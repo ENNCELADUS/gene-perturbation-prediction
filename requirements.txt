@@ -1,14 +1,23 @@
 # VCC Project Dependencies
 # Install with: pip install -r requirements.txt
+#
+# Note: PyTorch packages (torch, torchvision, torchaudio) should be installed from CUDA 12.1 wheels:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+#
+# After cloning STATE repository, install it with:
+# cd path/to/STATE && pip install -e . --no-deps
 
 # Core data processing
 anndata==0.12.6
-pandas==2.3.3
-numpy==2.3.4
+pandas==2.1.4
+numpy==1.26.4
 
 # Single-cell analysis
-scanpy==1.11.5
+scanpy>=1.11.2
 scipy==1.16.3
+scib>=1.1.0
+cell-load
+cell-eval==0.6.6
 
 # File I/O
 h5py==3.15.1
@@ -19,6 +28,16 @@ seaborn==0.13.2
 
 # Machine learning
 scikit-learn==1.7.2
+torch
+torchvision
+torchaudio
+transformers>=4.52.3
+datasets>=2.10.0
+peft>=0.11.0
+
+# scGPT Foundation Model (for perturbation prediction)
+scgpt>=0.2.0
+flash-attn<1.0.5  # Optional but recommended for faster attention computation
 
 # Additional dependencies
 networkx==3.5
@@ -26,5 +45,16 @@ umap-learn==0.5.9.post2
 numba==0.62.1
 statsmodels==0.14.5
 joblib==1.5.2
-tqdm==4.67.1
+tqdm>=4.67.1
 PyYAML==6.0.3
+geomloss>=0.2.6
+
+# Jupyter and development
+pyzmq
+ipykernel
+
+# Tooling
+ruff==0.9.1
+
+# Logging and monitoring (optional but recommended)
+wandb>=0.19.11

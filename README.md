@@ -45,6 +45,10 @@ conda activate vcc
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Format and lint (PEP 8 via Ruff)
+ruff format .
+ruff check . --fix
 ```
 
 ## Dataset Overview
