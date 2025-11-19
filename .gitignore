@@ -35,15 +35,10 @@ wheels/
 *~
 .DS_Store
 
-# Data files (raw data)
-data/raw/*.h5ad
+# Data files
+*.h5ad
 data/raw/*.csv
-data/raw/*.zip
-
-# Large files
-*.h5
-*.hdf5
-*.parquet
+*.zip
 
 # Logs
 *.log
