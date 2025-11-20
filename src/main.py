@@ -12,6 +12,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.utils.logging import get_logger
 from src.utils.metrics import compute_metrics
 from src.model.wrapper import ScGPTWrapper
+from src.model.baseline import BaselineWrapper
 from src.data.loader import PerturbationDataLoader
 
 
@@ -26,20 +27,34 @@ def main():
     parser.add_argument(
         "--config", default="src/configs/config.yaml", help="Path to config file"
     )
+    parser.add_argument(
+        "--model_type",
+        default="scgpt",
+        choices=["scgpt", "baseline"],
+        help="Model type to run (scgpt or baseline)",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
 
     # Create output dir
-    output_dir = Path(config["paths"]["output_dir"])
+    base_output_dir = Path(config["paths"]["output_dir"])
+    output_dir = base_output_dir / args.model_type
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger = get_logger("ZeroShotPerturbation", log_file=output_dir / "run.log")
-    logger.info("Starting Zero-Shot Perturbation Pipeline")
+    logger.info(
+        f"Starting Zero-Shot Perturbation Pipeline with {args.model_type} model"
+    )
+    logger.info(f"Results will be saved to: {output_dir}")
 
     # 2. Initialize Components
-    logger.info("Initializing Model Wrapper...")
-    model_wrapper = ScGPTWrapper(config, logger)
+    if args.model_type == "baseline":
+        logger.info("Initializing Baseline Model Wrapper...")
+        model_wrapper = BaselineWrapper(config, logger)
+    else:
+        logger.info("Initializing scGPT Model Wrapper...")
+        model_wrapper = ScGPTWrapper(config, logger)
 
     logger.info("Initializing Data Loader...")
     data_loader = PerturbationDataLoader(config, model_wrapper.vocab, logger)
