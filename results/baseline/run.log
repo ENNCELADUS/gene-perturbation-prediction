@@ -1,0 +1,42 @@
+2025-11-20 12:40:26,363 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with baseline model
+2025-11-20 12:40:26,363 - ZeroShotPerturbation - INFO - Results will be saved to: results/baseline
+2025-11-20 12:40:26,363 - ZeroShotPerturbation - INFO - Initializing Baseline Model Wrapper...
+2025-11-20 12:40:26,445 - ZeroShotPerturbation - INFO - Loaded vocab from model/scGPT/vocab.json
+2025-11-20 12:40:26,446 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-20 12:40:26,446 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-20 12:40:34,483 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-20 12:40:35,165 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-20 12:40:35,166 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-20 12:40:35,175 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-20 12:40:35,341 - ZeroShotPerturbation - INFO - Target TCF3 - MSE: 0.5795, Pearson: 0.9976
+2025-11-20 12:40:35,341 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-20 12:40:35,789 - ZeroShotPerturbation - INFO - Target TADA1 - MSE: 1.5373, Pearson: 0.9891
+2025-11-20 12:40:35,789 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-20 12:40:35,939 - ZeroShotPerturbation - INFO - Target FOXH1 - MSE: 0.2955, Pearson: 0.9978
+2025-11-20 12:40:35,939 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-20 12:40:36,026 - ZeroShotPerturbation - INFO - Target SMARCA4 - MSE: 7.0224, Pearson: 0.9533
+2025-11-20 12:40:36,026 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-20 12:40:36,159 - ZeroShotPerturbation - INFO - Target SMARCA5 - MSE: 2.6372, Pearson: 0.9844
+2025-11-20 12:40:36,159 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-20 12:40:36,397 - ZeroShotPerturbation - INFO - Target HIRA - MSE: 0.3418, Pearson: 0.9973
+2025-11-20 12:40:36,398 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-20 12:40:36,446 - ZeroShotPerturbation - INFO - Target RAB3B - MSE: 0.3966, Pearson: 0.9978
+2025-11-20 12:40:36,447 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-20 12:40:36,672 - ZeroShotPerturbation - INFO - Target IGF2R - MSE: 0.2974, Pearson: 0.9984
+2025-11-20 12:40:36,672 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-20 12:40:36,707 - ZeroShotPerturbation - INFO - Target SNCA - MSE: 0.4146, Pearson: 0.9967
+2025-11-20 12:40:36,707 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-20 12:40:36,748 - ZeroShotPerturbation - INFO - Target TMBIM6 - MSE: 0.3827, Pearson: 0.9977
+2025-11-20 12:40:36,748 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-20 12:40:36,853 - ZeroShotPerturbation - INFO - Target DAXX - MSE: 0.3714, Pearson: 0.9975
+2025-11-20 12:40:36,853 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-20 12:40:36,892 - ZeroShotPerturbation - INFO - Target METTL14 - MSE: 3.8926, Pearson: 0.9684
+2025-11-20 12:40:36,892 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-20 12:40:36,953 - ZeroShotPerturbation - INFO - Target METTL17 - MSE: 1.2398, Pearson: 0.9939
+2025-11-20 12:40:36,953 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-20 12:40:37,059 - ZeroShotPerturbation - INFO - Target PRR12 - MSE: 0.4275, Pearson: 0.9967
+2025-11-20 12:40:37,059 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-20 12:40:37,082 - ZeroShotPerturbation - INFO - Target EPB41L2 - MSE: 2.5607, Pearson: 0.9809
+2025-11-20 12:40:37,085 - ZeroShotPerturbation - INFO - Results saved to results/baseline/perturbation_metrics.csv
+2025-11-20 12:40:37,085 - ZeroShotPerturbation - INFO - Overall Mean MSE: 1.4931
+2025-11-20 12:40:37,085 - ZeroShotPerturbation - INFO - Overall Mean Pearson: 0.9898
