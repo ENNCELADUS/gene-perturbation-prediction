@@ -1,0 +1,16 @@
+/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/model.py:21: UserWarning: flash_attn is not installed
+  warnings.warn("flash_attn is not installed")
+/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/multiomic_model.py:19: UserWarning: flash_attn is not installed
+  warnings.warn("flash_attn is not installed")
+/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/torchtext/vocab/__init__.py:4: UserWarning: 
+/!\ IMPORTANT WARNING ABOUT TORCHTEXT STATUS /!\ 
+Torchtext is deprecated and the last released version will be 0.18 (this one). You can silence this warning by calling the following at the beginnign of your scripts: `import torchtext; torchtext.disable_torchtext_deprecation_warning()`
+  warnings.warn(torchtext._TORCHTEXT_DEPRECATION_MSG)
+/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/torchtext/utils.py:4: UserWarning: 
+/!\ IMPORTANT WARNING ABOUT TORCHTEXT STATUS /!\ 
+Torchtext is deprecated and the last released version will be 0.18 (this one). You can silence this warning by calling the following at the beginnign of your scripts: `import torchtext; torchtext.disable_torchtext_deprecation_warning()`
+  warnings.warn(torchtext._TORCHTEXT_DEPRECATION_MSG)
+/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/generation_model.py:73: UserWarning: flash-attn is not installed, using pytorch transformer instead. Set use_fast_transformer=False to avoid this warning. Installing flash-attn is highly recommended.
+  warnings.warn(
+/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/torch/nn/modules/transformer.py:408: UserWarning: The PyTorch API of nested tensors is in prototype stage and will change in the near future. (Triggered internally at ../aten/src/ATen/NestedTensorImpl.cpp:178.)
+  output = torch._nested_tensor_from_mask(output, src_key_padding_mask.logical_not(), mask_check=False)

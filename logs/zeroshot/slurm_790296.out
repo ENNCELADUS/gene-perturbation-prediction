@@ -1,0 +1,47 @@
+Activating conda environment 'vcc'...
+Starting Zero-Shot Perturbation Experiment...
+Date: Thu Nov 20 03:38:32 CST 2025
+Config: src/configs/config.yaml
+2025-11-20 03:39:04,512 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline
+2025-11-20 03:39:04,512 - ZeroShotPerturbation - INFO - Initializing Model Wrapper...
+2025-11-20 03:39:05,925 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-20 03:39:05,974 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-20 03:39:06,035 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-20 03:39:06,036 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-20 03:39:23,205 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-20 03:39:25,659 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-20 03:39:25,659 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-20 03:39:25,660 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-20 03:39:46,369 - ZeroShotPerturbation - INFO - Target TCF3 - MSE: 50.3031, Pearson: 0.9975
+2025-11-20 03:39:46,369 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-20 03:40:08,398 - ZeroShotPerturbation - INFO - Target TADA1 - MSE: 36.7035, Pearson: 0.9895
+2025-11-20 03:40:08,399 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-20 03:40:33,899 - ZeroShotPerturbation - INFO - Target FOXH1 - MSE: 45.9813, Pearson: 0.9977
+2025-11-20 03:40:33,899 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-20 03:41:03,356 - ZeroShotPerturbation - INFO - Target SMARCA4 - MSE: 32.6432, Pearson: 0.9558
+2025-11-20 03:41:03,357 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-20 03:41:37,536 - ZeroShotPerturbation - INFO - Target SMARCA5 - MSE: 44.3459, Pearson: 0.9858
+2025-11-20 03:41:37,537 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-20 03:42:15,055 - ZeroShotPerturbation - INFO - Target HIRA - MSE: 45.0300, Pearson: 0.9978
+2025-11-20 03:42:15,055 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-20 03:42:53,894 - ZeroShotPerturbation - INFO - Target RAB3B - MSE: 48.2240, Pearson: 0.9981
+2025-11-20 03:42:53,895 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-20 03:43:35,485 - ZeroShotPerturbation - INFO - Target IGF2R - MSE: 48.5333, Pearson: 0.9983
+2025-11-20 03:43:35,485 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-20 03:44:16,605 - ZeroShotPerturbation - INFO - Target SNCA - MSE: 41.1101, Pearson: 0.9976
+2025-11-20 03:44:16,605 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-20 03:44:57,959 - ZeroShotPerturbation - INFO - Target TMBIM6 - MSE: 50.0592, Pearson: 0.9978
+2025-11-20 03:44:57,959 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-20 03:45:40,308 - ZeroShotPerturbation - INFO - Target DAXX - MSE: 43.8007, Pearson: 0.9976
+2025-11-20 03:45:40,309 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-20 03:46:23,133 - ZeroShotPerturbation - INFO - Target METTL14 - MSE: 28.4065, Pearson: 0.9687
+2025-11-20 03:46:23,134 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-20 03:47:05,645 - ZeroShotPerturbation - INFO - Target METTL17 - MSE: 41.2727, Pearson: 0.9938
+2025-11-20 03:47:05,645 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-20 03:47:49,635 - ZeroShotPerturbation - INFO - Target PRR12 - MSE: 42.4332, Pearson: 0.9952
+2025-11-20 03:47:49,635 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-20 03:48:32,768 - ZeroShotPerturbation - INFO - Target EPB41L2 - MSE: 51.9740, Pearson: 0.9849
+2025-11-20 03:48:32,807 - ZeroShotPerturbation - INFO - Results saved to results/perturbation_metrics.csv
+2025-11-20 03:48:32,808 - ZeroShotPerturbation - INFO - Overall Mean MSE: 43.3881
+2025-11-20 03:48:32,808 - ZeroShotPerturbation - INFO - Overall Mean Pearson: 0.9904
+Experiment complete. Results saved to paths defined in config.

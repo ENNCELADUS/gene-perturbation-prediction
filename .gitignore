@@ -40,9 +40,6 @@ wheels/
 data/raw/*.csv
 *.zip
 
-# Logs
-logs/
-
 # Conda
 .conda/
 .condarc
