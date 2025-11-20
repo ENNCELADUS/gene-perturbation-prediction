@@ -41,7 +41,6 @@ data/raw/*.csv
 *.zip
 
 # Logs
-*.log
 logs/
 
 # Conda
