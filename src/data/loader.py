@@ -1,10 +1,8 @@
 import anndata
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, TensorDataset
 from pathlib import Path
 import logging
-from . import loader  # Self-reference for typing if needed, but mainly for structure
 
 
 class PerturbationDataLoader:
@@ -34,9 +32,10 @@ class PerturbationDataLoader:
         # Use vocab["<pad>"] for unknown genes to strictly avoid OOB indices
         pad_token_id = self.vocab["<pad>"]
         if "id_in_vocab" not in self.test_adata.var.columns:
+            # Map gene names to vocab IDs (use pad_token_id for unknown genes)
             self.test_adata.var["id_in_vocab"] = [
                 self.vocab[gene] if gene in self.vocab else pad_token_id
-                for gene in self.test_adata.var.index  # Assuming gene names are index or 'gene_name' col
+                for gene in self.test_adata.var.index
             ]
 
         # Extract Control Cells (non-targeting)
@@ -54,15 +53,37 @@ class PerturbationDataLoader:
         """Get actual expression data for a specific target gene"""
         return self.test_adata[self.test_adata.obs["target_gene"] == target_gene]
 
-    def prepare_perturbation_batch(self, target_gene, batch_size=None):
+    def get_control_mean(self) -> np.ndarray:
+        """Get mean expression of all control cells (for PDS delta calculation)."""
+        if isinstance(self.control_cells.X, np.ndarray):
+            return self.control_cells.X.mean(axis=0)
+        return np.asarray(self.control_cells.X.mean(axis=0)).flatten()
+
+    def get_gene_names(self) -> np.ndarray:
+        """Get gene names from test data."""
+        return np.asarray(self.test_adata.var_names)
+
+    def prepare_perturbation_batch(
+        self, target_gene, n_cells=None, seed=None, return_control_expr=False
+    ):
         """
         Prepare a batch of control cells with the perturbation flag set for target_gene.
-        """
-        if batch_size is None:
-            batch_size = self.config["inference"]["batch_size"]
 
-        # Sample control cells
-        indices = np.random.choice(self.control_cells.n_obs, batch_size, replace=True)
+        Args:
+            target_gene: Target gene for perturbation
+            n_cells: Number of cells to sample (default: config batch_size)
+            seed: Random seed for reproducibility
+            return_control_expr: If True, also return control expression array
+
+        Returns:
+            BatchData object, or (BatchData, control_expr) if return_control_expr=True
+        """
+        if n_cells is None:
+            n_cells = self.config["inference"]["batch_size"]
+
+        # Sample control cells with optional seed for reproducibility
+        rng = np.random.default_rng(seed)
+        indices = rng.choice(self.control_cells.n_obs, n_cells, replace=True)
         batch_ctrl = self.control_cells[indices].copy()
 
         # Expression values (X)
@@ -119,4 +140,8 @@ class PerturbationDataLoader:
             def to(self, device):
                 self.x = self.x.to(device)
 
-        return BatchData(combined_x, pert_flags)
+        batch_data = BatchData(combined_x, pert_flags)
+
+        if return_control_expr:
+            return batch_data, x.numpy()
+        return batch_data

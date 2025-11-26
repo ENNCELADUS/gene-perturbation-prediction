@@ -10,7 +10,11 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.utils.logging import get_logger
-from src.utils.metrics import compute_metrics
+from src.utils.de_metrics import (
+    compute_de_comparison_metrics,
+    compute_pds,
+    compute_pseudobulk_delta,
+)
 from src.model.wrapper import ScGPTWrapper
 from src.model.baseline import BaselineWrapper
 from src.data.loader import PerturbationDataLoader
@@ -32,6 +36,12 @@ def main():
         default="scgpt",
         choices=["scgpt", "baseline"],
         help="Model type to run (scgpt or baseline)",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=-1,
+        help="Number of threads for hpdex DE analysis (-1 = all cores)",
     )
     args = parser.parse_args()
 
@@ -59,9 +69,18 @@ def main():
     logger.info("Initializing Data Loader...")
     data_loader = PerturbationDataLoader(config, model_wrapper.vocab, logger)
 
+    # Get control mean for PDS calculation
+    control_mean = data_loader.get_control_mean()
+    gene_names = data_loader.get_gene_names()
+
     # 3. Main Inference Loop
     targets = data_loader.get_test_targets()
     results = []
+
+    # For PDS: accumulate deltas across all perturbations
+    pred_deltas = {}
+    truth_deltas = {}
+    target_gene_indices = {}
 
     logger.info(f"Processing {len(targets)} target genes...")
 
@@ -71,54 +90,129 @@ def main():
 
         logger.info(f"Predicting for target: {target}")
 
-        # Prepare Input
-        batch_data = data_loader.prepare_perturbation_batch(target)
-        if batch_data is None:
+        # Get ground truth to determine n_cells
+        ground_truth_adata = data_loader.get_target_ground_truth(target)
+        n_cells = ground_truth_adata.n_obs
+
+        if n_cells == 0:
+            logger.warning(f"No ground truth cells for {target}, skipping.")
             continue
+
+        # Prepare Input - sample same number of control cells as ground truth
+        # Use target hash as seed for reproducibility
+        seed = hash(target) % (2**32)
+        batch_result = data_loader.prepare_perturbation_batch(
+            target, n_cells=n_cells, seed=seed, return_control_expr=True
+        )
+        if batch_result is None:
+            continue
+
+        batch_data, control_expr = batch_result
 
         # Predict
         with torch.no_grad():
-            # We need gene_ids for the model to know which token maps to which column
-            # Assuming column order matches vocab mapping done in loader
-            # We can construct gene_ids from test_adata.var['id_in_vocab']
             gene_ids = np.array(data_loader.test_adata.var["id_in_vocab"])
-
             pred_expression = model_wrapper.predict(
                 batch_data,
                 gene_ids=gene_ids,
-                amp=False,  # Disable amp for stability in simple inference unless needed
+                amp=False,
             )
 
-        # Get Ground Truth
-        ground_truth_adata = data_loader.get_target_ground_truth(target)
-        if isinstance(ground_truth_adata.X, np.ndarray):
-            truth_expression = ground_truth_adata.X
+        # Convert predictions to numpy
+        if isinstance(pred_expression, torch.Tensor):
+            pred_expr = pred_expression.cpu().numpy()
         else:
-            truth_expression = ground_truth_adata.X.toarray()
+            pred_expr = np.asarray(pred_expression)
 
-        # Calculate Metrics
-        # We compare Mean Predicted vs Mean Truth (Pseudo-bulk comparison often used)
-        pred_mean = pred_expression.cpu().numpy().mean(axis=0)
-        truth_mean = truth_expression.mean(axis=0)
+        # Get ground truth expression
+        if isinstance(ground_truth_adata.X, np.ndarray):
+            truth_expr = ground_truth_adata.X
+        else:
+            truth_expr = ground_truth_adata.X.toarray()
 
-        metrics = compute_metrics(truth_mean, pred_mean)
+        # Compute DE-based metrics
+        try:
+            metrics = compute_de_comparison_metrics(
+                control_expr=control_expr,
+                pred_expr=pred_expr,
+                truth_expr=truth_expr,
+                gene_names=gene_names,
+                fdr_threshold=0.05,
+                threads=args.threads,
+            )
+        except Exception as e:
+            logger.warning(f"DE metrics failed for {target}: {e}")
+            metrics = {
+                "pearson_log2fc": np.nan,
+                "mse_log2fc": np.nan,
+                "des": np.nan,
+                "n_de_truth": 0,
+                "n_de_pred": 0,
+            }
+
         metrics["target_gene"] = target
+        metrics["n_cells"] = n_cells
         results.append(metrics)
 
+        # Accumulate deltas for PDS
+        pred_deltas[target] = compute_pseudobulk_delta(pred_expr, control_mean)
+        truth_deltas[target] = compute_pseudobulk_delta(truth_expr, control_mean)
+
+        # Get target gene index for PDS (exclude from distance)
+        try:
+            target_gene_indices[target] = data_loader.test_adata.var_names.get_loc(
+                target
+            )
+        except KeyError:
+            target_gene_indices[target] = -1
+
         logger.info(
-            f"Target {target} - MSE: {metrics['mse']:.4f}, Pearson: {metrics['pearson']:.4f}"
+            f"Target {target} - Pearson: {metrics['pearson_log2fc']:.4f}, "
+            f"DES: {metrics['des']:.4f}, n_DE: {metrics['n_de_truth']}"
         )
 
-    # 4. Save Results
+    # 4. Compute PDS (global metric)
+    if pred_deltas:
+        mean_pds, pds_scores = compute_pds(
+            pred_deltas, truth_deltas, target_gene_indices
+        )
+        # Add PDS to results
+        for r in results:
+            r["pds"] = pds_scores.get(r["target_gene"], np.nan)
+    else:
+        mean_pds = np.nan
+
+    # 5. Save Results
     results_df = pd.DataFrame(results)
+
+    # Reorder columns
+    col_order = [
+        "target_gene",
+        "n_cells",
+        "pearson_log2fc",
+        "mse_log2fc",
+        "des",
+        "pds",
+        "n_de_truth",
+        "n_de_pred",
+    ]
+    results_df = results_df[[c for c in col_order if c in results_df.columns]]
+
     csv_path = output_dir / "perturbation_metrics.csv"
     results_df.to_csv(csv_path, index=False)
     logger.info(f"Results saved to {csv_path}")
 
-    # Calculate Overall Mean
+    # Calculate and log overall metrics
     if not results_df.empty:
-        logger.info(f"Overall Mean MSE: {results_df['mse'].mean():.4f}")
-        logger.info(f"Overall Mean Pearson: {results_df['pearson'].mean():.4f}")
+        logger.info("=" * 50)
+        logger.info("Overall Metrics:")
+        logger.info(
+            f"  Mean Pearson (log2FC): {results_df['pearson_log2fc'].mean():.4f}"
+        )
+        logger.info(f"  Mean MSE (log2FC):     {results_df['mse_log2fc'].mean():.4f}")
+        logger.info(f"  Mean DES:              {results_df['des'].mean():.4f}")
+        logger.info(f"  Mean PDS:              {mean_pds:.4f}")
+        logger.info("=" * 50)
     else:
         logger.warning("No results generated.")
 
