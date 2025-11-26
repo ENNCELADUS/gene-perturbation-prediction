@@ -35,8 +35,13 @@ def main():
     parser.add_argument(
         "--model_type",
         default="scgpt",
-        choices=["scgpt", "baseline"],
-        help="Model type to run (scgpt or baseline)",
+        choices=["scgpt", "scgpt_finetuned", "baseline"],
+        help="Model type to run (scgpt, scgpt_finetuned, or baseline)",
+    )
+    parser.add_argument(
+        "--model_dir",
+        default=None,
+        help="Override model directory path (default: use config)",
     )
     parser.add_argument(
         "--threads",
@@ -48,15 +53,21 @@ def main():
 
     config = load_config(args.config)
 
+    # Override model directory if specified
+    if args.model_dir:
+        config["paths"]["model_dir"] = args.model_dir
+    elif args.model_type == "scgpt_finetuned":
+        # Default finetuned model path
+        config["paths"]["model_dir"] = "model/scGPT_finetuned"
+
     # Create output dir
     base_output_dir = Path(config["paths"]["output_dir"])
     output_dir = base_output_dir / args.model_type
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger = get_logger("ZeroShotPerturbation", log_file=output_dir / "run.log")
-    logger.info(
-        f"Starting Zero-Shot Perturbation Pipeline with {args.model_type} model"
-    )
+    logger.info(f"Starting Perturbation Pipeline with {args.model_type} model")
+    logger.info(f"Model directory: {config['paths']['model_dir']}")
     logger.info(f"Results will be saved to: {output_dir}")
 
     # 2. Initialize Components

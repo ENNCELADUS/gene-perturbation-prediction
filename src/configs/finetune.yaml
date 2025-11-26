@@ -1,0 +1,86 @@
+# scGPT Finetuning Configuration for VCC Perturbation Prediction
+# Based on scGPT Tutorial_Perturbation.ipynb
+
+# ========== Paths ==========
+paths:
+  # GEARS data directory (created by scripts/convert_to_gears.py)
+  gears_data_dir: "data/processed/gears"
+  dataset_name: "vcc"
+  
+  # Pretrained model directory
+  pretrained_model_dir: "model/scGPT"
+  
+  # Output directory for finetuned model
+  output_dir: "model/scGPT_finetuned"
+
+# ========== Data Processing ==========
+data:
+  pad_token: "<pad>"
+  special_tokens: ["<pad>", "<cls>", "<eoc>"]
+  pad_value: 0
+  pert_pad_id: 0
+  include_zero_gene: "all"  # "all" or "batch-wise"
+  max_seq_len: 1536
+
+# ========== Training Objectives ==========
+training:
+  # Primary objective (always on for perturbation)
+  MLM: true   # Masked Language Modeling
+  
+  # Optional objectives (disabled for perturbation finetuning)
+  CLS: false  # Cell type classification
+  CCE: false  # Contrastive cell embedding
+  MVC: false  # Masked value prediction for cell embedding
+  ECS: false  # Elastic cell similarity
+  
+  # Mixed precision training
+  amp: true
+
+# ========== Optimizer ==========
+optimizer:
+  lr: 1.0e-4
+  batch_size: 64
+  eval_batch_size: 64
+  epochs: 15
+  schedule_interval: 1
+  schedule_gamma: 0.9
+  early_stop: 10  # patience (based on training loss since no validation split)
+  grad_clip: 1.0
+
+# ========== Model Architecture ==========
+# These are overridden by pretrained model config (args.json)
+model:
+  embsize: 512
+  d_hid: 512
+  nlayers: 12
+  nhead: 8
+  n_layers_cls: 3
+  dropout: 0.0
+  use_fast_transformer: true
+
+# ========== Partial Weight Loading ==========
+# Only load these prefixes from pretrained model
+# The rest (e.g., decoder) will be randomly initialized
+load_param_prefixes:
+  - "encoder"
+  - "value_encoder"
+  - "transformer_encoder"
+
+# ========== GEARS Split ==========
+# Using 'no_test' split since we use all 135 genes for training
+# Test evaluation is done separately on held-out 15 genes
+split:
+  type: "no_test"  # No internal test split; use all data for training
+  seed: 42
+  train_gene_set_size: 1.0  # Use all genes for training
+
+# ========== Logging ==========
+logging:
+  log_interval: 100
+  save_interval: 1  # Save every epoch
+
+# ========== Hardware ==========
+hardware:
+  # Detected automatically, but can override
+  device: "cuda"  # "cuda" or "cpu"
+

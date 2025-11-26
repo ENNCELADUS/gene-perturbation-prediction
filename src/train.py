@@ -1,0 +1,578 @@
+#!/usr/bin/env python
+"""
+Finetune scGPT for perturbation prediction on VCC dataset.
+
+Based on scGPT Tutorial_Perturbation.ipynb
+
+Usage:
+    python src/train.py --config src/configs/finetune.yaml
+"""
+
+import argparse
+import copy
+import json
+import os
+import sys
+import time
+import warnings
+from pathlib import Path
+from typing import Dict, Optional
+
+import numpy as np
+import torch
+from torch import nn
+from torch_geometric.loader import DataLoader
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import GEARS
+from gears import PertData
+from gears.inference import compute_metrics, deeper_analysis, non_dropout_analysis
+
+# Import scGPT
+scgpt_path = Path(__file__).parent.parent / "scGPT"
+sys.path.insert(0, str(scgpt_path))
+
+import scgpt as scg
+from scgpt.loss import masked_mse_loss
+from scgpt.model import TransformerGenerator
+from scgpt.tokenizer.gene_tokenizer import GeneVocab
+from scgpt.utils import map_raw_id_to_vocab_id, set_seed
+
+import yaml
+
+warnings.filterwarnings("ignore")
+
+
+def load_config(config_path: str) -> dict:
+    """Load YAML configuration file."""
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def setup_logging(save_dir: Path):
+    """Setup scGPT logger with file handler."""
+    logger = scg.logger
+    scg.utils.add_file_handler(logger, save_dir / "run.log")
+    logger.info(f"Running on {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    return logger
+
+
+def load_pretrained_model(
+    config: dict,
+    vocab: GeneVocab,
+    n_genes: int,
+    device: torch.device,
+    logger,
+) -> TransformerGenerator:
+    """
+    Load pretrained scGPT model and initialize for finetuning.
+
+    Args:
+        config: Configuration dictionary
+        vocab: Gene vocabulary
+        n_genes: Number of genes in dataset
+        device: Torch device
+        logger: Logger instance
+
+    Returns:
+        Initialized TransformerGenerator model
+    """
+    model_dir = Path(config["paths"]["pretrained_model_dir"])
+    model_file = model_dir / "best_model.pt"
+    args_file = model_dir / "args.json"
+
+    # Load pretrained model config
+    with open(args_file, "r") as f:
+        model_configs = json.load(f)
+
+    logger.info(f"Loading pretrained model from {model_file}")
+    logger.info(
+        f"Model config: embsize={model_configs['embsize']}, "
+        f"nlayers={model_configs['nlayers']}, nheads={model_configs['nheads']}"
+    )
+
+    # Get model hyperparameters from pretrained config
+    embsize = model_configs["embsize"]
+    nhead = model_configs["nheads"]
+    d_hid = model_configs["d_hid"]
+    nlayers = model_configs["nlayers"]
+    n_layers_cls = model_configs["n_layers_cls"]
+
+    # Initialize model
+    ntokens = len(vocab)
+    model = TransformerGenerator(
+        ntoken=ntokens,
+        d_model=embsize,
+        nhead=nhead,
+        d_hid=d_hid,
+        nlayers=nlayers,
+        nlayers_cls=n_layers_cls,
+        n_cls=1,  # Not used for perturbation
+        vocab=vocab,
+        dropout=config["model"]["dropout"],
+        pad_token=config["data"]["pad_token"],
+        pad_value=config["data"]["pad_value"],
+        pert_pad_id=config["data"]["pert_pad_id"],
+        use_fast_transformer=config["model"]["use_fast_transformer"],
+    )
+
+    # Load pretrained weights (partial)
+    load_param_prefixes = config.get("load_param_prefixes", None)
+    pretrained_dict = torch.load(model_file, map_location=device)
+
+    if load_param_prefixes:
+        # Only load specified parameter prefixes
+        model_dict = model.state_dict()
+        pretrained_dict = {
+            k: v
+            for k, v in pretrained_dict.items()
+            if any([k.startswith(prefix) for prefix in load_param_prefixes])
+        }
+        for k, v in pretrained_dict.items():
+            logger.info(f"Loading params {k} with shape {v.shape}")
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict)
+    else:
+        # Load all matching params
+        try:
+            model.load_state_dict(pretrained_dict)
+            logger.info("Loaded all model params")
+        except RuntimeError:
+            # Load only matching params
+            model_dict = model.state_dict()
+            pretrained_dict = {
+                k: v
+                for k, v in pretrained_dict.items()
+                if k in model_dict and v.shape == model_dict[k].shape
+            }
+            model_dict.update(pretrained_dict)
+            model.load_state_dict(model_dict)
+            logger.info(f"Loaded {len(pretrained_dict)} matching params")
+
+    model.to(device)
+    return model
+
+
+def train_epoch(
+    model: nn.Module,
+    train_loader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    scaler: torch.cuda.amp.GradScaler,
+    gene_ids: np.ndarray,
+    config: dict,
+    epoch: int,
+    logger,
+) -> float:
+    """
+    Train the model for one epoch.
+
+    Returns:
+        Average training loss for the epoch
+    """
+    model.train()
+    total_loss = 0.0
+    total_mse = 0.0
+    start_time = time.time()
+
+    n_genes = len(gene_ids)
+    device = next(model.parameters()).device
+    amp_enabled = config["training"]["amp"]
+    log_interval = config["logging"]["log_interval"]
+    include_zero_gene = config["data"]["include_zero_gene"]
+    max_seq_len = config["data"]["max_seq_len"]
+
+    num_batches = len(train_loader)
+
+    for batch_idx, batch_data in enumerate(train_loader):
+        batch_size = len(batch_data.y)
+        batch_data.to(device)
+
+        # Extract data from batch
+        x: torch.Tensor = batch_data.x  # (batch_size * n_genes, 2)
+        ori_gene_values = x[:, 0].view(batch_size, n_genes)
+        pert_flags = x[:, 1].long().view(batch_size, n_genes)
+        target_gene_values = batch_data.y  # (batch_size, n_genes)
+
+        # Prepare input
+        if include_zero_gene in ["all", "batch-wise"]:
+            if include_zero_gene == "all":
+                input_gene_ids = torch.arange(n_genes, device=device, dtype=torch.long)
+            else:
+                input_gene_ids = (
+                    ori_gene_values.nonzero()[:, 1].flatten().unique().sort()[0]
+                )
+
+            # Sample if too many genes
+            if len(input_gene_ids) > max_seq_len:
+                input_gene_ids = torch.randperm(len(input_gene_ids), device=device)[
+                    :max_seq_len
+                ]
+
+            input_values = ori_gene_values[:, input_gene_ids]
+            input_pert_flags = pert_flags[:, input_gene_ids]
+            target_values = target_gene_values[:, input_gene_ids]
+
+            mapped_input_gene_ids = map_raw_id_to_vocab_id(input_gene_ids, gene_ids)
+            mapped_input_gene_ids = mapped_input_gene_ids.repeat(batch_size, 1)
+
+            src_key_padding_mask = torch.zeros_like(
+                input_values, dtype=torch.bool, device=device
+            )
+
+        # Forward pass
+        with torch.cuda.amp.autocast(enabled=amp_enabled):
+            output_dict = model(
+                mapped_input_gene_ids,
+                input_values,
+                input_pert_flags,
+                src_key_padding_mask=src_key_padding_mask,
+                CLS=config["training"]["CLS"],
+                CCE=config["training"]["CCE"],
+                MVC=config["training"]["MVC"],
+                ECS=config["training"]["ECS"],
+            )
+            output_values = output_dict["mlm_output"]
+
+            # Compute loss on all positions
+            masked_positions = torch.ones_like(input_values, dtype=torch.bool)
+            loss = loss_mse = masked_mse_loss(
+                output_values, target_values, masked_positions
+            )
+
+        # Backward pass
+        model.zero_grad()
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            config["optimizer"]["grad_clip"],
+            error_if_nonfinite=False if scaler.is_enabled() else True,
+        )
+
+        scaler.step(optimizer)
+        scaler.update()
+
+        total_loss += loss.item()
+        total_mse += loss_mse.item()
+
+        # Logging
+        if batch_idx % log_interval == 0 and batch_idx > 0:
+            ms_per_batch = (time.time() - start_time) * 1000 / log_interval
+            cur_loss = total_loss / log_interval
+            cur_mse = total_mse / log_interval
+            logger.info(
+                f"| epoch {epoch:3d} | {batch_idx:3d}/{num_batches:3d} batches | "
+                f"ms/batch {ms_per_batch:5.2f} | loss {cur_loss:5.4f} | mse {cur_mse:5.4f}"
+            )
+            total_loss = 0
+            total_mse = 0
+            start_time = time.time()
+
+    return total_loss / max(1, num_batches % log_interval)
+
+
+def evaluate(
+    model: nn.Module,
+    loader: DataLoader,
+    gene_ids: np.ndarray,
+    config: dict,
+    device: torch.device,
+) -> Dict:
+    """
+    Evaluate model on a data loader.
+
+    Returns:
+        Dictionary with predictions and ground truth
+    """
+    model.eval()
+
+    n_genes = len(gene_ids)
+    include_zero_gene = config["data"]["include_zero_gene"]
+
+    pert_cat = []
+    pred = []
+    truth = []
+    pred_de = []
+    truth_de = []
+
+    for batch_data in loader:
+        batch_data.to(device)
+        pert_cat.extend(batch_data.pert)
+
+        with torch.no_grad():
+            p = model.pred_perturb(
+                batch_data,
+                include_zero_gene=include_zero_gene,
+                gene_ids=gene_ids,
+            )
+            t = batch_data.y
+            pred.extend(p.cpu())
+            truth.extend(t.cpu())
+
+            # Differentially expressed genes
+            for itr, de_idx in enumerate(batch_data.de_idx):
+                pred_de.append(p[itr, de_idx])
+                truth_de.append(t[itr, de_idx])
+
+    # Compile results
+    results = {
+        "pert_cat": np.array(pert_cat),
+        "pred": torch.stack(pred).detach().cpu().numpy().astype(np.float32),
+        "truth": torch.stack(truth).detach().cpu().numpy().astype(np.float32),
+        "pred_de": torch.stack(pred_de).detach().cpu().numpy().astype(np.float32),
+        "truth_de": torch.stack(truth_de).detach().cpu().numpy().astype(np.float32),
+    }
+
+    return results
+
+
+def compute_perturbation_metrics(results: Dict, ctrl_adata) -> Dict:
+    """Compute perturbation prediction metrics."""
+    from scipy.stats import pearsonr
+
+    pred = results["pred"]
+    truth = results["truth"]
+    pred_de = results["pred_de"]
+    truth_de = results["truth_de"]
+
+    # Get control mean
+    if hasattr(ctrl_adata.X, "toarray"):
+        ctrl_mean = ctrl_adata.X.toarray().mean(axis=0)
+    else:
+        ctrl_mean = ctrl_adata.X.mean(axis=0)
+
+    # Flatten for correlation
+    pred_flat = pred.flatten()
+    truth_flat = truth.flatten()
+    pred_de_flat = pred_de.flatten()
+    truth_de_flat = truth_de.flatten()
+
+    # Compute metrics
+    pearson_all = pearsonr(pred_flat, truth_flat)[0]
+    pearson_de = pearsonr(pred_de_flat, truth_de_flat)[0]
+
+    # Delta (change from control)
+    pred_delta = pred - ctrl_mean
+    truth_delta = truth - ctrl_mean
+    pearson_delta = pearsonr(pred_delta.flatten(), truth_delta.flatten())[0]
+
+    pred_de_delta = pred_de - ctrl_mean[results.get("de_idx", slice(None))]
+    truth_de_delta = truth_de - ctrl_mean[results.get("de_idx", slice(None))]
+    # Approximate DE delta correlation
+    pearson_de_delta = pearsonr(pred_de.flatten(), truth_de.flatten())[0]
+
+    return {
+        "pearson": pearson_all,
+        "pearson_de": pearson_de,
+        "pearson_delta": pearson_delta,
+        "pearson_de_delta": pearson_de_delta,
+    }
+
+
+def save_model(model: nn.Module, config: dict, vocab: GeneVocab, save_dir: Path):
+    """Save finetuned model checkpoint."""
+    # Save model weights
+    torch.save(model.state_dict(), save_dir / "best_model.pt")
+
+    # Copy vocab
+    vocab_src = Path(config["paths"]["pretrained_model_dir"]) / "vocab.json"
+    vocab_dst = save_dir / "vocab.json"
+    if vocab_src.exists():
+        import shutil
+
+        shutil.copy(vocab_src, vocab_dst)
+
+    # Save model config (args.json)
+    args_src = Path(config["paths"]["pretrained_model_dir"]) / "args.json"
+    args_dst = save_dir / "args.json"
+    if args_src.exists():
+        import shutil
+
+        shutil.copy(args_src, args_dst)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Finetune scGPT for perturbation")
+    parser.add_argument(
+        "--config",
+        default="src/configs/finetune.yaml",
+        help="Path to config file",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed",
+    )
+    args = parser.parse_args()
+
+    # Load config
+    config = load_config(args.config)
+
+    # Set seed
+    set_seed(args.seed)
+
+    # Setup device
+    device = torch.device(
+        config["hardware"]["device"] if torch.cuda.is_available() else "cpu"
+    )
+    print(f"Using device: {device}")
+
+    # Setup output directory
+    save_dir = Path(config["paths"]["output_dir"])
+    save_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Saving to {save_dir}")
+
+    # Setup logging
+    logger = setup_logging(save_dir)
+    logger.info(f"Config: {config}")
+
+    # ========== Load Data ==========
+    logger.info("Loading data...")
+    gears_data_dir = config["paths"]["gears_data_dir"]
+    dataset_name = config["paths"]["dataset_name"]
+
+    pert_data = PertData(gears_data_dir)
+    pert_data.load(data_path=os.path.join(gears_data_dir, dataset_name))
+
+    # Prepare split
+    split_type = config["split"]["type"]
+    split_seed = config["split"]["seed"]
+    pert_data.prepare_split(split=split_type, seed=split_seed)
+
+    # Get dataloaders
+    batch_size = config["optimizer"]["batch_size"]
+    eval_batch_size = config["optimizer"]["eval_batch_size"]
+    pert_data.get_dataloader(batch_size=batch_size, test_batch_size=eval_batch_size)
+
+    # ========== Load Vocabulary ==========
+    logger.info("Loading vocabulary...")
+    vocab_file = Path(config["paths"]["pretrained_model_dir"]) / "vocab.json"
+    vocab = GeneVocab.from_file(vocab_file)
+
+    # Add special tokens
+    special_tokens = config["data"]["special_tokens"]
+    for s in special_tokens:
+        if s not in vocab:
+            vocab.append_token(s)
+
+    # Map genes to vocabulary
+    pert_data.adata.var["id_in_vocab"] = [
+        1 if gene in vocab else -1 for gene in pert_data.adata.var["gene_name"]
+    ]
+    gene_ids_in_vocab = np.array(pert_data.adata.var["id_in_vocab"])
+    logger.info(
+        f"Matched {np.sum(gene_ids_in_vocab >= 0)}/{len(gene_ids_in_vocab)} genes "
+        f"in vocabulary of size {len(vocab)}"
+    )
+
+    genes = pert_data.adata.var["gene_name"].tolist()
+    vocab.set_default_index(vocab[config["data"]["pad_token"]])
+    gene_ids = np.array(
+        [
+            vocab[gene] if gene in vocab else vocab[config["data"]["pad_token"]]
+            for gene in genes
+        ],
+        dtype=int,
+    )
+    n_genes = len(genes)
+
+    # ========== Load Model ==========
+    logger.info("Loading pretrained model...")
+    model = load_pretrained_model(config, vocab, n_genes, device, logger)
+    logger.info(f"Model has {sum(p.numel() for p in model.parameters()):,} parameters")
+
+    # ========== Setup Training ==========
+    criterion = masked_mse_loss
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=config["optimizer"]["lr"],
+    )
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer,
+        config["optimizer"]["schedule_interval"],
+        gamma=config["optimizer"]["schedule_gamma"],
+    )
+    scaler = torch.cuda.amp.GradScaler(enabled=config["training"]["amp"])
+
+    # ========== Training Loop ==========
+    epochs = config["optimizer"]["epochs"]
+    early_stop = config["optimizer"]["early_stop"]
+    best_loss = float("inf")
+    best_model = None
+    patience = 0
+
+    logger.info(f"Starting training for {epochs} epochs...")
+
+    for epoch in range(1, epochs + 1):
+        epoch_start = time.time()
+
+        train_loader = pert_data.dataloader["train_loader"]
+
+        # Train
+        train_loss = train_epoch(
+            model=model,
+            train_loader=train_loader,
+            optimizer=optimizer,
+            scaler=scaler,
+            gene_ids=gene_ids,
+            config=config,
+            epoch=epoch,
+            logger=logger,
+        )
+
+        # Evaluate on validation (if exists)
+        if "val_loader" in pert_data.dataloader:
+            val_loader = pert_data.dataloader["val_loader"]
+            val_res = evaluate(model, val_loader, gene_ids, config, device)
+            ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
+            val_metrics = compute_perturbation_metrics(val_res, ctrl_adata)
+            logger.info(f"Epoch {epoch} val_metrics: {val_metrics}")
+            current_loss = -val_metrics["pearson"]  # Negative for "lower is better"
+        else:
+            current_loss = train_loss
+
+        elapsed = time.time() - epoch_start
+        logger.info(f"| end of epoch {epoch:3d} | time: {elapsed:5.2f}s |")
+
+        # Check for best model
+        if current_loss < best_loss:
+            best_loss = current_loss
+            best_model = copy.deepcopy(model)
+            logger.info(f"Best model at epoch {epoch}")
+            patience = 0
+        else:
+            patience += 1
+            if patience >= early_stop:
+                logger.info(f"Early stopping at epoch {epoch}")
+                break
+
+        scheduler.step()
+
+    # ========== Save Best Model ==========
+    logger.info("Saving best model...")
+    save_model(best_model, config, vocab, save_dir)
+    logger.info(f"Model saved to {save_dir}")
+
+    # ========== Final Evaluation ==========
+    if "test_loader" in pert_data.dataloader:
+        logger.info("Evaluating on test set...")
+        test_loader = pert_data.dataloader["test_loader"]
+        test_res = evaluate(best_model, test_loader, gene_ids, config, device)
+        ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
+        test_metrics = compute_perturbation_metrics(test_res, ctrl_adata)
+        logger.info(f"Test metrics: {test_metrics}")
+
+        # Save test metrics
+        with open(save_dir / "test_metrics.json", "w") as f:
+            json.dump(test_metrics, f, indent=2)
+
+    logger.info("Training complete!")
+
+
+if __name__ == "__main__":
+    main()
