@@ -1,0 +1,571 @@
+2025-11-26 23:15:13,027 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:15:13,028 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:15:13,028 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:15:14,311 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:15:14,362 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:15:14,424 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:15:14,425 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:15:39,372 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:15:42,516 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:15:52,290 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:15:52,290 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:19:28,868 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:19:28,868 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:19:28,868 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:19:29,881 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:19:29,932 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:19:29,993 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:19:29,994 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:19:49,220 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:19:51,744 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:20:01,850 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:20:01,851 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:21:06,071 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:21:06,071 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:21:06,072 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:21:07,076 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:21:07,126 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:21:07,188 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:21:07,189 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:21:19,218 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:21:21,195 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:21:31,378 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:21:31,378 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:22:47,112 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:22:47,112 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:22:47,112 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:22:48,143 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:22:48,194 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:22:48,256 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:22:48,256 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:23:00,292 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:23:02,289 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:23:12,602 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:23:12,603 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:27:46,908 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:27:46,908 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:27:46,908 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:27:47,925 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:27:47,977 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:27:48,039 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:27:48,039 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:28:02,368 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:28:04,407 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:28:14,523 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:28:14,524 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:31:10,069 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:31:10,069 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:31:10,069 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:31:11,126 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:31:11,177 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:31:11,240 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:31:11,240 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:31:23,089 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:31:25,113 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:31:35,269 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:31:35,269 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:32:50,432 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:32:50,433 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:32:50,433 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:32:51,455 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:32:51,506 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:32:51,568 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:32:51,569 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:33:05,220 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:33:07,679 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:33:17,830 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:33:17,831 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:36:12,098 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:36:12,098 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:36:12,098 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:36:13,100 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:36:13,150 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:36:13,212 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:36:13,212 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:36:25,109 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:36:27,167 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:36:37,267 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:36:37,267 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:36:40,882 - ZeroShotPerturbation - WARNING - DE metrics failed for TCF3: No module named 'hpdex'
+2025-11-26 23:36:40,909 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:36:40,909 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-26 23:37:53,012 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:37:53,012 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:37:53,013 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:37:54,024 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:37:54,075 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:37:54,136 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:37:54,137 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:38:06,094 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:38:08,134 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:38:18,188 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:38:18,189 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:38:21,740 - ZeroShotPerturbation - WARNING - DE metrics failed for TCF3: No module named 'hpdex'
+2025-11-26 23:38:21,768 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:38:21,768 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-26 23:40:39,759 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:40:39,759 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:40:39,759 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:40:40,766 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:40:40,817 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:40:40,879 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:40:40,879 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:40:52,967 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:40:55,041 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:41:05,170 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:41:05,171 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:41:07,543 - ZeroShotPerturbation - WARNING - DE metrics failed for TCF3: No module named 'hpdex'
+2025-11-26 23:41:07,572 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:41:07,572 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-26 23:44:36,400 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:44:36,400 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:44:36,400 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:44:37,411 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:44:37,462 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:44:37,524 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:44:37,524 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:44:49,647 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:44:52,081 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:45:02,297 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:45:02,298 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:45:04,006 - ZeroShotPerturbation - WARNING - DE metrics failed for TCF3: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:04,035 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:04,035 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-26 23:45:08,245 - ZeroShotPerturbation - WARNING - DE metrics failed for TADA1: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:08,325 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:08,325 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-26 23:45:10,386 - ZeroShotPerturbation - WARNING - DE metrics failed for FOXH1: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:10,426 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:10,426 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-26 23:45:11,514 - ZeroShotPerturbation - WARNING - DE metrics failed for SMARCA4: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:11,535 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:11,535 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-26 23:45:13,371 - ZeroShotPerturbation - WARNING - DE metrics failed for SMARCA5: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:13,407 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:13,407 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-26 23:45:16,830 - ZeroShotPerturbation - WARNING - DE metrics failed for HIRA: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:16,898 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:16,899 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-26 23:45:17,553 - ZeroShotPerturbation - WARNING - DE metrics failed for RAB3B: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:17,565 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:17,565 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-26 23:45:20,679 - ZeroShotPerturbation - WARNING - DE metrics failed for IGF2R: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:20,742 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:20,742 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-26 23:45:21,186 - ZeroShotPerturbation - WARNING - DE metrics failed for SNCA: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:21,194 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:21,194 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-26 23:45:21,627 - ZeroShotPerturbation - WARNING - DE metrics failed for TMBIM6: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:21,637 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:21,637 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-26 23:45:22,972 - ZeroShotPerturbation - WARNING - DE metrics failed for DAXX: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:23,000 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:23,000 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-26 23:45:23,429 - ZeroShotPerturbation - WARNING - DE metrics failed for METTL14: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:23,438 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:23,439 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-26 23:45:24,199 - ZeroShotPerturbation - WARNING - DE metrics failed for METTL17: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:24,216 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:24,216 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-26 23:45:25,460 - ZeroShotPerturbation - WARNING - DE metrics failed for PRR12: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:25,486 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:25,486 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-26 23:45:25,689 - ZeroShotPerturbation - WARNING - DE metrics failed for EPB41L2: cannot import name 'pden' from 'hpdex' (unknown location)
+2025-11-26 23:45:25,693 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): nan
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     nan
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO -   Mean DES:              nan
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-26 23:45:25,725 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-26 23:51:56,714 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:51:56,714 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:51:56,714 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:51:57,739 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:51:57,790 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:51:57,852 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:51:57,852 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:52:16,407 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:52:19,155 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:52:29,228 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:52:29,229 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:53:36,739 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:53:36,739 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:53:36,739 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:53:37,741 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:53:37,792 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:53:37,853 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:53:37,853 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:53:50,248 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:53:52,278 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:54:02,401 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:54:02,401 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:54:05,156 - ZeroShotPerturbation - WARNING - DE metrics failed for TCF3: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:54:05,184 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:54:05,185 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-26 23:55:17,699 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:55:17,699 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:55:17,699 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:55:18,713 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:55:18,764 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:55:18,827 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:55:18,827 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-26 23:55:31,082 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-26 23:55:33,088 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-26 23:55:43,220 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-26 23:55:43,221 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-26 23:55:44,957 - ZeroShotPerturbation - WARNING - DE metrics failed for TCF3: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:55:44,985 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:55:44,985 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-26 23:55:49,166 - ZeroShotPerturbation - WARNING - DE metrics failed for TADA1: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:55:49,248 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:55:49,248 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-26 23:55:51,301 - ZeroShotPerturbation - WARNING - DE metrics failed for FOXH1: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:55:51,343 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:55:51,343 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-26 23:55:52,416 - ZeroShotPerturbation - WARNING - DE metrics failed for SMARCA4: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:55:52,436 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:55:52,437 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-26 23:55:54,257 - ZeroShotPerturbation - WARNING - DE metrics failed for SMARCA5: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:55:54,293 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:55:54,293 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-26 23:55:57,740 - ZeroShotPerturbation - WARNING - DE metrics failed for HIRA: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:55:57,809 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:55:57,809 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-26 23:55:58,494 - ZeroShotPerturbation - WARNING - DE metrics failed for RAB3B: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:55:58,506 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:55:58,507 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-26 23:56:01,615 - ZeroShotPerturbation - WARNING - DE metrics failed for IGF2R: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:01,677 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:01,677 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-26 23:56:02,092 - ZeroShotPerturbation - WARNING - DE metrics failed for SNCA: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:02,101 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:02,101 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-26 23:56:02,539 - ZeroShotPerturbation - WARNING - DE metrics failed for TMBIM6: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:02,550 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:02,550 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-26 23:56:03,877 - ZeroShotPerturbation - WARNING - DE metrics failed for DAXX: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:03,904 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:03,905 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-26 23:56:04,332 - ZeroShotPerturbation - WARNING - DE metrics failed for METTL14: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:04,341 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:04,341 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-26 23:56:05,073 - ZeroShotPerturbation - WARNING - DE metrics failed for METTL17: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:05,089 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:05,089 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-26 23:56:06,403 - ZeroShotPerturbation - WARNING - DE metrics failed for PRR12: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:06,429 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:06,429 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-26 23:56:06,635 - ZeroShotPerturbation - WARNING - DE metrics failed for EPB41L2: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /public/home/wangar2023/VCC_Project/hpdex/src/hpdex/backend/bin/kernel.cpython-311-x86_64-linux-gnu.so)
+2025-11-26 23:56:06,640 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: nan, DES: nan, n_DE: 0
+2025-11-26 23:56:06,666 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-26 23:56:06,666 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-26 23:56:06,666 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-26 23:56:06,667 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): nan
+2025-11-26 23:56:06,667 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     nan
+2025-11-26 23:56:06,667 - ZeroShotPerturbation - INFO -   Mean DES:              nan
+2025-11-26 23:56:06,667 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-26 23:56:06,667 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-26 23:59:52,473 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-26 23:59:52,473 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-26 23:59:52,473 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-26 23:59:53,489 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-26 23:59:53,541 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-26 23:59:53,603 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-26 23:59:53,604 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-27 00:00:05,864 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-27 00:00:07,865 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-27 00:00:18,002 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-27 00:00:18,002 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-27 00:00:29,980 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: 0.8902, DES: 0.0159, n_DE: 189
+2025-11-27 00:00:29,981 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-27 00:01:01,077 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: 0.8407, DES: 0.6046, n_DE: 9555
+2025-11-27 00:01:01,078 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-27 00:01:16,124 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: 0.8728, DES: 0.0524, n_DE: 839
+2025-11-27 00:01:16,124 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-27 00:01:22,281 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: 0.8009, DES: 0.6617, n_DE: 10041
+2025-11-27 00:01:22,281 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-27 00:01:35,527 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: 0.8286, DES: 0.5689, n_DE: 8677
+2025-11-27 00:01:35,528 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-27 00:02:01,759 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: 0.8707, DES: 0.1775, n_DE: 2625
+2025-11-27 00:02:01,759 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-27 00:02:05,500 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: 0.8958, DES: 0.0000, n_DE: 3
+2025-11-27 00:02:05,500 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-27 00:02:29,554 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: 0.8667, DES: 0.0532, n_DE: 620
+2025-11-27 00:02:29,554 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-27 00:02:31,819 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: 0.8994, DES: 0.0149, n_DE: 201
+2025-11-27 00:02:31,819 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-27 00:02:34,588 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: 0.8903, DES: 0.0000, n_DE: 11
+2025-11-27 00:02:34,588 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-27 00:02:42,774 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: 0.8870, DES: 0.0627, n_DE: 765
+2025-11-27 00:02:42,775 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-27 00:02:45,592 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: 0.8701, DES: 0.6563, n_DE: 9480
+2025-11-27 00:02:45,592 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-27 00:02:50,302 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: 0.8918, DES: 0.2914, n_DE: 4317
+2025-11-27 00:02:50,302 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-27 00:02:58,096 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: 0.8884, DES: 0.1066, n_DE: 1566
+2025-11-27 00:02:58,096 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-27 00:02:59,180 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: 0.8777, DES: 0.2018, n_DE: 2824
+2025-11-27 00:02:59,202 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-27 00:02:59,202 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:02:59,202 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-27 00:02:59,203 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): 0.8714
+2025-11-27 00:02:59,203 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     16.3272
+2025-11-27 00:02:59,203 - ZeroShotPerturbation - INFO -   Mean DES:              0.2312
+2025-11-27 00:02:59,203 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-27 00:02:59,203 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:05:29,881 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-27 00:05:29,881 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-27 00:05:29,881 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-27 00:05:30,896 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-27 00:05:30,947 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-27 00:05:31,009 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-27 00:05:31,009 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-27 00:05:46,123 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-27 00:05:48,526 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-27 00:05:58,658 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-27 00:05:58,658 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-27 00:06:08,454 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: 0.8839, DES: 0.0195, n_DE: 154
+2025-11-27 00:06:08,455 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-27 00:10:38,392 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-27 00:10:38,392 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-27 00:10:38,392 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-27 00:10:39,418 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-27 00:10:39,469 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-27 00:10:39,531 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-27 00:10:39,531 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-27 00:10:51,840 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-27 00:10:53,917 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-27 00:11:04,106 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-27 00:11:04,107 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-27 00:11:07,291 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: 0.9619, DES: 0.0000, n_DE: 35
+2025-11-27 00:11:07,453 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-27 00:11:15,915 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: 0.9550, DES: 0.0606, n_DE: 924
+2025-11-27 00:11:16,077 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-27 00:11:20,267 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: 0.9571, DES: 0.0000, n_DE: 70
+2025-11-27 00:11:20,419 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-27 00:11:22,186 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: 0.9274, DES: 0.2322, n_DE: 3166
+2025-11-27 00:11:22,347 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-27 00:11:26,052 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: 0.9454, DES: 0.0506, n_DE: 534
+2025-11-27 00:11:26,215 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-27 00:11:33,418 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: 0.9610, DES: 0.0147, n_DE: 68
+2025-11-27 00:11:33,581 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-27 00:11:34,690 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: 0.9585, DES: 0.0000, n_DE: 50
+2025-11-27 00:11:34,844 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-27 00:11:41,342 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: 0.9608, DES: 0.0000, n_DE: 41
+2025-11-27 00:11:41,502 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-27 00:11:42,225 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: 0.9604, DES: 0.0000, n_DE: 23
+2025-11-27 00:11:42,388 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-27 00:11:43,294 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: 0.9607, DES: 0.0000, n_DE: 66
+2025-11-27 00:11:43,456 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-27 00:11:45,745 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: 0.9564, DES: 0.0000, n_DE: 37
+2025-11-27 00:11:45,898 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-27 00:11:46,767 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: 0.9408, DES: 0.3839, n_DE: 4796
+2025-11-27 00:11:46,923 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-27 00:11:48,233 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: 0.9606, DES: 0.0000, n_DE: 41
+2025-11-27 00:11:48,398 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-27 00:11:50,624 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: 0.9571, DES: 0.0000, n_DE: 51
+2025-11-27 00:11:50,778 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-27 00:11:51,220 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: 0.9402, DES: 0.0513, n_DE: 312
+2025-11-27 00:11:51,397 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-27 00:11:51,398 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:11:51,398 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-27 00:11:51,398 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): 0.9536
+2025-11-27 00:11:51,398 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     13.5208
+2025-11-27 00:11:51,398 - ZeroShotPerturbation - INFO -   Mean DES:              0.0529
+2025-11-27 00:11:51,398 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-27 00:11:51,398 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:14:03,099 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-27 00:14:03,099 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-27 00:14:03,099 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-27 00:14:04,119 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-27 00:14:04,171 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-27 00:14:04,233 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-27 00:14:04,233 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-27 00:14:16,499 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-27 00:14:18,553 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-27 00:14:28,645 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-27 00:14:28,646 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-27 00:14:31,877 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: 0.9656, DES: 0.0000, n_DE: 44
+2025-11-27 00:14:32,043 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-27 00:14:40,483 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: 0.9576, DES: 0.0291, n_DE: 412
+2025-11-27 00:14:40,650 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-27 00:14:44,866 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: 0.9647, DES: 0.0000, n_DE: 108
+2025-11-27 00:14:45,025 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-27 00:14:46,819 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: 0.9288, DES: 0.3067, n_DE: 3926
+2025-11-27 00:14:46,984 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-27 00:14:50,718 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: 0.9517, DES: 0.0549, n_DE: 711
+2025-11-27 00:14:50,882 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-27 00:14:58,095 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: 0.9659, DES: 0.0000, n_DE: 64
+2025-11-27 00:14:58,259 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-27 00:14:59,403 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: 0.9594, DES: 0.0000, n_DE: 53
+2025-11-27 00:14:59,567 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-27 00:15:06,094 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: 0.9657, DES: 0.0000, n_DE: 71
+2025-11-27 00:15:06,253 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-27 00:15:07,039 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: 0.9604, DES: 0.0000, n_DE: 13
+2025-11-27 00:15:07,198 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-27 00:15:08,121 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: 0.9643, DES: 0.0000, n_DE: 53
+2025-11-27 00:15:08,274 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-27 00:15:10,587 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: 0.9649, DES: 0.0000, n_DE: 67
+2025-11-27 00:15:10,748 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-27 00:15:11,646 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: 0.9454, DES: 0.4258, n_DE: 5167
+2025-11-27 00:15:11,809 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-27 00:15:13,157 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: 0.9637, DES: 0.0110, n_DE: 181
+2025-11-27 00:15:13,320 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-27 00:15:15,559 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: 0.9578, DES: 0.0000, n_DE: 79
+2025-11-27 00:15:15,725 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-27 00:15:16,227 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: 0.9416, DES: 0.0370, n_DE: 324
+2025-11-27 00:15:16,420 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-27 00:15:16,420 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:15:16,420 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-27 00:15:16,420 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): 0.9572
+2025-11-27 00:15:16,421 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     13.5338
+2025-11-27 00:15:16,421 - ZeroShotPerturbation - INFO -   Mean DES:              0.0576
+2025-11-27 00:15:16,421 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-27 00:15:16,421 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:31:06,558 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-27 00:31:06,559 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-27 00:31:06,559 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-27 00:31:07,560 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-27 00:31:07,612 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-27 00:31:07,674 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-27 00:31:07,674 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-27 00:31:21,528 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-27 00:31:23,798 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-27 00:31:33,940 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-27 00:31:33,941 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-27 00:31:37,267 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: 0.9640, DES: 0.0000, n_DE: 42
+2025-11-27 00:31:37,449 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-27 00:31:46,174 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: 0.9603, DES: 0.0475, n_DE: 673
+2025-11-27 00:31:46,351 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-27 00:31:50,929 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: 0.9641, DES: 0.0000, n_DE: 82
+2025-11-27 00:31:51,095 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-27 00:31:53,073 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: 0.9268, DES: 0.1623, n_DE: 1966
+2025-11-27 00:31:53,246 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-27 00:31:57,164 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: 0.9465, DES: 0.0300, n_DE: 467
+2025-11-27 00:31:57,337 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-27 00:32:04,718 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: 0.9654, DES: 0.0000, n_DE: 43
+2025-11-27 00:32:04,894 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-27 00:32:06,228 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: 0.9602, DES: 0.0196, n_DE: 51
+2025-11-27 00:32:06,402 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-27 00:32:13,108 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: 0.9642, DES: 0.0000, n_DE: 38
+2025-11-27 00:32:13,281 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-27 00:32:14,256 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: 0.9588, DES: 0.0000, n_DE: 16
+2025-11-27 00:32:14,429 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-27 00:32:15,545 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: 0.9636, DES: 0.0000, n_DE: 41
+2025-11-27 00:32:15,717 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-27 00:32:18,212 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: 0.9625, DES: 0.0000, n_DE: 36
+2025-11-27 00:32:18,387 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-27 00:32:19,449 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: 0.9418, DES: 0.3521, n_DE: 4303
+2025-11-27 00:32:19,625 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-27 00:32:21,155 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: 0.9595, DES: 0.0253, n_DE: 79
+2025-11-27 00:32:21,330 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-27 00:32:23,756 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: 0.9641, DES: 0.0000, n_DE: 47
+2025-11-27 00:32:23,931 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-27 00:32:24,597 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: 0.9408, DES: 0.0313, n_DE: 319
+2025-11-27 00:32:24,795 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-27 00:32:24,795 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:32:24,795 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-27 00:32:24,796 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): 0.9562
+2025-11-27 00:32:24,796 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     13.9601
+2025-11-27 00:32:24,796 - ZeroShotPerturbation - INFO -   Mean DES:              0.0445
+2025-11-27 00:32:24,796 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-27 00:32:24,796 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:35:35,760 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-27 00:35:35,761 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-27 00:35:35,761 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-27 00:35:36,781 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-27 00:35:36,832 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-27 00:35:36,894 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-27 00:35:36,894 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-27 00:35:49,045 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-27 00:35:51,062 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-27 00:36:01,193 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-27 00:36:01,194 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-27 00:36:04,671 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: 0.9588, DES: 0.0000, n_DE: 31
+2025-11-27 00:36:04,846 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-27 00:36:13,445 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: 0.9567, DES: 0.0207, n_DE: 386
+2025-11-27 00:36:13,616 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-27 00:36:18,022 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: 0.9612, DES: 0.0000, n_DE: 43
+2025-11-27 00:36:18,194 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-27 00:36:20,163 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: 0.9262, DES: 0.1544, n_DE: 2247
+2025-11-27 00:36:20,336 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-27 00:36:24,268 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: 0.9481, DES: 0.0645, n_DE: 1070
+2025-11-27 00:36:24,431 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-27 00:36:31,781 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: 0.9606, DES: 0.0000, n_DE: 49
+2025-11-27 00:36:31,952 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-27 00:36:33,281 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: 0.9613, DES: 0.0000, n_DE: 52
+2025-11-27 00:36:33,446 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-27 00:36:40,139 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: 0.9630, DES: 0.0000, n_DE: 58
+2025-11-27 00:36:40,307 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-27 00:36:41,234 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: 0.9603, DES: 0.0000, n_DE: 17
+2025-11-27 00:36:41,406 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-27 00:36:42,496 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: 0.9597, DES: 0.0000, n_DE: 60
+2025-11-27 00:36:42,660 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-27 00:36:45,164 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: 0.9643, DES: 0.0000, n_DE: 42
+2025-11-27 00:36:45,334 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-27 00:36:46,380 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: 0.9394, DES: 0.3187, n_DE: 4622
+2025-11-27 00:36:46,550 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-27 00:36:48,067 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: 0.9586, DES: 0.0000, n_DE: 55
+2025-11-27 00:36:48,239 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-27 00:36:50,673 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: 0.9604, DES: 0.0000, n_DE: 65
+2025-11-27 00:36:50,847 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-27 00:36:51,528 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: 0.9397, DES: 0.0415, n_DE: 434
+2025-11-27 00:36:51,724 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-27 00:36:51,724 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:36:51,724 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-27 00:36:51,725 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): 0.9546
+2025-11-27 00:36:51,725 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     12.9574
+2025-11-27 00:36:51,725 - ZeroShotPerturbation - INFO -   Mean DES:              0.0400
+2025-11-27 00:36:51,725 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-27 00:36:51,725 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:38:23,283 - ZeroShotPerturbation - INFO - Starting Zero-Shot Perturbation Pipeline with scgpt model
+2025-11-27 00:38:23,283 - ZeroShotPerturbation - INFO - Results will be saved to: results/scgpt
+2025-11-27 00:38:23,283 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...
+2025-11-27 00:38:24,280 - ZeroShotPerturbation - INFO - Model vocab size: 60697, Saved checkpoint vocab size: 60697
+2025-11-27 00:38:24,330 - ZeroShotPerturbation - INFO - Loaded model from model/scGPT/best_model.pt
+2025-11-27 00:38:24,392 - ZeroShotPerturbation - INFO - Initializing Data Loader...
+2025-11-27 00:38:24,392 - ZeroShotPerturbation - INFO - Loading training data from data/processed/train.h5ad
+2025-11-27 00:38:36,526 - ZeroShotPerturbation - INFO - Loading test data from data/processed/test.h5ad
+2025-11-27 00:38:38,557 - ZeroShotPerturbation - INFO - Found 38176 control cells.
+2025-11-27 00:38:48,657 - ZeroShotPerturbation - INFO - Processing 15 target genes...
+2025-11-27 00:38:48,657 - ZeroShotPerturbation - INFO - Predicting for target: TCF3
+2025-11-27 00:38:52,132 - ZeroShotPerturbation - INFO - Target TCF3 - Pearson: 0.9646, DES: 0.0000, n_DE: 54
+2025-11-27 00:38:52,305 - ZeroShotPerturbation - INFO - Predicting for target: TADA1
+2025-11-27 00:39:00,964 - ZeroShotPerturbation - INFO - Target TADA1 - Pearson: 0.9579, DES: 0.0372, n_DE: 188
+2025-11-27 00:39:01,135 - ZeroShotPerturbation - INFO - Predicting for target: FOXH1
+2025-11-27 00:39:05,591 - ZeroShotPerturbation - INFO - Target FOXH1 - Pearson: 0.9650, DES: 0.0000, n_DE: 71
+2025-11-27 00:39:05,769 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA4
+2025-11-27 00:39:07,770 - ZeroShotPerturbation - INFO - Target SMARCA4 - Pearson: 0.9296, DES: 0.1836, n_DE: 2631
+2025-11-27 00:39:07,947 - ZeroShotPerturbation - INFO - Predicting for target: SMARCA5
+2025-11-27 00:39:11,919 - ZeroShotPerturbation - INFO - Target SMARCA5 - Pearson: 0.9484, DES: 0.0476, n_DE: 609
+2025-11-27 00:39:12,095 - ZeroShotPerturbation - INFO - Predicting for target: HIRA
+2025-11-27 00:39:19,501 - ZeroShotPerturbation - INFO - Target HIRA - Pearson: 0.9626, DES: 0.0000, n_DE: 61
+2025-11-27 00:39:19,674 - ZeroShotPerturbation - INFO - Predicting for target: RAB3B
+2025-11-27 00:39:21,011 - ZeroShotPerturbation - INFO - Target RAB3B - Pearson: 0.9636, DES: 0.0000, n_DE: 52
+2025-11-27 00:39:21,179 - ZeroShotPerturbation - INFO - Predicting for target: IGF2R
+2025-11-27 00:39:27,971 - ZeroShotPerturbation - INFO - Target IGF2R - Pearson: 0.9571, DES: 0.0128, n_DE: 78
+2025-11-27 00:39:28,145 - ZeroShotPerturbation - INFO - Predicting for target: SNCA
+2025-11-27 00:39:29,105 - ZeroShotPerturbation - INFO - Target SNCA - Pearson: 0.9591, DES: 0.0000, n_DE: 14
+2025-11-27 00:39:29,280 - ZeroShotPerturbation - INFO - Predicting for target: TMBIM6
+2025-11-27 00:39:30,403 - ZeroShotPerturbation - INFO - Target TMBIM6 - Pearson: 0.9671, DES: 0.0000, n_DE: 66
+2025-11-27 00:39:30,578 - ZeroShotPerturbation - INFO - Predicting for target: DAXX
+2025-11-27 00:39:33,101 - ZeroShotPerturbation - INFO - Target DAXX - Pearson: 0.9631, DES: 0.0000, n_DE: 50
+2025-11-27 00:39:33,276 - ZeroShotPerturbation - INFO - Predicting for target: METTL14
+2025-11-27 00:39:34,336 - ZeroShotPerturbation - INFO - Target METTL14 - Pearson: 0.9407, DES: 0.2390, n_DE: 3335
+2025-11-27 00:39:34,512 - ZeroShotPerturbation - INFO - Predicting for target: METTL17
+2025-11-27 00:39:36,060 - ZeroShotPerturbation - INFO - Target METTL17 - Pearson: 0.9632, DES: 0.0196, n_DE: 102
+2025-11-27 00:39:36,236 - ZeroShotPerturbation - INFO - Predicting for target: PRR12
+2025-11-27 00:39:38,678 - ZeroShotPerturbation - INFO - Target PRR12 - Pearson: 0.9612, DES: 0.0200, n_DE: 50
+2025-11-27 00:39:38,844 - ZeroShotPerturbation - INFO - Predicting for target: EPB41L2
+2025-11-27 00:39:39,520 - ZeroShotPerturbation - INFO - Target EPB41L2 - Pearson: 0.9382, DES: 0.0342, n_DE: 409
+2025-11-27 00:39:39,719 - ZeroShotPerturbation - INFO - Results saved to results/scgpt/perturbation_metrics.csv
+2025-11-27 00:39:39,719 - ZeroShotPerturbation - INFO - ==================================================
+2025-11-27 00:39:39,719 - ZeroShotPerturbation - INFO - Overall Metrics:
+2025-11-27 00:39:39,720 - ZeroShotPerturbation - INFO -   Mean Pearson (log2FC): 0.9561
+2025-11-27 00:39:39,720 - ZeroShotPerturbation - INFO -   Mean MSE (log2FC):     13.6556
+2025-11-27 00:39:39,720 - ZeroShotPerturbation - INFO -   Mean DES:              0.0396
+2025-11-27 00:39:39,720 - ZeroShotPerturbation - INFO -   Mean PDS:              0.5333
+2025-11-27 00:39:39,720 - ZeroShotPerturbation - INFO - ==================================================

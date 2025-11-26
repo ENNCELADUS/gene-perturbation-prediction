@@ -1,5 +1,6 @@
 import yaml
 import argparse
+import gc
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -94,6 +95,10 @@ def main():
         ground_truth_adata = data_loader.get_target_ground_truth(target)
         n_cells = ground_truth_adata.n_obs
 
+        # Cap n_cells to avoid OOM (process in smaller batches)
+        max_cells = config["inference"].get("max_cells", 64)
+        n_cells = min(n_cells, max_cells)
+
         if n_cells == 0:
             logger.warning(f"No ground truth cells for {target}, skipping.")
             continue
@@ -115,7 +120,7 @@ def main():
             pred_expression = model_wrapper.predict(
                 batch_data,
                 gene_ids=gene_ids,
-                amp=False,
+                amp=True,
             )
 
         # Convert predictions to numpy
@@ -170,6 +175,11 @@ def main():
             f"Target {target} - Pearson: {metrics['pearson_log2fc']:.4f}, "
             f"DES: {metrics['des']:.4f}, n_DE: {metrics['n_de_truth']}"
         )
+
+        # Clean up GPU memory after each target
+        del batch_data, pred_expression
+        gc.collect()
+        torch.cuda.empty_cache()
 
     # 4. Compute PDS (global metric)
     if pred_deltas:
