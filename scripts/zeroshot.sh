@@ -37,6 +37,9 @@ echo "Config: src/configs/config.yaml"
 
 set -euo pipefail
 
-python src/main.py --config src/configs/config.yaml
+# Add local hpdex package (numba backend, no C++ build required)
+export PYTHONPATH="${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
+
+python src/main.py --model_type scgpt --threads -1
 
 echo "Experiment complete. Results saved to paths defined in config."

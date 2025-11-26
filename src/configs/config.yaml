@@ -8,12 +8,13 @@ paths:
 model:
   pad_token: "<pad>"
   pad_value: 0
-  max_seq_len: 1200
+  max_seq_len: 2048
   include_zero_gene: "batch-wise" # "all" or "batch-wise"
 
 inference:
-  batch_size: 32
-  eval_batch_size: 32
+  batch_size: 16
+  eval_batch_size: 16
+  max_cells: 32  # Cap cells per target to avoid OOM
   seed: 42
   control_target_gene: "non-targeting"
 

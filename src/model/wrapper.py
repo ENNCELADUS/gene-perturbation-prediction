@@ -161,9 +161,11 @@ class ScGPTWrapper:
         if hasattr(batch_data, "to"):
             batch_data.to(self.device)
 
+        max_seq_len = self.config["model"].get("max_seq_len", 1200)
         return self.model.pred_perturb(
             batch_data,
             include_zero_gene=include_zero_gene,
             gene_ids=gene_ids,
             amp=amp,
+            max_seq_len=max_seq_len,
         )
