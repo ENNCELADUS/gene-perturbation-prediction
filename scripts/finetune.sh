@@ -1,32 +1,23 @@
 #!/bin/bash
-#SBATCH --job-name=scgpt_finetune
+#SBATCH -J scGPT_finetune
+#SBATCH -p critical
+#SBATCH -A hexm-critical
+#SBATCH -N 1
+#SBATCH -t 2-00:00:00
+#SBATCH --mem=128G
+#SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:NVIDIATITANRTX:1
 #SBATCH --output=logs/finetune/slurm_%j.out
 #SBATCH --error=logs/finetune/slurm_%j.err
-#SBATCH --time=12:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
-
-# ========== Environment Setup ==========
-echo "=========================================="
-echo "Job ID: $SLURM_JOB_ID"
-echo "Node: $SLURMD_NODENAME"
-echo "GPU: $CUDA_VISIBLE_DEVICES"
-echo "Date: $(date)"
-echo "=========================================="
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=2162352828@qq.com
 
 # Load conda environment
 source ~/.bashrc
 conda activate vcc
 
 # Navigate to project directory
-cd /home/richard/projects/VCC
-
-# Create log directory
-mkdir -p logs/finetune
+cd /public/home/wangar2023/VCC_Project
 
 # ========== Step 1: Convert Data to GEARS Format ==========
 echo ""
