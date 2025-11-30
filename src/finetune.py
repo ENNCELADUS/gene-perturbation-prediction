@@ -4,8 +4,11 @@ Finetune scGPT for perturbation prediction on VCC dataset.
 
 Based on scGPT Tutorial_Perturbation.ipynb
 
-Usage:
-    python src/train.py --config src/configs/finetune.yaml
+Usage (single GPU):
+    python src/finetune.py --config src/configs/finetune.yaml
+
+Usage (DDP with 4 GPUs):
+    torchrun --nproc_per_node=4 src/finetune.py --config src/configs/finetune.yaml
 """
 
 import argparse
@@ -20,7 +23,10 @@ from typing import Dict, Optional
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from torch import nn
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
 from torch_geometric.loader import DataLoader
 
 # Add project root to path
@@ -45,17 +51,48 @@ import yaml
 warnings.filterwarnings("ignore")
 
 
+# ========== DDP Utility Functions ==========
+def setup_ddp():
+    """
+    Initialize distributed training if running under torchrun.
+
+    Returns:
+        Tuple of (rank, local_rank, world_size, is_distributed)
+    """
+    if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        rank = int(os.environ["RANK"])
+        local_rank = int(os.environ["LOCAL_RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+        dist.init_process_group(backend="nccl")
+        torch.cuda.set_device(local_rank)
+        return rank, local_rank, world_size, True
+    else:
+        return 0, 0, 1, False
+
+
+def cleanup_ddp(is_distributed: bool):
+    """Clean up distributed training."""
+    if is_distributed:
+        dist.destroy_process_group()
+
+
+def is_main_process(rank: int) -> bool:
+    """Check if this is the main process (rank 0)."""
+    return rank == 0
+
+
 def load_config(config_path: str) -> dict:
     """Load YAML configuration file."""
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
 
-def setup_logging(save_dir: Path):
-    """Setup scGPT logger with file handler."""
+def setup_logging(save_dir: Path, rank: int = 0):
+    """Setup scGPT logger with file handler (only on rank 0)."""
     logger = scg.logger
-    scg.utils.add_file_handler(logger, save_dir / "run.log")
-    logger.info(f"Running on {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    if is_main_process(rank):
+        scg.utils.add_file_handler(logger, save_dir / "run.log")
+        logger.info(f"Running on {time.strftime('%Y-%m-%d %H:%M:%S')}")
     return logger
 
 
@@ -259,8 +296,8 @@ def train_epoch(
         total_loss += loss.item()
         total_mse += loss_mse.item()
 
-        # Logging
-        if batch_idx % log_interval == 0 and batch_idx > 0:
+        # Logging (only if logger is provided, i.e., rank 0)
+        if logger is not None and batch_idx % log_interval == 0 and batch_idx > 0:
             ms_per_batch = (time.time() - start_time) * 1000 / log_interval
             cur_loss = total_loss / log_interval
             cur_mse = total_mse / log_interval
@@ -375,8 +412,11 @@ def compute_perturbation_metrics(results: Dict, ctrl_adata) -> Dict:
 
 def save_model(model: nn.Module, config: dict, vocab: GeneVocab, save_dir: Path):
     """Save finetuned model checkpoint."""
+    # Unwrap DDP model if necessary
+    model_to_save = model.module if isinstance(model, DDP) else model
+
     # Save model weights
-    torch.save(model.state_dict(), save_dir / "best_model.pt")
+    torch.save(model_to_save.state_dict(), save_dir / "best_model.pt")
 
     # Copy vocab
     vocab_src = Path(config["paths"]["pretrained_model_dir"]) / "vocab.json"
@@ -410,47 +450,97 @@ def main():
     )
     args = parser.parse_args()
 
+    # ========== Setup DDP ==========
+    rank, local_rank, world_size, is_distributed = setup_ddp()
+
     # Load config
     config = load_config(args.config)
 
     # Set seed
     set_seed(args.seed)
 
-    # Setup device
-    device = torch.device(
-        config["hardware"]["device"] if torch.cuda.is_available() else "cpu"
-    )
-    print(f"Using device: {device}")
+    # Setup device (use local_rank for DDP)
+    if is_distributed:
+        device = torch.device(f"cuda:{local_rank}")
+    else:
+        device = torch.device(
+            config["hardware"]["device"] if torch.cuda.is_available() else "cpu"
+        )
 
-    # Setup output directory
+    if is_main_process(rank):
+        print(f"Using device: {device}")
+        if is_distributed:
+            print(f"DDP enabled: world_size={world_size}")
+
+    # Setup output directory (only rank 0 creates it)
     save_dir = Path(config["paths"]["output_dir"])
-    save_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Saving to {save_dir}")
+    if is_main_process(rank):
+        save_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Saving to {save_dir}")
 
-    # Setup logging
-    logger = setup_logging(save_dir)
-    logger.info(f"Config: {config}")
+    # Synchronize before logging setup
+    if is_distributed:
+        dist.barrier()
+
+    # Setup logging (only rank 0 logs to file)
+    logger = setup_logging(save_dir, rank)
+    if is_main_process(rank):
+        logger.info(f"Config: {config}")
+        logger.info(f"DDP: is_distributed={is_distributed}, world_size={world_size}")
 
     # ========== Load Data ==========
-    logger.info("Loading data...")
+    if is_main_process(rank):
+        logger.info("Loading data...")
     gears_data_dir = config["paths"]["gears_data_dir"]
     dataset_name = config["paths"]["dataset_name"]
 
     pert_data = PertData(gears_data_dir)
     pert_data.load(data_path=os.path.join(gears_data_dir, dataset_name))
 
-    # Prepare split
+    # Prepare split (only rank 0 prepares, others wait)
     split_type = config["split"]["type"]
     split_seed = config["split"]["seed"]
-    pert_data.prepare_split(split=split_type, seed=split_seed)
 
-    # Get dataloaders
+    if is_distributed:
+        if is_main_process(rank):
+            pert_data.prepare_split(split=split_type, seed=split_seed)
+        dist.barrier()
+        if not is_main_process(rank):
+            pert_data.prepare_split(split=split_type, seed=split_seed)
+    else:
+        pert_data.prepare_split(split=split_type, seed=split_seed)
+
+    # Get dataloaders (we'll create our own train_loader with DistributedSampler)
     batch_size = config["optimizer"]["batch_size"]
     eval_batch_size = config["optimizer"]["eval_batch_size"]
     pert_data.get_dataloader(batch_size=batch_size, test_batch_size=eval_batch_size)
 
+    # ========== Create Distributed Train Loader ==========
+    if is_distributed:
+        # Get the training dataset from PertData
+        train_dataset = pert_data.dataloader["train_loader"].dataset
+        train_sampler = DistributedSampler(
+            train_dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+        )
+        # Adjust batch size per GPU
+        per_gpu_batch_size = batch_size // world_size
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=per_gpu_batch_size,
+            sampler=train_sampler,
+            num_workers=4,
+            pin_memory=True,
+        )
+    else:
+        train_loader = pert_data.dataloader["train_loader"]
+        train_sampler = None
+
     # ========== Load Vocabulary ==========
-    logger.info("Loading vocabulary...")
+    if is_main_process(rank):
+        logger.info("Loading vocabulary...")
     vocab_file = Path(config["paths"]["pretrained_model_dir"]) / "vocab.json"
     vocab = GeneVocab.from_file(vocab_file)
 
@@ -465,10 +555,11 @@ def main():
         1 if gene in vocab else -1 for gene in pert_data.adata.var["gene_name"]
     ]
     gene_ids_in_vocab = np.array(pert_data.adata.var["id_in_vocab"])
-    logger.info(
-        f"Matched {np.sum(gene_ids_in_vocab >= 0)}/{len(gene_ids_in_vocab)} genes "
-        f"in vocabulary of size {len(vocab)}"
-    )
+    if is_main_process(rank):
+        logger.info(
+            f"Matched {np.sum(gene_ids_in_vocab >= 0)}/{len(gene_ids_in_vocab)} genes "
+            f"in vocabulary of size {len(vocab)}"
+        )
 
     genes = pert_data.adata.var["gene_name"].tolist()
     vocab.set_default_index(vocab[config["data"]["pad_token"]])
@@ -482,9 +573,19 @@ def main():
     n_genes = len(genes)
 
     # ========== Load Model ==========
-    logger.info("Loading pretrained model...")
+    if is_main_process(rank):
+        logger.info("Loading pretrained model...")
     model = load_pretrained_model(config, vocab, n_genes, device, logger)
-    logger.info(f"Model has {sum(p.numel() for p in model.parameters()):,} parameters")
+    if is_main_process(rank):
+        logger.info(
+            f"Model has {sum(p.numel() for p in model.parameters()):,} parameters"
+        )
+
+    # ========== Wrap Model with DDP ==========
+    if is_distributed:
+        model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+        if is_main_process(rank):
+            logger.info("Model wrapped with DistributedDataParallel")
 
     # ========== Setup Training ==========
     criterion = masked_mse_loss
@@ -506,12 +607,15 @@ def main():
     best_model = None
     patience = 0
 
-    logger.info(f"Starting training for {epochs} epochs...")
+    if is_main_process(rank):
+        logger.info(f"Starting training for {epochs} epochs...")
 
     for epoch in range(1, epochs + 1):
         epoch_start = time.time()
 
-        train_loader = pert_data.dataloader["train_loader"]
+        # Set epoch for distributed sampler (ensures proper shuffling)
+        if train_sampler is not None:
+            train_sampler.set_epoch(epoch)
 
         # Train
         train_loss = train_epoch(
@@ -522,56 +626,86 @@ def main():
             gene_ids=gene_ids,
             config=config,
             epoch=epoch,
-            logger=logger,
+            logger=logger if is_main_process(rank) else None,
         )
 
-        # Evaluate on validation (if exists)
-        if "val_loader" in pert_data.dataloader:
-            val_loader = pert_data.dataloader["val_loader"]
-            val_res = evaluate(model, val_loader, gene_ids, config, device)
-            ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
-            val_metrics = compute_perturbation_metrics(val_res, ctrl_adata)
-            logger.info(f"Epoch {epoch} val_metrics: {val_metrics}")
-            current_loss = -val_metrics["pearson"]  # Negative for "lower is better"
+        # Synchronize loss across processes
+        if is_distributed:
+            loss_tensor = torch.tensor([train_loss], device=device)
+            dist.all_reduce(loss_tensor, op=dist.ReduceOp.AVG)
+            train_loss = loss_tensor.item()
+
+        # Evaluate on validation (only on rank 0)
+        if is_main_process(rank):
+            if "val_loader" in pert_data.dataloader:
+                val_loader = pert_data.dataloader["val_loader"]
+                # Use unwrapped model for evaluation
+                eval_model = model.module if isinstance(model, DDP) else model
+                val_res = evaluate(eval_model, val_loader, gene_ids, config, device)
+                ctrl_adata = pert_data.adata[
+                    pert_data.adata.obs["condition"] == "ctrl"
+                ]
+                val_metrics = compute_perturbation_metrics(val_res, ctrl_adata)
+                logger.info(f"Epoch {epoch} val_metrics: {val_metrics}")
+                current_loss = -val_metrics["pearson"]  # Negative for "lower is better"
+            else:
+                current_loss = train_loss
+
+            elapsed = time.time() - epoch_start
+            logger.info(f"| end of epoch {epoch:3d} | time: {elapsed:5.2f}s |")
+
+            # Check for best model
+            if current_loss < best_loss:
+                best_loss = current_loss
+                # Store unwrapped model
+                model_to_copy = model.module if isinstance(model, DDP) else model
+                best_model = copy.deepcopy(model_to_copy)
+                logger.info(f"Best model at epoch {epoch}")
+                patience = 0
+            else:
+                patience += 1
+                if patience >= early_stop:
+                    logger.info(f"Early stopping at epoch {epoch}")
+                    # Broadcast early stop signal to all processes
+                    if is_distributed:
+                        early_stop_tensor = torch.tensor([1], device=device)
+                        dist.broadcast(early_stop_tensor, src=0)
+                    break
         else:
             current_loss = train_loss
 
-        elapsed = time.time() - epoch_start
-        logger.info(f"| end of epoch {epoch:3d} | time: {elapsed:5.2f}s |")
-
-        # Check for best model
-        if current_loss < best_loss:
-            best_loss = current_loss
-            best_model = copy.deepcopy(model)
-            logger.info(f"Best model at epoch {epoch}")
-            patience = 0
-        else:
-            patience += 1
-            if patience >= early_stop:
-                logger.info(f"Early stopping at epoch {epoch}")
+        # Check for early stop signal from rank 0
+        if is_distributed:
+            early_stop_tensor = torch.tensor([0], device=device)
+            dist.broadcast(early_stop_tensor, src=0)
+            if early_stop_tensor.item() == 1:
                 break
 
         scheduler.step()
 
-    # ========== Save Best Model ==========
-    logger.info("Saving best model...")
-    save_model(best_model, config, vocab, save_dir)
-    logger.info(f"Model saved to {save_dir}")
+    # ========== Save Best Model (only rank 0) ==========
+    if is_main_process(rank):
+        logger.info("Saving best model...")
+        save_model(best_model, config, vocab, save_dir)
+        logger.info(f"Model saved to {save_dir}")
 
-    # ========== Final Evaluation ==========
-    if "test_loader" in pert_data.dataloader:
-        logger.info("Evaluating on test set...")
-        test_loader = pert_data.dataloader["test_loader"]
-        test_res = evaluate(best_model, test_loader, gene_ids, config, device)
-        ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
-        test_metrics = compute_perturbation_metrics(test_res, ctrl_adata)
-        logger.info(f"Test metrics: {test_metrics}")
+        # ========== Final Evaluation ==========
+        if "test_loader" in pert_data.dataloader:
+            logger.info("Evaluating on test set...")
+            test_loader = pert_data.dataloader["test_loader"]
+            test_res = evaluate(best_model, test_loader, gene_ids, config, device)
+            ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
+            test_metrics = compute_perturbation_metrics(test_res, ctrl_adata)
+            logger.info(f"Test metrics: {test_metrics}")
 
-        # Save test metrics
-        with open(save_dir / "test_metrics.json", "w") as f:
-            json.dump(test_metrics, f, indent=2)
+            # Save test metrics
+            with open(save_dir / "test_metrics.json", "w") as f:
+                json.dump(test_metrics, f, indent=2)
 
-    logger.info("Training complete!")
+        logger.info("Training complete!")
+
+    # ========== Cleanup DDP ==========
+    cleanup_ddp(is_distributed)
 
 
 if __name__ == "__main__":
