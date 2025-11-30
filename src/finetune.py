@@ -494,7 +494,9 @@ def main():
     gears_data_dir = config["paths"]["gears_data_dir"]
     dataset_name = config["paths"]["dataset_name"]
 
-    pert_data = PertData(gears_data_dir)
+    # Use default_pert_graph=False to include all perturbation genes from data
+    # instead of filtering to essential genes list (avoids dropping 11 genes)
+    pert_data = PertData(gears_data_dir, default_pert_graph=False)
     pert_data.load(data_path=os.path.join(gears_data_dir, dataset_name))
 
     # Prepare split (only rank 0 prepares, others wait)

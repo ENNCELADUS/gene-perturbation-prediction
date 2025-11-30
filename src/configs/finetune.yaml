@@ -19,8 +19,8 @@ data:
   special_tokens: ["<pad>", "<cls>", "<eoc>"]
   pad_value: 0
   pert_pad_id: 0
-  include_zero_gene: "all"  # "all" or "batch-wise"
-  max_seq_len: 1536
+  include_zero_gene: "batch-wise"  # "batch-wise" uses less memory than "all"
+  max_seq_len: 1200  # Reduced from 1536 to fix OOM
 
 # ========== Training Objectives ==========
 training:
@@ -39,8 +39,8 @@ training:
 # ========== Optimizer ==========
 optimizer:
   lr: 1.0e-4
-  batch_size: 64
-  eval_batch_size: 64
+  batch_size: 16  # Reduced from 64 to fix OOM with 4 GPUs
+  eval_batch_size: 16
   epochs: 15
   schedule_interval: 1
   schedule_gamma: 0.9
