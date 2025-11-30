@@ -39,8 +39,8 @@ training:
 # ========== Optimizer ==========
 optimizer:
   lr: 1.0e-4
-  batch_size: 16
-  eval_batch_size: 16
+  batch_size: 64
+  eval_batch_size: 64
   epochs: 15
   schedule_interval: 1
   schedule_gamma: 0.9
