@@ -7,6 +7,7 @@
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:NVIDIATITANRTX:4
+#SBATCH --exclude=ai_gpu28
 #SBATCH --output=logs/finetune/slurm_%j.out
 #SBATCH --error=logs/finetune/slurm_%j.err
 #SBATCH --mail-type=ALL
