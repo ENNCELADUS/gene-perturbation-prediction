@@ -574,7 +574,9 @@ def main():
 
     # ========== Wrap Model with DDP ==========
     if is_distributed:
-        model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+        # find_unused_parameters=True needed because CLS/MVC/etc heads may not be used
+        model = DDP(model, device_ids=[local_rank], output_device=local_rank,
+                    find_unused_parameters=True)
         if is_main_process(rank):
             logger.info("Model wrapped with DistributedDataParallel")
 
