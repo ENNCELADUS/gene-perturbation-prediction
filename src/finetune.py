@@ -44,7 +44,7 @@ import scgpt as scg
 from scgpt.loss import masked_mse_loss
 from scgpt.model import TransformerGenerator
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
-from scgpt.utils import map_raw_id_to_vocab_id, set_seed
+from scgpt.utils import load_pretrained, map_raw_id_to_vocab_id, set_seed
 
 import yaml
 
@@ -155,38 +155,17 @@ def load_pretrained_model(
         use_fast_transformer=config["model"]["use_fast_transformer"],
     )
 
-    # Load pretrained weights (partial)
+    # Load pretrained weights using scGPT's utility
+    # This handles Wqkv -> in_proj_ key conversion when flash-attn is unavailable
     load_param_prefixes = config.get("load_param_prefixes", None)
     pretrained_dict = torch.load(model_file, map_location=device)
-
-    if load_param_prefixes:
-        # Only load specified parameter prefixes
-        model_dict = model.state_dict()
-        pretrained_dict = {
-            k: v
-            for k, v in pretrained_dict.items()
-            if any([k.startswith(prefix) for prefix in load_param_prefixes])
-        }
-        for k, v in pretrained_dict.items():
-            logger.info(f"Loading params {k} with shape {v.shape}")
-        model_dict.update(pretrained_dict)
-        model.load_state_dict(model_dict)
-    else:
-        # Load all matching params
-        try:
-            model.load_state_dict(pretrained_dict)
-            logger.info("Loaded all model params")
-        except RuntimeError:
-            # Load only matching params
-            model_dict = model.state_dict()
-            pretrained_dict = {
-                k: v
-                for k, v in pretrained_dict.items()
-                if k in model_dict and v.shape == model_dict[k].shape
-            }
-            model_dict.update(pretrained_dict)
-            model.load_state_dict(model_dict)
-            logger.info(f"Loaded {len(pretrained_dict)} matching params")
+    model = load_pretrained(
+        model,
+        pretrained_dict,
+        strict=False,
+        prefix=load_param_prefixes,
+        verbose=True,
+    )
 
     model.to(device)
     return model
@@ -226,11 +205,21 @@ def train_epoch(
         batch_size = len(batch_data.y)
         batch_data.to(device)
 
-        # Extract data from batch
-        x: torch.Tensor = batch_data.x  # (batch_size * n_genes, 2)
-        ori_gene_values = x[:, 0].view(batch_size, n_genes)
-        pert_flags = x[:, 1].long().view(batch_size, n_genes)
+        # Extract data from batch - GEARS format: x is (n_genes, 1) per cell
+        x: torch.Tensor = batch_data.x  # (batch_size * n_genes, 1)
+        ori_gene_values = x.squeeze(-1).view(batch_size, n_genes)
         target_gene_values = batch_data.y  # (batch_size, n_genes)
+
+        # Build pert_flags from pert_idx (indices of perturbed genes)
+        pert_flags = torch.zeros(batch_size, n_genes, dtype=torch.long, device=device)
+        pert_idx = batch_data.pert_idx  # (batch_size, num_perts) or list
+        for i in range(batch_size):
+            idx = pert_idx[i] if isinstance(pert_idx, list) else pert_idx[i]
+            if isinstance(idx, torch.Tensor):
+                idx = idx.tolist()
+            for p_idx in idx:
+                if p_idx >= 0 and p_idx < n_genes:  # -1 means no perturbation (ctrl)
+                    pert_flags[i, p_idx] = 1
 
         # Prepare input
         if include_zero_gene in ["all", "batch-wise"]:
@@ -533,7 +522,7 @@ def main():
             train_dataset,
             batch_size=per_gpu_batch_size,
             sampler=train_sampler,
-            num_workers=4,
+            num_workers=0,  # Avoid fork OOM on memory-constrained systems
             pin_memory=True,
         )
     else:

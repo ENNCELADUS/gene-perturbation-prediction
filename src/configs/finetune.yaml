@@ -20,7 +20,7 @@ data:
   pad_value: 0
   pert_pad_id: 0
   include_zero_gene: "batch-wise"  # "batch-wise" uses less memory than "all"
-  max_seq_len: 1200  # Reduced from 1536 to fix OOM
+  max_seq_len: 1536
 
 # ========== Training Objectives ==========
 training:
@@ -39,7 +39,7 @@ training:
 # ========== Optimizer ==========
 optimizer:
   lr: 1.0e-4
-  batch_size: 16  # Reduced from 64 to fix OOM with 4 GPUs
+  batch_size: 16
   eval_batch_size: 16
   epochs: 15
   schedule_interval: 1
@@ -56,7 +56,7 @@ model:
   nhead: 8
   n_layers_cls: 3
   dropout: 0.0
-  use_fast_transformer: true
+  use_fast_transformer: false  # Disabled: flash-attn not available, uses PyTorch transformer
 
 # ========== Partial Weight Loading ==========
 # Only load these prefixes from pretrained model

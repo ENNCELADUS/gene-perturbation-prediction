@@ -4,9 +4,9 @@
 #SBATCH -A hexm-critical
 #SBATCH -N 1
 #SBATCH -t 3-00:00:00
-#SBATCH --mem=196G
+#SBATCH --mem=256G
 #SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:NVIDIATITANRTX:4
+#SBATCH --gres=gpu:NVIDIATITANRTX:2
 #SBATCH --exclude=ai_gpu28
 #SBATCH --output=logs/finetune/slurm_%j.out
 #SBATCH --error=logs/finetune/slurm_%j.err
@@ -21,7 +21,7 @@ conda activate vcc
 cd /public/home/wangar2023/VCC_Project
 
 # ========== Step 1: Convert Data to GEARS Format ==========
-echo ""
+echo "=========================================="
 echo "Step 1: Converting data to GEARS format..."
 echo "=========================================="
 
@@ -36,7 +36,7 @@ else
 fi
 
 # ========== Step 2: Finetune scGPT (DDP) ==========
-echo ""
+echo "=========================================="
 echo "Step 2: Finetuning scGPT with DDP..."
 echo "=========================================="
 
@@ -49,16 +49,16 @@ torchrun --nproc_per_node=$NGPUS \
     --config src/configs/finetune.yaml \
     --seed 42
 
-# ========== Step 3: Evaluate Finetuned Model on Test Set ==========
-echo ""
-echo "Step 3: Evaluating finetuned model on held-out test genes..."
-echo "=========================================="
+# # ========== Step 3: Evaluate Finetuned Model on Test Set ==========
+# echo "=========================================="
+# echo "Step 3: Evaluating finetuned model on held-out test genes..."
+# echo "=========================================="
 
-# Create results directory
-mkdir -p results/scgpt_finetuned
+# # Create results directory
+# mkdir -p results/scgpt_finetuned
 
-# Run evaluation using the finetuned model
-python src/main.py \
-    --config src/configs/config.yaml \
-    --model_type scgpt_finetuned \
-    --threads 8
+# # Run evaluation using the finetuned model
+# python src/main.py \
+#     --config src/configs/config.yaml \
+#     --model_type scgpt_finetuned \
+#     --threads 8
