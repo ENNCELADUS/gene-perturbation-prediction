@@ -3,10 +3,10 @@
 #SBATCH -p critical
 #SBATCH -A hexm-critical
 #SBATCH -N 1
-#SBATCH -t 2-00:00:00
+#SBATCH -t 3-00:00:00
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:NVIDIATITANRTX:1
+#SBATCH --gres=gpu:NVIDIATITANRTX:4
 #SBATCH --output=logs/finetune/slurm_%j.out
 #SBATCH --error=logs/finetune/slurm_%j.err
 #SBATCH --mail-type=ALL
@@ -20,26 +20,31 @@ conda activate vcc
 cd /public/home/wangar2023/VCC_Project
 
 # ========== Step 1: Convert Data to GEARS Format ==========
+# echo ""
+# echo "Step 1: Converting data to GEARS format..."
+# echo "=========================================="
+
+# # Check if GEARS data already exists
+# if [ ! -d "data/processed/gears/vcc" ]; then
+#     python scripts/convert_to_gears.py \
+#         --train_path data/processed/train.h5ad \
+#         --output_dir data/processed/gears \
+#         --dataset_name vcc
+# else
+#     echo "GEARS data already exists, skipping conversion..."
+# fi
+
+# ========== Step 2: Finetune scGPT (DDP) ==========
 echo ""
-echo "Step 1: Converting data to GEARS format..."
+echo "Step 2: Finetuning scGPT with DDP..."
 echo "=========================================="
 
-# Check if GEARS data already exists
-if [ ! -d "data/processed/gears/vcc" ]; then
-    python scripts/convert_to_gears.py \
-        --train_path data/processed/train.h5ad \
-        --output_dir data/processed/gears \
-        --dataset_name vcc
-else
-    echo "GEARS data already exists, skipping conversion..."
-fi
+# Automatically detect number of GPUs from SLURM allocation
+NGPUS=$(nvidia-smi -L | wc -l)
+echo "Detected $NGPUS GPUs"
 
-# ========== Step 2: Finetune scGPT ==========
-echo ""
-echo "Step 2: Finetuning scGPT..."
-echo "=========================================="
-
-python src/train.py \
+torchrun --nproc_per_node=$NGPUS \
+    src/finetune.py \
     --config src/configs/finetune.yaml \
     --seed 42
 
