@@ -6,7 +6,6 @@ This document describes the finetuning pipeline for scGPT on the VCC perturbatio
 
 ## Prerequisites
 
-- **Hardware:** NVIDIA A40 (48GB) or TITAN RTX (24GB)
 - **Dependencies:** `gears`, `torch_geometric`, `scgpt`
 
 Install torch_geometric if missing:
@@ -15,6 +14,8 @@ pip install torch_geometric
 ```
 
 ## Data Pipeline
+
+No new layers or heads are added and no structural layers are removed; the finetune step just re‑initializes certain non‑encoder parameters and reloads encoder‑type weights from the base scGPT checkpoint.
 
 ### 1. VCC → GEARS Format Conversion
 
