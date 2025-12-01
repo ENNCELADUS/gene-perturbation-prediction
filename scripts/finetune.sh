@@ -31,19 +31,27 @@ echo "=========================================="
 echo "Step 0: Splitting data (30 test genes excluded from train)..."
 echo "=========================================="
 
-python scripts/data_process/split_data.py
+# Check if split data already exists
+if [ ! -f "data/processed/train.h5ad" ] || [ ! -f "data/processed/test.h5ad" ]; then
+    python scripts/data_process/split_data.py
+else
+    echo "Split data already exists, skipping data splitting..."
+fi
 
 # ========== Step 1: Convert Data to GEARS Format ==========
 echo "=========================================="
 echo "Step 1: Converting data to GEARS format..."
 echo "=========================================="
 
-# Force re-conversion since train.h5ad was regenerated
-rm -rf data/processed/gears/vcc
-python scripts/convert_to_gears.py \
-    --train_path data/processed/train.h5ad \
-    --output_dir data/processed/gears \
-    --dataset_name vcc
+# Check if GEARS data already exists
+if [ ! -d "data/processed/gears/vcc" ]; then
+    python scripts/convert_to_gears.py \
+        --train_path data/processed/train.h5ad \
+        --output_dir data/processed/gears \
+        --dataset_name vcc
+else
+    echo "GEARS data already exists, skipping conversion..."
+fi
 
 # ========== Step 2: Finetune scGPT (DDP) ==========
 echo "=========================================="
