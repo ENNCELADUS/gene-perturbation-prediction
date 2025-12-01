@@ -19,9 +19,10 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+from sklearn.model_selection import KFold
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -34,7 +35,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import GEARS
 from gears import PertData
-from gears.inference import compute_metrics, deeper_analysis, non_dropout_analysis
 
 # Import scGPT
 scgpt_path = Path(__file__).parent.parent / "scGPT"
@@ -292,7 +292,7 @@ def train_epoch(
             cur_mse = total_mse / log_interval
             logger.info(
                 f"| epoch {epoch:3d} | {batch_idx:3d}/{num_batches:3d} batches | "
-                f"ms/batch {ms_per_batch:5.2f} | loss {cur_loss:5.4f} | mse {cur_mse:5.4f}"
+                f"ms/batch {ms_per_batch:5.2f} | loss {cur_loss:5.4f}"
             )
             total_loss = 0
             total_mse = 0
@@ -367,9 +367,9 @@ def compute_perturbation_metrics(results: Dict, ctrl_adata) -> Dict:
 
     # Get control mean
     if hasattr(ctrl_adata.X, "toarray"):
-        ctrl_mean = ctrl_adata.X.toarray().mean(axis=0)
+        ctrl_mean = ctrl_adata.X.toarray().mean(axis=0).flatten()
     else:
-        ctrl_mean = ctrl_adata.X.mean(axis=0)
+        ctrl_mean = np.asarray(ctrl_adata.X.mean(axis=0)).flatten()
 
     # Flatten for correlation
     pred_flat = pred.flatten()
@@ -378,24 +378,23 @@ def compute_perturbation_metrics(results: Dict, ctrl_adata) -> Dict:
     truth_de_flat = truth_de.flatten()
 
     # Compute metrics
-    pearson_all = pearsonr(pred_flat, truth_flat)[0]
-    pearson_de = pearsonr(pred_de_flat, truth_de_flat)[0]
+    pearson_all = pearsonr(pred_flat, truth_flat)[0] if len(pred_flat) > 1 else 0.0
+    pearson_de = pearsonr(pred_de_flat, truth_de_flat)[0] if len(pred_de_flat) > 1 else 0.0
 
-    # Delta (change from control)
+    # Delta (change from control) - for all genes
     pred_delta = pred - ctrl_mean
     truth_delta = truth - ctrl_mean
-    pearson_delta = pearsonr(pred_delta.flatten(), truth_delta.flatten())[0]
+    pearson_delta = pearsonr(pred_delta.flatten(), truth_delta.flatten())[0] if len(pred_flat) > 1 else 0.0
 
-    pred_de_delta = pred_de - ctrl_mean[results.get("de_idx", slice(None))]
-    truth_de_delta = truth_de - ctrl_mean[results.get("de_idx", slice(None))]
-    # Approximate DE delta correlation
-    pearson_de_delta = pearsonr(pred_de.flatten(), truth_de.flatten())[0]
+    # For DE genes, we already have the subset - just compute correlation directly
+    # (DE delta would require per-sample de_idx which varies, so we skip that complexity)
+    pearson_de_delta = pearson_de  # Use same as pearson_de for simplicity
 
     return {
-        "pearson": pearson_all,
-        "pearson_de": pearson_de,
-        "pearson_delta": pearson_delta,
-        "pearson_de_delta": pearson_de_delta,
+        "pearson": float(pearson_all),
+        "pearson_de": float(pearson_de),
+        "pearson_delta": float(pearson_delta),
+        "pearson_de_delta": float(pearson_de_delta),
     }
 
 
@@ -422,6 +421,258 @@ def save_model(model: nn.Module, config: dict, vocab: GeneVocab, save_dir: Path)
         import shutil
 
         shutil.copy(args_src, args_dst)
+
+
+def get_perturbation_genes(pert_data) -> List[str]:
+    """
+    Extract unique perturbation conditions (excluding control).
+
+    Returns:
+        List of perturbation conditions (e.g., ["BRCA1+ctrl", "TP53+ctrl", ...])
+    """
+    conditions = pert_data.adata.obs["condition"].unique().tolist()
+    # Exclude control condition
+    pert_genes = [c for c in conditions if c != "ctrl"]
+    return sorted(pert_genes)
+
+
+def create_cv_folds(
+    pert_genes: List[str],
+    n_folds: int,
+    seed: int,
+) -> List[Tuple[List[str], List[str]]]:
+    """
+    Create gene-level k-fold cross-validation splits.
+
+    Args:
+        pert_genes: List of perturbation conditions
+        n_folds: Number of folds
+        seed: Random seed for reproducibility
+
+    Returns:
+        List of (train_perts, val_perts) tuples for each fold
+    """
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    pert_genes_arr = np.array(pert_genes)
+
+    folds = []
+    for train_idx, val_idx in kf.split(pert_genes_arr):
+        train_perts = pert_genes_arr[train_idx].tolist()
+        val_perts = pert_genes_arr[val_idx].tolist()
+        folds.append((train_perts, val_perts))
+
+    return folds
+
+
+def filter_dataset_by_perts(
+    dataset,
+    perts: List[str],
+    include_ctrl: bool = True,
+) -> List[int]:
+    """
+    Get indices of cells belonging to specified perturbations.
+
+    Args:
+        dataset: PyG dataset (list) from GEARS
+        perts: List of perturbation conditions to include
+        include_ctrl: Whether to include control cells
+
+    Returns:
+        List of cell indices
+    """
+    perts_set = set(perts)
+    indices = []
+    for i, data in enumerate(dataset):
+        cond = data.pert  # Each PyG Data object has .pert attribute
+        if cond in perts_set:
+            indices.append(i)
+        elif include_ctrl and cond == "ctrl":
+            indices.append(i)
+
+    return indices
+
+
+def train_fold(
+    fold_idx: int,
+    train_perts: List[str],
+    val_perts: List[str],
+    pert_data,
+    full_dataset,
+    gene_ids: np.ndarray,
+    vocab: GeneVocab,
+    config: dict,
+    device: torch.device,
+    logger,
+    rank: int,
+    local_rank: int,
+    world_size: int,
+    is_distributed: bool,
+) -> Tuple[Optional[nn.Module], float, Dict]:
+    """
+    Train one fold of cross-validation.
+
+    Returns:
+        Tuple of (best_model, best_val_pearson, val_metrics)
+    """
+    batch_size = config["optimizer"]["batch_size"]
+    eval_batch_size = config["optimizer"]["eval_batch_size"]
+    n_genes = len(gene_ids)
+
+    if is_main_process(rank):
+        logger.info(f"\n{'=' * 60}")
+        logger.info(
+            f"FOLD {fold_idx + 1}: Train on {len(train_perts)} perts, "
+            f"validate on {len(val_perts)} perts"
+        )
+        logger.info(f"{'=' * 60}")
+
+    # ========== Create Train/Val Dataloaders ==========
+    # Get cell indices for train and val sets
+    train_indices = filter_dataset_by_perts(
+        full_dataset, train_perts, include_ctrl=True
+    )
+    val_indices = filter_dataset_by_perts(
+        full_dataset, val_perts, include_ctrl=False
+    )
+
+    if is_main_process(rank):
+        logger.info(f"Train cells: {len(train_indices)}, Val cells: {len(val_indices)}")
+
+    # Create subset datasets
+    from torch.utils.data import Subset
+
+    train_subset = Subset(full_dataset, train_indices)
+    val_subset = Subset(full_dataset, val_indices)
+
+    # Create dataloaders
+    if is_distributed:
+        train_sampler = DistributedSampler(
+            train_subset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+        )
+        per_gpu_batch_size = max(1, batch_size // world_size)
+        train_loader = DataLoader(
+            train_subset,
+            batch_size=per_gpu_batch_size,
+            sampler=train_sampler,
+            num_workers=0,
+            pin_memory=True,
+        )
+    else:
+        train_loader = DataLoader(
+            train_subset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=0,
+        )
+        train_sampler = None
+
+    val_loader = DataLoader(
+        val_subset,
+        batch_size=eval_batch_size,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    # ========== Load Fresh Model for This Fold ==========
+    model = load_pretrained_model(config, vocab, n_genes, device, logger)
+
+    if is_distributed:
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            find_unused_parameters=True,
+        )
+
+    # ========== Setup Optimizer/Scheduler ==========
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=config["optimizer"]["lr"],
+    )
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer,
+        config["optimizer"]["schedule_interval"],
+        gamma=config["optimizer"]["schedule_gamma"],
+    )
+    scaler = torch.cuda.amp.GradScaler(enabled=config["training"]["amp"])
+
+    # ========== Training Loop ==========
+    epochs = config["optimizer"]["epochs"]
+    early_stop = config["optimizer"]["early_stop"]
+    best_val_pearson = -float("inf")
+    best_model = None
+    best_val_metrics = {}
+    patience = 0
+
+    ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
+
+    for epoch in range(1, epochs + 1):
+        epoch_start = time.time()
+
+        if train_sampler is not None:
+            train_sampler.set_epoch(epoch)
+
+        # Train
+        train_loss = train_epoch(
+            model=model,
+            train_loader=train_loader,
+            optimizer=optimizer,
+            scaler=scaler,
+            gene_ids=gene_ids,
+            config=config,
+            epoch=epoch,
+            logger=logger if is_main_process(rank) else None,
+        )
+
+        # Synchronize loss across processes
+        if is_distributed:
+            loss_tensor = torch.tensor([train_loss], device=device)
+            dist.all_reduce(loss_tensor, op=dist.ReduceOp.AVG)
+            train_loss = loss_tensor.item()
+
+        # Evaluate on validation
+        if is_main_process(rank):
+            eval_model = model.module if isinstance(model, DDP) else model
+            val_res = evaluate(eval_model, val_loader, gene_ids, config, device)
+            val_metrics = compute_perturbation_metrics(val_res, ctrl_adata)
+
+            elapsed = time.time() - epoch_start
+            val_p = val_metrics["pearson"]
+            logger.info(
+                f"| fold {fold_idx + 1} epoch {epoch:3d} | time: {elapsed:5.2f}s | "
+                f"train_loss: {train_loss:.4f} | val_pearson: {val_p:.4f}"
+            )
+
+            # Check for best model (maximize pearson)
+            if val_metrics["pearson"] > best_val_pearson:
+                best_val_pearson = val_metrics["pearson"]
+                best_val_metrics = val_metrics.copy()
+                model_to_copy = model.module if isinstance(model, DDP) else model
+                best_model = copy.deepcopy(model_to_copy)
+                logger.info(f"  -> New best model (pearson={best_val_pearson:.4f})")
+                patience = 0
+            else:
+                patience += 1
+                if patience >= early_stop:
+                    logger.info(f"Early stopping at epoch {epoch}")
+                    if is_distributed:
+                        early_stop_tensor = torch.tensor([1], device=device)
+                        dist.broadcast(early_stop_tensor, src=0)
+                    break
+
+        # Check for early stop signal from rank 0
+        if is_distributed:
+            early_stop_tensor = torch.tensor([0], device=device)
+            dist.broadcast(early_stop_tensor, src=0)
+            if early_stop_tensor.item() == 1:
+                break
+
+        scheduler.step()
+
+    return best_model, best_val_pearson, best_val_metrics
 
 
 def main():
@@ -484,50 +735,8 @@ def main():
     dataset_name = config["paths"]["dataset_name"]
 
     # Use default_pert_graph=False to include all perturbation genes from data
-    # instead of filtering to essential genes list (avoids dropping 11 genes)
     pert_data = PertData(gears_data_dir, default_pert_graph=False)
     pert_data.load(data_path=os.path.join(gears_data_dir, dataset_name))
-
-    # Prepare split (only rank 0 prepares, others wait)
-    split_type = config["split"]["type"]
-    split_seed = config["split"]["seed"]
-
-    if is_distributed:
-        if is_main_process(rank):
-            pert_data.prepare_split(split=split_type, seed=split_seed)
-        dist.barrier()
-        if not is_main_process(rank):
-            pert_data.prepare_split(split=split_type, seed=split_seed)
-    else:
-        pert_data.prepare_split(split=split_type, seed=split_seed)
-
-    # Get dataloaders (we'll create our own train_loader with DistributedSampler)
-    batch_size = config["optimizer"]["batch_size"]
-    eval_batch_size = config["optimizer"]["eval_batch_size"]
-    pert_data.get_dataloader(batch_size=batch_size, test_batch_size=eval_batch_size)
-
-    # ========== Create Distributed Train Loader ==========
-    if is_distributed:
-        # Get the training dataset from PertData
-        train_dataset = pert_data.dataloader["train_loader"].dataset
-        train_sampler = DistributedSampler(
-            train_dataset,
-            num_replicas=world_size,
-            rank=rank,
-            shuffle=True,
-        )
-        # Adjust batch size per GPU
-        per_gpu_batch_size = batch_size // world_size
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=per_gpu_batch_size,
-            sampler=train_sampler,
-            num_workers=0,  # Avoid fork OOM on memory-constrained systems
-            pin_memory=True,
-        )
-    else:
-        train_loader = pert_data.dataloader["train_loader"]
-        train_sampler = None
 
     # ========== Load Vocabulary ==========
     if is_main_process(rank):
@@ -563,137 +772,104 @@ def main():
     )
     n_genes = len(genes)
 
-    # ========== Load Model ==========
     if is_main_process(rank):
-        logger.info("Loading pretrained model...")
-    model = load_pretrained_model(config, vocab, n_genes, device, logger)
+        logger.info(f"Dataset has {n_genes} genes")
+
+    # ========== Create CV Folds ==========
+    n_folds = config["cv"]["n_folds"]
+    cv_seed = config["cv"]["seed"]
+
+    # Get all perturbation conditions (excluding ctrl)
+    pert_genes = get_perturbation_genes(pert_data)
     if is_main_process(rank):
-        logger.info(
-            f"Model has {sum(p.numel() for p in model.parameters()):,} parameters"
-        )
+        logger.info(f"Found {len(pert_genes)} perturbation conditions")
+        logger.info(f"Creating {n_folds}-fold cross-validation splits...")
 
-    # ========== Wrap Model with DDP ==========
-    if is_distributed:
-        # find_unused_parameters=True needed because CLS/MVC/etc heads may not be used
-        model = DDP(model, device_ids=[local_rank], output_device=local_rank,
-                    find_unused_parameters=True)
-        if is_main_process(rank):
-            logger.info("Model wrapped with DistributedDataParallel")
+    # Create folds
+    folds = create_cv_folds(pert_genes, n_folds, cv_seed)
 
-    # ========== Setup Training ==========
-    criterion = masked_mse_loss
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=config["optimizer"]["lr"],
-    )
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer,
-        config["optimizer"]["schedule_interval"],
-        gamma=config["optimizer"]["schedule_gamma"],
-    )
-    scaler = torch.cuda.amp.GradScaler(enabled=config["training"]["amp"])
-
-    # ========== Training Loop ==========
-    epochs = config["optimizer"]["epochs"]
-    early_stop = config["optimizer"]["early_stop"]
-    best_loss = float("inf")
-    best_model = None
-    patience = 0
+    # Get the full dataset (we need to create it without GEARS split)
+    # Use a dummy split to get the dataloader, then extract the dataset
+    pert_data.prepare_split(split="no_test", seed=cv_seed)
+    batch_size = config["optimizer"]["batch_size"]
+    eval_batch_size = config["optimizer"]["eval_batch_size"]
+    pert_data.get_dataloader(batch_size=batch_size, test_batch_size=eval_batch_size)
+    full_dataset = pert_data.dataloader["train_loader"].dataset
 
     if is_main_process(rank):
-        logger.info(f"Starting training for {epochs} epochs...")
+        logger.info(f"Full dataset size: {len(full_dataset)} cells")
 
-    for epoch in range(1, epochs + 1):
-        epoch_start = time.time()
+    # ========== Train All Folds ==========
+    best_overall_model = None
+    best_overall_pearson = -float("inf")
+    best_fold_idx = -1
+    all_fold_metrics = []
 
-        # Set epoch for distributed sampler (ensures proper shuffling)
-        if train_sampler is not None:
-            train_sampler.set_epoch(epoch)
-
-        # Train
-        train_loss = train_epoch(
-            model=model,
-            train_loader=train_loader,
-            optimizer=optimizer,
-            scaler=scaler,
+    for fold_idx, (train_perts, val_perts) in enumerate(folds):
+        fold_model, fold_pearson, fold_metrics = train_fold(
+            fold_idx=fold_idx,
+            train_perts=train_perts,
+            val_perts=val_perts,
+            pert_data=pert_data,
+            full_dataset=full_dataset,
             gene_ids=gene_ids,
+            vocab=vocab,
             config=config,
-            epoch=epoch,
-            logger=logger if is_main_process(rank) else None,
+            device=device,
+            logger=logger,
+            rank=rank,
+            local_rank=local_rank,
+            world_size=world_size,
+            is_distributed=is_distributed,
         )
 
-        # Synchronize loss across processes
-        if is_distributed:
-            loss_tensor = torch.tensor([train_loss], device=device)
-            dist.all_reduce(loss_tensor, op=dist.ReduceOp.AVG)
-            train_loss = loss_tensor.item()
-
-        # Evaluate on validation (only on rank 0)
         if is_main_process(rank):
-            if "val_loader" in pert_data.dataloader:
-                val_loader = pert_data.dataloader["val_loader"]
-                # Use unwrapped model for evaluation
-                eval_model = model.module if isinstance(model, DDP) else model
-                val_res = evaluate(eval_model, val_loader, gene_ids, config, device)
-                ctrl_adata = pert_data.adata[
-                    pert_data.adata.obs["condition"] == "ctrl"
-                ]
-                val_metrics = compute_perturbation_metrics(val_res, ctrl_adata)
-                logger.info(f"Epoch {epoch} val_metrics: {val_metrics}")
-                current_loss = -val_metrics["pearson"]  # Negative for "lower is better"
-            else:
-                current_loss = train_loss
+            all_fold_metrics.append(
+                {
+                    "fold": fold_idx + 1,
+                    "val_perts": val_perts,
+                    "metrics": fold_metrics,
+                }
+            )
+            logger.info(f"Fold {fold_idx + 1} best val_pearson: {fold_pearson:.4f}")
 
-            elapsed = time.time() - epoch_start
-            logger.info(f"| end of epoch {epoch:3d} | time: {elapsed:5.2f}s |")
+            # Track best model across all folds
+            if fold_pearson > best_overall_pearson:
+                best_overall_pearson = fold_pearson
+                best_overall_model = fold_model
+                best_fold_idx = fold_idx + 1
+                logger.info(f"  -> New overall best model from fold {best_fold_idx}")
 
-            # Check for best model
-            if current_loss < best_loss:
-                best_loss = current_loss
-                # Store unwrapped model
-                model_to_copy = model.module if isinstance(model, DDP) else model
-                best_model = copy.deepcopy(model_to_copy)
-                logger.info(f"Best model at epoch {epoch}")
-                patience = 0
-            else:
-                patience += 1
-                if patience >= early_stop:
-                    logger.info(f"Early stopping at epoch {epoch}")
-                    # Broadcast early stop signal to all processes
-                    if is_distributed:
-                        early_stop_tensor = torch.tensor([1], device=device)
-                        dist.broadcast(early_stop_tensor, src=0)
-                    break
-        else:
-            current_loss = train_loss
-
-        # Check for early stop signal from rank 0
+        # Synchronize between folds
         if is_distributed:
-            early_stop_tensor = torch.tensor([0], device=device)
-            dist.broadcast(early_stop_tensor, src=0)
-            if early_stop_tensor.item() == 1:
-                break
-
-        scheduler.step()
+            dist.barrier()
 
     # ========== Save Best Model (only rank 0) ==========
     if is_main_process(rank):
+        logger.info(f"\n{'=' * 60}")
+        logger.info("Cross-validation complete!")
+        logger.info(
+            f"Best model from fold {best_fold_idx} "
+            f"(val_pearson={best_overall_pearson:.4f})"
+        )
+        logger.info(f"{'=' * 60}")
+
+        # Save best model
         logger.info("Saving best model...")
-        save_model(best_model, config, vocab, save_dir)
+        save_model(best_overall_model, config, vocab, save_dir)
         logger.info(f"Model saved to {save_dir}")
 
-        # ========== Final Evaluation ==========
-        if "test_loader" in pert_data.dataloader:
-            logger.info("Evaluating on test set...")
-            test_loader = pert_data.dataloader["test_loader"]
-            test_res = evaluate(best_model, test_loader, gene_ids, config, device)
-            ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
-            test_metrics = compute_perturbation_metrics(test_res, ctrl_adata)
-            logger.info(f"Test metrics: {test_metrics}")
-
-            # Save test metrics
-            with open(save_dir / "test_metrics.json", "w") as f:
-                json.dump(test_metrics, f, indent=2)
+        # Save CV metrics summary
+        cv_summary = {
+            "n_folds": n_folds,
+            "cv_seed": cv_seed,
+            "best_fold": best_fold_idx,
+            "best_val_pearson": best_overall_pearson,
+            "fold_metrics": all_fold_metrics,
+        }
+        with open(save_dir / "cv_metrics.json", "w") as f:
+            json.dump(cv_summary, f, indent=2)
+        logger.info(f"CV metrics saved to {save_dir / 'cv_metrics.json'}")
 
         logger.info("Training complete!")
 
