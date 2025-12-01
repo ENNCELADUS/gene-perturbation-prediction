@@ -66,13 +66,12 @@ load_param_prefixes:
   - "value_encoder"
   - "transformer_encoder"
 
-# ========== GEARS Split ==========
-# Using 'no_test' split since we use all 135 genes for training
+# ========== Cross-Validation ==========
+# 3-fold CV on 135 perturbation genes for validation
 # Test evaluation is done separately on held-out 15 genes
-split:
-  type: "no_test"  # No internal test split; use all data for training
+cv:
+  n_folds: 3
   seed: 42
-  train_gene_set_size: 1.0  # Use all genes for training
 
 # ========== Logging ==========
 logging:
