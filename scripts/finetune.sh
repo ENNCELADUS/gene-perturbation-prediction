@@ -13,27 +13,37 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
+# Set project root
+ROOT_DIR="/public/home/wangar2023/VCC_Project"
+cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
+
 # Load conda environment
 source ~/.bashrc
 conda activate vcc
 
-# Navigate to project directory
-cd /public/home/wangar2023/VCC_Project
+# Add local hpdex package (numba backend, no C++ build required)
+export PYTHONPATH="${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
+
+set -euo pipefail
+
+# ========== Step 0: Split Data (exclude test genes) ==========
+echo "=========================================="
+echo "Step 0: Splitting data (30 test genes excluded from train)..."
+echo "=========================================="
+
+python scripts/data_process/split_data.py
 
 # ========== Step 1: Convert Data to GEARS Format ==========
 echo "=========================================="
 echo "Step 1: Converting data to GEARS format..."
 echo "=========================================="
 
-# Check if GEARS data already exists
-if [ ! -d "data/processed/gears/vcc" ]; then
-    python scripts/convert_to_gears.py \
-        --train_path data/processed/train.h5ad \
-        --output_dir data/processed/gears \
-        --dataset_name vcc
-else
-    echo "GEARS data already exists, skipping conversion..."
-fi
+# Force re-conversion since train.h5ad was regenerated
+rm -rf data/processed/gears/vcc
+python scripts/convert_to_gears.py \
+    --train_path data/processed/train.h5ad \
+    --output_dir data/processed/gears \
+    --dataset_name vcc
 
 # ========== Step 2: Finetune scGPT (DDP) ==========
 echo "=========================================="
@@ -49,16 +59,17 @@ torchrun --nproc_per_node=$NGPUS \
     --config src/configs/finetune.yaml \
     --seed 42
 
-# # ========== Step 3: Evaluate Finetuned Model on Test Set ==========
-# echo "=========================================="
-# echo "Step 3: Evaluating finetuned model on held-out test genes..."
-# echo "=========================================="
+# ========== Step 3: Evaluate Finetuned Model on Test Set ==========
+echo "=========================================="
+echo "Step 3: Evaluating finetuned model on held-out test genes..."
+echo "=========================================="
 
-# # Create results directory
-# mkdir -p results/scgpt_finetuned
+# Run evaluation using the finetuned model
+python src/main.py \
+    --config src/configs/config.yaml \
+    --model_type scgpt_finetuned \
+    --threads -1
 
-# # Run evaluation using the finetuned model
-# python src/main.py \
-#     --config src/configs/config.yaml \
-#     --model_type scgpt_finetuned \
-#     --threads 8
+echo "=========================================="
+echo "Pipeline complete. Results saved to results/scgpt_finetuned/"
+echo "=========================================="

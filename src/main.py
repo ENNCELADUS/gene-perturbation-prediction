@@ -13,6 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.utils.logging import get_logger
 from src.utils.de_metrics import (
     compute_de_comparison_metrics,
+    compute_mae_top2k,
     compute_pds,
     compute_pseudobulk_delta,
 )
@@ -69,6 +70,9 @@ def main():
     logger.info(f"Starting Perturbation Pipeline with {args.model_type} model")
     logger.info(f"Model directory: {config['paths']['model_dir']}")
     logger.info(f"Results will be saved to: {output_dir}")
+
+    # Get metrics config
+    mae_top_k = config.get("metrics", {}).get("mae_top_k", 2000)
 
     # 2. Initialize Components
     if args.model_type == "baseline":
@@ -146,9 +150,9 @@ def main():
         else:
             truth_expr = ground_truth_adata.X.toarray()
 
-        # Compute DE-based metrics
+        # Compute DES metric
         try:
-            metrics = compute_de_comparison_metrics(
+            de_metrics = compute_de_comparison_metrics(
                 control_expr=control_expr,
                 pred_expr=pred_expr,
                 truth_expr=truth_expr,
@@ -158,23 +162,35 @@ def main():
             )
         except Exception as e:
             logger.warning(f"DE metrics failed for {target}: {e}")
-            metrics = {
-                "pearson_log2fc": np.nan,
-                "mse_log2fc": np.nan,
+            de_metrics = {
                 "des": np.nan,
                 "n_de_truth": 0,
                 "n_de_pred": 0,
             }
 
-        metrics["target_gene"] = target
-        metrics["n_cells"] = n_cells
+        # Compute MAE_top2k metric
+        mae = compute_mae_top2k(
+            pred_expr=pred_expr,
+            truth_expr=truth_expr,
+            control_mean=control_mean,
+            top_k=mae_top_k,
+        )
+
+        metrics = {
+            "target_gene": target,
+            "n_cells": n_cells,
+            "des": de_metrics["des"],
+            "mae_top2k": mae,
+            "n_de_truth": de_metrics["n_de_truth"],
+            "n_de_pred": de_metrics["n_de_pred"],
+        }
         results.append(metrics)
 
         # Accumulate deltas for PDS
         pred_deltas[target] = compute_pseudobulk_delta(pred_expr, control_mean)
         truth_deltas[target] = compute_pseudobulk_delta(truth_expr, control_mean)
 
-        # Get target gene index for PDS (exclude from distance)
+        # Get target gene index (not used in cosine-based PDS but kept for compatibility)
         try:
             target_gene_indices[target] = data_loader.test_adata.var_names.get_loc(
                 target
@@ -183,8 +199,8 @@ def main():
             target_gene_indices[target] = -1
 
         logger.info(
-            f"Target {target} - Pearson: {metrics['pearson_log2fc']:.4f}, "
-            f"DES: {metrics['des']:.4f}, n_DE: {metrics['n_de_truth']}"
+            f"Target {target} - DES: {metrics['des']:.4f}, "
+            f"MAE_top2k: {metrics['mae_top2k']:.4f}, n_DE: {metrics['n_de_truth']}"
         )
 
         # Clean up GPU memory after each target
@@ -192,16 +208,14 @@ def main():
         gc.collect()
         torch.cuda.empty_cache()
 
-    # 4. Compute PDS (global metric)
+    # 4. Compute PDS (global metric using cosine similarity ranking)
     if pred_deltas:
-        mean_pds, pds_scores = compute_pds(
-            pred_deltas, truth_deltas, target_gene_indices
-        )
-        # Add PDS to results
+        npds, pds_ranks = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
+        # Add PDS rank to results
         for r in results:
-            r["pds"] = pds_scores.get(r["target_gene"], np.nan)
+            r["pds_rank"] = pds_ranks.get(r["target_gene"], np.nan)
     else:
-        mean_pds = np.nan
+        npds = np.nan
 
     # 5. Save Results
     results_df = pd.DataFrame(results)
@@ -210,10 +224,9 @@ def main():
     col_order = [
         "target_gene",
         "n_cells",
-        "pearson_log2fc",
-        "mse_log2fc",
+        "pds_rank",
         "des",
-        "pds",
+        "mae_top2k",
         "n_de_truth",
         "n_de_pred",
     ]
@@ -225,14 +238,14 @@ def main():
 
     # Calculate and log overall metrics
     if not results_df.empty:
+        mean_des = results_df["des"].mean()
+        mean_mae = results_df["mae_top2k"].mean()
+
         logger.info("=" * 50)
         logger.info("Overall Metrics:")
-        logger.info(
-            f"  Mean Pearson (log2FC): {results_df['pearson_log2fc'].mean():.4f}"
-        )
-        logger.info(f"  Mean MSE (log2FC):     {results_df['mse_log2fc'].mean():.4f}")
-        logger.info(f"  Mean DES:              {results_df['des'].mean():.4f}")
-        logger.info(f"  Mean PDS:              {mean_pds:.4f}")
+        logger.info(f"  nPDS (normalized):     {npds:.4f}")
+        logger.info(f"  Mean DES:              {mean_des:.4f}")
+        logger.info(f"  Mean MAE_top2k:        {mean_mae:.4f}")
         logger.info("=" * 50)
     else:
         logger.warning("No results generated.")
