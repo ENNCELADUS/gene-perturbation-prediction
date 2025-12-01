@@ -44,7 +44,7 @@ optimizer:
   epochs: 15
   schedule_interval: 1
   schedule_gamma: 0.9
-  early_stop: 10  # patience (based on training loss since no validation split)
+  early_stop: 10  # patience for early stopping
   grad_clip: 1.0
 
 # ========== Model Architecture ==========
@@ -66,12 +66,21 @@ load_param_prefixes:
   - "value_encoder"
   - "transformer_encoder"
 
-# ========== Cross-Validation ==========
-# 3-fold CV on 135 perturbation genes for validation
-# Test evaluation is done separately on held-out 15 genes
-cv:
-  n_folds: 3
+# ========== Data Split ==========
+# Train/Val split on 120 genes (excluding 30 test genes)
+split:
+  test_genes_file: "data/raw/test_set.csv"  # 30 test genes
+  train_ratio: 0.833  # 100/120 genes for training
+  val_ratio: 0.167    # 20/120 genes for validation
   seed: 42
+
+# ========== Metrics ==========
+metrics:
+  mae_top_k: 2000  # Top K genes by |log2FC| for MAE calculation
+
+# ========== Early Stopping ==========
+early_stopping:
+  metric: "combined"  # mean of nPDS, 1-DES, MAE_top2k (all lower is better)
 
 # ========== Logging ==========
 logging:
@@ -82,4 +91,3 @@ logging:
 hardware:
   # Detected automatically, but can override
   device: "cuda"  # "cuda" or "cpu"
-

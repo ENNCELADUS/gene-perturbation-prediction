@@ -1,19 +1,16 @@
 """
 Differential Expression-based evaluation metrics for perturbation prediction.
 
-Implements metrics from https://virtualcellchallenge.org/evaluation:
-- DES (Differential Expression Score)
-- PDS (Perturbation Discrimination Score)
-Plus standard metrics on DE log2FC:
-- Pearson correlation
-- MSE
+Implements metrics from docs/eval_metrics.md:
+- PDS (Perturbation Discrimination Score) - cosine similarity ranking
+- DES (Differential Expression Score) - DE gene overlap
+- MAE_top2k (MAE on top 2000 genes by |log2FC|)
 """
 
 import numpy as np
 import pandas as pd
 import anndata as ad
 import scipy.sparse
-from scipy.stats import pearsonr
 
 
 def build_de_adata(
@@ -54,11 +51,11 @@ def compute_de_comparison_metrics(
         pred_expr: Predicted perturbed expression (n_pred, n_genes)
         truth_expr: Ground truth perturbed expression (n_truth, n_genes)
         gene_names: Gene names array
-        fdr_threshold: FDR threshold for significant DE genes
+        fdr_threshold: FDR threshold for significant DE genes (for DES)
         threads: Number of threads for hpdex
 
     Returns:
-        dict with keys: pearson_log2fc, mse_log2fc, des, n_de_truth, n_de_pred
+        dict with keys: des, n_de_truth, n_de_pred
     """
     from hpdex import pden  # numba backend (no C++ required)
 
@@ -88,25 +85,6 @@ def compute_de_comparison_metrics(
     de_truth = de_truth.set_index("feature")
     de_pred = de_pred.set_index("feature")
 
-    # Align genes
-    common_genes = de_truth.index.intersection(de_pred.index)
-    truth_log2fc = de_truth.loc[common_genes, "log2_fold_change"].values
-    pred_log2fc = de_pred.loc[common_genes, "log2_fold_change"].values
-
-    # Handle NaN/Inf in log2FC
-    valid_mask = np.isfinite(truth_log2fc) & np.isfinite(pred_log2fc)
-    truth_log2fc_valid = truth_log2fc[valid_mask]
-    pred_log2fc_valid = pred_log2fc[valid_mask]
-
-    # Pearson correlation
-    if len(truth_log2fc_valid) > 2:
-        pearson_corr, _ = pearsonr(truth_log2fc_valid, pred_log2fc_valid)
-    else:
-        pearson_corr = np.nan
-
-    # MSE
-    mse = np.mean((truth_log2fc_valid - pred_log2fc_valid) ** 2)
-
     # DES (Differential Expression Score)
     truth_sig = set(de_truth.index[de_truth["fdr"] < fdr_threshold])
     pred_sig = set(de_pred.index[de_pred["fdr"] < fdr_threshold])
@@ -121,8 +99,6 @@ def compute_de_comparison_metrics(
     )
 
     return {
-        "pearson_log2fc": pearson_corr,
-        "mse_log2fc": mse,
         "des": des,
         "n_de_truth": n_de_truth,
         "n_de_pred": n_de_pred,
@@ -160,21 +136,25 @@ def compute_des(
 def compute_pds(
     pred_deltas: dict[str, np.ndarray],
     truth_deltas: dict[str, np.ndarray],
-    target_gene_indices: dict[str, int],
-) -> tuple[float, dict[str, float]]:
+    target_gene_indices: dict[str, int] | None = None,
+) -> tuple[float, dict[str, int]]:
     """
-    Compute Perturbation Discrimination Score.
+    Compute Perturbation Discrimination Score using cosine similarity ranking.
 
-    For each predicted perturbation, rank all true perturbation deltas by L1 distance.
-    PDS = 1 - (rank - 1) / N, where rank is position of correct perturbation.
+    For each predicted perturbation k, compute cosine similarity between
+    predicted delta and all true deltas:
+        S_{k,j} = (pred_delta_k · truth_delta_j) / (|pred_delta_k| * |truth_delta_j|)
+
+    Rank = position of true perturbation among all similarities (descending).
+    nPDS = (1/N^2) * sum(R_k)  -- lower is better
 
     Args:
         pred_deltas: {target_gene: delta_vector} for predictions
         truth_deltas: {target_gene: delta_vector} for ground truth
-        target_gene_indices: {target_gene: gene_index} to exclude from distance
+        target_gene_indices: {target_gene: gene_index} - not used in cosine version
 
     Returns:
-        (mean_pds, {target_gene: pds_score})
+        (normalized_pds, {target_gene: rank})
     """
     targets = list(pred_deltas.keys())
     n = len(targets)
@@ -182,40 +162,85 @@ def compute_pds(
     if n == 0:
         return np.nan, {}
 
-    pds_scores = {}
+    ranks = {}
 
     for p in targets:
-        pred_delta = pred_deltas[p].copy()
-        target_idx = target_gene_indices.get(p, -1)
+        pred_delta = pred_deltas[p]
 
-        # Compute L1 distance to all true deltas
-        distances = []
+        # Compute cosine similarity to all true deltas
+        similarities = []
+        pred_norm = np.linalg.norm(pred_delta)
+
         for t in targets:
-            truth_delta = truth_deltas[t].copy()
+            truth_delta = truth_deltas[t]
+            truth_norm = np.linalg.norm(truth_delta)
 
-            # Exclude target gene from distance calculation
-            if target_idx >= 0:
-                pred_delta_masked = np.delete(pred_delta, target_idx)
-                truth_delta_masked = np.delete(truth_delta, target_idx)
+            # Cosine similarity
+            if pred_norm > 0 and truth_norm > 0:
+                cos_sim = np.dot(pred_delta, truth_delta) / (pred_norm * truth_norm)
             else:
-                pred_delta_masked = pred_delta
-                truth_delta_masked = truth_delta
+                cos_sim = 0.0
 
-            dist = np.sum(np.abs(pred_delta_masked - truth_delta_masked))
-            distances.append((t, dist))
+            similarities.append((t, cos_sim))
 
-        # Sort by distance (ascending)
-        distances.sort(key=lambda x: x[1])
+        # Sort by similarity (descending - higher similarity = better match)
+        similarities.sort(key=lambda x: x[1], reverse=True)
 
         # Find rank of correct perturbation (1-indexed)
-        rank = next(i + 1 for i, (t, _) in enumerate(distances) if t == p)
+        rank = next(i + 1 for i, (t, _) in enumerate(similarities) if t == p)
+        ranks[p] = rank
 
-        # PDS = 1 - (rank - 1) / N
-        pds = 1 - (rank - 1) / n
-        pds_scores[p] = pds
+    # Normalized PDS: nPDS = (1/N^2) * sum(R_k)
+    # Lower is better (rank 1 for all = N/N^2 = 1/N)
+    normalized_pds = sum(ranks.values()) / (n * n)
 
-    mean_pds = np.mean(list(pds_scores.values()))
-    return mean_pds, pds_scores
+    return normalized_pds, ranks
+
+
+def compute_mae_top2k(
+    pred_expr: np.ndarray,
+    truth_expr: np.ndarray,
+    control_mean: np.ndarray,
+    top_k: int = 2000,
+) -> float:
+    """
+    Compute MAE on top K genes by ground truth |log2 fold change|.
+
+    Per docs/eval_metrics.md:
+    1. Compute |LFC| = |log2(c_k + 1) - log2(c_ntc + 1)| for ground truth
+       Since data is already log1p-normalized, we use it directly.
+    2. Select top K genes by |LFC|
+    3. Compute MAE on log1p-normalized expression for selected genes
+
+    Args:
+        pred_expr: Predicted expression (n_cells, n_genes), log1p-normalized
+        truth_expr: Ground truth expression (n_cells, n_genes), log1p-normalized
+        control_mean: Control mean expression (n_genes,), log1p-normalized
+        top_k: Number of top genes to select (default 2000)
+
+    Returns:
+        MAE on top K genes
+    """
+    # Compute pseudobulk means
+    pred_mean = pred_expr.mean(axis=0).flatten()
+    truth_mean = truth_expr.mean(axis=0).flatten()
+    control_mean = np.asarray(control_mean).flatten()
+
+    # Since data is log1p-normalized, compute log2 fold change:
+    # log2FC = log2(exp(log1p_k) / exp(log1p_ntc))
+    #        = (log1p_k - log1p_ntc) / log(2)
+    # We just need |delta| for ranking, so use |truth_mean - control_mean|
+    truth_delta = np.abs(truth_mean - control_mean)
+
+    # Select top K genes by |delta|
+    n_genes = len(truth_delta)
+    k = min(top_k, n_genes)
+    top_indices = np.argsort(truth_delta)[-k:]
+
+    # Compute MAE on selected genes (on log1p-normalized values)
+    mae = np.mean(np.abs(pred_mean[top_indices] - truth_mean[top_indices]))
+
+    return float(mae)
 
 
 def compute_pseudobulk_delta(
@@ -228,4 +253,4 @@ def compute_pseudobulk_delta(
     Assumes log1p-normalized expression.
     """
     perturbed_mean = perturbed_expr.mean(axis=0)
-    return perturbed_mean - control_mean
+    return np.asarray(perturbed_mean).flatten() - np.asarray(control_mean).flatten()
