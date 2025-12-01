@@ -13,8 +13,7 @@ model:
 
 inference:
   batch_size: 16
-  eval_batch_size: 16
-  max_cells: 32  # Cap cells per target to avoid OOM
+  eval_batch_size: 16  # Batch size for evaluation (processes all cells batch by batch)
   seed: 42
   control_target_gene: "non-targeting"
 

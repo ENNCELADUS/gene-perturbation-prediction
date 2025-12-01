@@ -3,14 +3,18 @@ Distributed Data Parallel (DDP) utility functions for multi-GPU training.
 """
 
 import os
+from datetime import timedelta
 
 import torch
 import torch.distributed as dist
 
 
-def setup_ddp():
+def setup_ddp(timeout_minutes: int = 60):
     """
     Initialize distributed training if running under torchrun.
+
+    Args:
+        timeout_minutes: NCCL timeout in minutes (default: 60 for long validation).
 
     Returns:
         Tuple of (rank, local_rank, world_size, is_distributed)
@@ -19,7 +23,11 @@ def setup_ddp():
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
-        dist.init_process_group(backend="nccl")
+        # Increase timeout to handle long validation with DE analysis
+        dist.init_process_group(
+            backend="nccl",
+            timeout=timedelta(minutes=timeout_minutes),
+        )
         torch.cuda.set_device(local_rank)
         return rank, local_rank, world_size, True
     else:

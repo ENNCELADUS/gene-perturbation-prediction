@@ -242,6 +242,9 @@ def main():
             loss_tensor = torch.tensor([train_loss], device=device)
             dist.all_reduce(loss_tensor, op=dist.ReduceOp.AVG)
             train_loss = loss_tensor.item()
+            # All ranks wait here while rank 0 does validation
+            # This prevents NCCL timeout during long validation
+            dist.barrier()
 
         # Validation (rank 0 only)
         if is_main_process(rank):
@@ -257,6 +260,7 @@ def main():
                 f"DES: {val_metrics['des']:.4f} | MAE: {val_metrics['mae_top2k']:.4f}"
             )
 
+            early_stop_flag = 0
             if val_metrics["combined"] < best_combined:
                 best_combined = val_metrics["combined"]
                 best_val_metrics = val_metrics.copy()
@@ -267,12 +271,13 @@ def main():
                 patience += 1
                 if patience >= config["optimizer"]["early_stop"]:
                     logger.info(f"Early stopping at epoch {epoch}")
-                    if is_distributed:
-                        dist.broadcast(torch.tensor([1], device=device), src=0)
-                    break
+                    early_stop_flag = 1
+        else:
+            early_stop_flag = 0
 
+        # Synchronize early stopping decision across all ranks
         if is_distributed:
-            stop_tensor = torch.tensor([0], device=device)
+            stop_tensor = torch.tensor([early_stop_flag], device=device)
             dist.broadcast(stop_tensor, src=0)
             if stop_tensor.item() == 1:
                 break

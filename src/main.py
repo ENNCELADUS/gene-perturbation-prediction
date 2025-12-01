@@ -63,7 +63,14 @@ def main():
 
     # Create output dir
     base_output_dir = Path(config["paths"]["output_dir"])
-    output_dir = base_output_dir / args.model_type
+    # Map model_type to output folder name
+    output_folder_map = {
+        "scgpt": "scgpt_zeroshot",
+        "scgpt_finetuned": "scgpt_finetuned",
+        "baseline": "baseline",
+    }
+    output_folder = output_folder_map.get(args.model_type, args.model_type)
+    output_dir = base_output_dir / output_folder
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger = get_logger("ZeroShotPerturbation", log_file=output_dir / "run.log")
@@ -100,6 +107,9 @@ def main():
 
     logger.info(f"Processing {len(targets)} target genes...")
 
+    # Get batch size for processing
+    eval_batch_size = config["inference"].get("eval_batch_size", 16)
+
     for target in targets:
         if target == config["inference"]["control_target_gene"]:
             continue
@@ -110,41 +120,67 @@ def main():
         ground_truth_adata = data_loader.get_target_ground_truth(target)
         n_cells = ground_truth_adata.n_obs
 
-        # Cap n_cells to avoid OOM (process in smaller batches)
-        max_cells = config["inference"].get("max_cells", 64)
-        n_cells = min(n_cells, max_cells)
-
         if n_cells == 0:
             logger.warning(f"No ground truth cells for {target}, skipping.")
             continue
 
-        # Prepare Input - sample same number of control cells as ground truth
-        # Use target hash as seed for reproducibility
-        seed = hash(target) % (2**32)
-        batch_result = data_loader.prepare_perturbation_batch(
-            target, n_cells=n_cells, seed=seed, return_control_expr=True
-        )
-        if batch_result is None:
+        logger.info(f"Processing {n_cells} cells in batches of {eval_batch_size}")
+
+        # Process all cells batch by batch
+        # Use target hash as base seed for reproducibility
+        base_seed = hash(target) % (2**32)
+        gene_ids = np.array(data_loader.test_adata.var["id_in_vocab"])
+
+        pred_expr_list = []
+        control_expr_list = []
+
+        for batch_start in range(0, n_cells, eval_batch_size):
+            batch_end = min(batch_start + eval_batch_size, n_cells)
+            batch_n_cells = batch_end - batch_start
+
+            # Use different seed for each batch to sample different control cells
+            batch_seed = base_seed + batch_start
+
+            batch_result = data_loader.prepare_perturbation_batch(
+                target, n_cells=batch_n_cells, seed=batch_seed, return_control_expr=True
+            )
+            if batch_result is None:
+                continue
+
+            batch_data, batch_control_expr = batch_result
+            control_expr_list.append(batch_control_expr)
+
+            # Predict
+            with torch.no_grad():
+                pred_expression = model_wrapper.predict(
+                    batch_data,
+                    gene_ids=gene_ids,
+                    amp=True,
+                )
+
+            # Convert predictions to numpy
+            if isinstance(pred_expression, torch.Tensor):
+                batch_pred_expr = pred_expression.cpu().numpy()
+            else:
+                batch_pred_expr = np.asarray(pred_expression)
+
+            pred_expr_list.append(batch_pred_expr)
+
+            # Clean up GPU memory after each batch
+            del batch_data, pred_expression
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        # Skip if no predictions were made
+        if not pred_expr_list:
+            logger.warning(f"No predictions generated for {target}, skipping.")
             continue
 
-        batch_data, control_expr = batch_result
+        # Concatenate all batch predictions
+        pred_expr = np.concatenate(pred_expr_list, axis=0)
+        control_expr = np.concatenate(control_expr_list, axis=0)
 
-        # Predict
-        with torch.no_grad():
-            gene_ids = np.array(data_loader.test_adata.var["id_in_vocab"])
-            pred_expression = model_wrapper.predict(
-                batch_data,
-                gene_ids=gene_ids,
-                amp=True,
-            )
-
-        # Convert predictions to numpy
-        if isinstance(pred_expression, torch.Tensor):
-            pred_expr = pred_expression.cpu().numpy()
-        else:
-            pred_expr = np.asarray(pred_expression)
-
-        # Get ground truth expression
+        # Get ground truth expression (use all cells)
         if isinstance(ground_truth_adata.X, np.ndarray):
             truth_expr = ground_truth_adata.X
         else:
@@ -202,11 +238,6 @@ def main():
             f"Target {target} - DES: {metrics['des']:.4f}, "
             f"MAE_top2k: {metrics['mae_top2k']:.4f}, n_DE: {metrics['n_de_truth']}"
         )
-
-        # Clean up GPU memory after each target
-        del batch_data, pred_expression
-        gc.collect()
-        torch.cuda.empty_cache()
 
     # 4. Compute PDS (global metric using cosine similarity ranking)
     if pred_deltas:
