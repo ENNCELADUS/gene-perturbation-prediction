@@ -34,13 +34,13 @@ conda activate vcc
 # Run Zero-Shot Pipeline
 echo "Starting Zero-Shot Perturbation Experiment..."
 echo "Date: $(date)"
-echo "Config: src/configs/config.yaml"
+echo "Config: src/configs/zeroshot.yaml"
 
 set -euo pipefail
 
 # Add local hpdex package (numba backend, no C++ build required)
 export PYTHONPATH="${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
 
-python src/main.py --model_type baseline --threads -1
+python src/main.py --config src/configs/zeroshot.yaml --model_type scgpt --threads -1
 
 echo "Experiment complete. Results saved to paths defined in config."
