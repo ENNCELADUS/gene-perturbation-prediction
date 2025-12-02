@@ -1,0 +1,86 @@
+# Linear Regression Model Configuration for VCC Perturbation Prediction
+# This config is used for BOTH training and evaluation
+
+# ========== Paths ==========
+paths:
+  # Pretrained scGPT model directory (for vocab loading only)
+  model_dir: "model/scGPT"
+  
+  # Linear model directory (output for training, input for eval)
+  linear_model_dir: "model/linear_regression"
+  
+  # Evaluation data paths
+  data_dir: "data/processed"
+  test_file: "test.h5ad"
+  train_file: "train.h5ad"
+  
+  # Evaluation results output
+  output_dir: "results"
+  
+  # GEARS data directory (for training, created by scripts/convert_to_gears.py)
+  gears_data_dir: "data/processed/gears"
+  dataset_name: "vcc"
+
+# ========== Model ==========
+# Linear model settings
+model:
+  pad_token: "<pad>"
+  pad_value: 0
+  max_seq_len: 1536
+  include_zero_gene: "batch-wise"
+
+# ========== Inference / Evaluation ==========
+inference:
+  batch_size: 16
+  eval_batch_size: 16
+  seed: 42
+  control_target_gene: "non-targeting"
+
+# ========== Data Processing (Training) ==========
+data:
+  special_tokens: ["<pad>", "<cls>", "<eoc>"]
+  pert_pad_id: 0
+
+# ========== Training ==========
+training:
+  amp: true  # Mixed precision training
+
+# ========== Optimizer ==========
+optimizer:
+  lr: 1.0e-3
+  batch_size: 64
+  eval_batch_size: 64
+  epochs: 50
+  early_stop: 10  # patience for early stopping
+  weight_decay: 1.0e-5
+
+# ========== Loss Function ==========
+loss:
+  type: "MSELoss"  # Options: "SmoothL1Loss", "MSELoss", "L1Loss"
+  reduction: "mean"
+
+# ========== Data Split ==========
+# Train/Val split on 120 genes (excluding 30 test genes)
+split:
+  test_genes_file: "data/raw/test_set.csv"  # 30 test genes
+  train_ratio: 0.833  # 100/120 genes for training
+  val_ratio: 0.167    # 20/120 genes for validation
+  seed: 42
+
+# ========== Metrics ==========
+metrics:
+  mae_top_k: 2000  # Top K genes by |log2FC| for MAE calculation
+
+# ========== Early Stopping ==========
+early_stopping:
+  metric: "overall_score"  # Higher is better (0-100 scale per eval_metrics.md)
+
+# ========== Logging ==========
+logging:
+  log_interval: 100
+  save_interval: 1  # Save every epoch
+
+# ========== Hardware ==========
+hardware:
+  device: "cuda"  # "cuda" or "cpu"
+
