@@ -194,74 +194,55 @@ $$\text{DES} = \frac{1}{N} \sum_{k=1}^N DES_k$$
 
 This uses Wilcoxon rank-sum test + BH (FDR=0.05) to compute set intersection ratios. When the predicted set is larger than the true set, truncate using $|\text{logFC}|$ to the same size before computing the intersection ratio.
 
-#### 4.2.2 Normalized Three Sub-Scores (All "Higher is Better", Range 0~1)
+#### 4.2.2 Normalized Three Sub-Scores
 
-**PDS score:**
+**Baseline** (simply averaging the expression from all perturbations. The baseline scores are pre-calculated on the Training dataset):
 
-Linearly invert MeanRank to 0~1:
+* `pds_nrank`: 0.5167
+* `mae_top2000`: 0.1258
+* `des`: 0.0442
 
-$$s_{\text{PDS}} = \frac{N - \text{MeanRank}}{N - 1}$$
+##### **Overall Score**
 
-When MeanRank = 1, $s_{\text{PDS}} = 1$; when MeanRank = N, $s_{\text{PDS}} = 0$.
+The overall score on the leaderboard—and ultimately the score used for prize-eligible final entries—is computed by **averaging the improvement of the three metrics** relative to a **baseline cell-mean model**.
 
-**MAE score:**
+The baseline model predicts by averaging expression across all perturbations. Its baseline scores are pre-computed on the Training dataset and appear in the raw score table.
 
-Transform MAE into a 0~1 "higher is better" score (recommended stable mapping that does not depend on global model min/max):
+---
 
-$$s_{\text{MAE}} = \frac{1}{1 + \frac{MAE_{top2k}}{\tau}}$$
+### **Scaled Metrics**
 
-Default value for $\tau$ (choose one for reproducibility):
+#### **1. Differential Expression Score (DES) & Perturbation Discrimination Score (PDS)**
 
-* $\tau = MAE_{top2k}^{\text{baseline}}$ (baseline, e.g., "always predict NTC pseudobulk" or "always predict training set mean" Top2000-MAE on validation)
-* If you don't want to compute a baseline, use $\tau = \text{median}(\{MAE_{top2k}(k)\})$ (median of per-perturbation MAE_top2k for the epoch)
+Both DES and PDS range from **0 (worst)** to **1 (best)**.
+Their scaled versions measure how much the model improves over the baseline.
 
-**DES score:**
+$$DES_{scaled} = \frac{DES_{prediction} - DES_{baseline}}{1 - DES_{baseline}}$$
 
-DES is already 0~1 and higher is better:
+$$PDS_{scaled} = \frac{PDS_{prediction} - PDS_{baseline}}{1 - PDS_{baseline}}$$
 
-$$s_{\text{DES}} = \text{DES}$$
+---
 
-#### 4.2.3 Composite Metric (Weighted Geometric Mean, Default Weights All Equal to 1)
+#### **2. Mean Absolute Error (MAE)**
 
-$$S_{\text{geo}} = \left( s_{\text{PDS}}^{w_1} \cdot s_{\text{MAE}}^{w_2} \cdot s_{\text{DES}}^{w_3} \right)^{\frac{1}{w_1 + w_2 + w_3}}$$
+Since lower MAE is better and the ideal value is **0**, the scaled score is:
 
-With default $w_1 = w_2 = w_3 = 1$:
+$$MAE_{scaled} = \frac{MAE_{baseline} - MAE_{prediction}}{MAE_{baseline}}$$
 
-$$S_{\text{geo}} = (s_{\text{PDS}} \cdot s_{\text{MAE}} \cdot s_{\text{DES}})^{1/3}$$
+---
 
-This is "higher is better". If you prefer a "lower is better" total score, also output:
+### **Score Clipping**
 
-$$L_{\text{geo}} = 1 - S_{\text{geo}}$$
+If any scaled score becomes **negative** (i.e., your model performs worse than the baseline), it is **clipped to 0**.
 
-as the final monitoring/early stopping metric.
+All scaled scores are thus bounded in:
 
-### 4.3 Final Test Metrics and `perturbation_metrics.csv`
+$$0 \le \text{scaled score} \le 1$$
 
-#### 4.3.1 Final Test Metrics (Global Summary, Written to Log)
+---
 
-Recommended fields (same set as validation for comparison):
+### **Final Score**
 
-* `pds_mean_rank`
-* `pds_nrank` (optional)
-* `mae_top2000`
-* `des`
-* `s_pds`
-* `s_mae`
-* `s_des`
-* `s_geo` (and optionally `l_geo = 1 - s_geo`)
+The final score is the **mean of the three scaled scores**, multiplied by 100:
 
-The raw calculations for PDS/MAE are consistent with the documentation.
-
-#### 4.3.2 `perturbation_metrics.csv` (Per-Perturbation Records for Diagnosing Underperformers)
-
-One row per perturbation $k$. Recommended minimum columns (all can be obtained from the existing evaluation process):
-
-* `perturbation_id` (or name of $k$)
-* `rank_Rk` (the true perturbation rank $R_k$ from PDS)
-* `rank_Rk_norm` (recommended to store $R_k/N$ for cross-dataset comparison)
-* `cosine_self` ($\cos(\hat{\delta}_k, \delta_k)$, for diagnosing signature alignment)
-* `mae_top2000_k` ($\frac{1}{2000}\sum_{g \in \Omega_k} |\hat{y}_{k,g} - y_{k,g}|$)
-* `des_k` ($DES_k$ computed according to the DES definition)
-* (Optional but useful) `n_true_de` ($n_{k,\text{true}}$), `n_pred_de` ($n_{k,\text{pred}}$), `n_intersect` (intersection size), to help explain why $DES_k$ is high/low
-
-When modifying code according to this checklist, in the validation/test evaluator: first generate pseudobulk and delta (already needed for PDS), simultaneously obtain $\Omega_k$ (already needed for Top2000), plus DES set statistics, and you can output both the global and per-perturbation tables.
+$$S = \frac{1}{3}(DES_{scaled} + PDS_{scaled} + MAE_{scaled}) \times 100$$

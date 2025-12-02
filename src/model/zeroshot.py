@@ -1,5 +1,4 @@
 import sys
-import os
 import json
 import torch
 import logging
@@ -7,7 +6,7 @@ from pathlib import Path
 
 # Add scGPT to path
 # This needs to be robust to where the script is run from
-# If run from src/main.py, file is src/model/wrapper.py
+# If run from src/main.py, file is src/model/zeroshot.py
 # We need to go up 3 levels to get to root (src/model/ -> src/ -> root)
 current_dir = Path(__file__).parent.parent.parent
 scgpt_path = current_dir / "scGPT"
@@ -169,3 +168,4 @@ class ScGPTWrapper:
             amp=amp,
             max_seq_len=max_seq_len,
         )
+

@@ -17,7 +17,7 @@ from src.utils.de_metrics import (
     compute_pds,
     compute_pseudobulk_delta,
 )
-from src.model.wrapper import ScGPTWrapper
+from src.model.zeroshot import ScGPTWrapper
 from src.model.baseline import BaselineWrapper
 from src.data.loader import PerturbationDataLoader
 
@@ -93,6 +93,16 @@ def main():
 
     logger.info("Initializing Data Loader...")
     data_loader = PerturbationDataLoader(config, model_wrapper.vocab, logger)
+
+    # Fit baseline model on training data (pre-compute mean expression)
+    if args.model_type == "baseline":
+        logger.info("Fitting baseline model on training data...")
+        train_adata = data_loader.get_train_adata()
+        model_wrapper.fit_from_adata(
+            train_adata,
+            condition_key="target_gene",  # Column in train_adata.obs
+            control_key=config["inference"]["control_target_gene"],
+        )
 
     # Get control mean for PDS calculation
     control_mean = data_loader.get_control_mean()

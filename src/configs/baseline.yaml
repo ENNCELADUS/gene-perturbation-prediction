@@ -1,0 +1,21 @@
+# Baseline evaluation config
+# Average baseline: predicts mean expression from training perturbations
+
+paths:
+  model_dir: "model/scGPT"  # Still needs vocab.json
+  data_dir: "data/processed"
+  test_file: "test.h5ad"
+  train_file: "train.h5ad"
+  output_dir: "results"
+
+model:
+  pad_token: "<pad>"
+
+inference:
+  eval_batch_size: 16
+  seed: 42
+  control_target_gene: "non-targeting"
+
+metrics:
+  mae_top_k: 2000
+

@@ -17,30 +17,13 @@
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
-# Initialize Conda
-if [[ -f "$HOME/.bashrc" ]]; then
-  # shellcheck disable=SC1090
-  source "$HOME/.bashrc"
-fi
-if [[ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]]; then
-  # shellcheck disable=SC1091
-  source "$HOME/miniconda3/etc/profile.d/conda.sh"
-fi
-
 # Activate Environment
-echo "Activating conda environment 'vcc'..."
+source ~/.bashrc
 conda activate vcc
-
-# Run Zero-Shot Pipeline
-echo "Starting Zero-Shot Perturbation Experiment..."
-echo "Date: $(date)"
-echo "Config: src/configs/zeroshot.yaml"
 
 set -euo pipefail
 
 # Add local hpdex package (numba backend, no C++ build required)
 export PYTHONPATH="${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
 
-python src/main.py --config src/configs/zeroshot.yaml --model_type scgpt --threads -1
-
-echo "Experiment complete. Results saved to paths defined in config."
+python src/main.py --config src/configs/zeroshot.yaml --model_type scgpt

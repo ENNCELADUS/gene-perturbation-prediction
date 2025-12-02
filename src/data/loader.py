@@ -63,6 +63,10 @@ class PerturbationDataLoader:
         """Get gene names from test data."""
         return np.asarray(self.test_adata.var_names)
 
+    def get_train_adata(self):
+        """Return the training AnnData object for baseline fitting."""
+        return self.train_adata
+
     def prepare_perturbation_batch(
         self, target_gene, n_cells=None, seed=None, return_control_expr=False
     ):
