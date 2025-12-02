@@ -269,9 +269,7 @@ def main():
                 best_overall_score = val_metrics["overall_score"]
                 best_val_metrics = val_metrics.copy()
                 best_model = copy.deepcopy(eval_model)
-                logger.info(
-                    f"  -> New best (overall_score={best_overall_score:.2f})"
-                )
+                logger.info(f"  -> New best (overall_score={best_overall_score:.2f})")
                 patience = 0
             else:
                 patience += 1

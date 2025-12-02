@@ -62,3 +62,7 @@ tests/integration/results/
 
 # Data (root level only, not src/data/)
 /data/
+
+# Docs
+docs/references
+hpdex/

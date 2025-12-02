@@ -333,8 +333,9 @@ def compute_validation_metrics(
     pred_deltas = {}
     truth_deltas = {}
     target_gene_indices = {}
-    des_scores = []
-    mae_scores = []
+
+    # Store per-perturbation metrics
+    pert_metrics = {}
 
     for pert in unique_perts:
         mask = pert_cat == pert
@@ -357,6 +358,7 @@ def compute_validation_metrics(
             target_gene_indices[pert] = -1
 
         # Compute DES
+        des_val = np.nan
         try:
             de_metrics = compute_de_comparison_metrics(
                 control_expr=ctrl_expr,
@@ -366,36 +368,60 @@ def compute_validation_metrics(
                 fdr_threshold=0.05,
                 threads=1,
             )
-            des_scores.append(de_metrics["des"])
+            des_val = de_metrics["des"]
         except Exception:
             pass
 
         # Compute MAE_top2k
-        mae = compute_mae_top2k(
+        mae_val = compute_mae_top2k(
             pred_expr=pred_pert,
             truth_expr=truth_pert,
             control_mean=ctrl_mean,
             top_k=mae_top_k,
         )
-        mae_scores.append(mae)
+
+        pert_metrics[pert] = {"des": des_val, "mae": mae_val}
 
     # Compute PDS (returns dict with mean_rank, npds, ranks, cosine_self)
     if pred_deltas:
         pds_result = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
         mean_rank = pds_result["mean_rank"]
         npds = pds_result["npds"]
+        pds_ranks = pds_result["ranks"]
     else:
         mean_rank = np.nan
         npds = np.nan
+        pds_ranks = {}
 
-    mean_des = np.nanmean(des_scores) if des_scores else np.nan
-    mean_mae = np.nanmean(mae_scores) if mae_scores else np.nan
+    # Compute averages for raw metrics (for logging)
+    des_values = [m["des"] for m in pert_metrics.values() if not np.isnan(m["des"])]
+    mae_values = [m["mae"] for m in pert_metrics.values() if not np.isnan(m["mae"])]
 
-    # Convert npds to pds (higher is better): pds = 1 - npds
+    mean_des = np.mean(des_values) if des_values else np.nan
+    mean_mae = np.mean(mae_values) if mae_values else np.nan
     pds = 1.0 - npds if not np.isnan(npds) else np.nan
 
-    # Compute scaled metrics and overall score using centralized function
-    score_result = compute_overall_score(pds, mean_mae, mean_des)
+    # Compute overall_score by averaging per-perturbation scores
+    overall_scores = []
+    n_perts = len(pred_deltas)
+
+    for pert, metrics in pert_metrics.items():
+        des_k = metrics["des"]
+        mae_k = metrics["mae"]
+
+        # Get PDS rank for this perturbation
+        if pert in pds_ranks and n_perts > 0:
+            rank_k = pds_ranks[pert]
+            rank_norm_k = rank_k / n_perts
+            pds_k = 1.0 - rank_norm_k
+        else:
+            pds_k = np.nan
+
+        # Compute score for this perturbation
+        score_res = compute_overall_score(pds_k, mae_k, des_k)
+        overall_scores.append(score_res["overall_score"])
+
+    mean_overall_score = np.mean(overall_scores) if overall_scores else 0.0
 
     return {
         # Raw metrics (three de_metrics)
@@ -404,8 +430,8 @@ def compute_validation_metrics(
         "des": float(mean_des) if not np.isnan(mean_des) else np.nan,
         # Additional raw info
         "pds_mean_rank": float(mean_rank) if not np.isnan(mean_rank) else np.nan,
-        # Scaled metrics and overall score
-        **score_result,
+        # Overall score (averaged from per-perturbation scores)
+        "overall_score": mean_overall_score,
     }
 
 

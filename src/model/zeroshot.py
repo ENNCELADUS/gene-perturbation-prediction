@@ -168,4 +168,3 @@ class ScGPTWrapper:
             amp=amp,
             max_seq_len=max_seq_len,
         )
-

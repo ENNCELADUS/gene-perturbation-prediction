@@ -69,7 +69,9 @@ class BaselineWrapper:
                           target has shape (batch, n_genes) representing
                           perturbed expression values.
         """
-        self.logger.info("Fitting baseline: computing mean expression from training data...")
+        self.logger.info(
+            "Fitting baseline: computing mean expression from training data..."
+        )
 
         all_targets = []
         for batch_data, target in train_loader:
@@ -98,7 +100,9 @@ class BaselineWrapper:
             condition_key: Column in .obs indicating perturbation condition
             control_key: Value in condition_key that indicates control samples
         """
-        self.logger.info("Fitting baseline from AnnData: computing mean perturbed expression...")
+        self.logger.info(
+            "Fitting baseline from AnnData: computing mean perturbed expression..."
+        )
 
         # Select only perturbed (non-control) samples
         perturbed_mask = adata.obs[condition_key] != control_key
