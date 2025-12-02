@@ -26,6 +26,12 @@ from src.utils.de_metrics import (
     compute_pseudobulk_delta,
 )
 
+# Baseline scores for normalization (pre-calculated on Training dataset)
+# Per docs/eval_metrics.md Section 4.2.2
+BASELINE_PDS_NRANK = 0.5167
+BASELINE_MAE_TOP2000 = 0.1258
+BASELINE_DES = 0.0442
+
 
 def load_pretrained_model(
     config: dict,
@@ -273,19 +279,18 @@ def compute_validation_metrics(
     """
     Compute validation metrics per eval_metrics.md Section 4.2.
 
-    Raw metrics:
-        - pds_mean_rank: Mean of perturbation ranks
-        - mae_top2k: Mean MAE on top 2000 genes by |LFC|
+    Raw metrics (three de_metrics):
+        - pds: Perturbation Discrimination Score (1 - npds, higher is better)
+        - mae: Mean MAE on top 2000 genes by |LFC|
         - des: Mean DES (Differential Expression Score)
 
-    Normalized sub-scores (all higher is better, 0-1):
-        - s_pds = (N - MeanRank) / (N - 1)
-        - s_mae = 1 / (1 + mae_top2k / tau) where tau = median(mae_scores)
-        - s_des = des
+    Scaled metrics (baseline-relative, clipped to [0, 1]):
+        - pds_scaled = (pds - baseline) / (1 - baseline)
+        - mae_scaled = (baseline - mae) / baseline
+        - des_scaled = (des - baseline) / (1 - baseline)
 
-    Composite metric:
-        - s_geo = (s_pds * s_mae * s_des)^(1/3)
-        - l_geo = 1 - s_geo (lower is better, for early stopping)
+    Overall score (0-100, higher is better):
+        - overall_score = mean(pds_scaled, mae_scaled, des_scaled) * 100
 
     Args:
         results: Dict with pert_cat, pred, truth arrays
@@ -294,7 +299,7 @@ def compute_validation_metrics(
         config: Configuration dictionary
 
     Returns:
-        Dict with raw metrics, normalized scores, and composite metrics
+        Dict with raw metrics, scaled scores, and overall_score
     """
     pred = results["pred"]
     truth = results["truth"]
@@ -379,57 +384,51 @@ def compute_validation_metrics(
     mean_des = np.nanmean(des_scores) if des_scores else np.nan
     mean_mae = np.nanmean(mae_scores) if mae_scores else np.nan
 
-    # Compute normalized sub-scores per eval_metrics.md Section 4.2.2
-    # s_pds = (N - MeanRank) / (N - 1), higher is better
-    if n_perts > 1 and not np.isnan(mean_rank):
-        s_pds = (n_perts - mean_rank) / (n_perts - 1)
-    elif n_perts == 1 and not np.isnan(mean_rank):
-        s_pds = 1.0 if mean_rank == 1 else 0.0
+    # Convert npds to pds (higher is better): pds = 1 - npds
+    pds = 1.0 - npds if not np.isnan(npds) else np.nan
+
+    # Compute scaled metrics per eval_metrics.md Section 4.2.2
+    # Using baseline values from BASELINE_* constants
+
+    # PDS_scaled = (PDS_pred - PDS_baseline) / (1 - PDS_baseline)
+    if not np.isnan(pds):
+        pds_scaled = max(0.0, (pds - BASELINE_PDS_NRANK) / (1 - BASELINE_PDS_NRANK))
     else:
-        s_pds = np.nan
+        pds_scaled = np.nan
 
-    # s_mae = 1 / (1 + mae_top2k / tau), tau = median of per-perturbation MAE
-    if mae_scores and not np.isnan(mean_mae):
-        tau = float(np.median(mae_scores))
-        if tau > 0:
-            s_mae = 1.0 / (1.0 + mean_mae / tau)
-        else:
-            s_mae = 1.0  # Perfect case, tau=0 means all MAE=0
+    # MAE_scaled = (MAE_baseline - MAE_pred) / MAE_baseline
+    if not np.isnan(mean_mae):
+        mae_scaled = max(0.0, (BASELINE_MAE_TOP2000 - mean_mae) / BASELINE_MAE_TOP2000)
     else:
-        s_mae = np.nan
+        mae_scaled = np.nan
 
-    # s_des = des (already 0-1, higher is better)
-    s_des = mean_des
-
-    # Composite metric: s_geo = (s_pds * s_mae * s_des)^(1/3)
-    if (
-        not np.isnan(s_pds)
-        and not np.isnan(s_mae)
-        and not np.isnan(s_des)
-        and s_pds > 0
-        and s_mae > 0
-        and s_des > 0
-    ):
-        s_geo = (s_pds * s_mae * s_des) ** (1 / 3)
+    # DES_scaled = (DES_pred - DES_baseline) / (1 - DES_baseline)
+    if not np.isnan(mean_des):
+        des_scaled = max(0.0, (mean_des - BASELINE_DES) / (1 - BASELINE_DES))
     else:
-        s_geo = np.nan
+        des_scaled = np.nan
 
-    # l_geo = 1 - s_geo (lower is better, for early stopping)
-    l_geo = 1.0 - s_geo if not np.isnan(s_geo) else np.nan
+    # Overall score = mean of scaled scores * 100
+    scaled_scores = [pds_scaled, mae_scaled, des_scaled]
+    valid_scores = [s for s in scaled_scores if not np.isnan(s)]
+    if valid_scores:
+        overall_score = float(np.mean(valid_scores) * 100)
+    else:
+        overall_score = 0.0
 
     return {
-        # Raw metrics
-        "pds": float(npds),
-        "pds_mean_rank": float(mean_rank),
-        "des": float(mean_des),
-        "mae_top2k": float(mean_mae),
-        # Normalized sub-scores
-        "s_pds": float(s_pds) if not np.isnan(s_pds) else np.nan,
-        "s_mae": float(s_mae) if not np.isnan(s_mae) else np.nan,
-        "s_des": float(s_des) if not np.isnan(s_des) else np.nan,
-        # Composite metrics
-        "s_geo": float(s_geo) if not np.isnan(s_geo) else np.nan,
-        "l_geo": float(l_geo) if not np.isnan(l_geo) else np.nan,
+        # Raw metrics (three de_metrics)
+        "pds": float(pds) if not np.isnan(pds) else np.nan,
+        "mae": float(mean_mae) if not np.isnan(mean_mae) else np.nan,
+        "des": float(mean_des) if not np.isnan(mean_des) else np.nan,
+        # Additional raw info
+        "pds_mean_rank": float(mean_rank) if not np.isnan(mean_rank) else np.nan,
+        # Scaled metrics
+        "pds_scaled": float(pds_scaled) if not np.isnan(pds_scaled) else np.nan,
+        "mae_scaled": float(mae_scaled) if not np.isnan(mae_scaled) else np.nan,
+        "des_scaled": float(des_scaled) if not np.isnan(des_scaled) else np.nan,
+        # Overall score (higher is better, for early stopping)
+        "overall_score": overall_score,
     }
 
 

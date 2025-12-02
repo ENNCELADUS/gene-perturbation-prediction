@@ -23,7 +23,7 @@ conda activate vcc
 
 set -euo pipefail
 
-# Add local hpdex package (numba backend, no C++ build required)
-export PYTHONPATH="${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
+# Add scGPT and local hpdex package to Python path
+export PYTHONPATH="${ROOT_DIR}/scGPT:${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
 
 python src/main.py --config src/configs/zeroshot.yaml --model_type scgpt
