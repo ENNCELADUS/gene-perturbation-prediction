@@ -38,43 +38,22 @@ else
     echo "Split data already exists, skipping data splitting..."
 fi
 
-# ========== Step 0.5: Apply log1p Normalization ==========
-echo "=========================================="
-echo "Step 0.5: Applying log1p normalization..."
-echo "=========================================="
-
-# Check if log1p normalization already applied
-if python -c "import anndata; a=anndata.read_h5ad('data/processed/train.h5ad'); exit(0 if 'log1p' in a.uns else 1)" 2>/dev/null; then
-    echo "Data already log1p normalized, skipping..."
-else
-    python scripts/data_process/apply_log1p.py
-fi
-
-# ========== Step 0.6: Optimize Data for Memory ==========
-echo "=========================================="
-echo "Step 0.6: Optimizing data for memory efficiency..."
-echo "=========================================="
-
-# Check if data is already optimized (float16)
-if python -c "import anndata; a=anndata.read_h5ad('data/processed/train.h5ad'); exit(0 if a.X.dtype.name == 'float16' else 1)" 2>/dev/null; then
-    echo "Data already optimized (float16), skipping..."
-else
-    python scripts/data_process/optimize_h5ad.py --skip_backup
-fi
-
 # ========== Step 1: Convert Data to GEARS Format ==========
 echo "=========================================="
 echo "Step 1: Converting data to GEARS format..."
 echo "=========================================="
 
-# Check if GEARS data already exists
-if [ ! -d "data/processed/gears/vcc" ]; then
+# Check if GEARS data already exists (check for actual output file, not just directory)
+if [ ! -f "data/processed/gears/vcc/perturb_processed.h5ad" ]; then
+    # Clean up any partial run artifacts
+    rm -rf data/processed/gears/vcc/ data/processed/gears/vcc_converted.h5ad 2>/dev/null || true
+    
     python scripts/convert_to_gears.py \
         --train_path data/processed/train.h5ad \
         --output_dir data/processed/gears \
         --dataset_name vcc
 
-    # Clean up intermediate file to save disk space (~25GB)
+    # Clean up intermediate file to save disk space (~13GB)
     if [ -f "data/processed/gears/vcc_converted.h5ad" ]; then
         echo "Removing intermediate file to save disk space..."
         rm -f data/processed/gears/vcc_converted.h5ad
