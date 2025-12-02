@@ -20,6 +20,7 @@ from src.utils.de_metrics import (
 )
 from src.model.zeroshot import ScGPTWrapper
 from src.model.baseline import BaselineWrapper
+from src.model.linear import LinearWrapper
 from src.data.loader import PerturbationDataLoader
 
 
@@ -37,8 +38,8 @@ def main():
     parser.add_argument(
         "--model_type",
         default="scgpt",
-        choices=["scgpt", "scgpt_finetuned", "baseline"],
-        help="Model type to run (scgpt, scgpt_finetuned, or baseline)",
+        choices=["scgpt", "scgpt_finetuned", "baseline", "linear"],
+        help="Model type to run (scgpt, scgpt_finetuned, baseline, or linear)",
     )
     parser.add_argument(
         "--model_dir",
@@ -63,6 +64,11 @@ def main():
         config["paths"]["model_dir"] = config["paths"].get(
             "finetuned_model_dir", "model/scGPT_finetuned"
         )
+    elif args.model_type == "linear":
+        # Use linear_model_dir for linear model evaluation
+        config["paths"]["linear_model_dir"] = config["paths"].get(
+            "linear_model_dir", "model/linear_regression"
+        )
 
     # Create output dir
     base_output_dir = Path(config["paths"]["output_dir"])
@@ -71,6 +77,7 @@ def main():
         "scgpt": "scgpt_zeroshot",
         "scgpt_finetuned": "scgpt_finetuned",
         "baseline": "baseline",
+        "linear": "linear",
     }
     output_folder = output_folder_map.get(args.model_type, args.model_type)
     output_dir = base_output_dir / output_folder
@@ -88,6 +95,11 @@ def main():
     if args.model_type == "baseline":
         logger.info("Initializing Baseline Model Wrapper...")
         model_wrapper = BaselineWrapper(config, logger)
+    elif args.model_type == "linear":
+        logger.info("Initializing Linear Model Wrapper...")
+        model_wrapper = LinearWrapper(config, logger)
+        linear_model_dir = Path(config["paths"]["linear_model_dir"])
+        model_wrapper.load_model(linear_model_dir)
     else:
         logger.info("Initializing scGPT Model Wrapper...")
         model_wrapper = ScGPTWrapper(config, logger)
