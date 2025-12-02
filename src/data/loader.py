@@ -93,6 +93,7 @@ class PerturbationDataLoader:
         else:
             x = batch_ctrl.X.toarray()
 
+        # Convert to float32 for model input (AMP will handle precision)
         x = torch.tensor(x, dtype=torch.float32)
 
         # Create Perturbation Flags

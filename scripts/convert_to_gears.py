@@ -70,11 +70,19 @@ def convert_vcc_to_gears(
     if "gene_name" not in adata.var.columns:
         adata.var["gene_name"] = adata.var.index.tolist()
 
-    # === Ensure X is sparse (for memory efficiency) ===
-    if not hasattr(adata.X, "toarray"):
-        from scipy.sparse import csr_matrix
+    # === Ensure X is sparse float16 (for memory efficiency) ===
+    from scipy.sparse import csr_matrix
 
+    if not hasattr(adata.X, "toarray"):
         adata.X = csr_matrix(adata.X)
+
+    # Convert to float16 for memory efficiency
+    if adata.X.dtype != np.float16:
+        adata.X.data = adata.X.data.astype(np.float16)
+
+    # Remove counts layer if present to save memory
+    if "counts" in adata.layers:
+        del adata.layers["counts"]
 
     # === Print conversion summary ===
     print("\n=== Conversion Summary ===")

@@ -60,5 +60,5 @@ temp/
 # Test Results
 tests/integration/results/
 
-# Data
-data/
+# Data (root level only, not src/data/)
+/data/

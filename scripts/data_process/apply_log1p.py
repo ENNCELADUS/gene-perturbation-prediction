@@ -3,10 +3,11 @@ Apply log1p normalization to train and test h5ad files.
 
 This script:
 - Loads train.h5ad and test.h5ad
-- Stores raw counts in adata.layers['counts'] for reference
 - Applies log1p transformation (no other normalization)
 - Records transformation metadata in adata.uns['log1p']
 - Overwrites the h5ad files in place
+
+Note: Raw counts are NOT stored to save memory. Run this after splitting.
 
 Usage:
     python scripts/data_process/apply_log1p.py
@@ -41,20 +42,14 @@ def apply_log1p_to_adata(adata: ad.AnnData, file_name: str) -> ad.AnnData:
 
     # Check if already log1p transformed
     if "log1p" in adata.uns:
-        print(f"  Warning: {file_name} already has log1p metadata. Skipping transformation.")
+        print(f"  Warning: {file_name} already has log1p metadata. Skipping.")
         return adata
 
-    # Store raw counts in layers['counts'] if not already present
-    if "counts" not in adata.layers:
-        print("  Storing raw counts in layers['counts']...")
-        # Handle sparse matrices
-        if hasattr(adata.X, "toarray"):
-            adata.layers["counts"] = adata.X.copy()
-        else:
-            import numpy as np
-            adata.layers["counts"] = np.array(adata.X).copy()
-    else:
-        print("  layers['counts'] already exists, preserving existing counts...")
+    # Note: We intentionally skip storing raw counts to save memory
+    # If counts layer exists from previous processing, remove it
+    if "counts" in adata.layers:
+        print("  Removing counts layer to save memory...")
+        del adata.layers["counts"]
 
     # Apply log1p transformation (no other normalization)
     print("  Applying log1p transformation...")
@@ -64,7 +59,7 @@ def apply_log1p_to_adata(adata: ad.AnnData, file_name: str) -> ad.AnnData:
     adata.uns["log1p"] = {"base": None}  # natural log (base=None means natural log)
 
     print(f"  After log1p - X min/max: {adata.X.min():.2f} / {adata.X.max():.2f}")
-    print(f"  Transformation metadata saved to uns['log1p']")
+    print("  Transformation metadata saved to uns['log1p']")
 
     return adata
 
@@ -103,4 +98,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
