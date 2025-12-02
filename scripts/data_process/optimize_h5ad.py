@@ -3,9 +3,10 @@
 Optimize h5ad files for memory efficiency.
 
 Optimizations:
-1. Remove counts layer (not needed for training)
-2. Convert X from float32 to float16 (sufficient precision for log1p values)
-3. Ensure sparse format is used
+1. Remove counts layer (not needed for training, saves ~50% memory)
+2. Ensure sparse CSR format is used
+
+Note: scipy.sparse does not support float16, so we keep float32.
 
 Usage:
     python scripts/data_process/optimize_h5ad.py
@@ -16,7 +17,6 @@ import os
 from pathlib import Path
 
 import anndata as ad
-import numpy as np
 import scipy.sparse as sp
 
 
@@ -56,34 +56,26 @@ def optimize_adata(adata: ad.AnnData, name: str) -> ad.AnnData:
             original_size += layer.nbytes
     print(f"Original data size: {original_size / (1024**3):.2f} GB")
 
-    # 1. Remove counts layer if present (not needed for training)
+    # 1. Remove counts layer if present (not needed for training, saves ~50%)
     if "counts" in adata.layers:
         print("\n[1] Removing 'counts' layer (not needed for training)...")
         del adata.layers["counts"]
         print("    Done.")
-
-    # 2. Convert X to float16 for memory efficiency
-    print("\n[2] Converting X from float32 to float16...")
-    if hasattr(adata.X, "data"):
-        # Sparse matrix - convert data array
-        adata.X.data = adata.X.data.astype(np.float16)
-        print(f"    Sparse matrix: {adata.X.nnz} non-zero elements")
     else:
-        # Dense matrix
-        adata.X = adata.X.astype(np.float16)
-    print(f"    New dtype: {adata.X.dtype}")
+        print("\n[1] No 'counts' layer to remove.")
 
-    # 3. Ensure sparse format (CSR is most efficient for row operations)
+    # 2. Ensure sparse format (CSR is most efficient for row operations)
+    # Note: scipy.sparse doesn't support float16, so we keep float32
     if not sp.issparse(adata.X):
-        print("\n[3] Converting X to sparse CSR format...")
+        print("\n[2] Converting X to sparse CSR format...")
         adata.X = sp.csr_matrix(adata.X)
         print("    Done.")
     elif not isinstance(adata.X, sp.csr_matrix):
-        print(f"\n[3] Converting X from {type(adata.X).__name__} to CSR...")
+        print(f"\n[2] Converting X from {type(adata.X).__name__} to CSR...")
         adata.X = adata.X.tocsr()
         print("    Done.")
     else:
-        print("\n[3] X already in CSR format.")
+        print("\n[2] X already in CSR format.")
 
     # Final stats
     optimized_size = 0

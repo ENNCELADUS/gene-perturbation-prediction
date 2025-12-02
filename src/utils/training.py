@@ -80,8 +80,8 @@ def load_pretrained_model(
         n_cls=1,  # Not used for perturbation
         vocab=vocab,
         dropout=config["model"]["dropout"],
-        pad_token=config["data"]["pad_token"],
-        pad_value=config["data"]["pad_value"],
+        pad_token=config["model"]["pad_token"],
+        pad_value=config["model"]["pad_value"],
         pert_pad_id=config["data"]["pert_pad_id"],
         use_fast_transformer=config["model"]["use_fast_transformer"],
     )
@@ -125,8 +125,8 @@ def train_epoch(
     device = next(model.parameters()).device
     amp_enabled = config["training"]["amp"]
     log_interval = config["logging"]["log_interval"]
-    include_zero_gene = config["data"]["include_zero_gene"]
-    max_seq_len = config["data"]["max_seq_len"]
+    include_zero_gene = config["model"]["include_zero_gene"]
+    max_seq_len = config["model"]["max_seq_len"]
 
     num_batches = len(train_loader)
 
@@ -237,7 +237,7 @@ def evaluate(
     """
     model.eval()
 
-    include_zero_gene = config["data"]["include_zero_gene"]
+    include_zero_gene = config["model"]["include_zero_gene"]
 
     pert_cat = []
     pred = []
