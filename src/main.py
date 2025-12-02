@@ -14,13 +14,9 @@ from src.utils.logging import get_logger
 from src.utils.de_metrics import (
     compute_de_comparison_metrics,
     compute_mae_top2k,
+    compute_overall_score,
     compute_pds,
     compute_pseudobulk_delta,
-)
-from src.utils.training import (
-    BASELINE_PDS_NRANK,
-    BASELINE_MAE_TOP2000,
-    BASELINE_DES,
 )
 from src.model.zeroshot import ScGPTWrapper
 from src.model.baseline import BaselineWrapper
@@ -263,7 +259,6 @@ def main():
     n_perts = len(pred_deltas)
     if pred_deltas:
         pds_result = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
-        mean_rank = pds_result["mean_rank"]
         npds = pds_result["npds"]
         pds_ranks = pds_result["ranks"]
         cosine_self = pds_result["cosine_self"]
@@ -277,7 +272,7 @@ def main():
             )
             r["cosine_self"] = cosine_self.get(pert_id, np.nan)
 
-            # Compute per-perturbation overall_score using baseline-relative scaling
+            # Compute per-perturbation overall_score using centralized function
             des_k = r["des_k"]
             mae_k = r["mae_top2000_k"]
             rank_norm_k = r["rank_Rk_norm"]
@@ -285,29 +280,10 @@ def main():
             # pds_k = 1 - rank_Rk_norm (higher is better)
             pds_k = 1.0 - rank_norm_k if not np.isnan(rank_norm_k) else np.nan
 
-            # Scaled metrics (clipped to [0, 1])
-            des_scaled_k = (
-                max(0.0, (des_k - BASELINE_DES) / (1 - BASELINE_DES))
-                if not np.isnan(des_k)
-                else np.nan
-            )
-            mae_scaled_k = (
-                max(0.0, (BASELINE_MAE_TOP2000 - mae_k) / BASELINE_MAE_TOP2000)
-                if not np.isnan(mae_k)
-                else np.nan
-            )
-            pds_scaled_k = (
-                max(0.0, (pds_k - BASELINE_PDS_NRANK) / (1 - BASELINE_PDS_NRANK))
-                if not np.isnan(pds_k)
-                else np.nan
-            )
-
-            # Per-perturbation overall_score = mean of scaled scores * 100
-            scaled_k = [des_scaled_k, mae_scaled_k, pds_scaled_k]
-            valid_k = [s for s in scaled_k if not np.isnan(s)]
-            r["overall_score"] = float(np.mean(valid_k) * 100) if valid_k else np.nan
+            # Use centralized function for scaled metrics and overall score
+            score_result = compute_overall_score(pds_k, mae_k, des_k)
+            r["overall_score"] = score_result["overall_score"]
     else:
-        mean_rank = np.nan
         npds = np.nan
         # Add overall_score as NaN for results without PDS
         for r in results:
@@ -316,7 +292,7 @@ def main():
     # 5. Save Results
     results_df = pd.DataFrame(results)
 
-    # Reorder columns: three de_metrics and overall_score at front, other details at back
+    # Reorder columns: de_metrics and overall_score first, other details last
     col_order = [
         "perturbation_id",
         # Three DE metrics (per-perturbation) and overall_score

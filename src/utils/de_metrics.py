@@ -283,3 +283,52 @@ def compute_pseudobulk_delta(
     """
     perturbed_mean = perturbed_expr.mean(axis=0)
     return np.asarray(perturbed_mean).flatten() - np.asarray(control_mean).flatten()
+
+
+# Baseline scores for normalization (pre-calculated on Training dataset)
+# Per docs/eval_metrics.md Section 4.2.2
+BASELINE_PDS = 0.4833  # 1 - 0.5167 (pds = 1 - npds)
+BASELINE_MAE_TOP2000 = 0.1258
+BASELINE_DES = 0.0442
+
+
+def compute_overall_score(pds: float, mae: float, des: float) -> dict:
+    """
+    Compute scaled metrics and overall score per eval_metrics.md Section 4.2.2.
+
+    Args:
+        pds: PDS score (1 - npds, higher is better, range 0-1)
+        mae: MAE on top 2000 genes (lower is better)
+        des: DES score (higher is better, range 0-1)
+
+    Returns:
+        dict with pds_scaled, mae_scaled, des_scaled, overall_score
+    """
+    # Scale and clip to [0, 1]
+    pds_scaled = (
+        max(0.0, (pds - BASELINE_PDS) / (1 - BASELINE_PDS))
+        if not np.isnan(pds)
+        else np.nan
+    )
+    mae_scaled = (
+        max(0.0, (BASELINE_MAE_TOP2000 - mae) / BASELINE_MAE_TOP2000)
+        if not np.isnan(mae)
+        else np.nan
+    )
+    des_scaled = (
+        max(0.0, (des - BASELINE_DES) / (1 - BASELINE_DES))
+        if not np.isnan(des)
+        else np.nan
+    )
+
+    # Overall score = mean of valid scaled scores * 100
+    scaled = [pds_scaled, mae_scaled, des_scaled]
+    valid = [s for s in scaled if not np.isnan(s)]
+    overall_score = float(np.mean(valid) * 100) if valid else 0.0
+
+    return {
+        "pds_scaled": float(pds_scaled) if not np.isnan(pds_scaled) else np.nan,
+        "mae_scaled": float(mae_scaled) if not np.isnan(mae_scaled) else np.nan,
+        "des_scaled": float(des_scaled) if not np.isnan(des_scaled) else np.nan,
+        "overall_score": overall_score,
+    }

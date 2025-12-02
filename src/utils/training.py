@@ -22,15 +22,10 @@ from scgpt.utils import load_pretrained, map_raw_id_to_vocab_id
 from src.utils.de_metrics import (
     compute_de_comparison_metrics,
     compute_mae_top2k,
+    compute_overall_score,
     compute_pds,
     compute_pseudobulk_delta,
 )
-
-# Baseline scores for normalization (pre-calculated on Training dataset)
-# Per docs/eval_metrics.md Section 4.2.2
-BASELINE_PDS_NRANK = 0.5167
-BASELINE_MAE_TOP2000 = 0.1258
-BASELINE_DES = 0.0442
 
 
 def load_pretrained_model(
@@ -195,9 +190,22 @@ def train_epoch(
             )
             output_values = output_dict["mlm_output"]
 
-            # SmoothL1Loss (Huber-style) per eval_metrics.md Section 4.1
-            smooth_l1 = nn.SmoothL1Loss(beta=1.0, reduction="mean")
-            loss = smooth_l1(output_values, target_values)
+            # Configurable loss function (default: SmoothL1Loss)
+            loss_cfg = config.get("loss", {})
+            loss_type = loss_cfg.get("type", "SmoothL1Loss")
+            beta = loss_cfg.get("beta", 1.0)
+            reduction = loss_cfg.get("reduction", "mean")
+
+            if loss_type == "SmoothL1Loss":
+                criterion = nn.SmoothL1Loss(beta=beta, reduction=reduction)
+            elif loss_type == "MSELoss":
+                criterion = nn.MSELoss(reduction=reduction)
+            elif loss_type == "L1Loss":
+                criterion = nn.L1Loss(reduction=reduction)
+            else:
+                raise ValueError(f"Unknown loss type: {loss_type}")
+
+            loss = criterion(output_values, target_values)
 
         # Backward pass
         model.zero_grad()
@@ -372,7 +380,6 @@ def compute_validation_metrics(
         mae_scores.append(mae)
 
     # Compute PDS (returns dict with mean_rank, npds, ranks, cosine_self)
-    n_perts = len(pred_deltas)
     if pred_deltas:
         pds_result = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
         mean_rank = pds_result["mean_rank"]
@@ -387,34 +394,8 @@ def compute_validation_metrics(
     # Convert npds to pds (higher is better): pds = 1 - npds
     pds = 1.0 - npds if not np.isnan(npds) else np.nan
 
-    # Compute scaled metrics per eval_metrics.md Section 4.2.2
-    # Using baseline values from BASELINE_* constants
-
-    # PDS_scaled = (PDS_pred - PDS_baseline) / (1 - PDS_baseline)
-    if not np.isnan(pds):
-        pds_scaled = max(0.0, (pds - BASELINE_PDS_NRANK) / (1 - BASELINE_PDS_NRANK))
-    else:
-        pds_scaled = np.nan
-
-    # MAE_scaled = (MAE_baseline - MAE_pred) / MAE_baseline
-    if not np.isnan(mean_mae):
-        mae_scaled = max(0.0, (BASELINE_MAE_TOP2000 - mean_mae) / BASELINE_MAE_TOP2000)
-    else:
-        mae_scaled = np.nan
-
-    # DES_scaled = (DES_pred - DES_baseline) / (1 - DES_baseline)
-    if not np.isnan(mean_des):
-        des_scaled = max(0.0, (mean_des - BASELINE_DES) / (1 - BASELINE_DES))
-    else:
-        des_scaled = np.nan
-
-    # Overall score = mean of scaled scores * 100
-    scaled_scores = [pds_scaled, mae_scaled, des_scaled]
-    valid_scores = [s for s in scaled_scores if not np.isnan(s)]
-    if valid_scores:
-        overall_score = float(np.mean(valid_scores) * 100)
-    else:
-        overall_score = 0.0
+    # Compute scaled metrics and overall score using centralized function
+    score_result = compute_overall_score(pds, mean_mae, mean_des)
 
     return {
         # Raw metrics (three de_metrics)
@@ -423,12 +404,8 @@ def compute_validation_metrics(
         "des": float(mean_des) if not np.isnan(mean_des) else np.nan,
         # Additional raw info
         "pds_mean_rank": float(mean_rank) if not np.isnan(mean_rank) else np.nan,
-        # Scaled metrics
-        "pds_scaled": float(pds_scaled) if not np.isnan(pds_scaled) else np.nan,
-        "mae_scaled": float(mae_scaled) if not np.isnan(mae_scaled) else np.nan,
-        "des_scaled": float(des_scaled) if not np.isnan(des_scaled) else np.nan,
-        # Overall score (higher is better, for early stopping)
-        "overall_score": overall_score,
+        # Scaled metrics and overall score
+        **score_result,
     }
 
 
