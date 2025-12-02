@@ -21,8 +21,8 @@ cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exi
 source ~/.bashrc
 conda activate vcc
 
-# Add local hpdex package (numba backend, no C++ build required)
-export PYTHONPATH="${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
+# Add scGPT and local hpdex package to Python path
+export PYTHONPATH="${ROOT_DIR}/scGPT:${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
 
 set -euo pipefail
 

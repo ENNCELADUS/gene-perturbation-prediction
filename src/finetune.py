@@ -217,7 +217,7 @@ def main():
 
     # ========== Training Loop ==========
     ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
-    best_l_geo = float("inf")  # l_geo = 1 - s_geo, lower is better
+    best_overall_score = 0.0  # overall_score (0-100), higher is better
     best_model = None
     best_val_metrics = {}
     patience = 0
@@ -259,19 +259,18 @@ def main():
 
             logger.info(
                 f"| epoch {epoch:3d} | time: {time.time() - epoch_start:5.2f}s | "
-                f"loss: {train_loss:.4f} | Rank: {val_metrics['pds_mean_rank']:.1f} | "
-                f"DES: {val_metrics['des']:.4f} | MAE: {val_metrics['mae_top2k']:.4f}"
+                f"loss: {train_loss:.4f} | PDS: {val_metrics['pds']:.4f} | "
+                f"DES: {val_metrics['des']:.4f} | MAE: {val_metrics['mae']:.4f}"
             )
-            logger.info(f"  s_geo: {val_metrics['s_geo']:.4f}")
+            logger.info(f"  overall_score: {val_metrics['overall_score']:.2f}")
 
             early_stop_flag = 0
-            if val_metrics["l_geo"] < best_l_geo:
-                best_l_geo = val_metrics["l_geo"]
+            if val_metrics["overall_score"] > best_overall_score:
+                best_overall_score = val_metrics["overall_score"]
                 best_val_metrics = val_metrics.copy()
                 best_model = copy.deepcopy(eval_model)
                 logger.info(
-                    f"  -> New best (l_geo={best_l_geo:.4f}, "
-                    f"s_geo={val_metrics['s_geo']:.4f})"
+                    f"  -> New best (overall_score={best_overall_score:.2f})"
                 )
                 patience = 0
             else:

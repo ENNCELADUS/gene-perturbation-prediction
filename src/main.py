@@ -17,6 +17,11 @@ from src.utils.de_metrics import (
     compute_pds,
     compute_pseudobulk_delta,
 )
+from src.utils.training import (
+    BASELINE_PDS_NRANK,
+    BASELINE_MAE_TOP2000,
+    BASELINE_DES,
+)
 from src.model.zeroshot import ScGPTWrapper
 from src.model.baseline import BaselineWrapper
 from src.data.loader import PerturbationDataLoader
@@ -263,7 +268,7 @@ def main():
         pds_ranks = pds_result["ranks"]
         cosine_self = pds_result["cosine_self"]
 
-        # Add PDS rank and cosine_self to results per eval_metrics.md Section 4.3.2
+        # Add PDS rank, cosine_self, and per-perturbation overall_score
         for r in results:
             pert_id = r["perturbation_id"]
             r["rank_Rk"] = pds_ranks.get(pert_id, np.nan)
@@ -271,21 +276,57 @@ def main():
                 pds_ranks.get(pert_id, np.nan) / n_perts if n_perts > 0 else np.nan
             )
             r["cosine_self"] = cosine_self.get(pert_id, np.nan)
+
+            # Compute per-perturbation overall_score using baseline-relative scaling
+            des_k = r["des_k"]
+            mae_k = r["mae_top2000_k"]
+            rank_norm_k = r["rank_Rk_norm"]
+
+            # pds_k = 1 - rank_Rk_norm (higher is better)
+            pds_k = 1.0 - rank_norm_k if not np.isnan(rank_norm_k) else np.nan
+
+            # Scaled metrics (clipped to [0, 1])
+            des_scaled_k = (
+                max(0.0, (des_k - BASELINE_DES) / (1 - BASELINE_DES))
+                if not np.isnan(des_k)
+                else np.nan
+            )
+            mae_scaled_k = (
+                max(0.0, (BASELINE_MAE_TOP2000 - mae_k) / BASELINE_MAE_TOP2000)
+                if not np.isnan(mae_k)
+                else np.nan
+            )
+            pds_scaled_k = (
+                max(0.0, (pds_k - BASELINE_PDS_NRANK) / (1 - BASELINE_PDS_NRANK))
+                if not np.isnan(pds_k)
+                else np.nan
+            )
+
+            # Per-perturbation overall_score = mean of scaled scores * 100
+            scaled_k = [des_scaled_k, mae_scaled_k, pds_scaled_k]
+            valid_k = [s for s in scaled_k if not np.isnan(s)]
+            r["overall_score"] = float(np.mean(valid_k) * 100) if valid_k else np.nan
     else:
         mean_rank = np.nan
         npds = np.nan
+        # Add overall_score as NaN for results without PDS
+        for r in results:
+            r["overall_score"] = np.nan
 
     # 5. Save Results
     results_df = pd.DataFrame(results)
 
-    # Reorder columns per eval_metrics.md Section 4.3.2
+    # Reorder columns: three de_metrics and overall_score at front, other details at back
     col_order = [
         "perturbation_id",
-        "rank_Rk",
-        "rank_Rk_norm",
-        "cosine_self",
-        "mae_top2000_k",
+        # Three DE metrics (per-perturbation) and overall_score
         "des_k",
+        "mae_top2000_k",
+        "rank_Rk_norm",  # PDS per-perturbation (normalized rank)
+        "overall_score",
+        # Other details
+        "rank_Rk",
+        "cosine_self",
         "n_true_de",
         "n_pred_de",
         "n_intersect",
@@ -297,64 +338,25 @@ def main():
     results_df.to_csv(csv_path, index=False)
     logger.info(f"Results saved to {csv_path}")
 
-    # Calculate and log overall metrics per eval_metrics.md Section 4.3.1
+    # Log overall metrics (aggregate from per-perturbation values already computed)
     if not results_df.empty:
         mean_des = results_df["des_k"].mean()
         mean_mae = results_df["mae_top2000_k"].mean()
+        mean_overall_score = results_df["overall_score"].mean()
 
-        # Compute normalized sub-scores (same as validation)
-        # s_pds = (N - MeanRank) / (N - 1)
-        if n_perts > 1 and not np.isnan(mean_rank):
-            s_pds = (n_perts - mean_rank) / (n_perts - 1)
-        elif n_perts == 1 and not np.isnan(mean_rank):
-            s_pds = 1.0 if mean_rank == 1 else 0.0
-        else:
-            s_pds = np.nan
-
-        # s_mae = 1 / (1 + mae / tau), tau = median of per-perturbation MAE
-        mae_values = results_df["mae_top2000_k"].dropna().values
-        if len(mae_values) > 0 and not np.isnan(mean_mae):
-            tau = float(np.median(mae_values))
-            if tau > 0:
-                s_mae = 1.0 / (1.0 + mean_mae / tau)
-            else:
-                s_mae = 1.0
-        else:
-            s_mae = np.nan
-
-        # s_des = des (already 0-1)
-        s_des = mean_des
-
-        # s_geo = (s_pds * s_mae * s_des)^(1/3)
-        if (
-            not np.isnan(s_pds)
-            and not np.isnan(s_mae)
-            and not np.isnan(s_des)
-            and s_pds > 0
-            and s_mae > 0
-            and s_des > 0
-        ):
-            s_geo = (s_pds * s_mae * s_des) ** (1 / 3)
-        else:
-            s_geo = np.nan
-
-        l_geo = 1.0 - s_geo if not np.isnan(s_geo) else np.nan
+        # Convert npds to pds (higher is better): pds = 1 - npds
+        pds = 1.0 - npds if not np.isnan(npds) else np.nan
 
         logger.info("=" * 50)
-        logger.info("Final Test Metrics (per eval_metrics.md Section 4.3.1):")
-        logger.info(f"  pds_mean_rank:         {mean_rank:.2f}")
-        logger.info(f"  pds_nrank:             {npds:.4f}")
-        logger.info(f"  mae_top2000:           {mean_mae:.4f}")
+        logger.info("Final Test Metrics (per eval_metrics.md Section 4.2.2):")
+        logger.info("-" * 50)
+        logger.info("Three DE Metrics (raw, averaged):")
+        logger.info(f"  pds:                   {pds:.4f}")
+        logger.info(f"  mae:                   {mean_mae:.4f}")
         logger.info(f"  des:                   {mean_des:.4f}")
         logger.info("-" * 50)
-        logger.info("Normalized Sub-Scores:")
-        logger.info(f"  s_pds:                 {s_pds:.4f}")
-        logger.info(f"  s_mae:                 {s_mae:.4f}")
-        logger.info(f"  s_des:                 {s_des:.4f}")
-        logger.info("-" * 50)
-        logger.info("Composite Metrics:")
-        logger.info(f"  s_geo:                 {s_geo:.4f}")
-        logger.info(f"  l_geo:                 {l_geo:.4f}")
+        logger.info("Overall Score (0-100, averaged from per-perturbation):")
+        logger.info(f"  overall_score:         {mean_overall_score:.2f}")
         logger.info("=" * 50)
     else:
         logger.warning("No results generated.")
