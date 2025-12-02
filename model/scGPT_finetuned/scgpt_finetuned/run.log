@@ -1,4 +1,0 @@
-2025-12-02 13:40:08,677 - ZeroShotPerturbation - INFO - Starting Perturbation Pipeline with scgpt_finetuned model
-2025-12-02 13:40:08,677 - ZeroShotPerturbation - INFO - Model directory: model/scGPT_finetuned
-2025-12-02 13:40:08,677 - ZeroShotPerturbation - INFO - Results will be saved to: model/scGPT_finetuned/scgpt_finetuned
-2025-12-02 13:40:08,677 - ZeroShotPerturbation - INFO - Initializing scGPT Model Wrapper...

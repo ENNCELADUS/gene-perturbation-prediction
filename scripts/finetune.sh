@@ -38,6 +38,18 @@ else
     echo "Split data already exists, skipping data splitting..."
 fi
 
+# ========== Step 0.5: Apply log1p Normalization ==========
+echo "=========================================="
+echo "Step 0.5: Applying log1p normalization..."
+echo "=========================================="
+
+# Check if log1p normalization already applied
+if python -c "import anndata; a=anndata.read_h5ad('data/processed/train.h5ad'); exit(0 if 'log1p' in a.uns else 1)" 2>/dev/null; then
+    echo "Data already log1p normalized, skipping..."
+else
+    python scripts/data_process/apply_log1p.py
+fi
+
 # ========== Step 1: Convert Data to GEARS Format ==========
 echo "=========================================="
 echo "Step 1: Converting data to GEARS format..."
