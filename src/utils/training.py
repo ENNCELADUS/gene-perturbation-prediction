@@ -15,7 +15,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch_geometric.loader import DataLoader
 
 # Import scGPT components (assumes scGPT is in path)
-from scgpt.loss import masked_mse_loss
 from scgpt.model import TransformerGenerator
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
 from scgpt.utils import load_pretrained, map_raw_id_to_vocab_id
@@ -120,7 +119,6 @@ def train_epoch(
     """
     model.train()
     total_loss = 0.0
-    total_mse = 0.0
     start_time = time.time()
 
     n_genes = len(gene_ids)
@@ -191,10 +189,9 @@ def train_epoch(
             )
             output_values = output_dict["mlm_output"]
 
-            masked_positions = torch.ones_like(input_values, dtype=torch.bool)
-            loss = loss_mse = masked_mse_loss(
-                output_values, target_values, masked_positions
-            )
+            # SmoothL1Loss (Huber-style) per eval_metrics.md Section 4.1
+            smooth_l1 = nn.SmoothL1Loss(beta=1.0, reduction="mean")
+            loss = smooth_l1(output_values, target_values)
 
         # Backward pass
         model.zero_grad()
@@ -211,7 +208,6 @@ def train_epoch(
         scaler.update()
 
         total_loss += loss.item()
-        total_mse += loss_mse.item()
 
         if logger is not None and batch_idx % log_interval == 0 and batch_idx > 0:
             ms_per_batch = (time.time() - start_time) * 1000 / log_interval
@@ -221,7 +217,6 @@ def train_epoch(
                 f"ms/batch {ms_per_batch:5.2f} | loss {cur_loss:5.4f}"
             )
             total_loss = 0
-            total_mse = 0
             start_time = time.time()
 
     return total_loss / max(1, num_batches % log_interval)
@@ -276,7 +271,21 @@ def compute_validation_metrics(
     config: dict,
 ) -> Dict:
     """
-    Compute validation metrics: PDS, DES, MAE_top2k.
+    Compute validation metrics per eval_metrics.md Section 4.2.
+
+    Raw metrics:
+        - pds_mean_rank: Mean of perturbation ranks
+        - mae_top2k: Mean MAE on top 2000 genes by |LFC|
+        - des: Mean DES (Differential Expression Score)
+
+    Normalized sub-scores (all higher is better, 0-1):
+        - s_pds = (N - MeanRank) / (N - 1)
+        - s_mae = 1 / (1 + mae_top2k / tau) where tau = median(mae_scores)
+        - s_des = des
+
+    Composite metric:
+        - s_geo = (s_pds * s_mae * s_des)^(1/3)
+        - l_geo = 1 - s_geo (lower is better, for early stopping)
 
     Args:
         results: Dict with pert_cat, pred, truth arrays
@@ -285,7 +294,7 @@ def compute_validation_metrics(
         config: Configuration dictionary
 
     Returns:
-        Dict with pds, des, mae_top2k, and combined early stopping metric
+        Dict with raw metrics, normalized scores, and composite metrics
     """
     pred = results["pred"]
     truth = results["truth"]
@@ -357,26 +366,70 @@ def compute_validation_metrics(
         )
         mae_scores.append(mae)
 
-    # Compute PDS
+    # Compute PDS (returns dict with mean_rank, npds, ranks, cosine_self)
+    n_perts = len(pred_deltas)
     if pred_deltas:
-        npds, _ = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
+        pds_result = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
+        mean_rank = pds_result["mean_rank"]
+        npds = pds_result["npds"]
     else:
+        mean_rank = np.nan
         npds = np.nan
 
     mean_des = np.nanmean(des_scores) if des_scores else np.nan
     mean_mae = np.nanmean(mae_scores) if mae_scores else np.nan
 
-    # Combined early stopping metric
-    if not np.isnan(npds) and not np.isnan(mean_des) and not np.isnan(mean_mae):
-        combined = (npds + (1 - mean_des) + mean_mae) / 3
+    # Compute normalized sub-scores per eval_metrics.md Section 4.2.2
+    # s_pds = (N - MeanRank) / (N - 1), higher is better
+    if n_perts > 1 and not np.isnan(mean_rank):
+        s_pds = (n_perts - mean_rank) / (n_perts - 1)
+    elif n_perts == 1 and not np.isnan(mean_rank):
+        s_pds = 1.0 if mean_rank == 1 else 0.0
     else:
-        combined = np.nan
+        s_pds = np.nan
+
+    # s_mae = 1 / (1 + mae_top2k / tau), tau = median of per-perturbation MAE
+    if mae_scores and not np.isnan(mean_mae):
+        tau = float(np.median(mae_scores))
+        if tau > 0:
+            s_mae = 1.0 / (1.0 + mean_mae / tau)
+        else:
+            s_mae = 1.0  # Perfect case, tau=0 means all MAE=0
+    else:
+        s_mae = np.nan
+
+    # s_des = des (already 0-1, higher is better)
+    s_des = mean_des
+
+    # Composite metric: s_geo = (s_pds * s_mae * s_des)^(1/3)
+    if (
+        not np.isnan(s_pds)
+        and not np.isnan(s_mae)
+        and not np.isnan(s_des)
+        and s_pds > 0
+        and s_mae > 0
+        and s_des > 0
+    ):
+        s_geo = (s_pds * s_mae * s_des) ** (1 / 3)
+    else:
+        s_geo = np.nan
+
+    # l_geo = 1 - s_geo (lower is better, for early stopping)
+    l_geo = 1.0 - s_geo if not np.isnan(s_geo) else np.nan
 
     return {
+        # Raw metrics
         "pds": float(npds),
+        "pds_mean_rank": float(mean_rank),
         "des": float(mean_des),
         "mae_top2k": float(mean_mae),
-        "combined": float(combined),
+        # Normalized sub-scores
+        "s_pds": float(s_pds) if not np.isnan(s_pds) else np.nan,
+        "s_mae": float(s_mae) if not np.isnan(s_mae) else np.nan,
+        "s_des": float(s_des) if not np.isnan(s_des) else np.nan,
+        # Composite metrics
+        "s_geo": float(s_geo) if not np.isnan(s_geo) else np.nan,
+        "l_geo": float(l_geo) if not np.isnan(l_geo) else np.nan,
     }
 
 

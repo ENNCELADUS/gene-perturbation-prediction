@@ -204,6 +204,7 @@ def main():
                 "des": np.nan,
                 "n_de_truth": 0,
                 "n_de_pred": 0,
+                "n_intersect": 0,
             }
 
         # Compute MAE_top2k metric
@@ -214,13 +215,15 @@ def main():
             top_k=mae_top_k,
         )
 
+        # Per-perturbation metrics per eval_metrics.md Section 4.3.2
         metrics = {
-            "target_gene": target,
+            "perturbation_id": target,
             "n_cells": n_cells,
-            "des": de_metrics["des"],
-            "mae_top2k": mae,
-            "n_de_truth": de_metrics["n_de_truth"],
-            "n_de_pred": de_metrics["n_de_pred"],
+            "des_k": de_metrics["des"],
+            "mae_top2000_k": mae,
+            "n_true_de": de_metrics["n_de_truth"],
+            "n_pred_de": de_metrics["n_de_pred"],
+            "n_intersect": de_metrics.get("n_intersect", 0),
         }
         results.append(metrics)
 
@@ -228,7 +231,7 @@ def main():
         pred_deltas[target] = compute_pseudobulk_delta(pred_expr, control_mean)
         truth_deltas[target] = compute_pseudobulk_delta(truth_expr, control_mean)
 
-        # Get target gene index (not used in cosine-based PDS but kept for compatibility)
+        # Get target gene index (not used in cosine-based PDS, kept for compatibility)
         try:
             target_gene_indices[target] = data_loader.test_adata.var_names.get_loc(
                 target
@@ -237,31 +240,46 @@ def main():
             target_gene_indices[target] = -1
 
         logger.info(
-            f"Target {target} - DES: {metrics['des']:.4f}, "
-            f"MAE_top2k: {metrics['mae_top2k']:.4f}, n_DE: {metrics['n_de_truth']}"
+            f"Target {target} - DES: {metrics['des_k']:.4f}, "
+            f"MAE_top2k: {metrics['mae_top2000_k']:.4f}, n_DE: {metrics['n_true_de']}"
         )
 
     # 4. Compute PDS (global metric using cosine similarity ranking)
+    n_perts = len(pred_deltas)
     if pred_deltas:
-        npds, pds_ranks = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
-        # Add PDS rank to results
+        pds_result = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
+        mean_rank = pds_result["mean_rank"]
+        npds = pds_result["npds"]
+        pds_ranks = pds_result["ranks"]
+        cosine_self = pds_result["cosine_self"]
+
+        # Add PDS rank and cosine_self to results per eval_metrics.md Section 4.3.2
         for r in results:
-            r["pds_rank"] = pds_ranks.get(r["target_gene"], np.nan)
+            pert_id = r["perturbation_id"]
+            r["rank_Rk"] = pds_ranks.get(pert_id, np.nan)
+            r["rank_Rk_norm"] = (
+                pds_ranks.get(pert_id, np.nan) / n_perts if n_perts > 0 else np.nan
+            )
+            r["cosine_self"] = cosine_self.get(pert_id, np.nan)
     else:
+        mean_rank = np.nan
         npds = np.nan
 
     # 5. Save Results
     results_df = pd.DataFrame(results)
 
-    # Reorder columns
+    # Reorder columns per eval_metrics.md Section 4.3.2
     col_order = [
-        "target_gene",
+        "perturbation_id",
+        "rank_Rk",
+        "rank_Rk_norm",
+        "cosine_self",
+        "mae_top2000_k",
+        "des_k",
+        "n_true_de",
+        "n_pred_de",
+        "n_intersect",
         "n_cells",
-        "pds_rank",
-        "des",
-        "mae_top2k",
-        "n_de_truth",
-        "n_de_pred",
     ]
     results_df = results_df[[c for c in col_order if c in results_df.columns]]
 
@@ -269,16 +287,64 @@ def main():
     results_df.to_csv(csv_path, index=False)
     logger.info(f"Results saved to {csv_path}")
 
-    # Calculate and log overall metrics
+    # Calculate and log overall metrics per eval_metrics.md Section 4.3.1
     if not results_df.empty:
-        mean_des = results_df["des"].mean()
-        mean_mae = results_df["mae_top2k"].mean()
+        mean_des = results_df["des_k"].mean()
+        mean_mae = results_df["mae_top2000_k"].mean()
+
+        # Compute normalized sub-scores (same as validation)
+        # s_pds = (N - MeanRank) / (N - 1)
+        if n_perts > 1 and not np.isnan(mean_rank):
+            s_pds = (n_perts - mean_rank) / (n_perts - 1)
+        elif n_perts == 1 and not np.isnan(mean_rank):
+            s_pds = 1.0 if mean_rank == 1 else 0.0
+        else:
+            s_pds = np.nan
+
+        # s_mae = 1 / (1 + mae / tau), tau = median of per-perturbation MAE
+        mae_values = results_df["mae_top2000_k"].dropna().values
+        if len(mae_values) > 0 and not np.isnan(mean_mae):
+            tau = float(np.median(mae_values))
+            if tau > 0:
+                s_mae = 1.0 / (1.0 + mean_mae / tau)
+            else:
+                s_mae = 1.0
+        else:
+            s_mae = np.nan
+
+        # s_des = des (already 0-1)
+        s_des = mean_des
+
+        # s_geo = (s_pds * s_mae * s_des)^(1/3)
+        if (
+            not np.isnan(s_pds)
+            and not np.isnan(s_mae)
+            and not np.isnan(s_des)
+            and s_pds > 0
+            and s_mae > 0
+            and s_des > 0
+        ):
+            s_geo = (s_pds * s_mae * s_des) ** (1 / 3)
+        else:
+            s_geo = np.nan
+
+        l_geo = 1.0 - s_geo if not np.isnan(s_geo) else np.nan
 
         logger.info("=" * 50)
-        logger.info("Overall Metrics:")
-        logger.info(f"  nPDS (normalized):     {npds:.4f}")
-        logger.info(f"  Mean DES:              {mean_des:.4f}")
-        logger.info(f"  Mean MAE_top2k:        {mean_mae:.4f}")
+        logger.info("Final Test Metrics (per eval_metrics.md Section 4.3.1):")
+        logger.info(f"  pds_mean_rank:         {mean_rank:.2f}")
+        logger.info(f"  pds_nrank:             {npds:.4f}")
+        logger.info(f"  mae_top2000:           {mean_mae:.4f}")
+        logger.info(f"  des:                   {mean_des:.4f}")
+        logger.info("-" * 50)
+        logger.info("Normalized Sub-Scores:")
+        logger.info(f"  s_pds:                 {s_pds:.4f}")
+        logger.info(f"  s_mae:                 {s_mae:.4f}")
+        logger.info(f"  s_des:                 {s_des:.4f}")
+        logger.info("-" * 50)
+        logger.info("Composite Metrics:")
+        logger.info(f"  s_geo:                 {s_geo:.4f}")
+        logger.info(f"  l_geo:                 {l_geo:.4f}")
         logger.info("=" * 50)
     else:
         logger.warning("No results generated.")

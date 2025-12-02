@@ -92,7 +92,7 @@ def compute_de_comparison_metrics(
     n_de_truth = len(truth_sig)
     n_de_pred = len(pred_sig)
 
-    des = compute_des(
+    des, n_intersect = compute_des(
         truth_sig,
         pred_sig,
         de_pred.loc[list(pred_sig), "log2_fold_change"] if pred_sig else pd.Series(),
@@ -102,6 +102,7 @@ def compute_de_comparison_metrics(
         "des": des,
         "n_de_truth": n_de_truth,
         "n_de_pred": n_de_pred,
+        "n_intersect": n_intersect,
     }
 
 
@@ -109,35 +110,40 @@ def compute_des(
     truth_sig: set,
     pred_sig: set,
     pred_log2fc: pd.Series,
-) -> float:
+) -> tuple[float, int]:
     """
     Compute Differential Expression Score.
 
     If n_pred <= n_true: DES = |intersection| / n_true
     If n_pred > n_true: select top n_true genes by |log2FC| from pred_sig,
     then compute overlap.
+
+    Returns:
+        (des_score, n_intersect)
     """
     n_true = len(truth_sig)
     n_pred = len(pred_sig)
 
     if n_true == 0:
-        return np.nan
+        return np.nan, 0
 
     if n_pred <= n_true:
         intersection = truth_sig & pred_sig
-        return len(intersection) / n_true
+        n_intersect = len(intersection)
+        return n_intersect / n_true, n_intersect
     else:
         # Select top n_true genes by absolute log2FC
         top_pred = set(pred_log2fc.abs().nlargest(n_true).index)
         intersection = truth_sig & top_pred
-        return len(intersection) / n_true
+        n_intersect = len(intersection)
+        return n_intersect / n_true, n_intersect
 
 
 def compute_pds(
     pred_deltas: dict[str, np.ndarray],
     truth_deltas: dict[str, np.ndarray],
     target_gene_indices: dict[str, int] | None = None,
-) -> tuple[float, dict[str, int]]:
+) -> dict:
     """
     Compute Perturbation Discrimination Score using cosine similarity ranking.
 
@@ -146,7 +152,10 @@ def compute_pds(
         S_{k,j} = (pred_delta_k · truth_delta_j) / (|pred_delta_k| * |truth_delta_j|)
 
     Rank = position of true perturbation among all similarities (descending).
-    nPDS = (1/N^2) * sum(R_k)  -- lower is better
+
+    Per eval_metrics.md Section 4.2.1:
+    - MeanRank = (1/N) * sum(R_k)
+    - nPDS = (1/N^2) * sum(R_k) = MeanRank / N
 
     Args:
         pred_deltas: {target_gene: delta_vector} for predictions
@@ -154,22 +163,37 @@ def compute_pds(
         target_gene_indices: {target_gene: gene_index} - not used in cosine version
 
     Returns:
-        (normalized_pds, {target_gene: rank})
+        dict with:
+            - mean_rank: mean of all ranks
+            - npds: normalized PDS (MeanRank / N)
+            - ranks: {target_gene: rank}
+            - cosine_self: {target_gene: cos(δ̂_k, δ_k)} self-similarity
     """
     targets = list(pred_deltas.keys())
     n = len(targets)
 
     if n == 0:
-        return np.nan, {}
+        return {"mean_rank": np.nan, "npds": np.nan, "ranks": {}, "cosine_self": {}}
 
     ranks = {}
+    cosine_self = {}
 
     for p in targets:
         pred_delta = pred_deltas[p]
+        truth_delta_self = truth_deltas[p]
 
         # Compute cosine similarity to all true deltas
         similarities = []
         pred_norm = np.linalg.norm(pred_delta)
+        truth_self_norm = np.linalg.norm(truth_delta_self)
+
+        # Store self-similarity (cos(δ̂_k, δ_k))
+        if pred_norm > 0 and truth_self_norm > 0:
+            cosine_self[p] = float(
+                np.dot(pred_delta, truth_delta_self) / (pred_norm * truth_self_norm)
+            )
+        else:
+            cosine_self[p] = 0.0
 
         for t in targets:
             truth_delta = truth_deltas[t]
@@ -190,11 +214,16 @@ def compute_pds(
         rank = next(i + 1 for i, (t, _) in enumerate(similarities) if t == p)
         ranks[p] = rank
 
-    # Normalized PDS: nPDS = (1/N^2) * sum(R_k)
-    # Lower is better (rank 1 for all = N/N^2 = 1/N)
-    normalized_pds = sum(ranks.values()) / (n * n)
+    # Mean rank and normalized PDS per eval_metrics.md
+    mean_rank = sum(ranks.values()) / n
+    npds = mean_rank / n  # nPDS = (1/N^2) * sum(R_k) = MeanRank / N
 
-    return normalized_pds, ranks
+    return {
+        "mean_rank": float(mean_rank),
+        "npds": float(npds),
+        "ranks": ranks,
+        "cosine_self": cosine_self,
+    }
 
 
 def compute_mae_top2k(

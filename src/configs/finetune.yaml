@@ -98,7 +98,7 @@ metrics:
 
 # ========== Early Stopping ==========
 early_stopping:
-  metric: "combined"  # mean of nPDS, 1-DES, MAE_top2k (all lower is better)
+  metric: "l_geo"  # 1 - s_geo, where s_geo = (s_pds * s_mae * s_des)^(1/3)
 
 # ========== Logging ==========
 logging:

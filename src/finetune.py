@@ -130,9 +130,12 @@ def main():
     ]
     genes = pert_data.adata.var["gene_name"].tolist()
     gene_names = np.array(genes)
-    vocab.set_default_index(vocab[config["data"]["pad_token"]])
+    vocab.set_default_index(vocab[config["model"]["pad_token"]])
     gene_ids = np.array(
-        [vocab[g] if g in vocab else vocab[config["data"]["pad_token"]] for g in genes],
+        [
+            vocab[g] if g in vocab else vocab[config["model"]["pad_token"]]
+            for g in genes
+        ],
         dtype=int,
     )
     n_genes = len(genes)
@@ -214,7 +217,7 @@ def main():
 
     # ========== Training Loop ==========
     ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
-    best_combined = float("inf")
+    best_l_geo = float("inf")  # l_geo = 1 - s_geo, lower is better
     best_model = None
     best_val_metrics = {}
     patience = 0
@@ -256,16 +259,20 @@ def main():
 
             logger.info(
                 f"| epoch {epoch:3d} | time: {time.time() - epoch_start:5.2f}s | "
-                f"loss: {train_loss:.4f} | nPDS: {val_metrics['pds']:.4f} | "
+                f"loss: {train_loss:.4f} | Rank: {val_metrics['pds_mean_rank']:.1f} | "
                 f"DES: {val_metrics['des']:.4f} | MAE: {val_metrics['mae_top2k']:.4f}"
             )
+            logger.info(f"  s_geo: {val_metrics['s_geo']:.4f}")
 
             early_stop_flag = 0
-            if val_metrics["combined"] < best_combined:
-                best_combined = val_metrics["combined"]
+            if val_metrics["l_geo"] < best_l_geo:
+                best_l_geo = val_metrics["l_geo"]
                 best_val_metrics = val_metrics.copy()
                 best_model = copy.deepcopy(eval_model)
-                logger.info(f"  -> New best (combined={best_combined:.4f})")
+                logger.info(
+                    f"  -> New best (l_geo={best_l_geo:.4f}, "
+                    f"s_geo={val_metrics['s_geo']:.4f})"
+                )
                 patience = 0
             else:
                 patience += 1
