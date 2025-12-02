@@ -94,7 +94,7 @@ def main():
         )
     )
 
-    save_dir = Path(config["paths"]["output_dir"])
+    save_dir = Path(config["paths"]["finetuned_model_dir"])
     if is_main_process(rank):
         save_dir.mkdir(parents=True, exist_ok=True)
         print(f"Using device: {device}, Saving to {save_dir}")
@@ -118,7 +118,7 @@ def main():
     )
 
     # ========== Load Vocabulary ==========
-    vocab_file = Path(config["paths"]["pretrained_model_dir"]) / "vocab.json"
+    vocab_file = Path(config["paths"]["model_dir"]) / "vocab.json"
     vocab = GeneVocab.from_file(vocab_file)
     for s in config["data"]["special_tokens"]:
         if s not in vocab:

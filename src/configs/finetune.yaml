@@ -1,26 +1,55 @@
 # scGPT Finetuning Configuration for VCC Perturbation Prediction
 # Based on scGPT Tutorial_Perturbation.ipynb
+# This config is used for BOTH training and evaluation
 
 # ========== Paths ==========
 paths:
-  # GEARS data directory (created by scripts/convert_to_gears.py)
+  # Pretrained model directory (used for training)
+  model_dir: "model/scGPT"
+  
+  # Finetuned model directory (output for training, input for eval)
+  finetuned_model_dir: "model/scGPT_finetuned"
+  
+  # Evaluation data paths
+  data_dir: "data/processed"
+  test_file: "test.h5ad"
+  train_file: "train.h5ad"
+  
+  # Evaluation results output
+  output_dir: "results"
+  
+  # GEARS data directory (for training, created by scripts/convert_to_gears.py)
   gears_data_dir: "data/processed/gears"
   dataset_name: "vcc"
-  
-  # Pretrained model directory
-  pretrained_model_dir: "model/scGPT"
-  
-  # Output directory for finetuned model
-  output_dir: "model/scGPT_finetuned"
 
-# ========== Data Processing ==========
-data:
+# ========== Model ==========
+# Common model settings used by both training and evaluation
+model:
   pad_token: "<pad>"
-  special_tokens: ["<pad>", "<cls>", "<eoc>"]
   pad_value: 0
-  pert_pad_id: 0
-  include_zero_gene: "batch-wise"  # "batch-wise" uses less memory than "all"
   max_seq_len: 1536
+  include_zero_gene: "batch-wise"  # "batch-wise" uses less memory than "all"
+  
+  # Architecture (overridden by pretrained model config args.json during training)
+  embsize: 512
+  d_hid: 512
+  nlayers: 12
+  nhead: 8
+  n_layers_cls: 3
+  dropout: 0.0
+  use_fast_transformer: false  # Disabled: flash-attn not available
+
+# ========== Inference / Evaluation ==========
+inference:
+  batch_size: 16
+  eval_batch_size: 16  # Batch size for evaluation (processes all cells batch by batch)
+  seed: 42
+  control_target_gene: "non-targeting"
+
+# ========== Data Processing (Training) ==========
+data:
+  special_tokens: ["<pad>", "<cls>", "<eoc>"]
+  pert_pad_id: 0
 
 # ========== Training Objectives ==========
 training:
@@ -46,17 +75,6 @@ optimizer:
   schedule_gamma: 0.9
   early_stop: 10  # patience for early stopping
   grad_clip: 1.0
-
-# ========== Model Architecture ==========
-# These are overridden by pretrained model config (args.json)
-model:
-  embsize: 512
-  d_hid: 512
-  nlayers: 12
-  nhead: 8
-  n_layers_cls: 3
-  dropout: 0.0
-  use_fast_transformer: false  # Disabled: flash-attn not available, uses PyTorch transformer
 
 # ========== Partial Weight Loading ==========
 # Only load these prefixes from pretrained model

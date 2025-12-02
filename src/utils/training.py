@@ -48,7 +48,7 @@ def load_pretrained_model(
     Returns:
         Initialized TransformerGenerator model
     """
-    model_dir = Path(config["paths"]["pretrained_model_dir"])
+    model_dir = Path(config["paths"]["model_dir"])
     model_file = model_dir / "best_model.pt"
     args_file = model_dir / "args.json"
 
@@ -387,13 +387,13 @@ def save_model(model: nn.Module, config: dict, vocab: GeneVocab, save_dir: Path)
     torch.save(model_to_save.state_dict(), save_dir / "best_model.pt")
 
     # Copy vocab
-    vocab_src = Path(config["paths"]["pretrained_model_dir"]) / "vocab.json"
+    vocab_src = Path(config["paths"]["model_dir"]) / "vocab.json"
     vocab_dst = save_dir / "vocab.json"
     if vocab_src.exists():
         shutil.copy(vocab_src, vocab_dst)
 
     # Copy model config
-    args_src = Path(config["paths"]["pretrained_model_dir"]) / "args.json"
+    args_src = Path(config["paths"]["model_dir"]) / "args.json"
     args_dst = save_dir / "args.json"
     if args_src.exists():
         shutil.copy(args_src, args_dst)

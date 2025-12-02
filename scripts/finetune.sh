@@ -74,7 +74,7 @@ echo "=========================================="
 
 # Run evaluation using the finetuned model
 python src/main.py \
-    --config src/configs/config.yaml \
+    --config src/configs/finetune.yaml \
     --model_type scgpt_finetuned \
     --threads -1
 

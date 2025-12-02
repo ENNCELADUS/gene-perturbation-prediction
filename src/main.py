@@ -31,7 +31,7 @@ def main():
     # 1. Setup
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--config", default="src/configs/config.yaml", help="Path to config file"
+        "--config", default="src/configs/finetune.yaml", help="Path to config file"
     )
     parser.add_argument(
         "--model_type",
@@ -58,8 +58,10 @@ def main():
     if args.model_dir:
         config["paths"]["model_dir"] = args.model_dir
     elif args.model_type == "scgpt_finetuned":
-        # Default finetuned model path
-        config["paths"]["model_dir"] = "model/scGPT_finetuned"
+        # Use finetuned_model_dir for finetuned model evaluation
+        config["paths"]["model_dir"] = config["paths"].get(
+            "finetuned_model_dir", "model/scGPT_finetuned"
+        )
 
     # Create output dir
     base_output_dir = Path(config["paths"]["output_dir"])
