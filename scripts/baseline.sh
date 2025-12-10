@@ -6,8 +6,6 @@
 #SBATCH -t 2-00:00:00
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:NVIDIATITANRTX:2
-#SBATCH --exclude=ai_gpu28
 #SBATCH --output=logs/baseline/slurm_%j.out
 #SBATCH --error=logs/baseline/slurm_%j.err
 #SBATCH --mail-type=ALL

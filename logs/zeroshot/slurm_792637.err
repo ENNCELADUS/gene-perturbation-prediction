@@ -1,1030 +1,0 @@
-/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/model.py:21: UserWarning: flash_attn is not installed
-  warnings.warn("flash_attn is not installed")
-/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/multiomic_model.py:19: UserWarning: flash_attn is not installed
-  warnings.warn("flash_attn is not installed")
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/torchtext/vocab/__init__.py:4: UserWarning: 
-/!\ IMPORTANT WARNING ABOUT TORCHTEXT STATUS /!\ 
-Torchtext is deprecated and the last released version will be 0.18 (this one). You can silence this warning by calling the following at the beginnign of your scripts: `import torchtext; torchtext.disable_torchtext_deprecation_warning()`
-  warnings.warn(torchtext._TORCHTEXT_DEPRECATION_MSG)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/torchtext/utils.py:4: UserWarning: 
-/!\ IMPORTANT WARNING ABOUT TORCHTEXT STATUS /!\ 
-Torchtext is deprecated and the last released version will be 0.18 (this one). You can silence this warning by calling the following at the beginnign of your scripts: `import torchtext; torchtext.disable_torchtext_deprecation_warning()`
-  warnings.warn(torchtext._TORCHTEXT_DEPRECATION_MSG)
-/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/generation_model.py:73: UserWarning: flash-attn is not installed, using pytorch transformer instead. Set use_fast_transformer=False to avoid this warning. Installing flash-attn is highly recommended.
-  warnings.warn(
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 938 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1876 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 258.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.28it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.28it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 938 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1876 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 258.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.31it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.31it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target AKT2 - DES: 0.0451, MAE_top2k: 1.3610, n_DE: 421
-INFO:ZeroShotPerturbation:Predicting for target: MAP3K7
-INFO:ZeroShotPerturbation:Processing 2019 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2019 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4038 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 557.0 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.19s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.19s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2019 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4038 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 557.0 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.11s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.11s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target MAP3K7 - DES: 0.0116, MAE_top2k: 1.2443, n_DE: 86
-INFO:ZeroShotPerturbation:Predicting for target: ZNF426
-INFO:ZeroShotPerturbation:Processing 1132 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/anndata/_core/anndata.py:1796: UserWarning: Observation names are not unique. To make them unique, call `.obs_names_make_unique`.
-  utils.warn_names_duplicates("obs")
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1132 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2264 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 312.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.61it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.61it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1132 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2264 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 312.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.88it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.88it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target ZNF426 - DES: 0.0000, MAE_top2k: 1.1999, n_DE: 15
-INFO:ZeroShotPerturbation:Predicting for target: DNMT1
-INFO:ZeroShotPerturbation:Processing 893 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/anndata/_core/anndata.py:1796: UserWarning: Observation names are not unique. To make them unique, call `.obs_names_make_unique`.
-  utils.warn_names_duplicates("obs")
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 893 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1786 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 246.4 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.00it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.00it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 893 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1786 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 246.4 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.41it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.41it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target DNMT1 - DES: 0.5330, MAE_top2k: 1.3004, n_DE: 8144
-INFO:ZeroShotPerturbation:Predicting for target: SRC
-INFO:ZeroShotPerturbation:Processing 2403 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/anndata/_core/anndata.py:1796: UserWarning: Observation names are not unique. To make them unique, call `.obs_names_make_unique`.
-  utils.warn_names_duplicates("obs")
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2403 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4806 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 662.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.67s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.67s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2403 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4806 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 662.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.52s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.52s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target SRC - DES: 0.0188, MAE_top2k: 1.2996, n_DE: 213
-INFO:ZeroShotPerturbation:Predicting for target: MED13
-INFO:ZeroShotPerturbation:Processing 2787 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2787 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 5574 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 768.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:03<00:00,  3.05s/it]Processing groups: 100%|██████████| 1/1 [00:03<00:00,  3.05s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2787 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 5574 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 768.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.97s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.97s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target MED13 - DES: 0.3364, MAE_top2k: 1.4096, n_DE: 4729
-INFO:ZeroShotPerturbation:Predicting for target: KDR
-INFO:ZeroShotPerturbation:Processing 2056 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2056 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4112 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 567.2 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.26s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.26s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2056 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4112 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 567.2 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.14s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.14s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target KDR - DES: 0.0000, MAE_top2k: 1.3086, n_DE: 19
-INFO:ZeroShotPerturbation:Predicting for target: EIF4B
-INFO:ZeroShotPerturbation:Processing 1585 cells in batches of 16
-/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/generation_model.py:348: UserWarning: var(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at ../aten/src/ATen/native/ReduceOps.cpp:1807.)
-  gene_vars = ori_gene_values[:, input_gene_ids].var(dim=0)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1585 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 3170 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 437.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:01<00:00,  1.21s/it]Processing groups: 100%|██████████| 1/1 [00:01<00:00,  1.21s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1585 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 3170 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 437.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:01<00:00,  1.11s/it]Processing groups: 100%|██████████| 1/1 [00:01<00:00,  1.11s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target EIF4B - DES: 0.3286, MAE_top2k: 1.5339, n_DE: 4333
-INFO:ZeroShotPerturbation:Predicting for target: SIX4
-INFO:ZeroShotPerturbation:Processing 642 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 642 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1284 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 177.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.81it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.81it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 642 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1284 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 177.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.18it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.18it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target SIX4 - DES: 0.0190, MAE_top2k: 1.2743, n_DE: 105
-INFO:ZeroShotPerturbation:Predicting for target: TFAM
-INFO:ZeroShotPerturbation:Processing 1105 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/anndata/_core/anndata.py:1796: UserWarning: Observation names are not unique. To make them unique, call `.obs_names_make_unique`.
-  utils.warn_names_duplicates("obs")
-/public/home/wangar2023/VCC_Project/scGPT/scgpt/model/generation_model.py:348: UserWarning: var(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at ../aten/src/ATen/native/ReduceOps.cpp:1807.)
-  gene_vars = ori_gene_values[:, input_gene_ids].var(dim=0)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1105 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2210 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 304.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.66it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.66it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1105 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2210 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 304.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.93it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.93it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target TFAM - DES: 0.2787, MAE_top2k: 1.6539, n_DE: 3236
-INFO:ZeroShotPerturbation:Predicting for target: MAST2
-INFO:ZeroShotPerturbation:Processing 1029 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1029 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2058 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 283.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.81it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.81it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1029 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2058 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 283.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.04it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.04it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target MAST2 - DES: 0.0000, MAE_top2k: 1.3239, n_DE: 27
-INFO:ZeroShotPerturbation:Predicting for target: SMAGP
-INFO:ZeroShotPerturbation:Processing 788 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/anndata/_core/anndata.py:1796: UserWarning: Observation names are not unique. To make them unique, call `.obs_names_make_unique`.
-  utils.warn_names_duplicates("obs")
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 788 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1576 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 217.4 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.04it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.04it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 788 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1576 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 217.4 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.50it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.50it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target SMAGP - DES: 0.1231, MAE_top2k: 1.4236, n_DE: 796
-INFO:ZeroShotPerturbation:Predicting for target: XRCC4
-INFO:ZeroShotPerturbation:Processing 591 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 591 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1182 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 163.0 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.10it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.09it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 591 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1182 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 163.0 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.82it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.82it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target XRCC4 - DES: 0.2740, MAE_top2k: 1.7536, n_DE: 2518
-INFO:ZeroShotPerturbation:Predicting for target: HMGN1
-INFO:ZeroShotPerturbation:Processing 2004 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2004 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4008 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 552.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.20s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.20s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 2004 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 4008 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 552.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.10s/it]Processing groups: 100%|██████████| 1/1 [00:02<00:00,  2.10s/it]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target HMGN1 - DES: 0.0000, MAE_top2k: 1.3348, n_DE: 15
-INFO:ZeroShotPerturbation:Predicting for target: GSK3B
-INFO:ZeroShotPerturbation:Processing 1059 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1059 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2118 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 292.2 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.69it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.68it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1059 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2118 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 292.2 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.00it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.00it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target GSK3B - DES: 0.1821, MAE_top2k: 1.3784, n_DE: 2169
-INFO:ZeroShotPerturbation:Predicting for target: TMBIM6
-INFO:ZeroShotPerturbation:Processing 505 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 505 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1010 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 139.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.74it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.74it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 505 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1010 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 139.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.46it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.46it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target TMBIM6 - DES: 0.0000, MAE_top2k: 1.5704, n_DE: 10
-INFO:ZeroShotPerturbation:Predicting for target: PMEL
-INFO:ZeroShotPerturbation:Processing 356 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 356 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 712 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 98.2 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.54it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.54it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 356 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 712 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 98.2 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  6.54it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  6.53it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target PMEL - DES: 0.0154, MAE_top2k: 1.3394, n_DE: 65
-INFO:ZeroShotPerturbation:Predicting for target: DAXX
-INFO:ZeroShotPerturbation:Processing 1332 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1332 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2664 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 367.5 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.32it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.32it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1332 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2664 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 367.5 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.53it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.53it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target DAXX - DES: 0.0589, MAE_top2k: 1.3993, n_DE: 696
-INFO:ZeroShotPerturbation:Predicting for target: METTL14
-INFO:ZeroShotPerturbation:Processing 468 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 468 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 936 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 129.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.81it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.80it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 468 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 936 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 129.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.58it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.58it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target METTL14 - DES: 0.6729, MAE_top2k: 1.5221, n_DE: 9564
-INFO:ZeroShotPerturbation:Predicting for target: MAU2
-INFO:ZeroShotPerturbation:Processing 1021 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1021 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2042 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 281.7 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.79it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.79it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1021 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2042 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 281.7 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.10it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.10it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target MAU2 - DES: 0.4927, MAE_top2k: 1.4633, n_DE: 7138
-INFO:ZeroShotPerturbation:Predicting for target: NDUFB4
-INFO:ZeroShotPerturbation:Processing 1413 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1413 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2826 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 389.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.25it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.25it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 1413 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 2826 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 389.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.41it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  1.41it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target NDUFB4 - DES: 0.2010, MAE_top2k: 1.7061, n_DE: 1358
-INFO:ZeroShotPerturbation:Predicting for target: KDM1A
-INFO:ZeroShotPerturbation:Processing 352 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 352 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 704 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 97.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.49it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.49it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 352 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 704 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 97.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.92it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.91it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target KDM1A - DES: 0.7104, MAE_top2k: 1.6067, n_DE: 10128
-INFO:ZeroShotPerturbation:Predicting for target: TXNDC9
-INFO:ZeroShotPerturbation:Processing 514 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 514 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1028 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 141.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.45it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.45it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 514 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1028 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 141.8 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.11it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.10it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target TXNDC9 - DES: 0.0388, MAE_top2k: 1.7049, n_DE: 309
-INFO:ZeroShotPerturbation:Predicting for target: CALM3
-INFO:ZeroShotPerturbation:Processing 681 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 681 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1362 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 187.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.67it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.67it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 681 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1362 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 187.9 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.98it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.98it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target CALM3 - DES: 0.0250, MAE_top2k: 1.8863, n_DE: 160
-INFO:ZeroShotPerturbation:Predicting for target: C1QBP
-INFO:ZeroShotPerturbation:Processing 711 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/site-packages/anndata/_core/anndata.py:1796: UserWarning: Observation names are not unique. To make them unique, call `.obs_names_make_unique`.
-  utils.warn_names_duplicates("obs")
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 711 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1422 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 196.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.56it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.56it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 711 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1422 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 196.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.02it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.02it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target C1QBP - DES: 0.2724, MAE_top2k: 1.7222, n_DE: 2772
-INFO:ZeroShotPerturbation:Predicting for target: MBTPS1
-INFO:ZeroShotPerturbation:Processing 626 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 626 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1252 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 172.7 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.00it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  2.99it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 626 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 1252 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 172.7 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.60it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  3.60it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target MBTPS1 - DES: 0.2941, MAE_top2k: 1.5762, n_DE: 3608
-INFO:ZeroShotPerturbation:Predicting for target: ZNF562
-INFO:ZeroShotPerturbation:Processing 418 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 418 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 836 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 115.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.74it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.73it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 418 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 836 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 115.3 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.52it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.51it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target ZNF562 - DES: 0.0000, MAE_top2k: 1.1874, n_DE: 21
-INFO:ZeroShotPerturbation:Predicting for target: PHF10
-INFO:ZeroShotPerturbation:Processing 450 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 450 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 900 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 124.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.44it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  4.44it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 450 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 900 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 124.1 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.26it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00,  5.25it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target PHF10 - DES: 0.1478, MAE_top2k: 1.4731, n_DE: 1245
-INFO:ZeroShotPerturbation:Predicting for target: FDPS
-INFO:ZeroShotPerturbation:Processing 154 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 154 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 308 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 42.5 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00, 14.85it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 154 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 308 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 42.5 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00, 24.73it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target FDPS - DES: 0.1541, MAE_top2k: 1.6282, n_DE: 1506
-INFO:ZeroShotPerturbation:Predicting for target: OXA1L
-INFO:ZeroShotPerturbation:Processing 63 cells in batches of 16
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-/public/home/wangar2023/.conda/envs/vcc/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
-  return dispatch(args[0].__class__)(*args, **kw)
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 63 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 126 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 17.4 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00, 64.05it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:hpdex.backend.de_:Creating pre-sorted reference data...
-INFO:hpdex.backend.de_:Converting to dense matrix and sorting reference group data (18080 genes x 63 samples)...
-INFO:hpdex.backend.de_:🤖 Optimizing task scheduling...
-INFO:hpdex.backend.de_:   Data: 126 cells × 18080 genes, 1 treatment groups
-INFO:hpdex.backend.de_:   Size: 17.4 MB
-INFO:hpdex.backend.de_:   Workers: 1
-INFO:hpdex.backend.de_:Auto-scheduling: Single worker mode, chunk_size=18080 (all genes)
-INFO:hpdex.backend.de_:🔧 Using single-threaded processing
-Processing groups:   0%|          | 0/1 [00:00<?, ?it/s]Processing groups: 100%|██████████| 1/1 [00:00<00:00, 71.64it/s]
-INFO:hpdex.backend.de_:📊 Combining results...
-INFO:hpdex.backend.de_:📈 Computing fold changes...
-INFO:hpdex.backend.de_:📊 Applying FDR correction...
-INFO:hpdex.backend.de_:✅ Analysis completed!
-INFO:ZeroShotPerturbation:Target OXA1L - DES: 0.0661, MAE_top2k: 1.5763, n_DE: 454
-INFO:ZeroShotPerturbation:Results saved to results/scgpt_zeroshot/perturbation_metrics.csv
-INFO:ZeroShotPerturbation:==================================================
-INFO:ZeroShotPerturbation:Final Test Metrics (per eval_metrics.md Section 4.2.2):
-INFO:ZeroShotPerturbation:--------------------------------------------------
-INFO:ZeroShotPerturbation:Three DE Metrics (raw, averaged):
-INFO:ZeroShotPerturbation:  pds:                   0.4833
-INFO:ZeroShotPerturbation:  mae:                   1.4721
-INFO:ZeroShotPerturbation:  des:                   0.1767
-INFO:ZeroShotPerturbation:--------------------------------------------------
-INFO:ZeroShotPerturbation:Overall Score (0-100, averaged from per-perturbation):
-INFO:ZeroShotPerturbation:  overall_score:         12.60
-INFO:ZeroShotPerturbation:==================================================

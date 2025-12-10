@@ -365,9 +365,9 @@ def compute_pseudobulk_delta(
 
 # Baseline scores for normalization (pre-calculated on Training dataset)
 # Per docs/eval_metrics.md Section 4.2.2
-BASELINE_PDS = 0.4833  # 1 - 0.5167 (pds = 1 - npds)
+BASELINE_PDS = 0.4833
 BASELINE_MAE_TOP2000 = 0.1258
-BASELINE_DES = 0.0442
+BASELINE_DES = 0.2534
 
 
 def compute_overall_score(pds: float, mae: float, des: float) -> dict:
