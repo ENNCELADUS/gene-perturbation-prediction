@@ -6,7 +6,8 @@ paths:
   data_dir: "data/processed"
   test_file: "test.h5ad"
   train_file: "train.h5ad"
-  output_dir: "results"
+  output_dir: "results/baseline"
+  log_dir: "logs/baseline"
 
 model:
   pad_token: "<pad>"
@@ -18,4 +19,3 @@ inference:
 
 metrics:
   mae_top_k: 2000
-

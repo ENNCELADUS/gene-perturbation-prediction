@@ -80,10 +80,19 @@ def main():
         "linear": "linear",
     }
     output_folder = output_folder_map.get(args.model_type, args.model_type)
-    output_dir = base_output_dir / output_folder
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger = get_logger("ZeroShotPerturbation", log_file=output_dir / "run.log")
+    # If config already points to a model-specific folder, use it directly; otherwise append folder
+    if base_output_dir.name in output_folder_map.values():
+        output_dir = base_output_dir
+    else:
+        output_dir = base_output_dir / output_folder
+
+    log_dir = Path(config["paths"].get("log_dir", output_dir))
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = get_logger("ZeroShotPerturbation", log_file=log_dir / "run.log")
     logger.info(f"Starting Perturbation Pipeline with {args.model_type} model")
     logger.info(f"Model directory: {config['paths']['model_dir']}")
     logger.info(f"Results will be saved to: {output_dir}")
