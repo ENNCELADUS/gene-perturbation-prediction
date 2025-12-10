@@ -138,6 +138,44 @@ $$DES = \frac{1}{N} \sum_{k=1}^N DES_k$$
 
 ---
 
+### 3.5 Cell-Eval Differential Expression Metrics (STATE §4.7.2)
+
+The STATE paper evaluates DE predictions with several complementary metrics using Wilcoxon rank-sum tests (BH-adjusted, $p_{adj} < 0.05$) on both observed and predicted values.
+
+**Notation**
+- Perturbations $t \in [T]$, gene set $G$.
+- Significant DE sets: $G^{(DE)}_{t,\text{true}}$, $G^{(DE)}_{t,\text{pred}}$.
+- Top-$k$ DE genes (ranked by $|\Delta_{t,g}|$): $G^{(k)}_{t,\text{true}}$, $G^{(k)}_{t,\text{pred}}$ with $k \in \{50,100,200,N\}$ (for $k=N$, use all true DE genes).
+- Spearman rank correlation is $\rho_{\text{rank}}$.
+
+**DE Overlap Accuracy**
+$$\text{Overlap}_{t,k} = \frac{|G^{(k)}_{t,\text{true}} \cap G^{(k)}_{t,\text{pred}}|}{k}$$
+
+**Top-$k$ Precision**
+$$\text{Precision}_{t,k} = \frac{|G^{(k)}_{t,\text{true}} \cap G^{(k)}_{t,\text{pred}}|}{|G^{(k)}_{t,\text{pred}}|}$$
+
+**Directionality Agreement**
+Let $G_t^{\cap} = G^{(DE)}_{t,\text{true}} \cap G^{(DE)}_{t,\text{pred}}$ with true log-fold change $\Delta_{t,g}$ and predicted $\hat{\Delta}_{t,g}$.
+$$\text{DirAgree}_t = \frac{|\{g \in G_t^{\cap} : \text{sgn}(\hat{\Delta}_{t,g}) = \text{sgn}(\Delta_{t,g})\}|}{|G_t^{\cap}|}$$
+
+**Spearman Correlation on Significant Genes**
+Let $G_t^{*} = G^{(DE)}_{t,\text{true}}$.
+$$\text{Spearman}_t = \rho_{\text{rank}}(\hat{\Delta}_{t,G_t^{*}}, \Delta_{t,G_t^{*}})$$
+
+**ROC-AUC**
+Labels genes as significant (1 if $p < 0.05$, else 0) in observed data; uses predicted $-\log_{10}(p_{adj})$ as scores.
+$$\text{ROC-AUC}_t = \int_0^1 \text{TPR}_t(\text{FPR}) \, d\text{FPR}$$
+
+**PR-AUC**
+Same labels/scores as ROC-AUC, reporting area under precision–recall.
+$$\text{PR-AUC}_t = \int_0^1 \text{Precision}_t(r) \, d\text{Recall}$$
+
+**Effect Size Correlation**
+Counts of significant DE genes: $n_t = |G^{(DE)}_{t,\text{true}}|$, $\hat{n}_t = |G^{(DE)}_{t,\text{pred}}|$.
+$$\text{SizeCorr} = \rho_{\text{rank}}\big((n_t)_{t=1}^T, (\hat{n}_t)_{t=1}^T\big)$$
+
+---
+
 ## 4. Final Metrics for Validation and Test
 
 ### 4.1 Loss Function
