@@ -28,6 +28,56 @@ from src.utils.de_metrics import (
 )
 
 
+def freeze_encoder_layers(
+    model: nn.Module,
+    freeze_prefixes: list = None,
+    logger=None,
+) -> tuple:
+    """
+    Freeze pretrained encoder components to prevent catastrophic forgetting.
+
+    This is critical for finetuning with small datasets - updating the pretrained
+    encoder with limited data destroys the learned gene-gene relationships.
+
+    Args:
+        model: The TransformerGenerator model
+        freeze_prefixes: List of parameter name prefixes to freeze.
+            Default: ['encoder', 'value_encoder', 'transformer_encoder']
+        logger: Optional logger instance
+
+    Returns:
+        Tuple of (trainable_params, total_params, frozen_params)
+    """
+    if freeze_prefixes is None:
+        freeze_prefixes = ["encoder", "value_encoder", "transformer_encoder"]
+
+    frozen_count = 0
+    trainable_count = 0
+
+    for name, param in model.named_parameters():
+        if any(name.startswith(prefix) for prefix in freeze_prefixes):
+            param.requires_grad = False
+            frozen_count += param.numel()
+        else:
+            param.requires_grad = True
+            trainable_count += param.numel()
+
+    total_params = frozen_count + trainable_count
+
+    if logger:
+        logger.info(
+            f"Froze {frozen_count:,} params, training {trainable_count:,} params"
+        )
+        logger.info(f"Trainable: {trainable_count / total_params * 100:.1f}% of model")
+        # Log which components are trainable
+        trainable_names = [n for n, p in model.named_parameters() if p.requires_grad]
+        logger.info(
+            f"Trainable components: {set(n.split('.')[0] for n in trainable_names)}"
+        )
+
+    return trainable_count, total_params, frozen_count
+
+
 def load_pretrained_model(
     config: dict,
     vocab: GeneVocab,
@@ -194,18 +244,37 @@ def train_epoch(
             loss_cfg = config.get("loss", {})
             loss_type = loss_cfg.get("type", "SmoothL1Loss")
             beta = loss_cfg.get("beta", 1.0)
-            reduction = loss_cfg.get("reduction", "mean")
 
             if loss_type == "SmoothL1Loss":
-                criterion = nn.SmoothL1Loss(beta=beta, reduction=reduction)
+                criterion = nn.SmoothL1Loss(beta=beta, reduction="none")
             elif loss_type == "MSELoss":
-                criterion = nn.MSELoss(reduction=reduction)
+                criterion = nn.MSELoss(reduction="none")
             elif loss_type == "L1Loss":
-                criterion = nn.L1Loss(reduction=reduction)
+                criterion = nn.L1Loss(reduction="none")
             else:
                 raise ValueError(f"Unknown loss type: {loss_type}")
 
-            loss = criterion(output_values, target_values)
+            # Compute element-wise loss
+            element_loss = criterion(output_values, target_values)
+
+            # ========== Weighted Loss (P1 Fix) ==========
+            # Upweight genes with larger expression changes to focus on perturbation signal
+            # This aligns training with the Top2000-MAE evaluation metric
+            if config.get("training", {}).get("weighted_loss", False):
+                weight_factor = config.get("training", {}).get("weight_factor", 5.0)
+
+                # Compute weight based on |target - input| (perturbation effect magnitude)
+                delta = torch.abs(target_values - input_values)
+                # Normalize delta to [0, 1] range per batch to avoid scale issues
+                delta_max = delta.max(dim=1, keepdim=True)[0].clamp(min=1e-6)
+                delta_norm = delta / delta_max
+                # Weight = 1 + factor * normalized_delta (so min weight = 1, max = 1 + factor)
+                weights = 1.0 + weight_factor * delta_norm
+
+                # Apply weights and reduce
+                loss = (element_loss * weights).mean()
+            else:
+                loss = element_loss.mean()
 
         # Backward pass
         model.zero_grad()

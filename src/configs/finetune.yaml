@@ -64,6 +64,21 @@ training:
   
   # Mixed precision training
   amp: true
+  
+  # ========== Freeze Encoder (P0 Fix) ==========
+  # CRITICAL: Set to true to prevent catastrophic forgetting
+  # With only ~100 training perturbations, updating the encoder destroys
+  # pretrained gene-gene relationships learned from 33M cells
+  freeze_encoder: true
+  freeze_prefixes:
+    - "encoder"
+    - "value_encoder"
+    - "transformer_encoder"
+  
+  # ========== Weighted Loss (P1 Fix) ==========
+  # Focus training on high-change genes (aligns with Top2000-MAE eval metric)
+  weighted_loss: true
+  weight_factor: 10.0  # Upweight high-change genes by this factor
 
 # ========== Optimizer ==========
 optimizer:

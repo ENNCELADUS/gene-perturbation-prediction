@@ -55,6 +55,7 @@ from src.utils.training import (
     evaluate,
     compute_validation_metrics,
     save_model,
+    freeze_encoder_layers,
 )
 
 warnings.filterwarnings("ignore")
@@ -198,6 +199,18 @@ def main():
 
     # ========== Load Model ==========
     model = load_pretrained_model(config, vocab, n_genes, device, logger)
+
+    # ========== Freeze Encoder (if configured) ==========
+    if config.get("training", {}).get("freeze_encoder", False):
+        freeze_prefixes = config.get("training", {}).get(
+            "freeze_prefixes", ["encoder", "value_encoder", "transformer_encoder"]
+        )
+        freeze_encoder_layers(
+            model,
+            freeze_prefixes=freeze_prefixes,
+            logger=logger if is_main_process(rank) else None,
+        )
+
     if is_distributed:
         model = DDP(
             model,
@@ -207,7 +220,9 @@ def main():
         )
 
     # ========== Optimizer/Scheduler ==========
-    optimizer = torch.optim.Adam(model.parameters(), lr=config["optimizer"]["lr"])
+    # Only optimize parameters that require gradients (respects freeze config)
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.Adam(trainable_params, lr=config["optimizer"]["lr"])
     scheduler = torch.optim.lr_scheduler.StepLR(
         optimizer,
         config["optimizer"]["schedule_interval"],
