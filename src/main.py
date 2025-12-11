@@ -335,14 +335,17 @@ def main():
     results_df.to_csv(csv_path, index=False)
     logger.info(f"Results saved to {csv_path}")
 
-    # Log overall metrics (aggregate from per-perturbation values already computed)
+    # Log overall metrics using "Score of Averages" approach per eval_metrics.md §4.2.2
     if not results_df.empty:
         mean_des = results_df["des_k"].mean()
         mean_mae = results_df["mae_top2000_k"].mean()
-        mean_overall_score = results_df["overall_score"].mean()
 
         # Convert npds to pds (higher is better): pds = 1 - npds
         pds = 1.0 - npds if not np.isnan(npds) else np.nan
+
+        # Compute overall_score from meaned metrics (NOT: average of per-perturbation scores)
+        score_result = compute_overall_score(pds, mean_mae, mean_des)
+        overall_score = score_result["overall_score"]
 
         logger.info("=" * 50)
         logger.info("Final Test Metrics (per eval_metrics.md Section 4.2.2):")
@@ -352,8 +355,8 @@ def main():
         logger.info(f"  mae:                   {mean_mae:.4f}")
         logger.info(f"  des:                   {mean_des:.4f}")
         logger.info("-" * 50)
-        logger.info("Overall Score (0-100, averaged from per-perturbation):")
-        logger.info(f"  overall_score:         {mean_overall_score:.2f}")
+        logger.info("Overall Score (0-100, from meaned metrics):")
+        logger.info(f"  overall_score:         {overall_score:.2f}")
         logger.info("=" * 50)
     else:
         logger.warning("No results generated.")
