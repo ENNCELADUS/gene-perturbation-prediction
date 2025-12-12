@@ -1,13 +1,12 @@
 #!/bin/bash
 #SBATCH -J scGPT_finetune
-#SBATCH -p critical
-#SBATCH -A hexm-critical
+#SBATCH -p hexm
+#SBATCH -A hexm
 #SBATCH -N 1
 #SBATCH -t 3-00:00:00
 #SBATCH --mem=300G
 #SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:NVIDIATITANRTX:3
-#SBATCH --exclude=ai_gpu28
+#SBATCH --gres=gpu:NVIDIAA40:4
 #SBATCH --output=logs/finetune/slurm_%j.out
 #SBATCH --error=logs/finetune/slurm_%j.err
 #SBATCH --mail-type=ALL
@@ -71,7 +70,7 @@ echo "=========================================="
 NGPUS=$(nvidia-smi -L | wc -l)
 echo "Detected $NGPUS GPUs"
 
-torchrun --nproc_per_node=$NGPUS \
+torchrun --nproc_per_node=3 \
     src/finetune.py \
     --config src/configs/finetune.yaml \
     --seed 42
