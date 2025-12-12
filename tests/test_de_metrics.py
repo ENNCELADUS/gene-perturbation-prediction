@@ -1,224 +1,104 @@
-import pytest
-import scanpy as sc
 import numpy as np
-import pandas as pd
+import pytest
+
 from src.utils.de_metrics import (
-    compute_pds,
     compute_de_comparison_metrics,
-    compute_mae_top2k,
-    compute_pseudobulk_delta,
     compute_des,
+    compute_mae_top2k,
+    compute_overall_score,
+    compute_pds,
 )
 
-TEST_DATA_PATH = "tests/data/metrics_test_data.h5ad"
 
+def test_compute_pds_deterministic():
+    truth_deltas = {
+        "A": np.array([1.0, 0.0, 0.0]),
+        "B": np.array([0.0, 1.0, 0.0]),
+        "C": np.array([0.0, 0.0, 1.0]),
+    }
+    pred_deltas = {k: v.copy() for k, v in truth_deltas.items()}
 
-@pytest.fixture(scope="module")
-def adata_fixture():
-    """Load the sampled test data."""
-    try:
-        adata = sc.read_h5ad(TEST_DATA_PATH)
-    except FileNotFoundError:
-        pytest.skip(
-            f"Test data not found at {TEST_DATA_PATH}. Run scripts/sample_test_data.py first."
-        )
-
-    # Identify NTC (mocked in sampling script as the first one or named explicitly)
-    # The sampling script uses 'target_gene'.
-    # We need to know which one is NTC.
-    # Based on the script output, 'AKT2' was used as mock NTC.
-    # But ideally we dynamically find it or the test assumes known structure.
-    # For robust testing with the mock data, let's just pick one as control randomly
-    # if we can't match a standard name, but we know 'AKT2' is used as mock.
-
-    # We'll use the first one in the list as NTC effectively.
-    return adata
-
-
-def get_pseudobulk(adata, pert_col="target_gene"):
-    """Helper to compute pseudobulk for testing."""
-    # Simple mean per group
-    pseudobulks = {}
-    for group in adata.obs[pert_col].unique():
-        subset = adata[adata.obs[pert_col] == group]
-        # Use X (log1p normalized)
-        if hasattr(subset.X, "toarray"):
-            expr = subset.X.toarray()
-        else:
-            expr = subset.X
-        pseudobulks[group] = expr.mean(axis=0)
-    return pseudobulks
-
-
-def test_compute_pds(adata_fixture):
-    """Test Perturbation Discrimination Score (PDS)."""
-    adata = adata_fixture
-    pert_col = "target_gene"
-
-    # Identify control (mock)
-    conditions = list(adata.obs[pert_col].unique())
-    # Assume first is NTC for this test setup
-    ntc_name = conditions[0]
-    perturbations = conditions[1:]
-
-    if len(perturbations) < 1:
-        pytest.skip("Not enough perturbations for PDS test.")
-
-    # Compute deltas
-    pseudobulks = get_pseudobulk(adata, pert_col)
-    ntc_expr = pseudobulks[ntc_name]
-
-    truth_deltas = {}
-    pred_deltas = {}
-
-    # For PDS, we need predicted and truth.
-    # To test the metric, we can mock predictions.
-    # 1. Perfect prediction: pred == truth -> Should have best rank (1) and high cosine
-    # 2. Noisy prediction: pred = truth + noise
-
-    for p in perturbations:
-        truth = pseudobulks[p] - ntc_expr
-        truth_deltas[p] = truth
-
-        # Create a "good" prediction (closely dependent on truth)
-        # Add small noise
-        noise = np.random.normal(0, 0.01, size=truth.shape)
-        pred_deltas[p] = truth + noise
-
-    # Add a "bad" prediction for one to see if rank drops?
-    # But PDS computes rank of *true* perturbation for a *given* prediction.
-    # If prediction is perfect effectively, it should be closest to its own truth.
-
-    # Compute PDS
     results = compute_pds(pred_deltas, truth_deltas)
-
-    assert "mean_rank" in results
-    assert "npds" in results
-    assert "ranks" in results
-
-    # With reliable predictions (truth + small noise), ranks should be 1 (perfect discrimination)
-    # assuming the perturbations are distinct enough.
-    # Note: If perturbations are very similar, rank might not be 1.
-    print(f"PDS Ranks: {results['ranks']}")
-
-    # Check range
-    assert 1 <= results["mean_rank"] <= len(perturbations)
-    assert 0 <= results["npds"] <= 1.0
-
-    # Check self cosine similarity - should be high for good predictions
-    for p, sim in results["cosine_self"].items():
-        assert sim > 0.9  # given we added only small noise
+    assert results["mean_rank"] == 1.0
+    assert results["npds"] == pytest.approx(1.0 / 3.0)
+    assert all(rank == 1 for rank in results["ranks"].values())
+    assert all(sim == pytest.approx(1.0) for sim in results["cosine_self"].values())
 
 
-def test_compute_des(adata_fixture):
-    """Test Differential Expression Score (DES)."""
-    adata = adata_fixture
-    pert_col = "target_gene"
-    conditions = list(adata.obs[pert_col].unique())
-    ntc_name = conditions[0]
-    pert_name = conditions[1]
+def test_compute_des_pred_smaller_or_equal():
+    truth = {0, 1, 2, 3}
+    pred = {1, 3}
+    pred_log2fc = np.array([0.1, 0.2, 0.3, 0.4])
+    des, n_intersect = compute_des(truth, pred, pred_log2fc)
+    assert n_intersect == 2
+    assert des == pytest.approx(0.5)
 
-    # Get expression logic
-    def get_expr(name):
-        subset = adata[adata.obs[pert_col] == name]
-        if hasattr(subset.X, "toarray"):
-            return subset.X.toarray()
-        return subset.X
 
-    control_expr = get_expr(ntc_name)
-    truth_expr = get_expr(pert_name)  # Treating real data as truth
+def test_compute_des_pred_larger_truncates_by_abs_log2fc():
+    truth = {0, 1, 2}
+    pred = {0, 1, 2, 3, 4}
+    pred_log2fc = np.array([1.0, 0.9, 0.8, 100.0, 90.0])
+    des, n_intersect = compute_des(truth, pred, pred_log2fc)
+    assert n_intersect == 1
+    assert des == pytest.approx(1.0 / 3.0)
 
-    # Create mock prediction:
-    # 1. Perfect prediction: pred = truth
-    # 2. Or shifted prediction
+
+def test_compute_de_comparison_metrics_pdex_perfect_prediction():
+    rng = np.random.default_rng(0)
+    n_ctrl = 40
+    n_pert = 40
+    n_genes = 20
+    gene_names = np.array([f"g{i}" for i in range(n_genes)], dtype=object)
+
+    control_expr = rng.normal(loc=1.0, scale=0.05, size=(n_ctrl, n_genes)).astype(
+        np.float32
+    )
+    truth_expr = control_expr[:n_pert].copy()
+    truth_expr[:, :5] += 2.0  # strong shift to ensure DE detection
+
     pred_expr = truth_expr.copy()
-
-    # Gene names
-    gene_names = np.array(adata.var_names)
-
-    # Test DES function
-    # Note: this uses Wilcoxon test which might be slow or sensitive to sample size.
-    # We sampled 50 cells, should be enough for some DE.
 
     results = compute_de_comparison_metrics(
         control_expr=control_expr,
         pred_expr=pred_expr,
         truth_expr=truth_expr,
         gene_names=gene_names,
+        fdr_threshold=0.05,
+        threads=1,
     )
 
-    assert "des" in results
-    des = results["des"]
-
-    # Since pred == truth, DES should be 1.0 (or close to it, if DE set is empty or something)
-    # If no DE genes are found, our current implementation returns 0.0, 0 intersect.
-
-    n_de_truth = results["n_de_truth"]
-    if n_de_truth > 0:
-        assert des == 1.0
-        assert results["n_intersect"] == n_de_truth
-    else:
-        # If no DE genes found (possible with small sample/weak perturbation), DES is 0.
-        assert des == 0.0
+    assert results["n_de_truth"] > 0
+    assert results["des"] == pytest.approx(1.0)
+    assert results["n_de_pred"] == results["n_de_truth"]
+    assert results["n_intersect"] == results["n_de_truth"]
 
 
-def test_compute_mae_top2k(adata_fixture):
-    """Test MAE top 2k metric."""
-    adata = adata_fixture
-    pert_col = "target_gene"
-    conditions = list(adata.obs[pert_col].unique())
-    ntc_name = conditions[0]
-    pert_name = conditions[1]
-
-    def get_expr(name):
-        subset = adata[adata.obs[pert_col] == name]
-        if hasattr(subset.X, "toarray"):
-            return subset.X.toarray()
-        return subset.X
-
-    control_expr = get_expr(ntc_name)
-    truth_expr = get_expr(pert_name)
-
-    # Mock prediction: truth + constant error
+def test_compute_mae_top2k_constant_error():
+    rng = np.random.default_rng(0)
+    n_cells = 10
+    n_genes = 50
+    control_mean = rng.normal(loc=1.0, scale=0.1, size=(n_genes,)).astype(np.float32)
+    truth_expr = rng.normal(loc=1.0, scale=0.1, size=(n_cells, n_genes)).astype(
+        np.float32
+    )
     error_val = 0.5
     pred_expr = truth_expr + error_val
-
-    # Control mean needed for ranking genes
-    control_mean = control_expr.mean(axis=0)
 
     mae = compute_mae_top2k(
         pred_expr=pred_expr,
         truth_expr=truth_expr,
         control_mean=control_mean,
-        top_k=100,  # use smaller k for test
+        top_k=20,
     )
-
-    # MAE should be exactly error_val (since we added constant error to all genes,
-    # meaningful of subset selection doesn't change the error value for those selected)
-    assert np.isclose(mae, error_val, atol=1e-5)
+    assert np.isclose(mae, error_val, atol=1e-6)
 
 
 def test_compute_overall_score():
     """Test the aggregation logic."""
-    from src.utils.de_metrics import (
-        compute_overall_score,
-        BASELINE_PDS,
-        BASELINE_DES,
-        BASELINE_MAE_TOP2000,
-    )
+    from src.utils.de_metrics import BASELINE_DES, BASELINE_MAE_TOP2000, BASELINE_PDS
 
-    # Case 1: Perfect scores compared to baseline
-    # PDS (rank based): normalized score. Lower rank is better.
-    # In `compute_pds`: nPDS = MeanRank / N.
-    # But `compute_overall_score` expects input `pds` as "1 - nPDS" ?
-    # Let's check `compute_overall_score` docstring in source:
-    # "pds: PDS score (1 - npds, higher is better, range 0-1)"
-
-    # So if MeanRank = 1, N=2 -> nPDS = 0.5. Input pds = 0.5.
-    # If MeanRank = 1, N=100 -> nPDS = 0.01. Input pds = 0.99.
-
-    # Let's assume a good model:
-    input_pds = 0.9
+    # Case 1: Better-than-baseline scores should yield positive scaled values.
+    input_pds = 0.1  # Lower normalized rank is better
     input_mae = 0.05  # Lower than baseline 0.1258
     input_des = 0.8  # Higher than baseline 0.0442
 
@@ -230,7 +110,7 @@ def test_compute_overall_score():
 
     # Case 2: Worse than baseline (should clip to 0)
     scores_bad = compute_overall_score(
-        pds=BASELINE_PDS - 0.1, mae=BASELINE_MAE_TOP2000 + 0.1, des=BASELINE_DES - 0.01
+        pds=BASELINE_PDS + 0.1, mae=BASELINE_MAE_TOP2000 + 0.1, des=BASELINE_DES - 0.01
     )
     assert scores_bad["pds_scaled"] == 0.0
     assert scores_bad["mae_scaled"] == 0.0

@@ -1,66 +1,111 @@
 """
-Differential Expression-based evaluation metrics for perturbation prediction.
+Differential Expression metrics for perturbation prediction.
 
-Implements metrics from docs/eval_metrics.md:
-- PDS (Perturbation Discrimination Score) - cosine similarity ranking
-- DES (Differential Expression Score) - DE gene overlap [PLACEHOLDER]
-- MAE_top2k (MAE on top 2000 genes by |log2FC|)
-
-NOTE: DES metric implementation has been temporarily removed and returns placeholder values.
+Metrics (per docs/eval_metrics.md):
+- PDS: Perturbation Discrimination Score (cosine similarity ranking)
+- DES: Differential Expression Score (DE gene overlap)
+- MAE_top2k: MAE on top 2000 genes by |log2FC|
 """
 
 import numpy as np
+from pdex import parallel_differential_expression
 
 
-def wilcoxon_test_per_gene(
-    group1: np.ndarray,
-    group2: np.ndarray,
-) -> np.ndarray:
-    """
-    Placeholder for per-gene differential expression statistical testing.
-
-    Args:
-        group1: Expression matrix (n_cells_1, n_genes)
-        group2: Expression matrix (n_cells_2, n_genes)
-
-    Returns:
-        p_values: Array of placeholder p-values (n_genes,)
-    """
-    group1 = np.atleast_2d(group1)
-    n_genes = group1.shape[1] if group1.ndim == 2 else 0
-    return np.full(n_genes, np.nan, dtype=float)
+def _ensure_dense_2d(x: np.ndarray) -> np.ndarray:
+    """Convert sparse/1D array to dense 2D (n_samples, n_features)."""
+    if hasattr(x, "toarray"):
+        x = x.toarray()
+    x = np.asarray(x)
+    return x[None, :] if x.ndim == 1 else x
 
 
-def benjamini_hochberg(p_values: np.ndarray) -> np.ndarray:
-    """
-    Placeholder for Benjamini-Hochberg FDR correction.
-
-    Args:
-        p_values: Array of raw p-values
-
-    Returns:
-        p_adj: Array of placeholder adjusted p-values
-    """
-    return np.full_like(np.asarray(p_values, dtype=float), np.nan, dtype=float)
-
-
-def compute_log2fc(
-    perturbed_expr: np.ndarray,
+def _pdex_de(
     control_expr: np.ndarray,
-) -> np.ndarray:
-    """
-    Placeholder for log2 fold-change computation.
+    perturbed_expr: np.ndarray,
+    gene_names: np.ndarray,
+    *,
+    fdr_threshold: float,
+    threads: int = -1,
+) -> tuple[set[int], np.ndarray]:
+    """Run DE analysis using pdex. Returns (de_gene_indices, log2fc_array)."""
+    import anndata as ad
+    import pandas as pd
 
-    Args:
-        perturbed_expr: Perturbed expression (n_cells, n_genes), log1p-normalized
-        control_expr: Control expression (n_cells, n_genes), log1p-normalized
+    control_expr = _ensure_dense_2d(control_expr)
+    perturbed_expr = _ensure_dense_2d(perturbed_expr)
+    gene_names = np.asarray(gene_names, dtype=object)
+    n_genes = control_expr.shape[1]
 
-    Returns:
-        log2fc: Array of placeholder log2 fold changes (n_genes,)
-    """
-    perturbed_expr = np.atleast_2d(perturbed_expr)
-    n_genes = perturbed_expr.shape[1] if perturbed_expr.ndim == 2 else 0
-    return np.full(n_genes, np.nan, dtype=float)
+    if perturbed_expr.shape[1] != n_genes:
+        raise ValueError(f"Gene count mismatch: {n_genes} vs {perturbed_expr.shape[1]}")
+    if len(gene_names) != n_genes:
+        raise ValueError(f"gene_names length mismatch: {len(gene_names)} vs {n_genes}")
+
+    # Build AnnData for DE analysis
+    x = np.vstack([control_expr, perturbed_expr])
+    obs = pd.DataFrame(
+        {
+            "__group": ["control"] * control_expr.shape[0]
+            + ["perturbed"] * perturbed_expr.shape[0]
+        }
+    )
+    adata = ad.AnnData(X=x, obs=obs, var=pd.DataFrame(index=gene_names))
+
+    # Common DE parameters
+    de_params = dict(
+        adata=adata,
+        groups=["perturbed"],
+        reference="control",
+        groupby_key="__group",
+        batch_size=100,
+        metric="wilcoxon",
+        tie_correct=True,
+        is_log1p=True,
+        as_polars=False,
+    )
+    num_workers = max(1, threads) if threads > 0 else 1
+
+    try:
+        df = parallel_differential_expression(**de_params, num_workers=num_workers)
+    except OSError as e:
+        if getattr(e, "errno", None) != 13:
+            raise
+        # Permission error fallback to single-threaded
+        from pdex._single_cell import parallel_differential_expression_vec_wrapper
+
+        df = parallel_differential_expression_vec_wrapper(**de_params, num_workers=1)
+
+    if df is None or len(df) == 0:
+        return set(), np.zeros(n_genes, dtype=float)
+
+    if "target" in df.columns:
+        df = df[df["target"] == "perturbed"]
+
+    # Ensure log2_fold_change column exists
+    if "log2_fold_change" not in df.columns and "fold_change" in df.columns:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            df = df.assign(log2_fold_change=np.log2(df["fold_change"].to_numpy()))
+
+    # Map gene names to indices
+    name_to_idx = {str(g): i for i, g in enumerate(gene_names)}
+
+    # Extract log2FC values
+    log2fc = np.zeros(n_genes, dtype=float)
+    for feat, val in zip(
+        df["feature"].astype(str), df["log2_fold_change"], strict=False
+    ):
+        if (idx := name_to_idx.get(feat)) is not None and np.isfinite(val):
+            log2fc[idx] = val
+
+    # Extract DE genes (FDR < threshold)
+    de_genes: set[int] = set()
+    if "fdr" in df.columns:
+        for feat, fdr in zip(df["feature"].astype(str), df["fdr"], strict=False):
+            if np.isfinite(fdr) and fdr < fdr_threshold:
+                if (idx := name_to_idx.get(feat)) is not None:
+                    de_genes.add(idx)
+
+    return de_genes, log2fc
 
 
 def compute_de_comparison_metrics(
@@ -74,24 +119,50 @@ def compute_de_comparison_metrics(
     """
     Compute DE-based metrics comparing predicted vs ground truth perturbation.
 
-    Placeholder implementation (DES temporarily disabled).
+    Uses the official `pdex.parallel_differential_expression` to call DE genes
+    (Wilcoxon rank-sum / Mann–Whitney U, BH FDR), then computes DES per
+    docs/eval_metrics.md §3.
 
     Args:
-        control_expr: Control cell expression (n_ctrl, n_genes), log1p-normalized
-        pred_expr: Predicted perturbed expression (n_pred, n_genes), log1p-normalized
-        truth_expr: Ground truth perturbed expression (n_truth, n_genes), log1p-normalized
+        control_expr: Control cell expression (n_ctrl, n_genes),
+            log1p-normalized
+        pred_expr: Predicted perturbed expression (n_pred, n_genes),
+            log1p-normalized
+        truth_expr: Ground truth perturbed expression (n_truth, n_genes),
+            log1p-normalized
         gene_names: Gene names array
         fdr_threshold: FDR threshold for significant DE genes (default 0.05)
-        threads: Unused, kept for API compatibility
+        threads: Worker count hint for pdex (uses 1 if <= 0)
 
     Returns:
         dict with keys: des, n_de_truth, n_de_pred, n_intersect
     """
+    control_expr = _ensure_dense_2d(control_expr)
+    pred_expr = _ensure_dense_2d(pred_expr)
+    truth_expr = _ensure_dense_2d(truth_expr)
+    gene_names = np.asarray(gene_names, dtype=object)
+
+    truth_de_genes, _ = _pdex_de(
+        control_expr,
+        truth_expr,
+        gene_names,
+        fdr_threshold=fdr_threshold,
+        threads=threads,
+    )
+    pred_de_genes, pred_log2fc = _pdex_de(
+        control_expr,
+        pred_expr,
+        gene_names,
+        fdr_threshold=fdr_threshold,
+        threads=threads,
+    )
+
+    des_score, n_intersect = compute_des(truth_de_genes, pred_de_genes, pred_log2fc)
     return {
-        "des": np.nan,
-        "n_de_truth": 0,
-        "n_de_pred": 0,
-        "n_intersect": 0,
+        "des": float(des_score),
+        "n_de_truth": int(len(truth_de_genes)),
+        "n_de_pred": int(len(pred_de_genes)),
+        "n_intersect": int(n_intersect),
     }
 
 
@@ -101,101 +172,75 @@ def compute_des(
     pred_log2fc: np.ndarray,
 ) -> tuple[float, int]:
     """
-    Placeholder for Differential Expression Score (DES).
+    Compute Differential Expression Score (DES) per docs/eval_metrics.md §3.
 
-    Args:
-        truth_de_genes: Set of gene indices that are truly DE
-        pred_de_genes: Set of gene indices predicted as DE
-        pred_log2fc: Array of predicted log2 fold changes (n_genes,)
-
-    Returns:
-        (des_score, n_intersect) placeholder values
+    If |pred| > |truth|, truncate pred to top |truth| genes by |log2FC|.
+    DES = |intersection| / |truth|
     """
-    return np.nan, 0
+    n_true = len(truth_de_genes)
+    if n_true == 0:
+        return 0.0, 0
+
+    # Truncate predicted set if larger than truth set (§3.3)
+    if len(pred_de_genes) <= n_true:
+        pred_eval = pred_de_genes
+    else:
+        log2fc = np.asarray(pred_log2fc, dtype=float).ravel()
+        ranked = sorted(
+            pred_de_genes,
+            key=lambda i: abs(log2fc[i]) if 0 <= i < len(log2fc) else 0.0,
+            reverse=True,
+        )
+        pred_eval = set(ranked[:n_true])
+
+    n_intersect = len(pred_eval & truth_de_genes)
+    return n_intersect / n_true, n_intersect
 
 
 def compute_pds(
     pred_deltas: dict[str, np.ndarray],
     truth_deltas: dict[str, np.ndarray],
-    target_gene_indices: dict[str, int] | None = None,
+    target_gene_indices: dict[str, int] | None = None,  # kept for API compat
 ) -> dict:
     """
-    Compute Perturbation Discrimination Score using cosine similarity ranking.
+    Compute Perturbation Discrimination Score (PDS) per docs/eval_metrics.md §1.
 
-    For each predicted perturbation k, compute cosine similarity between
-    predicted delta and all true deltas:
-        S_{k,j} = (pred_delta_k · truth_delta_j) / (|pred_delta_k| * |truth_delta_j|)
+    For each perturbation k, compute cosine similarity S_{k,j} between predicted
+    delta and all true deltas. R_k = rank of true perturbation (1 = best).
 
-    Rank = position of true perturbation among all similarities (descending).
-
-    Per eval_metrics.md Section 4.2.1:
-    - MeanRank = (1/N) * sum(R_k)
-    - nPDS = (1/N^2) * sum(R_k) = MeanRank / N
-
-    Args:
-        pred_deltas: {target_gene: delta_vector} for predictions
-        truth_deltas: {target_gene: delta_vector} for ground truth
-        target_gene_indices: {target_gene: gene_index} - not used in cosine version
-
-    Returns:
-        dict with:
-            - mean_rank: mean of all ranks
-            - npds: normalized PDS (MeanRank / N)
-            - ranks: {target_gene: rank}
-            - cosine_self: {target_gene: cos(δ̂_k, δ_k)} self-similarity
+    Returns: mean_rank, npds (= mean_rank / N), ranks, cosine_self
     """
     targets = list(pred_deltas.keys())
     n = len(targets)
-
     if n == 0:
         return {"mean_rank": np.nan, "npds": np.nan, "ranks": {}, "cosine_self": {}}
 
-    ranks = {}
-    cosine_self = {}
+    # Build matrices: (N, G) for pred and truth deltas
+    pred_mat = np.stack([pred_deltas[t] for t in targets])
+    truth_mat = np.stack([truth_deltas[t] for t in targets])
 
-    for p in targets:
-        pred_delta = pred_deltas[p]
-        truth_delta_self = truth_deltas[p]
+    # Normalize rows (epsilon to avoid division by zero)
+    eps = 1e-12
+    pred_norm = pred_mat / (np.linalg.norm(pred_mat, axis=1, keepdims=True) + eps)
+    truth_norm = truth_mat / (np.linalg.norm(truth_mat, axis=1, keepdims=True) + eps)
 
-        # Compute cosine similarity to all true deltas
-        similarities = []
-        pred_norm = np.linalg.norm(pred_delta)
-        truth_self_norm = np.linalg.norm(truth_delta_self)
+    # Cosine similarity matrix S[k,j] = cos(pred_k, truth_j)
+    S = pred_norm @ truth_norm.T  # (N, N)
 
-        # Store self-similarity (cos(δ̂_k, δ_k))
-        if pred_norm > 0 and truth_self_norm > 0:
-            cosine_self[p] = float(
-                np.dot(pred_delta, truth_delta_self) / (pred_norm * truth_self_norm)
-            )
-        else:
-            cosine_self[p] = 0.0
+    # Compute ranks: for each row k, rank of diagonal element S[k,k]
+    # Rank = 1 + count of elements > S[k,k] in row k
+    diag = np.diag(S)
+    ranks_arr = 1 + (S > diag[:, None]).sum(axis=1)
 
-        for t in targets:
-            truth_delta = truth_deltas[t]
-            truth_norm = np.linalg.norm(truth_delta)
+    ranks = {t: int(ranks_arr[i]) for i, t in enumerate(targets)}
+    cosine_self = {t: float(diag[i]) for i, t in enumerate(targets)}
 
-            # Cosine similarity
-            if pred_norm > 0 and truth_norm > 0:
-                cos_sim = np.dot(pred_delta, truth_delta) / (pred_norm * truth_norm)
-            else:
-                cos_sim = 0.0
-
-            similarities.append((t, cos_sim))
-
-        # Sort by similarity (descending - higher similarity = better match)
-        similarities.sort(key=lambda x: x[1], reverse=True)
-
-        # Find rank of correct perturbation (1-indexed)
-        rank = next(i + 1 for i, (t, _) in enumerate(similarities) if t == p)
-        ranks[p] = rank
-
-    # Mean rank and normalized PDS per eval_metrics.md
-    mean_rank = sum(ranks.values()) / n
-    npds = mean_rank / n  # nPDS = (1/N^2) * sum(R_k) = MeanRank / N
+    mean_rank = float(ranks_arr.mean())
+    npds = mean_rank / n
 
     return {
-        "mean_rank": float(mean_rank),
-        "npds": float(npds),
+        "mean_rank": mean_rank,
+        "npds": npds,
         "ranks": ranks,
         "cosine_self": cosine_self,
     }
@@ -208,13 +253,14 @@ def compute_mae_top2k(
     top_k: int = 2000,
 ) -> float:
     """
-    Compute MAE on top K genes by ground truth |log2 fold change|.
+    Compute MAE on top K genes using ground truth perturbation effect magnitude.
 
     Per docs/eval_metrics.md:
-    1. Compute |LFC| = |log2(c_k + 1) - log2(c_ntc + 1)| for ground truth
-       Since data is already log1p-normalized, we use it directly.
-    2. Select top K genes by |LFC|
-    3. Compute MAE on log1p-normalized expression for selected genes
+    1. Compute |delta| between perturbed and control pseudobulk (log1p space).
+       Data is already log1p-normalized, so the delta is a log-ratio up to a
+       constant base change; no extra log2 conversion is needed.
+    2. Select top K genes by |delta|.
+    3. Compute MAE on log1p-normalized expression for the selected genes.
 
     Args:
         pred_expr: Predicted expression (n_cells, n_genes), log1p-normalized
@@ -230,10 +276,8 @@ def compute_mae_top2k(
     truth_mean = truth_expr.mean(axis=0).flatten()
     control_mean = np.asarray(control_mean).flatten()
 
-    # Since data is log1p-normalized, compute log2 fold change:
-    # log2FC = log2(exp(log1p_k) / exp(log1p_ntc))
-    #        = (log1p_k - log1p_ntc) / log(2)
-    # We just need |delta| for ranking, so use |truth_mean - control_mean|
+    # Data is log1p-normalized; |truth_mean - control_mean| is proportional
+    # to |log2 fold change| and suffices for selecting the top genes.
     truth_delta = np.abs(truth_mean - control_mean)
 
     # Select top K genes by |delta|
@@ -262,9 +306,9 @@ def compute_pseudobulk_delta(
 
 # Baseline scores for normalization (pre-calculated on Training dataset)
 # Per docs/eval_metrics.md Section 4.2.2
-BASELINE_PDS = 0.4833
-BASELINE_MAE_TOP2000 = 0.1258
-BASELINE_DES = 0.2534
+BASELINE_PDS = 0.5167  # nPDS (mean_rank / N), lower is better
+BASELINE_MAE_TOP2000 = 0.1258  # lower is better
+BASELINE_DES = 0.0442  # higher is better
 
 
 def compute_overall_score(pds: float, mae: float, des: float) -> dict:
@@ -272,7 +316,7 @@ def compute_overall_score(pds: float, mae: float, des: float) -> dict:
     Compute scaled metrics and overall score per eval_metrics.md Section 4.2.2.
 
     Args:
-        pds: PDS score (1 - npds, higher is better, range 0-1)
+        pds: Normalized PDS (mean_rank / N); lower is better.
         mae: MAE on top 2000 genes (lower is better)
         des: DES score (higher is better, range 0-1)
 
@@ -281,9 +325,7 @@ def compute_overall_score(pds: float, mae: float, des: float) -> dict:
     """
     # Scale and clip to [0, 1]
     pds_scaled = (
-        max(0.0, (pds - BASELINE_PDS) / (1 - BASELINE_PDS))
-        if not np.isnan(pds)
-        else np.nan
+        max(0.0, (BASELINE_PDS - pds) / BASELINE_PDS) if not np.isnan(pds) else np.nan
     )
     mae_scaled = (
         max(0.0, (BASELINE_MAE_TOP2000 - mae) / BASELINE_MAE_TOP2000)

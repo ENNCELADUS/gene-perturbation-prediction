@@ -357,12 +357,13 @@ def compute_validation_metrics(
     Compute validation metrics per eval_metrics.md Section 4.2.
 
     Raw metrics (three de_metrics):
-        - pds: Perturbation Discrimination Score (1 - npds, higher is better)
+        - pds: Normalized Perturbation Discrimination Score (mean_rank / N),
+          lower is better
         - mae: Mean MAE on top 2000 genes by |LFC|
         - des: Mean DES (Differential Expression Score)
 
     Scaled metrics (baseline-relative, clipped to [0, 1]):
-        - pds_scaled = (pds - baseline) / (1 - baseline)
+        - pds_scaled = (baseline - pds) / baseline
         - mae_scaled = (baseline - mae) / baseline
         - des_scaled = (des - baseline) / (1 - baseline)
 
@@ -470,7 +471,7 @@ def compute_validation_metrics(
 
     mean_des = np.mean(des_values) if des_values else np.nan
     mean_mae = np.mean(mae_values) if mae_values else np.nan
-    pds = 1.0 - npds if not np.isnan(npds) else np.nan
+    pds = npds
 
     # Compute overall_score using "Score of Averages" approach per eval_metrics.md §4.2.2
     # First average the three metrics, then compute the overall score from those averages

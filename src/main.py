@@ -280,7 +280,7 @@ def main():
     n_perts = len(pred_deltas)
     if pred_deltas:
         pds_result = compute_pds(pred_deltas, truth_deltas, target_gene_indices)
-        npds = pds_result["npds"]
+        pds_nrank = pds_result["npds"]
         pds_ranks = pds_result["ranks"]
         cosine_self = pds_result["cosine_self"]
 
@@ -298,14 +298,14 @@ def main():
             mae_k = r["mae_top2000_k"]
             rank_norm_k = r["rank_Rk_norm"]
 
-            # pds_k = 1 - rank_Rk_norm (higher is better)
-            pds_k = 1.0 - rank_norm_k if not np.isnan(rank_norm_k) else np.nan
+            # pds_k uses normalized rank (lower is better per docs/eval_metrics.md)
+            pds_k = rank_norm_k
 
             # Use centralized function for scaled metrics and overall score
             score_result = compute_overall_score(pds_k, mae_k, des_k)
             r["overall_score"] = score_result["overall_score"]
     else:
-        npds = np.nan
+        pds_nrank = np.nan
         # Add overall_score as NaN for results without PDS
         for r in results:
             r["overall_score"] = np.nan
@@ -340,8 +340,7 @@ def main():
         mean_des = results_df["des_k"].mean()
         mean_mae = results_df["mae_top2000_k"].mean()
 
-        # Convert npds to pds (higher is better): pds = 1 - npds
-        pds = 1.0 - npds if not np.isnan(npds) else np.nan
+        pds = pds_nrank
 
         # Compute overall_score from meaned metrics (NOT: average of per-perturbation scores)
         score_result = compute_overall_score(pds, mean_mae, mean_des)
@@ -351,7 +350,7 @@ def main():
         logger.info("Final Test Metrics (per eval_metrics.md Section 4.2.2):")
         logger.info("-" * 50)
         logger.info("Three DE Metrics (raw, averaged):")
-        logger.info(f"  pds:                   {pds:.4f}")
+        logger.info(f"  pds_nrank:             {pds:.4f}")
         logger.info(f"  mae:                   {mean_mae:.4f}")
         logger.info(f"  des:                   {mean_des:.4f}")
         logger.info("-" * 50)
