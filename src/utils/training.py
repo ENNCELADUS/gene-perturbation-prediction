@@ -383,16 +383,17 @@ def compute_validation_metrics(
     pert_cat = results["pert_cat"]
 
     # Get control mean
-    if hasattr(ctrl_adata.X, "toarray"):
-        ctrl_mean = ctrl_adata.X.toarray().mean(axis=0).flatten()
-    else:
-        ctrl_mean = np.asarray(ctrl_adata.X.mean(axis=0)).flatten()
+    ctrl_mean = np.asarray(ctrl_adata.X.mean(axis=0)).flatten()
 
     # Get control expression for DE analysis
-    if hasattr(ctrl_adata.X, "toarray"):
-        ctrl_expr = ctrl_adata.X.toarray()
+    compute_de_metrics = config.get("metrics", {}).get("compute_de_metrics", True)
+    if compute_de_metrics:
+        if hasattr(ctrl_adata.X, "toarray"):
+            ctrl_expr = ctrl_adata.X.toarray()
+        else:
+            ctrl_expr = np.asarray(ctrl_adata.X)
     else:
-        ctrl_expr = np.asarray(ctrl_adata.X)
+        ctrl_expr = None
 
     mae_top_k = config.get("metrics", {}).get("mae_top_k", 2000)
 
@@ -428,18 +429,19 @@ def compute_validation_metrics(
 
         # Compute DES
         des_val = np.nan
-        try:
-            de_metrics = compute_de_comparison_metrics(
-                control_expr=ctrl_expr,
-                pred_expr=pred_pert,
-                truth_expr=truth_pert,
-                gene_names=gene_names,
-                fdr_threshold=0.05,
-                threads=1,
-            )
-            des_val = de_metrics["des"]
-        except Exception:
-            pass
+        if compute_de_metrics and ctrl_expr is not None:
+            try:
+                de_metrics = compute_de_comparison_metrics(
+                    control_expr=ctrl_expr,
+                    pred_expr=pred_pert,
+                    truth_expr=truth_pert,
+                    gene_names=gene_names,
+                    fdr_threshold=0.05,
+                    threads=1,
+                )
+                des_val = de_metrics["des"]
+            except Exception:
+                pass
 
         # Compute MAE_top2k
         mae_val = compute_mae_top2k(

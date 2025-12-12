@@ -116,6 +116,9 @@ split:
 # ========== Metrics ==========
 metrics:
   mae_top_k: 2000  # Top K genes by |log2FC| for MAE calculation
+  # DE metrics (Wilcoxon per gene per perturbation) can be extremely slow and will
+  # make non-main DDP ranks wait at a collective, risking NCCL timeouts.
+  compute_de_metrics: false
 
 # ========== Early Stopping ==========
 early_stopping:
@@ -130,3 +133,6 @@ logging:
 hardware:
   # Detected automatically, but can override
   device: "cuda"  # "cuda" or "cpu"
+  # NCCL watchdog timeout (minutes) for DDP collectives (e.g., barrier/broadcast)
+  # while rank 0 computes validation metrics.
+  ddp_timeout_minutes: 240

@@ -83,8 +83,10 @@ def main():
     args = parser.parse_args()
 
     # ========== Setup ==========
-    rank, local_rank, world_size, is_distributed = setup_ddp()
     config = load_config(args.config)
+    rank, local_rank, world_size, is_distributed = setup_ddp(
+        timeout_minutes=config.get("hardware", {}).get("ddp_timeout_minutes", 60)
+    )
     set_seed(args.seed)
 
     device = (
