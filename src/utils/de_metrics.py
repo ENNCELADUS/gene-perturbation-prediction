@@ -10,8 +10,6 @@ NOTE: DES metric implementation has been temporarily removed and returns placeho
 """
 
 import numpy as np
-import pandas as pd
-from scipy.stats import mannwhitneyu
 
 
 def wilcoxon_test_per_gene(
@@ -19,69 +17,31 @@ def wilcoxon_test_per_gene(
     group2: np.ndarray,
 ) -> np.ndarray:
     """
-    Run Wilcoxon rank-sum test (Mann-Whitney U) for each gene between two groups.
+    Placeholder for per-gene differential expression statistical testing.
 
     Args:
         group1: Expression matrix (n_cells_1, n_genes)
         group2: Expression matrix (n_cells_2, n_genes)
 
     Returns:
-        p_values: Array of p-values (n_genes,)
+        p_values: Array of placeholder p-values (n_genes,)
     """
-    n_genes = group1.shape[1]
-    p_values = np.ones(n_genes)
-
-    for g in range(n_genes):
-        x = group1[:, g]
-        y = group2[:, g]
-
-        # Handle constant columns (no variance)
-        if np.std(x) == 0 and np.std(y) == 0:
-            p_values[g] = 1.0
-        else:
-            try:
-                _, p_values[g] = mannwhitneyu(x, y, alternative="two-sided")
-            except ValueError:
-                # Handle edge cases (e.g., all identical values)
-                p_values[g] = 1.0
-
-    return p_values
+    group1 = np.atleast_2d(group1)
+    n_genes = group1.shape[1] if group1.ndim == 2 else 0
+    return np.full(n_genes, np.nan, dtype=float)
 
 
 def benjamini_hochberg(p_values: np.ndarray) -> np.ndarray:
     """
-    Apply Benjamini-Hochberg FDR correction.
+    Placeholder for Benjamini-Hochberg FDR correction.
 
     Args:
         p_values: Array of raw p-values
 
     Returns:
-        p_adj: Array of adjusted p-values
+        p_adj: Array of placeholder adjusted p-values
     """
-    n = len(p_values)
-    if n == 0:
-        return np.array([])
-
-    # Sort p-values and get sorting indices
-    sorted_idx = np.argsort(p_values)
-    sorted_p = p_values[sorted_idx]
-
-    # BH adjustment: p_adj[i] = p[i] * n / rank[i]
-    # Then take cumulative minimum from the end
-    rank = np.arange(1, n + 1)
-    adjusted = sorted_p * n / rank
-
-    # Ensure monotonicity: take cumulative minimum from the end
-    adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
-
-    # Clip to [0, 1]
-    adjusted = np.clip(adjusted, 0.0, 1.0)
-
-    # Reorder to original order
-    p_adj = np.empty(n)
-    p_adj[sorted_idx] = adjusted
-
-    return p_adj
+    return np.full_like(np.asarray(p_values, dtype=float), np.nan, dtype=float)
 
 
 def compute_log2fc(
@@ -89,22 +49,18 @@ def compute_log2fc(
     control_expr: np.ndarray,
 ) -> np.ndarray:
     """
-    Compute log2 fold change from log1p-normalized expression.
-
-    Since data is already log1p-normalized:
-        log2FC = (mean_log1p_pert - mean_log1p_ctrl) / log(2)
+    Placeholder for log2 fold-change computation.
 
     Args:
         perturbed_expr: Perturbed expression (n_cells, n_genes), log1p-normalized
         control_expr: Control expression (n_cells, n_genes), log1p-normalized
 
     Returns:
-        log2fc: Array of log2 fold changes (n_genes,)
+        log2fc: Array of placeholder log2 fold changes (n_genes,)
     """
-    perturbed_mean = perturbed_expr.mean(axis=0).flatten()
-    control_mean = control_expr.mean(axis=0).flatten()
-    log2fc = (perturbed_mean - control_mean) / np.log(2)
-    return log2fc
+    perturbed_expr = np.atleast_2d(perturbed_expr)
+    n_genes = perturbed_expr.shape[1] if perturbed_expr.ndim == 2 else 0
+    return np.full(n_genes, np.nan, dtype=float)
 
 
 def compute_de_comparison_metrics(
@@ -118,8 +74,7 @@ def compute_de_comparison_metrics(
     """
     Compute DE-based metrics comparing predicted vs ground truth perturbation.
 
-    Uses Wilcoxon rank-sum test with Benjamini-Hochberg FDR correction
-    per docs/eval_metrics.md §3.1-3.4.
+    Placeholder implementation (DES temporarily disabled).
 
     Args:
         control_expr: Control cell expression (n_ctrl, n_genes), log1p-normalized
@@ -132,39 +87,11 @@ def compute_de_comparison_metrics(
     Returns:
         dict with keys: des, n_de_truth, n_de_pred, n_intersect
     """
-    # Ensure arrays are 2D numpy arrays
-    control_expr = np.atleast_2d(control_expr)
-    pred_expr = np.atleast_2d(pred_expr)
-    truth_expr = np.atleast_2d(truth_expr)
-
-    n_genes = control_expr.shape[1]
-
-    # 1. Wilcoxon test: control vs truth -> get true DE genes
-    p_values_truth = wilcoxon_test_per_gene(control_expr, truth_expr)
-    p_adj_truth = benjamini_hochberg(p_values_truth)
-    de_genes_truth = set(np.where(p_adj_truth < fdr_threshold)[0])
-
-    # 2. Wilcoxon test: control vs pred -> get predicted DE genes
-    p_values_pred = wilcoxon_test_per_gene(control_expr, pred_expr)
-    p_adj_pred = benjamini_hochberg(p_values_pred)
-    de_genes_pred = set(np.where(p_adj_pred < fdr_threshold)[0])
-
-    # 3. Compute log2FC for both
-    log2fc_truth = compute_log2fc(truth_expr, control_expr)
-    log2fc_pred = compute_log2fc(pred_expr, control_expr)
-
-    # 4. Compute DES
-    des_score, n_intersect = compute_des(
-        truth_de_genes=de_genes_truth,
-        pred_de_genes=de_genes_pred,
-        pred_log2fc=log2fc_pred,
-    )
-
     return {
-        "des": des_score,
-        "n_de_truth": len(de_genes_truth),
-        "n_de_pred": len(de_genes_pred),
-        "n_intersect": n_intersect,
+        "des": np.nan,
+        "n_de_truth": 0,
+        "n_de_pred": 0,
+        "n_intersect": 0,
     }
 
 
@@ -174,11 +101,7 @@ def compute_des(
     pred_log2fc: np.ndarray,
 ) -> tuple[float, int]:
     """
-    Compute Differential Expression Score per eval_metrics.md §3.2-3.3.
-
-    Case 1: |G_pred| <= |G_true| -> DES = |G_pred ∩ G_true| / |G_true|
-    Case 2: |G_pred| > |G_true| -> Truncate G_pred to top |G_true| by |log2FC|,
-                                   then DES = |truncated ∩ G_true| / |G_true|
+    Placeholder for Differential Expression Score (DES).
 
     Args:
         truth_de_genes: Set of gene indices that are truly DE
@@ -186,35 +109,9 @@ def compute_des(
         pred_log2fc: Array of predicted log2 fold changes (n_genes,)
 
     Returns:
-        (des_score, n_intersect)
+        (des_score, n_intersect) placeholder values
     """
-    n_true = len(truth_de_genes)
-    n_pred = len(pred_de_genes)
-
-    # Edge case: no true DE genes
-    if n_true == 0:
-        return 0.0, 0
-
-    # Case 1: |G_pred| <= |G_true|
-    if n_pred <= n_true:
-        intersection = truth_de_genes & pred_de_genes
-        n_intersect = len(intersection)
-        des_score = n_intersect / n_true
-    # Case 2: |G_pred| > |G_true| -> truncate by |log2FC|
-    else:
-        # Sort predicted DE genes by |log2FC| descending
-        pred_genes_list = list(pred_de_genes)
-        abs_log2fc = np.abs(pred_log2fc[pred_genes_list])
-        sorted_indices = np.argsort(abs_log2fc)[::-1]  # Descending
-
-        # Take top n_true genes
-        truncated_pred = set(np.array(pred_genes_list)[sorted_indices[:n_true]])
-
-        intersection = truth_de_genes & truncated_pred
-        n_intersect = len(intersection)
-        des_score = n_intersect / n_true
-
-    return float(des_score), n_intersect
+    return np.nan, 0
 
 
 def compute_pds(
