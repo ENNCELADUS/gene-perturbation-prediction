@@ -260,9 +260,6 @@ def main():
             loss_tensor = torch.tensor([train_loss], device=device)
             dist.all_reduce(loss_tensor, op=dist.ReduceOp.AVG)
             train_loss = loss_tensor.item()
-            # All ranks wait here while rank 0 does validation
-            # This prevents NCCL timeout during long validation
-            dist.barrier()
 
         # Validation (rank 0 only)
         if is_main_process(rank):
@@ -297,6 +294,9 @@ def main():
 
         # Synchronize early stopping decision across all ranks
         if is_distributed:
+            # Barrier ensures all ranks wait for rank 0 to finish validation
+            # before participating in the broadcast (prevents NCCL timeout)
+            dist.barrier()
             stop_tensor = torch.tensor([early_stop_flag], device=device)
             dist.broadcast(stop_tensor, src=0)
             if stop_tensor.item() == 1:
