@@ -109,8 +109,8 @@ load_param_prefixes:
 # Train/Val split on 120 genes (excluding 30 test genes)
 split:
   test_genes_file: "data/raw/test_set.csv"  # 30 test genes
-  train_ratio: 0.833  # 100/120 genes for training
-  val_ratio: 0.167    # 20/120 genes for validation
+  train_ratio: 0.834  # 100/120 genes for training
+  val_ratio: 0.166    # 20/120 genes for validation
   seed: 42
 
 # ========== Metrics ==========
