@@ -26,8 +26,17 @@ def _pdex_de(
     *,
     fdr_threshold: float,
     threads: int = -1,
-) -> tuple[set[int], np.ndarray]:
-    """Run DE analysis using pdex. Returns (de_gene_indices, log2fc_array)."""
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Run DE analysis using pdex.
+
+    Returns:
+        Tuple of (sorted_de_gene_names, log2fc_array):
+        - sorted_de_gene_names: Gene names passing FDR threshold, sorted by |log2FC| descending
+        - log2fc_array: Full log2FC array for all genes (n_genes,)
+
+    Aligned with csc286_eval.py logic.
+    """
     import anndata as ad
     import pandas as pd
 
@@ -76,7 +85,7 @@ def _pdex_de(
         df = parallel_differential_expression_vec_wrapper(**de_params, num_workers=1)
 
     if df is None or len(df) == 0:
-        return set(), np.zeros(n_genes, dtype=float)
+        return np.array([], dtype=object), np.zeros(n_genes, dtype=float)
 
     if "target" in df.columns:
         df = df[df["target"] == "perturbed"]
@@ -86,10 +95,13 @@ def _pdex_de(
         with np.errstate(divide="ignore", invalid="ignore"):
             df = df.assign(log2_fold_change=np.log2(df["fold_change"].to_numpy()))
 
-    # Map gene names to indices
+    # Add abs_log2_fold_change for sorting (aligned with csc286_eval.py)
+    df = df.assign(abs_log2_fold_change=np.abs(df["log2_fold_change"].to_numpy()))
+
+    # Map gene names to indices for log2fc array
     name_to_idx = {str(g): i for i, g in enumerate(gene_names)}
 
-    # Extract log2FC values
+    # Extract log2FC values for all genes
     log2fc = np.zeros(n_genes, dtype=float)
     for feat, val in zip(
         df["feature"].astype(str), df["log2_fold_change"], strict=False
@@ -97,15 +109,19 @@ def _pdex_de(
         if (idx := name_to_idx.get(feat)) is not None and np.isfinite(val):
             log2fc[idx] = val
 
-    # Extract DE genes (FDR < threshold)
-    de_genes: set[int] = set()
-    if "fdr" in df.columns:
-        for feat, fdr in zip(df["feature"].astype(str), df["fdr"], strict=False):
-            if np.isfinite(fdr) and fdr < fdr_threshold:
-                if (idx := name_to_idx.get(feat)) is not None:
-                    de_genes.add(idx)
+    # Filter by FDR threshold and sort by |log2FC| descending (aligned with csc286_eval.py)
+    if "fdr" not in df.columns:
+        return np.array([], dtype=object), log2fc
 
-    return de_genes, log2fc
+    sig_df = df[df["fdr"].apply(lambda x: np.isfinite(x) and x < fdr_threshold)]
+    if len(sig_df) == 0:
+        return np.array([], dtype=object), log2fc
+
+    # Sort by abs_log2_fold_change descending and extract gene names
+    sig_df = sig_df.sort_values("abs_log2_fold_change", ascending=False)
+    sorted_de_genes = sig_df["feature"].astype(str).to_numpy()
+
+    return sorted_de_genes, log2fc
 
 
 def compute_de_comparison_metrics(
@@ -115,6 +131,7 @@ def compute_de_comparison_metrics(
     gene_names: np.ndarray,
     fdr_threshold: float = 0.05,
     threads: int = -1,
+    topk: int | None = None,
 ) -> dict:
     """
     Compute DE-based metrics comparing predicted vs ground truth perturbation.
@@ -122,6 +139,10 @@ def compute_de_comparison_metrics(
     Uses the official `pdex.parallel_differential_expression` to call DE genes
     (Wilcoxon rank-sum / Mann–Whitney U, BH FDR), then computes DES per
     docs/eval_metrics.md §3.
+
+    Aligned with csc286_eval.py logic:
+    - DE genes are sorted by |log2FC| descending
+    - DES = |intersection(real[:k], pred[:k])| / k, where k = min(|real|, topk)
 
     Args:
         control_expr: Control cell expression (n_ctrl, n_genes),
@@ -133,6 +154,7 @@ def compute_de_comparison_metrics(
         gene_names: Gene names array
         fdr_threshold: FDR threshold for significant DE genes (default 0.05)
         threads: Worker count hint for pdex (uses 1 if <= 0)
+        topk: Optional top-K for DES overlap; default uses |truth DE genes|
 
     Returns:
         dict with keys: des, n_de_truth, n_de_pred, n_intersect
@@ -149,7 +171,7 @@ def compute_de_comparison_metrics(
         fdr_threshold=fdr_threshold,
         threads=threads,
     )
-    pred_de_genes, pred_log2fc = _pdex_de(
+    pred_de_genes, _ = _pdex_de(
         control_expr,
         pred_expr,
         gene_names,
@@ -157,7 +179,7 @@ def compute_de_comparison_metrics(
         threads=threads,
     )
 
-    des_score, n_intersect = compute_des(truth_de_genes, pred_de_genes, pred_log2fc)
+    des_score, n_intersect = compute_des(truth_de_genes, pred_de_genes, topk=topk)
     return {
         "des": float(des_score),
         "n_de_truth": int(len(truth_de_genes)),
@@ -167,34 +189,44 @@ def compute_de_comparison_metrics(
 
 
 def compute_des(
-    truth_de_genes: set,
-    pred_de_genes: set,
-    pred_log2fc: np.ndarray,
+    truth_de_genes: np.ndarray,
+    pred_de_genes: np.ndarray,
+    topk: int | None = None,
 ) -> tuple[float, int]:
     """
     Compute Differential Expression Score (DES) per docs/eval_metrics.md §3.
 
-    If |pred| > |truth|, truncate pred to top |truth| genes by |log2FC|.
-    DES = |intersection| / |truth|
+    Aligned with csc286_eval.py logic:
+    - Both truth and pred gene lists should be sorted by |log2FC| descending
+    - k_eff = len(truth) if topk is None, else min(len(truth), topk)
+    - DES = |intersection(truth[:k_eff], pred[:k_eff])| / k_eff
+
+    Args:
+        truth_de_genes: Ground truth DE gene names, sorted by |log2FC| descending
+        pred_de_genes: Predicted DE gene names, sorted by |log2FC| descending
+        topk: Optional top-K limit; default uses |truth|
+
+    Returns:
+        Tuple of (des_score, n_intersect)
     """
-    n_true = len(truth_de_genes)
-    if n_true == 0:
+    truth_de_genes = np.asarray(truth_de_genes)
+    pred_de_genes = np.asarray(pred_de_genes)
+
+    # Determine effective K (aligned with csc286_eval.py)
+    k_eff = len(truth_de_genes) if topk is None else min(len(truth_de_genes), topk)
+
+    if k_eff == 0:
         return 0.0, 0
 
-    # Truncate predicted set if larger than truth set (§3.3)
-    if len(pred_de_genes) <= n_true:
-        pred_eval = pred_de_genes
-    else:
-        log2fc = np.asarray(pred_log2fc, dtype=float).ravel()
-        ranked = sorted(
-            pred_de_genes,
-            key=lambda i: abs(log2fc[i]) if 0 <= i < len(log2fc) else 0.0,
-            reverse=True,
-        )
-        pred_eval = set(ranked[:n_true])
+    # Take top k_eff from each list
+    truth_topk = truth_de_genes[:k_eff]
+    pred_topk = pred_de_genes[:k_eff]
 
-    n_intersect = len(pred_eval & truth_de_genes)
-    return n_intersect / n_true, n_intersect
+    # Compute intersection
+    n_intersect = np.intersect1d(truth_topk, pred_topk).size
+    des_score = n_intersect / k_eff
+
+    return float(des_score), int(n_intersect)
 
 
 def compute_pds(
