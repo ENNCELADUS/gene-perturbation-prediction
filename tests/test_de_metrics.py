@@ -26,21 +26,19 @@ def test_compute_pds_deterministic():
 
 
 def test_compute_des_pred_smaller_or_equal():
-    truth = {0, 1, 2, 3}
-    pred = {1, 3}
-    pred_log2fc = np.array([0.1, 0.2, 0.3, 0.4])
-    des, n_intersect = compute_des(truth, pred, pred_log2fc)
+    truth = np.array(["g0", "g1", "g2", "g3"])
+    pred = np.array(["g1", "g3"])
+    des, n_intersect = compute_des(truth, pred)
     assert n_intersect == 2
     assert des == pytest.approx(0.5)
 
 
 def test_compute_des_pred_larger_truncates_by_abs_log2fc():
-    truth = {0, 1, 2}
-    pred = {0, 1, 2, 3, 4}
-    pred_log2fc = np.array([1.0, 0.9, 0.8, 100.0, 90.0])
-    des, n_intersect = compute_des(truth, pred, pred_log2fc)
-    assert n_intersect == 1
-    assert des == pytest.approx(1.0 / 3.0)
+    truth = np.array(["g0", "g1", "g2"])
+    pred = np.array(["g2", "g3", "g4", "g0", "g1"])
+    des, n_intersect = compute_des(truth, pred, topk=2)
+    assert n_intersect == 0
+    assert des == 0.0
 
 
 def test_compute_de_comparison_metrics_pdex_perfect_prediction():
