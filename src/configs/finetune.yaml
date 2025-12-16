@@ -116,6 +116,7 @@ split:
 # ========== Metrics ==========
 metrics:
   mae_top_k: 2000  # Top K genes by |log2FC| for MAE calculation
+  des_top_k: null  # K for DES overlap (null = use |truth DE|; also used by fast fallback DES)
   # DE metrics (Wilcoxon per gene per perturbation) can be extremely slow and will
   # make non-main DDP ranks wait at a collective, risking NCCL timeouts.
   compute_de_metrics: false
