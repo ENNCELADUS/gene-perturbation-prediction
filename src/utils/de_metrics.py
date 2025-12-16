@@ -6,8 +6,16 @@ Metrics (per docs/eval_metrics.md):
 - DES: Differential Expression Score (DE gene overlap)
 - MAE_top2k: MAE on top 2000 genes by |log2FC|
 """
+from __future__ import annotations
 
 import numpy as np
+import pandas as pd
+import anndata as ad
+
+try:  # Optional dependency; fallback to pandas if unavailable
+    import polars as pl
+except ImportError:  # pragma: no cover - exercised when polars not installed
+    pl = None
 from pdex import parallel_differential_expression
 
 
@@ -19,109 +27,107 @@ def _ensure_dense_2d(x: np.ndarray) -> np.ndarray:
     return x[None, :] if x.ndim == 1 else x
 
 
-def _pdex_de(
-    control_expr: np.ndarray,
-    perturbed_expr: np.ndarray,
-    gene_names: np.ndarray,
-    *,
-    fdr_threshold: float,
-    threads: int = -1,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Run DE analysis using pdex.
-
-    Returns:
-        Tuple of (sorted_de_gene_names, log2fc_array):
-        - sorted_de_gene_names: Gene names passing FDR threshold, sorted by |log2FC| descending
-        - log2fc_array: Full log2FC array for all genes (n_genes,)
-
-    Aligned with csc286_eval.py logic.
-    """
-    import anndata as ad
-    import pandas as pd
-
+def _build_single_perturbation_adata(
+    control_expr: np.ndarray, perturbed_expr: np.ndarray, gene_names: np.ndarray
+) -> ad.AnnData:
+    """Construct a simple AnnData with control and perturbed cells for DE."""
     control_expr = _ensure_dense_2d(control_expr)
     perturbed_expr = _ensure_dense_2d(perturbed_expr)
     gene_names = np.asarray(gene_names, dtype=object)
-    n_genes = control_expr.shape[1]
 
+    n_genes = control_expr.shape[1]
     if perturbed_expr.shape[1] != n_genes:
         raise ValueError(f"Gene count mismatch: {n_genes} vs {perturbed_expr.shape[1]}")
     if len(gene_names) != n_genes:
         raise ValueError(f"gene_names length mismatch: {len(gene_names)} vs {n_genes}")
 
-    # Build AnnData for DE analysis
     x = np.vstack([control_expr, perturbed_expr])
     obs = pd.DataFrame(
         {
-            "__group": ["control"] * control_expr.shape[0]
+            "perturbation": ["control"] * control_expr.shape[0]
             + ["perturbed"] * perturbed_expr.shape[0]
         }
     )
-    adata = ad.AnnData(X=x, obs=obs, var=pd.DataFrame(index=gene_names))
+    var = pd.DataFrame(index=gene_names)
+    return ad.AnnData(X=x, obs=obs, var=var)
 
-    # Common DE parameters
-    de_params = dict(
+
+def _run_de(
+    adata: ad.AnnData,
+    control: str,
+    pert_col: str,
+    method: str,
+    num_workers: int,
+    batch_size: int,
+) -> pd.DataFrame | "pl.DataFrame":
+    """Run DE with pdex and ensure |log2FC| sorting columns exist."""
+    de_kwargs = dict(
         adata=adata,
-        groups=["perturbed"],
-        reference="control",
-        groupby_key="__group",
-        batch_size=100,
-        metric="wilcoxon",
-        tie_correct=True,
+        reference=control,
+        groupby_key=pert_col,
+        metric=method,
+        num_workers=num_workers,
+        batch_size=batch_size,
         is_log1p=True,
-        as_polars=False,
+        as_polars=pl is not None,
     )
-    num_workers = max(1, threads) if threads > 0 else 1
-
     try:
-        df = parallel_differential_expression(**de_params, num_workers=num_workers)
-    except OSError as e:
-        if getattr(e, "errno", None) != 13:
-            raise
-        # Permission error fallback to single-threaded
+        df = parallel_differential_expression(**de_kwargs)
+    except (PermissionError, OSError):
         from pdex._single_cell import parallel_differential_expression_vec_wrapper
 
-        df = parallel_differential_expression_vec_wrapper(**de_params, num_workers=1)
+        de_kwargs["num_workers"] = 1
+        df = parallel_differential_expression_vec_wrapper(**de_kwargs)
 
-    if df is None or len(df) == 0:
-        return np.array([], dtype=object), np.zeros(n_genes, dtype=float)
+    if pl is not None and isinstance(df, pl.DataFrame):
+        if "log2_fold_change" not in df.columns:
+            df = df.with_columns(pl.col("fold_change").log(base=2).fill_nan(0.0).alias("log2_fold_change"))
+        if "abs_log2_fold_change" not in df.columns:
+            df = df.with_columns(pl.col("log2_fold_change").abs().alias("abs_log2_fold_change"))
+        return df
 
-    if "target" in df.columns:
-        df = df[df["target"] == "perturbed"]
-
-    # Ensure log2_fold_change column exists
-    if "log2_fold_change" not in df.columns and "fold_change" in df.columns:
+    # Pandas fallback if polars not installed
+    if "log2_fold_change" not in df.columns:
         with np.errstate(divide="ignore", invalid="ignore"):
-            df = df.assign(log2_fold_change=np.log2(df["fold_change"].to_numpy()))
+            df["log2_fold_change"] = np.log2(df.get("fold_change", np.nan))
+    if "abs_log2_fold_change" not in df.columns:
+        df["abs_log2_fold_change"] = df["log2_fold_change"].abs()
+    return df.reset_index(drop=True)
 
-    # Add abs_log2_fold_change for sorting (aligned with csc286_eval.py)
-    df = df.assign(abs_log2_fold_change=np.abs(df["log2_fold_change"].to_numpy()))
 
-    # Map gene names to indices for log2fc array
-    name_to_idx = {str(g): i for i, g in enumerate(gene_names)}
-
-    # Extract log2FC values for all genes
-    log2fc = np.zeros(n_genes, dtype=float)
-    for feat, val in zip(
-        df["feature"].astype(str), df["log2_fold_change"], strict=False
-    ):
-        if (idx := name_to_idx.get(feat)) is not None and np.isfinite(val):
-            log2fc[idx] = val
-
-    # Filter by FDR threshold and sort by |log2FC| descending (aligned with csc286_eval.py)
+def _get_sorted_genes(df: pd.DataFrame | "pl.DataFrame", fdr: float, topk: int | None) -> dict[str, np.ndarray]:
+    """Filter by FDR and sort DE genes by |log2FC| descending."""
     if "fdr" not in df.columns:
-        return np.array([], dtype=object), log2fc
+        return {}
+    lists: dict[str, np.ndarray] = {}
 
-    sig_df = df[df["fdr"].apply(lambda x: np.isfinite(x) and x < fdr_threshold)]
-    if len(sig_df) == 0:
-        return np.array([], dtype=object), log2fc
+    if pl is not None and isinstance(df, pl.DataFrame):
+        sig = df.filter(pl.col("fdr") < fdr)
+        for pert in sig["target"].unique().to_list():
+            genes = (
+                sig.filter(pl.col("target") == pert)
+                .sort("abs_log2_fold_change", descending=True)
+                .select("feature")
+                .to_numpy()
+                .ravel()
+            )
+            if topk is not None:
+                genes = genes[:topk]
+            lists[str(pert)] = genes
+        return lists
 
-    # Sort by abs_log2_fold_change descending and extract gene names
-    sig_df = sig_df.sort_values("abs_log2_fold_change", ascending=False)
-    sorted_de_genes = sig_df["feature"].astype(str).to_numpy()
-
-    return sorted_de_genes, log2fc
+    # Pandas path
+    sig = df[df["fdr"] < fdr]
+    for pert, sub in sig.groupby("target"):
+        genes = (
+            sub.sort_values("abs_log2_fold_change", ascending=False)["feature"]
+            .to_numpy()
+            .ravel()
+        )
+        if topk is not None:
+            genes = genes[:topk]
+        lists[str(pert)] = genes
+    return lists
 
 
 def compute_de_comparison_metrics(
@@ -136,12 +142,9 @@ def compute_de_comparison_metrics(
     """
     Compute DE-based metrics comparing predicted vs ground truth perturbation.
 
-    Uses the official `pdex.parallel_differential_expression` to call DE genes
-    (Wilcoxon rank-sum / Mann–Whitney U, BH FDR), then computes DES per
-    docs/eval_metrics.md §3.
-
-    Aligned with csc286_eval.py logic:
-    - DE genes are sorted by |log2FC| descending
+    DES calculation is aligned with `csc286_eval.py`:
+    - Compute DE on control vs. perturbed using pdex (Wilcoxon, BH FDR)
+    - Filter by FDR and sort by |log2FC| descending
     - DES = |intersection(real[:k], pred[:k])| / k, where k = min(|real|, topk)
 
     Args:
@@ -159,31 +162,38 @@ def compute_de_comparison_metrics(
     Returns:
         dict with keys: des, n_de_truth, n_de_pred, n_intersect
     """
-    control_expr = _ensure_dense_2d(control_expr)
-    pred_expr = _ensure_dense_2d(pred_expr)
-    truth_expr = _ensure_dense_2d(truth_expr)
     gene_names = np.asarray(gene_names, dtype=object)
+    adata_truth = _build_single_perturbation_adata(control_expr, truth_expr, gene_names)
+    adata_pred = _build_single_perturbation_adata(control_expr, pred_expr, gene_names)
 
-    truth_de_genes, _ = _pdex_de(
-        control_expr,
-        truth_expr,
-        gene_names,
-        fdr_threshold=fdr_threshold,
-        threads=threads,
+    num_workers = max(1, threads) if threads > 0 else 1
+    real_de = _run_de(
+        adata_truth,
+        control="control",
+        pert_col="perturbation",
+        method="wilcoxon",
+        num_workers=num_workers,
+        batch_size=100,
     )
-    pred_de_genes, _ = _pdex_de(
-        control_expr,
-        pred_expr,
-        gene_names,
-        fdr_threshold=fdr_threshold,
-        threads=threads,
+    pred_de = _run_de(
+        adata_pred,
+        control="control",
+        pert_col="perturbation",
+        method="wilcoxon",
+        num_workers=num_workers,
+        batch_size=100,
+    )
+    des_score, n_de_truth, n_de_pred, n_intersect = compute_des_from_de_frames(
+        pred_df=pred_de,
+        real_df=real_de,
+        fdr=fdr_threshold,
+        topk=topk,
     )
 
-    des_score, n_intersect = compute_des(truth_de_genes, pred_de_genes, topk=topk)
     return {
         "des": float(des_score),
-        "n_de_truth": int(len(truth_de_genes)),
-        "n_de_pred": int(len(pred_de_genes)),
+        "n_de_truth": int(n_de_truth),
+        "n_de_pred": int(n_de_pred),
         "n_intersect": int(n_intersect),
     }
 
@@ -227,6 +237,33 @@ def compute_des(
     des_score = n_intersect / k_eff
 
     return float(des_score), int(n_intersect)
+
+
+def compute_des_from_de_frames(
+    pred_df: pl.DataFrame,
+    real_df: pl.DataFrame,
+    *,
+    fdr: float,
+    topk: int | None,
+) -> tuple[float, int, int, int]:
+    """
+    Compute DES using DE outputs that match csc286_eval.py.
+
+    Returns:
+        des_score, n_de_truth, n_de_pred, n_intersect
+    """
+    real_lists = _get_sorted_genes(real_df, fdr, topk)
+    pred_lists = _get_sorted_genes(pred_df, fdr, topk)
+    perts = set(real_lists) & set(pred_lists)
+    if not perts:
+        return 0.0, 0, 0, 0
+
+    pert = next(iter(perts))  # single-pert AnnData, so just take the one overlap
+    truth_genes = real_lists[pert]
+    pred_genes = pred_lists[pert]
+    des_score, n_intersect = compute_des(truth_genes, pred_genes, topk=topk)
+
+    return des_score, len(truth_genes), len(pred_genes), n_intersect
 
 
 def compute_pds(
