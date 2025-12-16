@@ -6,6 +6,7 @@ Metrics (per docs/eval_metrics.md):
 - DES: Differential Expression Score (DE gene overlap)
 - MAE_top2k: MAE on top 2000 genes by |log2FC|
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -81,9 +82,16 @@ def _run_de(
 
     if pl is not None and isinstance(df, pl.DataFrame):
         if "log2_fold_change" not in df.columns:
-            df = df.with_columns(pl.col("fold_change").log(base=2).fill_nan(0.0).alias("log2_fold_change"))
+            df = df.with_columns(
+                pl.col("fold_change")
+                .log(base=2)
+                .fill_nan(0.0)
+                .alias("log2_fold_change")
+            )
         if "abs_log2_fold_change" not in df.columns:
-            df = df.with_columns(pl.col("log2_fold_change").abs().alias("abs_log2_fold_change"))
+            df = df.with_columns(
+                pl.col("log2_fold_change").abs().alias("abs_log2_fold_change")
+            )
         return df
 
     # Pandas fallback if polars not installed
@@ -95,7 +103,9 @@ def _run_de(
     return df.reset_index(drop=True)
 
 
-def _get_sorted_genes(df: pd.DataFrame | "pl.DataFrame", fdr: float, topk: int | None) -> dict[str, np.ndarray]:
+def _get_sorted_genes(
+    df: pd.DataFrame | "pl.DataFrame", fdr: float, topk: int | None
+) -> dict[str, np.ndarray]:
     """Filter by FDR and sort DE genes by |log2FC| descending."""
     if "fdr" not in df.columns:
         return {}
@@ -188,6 +198,7 @@ def compute_de_comparison_metrics(
         real_df=real_de,
         fdr=fdr_threshold,
         topk=topk,
+        control="control",
     )
 
     return {
@@ -206,8 +217,8 @@ def compute_des(
     """
     Compute Differential Expression Score (DES) per docs/eval_metrics.md §3.
 
-    Aligned with csc286_eval.py logic:
-    - Both truth and pred gene lists should be sorted by |log2FC| descending
+    This is a direct port of the DES overlap calculation used in `csc286_eval.py`:
+    - Both truth and pred gene lists are assumed sorted by |log2FC| descending
     - k_eff = len(truth) if topk is None, else min(len(truth), topk)
     - DES = |intersection(truth[:k_eff], pred[:k_eff])| / k_eff
 
@@ -228,26 +239,49 @@ def compute_des(
     if k_eff == 0:
         return 0.0, 0
 
-    # Take top k_eff from each list
-    truth_topk = truth_de_genes[:k_eff]
-    pred_topk = pred_de_genes[:k_eff]
-
-    # Compute intersection
-    n_intersect = np.intersect1d(truth_topk, pred_topk).size
-    des_score = n_intersect / k_eff
-
-    return float(des_score), int(n_intersect)
+    n_intersect = np.intersect1d(truth_de_genes[:k_eff], pred_de_genes[:k_eff]).size
+    return float(n_intersect / k_eff), int(n_intersect)
 
 
-def compute_des_from_de_frames(
-    pred_df: pl.DataFrame,
-    real_df: pl.DataFrame,
+def compute_des_per_pert(
+    pred_df: pd.DataFrame | "pl.DataFrame",
+    real_df: pd.DataFrame | "pl.DataFrame",
     *,
     fdr: float,
     topk: int | None,
+) -> dict[str, float]:
+    """
+    Compute DES per perturbation from DE result frames.
+
+    Ported from `csc286_eval.py::compute_des_per_pert` (uses FDR filtering and
+    overlap@K on |log2FC|-sorted DE genes).
+    """
+    real_lists = _get_sorted_genes(real_df, fdr, topk)
+    pred_lists = _get_sorted_genes(pred_df, fdr, topk)
+    perts = set(real_lists) & set(pred_lists)
+    scores: dict[str, float] = {}
+    for pert in perts:
+        real_genes = real_lists[pert]
+        pred_genes = pred_lists[pert]
+        k_eff = len(real_genes) if topk is None else min(len(real_genes), topk)
+        if k_eff == 0:
+            scores[pert] = 0.0
+            continue
+        overlap = np.intersect1d(real_genes[:k_eff], pred_genes[:k_eff]).size / k_eff
+        scores[pert] = float(overlap)
+    return scores
+
+
+def compute_des_from_de_frames(
+    pred_df: pd.DataFrame | "pl.DataFrame",
+    real_df: pd.DataFrame | "pl.DataFrame",
+    *,
+    fdr: float,
+    topk: int | None,
+    control: str | None = None,
 ) -> tuple[float, int, int, int]:
     """
-    Compute DES using DE outputs that match csc286_eval.py.
+    Compute DES using DE outputs (aligned with `csc286_eval.py`).
 
     Returns:
         des_score, n_de_truth, n_de_pred, n_intersect
@@ -255,15 +289,25 @@ def compute_des_from_de_frames(
     real_lists = _get_sorted_genes(real_df, fdr, topk)
     pred_lists = _get_sorted_genes(pred_df, fdr, topk)
     perts = set(real_lists) & set(pred_lists)
+    if control is not None:
+        perts.discard(control)
     if not perts:
         return 0.0, 0, 0, 0
 
-    pert = next(iter(perts))  # single-pert AnnData, so just take the one overlap
+    pert = next(iter(perts))
     truth_genes = real_lists[pert]
     pred_genes = pred_lists[pert]
-    des_score, n_intersect = compute_des(truth_genes, pred_genes, topk=topk)
+    k_eff = len(truth_genes) if topk is None else min(len(truth_genes), topk)
+    if k_eff == 0:
+        return 0.0, len(truth_genes), len(pred_genes), 0
 
-    return des_score, len(truth_genes), len(pred_genes), n_intersect
+    n_intersect = np.intersect1d(truth_genes[:k_eff], pred_genes[:k_eff]).size
+    return (
+        float(n_intersect / k_eff),
+        len(truth_genes),
+        len(pred_genes),
+        int(n_intersect),
+    )
 
 
 def compute_pds(
