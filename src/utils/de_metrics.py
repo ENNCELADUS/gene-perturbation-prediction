@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import anndata as ad
+from numpy.typing import NDArray
 
 try:  # Optional dependency; fallback to pandas if unavailable
     import polars as pl
@@ -103,41 +104,81 @@ def _run_de(
     return df.reset_index(drop=True)
 
 
-def _get_sorted_genes(
-    df: pd.DataFrame | "pl.DataFrame", fdr: float, topk: int | None
-) -> dict[str, np.ndarray]:
-    """Filter by FDR and sort DE genes by |log2FC| descending."""
-    if "fdr" not in df.columns:
-        return {}
-    lists: dict[str, np.ndarray] = {}
-
+def _get_unique_perts(df: pd.DataFrame | "pl.DataFrame") -> list[str]:
     if pl is not None and isinstance(df, pl.DataFrame):
-        sig = df.filter(pl.col("fdr") < fdr)
-        for pert in sig["target"].unique().to_list():
-            genes = (
-                sig.filter(pl.col("target") == pert)
-                .sort("abs_log2_fold_change", descending=True)
-                .select("feature")
-                .to_numpy()
-                .ravel()
-            )
-            if topk is not None:
-                genes = genes[:topk]
-            lists[str(pert)] = genes
-        return lists
+        return sorted(str(p) for p in df["target"].unique().to_list())
+    return sorted(str(p) for p in df["target"].unique())
 
-    # Pandas path
-    sig = df[df["fdr"] < fdr]
-    for pert, sub in sig.groupby("target"):
-        genes = (
-            sub.sort_values("abs_log2_fold_change", ascending=False)["feature"]
-            .to_numpy()
-            .ravel()
+
+def _ensure_matching_perts(
+    real_df: pd.DataFrame | "pl.DataFrame",
+    pred_df: pd.DataFrame | "pl.DataFrame",
+) -> list[str]:
+    real_perts = _get_unique_perts(real_df)
+    pred_perts = _get_unique_perts(pred_df)
+    if real_perts != pred_perts:
+        raise ValueError(
+            f"Perturbation mismatch: real {real_perts} != pred {pred_perts}"
         )
-        if topk is not None:
-            genes = genes[:topk]
-        lists[str(pert)] = genes
-    return lists
+    return real_perts
+
+
+def _get_sig_rank_matrix(
+    df: "pl.DataFrame",
+    *,
+    fdr_threshold: float,
+    sort_by: str = "abs_log2_fold_change",
+) -> "pl.DataFrame":
+    """
+    Build a rank matrix (rows=ranks, cols=perturbations, values=genes).
+
+    Ported from `cell-eval/src/cell_eval/_types/_de.py::DEResults.get_top_genes`.
+    Ranking is computed after FDR filtering.
+    """
+    if pl is None:  # pragma: no cover
+        raise RuntimeError("polars is required for _get_sig_rank_matrix")
+
+    descending = sort_by in {"fold_change", "abs_log2_fold_change"}
+    filtered = df.filter(pl.col("fdr") < fdr_threshold)
+    rank_matrix = (
+        filtered.with_columns(
+            rank=pl.struct(sort_by)
+            .rank("ordinal", descending=descending)
+            .over("target")
+            - 1
+        )
+        .pivot(index="rank", on="target", values="feature")
+        .sort("rank")
+    )
+
+    all_perts = set(df["target"].unique().to_list())
+    present_perts = set(rank_matrix.columns) - {"rank"}
+    missing_perts = all_perts - present_perts
+    if missing_perts:
+        rank_matrix = rank_matrix.with_columns(
+            [pl.lit(None).alias(p) for p in missing_perts]
+        )
+
+    return rank_matrix
+
+
+def _get_sig_sorted_genes_pandas(
+    df: pd.DataFrame,
+    *,
+    fdr_threshold: float,
+    sort_by: str = "abs_log2_fold_change",
+) -> dict[str, NDArray[np.str_]]:
+    sig = df[df["fdr"] < fdr_threshold]
+    out: dict[str, NDArray[np.str_]] = {}
+    for pert in _get_unique_perts(df):
+        sub = sig[sig["target"].astype(str) == pert]
+        if sub.shape[0] == 0:
+            out[pert] = np.asarray([], dtype=str)
+            continue
+        out[pert] = (
+            sub.sort_values(sort_by, ascending=False)["feature"].astype(str).to_numpy()
+        )
+    return out
 
 
 def compute_de_comparison_metrics(
@@ -152,10 +193,10 @@ def compute_de_comparison_metrics(
     """
     Compute DE-based metrics comparing predicted vs ground truth perturbation.
 
-    DES calculation is aligned with `csc286_eval.py`:
-    - Compute DE on control vs. perturbed using pdex (Wilcoxon, BH FDR)
-    - Filter by FDR and sort by |log2FC| descending
-    - DES = |intersection(real[:k], pred[:k])| / k, where k = min(|real|, topk)
+    DES calculation follows the official cell-eval overlap implementation:
+    - Filter by FDR and rank genes by abs(log2FC) within each perturbation
+    - DES (overlap/recall@K): |intersection(real[:k], pred[:k])| / k,
+      where k = min(|real|, topk) (or |real| if topk is None)
 
     Args:
         control_expr: Control cell expression (n_ctrl, n_genes),
@@ -217,7 +258,7 @@ def compute_des(
     """
     Compute Differential Expression Score (DES) per docs/eval_metrics.md §3.
 
-    This is a direct port of the DES overlap calculation used in `csc286_eval.py`:
+    This matches the official cell-eval DE overlap calculation:
     - Both truth and pred gene lists are assumed sorted by |log2FC| descending
     - k_eff = len(truth) if topk is None, else min(len(truth), topk)
     - DES = |intersection(truth[:k_eff], pred[:k_eff])| / k_eff
@@ -233,7 +274,7 @@ def compute_des(
     truth_de_genes = np.asarray(truth_de_genes)
     pred_de_genes = np.asarray(pred_de_genes)
 
-    # Determine effective K (aligned with csc286_eval.py)
+    # Determine effective K (overlap/recall@K)
     k_eff = len(truth_de_genes) if topk is None else min(len(truth_de_genes), topk)
 
     if k_eff == 0:
@@ -253,23 +294,51 @@ def compute_des_per_pert(
     """
     Compute DES per perturbation from DE result frames.
 
-    Ported from `csc286_eval.py::compute_des_per_pert` (uses FDR filtering and
-    overlap@K on |log2FC|-sorted DE genes).
+    Ported from the official cell-eval overlap implementation
+    (`cell-eval/src/cell_eval/_types/_de.py::DEComparison.compute_overlap`).
     """
-    real_lists = _get_sorted_genes(real_df, fdr, topk)
-    pred_lists = _get_sorted_genes(pred_df, fdr, topk)
-    perts = set(real_lists) & set(pred_lists)
-    scores: dict[str, float] = {}
-    for pert in perts:
-        real_genes = real_lists[pert]
-        pred_genes = pred_lists[pert]
-        k_eff = len(real_genes) if topk is None else min(len(real_genes), topk)
-        if k_eff == 0:
-            scores[pert] = 0.0
-            continue
-        overlap = np.intersect1d(real_genes[:k_eff], pred_genes[:k_eff]).size / k_eff
-        scores[pert] = float(overlap)
-    return scores
+    perts = _ensure_matching_perts(real_df=real_df, pred_df=pred_df)
+
+    if (
+        pl is not None
+        and isinstance(real_df, pl.DataFrame)
+        and isinstance(pred_df, pl.DataFrame)
+    ):
+        real_rank = _get_sig_rank_matrix(real_df, fdr_threshold=fdr)
+        pred_rank = _get_sig_rank_matrix(pred_df, fdr_threshold=fdr)
+
+        out: dict[str, float] = {}
+        for pert in perts:
+            real_genes = real_rank[pert].drop_nulls().to_numpy()
+            pred_genes = pred_rank[pert].drop_nulls().to_numpy()
+            k_eff = real_genes.size if topk is None else min(topk, real_genes.size)
+            if k_eff == 0:
+                out[pert] = 0.0
+                continue
+            out[pert] = float(
+                np.intersect1d(real_genes[:k_eff], pred_genes[:k_eff]).size / k_eff
+            )
+        return out
+
+    if isinstance(real_df, pd.DataFrame) and isinstance(pred_df, pd.DataFrame):
+        real_lists = _get_sig_sorted_genes_pandas(real_df, fdr_threshold=fdr)
+        pred_lists = _get_sig_sorted_genes_pandas(pred_df, fdr_threshold=fdr)
+        out: dict[str, float] = {}
+        for pert in perts:
+            real_genes = real_lists[pert]
+            pred_genes = pred_lists[pert]
+            k_eff = real_genes.size if topk is None else min(topk, real_genes.size)
+            if k_eff == 0:
+                out[pert] = 0.0
+                continue
+            out[pert] = float(
+                np.intersect1d(real_genes[:k_eff], pred_genes[:k_eff]).size / k_eff
+            )
+        return out
+
+    raise TypeError(
+        "pred_df and real_df must both be pandas.DataFrame or polars.DataFrame"
+    )
 
 
 def compute_des_from_de_frames(
@@ -281,32 +350,68 @@ def compute_des_from_de_frames(
     control: str | None = None,
 ) -> tuple[float, int, int, int]:
     """
-    Compute DES using DE outputs (aligned with `csc286_eval.py`).
+    Compute DES using DE outputs (aligned with the official cell-eval overlap).
 
     Returns:
-        des_score, n_de_truth, n_de_pred, n_intersect
+        des_score (mean across perturbations), n_de_truth, n_de_pred, n_intersect
     """
-    real_lists = _get_sorted_genes(real_df, fdr, topk)
-    pred_lists = _get_sorted_genes(pred_df, fdr, topk)
-    perts = set(real_lists) & set(pred_lists)
+    perts = _ensure_matching_perts(real_df=real_df, pred_df=pred_df)
     if control is not None:
-        perts.discard(control)
+        perts = [p for p in perts if p != control]
     if not perts:
         return 0.0, 0, 0, 0
 
-    pert = next(iter(perts))
-    truth_genes = real_lists[pert]
-    pred_genes = pred_lists[pert]
-    k_eff = len(truth_genes) if topk is None else min(len(truth_genes), topk)
-    if k_eff == 0:
-        return 0.0, len(truth_genes), len(pred_genes), 0
+    des_scores: list[float] = []
+    n_de_truth = 0
+    n_de_pred = 0
+    n_intersect = 0
 
-    n_intersect = np.intersect1d(truth_genes[:k_eff], pred_genes[:k_eff]).size
-    return (
-        float(n_intersect / k_eff),
-        len(truth_genes),
-        len(pred_genes),
-        int(n_intersect),
+    if (
+        pl is not None
+        and isinstance(real_df, pl.DataFrame)
+        and isinstance(pred_df, pl.DataFrame)
+    ):
+        real_rank = _get_sig_rank_matrix(real_df, fdr_threshold=fdr)
+        pred_rank = _get_sig_rank_matrix(pred_df, fdr_threshold=fdr)
+
+        for pert in perts:
+            truth_genes = real_rank[pert].drop_nulls().to_numpy()
+            pred_genes = pred_rank[pert].drop_nulls().to_numpy()
+            n_de_truth += int(truth_genes.size)
+            n_de_pred += int(pred_genes.size)
+
+            k_eff = truth_genes.size if topk is None else min(topk, truth_genes.size)
+            if k_eff == 0:
+                des_scores.append(0.0)
+                continue
+            n_int = int(np.intersect1d(truth_genes[:k_eff], pred_genes[:k_eff]).size)
+            n_intersect += n_int
+            des_scores.append(float(n_int / k_eff))
+
+        return float(np.mean(des_scores)), n_de_truth, n_de_pred, n_intersect
+
+    if isinstance(real_df, pd.DataFrame) and isinstance(pred_df, pd.DataFrame):
+        real_lists = _get_sig_sorted_genes_pandas(real_df, fdr_threshold=fdr)
+        pred_lists = _get_sig_sorted_genes_pandas(pred_df, fdr_threshold=fdr)
+
+        for pert in perts:
+            truth_genes = real_lists[pert]
+            pred_genes = pred_lists[pert]
+            n_de_truth += int(truth_genes.size)
+            n_de_pred += int(pred_genes.size)
+
+            k_eff = truth_genes.size if topk is None else min(topk, truth_genes.size)
+            if k_eff == 0:
+                des_scores.append(0.0)
+                continue
+            n_int = int(np.intersect1d(truth_genes[:k_eff], pred_genes[:k_eff]).size)
+            n_intersect += n_int
+            des_scores.append(float(n_int / k_eff))
+
+        return float(np.mean(des_scores)), n_de_truth, n_de_pred, n_intersect
+
+    raise TypeError(
+        "pred_df and real_df must both be pandas.DataFrame or polars.DataFrame"
     )
 
 
