@@ -63,7 +63,8 @@ tests/integration/results/
 # Data (root level only, not src/data/)
 /data/
 
-# Docs
+# External
 docs/references
 hpdex/
 cell-eval/
+csc286_eval.py
