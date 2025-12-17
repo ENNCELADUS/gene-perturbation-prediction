@@ -526,7 +526,7 @@ def compute_pseudobulk_delta(
 # Per docs/eval_metrics.md Section 4.2.2
 BASELINE_PDS = 0.5167  # nPDS (mean_rank / N), lower is better
 BASELINE_MAE_TOP2000 = 0.1258  # lower is better
-BASELINE_DES = 0.0442  # higher is better
+BASELINE_DES = 0.0485  # higher is better
 
 
 def compute_overall_score(pds: float, mae: float, des: float) -> dict:

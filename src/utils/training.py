@@ -21,6 +21,7 @@ from scgpt.utils import load_pretrained, map_raw_id_to_vocab_id
 
 from src.utils.de_metrics import (
     compute_de_comparison_metrics,
+    compute_des,
     compute_mae_top2k,
     compute_overall_score,
     compute_pds,
@@ -382,6 +383,7 @@ def compute_validation_metrics(
     pred = results["pred"]
     truth = results["truth"]
     pert_cat = results["pert_cat"]
+    gene_names = np.asarray(gene_names)
 
     # Get control mean
     ctrl_mean = np.asarray(ctrl_adata.X.mean(axis=0)).flatten()
@@ -397,6 +399,7 @@ def compute_validation_metrics(
         ctrl_expr = None
 
     mae_top_k = config.get("metrics", {}).get("mae_top_k", 2000)
+    des_top_k = config.get("metrics", {}).get("des_top_k", None)
 
     # Group by perturbation
     unique_perts = [p for p in np.unique(pert_cat) if p != "ctrl"]
@@ -430,6 +433,21 @@ def compute_validation_metrics(
 
         # Compute DES
         des_val = np.nan
+
+        # Fast fallback DES: rank genes by |delta| without running DE (keeps val metric usable
+        # when full DE is disabled for speed/timeout reasons).
+        def _fast_des_from_deltas() -> float:
+            truth_delta = compute_pseudobulk_delta(truth_pert, ctrl_mean)
+            pred_delta = compute_pseudobulk_delta(pred_pert, ctrl_mean)
+            truth_genes = gene_names[np.argsort(np.abs(truth_delta))[::-1]]
+            pred_genes = gene_names[np.argsort(np.abs(pred_delta))[::-1]]
+            des_score, _ = compute_des(
+                truth_genes,
+                pred_genes,
+                topk=des_top_k,
+            )
+            return des_score
+
         if compute_de_metrics and ctrl_expr is not None:
             try:
                 de_metrics = compute_de_comparison_metrics(
@@ -439,10 +457,13 @@ def compute_validation_metrics(
                     gene_names=gene_names,
                     fdr_threshold=0.05,
                     threads=1,
+                    topk=des_top_k,
                 )
                 des_val = de_metrics["des"]
             except Exception:
-                pass
+                des_val = _fast_des_from_deltas()
+        else:
+            des_val = _fast_des_from_deltas()
 
         # Compute MAE_top2k
         mae_val = compute_mae_top2k(
