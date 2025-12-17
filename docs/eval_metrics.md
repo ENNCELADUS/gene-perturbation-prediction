@@ -252,12 +252,16 @@ The baseline model predicts by averaging expression across all perturbations. It
 
 #### **1. Differential Expression Score (DES) & Perturbation Discrimination Score (PDS)**
 
-Both DES and PDS range from **0 (worst)** to **1 (best)**.
-Their scaled versions measure how much the model improves over the baseline.
+- DES ranges from **0 (worst)** to **1 (best)** (higher is better).
+- PDS is a (normalized) mean rank, so **lower is better**. A perfect model has
+  $nPDS_{rank} = 1/N$; the baseline is worse (higher).
+
+Their scaled versions measure improvement over the baseline, respecting each
+metric's direction:
 
 $$DES_{scaled} = \frac{DES_{prediction} - DES_{baseline}}{1 - DES_{baseline}}$$
 
-$$PDS_{scaled} = \frac{PDS_{prediction} - PDS_{baseline}}{1 - PDS_{baseline}}$$
+$$PDS_{scaled} = \frac{PDS_{baseline} - PDS_{prediction}}{PDS_{baseline}}$$
 
 ---
 
