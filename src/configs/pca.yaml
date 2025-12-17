@@ -1,0 +1,24 @@
+# PCA Baseline Configuration for Reverse Perturbation Prediction
+
+data:
+  name: norman
+  path: data/norman/
+  split: simulation
+  seed: 1
+  pseudo_bulk: true
+  mask_perturbed: true  # Anti-cheat: mask perturbed gene expression
+
+model:
+  encoder: pca
+  n_components: 50
+
+retrieval:
+  metric: cosine  # cosine or euclidean
+  top_k: [1, 5, 10, 20]
+
+evaluate:
+  metrics: [top_k_accuracy, mrr]
+
+logging:
+  output_dir: logs/
+  experiment_name: pca_baseline
