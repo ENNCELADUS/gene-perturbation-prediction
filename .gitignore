@@ -68,3 +68,4 @@ docs/references
 hpdex/
 cell-eval/
 csc286_eval.py
+/logs/

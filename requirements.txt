@@ -3,9 +3,6 @@
 #
 # Note: PyTorch packages (torch, torchvision, torchaudio) should be installed from CUDA 12.1 wheels:
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-#
-# After cloning STATE repository, install it with:
-# cd path/to/STATE && pip install -e . --no-deps
 
 # Core data processing
 anndata==0.12.6

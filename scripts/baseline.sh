@@ -11,19 +11,18 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
-# Set project root
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
-mkdir -p logs/baseline results/baseline
-
-# Activate Environment
+# Load conda environment
 source ~/.bashrc
 conda activate vcc
 
-set -euo pipefail
+# Create logs dir
+mkdir -p logs/baseline
 
-# Add scGPT and local hpdex package to Python path
-export PYTHONPATH="${ROOT_DIR}/scGPT:${ROOT_DIR}/hpdex/src:${PYTHONPATH:-}"
+# Run PCA baseline pipeline
+python -m src.main --config src/configs/pca.yaml
 
-python src/main.py --config src/configs/baseline.yaml --model_type baseline
+echo "PCA baseline completed!"
+
