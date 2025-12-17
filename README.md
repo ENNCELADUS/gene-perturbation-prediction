@@ -1,103 +1,86 @@
-# VCC - CRISPR Perturbation Gene Expression Dataset
+# VCC - Reverse Perturbation Prediction
 
-A comprehensive analysis and preprocessing pipeline for the VCC (CRISPR Perturbation) gene expression dataset.
+Reverse perturbation prediction for CRISPR Perturb-seq data using retrieval-based methods.
+
+## Quick Start
+
+```bash
+# Setup environment
+conda create -n vcc python=3.11 -y
+conda activate vcc
+pip install -r requirements.txt
+
+# Run PCA baseline
+python -m src.main --config src/configs/pca.yaml
+```
 
 ## Project Structure
 
 ```
 VCC/
-├── README.md                              # This file
-├── requirements.txt                       # Python dependencies
-├── environment.yml                        # Conda environment configuration
+├── src/                        # Main source code
+│   ├── main.py                 # Entry point
+│   ├── configs/                # Model configs (pca.yaml, scgpt.yaml)
+│   ├── data/                   # Data loading (GEARS wrapper)
+│   ├── model/                  # Encoders + retrieval
+│   ├── evaluate/               # Metrics (Top-K, MRR, NDCG)
+│   ├── train/                  # Training (Stage 2)
+│   └── utils/                  # Utilities
 │
-├── data/                                  # Data directory
-│   ├── raw/                               # Raw data files (downloaded)
-│   │   ├── adata_Training.h5ad            # Training set (221K cells × 18K genes)
-│   │   ├── gene_names.csv                 # Gene name mappings
-│   │   └── pert_counts_Validation.csv     # Validation perturbation counts
-│   └── processed/                         # Processed data (generated)
+├── scripts/                    # HPC SLURM scripts
+│   ├── baseline.sh             # PCA baseline
+│   └── scgpt.sh                # scGPT retrieval
 │
-├── scripts/                               # Executable Python scripts
-│   ├── preview_data.py                    # Preview all data files
-│   └── visualize_h5ad.py                  # Generate visualizations & analysis
+├── data/                       # Data directory
+│   └── norman/                 # Norman Perturb-seq dataset
 │
-├── analysis/                              # Analysis outputs
-│   └── visualizations/                    # Generated plots
-│       ├── h5ad_visualization.png         # Main analysis plots
-│       └── h5ad_expression_details.png    # Expression matrix details
-│
-├── docs/                                  # Documentation
-│   ├── VCC_DATA_DESCRIPTION.md            # Detailed data description
-│   └── h5ad_visualize.md                  # H5AD visualization guide
-│
-└── notebooks/                             # Jupyter notebooks (optional)
-    └── (place analysis notebooks here)
+└── logs/                       # Experiment outputs (gitignored)
 ```
 
-## Quick Start
+## Usage
 
-### Setup Environment
+### Local Execution
 
 ```bash
-# Create conda environment
-conda create -n vcc python=3.11 -y
-conda activate vcc
+# PCA baseline
+python -m src.main --config src/configs/pca.yaml
 
-# Install dependencies
-pip install -r requirements.txt
+# scGPT retrieval (Stage 2)
+python -m src.main --config src/configs/scgpt.yaml
 
-# Format and lint (PEP 8 via Ruff)
-ruff format .
-ruff check . --fix
+# Evaluate on specific split
+python -m src.main --config src/configs/pca.yaml --split test
 ```
 
-## Dataset Overview
+### HPC (SLURM)
 
-### Training Data: `adata_Training.h5ad`
+```bash
+sbatch scripts/baseline.sh   # PCA baseline
+sbatch scripts/scgpt.sh      # scGPT with GPU
+```
 
-- **Cells (obs):** 221,273
-- **Genes (vars):** 18,080
-- **Size:** ~7.2 GB (sparse format)
-- **Sparsity:** 51.69% zeros
-- **Format:** AnnData H5AD
+## Data
 
-**Observation Metadata:**
-- `target_gene` - CRISPR target gene (151 unique)
-- `guide_id` - Guide RNA identifier (189 unique)
-- `batch` - Experimental batch (48 unique)
+Uses Norman et al. 2019 CRISPRa Perturb-seq dataset via GEARS:
 
-**Gene Metadata:**
-- `gene_id` - Ensembl gene identifier
+| Property | Value |
+|----------|-------|
+| Cells | 91,205 |
+| Genes | 5,045 (HVG) |
+| Conditions | 284 |
+| Single-gene perturbations | 152 |
+| Double-gene perturbations | 131 |
 
-**Expression Matrix:**
-- Type: Sparse CSR matrix
-- Data type: float32
-- Non-zero elements: 1.93B
+See `data/norman/README.md` for details.
 
-### Gene Names: `gene_names.csv`
+## Metrics
 
-- 18,079 gene names in order
-- Corresponds to genes in expression matrix
+- **Top-K Accuracy**: Fraction where true perturbation is in top-K predictions
+- **MRR**: Mean Reciprocal Rank
+- **NDCG**: Normalized Discounted Cumulative Gain
 
-### Validation Perturbations: `pert_counts_Validation.csv`
+## References
 
-- 50 target genes for validation
-- Cell counts: 161-2,925 cells per gene
-- Median UMI per cell: ~54K
-
-## Key Statistics
-
-| Metric | Value |
-|--------|-------|
-| Total cells | 221,273 |
-| Total genes | 18,080 |
-| Control cells (non-targeting) | 38,176 |
-| Perturbed cells | 183,097 |
-| Unique target genes | 151 |
-| Unique batches | 48 |
-| Sparsity | 51.69% |
-| Avg non-zero expression | 6.50 |
-
-## Documentation
-
-- **[h5ad_visualize.md](docs/h5ad_visualize.md)** - Guide to H5AD structure visualization
+1. Norman et al. (2019). Exploring genetic interaction manifolds. *Science*.
+2. Roohani et al. (2023). GEARS: Predicting transcriptional outcomes. *Nature Biotechnology*.
+3. Cui et al. (2023). scGPT: Building foundation models for single-cell. *Nature Methods*.
