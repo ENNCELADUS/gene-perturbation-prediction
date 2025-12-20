@@ -1,12 +1,20 @@
 # scGPT Retrieval Configuration for Reverse Perturbation Prediction
 
 data:
-  name: norman
-  path: data/norman/
-  split: simulation
-  seed: 1
-  pseudo_bulk: true
-  mask_perturbed: true
+  h5ad_path: data/norman/perturb_processed.h5ad
+
+split:
+  min_cells_per_condition: 50
+  query_fraction: 0.2
+  min_query_cells: 10
+  seed: 42
+  output_path: data/norman/splits/cell_split_seed42.json
+
+library:
+  type: bootstrap  # bootstrap | mean | raw_cell
+  n_prototypes: 30
+  m_cells_per_prototype: 50
+  seed: 42
 
 model:
   encoder: scgpt
@@ -16,12 +24,13 @@ model:
   lora_rank: 8
 
 retrieval:
-  metric: cosine
-  top_k: [1, 5, 10, 20]
+  metric: cosine  # cosine | euclidean
+  top_k: [1, 5, 8, 10]
 
 evaluate:
-  metrics: [top_k_accuracy, mrr, ndcg]
+  mask_perturbed: true  # Anti-cheat: mask perturbed gene expression
+  mask_ablation: false
 
 logging:
-  output_dir: logs/
+  output_dir: results/
   experiment_name: scgpt_retrieval

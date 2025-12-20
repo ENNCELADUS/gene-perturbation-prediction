@@ -1,11 +1,17 @@
 """Data loading and preprocessing for perturbation prediction."""
 
-from .norman_dataset import NormanDataset, load_norman_data
-from .preprocessing import create_pseudo_bulk, mask_perturbed_genes
+from .perturb_dataset import PerturbDataset, load_perturb_data
+from .splits import CellSplit, CellSplitter
+from .preprocessing import mask_perturbed_genes, build_prototype_library
 
 __all__ = [
-    "NormanDataset",
-    "load_norman_data",
-    "create_pseudo_bulk",
+    # Dataset
+    "PerturbDataset",
+    "load_perturb_data",
+    # Splits
+    "CellSplit",
+    "CellSplitter",
+    # Preprocessing
     "mask_perturbed_genes",
+    "build_prototype_library",
 ]

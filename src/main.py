@@ -14,8 +14,8 @@ from pathlib import Path
 
 import yaml
 
-from .data import load_norman_data
-from .evaluate import RetrievalEvaluator
+from .data import load_perturb_data
+from .evaluate import CellRetrievalEvaluator
 from .utils import save_config
 
 
@@ -41,13 +41,6 @@ def parse_args():
         type=str,
         default=None,
         help="Override experiment name from config",
-    )
-    parser.add_argument(
-        "--split",
-        type=str,
-        choices=["val", "test", "both"],
-        default="both",
-        help="Which split to evaluate on",
     )
     return parser.parse_args()
 
@@ -105,51 +98,95 @@ def run_pipeline(config: dict, args) -> dict:
     print(f"Output: {run_dir}")
 
     # Load data
-    print("\n[1/4] Loading Norman dataset...")
-    dataset = load_norman_data(
-        data_dir=config["data"]["path"],
-        split=config["data"]["split"],
-        seed=config["data"]["seed"],
+    print("\n[1/4] Loading dataset...")
+    split_config = config["split"]
+    dataset = load_perturb_data(
+        h5ad_path=config["data"]["h5ad_path"],
+        split_path=split_config.get("output_path"),
+        min_cells_per_condition=split_config.get("min_cells_per_condition", 50),
+        query_fraction=split_config.get("query_fraction", 0.2),
+        min_query_cells=split_config.get("min_query_cells", 10),
+        seed=split_config.get("seed", 42),
     )
-    print(f"  - Cells: {dataset.adata.n_obs}, Genes: {dataset.adata.n_vars}")
-    print(f"  - Train: {len(dataset.conditions.get('train', []))} conditions")
-    print(f"  - Val: {len(dataset.conditions.get('val', []))} conditions")
-    print(f"  - Test: {len(dataset.conditions.get('test', []))} conditions")
+
+    # Print summary
+    summary = dataset.summary()
+    print(f"  - Total cells: {summary['n_cells']}")
+    print(f"  - Genes: {summary['n_genes']}")
+    print(f"  - Valid conditions: {summary['n_valid_conditions']}")
+    print(f"  - Ref cells: {summary['n_ref_cells']}")
+    print(f"  - Query cells: {summary['n_query_cells']}")
+    print(f"  - Dropped conditions: {summary['n_dropped_conditions']}")
+
+    # Save split artifact
+    print("\n[2/4] Saving split artifact...")
+    split_path = Path(
+        split_config.get(
+            "output_path", f"splits/cell_split_seed{split_config['seed']}.json"
+        )
+    )
+    split_path.parent.mkdir(parents=True, exist_ok=True)
+    dataset.split.save(split_path)
+    print(f"  - Saved to: {split_path}")
 
     # Setup evaluator
-    print(f"\n[2/4] Setting up {config['model']['encoder']} encoder...")
+    print(f"\n[3/4] Setting up {config['model']['encoder']} encoder...")
     encoder_kwargs = get_encoder_kwargs(config)
-    evaluator = RetrievalEvaluator(
+    library_config = config.get("library", {})
+    eval_config = config.get("evaluate", {})
+
+    evaluator = CellRetrievalEvaluator(
         encoder_type=config["model"]["encoder"],
         encoder_kwargs=encoder_kwargs,
         metric=config["retrieval"]["metric"],
         top_k=config["retrieval"]["top_k"],
-        mask_perturbed=config["data"].get("mask_perturbed", True),
-        pseudo_bulk=config["data"].get("pseudo_bulk", True),
+        mask_perturbed=eval_config.get("mask_perturbed", True),
+        library_type=library_config.get("type", "bootstrap"),
+        n_prototypes=library_config.get("n_prototypes", 30),
+        m_cells_per_prototype=library_config.get("m_cells_per_prototype", 50),
+        library_seed=library_config.get("seed", 42),
     )
     evaluator.setup(dataset)
-    print(f"  - Encoder config: {encoder_kwargs}")
+    print(f"  - Encoder: {config['model']['encoder']}")
+    print(f"  - Library type: {library_config.get('type', 'bootstrap')}")
     print(f"  - Similarity: {config['retrieval']['metric']}")
 
-    results = {"config": config}
+    results = {"config": config, "summary": summary}
 
-    # Evaluate on validation set
-    if args.split in ["val", "both"]:
-        print("\n[3/4] Evaluating on validation set...")
-        val_metrics = evaluator.evaluate(dataset, split="val")
-        results["val"] = val_metrics
-        print("  Validation metrics:")
-        for k, v in sorted(val_metrics.items()):
+    # Evaluate
+    print("\n[4/4] Evaluating...")
+    metrics = evaluator.evaluate(dataset)
+    results["metrics"] = metrics
+    print("  Metrics:")
+    for k, v in sorted(metrics.items()):
+        if isinstance(v, float):
             print(f"    {k}: {v:.4f}")
+        else:
+            print(f"    {k}: {v}")
 
-    # Evaluate on test set
-    if args.split in ["test", "both"]:
-        print("\n[4/4] Evaluating on test set...")
-        test_metrics = evaluator.evaluate(dataset, split="test")
-        results["test"] = test_metrics
-        print("  Test metrics:")
-        for k, v in sorted(test_metrics.items()):
-            print(f"    {k}: {v:.4f}")
+    # Evaluate with masking OFF (ablation) if requested
+    if eval_config.get("mask_ablation", False):
+        print("\n  Running mask OFF ablation...")
+        evaluator_no_mask = CellRetrievalEvaluator(
+            encoder_type=config["model"]["encoder"],
+            encoder_kwargs=encoder_kwargs,
+            metric=config["retrieval"]["metric"],
+            top_k=config["retrieval"]["top_k"],
+            mask_perturbed=False,
+            library_type=library_config.get("type", "bootstrap"),
+            n_prototypes=library_config.get("n_prototypes", 30),
+            m_cells_per_prototype=library_config.get("m_cells_per_prototype", 50),
+            library_seed=library_config.get("seed", 42),
+        )
+        evaluator_no_mask.setup(dataset)
+        metrics_no_mask = evaluator_no_mask.evaluate(dataset)
+        results["metrics_mask_off"] = metrics_no_mask
+        print("  Metrics (mask OFF):")
+        for k, v in sorted(metrics_no_mask.items()):
+            if isinstance(v, float):
+                print(f"    {k}: {v:.4f}")
+            else:
+                print(f"    {k}: {v}")
 
     # Save results
     with open(run_dir / "metrics.json", "w") as f:

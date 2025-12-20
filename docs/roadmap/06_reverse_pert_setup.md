@@ -119,6 +119,107 @@ scGPT 也在文中说明 Norman 有大量单/双基因扰动并用于多种扰�
 
 ---
 
+## Stage 1 requirements: scGPT-style reverse perturbation retrieval (MVP)
+
+### 1) Benchmark definition and reproducibility
+
+You need a single, explicit benchmark specification that every model runs under:
+A condition vocabulary (how a perturbation condition is defined and named, including single vs pair).
+A fixed train/val/test split at the condition level (saved to disk and reused).
+A clear candidate set definition for retrieval (which conditions are in the search space for each evaluation).
+
+### 2) Leakage-safe data preparation
+
+A preprocessing policy that is fit only on train (and optionally val) and then applied to val/test:
+Normalization / gene selection / dimensionality reduction fitting must not touch test.
+A consistent “control signature” definition (how controls are pooled/handled).
+A consistent handling of low-count conditions (drop policy or minimum cells policy).
+
+### 3) Reference library construction (candidates)
+
+A standardized way to build the retrieval library, with at least one stable default:
+Per-condition prototypes (mean or bootstrap pseudo-bulk).
+Optional variants: raw-cell library vs mean library vs multi-prototype library.
+Library built from reference cells only (not query cells).
+
+### 4) Anti-cheat evaluation toggle
+
+A mandatory masking switch that zeroes perturbed gene(s) in both reference and query signatures before embedding.
+The benchmark must report results with masking ON and OFF.
+
+### 5) Model interface standardization
+
+All models must implement the same functional contract:
+Given signatures, produce embeddings or scores over candidate conditions.
+If trainable, support a training step using train split and a selection step using val split.
+Produce top-K retrieval outputs in a common format for metrics.
+
+### 6) Baselines and model roster (minimum set)
+
+At least these three must be runnable under the same harness:
+Raw/PCA embedding + nearest-neighbor retrieval baseline.
+A discriminative baseline (e.g., logistic regression classifier treated as top-K retrieval).
+scGPT encoder retrieval (frozen at minimum; light fine-tune optional).
+
+### 7) Unified evaluation and reporting
+
+A single evaluation pipeline that outputs:
+Top-K exact match, top-K “relevant” match (gene overlap), MRR, NDCG.
+Per-condition (macro) and per-cell (micro) summaries.
+A single consolidated comparison table across models, plus key plots.
+
+---
+
+## Stage 2 requirements: scalable, generalizable retrieval system
+
+### 1) Expanded benchmark tracks (generalization regimes)
+
+Define multiple evaluation tracks beyond the toy subset:
+In-distribution condition holdout (seen genes, held-out conditions).
+Unseen-combination generalization (held-out gene pairs, singles seen).
+Unseen-gene generalization (held-out genes and all conditions containing them).
+
+Each track must have a saved split spec and be runnable with the same evaluation code.
+
+### 2) Pseudo-bulk as a first-class representation
+
+Make pseudo-bulk/prototypes the default signature representation (not an ad-hoc option):
+Configurable number of cells per pseudo-bulk and number of prototypes per condition.
+Report performance vs pseudo-bulk size (stability/data-efficiency curve).
+
+### 3) Candidate-library realism
+
+Support candidate sets that match “target discovery” use:
+At minimum: retrieve among a large candidate set including many conditions, not only those seen in training.
+Optionally: include predicted candidate signatures if you introduce a forward predictor; but the benchmark must clearly label whether candidates are observed vs predicted.
+
+### 4) Reliability and confidence reporting
+
+Add system-level reliability measures, not only accuracy:
+A confidence score per query (margin, entropy, agreement across prototypes, etc.).
+Coverage vs accuracy curves (selective retrieval performance).
+
+### 5) Error analysis outputs with biological interpretability
+
+Automated diagnostics for failures:
+Which conditions are most frequently confused with which others.
+Simple signature-level explanations (e.g., overlap of top DE genes between query and retrieved condition).
+Optional pathway-level summaries if you want a stronger biology narrative.
+
+### 6) Experiment management for model comparisons
+
+A consistent run management standard so you can compare models across tracks:
+Common config schema, saved artifacts, and a single aggregation report that builds “leaderboard-style” tables across models, splits, and seeds.
+
+---
+
+## Minimal “Definition of Done” per stage
+
+Stage 1 is done when: the same split can run multiple models end-to-end and produces a single comparison table with masking ablation.
+Stage 2 is done when: you can run multiple generalization tracks, pseudo-bulk stability curves, and confidence-aware evaluation under the same framework, and summarize the generalization gap in a model-comparison report.
+
+---
+
 ### 阶段 3：把检索任务真正落到“靶点发现”应用闭环（2–3 周）
 
 任务目标：不改变你们的核心技术（仍是检索/反推），但把 query 从“随机扰动后状态”替换为“疾病样/功能异常状态”，让输出 Top-K 真正对应“潜在治疗靶点”。
