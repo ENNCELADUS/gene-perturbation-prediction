@@ -16,6 +16,7 @@ import scanpy as sc
 import numpy as np
 
 from .splits import CellSplit, CellSplitter
+from .condition_splits import ConditionSplit
 
 
 class PerturbDataset:
@@ -45,6 +46,7 @@ class PerturbDataset:
 
         self.adata: Optional[ad.AnnData] = None
         self.split: Optional[CellSplit] = None
+        self.condition_split: Optional[ConditionSplit] = None
 
     def load(self) -> "PerturbDataset":
         """Load h5ad file."""
@@ -97,6 +99,15 @@ class PerturbDataset:
         """Apply an external split to this dataset."""
         self.split = split
 
+    def load_condition_split(self, split_path: str | Path) -> ConditionSplit:
+        """Load an existing condition split from JSON."""
+        self.condition_split = ConditionSplit.load(split_path)
+        return self.condition_split
+
+    def apply_condition_split(self, split: ConditionSplit) -> None:
+        """Apply an external condition split to this dataset."""
+        self.condition_split = split
+
     @property
     def ref_adata(self) -> ad.AnnData:
         """Get reference cells as AnnData subset."""
@@ -129,6 +140,41 @@ class PerturbDataset:
             conditions = self.adata.obs[self.condition_col].unique()
             return [c for c in conditions if c != "ctrl"]
         return self.split.conditions
+
+    def get_ref_adata_for_conditions(self, conditions: List[str]) -> ad.AnnData:
+        """Get reference cells for a list of conditions."""
+        ref = self.ref_adata
+        mask = ref.obs[self.condition_col].isin(conditions)
+        return ref[mask].copy()
+
+    def get_query_adata_for_conditions(self, conditions: List[str]) -> ad.AnnData:
+        """Get query cells for a list of conditions."""
+        query = self.query_adata
+        mask = query.obs[self.condition_col].isin(conditions)
+        return query[mask].copy()
+
+    def get_condition_sets(self) -> dict:
+        """
+        Get condition sets for train/val/test.
+
+        Returns:
+            Dict with keys: train, val, test, all
+        """
+        if self.condition_split is None:
+            conditions = self.all_conditions
+            return {
+                "train": conditions,
+                "val": [],
+                "test": conditions,
+                "all": conditions,
+            }
+
+        return {
+            "train": self.condition_split.train_conditions,
+            "val": self.condition_split.val_conditions,
+            "test": self.condition_split.test_conditions,
+            "all": self.condition_split.all_conditions,
+        }
 
     @property
     def control_adata(self) -> ad.AnnData:
@@ -183,6 +229,12 @@ class PerturbDataset:
             stats["n_valid_conditions"] = len(self.split.conditions)
             stats["n_dropped_conditions"] = len(self.split.dropped_conditions)
             stats["split_seed"] = self.split.seed
+
+        if self.condition_split is not None:
+            stats["condition_track"] = self.condition_split.track
+            stats["n_train_conditions"] = len(self.condition_split.train_conditions)
+            stats["n_val_conditions"] = len(self.condition_split.val_conditions)
+            stats["n_test_conditions"] = len(self.condition_split.test_conditions)
 
         return stats
 

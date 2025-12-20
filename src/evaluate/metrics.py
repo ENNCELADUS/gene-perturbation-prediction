@@ -206,6 +206,7 @@ def compute_all_metrics(
     ground_truth: List[str],
     top_k_values: List[int] = [1, 5, 8, 10],
     candidate_pool: List[str] = None,
+    include_macro: bool = True,
 ) -> Dict[str, float]:
     """
     Compute all retrieval metrics.
@@ -216,6 +217,7 @@ def compute_all_metrics(
         top_k_values: K values for Top-K metrics
         candidate_pool: If provided, exact metrics only computed for queries
                         whose ground truth is in this pool
+        include_macro: Whether to include macro (per-condition) metrics
 
     Returns:
         Dictionary of metric name -> value
@@ -249,8 +251,31 @@ def compute_all_metrics(
     for k in top_k_values:
         metrics[f"ndcg@{k}"] = ndcg(in_pool_preds, in_pool_truth, k)
 
+    # Macro (per-condition) metrics
+    if include_macro:
+        from collections import defaultdict
+
+        for k in top_k_values[:2]:  # Only compute for k=1,5 to avoid clutter
+            condition_stats = defaultdict(lambda: {"hits": 0, "total": 0})
+
+            for preds, true in zip(in_pool_preds, in_pool_truth):
+                condition_stats[true]["total"] += 1
+                if true in preds[:k]:
+                    condition_stats[true]["hits"] += 1
+
+            # Compute macro average
+            per_cond_acc = [
+                s["hits"] / s["total"] if s["total"] > 0 else 0.0
+                for s in condition_stats.values()
+            ]
+            metrics[f"macro_hit@{k}"] = (
+                float(np.mean(per_cond_acc)) if per_cond_acc else 0.0
+            )
+
     # Report counts
     metrics["n_queries"] = len(ground_truth)
     metrics["n_in_pool"] = len(in_pool_truth)
+    if include_macro:
+        metrics["n_conditions"] = len(set(in_pool_truth))
 
     return metrics
