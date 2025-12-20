@@ -99,8 +99,12 @@ class TrainingConfig:
             for k, v in data["head"].items():
                 config_dict[f"head_{k}"] = v
         if "model" in data:
-            if "checkpoint" in data["model"]:
-                config_dict["scgpt_model_dir"] = data["model"]["checkpoint"]
+            # Support both pretrained_dir and checkpoint keys
+            pretrained = data["model"].get("pretrained_dir") or data["model"].get(
+                "checkpoint"
+            )
+            if pretrained:
+                config_dict["scgpt_model_dir"] = pretrained
 
         return cls(**{k: v for k, v in config_dict.items() if hasattr(cls, k)})
 

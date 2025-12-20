@@ -23,11 +23,13 @@ class ScGPTEncoder(BaseEncoder):
     def __init__(
         self,
         model_dir: Optional[str] = None,
+        checkpoint: Optional[str] = None,
         gene_col: str = "gene_name",
         max_length: int = 1200,
         batch_size: int = 64,
         device: str = "cuda",
         use_fast_transformer: bool = True,
+        **unused_kwargs,
     ):
         """
         Initialize scGPT encoder.
@@ -41,7 +43,8 @@ class ScGPTEncoder(BaseEncoder):
             device: Device to use ('cuda' or 'cpu')
             use_fast_transformer: Whether to use flash attention
         """
-        self.model_dir = model_dir or "model/scGPT"
+        resolved_model_dir = model_dir or checkpoint
+        self.model_dir = resolved_model_dir or "model/scGPT"
         self.gene_col = gene_col
         self.max_length = max_length
         self.batch_size = batch_size

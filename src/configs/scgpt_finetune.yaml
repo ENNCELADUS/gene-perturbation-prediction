@@ -59,7 +59,8 @@ classification:
 # Model paths
 model:
   encoder: scgpt
-  checkpoint: model/scGPT
+  # Pretrained scGPT checkpoint (frozen backbone)
+  pretrained_dir: model/scGPT
   freeze_encoder: true
   use_lora: false  # Set to true when using lora_head mode
 
