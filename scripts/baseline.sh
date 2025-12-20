@@ -11,14 +11,14 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
-set -euo pipefail
-
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
 # Load conda environment
 source ~/.bashrc
 conda activate vcc
+
+set -euo pipefail
 
 echo "=============================================="
 echo "Running all baseline models"
