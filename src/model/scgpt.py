@@ -215,3 +215,33 @@ class ScGPTEncoder(BaseEncoder):
         """Get embedding dimensionality."""
         self._load_model()
         return self._model_configs["embsize"]
+
+    def get_model(self):
+        """
+        Get underlying TransformerModel for fine-tuning.
+
+        Returns:
+            scGPT TransformerModel
+        """
+        self._load_model()
+        return self._model
+
+    def get_vocab(self):
+        """
+        Get vocabulary for token encoding.
+
+        Returns:
+            GeneVocab instance
+        """
+        self._load_model()
+        return self._vocab
+
+    def get_model_configs(self) -> dict:
+        """
+        Get model configuration dictionary.
+
+        Returns:
+            Model config dict with embsize, nheads, etc.
+        """
+        self._load_model()
+        return self._model_configs

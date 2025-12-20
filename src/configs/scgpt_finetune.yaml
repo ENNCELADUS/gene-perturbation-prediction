@@ -1,0 +1,92 @@
+# scGPT Fine-tuning Configuration for Reverse Perturbation Prediction
+# 
+# Three training modes for ablative study:
+#   1. frozen - Inference only (baseline)
+#   2. head_only - Train retrieval head with frozen backbone
+#   3. lora_head - Train LoRA adapters + retrieval head
+
+# Inherit base scGPT data/evaluation settings
+data:
+  h5ad_path: data/norman/perturb_processed.h5ad
+
+split:
+  min_cells_per_condition: 50
+  query_fraction: 0.2
+  min_query_cells: 10
+  seed: 42
+  output_path: data/norman/splits/cell_split_seed42.json
+
+# Training configuration
+training:
+  mode: head_only  # frozen | head_only | lora_head
+  loss_fn: infonce  # infonce | classification
+  epochs: 50
+  batch_size: 32
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  early_stopping_patience: 10
+  early_stopping_metric: val_loss
+  checkpoint_dir: checkpoints/scgpt_finetune
+
+# LoRA configuration (for lora_head mode)
+lora:
+  rank: 8
+  alpha: 16.0
+  dropout: 0.1
+  # Target modules in TransformerEncoderLayer:
+  # - out_proj: attention output projection
+  # - linear1, linear2: FFN layers
+  target_modules:
+    - out_proj
+    - linear1
+    - linear2
+
+# Retrieval head configuration
+head:
+  hidden_dim: 256
+  output_dim: 128
+  dropout: 0.2
+
+# InfoNCE loss configuration
+infonce:
+  temperature: 0.07
+
+# Classification loss configuration (for classification mode)
+classification:
+  label_smoothing: 0.1
+
+# Model paths
+model:
+  encoder: scgpt
+  checkpoint: model/scGPT
+  freeze_encoder: true
+  use_lora: false  # Set to true when using lora_head mode
+
+# Retrieval evaluation settings
+retrieval:
+  metric: cosine
+  top_k: [1, 5, 8, 10]
+
+# Evaluation settings
+evaluate:
+  mask_perturbed: true
+  mask_ablation: true
+
+track: in_dist
+
+condition_split:
+  train_ratio: 0.7
+  val_ratio: 0.1
+  test_ratio: 0.2
+  seed: 42
+  output_path: data/norman/splits/condition_split_in_dist_seed42.json
+
+query:
+  mode: cell
+  query_split: test
+  candidate_source: all
+
+logging:
+  output_dir: results/
+  experiment_name: scgpt_finetune

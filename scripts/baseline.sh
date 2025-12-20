@@ -11,6 +11,8 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
+set -euo pipefail
+
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
@@ -18,11 +20,31 @@ cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exi
 source ~/.bashrc
 conda activate vcc
 
-# Create logs dir
-mkdir -p logs/baseline
+echo "=============================================="
+echo "Running all baseline models"
+echo "=============================================="
 
-# Run PCA baseline pipeline
+# Run PCA baseline
+echo ""
+echo "[1/2] Running PCA baseline..."
+echo "----------------------------------------------"
 python -m src.main --config src/configs/pca.yaml
-
 echo "PCA baseline completed!"
 
+# Run Logistic Regression baseline
+echo ""
+echo "[2/2] Running Logistic Regression baseline..."
+echo "----------------------------------------------"
+python -m src.main --config src/configs/logreg.yaml
+echo "Logistic Regression baseline completed!"
+
+echo ""
+echo "=============================================="
+echo "All baselines completed!"
+echo "=============================================="
+
+# Generate comparison report
+echo ""
+echo "Generating comparison report..."
+python scripts/compare.py --pattern "results/pca_*" --pattern "results/logreg_*" --output results/reports --name baseline_comparison
+echo "Comparison report saved to results/reports/"

@@ -12,6 +12,8 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
+set -euo pipefail
+
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
@@ -19,10 +21,98 @@ cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exi
 source ~/.bashrc
 conda activate vcc
 
-# Create logs dir
+# Create log directory
 mkdir -p logs/scgpt
 
-# Run scGPT retrieval pipeline
-python -m src.main --config src/configs/scgpt.yaml
+echo "=============================================="
+echo "scGPT Ablative Study: Three Modes"
+echo "=============================================="
+echo "Mode 1: Frozen scGPT encoder (baseline)"
+echo "Mode 2: scGPT + trainable retrieval head"
+echo "Mode 3: scGPT + LoRA + retrieval head"
+echo "=============================================="
 
-echo "scGPT retrieval completed!"
+# ============================================
+# MODE 1: Frozen scGPT Encoder (Baseline)
+# ============================================
+echo ""
+echo "=============================================="
+echo "[MODE 1] Frozen scGPT Retrieval (Baseline)"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt.yaml
+echo "[1/3] Frozen scGPT completed!"
+
+# ============================================
+# MODE 2: scGPT + Trainable Retrieval Head
+# ============================================
+echo ""
+echo "=============================================="
+echo "[MODE 2] scGPT + Trainable Retrieval Head"
+echo "=============================================="
+echo "Training retrieval head with InfoNCE loss..."
+python -m src.train.finetune \
+    --config src/configs/scgpt_finetune.yaml \
+    --mode head_only \
+    --loss infonce
+echo "Evaluating head-only fine-tuned model..."
+python -m src.main \
+    --config src/configs/scgpt.yaml \
+    --experiment_name scgpt_head_only
+echo "[2/3] Head-only fine-tuning completed!"
+
+# ============================================
+# MODE 3: scGPT + LoRA + Retrieval Head
+# ============================================
+echo ""
+echo "=============================================="
+echo "[MODE 3] scGPT + LoRA + Retrieval Head"
+echo "=============================================="
+echo "Training with LoRA adapters + retrieval head..."
+python -m src.train.finetune \
+    --config src/configs/scgpt_finetune.yaml \
+    --mode lora_head \
+    --loss infonce
+echo "Evaluating LoRA fine-tuned model..."
+python -m src.main \
+    --config src/configs/scgpt.yaml \
+    --experiment_name scgpt_lora_head
+echo "[3/3] LoRA fine-tuning completed!"
+
+echo ""
+echo "=============================================="
+echo "All scGPT modes completed!"
+echo "=============================================="
+
+# ============================================
+# Generate Ablative Comparison Report
+# ============================================
+echo ""
+echo "Generating ablative comparison report..."
+python scripts/compare.py \
+    --pattern "results/scgpt_*" \
+    --pattern "results/scgpt_head_only_*" \
+    --pattern "results/scgpt_lora_head_*" \
+    --output results/reports \
+    --name scgpt_ablative_comparison
+echo "Ablative comparison report saved to results/reports/"
+
+# ============================================
+# Optional: Classification Loss Variants
+# ============================================
+# Uncomment to also run with classification loss
+# echo ""
+# echo "=============================================="
+# echo "[BONUS] Training with Classification Loss"
+# echo "=============================================="
+# 
+# # Head-only with classification
+# python -m src.train.finetune \
+#     --config src/configs/scgpt_finetune.yaml \
+#     --mode head_only \
+#     --loss classification
+# 
+# # LoRA with classification
+# python -m src.train.finetune \
+#     --config src/configs/scgpt_finetune.yaml \
+#     --mode lora_head \
+#     --loss classification
