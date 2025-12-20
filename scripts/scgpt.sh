@@ -24,6 +24,33 @@ conda activate vcc
 # Create log directory
 mkdir -p logs/scgpt
 
+detect_num_gpus() {
+    if [[ -n "${SLURM_GPUS_ON_NODE:-}" ]]; then
+        echo "$SLURM_GPUS_ON_NODE"
+        return
+    fi
+    if [[ -n "${SLURM_GPUS_PER_NODE:-}" ]]; then
+        echo "${SLURM_GPUS_PER_NODE%%(*}"
+        return
+    fi
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        nvidia-smi -L | wc -l
+        return
+    fi
+    echo 0
+}
+
+NUM_GPUS="$(detect_num_gpus)"
+echo "Detected GPUs: ${NUM_GPUS}"
+
+run_finetune() {
+    if [[ "${NUM_GPUS}" -gt 1 ]]; then
+        torchrun --standalone --nproc_per_node="${NUM_GPUS}" -m src.train.finetune "$@"
+    else
+        python -m src.train.finetune "$@"
+    fi
+}
+
 echo "=============================================="
 echo "scGPT Ablative Study: Three Modes"
 echo "=============================================="
@@ -50,7 +77,7 @@ echo "=============================================="
 echo "[MODE 2] scGPT + Trainable Retrieval Head"
 echo "=============================================="
 echo "Training retrieval head with InfoNCE loss..."
-python -m src.train.finetune \
+run_finetune \
     --config src/configs/scgpt_finetune.yaml \
     --mode head_only \
     --loss infonce
@@ -68,7 +95,7 @@ echo "=============================================="
 echo "[MODE 3] scGPT + LoRA + Retrieval Head"
 echo "=============================================="
 echo "Training with LoRA adapters + retrieval head..."
-python -m src.train.finetune \
+run_finetune \
     --config src/configs/scgpt_finetune.yaml \
     --mode lora_head \
     --loss infonce

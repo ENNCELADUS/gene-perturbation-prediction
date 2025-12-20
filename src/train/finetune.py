@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader
 import yaml
 
@@ -347,6 +349,7 @@ class ScGPTTrainer:
         model: FineTunableScGPTEncoder,
         config: TrainingConfig,
         device: str = "cuda",
+        is_master: bool = True,
     ):
         """
         Initialize trainer.
@@ -359,6 +362,7 @@ class ScGPTTrainer:
         self.model = model.to(device)
         self.config = config
         self.device = device
+        self.is_master = is_master
 
         # Optimizer only for trainable parameters
         trainable_params = [p for p in model.parameters() if p.requires_grad]
@@ -409,6 +413,11 @@ class ScGPTTrainer:
             total_loss += loss.item()
             num_batches += 1
 
+        if dist.is_initialized():
+            stats = torch.tensor([total_loss, num_batches], device=self.device)
+            dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+            total_loss, num_batches = stats.tolist()
+
         return total_loss / max(num_batches, 1)
 
     @torch.no_grad()
@@ -427,6 +436,11 @@ class ScGPTTrainer:
 
             total_loss += loss.item()
             num_batches += 1
+
+        if dist.is_initialized():
+            stats = torch.tensor([total_loss, num_batches], device=self.device)
+            dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+            total_loss, num_batches = stats.tolist()
 
         return total_loss / max(num_batches, 1)
 
@@ -456,15 +470,19 @@ class ScGPTTrainer:
             pct_start=self.config.warmup_ratio,
         )
 
-        print(f"\n{'=' * 60}")
-        print(f"Starting training: {self.config.mode} mode")
-        print(f"Loss function: {self.config.loss_fn}")
-        print(f"Epochs: {self.config.epochs}")
-        print(f"Batch size: {self.config.batch_size}")
-        print(f"Learning rate: {self.config.learning_rate}")
-        print(f"{'=' * 60}\n")
+        if self.is_master:
+            print(f"\n{'=' * 60}")
+            print(f"Starting training: {self.config.mode} mode")
+            print(f"Loss function: {self.config.loss_fn}")
+            print(f"Epochs: {self.config.epochs}")
+            print(f"Batch size: {self.config.batch_size}")
+            print(f"Learning rate: {self.config.learning_rate}")
+            print(f"{'=' * 60}\n")
 
         for epoch in range(self.config.epochs):
+            if hasattr(train_loader.sampler, "set_epoch"):
+                train_loader.sampler.set_epoch(epoch)
+
             # Train
             train_loss = self.train_epoch(train_loader)
             self.history["train_loss"].append(train_loss)
@@ -474,11 +492,12 @@ class ScGPTTrainer:
             self.history["val_loss"].append(val_loss)
 
             # Log
-            print(
-                f"Epoch {epoch + 1}/{self.config.epochs} | "
-                f"Train Loss: {train_loss:.4f} | "
-                f"Val Loss: {val_loss:.4f}"
-            )
+            if self.is_master:
+                print(
+                    f"Epoch {epoch + 1}/{self.config.epochs} | "
+                    f"Train Loss: {train_loss:.4f} | "
+                    f"Val Loss: {val_loss:.4f}"
+                )
 
             # Early stopping
             if val_loss < self.best_val_loss:
@@ -488,36 +507,42 @@ class ScGPTTrainer:
             else:
                 self.patience_counter += 1
                 if self.patience_counter >= self.config.early_stopping_patience:
-                    print(f"\nEarly stopping at epoch {epoch + 1}")
+                    if self.is_master:
+                        print(f"\nEarly stopping at epoch {epoch + 1}")
                     break
 
         # Save final
         self._save_checkpoint("final")
 
-        print(f"\nTraining complete. Best val loss: {self.best_val_loss:.4f}")
+        if self.is_master:
+            print(f"\nTraining complete. Best val loss: {self.best_val_loss:.4f}")
 
         return self.history
 
     def _save_checkpoint(self, name: str):
         """Save model checkpoint."""
+        if not self.is_master:
+            return
+
         checkpoint_path = self.checkpoint_dir / f"{name}_{self.config.mode}.pt"
+        base_model = self.model.module if hasattr(self.model, "module") else self.model
 
         # Save only trainable parts
         state = {
             "config": asdict(self.config),
-            "retrieval_head": self.model.retrieval_head.state_dict(),
+            "retrieval_head": base_model.retrieval_head.state_dict(),
             "history": self.history,
             "best_val_loss": self.best_val_loss,
         }
 
         # Save loss function state if it has parameters
-        if hasattr(self.model.loss_fn, "state_dict"):
-            state["loss_fn"] = self.model.loss_fn.state_dict()
+        if hasattr(base_model.loss_fn, "state_dict"):
+            state["loss_fn"] = base_model.loss_fn.state_dict()
 
         # Save LoRA weights if applicable
         if self.config.mode == "lora_head":
             lora_state = {}
-            for name, module in self.model.scgpt_model.named_modules():
+            for name, module in base_model.scgpt_model.named_modules():
                 from .lora import LoRALinear
 
                 if isinstance(module, LoRALinear):
@@ -534,13 +559,14 @@ class ScGPTTrainer:
         """Load model checkpoint."""
         state = torch.load(path, map_location=self.device)
 
-        self.model.retrieval_head.load_state_dict(state["retrieval_head"])
+        base_model = self.model.module if hasattr(self.model, "module") else self.model
+        base_model.retrieval_head.load_state_dict(state["retrieval_head"])
 
-        if "loss_fn" in state and hasattr(self.model.loss_fn, "load_state_dict"):
-            self.model.loss_fn.load_state_dict(state["loss_fn"])
+        if "loss_fn" in state and hasattr(base_model.loss_fn, "load_state_dict"):
+            base_model.loss_fn.load_state_dict(state["loss_fn"])
 
         if "lora" in state:
-            for name, module in self.model.scgpt_model.named_modules():
+            for name, module in base_model.scgpt_model.named_modules():
                 from .lora import LoRALinear
 
                 if isinstance(module, LoRALinear) and name in state["lora"]:
@@ -584,6 +610,22 @@ def parse_args():
     return parser.parse_args()
 
 
+def _setup_ddp() -> Tuple[bool, str, int]:
+    """Initialize DDP if launched with torchrun."""
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    if world_size > 1:
+        if not torch.cuda.is_available():
+            raise RuntimeError("DDP requested but CUDA is not available.")
+        if not dist.is_initialized():
+            dist.init_process_group(backend="nccl")
+        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        torch.cuda.set_device(local_rank)
+        return True, f"cuda:{local_rank}", int(os.environ.get("RANK", "0"))
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    return False, device, 0
+
+
 def main():
     """Main entry point for fine-tuning."""
     args = parse_args()
@@ -600,18 +642,23 @@ def main():
     if args.loss:
         config.loss_fn = args.loss
 
-    print(f"\n{'=' * 60}")
-    print("scGPT Fine-tuning for Reverse Perturbation Retrieval")
-    print(f"{'=' * 60}")
-    print(f"Mode: {config.mode}")
-    print(f"Loss: {config.loss_fn}")
-    print(f"{'=' * 60}\n")
+    ddp_enabled, device, rank = _setup_ddp()
+    is_master = rank == 0
+
+    if is_master:
+        print(f"\n{'=' * 60}")
+        print("scGPT Fine-tuning for Reverse Perturbation Retrieval")
+        print(f"{'=' * 60}")
+        print(f"Mode: {config.mode}")
+        print(f"Loss: {config.loss_fn}")
+        print(f"{'=' * 60}\n")
 
     if args.dry_run:
-        print("[Dry run] Configuration loaded successfully.")
-        print(f"  LoRA rank: {config.lora_rank}")
-        print(f"  Head hidden dim: {config.head_hidden_dim}")
-        print(f"  Learning rate: {config.learning_rate}")
+        if is_master:
+            print("[Dry run] Configuration loaded successfully.")
+            print(f"  LoRA rank: {config.lora_rank}")
+            print(f"  Head hidden dim: {config.head_hidden_dim}")
+            print(f"  Learning rate: {config.learning_rate}")
         return
 
     # Import heavy dependencies only when needed
@@ -626,7 +673,8 @@ def main():
     # Load scGPT model
     from src.model import ScGPTEncoder
 
-    print("Loading scGPT model...")
+    if is_master:
+        print("Loading scGPT model...")
     encoder = ScGPTEncoder(model_dir=config.scgpt_model_dir)
     encoder._load_model()
     scgpt_model = encoder._model
@@ -634,14 +682,16 @@ def main():
     # Load dataset
     from src.data import load_perturb_data
 
-    print("Loading dataset...")
+    if is_master:
+        print("Loading dataset...")
     dataset = load_perturb_data(h5ad_path="data/norman/perturb_processed.h5ad")
 
     # Get condition mapping
     conditions = dataset.all_conditions
     condition_to_idx = {c: i for i, c in enumerate(conditions)}
     num_conditions = len(conditions)
-    print(f"  Conditions: {num_conditions}")
+    if is_master:
+        print(f"  Conditions: {num_conditions}")
 
     # Create model
     model = FineTunableScGPTEncoder(
@@ -651,7 +701,8 @@ def main():
     )
 
     # Extract embeddings (pre-compute for efficiency)
-    print("Extracting embeddings...")
+    if is_master:
+        print("Extracting embeddings...")
     train_adata = dataset.get_ref_adata_for_conditions(conditions)
     embeddings = encoder.encode_adata(train_adata)
     labels = train_adata.obs[dataset.condition_col].values
@@ -670,29 +721,44 @@ def main():
         train_dataset, [n_train, n_val]
     )
 
+    train_sampler = None
+    val_sampler = None
+    if ddp_enabled:
+        train_sampler = torch.utils.data.DistributedSampler(train_subset, shuffle=True)
+        val_sampler = torch.utils.data.DistributedSampler(val_subset, shuffle=False)
+
     train_loader = DataLoader(
         train_subset,
         batch_size=config.batch_size,
-        shuffle=True,
+        shuffle=train_sampler is None,
         drop_last=True,
+        sampler=train_sampler,
     )
     val_loader = DataLoader(
         val_subset,
         batch_size=config.batch_size,
         shuffle=False,
+        sampler=val_sampler,
     )
 
     # Train
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    trainer = ScGPTTrainer(model, config, device=device)
+    if ddp_enabled:
+        model = torch.nn.parallel.DistributedDataParallel(
+            model.to(device), device_ids=[int(device.split(":")[-1])]
+        )
+    trainer = ScGPTTrainer(model, config, device=device, is_master=is_master)
 
     history = trainer.train(train_loader, val_loader)
 
     # Save history
-    history_path = Path(config.checkpoint_dir) / f"history_{config.mode}.json"
-    with open(history_path, "w") as f:
-        json.dump(history, f, indent=2)
-    print(f"Training history saved: {history_path}")
+    if is_master:
+        history_path = Path(config.checkpoint_dir) / f"history_{config.mode}.json"
+        with open(history_path, "w") as f:
+            json.dump(history, f, indent=2)
+        print(f"Training history saved: {history_path}")
+
+    if dist.is_initialized():
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":
