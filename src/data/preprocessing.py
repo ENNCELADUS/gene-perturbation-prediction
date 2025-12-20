@@ -64,6 +64,7 @@ def build_prototype_library(
     adata: ad.AnnData,
     conditions: List[str],
     n_prototypes: int = 30,
+    m_cells_per_prototype: Optional[int] = None,
     method: str = "bootstrap",
     seed: int = 42,
     condition_col: str = "condition",
@@ -78,6 +79,7 @@ def build_prototype_library(
         adata: AnnData object with single-cell data
         conditions: List of condition names to include
         n_prototypes: Number of prototypes per condition (default 30)
+        m_cells_per_prototype: Cells sampled per prototype (None = all cells)
         method: 'bootstrap' (resample with replacement) or 'sample' (split cells)
         seed: Random seed for reproducibility
         condition_col: Column name with condition labels
@@ -118,7 +120,8 @@ def build_prototype_library(
         if method == "bootstrap":
             # Bootstrap: sample with replacement and average
             for _ in range(n_prototypes):
-                indices = rng.choice(n_cells, size=n_cells, replace=True)
+                sample_size = m_cells_per_prototype or n_cells
+                indices = rng.choice(n_cells, size=sample_size, replace=True)
                 sampled = expr[indices]
                 prototype = np.mean(sampled, axis=0).flatten()
                 all_profiles.append(prototype)
@@ -136,6 +139,12 @@ def build_prototype_library(
 
             for group in group_indices:
                 if len(group) > 0:
+                    if m_cells_per_prototype:
+                        group = rng.choice(
+                            group,
+                            size=min(len(group), m_cells_per_prototype),
+                            replace=False,
+                        )
                     prototype = np.mean(expr[group], axis=0).flatten()
                     all_profiles.append(prototype)
                     all_labels.append(cond)

@@ -1,4 +1,4 @@
-# PCA Baseline Configuration for Reverse Perturbation Prediction
+# Logistic Regression Baseline Configuration for Reverse Perturbation Prediction
 
 data:
   h5ad_path: data/norman/perturb_processed.h5ad
@@ -17,11 +17,13 @@ library:
   seed: 42
 
 model:
-  encoder: pca
-  n_components: 50
+  encoder: logreg
+  C: 1.0  # Inverse regularization strength
+  max_iter: 1000
+  solver: lbfgs
 
 retrieval:
-  metric: cosine  # cosine | euclidean
+  metric: prob  # prob for classifier (uses probability scores)
   top_k: [1, 5, 8, 10]
 
 evaluate:
@@ -66,4 +68,4 @@ report:
 
 logging:
   output_dir: results/
-  experiment_name: pca
+  experiment_name: logreg
