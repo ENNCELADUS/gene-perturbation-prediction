@@ -1,12 +1,9 @@
 """Evaluation module for reverse perturbation prediction."""
 
-from .metrics import top_k_accuracy, mrr, ndcg, compute_all_metrics
-from .retrieval_eval import RetrievalEvaluator
+from .cell_eval import CellRetrievalEvaluator
+from .metrics import compute_all_metrics
 
 __all__ = [
-    "top_k_accuracy",
-    "mrr",
-    "ndcg",
+    "CellRetrievalEvaluator",
     "compute_all_metrics",
-    "RetrievalEvaluator",
 ]

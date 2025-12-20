@@ -2,67 +2,14 @@
 Preprocessing utilities for reverse perturbation prediction.
 
 Includes:
-- Pseudo-bulk aggregation
 - Perturbed gene masking (anti-cheat)
-- Reference library construction
+- Prototype library construction
 """
 
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 import anndata as ad
-
-
-def create_pseudo_bulk(
-    adata: ad.AnnData,
-    groupby: str = "condition",
-    layer: Optional[str] = None,
-) -> ad.AnnData:
-    """
-    Create pseudo-bulk profiles by averaging cells per condition.
-
-    Args:
-        adata: AnnData object with single-cell data
-        groupby: Column in obs to group by
-        layer: Layer to use (None for X)
-
-    Returns:
-        AnnData with pseudo-bulk profiles (one per condition)
-    """
-    conditions = adata.obs[groupby].unique()
-    profiles = []
-    obs_data = []
-
-    for cond in conditions:
-        mask = adata.obs[groupby] == cond
-        cells = adata[mask]
-
-        # Get expression matrix
-        if layer:
-            expr = cells.layers[layer]
-        else:
-            expr = cells.X
-
-        # Average expression
-        if hasattr(expr, "toarray"):
-            expr = expr.toarray()
-        mean_expr = np.mean(expr, axis=0).flatten()
-        profiles.append(mean_expr)
-
-        # Collect metadata
-        obs_data.append({
-            groupby: cond,
-            "n_cells": mask.sum(),
-            "control": cells.obs["control"].iloc[0] if "control" in cells.obs else 0,
-        })
-
-    # Create new AnnData
-    X = np.vstack(profiles)
-    import pandas as pd
-    obs = pd.DataFrame(obs_data)
-
-    pseudo_bulk = ad.AnnData(X=X, obs=obs, var=adata.var.copy())
-    return pseudo_bulk
 
 
 def mask_perturbed_genes(
@@ -74,9 +21,9 @@ def mask_perturbed_genes(
     """
     Mask expression of perturbed genes to prevent information leakage.
 
-    This is the anti-cheat protocol from the roadmap: the model should
-    not be able to identify perturbations by looking at the perturbed
-    gene's own expression (which may be knocked out/down).
+    This is the anti-cheat protocol: the model should not be able to
+    identify perturbations by looking at the perturbed gene's own
+    expression (which may be knocked out/down).
 
     Args:
         adata: AnnData object
@@ -90,7 +37,11 @@ def mask_perturbed_genes(
     adata = adata.copy()
 
     # Get gene names from var
-    gene_names = adata.var[gene_name_col].values if gene_name_col in adata.var else adata.var.index.values
+    gene_names = (
+        adata.var[gene_name_col].values
+        if gene_name_col in adata.var
+        else adata.var.index.values
+    )
     gene_to_idx = {g: i for i, g in enumerate(gene_names)}
 
     # Process each cell
@@ -109,34 +60,90 @@ def mask_perturbed_genes(
     return adata
 
 
-def build_reference_library(
+def build_prototype_library(
     adata: ad.AnnData,
+    conditions: List[str],
+    n_prototypes: int = 30,
+    method: str = "bootstrap",
+    seed: int = 42,
     condition_col: str = "condition",
-    exclude_control: bool = True,
-) -> dict:
+    layer: Optional[str] = None,
+) -> Tuple[np.ndarray, List[str]]:
     """
-    Build reference library of perturbation signatures.
+    Build reference library with multiple prototype profiles per condition.
+
+    Creates diversity via bootstrap sampling for similarity-based retrieval.
 
     Args:
-        adata: Pseudo-bulk AnnData (one row per condition)
-        condition_col: Column with condition names
-        exclude_control: Whether to exclude control from library
+        adata: AnnData object with single-cell data
+        conditions: List of condition names to include
+        n_prototypes: Number of prototypes per condition (default 30)
+        method: 'bootstrap' (resample with replacement) or 'sample' (split cells)
+        seed: Random seed for reproducibility
+        condition_col: Column name with condition labels
+        layer: Layer to use (None for X)
 
     Returns:
-        Dictionary mapping condition -> expression vector
+        Tuple of (profiles array, condition labels list)
+        - profiles: (n_conditions * n_prototypes, n_genes)
+        - labels: condition name for each row
     """
-    library = {}
+    rng = np.random.default_rng(seed)
 
-    for i, row in adata.obs.iterrows():
-        condition = row[condition_col]
+    all_profiles = []
+    all_labels = []
 
-        # Skip control if requested
-        if exclude_control and condition == "ctrl":
+    for cond in conditions:
+        # Skip control
+        if cond == "ctrl":
             continue
 
-        expr = adata[i].X
+        # Get cells for this condition
+        mask = adata.obs[condition_col] == cond
+        cells = adata[mask]
+        n_cells = mask.sum()
+
+        if n_cells == 0:
+            continue
+
+        # Get expression matrix
+        if layer:
+            expr = cells.layers[layer]
+        else:
+            expr = cells.X
         if hasattr(expr, "toarray"):
             expr = expr.toarray()
-        library[condition] = expr.flatten()
 
-    return library
+        # Generate prototypes
+        if method == "bootstrap":
+            # Bootstrap: sample with replacement and average
+            for _ in range(n_prototypes):
+                indices = rng.choice(n_cells, size=n_cells, replace=True)
+                sampled = expr[indices]
+                prototype = np.mean(sampled, axis=0).flatten()
+                all_profiles.append(prototype)
+                all_labels.append(cond)
+
+        elif method == "sample":
+            # Sample: split cells into groups and average each
+            if n_cells < n_prototypes:
+                group_indices = np.array_split(
+                    rng.choice(n_cells, size=n_prototypes, replace=True), n_prototypes
+                )
+            else:
+                indices = rng.permutation(n_cells)
+                group_indices = np.array_split(indices, n_prototypes)
+
+            for group in group_indices:
+                if len(group) > 0:
+                    prototype = np.mean(expr[group], axis=0).flatten()
+                    all_profiles.append(prototype)
+                    all_labels.append(cond)
+        else:
+            raise ValueError(f"Unknown method: {method}. Use 'bootstrap' or 'sample'.")
+
+    if not all_profiles:
+        return np.array([]), []
+
+    profiles = np.vstack(all_profiles)
+    return profiles, all_labels

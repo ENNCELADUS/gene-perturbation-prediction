@@ -80,7 +80,9 @@ def main():
     # Prepare split
     print(f"\n[4/4] Preparing split: {args.split} (seed={args.seed})")
     pert_data.prepare_split(split=args.split, seed=args.seed)
-    pert_data.get_dataloader(batch_size=args.batch_size, test_batch_size=args.batch_size)
+    pert_data.get_dataloader(
+        batch_size=args.batch_size, test_batch_size=args.batch_size
+    )
 
     # Print split info
     print("\nSplit Statistics:")
