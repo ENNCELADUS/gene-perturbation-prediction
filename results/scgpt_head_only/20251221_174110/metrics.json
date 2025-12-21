@@ -1,0 +1,236 @@
+{
+  "config": {
+    "data": {
+      "h5ad_path": "data/norman/perturb_processed.h5ad"
+    },
+    "split": {
+      "min_cells_per_condition": 50,
+      "query_fraction": 0.2,
+      "min_query_cells": 10,
+      "seed": 42,
+      "output_path": "data/norman/splits/cell_split_seed42.json"
+    },
+    "track": "in_dist",
+    "condition_split": {
+      "train_ratio": 0.7,
+      "val_ratio": 0.1,
+      "test_ratio": 0.2,
+      "seed": 42,
+      "output_path": "data/norman/splits/condition_split_in_dist_seed42.json",
+      "n_holdout_genes": 5
+    },
+    "model": {
+      "encoder": "scgpt",
+      "checkpoint": null,
+      "freeze_encoder": true,
+      "use_lora": false,
+      "lora_rank": 8
+    },
+    "library": {
+      "type": "bootstrap",
+      "n_prototypes": 30,
+      "m_cells_per_prototype": 50,
+      "seed": 42
+    },
+    "retrieval": {
+      "metric": "cosine",
+      "top_k": [
+        1,
+        5,
+        8,
+        10
+      ]
+    },
+    "query": {
+      "mode": "cell",
+      "query_split": "test",
+      "candidate_source": "all",
+      "pseudo_bulk": {
+        "cells_per_bulk": 50,
+        "n_bulks": 1,
+        "seed": 42
+      },
+      "pseudo_bulk_curve": {
+        "enable": false,
+        "cells_per_bulk_values": [
+          10,
+          25,
+          50,
+          100,
+          200
+        ],
+        "n_bulks": 5,
+        "seed": 42
+      }
+    },
+    "evaluate": {
+      "mask_perturbed": true,
+      "mask_ablation": true
+    },
+    "confidence": {
+      "enable": true,
+      "method": "margin",
+      "coverage_points": 20,
+      "top_k_agreement": 1
+    },
+    "report": {
+      "enable": false,
+      "result_dirs": [],
+      "output_dir": "results/reports",
+      "report_name": "comparison_report"
+    },
+    "logging": {
+      "output_dir": "results/",
+      "experiment_name": "scgpt"
+    }
+  },
+  "summary": {
+    "h5ad_path": "data/norman/perturb_processed.h5ad",
+    "loaded": true,
+    "has_split": true,
+    "n_cells": 91205,
+    "n_genes": 5045,
+    "n_control_cells": 7353,
+    "n_perturbed_cells": 83852,
+    "n_conditions": 282,
+    "n_ref_cells": 67152,
+    "n_query_cells": 16651,
+    "n_valid_conditions": 282,
+    "n_dropped_conditions": 1,
+    "split_seed": 42
+  },
+  "metrics": {
+    "exact_hit@1": 0.0019120458891013384,
+    "exact_hit@5": 0.009833378858235455,
+    "exact_hit@8": 0.02376399890740235,
+    "exact_hit@10": 0.03414367659109533,
+    "mrr": 0.007819335509857224,
+    "relevant_hit@1": 0.07156514613493581,
+    "relevant_hit@5": 0.18929254302103252,
+    "relevant_hit@8": 0.2616771373941546,
+    "relevant_hit@10": 0.30019120458891013,
+    "ndcg@1": 0.0019120458891013384,
+    "ndcg@5": 0.005978881653380878,
+    "ndcg@8": 0.010626920492915531,
+    "ndcg@10": 0.013699222357349782,
+    "macro_hit@1": 0.005847953216374269,
+    "macro_hit@5": 0.021901852846401716,
+    "n_queries": 3661,
+    "n_in_pool": 3661,
+    "n_conditions": 57,
+    "confidence_auc": 0.0007845053150081871,
+    "coverage_accuracy_curve": {
+      "coverage": [
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.39999999999999997,
+        0.44999999999999996,
+        0.49999999999999994,
+        0.5499999999999999,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.7999999999999999,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ],
+      "accuracy": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.00078064012490242,
+        0.0006830601092896175,
+        0.0006071645415907711,
+        0.000546448087431694,
+        0.0004967709885742673,
+        0.0004553734061930783,
+        0.0004203446826397646,
+        0.00117096018735363,
+        0.0014571948998178506,
+        0.0020491803278688526,
+        0.0019286403085824494,
+        0.0021250758955676987,
+        0.0020132297958009777,
+        0.0019120458891013384
+      ]
+    }
+  },
+  "metrics_mask_off": {
+    "exact_hit@1": 0.0019120458891013384,
+    "exact_hit@5": 0.021305654192843484,
+    "exact_hit@8": 0.03851406719475553,
+    "exact_hit@10": 0.04206500956022945,
+    "mrr": 0.011470432659998352,
+    "relevant_hit@1": 0.07511608850040973,
+    "relevant_hit@5": 0.22343621961212784,
+    "relevant_hit@8": 0.2838022398251844,
+    "relevant_hit@10": 0.3135755258126195,
+    "ndcg@1": 0.0019120458891013384,
+    "ndcg@5": 0.01170271735965287,
+    "ndcg@8": 0.01751832960680737,
+    "ndcg@10": 0.01855785526086826,
+    "macro_hit@1": 0.005847953216374269,
+    "macro_hit@5": 0.0348945273018163,
+    "n_queries": 3661,
+    "n_in_pool": 3661,
+    "n_conditions": 57,
+    "confidence_auc": 0.0006937590893776798,
+    "coverage_accuracy_curve": {
+      "coverage": [
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.39999999999999997,
+        0.44999999999999996,
+        0.49999999999999994,
+        0.5499999999999999,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.7999999999999999,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ],
+      "accuracy": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0009107468123861566,
+        0.00078064012490242,
+        0.0006830601092896175,
+        0.0006071645415907711,
+        0.000546448087431694,
+        0.0004967709885742673,
+        0.0004553734061930783,
+        0.0004203446826397646,
+        0.00078064012490242,
+        0.001092896174863388,
+        0.0010245901639344263,
+        0.0012857602057216328,
+        0.0018214936247723133,
+        0.0020132297958009777,
+        0.0019120458891013384
+      ]
+    }
+  }
+}
