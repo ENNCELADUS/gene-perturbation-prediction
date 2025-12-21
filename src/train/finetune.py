@@ -396,6 +396,7 @@ class ScGPTTrainer:
         self.model.train()
         total_loss = 0.0
         num_batches = 0
+        base_model = self.model.module if hasattr(self.model, "module") else self.model
 
         for embeddings, labels in dataloader:
             embeddings = embeddings.to(self.device)
@@ -405,7 +406,7 @@ class ScGPTTrainer:
 
             # Forward
             projected = self.model(embeddings)
-            loss = self.model.compute_loss(projected, labels)
+            loss = base_model.compute_loss(projected, labels)
 
             # Backward
             loss.backward()
@@ -430,13 +431,14 @@ class ScGPTTrainer:
         self.model.eval()
         total_loss = 0.0
         num_batches = 0
+        base_model = self.model.module if hasattr(self.model, "module") else self.model
 
         for embeddings, labels in dataloader:
             embeddings = embeddings.to(self.device)
             labels = labels.to(self.device)
 
             projected = self.model(embeddings)
-            loss = self.model.compute_loss(projected, labels)
+            loss = base_model.compute_loss(projected, labels)
 
             total_loss += loss.item()
             num_batches += 1
