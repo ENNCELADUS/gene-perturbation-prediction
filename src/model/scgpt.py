@@ -12,6 +12,131 @@ import numpy as np
 from .base import BaseEncoder
 
 
+def _get_batch_cell_embeddings(
+    adata,
+    cell_embedding_mode: str = "cls",
+    model=None,
+    vocab=None,
+    max_length: int = 1200,
+    batch_size: int = 64,
+    model_configs=None,
+    gene_ids=None,
+    use_batch_labels: bool = False,
+    num_workers: Optional[int] = None,
+) -> np.ndarray:
+    """Local embedding helper to avoid multiprocessing OOM during DDP."""
+    import os
+
+    import torch
+    from torch.utils.data import DataLoader, SequentialSampler
+    from scgpt.data_collator import DataCollator
+
+    count_matrix = adata.X
+    count_matrix = (
+        count_matrix if isinstance(count_matrix, np.ndarray) else count_matrix.toarray()
+    )
+
+    if gene_ids is None:
+        gene_ids = np.array(adata.var["id_in_vocab"])
+        assert np.all(gene_ids >= 0)
+
+    if use_batch_labels:
+        batch_ids = np.array(adata.obs["batch_id"].tolist())
+
+    class Dataset(torch.utils.data.Dataset):
+        def __init__(self, count_matrix, gene_ids, batch_ids=None):
+            self.count_matrix = count_matrix
+            self.gene_ids = gene_ids
+            self.batch_ids = batch_ids
+
+        def __len__(self):
+            return len(self.count_matrix)
+
+        def __getitem__(self, idx):
+            row = self.count_matrix[idx]
+            nonzero_idx = np.nonzero(row)[0]
+            values = row[nonzero_idx]
+            genes = self.gene_ids[nonzero_idx]
+            genes = np.insert(genes, 0, vocab["<cls>"])
+            values = np.insert(values, 0, model_configs["pad_value"])
+            genes = torch.from_numpy(genes).long()
+            values = torch.from_numpy(values).float()
+            output = {"id": idx, "genes": genes, "expressions": values}
+            if self.batch_ids is not None:
+                output["batch_labels"] = self.batch_ids[idx]
+            return output
+
+    if cell_embedding_mode != "cls":
+        raise ValueError(f"Unknown cell embedding mode: {cell_embedding_mode}")
+
+    dataset = Dataset(count_matrix, gene_ids, batch_ids if use_batch_labels else None)
+    collator = DataCollator(
+        do_padding=True,
+        pad_token_id=vocab[model_configs["pad_token"]],
+        pad_value=model_configs["pad_value"],
+        do_mlm=False,
+        do_binning=True,
+        max_length=max_length,
+        sampling=True,
+        keep_first_n_tokens=1,
+    )
+
+    if num_workers is None:
+        env_workers = os.environ.get("SCGPT_NUM_WORKERS")
+        if env_workers:
+            try:
+                num_workers = max(0, int(env_workers))
+            except ValueError:
+                num_workers = None
+        if num_workers is None:
+            if torch.distributed.is_available() and torch.distributed.is_initialized():
+                num_workers = 0
+            else:
+                affinity = (
+                    os.sched_getaffinity(0)
+                    if hasattr(os, "sched_getaffinity")
+                    else range(os.cpu_count() or 1)
+                )
+                num_workers = min(len(affinity), batch_size)
+
+    data_loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=SequentialSampler(dataset),
+        collate_fn=collator,
+        drop_last=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+
+    device = next(model.parameters()).device
+    cell_embeddings = np.zeros(
+        (len(dataset), model_configs["embsize"]), dtype=np.float32
+    )
+    with torch.no_grad(), torch.cuda.amp.autocast(enabled=True):
+        count = 0
+        for data_dict in data_loader:
+            input_gene_ids = data_dict["gene"].to(device)
+            src_key_padding_mask = input_gene_ids.eq(vocab[model_configs["pad_token"]])
+            embeddings = model._encode(
+                input_gene_ids,
+                data_dict["expr"].to(device),
+                src_key_padding_mask=src_key_padding_mask,
+                batch_labels=data_dict["batch_labels"].to(device)
+                if use_batch_labels
+                else None,
+            )
+
+            embeddings = embeddings[:, 0, :]
+            embeddings = embeddings.cpu().numpy()
+            cell_embeddings[count : count + len(embeddings)] = embeddings
+            count += len(embeddings)
+    cell_embeddings = cell_embeddings / np.linalg.norm(
+        cell_embeddings, axis=1, keepdims=True
+    )
+    return cell_embeddings
+
+
 class ScGPTEncoder(BaseEncoder):
     """
     scGPT-based expression encoder.
@@ -243,8 +368,6 @@ class ScGPTEncoder(BaseEncoder):
         if str(scgpt_path) not in sys.path:
             sys.path.insert(0, str(scgpt_path))
 
-        from scgpt.tasks.cell_emb import get_batch_cell_embeddings
-
         # Prepare gene IDs
         adata = adata.copy()
         gene_names = (
@@ -267,7 +390,7 @@ class ScGPTEncoder(BaseEncoder):
         gene_ids = np.array(adata.var["id_in_vocab"])
 
         # Get cell embeddings
-        cell_embeddings = get_batch_cell_embeddings(
+        cell_embeddings = _get_batch_cell_embeddings(
             adata,
             cell_embedding_mode="cls",
             model=self._model,
