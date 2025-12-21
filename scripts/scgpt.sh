@@ -24,6 +24,16 @@ set -euo pipefail
 # Create log directory
 mkdir -p logs/scgpt
 
+latest_run_dir() {
+    local base_dir="$1"
+    local latest_dir=""
+    latest_dir="$(ls -dt "${base_dir}"/* 2>/dev/null | head -n 1 || true)"
+    if [[ -z "${latest_dir}" ]]; then
+        return 1
+    fi
+    echo "${latest_dir}"
+}
+
 detect_num_gpus() {
     if [[ -n "${SLURM_GPUS_ON_NODE:-}" ]]; then
         echo "$SLURM_GPUS_ON_NODE"
@@ -67,6 +77,10 @@ echo "=============================================="
 echo "[MODE 1] Frozen scGPT Retrieval (Baseline)"
 echo "=============================================="
 python -m src.main --config src/configs/scgpt.yaml
+SCGPT_BASELINE_DIR="$(latest_run_dir results/scgpt)" || {
+    echo "Error: No scGPT baseline results found in results/scgpt" >&2
+    exit 1
+}
 echo "[1/3] Frozen scGPT completed!"
 
 # ============================================
@@ -85,6 +99,10 @@ echo "Evaluating head-only fine-tuned model..."
 python -m src.main \
     --config src/configs/scgpt.yaml \
     --experiment_name scgpt_head_only
+SCGPT_HEAD_ONLY_DIR="$(latest_run_dir results/scgpt_head_only)" || {
+    echo "Error: No scGPT head-only results found in results/scgpt_head_only" >&2
+    exit 1
+}
 echo "[2/3] Head-only fine-tuning completed!"
 
 # ============================================
@@ -103,6 +121,10 @@ echo "Evaluating LoRA fine-tuned model..."
 python -m src.main \
     --config src/configs/scgpt.yaml \
     --experiment_name scgpt_lora_head
+SCGPT_LORA_HEAD_DIR="$(latest_run_dir results/scgpt_lora_head)" || {
+    echo "Error: No scGPT LoRA head results found in results/scgpt_lora_head" >&2
+    exit 1
+}
 echo "[3/3] LoRA fine-tuning completed!"
 
 echo ""
@@ -116,9 +138,7 @@ echo "=============================================="
 echo ""
 echo "Generating ablative comparison report..."
 python scripts/compare.py \
-    --pattern "results/scgpt_*" \
-    --pattern "results/scgpt_head_only_*" \
-    --pattern "results/scgpt_lora_head_*" \
+    --results "${SCGPT_BASELINE_DIR}" "${SCGPT_HEAD_ONLY_DIR}" "${SCGPT_LORA_HEAD_DIR}" \
     --output results/reports \
     --name scgpt_ablative_comparison
 echo "Ablative comparison report saved to results/reports/"

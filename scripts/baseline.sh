@@ -20,6 +20,16 @@ conda activate vcc
 
 set -euo pipefail
 
+latest_run_dir() {
+    local base_dir="$1"
+    local latest_dir=""
+    latest_dir="$(ls -dt "${base_dir}"/* 2>/dev/null | head -n 1 || true)"
+    if [[ -z "${latest_dir}" ]]; then
+        return 1
+    fi
+    echo "${latest_dir}"
+}
+
 echo "=============================================="
 echo "Running all baseline models"
 echo "=============================================="
@@ -29,6 +39,10 @@ echo ""
 echo "[1/2] Running PCA baseline..."
 echo "----------------------------------------------"
 python -m src.main --config src/configs/pca.yaml
+PCA_RUN_DIR="$(latest_run_dir results/pca)" || {
+    echo "Error: No PCA results found in results/pca" >&2
+    exit 1
+}
 echo "PCA baseline completed!"
 
 # Run Logistic Regression baseline
@@ -36,6 +50,10 @@ echo ""
 echo "[2/2] Running Logistic Regression baseline..."
 echo "----------------------------------------------"
 python -m src.main --config src/configs/logreg.yaml
+LOGREG_RUN_DIR="$(latest_run_dir results/logreg)" || {
+    echo "Error: No Logistic Regression results found in results/logreg" >&2
+    exit 1
+}
 echo "Logistic Regression baseline completed!"
 
 echo ""
@@ -46,5 +64,8 @@ echo "=============================================="
 # Generate comparison report
 echo ""
 echo "Generating comparison report..."
-python scripts/compare.py --pattern "results/pca_*" --pattern "results/logreg_*" --output results/reports --name baseline_comparison
+python scripts/compare.py \
+    --results "${PCA_RUN_DIR}" "${LOGREG_RUN_DIR}" \
+    --output results/reports \
+    --name baseline_comparison
 echo "Comparison report saved to results/reports/"

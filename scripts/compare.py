@@ -29,8 +29,12 @@ def main():
     )
     parser.add_argument(
         "--pattern",
-        type=str,
-        help="Glob pattern to match result directories (alternative to --results)",
+        action="append",
+        default=[],
+        help=(
+            "Glob pattern to match result directories (alternative to --results). "
+            "Repeat to provide multiple patterns."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -60,7 +64,8 @@ def main():
                 result_dirs.append(path)
 
     if args.pattern:
-        result_dirs.extend(glob.glob(args.pattern))
+        for pattern in args.pattern:
+            result_dirs.extend(glob.glob(pattern))
 
     # Remove duplicates and convert to Path
     result_dirs = list(set(result_dirs))

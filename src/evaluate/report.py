@@ -45,7 +45,11 @@ def aggregate_results(result_dirs: List[Path]) -> pd.DataFrame:
         config = data.get("config", {})
         model_config = config.get("model", {})
         encoder_type = model_config.get("encoder", "unknown")
-        exp_name = config.get("logging", {}).get("experiment_name", result_dir.name)
+        exp_name = config.get("logging", {}).get("experiment_name")
+        if not exp_name:
+            exp_name = result_dir.parent.name
+        elif exp_name == encoder_type and result_dir.parent.name != exp_name:
+            exp_name = result_dir.parent.name
 
         # Extract mask ON metrics
         if "metrics" in data:
@@ -108,10 +112,12 @@ def generate_comparison_table(
     # Filter to available metrics
     available_metrics = [m for m in metrics if m in results.columns]
 
-    # Pivot for comparison: rows = (encoder, mask), columns = metrics
-    index_cols = ["encoder", "mask"]
+    # Prefer experiment name when it distinguishes runs using the same encoder.
+    label_col = "experiment" if results["experiment"].nunique() > 1 else "encoder"
+    # Pivot for comparison: rows = (label, mask), columns = metrics
+    index_cols = [label_col, "mask"]
     display_df = results[index_cols + available_metrics].copy()
-    display_df = display_df.sort_values(["encoder", "mask"], ascending=[True, False])
+    display_df = display_df.sort_values(index_cols, ascending=[True, False])
 
     # Format floats
     for col in available_metrics:
@@ -236,7 +242,7 @@ def generate_report(
 
 ## Overview
 
-Comparison of {len(results_df["encoder"].unique())} models across {len(result_dirs)} runs.
+Comparison of {len(results_df["experiment"].unique())} experiments across {len(result_dirs)} runs.
 
 ## Results Table
 
@@ -246,6 +252,7 @@ Comparison of {len(results_df["encoder"].unique())} models across {len(result_di
 
 - **mask=True**: Anti-cheat masking enabled (perturbed gene expression zeroed)
 - **mask=False**: No masking (includes potential leakage signal)
+- **experiment/encoder**: Uses logging.experiment_name when multiple runs share an encoder; otherwise shows encoder
 - **exact_hit@K**: Fraction where true condition is in top-K predictions
 - **relevant_hit@K**: Fraction where any top-K prediction shares a gene with ground truth
 - **mrr**: Mean Reciprocal Rank
