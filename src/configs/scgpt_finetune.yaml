@@ -45,7 +45,7 @@ training:
   warmup_ratio: 0.1
   early_stopping_patience: 10
   early_stopping_metric: val_loss
-  checkpoint_dir: checkpoints/scgpt_finetune
+  checkpoint_dir: model/scgpt_finetune
 
 # LoRA configuration (for lora_head mode)
 lora:
