@@ -108,7 +108,7 @@ def run_pipeline(config: dict, args) -> dict:
         "experiment_name", config["model"]["encoder"]
     )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = Path(output_dir) / f"{experiment_name}_{timestamp}"
+    run_dir = Path(output_dir) / experiment_name / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)

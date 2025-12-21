@@ -1,20 +1,38 @@
 # scGPT Fine-tuning Configuration for Reverse Perturbation Prediction
-# 
+#
 # Three training modes for ablative study:
 #   1. frozen - Inference only (baseline)
 #   2. head_only - Train retrieval head with frozen backbone
 #   3. lora_head - Train LoRA adapters + retrieval head
 
-# Inherit base scGPT data/evaluation settings
+# Data
 data:
   h5ad_path: data/norman/perturb_processed.h5ad
 
+# Cell-level split
 split:
   min_cells_per_condition: 50
   query_fraction: 0.2
   min_query_cells: 10
   seed: 42
   output_path: data/norman/splits/cell_split_seed42.json
+
+# Condition-level split (generalization track)
+track: in_dist
+condition_split:
+  train_ratio: 0.7
+  val_ratio: 0.1
+  test_ratio: 0.2
+  seed: 42
+  output_path: data/norman/splits/condition_split_in_dist_seed42.json
+
+# Model
+model:
+  encoder: scgpt
+  # Pretrained scGPT checkpoint (frozen backbone)
+  pretrained_dir: model/scGPT
+  freeze_encoder: true
+  use_lora: false  # Set to true when using lora_head mode
 
 # Training configuration
 training:
@@ -56,38 +74,23 @@ infonce:
 classification:
   label_smoothing: 0.1
 
-# Model paths
-model:
-  encoder: scgpt
-  # Pretrained scGPT checkpoint (frozen backbone)
-  pretrained_dir: model/scGPT
-  freeze_encoder: true
-  use_lora: false  # Set to true when using lora_head mode
-
 # Retrieval evaluation settings
 retrieval:
   metric: cosine
   top_k: [1, 5, 8, 10]
+
+# Query setup
+query:
+  mode: cell
+  query_split: test
+  candidate_source: all
 
 # Evaluation settings
 evaluate:
   mask_perturbed: true
   mask_ablation: true
 
-track: in_dist
-
-condition_split:
-  train_ratio: 0.7
-  val_ratio: 0.1
-  test_ratio: 0.2
-  seed: 42
-  output_path: data/norman/splits/condition_split_in_dist_seed42.json
-
-query:
-  mode: cell
-  query_split: test
-  candidate_source: all
-
+# Logging
 logging:
   output_dir: results/
   experiment_name: scgpt_finetune

@@ -42,6 +42,25 @@ from .lora import (
 class TrainingConfig:
     """Configuration for scGPT fine-tuning."""
 
+    # Data paths
+    data_h5ad_path: str = "data/norman/perturb_processed.h5ad"
+
+    # Cell-level split config
+    split_min_cells_per_condition: int = 50
+    split_query_fraction: float = 0.2
+    split_min_query_cells: int = 10
+    split_seed: int = 42
+    split_output_path: Optional[str] = None
+
+    # Condition-level split config (optional)
+    track: Optional[str] = None
+    condition_split_train_ratio: float = 0.7
+    condition_split_val_ratio: float = 0.1
+    condition_split_test_ratio: float = 0.2
+    condition_split_seed: int = 42
+    condition_split_output_path: Optional[str] = None
+    condition_split_n_holdout_genes: int = 5
+
     # Mode: frozen | head_only | lora_head
     mode: str = "head_only"
 
@@ -90,6 +109,47 @@ class TrainingConfig:
 
         # Flatten nested config
         config_dict = {}
+        if "data" in data:
+            h5ad_path = data["data"].get("h5ad_path")
+            if h5ad_path:
+                config_dict["data_h5ad_path"] = h5ad_path
+        if "split" in data:
+            split_cfg = data["split"]
+            config_dict["split_min_cells_per_condition"] = split_cfg.get(
+                "min_cells_per_condition",
+                config_dict.get("split_min_cells_per_condition"),
+            )
+            config_dict["split_query_fraction"] = split_cfg.get(
+                "query_fraction", config_dict.get("split_query_fraction")
+            )
+            config_dict["split_min_query_cells"] = split_cfg.get(
+                "min_query_cells", config_dict.get("split_min_query_cells")
+            )
+            config_dict["split_seed"] = split_cfg.get(
+                "seed", config_dict.get("split_seed")
+            )
+            config_dict["split_output_path"] = split_cfg.get("output_path")
+        if "track" in data:
+            config_dict["track"] = data.get("track")
+        if "condition_split" in data:
+            cond_cfg = data["condition_split"]
+            config_dict["condition_split_train_ratio"] = cond_cfg.get(
+                "train_ratio", config_dict.get("condition_split_train_ratio")
+            )
+            config_dict["condition_split_val_ratio"] = cond_cfg.get(
+                "val_ratio", config_dict.get("condition_split_val_ratio")
+            )
+            config_dict["condition_split_test_ratio"] = cond_cfg.get(
+                "test_ratio", config_dict.get("condition_split_test_ratio")
+            )
+            config_dict["condition_split_seed"] = cond_cfg.get(
+                "seed", config_dict.get("condition_split_seed")
+            )
+            config_dict["condition_split_output_path"] = cond_cfg.get("output_path")
+            if "n_holdout_genes" in cond_cfg:
+                config_dict["condition_split_n_holdout_genes"] = cond_cfg.get(
+                    "n_holdout_genes"
+                )
         if "training" in data:
             config_dict.update(data["training"])
         if "lora" in data:
@@ -687,10 +747,45 @@ def main():
 
     # Load dataset
     from src.data import load_perturb_data
+    from src.data import ConditionSplitter, ConditionSplit
 
     if is_master:
         print("Loading dataset...")
-    dataset = load_perturb_data(h5ad_path="data/norman/perturb_processed.h5ad")
+    dataset = load_perturb_data(
+        h5ad_path=config.data_h5ad_path,
+        split_path=config.split_output_path,
+        min_cells_per_condition=config.split_min_cells_per_condition,
+        query_fraction=config.split_query_fraction,
+        min_query_cells=config.split_min_query_cells,
+        seed=config.split_seed,
+    )
+    if config.split_output_path and dataset.split is not None:
+        dataset.split.save(config.split_output_path)
+
+    if config.track:
+        cond_split = None
+        if (
+            config.condition_split_output_path
+            and Path(config.condition_split_output_path).exists()
+        ):
+            cond_split = ConditionSplit.load(config.condition_split_output_path)
+        else:
+            splitter = ConditionSplitter(
+                train_ratio=config.condition_split_train_ratio,
+                val_ratio=config.condition_split_val_ratio,
+                test_ratio=config.condition_split_test_ratio,
+                seed=config.condition_split_seed,
+            )
+            if config.track == "unseen_gene":
+                cond_split = splitter.split_unseen_gene(
+                    dataset.all_conditions,
+                    n_holdout_genes=config.condition_split_n_holdout_genes,
+                )
+            else:
+                cond_split = splitter.split(dataset.all_conditions, track=config.track)
+            if config.condition_split_output_path:
+                cond_split.save(config.condition_split_output_path)
+        dataset.apply_condition_split(cond_split)
 
     # Get condition mapping
     conditions = dataset.all_conditions
@@ -706,26 +801,40 @@ def main():
         num_conditions=num_conditions,
     )
 
+    condition_sets = dataset.get_condition_sets()
+    train_conditions = condition_sets.get("train") or conditions
+    val_conditions = condition_sets.get("val") or []
+
     # Extract embeddings (pre-compute for efficiency)
     if is_master:
         print("Extracting embeddings...")
-    train_adata = dataset.get_ref_adata_for_conditions(conditions)
-    embeddings = encoder.encode_adata(train_adata)
-    labels = train_adata.obs[dataset.condition_col].values
+    train_adata = dataset.get_ref_adata_for_conditions(train_conditions)
+    train_embeddings = encoder.encode_adata(train_adata)
+    train_labels = train_adata.obs[dataset.condition_col].values
 
-    # Create datasets
     train_dataset = CellEmbeddingDataset(
-        embeddings=embeddings,
-        condition_labels=labels,
+        embeddings=train_embeddings,
+        condition_labels=train_labels,
         condition_to_idx=condition_to_idx,
     )
 
-    # Simple 80/20 split for train/val
-    n_train = int(0.8 * len(train_dataset))
-    n_val = len(train_dataset) - n_train
-    train_subset, val_subset = torch.utils.data.random_split(
-        train_dataset, [n_train, n_val]
-    )
+    if val_conditions:
+        val_adata = dataset.get_ref_adata_for_conditions(val_conditions)
+        val_embeddings = encoder.encode_adata(val_adata)
+        val_labels = val_adata.obs[dataset.condition_col].values
+        val_dataset = CellEmbeddingDataset(
+            embeddings=val_embeddings,
+            condition_labels=val_labels,
+            condition_to_idx=condition_to_idx,
+        )
+        train_subset = train_dataset
+        val_subset = val_dataset
+    else:
+        n_train = int(0.8 * len(train_dataset))
+        n_val = len(train_dataset) - n_train
+        train_subset, val_subset = torch.utils.data.random_split(
+            train_dataset, [n_train, n_val]
+        )
 
     train_sampler = None
     val_sampler = None
@@ -749,8 +858,11 @@ def main():
 
     # Train
     if ddp_enabled:
+        allow_unused = config.loss_fn == "infonce" or config.mode == "lora_head"
         model = torch.nn.parallel.DistributedDataParallel(
-            model.to(device), device_ids=[int(device.split(":")[-1])]
+            model.to(device),
+            device_ids=[int(device.split(":")[-1])],
+            find_unused_parameters=allow_unused,
         )
     trainer = ScGPTTrainer(model, config, device=device, is_master=is_master)
 

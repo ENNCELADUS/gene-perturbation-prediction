@@ -1,8 +1,10 @@
 # scGPT Retrieval Configuration for Reverse Perturbation Prediction
 
+# Data
 data:
   h5ad_path: data/norman/perturb_processed.h5ad
 
+# Cell-level split
 split:
   min_cells_per_condition: 50
   query_fraction: 0.2
@@ -10,29 +12,8 @@ split:
   seed: 42
   output_path: data/norman/splits/cell_split_seed42.json
 
-library:
-  type: bootstrap  # bootstrap | mean | raw_cell
-  n_prototypes: 30
-  m_cells_per_prototype: 50
-  seed: 42
-
-model:
-  encoder: scgpt
-  checkpoint: null  # Path to scGPT pretrained weights
-  freeze_encoder: true
-  use_lora: false
-  lora_rank: 8
-
-retrieval:
-  metric: cosine  # cosine | euclidean
-  top_k: [1, 5, 8, 10]
-
-evaluate:
-  mask_perturbed: true  # Anti-cheat: mask perturbed gene expression
-  mask_ablation: true
-
+# Condition-level split (generalization track)
 track: in_dist  # in_dist | unseen_combo | unseen_gene
-
 condition_split:
   train_ratio: 0.7
   val_ratio: 0.1
@@ -41,6 +22,27 @@ condition_split:
   output_path: data/norman/splits/condition_split_in_dist_seed42.json
   n_holdout_genes: 5
 
+# Model
+model:
+  encoder: scgpt
+  checkpoint: null  # Path to scGPT pretrained weights
+  freeze_encoder: true
+  use_lora: false
+  lora_rank: 8
+
+# Prototype library
+library:
+  type: bootstrap  # bootstrap | mean | raw_cell
+  n_prototypes: 30
+  m_cells_per_prototype: 50
+  seed: 42
+
+# Retrieval
+retrieval:
+  metric: cosine  # cosine | euclidean
+  top_k: [1, 5, 8, 10]
+
+# Query setup
 query:
   mode: cell  # cell | pseudobulk
   query_split: test  # train | val | test
@@ -55,18 +57,26 @@ query:
     n_bulks: 5
     seed: 42
 
+# Evaluation
+evaluate:
+  mask_perturbed: true  # Anti-cheat: mask perturbed gene expression
+  mask_ablation: true
+
+# Confidence estimation
 confidence:
   enable: true
   method: margin  # margin | entropy
   coverage_points: 20
   top_k_agreement: 1
 
+# Reporting
 report:
   enable: false
   result_dirs: []
   output_dir: results/reports
   report_name: comparison_report
 
+# Logging
 logging:
   output_dir: results/
   experiment_name: scgpt

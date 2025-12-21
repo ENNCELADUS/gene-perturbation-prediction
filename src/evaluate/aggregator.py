@@ -10,6 +10,7 @@ Provides:
 from __future__ import annotations
 
 import json
+import fnmatch
 from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
@@ -64,12 +65,11 @@ class RunAggregator:
         """
         self.runs = []
 
-        for run_dir in self.base_dir.glob(pattern):
+        for metrics_file in self.base_dir.rglob("metrics.json"):
+            run_dir = metrics_file.parent
             if not run_dir.is_dir():
                 continue
-
-            metrics_file = run_dir / "metrics.json"
-            if not metrics_file.exists():
+            if not fnmatch.fnmatch(run_dir.name, pattern):
                 continue
 
             with open(metrics_file) as f:
