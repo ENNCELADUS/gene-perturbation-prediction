@@ -89,6 +89,26 @@ class LoRALinear(nn.Module):
 
         return result + lora_out * self.scaling
 
+    @property
+    def weight(self) -> torch.Tensor:
+        """Expose wrapped weight for compatibility with callers expecting nn.Linear."""
+        return self.original_linear.weight
+
+    @property
+    def bias(self) -> Optional[torch.Tensor]:
+        """Expose wrapped bias for compatibility with callers expecting nn.Linear."""
+        return self.original_linear.bias
+
+    @property
+    def in_features(self) -> int:
+        """Expose wrapped in_features for compatibility with nn.Linear."""
+        return self.original_linear.in_features
+
+    @property
+    def out_features(self) -> int:
+        """Expose wrapped out_features for compatibility with nn.Linear."""
+        return self.original_linear.out_features
+
     def merge_weights(self):
         """
         Merge LoRA weights into original linear layer.
