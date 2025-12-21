@@ -60,9 +60,14 @@ class LoRALinear(nn.Module):
         for param in self.original_linear.parameters():
             param.requires_grad = False
 
-        # LoRA matrices
-        self.lora_A = nn.Parameter(torch.zeros(rank, in_features))
-        self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
+        # LoRA matrices (match original layer device/dtype for multi-GPU safety)
+        weight = self.original_linear.weight
+        self.lora_A = nn.Parameter(
+            torch.zeros(rank, in_features, device=weight.device, dtype=weight.dtype)
+        )
+        self.lora_B = nn.Parameter(
+            torch.zeros(out_features, rank, device=weight.device, dtype=weight.dtype)
+        )
 
         # Initialize A with kaiming uniform and B with zeros
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
