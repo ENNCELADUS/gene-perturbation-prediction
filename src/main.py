@@ -160,7 +160,7 @@ def run_pipeline(config: dict, args) -> dict:
 
     # Optional: condition-level split for generalization tracks
     track = args.track or config.get("track")
-    if track:
+    if track and track != "in_dist":
         cond_cfg = config.get("condition_split", {})
         splitter = ConditionSplitter(
             train_ratio=cond_cfg.get("train_ratio", 0.7),
@@ -185,6 +185,8 @@ def run_pipeline(config: dict, args) -> dict:
         dataset.apply_condition_split(cond_split)
         config["track"] = track
         print(f"  - Condition split ({track}) saved to: {cond_out_path}")
+    elif track == "in_dist":
+        print("  [Info] in_dist track uses cell-level split; skipping condition split.")
 
     # Setup evaluator
     print(f"\n[3/4] Setting up {config['model']['encoder']} encoder...")
