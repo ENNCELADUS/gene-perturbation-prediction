@@ -29,6 +29,8 @@ class ScGPTEncoder(BaseEncoder):
         batch_size: int = 64,
         device: str = "cuda",
         use_fast_transformer: bool = True,
+        finetune_checkpoint: Optional[str] = None,
+        finetune_apply_head: bool = True,
         **unused_kwargs,
     ):
         """
@@ -50,12 +52,17 @@ class ScGPTEncoder(BaseEncoder):
         self.batch_size = batch_size
         self.device = device
         self.use_fast_transformer = use_fast_transformer
+        self.finetune_checkpoint = finetune_checkpoint
+        self.finetune_apply_head = finetune_apply_head
 
         # Lazy-loaded components
         self._model = None
         self._vocab = None
         self._model_configs = None
         self._loaded = False
+        self._finetune_loaded = False
+        self._retrieval_head = None
+        self._finetune_config = None
 
     def _load_model(self):
         """Load scGPT model, vocab, and config."""
@@ -134,7 +141,68 @@ class ScGPTEncoder(BaseEncoder):
         self._model.to(device)
         self._model.eval()
 
+        if self.finetune_checkpoint:
+            self._load_finetune(device)
+
         self._loaded = True
+
+    def _load_finetune(self, device) -> None:
+        """Load fine-tuned retrieval head and optional LoRA weights."""
+        if self._finetune_loaded:
+            return
+
+        import torch
+        from pathlib import Path
+
+        checkpoint_path = Path(self.finetune_checkpoint)
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(
+                f"Fine-tune checkpoint not found: {checkpoint_path}"
+            )
+
+        state = torch.load(checkpoint_path, map_location=device)
+        self._finetune_config = state.get("config", {})
+
+        if self.finetune_apply_head and "retrieval_head" in state:
+            from src.train.finetune import RetrievalHead
+
+            head_hidden = self._finetune_config.get("head_hidden_dim", 256)
+            head_output = self._finetune_config.get("head_output_dim", 128)
+            head_dropout = self._finetune_config.get("head_dropout", 0.2)
+            self._retrieval_head = RetrievalHead(
+                input_dim=self._model_configs["embsize"],
+                hidden_dim=head_hidden,
+                output_dim=head_output,
+                dropout=head_dropout,
+                normalize=True,
+            )
+            self._retrieval_head.load_state_dict(state["retrieval_head"])
+            self._retrieval_head.to(device)
+            self._retrieval_head.eval()
+
+        lora_state = state.get("lora")
+        if lora_state:
+            from src.train.lora import apply_lora_to_scgpt, LoRALinear
+
+            apply_lora_to_scgpt(
+                self._model,
+                rank=self._finetune_config.get("lora_rank", 8),
+                alpha=self._finetune_config.get("lora_alpha", 16.0),
+                dropout=self._finetune_config.get("lora_dropout", 0.1),
+                target_modules=self._finetune_config.get(
+                    "lora_target_modules", ["out_proj", "linear1", "linear2"]
+                ),
+            )
+            for name, module in self._model.named_modules():
+                if isinstance(module, LoRALinear) and name in lora_state:
+                    module.lora_A.data = lora_state[name]["lora_A"].to(
+                        module.lora_A.device
+                    )
+                    module.lora_B.data = lora_state[name]["lora_B"].to(
+                        module.lora_B.device
+                    )
+
+        self._finetune_loaded = True
 
     def fit(self, X: np.ndarray) -> "ScGPTEncoder":
         """Fit is no-op for pretrained model."""
@@ -211,12 +279,38 @@ class ScGPTEncoder(BaseEncoder):
             use_batch_labels=False,
         )
 
+        if self._retrieval_head is not None:
+            cell_embeddings = self._apply_retrieval_head(cell_embeddings)
+
         return cell_embeddings
+
+    def _apply_retrieval_head(self, embeddings: np.ndarray) -> np.ndarray:
+        """Apply fine-tuned retrieval head to embeddings."""
+        if self._retrieval_head is None:
+            return embeddings
+
+        import torch
+
+        device = next(self._model.parameters()).device
+        head = self._retrieval_head.to(device)
+        head.eval()
+
+        outputs = []
+        batch_size = max(1, self.batch_size)
+        with torch.no_grad():
+            for i in range(0, len(embeddings), batch_size):
+                batch = torch.from_numpy(embeddings[i : i + batch_size]).to(device)
+                projected = head(batch).cpu().numpy()
+                outputs.append(projected)
+
+        return np.vstack(outputs) if outputs else embeddings
 
     @property
     def embedding_dim(self) -> int:
         """Get embedding dimensionality."""
         self._load_model()
+        if self._retrieval_head is not None:
+            return self._retrieval_head.mlp[-1].out_features
         return self._model_configs["embsize"]
 
     def get_model(self):

@@ -137,49 +137,96 @@ class CellRetrievalEvaluator:
     ) -> None:
         """Build reference library from encoded ref cells."""
         ref_for_library = dataset.get_ref_adata_for_conditions(conditions)
-        X = ref_for_library.X
-        if hasattr(X, "toarray"):
-            X = X.toarray()
+        if self.mask_perturbed:
+            ref_for_library = mask_perturbed_genes(ref_for_library)
 
-        if self.library_type == "bootstrap":
-            # Build bootstrap prototypes
-            profiles, labels = build_prototype_library(
-                adata=ref_for_library,
-                conditions=conditions,
-                n_prototypes=self.n_prototypes,
-                m_cells_per_prototype=self.m_cells_per_prototype,
-                method="bootstrap",
-                seed=self.library_seed,
-            )
-            # Encode prototypes
-            self.library_vectors = self._encode_profiles(profiles, ref_for_library)
-            self.library_labels = labels
+        use_embedding_space = self.encoder_type == "scgpt" and hasattr(
+            self.encoder, "encode_adata"
+        )
 
-        elif self.library_type == "mean":
-            # One mean prototype per condition
-            profiles = []
-            labels = []
-            for cond in conditions:
-                mask = ref_for_library.obs["condition"] == cond
-                if mask.sum() == 0:
-                    continue
-                cond_X = X[mask]
-                mean_profile = np.mean(cond_X, axis=0)
-                profiles.append(mean_profile)
-                labels.append(cond)
+        if use_embedding_space:
+            cell_embeddings = self.encoder.encode_adata(ref_for_library)
+            cell_labels = np.array(ref_for_library.obs["condition"].tolist())
 
-            if profiles:
-                profiles = np.vstack(profiles)
+            if self.library_type == "raw_cell":
+                self.library_vectors = cell_embeddings
+                self.library_labels = cell_labels.tolist()
+
+            elif self.library_type in {"bootstrap", "mean"}:
+                profiles = []
+                labels = []
+                rng = np.random.default_rng(self.library_seed)
+
+                for cond in conditions:
+                    if cond == "ctrl":
+                        continue
+                    cond_mask = cell_labels == cond
+                    if not np.any(cond_mask):
+                        continue
+                    cond_embeddings = cell_embeddings[cond_mask]
+                    n_cells = len(cond_embeddings)
+
+                    if self.library_type == "mean":
+                        profiles.append(cond_embeddings.mean(axis=0))
+                        labels.append(cond)
+                        continue
+
+                    sample_size = self.m_cells_per_prototype or n_cells
+                    for _ in range(self.n_prototypes):
+                        indices = rng.choice(n_cells, size=sample_size, replace=True)
+                        prototype = cond_embeddings[indices].mean(axis=0)
+                        profiles.append(prototype)
+                        labels.append(cond)
+
+                if profiles:
+                    self.library_vectors = np.vstack(profiles)
+                    self.library_labels = labels
+
+            else:
+                raise ValueError(f"Unknown library_type: {self.library_type}")
+
+        else:
+            X = ref_for_library.X
+            if hasattr(X, "toarray"):
+                X = X.toarray()
+
+            if self.library_type == "bootstrap":
+                profiles, labels = build_prototype_library(
+                    adata=ref_for_library,
+                    conditions=conditions,
+                    n_prototypes=self.n_prototypes,
+                    m_cells_per_prototype=self.m_cells_per_prototype,
+                    method="bootstrap",
+                    seed=self.library_seed,
+                )
                 self.library_vectors = self._encode_profiles(profiles, ref_for_library)
                 self.library_labels = labels
 
-        elif self.library_type == "raw_cell":
-            # Use all ref cell embeddings directly
-            self.library_vectors = self._encode_profiles(X, ref_for_library)
-            self.library_labels = ref_for_library.obs["condition"].tolist()
+            elif self.library_type == "mean":
+                profiles = []
+                labels = []
+                for cond in conditions:
+                    mask = ref_for_library.obs["condition"] == cond
+                    if mask.sum() == 0:
+                        continue
+                    cond_X = X[mask]
+                    mean_profile = np.mean(cond_X, axis=0)
+                    profiles.append(mean_profile)
+                    labels.append(cond)
 
-        else:
-            raise ValueError(f"Unknown library_type: {self.library_type}")
+                if profiles:
+                    profiles = np.vstack(profiles)
+                    self.library_vectors = self._encode_profiles(
+                        profiles, ref_for_library
+                    )
+                    self.library_labels = labels
+
+            elif self.library_type == "raw_cell":
+                self.library_vectors = self._encode_profiles(X, ref_for_library)
+                self.library_labels = ref_for_library.obs["condition"].tolist()
+
+            else:
+                raise ValueError(f"Unknown library_type: {self.library_type}")
 
         if not self.library_labels:
             raise RuntimeError("Reference library is empty; check conditions/split.")

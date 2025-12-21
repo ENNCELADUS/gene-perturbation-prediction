@@ -43,6 +43,7 @@ training:
   learning_rate: 1.0e-4
   weight_decay: 0.01
   warmup_ratio: 0.1
+  mask_perturbed: true
   early_stopping_patience: 10
   early_stopping_metric: val_loss
   checkpoint_dir: model/scgpt_finetune

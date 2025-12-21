@@ -73,6 +73,7 @@ class TrainingConfig:
     learning_rate: float = 1e-4
     weight_decay: float = 0.01
     warmup_ratio: float = 0.1
+    mask_perturbed: bool = True
 
     # Early stopping
     early_stopping_patience: int = 10
@@ -261,6 +262,78 @@ class CellEmbeddingDataset(Dataset):
         return self.embeddings[idx], self.labels[idx]
 
 
+class CellTokenDataset(Dataset):
+    """Dataset that returns tokenized genes/expressions with labels."""
+
+    def __init__(
+        self,
+        adata,
+        gene_ids: np.ndarray,
+        condition_labels: np.ndarray,
+        condition_to_idx: Dict[str, int],
+        cls_token_id: int,
+        pad_value: float,
+    ):
+        self.count_matrix = (
+            adata.X.toarray() if hasattr(adata.X, "toarray") else adata.X
+        )
+        self.gene_ids = gene_ids
+        self.labels = torch.tensor(
+            [condition_to_idx[c] for c in condition_labels],
+            dtype=torch.long,
+        )
+        self.cls_token_id = cls_token_id
+        self.pad_value = pad_value
+
+    def __len__(self) -> int:
+        return len(self.count_matrix)
+
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        row = self.count_matrix[idx]
+        nonzero_idx = np.nonzero(row)[0]
+        values = row[nonzero_idx].astype(np.float32)
+        genes = self.gene_ids[nonzero_idx].astype(np.int64)
+        genes = np.insert(genes, 0, self.cls_token_id)
+        values = np.insert(values, 0, self.pad_value).astype(np.float32)
+        return {
+            "genes": torch.from_numpy(genes).long(),
+            "expressions": torch.from_numpy(values).float(),
+            "label": self.labels[idx],
+        }
+
+
+def _prepare_scgpt_adata(adata, vocab, gene_col: str):
+    """Add vocab ids and filter to genes present in scGPT vocab."""
+    adata = adata.copy()
+    gene_names = (
+        adata.var[gene_col].values if gene_col in adata.var else adata.var.index.values
+    )
+    adata.var["id_in_vocab"] = [vocab[g] if g in vocab else -1 for g in gene_names]
+    valid_genes = adata.var["id_in_vocab"] >= 0
+    n_valid = int(valid_genes.sum())
+    n_total = len(valid_genes)
+    if n_valid < n_total:
+        print(f"  [scGPT] Using {n_valid}/{n_total} genes in vocabulary")
+    adata = adata[:, valid_genes].copy()
+    gene_ids = np.array(adata.var["id_in_vocab"])
+    return adata, gene_ids
+
+
+def _make_scgpt_collate_fn(collator):
+    """Attach labels to scGPT data collator output."""
+
+    def collate(examples):
+        labels = torch.stack([ex["label"] for ex in examples])
+        base_examples = [
+            {"genes": ex["genes"], "expressions": ex["expressions"]} for ex in examples
+        ]
+        batch = collator(base_examples)
+        batch["labels"] = labels
+        return batch
+
+    return collate
+
+
 class FineTunableScGPTEncoder(nn.Module):
     """
     scGPT encoder with fine-tuning support.
@@ -379,6 +452,27 @@ class FineTunableScGPTEncoder(nn.Module):
         """
         return self.retrieval_head(embeddings)
 
+    def encode_tokens(
+        self,
+        input_gene_ids: torch.Tensor,
+        expressions: torch.Tensor,
+        pad_token_id: int,
+        batch_labels: Optional[torch.Tensor] = None,
+        normalize: bool = True,
+    ) -> torch.Tensor:
+        """Encode gene/expression tokens into CLS embeddings."""
+        src_key_padding_mask = input_gene_ids.eq(pad_token_id)
+        layer_output = self.scgpt_model._encode(
+            input_gene_ids,
+            expressions,
+            src_key_padding_mask=src_key_padding_mask,
+            batch_labels=batch_labels,
+        )
+        embeddings = layer_output[:, 0, :]
+        if normalize:
+            embeddings = F.normalize(embeddings, p=2, dim=1)
+        return embeddings
+
     def compute_loss(
         self,
         embeddings: torch.Tensor,
@@ -414,6 +508,8 @@ class ScGPTTrainer:
         config: TrainingConfig,
         device: str = "cuda",
         is_master: bool = True,
+        end_to_end: bool = False,
+        pad_token_id: Optional[int] = None,
     ):
         """
         Initialize trainer.
@@ -427,6 +523,8 @@ class ScGPTTrainer:
         self.config = config
         self.device = device
         self.is_master = is_master
+        self.end_to_end = end_to_end
+        self.pad_token_id = pad_token_id
 
         # Optimizer only for trainable parameters
         trainable_params = [p for p in model.parameters() if p.requires_grad]
@@ -458,14 +556,24 @@ class ScGPTTrainer:
         num_batches = 0
         base_model = self.model.module if hasattr(self.model, "module") else self.model
 
-        for embeddings, labels in dataloader:
-            embeddings = embeddings.to(self.device)
-            labels = labels.to(self.device)
+        for batch in dataloader:
+            if self.end_to_end:
+                input_gene_ids = batch["gene"].to(self.device)
+                expressions = batch["expr"].to(self.device)
+                labels = batch["labels"].to(self.device)
+                cls_embeddings = base_model.encode_tokens(
+                    input_gene_ids,
+                    expressions,
+                    pad_token_id=self.pad_token_id,
+                )
+                projected = base_model.retrieval_head(cls_embeddings)
+            else:
+                embeddings, labels = batch
+                embeddings = embeddings.to(self.device)
+                labels = labels.to(self.device)
+                projected = self.model(embeddings)
 
             self.optimizer.zero_grad()
-
-            # Forward
-            projected = self.model(embeddings)
             loss = base_model.compute_loss(projected, labels)
 
             # Backward
@@ -493,12 +601,24 @@ class ScGPTTrainer:
         num_batches = 0
         base_model = self.model.module if hasattr(self.model, "module") else self.model
 
-        for embeddings, labels in dataloader:
-            embeddings = embeddings.to(self.device)
-            labels = labels.to(self.device)
-
-            projected = self.model(embeddings)
-            loss = base_model.compute_loss(projected, labels)
+        for batch in dataloader:
+            if self.end_to_end:
+                input_gene_ids = batch["gene"].to(self.device)
+                expressions = batch["expr"].to(self.device)
+                labels = batch["labels"].to(self.device)
+                cls_embeddings = base_model.encode_tokens(
+                    input_gene_ids,
+                    expressions,
+                    pad_token_id=self.pad_token_id,
+                )
+                projected = base_model.retrieval_head(cls_embeddings)
+                loss = base_model.compute_loss(projected, labels)
+            else:
+                embeddings, labels = batch
+                embeddings = embeddings.to(self.device)
+                labels = labels.to(self.device)
+                projected = self.model(embeddings)
+                loss = base_model.compute_loss(projected, labels)
 
             total_loss += loss.item()
             num_batches += 1
@@ -746,7 +866,7 @@ def main():
     scgpt_model = encoder._model
 
     # Load dataset
-    from src.data import load_perturb_data
+    from src.data import load_perturb_data, mask_perturbed_genes
     from src.data import ConditionSplitter, ConditionSplit
 
     if is_master:
@@ -766,7 +886,7 @@ def main():
     ):
         dataset.split.save(config.split_output_path)
 
-    if config.track:
+    if config.track and config.track != "in_dist":
         cond_split = None
         if (
             config.condition_split_output_path
@@ -790,6 +910,8 @@ def main():
             if config.condition_split_output_path:
                 cond_split.save(config.condition_split_output_path)
         dataset.apply_condition_split(cond_split)
+    elif config.track == "in_dist" and is_master:
+        print("  [Info] in_dist track uses cell-level split; skipping condition split.")
 
     # Get condition mapping
     conditions = dataset.all_conditions
@@ -809,36 +931,111 @@ def main():
     train_conditions = condition_sets.get("train") or conditions
     val_conditions = condition_sets.get("val") or []
 
-    # Extract embeddings (pre-compute for efficiency)
-    if is_master:
-        print("Extracting embeddings...")
-    train_adata = dataset.get_ref_adata_for_conditions(train_conditions)
-    train_embeddings = encoder.encode_adata(train_adata)
-    train_labels = train_adata.obs[dataset.condition_col].values
+    if config.mode == "lora_head":
+        if is_master:
+            print("Preparing token datasets for LoRA fine-tuning...")
+        train_adata = dataset.get_ref_adata_for_conditions(train_conditions)
+        if config.mask_perturbed:
+            train_adata = mask_perturbed_genes(
+                train_adata, condition_col=dataset.condition_col
+            )
+        train_adata, train_gene_ids = _prepare_scgpt_adata(
+            train_adata, encoder._vocab, encoder.gene_col
+        )
+        train_labels = train_adata.obs[dataset.condition_col].values
+        train_dataset = CellTokenDataset(
+            adata=train_adata,
+            gene_ids=train_gene_ids,
+            condition_labels=train_labels,
+            condition_to_idx=condition_to_idx,
+            cls_token_id=encoder._vocab["<cls>"],
+            pad_value=encoder._model_configs["pad_value"],
+        )
 
-    train_dataset = CellEmbeddingDataset(
-        embeddings=train_embeddings,
-        condition_labels=train_labels,
-        condition_to_idx=condition_to_idx,
-    )
+        if val_conditions:
+            val_adata = dataset.get_ref_adata_for_conditions(val_conditions)
+            if config.mask_perturbed:
+                val_adata = mask_perturbed_genes(
+                    val_adata, condition_col=dataset.condition_col
+                )
+            val_adata, val_gene_ids = _prepare_scgpt_adata(
+                val_adata, encoder._vocab, encoder.gene_col
+            )
+            val_labels = val_adata.obs[dataset.condition_col].values
+            val_dataset = CellTokenDataset(
+                adata=val_adata,
+                gene_ids=val_gene_ids,
+                condition_labels=val_labels,
+                condition_to_idx=condition_to_idx,
+                cls_token_id=encoder._vocab["<cls>"],
+                pad_value=encoder._model_configs["pad_value"],
+            )
+            train_subset = train_dataset
+            val_subset = val_dataset
+        else:
+            n_train = int(0.8 * len(train_dataset))
+            n_val = len(train_dataset) - n_train
+            generator = torch.Generator().manual_seed(config.split_seed)
+            train_subset, val_subset = torch.utils.data.random_split(
+                train_dataset, [n_train, n_val], generator=generator
+            )
 
-    if val_conditions:
-        val_adata = dataset.get_ref_adata_for_conditions(val_conditions)
-        val_embeddings = encoder.encode_adata(val_adata)
-        val_labels = val_adata.obs[dataset.condition_col].values
-        val_dataset = CellEmbeddingDataset(
-            embeddings=val_embeddings,
-            condition_labels=val_labels,
+        from scgpt.data_collator import DataCollator
+
+        pad_token_id = encoder._vocab[encoder._model_configs["pad_token"]]
+        collator = DataCollator(
+            do_padding=True,
+            pad_token_id=pad_token_id,
+            pad_value=encoder._model_configs["pad_value"],
+            do_mlm=False,
+            do_binning=True,
+            max_length=encoder.max_length,
+            sampling=True,
+            keep_first_n_tokens=1,
+        )
+        collate_fn = _make_scgpt_collate_fn(collator)
+    else:
+        # Extract embeddings (pre-compute for efficiency)
+        if is_master:
+            print("Extracting embeddings...")
+        train_adata = dataset.get_ref_adata_for_conditions(train_conditions)
+        if config.mask_perturbed:
+            train_adata = mask_perturbed_genes(
+                train_adata, condition_col=dataset.condition_col
+            )
+        train_embeddings = encoder.encode_adata(train_adata)
+        train_labels = train_adata.obs[dataset.condition_col].values
+
+        train_dataset = CellEmbeddingDataset(
+            embeddings=train_embeddings,
+            condition_labels=train_labels,
             condition_to_idx=condition_to_idx,
         )
-        train_subset = train_dataset
-        val_subset = val_dataset
-    else:
-        n_train = int(0.8 * len(train_dataset))
-        n_val = len(train_dataset) - n_train
-        train_subset, val_subset = torch.utils.data.random_split(
-            train_dataset, [n_train, n_val]
-        )
+
+        if val_conditions:
+            val_adata = dataset.get_ref_adata_for_conditions(val_conditions)
+            if config.mask_perturbed:
+                val_adata = mask_perturbed_genes(
+                    val_adata, condition_col=dataset.condition_col
+                )
+            val_embeddings = encoder.encode_adata(val_adata)
+            val_labels = val_adata.obs[dataset.condition_col].values
+            val_dataset = CellEmbeddingDataset(
+                embeddings=val_embeddings,
+                condition_labels=val_labels,
+                condition_to_idx=condition_to_idx,
+            )
+            train_subset = train_dataset
+            val_subset = val_dataset
+        else:
+            n_train = int(0.8 * len(train_dataset))
+            n_val = len(train_dataset) - n_train
+            generator = torch.Generator().manual_seed(config.split_seed)
+            train_subset, val_subset = torch.utils.data.random_split(
+                train_dataset, [n_train, n_val], generator=generator
+            )
+        collate_fn = None
+        pad_token_id = None
 
     train_sampler = None
     val_sampler = None
@@ -852,12 +1049,14 @@ def main():
         shuffle=train_sampler is None,
         drop_last=True,
         sampler=train_sampler,
+        collate_fn=collate_fn,
     )
     val_loader = DataLoader(
         val_subset,
         batch_size=config.batch_size,
         shuffle=False,
         sampler=val_sampler,
+        collate_fn=collate_fn,
     )
 
     # Train
@@ -868,7 +1067,14 @@ def main():
             device_ids=[int(device.split(":")[-1])],
             find_unused_parameters=allow_unused,
         )
-    trainer = ScGPTTrainer(model, config, device=device, is_master=is_master)
+    trainer = ScGPTTrainer(
+        model,
+        config,
+        device=device,
+        is_master=is_master,
+        end_to_end=config.mode == "lora_head",
+        pad_token_id=pad_token_id,
+    )
 
     history = trainer.train(train_loader, val_loader)
 

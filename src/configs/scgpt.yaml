@@ -26,6 +26,8 @@ condition_split:
 model:
   encoder: scgpt
   checkpoint: null  # Path to scGPT pretrained weights
+  finetune_checkpoint: null  # Path to fine-tuned retrieval checkpoint
+  finetune_apply_head: true
   freeze_encoder: true
   use_lora: false
   lora_rank: 8

@@ -47,6 +47,12 @@ def parse_args():
         help="Override experiment name from config",
     )
     parser.add_argument(
+        "--finetune_checkpoint",
+        type=str,
+        default=None,
+        help="Path to scGPT fine-tune checkpoint (retrieval head/LoRA)",
+    )
+    parser.add_argument(
         "--track",
         type=str,
         default=None,
@@ -77,6 +83,8 @@ def get_encoder_kwargs(config: dict) -> dict:
     elif encoder_type == "scgpt":
         return {
             "checkpoint": model_config.get("checkpoint"),
+            "finetune_checkpoint": model_config.get("finetune_checkpoint"),
+            "finetune_apply_head": model_config.get("finetune_apply_head", True),
             "freeze": model_config.get("freeze_encoder", True),
             "use_lora": model_config.get("use_lora", False),
             "lora_rank": model_config.get("lora_rank", 8),
@@ -107,6 +115,8 @@ def run_pipeline(config: dict, args) -> dict:
     experiment_name = args.experiment_name or config["logging"].get(
         "experiment_name", config["model"]["encoder"]
     )
+    if args.finetune_checkpoint:
+        config["model"]["finetune_checkpoint"] = args.finetune_checkpoint
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = Path(output_dir) / experiment_name / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
