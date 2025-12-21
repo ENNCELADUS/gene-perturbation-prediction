@@ -98,7 +98,7 @@ class TrainingConfig:
     label_smoothing: float = 0.1
 
     # Paths
-    checkpoint_dir: str = "checkpoints/scgpt_finetune"
+    checkpoint_dir: str = "model/scgpt_finetune"
     scgpt_model_dir: str = "model/scGPT"
 
     @classmethod
