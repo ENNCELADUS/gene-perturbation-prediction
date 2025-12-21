@@ -8,6 +8,7 @@ reference and query sets.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import List, Optional
 
@@ -265,7 +266,12 @@ def load_perturb_data(
     dataset.load()
 
     if split_path and Path(split_path).exists():
-        dataset.load_split(split_path)
+        try:
+            dataset.load_split(split_path)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Split file exists but is not valid JSON: {split_path}"
+            ) from exc
     else:
         dataset.create_split(
             min_cells_per_condition=min_cells_per_condition,
