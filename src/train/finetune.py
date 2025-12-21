@@ -759,7 +759,11 @@ def main():
         min_query_cells=config.split_min_query_cells,
         seed=config.split_seed,
     )
-    if config.split_output_path and dataset.split is not None:
+    if (
+        config.split_output_path
+        and dataset.split is not None
+        and not Path(config.split_output_path).exists()
+    ):
         dataset.split.save(config.split_output_path)
 
     if config.track:
