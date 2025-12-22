@@ -747,6 +747,12 @@ class ScGPTTrainer:
     - Logging
     """
 
+    @staticmethod
+    def _unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
+        if hasattr(model, "module"):
+            return model.module
+        return model
+
     def __init__(
         self,
         model: FineTunableScGPTEncoder,
@@ -770,6 +776,7 @@ class ScGPTTrainer:
         self.is_master = is_master
         self.end_to_end = end_to_end
         self.pad_token_id = pad_token_id
+        self.base_model = self._unwrap_model(self.model)
 
         self.optimizer = self._build_optimizer(model, config)
 
@@ -783,7 +790,7 @@ class ScGPTTrainer:
             "train_loss": [],
             "val_loss": [],
         }
-        if isinstance(model.loss_fn, ClassificationLoss):
+        if isinstance(self.base_model.loss_fn, ClassificationLoss):
             self.history["val_accuracy"] = []
 
         # Checkpointing
@@ -793,6 +800,7 @@ class ScGPTTrainer:
     def _build_optimizer(
         self, model: FineTunableScGPTEncoder, config: TrainingConfig
     ) -> torch.optim.Optimizer:
+        base_model = self._unwrap_model(model)
         use_param_groups = (
             config.head_learning_rate is not None
             or config.backbone_learning_rate is not None
@@ -801,12 +809,12 @@ class ScGPTTrainer:
             head_lr = config.head_learning_rate or config.learning_rate
             backbone_lr = config.backbone_learning_rate or config.learning_rate
             head_params: List[torch.nn.Parameter] = []
-            for module in (model.retrieval_head, model.loss_fn):
+            for module in (base_model.retrieval_head, base_model.loss_fn):
                 head_params.extend([p for p in module.parameters() if p.requires_grad])
             head_param_ids = {id(p) for p in head_params}
             backbone_params = [
                 p
-                for p in model.scgpt_model.parameters()
+                for p in base_model.scgpt_model.parameters()
                 if p.requires_grad and id(p) not in head_param_ids
             ]
             param_groups = []
@@ -893,7 +901,7 @@ class ScGPTTrainer:
         num_batches = 0
         total_correct = 0
         total_samples = 0
-        track_accuracy = isinstance(self.model.loss_fn, ClassificationLoss)
+        track_accuracy = isinstance(self.base_model.loss_fn, ClassificationLoss)
 
         for batch in dataloader:
             if self.end_to_end:
@@ -929,7 +937,7 @@ class ScGPTTrainer:
             total_loss += loss.item()
             num_batches += 1
             if track_accuracy:
-                logits = self.model.loss_fn.classifier(projected)
+                logits = self.base_model.loss_fn.classifier(projected)
                 preds = logits.argmax(dim=1)
                 total_correct += int((preds == labels).sum().item())
                 total_samples += int(labels.size(0))
