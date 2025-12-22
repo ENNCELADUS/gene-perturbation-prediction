@@ -35,8 +35,15 @@ def _get_batch_cell_embeddings(
 
     if input_layer_key and input_layer_key != "X":
         if input_layer_key not in adata.layers:
-            raise ValueError(f"Layer '{input_layer_key}' not found in AnnData.layers")
-        count_matrix = adata.layers[input_layer_key]
+            if input_layer_key == "counts":
+                print("  [scGPT] Layer 'counts' not found in AnnData.layers; using X.")
+                count_matrix = adata.X
+            else:
+                raise ValueError(
+                    f"Layer '{input_layer_key}' not found in AnnData.layers"
+                )
+        else:
+            count_matrix = adata.layers[input_layer_key]
     else:
         count_matrix = adata.X
     count_matrix = (
@@ -432,7 +439,11 @@ class ScGPTEncoder(BaseEncoder):
 
         use_key = self.raw_layer_key or "X"
         if use_key != "X" and use_key not in adata.layers:
-            raise ValueError(f"Layer '{use_key}' not found in AnnData.layers")
+            if use_key == "counts":
+                print("  [scGPT] Layer 'counts' not found in AnnData.layers; using X.")
+                use_key = "X"
+            else:
+                raise ValueError(f"Layer '{use_key}' not found in AnnData.layers")
 
         preprocessor = Preprocessor(
             use_key=use_key,

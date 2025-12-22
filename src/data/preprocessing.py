@@ -51,8 +51,13 @@ def mask_perturbed_genes(
         X = adata.X.copy()
     else:
         if layer not in adata.layers:
-            raise ValueError(f"Layer '{layer}' not found in AnnData.layers")
-        X = adata.layers[layer].copy()
+            if layer == "counts":
+                print("  [Mask] Layer 'counts' not found in AnnData.layers; using X.")
+                X = adata.X.copy()
+            else:
+                raise ValueError(f"Layer '{layer}' not found in AnnData.layers")
+        else:
+            X = adata.layers[layer].copy()
     if hasattr(X, "toarray"):
         X = X.toarray()
 
