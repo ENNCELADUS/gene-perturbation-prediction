@@ -2,18 +2,20 @@
 
 ## Overview
 
-Comparison of 3 experiments across 3 runs.
+Comparison of 4 experiments across 4 runs.
 
 ## Results Table
 
-| experiment      | mask   |   exact_hit@1 |   exact_hit@5 |   relevant_hit@1 |   relevant_hit@5 |    mrr |   ndcg@5 |
-|:----------------|:-------|--------------:|--------------:|-----------------:|-----------------:|-------:|---------:|
-| scgpt           | True   |        0.0628 |        0.1868 |           0.2012 |           0.393  | 0.1163 |   0.1249 |
-| scgpt           | False  |        0.0644 |        0.1954 |           0.208  |           0.4048 | 0.1217 |   0.1311 |
-| scgpt_head_only | True   |        0.0756 |        0.2324 |           0.2511 |           0.4385 | 0.1434 |   0.1545 |
-| scgpt_head_only | False  |        0.0795 |        0.2393 |           0.2557 |           0.4442 | 0.1491 |   0.1607 |
-| scgpt_lora_head | True   |        0.0718 |        0.2357 |           0.2455 |           0.4403 | 0.1422 |   0.1554 |
-| scgpt_lora_head | False  |        0.0711 |        0.2375 |           0.2462 |           0.4396 | 0.1423 |   0.1563 |
+| experiment         | mask   |   exact_hit@1 |   exact_hit@5 |   relevant_hit@1 |   relevant_hit@5 |    mrr |   ndcg@5 |
+|:-------------------|:-------|--------------:|--------------:|-----------------:|-----------------:|-------:|---------:|
+| scgpt              | True   |        0.0656 |        0.1971 |           0.2079 |           0.406  | 0.1228 |   0.1321 |
+| scgpt              | False  |        0.0743 |        0.2116 |           0.2276 |           0.417  | 0.1341 |   0.1442 |
+| scgpt_finetune_cls | True   |        0.1842 |        0.429  |           0.3809 |           0.5818 | 0.288  |   0.3114 |
+| scgpt_finetune_cls | False  |        0.1736 |        0.4205 |           0.3714 |           0.5742 | 0.2783 |   0.3016 |
+| scgpt_head_only    | True   |        0.124  |        0.3385 |           0.3512 |           0.5317 | 0.2165 |   0.2341 |
+| scgpt_head_only    | False  |        0.1298 |        0.3443 |           0.3611 |           0.5369 | 0.2221 |   0.2399 |
+| scgpt_lora_head    | True   |        0.1183 |        0.3187 |           0.3222 |           0.5089 | 0.2042 |   0.2207 |
+| scgpt_lora_head    | False  |        0.1164 |        0.3251 |           0.3247 |           0.5153 | 0.2071 |   0.2245 |
 
 ## Notes
 
