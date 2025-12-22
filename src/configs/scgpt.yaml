@@ -31,11 +31,17 @@ model:
   freeze_encoder: true
   use_lora: false
   lora_rank: 8
+  gene_alias_map_path: null
   raw_layer_key: counts
   preprocess: true
   preprocess_normalize_total: 1e4
   preprocess_log1p: true
   preprocess_binning: 51
+  preprocess_filter_gene_by_counts: 5
+  preprocess_filter_cell_by_counts: false
+  preprocess_subset_hvg: false
+  preprocess_hvg_use_key: null
+  preprocess_hvg_flavor: seurat_v3
   preprocess_result_binned_key: X_binned
   preprocess_result_normed_key: X_normed
   preprocess_result_log1p_key: X_log1p

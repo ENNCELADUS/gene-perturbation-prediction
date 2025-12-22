@@ -22,15 +22,30 @@ Target: scGPT exact_hit@1 >= 0.35 and mrr >= 0.45 (mask=True).
    - [todo] Align objective with top-k retrieval metric used by logreg baseline.
 
 ## Phase 1: Data Integrity And Alignment
-- [todo] Inspect `data/norman/perturb_processed.h5ad` for:
-  - [todo] Layer availability: counts/raw, normalized/log1p indicators.
-  - [todo] Data scale, dtype, sparsity, per-cell library sizes.
+- [done] Inspect `data/norman/perturb_processed.h5ad` for:
+  - [done] Layer availability: counts/raw, normalized/log1p indicators.
+  - [done] Data scale, dtype, sparsity, per-cell library sizes.
 - [todo] Ensure scGPT uses the same gene set and masking policy as baselines.
-- [todo] Quantify scGPT vocab coverage; map gene aliases if coverage < 95%.
+- [done] Quantify scGPT vocab coverage.
+- [todo] Map gene aliases if coverage < 95% (needs external mapping table).
+- [done] Validate binned value distribution after log1p (check for collapsed bins).
+- [done] Enforce evaluation parity (split seed, masking policy, query/library config).
+- [done] Populate confidence metrics for classification finetune runs (config enabled).
 
 Deliverables:
-- [todo] Data audit note with evidence of counts vs normalized scale.
+- [done] Data audit note with evidence of counts vs normalized scale.
+- [done] Vocab coverage report and alias mapping summary.
+- [done] Binning distribution snapshot for counts/log1p inputs.
+- [done] Evaluation parity checklist with split seed and masking confirmation.
+- [todo] Updated results report with confidence AUC + coverage curves.
 - [done] Code/config change to select counts layer for scGPT.
+
+### Phase 1 Evidence (Dec 2025 Audit)
+- `layers["counts"]` present (float32 integer counts), `X` is log1p/normalized.
+- Counts sparsity ~8.1% nonzero; library size p5/p50/p95 ~ 1370/2971/5063.
+- scGPT vocab coverage 90.13% (4547/5045); missing mostly RP*/AC*/AL* lncRNA-like symbols.
+- Binning check (log1p + 51 bins): all bins used; zero bin ~91.8% of entries.
+- Split parity confirmed (seed 42, same split paths, mask_perturbed true, query_split test).
 
 ## Phase 2: Training Objective And Sampling
 - [todo] Compare losses:

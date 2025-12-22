@@ -96,12 +96,24 @@ def get_encoder_kwargs(config: dict) -> dict:
             "use_lora": model_config.get("use_lora", False),
             "lora_rank": model_config.get("lora_rank", 8),
             "raw_layer_key": model_config.get("raw_layer_key"),
+            "gene_alias_map_path": model_config.get("gene_alias_map_path"),
             "preprocess": model_config.get("preprocess", False),
             "preprocess_normalize_total": model_config.get(
                 "preprocess_normalize_total", 1e4
             ),
             "preprocess_log1p": model_config.get("preprocess_log1p", True),
             "preprocess_binning": model_config.get("preprocess_binning"),
+            "preprocess_filter_gene_by_counts": model_config.get(
+                "preprocess_filter_gene_by_counts", False
+            ),
+            "preprocess_filter_cell_by_counts": model_config.get(
+                "preprocess_filter_cell_by_counts", False
+            ),
+            "preprocess_subset_hvg": model_config.get("preprocess_subset_hvg", False),
+            "preprocess_hvg_use_key": model_config.get("preprocess_hvg_use_key"),
+            "preprocess_hvg_flavor": model_config.get(
+                "preprocess_hvg_flavor", "seurat_v3"
+            ),
             "preprocess_result_binned_key": model_config.get(
                 "preprocess_result_binned_key", "X_binned"
             ),

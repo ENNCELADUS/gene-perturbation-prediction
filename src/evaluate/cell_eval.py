@@ -302,11 +302,16 @@ class CellRetrievalEvaluator:
         return condition_sets["test"]
 
     def _encode_profiles(
-        self, profiles: np.ndarray, template_adata: ad.AnnData
+        self,
+        profiles: np.ndarray,
+        template_adata: ad.AnnData,
+        layer_key: Optional[str] = None,
     ) -> np.ndarray:
         """Encode profiles with encoder, supporting scGPT AnnData inputs."""
         if hasattr(self.encoder, "encode_adata"):
             adata = ad.AnnData(X=profiles, var=template_adata.var.copy())
+            if layer_key and layer_key != "X":
+                adata.layers[layer_key] = profiles
             return self.encoder.encode_adata(adata)
         return self.encoder.encode(profiles)
 
@@ -326,17 +331,26 @@ class CellRetrievalEvaluator:
             cells_per_bulk = self.pseudo_bulk_config.get("cells_per_bulk", 50)
             n_bulks = self.pseudo_bulk_config.get("n_bulks", 1)
             seed = self.pseudo_bulk_config.get("seed", 42)
+            layer_key = (
+                self.mask_layer_key if hasattr(self.encoder, "encode_adata") else None
+            )
             bulks, labels = create_pseudo_bulk(
                 query_adata,
                 cells_per_bulk=cells_per_bulk,
                 n_bulks=n_bulks,
                 condition_col="condition",
                 seed=seed,
+                layer=layer_key,
             )
             if bulks.size == 0:
                 return np.array([]), [], query_adata
-            embeddings = self._encode_profiles(bulks, query_adata)
+            embeddings = self._encode_profiles(bulks, query_adata, layer_key=layer_key)
             return embeddings, labels, query_adata
+
+        if hasattr(self.encoder, "encode_adata"):
+            embeddings = self.encoder.encode_adata(query_adata)
+            ground_truth = query_adata.obs["condition"].tolist()
+            return embeddings, ground_truth, query_adata
 
         X_query = query_adata.X
         if hasattr(X_query, "toarray"):

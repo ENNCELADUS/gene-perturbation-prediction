@@ -109,11 +109,17 @@ class TrainingConfig:
     # Paths
     checkpoint_dir: str = "model/scgpt_finetune"
     scgpt_model_dir: str = "model/scGPT"
+    scgpt_gene_alias_map_path: Optional[str] = None
     scgpt_raw_layer_key: Optional[str] = None
     scgpt_preprocess: bool = False
     scgpt_preprocess_normalize_total: float | bool = 1e4
     scgpt_preprocess_log1p: bool = True
     scgpt_preprocess_binning: Optional[int] = None
+    scgpt_preprocess_filter_gene_by_counts: int | bool = False
+    scgpt_preprocess_filter_cell_by_counts: int | bool = False
+    scgpt_preprocess_subset_hvg: int | bool = False
+    scgpt_preprocess_hvg_use_key: Optional[str] = None
+    scgpt_preprocess_hvg_flavor: str = "seurat_v3"
     scgpt_preprocess_result_binned_key: str = "X_binned"
     scgpt_preprocess_result_normed_key: str = "X_normed"
     scgpt_preprocess_result_log1p_key: str = "X_log1p"
@@ -182,6 +188,10 @@ class TrainingConfig:
             )
             if pretrained:
                 config_dict["scgpt_model_dir"] = pretrained
+            config_dict["scgpt_gene_alias_map_path"] = data["model"].get(
+                "gene_alias_map_path",
+                config_dict.get("scgpt_gene_alias_map_path"),
+            )
             config_dict["scgpt_raw_layer_key"] = data["model"].get("raw_layer_key")
             config_dict["scgpt_preprocess"] = data["model"].get(
                 "preprocess", config_dict.get("scgpt_preprocess")
@@ -195,6 +205,26 @@ class TrainingConfig:
             )
             config_dict["scgpt_preprocess_binning"] = data["model"].get(
                 "preprocess_binning", config_dict.get("scgpt_preprocess_binning")
+            )
+            config_dict["scgpt_preprocess_filter_gene_by_counts"] = data["model"].get(
+                "preprocess_filter_gene_by_counts",
+                config_dict.get("scgpt_preprocess_filter_gene_by_counts"),
+            )
+            config_dict["scgpt_preprocess_filter_cell_by_counts"] = data["model"].get(
+                "preprocess_filter_cell_by_counts",
+                config_dict.get("scgpt_preprocess_filter_cell_by_counts"),
+            )
+            config_dict["scgpt_preprocess_subset_hvg"] = data["model"].get(
+                "preprocess_subset_hvg",
+                config_dict.get("scgpt_preprocess_subset_hvg"),
+            )
+            config_dict["scgpt_preprocess_hvg_use_key"] = data["model"].get(
+                "preprocess_hvg_use_key",
+                config_dict.get("scgpt_preprocess_hvg_use_key"),
+            )
+            config_dict["scgpt_preprocess_hvg_flavor"] = data["model"].get(
+                "preprocess_hvg_flavor",
+                config_dict.get("scgpt_preprocess_hvg_flavor"),
             )
             config_dict["scgpt_preprocess_result_binned_key"] = data["model"].get(
                 "preprocess_result_binned_key",
@@ -1039,11 +1069,17 @@ def main():
         print("Loading scGPT model...")
     encoder = ScGPTEncoder(
         model_dir=config.scgpt_model_dir,
+        gene_alias_map_path=config.scgpt_gene_alias_map_path,
         raw_layer_key=config.scgpt_raw_layer_key,
         preprocess=config.scgpt_preprocess,
         preprocess_normalize_total=config.scgpt_preprocess_normalize_total,
         preprocess_log1p=config.scgpt_preprocess_log1p,
         preprocess_binning=config.scgpt_preprocess_binning,
+        preprocess_filter_gene_by_counts=config.scgpt_preprocess_filter_gene_by_counts,
+        preprocess_filter_cell_by_counts=config.scgpt_preprocess_filter_cell_by_counts,
+        preprocess_subset_hvg=config.scgpt_preprocess_subset_hvg,
+        preprocess_hvg_use_key=config.scgpt_preprocess_hvg_use_key,
+        preprocess_hvg_flavor=config.scgpt_preprocess_hvg_flavor,
         preprocess_result_binned_key=config.scgpt_preprocess_result_binned_key,
         preprocess_result_normed_key=config.scgpt_preprocess_result_normed_key,
         preprocess_result_log1p_key=config.scgpt_preprocess_result_log1p_key,

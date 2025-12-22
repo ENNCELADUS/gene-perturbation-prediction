@@ -21,6 +21,7 @@ def create_pseudo_bulk(
     n_bulks: int = 1,
     condition_col: str = "condition",
     seed: int = 42,
+    layer: Optional[str] = None,
 ) -> Tuple[np.ndarray, List[str]]:
     """
     Create pseudo-bulk profiles by averaging cells.
@@ -31,13 +32,26 @@ def create_pseudo_bulk(
         n_bulks: Number of pseudo-bulks to create per condition
         condition_col: Column with condition labels
         seed: Random seed
+        layer: Optional layer to use instead of X
 
     Returns:
         Tuple of (bulk_profiles, condition_labels)
     """
     rng = np.random.default_rng(seed)
 
-    X = adata.X
+    if layer and layer != "X":
+        if layer not in adata.layers:
+            if layer == "counts":
+                print(
+                    "  [PseudoBulk] Layer 'counts' not found in AnnData.layers; using X."
+                )
+                X = adata.X
+            else:
+                raise ValueError(f"Layer '{layer}' not found in AnnData.layers")
+        else:
+            X = adata.layers[layer]
+    else:
+        X = adata.X
     if hasattr(X, "toarray"):
         X = X.toarray()
 

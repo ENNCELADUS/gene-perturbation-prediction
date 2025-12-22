@@ -5,6 +5,8 @@ Uses pretrained scGPT model (frozen) to extract cell embeddings
 via CLS token pooling from the transformer's last layer.
 """
 
+import json
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -164,6 +166,7 @@ class ScGPTEncoder(BaseEncoder):
         model_dir: Optional[str] = None,
         checkpoint: Optional[str] = None,
         gene_col: str = "gene_name",
+        gene_alias_map_path: Optional[str] = None,
         max_length: int = 1200,
         batch_size: int = 64,
         device: str = "cuda",
@@ -176,6 +179,11 @@ class ScGPTEncoder(BaseEncoder):
         preprocess_normalize_total: float | bool = 1e4,
         preprocess_log1p: bool = True,
         preprocess_binning: Optional[int] = None,
+        preprocess_filter_gene_by_counts: int | bool = False,
+        preprocess_filter_cell_by_counts: int | bool = False,
+        preprocess_subset_hvg: int | bool = False,
+        preprocess_hvg_use_key: Optional[str] = None,
+        preprocess_hvg_flavor: str = "seurat_v3",
         preprocess_result_binned_key: str = "X_binned",
         preprocess_result_normed_key: str = "X_normed",
         preprocess_result_log1p_key: str = "X_log1p",
@@ -196,6 +204,7 @@ class ScGPTEncoder(BaseEncoder):
         resolved_model_dir = model_dir or checkpoint
         self.model_dir = resolved_model_dir or "model/scGPT"
         self.gene_col = gene_col
+        self.gene_alias_map_path = gene_alias_map_path
         self.max_length = max_length
         self.batch_size = batch_size
         self.device = device
@@ -208,6 +217,11 @@ class ScGPTEncoder(BaseEncoder):
         self.preprocess_normalize_total = preprocess_normalize_total
         self.preprocess_log1p = preprocess_log1p
         self.preprocess_binning = preprocess_binning
+        self.preprocess_filter_gene_by_counts = preprocess_filter_gene_by_counts
+        self.preprocess_filter_cell_by_counts = preprocess_filter_cell_by_counts
+        self.preprocess_subset_hvg = preprocess_subset_hvg
+        self.preprocess_hvg_use_key = preprocess_hvg_use_key
+        self.preprocess_hvg_flavor = preprocess_hvg_flavor
         self.preprocess_result_binned_key = preprocess_result_binned_key
         self.preprocess_result_normed_key = preprocess_result_normed_key
         self.preprocess_result_log1p_key = preprocess_result_log1p_key
@@ -218,6 +232,7 @@ class ScGPTEncoder(BaseEncoder):
         self._model_configs = None
         self._loaded = False
         self._finetune_loaded = False
+        self._gene_alias_map = None
         self._retrieval_head = None
         self._classifier_head = None
         self._classifier_condition_order = None
@@ -447,10 +462,15 @@ class ScGPTEncoder(BaseEncoder):
 
         preprocessor = Preprocessor(
             use_key=use_key,
+            filter_gene_by_counts=self.preprocess_filter_gene_by_counts,
+            filter_cell_by_counts=self.preprocess_filter_cell_by_counts,
             normalize_total=self.preprocess_normalize_total,
             result_normed_key=self.preprocess_result_normed_key,
             log1p=self.preprocess_log1p,
             result_log1p_key=self.preprocess_result_log1p_key,
+            subset_hvg=self.preprocess_subset_hvg,
+            hvg_use_key=self.preprocess_hvg_use_key,
+            hvg_flavor=self.preprocess_hvg_flavor,
             binning=self._resolve_binning(),
             result_binned_key=self.preprocess_result_binned_key,
         )
@@ -493,6 +513,18 @@ class ScGPTEncoder(BaseEncoder):
             if self.gene_col in adata.var
             else adata.var.index.values
         )
+        if self.gene_alias_map_path:
+            if self._gene_alias_map is None:
+                alias_path = Path(self.gene_alias_map_path)
+                if not alias_path.exists():
+                    raise FileNotFoundError(
+                        f"Gene alias map not found: {self.gene_alias_map_path}"
+                    )
+                self._gene_alias_map = json.loads(alias_path.read_text())
+            if self._gene_alias_map:
+                gene_names = np.array(
+                    [self._gene_alias_map.get(str(g), str(g)) for g in gene_names]
+                )
         adata.var["id_in_vocab"] = [
             self._vocab[g] if g in self._vocab else -1 for g in gene_names
         ]
@@ -540,7 +572,6 @@ class ScGPTEncoder(BaseEncoder):
             Cell embeddings (n_cells, embsize), normalized
         """
         import sys
-        from pathlib import Path
 
         # Ensure model is loaded
         self._load_model()
