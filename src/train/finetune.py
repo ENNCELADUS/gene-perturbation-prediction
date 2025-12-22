@@ -579,21 +579,53 @@ class FineTunableScGPTEncoder(nn.Module):
 
     def forward(
         self,
-        embeddings: torch.Tensor,
+        embeddings: Optional[torch.Tensor] = None,
+        input_gene_ids: Optional[torch.Tensor] = None,
+        expressions: Optional[torch.Tensor] = None,
+        pad_token_id: Optional[int] = None,
+        batch_labels: Optional[torch.Tensor] = None,
+        normalize: bool = True,
+        labels: Optional[torch.Tensor] = None,
+        return_projected: bool = False,
     ) -> torch.Tensor:
         """
-        Forward pass through retrieval head.
-
-        Note: This assumes embeddings are already extracted from scGPT.
-        For end-to-end training with gene tokens, use encode_cells().
+        Forward pass with optional loss computation.
 
         Args:
             embeddings: Cell embeddings from scGPT [B, embsize]
+            input_gene_ids: Tokenized gene ids [B, T] (for end-to-end)
+            expressions: Tokenized expressions [B, T] (for end-to-end)
+            pad_token_id: Pad token id (required for end-to-end)
+            batch_labels: Optional batch labels for scGPT encoder
+            normalize: Whether to L2-normalize CLS embeddings
+            labels: Condition labels [B] to compute loss
+            return_projected: Return projected embeddings with loss
 
         Returns:
-            Projected embeddings [B, output_dim]
+            Projected embeddings or loss (optionally with projections)
         """
-        return self.retrieval_head(embeddings)
+        if embeddings is None:
+            if input_gene_ids is None or expressions is None:
+                raise ValueError(
+                    "Provide embeddings or input_gene_ids + expressions for forward()."
+                )
+            if pad_token_id is None:
+                raise ValueError("pad_token_id is required for token inputs.")
+            embeddings = self.encode_tokens(
+                input_gene_ids,
+                expressions,
+                pad_token_id=pad_token_id,
+                batch_labels=batch_labels,
+                normalize=normalize,
+            )
+
+        projected = self.retrieval_head(embeddings)
+        if labels is not None:
+            loss = self.loss_fn(projected, labels)
+            if return_projected:
+                return loss, projected
+            return loss
+        return projected
 
     def encode_tokens(
         self,
@@ -697,27 +729,27 @@ class ScGPTTrainer:
         self.model.train()
         total_loss = 0.0
         num_batches = 0
-        base_model = self.model.module if hasattr(self.model, "module") else self.model
 
         for batch in dataloader:
             if self.end_to_end:
                 input_gene_ids = batch["gene"].to(self.device)
                 expressions = batch["expr"].to(self.device)
                 labels = batch["labels"].to(self.device)
-                cls_embeddings = base_model.encode_tokens(
-                    input_gene_ids,
-                    expressions,
-                    pad_token_id=self.pad_token_id,
-                )
-                projected = base_model.retrieval_head(cls_embeddings)
             else:
                 embeddings, labels = batch
                 embeddings = embeddings.to(self.device)
                 labels = labels.to(self.device)
-                projected = self.model(embeddings)
 
             self.optimizer.zero_grad()
-            loss = base_model.compute_loss(projected, labels)
+            if self.end_to_end:
+                loss = self.model(
+                    input_gene_ids=input_gene_ids,
+                    expressions=expressions,
+                    pad_token_id=self.pad_token_id,
+                    labels=labels,
+                )
+            else:
+                loss = self.model(embeddings=embeddings, labels=labels)
 
             # Backward
             loss.backward()
@@ -742,26 +774,23 @@ class ScGPTTrainer:
         self.model.eval()
         total_loss = 0.0
         num_batches = 0
-        base_model = self.model.module if hasattr(self.model, "module") else self.model
 
         for batch in dataloader:
             if self.end_to_end:
                 input_gene_ids = batch["gene"].to(self.device)
                 expressions = batch["expr"].to(self.device)
                 labels = batch["labels"].to(self.device)
-                cls_embeddings = base_model.encode_tokens(
-                    input_gene_ids,
-                    expressions,
+                loss = self.model(
+                    input_gene_ids=input_gene_ids,
+                    expressions=expressions,
                     pad_token_id=self.pad_token_id,
+                    labels=labels,
                 )
-                projected = base_model.retrieval_head(cls_embeddings)
-                loss = base_model.compute_loss(projected, labels)
             else:
                 embeddings, labels = batch
                 embeddings = embeddings.to(self.device)
                 labels = labels.to(self.device)
-                projected = self.model(embeddings)
-                loss = base_model.compute_loss(projected, labels)
+                loss = self.model(embeddings=embeddings, labels=labels)
 
             total_loss += loss.item()
             num_batches += 1
@@ -1255,10 +1284,10 @@ def main():
 
     # Train
     if ddp_enabled:
-        allow_unused = (
-            config.mode == "lora_head"
-            or config.loss_fn in {"infonce", "classification"}
-        )
+        allow_unused = config.mode == "lora_head" or config.loss_fn in {
+            "infonce",
+            "classification",
+        }
         model = torch.nn.parallel.DistributedDataParallel(
             model.to(device),
             device_ids=[int(device.split(":")[-1])],
