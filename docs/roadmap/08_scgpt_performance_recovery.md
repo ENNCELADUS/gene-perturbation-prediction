@@ -19,7 +19,7 @@ Target: scGPT exact_hit@1 >= 0.35 and mrr >= 0.45 (mask=True).
 3. [done] Run classification-loss fine-tuning as a sanity check.
    - [done] Add classification finetune config for quick runs.
    - [done] Wire classification mode into the scGPT run script.
-   - [todo] Align objective with top-k retrieval metric used by logreg baseline.
+   - [done] Align objective with top-k retrieval metric used by logreg baseline.
 
 ## Phase 1: Data Integrity And Alignment
 - [done] Inspect `data/norman/perturb_processed.h5ad` for:

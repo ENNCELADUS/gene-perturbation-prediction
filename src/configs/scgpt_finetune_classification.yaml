@@ -1,6 +1,6 @@
-# scGPT Fine-tuning Configuration (Classification Sanity Check)
+# scGPT Fine-tuning Configuration (Top-K Classification Objective)
 #
-# Uses classification loss to validate retrieval embeddings.
+# Aligns training with logreg's probability-ranked top-K retrieval.
 
 # Data
 data:
@@ -84,11 +84,11 @@ infonce:
 
 # Classification loss configuration (for classification mode)
 classification:
-  label_smoothing: 0.1
+  label_smoothing: 0.0
 
 # Retrieval evaluation settings
 retrieval:
-  metric: cosine
+  metric: prob
   top_k: [1, 5, 8, 10]
 
 # Query setup

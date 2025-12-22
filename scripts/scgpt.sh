@@ -67,7 +67,7 @@ echo "=============================================="
 echo "Mode 1: Frozen scGPT encoder (baseline)"
 echo "Mode 2: scGPT + trainable retrieval head (InfoNCE)"
 echo "Mode 3: scGPT + trainable retrieval head (Classification)"
-echo "Mode 4: scGPT + LoRA + retrieval head (InfoNCE)"
+echo "Mode 4: scGPT + LoRA + retrieval head (Classification)"
 echo "=============================================="
 
 # # ============================================
@@ -131,24 +131,24 @@ SCGPT_HEAD_ONLY_CLS_DIR="$(latest_run_dir results/scgpt_head_only_cls)" || {
 echo "[3/4] Classification fine-tuning completed!"
 
 # ============================================
-# MODE 4: scGPT + LoRA + Retrieval Head
+# MODE 4: scGPT + LoRA + Retrieval Head (Classification)
 # ============================================
 echo ""
 echo "=============================================="
-echo "[MODE 4] scGPT + LoRA + Retrieval Head"
+echo "[MODE 4] scGPT + LoRA + Retrieval Head (Classification)"
 echo "=============================================="
-echo "Training with LoRA adapters + retrieval head..."
+echo "Training with LoRA adapters + classification loss..."
 run_finetune \
-    --config src/configs/scgpt_finetune.yaml \
+    --config src/configs/scgpt_finetune_classification.yaml \
     --mode lora_head \
-    --loss infonce
+    --loss classification
 echo "Evaluating LoRA fine-tuned model..."
 python -m src.main \
-    --config src/configs/scgpt.yaml \
-    --experiment_name scgpt_lora_head \
-    --finetune_checkpoint model/scgpt_finetune/best_lora_head.pt
-SCGPT_LORA_HEAD_DIR="$(latest_run_dir results/scgpt_lora_head)" || {
-    echo "Error: No scGPT LoRA head results found in results/scgpt_lora_head" >&2
+    --config src/configs/scgpt_finetune_classification.yaml \
+    --experiment_name scgpt_lora_head_cls \
+    --finetune_checkpoint model/scgpt_finetune_cls/best_lora_head.pt
+SCGPT_LORA_HEAD_DIR="$(latest_run_dir results/scgpt_lora_head_cls)" || {
+    echo "Error: No scGPT LoRA head results found in results/scgpt_lora_head_cls" >&2
     exit 1
 }
 echo "[4/4] LoRA fine-tuning completed!"
@@ -170,6 +170,6 @@ python scripts/compare.py \
 echo "Ablative comparison report saved to results/reports/"
 
 # ============================================
-# Optional: Classification Loss Variants
+# Optional: InfoNCE Variants
 # ============================================
-# Extend classification runs (e.g., LoRA) by adding a similar block above.
+# Extend InfoNCE runs by adding a similar block above.
