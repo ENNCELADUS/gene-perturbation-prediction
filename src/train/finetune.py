@@ -1255,7 +1255,10 @@ def main():
 
     # Train
     if ddp_enabled:
-        allow_unused = config.loss_fn == "infonce" or config.mode == "lora_head"
+        allow_unused = (
+            config.mode == "lora_head"
+            or config.loss_fn in {"infonce", "classification"}
+        )
         model = torch.nn.parallel.DistributedDataParallel(
             model.to(device),
             device_ids=[int(device.split(":")[-1])],
