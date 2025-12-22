@@ -145,10 +145,10 @@ run_finetune \
 echo "Evaluating LoRA fine-tuned model..."
 python -m src.main \
     --config src/configs/scgpt_finetune_classification.yaml \
-    --experiment_name scgpt_lora_head_cls \
+    --experiment_name scgpt_lora_head \
     --finetune_checkpoint model/scgpt_finetune_cls/best_lora_head.pt
-SCGPT_LORA_HEAD_DIR="$(latest_run_dir results/scgpt_lora_head_cls)" || {
-    echo "Error: No scGPT LoRA head results found in results/scgpt_lora_head_cls" >&2
+SCGPT_LORA_HEAD_DIR="$(latest_run_dir results/scgpt_lora_head)" || {
+    echo "Error: No scGPT LoRA head results found in results/scgpt_lora_head" >&2
     exit 1
 }
 echo "[4/4] LoRA fine-tuning completed!"

@@ -54,12 +54,18 @@ training:
   epochs: 200
   batch_size: 32
   learning_rate: 1.0e-4
+  head_learning_rate: 1.0e-4
+  backbone_learning_rate: 1.0e-5
+  unfreeze_last_n_layers: 2
   weight_decay: 0.01
   warmup_ratio: 0.1
   mask_perturbed: true
+  max_grad_norm: 1.0
   early_stopping_patience: 10
   early_stopping_metric: val_loss
-  balanced_sampling: false
+  balanced_sampling: true
+  balanced_sampling_n_conditions: 8
+  balanced_sampling_n_cells: 4
   checkpoint_dir: model/scgpt_finetune_cls
 
 # LoRA configuration (for lora_head mode)
@@ -67,6 +73,7 @@ lora:
   rank: 8
   alpha: 16.0
   dropout: 0.1
+  last_n_layers: 2
   target_modules:
     - out_proj
     - linear1

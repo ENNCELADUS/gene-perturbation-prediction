@@ -55,9 +55,13 @@ training:
   epochs: 200
   batch_size: 32
   learning_rate: 1.0e-4
+  head_learning_rate: null
+  backbone_learning_rate: null
+  unfreeze_last_n_layers: 0
   weight_decay: 0.01
   warmup_ratio: 0.1
   mask_perturbed: true
+  max_grad_norm: null
   early_stopping_patience: 10
   early_stopping_metric: val_loss
   balanced_sampling: true
@@ -71,6 +75,7 @@ lora:
   rank: 8
   alpha: 16.0
   dropout: 0.1
+  last_n_layers: null
   # Target modules in TransformerEncoderLayer:
   # - out_proj: attention output projection
   # - linear1, linear2: FFN layers

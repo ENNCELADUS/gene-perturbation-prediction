@@ -134,6 +134,7 @@ def apply_lora_to_scgpt(
     alpha: float = 16.0,
     dropout: float = 0.1,
     target_modules: Optional[List[str]] = None,
+    layer_indices: Optional[List[int]] = None,
 ) -> nn.Module:
     """
     Apply LoRA adapters to scGPT transformer encoder.
@@ -149,12 +150,18 @@ def apply_lora_to_scgpt(
         dropout: LoRA dropout
         target_modules: List of module names to apply LoRA to.
                        Default: ["out_proj", "linear1", "linear2"]
+        layer_indices: Optional list of transformer layer indices to apply LoRA to.
+            When None, applies to all layers.
 
     Returns:
         Model with LoRA adapters applied
     """
     if target_modules is None:
         target_modules = ["out_proj", "linear1", "linear2"]
+
+    layer_index_set = None
+    if layer_indices:
+        layer_index_set = set(layer_indices)
 
     lora_layers = []
 
@@ -163,6 +170,8 @@ def apply_lora_to_scgpt(
         encoder = model.transformer_encoder
 
         for layer_idx, layer in enumerate(encoder.layers):
+            if layer_index_set is not None and layer_idx not in layer_index_set:
+                continue
             # Apply LoRA to attention output projection
             if "out_proj" in target_modules and hasattr(layer.self_attn, "out_proj"):
                 original = layer.self_attn.out_proj

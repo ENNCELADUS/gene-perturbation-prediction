@@ -402,6 +402,15 @@ class ScGPTEncoder(BaseEncoder):
         if lora_state:
             from src.train.lora import apply_lora_to_scgpt, LoRALinear
 
+            lora_last_n_layers = self._finetune_config.get("lora_last_n_layers")
+            layer_indices = None
+            if lora_last_n_layers:
+                encoder = getattr(self._model, "transformer_encoder", None)
+                if encoder is not None and hasattr(encoder, "layers"):
+                    n_layers = len(encoder.layers)
+                    start_idx = max(0, n_layers - int(lora_last_n_layers))
+                    layer_indices = list(range(start_idx, n_layers))
+
             apply_lora_to_scgpt(
                 self._model,
                 rank=self._finetune_config.get("lora_rank", 8),
@@ -410,6 +419,7 @@ class ScGPTEncoder(BaseEncoder):
                 target_modules=self._finetune_config.get(
                     "lora_target_modules", ["out_proj", "linear1", "linear2"]
                 ),
+                layer_indices=layer_indices,
             )
             for name, module in self._model.named_modules():
                 if isinstance(module, LoRALinear) and name in lora_state:

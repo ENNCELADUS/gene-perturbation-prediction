@@ -68,13 +68,19 @@ class TrainingConfig:
     # Loss function: infonce | classification
     loss_fn: str = "infonce"
 
+    # Optional partial unfreezing of backbone (head_only mode)
+    unfreeze_last_n_layers: int = 0
+
     # Training hyperparameters
     epochs: int = 50
     batch_size: int = 32
     learning_rate: float = 1e-4
+    head_learning_rate: Optional[float] = None
+    backbone_learning_rate: Optional[float] = None
     weight_decay: float = 0.01
     warmup_ratio: float = 0.1
     mask_perturbed: bool = True
+    max_grad_norm: Optional[float] = None
 
     # Early stopping
     early_stopping_patience: int = 10
@@ -84,6 +90,7 @@ class TrainingConfig:
     lora_rank: int = 8
     lora_alpha: float = 16.0
     lora_dropout: float = 0.1
+    lora_last_n_layers: Optional[int] = None
     lora_target_modules: List[str] = field(
         default_factory=lambda: ["out_proj", "linear1", "linear2"]
     )
@@ -507,6 +514,31 @@ def _make_scgpt_collate_fn(collator):
     return collate
 
 
+def _resolve_transformer_layer_indices(
+    model: nn.Module, last_n_layers: Optional[int]
+) -> Optional[List[int]]:
+    if last_n_layers is None or last_n_layers <= 0:
+        return None
+    encoder = getattr(model, "transformer_encoder", None)
+    if encoder is None or not hasattr(encoder, "layers"):
+        return None
+    n_layers = len(encoder.layers)
+    start_idx = max(0, n_layers - last_n_layers)
+    return list(range(start_idx, n_layers))
+
+
+def _unfreeze_last_n_transformer_layers(
+    model: nn.Module, last_n_layers: Optional[int]
+) -> None:
+    layer_indices = _resolve_transformer_layer_indices(model, last_n_layers)
+    if not layer_indices:
+        return
+    encoder = model.transformer_encoder
+    for layer_idx in layer_indices:
+        for param in encoder.layers[layer_idx].parameters():
+            param.requires_grad = True
+
+
 class FineTunableScGPTEncoder(nn.Module):
     """
     scGPT encoder with fine-tuning support.
@@ -582,17 +614,25 @@ class FineTunableScGPTEncoder(nn.Module):
         elif mode == "head_only":
             # Freeze backbone, train head + loss
             freeze_model(self.scgpt_model)
+            if self.config.unfreeze_last_n_layers > 0:
+                _unfreeze_last_n_transformer_layers(
+                    self.scgpt_model, self.config.unfreeze_last_n_layers
+                )
             # Head is trainable by default
 
         elif mode == "lora_head":
             # Freeze backbone, add LoRA, train LoRA + head + loss
             freeze_model(self.scgpt_model)
+            lora_layer_indices = _resolve_transformer_layer_indices(
+                self.scgpt_model, self.config.lora_last_n_layers
+            )
             apply_lora_to_scgpt(
                 self.scgpt_model,
                 rank=self.config.lora_rank,
                 alpha=self.config.lora_alpha,
                 dropout=self.config.lora_dropout,
                 target_modules=self.config.lora_target_modules,
+                layer_indices=lora_layer_indices,
             )
             unfreeze_lora(self.scgpt_model)
 
@@ -731,13 +771,7 @@ class ScGPTTrainer:
         self.end_to_end = end_to_end
         self.pad_token_id = pad_token_id
 
-        # Optimizer only for trainable parameters
-        trainable_params = [p for p in model.parameters() if p.requires_grad]
-        self.optimizer = torch.optim.AdamW(
-            trainable_params,
-            lr=config.learning_rate,
-            weight_decay=config.weight_decay,
-        )
+        self.optimizer = self._build_optimizer(model, config)
 
         # Learning rate scheduler with warmup
         self.scheduler = None  # Set during training
@@ -749,10 +783,53 @@ class ScGPTTrainer:
             "train_loss": [],
             "val_loss": [],
         }
+        if isinstance(model.loss_fn, ClassificationLoss):
+            self.history["val_accuracy"] = []
 
         # Checkpointing
         self.checkpoint_dir = Path(config.checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    def _build_optimizer(
+        self, model: FineTunableScGPTEncoder, config: TrainingConfig
+    ) -> torch.optim.Optimizer:
+        use_param_groups = (
+            config.head_learning_rate is not None
+            or config.backbone_learning_rate is not None
+        )
+        if use_param_groups:
+            head_lr = config.head_learning_rate or config.learning_rate
+            backbone_lr = config.backbone_learning_rate or config.learning_rate
+            head_params: List[torch.nn.Parameter] = []
+            for module in (model.retrieval_head, model.loss_fn):
+                head_params.extend([p for p in module.parameters() if p.requires_grad])
+            head_param_ids = {id(p) for p in head_params}
+            backbone_params = [
+                p
+                for p in model.scgpt_model.parameters()
+                if p.requires_grad and id(p) not in head_param_ids
+            ]
+            param_groups = []
+            if backbone_params:
+                param_groups.append({"params": backbone_params, "lr": backbone_lr})
+            if head_params:
+                param_groups.append({"params": head_params, "lr": head_lr})
+            if not param_groups:
+                param_groups = [
+                    {"params": [p for p in model.parameters() if p.requires_grad]}
+                ]
+            return torch.optim.AdamW(
+                param_groups,
+                lr=config.learning_rate,
+                weight_decay=config.weight_decay,
+            )
+
+        trainable_params = [p for p in model.parameters() if p.requires_grad]
+        return torch.optim.AdamW(
+            trainable_params,
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay,
+        )
 
     def train_epoch(self, dataloader: DataLoader) -> float:
         """Train for one epoch."""
@@ -783,6 +860,10 @@ class ScGPTTrainer:
 
             # Backward
             loss.backward()
+            if self.config.max_grad_norm is not None:
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(), self.config.max_grad_norm
+                )
             self.optimizer.step()
 
             if self.scheduler is not None:
@@ -795,6 +876,12 @@ class ScGPTTrainer:
             stats = torch.tensor([total_loss, num_batches], device=self.device)
             dist.all_reduce(stats, op=dist.ReduceOp.SUM)
             total_loss, num_batches = stats.tolist()
+            if track_accuracy:
+                acc_stats = torch.tensor(
+                    [total_correct, total_samples], device=self.device
+                )
+                dist.all_reduce(acc_stats, op=dist.ReduceOp.SUM)
+                total_correct, total_samples = acc_stats.tolist()
 
         return total_loss / max(num_batches, 1)
 
@@ -804,33 +891,59 @@ class ScGPTTrainer:
         self.model.eval()
         total_loss = 0.0
         num_batches = 0
+        total_correct = 0
+        total_samples = 0
+        track_accuracy = isinstance(self.model.loss_fn, ClassificationLoss)
 
         for batch in dataloader:
             if self.end_to_end:
                 input_gene_ids = batch["gene"].to(self.device)
                 expressions = batch["expr"].to(self.device)
                 labels = batch["labels"].to(self.device)
-                loss = self.model(
-                    input_gene_ids=input_gene_ids,
-                    expressions=expressions,
-                    pad_token_id=self.pad_token_id,
-                    labels=labels,
-                )
+                if track_accuracy:
+                    loss, projected = self.model(
+                        input_gene_ids=input_gene_ids,
+                        expressions=expressions,
+                        pad_token_id=self.pad_token_id,
+                        labels=labels,
+                        return_projected=True,
+                    )
+                else:
+                    loss = self.model(
+                        input_gene_ids=input_gene_ids,
+                        expressions=expressions,
+                        pad_token_id=self.pad_token_id,
+                        labels=labels,
+                    )
             else:
                 embeddings, labels = batch
                 embeddings = embeddings.to(self.device)
                 labels = labels.to(self.device)
-                loss = self.model(embeddings=embeddings, labels=labels)
+                if track_accuracy:
+                    loss, projected = self.model(
+                        embeddings=embeddings, labels=labels, return_projected=True
+                    )
+                else:
+                    loss = self.model(embeddings=embeddings, labels=labels)
 
             total_loss += loss.item()
             num_batches += 1
+            if track_accuracy:
+                logits = self.model.loss_fn.classifier(projected)
+                preds = logits.argmax(dim=1)
+                total_correct += int((preds == labels).sum().item())
+                total_samples += int(labels.size(0))
 
         if dist.is_initialized():
             stats = torch.tensor([total_loss, num_batches], device=self.device)
             dist.all_reduce(stats, op=dist.ReduceOp.SUM)
             total_loss, num_batches = stats.tolist()
 
-        return total_loss / max(num_batches, 1)
+        avg_loss = total_loss / max(num_batches, 1)
+        if track_accuracy and total_samples:
+            avg_acc = total_correct / total_samples
+            return avg_loss, avg_acc
+        return avg_loss
 
     def train(
         self,
@@ -865,6 +978,18 @@ class ScGPTTrainer:
             print(f"Epochs: {self.config.epochs}")
             print(f"Batch size: {self.config.batch_size}")
             print(f"Learning rate: {self.config.learning_rate}")
+            if (
+                self.config.head_learning_rate is not None
+                or self.config.backbone_learning_rate is not None
+            ):
+                head_lr = self.config.head_learning_rate or self.config.learning_rate
+                backbone_lr = (
+                    self.config.backbone_learning_rate or self.config.learning_rate
+                )
+                print(f"Head learning rate: {head_lr}")
+                print(f"Backbone learning rate: {backbone_lr}")
+            if self.config.max_grad_norm is not None:
+                print(f"Max grad norm: {self.config.max_grad_norm}")
             print(f"{'=' * 60}\n")
 
         for epoch in range(self.config.epochs):
@@ -880,8 +1005,14 @@ class ScGPTTrainer:
             self.history["train_loss"].append(train_loss)
 
             # Validate
-            val_loss = self.validate(val_loader)
-            self.history["val_loss"].append(val_loss)
+            val_metrics = self.validate(val_loader)
+            if isinstance(val_metrics, tuple):
+                val_loss, val_accuracy = val_metrics
+                self.history["val_loss"].append(val_loss)
+                self.history["val_accuracy"].append(val_accuracy)
+            else:
+                val_loss = val_metrics
+                self.history["val_loss"].append(val_loss)
 
             # Log
             if self.is_master:
@@ -890,6 +1021,8 @@ class ScGPTTrainer:
                     f"Train Loss: {train_loss:.4f} | "
                     f"Val Loss: {val_loss:.4f}"
                 )
+                if isinstance(val_metrics, tuple):
+                    print(f"  Val Accuracy@1: {val_accuracy:.4f}")
 
             # Early stopping
             if val_loss < self.best_val_loss:

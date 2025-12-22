@@ -8,7 +8,24 @@ Target: scGPT exact_hit@1 >= 0.35 and mrr >= 0.45 (mask=True).
 
 ## Current Gap (Dec 2025 runs)
 - logreg: exact_hit@1 ~0.35, mrr ~0.48 (mask=True)
-- scgpt frozen/head-only/LoRA: exact_hit@1 ~0.06-0.08, mrr ~0.12-0.15
+- scgpt frozen: exact_hit@1 ~0.07, mrr ~0.13
+- scgpt head-only InfoNCE: exact_hit@1 ~0.13, mrr ~0.23
+- scgpt head-only classification: exact_hit@1 ~0.19, mrr ~0.29
+- scgpt LoRA classification: exact_hit@1 ~0.03, mrr ~0.07 (collapsed)
+
+## Priority Actions (Next Runs)
+1. [done] Enable balanced sampling for classification fine-tuning.
+   - Implemented in `src/configs/scgpt_finetune_classification.yaml`.
+   - Next: re-run cls head-only with balanced batches.
+2. [done] Increase adaptation capacity safely.
+   - Unfreeze last 2 transformer layers + split LR (head 1e-4, backbone 1e-5).
+   - Add grad clipping for stability (max_grad_norm=1.0).
+3. [done] Restrict LoRA to last layers only.
+   - Apply LoRA only to last 2 transformer blocks to avoid early-layer drift.
+   - Keep rank=8 for now; increase only after stability is confirmed.
+4. [in-progress] Early metric tracking on exact_hit@1/mrr.
+   - [done] Log val Accuracy@1 for classification runs.
+   - [todo] Add retrieval metric tracking for InfoNCE runs.
 
 ## Urgent Changes (Do First)
 1. [done] Switch scGPT to the official preprocessing pipeline using raw counts.
@@ -48,10 +65,11 @@ Deliverables:
 - Split parity confirmed (seed 42, same split paths, mask_perturbed true, query_split test).
 
 ## Phase 2: Training Objective And Sampling
-- [todo] Compare losses:
-  - [todo] InfoNCE (current) vs classification loss (closed-set).
-- [todo] Add balanced sampler:
-  - [todo] Each batch contains 4-8 cells per condition across 4-8 conditions.
+- [in-progress] Compare losses:
+  - [done] Classification loss baseline confirmed.
+  - [todo] Re-run classification with balanced sampling and partial unfreeze.
+- [done] Add balanced sampler:
+  - [done] Each batch contains 4-8 cells per condition across 4-8 conditions.
 - [todo] Add early metric tracking on exact_hit@1 via a small validation subset.
 
 Deliverables:
@@ -59,9 +77,10 @@ Deliverables:
 - [todo] Ablation table: {loss, sampler, batch size} -> metrics.
 
 ## Phase 3: Capacity And Adaptation
-- [todo] Increase adaptation capacity:
-  - [todo] Unfreeze last N transformer layers OR raise LoRA rank to 16/32.
-  - [todo] Use separate LR for backbone vs head (e.g., 1e-5 vs 1e-4).
+- [in-progress] Increase adaptation capacity:
+  - [done] Unfreeze last 2 transformer layers in head-only mode.
+  - [done] Use separate LR for backbone vs head (1e-5 vs 1e-4).
+  - [todo] Re-evaluate with LoRA rank 16/32 after stability.
 - [todo] Evaluate retrieval head depth/width and output dim.
 
 Deliverables:
