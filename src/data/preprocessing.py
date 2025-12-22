@@ -17,6 +17,7 @@ def mask_perturbed_genes(
     condition_col: str = "condition",
     gene_name_col: str = "gene_name",
     mask_value: float = 0.0,
+    layer: Optional[str] = None,
 ) -> ad.AnnData:
     """
     Mask expression of perturbed genes to prevent information leakage.
@@ -30,6 +31,7 @@ def mask_perturbed_genes(
         condition_col: Column with perturbation condition
         gene_name_col: Column in var with gene names
         mask_value: Value to set for masked genes
+        layer: AnnData layer key to mask (defaults to X)
 
     Returns:
         AnnData with perturbed genes masked
@@ -44,8 +46,13 @@ def mask_perturbed_genes(
     )
     gene_to_idx = {g: i for i, g in enumerate(gene_names)}
 
-    # Process each cell
-    X = adata.X.copy()
+    # Select the matrix to mask
+    if layer is None or layer == "X":
+        X = adata.X.copy()
+    else:
+        if layer not in adata.layers:
+            raise ValueError(f"Layer '{layer}' not found in AnnData.layers")
+        X = adata.layers[layer].copy()
     if hasattr(X, "toarray"):
         X = X.toarray()
 
@@ -56,7 +63,10 @@ def mask_perturbed_genes(
             if gene != "ctrl" and gene in gene_to_idx:
                 X[i, gene_to_idx[gene]] = mask_value
 
-    adata.X = X
+    if layer is None or layer == "X":
+        adata.X = X
+    else:
+        adata.layers[layer] = X
     return adata
 
 

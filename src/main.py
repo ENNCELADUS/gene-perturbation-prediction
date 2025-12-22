@@ -18,6 +18,7 @@ from .data import load_perturb_data, ConditionSplitter
 from .evaluate import (
     CellRetrievalEvaluator,
     ClassifierEvaluator,
+    ScGPTClassifierEvaluator,
     generate_error_report,
     generate_report,
 )
@@ -81,13 +82,35 @@ def get_encoder_kwargs(config: dict) -> dict:
     if encoder_type == "pca":
         return {"n_components": model_config.get("n_components", 50)}
     elif encoder_type == "scgpt":
+        checkpoint = model_config.get("checkpoint") or model_config.get(
+            "pretrained_dir"
+        )
         return {
-            "checkpoint": model_config.get("checkpoint"),
+            "checkpoint": checkpoint,
             "finetune_checkpoint": model_config.get("finetune_checkpoint"),
             "finetune_apply_head": model_config.get("finetune_apply_head", True),
+            "finetune_apply_classifier": model_config.get(
+                "finetune_apply_classifier", False
+            ),
             "freeze": model_config.get("freeze_encoder", True),
             "use_lora": model_config.get("use_lora", False),
             "lora_rank": model_config.get("lora_rank", 8),
+            "raw_layer_key": model_config.get("raw_layer_key"),
+            "preprocess": model_config.get("preprocess", False),
+            "preprocess_normalize_total": model_config.get(
+                "preprocess_normalize_total", 1e4
+            ),
+            "preprocess_log1p": model_config.get("preprocess_log1p", True),
+            "preprocess_binning": model_config.get("preprocess_binning"),
+            "preprocess_result_binned_key": model_config.get(
+                "preprocess_result_binned_key", "X_binned"
+            ),
+            "preprocess_result_normed_key": model_config.get(
+                "preprocess_result_normed_key", "X_normed"
+            ),
+            "preprocess_result_log1p_key": model_config.get(
+                "preprocess_result_log1p_key", "X_log1p"
+            ),
         }
     elif encoder_type == "logreg":
         return {
@@ -193,6 +216,7 @@ def run_pipeline(config: dict, args) -> dict:
     encoder_kwargs = get_encoder_kwargs(config)
     library_config = config.get("library", {})
     eval_config = config.get("evaluate", {})
+    eval_mode = eval_config.get("mode", "retrieval")
     confidence_config = config.get("confidence", {})
     query_config = config.get("query", {})
     encoder_type = config["model"]["encoder"]
@@ -211,6 +235,20 @@ def run_pipeline(config: dict, args) -> dict:
         evaluator.setup(dataset)
         print(f"  - Classifier: {encoder_type}")
         print(f"  - Mode: discriminative (probability-based ranking)")
+    elif eval_mode == "classifier":
+        evaluator = ScGPTClassifierEvaluator(
+            encoder_kwargs=encoder_kwargs,
+            top_k=config["retrieval"]["top_k"],
+            mask_perturbed=eval_config.get("mask_perturbed", True),
+            mask_layer_key=encoder_kwargs.get("raw_layer_key"),
+            query_mode=query_config.get("mode", "cell"),
+            pseudo_bulk_config=query_config.get("pseudo_bulk", {}),
+            candidate_source=query_config.get("candidate_source", "all"),
+            query_split=query_config.get("query_split", "test"),
+        )
+        evaluator.setup(dataset)
+        print("  - Encoder: scgpt (classification head)")
+        print("  - Mode: discriminative (probability-based ranking)")
     else:
         evaluator = CellRetrievalEvaluator(
             encoder_type=encoder_type,
@@ -218,6 +256,7 @@ def run_pipeline(config: dict, args) -> dict:
             metric=config["retrieval"]["metric"],
             top_k=config["retrieval"]["top_k"],
             mask_perturbed=eval_config.get("mask_perturbed", True),
+            mask_layer_key=encoder_kwargs.get("raw_layer_key"),
             library_type=library_config.get("type", "bootstrap"),
             n_prototypes=library_config.get("n_prototypes", 30),
             m_cells_per_prototype=library_config.get("m_cells_per_prototype", 50),
@@ -265,6 +304,17 @@ def run_pipeline(config: dict, args) -> dict:
                 classifier_kwargs=encoder_kwargs,
                 top_k=config["retrieval"]["top_k"],
                 mask_perturbed=False,
+                query_mode=query_config.get("mode", "cell"),
+                pseudo_bulk_config=query_config.get("pseudo_bulk", {}),
+                candidate_source=query_config.get("candidate_source", "all"),
+                query_split=query_config.get("query_split", "test"),
+            )
+        elif eval_mode == "classifier":
+            evaluator_no_mask = ScGPTClassifierEvaluator(
+                encoder_kwargs=encoder_kwargs,
+                top_k=config["retrieval"]["top_k"],
+                mask_perturbed=False,
+                mask_layer_key=encoder_kwargs.get("raw_layer_key"),
                 query_mode=query_config.get("mode", "cell"),
                 pseudo_bulk_config=query_config.get("pseudo_bulk", {}),
                 candidate_source=query_config.get("candidate_source", "all"),

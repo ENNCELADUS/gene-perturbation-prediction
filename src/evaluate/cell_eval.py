@@ -49,6 +49,7 @@ class CellRetrievalEvaluator:
         metric: str = "cosine",
         top_k: List[int] = [1, 5, 8, 10],
         mask_perturbed: bool = True,
+        mask_layer_key: Optional[str] = None,
         library_type: str = "bootstrap",
         n_prototypes: int = 30,
         m_cells_per_prototype: int = 50,
@@ -77,6 +78,7 @@ class CellRetrievalEvaluator:
         self.metric = metric
         self.top_k = top_k
         self.mask_perturbed = mask_perturbed
+        self.mask_layer_key = mask_layer_key
         self.library_type = library_type
         self.n_prototypes = n_prototypes
         self.m_cells_per_prototype = m_cells_per_prototype
@@ -114,7 +116,7 @@ class CellRetrievalEvaluator:
 
         # Apply masking if requested
         if self.mask_perturbed:
-            ref_adata = mask_perturbed_genes(ref_adata)
+            ref_adata = mask_perturbed_genes(ref_adata, layer=self.mask_layer_key)
 
         # Fit encoder on reference data
         self.encoder = get_encoder(self.encoder_type, **self.encoder_kwargs)
@@ -138,7 +140,9 @@ class CellRetrievalEvaluator:
         """Build reference library from encoded ref cells."""
         ref_for_library = dataset.get_ref_adata_for_conditions(conditions)
         if self.mask_perturbed:
-            ref_for_library = mask_perturbed_genes(ref_for_library)
+            ref_for_library = mask_perturbed_genes(
+                ref_for_library, layer=self.mask_layer_key
+            )
 
         use_embedding_space = self.encoder_type == "scgpt" and hasattr(
             self.encoder, "encode_adata"
@@ -316,7 +320,7 @@ class CellRetrievalEvaluator:
         query_adata = dataset.get_query_adata_for_conditions(query_conditions)
 
         if self.mask_perturbed:
-            query_adata = mask_perturbed_genes(query_adata)
+            query_adata = mask_perturbed_genes(query_adata, layer=self.mask_layer_key)
 
         if mode == "pseudobulk":
             cells_per_bulk = self.pseudo_bulk_config.get("cells_per_bulk", 50)

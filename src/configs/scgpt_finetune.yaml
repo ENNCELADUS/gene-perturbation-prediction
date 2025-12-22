@@ -33,6 +33,14 @@ model:
   pretrained_dir: model/scGPT
   freeze_encoder: true
   use_lora: false  # Set to true when using lora_head mode
+  raw_layer_key: counts
+  preprocess: true
+  preprocess_normalize_total: 1e4
+  preprocess_log1p: true
+  preprocess_binning: 51
+  preprocess_result_binned_key: X_binned
+  preprocess_result_normed_key: X_normed
+  preprocess_result_log1p_key: X_log1p
 
 # Training configuration
 training:
@@ -46,6 +54,10 @@ training:
   mask_perturbed: true
   early_stopping_patience: 10
   early_stopping_metric: val_loss
+  balanced_sampling: true
+  balanced_sampling_n_conditions: 8
+  balanced_sampling_n_cells: 4
+  balanced_sampling_seed: 42
   checkpoint_dir: model/scgpt_finetune
 
 # LoRA configuration (for lora_head mode)

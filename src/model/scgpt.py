@@ -5,7 +5,7 @@ Uses pretrained scGPT model (frozen) to extract cell embeddings
 via CLS token pooling from the transformer's last layer.
 """
 
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -23,6 +23,8 @@ def _get_batch_cell_embeddings(
     gene_ids=None,
     use_batch_labels: bool = False,
     num_workers: Optional[int] = None,
+    input_layer_key: Optional[str] = None,
+    do_binning: bool = True,
 ) -> np.ndarray:
     """Local embedding helper to avoid multiprocessing OOM during DDP."""
     import os
@@ -31,7 +33,12 @@ def _get_batch_cell_embeddings(
     from torch.utils.data import DataLoader, SequentialSampler
     from scgpt.data_collator import DataCollator
 
-    count_matrix = adata.X
+    if input_layer_key and input_layer_key != "X":
+        if input_layer_key not in adata.layers:
+            raise ValueError(f"Layer '{input_layer_key}' not found in AnnData.layers")
+        count_matrix = adata.layers[input_layer_key]
+    else:
+        count_matrix = adata.X
     count_matrix = (
         count_matrix if isinstance(count_matrix, np.ndarray) else count_matrix.toarray()
     )
@@ -75,7 +82,7 @@ def _get_batch_cell_embeddings(
         pad_token_id=vocab[model_configs["pad_token"]],
         pad_value=model_configs["pad_value"],
         do_mlm=False,
-        do_binning=True,
+        do_binning=do_binning,
         max_length=max_length,
         sampling=True,
         keep_first_n_tokens=1,
@@ -156,6 +163,15 @@ class ScGPTEncoder(BaseEncoder):
         use_fast_transformer: bool = True,
         finetune_checkpoint: Optional[str] = None,
         finetune_apply_head: bool = True,
+        finetune_apply_classifier: bool = False,
+        raw_layer_key: Optional[str] = None,
+        preprocess: bool = False,
+        preprocess_normalize_total: float | bool = 1e4,
+        preprocess_log1p: bool = True,
+        preprocess_binning: Optional[int] = None,
+        preprocess_result_binned_key: str = "X_binned",
+        preprocess_result_normed_key: str = "X_normed",
+        preprocess_result_log1p_key: str = "X_log1p",
         **unused_kwargs,
     ):
         """
@@ -179,6 +195,15 @@ class ScGPTEncoder(BaseEncoder):
         self.use_fast_transformer = use_fast_transformer
         self.finetune_checkpoint = finetune_checkpoint
         self.finetune_apply_head = finetune_apply_head
+        self.finetune_apply_classifier = finetune_apply_classifier
+        self.raw_layer_key = raw_layer_key
+        self.preprocess = preprocess
+        self.preprocess_normalize_total = preprocess_normalize_total
+        self.preprocess_log1p = preprocess_log1p
+        self.preprocess_binning = preprocess_binning
+        self.preprocess_result_binned_key = preprocess_result_binned_key
+        self.preprocess_result_normed_key = preprocess_result_normed_key
+        self.preprocess_result_log1p_key = preprocess_result_log1p_key
 
         # Lazy-loaded components
         self._model = None
@@ -187,6 +212,8 @@ class ScGPTEncoder(BaseEncoder):
         self._loaded = False
         self._finetune_loaded = False
         self._retrieval_head = None
+        self._classifier_head = None
+        self._classifier_condition_order = None
         self._finetune_config = None
 
     def _load_model(self):
@@ -287,6 +314,7 @@ class ScGPTEncoder(BaseEncoder):
 
         state = torch.load(checkpoint_path, map_location=device)
         self._finetune_config = state.get("config", {})
+        self._classifier_condition_order = self._finetune_config.get("condition_order")
 
         if self.finetune_apply_head and "retrieval_head" in state:
             from src.train.finetune import RetrievalHead
@@ -304,6 +332,49 @@ class ScGPTEncoder(BaseEncoder):
             self._retrieval_head.load_state_dict(state["retrieval_head"])
             self._retrieval_head.to(device)
             self._retrieval_head.eval()
+
+        if self.finetune_apply_classifier:
+            from src.train.losses import ClassificationLoss
+
+            loss_state = state.get("loss_fn")
+            loss_type = self._finetune_config.get("loss_fn")
+            if loss_type != "classification":
+                raise ValueError(
+                    "Classification head requested but checkpoint was not trained "
+                    "with classification loss."
+                )
+            if not loss_state or "classifier.3.weight" not in loss_state:
+                raise ValueError(
+                    "Classification head state not found in finetune checkpoint."
+                )
+            if self._retrieval_head is None:
+                raise ValueError(
+                    "Classification head requires retrieval head. "
+                    "Set finetune_apply_head=True."
+                )
+
+            num_conditions = int(loss_state["classifier.3.weight"].shape[0])
+            head_hidden = self._finetune_config.get("head_hidden_dim")
+            if head_hidden is None:
+                head_hidden = int(loss_state["classifier.3.weight"].shape[1])
+            head_output = self._finetune_config.get("head_output_dim")
+            if head_output is None and "classifier.0.weight" in loss_state:
+                head_output = int(loss_state["classifier.0.weight"].shape[1])
+            head_output = head_output or self._model_configs.get("embsize", 512)
+            head_dropout = self._finetune_config.get("head_dropout", 0.2)
+            label_smoothing = self._finetune_config.get("label_smoothing", 0.1)
+
+            cls_loss = ClassificationLoss(
+                num_conditions=num_conditions,
+                embedding_dim=head_output,
+                hidden_dim=head_hidden,
+                dropout=head_dropout,
+                label_smoothing=label_smoothing,
+            )
+            cls_loss.load_state_dict(loss_state)
+            cls_loss.to(device)
+            cls_loss.eval()
+            self._classifier_head = cls_loss.classifier
 
         lora_state = state.get("lora")
         if lora_state:
@@ -328,6 +399,106 @@ class ScGPTEncoder(BaseEncoder):
                     )
 
         self._finetune_loaded = True
+
+    def _resolve_binning(self) -> Optional[int]:
+        """Resolve binning configuration for scGPT preprocessing."""
+        if not self.preprocess:
+            return None
+        if self.preprocess_binning is False or self.preprocess_binning == 0:
+            return None
+        if self.preprocess_binning is not None:
+            return int(self.preprocess_binning)
+        return int(self._model_configs.get("n_bins", 51))
+
+    def get_input_layer_key(self) -> str:
+        """Return the AnnData layer key used for scGPT input."""
+        if self.preprocess:
+            binning = self._resolve_binning()
+            if binning:
+                return self.preprocess_result_binned_key
+            if self.preprocess_log1p:
+                return self.preprocess_result_log1p_key
+            if self.preprocess_normalize_total:
+                return self.preprocess_result_normed_key
+        return self.raw_layer_key or "X"
+
+    def resolve_input_layer_key(self, adata) -> str:
+        """Resolve input layer key from processed AnnData metadata."""
+        return adata.uns.get("scgpt_input_layer", self.get_input_layer_key())
+
+    def _apply_preprocess(self, adata):
+        """Apply scGPT preprocessing on raw counts."""
+        from scgpt.preprocess import Preprocessor
+
+        use_key = self.raw_layer_key or "X"
+        if use_key != "X" and use_key not in adata.layers:
+            raise ValueError(f"Layer '{use_key}' not found in AnnData.layers")
+
+        preprocessor = Preprocessor(
+            use_key=use_key,
+            normalize_total=self.preprocess_normalize_total,
+            result_normed_key=self.preprocess_result_normed_key,
+            log1p=self.preprocess_log1p,
+            result_log1p_key=self.preprocess_result_log1p_key,
+            binning=self._resolve_binning(),
+            result_binned_key=self.preprocess_result_binned_key,
+        )
+        preprocessor(adata)
+        return adata
+
+    def _materialize_preprocessed_input(self, adata):
+        """Store preprocessed input in a standalone AnnData to avoid bloating."""
+        import anndata as ad
+
+        input_layer_key = self.get_input_layer_key()
+        if input_layer_key == "X":
+            adata.uns["scgpt_input_layer"] = "X"
+            return adata
+
+        if input_layer_key not in adata.layers:
+            raise ValueError(f"Layer '{input_layer_key}' not found in AnnData.layers")
+        matrix = adata.layers[input_layer_key]
+        if input_layer_key == self.preprocess_result_binned_key:
+            matrix = matrix.astype(np.uint8, copy=False)
+        elif hasattr(matrix, "astype"):
+            matrix = matrix.astype(np.float32, copy=False)
+
+        processed = ad.AnnData(
+            X=matrix,
+            obs=adata.obs.copy(),
+            var=adata.var.copy(),
+        )
+        processed.uns["scgpt_input_layer"] = "X"
+        return processed
+
+    def prepare_adata(self, adata):
+        """Map genes to vocab, filter, and apply scGPT preprocessing."""
+        # Ensure model is loaded for vocab/configs
+        self._load_model()
+
+        adata = adata.copy()
+        gene_names = (
+            adata.var[self.gene_col].values
+            if self.gene_col in adata.var
+            else adata.var.index.values
+        )
+        adata.var["id_in_vocab"] = [
+            self._vocab[g] if g in self._vocab else -1 for g in gene_names
+        ]
+
+        valid_genes = adata.var["id_in_vocab"] >= 0
+        n_valid = valid_genes.sum()
+        n_total = len(valid_genes)
+        if n_valid < n_total:
+            print(f"  [scGPT] Using {n_valid}/{n_total} genes in vocabulary")
+        adata = adata[:, valid_genes].copy()
+
+        if self.preprocess:
+            adata = self._apply_preprocess(adata)
+            adata = self._materialize_preprocessed_input(adata)
+
+        gene_ids = np.array(adata.var["id_in_vocab"])
+        return adata, gene_ids
 
     def fit(self, X: np.ndarray) -> "ScGPTEncoder":
         """Fit is no-op for pretrained model."""
@@ -368,26 +539,7 @@ class ScGPTEncoder(BaseEncoder):
         if str(scgpt_path) not in sys.path:
             sys.path.insert(0, str(scgpt_path))
 
-        # Prepare gene IDs
-        adata = adata.copy()
-        gene_names = (
-            adata.var[self.gene_col].values
-            if self.gene_col in adata.var
-            else adata.var.index.values
-        )
-        adata.var["id_in_vocab"] = [
-            self._vocab[g] if g in self._vocab else -1 for g in gene_names
-        ]
-
-        # Filter to genes in vocabulary
-        valid_genes = adata.var["id_in_vocab"] >= 0
-        n_valid = valid_genes.sum()
-        n_total = len(valid_genes)
-        if n_valid < n_total:
-            print(f"  [scGPT] Using {n_valid}/{n_total} genes in vocabulary")
-        adata = adata[:, valid_genes]
-
-        gene_ids = np.array(adata.var["id_in_vocab"])
+        adata, gene_ids = self.prepare_adata(adata)
 
         # Get cell embeddings
         cell_embeddings = _get_batch_cell_embeddings(
@@ -400,12 +552,69 @@ class ScGPTEncoder(BaseEncoder):
             model_configs=self._model_configs,
             gene_ids=gene_ids,
             use_batch_labels=False,
+            input_layer_key=self.resolve_input_layer_key(adata),
+            do_binning=self._resolve_binning() is None,
         )
 
         if self._retrieval_head is not None:
             cell_embeddings = self._apply_retrieval_head(cell_embeddings)
 
         return cell_embeddings
+
+    def has_classifier_head(self) -> bool:
+        """Return True if a classification head is loaded."""
+        return self._classifier_head is not None
+
+    def get_condition_order(self) -> Optional[List[str]]:
+        """Return the condition order used for classifier outputs."""
+        return self._classifier_condition_order
+
+    def predict_topk_adata(
+        self,
+        adata,
+        k: int = 5,
+        condition_order: Optional[List[str]] = None,
+    ) -> Tuple[List[List[str]], np.ndarray]:
+        """
+        Predict top-K conditions using the classification head.
+
+        Args:
+            adata: AnnData with gene names in var
+            k: Number of top predictions to return
+            condition_order: Optional list of condition names aligned to logits
+
+        Returns:
+            Tuple of (top-K condition names, top-K scores)
+        """
+        if self._classifier_head is None:
+            raise RuntimeError("Classification head not loaded for scGPT.")
+
+        condition_order = condition_order or self._classifier_condition_order
+        if not condition_order:
+            raise ValueError("Condition order required for classifier predictions.")
+
+        embeddings = self.encode_adata(adata)
+
+        import torch
+
+        device = next(self._classifier_head.parameters()).device
+        with torch.no_grad():
+            tensor = torch.from_numpy(embeddings).to(device)
+            logits = self._classifier_head(tensor)
+            probs = torch.softmax(logits, dim=1)
+
+        if len(condition_order) != probs.shape[1]:
+            raise ValueError(
+                "Condition order length does not match classifier output size."
+            )
+
+        max_k = min(k, probs.shape[1])
+        top_scores, top_indices = probs.topk(max_k, dim=1)
+        top_scores_np = top_scores.cpu().numpy()
+        top_indices_np = top_indices.cpu().numpy()
+        condition_order_np = np.asarray(condition_order)
+        top_conditions = condition_order_np[top_indices_np].tolist()
+        return top_conditions, top_scores_np
 
     def _apply_retrieval_head(self, embeddings: np.ndarray) -> np.ndarray:
         """Apply fine-tuned retrieval head to embeddings."""

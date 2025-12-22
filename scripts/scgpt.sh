@@ -62,11 +62,12 @@ run_finetune() {
 }
 
 echo "=============================================="
-echo "scGPT Ablative Study: Three Modes"
+echo "scGPT Ablative Study: Four Modes"
 echo "=============================================="
 echo "Mode 1: Frozen scGPT encoder (baseline)"
-echo "Mode 2: scGPT + trainable retrieval head"
-echo "Mode 3: scGPT + LoRA + retrieval head"
+echo "Mode 2: scGPT + trainable retrieval head (InfoNCE)"
+echo "Mode 3: scGPT + trainable retrieval head (Classification)"
+echo "Mode 4: scGPT + LoRA + retrieval head (InfoNCE)"
 echo "=============================================="
 
 # ============================================
@@ -81,7 +82,7 @@ SCGPT_BASELINE_DIR="$(latest_run_dir results/scgpt)" || {
     echo "Error: No scGPT baseline results found in results/scgpt" >&2
     exit 1
 }
-echo "[1/3] Frozen scGPT completed!"
+echo "[1/4] Frozen scGPT completed!"
 
 # ============================================
 # MODE 2: scGPT + Trainable Retrieval Head
@@ -104,14 +105,37 @@ SCGPT_HEAD_ONLY_DIR="$(latest_run_dir results/scgpt_head_only)" || {
     echo "Error: No scGPT head-only results found in results/scgpt_head_only" >&2
     exit 1
 }
-echo "[2/3] Head-only fine-tuning completed!"
+echo "[2/4] Head-only fine-tuning completed!"
 
 # ============================================
-# MODE 3: scGPT + LoRA + Retrieval Head
+# MODE 3: scGPT + Trainable Retrieval Head (Classification)
 # ============================================
 echo ""
 echo "=============================================="
-echo "[MODE 3] scGPT + LoRA + Retrieval Head"
+echo "[MODE 3] scGPT + Trainable Retrieval Head (Classification)"
+echo "=============================================="
+echo "Training retrieval head with classification loss..."
+run_finetune \
+    --config src/configs/scgpt_finetune_classification.yaml \
+    --mode head_only \
+    --loss classification
+echo "Evaluating classification fine-tuned model..."
+python -m src.main \
+    --config src/configs/scgpt_finetune_classification.yaml \
+    --experiment_name scgpt_head_only_cls \
+    --finetune_checkpoint model/scgpt_finetune_cls/best_head_only.pt
+SCGPT_HEAD_ONLY_CLS_DIR="$(latest_run_dir results/scgpt_head_only_cls)" || {
+    echo "Error: No scGPT classification results found in results/scgpt_head_only_cls" >&2
+    exit 1
+}
+echo "[3/4] Classification fine-tuning completed!"
+
+# ============================================
+# MODE 4: scGPT + LoRA + Retrieval Head
+# ============================================
+echo ""
+echo "=============================================="
+echo "[MODE 4] scGPT + LoRA + Retrieval Head"
 echo "=============================================="
 echo "Training with LoRA adapters + retrieval head..."
 run_finetune \
@@ -127,7 +151,7 @@ SCGPT_LORA_HEAD_DIR="$(latest_run_dir results/scgpt_lora_head)" || {
     echo "Error: No scGPT LoRA head results found in results/scgpt_lora_head" >&2
     exit 1
 }
-echo "[3/3] LoRA fine-tuning completed!"
+echo "[4/4] LoRA fine-tuning completed!"
 
 echo ""
 echo "=============================================="
@@ -140,7 +164,7 @@ echo "=============================================="
 echo ""
 echo "Generating ablative comparison report..."
 python scripts/compare.py \
-    --results "${SCGPT_BASELINE_DIR}" "${SCGPT_HEAD_ONLY_DIR}" "${SCGPT_LORA_HEAD_DIR}" \
+    --results "${SCGPT_BASELINE_DIR}" "${SCGPT_HEAD_ONLY_DIR}" "${SCGPT_HEAD_ONLY_CLS_DIR}" "${SCGPT_LORA_HEAD_DIR}" \
     --output results/reports \
     --name scgpt_ablative_comparison
 echo "Ablative comparison report saved to results/reports/"
@@ -148,20 +172,4 @@ echo "Ablative comparison report saved to results/reports/"
 # ============================================
 # Optional: Classification Loss Variants
 # ============================================
-# Uncomment to also run with classification loss
-# echo ""
-# echo "=============================================="
-# echo "[BONUS] Training with Classification Loss"
-# echo "=============================================="
-# 
-# # Head-only with classification
-# python -m src.train.finetune \
-#     --config src/configs/scgpt_finetune.yaml \
-#     --mode head_only \
-#     --loss classification
-# 
-# # LoRA with classification
-# python -m src.train.finetune \
-#     --config src/configs/scgpt_finetune.yaml \
-#     --mode lora_head \
-#     --loss classification
+# Extend classification runs (e.g., LoRA) by adding a similar block above.

@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import json
 import os
 from dataclasses import dataclass, field, asdict
@@ -97,10 +98,25 @@ class TrainingConfig:
 
     # Classification config
     label_smoothing: float = 0.1
+    condition_order: Optional[List[str]] = None
+
+    # Balanced sampling (for contrastive training)
+    balanced_sampling: bool = False
+    balanced_sampling_n_conditions: int = 8
+    balanced_sampling_n_cells: int = 4
+    balanced_sampling_seed: int = 42
 
     # Paths
     checkpoint_dir: str = "model/scgpt_finetune"
     scgpt_model_dir: str = "model/scGPT"
+    scgpt_raw_layer_key: Optional[str] = None
+    scgpt_preprocess: bool = False
+    scgpt_preprocess_normalize_total: float | bool = 1e4
+    scgpt_preprocess_log1p: bool = True
+    scgpt_preprocess_binning: Optional[int] = None
+    scgpt_preprocess_result_binned_key: str = "X_binned"
+    scgpt_preprocess_result_normed_key: str = "X_normed"
+    scgpt_preprocess_result_log1p_key: str = "X_log1p"
 
     @classmethod
     def from_yaml(cls, path: str) -> "TrainingConfig":
@@ -166,6 +182,32 @@ class TrainingConfig:
             )
             if pretrained:
                 config_dict["scgpt_model_dir"] = pretrained
+            config_dict["scgpt_raw_layer_key"] = data["model"].get("raw_layer_key")
+            config_dict["scgpt_preprocess"] = data["model"].get(
+                "preprocess", config_dict.get("scgpt_preprocess")
+            )
+            config_dict["scgpt_preprocess_normalize_total"] = data["model"].get(
+                "preprocess_normalize_total",
+                config_dict.get("scgpt_preprocess_normalize_total"),
+            )
+            config_dict["scgpt_preprocess_log1p"] = data["model"].get(
+                "preprocess_log1p", config_dict.get("scgpt_preprocess_log1p")
+            )
+            config_dict["scgpt_preprocess_binning"] = data["model"].get(
+                "preprocess_binning", config_dict.get("scgpt_preprocess_binning")
+            )
+            config_dict["scgpt_preprocess_result_binned_key"] = data["model"].get(
+                "preprocess_result_binned_key",
+                config_dict.get("scgpt_preprocess_result_binned_key"),
+            )
+            config_dict["scgpt_preprocess_result_normed_key"] = data["model"].get(
+                "preprocess_result_normed_key",
+                config_dict.get("scgpt_preprocess_result_normed_key"),
+            )
+            config_dict["scgpt_preprocess_result_log1p_key"] = data["model"].get(
+                "preprocess_result_log1p_key",
+                config_dict.get("scgpt_preprocess_result_log1p_key"),
+            )
 
         return cls(**{k: v for k, v in config_dict.items() if hasattr(cls, k)})
 
@@ -273,10 +315,17 @@ class CellTokenDataset(Dataset):
         condition_to_idx: Dict[str, int],
         cls_token_id: int,
         pad_value: float,
+        input_layer_key: Optional[str] = None,
     ):
-        self.count_matrix = (
-            adata.X.toarray() if hasattr(adata.X, "toarray") else adata.X
-        )
+        if input_layer_key and input_layer_key != "X":
+            if input_layer_key not in adata.layers:
+                raise ValueError(
+                    f"Layer '{input_layer_key}' not found in AnnData.layers"
+                )
+            matrix = adata.layers[input_layer_key]
+        else:
+            matrix = adata.X
+        self.count_matrix = matrix.toarray() if hasattr(matrix, "toarray") else matrix
         self.gene_ids = gene_ids
         self.labels = torch.tensor(
             [condition_to_idx[c] for c in condition_labels],
@@ -300,6 +349,85 @@ class CellTokenDataset(Dataset):
             "expressions": torch.from_numpy(values).float(),
             "label": self.labels[idx],
         }
+
+
+def _extract_labels(dataset) -> np.ndarray:
+    """Extract labels from datasets or subsets for balanced sampling."""
+    if isinstance(dataset, torch.utils.data.Subset):
+        base_labels = _extract_labels(dataset.dataset)
+        return np.asarray(base_labels)[dataset.indices]
+    if hasattr(dataset, "labels"):
+        labels = dataset.labels
+        if isinstance(labels, torch.Tensor):
+            labels = labels.cpu().numpy()
+        return np.asarray(labels)
+    raise ValueError("Dataset does not expose labels for balanced sampling.")
+
+
+class BalancedBatchSampler(torch.utils.data.Sampler[List[int]]):
+    """Sample batches with multiple cells per condition."""
+
+    def __init__(
+        self,
+        labels: np.ndarray,
+        n_conditions_per_batch: int,
+        n_cells_per_condition: int,
+        seed: int = 42,
+        drop_last: bool = True,
+    ):
+        self.labels = np.asarray(labels)
+        self.n_conditions_per_batch = n_conditions_per_batch
+        self.n_cells_per_condition = n_cells_per_condition
+        self.seed = seed
+        self.drop_last = drop_last
+        self._epoch = 0
+
+        if self.n_conditions_per_batch <= 0 or self.n_cells_per_condition <= 0:
+            raise ValueError("Balanced sampler requires positive batch settings.")
+
+        self.label_to_indices: Dict[int, np.ndarray] = {}
+        for label in np.unique(self.labels):
+            label = int(label)
+            self.label_to_indices[label] = np.where(self.labels == label)[0]
+        self.unique_labels = list(self.label_to_indices.keys())
+
+        self.batch_size = self.n_conditions_per_batch * self.n_cells_per_condition
+        if self.drop_last:
+            self.num_batches = max(1, len(self.labels) // self.batch_size)
+        else:
+            self.num_batches = max(1, math.ceil(len(self.labels) / self.batch_size))
+
+    def set_epoch(self, epoch: int) -> None:
+        self._epoch = epoch
+
+    def __len__(self) -> int:
+        return self.num_batches
+
+    def __iter__(self):
+        rng = np.random.default_rng(self.seed + self._epoch)
+        for _ in range(self.num_batches):
+            if len(self.unique_labels) >= self.n_conditions_per_batch:
+                batch_labels = rng.choice(
+                    self.unique_labels,
+                    size=self.n_conditions_per_batch,
+                    replace=False,
+                )
+            else:
+                batch_labels = rng.choice(
+                    self.unique_labels,
+                    size=self.n_conditions_per_batch,
+                    replace=True,
+                )
+
+            batch_indices: List[int] = []
+            for label in batch_labels:
+                indices = self.label_to_indices[int(label)]
+                replace = len(indices) < self.n_cells_per_condition
+                sampled = rng.choice(
+                    indices, size=self.n_cells_per_condition, replace=replace
+                )
+                batch_indices.extend(sampled.tolist())
+            yield batch_indices
 
 
 def _prepare_scgpt_adata(adata, vocab, gene_col: str):
@@ -668,6 +796,10 @@ class ScGPTTrainer:
         for epoch in range(self.config.epochs):
             if hasattr(train_loader.sampler, "set_epoch"):
                 train_loader.sampler.set_epoch(epoch)
+            if hasattr(train_loader, "batch_sampler") and hasattr(
+                train_loader.batch_sampler, "set_epoch"
+            ):
+                train_loader.batch_sampler.set_epoch(epoch)
 
             # Train
             train_loss = self.train_epoch(train_loader)
@@ -861,7 +993,17 @@ def main():
 
     if is_master:
         print("Loading scGPT model...")
-    encoder = ScGPTEncoder(model_dir=config.scgpt_model_dir)
+    encoder = ScGPTEncoder(
+        model_dir=config.scgpt_model_dir,
+        raw_layer_key=config.scgpt_raw_layer_key,
+        preprocess=config.scgpt_preprocess,
+        preprocess_normalize_total=config.scgpt_preprocess_normalize_total,
+        preprocess_log1p=config.scgpt_preprocess_log1p,
+        preprocess_binning=config.scgpt_preprocess_binning,
+        preprocess_result_binned_key=config.scgpt_preprocess_result_binned_key,
+        preprocess_result_normed_key=config.scgpt_preprocess_result_normed_key,
+        preprocess_result_log1p_key=config.scgpt_preprocess_result_log1p_key,
+    )
     encoder._load_model()
     scgpt_model = encoder._model
 
@@ -917,6 +1059,7 @@ def main():
     conditions = dataset.all_conditions
     condition_to_idx = {c: i for i, c in enumerate(conditions)}
     num_conditions = len(conditions)
+    config.condition_order = list(conditions)
     if is_master:
         print(f"  Conditions: {num_conditions}")
 
@@ -937,11 +1080,11 @@ def main():
         train_adata = dataset.get_ref_adata_for_conditions(train_conditions)
         if config.mask_perturbed:
             train_adata = mask_perturbed_genes(
-                train_adata, condition_col=dataset.condition_col
+                train_adata,
+                condition_col=dataset.condition_col,
+                layer=config.scgpt_raw_layer_key,
             )
-        train_adata, train_gene_ids = _prepare_scgpt_adata(
-            train_adata, encoder._vocab, encoder.gene_col
-        )
+        train_adata, train_gene_ids = encoder.prepare_adata(train_adata)
         train_labels = train_adata.obs[dataset.condition_col].values
         train_dataset = CellTokenDataset(
             adata=train_adata,
@@ -950,17 +1093,18 @@ def main():
             condition_to_idx=condition_to_idx,
             cls_token_id=encoder._vocab["<cls>"],
             pad_value=encoder._model_configs["pad_value"],
+            input_layer_key=encoder.resolve_input_layer_key(train_adata),
         )
 
         if val_conditions:
             val_adata = dataset.get_ref_adata_for_conditions(val_conditions)
             if config.mask_perturbed:
                 val_adata = mask_perturbed_genes(
-                    val_adata, condition_col=dataset.condition_col
+                    val_adata,
+                    condition_col=dataset.condition_col,
+                    layer=config.scgpt_raw_layer_key,
                 )
-            val_adata, val_gene_ids = _prepare_scgpt_adata(
-                val_adata, encoder._vocab, encoder.gene_col
-            )
+            val_adata, val_gene_ids = encoder.prepare_adata(val_adata)
             val_labels = val_adata.obs[dataset.condition_col].values
             val_dataset = CellTokenDataset(
                 adata=val_adata,
@@ -969,6 +1113,7 @@ def main():
                 condition_to_idx=condition_to_idx,
                 cls_token_id=encoder._vocab["<cls>"],
                 pad_value=encoder._model_configs["pad_value"],
+                input_layer_key=encoder.resolve_input_layer_key(val_adata),
             )
             train_subset = train_dataset
             val_subset = val_dataset
@@ -983,12 +1128,16 @@ def main():
         from scgpt.data_collator import DataCollator
 
         pad_token_id = encoder._vocab[encoder._model_configs["pad_token"]]
+        pre_binned = config.scgpt_preprocess and not (
+            config.scgpt_preprocess_binning is False
+            or config.scgpt_preprocess_binning == 0
+        )
         collator = DataCollator(
             do_padding=True,
             pad_token_id=pad_token_id,
             pad_value=encoder._model_configs["pad_value"],
             do_mlm=False,
-            do_binning=True,
+            do_binning=not pre_binned,
             max_length=encoder.max_length,
             sampling=True,
             keep_first_n_tokens=1,
@@ -1001,7 +1150,9 @@ def main():
         train_adata = dataset.get_ref_adata_for_conditions(train_conditions)
         if config.mask_perturbed:
             train_adata = mask_perturbed_genes(
-                train_adata, condition_col=dataset.condition_col
+                train_adata,
+                condition_col=dataset.condition_col,
+                layer=config.scgpt_raw_layer_key,
             )
         train_embeddings = encoder.encode_adata(train_adata)
         train_labels = train_adata.obs[dataset.condition_col].values
@@ -1016,7 +1167,9 @@ def main():
             val_adata = dataset.get_ref_adata_for_conditions(val_conditions)
             if config.mask_perturbed:
                 val_adata = mask_perturbed_genes(
-                    val_adata, condition_col=dataset.condition_col
+                    val_adata,
+                    condition_col=dataset.condition_col,
+                    layer=config.scgpt_raw_layer_key,
                 )
             val_embeddings = encoder.encode_adata(val_adata)
             val_labels = val_adata.obs[dataset.condition_col].values
@@ -1043,14 +1196,40 @@ def main():
         train_sampler = torch.utils.data.DistributedSampler(train_subset, shuffle=True)
         val_sampler = torch.utils.data.DistributedSampler(val_subset, shuffle=False)
 
-    train_loader = DataLoader(
-        train_subset,
-        batch_size=config.batch_size,
-        shuffle=train_sampler is None,
-        drop_last=True,
-        sampler=train_sampler,
-        collate_fn=collate_fn,
+    use_balanced_sampling = (
+        config.balanced_sampling and config.loss_fn == "infonce" and not ddp_enabled
     )
+    if config.balanced_sampling and not use_balanced_sampling and is_master:
+        print("Balanced sampling disabled (requires infonce loss and non-DDP mode).")
+    if use_balanced_sampling:
+        labels = _extract_labels(train_subset)
+        batch_sampler = BalancedBatchSampler(
+            labels=labels,
+            n_conditions_per_batch=config.balanced_sampling_n_conditions,
+            n_cells_per_condition=config.balanced_sampling_n_cells,
+            seed=config.balanced_sampling_seed,
+            drop_last=True,
+        )
+        if is_master:
+            print(
+                "Using balanced sampling: "
+                f"{config.balanced_sampling_n_conditions} conditions x "
+                f"{config.balanced_sampling_n_cells} cells"
+            )
+        train_loader = DataLoader(
+            train_subset,
+            batch_sampler=batch_sampler,
+            collate_fn=collate_fn,
+        )
+    else:
+        train_loader = DataLoader(
+            train_subset,
+            batch_size=config.batch_size,
+            shuffle=train_sampler is None,
+            drop_last=True,
+            sampler=train_sampler,
+            collate_fn=collate_fn,
+        )
     val_loader = DataLoader(
         val_subset,
         batch_size=config.batch_size,

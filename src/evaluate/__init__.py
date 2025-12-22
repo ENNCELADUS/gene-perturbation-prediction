@@ -2,6 +2,7 @@
 
 from .cell_eval import CellRetrievalEvaluator
 from .classifier_eval import ClassifierEvaluator
+from .scgpt_classifier_eval import ScGPTClassifierEvaluator
 from .metrics import compute_all_metrics
 from .report import (
     aggregate_results,
@@ -25,6 +26,7 @@ __all__ = [
     # Evaluators
     "CellRetrievalEvaluator",
     "ClassifierEvaluator",
+    "ScGPTClassifierEvaluator",
     # Metrics
     "compute_all_metrics",
     # Reporting

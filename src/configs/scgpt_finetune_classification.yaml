@@ -1,0 +1,103 @@
+# scGPT Fine-tuning Configuration (Classification Sanity Check)
+#
+# Uses classification loss to validate retrieval embeddings.
+
+# Data
+data:
+  h5ad_path: data/norman/perturb_processed.h5ad
+
+# Cell-level split
+split:
+  min_cells_per_condition: 50
+  query_fraction: 0.2
+  min_query_cells: 10
+  seed: 42
+  output_path: data/norman/splits/cell_split_seed42.json
+
+# Condition-level split (generalization track)
+track: in_dist
+condition_split:
+  train_ratio: 0.7
+  val_ratio: 0.1
+  test_ratio: 0.2
+  seed: 42
+  output_path: data/norman/splits/condition_split_in_dist_seed42.json
+
+# Model
+model:
+  encoder: scgpt
+  # Pretrained scGPT checkpoint (frozen backbone)
+  pretrained_dir: model/scGPT
+  finetune_apply_head: true
+  finetune_apply_classifier: true
+  freeze_encoder: true
+  use_lora: false
+  raw_layer_key: counts
+  preprocess: true
+  preprocess_normalize_total: 1e4
+  preprocess_log1p: true
+  preprocess_binning: 51
+  preprocess_result_binned_key: X_binned
+  preprocess_result_normed_key: X_normed
+  preprocess_result_log1p_key: X_log1p
+
+# Training configuration
+training:
+  mode: head_only  # frozen | head_only | lora_head
+  loss_fn: classification  # infonce | classification
+  epochs: 50
+  batch_size: 32
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  mask_perturbed: true
+  early_stopping_patience: 10
+  early_stopping_metric: val_loss
+  balanced_sampling: false
+  checkpoint_dir: model/scgpt_finetune_cls
+
+# LoRA configuration (for lora_head mode)
+lora:
+  rank: 8
+  alpha: 16.0
+  dropout: 0.1
+  target_modules:
+    - out_proj
+    - linear1
+    - linear2
+
+# Retrieval head configuration
+head:
+  hidden_dim: 256
+  output_dim: 128
+  dropout: 0.2
+
+# InfoNCE loss configuration
+infonce:
+  temperature: 0.07
+
+# Classification loss configuration (for classification mode)
+classification:
+  label_smoothing: 0.1
+
+# Retrieval evaluation settings
+retrieval:
+  metric: cosine
+  top_k: [1, 5, 8, 10]
+
+# Query setup
+query:
+  mode: cell
+  query_split: test
+  candidate_source: all
+
+# Evaluation settings
+evaluate:
+  mode: classifier
+  mask_perturbed: true
+  mask_ablation: true
+
+# Logging
+logging:
+  output_dir: results/
+  experiment_name: scgpt_finetune_cls
