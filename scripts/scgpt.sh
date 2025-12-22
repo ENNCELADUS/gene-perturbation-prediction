@@ -70,42 +70,42 @@ echo "Mode 3: scGPT + trainable retrieval head (Classification)"
 echo "Mode 4: scGPT + LoRA + retrieval head (Classification)"
 echo "=============================================="
 
-# # ============================================
-# # MODE 1: Frozen scGPT Encoder (Baseline)
-# # ============================================
-# echo ""
-# echo "=============================================="
-# echo "[MODE 1] Frozen scGPT Retrieval (Baseline)"
-# echo "=============================================="
-# python -m src.main --config src/configs/scgpt.yaml
-# SCGPT_BASELINE_DIR="$(latest_run_dir results/scgpt)" || {
-#     echo "Error: No scGPT baseline results found in results/scgpt" >&2
-#     exit 1
-# }
-# echo "[1/4] Frozen scGPT completed!"
+# ============================================
+# MODE 1: Frozen scGPT Encoder (Baseline)
+# ============================================
+echo ""
+echo "=============================================="
+echo "[MODE 1] Frozen scGPT Retrieval (Baseline)"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt.yaml
+SCGPT_BASELINE_DIR="$(latest_run_dir results/scgpt)" || {
+    echo "Error: No scGPT baseline results found in results/scgpt" >&2
+    exit 1
+}
+echo "[1/4] Frozen scGPT completed!"
 
-# # ============================================
-# # MODE 2: scGPT + Trainable Retrieval Head
-# # ============================================
-# echo ""
-# echo "=============================================="
-# echo "[MODE 2] scGPT + Trainable Retrieval Head"
-# echo "=============================================="
-# echo "Training retrieval head with InfoNCE loss..."
-# run_finetune \
-#     --config src/configs/scgpt_finetune.yaml \
-#     --mode head_only \
-#     --loss infonce
-# echo "Evaluating head-only fine-tuned model..."
-# python -m src.main \
-#     --config src/configs/scgpt.yaml \
-#     --experiment_name scgpt_head_only \
-#     --finetune_checkpoint model/scgpt_finetune/best_head_only.pt
-# SCGPT_HEAD_ONLY_DIR="$(latest_run_dir results/scgpt_head_only)" || {
-#     echo "Error: No scGPT head-only results found in results/scgpt_head_only" >&2
-#     exit 1
-# }
-# echo "[2/4] Head-only fine-tuning completed!"
+# ============================================
+# MODE 2: scGPT + Trainable Retrieval Head
+# ============================================
+echo ""
+echo "=============================================="
+echo "[MODE 2] scGPT + Trainable Retrieval Head"
+echo "=============================================="
+echo "Training retrieval head with InfoNCE loss..."
+run_finetune \
+    --config src/configs/scgpt_finetune.yaml \
+    --mode head_only \
+    --loss infonce
+echo "Evaluating head-only fine-tuned model..."
+python -m src.main \
+    --config src/configs/scgpt.yaml \
+    --experiment_name scgpt_head_only \
+    --finetune_checkpoint model/scgpt_finetune/best_head_only.pt
+SCGPT_HEAD_ONLY_DIR="$(latest_run_dir results/scgpt_head_only)" || {
+    echo "Error: No scGPT head-only results found in results/scgpt_head_only" >&2
+    exit 1
+}
+echo "[2/4] Head-only fine-tuning completed!"
 
 # ============================================
 # MODE 3: scGPT + Trainable Retrieval Head (Classification)
