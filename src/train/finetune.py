@@ -374,16 +374,24 @@ class BalancedBatchSampler(torch.utils.data.Sampler[List[int]]):
         n_cells_per_condition: int,
         seed: int = 42,
         drop_last: bool = True,
+        num_replicas: int = 1,
+        rank: int = 0,
     ):
         self.labels = np.asarray(labels)
         self.n_conditions_per_batch = n_conditions_per_batch
         self.n_cells_per_condition = n_cells_per_condition
         self.seed = seed
         self.drop_last = drop_last
+        self.num_replicas = num_replicas
+        self.rank = rank
         self._epoch = 0
 
         if self.n_conditions_per_batch <= 0 or self.n_cells_per_condition <= 0:
             raise ValueError("Balanced sampler requires positive batch settings.")
+        if self.num_replicas <= 0:
+            raise ValueError("Balanced sampler requires num_replicas >= 1.")
+        if self.rank < 0 or self.rank >= self.num_replicas:
+            raise ValueError("Balanced sampler rank must be in [0, num_replicas).")
 
         self.label_to_indices: Dict[int, np.ndarray] = {}
         for label in np.unique(self.labels):
@@ -393,9 +401,15 @@ class BalancedBatchSampler(torch.utils.data.Sampler[List[int]]):
 
         self.batch_size = self.n_conditions_per_batch * self.n_cells_per_condition
         if self.drop_last:
-            self.num_batches = max(1, len(self.labels) // self.batch_size)
+            base_num_batches = max(1, len(self.labels) // self.batch_size)
         else:
-            self.num_batches = max(1, math.ceil(len(self.labels) / self.batch_size))
+            base_num_batches = max(1, math.ceil(len(self.labels) / self.batch_size))
+        if self.num_replicas > 1:
+            self.num_batches = math.ceil(base_num_batches / self.num_replicas)
+            self.total_batches = self.num_batches * self.num_replicas
+        else:
+            self.num_batches = base_num_batches
+            self.total_batches = base_num_batches
 
     def set_epoch(self, epoch: int) -> None:
         self._epoch = epoch
@@ -405,7 +419,7 @@ class BalancedBatchSampler(torch.utils.data.Sampler[List[int]]):
 
     def __iter__(self):
         rng = np.random.default_rng(self.seed + self._epoch)
-        for _ in range(self.num_batches):
+        for batch_idx in range(self.total_batches):
             if len(self.unique_labels) >= self.n_conditions_per_batch:
                 batch_labels = rng.choice(
                     self.unique_labels,
@@ -427,7 +441,8 @@ class BalancedBatchSampler(torch.utils.data.Sampler[List[int]]):
                     indices, size=self.n_cells_per_condition, replace=replace
                 )
                 batch_indices.extend(sampled.tolist())
-            yield batch_indices
+            if batch_idx % self.num_replicas == self.rank:
+                yield batch_indices
 
 
 def _prepare_scgpt_adata(adata, vocab, gene_col: str):
@@ -1192,23 +1207,23 @@ def main():
 
     train_sampler = None
     val_sampler = None
-    if ddp_enabled:
+    use_balanced_sampling = config.balanced_sampling
+    if ddp_enabled and not use_balanced_sampling:
         train_sampler = torch.utils.data.DistributedSampler(train_subset, shuffle=True)
+    if ddp_enabled:
         val_sampler = torch.utils.data.DistributedSampler(val_subset, shuffle=False)
 
-    use_balanced_sampling = (
-        config.balanced_sampling and config.loss_fn == "infonce" and not ddp_enabled
-    )
-    if config.balanced_sampling and not use_balanced_sampling and is_master:
-        print("Balanced sampling disabled (requires infonce loss and non-DDP mode).")
     if use_balanced_sampling:
         labels = _extract_labels(train_subset)
+        num_replicas = dist.get_world_size() if ddp_enabled else 1
         batch_sampler = BalancedBatchSampler(
             labels=labels,
             n_conditions_per_batch=config.balanced_sampling_n_conditions,
             n_cells_per_condition=config.balanced_sampling_n_cells,
             seed=config.balanced_sampling_seed,
             drop_last=True,
+            num_replicas=num_replicas,
+            rank=rank if ddp_enabled else 0,
         )
         if is_master:
             print(
