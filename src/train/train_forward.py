@@ -252,14 +252,14 @@ def main():
     if is_main:
         print("\n[3/5] Creating datasets...")
     train_dataset = ForwardModelDataset(
-        adata=dataset.train_adata,
+        adata=dataset.adata,
         conditions=dataset.train_conditions,
         vocab=model.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )
 
     val_dataset = ForwardModelDataset(
-        adata=dataset.val_adata,
+        adata=dataset.adata,
         conditions=dataset.val_conditions,
         vocab=model.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
