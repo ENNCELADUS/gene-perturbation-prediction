@@ -33,7 +33,7 @@ from .data import load_perturb_data, NormanConditionSplitter
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Route A: Forward Model + Retrieval for Reverse Perturbation Prediction"
+        description="Route A/B: Reverse Perturbation Prediction"
     )
     parser.add_argument(
         "--config",
@@ -45,7 +45,16 @@ def parse_args():
         "--mode",
         type=str,
         default="data",
-        choices=["data", "train", "build_db", "evaluate", "full"],
+        choices=[
+            "data",
+            "train",
+            "build_db",
+            "evaluate",
+            "full",
+            "route_b1_train",
+            "route_b1_eval",
+            "route_b1_full",
+        ],
         help="Operation mode: data, train, build_db, evaluate, or full",
     )
     parser.add_argument(
@@ -315,6 +324,76 @@ def run_full_pipeline(config: dict, args) -> dict:
     return results
 
 
+def run_route_b1_train(config: dict, args) -> dict:
+    """Run Route B1 gene-score training."""
+    from .train.train_gene_score import main as train_main
+    import sys
+
+    sys.argv = [
+        "train_gene_score",
+        "--config",
+        args.config,
+    ]
+    if args.output_dir:
+        sys.argv.extend(["--output_dir", args.output_dir])
+    if args.max_steps:
+        sys.argv.extend(["--max_steps", str(args.max_steps)])
+
+    print("\n" + "=" * 60)
+    print("MODE: ROUTE_B1_TRAIN - Gene-Score Model")
+    print("=" * 60)
+
+    train_main()
+
+    return {"status": "route_b1_training_complete"}
+
+
+def run_route_b1_eval(config: dict, args) -> dict:
+    """Run Route B1 gene-score evaluation."""
+    from .evaluate.evaluate_gene_score import main as eval_main
+    import sys
+
+    checkpoint = args.checkpoint or "results/gene_score/best_model.pt"
+    output = "results/gene_score/eval_results.json"
+
+    sys.argv = [
+        "evaluate_gene_score",
+        "--config",
+        args.config,
+        "--checkpoint",
+        checkpoint,
+        "--output",
+        output,
+    ]
+
+    print("\n" + "=" * 60)
+    print("MODE: ROUTE_B1_EVAL - Gene-Score Evaluation")
+    print("=" * 60)
+
+    eval_main()
+
+    return {"status": "route_b1_evaluation_complete", "results_path": output}
+
+
+def run_route_b1_full(config: dict, args) -> dict:
+    """Run Route B1 pipeline: train → evaluate."""
+    print("\n" + "=" * 60)
+    print("MODE: ROUTE_B1_FULL - Complete Pipeline")
+    print("=" * 60)
+
+    print("\n[STAGE 1/2] Training Gene-Score Model")
+    run_route_b1_train(config, args)
+
+    print("\n[STAGE 2/2] Evaluating Gene-Score Model")
+    results = run_route_b1_eval(config, args)
+
+    print("\n" + "=" * 60)
+    print("ROUTE B1 PIPELINE COMPLETE")
+    print("=" * 60)
+
+    return results
+
+
 def main():
     """Main entry point with mode dispatch."""
     args = parse_args()
@@ -331,6 +410,12 @@ def main():
         results = run_evaluate(config, args)
     elif args.mode == "full":
         results = run_full_pipeline(config, args)
+    elif args.mode == "route_b1_train":
+        results = run_route_b1_train(config, args)
+    elif args.mode == "route_b1_eval":
+        results = run_route_b1_eval(config, args)
+    elif args.mode == "route_b1_full":
+        results = run_route_b1_full(config, args)
     else:
         raise ValueError(f"Unknown mode: {args.mode}")
 

@@ -1,0 +1,52 @@
+# scGPT Route B1 Configuration (Gene-Level Scoring + Composition)
+
+# Data
+data:
+  h5ad_path: data/norman/perturb_processed.h5ad
+
+# Norman GEARS-style Condition-level split (optimized)
+condition_split:
+  unseen_gene_fraction: 0.15
+  seen_single_train_ratio: 0.9
+  combo_seen2_train_ratio: 0.7
+  combo_seen2_val_ratio: 0.15
+  min_cells_per_condition: 50
+  min_cells_per_double: 30
+  seed: 42
+  output_path: data/norman/splits/norman_condition_split_optimized_seed42.json
+
+# Model
+model:
+  encoder: scgpt
+  pretrained_dir: model/scGPT
+  freeze_encoder: true
+  preprocess_binning: 51
+
+# Training
+training:
+  epochs: 200
+  batch_size: 64
+  head_learning_rate: 1.0e-4
+  backbone_learning_rate: 1.0e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  unfreeze_last_n_layers: 1
+  balanced_sampling: true
+  balanced_sampling_n_conditions: 8
+  balanced_sampling_n_cells: 4
+  early_stopping_patience: 10
+  early_stopping_metric: val_loss
+
+# Head
+head:
+  hidden_dim: 512
+  dropout: 0.2
+
+# Evaluation
+evaluate:
+  top_k: [1, 5, 10, 20]
+
+# Logging
+logging:
+  output_dir: results/
+  experiment_name: scgpt_discriminative

@@ -1,9 +1,5 @@
-# scGPT Fine-tuning Configuration for Reverse Perturbation Prediction
-#
-# Three training modes for ablative study:
-#   1. frozen - Inference only (baseline)
-#   2. head_only - Train retrieval head with frozen backbone
-#   3. lora_head - Train LoRA adapters + retrieval head
+# Route A: Forward Model + Retrieval Configuration
+# scGPT-based reverse perturbation prediction using generative forward modeling
 
 # Data
 data:
@@ -11,96 +7,79 @@ data:
 
 # Norman GEARS-style Condition-level split (optimized)
 condition_split:
-  unseen_gene_fraction: 0.15      # 15% of single-genes → test-only (~12-15 genes, increased train coverage)
+  unseen_gene_fraction: 0.15      # 15% of single-genes → test-only (~12-15 genes)
   seen_single_train_ratio: 0.9    # 90% train / 10% val for seen singles
-  combo_seen2_train_ratio: 0.7    # 70% train for 2/2-seen combos
+  combo_seen2_train_ratio: 0.7    # 70% train for 2/2-seen combos  
   combo_seen2_val_ratio: 0.15     # 15% val for 2/2-seen combos (remaining → test)
   min_cells_per_condition: 50     # Filter threshold for single-gene conditions
-  min_cells_per_double: 30        # Lower threshold for double-gene (increase coverage, handle noise)
+  min_cells_per_double: 30        # Lower threshold for double-gene conditions
   seed: 42
   output_path: data/norman/splits/norman_condition_split_optimized_seed42.json
 
-# Model
+# Model Configuration
 model:
   encoder: scgpt
-  # Pretrained scGPT checkpoint (frozen backbone)
-  pretrained_dir: model/scGPT
+  # Pretrained scGPT checkpoint settings
+  pretrained_checkpoint: model/scGPT/best_model.pt
+  vocab_path: model/scGPT/vocab.json
+  args_path: model/scGPT/args.json
+  
+  # Freeze strategy for finetuning
   freeze_encoder: true
-  use_lora: false  # Set to true when using lora_head mode
-  gene_alias_map_path: null
-  # Preprocessing: Plan A - Use log-normalized + HVG filtered data from adata.X
-  # Only binning is needed for scGPT value encoder
+  freeze_layers_up_to: 10  # Freeze transformer layers 0-10, train layer 11
+  
+  # Preprocessing (scGPT uses binned continuous values)
   preprocess: true
   preprocess_binning: 51
   preprocess_result_binned_key: X_binned
 
-# Training configuration
+# Forward Model Training Configuration
 training:
-  mode: head_only  # frozen | head_only | lora_head
-  loss_fn: infonce  # infonce | classification
-  epochs: 200
-  batch_size: 32
-  learning_rate: 1.0e-4
-  head_learning_rate: null
-  backbone_learning_rate: null
-  unfreeze_last_n_layers: 0
+  # Optimizer settings
+  lr_decoder: 1.0e-4          # Learning rate for decoder/mvc_decoder
+  lr_last_layer: 1.0e-5       # Learning rate for last transformer layer + enc_norm
   weight_decay: 0.01
-  warmup_ratio: 0.1
-  mask_perturbed: true
-  max_grad_norm: null
+  
+  # Training hyperparameters
+  epochs: 30
+  batch_size: 16              # Training batch size
+  val_batch_size: 32          # Validation batch size
+  warmup_ratio: 0.05          # LR warmup (5% of total steps)
+  max_grad_norm: 1.0          # Gradient clipping
+  
+  # Data collator settings
+  max_control_per_condition: 100  # Max control cells to sample per condition
+  max_seq_len: 1200               # Maximum sequence length for tokenization
+  
+  # Checkpointing
+  output_dir: results/forward
+  save_every_n_epochs: 5
   early_stopping_patience: 10
-  early_stopping_metric: val_loss
-  balanced_sampling: true
-  balanced_sampling_n_conditions: 8
-  balanced_sampling_n_cells: 4
-  balanced_sampling_seed: 42
-  checkpoint_dir: model/scgpt_finetune
 
-# LoRA configuration (for lora_head mode)
-lora:
-  rank: 8
-  alpha: 16.0
-  dropout: 0.1
-  last_n_layers: null
-  # Target modules in TransformerEncoderLayer:
-  # - out_proj: attention output projection
-  # - linear1, linear2: FFN layers
-  target_modules:
-    - out_proj
-    - linear1
-    - linear2
+# Reference Database Construction
+reference_db:
+  n_samples_per_condition: 200  # Number of predicted profiles per condition
+  output_path: results/forward/reference_db.pkl
 
-# Retrieval head configuration
-head:
-  hidden_dim: 256
-  output_dim: 128
-  dropout: 0.2
-
-# InfoNCE loss configuration
-infonce:
-  temperature: 0.07
-
-# Classification loss configuration (for classification mode)
-classification:
-  label_smoothing: 0.1
-
-# Retrieval evaluation settings
+# Retrieval Configuration
 retrieval:
-  metric: cosine
-  top_k: [1, 5, 8, 10]
+  metric: cosine              # cosine | euclidean
+  top_k: [1, 5, 10, 20]      # Top-K values for Hit@K metrics
+  voting_weight: linear       # Voting aggregation: linear (rank-based decay)
 
-# Query setup
-query:
-  mode: cell
-  query_split: test
-  candidate_source: all
-
-# Evaluation settings
+# Evaluation Settings
 evaluate:
-  mask_perturbed: true
-  mask_ablation: true
+  # Metrics to compute (from src/evaluate/metrics.py)
+  metrics:
+    - top_k_accuracy          # Exact match Hit@K
+    - one_gene_overlap_hit    # Relevant retrieval Hit@K (one-gene overlap)
+    - mrr                     # Mean Reciprocal Rank
+    - ndcg                    # Normalized Discounted Cumulative Gain
+  
+  # Output
+  results_path: results/forward/eval_results.json
 
 # Logging
 logging:
   output_dir: results/
-  experiment_name: scgpt_finetune
+  experiment_name: scgpt_route_a

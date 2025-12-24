@@ -9,10 +9,13 @@ import json
 from pathlib import Path
 from typing import Dict
 import yaml
+import os
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 import scanpy as sc
 
@@ -77,19 +80,23 @@ def compute_forward_loss(
 
 
 def train_epoch(
-    model: ScGPTForward,
+    model: torch.nn.Module,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler._LRScheduler,
     device: str,
+    sampler: DistributedSampler | None = None,
     max_steps: int = None,
     epoch: int = 0,
 ) -> Dict[str, float]:
     """Train for one epoch."""
-    model.model.train()
+    model.train()
 
     total_loss = 0.0
     num_batches = 0
+
+    if sampler is not None:
+        sampler.set_epoch(epoch)
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch}")
     for step, batch in enumerate(pbar):
@@ -140,12 +147,12 @@ def train_epoch(
 
 
 def validate(
-    model: ScGPTForward,
+    model: torch.nn.Module,
     dataloader: DataLoader,
     device: str,
 ) -> Dict[str, float]:
     """Validate the model."""
-    model.model.eval()
+    model.eval()
 
     total_loss = 0.0
     num_batches = 0
@@ -177,6 +184,24 @@ def validate(
     }
 
 
+def _setup_distributed() -> Dict[str, int | bool]:
+    if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        rank = int(os.environ["RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        backend = "nccl" if torch.cuda.is_available() else "gloo"
+        torch.distributed.init_process_group(backend=backend)
+        if torch.cuda.is_available():
+            torch.cuda.set_device(local_rank)
+        return {
+            "enabled": True,
+            "rank": rank,
+            "world_size": world_size,
+            "local_rank": local_rank,
+        }
+    return {"enabled": False, "rank": 0, "world_size": 1, "local_rank": 0}
+
+
 def main():
     args = parse_args()
     config = load_config(args.config)
@@ -185,21 +210,26 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save config
-    with open(output_dir / "config.yaml", "w") as f:
-        yaml.dump(config, f)
+    ddp = _setup_distributed()
+    is_main = ddp["rank"] == 0
 
-    print("=" * 60)
-    print("scGPT Forward Model Training")
-    print("=" * 60)
-    print(f"Output: {output_dir}")
+    if is_main:
+        # Save config
+        with open(output_dir / "config.yaml", "w") as f:
+            yaml.dump(config, f)
 
-    # Set device
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Device: {device}")
+        print("=" * 60)
+        print("scGPT Forward Model Training")
+        print("=" * 60)
+        print(f"Output: {output_dir}")
+
+    device = f"cuda:{ddp['local_rank']}" if torch.cuda.is_available() else "cpu"
+    if is_main:
+        print(f"Device: {device}")
 
     # Load data
-    print("\n[1/5] Loading dataset...")
+    if is_main:
+        print("\n[1/5] Loading dataset...")
     cond_split_config = config.get("condition_split", {})
     dataset = load_perturb_data(
         h5ad_path=config["data"]["h5ad_path"],
@@ -207,17 +237,20 @@ def main():
         **{k: v for k, v in cond_split_config.items() if k != "output_path"},
     )
 
-    print(f"  - Total cells: {dataset.adata.n_obs}")
-    print(f"  - Genes: {dataset.adata.n_vars}")
-    print(f"  - Train conditions: {len(dataset.train_conditions())}")
-    print(f"  - Val conditions: {len(dataset.val_conditions())}")
+    if is_main:
+        print(f"  - Total cells: {dataset.adata.n_obs}")
+        print(f"  - Genes: {dataset.adata.n_vars}")
+        print(f"  - Train conditions: {len(dataset.train_conditions())}")
+        print(f"  - Val conditions: {len(dataset.val_conditions())}")
 
     # Load model
-    print("\n[2/5] Loading model...")
+    if is_main:
+        print("\n[2/5] Loading model...")
     model = ScGPTForward(device=device)
 
     # Create datasets
-    print("\n[3/5] Creating datasets...")
+    if is_main:
+        print("\n[3/5] Creating datasets...")
     train_dataset = ForwardModelDataset(
         adata=dataset.train_adata(),
         conditions=dataset.train_conditions(),
@@ -233,10 +266,16 @@ def main():
     )
 
     # Create dataloaders
+    train_sampler = None
+    val_sampler = None
+    if ddp["enabled"]:
+        train_sampler = DistributedSampler(train_dataset, shuffle=True)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=16,
-        shuffle=True,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         collate_fn=lambda batch: collate_forward_batch(batch, model.vocab),
         num_workers=0,  # Set to 0 to avoid multiprocessing issues
     )
@@ -245,12 +284,14 @@ def main():
         val_dataset,
         batch_size=32,
         shuffle=False,
+        sampler=val_sampler,
         collate_fn=lambda batch: collate_forward_batch(batch, model.vocab),
         num_workers=0,
     )
 
     # Setup optimizer and scheduler
-    print("\n[4/5] Setting up optimizer...")
+    if is_main:
+        print("\n[4/5] Setting up optimizer...")
     optimizer = model.get_optimizer(lr_decoder=1e-4, lr_last_layer=1e-5)
 
     total_steps = len(train_loader) * 30  # Assume 30 epochs max
@@ -262,12 +303,21 @@ def main():
         eta_min=1e-6,
     )
 
+    if ddp["enabled"]:
+        model = DDP(
+            model,
+            device_ids=[ddp["local_rank"]] if torch.cuda.is_available() else None,
+            output_device=ddp["local_rank"] if torch.cuda.is_available() else None,
+        )
+
     # Training loop
-    print("\n[5/5] Training...")
+    if is_main:
+        print("\n[5/5] Training...")
     best_val_loss = float("inf")
 
     for epoch in range(30):  # Max 30 epochs
-        print(f"\nEpoch {epoch + 1}/30")
+        if is_main:
+            print(f"\nEpoch {epoch + 1}/30")
 
         # Train
         train_metrics = train_epoch(
@@ -276,35 +326,43 @@ def main():
             optimizer,
             scheduler,
             device,
+            sampler=train_sampler,
             max_steps=args.max_steps,
             epoch=epoch,
         )
 
         # Validate
-        val_metrics = validate(model, val_loader, device)
+        val_metrics = {"val_loss": float("inf")}
+        if is_main:
+            val_metrics = validate(model, val_loader, device)
 
-        print(f"  Train Loss: {train_metrics['train_loss']:.4f}")
-        print(f"  Val Loss: {val_metrics['val_loss']:.4f}")
+        if is_main:
+            print(f"  Train Loss: {train_metrics['train_loss']:.4f}")
+            print(f"  Val Loss: {val_metrics['val_loss']:.4f}")
 
         # Save checkpoint
-        if val_metrics["val_loss"] < best_val_loss:
+        if is_main and val_metrics["val_loss"] < best_val_loss:
             best_val_loss = val_metrics["val_loss"]
-            model.save_finetuned(output_dir / "best_model.pt")
+            save_target = model.module if isinstance(model, DDP) else model
+            save_target.save_finetuned(output_dir / "best_model.pt")
             print(f"  ✓ Saved best model (val_loss={best_val_loss:.4f})")
 
         # Save periodic checkpoint
-        if (epoch + 1) % 5 == 0:
-            model.save_finetuned(output_dir / f"checkpoint_epoch{epoch + 1}.pt")
+        if is_main and (epoch + 1) % 5 == 0:
+            save_target = model.module if isinstance(model, DDP) else model
+            save_target.save_finetuned(output_dir / f"checkpoint_epoch{epoch + 1}.pt")
 
         # Early stopping
         if args.max_steps:
-            print(f"\nStopping early (max_steps={args.max_steps})")
+            if is_main:
+                print(f"\nStopping early (max_steps={args.max_steps})")
             break
 
-    print("\n" + "=" * 60)
-    print(f"Training complete! Best val loss: {best_val_loss:.4f}")
-    print(f"Model saved to: {output_dir / 'best_model.pt'}")
-    print("=" * 60)
+    if is_main:
+        print("\n" + "=" * 60)
+        print(f"Training complete! Best val loss: {best_val_loss:.4f}")
+        print(f"Model saved to: {output_dir / 'best_model.pt'}")
+        print("=" * 60)
 
 
 if __name__ == "__main__":
