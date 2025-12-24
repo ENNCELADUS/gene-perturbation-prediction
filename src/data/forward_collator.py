@@ -181,7 +181,7 @@ def collate_forward_batch(
         pad_token=pad_token,
         pad_value=pad_value,
         append_cls=False,  # Don't append CLS token for forward modeling
-        include_zero_gene=False,  # Only include expressed genes
+        include_zero_gene=True,  # Keep all genes to align control/perturbed sequences
         return_pt=True,
     )
 
@@ -193,7 +193,7 @@ def collate_forward_batch(
         pad_token=pad_token,
         pad_value=pad_value,
         append_cls=False,
-        include_zero_gene=False,
+        include_zero_gene=True,
         return_pt=True,
     )
 
