@@ -1,0 +1,252 @@
+{
+  "config": {
+    "data": {
+      "h5ad_path": "data/norman/perturb_processed.h5ad"
+    },
+    "split": {
+      "min_cells_per_condition": 50,
+      "query_fraction": 0.2,
+      "min_query_cells": 10,
+      "seed": 42,
+      "output_path": "data/norman/splits/cell_split_seed42.json"
+    },
+    "track": "in_dist",
+    "condition_split": {
+      "train_ratio": 0.7,
+      "val_ratio": 0.1,
+      "test_ratio": 0.2,
+      "seed": 42,
+      "output_path": "data/norman/splits/condition_split_in_dist_seed42.json",
+      "n_holdout_genes": 5
+    },
+    "model": {
+      "encoder": "scgpt",
+      "checkpoint": null,
+      "finetune_checkpoint": "model/scgpt_finetune/best_head_only.pt",
+      "finetune_apply_head": true,
+      "freeze_encoder": true,
+      "use_lora": false,
+      "lora_rank": 8,
+      "gene_alias_map_path": null,
+      "raw_layer_key": "counts",
+      "preprocess": true,
+      "preprocess_normalize_total": "1e4",
+      "preprocess_log1p": true,
+      "preprocess_binning": 51,
+      "preprocess_filter_gene_by_counts": 5,
+      "preprocess_filter_cell_by_counts": false,
+      "preprocess_subset_hvg": false,
+      "preprocess_hvg_use_key": null,
+      "preprocess_hvg_flavor": "seurat_v3",
+      "preprocess_result_binned_key": "X_binned",
+      "preprocess_result_normed_key": "X_normed",
+      "preprocess_result_log1p_key": "X_log1p"
+    },
+    "library": {
+      "type": "bootstrap",
+      "n_prototypes": 30,
+      "m_cells_per_prototype": 50,
+      "seed": 42
+    },
+    "retrieval": {
+      "metric": "cosine",
+      "top_k": [
+        1,
+        5,
+        8,
+        10
+      ]
+    },
+    "query": {
+      "mode": "cell",
+      "query_split": "test",
+      "candidate_source": "all",
+      "pseudo_bulk": {
+        "cells_per_bulk": 50,
+        "n_bulks": 1,
+        "seed": 42
+      },
+      "pseudo_bulk_curve": {
+        "enable": false,
+        "cells_per_bulk_values": [
+          10,
+          25,
+          50,
+          100,
+          200
+        ],
+        "n_bulks": 5,
+        "seed": 42
+      }
+    },
+    "evaluate": {
+      "mask_perturbed": true,
+      "mask_ablation": true
+    },
+    "confidence": {
+      "enable": true,
+      "method": "margin",
+      "coverage_points": 20,
+      "top_k_agreement": 1
+    },
+    "report": {
+      "enable": false,
+      "result_dirs": [],
+      "output_dir": "results/reports",
+      "report_name": "comparison_report"
+    },
+    "logging": {
+      "output_dir": "results/",
+      "experiment_name": "scgpt"
+    }
+  },
+  "summary": {
+    "h5ad_path": "data/norman/perturb_processed.h5ad",
+    "loaded": true,
+    "has_split": true,
+    "n_cells": 91205,
+    "n_genes": 5045,
+    "n_control_cells": 7353,
+    "n_perturbed_cells": 83852,
+    "n_conditions": 282,
+    "n_ref_cells": 67152,
+    "n_query_cells": 16651,
+    "n_valid_conditions": 282,
+    "n_dropped_conditions": 1,
+    "split_seed": 42
+  },
+  "metrics": {
+    "exact_hit@1": 0.13849018076992373,
+    "exact_hit@5": 0.35907753288090805,
+    "exact_hit@8": 0.4406341961443757,
+    "exact_hit@10": 0.4804516245270554,
+    "mrr": 0.23194171568893807,
+    "relevant_hit@1": 0.36448261365683743,
+    "relevant_hit@5": 0.5445919164014174,
+    "relevant_hit@8": 0.5988829499729746,
+    "relevant_hit@10": 0.6274698216323344,
+    "ndcg@1": 0.13849018076992373,
+    "ndcg@5": 0.2511614479617059,
+    "ndcg@8": 0.2786917175941531,
+    "ndcg@10": 0.2904530405849581,
+    "macro_hit@1": 0.13013860092467286,
+    "macro_hit@5": 0.3509828330546055,
+    "n_queries": 16651,
+    "n_in_pool": 16651,
+    "n_conditions": 282,
+    "confidence_auc": 0.20990660916281928,
+    "coverage_accuracy_curve": {
+      "coverage": [
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.39999999999999997,
+        0.44999999999999996,
+        0.49999999999999994,
+        0.5499999999999999,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.7999999999999999,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ],
+      "accuracy": [
+        0.546875,
+        0.421021021021021,
+        0.3496195434521426,
+        0.3033033033033033,
+        0.27030273906775587,
+        0.24304304304304306,
+        0.22636004805217091,
+        0.2111111111111111,
+        0.1994127068873465,
+        0.18966966966966967,
+        0.18290019654946496,
+        0.17707707707707707,
+        0.16973112815300748,
+        0.16353496353496352,
+        0.158472133247918,
+        0.15427927927927929,
+        0.149508938034339,
+        0.14474474474474475,
+        0.14135794664306486,
+        0.13849018076992373
+      ]
+    }
+  },
+  "metrics_mask_off": {
+    "exact_hit@1": 0.1312834064020179,
+    "exact_hit@5": 0.35337216983964925,
+    "exact_hit@8": 0.4393129541769263,
+    "exact_hit@10": 0.4796108341841331,
+    "mrr": 0.2269681119299761,
+    "relevant_hit@1": 0.3615999039096751,
+    "relevant_hit@5": 0.539126779172422,
+    "relevant_hit@8": 0.5979821031769864,
+    "relevant_hit@10": 0.627169539367005,
+    "ndcg@1": 0.1312834064020179,
+    "ndcg@5": 0.24548790115560232,
+    "ndcg@8": 0.27454852786476874,
+    "ndcg@10": 0.2864659785761219,
+    "macro_hit@1": 0.12360895516041666,
+    "macro_hit@5": 0.345090344115445,
+    "n_queries": 16651,
+    "n_in_pool": 16651,
+    "n_conditions": 282,
+    "confidence_auc": 0.19556916321916545,
+    "coverage_accuracy_curve": {
+      "coverage": [
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.39999999999999997,
+        0.44999999999999996,
+        0.49999999999999994,
+        0.5499999999999999,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.7999999999999999,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ],
+      "accuracy": [
+        0.484375,
+        0.37237237237237236,
+        0.32078494193031637,
+        0.28468468468468466,
+        0.2544449783757809,
+        0.23063063063063063,
+        0.2138321606315428,
+        0.2003003003003003,
+        0.18846769887880405,
+        0.18054054054054053,
+        0.1719807818300939,
+        0.16566566566566568,
+        0.1588284209553728,
+        0.154011154011154,
+        0.149583600256246,
+        0.14444444444444443,
+        0.1409595138839822,
+        0.13787120453787122,
+        0.13415096725249714,
+        0.1312834064020179
+      ]
+    }
+  }
+}
