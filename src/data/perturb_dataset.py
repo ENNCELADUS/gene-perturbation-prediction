@@ -57,11 +57,12 @@ class PerturbDataset:
 
     def create_condition_split(
         self,
-        unseen_gene_fraction: float = 0.25,
+        unseen_gene_fraction: float = 0.15,
         seen_single_train_ratio: float = 0.9,
         combo_seen2_train_ratio: float = 0.7,
         combo_seen2_val_ratio: float = 0.15,
         min_cells_per_condition: int = 50,
+        min_cells_per_double: int = 30,
         seed: int = 42,
     ) -> ConditionSplit:
         """
@@ -72,7 +73,8 @@ class PerturbDataset:
             seen_single_train_ratio: Train ratio for seen single-gene conditions
             combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
             combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions
-            min_cells_per_condition: Minimum cells per condition (filter threshold)
+            min_cells_per_condition: Minimum cells for single-gene conditions (filter threshold)
+            min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
             seed: Random seed
 
         Returns:
@@ -81,8 +83,11 @@ class PerturbDataset:
         if self.adata is None:
             raise RuntimeError("Must call load() before create_condition_split()")
 
-        # Get all non-control conditions
-        conditions = self._get_valid_conditions(min_cells_per_condition)
+        # Get all non-control conditions with separate thresholds
+        conditions = self._get_valid_conditions(
+            min_cells_single=min_cells_per_condition,
+            min_cells_double=min_cells_per_double,
+        )
 
         # Create splitter and split
         splitter = NormanConditionSplitter(
@@ -96,11 +101,18 @@ class PerturbDataset:
         self.condition_split = splitter.split(conditions)
         return self.condition_split
 
-    def _get_valid_conditions(self, min_cells: int = 50) -> List[str]:
+    def _get_valid_conditions(
+        self, min_cells_single: int = 50, min_cells_double: int = 30
+    ) -> List[str]:
         """
         Get conditions with at least min_cells cells.
 
-        Excludes control conditions.
+        Excludes control conditions (ctrl only).
+        Supports different thresholds for single and double gene conditions.
+
+        Args:
+            min_cells_single: Minimum cells for single-gene conditions
+            min_cells_double: Minimum cells for double-gene conditions
         """
         if self.adata is None:
             return []
@@ -108,10 +120,23 @@ class PerturbDataset:
         # Count cells per condition
         condition_counts = self.adata.obs[self.condition_col].value_counts()
 
-        # Filter by min cells and exclude control
+        # Filter by min cells and exclude pure control
         valid = []
         for cond, count in condition_counts.items():
-            if count >= min_cells and cond != "ctrl":
+            if cond == "ctrl":
+                continue
+
+            # Determine threshold based on condition type
+            # Need to check the original condition format (with +ctrl)
+            from .condition_splits import NormanConditionSplitter
+
+            splitter = NormanConditionSplitter()
+            normalized = splitter.normalize_condition(cond)
+            is_double = splitter.is_double_perturbation(normalized)
+
+            threshold = min_cells_double if is_double else min_cells_single
+
+            if count >= threshold:
                 valid.append(cond)
 
         return valid
@@ -241,11 +266,12 @@ class PerturbDataset:
 def load_perturb_data(
     h5ad_path: str | Path,
     condition_split_path: Optional[str | Path] = None,
-    unseen_gene_fraction: float = 0.25,
+    unseen_gene_fraction: float = 0.15,
     seen_single_train_ratio: float = 0.9,
     combo_seen2_train_ratio: float = 0.7,
     combo_seen2_val_ratio: float = 0.15,
     min_cells_per_condition: int = 50,
+    min_cells_per_double: int = 30,
     seed: int = 42,
 ) -> PerturbDataset:
     """
@@ -254,11 +280,12 @@ def load_perturb_data(
     Args:
         h5ad_path: Path to h5ad file
         condition_split_path: Path to existing condition split JSON (if None, creates new)
-        unseen_gene_fraction: Fraction of single-genes to designate as unseen
+        unseen_gene_fraction: Fraction of single-genes to designate as unseen (default 0.15 = ~12-15 genes)
         seen_single_train_ratio: Train ratio for seen single-gene conditions
         combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
         combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions
-        min_cells_per_condition: Minimum cells per condition
+        min_cells_per_condition: Minimum cells for single-gene conditions
+        min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
         seed: Random seed
 
     Returns:
@@ -281,6 +308,7 @@ def load_perturb_data(
             combo_seen2_train_ratio=combo_seen2_train_ratio,
             combo_seen2_val_ratio=combo_seen2_val_ratio,
             min_cells_per_condition=min_cells_per_condition,
+            min_cells_per_double=min_cells_per_double,
             seed=seed,
         )
 
