@@ -884,12 +884,6 @@ class ScGPTTrainer:
             stats = torch.tensor([total_loss, num_batches], device=self.device)
             dist.all_reduce(stats, op=dist.ReduceOp.SUM)
             total_loss, num_batches = stats.tolist()
-            if track_accuracy:
-                acc_stats = torch.tensor(
-                    [total_correct, total_samples], device=self.device
-                )
-                dist.all_reduce(acc_stats, op=dist.ReduceOp.SUM)
-                total_correct, total_samples = acc_stats.tolist()
 
         return total_loss / max(num_batches, 1)
 
