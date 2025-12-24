@@ -185,3 +185,28 @@ This stratification is essential for:
 **References**  
 [1] PMC — GEARS paper  
 [2] Virtual Cell Models — GEARS-processed Norman dataset
+
+---
+
+## Final Implementation (Optimized Settings)
+
+**Configuration** (default in `src/configs/*.yaml`):
+- `unseen_gene_fraction: 0.15` → 15 unseen genes (15% of singles)
+- `min_cells_per_condition: 50` (singles), `min_cells_per_double: 30` (doubles)
+- `seen_single_train_ratio: 0.9`, `combo_seen2_train_ratio: 0.7`, `combo_seen2_val_ratio: 0.15`
+
+**Results** (Norman dataset, seed=42):
+- Total: 236 conditions | 83,803 cells (post-filter)
+- **Train**: 147 conditions (56,580 cells)
+  - 81 singles, 66 doubles (seen2)
+  - 18,262 cells for gene-gene interaction learning
+- **Val**: 23 conditions (6,560 cells)
+- **Test**: 66 conditions (20,712 cells)
+  - 15 single_unseen, 15 combo_seen2, 31 combo_seen1, 5 combo_seen0
+
+**Key metrics**:
+- 34% more interaction learning cells vs baseline (18.3k vs 13.6k)
+- 27% more double-gene combos (66 vs 52)
+- 71% of train combos have ≥200 cells (robust)
+
+**Artifact**: `data/norman/splits/norman_condition_split_seed42.json`

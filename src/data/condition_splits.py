@@ -104,25 +104,67 @@ class NormanConditionSplitter:
         """
         Normalize condition to canonical format.
 
-        - Single-gene: 'X' → 'X'
+        - Control: 'ctrl' → 'ctrl'
+        - Single-gene: 'X+ctrl' or 'ctrl+X' → 'X' (strip ctrl)
         - Double-gene: enforce lexicographic ordering 'A+B' where A < B
         """
+        condition = condition.strip()
+
+        # Handle control
+        if condition == "ctrl":
+            return condition
+
+        # Split by +
         if "+" in condition:
-            genes = condition.split("+")
-            genes = sorted([g.strip() for g in genes])
+            genes = [g.strip() for g in condition.split("+")]
+            # Remove 'ctrl' from the list
+            genes = [g for g in genes if g != "ctrl"]
+
+            # If only one gene left, it's a single perturbation
+            if len(genes) == 1:
+                return genes[0]
+
+            # Multiple genes: sort for canonical order
+            genes = sorted(genes)
             return "+".join(genes)
-        return condition.strip()
+
+        return condition
 
     @staticmethod
     def is_double_perturbation(condition: str) -> bool:
-        """Check if condition is a double-gene perturbation."""
-        return "+" in condition
+        """
+        Check if condition is a double-gene perturbation.
+
+        Single: 'ctrl', 'GENE', 'GENE+ctrl', 'ctrl+GENE'
+        Double: 'GENE1+GENE2' (both not ctrl)
+        """
+        if condition == "ctrl":
+            return False
+
+        if "+" not in condition:
+            return False
+
+        # Split and filter out ctrl
+        genes = [g.strip() for g in condition.split("+") if g.strip() != "ctrl"]
+
+        # Double perturbation has 2+ non-control genes
+        return len(genes) >= 2
 
     @staticmethod
     def get_genes_from_condition(condition: str) -> List[str]:
-        """Extract gene names from condition string."""
+        """
+        Extract gene names from condition string (excluding ctrl).
+
+        Returns:
+            List of gene names (empty list for 'ctrl')
+        """
+        if condition == "ctrl":
+            return []
+
         if "+" in condition:
-            return [g.strip() for g in condition.split("+")]
+            genes = [g.strip() for g in condition.split("+") if g.strip() != "ctrl"]
+            return genes
+
         return [condition.strip()]
 
     def split(self, conditions: List[str]) -> ConditionSplit:
