@@ -247,6 +247,7 @@ def main():
     if is_main:
         print("\n[2/5] Loading model...")
     model = ScGPTForward(device=device)
+    vocab = model.vocab
 
     # Create datasets
     if is_main:
@@ -254,14 +255,14 @@ def main():
     train_dataset = ForwardModelDataset(
         adata=dataset.adata,
         conditions=dataset.train_conditions,
-        vocab=model.vocab,
+        vocab=vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )
 
     val_dataset = ForwardModelDataset(
         adata=dataset.adata,
         conditions=dataset.val_conditions,
-        vocab=model.vocab,
+        vocab=vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )
 
@@ -276,7 +277,7 @@ def main():
         batch_size=16,
         shuffle=train_sampler is None,
         sampler=train_sampler,
-        collate_fn=lambda batch: collate_forward_batch(batch, model.vocab),
+        collate_fn=lambda batch: collate_forward_batch(batch, vocab),
         num_workers=0,  # Set to 0 to avoid multiprocessing issues
     )
 
@@ -285,7 +286,7 @@ def main():
         batch_size=32,
         shuffle=False,
         sampler=val_sampler,
-        collate_fn=lambda batch: collate_forward_batch(batch, model.vocab),
+        collate_fn=lambda batch: collate_forward_batch(batch, vocab),
         num_workers=0,
     )
 
