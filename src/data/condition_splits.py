@@ -1,10 +1,11 @@
 """
-Condition-level splits for generalization evaluation.
+Norman condition-level splits for GEARS-style generalization evaluation.
 
-Implements multiple evaluation tracks:
-- In-distribution: held-out conditions with seen genes
-- Unseen-combination: held-out gene pairs where singles are seen
-- Unseen-gene: held-out genes and all conditions containing them
+Implements the GEARS/community-standard gene-visibility-based stratification:
+- Single-gene conditions: seen (train/val) vs unseen (test-only)
+- Double-gene conditions: stratified by how many genes are seen (0/2, 1/2, 2/2)
+
+Reference: docs/roadmap/07_norman_data_split.md
 """
 
 from __future__ import annotations
@@ -17,49 +18,37 @@ from typing import Dict, List, Set, Tuple, Optional
 import numpy as np
 
 
-def parse_genes_from_condition(condition: str) -> Set[str]:
-    """Extract gene names from condition string."""
-    if not condition or condition == "ctrl":
-        return set()
-    genes = condition.split("+")
-    return {g.strip() for g in genes if g.strip() and g.strip() != "ctrl"}
-
-
-def is_single_gene_condition(condition: str) -> bool:
-    """Check if condition is single-gene perturbation."""
-    genes = parse_genes_from_condition(condition)
-    return len(genes) == 1
-
-
-def is_pair_condition(condition: str) -> bool:
-    """Check if condition is gene-pair perturbation."""
-    genes = parse_genes_from_condition(condition)
-    return len(genes) == 2
-
-
 @dataclass
 class ConditionSplit:
-    """Container for condition-level split results."""
+    """
+    Stores condition-level train/val/test split with test strata metadata.
 
-    train_conditions: List[str] = field(default_factory=list)
-    val_conditions: List[str] = field(default_factory=list)
-    test_conditions: List[str] = field(default_factory=list)
+    Attributes:
+        train_conditions: Conditions for training (seen singles + 2/2-seen combos)
+        val_conditions: Conditions for validation (seen singles + 2/2-seen combos)
+        test_conditions: All test conditions (unseen singles + all combo tiers)
+        test_strata: Dict mapping tier names to condition lists:
+            - 'single_unseen': unseen single-gene conditions
+            - 'combo_seen2': 2/2-seen double-gene conditions in test
+            - 'combo_seen1': 1/2-seen double-gene conditions
+            - 'combo_seen0': 0/2-seen double-gene conditions
+        unseen_genes: Set of genes designated as unseen (test-only)
+        seed: Random seed used for splitting
+    """
 
-    # Track type
-    track: str = "in_dist"  # "in_dist", "unseen_combo", "unseen_gene"
-
-    # Split metadata
+    train_conditions: List[str]
+    val_conditions: List[str]
+    test_conditions: List[str]
+    test_strata: Dict[str, List[str]] = field(default_factory=dict)
+    unseen_genes: List[str] = field(default_factory=list)
     seed: int = 42
-    train_ratio: float = 0.7
-    val_ratio: float = 0.1
-    test_ratio: float = 0.2
 
     @property
     def all_conditions(self) -> List[str]:
-        """Get all conditions in split."""
+        """Get all conditions across splits."""
         return self.train_conditions + self.val_conditions + self.test_conditions
 
-    def save(self, path: Path | str) -> None:
+    def save(self, path: str | Path) -> None:
         """Save split to JSON file."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,199 +56,179 @@ class ConditionSplit:
             json.dump(asdict(self), f, indent=2)
 
     @classmethod
-    def load(cls, path: Path | str) -> "ConditionSplit":
+    def load(cls, path: str | Path) -> "ConditionSplit":
         """Load split from JSON file."""
         with open(path) as f:
             data = json.load(f)
         return cls(**data)
 
 
-class ConditionSplitter:
+class NormanConditionSplitter:
     """
-    Condition-level splitter for generalization evaluation.
+    GEARS-style condition-level splitter for Norman dataset.
 
-    Supports multiple generalization tracks:
-    - in_dist: Random condition holdout (all genes seen in training)
-    - unseen_combo: Hold out gene pairs where individual genes are in training
-    - unseen_gene: Hold out genes and all conditions containing them
+    Implements gene-visibility-based stratification:
+    - Unseen genes: selected fraction of single-gene conditions → test only
+    - Single-gene conditions: seen → train/val, unseen → test
+    - Double-gene conditions: stratified by 0/1/2-seen based on unseen_genes
+
+    See docs/roadmap/07_norman_data_split.md for full specification.
     """
 
     def __init__(
         self,
-        train_ratio: float = 0.7,
-        val_ratio: float = 0.1,
-        test_ratio: float = 0.2,
+        unseen_gene_fraction: float = 0.25,
+        seen_single_train_ratio: float = 0.9,
+        combo_seen2_train_ratio: float = 0.7,
+        combo_seen2_val_ratio: float = 0.15,
         seed: int = 42,
     ):
         """
         Initialize splitter.
 
         Args:
-            train_ratio: Fraction of conditions for training
-            val_ratio: Fraction for validation
-            test_ratio: Fraction for testing
-            seed: Random seed
+            unseen_gene_fraction: Fraction of single-genes to designate as unseen (0.2-0.3 recommended)
+            seen_single_train_ratio: Train ratio for seen single-gene conditions (remaining → val)
+            combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
+            combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions (remaining → test)
+            seed: Random seed for reproducibility
         """
-        self.train_ratio = train_ratio
-        self.val_ratio = val_ratio
-        self.test_ratio = test_ratio
+        self.unseen_gene_fraction = unseen_gene_fraction
+        self.seen_single_train_ratio = seen_single_train_ratio
+        self.combo_seen2_train_ratio = combo_seen2_train_ratio
+        self.combo_seen2_val_ratio = combo_seen2_val_ratio
         self.seed = seed
 
-        assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6
-
-    def split_in_distribution(self, conditions: List[str]) -> ConditionSplit:
+    @staticmethod
+    def normalize_condition(condition: str) -> str:
         """
-        Random split at condition level.
+        Normalize condition to canonical format.
 
-        All genes appear in training; only specific conditions are held out.
+        - Single-gene: 'X' → 'X'
+        - Double-gene: enforce lexicographic ordering 'A+B' where A < B
         """
-        rng = np.random.default_rng(self.seed)
-        conditions = [c for c in conditions if c != "ctrl"]
-        shuffled = rng.permutation(conditions).tolist()
+        if "+" in condition:
+            genes = condition.split("+")
+            genes = sorted([g.strip() for g in genes])
+            return "+".join(genes)
+        return condition.strip()
 
-        n_train = int(len(shuffled) * self.train_ratio)
-        n_val = int(len(shuffled) * self.val_ratio)
+    @staticmethod
+    def is_double_perturbation(condition: str) -> bool:
+        """Check if condition is a double-gene perturbation."""
+        return "+" in condition
 
-        return ConditionSplit(
-            train_conditions=shuffled[:n_train],
-            val_conditions=shuffled[n_train : n_train + n_val],
-            test_conditions=shuffled[n_train + n_val :],
-            track="in_dist",
-            seed=self.seed,
-            train_ratio=self.train_ratio,
-            val_ratio=self.val_ratio,
-            test_ratio=self.test_ratio,
-        )
+    @staticmethod
+    def get_genes_from_condition(condition: str) -> List[str]:
+        """Extract gene names from condition string."""
+        if "+" in condition:
+            return [g.strip() for g in condition.split("+")]
+        return [condition.strip()]
 
-    def split_unseen_combination(self, conditions: List[str]) -> ConditionSplit:
+    def split(self, conditions: List[str]) -> ConditionSplit:
         """
-        Hold out gene pairs where individual genes are seen.
-
-        - Train: all single-gene conditions + some pairs
-        - Test: pairs where both genes appear in train singles
-        """
-        rng = np.random.default_rng(self.seed)
-        conditions = [c for c in conditions if c != "ctrl"]
-
-        singles = [c for c in conditions if is_single_gene_condition(c)]
-        pairs = [c for c in conditions if is_pair_condition(c)]
-
-        # All singles go to train
-        train_genes = set()
-        for s in singles:
-            train_genes.update(parse_genes_from_condition(s))
-
-        # Split pairs: those with both genes in singles can be test
-        testable_pairs = []
-        train_only_pairs = []
-
-        for p in pairs:
-            genes = parse_genes_from_condition(p)
-            if genes.issubset(train_genes):
-                testable_pairs.append(p)
-            else:
-                train_only_pairs.append(p)
-
-        # Shuffle testable pairs
-        rng.shuffle(testable_pairs)
-        n_test = int(
-            len(testable_pairs)
-            * self.test_ratio
-            / (self.val_ratio + self.test_ratio + 0.001)
-        )
-        n_val = int(
-            len(testable_pairs)
-            * self.val_ratio
-            / (self.val_ratio + self.test_ratio + 0.001)
-        )
-
-        test_pairs = testable_pairs[:n_test]
-        val_pairs = testable_pairs[n_test : n_test + n_val]
-        train_pairs = testable_pairs[n_test + n_val :] + train_only_pairs
-
-        return ConditionSplit(
-            train_conditions=singles + train_pairs,
-            val_conditions=val_pairs,
-            test_conditions=test_pairs,
-            track="unseen_combo",
-            seed=self.seed,
-            train_ratio=self.train_ratio,
-            val_ratio=self.val_ratio,
-            test_ratio=self.test_ratio,
-        )
-
-    def split_unseen_gene(
-        self, conditions: List[str], n_holdout_genes: int = 5
-    ) -> ConditionSplit:
-        """
-        Hold out genes and all conditions containing them.
-
-        - Test: all conditions containing held-out genes
-        - Train: only conditions with seen genes
-        """
-        rng = np.random.default_rng(self.seed)
-        conditions = [c for c in conditions if c != "ctrl"]
-
-        # Collect all genes
-        all_genes = set()
-        for c in conditions:
-            all_genes.update(parse_genes_from_condition(c))
-
-        all_genes = list(all_genes)
-        rng.shuffle(all_genes)
-
-        # Hold out genes
-        holdout_genes = set(all_genes[:n_holdout_genes])
-        train_genes = set(all_genes[n_holdout_genes:])
-
-        # Split conditions
-        test_conditions = []
-        trainable_conditions = []
-
-        for c in conditions:
-            genes = parse_genes_from_condition(c)
-            if genes & holdout_genes:  # Any overlap with holdout
-                test_conditions.append(c)
-            else:
-                trainable_conditions.append(c)
-
-        # Split trainable into train/val
-        rng.shuffle(trainable_conditions)
-        n_val = int(
-            len(trainable_conditions)
-            * self.val_ratio
-            / (self.train_ratio + self.val_ratio)
-        )
-
-        return ConditionSplit(
-            train_conditions=trainable_conditions[n_val:],
-            val_conditions=trainable_conditions[:n_val],
-            test_conditions=test_conditions,
-            track="unseen_gene",
-            seed=self.seed,
-            train_ratio=self.train_ratio,
-            val_ratio=self.val_ratio,
-            test_ratio=self.test_ratio,
-        )
-
-    def split(self, conditions: List[str], track: str = "in_dist") -> ConditionSplit:
-        """
-        Create split for specified track.
+        Create GEARS-style condition-level split.
 
         Args:
-            conditions: List of condition names
-            track: "in_dist", "unseen_combo", or "unseen_gene"
+            conditions: List of condition names (single and double perturbations)
+                        Should NOT include control conditions.
 
         Returns:
-            ConditionSplit for the specified track
+            ConditionSplit with train/val/test conditions and test strata
         """
-        if track == "in_dist":
-            return self.split_in_distribution(conditions)
-        elif track == "unseen_combo":
-            return self.split_unseen_combination(conditions)
-        elif track == "unseen_gene":
-            return self.split_unseen_gene(conditions)
-        else:
-            raise ValueError(
-                f"Unknown track: {track}. Use 'in_dist', 'unseen_combo', or 'unseen_gene'"
-            )
+        rng = np.random.default_rng(self.seed)
+
+        # Step 1: Normalize all conditions
+        conditions = [self.normalize_condition(c) for c in conditions]
+        conditions = list(set(conditions))  # Remove duplicates
+
+        # Step 2: Separate single-gene and double-gene conditions
+        single_conditions = [
+            c for c in conditions if not self.is_double_perturbation(c)
+        ]
+        double_conditions = [c for c in conditions if self.is_double_perturbation(c)]
+
+        # Step 3: Select unseen genes (fraction of single-gene conditions → test only)
+        n_unseen = max(1, int(len(single_conditions) * self.unseen_gene_fraction))
+        shuffled_singles = rng.permutation(single_conditions).tolist()
+        unseen_genes = set(shuffled_singles[:n_unseen])
+        seen_genes = set(shuffled_singles[n_unseen:])
+
+        # Step 4: Split single-gene conditions
+        # Unseen → test only
+        test_single_unseen = list(unseen_genes)
+
+        # Seen → train/val split
+        seen_singles = list(seen_genes)
+        rng.shuffle(seen_singles)
+        n_train_single = int(len(seen_singles) * self.seen_single_train_ratio)
+        train_single = seen_singles[:n_train_single]
+        val_single = seen_singles[n_train_single:]
+
+        # Step 5: Classify double-gene conditions by seen tier
+        combo_seen0 = []  # Both genes unseen
+        combo_seen1 = []  # One gene unseen
+        combo_seen2 = []  # Both genes seen
+
+        for cond in double_conditions:
+            genes = self.get_genes_from_condition(cond)
+            n_seen = sum(1 for g in genes if g in seen_genes)
+
+            if n_seen == 0:
+                combo_seen0.append(cond)
+            elif n_seen == 1:
+                combo_seen1.append(cond)
+            else:  # n_seen == 2
+                combo_seen2.append(cond)
+
+        # Step 6: Split combo_seen2 into train/val/test
+        # Only combo_seen2 may enter training (Rule 2 from spec)
+        rng.shuffle(combo_seen2)
+        n_train_combo = int(len(combo_seen2) * self.combo_seen2_train_ratio)
+        n_val_combo = int(len(combo_seen2) * self.combo_seen2_val_ratio)
+
+        train_double = combo_seen2[:n_train_combo]
+        val_double = combo_seen2[n_train_combo : n_train_combo + n_val_combo]
+        test_double_seen2 = combo_seen2[n_train_combo + n_val_combo :]
+
+        # combo_seen0 and combo_seen1 go entirely to test (Rule 1 from spec)
+
+        # Step 7: Assemble final splits
+        train_conditions = train_single + train_double
+        val_conditions = val_single + val_double
+        test_conditions = (
+            test_single_unseen + test_double_seen2 + combo_seen1 + combo_seen0
+        )
+
+        # Shuffle for good measure
+        rng.shuffle(train_conditions)
+        rng.shuffle(val_conditions)
+        rng.shuffle(test_conditions)
+
+        # Step 8: Create test strata for tier-wise evaluation
+        test_strata = {
+            "single_unseen": test_single_unseen,
+            "combo_seen2": test_double_seen2,
+            "combo_seen1": combo_seen1,
+            "combo_seen0": combo_seen0,
+        }
+
+        return ConditionSplit(
+            train_conditions=train_conditions,
+            val_conditions=val_conditions,
+            test_conditions=test_conditions,
+            test_strata=test_strata,
+            unseen_genes=list(unseen_genes),
+            seed=self.seed,
+        )
+
+    def summary(self, split: ConditionSplit) -> Dict:
+        """Generate summary statistics for a split."""
+        return {
+            "n_train": len(split.train_conditions),
+            "n_val": len(split.val_conditions),
+            "n_test": len(split.test_conditions),
+            "n_unseen_genes": len(split.unseen_genes),
+            "test_strata": {k: len(v) for k, v in split.test_strata.items()},
+            "seed": split.seed,
+        }

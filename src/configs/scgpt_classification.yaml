@@ -1,38 +1,30 @@
-# scGPT Fine-tuning Configuration for Reverse Perturbation Prediction
+# scGPT Fine-tuning Configuration (Top-K Classification Objective)
 #
-# Three training modes for ablative study:
-#   1. frozen - Inference only (baseline)
-#   2. head_only - Train retrieval head with frozen backbone
-#   3. lora_head - Train LoRA adapters + retrieval head
+# Aligns training with logreg's probability-ranked top-K retrieval.
 
 # Data
 data:
   h5ad_path: data/norman/perturb_processed.h5ad
 
-# Cell-level split
-split:
-  min_cells_per_condition: 50
-  query_fraction: 0.2
-  min_query_cells: 10
-  seed: 42
-  output_path: data/norman/splits/cell_split_seed42.json
-
-# Condition-level split (generalization track)
-track: in_dist
+# Norman GEARS-style Condition-level split
 condition_split:
-  train_ratio: 0.7
-  val_ratio: 0.1
-  test_ratio: 0.2
+  unseen_gene_fraction: 0.25      # 25% of single-genes → test-only (unseen)
+  seen_single_train_ratio: 0.9    # 90% train / 10% val for seen singles
+  combo_seen2_train_ratio: 0.7    # 70% train for 2/2-seen combos
+  combo_seen2_val_ratio: 0.15     # 15% val for 2/2-seen combos (remaining → test)
+  min_cells_per_condition: 50     # Filter threshold
   seed: 42
-  output_path: data/norman/splits/condition_split_in_dist_seed42.json
+  output_path: data/norman/splits/norman_condition_split_seed42.json
 
 # Model
 model:
   encoder: scgpt
   # Pretrained scGPT checkpoint (frozen backbone)
   pretrained_dir: model/scGPT
+  finetune_apply_head: true
+  finetune_apply_classifier: true
   freeze_encoder: true
-  use_lora: false  # Set to true when using lora_head mode
+  use_lora: false
   gene_alias_map_path: null
   raw_layer_key: counts
   preprocess: true
@@ -51,34 +43,30 @@ model:
 # Training configuration
 training:
   mode: head_only  # frozen | head_only | lora_head
-  loss_fn: infonce  # infonce | classification
+  loss_fn: classification  # infonce | classification
   epochs: 200
   batch_size: 32
   learning_rate: 1.0e-4
-  head_learning_rate: null
-  backbone_learning_rate: null
-  unfreeze_last_n_layers: 0
+  head_learning_rate: 1.0e-4
+  backbone_learning_rate: 1.0e-5
+  unfreeze_last_n_layers: 2
   weight_decay: 0.01
   warmup_ratio: 0.1
   mask_perturbed: true
-  max_grad_norm: null
+  max_grad_norm: 1.0
   early_stopping_patience: 10
   early_stopping_metric: val_loss
   balanced_sampling: true
   balanced_sampling_n_conditions: 8
   balanced_sampling_n_cells: 4
-  balanced_sampling_seed: 42
-  checkpoint_dir: model/scgpt_finetune
+  checkpoint_dir: model/scgpt_finetune_cls
 
 # LoRA configuration (for lora_head mode)
 lora:
   rank: 8
   alpha: 16.0
   dropout: 0.1
-  last_n_layers: null
-  # Target modules in TransformerEncoderLayer:
-  # - out_proj: attention output projection
-  # - linear1, linear2: FFN layers
+  last_n_layers: 2
   target_modules:
     - out_proj
     - linear1
@@ -96,11 +84,11 @@ infonce:
 
 # Classification loss configuration (for classification mode)
 classification:
-  label_smoothing: 0.1
+  label_smoothing: 0.0
 
 # Retrieval evaluation settings
 retrieval:
-  metric: cosine
+  metric: prob
   top_k: [1, 5, 8, 10]
 
 # Query setup
@@ -111,10 +99,18 @@ query:
 
 # Evaluation settings
 evaluate:
+  mode: classifier
   mask_perturbed: true
   mask_ablation: true
+
+# Confidence estimation
+confidence:
+  enable: true
+  method: margin
+  coverage_points: 20
+  top_k_agreement: 1
 
 # Logging
 logging:
   output_dir: results/
-  experiment_name: scgpt_finetune
+  experiment_name: scgpt_finetune_cls
