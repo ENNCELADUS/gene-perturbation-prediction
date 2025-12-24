@@ -15,24 +15,12 @@
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
-# Load conda environment
 source ~/.bashrc
 conda activate vcc
 
 set -euo pipefail
 
-# Create log directory
 mkdir -p logs/scgpt
-
-latest_run_dir() {
-    local base_dir="$1"
-    local latest_dir=""
-    latest_dir="$(ls -dt "${base_dir}"/* 2>/dev/null | head -n 1 || true)"
-    if [[ -z "${latest_dir}" ]]; then
-        return 1
-    fi
-    echo "${latest_dir}"
-}
 
 detect_num_gpus() {
     if [[ -n "${SLURM_GPUS_ON_NODE:-}" ]]; then
@@ -53,123 +41,61 @@ detect_num_gpus() {
 NUM_GPUS="$(detect_num_gpus)"
 echo "Detected GPUs: ${NUM_GPUS}"
 
-run_finetune() {
+run_ddp() {
     if [[ "${NUM_GPUS}" -gt 1 ]]; then
-        torchrun --standalone --nproc_per_node="${NUM_GPUS}" -m src.train.finetune "$@"
+        torchrun --standalone --nproc_per_node="${NUM_GPUS}" "$@"
     else
-        python -m src.train.finetune "$@"
+        python "$@"
     fi
 }
 
 echo "=============================================="
-echo "scGPT Ablative Study: Four Modes"
-echo "=============================================="
-echo "Mode 1: Frozen scGPT encoder (baseline)"
-echo "Mode 2: scGPT + trainable retrieval head (InfoNCE)"
-echo "Mode 3: scGPT + trainable retrieval head (Classification)"
-echo "Mode 4: scGPT + LoRA + retrieval head (Classification)"
+echo "Route A + Route B1 Experiments"
 echo "=============================================="
 
 # ============================================
-# MODE 1: Frozen scGPT Encoder (Baseline)
+# Route A: Forward Model + Retrieval
 # ============================================
 echo ""
 echo "=============================================="
-echo "[MODE 1] Frozen scGPT Retrieval (Baseline)"
+echo "[Route A] Data Preparation"
 echo "=============================================="
-python -m src.main --config src/configs/scgpt.yaml
-SCGPT_BASELINE_DIR="$(latest_run_dir results/scgpt)" || {
-    echo "Error: No scGPT baseline results found in results/scgpt" >&2
-    exit 1
-}
-echo "[1/4] Frozen scGPT completed!"
-
-# ============================================
-# MODE 2: scGPT + Trainable Retrieval Head
-# ============================================
-echo ""
-echo "=============================================="
-echo "[MODE 2] scGPT + Trainable Retrieval Head"
-echo "=============================================="
-echo "Training retrieval head with InfoNCE loss..."
-run_finetune \
-    --config src/configs/scgpt_finetune.yaml \
-    --mode head_only \
-    --loss infonce
-echo "Evaluating head-only fine-tuned model..."
-python -m src.main \
-    --config src/configs/scgpt.yaml \
-    --experiment_name scgpt_head_only \
-    --finetune_checkpoint model/scgpt_finetune/best_head_only.pt
-SCGPT_HEAD_ONLY_DIR="$(latest_run_dir results/scgpt_head_only)" || {
-    echo "Error: No scGPT head-only results found in results/scgpt_head_only" >&2
-    exit 1
-}
-echo "[2/4] Head-only fine-tuning completed!"
-
-# ============================================
-# MODE 3: scGPT + Trainable Retrieval Head (Classification)
-# ============================================
-echo ""
-echo "=============================================="
-echo "[MODE 3] scGPT + Trainable Retrieval Head (Classification)"
-echo "=============================================="
-echo "Training retrieval head with classification loss..."
-run_finetune \
-    --config src/configs/scgpt_finetune_classification.yaml \
-    --mode head_only \
-    --loss classification
-echo "Evaluating classification fine-tuned model..."
-python -m src.main \
-    --config src/configs/scgpt_finetune_classification.yaml \
-    --experiment_name scgpt_head_only_cls \
-    --finetune_checkpoint model/scgpt_finetune_cls/best_head_only.pt
-SCGPT_HEAD_ONLY_CLS_DIR="$(latest_run_dir results/scgpt_head_only_cls)" || {
-    echo "Error: No scGPT classification results found in results/scgpt_head_only_cls" >&2
-    exit 1
-}
-echo "[3/4] Classification fine-tuning completed!"
-
-# ============================================
-# MODE 4: scGPT + LoRA + Retrieval Head (Classification)
-# ============================================
-echo ""
-echo "=============================================="
-echo "[MODE 4] scGPT + LoRA + Retrieval Head (Classification)"
-echo "=============================================="
-echo "Training with LoRA adapters + classification loss..."
-run_finetune \
-    --config src/configs/scgpt_finetune_classification.yaml \
-    --mode lora_head \
-    --loss classification
-echo "Evaluating LoRA fine-tuned model..."
-python -m src.main \
-    --config src/configs/scgpt_finetune_classification.yaml \
-    --experiment_name scgpt_lora_head \
-    --finetune_checkpoint model/scgpt_finetune_cls/best_lora_head.pt
-SCGPT_LORA_HEAD_DIR="$(latest_run_dir results/scgpt_lora_head)" || {
-    echo "Error: No scGPT LoRA head results found in results/scgpt_lora_head" >&2
-    exit 1
-}
-echo "[4/4] LoRA fine-tuning completed!"
+python -m src.main --config src/configs/scgpt_forward.yaml --mode data
 
 echo ""
 echo "=============================================="
-echo "All scGPT modes completed!"
+echo "[Route A] Train Forward Model (DDP if multi-GPU)"
 echo "=============================================="
+run_ddp -m src.main --config src/configs/scgpt_forward.yaml --mode train
+
+echo ""
+echo "=============================================="
+echo "[Route A] Build Reference Database"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt_forward.yaml --mode build_db
+
+echo ""
+echo "=============================================="
+echo "[Route A] Evaluate Retrieval"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt_forward.yaml --mode evaluate
 
 # ============================================
-# Generate Ablative Comparison Report
+# Route B1: Gene-Level Scoring + Composition
 # ============================================
 echo ""
-echo "Generating ablative comparison report..."
-python scripts/compare.py \
-    --results "${SCGPT_BASELINE_DIR}" "${SCGPT_HEAD_ONLY_DIR}" "${SCGPT_HEAD_ONLY_CLS_DIR}" "${SCGPT_LORA_HEAD_DIR}" \
-    --output results/reports \
-    --name scgpt_ablative_comparison
-echo "Ablative comparison report saved to results/reports/"
+echo "=============================================="
+echo "[Route B1] Train Gene-Score Model (DDP if multi-GPU)"
+echo "=============================================="
+run_ddp -m src.main --config src/configs/scgpt_discriminative.yaml --mode route_b1_train
 
-# ============================================
-# Optional: InfoNCE Variants
-# ============================================
-# Extend InfoNCE runs by adding a similar block above.
+echo ""
+echo "=============================================="
+echo "[Route B1] Evaluate Gene-Score Model"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt_discriminative.yaml --mode route_b1_eval
+
+echo ""
+echo "=============================================="
+echo "All Route A and Route B1 runs completed!"
+echo "=============================================="

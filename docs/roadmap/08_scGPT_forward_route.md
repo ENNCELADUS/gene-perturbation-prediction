@@ -214,6 +214,93 @@ Instead of predicting **condition IDs**, the model predicts **perturbed genes as
 
 This is a genuinely different **problem definition**, yet it remains fully aligned with scGPT’s Top-K hit metrics.
 
+### 2.1 Route B1 Implementation Details (Discriminative Compositional)
+
+This section mirrors the Route A implementation detail level, but for gene-level scoring + compositional ranking.
+
+#### 2.1.1 Task Definition (Route B1)
+- **Input:** a single perturbed cell expression profile (test cells are from the held-out conditions).
+- **Output:** a score for each gene in the **processed gene space** (5,045 genes).
+- **Condition ranking:** score every condition in the split by composing gene scores:
+  - Single: `score(X) = s[X]`
+  - Double: `score(X+Y) = s[X] + s[Y]` (or mean; pick one and keep fixed)
+- **Metric:** Top-K exact hit + one-gene overlap hit using existing retrieval metrics.
+
+#### 2.1.2 Reuse Existing APIs (Keep Codebase Clean)
+Use existing Route A utilities to avoid reimplementation:
+- **Data & splits:** `src/data/perturb_dataset.py` and `src/data/condition_splits.py`
+  - `load_perturb_data(...)` yields the same train/val/test conditions.
+- **Tokenization:** `scgpt.tokenizer.gene_tokenizer.tokenize_and_pad_batch` already used in Route A.
+- **Checkpoint loading + freeze strategy:** reuse `src/model/scgpt_forward.py` for loading the backbone and applying the same freeze policy (or subclass it for a gene-scoring head).
+- **Evaluation metrics:** `src/evaluate/metrics.py` (`compute_all_metrics`, `parse_condition_genes`) already matches Route B1 Top-K definitions.
+
+#### 2.1.3 Model Architecture (Minimal Additions)
+Use scGPT as an encoder and add a gene-scoring head:
+
+- **Backbone:** `TransformerModel` via `ScGPTForward` (to reuse checkpoint loading).
+- **Representation:** use `cell_emb` (CLS-style embedding) from scGPT outputs.
+- **Head:** an MLP that maps `cell_emb -> gene_scores` with output size = number of processed genes.
+  - Example: `Linear(emb, 512) -> GELU -> Dropout -> Linear(512, n_genes)`
+  - Output is **logits** for multi-label loss.
+
+**Freeze policy (default):**
+- Freeze same parts as Route A (encoder, value encoder, transformer layers 0–10).
+- Trainable: scoring head + last transformer layer (optional) + `enc_norm`.
+
+#### 2.1.4 Data Collation for Route B1
+Create a new dataset/collator that yields **perturbed cells only**:
+- **Inputs:** perturbed expression profile + gene IDs (tokenized).
+- **Targets:** multi-hot gene labels derived from `condition` (from `parse_condition_genes`).
+- Reuse binning logic from `src/data/forward_collator.py` to stay consistent with scGPT input.
+
+Suggested new module:
+- `src/data/gene_score_collator.py` → `GeneScoreDataset`, `collate_gene_score_batch`
+
+#### 2.1.5 Training Loop (Multi-Label Gene Scoring)
+Training is standard multi-label classification:
+- **Loss:** `BCEWithLogitsLoss` over the gene space (positives = genes in condition).
+- **Masking:** optional `mask_perturbed` strategy from config for ablations.
+- **Sampling:** balanced condition sampling similar to Route A (avoid over-represented conditions).
+
+Suggested new module:
+- `src/train/train_gene_score.py`
+
+Key steps:
+1) Load data using `load_perturb_data`.
+2) Build `GeneScoreDataset` for train/val split.
+3) Load scGPT backbone checkpoint using `ScGPTForward`.
+4) Attach the gene-scoring head and freeze backbone as configured.
+5) Train with early stopping on `val_loss` or `val_hit@K` proxy.
+
+#### 2.1.6 Inference + Condition Composition
+For each test cell:
+1) Run model → gene score vector `s`.
+2) Enumerate candidate conditions from the split (train+val+test).
+3) Compute condition scores using composition rule (sum or mean).
+4) Rank conditions per cell.
+5) Aggregate per-condition rankings across cells (reuse Route A voting logic if desired).
+
+Reuse from Route A:
+- `aggregate_by_voting(...)` can be moved to a shared utility (e.g., `src/evaluate/retrieval_utils.py`) and reused here.
+
+#### 2.1.7 Evaluation (Reuse Metrics)
+Use existing metric APIs without changes:
+- `compute_all_metrics(predictions, ground_truth, top_k_values, ...)`
+- `parse_condition_genes(...)` already handles `GENE1+GENE2` normalization.
+
+Evaluation entry point (new):
+- `src/evaluate/evaluate_gene_score.py`
+  - Builds rankings from gene scores.
+  - Uses `compute_all_metrics` to report exact hit@K + one-gene-overlap hit@K.
+
+#### 2.1.8 Main Entrypoint Integration
+Add a new mode alongside Route A in `src/main.py`:
+- `mode=route_b1_train` → calls `train_gene_score`
+- `mode=route_b1_eval` → calls `evaluate_gene_score`
+- `mode=route_b1_full` → train + eval
+
+This keeps Route A and Route B1 parallel while reusing data, checkpoint loaders, and metrics.
+
 ---
 
 ## 3) Comparing the Two Routes
