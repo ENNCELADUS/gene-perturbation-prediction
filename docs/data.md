@@ -2,23 +2,6 @@
 
 ## Norman split logic (current)
 
-**Cell-level split (within-condition)**  
-Implemented in `src/data/splits.py` and used by `load_perturb_data()` in
-`src/data/perturb_dataset.py`.
-
-- Scope: per perturbation condition, excluding `ctrl`.
-- Uses only perturbed cells (`obs[control] == 0`).
-- If a condition has fewer than `min_cells_per_condition` cells,
-  it is dropped.
-- Cells are shuffled with a fixed seed, then split into:
-  - reference: `n_ref = n_cells - n_query`
-  - query: `n_query = max(min_query_cells, int(n_cells * query_fraction))`
-- Every kept condition appears in both ref and query (exact retrieval setting).
-- Saved as JSON to the configured `split.output_path`
-  (e.g. `data/norman/splits/cell_split_seed42.json`).
-- Train/val/test are determined by the condition split; cell-level split
-  defines ref/query within each condition.
-
 **Condition-level split (generalization tracks)**  
 Implemented in `src/data/condition_splits.py` and triggered by `--track`
 in `src/main.py`.
@@ -55,20 +38,6 @@ Fine-tuning code path: `src/train/finetune.py` + `src/model/scgpt.py`.
 - Labels are taken from `adata.obs["condition"]`.
 
 ## Code interface (current)
-
-**Load dataset and cell split**
-```python
-from src.data import load_perturb_data
-
-dataset = load_perturb_data(
-    h5ad_path="data/norman/perturb_processed.h5ad",
-    split_path="data/norman/splits/cell_split_seed42.json",
-    min_cells_per_condition=50,
-    query_fraction=0.2,
-    min_query_cells=10,
-    seed=42,
-)
-```
 
 **Condition split (required for train/val/test splits)**
 ```python
