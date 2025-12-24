@@ -50,6 +50,11 @@ class ForwardModelDataset(Dataset):
         # Get control cells
         self.control_mask = adata.obs[control_key] == 1
         self.control_indices = np.where(self.control_mask)[0]
+        if len(self.control_indices) == 0:
+            raise ValueError(
+                f"No control cells found for control_key='{control_key}'. "
+                "Forward training requires control cells to pair with perturbed examples."
+            )
 
         # Build examples: (control_idx, perturbed_idx, condition_name)
         self.examples = []
@@ -63,6 +68,8 @@ class ForwardModelDataset(Dataset):
 
             # Sample control cells
             n_control = min(len(self.control_indices), self.max_control_per_condition)
+            if n_control == 0:
+                continue
             sampled_control = self.rng.choice(
                 self.control_indices, size=n_control, replace=False
             )
