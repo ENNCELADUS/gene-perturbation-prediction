@@ -195,6 +195,9 @@ This stratification is essential for:
 - `min_cells_per_condition: 50` (singles), `min_cells_per_double: 30` (doubles)
 - `seen_single_train_ratio: 0.9`, `combo_seen2_train_ratio: 0.7`, `combo_seen2_val_ratio: 0.15`
 
+**Raw Data**:
+`data/norman/perturb_processed.h5ad` has shape (91205, 5045) — 91,205 cells by 5,045 genes.
+
 **Results** (Norman dataset, seed=42):
 - Total: 236 conditions | 83,803 cells (post-filter)
 - **Train**: 147 conditions (56,580 cells)

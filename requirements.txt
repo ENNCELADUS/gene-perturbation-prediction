@@ -23,6 +23,7 @@ numba==0.62.1
 scib>=1.1.0
 scgpt>=0.2.0
 flash-attn<1.0.5; platform_system == "Linux"  # Optional; requires CUDA/NVCC
+ipython
 
 # Visualization + analysis utilities
 matplotlib==3.10.7
