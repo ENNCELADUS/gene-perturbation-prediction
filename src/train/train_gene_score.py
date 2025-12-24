@@ -255,8 +255,8 @@ def main():
     )
 
     if is_main:
-        print(f"  - Train conditions: {len(dataset.train_conditions())}")
-        print(f"  - Val conditions: {len(dataset.val_conditions())}")
+        print(f"  - Train conditions: {len(dataset.train_conditions)}")
+        print(f"  - Val conditions: {len(dataset.val_conditions)}")
 
     if is_main:
         print("\n[2/5] Building datasets...")
@@ -271,15 +271,15 @@ def main():
     freeze_layers_up_to = max(n_layers - 1 - unfreeze_last_n_layers, -1)
 
     train_dataset = GeneScoreDataset(
-        adata=dataset.train_adata(),
-        conditions=dataset.train_conditions(),
+        adata=dataset.train_adata,
+        conditions=dataset.train_conditions,
         vocab=vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )
 
     val_dataset = GeneScoreDataset(
-        adata=dataset.val_adata(),
-        conditions=dataset.val_conditions(),
+        adata=dataset.val_adata,
+        conditions=dataset.val_conditions,
         vocab=train_dataset.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )

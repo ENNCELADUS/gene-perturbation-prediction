@@ -143,8 +143,8 @@ def evaluate_retrieval(
     """
     print("\nEvaluating on test set...")
 
-    test_adata = dataset.test_adata()
-    test_conditions = dataset.test_conditions()
+    test_adata = dataset.test_adata
+    test_conditions = dataset.test_conditions
 
     print(f"  Test cells: {len(test_adata)}")
     print(f"  Test conditions: {len(test_conditions)}")
