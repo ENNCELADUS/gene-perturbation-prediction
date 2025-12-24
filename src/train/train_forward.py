@@ -307,6 +307,7 @@ def main():
     if ddp["enabled"]:
         model = DDP(
             model,
+            find_unused_parameters=True,
             device_ids=[ddp["local_rank"]] if torch.cuda.is_available() else None,
             output_device=ddp["local_rank"] if torch.cuda.is_available() else None,
         )
