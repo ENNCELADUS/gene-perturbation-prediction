@@ -93,7 +93,7 @@ def main():
         **{k: v for k, v in cond_split_config.items() if k != "output_path"},
     )
 
-    test_conditions = dataset.test_conditions()
+    test_conditions = dataset.test_conditions
     all_conditions = dataset.all_conditions
     print(f"  - Test conditions: {len(test_conditions)}")
     print(f"  - Candidate conditions: {len(all_conditions)}")
@@ -117,7 +117,7 @@ def main():
 
     print("\n[3/4] Preparing evaluation data...")
     test_dataset = GeneScoreDataset(
-        adata=dataset.test_adata(),
+        adata=dataset.test_adata,
         conditions=test_conditions,
         vocab=model.backbone.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),

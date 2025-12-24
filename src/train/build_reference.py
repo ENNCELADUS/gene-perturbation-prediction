@@ -168,7 +168,7 @@ def build_reference_database(
     """
     print(f"Building reference database for {len(conditions)} conditions...")
 
-    control_adata = dataset.control_adata()
+    control_adata = dataset.control_adata
 
     reference_db = {
         "predictions": {},
@@ -213,13 +213,11 @@ def main():
 
     # All conditions (train + val + test)
     all_conditions = (
-        dataset.train_conditions()
-        + dataset.val_conditions()
-        + dataset.test_conditions()
+        dataset.train_conditions + dataset.val_conditions + dataset.test_conditions
     )
 
     print(f"  - Total conditions: {len(all_conditions)}")
-    print(f"  - Control cells: {len(dataset.control_adata())}")
+    print(f"  - Control cells: {len(dataset.control_adata)}")
 
     # Load model
     print("\n[2/3] Loading finetuned model...")

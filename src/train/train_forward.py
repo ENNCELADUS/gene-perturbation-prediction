@@ -240,8 +240,8 @@ def main():
     if is_main:
         print(f"  - Total cells: {dataset.adata.n_obs}")
         print(f"  - Genes: {dataset.adata.n_vars}")
-        print(f"  - Train conditions: {len(dataset.train_conditions())}")
-        print(f"  - Val conditions: {len(dataset.val_conditions())}")
+        print(f"  - Train conditions: {len(dataset.train_conditions)}")
+        print(f"  - Val conditions: {len(dataset.val_conditions)}")
 
     # Load model
     if is_main:
@@ -252,15 +252,15 @@ def main():
     if is_main:
         print("\n[3/5] Creating datasets...")
     train_dataset = ForwardModelDataset(
-        adata=dataset.train_adata(),
-        conditions=dataset.train_conditions(),
+        adata=dataset.train_adata,
+        conditions=dataset.train_conditions,
         vocab=model.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )
 
     val_dataset = ForwardModelDataset(
-        adata=dataset.val_adata(),
-        conditions=dataset.val_conditions(),
+        adata=dataset.val_adata,
+        conditions=dataset.val_conditions,
         vocab=model.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )
