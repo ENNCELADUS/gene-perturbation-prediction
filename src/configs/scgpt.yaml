@@ -4,23 +4,15 @@
 data:
   h5ad_path: data/norman/perturb_processed.h5ad
 
-# Cell-level split
-split:
-  min_cells_per_condition: 50
-  query_fraction: 0.2
-  min_query_cells: 10
-  seed: 42
-  output_path: data/norman/splits/cell_split_seed42.json
-
-# Condition-level split (generalization track)
-track: in_dist  # in_dist | unseen_combo | unseen_gene
+# Norman GEARS-style Condition-level split
 condition_split:
-  train_ratio: 0.7
-  val_ratio: 0.1
-  test_ratio: 0.2
+  unseen_gene_fraction: 0.25      # 25% of single-genes → test-only (unseen)
+  seen_single_train_ratio: 0.9    # 90% train / 10% val for seen singles
+  combo_seen2_train_ratio: 0.7    # 70% train for 2/2-seen combos
+  combo_seen2_val_ratio: 0.15     # 15% val for 2/2-seen combos (remaining → test)
+  min_cells_per_condition: 50     # Filter threshold
   seed: 42
-  output_path: data/norman/splits/condition_split_in_dist_seed42.json
-  n_holdout_genes: 5
+  output_path: data/norman/splits/norman_condition_split_seed42.json
 
 # Model
 model:

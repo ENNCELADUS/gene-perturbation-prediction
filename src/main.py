@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from .data import load_perturb_data, ConditionSplitter
+from .data import load_perturb_data, NormanConditionSplitter
 from .evaluate import (
     CellRetrievalEvaluator,
     ClassifierEvaluator,
@@ -53,13 +53,7 @@ def parse_args():
         default=None,
         help="Path to scGPT fine-tune checkpoint (retrieval head/LoRA)",
     )
-    parser.add_argument(
-        "--track",
-        type=str,
-        default=None,
-        choices=["in_dist", "unseen_combo", "unseen_gene"],
-        help="Generalization track for condition-level evaluation",
-    )
+
     parser.add_argument(
         "--error_analysis",
         action="store_true",
@@ -163,65 +157,50 @@ def run_pipeline(config: dict, args) -> dict:
 
     # Load data
     print("\n[1/4] Loading dataset...")
-    split_config = config["split"]
+    cond_split_config = config.get("condition_split", {})
     dataset = load_perturb_data(
         h5ad_path=config["data"]["h5ad_path"],
-        split_path=split_config.get("output_path"),
-        min_cells_per_condition=split_config.get("min_cells_per_condition", 50),
-        query_fraction=split_config.get("query_fraction", 0.2),
-        min_query_cells=split_config.get("min_query_cells", 10),
-        seed=split_config.get("seed", 42),
+        condition_split_path=cond_split_config.get("output_path"),
+        unseen_gene_fraction=cond_split_config.get("unseen_gene_fraction", 0.25),
+        seen_single_train_ratio=cond_split_config.get("seen_single_train_ratio", 0.9),
+        combo_seen2_train_ratio=cond_split_config.get("combo_seen2_train_ratio", 0.7),
+        combo_seen2_val_ratio=cond_split_config.get("combo_seen2_val_ratio", 0.15),
+        min_cells_per_condition=cond_split_config.get("min_cells_per_condition", 50),
+        seed=cond_split_config.get("seed", 42),
     )
 
     # Print summary
     summary = dataset.summary()
     print(f"  - Total cells: {summary['n_cells']}")
     print(f"  - Genes: {summary['n_genes']}")
-    print(f"  - Valid conditions: {summary['n_valid_conditions']}")
-    print(f"  - Ref cells: {summary['n_ref_cells']}")
-    print(f"  - Query cells: {summary['n_query_cells']}")
-    print(f"  - Dropped conditions: {summary['n_dropped_conditions']}")
+    print(f"  - Total conditions: {summary['n_conditions']}")
+    if summary.get("has_condition_split"):
+        print(f"  - Train conditions: {summary['n_train_conditions']}")
+        print(f"  - Val conditions: {summary['n_val_conditions']}")
+        print(f"  - Test conditions: {summary['n_test_conditions']}")
+        print(f"  - Unseen genes: {summary['n_unseen_genes']}")
+        print(f"  - Test strata: {summary.get('test_strata_counts', {})}")
 
-    # Save split artifact
-    print("\n[2/4] Saving split artifact...")
+    # Save condition split artifact
+    print("\n[2/4] Saving condition split artifact...")
+    cond_split_config = config.get("condition_split", {})
     split_path = Path(
-        split_config.get(
-            "output_path", f"splits/cell_split_seed{split_config['seed']}.json"
+        cond_split_config.get(
+            "output_path",
+            f"data/norman/splits/norman_condition_split_seed{cond_split_config.get('seed', 42)}.json",
         )
     )
     split_path.parent.mkdir(parents=True, exist_ok=True)
-    dataset.split.save(split_path)
+    dataset.condition_split.save(split_path)
     print(f"  - Saved to: {split_path}")
 
-    # Optional: condition-level split for generalization tracks
-    track = args.track or config.get("track")
-    if track and track != "in_dist":
-        cond_cfg = config.get("condition_split", {})
-        splitter = ConditionSplitter(
-            train_ratio=cond_cfg.get("train_ratio", 0.7),
-            val_ratio=cond_cfg.get("val_ratio", 0.1),
-            test_ratio=cond_cfg.get("test_ratio", 0.2),
-            seed=cond_cfg.get("seed", split_config.get("seed", 42)),
-        )
-        if track == "unseen_gene":
-            cond_split = splitter.split_unseen_gene(
-                dataset.all_conditions,
-                n_holdout_genes=cond_cfg.get("n_holdout_genes", 5),
-            )
-        else:
-            cond_split = splitter.split(dataset.all_conditions, track=track)
-        cond_out = cond_cfg.get(
-            "output_path",
-            f"data/norman/splits/condition_split_{track}_seed{cond_split.seed}.json",
-        )
-        cond_out_path = Path(cond_out)
-        cond_out_path.parent.mkdir(parents=True, exist_ok=True)
-        cond_split.save(cond_out_path)
-        dataset.apply_condition_split(cond_split)
-        config["track"] = track
-        print(f"  - Condition split ({track}) saved to: {cond_out_path}")
-    elif track == "in_dist":
-        print("  [Info] in_dist track uses cell-level split; skipping condition split.")
+    # Print split summary
+    if dataset.condition_split:
+        from .data import NormanConditionSplitter
+
+        splitter_temp = NormanConditionSplitter(seed=cond_split_config.get("seed", 42))
+        split_summary = splitter_temp.summary(dataset.condition_split)
+        print(f"  - Split summary: {split_summary}")
 
     # Setup evaluator
     print(f"\n[3/4] Setting up {config['model']['encoder']} encoder...")
