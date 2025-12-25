@@ -50,7 +50,12 @@ class GeneScoreDataset(Dataset):
         self.condition_key = condition_key
         self.rng = np.random.RandomState(seed)
 
-        self.gene_names = self.adata.var_names.tolist()
+        # Use 'gene_name' column if available (gene symbols),
+        # otherwise fall back to var_names (may be Ensembl IDs)
+        if "gene_name" in self.adata.var.columns:
+            self.gene_names = self.adata.var["gene_name"].tolist()
+        else:
+            self.gene_names = self.adata.var_names.tolist()
         self.gene_name_to_idx = {g: i for i, g in enumerate(self.gene_names)}
         self.gene_ids = np.array(
             [self.vocab.get(g, self.vocab.get("<pad>", 0)) for g in self.gene_names]
@@ -134,6 +139,12 @@ def collate_gene_score_batch(
     """
     exprs = np.stack([ex["expr"] for ex in batch])
     gene_ids = batch[0]["gene_ids"]
+
+    # Safeguard: ensure no all-zero rows exist to avoid empty tensors.
+    # PyTorch transformer's to_padded_tensor fails with empty sequences.
+    for i in range(len(exprs)):
+        if np.count_nonzero(exprs[i]) == 0:
+            exprs[i, 0] = 1  # Set minimal placeholder value
 
     tokenized = tokenize_and_pad_batch(
         exprs,

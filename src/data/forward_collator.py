@@ -105,8 +105,12 @@ class ForwardModelDataset(Dataset):
         ctrl_binned = self._bin_expression(ctrl_expr)
         pert_binned = self._bin_expression(pert_expr)
 
-        # Get gene IDs
-        gene_names = self.adata.var_names.tolist()
+        # Get gene IDs - use 'gene_name' column if available (gene symbols),
+        # otherwise fall back to var_names (may be Ensembl IDs)
+        if "gene_name" in self.adata.var.columns:
+            gene_names = self.adata.var["gene_name"].tolist()
+        else:
+            gene_names = self.adata.var_names.tolist()
         gene_ids = np.array(
             [self.vocab.get(g, self.vocab.get("<pad>", 0)) for g in gene_names]
         )

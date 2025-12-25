@@ -110,12 +110,22 @@ def generate_predictions_for_condition(
             control_binned.append(binned)
         control_binned = np.array(control_binned)
 
-        # Get gene IDs
-        gene_names = control_adata.var_names.tolist()
+        # Get gene IDs - use 'gene_name' column if available (gene symbols),
+        # otherwise fall back to var_names (may be Ensembl IDs)
+        if "gene_name" in control_adata.var.columns:
+            gene_names = control_adata.var["gene_name"].tolist()
+        else:
+            gene_names = control_adata.var_names.tolist()
         gene_ids = np.array([vocab.get(g, vocab.get("<pad>", 0)) for g in gene_names])
 
         # Tokenize and pad
         from scgpt.tokenizer.gene_tokenizer import tokenize_and_pad_batch
+
+        # Safeguard: ensure no all-zero rows exist to avoid empty tensors.
+        # PyTorch transformer's to_padded_tensor fails with empty sequences.
+        for i in range(len(control_binned)):
+            if np.count_nonzero(control_binned[i]) == 0:
+                control_binned[i, 0] = 1  # Set minimal placeholder value
 
         batch_data = tokenize_and_pad_batch(
             control_binned,
