@@ -135,7 +135,7 @@ def generate_predictions_for_condition(
             pad_token="<pad>",
             pad_value=-2,
             append_cls=False,
-            include_zero_gene=False,
+            include_zero_gene=True,  # Must be True to ensure consistent seq_len across batches
             return_pt=True,
         )
 

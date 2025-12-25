@@ -49,24 +49,24 @@ run_ddp() {
     fi
 }
 
-echo "=============================================="
-echo "Route A + Route B1 Experiments"
-echo "=============================================="
+# echo "=============================================="
+# echo "Route A + Route B1 Experiments"
+# echo "=============================================="
 
-# ============================================
-# Route A: Forward Model + Retrieval
-# ============================================
-echo ""
-echo "=============================================="
-echo "[Route A] Data Preparation"
-echo "=============================================="
-python -m src.main --config src/configs/scgpt_forward.yaml --mode data
+# # ============================================
+# # Route A: Forward Model + Retrieval
+# # ============================================
+# echo ""
+# echo "=============================================="
+# echo "[Route A] Data Preparation"
+# echo "=============================================="
+# python -m src.main --config src/configs/scgpt_forward.yaml --mode data
 
-echo ""
-echo "=============================================="
-echo "[Route A] Train Forward Model (DDP if multi-GPU)"
-echo "=============================================="
-run_ddp -m src.main --config src/configs/scgpt_forward.yaml --mode train
+# echo ""
+# echo "=============================================="
+# echo "[Route A] Train Forward Model (DDP if multi-GPU)"
+# echo "=============================================="
+# run_ddp -m src.main --config src/configs/scgpt_forward.yaml --mode train
 
 echo ""
 echo "=============================================="
