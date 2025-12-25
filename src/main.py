@@ -54,6 +54,8 @@ def parse_args():
             "route_b1_train",
             "route_b1_eval",
             "route_b1_full",
+            "tga",
+            "de",
         ],
         help="Operation mode: data, train, build_db, evaluate, or full",
     )
@@ -394,6 +396,58 @@ def run_route_b1_full(config: dict, args) -> dict:
     return results
 
 
+def run_tga(config: dict, args) -> dict:
+    """Run TGA baseline evaluation."""
+    from .evaluate.evaluate_tga import main as tga_main
+    import sys
+
+    output = config.get("evaluation", {}).get(
+        "output_path", "results/tgd/eval_results.json"
+    )
+
+    sys.argv = [
+        "evaluate_tgd",
+        "--config",
+        args.config,
+        "--output",
+        output,
+    ]
+
+    print("\n" + "=" * 60)
+    print("MODE: TGA - Target-Gene Activation Baseline")
+    print("=" * 60)
+
+    tga_main()
+
+    return {"status": "tga_evaluation_complete", "results_path": output}
+
+
+def run_de(config: dict, args) -> dict:
+    """Run DE baseline evaluation."""
+    from .evaluate.evaluate_de import main as de_main
+    import sys
+
+    output = config.get("evaluation", {}).get(
+        "output_path", "results/de/eval_results.json"
+    )
+
+    sys.argv = [
+        "evaluate_de",
+        "--config",
+        args.config,
+        "--output",
+        output,
+    ]
+
+    print("\n" + "=" * 60)
+    print("MODE: DE - Differential Expression Baseline")
+    print("=" * 60)
+
+    de_main()
+
+    return {"status": "de_evaluation_complete", "results_path": output}
+
+
 def main():
     """Main entry point with mode dispatch."""
     args = parse_args()
@@ -416,6 +470,10 @@ def main():
         results = run_route_b1_eval(config, args)
     elif args.mode == "route_b1_full":
         results = run_route_b1_full(config, args)
+    elif args.mode == "tga":
+        results = run_tga(config, args)
+    elif args.mode == "de":
+        results = run_de(config, args)
     else:
         raise ValueError(f"Unknown mode: {args.mode}")
 
