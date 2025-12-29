@@ -311,6 +311,8 @@ def main():
     if ddp["enabled"]:
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
 
+    collate_vocab = train_dataset.vocab
+
     if config["training"].get("balanced_sampling", False) and not ddp["enabled"]:
         n_conditions = config["training"].get("balanced_sampling_n_conditions", 8)
         n_cells = config["training"].get("balanced_sampling_n_cells", 4)
@@ -325,7 +327,7 @@ def main():
             train_dataset,
             batch_sampler=batch_sampler,
             collate_fn=lambda batch: collate_gene_score_batch(
-                batch, model.backbone.vocab, n_genes
+                batch, collate_vocab, n_genes
             ),
             num_workers=0,
         )
@@ -339,7 +341,7 @@ def main():
             shuffle=train_sampler is None,
             sampler=train_sampler,
             collate_fn=lambda batch: collate_gene_score_batch(
-                batch, model.backbone.vocab, n_genes
+                batch, collate_vocab, n_genes
             ),
             num_workers=0,
         )
@@ -350,7 +352,7 @@ def main():
         shuffle=False,
         sampler=val_sampler,
         collate_fn=lambda batch: collate_gene_score_batch(
-            batch, model.backbone.vocab, n_genes
+            batch, collate_vocab, n_genes
         ),
         num_workers=0,
     )
