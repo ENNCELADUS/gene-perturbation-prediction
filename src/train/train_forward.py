@@ -316,6 +316,22 @@ def main():
     if is_main:
         print("\n[5/5] Training...")
     best_val_loss = float("inf")
+    early_stopping_patience = config["training"].get("early_stopping_patience")
+    early_stopping_metric = config["training"].get(
+        "early_stopping_metric", "val_loss"
+    )
+    if early_stopping_metric not in {"train_loss", "val_loss"}:
+        if is_main:
+            print(
+                "Unknown early_stopping_metric="
+                f"{early_stopping_metric}; defaulting to val_loss."
+            )
+        early_stopping_metric = "val_loss"
+    early_stop_enabled = (
+        early_stopping_patience is not None and early_stopping_patience > 0
+    )
+    best_metric = float("inf")
+    patience = 0
 
     for epoch in range(30):  # Max 30 epochs
         if is_main:
@@ -353,6 +369,33 @@ def main():
         if is_main and (epoch + 1) % 5 == 0:
             save_target = model.module if isinstance(model, DDP) else model
             save_target.save_finetuned(output_dir / f"checkpoint_epoch{epoch + 1}.pt")
+
+        early_stop = False
+        if early_stop_enabled and is_main:
+            metric_value = (
+                train_metrics["train_loss"]
+                if early_stopping_metric == "train_loss"
+                else val_metrics["val_loss"]
+            )
+            if metric_value < best_metric:
+                best_metric = metric_value
+                patience = 0
+            else:
+                patience += 1
+            if patience >= early_stopping_patience:
+                early_stop = True
+                print(
+                    f"\nStopping early (patience={early_stopping_patience}, "
+                    f"metric={early_stopping_metric})"
+                )
+        if ddp["enabled"]:
+            stop_tensor = torch.tensor(
+                int(early_stop), device=device if torch.cuda.is_available() else "cpu"
+            )
+            torch.distributed.broadcast(stop_tensor, src=0)
+            early_stop = bool(stop_tensor.item())
+        if early_stop:
+            break
 
         # Early stopping
         if args.max_steps:
