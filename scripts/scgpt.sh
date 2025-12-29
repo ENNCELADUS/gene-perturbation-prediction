@@ -68,17 +68,17 @@ run_ddp() {
 # echo "=============================================="
 # run_ddp -m src.main --config src/configs/scgpt_forward.yaml --mode train
 
-echo ""
-echo "=============================================="
-echo "[Route A] Build Reference Database"
-echo "=============================================="
-python -m src.main --config src/configs/scgpt_forward.yaml --mode build_db
+# echo ""
+# echo "=============================================="
+# echo "[Route A] Build Reference Database"
+# echo "=============================================="
+# python -m src.main --config src/configs/scgpt_forward.yaml --mode build_db
 
-echo ""
-echo "=============================================="
-echo "[Route A] Evaluate Retrieval"
-echo "=============================================="
-python -m src.main --config src/configs/scgpt_forward.yaml --mode evaluate
+# echo ""
+# echo "=============================================="
+# echo "[Route A] Evaluate Retrieval"
+# echo "=============================================="
+# python -m src.main --config src/configs/scgpt_forward.yaml --mode evaluate
 
 # ============================================
 # Route B1: Gene-Level Scoring + Composition

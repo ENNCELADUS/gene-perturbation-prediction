@@ -54,6 +54,7 @@ def generate_predictions_for_condition(
     n_samples: int = 200,
     batch_size: int = 32,
     device: str = "cuda",
+    max_len: int | None = None,
 ) -> np.ndarray:
     """
     Generate predicted perturbed profiles for a condition.
@@ -66,6 +67,7 @@ def generate_predictions_for_condition(
         n_samples: Number of control cells to sample
         batch_size: Batch size for inference
         device: Device
+        max_len: Maximum sequence length (None uses full gene count)
 
     Returns:
         Array of predicted expression profiles, shape (n_samples, n_genes)
@@ -130,7 +132,7 @@ def generate_predictions_for_condition(
         batch_data = tokenize_and_pad_batch(
             control_binned,
             gene_ids,
-            max_len=1200,
+            max_len=len(gene_ids) if max_len is None else max_len,
             vocab=vocab,
             pad_token="<pad>",
             pad_value=-2,

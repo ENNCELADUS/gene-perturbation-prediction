@@ -151,7 +151,7 @@ class ForwardModelDataset(Dataset):
 def collate_forward_batch(
     batch: List[Dict],
     vocab: Dict[str, int],
-    max_len: int = 1200,
+    max_len: int | None = None,
     pad_token: str = "<pad>",
     pad_value: int = -2,
 ) -> Dict[str, torch.Tensor]:
@@ -161,7 +161,7 @@ def collate_forward_batch(
     Args:
         batch: List of examples from ForwardModelDataset
         vocab: Vocabulary mapping
-        max_len: Maximum sequence length
+        max_len: Maximum sequence length (None uses full gene count)
         pad_token: Padding token
         pad_value: Padding value for expression
 
@@ -174,6 +174,8 @@ def collate_forward_batch(
     control_exprs = np.stack([ex["control_expr"] for ex in batch])
     perturbed_exprs = np.stack([ex["perturbed_expr"] for ex in batch])
     gene_ids = batch[0]["gene_ids"]  # Same for all examples
+    if max_len is None:
+        max_len = len(gene_ids)
 
     # Tokenize and pad using scGPT's function
     # This handles non-zero gene selection and padding
