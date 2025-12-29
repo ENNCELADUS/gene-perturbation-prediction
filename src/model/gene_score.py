@@ -52,11 +52,17 @@ class GeneScoreModel(nn.Module):
 
     def _freeze_unused_heads(self) -> None:
         """Freeze decoder heads that are not used for gene scoring."""
+        if hasattr(self.backbone.model, "cls_decoder"):
+            for param in self.backbone.model.cls_decoder.parameters():
+                param.requires_grad = False
         if hasattr(self.backbone.model, "decoder"):
             for param in self.backbone.model.decoder.parameters():
                 param.requires_grad = False
         if hasattr(self.backbone.model, "mvc_decoder"):
             for param in self.backbone.model.mvc_decoder.parameters():
+                param.requires_grad = False
+        if hasattr(self.backbone.model, "flag_encoder"):
+            for param in self.backbone.model.flag_encoder.parameters():
                 param.requires_grad = False
 
     def forward(
@@ -70,7 +76,7 @@ class GeneScoreModel(nn.Module):
             values=values,
             src_key_padding_mask=padding_mask,
             batch_labels=None,
-            CLS=True,
+            CLS=False,
             CCE=False,
             MVC=False,
             ECS=False,
