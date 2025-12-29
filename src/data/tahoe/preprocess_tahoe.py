@@ -13,7 +13,30 @@ from typing import Optional
 
 import numpy as np
 import scanpy as sc
-from scipy.sparse import issparse
+from scipy.sparse import issparse, spmatrix
+
+
+def _normalize_log1p_matrix(
+    matrix: np.ndarray | spmatrix,
+    target_sum: float,
+) -> np.ndarray | spmatrix:
+    """Normalize counts per row to target_sum, then log1p (sparse-safe)."""
+    if issparse(matrix):
+        matrix = matrix.tocsr(copy=True)
+        matrix.data = matrix.data.astype(np.float32, copy=False)
+        row_sums = np.asarray(matrix.sum(axis=1)).ravel()
+        row_sums[row_sums == 0] = 1
+        scale = (target_sum / row_sums).astype(np.float32)
+        matrix.data *= np.repeat(scale, np.diff(matrix.indptr))
+        np.log1p(matrix.data, out=matrix.data)
+        return matrix
+
+    dense = np.array(matrix, dtype=np.float32, copy=True)
+    row_sums = dense.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1
+    dense = dense / row_sums * target_sum
+    np.log1p(dense, out=dense)
+    return dense
 
 
 def preprocess_tahoe(
@@ -49,7 +72,7 @@ def preprocess_tahoe(
     adata = sc.read_h5ad(input_path, backed="r")
     print(f"  Shape: {adata.shape}")
 
-    # Load into memory in chunks for processing
+    # Load into memory for processing
     print("Loading data into memory...")
     adata = adata.to_memory()
 
@@ -68,16 +91,8 @@ def preprocess_tahoe(
         print("Normalizing ctrl layer → layers['ctrl_norm']...")
         # Store normalized control
         ctrl_data = adata.layers["ctrl"]
-        if issparse(ctrl_data):
-            ctrl_data = ctrl_data.toarray()
-
-        # Normalize per-cell
-        ctrl_sums = ctrl_data.sum(axis=1, keepdims=True)
-        ctrl_sums[ctrl_sums == 0] = 1  # Avoid division by zero
-        ctrl_normalized = ctrl_data / ctrl_sums * target_sum
-        ctrl_log = np.log1p(ctrl_normalized)
-
-        adata.layers["ctrl_norm"] = ctrl_log.astype(np.float32)
+        ctrl_log = _normalize_log1p_matrix(ctrl_data, target_sum=target_sum)
+        adata.layers["ctrl_norm"] = ctrl_log
 
     # Step 4: Optional HVG selection
     if n_hvg is not None and n_hvg < adata.n_vars:
