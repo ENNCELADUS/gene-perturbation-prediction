@@ -196,32 +196,48 @@ Total: **49 unique cell lines**
 
 ---
 
-## Drug-Based Condition Split Strategies
+## Drug-Based Condition Split Strategy
 
-Unlike the Norman dataset (gene knockouts), Tahoe uses:
-- **Condition = target_gene + drug**
-- Splitting by **drug** tests generalization to unseen drugs
+Unlike Norman (gene-visibility splits), Tahoe uses **drug-visibility** for generalization evaluation.
 
-### Strategy 1: Random Drug Holdout
-Split drugs randomly into train/val/test:
-- Train: 36 drugs (~1.6M cells)
-- Val: 5 drugs (~225k cells)
-- Test: 11 drugs (~496k cells)
+### Split Methodology
 
-### Strategy 2: Leave-One-Drug-Out
-Cross-validation with each drug as test fold:
-- 52 test folds
-- Each test: ~45k cells (avg)
+**Unit**: Condition (all cells of a condition stay together)
 
-### Strategy 3: Stratified by Drug Size
-Group drugs by cell count quartiles:
-- Small (<Q1): 1 drug
-- Medium (Q1-Q3): 35 drugs
-- Large (≥Q3): 16 drugs
+**Drug Selection**:
+1. Filter conditions with `< min_cells` (default: 5)
+2. Stratify drugs by cell count quartiles (Q1-Q4)
+3. Sample **unseen drugs** proportionally from each quartile (default: 20% ≈ 10 drugs)
+4. Split remaining **seen drugs** into train/val/test (default: 80/10/10)
 
-> [!TIP]
-> For **unseen drug generalization** evaluation, use Strategy 1 or 2.
-> For **balanced evaluation**, use Strategy 3 to ensure similar-sized drugs in each split.
+### Test Strata
+
+| Stratum | Description |
+|---------|-------------|
+| `drug_unseen` | Conditions with drugs never seen in training |
+| `drug_seen_holdout` | Conditions from seen drugs held out for testing |
+
+### Usage
+
+```python
+from src.data.tahoe import load_tahoe_data
+
+# Load preprocessed data with drug split
+dataset = load_tahoe_data(
+    "data/processed/tahoe/tahoe_log1p.h5ad",
+    unseen_drug_fraction=0.2,
+    train_ratio=0.8,
+    val_ratio=0.1,
+    seed=42,
+)
+
+# Access splits
+train_adata = dataset.train_adata
+test_strata = dataset.test_strata
+```
+
+> [!NOTE]
+> Preprocessing required: Run `python -m src.data.tahoe.preprocess_tahoe` to normalize raw counts.
 
 ---
 
@@ -234,11 +250,3 @@ Group drugs by cell count quartiles:
 | Split strategy | By seen/unseen genes | By seen/unseen drugs |
 | Double perturbation | Gene + Gene | N/A (single drug-gene pairs) |
 | Cell lines | Single | 49 cell lines |
-
----
-
-## var Columns
-
-| Column | Description |
-|--------|-------------|
-| `gene_idx` | Gene index |
