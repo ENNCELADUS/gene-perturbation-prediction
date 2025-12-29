@@ -56,3 +56,9 @@ echo "-> Normalizing and log1p preprocessing"
 python src/data/tahoe/preprocess_tahoe.py \
     --input "data/tahoe/tahoe.h5ad" \
     --output "data/processed/tahoe/tahoe_log1p.h5ad"
+
+echo "-> Creating drug-based train/val/test split"
+python src/data/tahoe/tahoe_dataset.py \
+    --input "data/processed/tahoe/tahoe_log1p.h5ad" \
+    --output "data/processed/tahoe/splits/tahoe_drug_split_seed42.json" \
+    --seed 42

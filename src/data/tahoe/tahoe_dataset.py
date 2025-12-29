@@ -6,8 +6,9 @@ Reference: docs/roadmap/10_tahoe_data_preprocessing.md
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 import anndata as ad
 import scanpy as sc
@@ -230,3 +231,83 @@ def load_tahoe_data(
         dataset.create_drug_split(**split_kwargs)
 
     return dataset
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Create Tahoe drug-based train/val/test split JSON.",
+    )
+    parser.add_argument(
+        "--input",
+        default="data/processed/tahoe/tahoe_log1p.h5ad",
+        help="Path to preprocessed Tahoe H5AD.",
+    )
+    parser.add_argument(
+        "--output",
+        default="data/processed/tahoe/splits/tahoe_drug_split_seed42.json",
+        help="Path to write split JSON.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for the split.",
+    )
+    parser.add_argument(
+        "--unseen-single-gene-fraction",
+        type=float,
+        default=0.25,
+        help="Fraction of single-target genes held out as unseen.",
+    )
+    parser.add_argument(
+        "--n-unseen-single-genes",
+        type=int,
+        default=None,
+        help="Optional explicit count of unseen single-target genes.",
+    )
+    parser.add_argument(
+        "--single-seen-val-ratio",
+        type=float,
+        default=0.1,
+        help="Validation ratio for seen single-target drugs.",
+    )
+    parser.add_argument(
+        "--multi-train-ratio",
+        type=float,
+        default=0.65,
+        help="Train ratio for seen multi-target drugs.",
+    )
+    parser.add_argument(
+        "--multi-val-ratio",
+        type=float,
+        default=0.1,
+        help="Validation ratio for seen multi-target drugs.",
+    )
+    parser.add_argument(
+        "--min-cells-per-condition",
+        type=int,
+        default=5,
+        help="Minimum cells required to keep a condition.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    dataset = TahoeDataset(args.input)
+    dataset.load()
+    dataset.create_drug_split(
+        unseen_single_gene_fraction=args.unseen_single_gene_fraction,
+        n_unseen_single_genes=args.n_unseen_single_genes,
+        single_seen_val_ratio=args.single_seen_val_ratio,
+        multi_train_ratio=args.multi_train_ratio,
+        multi_val_ratio=args.multi_val_ratio,
+        min_cells_per_condition=args.min_cells_per_condition,
+        seed=args.seed,
+        save_path=args.output,
+    )
+    print(dataset.summary())
+
+
+if __name__ == "__main__":
+    main()
