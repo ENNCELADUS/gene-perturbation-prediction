@@ -134,21 +134,21 @@ class TahoeDrugSplitter:
             condition_counts >= self.min_cells_per_condition
         ].index.tolist()
 
-        # Get unique condition-drug-target mapping
+        # Get unique condition-drug mapping (condition can be multi-gene per drug)
         cond_drug = (
-            obs_df[[condition_col, drug_col, target_gene_col]]
+            obs_df[[condition_col, drug_col]]
             .drop_duplicates()
-            .set_index(condition_col)[[drug_col, target_gene_col]]
+            .set_index(condition_col)[[drug_col]]
         )
         cond_drug = cond_drug.loc[cond_drug.index.isin(valid_conditions)]
 
         filtered_obs = obs_df[obs_df[condition_col].isin(valid_conditions)]
 
         # Step 2: Build drug -> target genes mapping (from obs)
-        drug_targets = (
-            filtered_obs.groupby(drug_col)[target_gene_col]
-            .unique()
-            .apply(lambda genes: sorted(genes.tolist()))
+        drug_targets = filtered_obs.groupby(drug_col)[target_gene_col].apply(
+            lambda genes: sorted(
+                {g for combo in genes for g in self._parse_gene_combo(combo)}
+            )
         )
         single_target_drugs = [
             drug for drug, targets in drug_targets.items() if len(targets) == 1
@@ -165,10 +165,12 @@ class TahoeDrugSplitter:
         if not single_target_genes:
             raise ValueError("No single-target genes found for Tahoe split logic.")
 
+        single_obs = filtered_obs[filtered_obs[drug_col].isin(single_target_drugs)]
         gene_sizes = (
-            filtered_obs[filtered_obs[drug_col].isin(single_target_drugs)]
-            .groupby(target_gene_col)
-            .size()
+            single_obs[target_gene_col]
+            .apply(self._parse_gene_combo)
+            .explode()
+            .value_counts()
         )
         n_unseen = self._resolve_unseen_gene_count(
             len(single_target_genes),
@@ -319,6 +321,18 @@ class TahoeDrugSplitter:
         """Check if any target is in unseen genes."""
         unseen_set = set(unseen_genes)
         return any(t in unseen_set for t in targets)
+
+    @staticmethod
+    def _parse_gene_combo(combo: str) -> List[str]:
+        """Parse a target gene string into a sorted list of genes."""
+        if combo is None:
+            return []
+        genes = [
+            g.strip()
+            for g in str(combo).split("+")
+            if g.strip() and g.strip() != "ctrl"
+        ]
+        return sorted(set(genes))
 
     def _stratified_multi_split(
         self,

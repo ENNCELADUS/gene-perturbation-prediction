@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 import scanpy as sc
 from scipy.sparse import issparse, spmatrix
 
@@ -39,6 +40,37 @@ def _normalize_log1p_matrix(
     return dense
 
 
+def _normalize_gene_combo(value: str) -> str:
+    """Normalize gene combo strings (e.g., 'B+A' -> 'A+B')."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return text
+    if text == "ctrl":
+        return "ctrl"
+    genes = [g.strip() for g in text.split("+") if g.strip() and g.strip() != "ctrl"]
+    if not genes:
+        return "ctrl"
+    genes = sorted(genes)
+    if len(genes) == 1:
+        return genes[0]
+    return "+".join(genes)
+
+
+def _normalize_condition_series(series: pd.Series) -> pd.Series:
+    """Normalize condition-like series to canonical gene order."""
+    normalized = series.astype(str).map(_normalize_gene_combo)
+    return normalized.astype("category")
+
+
+def _split_genes(condition: str) -> list[str]:
+    normalized = _normalize_gene_combo(condition)
+    if normalized in {"", "ctrl"}:
+        return []
+    return [g for g in normalized.split("+") if g]
+
+
 def preprocess_tahoe(
     input_path: str | Path,
     output_path: str | Path,
@@ -51,11 +83,12 @@ def preprocess_tahoe(
 
     Steps:
         1. Load H5AD in backed mode
-        2. Preserve raw counts in layers["counts"]
-        3. Normalize + log1p on X
-        4. Normalize ctrl layer → layers["ctrl_norm"]
-        5. Optional HVG selection
-        6. Write output
+        2. Normalize obs["condition"] by drug target genes
+        3. Preserve raw counts in layers["counts"]
+        4. Normalize + log1p on X
+        5. Normalize ctrl layer → layers["ctrl_norm"]
+        6. Optional HVG selection
+        7. Write output
 
     Args:
         input_path: Path to raw Tahoe H5AD
@@ -75,6 +108,35 @@ def preprocess_tahoe(
     # Load into memory for processing
     print("Loading data into memory...")
     adata = adata.to_memory()
+
+    # Normalize condition strings to canonical gene order and merge by drug targets
+    if "drug" in adata.obs and "target_gene" in adata.obs:
+        print("Normalizing obs['condition'] based on drug target genes...")
+        adata.obs["target_gene"] = _normalize_condition_series(adata.obs["target_gene"])
+
+        drug_targets = (
+            adata.obs[["drug", "target_gene"]]
+            .dropna()
+            .groupby("drug")["target_gene"]
+            .apply(lambda values: sorted({g for v in values for g in _split_genes(v)}))
+        )
+        drug_conditions = {
+            drug: "+".join(genes) if genes else "ctrl"
+            for drug, genes in drug_targets.items()
+        }
+        adata.obs["condition"] = adata.obs["drug"].map(drug_conditions)
+        adata.obs["condition"] = adata.obs["condition"].astype("category")
+
+        if "condition_name" in adata.obs and "cell_line_id" in adata.obs:
+            adata.obs["condition_name"] = (
+                adata.obs["cell_line_id"].astype(str)
+                + "_"
+                + adata.obs["condition"].astype(str)
+            )
+            adata.obs["condition_name"] = adata.obs["condition_name"].astype("category")
+    elif "condition" in adata.obs:
+        print("Normalizing obs['condition']...")
+        adata.obs["condition"] = _normalize_condition_series(adata.obs["condition"])
 
     # Step 1: Preserve raw counts
     print("Preserving raw counts in layers['counts']...")
