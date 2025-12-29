@@ -1,18 +1,23 @@
-以“**in silico reverse perturbation prediction（检索/反推扰动基因）**”为起点、且能自然延展到“**靶点发现**”的一套研究 roadmap。先找一个**应用场景**与**容易验证的目标**，用**可靠数据**讲一个**闭环故事**，而不是在小 benchmark 上刷分。
-
----
+以“**in silico reverse perturbation prediction（检索/反推扰动基因）**”为起点、且能自然延展到“**靶点发现**”的一套研究 roadmap。核心原则仍然是：先找一个应用场景与容易验证的目标，用可靠数据讲一个闭环故事，而不是在小 benchmark 上刷分。
 
 ## 闭环生物故事主线
 
-“给定一个异常细胞状态（例如炎症过强/疾病样表达谱），模型输出一个**可实验验证的候选基因干预列表（Top-K）**；用 Perturb-seq 的**真实扰动标签**与独立的已审阅证据（例如已验证调控因子列表）验证命中率与机制一致性，从而把评估对齐到‘靶点发现’而非重建误差。”这正对应你们 deep research 报告提出的闭环方向：用逆向任务直接对齐治疗靶点发现，并强调评估应以“检索到真实因子/已验证靶点”等为成功标准，而非仅低 MSE。
+你们的故事主线可以明确写成：我们把“reverse perturbation”从一个 abstract 的检索任务，落到一个真实的药物研发 workflow 里，也就是 phenotypic screening → target deconvolution。
 
-在 scGPT 原文里，这条叙事被明确写出：reverse prediction 可以“促进潜在治疗基因靶点的发现”，并举了“预测能让细胞从疾病状态恢复的 CRISPR 靶基因”的假想应用。
+具体叙事是这样的：给定一个观察到的细胞状态变化（transcriptomic phenotype / expression signature），模型输出 Top-K 候选“干预因子”（gene target）。在 CRISPR Perturb-seq（Norman）里，这个因子等价于真实扰动基因（ground-truth label 来自实验元数据）；在 drug perturbation（Tahoe）里，这个因子等价于药物的 target_gene（ground-truth label 来自 drug metadata）。于是同一个 reverse task，可以在两类数据上形成闭环：前者验证“能否从表达反推致因基因”，后者验证“能否从药物引起的 phenotype 反推药物靶点”，从而把研究的实际价值讲清楚：它不是为了重建表达，而是为了 target discovery / mechanism hypothesis generation。
+
+我们在 Norman（Perturb-seq）上验证 reverse perturbation prediction 能从 expression phenotype 中 recover perturbation genes，证明模型学到的是 perturbation fingerprint 而不是 reconstruction trick；随后在 Tahoe 的 single-target drug subset 上，把同一 reverse task 迁移到药物场景，直接以 drug metadata 的 target_gene 作为 ground truth，评估模型是否能从 drug-induced transcriptomic phenotype 中反推出真实靶点（hit@K / MRR / NDCG）。这一步把研究从“方法学检索任务”闭环到“药物靶点发现”的实际应用：它对应 phenotypic screening 后的 target deconvolution，并为未知靶点化合物或传统药物提供可计算的 Top-K 机制假设与后续验证路径。
 
 ---
 
-## Roadmap
+## Roadmap（更新版）
 
-### 阶段 0：Story and Eval metrics
+### 阶段 0：Story、Problem Formulation 与 Eval Protocol（1–2 天）
+
+这一阶段的更新重点是把“同一套 reverse formulation”在基因扰动与药物扰动之间统一起来，并且把反作弊协议写成可复用模板。
+
+正向问题仍然是 VCC 的 forward transition：给定基线状态与已知扰动，预测扰动后状态。反向问题是：给定“前后状态对”去反推扰动 identity，本质上是一个 in silico causal identification / retrieval problem。
+
 #### Problem formulation
 
 1. **正向问题**
@@ -60,227 +65,66 @@ $$
      - 路线 A 的依据是“通过 $f$ 预测出来的结果与目标的匹配程度”。
      - 路线 B 的依据是“从数据中学到的状态 $\to$ 干预映射”，它隐式吸收了 $f$ 与 $d$ 的作用。
 
-4. 明确两层任务定义 
-    第一层（核心 MVP）：Reverse Genetic Perturbation Identification（反推致因基因）。deep research 报告把它定义得非常清楚：输入是单细胞或平均后的表达向量，输出是候选扰动基因的**排序列表**，标签来自实验元数据，评价看 Top-K 命中/排序指标。  
-    第二层（靶点发现语义化）：把“异常状态”解释为“疾病样/功能异常状态”，将 Top-K 解释为“候选驱动基因/干预靶点”。
-    
-5. 定义主指标与次指标  
-    主指标建议直接采用检索式指标：Top-1/Top-5、MRR、NDCG（报告里也建议 reverse ID 用 MRR，整体用 NDCG/mAP）。  
-    次指标（生物意义体现）：错误是否“生物学上合理”（例如混淆的基因是否共享 GO/通路），这也是报告强调的“生物一致性”评估。
-    
-6. 规定必须做的反作弊协议  
-    报告明确提醒 reverse ID 存在“直接看被敲基因自身表达”为零的作弊路径，并给出协议：在输入中**mask 被扰动基因的表达**，迫使模型学习下游效应。  
-    再加上“按扰动 ID 进行 hold-out split”的泛化评估（训练见过 80 个基因，测试完全没见过的 20 个基因），避免记忆签名。
-    
+在 Norman（基因扰动）里，你们的核心 MVP 是 Reverse Genetic Perturbation Identification：输入是 perturbed expression（可选带 control baseline），输出是 perturbation gene（或 condition）的 Top-K 排序，标签来自 Perturb-seq 元数据，评价用 hit@K / MRR / NDCG 等排序指标。
 
-交付物：一页“评价卡模板”（指标、split、反作弊、基线清单），以及最终选用数据集的决定标准（规模、标签、可获取性）。
+在 Tahoe（药物扰动）里，完全对应的定义是 Reverse Drug Target Identification：输入是 drug-treated vs DMSO control 的 paired profile（或者 delta signature），输出是 target_gene 的 Top-K 排序，标签来自 drug metadata，并且因为你们只选 single-target subset，所以监督空间是 clean 的 single-gene label space，验证也直接。
+
+反作弊协议需要在两条数据线上各写一条“对应版本”。在 Norman 里，报告里强调的作弊路径是“直接看被敲基因自身表达接近 0”，所以必须做 mask perturbed gene expression 的 ablation。 在 Tahoe 里不存在“敲到 0”的同构作弊，但仍然可能出现“target gene expression 本身极端变化导致 shortcut”的弱作弊，因此你们可以把同样的 masking 作为 robustness check（mask target_gene 的表达维度，再看 hit@K 是否仍然显著高于 baseline），以证明模型在学习下游 network effect，而不只是抓住一个单点信号。
+
+交付物建议更新为两份卡片：一份 Norman Reverse-ID Eval Card（condition split、strata、mask 策略、指标、基线）；一份 Tahoe Target-ID Eval Card（data selection、ctrl pairing、overlap_ratio、label space、指标、基线）。
 
 ---
 
-### 阶段 1：复现 scGPT 的“逆向检索”设定（MVP 复现，2–4 天）
+### 阶段 1：Norman 上复现 “reverse retrieval” 的 MVP（2–4 天）
 
-任务目标：严格复现 scGPT 在 Norman 子集上的“Top-K retrieval”框架，作为你们后续所有故事的技术锚点。
+这一阶段从“玩具 20-gene 子集复现”升级为“可落地的 Norman full split 复现”，并且明确你们会同时支持 scGPT-style route 与 compositional route。
 
-scGPT 在论文中把 reverse perturbation prediction 明确定义为检索任务：用所有候选扰动条件的“参考库”与测试的“query（真实扰动后细胞）”做相似度检索，目标是检索到能产生该结果的扰动条件。  
-其具体实验设定也给出了可操作细节：从 Norman 选 20 个基因构成 210 个组合，训练 39 个组合，其余为未见组合；并用多 control cell 生成参考库。
+数据切分采用你们已经定稿的 condition-level split（split unit 是 condition，不是 cell），并且包含 GEARS 语义的 seen/unseen 分层：single_unseen、combo_seen2、combo_seen1、combo_seen0，这个分层将直接成为你们后续泛化叙事的 backbone。
 
-可用数据资源（首选）  
-Norman et al. 2019（K562，CRISPRa，单基因+双基因，约 25k cells，标签清晰），报告的数据表也把它列为“最适合显式标签逆向任务”的数据之一。  
-scGPT 也在文中说明 Norman 有大量单/双基因扰动并用于多种扰动评估。
+技术上，阶段 1 的目标不是做复杂建模，而是把“reverse retrieval 的端到端链路”跑通，并拿到一个可信的、可复现的表格结果：raw/PCA 最近邻、logistic regression、以及 scGPT（frozen encoder + light head 或 forward-finetune + retrieval）在同一 split 与同一指标上的对比。你们在 08_scGPT_route 里已经把 Route A（Forward + Retrieval）与 Route B1（Gene-level scoring + compositional ranking）定义得足够工程化，阶段 1 只需要做最小实现并验证 metric pipeline 正确。
 
-你们要做的不是“重新造模型”，而是“按论文做下游应用复现”：
-
-1. 基线 1：差异基因（naive baseline）/最近邻检索（raw 或 PCA）
-2. 基线 2：线性分类器（logistic regression）
-3. scGPT：冻结或轻量微调（只训检索头/LoRA）（deep research 报告也明确建议用 scGPT 作为 pretrained encoder + 轻量头）。
-
-交付物：复现图表与表格（Top-K 命中、MRR、混淆矩阵），以及“mask perturbed gene”后的对照结果，证明不是靠作弊信号。  
-备注：scGPT 原文还给出其在该任务上“Top-1 relevant、Top-8 correct”等结果与实验意义（减少随机试错次数，辅助规划实验），你们可以把这段作为报告动机。
+交付物仍然是：hit@K、MRR、NDCG（以及 exact vs one-gene-overlap 的 relevant hit），并且必须包含 “mask perturbed gene” 的结果作为 sanity check。
 
 ---
 
-### 阶段 2：从“复现”升级为“可推广的检索系统”（1–2 周）
+### 阶段 2：把 Norman 的 MVP 升级为“可推广的检索系统”（1–2 周）
 
-任务目标：把“20 基因玩具子集”扩展到更现实的规模，并把“检索=靶点发现”说清楚。
+这一阶段的更新重点是把“系统性”写清楚：同一套 split、同一套 evaluator、同一套 anti-leak 协议，支持两条路线并进行可解释 error analysis。
 
-1. 扩展数据规模的两条路径  
-    路径 A（更稳）：Norman 全集（单基因为主，双基因作为加分），保持噪声可控与故事连贯。  
-    路径 B（更像真实筛选）：Replogle 2022（K562/RPE-1，基因 KO/CRISPRi，报告表格给出百万级规模与显式扰动基因标签），但工程更重，适合你们 4×A40 的资源。
-    
-2. 伪 bulk 策略（强烈建议作为主版本）  
-    你已确认可以先做 pseudo-bulk，这会显著降低单细胞噪声，并让检索更像真实药物筛选的“signature matching”。deep research 报告也明确 reverse ID 输入可以是单细胞或“平均的 many cells”。
-    
-3. 研究点放在“泛化与可靠性”，而不是结构创新  
-    你们的主研究问题可以写成：  
-    “在**hold-out 未见扰动基因**与**跨批次**场景下，scGPT embedding 是否比 raw 表达/PCA 更能保留‘扰动的因果指纹’？”这与报告强调的 realistic split 完全一致。
-    
+第一，固定 condition split 与 strata reporting。你们已经有具体可复现的 split artifact（含条件数、细胞数、以及 test strata 分解），阶段 2 的产出要在 paper-style 图表里稳定呈现：overall 与分层（single_unseen / combo_seen0/1/2）都要报。
 
-交付物：一个“检索系统卡”（数据、split、指标、基线、消融、错误分析），以及一个“泛化曲线”（seen→unseen 的性能落差与解释）。
+第二，Route A 与 Route B1 的对照要被写成“同任务、不同 inference mechanism”的比较，而不是“两个模型谁分数高”。Route A 强调 forward generator 的覆盖与 retrieval over hypotheses；Route B1 强调 compositional generalization（对 unseen combos 的自然支持）。这套 framing 你们的 08_scGPT_route 已经写好，阶段 2 需要把它落成稳定的实验矩阵。
+
+第三，错误分析要从“数值误差”转为“生物一致性”。例如错误检索到的基因是否落在同一 pathway/GO term，是否共享上游 TF 或 signaling module。你们可以把这作为次指标，强化“不是刷 MSE，而是在做 mechanism-aware retrieval”。
+
+交付物是一个系统卡（data/split/metrics/baselines/ablations/error analysis）加一张 seen→unseen 的泛化曲线或分层柱状图。
 
 ---
 
-## Stage 1 requirements: scGPT-style reverse perturbation retrieval (MVP)
+### 阶段 3：用 Tahoe 把 reverse task 落到“药物靶点发现”的真实闭环（2–3 周，重点更新）
 
-### 1) Benchmark definition and reproducibility
+阶段 3 的核心目标是：在不改变你们研究的 “reverse perturbation prediction” 本质前提下，把它放进一个真实的 drug discovery 场景里，回答审稿人最关心的一句话：So what？它能做什么？
 
-You need a single, explicit benchmark specification that every model runs under:
-A condition vocabulary (how a perturbation condition is defined and named, including single vs pair).
-A fixed train/val/test split at the condition level (saved to disk and reused).
-A clear candidate set definition for retrieval (which conditions are in the search space for each evaluation).
+你们要讲的价值点可以明确写成三层。
 
-### 2) Leakage-safe data preparation
+第一层价值是场景对齐（phenotypic screening → target deconvolution）。药物研发里存在大量 phenotype-first 的筛选：先看到细胞状态被“改善/改变”，但不知道药物打到了哪里。你们的 reverse task 正是把“表达 signature（phenotype readout）”映射回“候选干预因子（target gene）”，这与 Norman 的“从 perturbation signature 反推扰动基因”在形式上同构，只是 label 从 perturbation gene 变成 drug target_gene。你们在前面讨论里提到的“从表型出发，再回推靶点，让传统药物/复杂药物更可解释”，在 Tahoe 上可以用一个非常干净、可量化的方式落地。
 
-A preprocessing policy that is fit only on train (and optionally val) and then applied to val/test:
-Normalization / gene selection / dimensionality reduction fitting must not touch test.
-A consistent “control signature” definition (how controls are pooled/handled).
-A consistent handling of low-count conditions (drop policy or minimum cells policy).
+第二层价值是可验证性（easy-to-verify objective）。Tahoe 的 data selection 已经为你们构造了一个“单靶点药物”的监督空间：只保留 single-target drug；把 Tahoe token_id 映射到 scGPT vocab gene id；为每个 treat 样本配对一个 DMSO control（按 cell_line_id 与 plate key，取第一条匹配 DMSO 以加速）；并用 overlap_ratio 做质量过滤，同时把 ctrl 表达对齐到 treat 的基因顺序（缺失补 0），保证输入是严格对齐的 paired profile。这样你们可以定义一个非常标准的 benchmark：输入 (treat, ctrl) 或 delta，输出 target_gene label，评价用 hit@K / MRR / NDCG，Top-10 里命中即是成功。它是“闭环”的，因为 ground truth 就在 metadata 里，不需要额外 wet lab。
 
-### 3) Reference library construction (candidates)
+第三层价值是方法可迁移（from labeled target to unlabeled mechanism）。一旦你们在 Tahoe 的 single-target subset 上证明：模型能从 drug-induced transcriptomic phenotype 里 recover 出正确 target（显著优于 PCA/nearest neighbor/linear classifier baseline，并且在 mask target gene 的鲁棒性测试下仍成立），你们就有非常自然的外延：对没有明确靶点的化合物、对 multi-target drug、对传统药物提取物，模型可以输出 Top-K targets 作为 hypothesis list，再结合结构侧的 docking/binding prediction 或 pathway enrichment 做 computational validation。这正对应你们前面讨论稿里强调的“phenotypic screening + computational validation”的闭环出口。
 
-A standardized way to build the retrieval library, with at least one stable default:
-Per-condition prototypes (mean or bootstrap pseudo-bulk).
-Optional variants: raw-cell library vs mean library vs multi-prototype library.
-Library built from reference cells only (not query cells).
+在实现层面，阶段 3 建议你们把“Tahoe 任务”写成对阶段 1/2 evaluator 的最小改动复用，而不是另起炉灶。
 
-### 4) Anti-cheat evaluation toggle
+输入形式建议有两个等价版本，作为 ablation。
 
-A mandatory masking switch that zeroes perturbed gene(s) in both reference and query signatures before embedding.
-The benchmark must report results with masking ON and OFF.
+版本 A：paired profile 直接输入，即把 (ctrl aligned to treat genes, treat) 作为模型输入（或者拼接、或者差分再拼接），输出 target_gene 的 Top-K 排名。
 
-### 5) Model interface standardization
+版本 B：signature matching 风格，输入 delta signature（treat - ctrl），更贴近 CMAP-like 的传统表达签名检索叙事，同时也更容易解释“模型是在用 phenotype signature 推断 target”。
 
-All models must implement the same functional contract:
-Given signatures, produce embeddings or scores over candidate conditions.
-If trainable, support a training step using train split and a selection step using val split.
-Produce top-K retrieval outputs in a common format for metrics.
+模型路线方面，你们可以直接复用阶段 2 的 Route B1 思想：输出 gene-level scores（这里的 label space 就是 target_gene），然后把 Top-K gene scores 作为候选靶点列表；如果你们希望和 “retrieval” 叙事更一致，也可以把每个 target_gene 的 reference signature（按药物或按样本聚合）建成一个库，对 query drug profile 做检索，最终返回 target_gene。两者都能与阶段 0 的 reverse formulation一致，只是 scoring function 不同。
 
-### 6) Baselines and model roster (minimum set)
+最关键的交付物应当是一个“应用闭环图”加一组核心实验表格。
 
-At least these three must be runnable under the same harness:
-Raw/PCA embedding + nearest-neighbor retrieval baseline.
-A discriminative baseline (e.g., logistic regression classifier treated as top-K retrieval).
-scGPT encoder retrieval (frozen at minimum; light fine-tune optional).
+闭环图建议包含四个模块：drug-treated transcriptomic phenotype（输入）→ reverse model outputs Top-K target genes（机制假设）→ 与 metadata 中已知 target 的 hit@K 验证（闭环）→ 对 unknown/complex compounds 的 extension（应用前景）。
 
-### 7) Unified evaluation and reporting
-
-A single evaluation pipeline that outputs:
-Top-K exact match, top-K “relevant” match (gene overlap), MRR, NDCG.
-Per-condition (macro) and per-cell (micro) summaries.
-A single consolidated comparison table across models, plus key plots.
-
----
-
-## Stage 2 requirements: scalable, generalizable retrieval system
-
-### 1) Expanded benchmark tracks (generalization regimes)
-
-Define multiple evaluation tracks beyond the toy subset:
-In-distribution condition holdout (seen genes, held-out conditions).
-Unseen-combination generalization (held-out gene pairs, singles seen).
-Unseen-gene generalization (held-out genes and all conditions containing them).
-
-Each track must have a saved split spec and be runnable with the same evaluation code.
-
-### 2) Pseudo-bulk as a first-class representation
-
-Make pseudo-bulk/prototypes the default signature representation (not an ad-hoc option):
-Configurable number of cells per pseudo-bulk and number of prototypes per condition.
-Report performance vs pseudo-bulk size (stability/data-efficiency curve).
-
-### 3) Candidate-library realism
-
-Support candidate sets that match “target discovery” use:
-At minimum: retrieve among a large candidate set including many conditions, not only those seen in training.
-Optionally: include predicted candidate signatures if you introduce a forward predictor; but the benchmark must clearly label whether candidates are observed vs predicted.
-
-### 4) Reliability and confidence reporting
-
-Add system-level reliability measures, not only accuracy:
-A confidence score per query (margin, entropy, agreement across prototypes, etc.).
-Coverage vs accuracy curves (selective retrieval performance).
-
-### 5) Error analysis outputs with biological interpretability
-
-Automated diagnostics for failures:
-Which conditions are most frequently confused with which others.
-Simple signature-level explanations (e.g., overlap of top DE genes between query and retrieved condition).
-Optional pathway-level summaries if you want a stronger biology narrative.
-
-### 6) Experiment management for model comparisons
-
-A consistent run management standard so you can compare models across tracks:
-Common config schema, saved artifacts, and a single aggregation report that builds “leaderboard-style” tables across models, splits, and seeds.
-
----
-
-## Minimal “Definition of Done” per stage
-
-Stage 1 is done when: the same split can run multiple models end-to-end and produces a single comparison table with masking ablation.
-Stage 2 is done when: you can run multiple generalization tracks, pseudo-bulk stability curves, and confidence-aware evaluation under the same framework, and summarize the generalization gap in a model-comparison report.
-
----
-
-### 阶段 3：把检索任务真正落到“靶点发现”应用闭环（2–3 周）
-
-任务目标：不改变你们的核心技术（仍是检索/反推），但把 query 从“随机扰动后状态”替换为“疾病样/功能异常状态”，让输出 Top-K 真正对应“潜在治疗靶点”。
-
-这里直接采用 scGPT 文中的假想应用：预测“能让细胞从疾病状态恢复的 CRISPR 靶基因”。  
-实现上你们不需要真的有“疾病患者+对应 perturb-seq”的完美闭环，只需要一个有**已验证调控因子列表**的“疾病样刺激模型”，作为 ground truth。
-
-可用数据资源（优先推荐）  
-Yao et al. 2024（LPS 免疫刺激 + CRISPR KO 调控因子）：报告表格说明它提供“被验证的 LPS 反应调控因子列表（KO 会削弱炎症）”以及显式扰动基因标签，这正好把“Top-K 候选”变成“已验证的靶点集合命中率”问题。
-
-如何把它写成闭环故事（CS 友好、可验证）
-
-1. 定义异常状态：LPS 刺激下“过强炎症转录程序”的表达 profile。
-    
-2. 目标：找出“哪些基因 KO 会把该异常程序拉回去”（候选靶点）。
-    
-3. 方法：用你们在阶段 2 建好的检索器，把“异常状态”作为 query，在扰动 signature 库中检索最能匹配“恢复/抑制炎症”方向的扰动（具体可用负相关的 signature 相似度或“接近健康”距离）。
-    
-4. 验证：Top-K 是否显著富集在 Yao 提供的“validated regulators”列表中（这就是明确标签）。
-    
-
-交付物：一张闭环图（异常状态→候选靶点→验证命中→机制解释），一张 Top-K 富集/PR-AUC 图，以及 2–3 个高质量 case study（例如你们 top-10 中哪些基因在免疫通路上聚类）。
-
----
-
-### 阶段 4：机制解释层（不改模型主干，用“解释+外部证据”增强生物意义，1–2 周）
-
-任务目标：回应“CS 学生不懂生物故事”的最大痛点：让结果不仅是一个列表，而是一个“为什么可信”的链条。
-
-你们 deep research 报告明确提出闭环评估应落在“检索到已知 disease genes / validated regulatory targets / true drug–target”而非低 MSE，并建议利用 ENCODE/ChIP 证据等外部 ground truth。  
-最稳妥的机制增强方式是两步：
-
-1. 通路/基因集层面的解释  
-    对 Top-K 候选做 pathway enrichment（GSEA/hypergeometric），报告也把它列为关键的“生物一致性”指标之一。
-    
-2. 调控靶基因层面的验证（可选加分）  
-    如果你们选到的候选里包含 TF/调控因子，可以进一步用 TF target gene set（ENCODE/ChEA/MSigDB TFT 等）验证“预测到的下游效应是否合理”，报告给了这种验证思路（检查 Gene B 是否在 A 的 ChIP target 集合中）。
-    
-
-交付物：一页“机制证据卡”（Top pathways、关键下游基因、外部证据来源与命中统计），把“输出=靶点发现”讲成可审阅的科学论证。
-
----
-
-## 资源与算力如何匹配你们的约束（最多 4×A40，3 天训练）
-
-你们的定位是“下游应用与小改”，因此训练预算主要花在阶段 1–2 的 scGPT 轻量适配上。deep research 报告已经把“用 scGPT 作为 pretrained encoder、加轻量头/LoRA，在 3 天单 GPU 预算内完成”作为可行策略；你们有 4×A40，只会更稳。
-
-同时，报告也提醒必须纳入线性/最近邻等强基线，因为已有研究显示复杂模型在某些扰动预测设置下未必优于简单方法；你们的贡献点应落在“任务定义 + 评估协议 + 生物闭环”。
-
----
-
-## 你们最终报告的结构建议（与老师“讲故事”对齐）
-
-1. 问题与动机：为什么 VCC 式指标不等价于靶点发现；为什么逆向任务更贴近应用（引用闭环定义）。
-    
-2. 方法：reverse perturbation 作为 Top-K retrieval（引用 scGPT 的任务设定）。
-    
-3. 实验 1（MVP）：Norman 子集复现与反作弊验证。
-    
-4. 实验 2（泛化）：hold-out genes + pseudo-bulk + 多基线对照。
-    
-5. 实验 3（靶点发现闭环）：Yao LPS 场景，命中 validated regulators + pathway 解释。
-    
-6. 讨论：你们的系统如何用于“规划扰动实验、减少试错次数”（scGPT 也强调这一点）。
+核心表格至少包含：PCA/NN baseline、logistic regression baseline、scGPT encoder + head（或其他 backbone）在同一 Tahoe 数据处理流程下的 hit@1/5/10、MRR、NDCG，并且附带 overlap_ratio 阈值与 ctrl pairing 策略的敏感性分析（例如 first-DMSO vs multi-DMSO aggregation，overlap_ratio=0.05 vs 更严格阈值）。这些细节在 dataset selection 文档里已经明确是关键变量，阶段 3 要把它变成你们 story 的可信度来源，而不是工程噪声。
