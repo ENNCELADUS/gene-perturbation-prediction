@@ -58,7 +58,7 @@ python src/data/tahoe/preprocess_tahoe.py \
     --output "data/processed/tahoe/tahoe_log1p.h5ad"
 
 echo "-> Creating drug-based train/val/test split"
-python src/data/tahoe/tahoe_dataset.py \
+python -m src.data.tahoe.tahoe_dataset \
     --input "data/processed/tahoe/tahoe_log1p.h5ad" \
     --output "data/processed/tahoe/splits/tahoe_drug_split_seed42.json" \
     --seed 42
