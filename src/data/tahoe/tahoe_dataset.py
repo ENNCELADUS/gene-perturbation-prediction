@@ -7,6 +7,7 @@ Reference: docs/roadmap/10_tahoe_data_preprocessing.md
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -14,7 +15,16 @@ import anndata as ad
 import scanpy as sc
 import pandas as pd
 
-from .drug_condition_splits import TahoeConditionSplit, TahoeDrugSplitter
+try:
+    from .drug_condition_splits import TahoeConditionSplit, TahoeDrugSplitter
+except ImportError:  # Allow running as a script.
+    from pathlib import Path as _Path
+
+    sys.path.append(str(_Path(__file__).resolve().parents[2]))
+    from data.tahoe.drug_condition_splits import (  # type: ignore[no-redef]
+        TahoeConditionSplit,
+        TahoeDrugSplitter,
+    )
 
 
 class TahoeDataset:
