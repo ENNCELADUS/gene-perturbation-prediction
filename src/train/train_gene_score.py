@@ -129,6 +129,7 @@ def train_epoch(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler._LRScheduler,
+    scaler: torch.cuda.amp.GradScaler | None = None,
     device: str,
     sampler: DistributedSampler | None = None,
     max_steps: int | None = None,
@@ -136,6 +137,7 @@ def train_epoch(
 ) -> Dict[str, float]:
     model.train()
     loss_fn = torch.nn.BCEWithLogitsLoss()
+    use_amp = scaler is not None and scaler.is_enabled()
 
     total_loss = 0.0
     num_batches = 0
@@ -153,13 +155,21 @@ def train_epoch(
         padding_mask = batch["padding_mask"].to(device)
         targets = batch["targets"].to(device)
 
-        logits = model(genes, values, padding_mask)
-        loss = loss_fn(logits, targets)
+        with torch.cuda.amp.autocast(enabled=use_amp):
+            logits = model(genes, values, padding_mask)
+            loss = loss_fn(logits, targets)
 
         optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+        if scaler is None:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+        else:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            scaler.step(optimizer)
+            scaler.update()
         scheduler.step()
 
         total_loss += loss.item()
@@ -180,6 +190,7 @@ def validate(
     model: torch.nn.Module,
     dataloader: DataLoader,
     device: str,
+    use_amp: bool = False,
 ) -> Dict[str, float]:
     model.eval()
     loss_fn = torch.nn.BCEWithLogitsLoss()
@@ -194,8 +205,9 @@ def validate(
             padding_mask = batch["padding_mask"].to(device)
             targets = batch["targets"].to(device)
 
-            logits = model(genes, values, padding_mask)
-            loss = loss_fn(logits, targets)
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                logits = model(genes, values, padding_mask)
+                loss = loss_fn(logits, targets)
 
             total_loss += loss.item()
             num_batches += 1
@@ -365,6 +377,7 @@ def main():
     scheduler = build_scheduler(
         optimizer, total_steps, config["training"].get("warmup_ratio", 0.0)
     )
+    scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
 
     if ddp["enabled"]:
         model = DDP(
@@ -380,6 +393,7 @@ def main():
             train_loader,
             optimizer,
             scheduler,
+            scaler,
             device,
             sampler=train_sampler,
             max_steps=args.max_steps,
@@ -387,7 +401,9 @@ def main():
         )
         val_metrics = {"val_loss": float("inf")}
         if is_main:
-            val_metrics = validate(model, val_loader, device)
+            val_metrics = validate(
+                model, val_loader, device, use_amp=scaler.is_enabled()
+            )
 
         if is_main:
             print(f"  Train Loss: {train_metrics['train_loss']:.4f}")
