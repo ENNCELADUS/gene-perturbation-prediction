@@ -61,4 +61,8 @@ echo "-> Creating drug-based train/val/test split"
 python -m src.data.tahoe.tahoe_dataset \
     --input "data/processed/tahoe/tahoe_log1p.h5ad" \
     --output "data/processed/tahoe/splits/tahoe_drug_split_seed42.json" \
-    --seed 42
+    --seed 42 \
+    --unseen-single-gene-fraction 0.15 \
+    --single-seen-val-ratio 0.15 \
+    --multi-train-ratio 0.75 \
+    --multi-val-ratio 0.15

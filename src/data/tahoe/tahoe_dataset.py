@@ -266,7 +266,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--unseen-single-gene-fraction",
         type=float,
-        default=0.25,
+        default=0.15,
         help="Fraction of single-target genes held out as unseen.",
     )
     parser.add_argument(
@@ -278,19 +278,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--single-seen-val-ratio",
         type=float,
-        default=0.1,
+        default=0.15,
         help="Validation ratio for seen single-target drugs.",
     )
     parser.add_argument(
         "--multi-train-ratio",
         type=float,
-        default=0.65,
+        default=0.75,
         help="Train ratio for seen multi-target drugs.",
     )
     parser.add_argument(
         "--multi-val-ratio",
         type=float,
-        default=0.1,
+        default=0.15,
         help="Validation ratio for seen multi-target drugs.",
     )
     parser.add_argument(
