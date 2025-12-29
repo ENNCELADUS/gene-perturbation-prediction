@@ -20,8 +20,8 @@ try:
 except ImportError:  # Allow running as a script.
     from pathlib import Path as _Path
 
-    sys.path.append(str(_Path(__file__).resolve().parents[2]))
-    from data.tahoe.drug_condition_splits import (  # type: ignore[no-redef]
+    sys.path.append(str(_Path(__file__).resolve().parents[3]))
+    from src.data.tahoe.drug_condition_splits import (  # type: ignore[no-redef]
         TahoeConditionSplit,
         TahoeDrugSplitter,
     )
