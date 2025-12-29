@@ -168,6 +168,7 @@ class TahoeDrugSplitter:
         single_obs = filtered_obs[filtered_obs[drug_col].isin(single_target_drugs)]
         gene_sizes = (
             single_obs[target_gene_col]
+            .astype(str)
             .apply(self._parse_gene_combo)
             .explode()
             .value_counts()
