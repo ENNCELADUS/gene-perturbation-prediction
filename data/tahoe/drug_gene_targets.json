@@ -1,0 +1,380 @@
+{
+  "(R)-Verapamil (hydrochloride)": {
+    "count": 1,
+    "target_genes": [
+      "ABCB1"
+    ]
+  },
+  "Adagrasib": {
+    "count": 1,
+    "target_genes": [
+      "KRAS"
+    ]
+  },
+  "Adenosine": {
+    "count": 4,
+    "target_genes": [
+      "ADORA1",
+      "ADORA2A",
+      "ADORA2B",
+      "ADORA3"
+    ]
+  },
+  "Aliskiren": {
+    "count": 1,
+    "target_genes": [
+      "REN"
+    ]
+  },
+  "Almonertinib (hydrochloride)": {
+    "count": 1,
+    "target_genes": [
+      "EGFR"
+    ]
+  },
+  "Amsacrine": {
+    "count": 1,
+    "target_genes": [
+      "TOP2A"
+    ]
+  },
+  "Balsalazide (sodium hydrate)": {
+    "count": 2,
+    "target_genes": [
+      "IL6",
+      "STAT3"
+    ]
+  },
+  "Berbamine": {
+    "count": 1,
+    "target_genes": [
+      "CACNA1C"
+    ]
+  },
+  "Cepharanthine": {
+    "count": 3,
+    "target_genes": [
+      "CYP2C9",
+      "CYP2E1",
+      "CYP3A4"
+    ]
+  },
+  "Clonidine (hydrochloride)": {
+    "count": 3,
+    "target_genes": [
+      "ADRA2A",
+      "ADRA2B",
+      "ADRA2C"
+    ]
+  },
+  "Clotrimazole": {
+    "count": 2,
+    "target_genes": [
+      "CYP2A6",
+      "CYP51A1"
+    ]
+  },
+  "Docetaxel": {
+    "count": 6,
+    "target_genes": [
+      "TUBB1",
+      "TUBB2A",
+      "TUBB2B",
+      "TUBB3",
+      "TUBB4A",
+      "TUBB4B"
+    ]
+  },
+  "Elagolix sodium": {
+    "count": 1,
+    "target_genes": [
+      "GNRHR"
+    ]
+  },
+  "Fluvoxamine (maleate)": {
+    "count": 1,
+    "target_genes": [
+      "SLC6A4"
+    ]
+  },
+  "Furosemide": {
+    "count": 2,
+    "target_genes": [
+      "SLC12A1",
+      "SLC12A2"
+    ]
+  },
+  "Gemfibrozil": {
+    "count": 5,
+    "target_genes": [
+      "CYP1A2",
+      "CYP2C19",
+      "CYP2C8",
+      "CYP2C9",
+      "PPARA"
+    ]
+  },
+  "Goserelin (acetate)": {
+    "count": 1,
+    "target_genes": [
+      "GNRHR"
+    ]
+  },
+  "Idarubicin (hydrochloride)": {
+    "count": 1,
+    "target_genes": [
+      "TOP2A"
+    ]
+  },
+  "Larotrectinib": {
+    "count": 3,
+    "target_genes": [
+      "NTRK1",
+      "NTRK2",
+      "NTRK3"
+    ]
+  },
+  "Lenalidomide (hemihydrate)": {
+    "count": 3,
+    "target_genes": [
+      "CRBN",
+      "IKZF1",
+      "IKZF3"
+    ]
+  },
+  "Lidocaine (hydrochloride)": {
+    "count": 3,
+    "target_genes": [
+      "MAP2K1",
+      "MAPK1",
+      "NFKB1"
+    ]
+  },
+  "Lumateperone (tosylate)": {
+    "count": 2,
+    "target_genes": [
+      "DRD2",
+      "HTR2A"
+    ]
+  },
+  "Medroxyprogesterone acetate": {
+    "count": 1,
+    "target_genes": [
+      "PGR"
+    ]
+  },
+  "Mitoxantrone (dihydrochloride)": {
+    "count": 3,
+    "target_genes": [
+      "PRKCA",
+      "TOP2A",
+      "TOP2B"
+    ]
+  },
+  "Neratinib (maleate)": {
+    "count": 2,
+    "target_genes": [
+      "EGFR",
+      "ERBB2"
+    ]
+  },
+  "Norepinephrine (hydrochloride)": {
+    "count": 7,
+    "target_genes": [
+      "ADRA1A",
+      "ADRA1B",
+      "ADRA1D",
+      "ADRA2A",
+      "ADRA2B",
+      "ADRA2C",
+      "ADRB1"
+    ]
+  },
+  "Olanzapine": {
+    "count": 13,
+    "target_genes": [
+      "ADRA1A",
+      "ADRA1B",
+      "ADRA1D",
+      "CHRM1",
+      "CHRM2",
+      "CHRM3",
+      "CHRM4",
+      "CHRM5",
+      "DRD2",
+      "DRD4",
+      "HTR2A",
+      "HTR2C",
+      "HTR6"
+    ]
+  },
+  "Palmatine (chloride)": {
+    "count": 3,
+    "target_genes": [
+      "IDO1",
+      "NS2B-NS3",
+      "WNV"
+    ]
+  },
+  "Pasireotide (acetate)": {
+    "count": 4,
+    "target_genes": [
+      "SSTR1",
+      "SSTR2",
+      "SSTR3",
+      "SSTR5"
+    ]
+  },
+  "Pentagastrin": {
+    "count": 1,
+    "target_genes": [
+      "CCKBR"
+    ]
+  },
+  "Pentamidine (isethionate)": {
+    "count": 1,
+    "target_genes": [
+      "PRLR"
+    ]
+  },
+  "Radotinib": {
+    "count": 1,
+    "target_genes": [
+      "ABL1"
+    ]
+  },
+  "Raltitrexed": {
+    "count": 1,
+    "target_genes": [
+      "TYMS"
+    ]
+  },
+  "Rapamycin": {
+    "count": 2,
+    "target_genes": [
+      "FKBP1A",
+      "MTOR"
+    ]
+  },
+  "Relugolix": {
+    "count": 1,
+    "target_genes": [
+      "GNRHR"
+    ]
+  },
+  "Resveratrol": {
+    "count": 1,
+    "target_genes": [
+      "SIRT1"
+    ]
+  },
+  "Retinoic acid": {
+    "count": 4,
+    "target_genes": [
+      "PPARD",
+      "RARA",
+      "RARB",
+      "RARG"
+    ]
+  },
+  "Rimonabant": {
+    "count": 1,
+    "target_genes": [
+      "CNR1"
+    ]
+  },
+  "Selinexor": {
+    "count": 1,
+    "target_genes": [
+      "XPO1"
+    ]
+  },
+  "Sinomenine": {
+    "count": 1,
+    "target_genes": [
+      "OPRM1"
+    ]
+  },
+  "Sodium Salicylate": {
+    "count": 1,
+    "target_genes": [
+      "PTGS2"
+    ]
+  },
+  "Sulfisoxazole": {
+    "count": 2,
+    "target_genes": [
+      "EDNRA",
+      "EDNRB"
+    ]
+  },
+  "Temsirolimus": {
+    "count": 1,
+    "target_genes": [
+      "MTOR"
+    ]
+  },
+  "Terfenadine": {
+    "count": 1,
+    "target_genes": [
+      "HRH1"
+    ]
+  },
+  "Thymol": {
+    "count": 1,
+    "target_genes": [
+      "TRPA1"
+    ]
+  },
+  "Tofacitinib": {
+    "count": 3,
+    "target_genes": [
+      "JAK1",
+      "JAK2",
+      "JAK3"
+    ]
+  },
+  "Tofacitinib (citrate)": {
+    "count": 3,
+    "target_genes": [
+      "JAK1",
+      "JAK2",
+      "JAK3"
+    ]
+  },
+  "Tolcapone": {
+    "count": 1,
+    "target_genes": [
+      "COMT"
+    ]
+  },
+  "Triamcinolone": {
+    "count": 1,
+    "target_genes": [
+      "NR3C1"
+    ]
+  },
+  "Trimetrexate": {
+    "count": 1,
+    "target_genes": [
+      "DHFR"
+    ]
+  },
+  "Tucidinostat": {
+    "count": 6,
+    "target_genes": [
+      "HDAC1",
+      "HDAC10",
+      "HDAC11",
+      "HDAC2",
+      "HDAC3",
+      "HDAC8"
+    ]
+  },
+  "Vilanterol": {
+    "count": 1,
+    "target_genes": [
+      "ADRB2"
+    ]
+  }
+}
