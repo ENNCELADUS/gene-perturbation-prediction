@@ -16,7 +16,7 @@ ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
 source ~/.bashrc
-conda activate vcc
+conda activate scgpt
 
 set -euo pipefail
 
