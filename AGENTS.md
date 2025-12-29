@@ -4,7 +4,7 @@
 Core automation sits in `scripts/` (data preview and visualization helpers) and the vendorized `scGPT/` modules/tests. Keep raw AnnData or CSV inputs inside `data/raw/` (gitignored) and write derived features to `data/processed/`. Docs live in `docs/`, and notebooks stay in `notebook/` with outputs cleared before commit.
 
 ## Build, Test, and Development Commands
-- `source ~/.zshrc && conda activate vcc`: activate conda environment to run python.
+- `source ~/.bashrc && conda activate vcc`: activate conda environment to run python.
 - `ruff format . && ruff check . --fix`: applies PEP 8 formatting and autofixes lint issues using the repo `pyproject.toml`.
 
 ## Coding Style & Naming Conventions

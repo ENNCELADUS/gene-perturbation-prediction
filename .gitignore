@@ -37,8 +37,10 @@ wheels/
 
 # Data files
 *.h5ad
-data/raw/*.csv
+*.csv
 *.zip
+*.parquet
+*.pkl
 
 # Conda
 .conda/
@@ -59,9 +61,6 @@ temp/
 
 # Test Results
 tests/integration/results/
-
-# Data (root level only, not src/data/)
-/data/
 
 # External
 docs/references
