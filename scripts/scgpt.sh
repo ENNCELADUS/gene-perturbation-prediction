@@ -49,18 +49,18 @@ run_ddp() {
     fi
 }
 
-# echo "=============================================="
-# echo "Route A + Route B1 Experiments"
-# echo "=============================================="
+echo "=============================================="
+echo "Route B1 Experiments"
+echo "=============================================="
 
-# # ============================================
-# # Route A: Forward Model + Retrieval
-# # ============================================
-# echo ""
-# echo "=============================================="
-# echo "[Route A] Data Preparation"
-# echo "=============================================="
-# python -m src.main --config src/configs/scgpt_forward.yaml --mode data
+# ============================================
+# Route A: Forward Model + Retrieval
+# ============================================
+echo ""
+echo "=============================================="
+echo "Data Preparation"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
 
 # echo ""
 # echo "=============================================="
