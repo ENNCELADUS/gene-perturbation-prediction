@@ -1,12 +1,11 @@
 # Baseline evaluation config
-# Average baseline: predicts mean expression from training perturbations
-
+# random forest baseline
 paths:
   model_dir: "model/scGPT"  # Still needs vocab.json
   data_dir: "../CellPerturb_VCC_Proj6/vcc_data/log1p"
   test_file: "test_lognorm.h5ad"
   train_file: "train_lognorm.h5ad"
-  output_dir: "results/baseline_djw"
+  output_dir: "results/rf_djw"
   log_dir: "logs/baseline_djw" # 没有内容输出
 
 model:

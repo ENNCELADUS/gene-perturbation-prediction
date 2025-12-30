@@ -7,12 +7,12 @@ paths:
   model_dir: "model/scGPT"
   
   # Linear model directory (output for training, input for eval)
-  linear_model_dir: "model/linear_regression"
+  linear_model_dir: "model/ridge"
   
   # Evaluation data paths
-  data_dir: "data/processed"
-  test_file: "test.h5ad"
-  train_file: "train.h5ad"
+  data_dir: "../CellPerturb_VCC_Proj6/vcc_data/log1p"
+  test_file: "test_lognorm.h5ad"
+  train_file: "train_lognorm.h5ad"
   
   # Evaluation results output
   output_dir: "results"
