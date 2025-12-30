@@ -167,13 +167,15 @@ def main():
 
         pred_expr_list = []
         control_expr_list = []
-
+        i=0
         for batch_start in range(0, n_cells, eval_batch_size):
+            i+=1
             batch_end = min(batch_start + eval_batch_size, n_cells)
             batch_n_cells = batch_end - batch_start
 
             # Use different seed for each batch to sample different control cells
-            batch_seed = base_seed + batch_start
+            #batch_seed = base_seed + batch_start
+            batch_seed= base_seed + batch_start -(i%6)*eval_batch_size
 
             batch_result = data_loader.prepare_perturbation_batch(
                 target, n_cells=batch_n_cells, seed=batch_seed, return_control_expr=True
