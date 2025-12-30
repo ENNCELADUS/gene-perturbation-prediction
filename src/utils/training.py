@@ -185,10 +185,52 @@ def train_epoch(
     log_interval = config["logging"]["log_interval"]
     include_zero_gene = config["model"]["include_zero_gene"]
     max_seq_len = config["model"]["max_seq_len"]
+    loss_cfg = config.get("loss", {})
+    inject_de_genes = loss_cfg.get("inject_de_genes", True)
+    de_inject_max = loss_cfg.get("de_inject_max", None)
 
     num_batches = len(train_loader)
     ctrl_mean_tensor = torch.as_tensor(ctrl_mean, device=device)
     loss_parts_sum = {"dist": 0.0, "proto": 0.0, "de_rank": 0.0, "dir": 0.0}
+
+    def _sample_ids(ids: torch.Tensor, k: int) -> torch.Tensor:
+        if ids.numel() <= k:
+            return ids
+        return ids[torch.randperm(ids.numel(), device=ids.device)[:k]]
+
+    def _merge_input_gene_ids(input_gene_ids: torch.Tensor, perts) -> torch.Tensor:
+        if input_gene_ids.numel() == 0:
+            return input_gene_ids
+        if not inject_de_genes or not de_gene_map:
+            return _sample_ids(input_gene_ids, max_seq_len)
+
+        de_ids = []
+        for pert in perts:
+            pert_key = str(pert)
+            if pert_key in de_gene_map:
+                de_ids.append(de_gene_map[pert_key].to(device))
+
+        if not de_ids:
+            return _sample_ids(input_gene_ids, max_seq_len)
+
+        de_ids = torch.unique(torch.cat(de_ids))
+        if de_inject_max is not None:
+            de_ids = _sample_ids(de_ids, int(de_inject_max))
+
+        if de_ids.numel() >= max_seq_len:
+            return _sample_ids(de_ids, max_seq_len)
+
+        if hasattr(torch, "isin"):
+            non_de = input_gene_ids[~torch.isin(input_gene_ids, de_ids)]
+        else:
+            mask = np.isin(
+                input_gene_ids.detach().cpu().numpy(), de_ids.detach().cpu().numpy()
+            )
+            non_de = input_gene_ids[~torch.from_numpy(mask).to(device)]
+
+        remaining = max_seq_len - de_ids.numel()
+        non_de = _sample_ids(non_de, remaining)
+        return torch.unique(torch.cat([de_ids, non_de]))
 
     for batch_idx, batch_data in enumerate(train_loader):
         batch_size = len(batch_data.y)
@@ -219,10 +261,7 @@ def train_epoch(
                     ori_gene_values.nonzero()[:, 1].flatten().unique().sort()[0]
                 )
 
-            if len(input_gene_ids) > max_seq_len:
-                input_gene_ids = torch.randperm(len(input_gene_ids), device=device)[
-                    :max_seq_len
-                ]
+            input_gene_ids = _merge_input_gene_ids(input_gene_ids, batch_data.pert)
 
             input_values = ori_gene_values[:, input_gene_ids]
             input_pert_flags = pert_flags[:, input_gene_ids]

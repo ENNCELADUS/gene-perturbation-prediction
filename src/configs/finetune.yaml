@@ -98,6 +98,9 @@ loss:
   dir_tau: 0.2
   de_rank_sample_de: 256
   de_rank_sample_non_de: 256
+  de_gene_top_k: 500     # Proxy DE set size when only rank lists are available
+  inject_de_genes: true  # Ensure DE genes are included in the model input
+  de_inject_max: 512     # Cap DE genes injected per batch
 
 # ========== Partial Weight Loading ==========
 # Only load these prefixes from pretrained model

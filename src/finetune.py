@@ -156,10 +156,31 @@ def main():
 
     # Precompute DE gene map for loss terms that use DE sets
     de_fdr = config.get("metrics", {}).get("de_fdr", 0.05)
-    de_gene_map = build_de_gene_map(pert_data.adata, gene_names, fdr_threshold=de_fdr)
+    de_top_k = config.get("loss", {}).get(
+        "de_gene_top_k", config.get("metrics", {}).get("des_top_k", None)
+    )
+    de_gene_map = build_de_gene_map(
+        pert_data.adata,
+        gene_names,
+        fdr_threshold=de_fdr,
+        top_k=de_top_k,
+    )
     if is_main_process(rank):
         if de_gene_map:
             logger.info(f"DE gene map loaded for {len(de_gene_map)} perturbations")
+            de_sizes = [len(v) for v in de_gene_map.values()]
+            logger.info(
+                "DE genes per pert: mean %.1f | min %d | max %d"
+                % (
+                    float(np.mean(de_sizes)),
+                    int(np.min(de_sizes)),
+                    int(np.max(de_sizes)),
+                )
+            )
+            all_perts = set(pert_data.adata.obs["condition"].unique())
+            all_perts.discard("ctrl")
+            overlap = all_perts.intersection(set(de_gene_map.keys()))
+            logger.info(f"DE map overlap: {len(overlap)}/{len(all_perts)} conditions")
         else:
             logger.warning("DE gene map is empty; DE loss terms will be skipped")
 

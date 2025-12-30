@@ -39,6 +39,7 @@ def build_de_gene_map(
     adata,
     gene_names: np.ndarray,
     fdr_threshold: float = 0.05,
+    top_k: int | None = None,
 ) -> Dict[str, torch.Tensor]:
     gene_names = np.asarray(gene_names, dtype=str)
     name_to_idx = {name: idx for idx, name in enumerate(gene_names)}
@@ -62,6 +63,8 @@ def build_de_gene_map(
                 if pert == "ctrl":
                     continue
                 genes = [g for g in genes if g in name_to_idx]
+                if top_k is not None:
+                    genes = genes[:top_k]
                 if genes:
                     de_map[pert] = torch.tensor(
                         [name_to_idx[g] for g in genes], dtype=torch.long
@@ -96,6 +99,8 @@ def build_de_gene_map(
                 if pvals_adj is not None:
                     pvals = np.asarray(pvals_adj[group]).astype(float)
                     genes = genes[pvals < fdr_threshold]
+                if top_k is not None:
+                    genes = genes[:top_k]
                 genes = [g for g in genes if g in name_to_idx]
                 if genes and group != "ctrl":
                     de_map[str(group)] = torch.tensor(
@@ -110,6 +115,8 @@ def build_de_gene_map(
                 if pvals_adj is not None:
                     pvals = np.asarray(pvals_adj[:, idx]).astype(float)
                     genes = genes[pvals < fdr_threshold]
+                if top_k is not None:
+                    genes = genes[:top_k]
                 genes = [g for g in genes if g in name_to_idx]
                 if genes and group != "ctrl":
                     de_map[str(group)] = torch.tensor(
@@ -263,13 +270,15 @@ def compute_composite_loss(
             continue
 
         de_mask = _torch_isin(gene_indices, de_idx_full)
-        if de_mask.sum() == 0 or (~de_mask).sum() == 0:
+        if de_mask.sum() == 0:
             continue
 
+        dir_losses.append(de_direction_loss(pred_delta, truth_delta, de_mask, dir_tau))
+        if (~de_mask).sum() == 0:
+            continue
         de_rank_losses.append(
             de_rank_loss(pred_delta, de_mask, de_rank_tau, max_de, max_non_de)
         )
-        dir_losses.append(de_direction_loss(pred_delta, truth_delta, de_mask, dir_tau))
 
     dist_loss = (
         _safe_mean(torch.stack(dist_losses)) if dist_losses else pred.new_tensor(0.0)
