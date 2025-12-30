@@ -153,7 +153,9 @@ def main():
             with torch.cuda.amp.autocast(enabled=use_amp):
                 gene_scores = model(genes, values, padding_mask)  # (batch, n_genes)
 
-        condition_scores = torch.matmul(gene_scores, condition_matrix.T)
+        condition_scores = torch.matmul(
+            gene_scores, condition_matrix.T.to(gene_scores.dtype)
+        )
         top_k = max(args.top_k)
         top_indices = torch.topk(condition_scores, k=top_k, dim=1).indices
 
