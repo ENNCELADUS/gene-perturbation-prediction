@@ -237,6 +237,14 @@ def main():
     args = parse_args()
     config = load_config(args.config)
 
+    if args.output_dir == "results/gene_score":
+        logging_cfg = config.get("logging", {})
+        base_dir = logging_cfg.get("output_dir", "results")
+        exp_name = logging_cfg.get(
+            "experiment_name", config.get("model", {}).get("encoder", "experiment")
+        )
+        args.output_dir = str(Path(base_dir) / exp_name)
+
     ddp = _setup_distributed()
     is_main = ddp["rank"] == 0
 
