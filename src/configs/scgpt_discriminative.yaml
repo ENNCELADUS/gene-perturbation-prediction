@@ -47,8 +47,8 @@ head:
 evaluate:
   top_k: [1, 5, 10, 20]
   mask: true  # Mask target gene expression at eval time
+  output_path: results/scgpt_discriminative/eval_results_mask.json
 
 # Logging
 logging:
-  output_dir: results/
-  experiment_name: scgpt_discriminative
+  output_dir: results/scgpt_discriminative
