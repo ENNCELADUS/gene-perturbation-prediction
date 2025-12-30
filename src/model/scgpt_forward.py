@@ -124,14 +124,10 @@ class ScGPTForward(nn.Module):
         allowed_unexpected_prefixes = ("flag_encoder.",)
 
         missing = [
-            key
-            for key in missing
-            if not key.startswith(allowed_missing_prefixes)
+            key for key in missing if not key.startswith(allowed_missing_prefixes)
         ]
         unexpected = [
-            key
-            for key in unexpected
-            if not key.startswith(allowed_unexpected_prefixes)
+            key for key in unexpected if not key.startswith(allowed_unexpected_prefixes)
         ]
 
         print(f"  ✓ Loaded checkpoint ({len(compatible)} matched params)")

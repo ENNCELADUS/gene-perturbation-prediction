@@ -317,9 +317,7 @@ def main():
         print("\n[5/5] Training...")
     best_val_loss = float("inf")
     early_stopping_patience = config["training"].get("early_stopping_patience")
-    early_stopping_metric = config["training"].get(
-        "early_stopping_metric", "val_loss"
-    )
+    early_stopping_metric = config["training"].get("early_stopping_metric", "val_loss")
     if early_stopping_metric not in {"train_loss", "val_loss"}:
         if is_main:
             print(

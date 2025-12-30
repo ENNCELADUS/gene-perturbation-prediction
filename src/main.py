@@ -11,13 +11,13 @@ Supports multiple modes:
 
 Usage:
     # Data preparation only
-    python -m src.main --config src/configs/scgpt.yaml --mode data
+    python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
 
     # Train forward model
-    python -m src.main --config src/configs/scgpt.yaml --mode train
+    python -m src.main --config src/configs/scgpt_discriminative.yaml --mode train
 
     # Full pipeline
-    python -m src.main --config src/configs/scgpt.yaml --mode full
+    python -m src.main --config src/configs/scgpt_discriminative.yaml --mode full
 """
 
 import argparse
@@ -39,7 +39,7 @@ def parse_args():
         "--config",
         type=str,
         required=True,
-        help="Path to config file (e.g., src/configs/scgpt.yaml)",
+        help="Path to config file (e.g., src/configs/scgpt_discriminative.yaml)",
     )
     parser.add_argument(
         "--mode",
@@ -127,46 +127,22 @@ def run_pipeline(config: dict, args) -> dict:
     print("\n[1/2] Loading dataset...")
     cond_split_config = config.get("condition_split", {})
 
-    # Check if split file exists and has matching settings
+    # Check if split file exists
     split_path = Path(cond_split_config.get("output_path", ""))
     use_existing_split = False
 
     if split_path.exists():
-        # Load existing split and check if settings match
-        try:
-            from .data import ConditionSplit
-
-            existing_split = ConditionSplit.load(split_path)
-
-            # Check if settings match
-            expected_unseen_genes = int(
-                105 * cond_split_config.get("unseen_gene_fraction", 0.15)
-            )
-            actual_unseen_genes = len(existing_split.unseen_genes)
-            settings_match = (
-                abs(actual_unseen_genes - expected_unseen_genes) <= 2
-            )  # Allow small variation
-
-            if settings_match:
-                print(f"  ✓ Using existing split: {split_path}")
-                print(f"    (unseen genes: {actual_unseen_genes}, matches config)")
-                use_existing_split = True
-            else:
-                print(
-                    f"  ⚠ Existing split settings mismatch (unseen genes: {actual_unseen_genes} vs expected ~{expected_unseen_genes})"
-                )
-                print(f"    Will generate new split...")
-        except Exception as e:
-            print(f"  ⚠ Could not validate existing split: {e}")
-            print(f"    Will generate new split...")
+        print(f"  ✓ Using existing split: {split_path}")
+        use_existing_split = True
 
     dataset = load_perturb_data(
         h5ad_path=config["data"]["h5ad_path"],
         condition_split_path=split_path if use_existing_split else None,
-        unseen_gene_fraction=cond_split_config.get("unseen_gene_fraction", 0.15),
         seen_single_train_ratio=cond_split_config.get("seen_single_train_ratio", 0.9),
-        combo_seen2_train_ratio=cond_split_config.get("combo_seen2_train_ratio", 0.7),
-        combo_seen2_val_ratio=cond_split_config.get("combo_seen2_val_ratio", 0.15),
+        double_train_ratio=cond_split_config.get("double_train_ratio", 0.7),
+        double_val_ratio=cond_split_config.get("double_val_ratio", 0.15),
+        double_freq_bins=cond_split_config.get("double_freq_bins", 3),
+        double_count_bins=cond_split_config.get("double_count_bins", 3),
         min_cells_per_condition=cond_split_config.get("min_cells_per_condition", 50),
         min_cells_per_double=cond_split_config.get("min_cells_per_double", 30),
         seed=cond_split_config.get("seed", 42),
@@ -181,7 +157,6 @@ def run_pipeline(config: dict, args) -> dict:
         print(f"  - Train conditions: {summary['n_train_conditions']}")
         print(f"  - Val conditions: {summary['n_val_conditions']}")
         print(f"  - Test conditions: {summary['n_test_conditions']}")
-        print(f"  - Unseen genes: {summary['n_unseen_genes']}")
         print(f"  - Test strata: {summary.get('test_strata_counts', {})}")
 
     # Save condition split artifact

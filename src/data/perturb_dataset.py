@@ -57,10 +57,11 @@ class PerturbDataset:
 
     def create_condition_split(
         self,
-        unseen_gene_fraction: float = 0.15,
         seen_single_train_ratio: float = 0.9,
-        combo_seen2_train_ratio: float = 0.7,
-        combo_seen2_val_ratio: float = 0.15,
+        double_train_ratio: float = 0.7,
+        double_val_ratio: float = 0.15,
+        double_freq_bins: int = 3,
+        double_count_bins: int = 3,
         min_cells_per_condition: int = 50,
         min_cells_per_double: int = 30,
         seed: int = 42,
@@ -69,10 +70,11 @@ class PerturbDataset:
         Create a Norman GEARS-style condition-level split.
 
         Args:
-            unseen_gene_fraction: Fraction of single-genes to designate as unseen
             seen_single_train_ratio: Train ratio for seen single-gene conditions
-            combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
-            combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions
+            double_train_ratio: Train ratio for double-gene conditions
+            double_val_ratio: Val ratio for double-gene conditions (remaining → test)
+            double_freq_bins: Number of bins for per-gene double frequency
+            double_count_bins: Number of bins for per-condition cell counts
             min_cells_per_condition: Minimum cells for single-gene conditions (filter threshold)
             min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
             seed: Random seed
@@ -91,14 +93,18 @@ class PerturbDataset:
 
         # Create splitter and split
         splitter = NormanConditionSplitter(
-            unseen_gene_fraction=unseen_gene_fraction,
             seen_single_train_ratio=seen_single_train_ratio,
-            combo_seen2_train_ratio=combo_seen2_train_ratio,
-            combo_seen2_val_ratio=combo_seen2_val_ratio,
+            double_train_ratio=double_train_ratio,
+            double_val_ratio=double_val_ratio,
+            double_freq_bins=double_freq_bins,
+            double_count_bins=double_count_bins,
             seed=seed,
         )
 
-        self.condition_split = splitter.split(conditions)
+        condition_counts = self._get_condition_counts()
+        self.condition_split = splitter.split(
+            conditions, condition_counts=condition_counts
+        )
         return self.condition_split
 
     def _get_valid_conditions(
@@ -140,6 +146,22 @@ class PerturbDataset:
                 valid.append(cond)
 
         return valid
+
+    def _get_condition_counts(self) -> Dict[str, int]:
+        """Return normalized condition -> cell count mapping."""
+        if self.adata is None:
+            return {}
+        condition_counts = self.adata.obs[self.condition_col].value_counts()
+        splitter = NormanConditionSplitter()
+        normalized_counts: Dict[str, int] = {}
+        for cond, count in condition_counts.items():
+            if cond == "ctrl":
+                continue
+            normalized = splitter.normalize_condition(cond)
+            normalized_counts[normalized] = normalized_counts.get(normalized, 0) + int(
+                count
+            )
+        return normalized_counts
 
     def load_condition_split(self, split_path: str | Path) -> ConditionSplit:
         """Load an existing condition split from JSON."""
@@ -254,7 +276,6 @@ class PerturbDataset:
             stats["n_train_conditions"] = len(self.condition_split.train_conditions)
             stats["n_val_conditions"] = len(self.condition_split.val_conditions)
             stats["n_test_conditions"] = len(self.condition_split.test_conditions)
-            stats["n_unseen_genes"] = len(self.condition_split.unseen_genes)
             stats["test_strata_counts"] = {
                 k: len(v) for k, v in self.condition_split.test_strata.items()
             }
@@ -266,10 +287,11 @@ class PerturbDataset:
 def load_perturb_data(
     h5ad_path: str | Path,
     condition_split_path: Optional[str | Path] = None,
-    unseen_gene_fraction: float = 0.15,
     seen_single_train_ratio: float = 0.9,
-    combo_seen2_train_ratio: float = 0.7,
-    combo_seen2_val_ratio: float = 0.15,
+    double_train_ratio: float = 0.7,
+    double_val_ratio: float = 0.15,
+    double_freq_bins: int = 3,
+    double_count_bins: int = 3,
     min_cells_per_condition: int = 50,
     min_cells_per_double: int = 30,
     seed: int = 42,
@@ -280,10 +302,11 @@ def load_perturb_data(
     Args:
         h5ad_path: Path to h5ad file
         condition_split_path: Path to existing condition split JSON (if None, creates new)
-        unseen_gene_fraction: Fraction of single-genes to designate as unseen (default 0.15 = ~12-15 genes)
         seen_single_train_ratio: Train ratio for seen single-gene conditions
-        combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
-        combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions
+        double_train_ratio: Train ratio for double-gene conditions
+        double_val_ratio: Val ratio for double-gene conditions (remaining → test)
+        double_freq_bins: Number of bins for per-gene double frequency
+        double_count_bins: Number of bins for per-condition cell counts
         min_cells_per_condition: Minimum cells for single-gene conditions
         min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
         seed: Random seed
@@ -303,10 +326,11 @@ def load_perturb_data(
             ) from exc
     else:
         dataset.create_condition_split(
-            unseen_gene_fraction=unseen_gene_fraction,
             seen_single_train_ratio=seen_single_train_ratio,
-            combo_seen2_train_ratio=combo_seen2_train_ratio,
-            combo_seen2_val_ratio=combo_seen2_val_ratio,
+            double_train_ratio=double_train_ratio,
+            double_val_ratio=double_val_ratio,
+            double_freq_bins=double_freq_bins,
+            double_count_bins=double_count_bins,
             min_cells_per_condition=min_cells_per_condition,
             min_cells_per_double=min_cells_per_double,
             seed=seed,

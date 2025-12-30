@@ -1,9 +1,9 @@
 """
-Norman condition-level splits for GEARS-style generalization evaluation.
+Norman condition-level splits for compositional generalization evaluation.
 
-Implements the GEARS/community-standard gene-visibility-based stratification:
-- Single-gene conditions: seen (train/val) vs unseen (test-only)
-- Double-gene conditions: stratified by how many genes are seen (0/2, 1/2, 2/2)
+Implements a compositional split without unseen single-gene holdout:
+- Single-gene conditions: all used for train/val (no single-gene test holdout)
+- Double-gene conditions: stratified sampling by gene frequency and cell count
 
 Reference: docs/roadmap/07_norman_data_split.md
 """
@@ -24,15 +24,13 @@ class ConditionSplit:
     Stores condition-level train/val/test split with test strata metadata.
 
     Attributes:
-        train_conditions: Conditions for training (seen singles + 2/2-seen combos)
-        val_conditions: Conditions for validation (seen singles + 2/2-seen combos)
-        test_conditions: All test conditions (unseen singles + all combo tiers)
+        train_conditions: Conditions for training (all singles + selected combos)
+        val_conditions: Conditions for validation (all singles + selected combos)
+        test_conditions: All test conditions (subset of double-gene conditions)
         test_strata: Dict mapping tier names to condition lists:
-            - 'single_unseen': unseen single-gene conditions
-            - 'combo_seen2': 2/2-seen double-gene conditions in test
-            - 'combo_seen1': 1/2-seen double-gene conditions
-            - 'combo_seen0': 0/2-seen double-gene conditions
-        unseen_genes: Set of genes designated as unseen (test-only)
+            - 'double_test': all double-gene conditions in test
+            - 'double_f{bin}_c{bin}': stratified test subsets by freq/cell bins
+        unseen_genes: Reserved for backward compatibility (unused)
         seed: Random seed used for splitting
     """
 
@@ -67,36 +65,38 @@ class NormanConditionSplitter:
     """
     GEARS-style condition-level splitter for Norman dataset.
 
-    Implements gene-visibility-based stratification:
-    - Unseen genes: selected fraction of single-gene conditions → test only
-    - Single-gene conditions: seen → train/val, unseen → test
-    - Double-gene conditions: stratified by 0/1/2-seen based on unseen_genes
+    Implements compositional stratification:
+    - Single-gene conditions: all → train/val
+    - Double-gene conditions: stratified by gene frequency and cell counts
 
     See docs/roadmap/07_norman_data_split.md for full specification.
     """
 
     def __init__(
         self,
-        unseen_gene_fraction: float = 0.25,
         seen_single_train_ratio: float = 0.9,
-        combo_seen2_train_ratio: float = 0.7,
-        combo_seen2_val_ratio: float = 0.15,
+        double_train_ratio: float = 0.7,
+        double_val_ratio: float = 0.15,
+        double_freq_bins: int = 3,
+        double_count_bins: int = 3,
         seed: int = 42,
     ):
         """
         Initialize splitter.
 
         Args:
-            unseen_gene_fraction: Fraction of single-genes to designate as unseen (0.2-0.3 recommended)
             seen_single_train_ratio: Train ratio for seen single-gene conditions (remaining → val)
-            combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
-            combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions (remaining → test)
+            double_train_ratio: Train ratio for double-gene conditions
+            double_val_ratio: Val ratio for double-gene conditions (remaining → test)
+            double_freq_bins: Number of bins for per-gene double frequency
+            double_count_bins: Number of bins for per-condition cell counts
             seed: Random seed for reproducibility
         """
-        self.unseen_gene_fraction = unseen_gene_fraction
         self.seen_single_train_ratio = seen_single_train_ratio
-        self.combo_seen2_train_ratio = combo_seen2_train_ratio
-        self.combo_seen2_val_ratio = combo_seen2_val_ratio
+        self.double_train_ratio = double_train_ratio
+        self.double_val_ratio = double_val_ratio
+        self.double_freq_bins = double_freq_bins
+        self.double_count_bins = double_count_bins
         self.seed = seed
 
     @staticmethod
@@ -167,13 +167,18 @@ class NormanConditionSplitter:
 
         return [condition.strip()]
 
-    def split(self, conditions: List[str]) -> ConditionSplit:
+    def split(
+        self,
+        conditions: List[str],
+        condition_counts: Optional[Dict[str, int]] = None,
+    ) -> ConditionSplit:
         """
-        Create GEARS-style condition-level split.
+        Create compositional condition-level split.
 
         Args:
             conditions: List of condition names (single and double perturbations)
                         Should NOT include control conditions.
+            condition_counts: Optional mapping of condition -> cell count
 
         Returns:
             ConditionSplit with train/val/test conditions and test strata
@@ -190,77 +195,81 @@ class NormanConditionSplitter:
         ]
         double_conditions = [c for c in conditions if self.is_double_perturbation(c)]
 
-        # Step 3: Select unseen genes (fraction of single-gene conditions → test only)
-        n_unseen = max(1, int(len(single_conditions) * self.unseen_gene_fraction))
-        shuffled_singles = rng.permutation(single_conditions).tolist()
-        unseen_genes = set(shuffled_singles[:n_unseen])
-        seen_genes = set(shuffled_singles[n_unseen:])
+        # Step 3: Split single-gene conditions (all to train/val)
+        all_singles = list(single_conditions)
+        rng.shuffle(all_singles)
+        n_train_single = int(len(all_singles) * self.seen_single_train_ratio)
+        train_single = all_singles[:n_train_single]
+        val_single = all_singles[n_train_single:]
 
-        # Step 4: Split single-gene conditions
-        # Unseen → test only
-        test_single_unseen = list(unseen_genes)
+        # Step 4: Stratified split for double-gene conditions
+        condition_counts = condition_counts or {}
+        gene_double_counts: Dict[str, int] = {}
+        for cond in double_conditions:
+            for gene in self.get_genes_from_condition(cond):
+                gene_double_counts[gene] = gene_double_counts.get(gene, 0) + 1
 
-        # Seen → train/val split
-        seen_singles = list(seen_genes)
-        rng.shuffle(seen_singles)
-        n_train_single = int(len(seen_singles) * self.seen_single_train_ratio)
-        train_single = seen_singles[:n_train_single]
-        val_single = seen_singles[n_train_single:]
-
-        # Step 5: Classify double-gene conditions by seen tier
-        combo_seen0 = []  # Both genes unseen
-        combo_seen1 = []  # One gene unseen
-        combo_seen2 = []  # Both genes seen
-
+        freq_values = []
+        count_values = []
+        cond_freq_score: Dict[str, float] = {}
+        cond_count_score: Dict[str, int] = {}
         for cond in double_conditions:
             genes = self.get_genes_from_condition(cond)
-            n_seen = sum(1 for g in genes if g in seen_genes)
+            if genes:
+                freq_score = float(
+                    np.mean([gene_double_counts.get(g, 0) for g in genes])
+                )
+            else:
+                freq_score = 0.0
+            count_score = int(condition_counts.get(cond, 0))
+            cond_freq_score[cond] = freq_score
+            cond_count_score[cond] = count_score
+            freq_values.append(freq_score)
+            count_values.append(count_score)
 
-            if n_seen == 0:
-                combo_seen0.append(cond)
-            elif n_seen == 1:
-                combo_seen1.append(cond)
-            else:  # n_seen == 2
-                combo_seen2.append(cond)
+        freq_bins = self._make_bins(freq_values, self.double_freq_bins)
+        count_bins = self._make_bins(count_values, self.double_count_bins)
 
-        # Step 6: Split combo_seen2 into train/val/test
-        # Only combo_seen2 may enter training (Rule 2 from spec)
-        rng.shuffle(combo_seen2)
-        n_train_combo = int(len(combo_seen2) * self.combo_seen2_train_ratio)
-        n_val_combo = int(len(combo_seen2) * self.combo_seen2_val_ratio)
+        strata: Dict[str, List[str]] = {}
+        for cond in double_conditions:
+            f_bin = self._assign_bin(cond_freq_score[cond], freq_bins)
+            c_bin = self._assign_bin(cond_count_score[cond], count_bins)
+            key = f"double_f{f_bin}_c{c_bin}"
+            strata.setdefault(key, []).append(cond)
 
-        train_double = combo_seen2[:n_train_combo]
-        val_double = combo_seen2[n_train_combo : n_train_combo + n_val_combo]
-        test_double_seen2 = combo_seen2[n_train_combo + n_val_combo :]
-
-        # combo_seen0 and combo_seen1 go entirely to test (Rule 1 from spec)
+        train_double: List[str] = []
+        val_double: List[str] = []
+        test_double: List[str] = []
+        test_strata: Dict[str, List[str]] = {}
+        for key, group in strata.items():
+            rng.shuffle(group)
+            n_train = int(len(group) * self.double_train_ratio)
+            n_val = int(len(group) * self.double_val_ratio)
+            train_double.extend(group[:n_train])
+            val_double.extend(group[n_train : n_train + n_val])
+            test_group = group[n_train + n_val :]
+            test_double.extend(test_group)
+            test_strata[key] = test_group
 
         # Step 7: Assemble final splits
         train_conditions = train_single + train_double
         val_conditions = val_single + val_double
-        test_conditions = (
-            test_single_unseen + test_double_seen2 + combo_seen1 + combo_seen0
-        )
+        test_conditions = test_double
 
         # Shuffle for good measure
         rng.shuffle(train_conditions)
         rng.shuffle(val_conditions)
         rng.shuffle(test_conditions)
 
-        # Step 8: Create test strata for tier-wise evaluation
-        test_strata = {
-            "single_unseen": test_single_unseen,
-            "combo_seen2": test_double_seen2,
-            "combo_seen1": combo_seen1,
-            "combo_seen0": combo_seen0,
-        }
+        # Step 8: Create test strata for evaluation
+        test_strata["double_test"] = test_double
 
         return ConditionSplit(
             train_conditions=train_conditions,
             val_conditions=val_conditions,
             test_conditions=test_conditions,
             test_strata=test_strata,
-            unseen_genes=list(unseen_genes),
+            unseen_genes=[],
             seed=self.seed,
         )
 
@@ -270,7 +279,26 @@ class NormanConditionSplitter:
             "n_train": len(split.train_conditions),
             "n_val": len(split.val_conditions),
             "n_test": len(split.test_conditions),
-            "n_unseen_genes": len(split.unseen_genes),
             "test_strata": {k: len(v) for k, v in split.test_strata.items()},
             "seed": split.seed,
         }
+
+    @staticmethod
+    def _make_bins(values: List[float], n_bins: int) -> List[float]:
+        if not values or n_bins <= 1:
+            return []
+        unique_vals = np.unique(values)
+        if len(unique_vals) <= 1:
+            return []
+        quantiles = np.linspace(0, 1, num=n_bins + 1)[1:-1]
+        edges = np.quantile(values, quantiles)
+        return sorted(set(edges.tolist()))
+
+    @staticmethod
+    def _assign_bin(value: float, edges: List[float]) -> int:
+        if not edges:
+            return 0
+        for idx, edge in enumerate(edges):
+            if value <= edge:
+                return idx
+        return len(edges)
