@@ -46,6 +46,7 @@ head:
 # Evaluation
 evaluate:
   top_k: [1, 5, 10, 20]
+  mask: true  # Mask target gene expression at eval time
 
 # Logging
 logging:

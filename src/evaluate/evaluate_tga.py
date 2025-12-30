@@ -20,6 +20,7 @@ from typing import Dict, List
 import numpy as np
 import yaml
 from tqdm import tqdm
+from scipy import sparse
 
 from ..data import load_perturb_data
 from ..model.tga import TGA
@@ -113,6 +114,7 @@ def evaluate_tga(
     tga_model: TGA,
     candidate_conditions: List[str],
     top_k_values: List[int] = [1, 5, 8, 10],
+    mask_target_genes: bool = False,
 ) -> Dict:
     """
     Evaluate TGD baseline on test conditions.
@@ -153,6 +155,9 @@ def evaluate_tga(
 
         if query_adata.n_obs == 0:
             continue
+
+        if mask_target_genes:
+            query_adata = apply_target_gene_mask(query_adata, condition, tga_model)
 
         # Predict top-K (use max K value)
         max_k = max(top_k_values)
@@ -207,6 +212,29 @@ def evaluate_tga(
     return results
 
 
+def apply_target_gene_mask(query_adata, condition: str, tga_model: TGA):
+    genes = parse_condition_genes(condition)
+    if not genes:
+        return query_adata
+
+    if tga_model.gene_name_to_idx is None or tga_model.gene_means is None:
+        return query_adata
+
+    X = query_adata.X
+    if sparse.issparse(X):
+        X = X.toarray()
+
+    X = np.array(X, copy=True)
+    for gene in genes:
+        idx = tga_model.gene_name_to_idx.get(gene)
+        if idx is None:
+            continue
+        X[:, idx] = tga_model.gene_means[idx]
+
+    query_adata.X = X
+    return query_adata
+
+
 def main():
     args = parse_args()
     config = load_config(args.config)
@@ -251,12 +279,16 @@ def main():
     print("\n[4/4] Running evaluation...")
     eval_config = config.get("evaluation", {})
     top_k_values = eval_config.get("top_k_values", [1, 5, 8, 10])
+    mask_target_genes = eval_config.get("mask", False)
+    if mask_target_genes:
+        print("  - Masking target gene expression (anti-cheat) enabled")
 
     results = evaluate_tga(
         dataset,
         tga,
         candidate_conditions,
         top_k_values=top_k_values,
+        mask_target_genes=mask_target_genes,
     )
 
     # Save results
