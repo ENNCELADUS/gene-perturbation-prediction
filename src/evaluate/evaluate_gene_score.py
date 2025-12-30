@@ -74,6 +74,29 @@ def aggregate_by_voting(per_cell_rankings: List[List[str]], k: int) -> List[str]
     return [cond for cond, _ in sorted_conditions[:k]]
 
 
+def mask_target_gene_values(
+    genes: torch.Tensor,
+    values: torch.Tensor,
+    conditions: List[str],
+    vocab: Dict[str, int],
+    neutral_value: int = 0,
+) -> torch.Tensor:
+    masked_values = values.clone()
+    for i, condition in enumerate(conditions):
+        target_genes = parse_condition_genes(condition)
+        if not target_genes:
+            continue
+        token_ids = [vocab[g] for g in target_genes if g in vocab and g != "<pad>"]
+        if not token_ids:
+            continue
+        row_gene_ids = genes[i]
+        row_mask = torch.zeros_like(row_gene_ids, dtype=torch.bool)
+        for token_id in token_ids:
+            row_mask |= row_gene_ids == token_id
+        masked_values[i][row_mask] = neutral_value
+    return masked_values
+
+
 def main():
     args = parse_args()
     config = load_config(args.config)
@@ -147,6 +170,11 @@ def main():
     )
 
     print("\n[4/4] Scoring and ranking...")
+    eval_config = config.get("evaluate", {})
+    mask_target_genes = eval_config.get("mask", False)
+    if mask_target_genes:
+        print("  - Masking target gene expression (anti-cheat) enabled")
+
     per_condition_rankings: Dict[str, List[List[str]]] = {
         cond: [] for cond in test_conditions
     }
@@ -156,6 +184,15 @@ def main():
         values = batch["values"].to(device)
         padding_mask = batch["padding_mask"].to(device)
         conditions = batch["conditions"]
+
+        if mask_target_genes:
+            values = mask_target_gene_values(
+                genes=genes,
+                values=values,
+                conditions=conditions,
+                vocab=model.backbone.vocab,
+                neutral_value=0,
+            )
 
         with torch.no_grad():
             with torch.cuda.amp.autocast(enabled=use_amp):

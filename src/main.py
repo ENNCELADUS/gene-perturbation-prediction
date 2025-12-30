@@ -1,23 +1,25 @@
 #!/usr/bin/env python
 """
-Main entry point for Route A: Forward Model + Retrieval.
+Main entry point for reverse perturbation prediction workflows.
 
 Supports multiple modes:
 - data: Load and prepare data splits (default)
-- train: Train forward model
-- build_db: Build reference database
-- evaluate: Evaluate retrieval performance
-- full: Run complete pipeline (train → build_db → evaluate)
+- train/build_db/evaluate/full: Route A forward model pipeline
+- route_b1_train/route_b1_eval/route_b1_full: Route B1 gene-score pipeline
+- tga: Target-Gene Activation baseline evaluation
 
 Usage:
     # Data preparation only
     python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
 
-    # Train forward model
-    python -m src.main --config src/configs/scgpt_discriminative.yaml --mode train
+    # Route B1 training
+    run_ddp -m src.main --config src/configs/scgpt_discriminative.yaml --mode route_b1_train
 
-    # Full pipeline
-    python -m src.main --config src/configs/scgpt_discriminative.yaml --mode full
+    # Route B1 evaluation
+    python -m src.main --config src/configs/scgpt_discriminative.yaml --mode route_b1_eval
+
+    # TGA baseline
+    python -m src.main --config src/configs/tga.yaml --mode tga
 """
 
 import argparse
