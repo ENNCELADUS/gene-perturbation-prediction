@@ -114,7 +114,12 @@ def main():
     if is_main_process(rank):
         logger.info("Loading data...")
 
-    pert_data = PertData(config["paths"]["gears_data_dir"], default_pert_graph=False)
+    try:
+        pert_data = PertData(
+            config["paths"]["gears_data_dir"], default_pert_graph=False
+        )
+    except TypeError:
+        pert_data = PertData(config["paths"]["gears_data_dir"])
     pert_data.load(
         data_path=os.path.join(
             config["paths"]["gears_data_dir"], config["paths"]["dataset_name"]
