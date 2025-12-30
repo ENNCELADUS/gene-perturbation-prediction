@@ -1,10 +1,8 @@
 """
 Evaluation script for TGA (Target-Gene Activation) baseline.
 
-Evaluates the TGA heuristic on test conditions and reports:
-- Exact hit@K (exact condition match in top-K)
-- Relevant hit@K (one-gene overlap in top-K)
-- Stratified results by seen2/seen1/seen0
+Evaluates the TGA heuristic on test conditions and reports gene-level
+Top-K metrics against the target gene set.
 
 For CRISPRa datasets like Norman where target genes are upregulated.
 """
@@ -13,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import defaultdict
 import hashlib
 from pathlib import Path
 from typing import Dict, List
@@ -26,12 +23,9 @@ from scipy import sparse
 from ..data import load_perturb_data
 from ..model.tga import TGA
 from .metrics import (
-    compute_all_metrics,
     parse_condition_genes,
-    top_k_accuracy,
-    one_gene_overlap_hit_at_k,
-    mrr,
 )
+from .evaluate_gene_score import compute_gene_metrics
 
 
 def parse_args():
@@ -119,31 +113,21 @@ def evaluate_tga(
     target_gene_pool: List[str] | None = None,
 ) -> Dict:
     """
-    Evaluate TGD baseline on test conditions.
+    Evaluate TGA baseline on test conditions with gene-level metrics.
 
     Args:
         dataset: PerturbDataset with condition split
-        tgd_model: Fitted TGD model
-        candidate_conditions: List of candidate conditions
-        top_k_values: K values for hit@K metrics
+        tga_model: Fitted TGA model
+        candidate_conditions: List of candidate conditions (unused for metrics)
+        top_k_values: K values for gene-level metrics
 
     Returns:
         Dictionary with evaluation results
     """
     test_conditions = dataset.test_conditions
-    test_strata = dataset.test_strata
-
-    # Collect predictions and ground truth
-    all_predictions = []
-    all_ground_truth = []
-    strata_predictions = defaultdict(list)
-    strata_ground_truth = defaultdict(list)
-
-    # Build strata mapping for efficient lookup
-    condition_to_stratum = {}
-    for stratum, conditions in test_strata.items():
-        for cond in conditions:
-            condition_to_stratum[cond] = stratum
+    # Collect gene-score vectors and targets
+    all_scores = []
+    all_targets = []
 
     print(f"\nEvaluating on {len(test_conditions)} test conditions...")
 
@@ -167,54 +151,42 @@ def evaluate_tga(
                 target_gene_pool=target_gene_pool,
             )
 
-        # Predict top-K (use max K value)
-        max_k = max(top_k_values)
-        predictions = tga_model.predict(
-            query_adata,
-            candidate_conditions,
-            top_k=max_k,
-            use_pseudobulk=True,
-        )
+        # Compute gene scores directly
+        X = query_adata.X
+        if sparse.issparse(X):
+            X = X.toarray()
+        query_expr = np.mean(X, axis=0)
+        gene_scores = tga_model.score_genes(query_expr)
 
-        all_predictions.append(predictions)
-        all_ground_truth.append(condition)
+        target_genes = parse_condition_genes(condition)
+        target_indices = [
+            tga_model.gene_name_to_idx[g]
+            for g in target_genes
+            if g in tga_model.gene_name_to_idx
+        ]
+        if not target_indices:
+            continue
 
-        # Track by stratum
-        stratum = condition_to_stratum.get(condition, "unknown")
-        strata_predictions[stratum].append(predictions)
-        strata_ground_truth[stratum].append(condition)
+        all_scores.append(gene_scores)
+        all_targets.append(target_indices)
 
     # Compute overall metrics
     print("\nComputing metrics...")
-    overall_metrics = compute_all_metrics(
-        all_predictions,
-        all_ground_truth,
+    gene_metrics = compute_gene_metrics(
+        scores=all_scores,
+        targets=all_targets,
         top_k_values=top_k_values,
-        candidate_pool=candidate_conditions,
     )
-
-    # Compute stratified metrics
-    strata_metrics = {}
-    for stratum in sorted(strata_predictions.keys()):
-        preds = strata_predictions[stratum]
-        truth = strata_ground_truth[stratum]
-
-        if len(truth) == 0:
-            continue
-
-        strata_metrics[stratum] = compute_all_metrics(
-            preds,
-            truth,
-            top_k_values=top_k_values,
-            candidate_pool=candidate_conditions,
-        )
+    metrics = {"mrr": gene_metrics.get("mrr", 0.0)}
+    for k in top_k_values:
+        metrics[f"exact_hit@{k}"] = gene_metrics.get(f"exact_hit@{k}", 0.0)
+        metrics[f"relevant_hit@{k}"] = gene_metrics.get(f"hit@{k}", 0.0)
+        metrics[f"recall@{k}"] = gene_metrics.get(f"recall@{k}", 0.0)
+        metrics[f"ndcg@{k}"] = gene_metrics.get(f"ndcg@{k}", 0.0)
 
     results = {
-        "overall": overall_metrics,
-        "by_stratum": strata_metrics,
-        "n_test_conditions": len(test_conditions),
-        "n_evaluated": len(all_ground_truth),
-        "n_candidates": len(candidate_conditions),
+        "metrics": metrics,
+        "n_evaluated": len(all_targets),
     }
 
     return results
@@ -335,7 +307,7 @@ def main():
         mask_k = int(mask_k)
     if mask_k > 0:
         print(f"  - Masking {mask_k} genes per query (anti-cheat) enabled")
-    target_gene_pool = build_target_gene_pool(dataset.all_conditions)
+    target_gene_pool = build_target_gene_pool(dataset.test_conditions)
 
     results = evaluate_tga(
         dataset,
@@ -359,19 +331,15 @@ def main():
 
     print("\nOverall Metrics:")
     for k in top_k_values:
-        exact = results["overall"].get(f"exact_hit@{k}", 0)
-        relevant = results["overall"].get(f"relevant_hit@{k}", 0)
-        print(f"  Hit@{k}: exact={exact:.3f}, relevant={relevant:.3f}")
+        exact = results["metrics"].get(f"exact_hit@{k}", 0)
+        relevant = results["metrics"].get(f"relevant_hit@{k}", 0)
+        recall = results["metrics"].get(f"recall@{k}", 0)
+        ndcg = results["metrics"].get(f"ndcg@{k}", 0)
+        print(
+            f"  Hit@{k}: exact={exact:.3f}, relevant={relevant:.3f}, recall={recall:.3f}, ndcg={ndcg:.3f}"
+        )
 
-    print(f"  MRR: {results['overall'].get('mrr', 0):.3f}")
-
-    print("\nBy Stratum:")
-    for stratum in sorted(results["by_stratum"].keys()):
-        metrics = results["by_stratum"][stratum]
-        n = metrics.get("n_queries", 0)
-        exact_1 = metrics.get("exact_hit@1", 0)
-        exact_5 = metrics.get("exact_hit@5", 0)
-        print(f"  {stratum} (n={n}): hit@1={exact_1:.3f}, hit@5={exact_5:.3f}")
+    print(f"  MRR: {results['metrics'].get('mrr', 0):.3f}")
 
     print(f"\nResults saved to: {output_path}")
     print("=" * 60)

@@ -46,8 +46,8 @@ head:
 # Evaluation
 evaluate:
   top_k: [1, 5, 10, 20]
-  mask: 10  # 0=off, K=mask K genes (must include true target genes)
-  output_path: results/scgpt_discriminative/eval_results_mask.json
+  mask: 0  # 0=off, K=mask K genes (must include true target genes)
+  output_path: results/scgpt_discriminative/eval_results_no_mask.json
 
 # Logging
 logging:
