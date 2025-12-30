@@ -78,6 +78,14 @@ def main():
     args = parse_args()
     config = load_config(args.config)
 
+    if args.output == "results/gene_score/eval_results.json":
+        logging_cfg = config.get("logging", {})
+        base_dir = logging_cfg.get("output_dir", "results")
+        exp_name = logging_cfg.get(
+            "experiment_name", config.get("model", {}).get("encoder", "experiment")
+        )
+        args.output = str(Path(base_dir) / exp_name / "eval_results.json")
+
     print("=" * 60)
     print("Route B1 Gene-Score Evaluation")
     print("=" * 60)

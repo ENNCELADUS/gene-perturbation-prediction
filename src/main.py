@@ -114,14 +114,18 @@ def run_pipeline(config: dict, args) -> dict:
     experiment_name = args.experiment_name or config["logging"].get(
         "experiment_name", config["model"]["encoder"]
     )
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = Path(output_dir) / experiment_name / timestamp
-    run_dir.mkdir(parents=True, exist_ok=True)
+    if args.mode == "data":
+        run_dir = None
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = Path(output_dir) / experiment_name / timestamp
+        run_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
     print(f"Data Loading - {config['model']['encoder'].upper()}")
     print("=" * 60)
-    print(f"Output: {run_dir}")
+    if run_dir is not None:
+        print(f"Output: {run_dir}")
 
     # Load data
     print("\n[1/2] Loading dataset...")
@@ -180,13 +184,13 @@ def run_pipeline(config: dict, args) -> dict:
 
     results = {"config": config, "summary": summary}
 
-    # Save results
-    with open(run_dir / "summary.json", "w") as f:
-        json.dump(results, f, indent=2)
+    if run_dir is not None:
+        with open(run_dir / "summary.json", "w") as f:
+            json.dump(results, f, indent=2)
 
-    print("\n" + "=" * 60)
-    print(f"Summary saved to: {run_dir / 'summary.json'}")
-    print("=" * 60)
+        print("\n" + "=" * 60)
+        print(f"Summary saved to: {run_dir / 'summary.json'}")
+        print("=" * 60)
 
     return results
 
@@ -306,13 +310,22 @@ def run_route_b1_train(config: dict, args) -> dict:
     from .train.train_gene_score import main as train_main
     import sys
 
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    if output_dir is None:
+        logging_config = config.get("logging", {})
+        base_dir = logging_config.get("output_dir", "results")
+        exp_name = logging_config.get(
+            "experiment_name", config["model"].get("encoder", "experiment")
+        )
+        output_dir = Path(base_dir) / exp_name
+
     sys.argv = [
         "train_gene_score",
         "--config",
         args.config,
+        "--output_dir",
+        str(output_dir),
     ]
-    if args.output_dir:
-        sys.argv.extend(["--output_dir", args.output_dir])
     if args.max_steps:
         sys.argv.extend(["--max_steps", str(args.max_steps)])
 
@@ -330,8 +343,17 @@ def run_route_b1_eval(config: dict, args) -> dict:
     from .evaluate.evaluate_gene_score import main as eval_main
     import sys
 
-    checkpoint = args.checkpoint or "results/gene_score/best_model.pt"
-    output = "results/gene_score/eval_results.json"
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    if output_dir is None:
+        logging_config = config.get("logging", {})
+        base_dir = logging_config.get("output_dir", "results")
+        exp_name = logging_config.get(
+            "experiment_name", config["model"].get("encoder", "experiment")
+        )
+        output_dir = Path(base_dir) / exp_name
+
+    checkpoint = args.checkpoint or str(output_dir / "best_model.pt")
+    output = str(output_dir / "eval_results.json")
 
     sys.argv = [
         "evaluate_gene_score",
