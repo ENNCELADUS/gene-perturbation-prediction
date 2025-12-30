@@ -6,7 +6,6 @@ Implements:
 - One-gene-overlap Hit@K (relevant retrieval): fraction where any prediction shares ≥1 gene
 - MRR (Mean Reciprocal Rank): average of 1/rank of true label
 - NDCG (Normalized Discounted Cumulative Gain): ranking quality
-- DE gene overlap (Jaccard/F1): overlap of DE gene sets
 """
 
 from typing import List, Dict, Union, Set
@@ -153,52 +152,6 @@ def ndcg(
     # Ideal DCG is 1/log2(2) = 1.0 for single relevant item at rank 1
     idcg = 1.0
     return np.mean(dcg_scores) / idcg if dcg_scores else 0.0
-
-
-def de_gene_overlap(
-    predicted_de_genes: List[Set[str]],
-    observed_de_genes: List[Set[str]],
-    metric: str = "jaccard",
-) -> float:
-    """
-    Compute overlap between predicted and observed DE gene sets.
-
-    Args:
-        predicted_de_genes: List of predicted DE gene sets per query
-        observed_de_genes: List of observed DE gene sets per query
-        metric: 'jaccard' or 'f1'
-
-    Returns:
-        Mean overlap score across queries
-    """
-    scores = []
-    for pred, obs in zip(predicted_de_genes, observed_de_genes):
-        if not pred and not obs:
-            scores.append(1.0)  # Both empty = perfect match
-            continue
-        if not pred or not obs:
-            scores.append(0.0)
-            continue
-
-        intersection = len(pred & obs)
-        union = len(pred | obs)
-
-        if metric == "jaccard":
-            score = intersection / union if union > 0 else 0.0
-        elif metric == "f1":
-            precision = intersection / len(pred) if pred else 0.0
-            recall = intersection / len(obs) if obs else 0.0
-            score = (
-                2 * precision * recall / (precision + recall)
-                if (precision + recall) > 0
-                else 0.0
-            )
-        else:
-            raise ValueError(f"Unknown metric: {metric}. Use 'jaccard' or 'f1'.")
-
-        scores.append(score)
-
-    return np.mean(scores) if scores else 0.0
 
 
 def compute_all_metrics(
