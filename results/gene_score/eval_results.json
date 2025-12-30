@@ -1,0 +1,20 @@
+{
+  "exact_hit@1": 0.0,
+  "exact_hit@5": 0.0,
+  "exact_hit@10": 0.0,
+  "exact_hit@20": 0.0,
+  "mrr": 0.0,
+  "relevant_hit@1": 0.10526315789473684,
+  "relevant_hit@5": 0.3684210526315789,
+  "relevant_hit@10": 0.42105263157894735,
+  "relevant_hit@20": 0.6842105263157895,
+  "ndcg@1": 0.0,
+  "ndcg@5": 0.0,
+  "ndcg@10": 0.0,
+  "ndcg@20": 0.0,
+  "macro_hit@1": 0.0,
+  "macro_hit@5": 0.0,
+  "n_queries": 19,
+  "n_in_pool": 19,
+  "n_conditions": 19
+}

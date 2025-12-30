@@ -16,14 +16,14 @@ PyYAML==6.0.3
 
 # Machine learning / modeling
 scikit-learn==1.7.2
-torch
+torch==2.2.0 # CUDA 12.1
 torchtext==0.18.0; python_version >= "3.11"
 torchtext==0.14.0; python_version < "3.11"
 datasets>=2.10.0
 numba==0.62.1
 scib>=1.1.0
 scgpt>=0.2.0
-flash-attn==2.8.3  # requires CUDA/NVCC
+flash-attn==1.0.4  # requires CUDA/NVCC
 ipython
 
 # Visualization + analysis utilities

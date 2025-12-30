@@ -1,0 +1,42 @@
+condition_split:
+  double_count_bins: 3
+  double_freq_bins: 3
+  double_train_ratio: 0.7
+  double_val_ratio: 0.15
+  min_cells_per_condition: 50
+  min_cells_per_double: 30
+  output_path: data/norman/splits/norman_condition_split_compositional_seed42.json
+  seed: 42
+  seen_single_train_ratio: 0.9
+data:
+  h5ad_path: data/norman/perturb_processed.h5ad
+evaluate:
+  top_k:
+  - 1
+  - 5
+  - 10
+  - 20
+head:
+  dropout: 0.2
+  hidden_dim: 512
+logging:
+  experiment_name: scgpt_discriminative
+  output_dir: results/
+model:
+  encoder: scgpt
+  freeze_encoder: true
+  preprocess_binning: 51
+  pretrained_dir: model/scGPT
+training:
+  backbone_learning_rate: 1.0e-05
+  balanced_sampling: true
+  balanced_sampling_n_cells: 4
+  balanced_sampling_n_conditions: 8
+  batch_size: 64
+  early_stopping_metric: val_loss
+  early_stopping_patience: 10
+  epochs: 200
+  head_learning_rate: 0.0001
+  unfreeze_last_n_layers: 1
+  warmup_ratio: 0.1
+  weight_decay: 0.01
