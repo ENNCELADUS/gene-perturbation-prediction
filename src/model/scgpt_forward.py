@@ -102,28 +102,45 @@ class ScGPTForward(nn.Module):
         """Load pretrained weights from checkpoint."""
         print(f"Loading checkpoint from {self.checkpoint_path}")
         checkpoint = torch.load(self.checkpoint_path, map_location="cpu")
+        model_state = self.model.state_dict()
+        compatible = {}
+        mismatched = []
+        unexpected = []
 
-        # checkpoint is state_dict (OrderedDict)
-        # Try strict loading first, if it fails use non-strict
-        try:
-            self.model.load_state_dict(checkpoint, strict=True)
-            print(f"  ✓ Loaded {len(checkpoint)} parameter groups (strict mode)")
-        except RuntimeError as e:
-            print(f"  ⚠ Strict loading failed: {str(e)[:200]}...")
-            print(f"  → Attempting non-strict loading (will skip incompatible layers)")
+        for key, value in checkpoint.items():
+            if key not in model_state:
+                unexpected.append(key)
+                continue
+            if model_state[key].shape != value.shape:
+                mismatched.append(key)
+                continue
+            compatible[key] = value
 
-            # Load with strict=False - this will load matching keys and skip incompatible ones
-            missing_keys, unexpected_keys = self.model.load_state_dict(
-                checkpoint, strict=False
-            )
+        model_state.update(compatible)
+        self.model.load_state_dict(model_state, strict=True)
 
-            print(f"  ✓ Loaded checkpoint (non-strict mode)")
-            if missing_keys:
-                print(f"    Missing keys ({len(missing_keys)}): {missing_keys[:5]}...")
-            if unexpected_keys:
-                print(
-                    f"    Unexpected keys ({len(unexpected_keys)}): {unexpected_keys[:5]}..."
-                )
+        missing = [key for key in model_state.keys() if key not in compatible]
+        allowed_missing_prefixes = ("cls_decoder.",)
+        allowed_unexpected_prefixes = ("flag_encoder.",)
+
+        missing = [
+            key
+            for key in missing
+            if not key.startswith(allowed_missing_prefixes)
+        ]
+        unexpected = [
+            key
+            for key in unexpected
+            if not key.startswith(allowed_unexpected_prefixes)
+        ]
+
+        print(f"  ✓ Loaded checkpoint ({len(compatible)} matched params)")
+        if missing:
+            print(f"  ⚠ Missing keys ({len(missing)}): {missing[:5]}...")
+        if unexpected:
+            print(f"  ⚠ Unexpected keys ({len(unexpected)}): {unexpected[:5]}...")
+        if mismatched:
+            print(f"  ⚠ Mismatched shapes ({len(mismatched)}): {mismatched[:5]}...")
 
     def _apply_freeze_strategy(self):
         """
