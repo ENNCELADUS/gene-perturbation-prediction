@@ -1,4 +1,4 @@
-# TGD (Target-Gene Downregulation) Baseline Configuration
+# TGA (Target-Gene Activation) Baseline Configuration
 # Training-free heuristic baseline for reverse perturbation prediction
 
 data:
@@ -15,13 +15,13 @@ condition_split:
   seed: 42
 
 baseline:
-  name: tgd
+  name: tga
   epsilon: 1.0e-6  # Numerical stability for z-score computation
   use_pseudobulk: true  # Average query cells before scoring
 
 evaluation:
   top_k_values: [1, 5, 8, 10, 20]
-  output_path: results/tgd/eval_results.json
+  output_path: results/tga/eval_results.json
 
 logging:
-  output_dir: results/tgd
+  output_dir: results/tga

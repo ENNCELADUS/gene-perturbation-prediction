@@ -42,17 +42,3 @@ Metrics for evaluating reverse-perturbation retrieval, where each query perturba
      $$
 
    - **Bio-meaning:** Distinguishes close-but-not-exact mechanisms from irrelevant ones.
-
-6. **DE gene set overlap** (F1 or Jaccard)
-   - **Definition:** Compare predicted vs. observed differentially expressed (DE) gene sets `S_pred` and `S_obs`.
-
-     $$
-     \text{Jaccard}=\frac{|S_{\text{pred}}\cap S_{\text{obs}}|}{|S_{\text{pred}}\cup S_{\text{obs}}|},\quad
-     \text{F1}=\frac{2PR}{P+R}.
-     $$
-
-   - **Bio-meaning:** Tests whether retrieved perturbations reproduce the same transcriptional program, not just nearest-neighbor similarity.
-
-7. **Pathway enrichment agreement** (FDR / NES concordance) *(optional)*
-   - **Definition:** Run pathway enrichment on predicted-response DE genes and on observed DE genes; report overlap of significant pathways (e.g., Jaccard on pathway sets at `FDR < 0.05`) and/or correlation of pathway scores (NES).
-   - **Bio-meaning:** Evaluates mechanistic consistency at the pathway level, which is often more robust than individual genes.
