@@ -3,11 +3,11 @@
 
 paths:
   model_dir: "model/scGPT"  # Still needs vocab.json
-  data_dir: "data/processed"
-  test_file: "test.h5ad"
-  train_file: "train.h5ad"
-  output_dir: "results/baseline"
-  log_dir: "logs/baseline"
+  data_dir: "../CellPerturb_VCC_Proj6/vcc_data/log1p"
+  test_file: "test_lognorm.h5ad"
+  train_file: "train_lognorm.h5ad"
+  output_dir: "results/baseline_djw"
+  log_dir: "logs/baseline_djw" # 没有内容输出
 
 model:
   pad_token: "<pad>"
