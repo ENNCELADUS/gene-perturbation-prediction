@@ -57,6 +57,7 @@ from src.utils.training import (
     save_model,
     freeze_encoder_layers,
 )
+from src.utils.loss_metrics import build_de_gene_map
 
 warnings.filterwarnings("ignore")
 
@@ -148,6 +149,15 @@ def main():
             f"Dataset: {n_genes} genes, {np.sum(pert_data.adata.var['id_in_vocab'] >= 0)} in vocab"
         )
 
+    # Precompute DE gene map for loss terms that use DE sets
+    de_fdr = config.get("metrics", {}).get("de_fdr", 0.05)
+    de_gene_map = build_de_gene_map(pert_data.adata, gene_names, fdr_threshold=de_fdr)
+    if is_main_process(rank):
+        if de_gene_map:
+            logger.info(f"DE gene map loaded for {len(de_gene_map)} perturbations")
+        else:
+            logger.warning("DE gene map is empty; DE loss terms will be skipped")
+
     # ========== Create Train/Val Split ==========
     split_config = config["split"]
     test_genes = load_test_genes(split_config["test_genes_file"])
@@ -234,6 +244,7 @@ def main():
 
     # ========== Training Loop ==========
     ctrl_adata = pert_data.adata[pert_data.adata.obs["condition"] == "ctrl"]
+    ctrl_mean = np.asarray(ctrl_adata.X.mean(axis=0)).flatten()
     best_overall_score = 0.0  # overall_score (0-100), higher is better
     best_model = None
     best_val_metrics = {}
@@ -253,6 +264,8 @@ def main():
             optimizer,
             scaler,
             gene_ids,
+            ctrl_mean,
+            de_gene_map,
             config,
             epoch,
             logger if is_main_process(rank) else None,

@@ -108,9 +108,13 @@ class RandomForestWrapper:
 
     def fit_from_adata(self, adata, condition_key="condition", control_key="ctrl"):
         if sc is None:
-            raise ImportError("scanpy is required for RandomForestWrapper (PCA). Please install scanpy.")
+            raise ImportError(
+                "scanpy is required for RandomForestWrapper (PCA). Please install scanpy."
+            )
         if RandomForestRegressor is None:
-            raise ImportError("scikit-learn is required for RandomForestWrapper. Please install scikit-learn.")
+            raise ImportError(
+                "scikit-learn is required for RandomForestWrapper. Please install scikit-learn."
+            )
 
         self.logger.info("Fitting random forest model from AnnData...")
 
@@ -133,7 +137,9 @@ class RandomForestWrapper:
             )
         else:
             df = pd.DataFrame(
-                np.asarray(X), index=adata.obs[condition_key].values, columns=self.var_names
+                np.asarray(X),
+                index=adata.obs[condition_key].values,
+                columns=self.var_names,
             )
 
         group_means = df.groupby(level=0, observed=True).mean()
@@ -141,10 +147,16 @@ class RandomForestWrapper:
         # ---- mean profiles ----
         ctrl_mask = adata.obs[condition_key] == str(control_key)
         if ctrl_mask.sum() == 0:
-            raise ValueError(f"No control cells found where {condition_key} == '{control_key}'.")
+            raise ValueError(
+                f"No control cells found where {condition_key} == '{control_key}'."
+            )
 
-        self.mean_unperturbed = np.asarray(adata[ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
-        self.mean_perturbed = np.asarray(adata[~ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
+        self.mean_unperturbed = (
+            np.asarray(adata[ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
+        )
+        self.mean_perturbed = (
+            np.asarray(adata[~ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
+        )
 
         # Remove control from training targets
         if str(control_key) in group_means.index:
@@ -169,7 +181,9 @@ class RandomForestWrapper:
                 continue
 
             x = G[idx, :]  # (k,)
-            delta = (group_means.loc[tg].values.astype(np.float64) - self.mean_perturbed.astype(np.float64))  # (n_genes,)
+            delta = group_means.loc[tg].values.astype(
+                np.float64
+            ) - self.mean_perturbed.astype(np.float64)  # (n_genes,)
 
             z, *_ = np.linalg.lstsq(G, delta, rcond=None)  # (k,)
 
@@ -204,7 +218,9 @@ class RandomForestWrapper:
 
     def _predict_profile_for_target(self, target_gene: str) -> np.ndarray:
         if not self._is_fitted or self.rf is None:
-            raise RuntimeError("RandomForestWrapper not fitted. Call fit_from_adata() first.")
+            raise RuntimeError(
+                "RandomForestWrapper not fitted. Call fit_from_adata() first."
+            )
 
         idx = self.gene2idx.get(str(target_gene), None)
         if idx is None:
@@ -212,13 +228,25 @@ class RandomForestWrapper:
 
         x = self.G[idx, :].astype(np.float64, copy=False).reshape(1, -1)  # (1, k)
         z_hat = self.rf.predict(x).reshape(-1)  # (k,)
-        y_hat = (self.G.astype(np.float64) @ z_hat.reshape(-1, 1)).reshape(-1) + self.mean_perturbed.astype(np.float64)
+        y_hat = (self.G.astype(np.float64) @ z_hat.reshape(-1, 1)).reshape(
+            -1
+        ) + self.mean_perturbed.astype(np.float64)
 
         return y_hat.astype(np.float32, copy=False)
 
-    def predict(self, batch_data, gene_ids, include_zero_gene="batch-wise", amp=True, target_gene=None, **kwargs):
+    def predict(
+        self,
+        batch_data,
+        gene_ids,
+        include_zero_gene="batch-wise",
+        amp=True,
+        target_gene=None,
+        **kwargs,
+    ):
         if not self._is_fitted:
-            raise RuntimeError("RandomForestWrapper has not been fitted. Call fit_from_adata() first.")
+            raise RuntimeError(
+                "RandomForestWrapper has not been fitted. Call fit_from_adata() first."
+            )
         if target_gene is None:
             raise ValueError(
                 "RandomForestWrapper.predict() requires target_gene. Update main.py to pass target_gene=target."
@@ -237,7 +265,9 @@ class RandomForestWrapper:
             if profile.shape[0] > n_genes:
                 profile = profile[:n_genes]
             else:
-                profile = np.pad(profile, (0, n_genes - profile.shape[0]), mode="constant")
+                profile = np.pad(
+                    profile, (0, n_genes - profile.shape[0]), mode="constant"
+                )
 
         pred = torch.from_numpy(profile).float().unsqueeze(0).expand(batch_size, -1)
         if batch_data.x.is_cuda:

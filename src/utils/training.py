@@ -6,7 +6,7 @@ import json
 import shutil
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Mapping
 
 import numpy as np
 import torch
@@ -21,12 +21,12 @@ from scgpt.utils import load_pretrained, map_raw_id_to_vocab_id
 
 from src.utils.de_metrics import (
     compute_de_comparison_metrics,
-    compute_des,
     compute_mae_top2k,
     compute_overall_score,
     compute_pds,
     compute_pseudobulk_delta,
 )
+from src.utils.loss_metrics import compute_composite_loss
 
 
 def freeze_encoder_layers(
@@ -159,12 +159,18 @@ def train_epoch(
     optimizer: torch.optim.Optimizer,
     scaler: torch.cuda.amp.GradScaler,
     gene_ids: np.ndarray,
+    ctrl_mean: np.ndarray,
+    de_gene_map: Mapping[str, torch.Tensor] | None,
     config: dict,
     epoch: int,
     logger,
 ) -> float:
     """
     Train the model for one epoch.
+
+    Args:
+        ctrl_mean: Control mean expression (n_genes,)
+        de_gene_map: Mapping of perturbation -> DE gene indices
 
     Returns:
         Average training loss for the epoch
@@ -181,6 +187,8 @@ def train_epoch(
     max_seq_len = config["model"]["max_seq_len"]
 
     num_batches = len(train_loader)
+    ctrl_mean_tensor = torch.as_tensor(ctrl_mean, device=device)
+    loss_parts_sum = {"dist": 0.0, "proto": 0.0, "de_rank": 0.0, "dir": 0.0}
 
     for batch_idx, batch_data in enumerate(train_loader):
         batch_size = len(batch_data.y)
@@ -241,41 +249,16 @@ def train_epoch(
             )
             output_values = output_dict["mlm_output"]
 
-            # Configurable loss function (default: SmoothL1Loss)
-            loss_cfg = config.get("loss", {})
-            loss_type = loss_cfg.get("type", "SmoothL1Loss")
-            beta = loss_cfg.get("beta", 1.0)
-
-            if loss_type == "SmoothL1Loss":
-                criterion = nn.SmoothL1Loss(beta=beta, reduction="none")
-            elif loss_type == "MSELoss":
-                criterion = nn.MSELoss(reduction="none")
-            elif loss_type == "L1Loss":
-                criterion = nn.L1Loss(reduction="none")
-            else:
-                raise ValueError(f"Unknown loss type: {loss_type}")
-
-            # Compute element-wise loss
-            element_loss = criterion(output_values, target_values)
-
-            # ========== Weighted Loss (P1 Fix) ==========
-            # Upweight genes with larger expression changes to focus on perturbation signal
-            # This aligns training with the Top2000-MAE evaluation metric
-            if config.get("training", {}).get("weighted_loss", False):
-                weight_factor = config.get("training", {}).get("weight_factor", 5.0)
-
-                # Compute weight based on |target - input| (perturbation effect magnitude)
-                delta = torch.abs(target_values - input_values)
-                # Normalize delta to [0, 1] range per batch to avoid scale issues
-                delta_max = delta.max(dim=1, keepdim=True)[0].clamp(min=1e-6)
-                delta_norm = delta / delta_max
-                # Weight = 1 + factor * normalized_delta (so min weight = 1, max = 1 + factor)
-                weights = 1.0 + weight_factor * delta_norm
-
-                # Apply weights and reduce
-                loss = (element_loss * weights).mean()
-            else:
-                loss = element_loss.mean()
+            ctrl_mean_subset = ctrl_mean_tensor[input_gene_ids]
+            loss, loss_parts = compute_composite_loss(
+                pred=output_values,
+                truth=target_values,
+                perts=batch_data.pert,
+                ctrl_mean=ctrl_mean_subset,
+                de_gene_map=de_gene_map,
+                gene_indices=input_gene_ids,
+                config=config,
+            )
 
         # Backward pass
         model.zero_grad()
@@ -292,6 +275,8 @@ def train_epoch(
         scaler.update()
 
         total_loss += loss.item()
+        for key in loss_parts_sum:
+            loss_parts_sum[key] += loss_parts.get(key, 0.0)
 
         if logger is not None and batch_idx % log_interval == 0 and batch_idx > 0:
             ms_per_batch = (time.time() - start_time) * 1000 / log_interval
@@ -300,7 +285,17 @@ def train_epoch(
                 f"| epoch {epoch:3d} | {batch_idx:3d}/{num_batches:3d} batches | "
                 f"ms/batch {ms_per_batch:5.2f} | loss {cur_loss:5.4f}"
             )
+            logger.info(
+                "  dist %.4f | proto %.4f | de_rank %.4f | dir %.4f"
+                % (
+                    loss_parts_sum["dist"] / log_interval,
+                    loss_parts_sum["proto"] / log_interval,
+                    loss_parts_sum["de_rank"] / log_interval,
+                    loss_parts_sum["dir"] / log_interval,
+                )
+            )
             total_loss = 0
+            loss_parts_sum = {k: 0.0 for k in loss_parts_sum}
             start_time = time.time()
 
     return total_loss / max(1, num_batches % log_interval)
@@ -389,17 +384,15 @@ def compute_validation_metrics(
     ctrl_mean = np.asarray(ctrl_adata.X.mean(axis=0)).flatten()
 
     # Get control expression for DE analysis
-    compute_de_metrics = config.get("metrics", {}).get("compute_de_metrics", True)
-    if compute_de_metrics:
-        if hasattr(ctrl_adata.X, "toarray"):
-            ctrl_expr = ctrl_adata.X.toarray()
-        else:
-            ctrl_expr = np.asarray(ctrl_adata.X)
+    if hasattr(ctrl_adata.X, "toarray"):
+        ctrl_expr = ctrl_adata.X.toarray()
     else:
-        ctrl_expr = None
+        ctrl_expr = np.asarray(ctrl_adata.X)
 
     mae_top_k = config.get("metrics", {}).get("mae_top_k", 2000)
-    des_top_k = config.get("metrics", {}).get("des_top_k", None)
+    de_threads = config.get("metrics", {}).get(
+        "de_threads", config.get("hardware", {}).get("threads", 1)
+    )
 
     # Group by perturbation
     unique_perts = [p for p in np.unique(pert_cat) if p != "ctrl"]
@@ -431,39 +424,20 @@ def compute_validation_metrics(
         except (IndexError, ValueError):
             target_gene_indices[pert] = -1
 
-        # Compute DES
+        # Compute DES (align with main.py DE-metrics logic)
         des_val = np.nan
-
-        # Fast fallback DES: rank genes by |delta| without running DE (keeps val metric usable
-        # when full DE is disabled for speed/timeout reasons).
-        def _fast_des_from_deltas() -> float:
-            truth_delta = compute_pseudobulk_delta(truth_pert, ctrl_mean)
-            pred_delta = compute_pseudobulk_delta(pred_pert, ctrl_mean)
-            truth_genes = gene_names[np.argsort(np.abs(truth_delta))[::-1]]
-            pred_genes = gene_names[np.argsort(np.abs(pred_delta))[::-1]]
-            des_score, _ = compute_des(
-                truth_genes,
-                pred_genes,
-                topk=des_top_k,
+        try:
+            de_metrics = compute_de_comparison_metrics(
+                control_expr=ctrl_expr,
+                pred_expr=pred_pert,
+                truth_expr=truth_pert,
+                gene_names=gene_names,
+                fdr_threshold=0.05,
+                threads=de_threads,
             )
-            return des_score
-
-        if compute_de_metrics and ctrl_expr is not None:
-            try:
-                de_metrics = compute_de_comparison_metrics(
-                    control_expr=ctrl_expr,
-                    pred_expr=pred_pert,
-                    truth_expr=truth_pert,
-                    gene_names=gene_names,
-                    fdr_threshold=0.05,
-                    threads=1,
-                    topk=des_top_k,
-                )
-                des_val = de_metrics["des"]
-            except Exception:
-                des_val = _fast_des_from_deltas()
-        else:
-            des_val = _fast_des_from_deltas()
+            des_val = de_metrics["des"]
+        except Exception:
+            des_val = np.nan
 
         # Compute MAE_top2k
         mae_val = compute_mae_top2k(

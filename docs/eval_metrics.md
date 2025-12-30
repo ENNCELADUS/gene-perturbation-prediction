@@ -44,15 +44,12 @@ $$S_{k,j} = \frac{\hat{\delta}_k \cdot \delta_j}{|\hat{\delta}_k|_2 |\delta_j|_2
 
 Let $R_k$ be the rank of the *true* perturbation $\delta_k$ among all similarities with $\hat{\delta}_k$.
 
-Mean rank:
-
-$$PDS_{rank} = \frac{1}{N} \sum_{k=1}^N R_k$$
-
-Normalized score:
+The primary metric is the **Normalized Perturbation Discrimination Score ($nPDS_{rank}$)**:
 
 $$nPDS_{rank} = \frac{1}{N^2} \sum_{k=1}^N R_k$$
 
-Lower = better discrimination.
+* Range: $[1/N, 1]$
+* Interpretation: Lower is better (best = $1/N$, worst = $1$).
 
 ---
 
@@ -180,111 +177,62 @@ $$\text{SizeCorr} = \rho_{\text{rank}}\big((n_t)_{t=1}^T, (\hat{n}_t)_{t=1}^T\bi
 
 ### 4.1 Loss Function
 
-Use PyTorch's built-in **SmoothL1** loss (Huber-style L1/L2 compromise) to directly regress $\hat{y}$ against $y$ in **log1p space**. Either the function name or mathematical definition can be written in code comments.
+The model minimizes a composite loss function ($L_{\text{total}}$) that balances cell-level reconstruction and perturbation-level discrimination. Default weights are:
 
-**PyTorch implementation:**
+$$
+L_{\text{total}} = 0.60 \cdot L_{\text{SW1}} + 0.25 \cdot L_{\text{Proto}} + 0.10 \cdot L_{\text{Rank}} + 0.05 \cdot L_{\text{Dir}}
+$$
 
-```python
-torch.nn.SmoothL1Loss(beta=1.0, reduction="mean")
-```
+*   **$L_{\text{SW1}}$ (Sliced Wasserstein)**: Aligns distribution shapes between predicted and true cell populations.
+*   **$L_{\text{Proto}}$ (ProtoInfoNCE)**: Contrastive loss on pseudobulk deltas to enforce perturbation distinctiveness.
+*   **$L_{\text{Rank}}$ (DE Rank)**: Ensures significant DE genes have larger absolute predicted changes than non-DE genes.
+*   **$L_{\text{Dir}}$ (DE Direction)**: Penalizes incorrect sign predictions for significant DE genes.
 
-Note: Older versions may not have the `beta` parameter; use the default SmoothL1 in that case.
+### 4.2 Updated Overall Score (Official-style scaling; adapted to your metric definitions)
 
-**Mathematical definition** (element-wise, let $e = \hat{y} - y$):
+Let the validation metrics computed using **your** definitions be:
 
-When $|e| < \beta$:
+* $DES_{\text{pred}} \in [0, 1]$ (higher is better)
+* $nPDS_{\text{pred}} = \frac{1}{N^2} \sum_{k=1}^N R_k$ (lower is better)
+* $MAE_{\text{pred}}$ (your Top2000-MAE; lower is better)
 
-$$\ell(e) = \frac{1}{2} \frac{e^2}{\beta}$$
+Let the corresponding baseline scores (cell-mean baseline model) under the **same** metric definitions be:
+* $DES_{\text{base}} = 0.1075$
+* $nPDS_{\text{base}} = 0.5167$
+* $MAE_{\text{base}} = 0.1258$
 
-When $|e| \ge \beta$:
+Define a clipping operator:
+$$
+\text{clip}_{[0,1]}(x) = \min(1, \max(0, x))
+$$
 
-$$\ell(e) = |e| - \frac{1}{2}\beta$$
+### 4.3 Scaled DES (same as official)
 
-Finally, take the mean over all elements.
+Because the best possible $DES$ is $1$:
+$$
+DES_{\text{scaled}} = \text{clip}_{[0,1]} \left( \frac{DES_{\text{pred}} - DES_{\text{base}}}{1 - DES_{\text{base}}} \right)
+$$
 
-### 4.2 Validation Metrics per Epoch
+### 4.4 Scaled PDS (using $nPDS_{rank}$ definition)
 
-For each epoch, record both the "raw three metrics" and the "normalized three sub-scores" (all in the same direction), then compute a **weighted geometric mean** composite score (default weights all equal to 1). The calculation procedures and meanings for PDS and Top2000-MAE follow the documentation (pseudobulk, delta, cosine similarity, ranking, Top2000 gene selection, and MAE).
+Official scoring logic adapted to your normalized PDS ($nPDS_{\text{pred}}$), where lower is better. The best attainable value is $nPDS_{\min} = \frac{1}{N}$.
 
-#### 4.2.1 Raw Three Metrics (Computed According to Evaluation Definitions)
+$$
+nPDS_{\text{scaled}} = \text{clip}_{[0,1]} \left( \frac{nPDS_{\text{base}} - nPDS_{\text{pred}}}{nPDS_{\text{base}}} \right)
+$$
 
-**PDS (lower is better):**
+This normalization yields zero if performance is no better than baseline, and approaches one as performance improves (implementation simplifies theoretical optimum to 0).
 
-For each perturbation $k$, first compute pseudobulk to obtain $y_k$, $\hat{y}_k$, and $y_{ntc}$. Construct $\delta_k = y_k - y_{ntc}$ and $\hat{\delta}_k = \hat{y}_k - y_{ntc}$. Compute cosine similarity $S_{k,j}$ with all true deltas $\delta_j$. Obtain the rank $R_k$ of the true perturbation in the sorted similarities with $\hat{\delta}_k$. Then compute the mean rank:
+### 4.5 Scaled MAE (official logic, with your Top2000-MAE)
 
-$$\text{MeanRank} = \frac{1}{N} \sum_{k=1}^N R_k$$
+For MAE, the best value is $0$, so the official scaling becomes:
+$$
+MAE_{\text{scaled}} = \text{clip}_{[0,1]} \left( \frac{MAE_{\text{base}} - MAE_{\text{pred}}}{MAE_{\text{base}}} \right)
+$$
 
-If you also want to keep the normalized version from the documentation, you can record it simultaneously:
+### 4.6 Final Overall Score (official aggregation)
 
-$$nPDS_{rank} = \frac{1}{N^2} \sum_{k=1}^{N} R_k$$
-
-**Top2000-MAE (lower is better):**
-
-Select the Top2000 gene set $\Omega_k$ for each perturbation based on ground truth LFC, then compute:
-
-$$MAE_{top2k} = \frac{1}{N} \sum_{k=1}^{N} \left( \frac{1}{2000} \sum_{g \in \Omega_k} |\hat{y}_{k,g} - y_{k,g}| \right)$$
-
-**DES (higher is better):**
-
-Compute according to the DES definition:
-
-$$\text{DES} = \frac{1}{N} \sum_{k=1}^N DES_k$$
-
-This uses Wilcoxon rank-sum test + BH (FDR=0.05) to compute set intersection ratios. When the predicted set is larger than the true set, truncate using $|\text{logFC}|$ to the same size before computing the intersection ratio.
-
-#### 4.2.2 Normalized Three Sub-Scores
-
-**Baseline** (simply averaging the expression from all perturbations. The baseline scores are pre-calculated on the Training dataset):
-
-* `pds_nrank`: 0.5167
-* `mae_top2000`: 0.1258
-* `des`: 0.0442
-
-##### **Overall Score**
-
-The overall score on the leaderboard—and ultimately the score used for prize-eligible final entries—is computed by **averaging the improvement of the three metrics** relative to a **baseline cell-mean model**.
-
-The baseline model predicts by averaging expression across all perturbations. Its baseline scores are pre-computed on the Training dataset and appear in the raw score table.
-
----
-
-### **Scaled Metrics**
-
-#### **1. Differential Expression Score (DES) & Perturbation Discrimination Score (PDS)**
-
-- DES ranges from **0 (worst)** to **1 (best)** (higher is better).
-- PDS is a (normalized) mean rank, so **lower is better**. A perfect model has
-  $nPDS_{rank} = 1/N$; the baseline is worse (higher).
-
-Their scaled versions measure improvement over the baseline, respecting each
-metric's direction:
-
-$$DES_{scaled} = \frac{DES_{prediction} - DES_{baseline}}{1 - DES_{baseline}}$$
-
-$$PDS_{scaled} = \frac{PDS_{baseline} - PDS_{prediction}}{PDS_{baseline}}$$
-
----
-
-#### **2. Mean Absolute Error (MAE)**
-
-Since lower MAE is better and the ideal value is **0**, the scaled score is:
-
-$$MAE_{scaled} = \frac{MAE_{baseline} - MAE_{prediction}}{MAE_{baseline}}$$
-
----
-
-### **Score Clipping**
-
-If any scaled score becomes **negative** (i.e., your model performs worse than the baseline), it is **clipped to 0**.
-
-All scaled scores are thus bounded in:
-
-$$0 \le \text{scaled score} \le 1$$
-
----
-
-### **Final Score**
-
-The final score is the **mean of the three scaled scores**, multiplied by 100:
-
-$$S = \frac{1}{3}(DES_{scaled} + PDS_{scaled} + MAE_{scaled}) \times 100$$
+Official aggregation is the **unweighted arithmetic mean** of the three scaled scores, multiplied by 100:
+$$
+S_{\text{overall}} = 100 \cdot \frac{DES_{\text{scaled}} + nPDS_{\text{scaled}} + MAE_{\text{scaled}}}{3}
+$$

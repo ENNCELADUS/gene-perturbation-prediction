@@ -37,7 +37,7 @@ model:
   nhead: 8
   n_layers_cls: 3
   dropout: 0.0
-  use_fast_transformer: false  # Disabled: flash-attn not available
+  use_fast_transformer: true  # Disabled: flash-attn not available
 
 # ========== Inference / Evaluation ==========
 inference:
@@ -75,11 +75,6 @@ training:
     - "value_encoder"
     - "transformer_encoder"
   
-  # ========== Weighted Loss (P1 Fix) ==========
-  # Focus training on high-change genes (aligns with Top2000-MAE eval metric)
-  weighted_loss: true
-  weight_factor: 10.0  # Upweight high-change genes by this factor
-
 # ========== Optimizer ==========
 optimizer:
   lr: 1.0e-4
@@ -93,9 +88,16 @@ optimizer:
 
 # ========== Loss Function ==========
 loss:
-  type: "SmoothL1Loss"  # Options: "SmoothL1Loss", "MSELoss", "L1Loss"
-  beta: 0.5             # For SmoothL1Loss only (transition from L1 to L2)
-  reduction: "mean"     # Options: "mean", "sum", "none"
+  sw1_weight: 0.60
+  proto_weight: 0.25
+  de_rank_weight: 0.10
+  dir_weight: 0.05
+  sw1_projections: 32
+  proto_tau: 0.1
+  de_rank_tau: 0.2
+  dir_tau: 0.2
+  de_rank_sample_de: 256
+  de_rank_sample_non_de: 256
 
 # ========== Partial Weight Loading ==========
 # Only load these prefixes from pretrained model
@@ -116,10 +118,8 @@ split:
 # ========== Metrics ==========
 metrics:
   mae_top_k: 2000  # Top K genes by |log2FC| for MAE calculation
-  des_top_k: null  # K for DES overlap (null = use |truth DE|; also used by fast fallback DES)
-  # DE metrics (Wilcoxon per gene per perturbation) can be extremely slow and will
-  # make non-main DDP ranks wait at a collective, risking NCCL timeouts.
-  compute_de_metrics: false
+  des_top_k: null  # K for DES overlap (null = use |truth DE|)
+  de_fdr: 0.05     # FDR threshold for DE gene sets used in training loss
 
 # ========== Early Stopping ==========
 early_stopping:

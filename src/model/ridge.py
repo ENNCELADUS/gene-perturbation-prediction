@@ -59,8 +59,8 @@ class RidgeWrapper:
         self.lmbda = float(ridge_cfg.get("ridge_lambda", 0.1))
 
         # Learned state
-        self.G = None               # (n_genes, top_k)
-        self.W = None               # (top_k, top_k)
+        self.G = None  # (n_genes, top_k)
+        self.W = None  # (top_k, top_k)
         self.mean_unperturbed = None
         self.mean_perturbed = None
         self.gene2idx = None
@@ -120,7 +120,9 @@ class RidgeWrapper:
             )
         else:
             df = pd.DataFrame(
-                np.asarray(X), index=adata.obs[condition_key].values, columns=self.var_names
+                np.asarray(X),
+                index=adata.obs[condition_key].values,
+                columns=self.var_names,
             )
 
         group_means = df.groupby(level=0, observed=True).mean()
@@ -134,8 +136,12 @@ class RidgeWrapper:
                 f"No control cells found where {condition_key} == '{control_key}'."
             )
 
-        self.mean_unperturbed = np.asarray(adata[ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
-        self.mean_perturbed = np.asarray(adata[~ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
+        self.mean_unperturbed = (
+            np.asarray(adata[ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
+        )
+        self.mean_perturbed = (
+            np.asarray(adata[~ctrl_mask].X.mean(axis=0)).ravel().astype(np.float32)
+        )
 
         # ---- 3) PCA gene loadings ----
         perturbed_genes = set(adata.obs[condition_key].unique().tolist())
@@ -185,7 +191,9 @@ class RidgeWrapper:
 
     def _predict_profile_for_target(self, target_gene: str) -> np.ndarray:
         if not self._is_fitted:
-            raise RuntimeError("RidgeWrapper has not been fitted. Call fit_from_adata() first.")
+            raise RuntimeError(
+                "RidgeWrapper has not been fitted. Call fit_from_adata() first."
+            )
 
         if self.G is None or self.W is None or self.gene2idx is None:
             return self.mean_perturbed
@@ -198,9 +206,19 @@ class RidgeWrapper:
         yhat = (self.G @ self.W @ P_val.T).reshape(-1) + self.mean_perturbed
         return yhat.astype(np.float32, copy=False)
 
-    def predict(self, batch_data, gene_ids, include_zero_gene="batch-wise", amp=True, target_gene=None, **kwargs):
+    def predict(
+        self,
+        batch_data,
+        gene_ids,
+        include_zero_gene="batch-wise",
+        amp=True,
+        target_gene=None,
+        **kwargs,
+    ):
         if not self._is_fitted:
-            raise RuntimeError("RidgeWrapper has not been fitted. Call fit_from_adata() first.")
+            raise RuntimeError(
+                "RidgeWrapper has not been fitted. Call fit_from_adata() first."
+            )
 
         batch_size = batch_data.x.shape[0]
         n_genes = batch_data.x.shape[2]
@@ -222,7 +240,9 @@ class RidgeWrapper:
             if profile.shape[0] > n_genes:
                 profile = profile[:n_genes]
             else:
-                profile = np.pad(profile, (0, n_genes - profile.shape[0]), mode="constant")
+                profile = np.pad(
+                    profile, (0, n_genes - profile.shape[0]), mode="constant"
+                )
 
         pred = torch.from_numpy(profile).float().unsqueeze(0).expand(batch_size, -1)
 
