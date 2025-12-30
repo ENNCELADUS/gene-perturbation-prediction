@@ -175,7 +175,7 @@ def main():
 
             # Use different seed for each batch to sample different control cells
             #batch_seed = base_seed + batch_start
-            batch_seed= base_seed + batch_start -(i%6)*eval_batch_size
+            batch_seed= base_seed + batch_start -(i%5)*eval_batch_size
 
             batch_result = data_loader.prepare_perturbation_batch(
                 target, n_cells=batch_n_cells, seed=batch_seed, return_control_expr=True
