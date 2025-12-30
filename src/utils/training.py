@@ -357,6 +357,7 @@ def evaluate(
 
     include_zero_gene = config["model"]["include_zero_gene"]
     max_seq_len = config["model"]["max_seq_len"]
+    amp_enabled = config.get("training", {}).get("amp", False)
 
     def _predict_batch_fallback(batch_data) -> torch.Tensor:
         batch_size = len(batch_data.pert)
@@ -405,17 +406,18 @@ def evaluate(
         src_key_padding_mask = torch.zeros_like(
             input_values, dtype=torch.bool, device=device
         )
-        output_dict = model(
-            mapped_input_gene_ids,
-            input_values,
-            input_pert_flags,
-            src_key_padding_mask=src_key_padding_mask,
-            CLS=False,
-            CCE=False,
-            MVC=False,
-            ECS=False,
-            do_sample=True,
-        )
+        with torch.cuda.amp.autocast(enabled=amp_enabled):
+            output_dict = model(
+                mapped_input_gene_ids,
+                input_values,
+                input_pert_flags,
+                src_key_padding_mask=src_key_padding_mask,
+                CLS=False,
+                CCE=False,
+                MVC=False,
+                ECS=False,
+                do_sample=True,
+            )
         output_values = output_dict["mlm_output"].float()
         pred_gene_values = torch.zeros_like(ori_gene_values)
         pred_gene_values[:, input_gene_ids] = output_values
