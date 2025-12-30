@@ -46,6 +46,30 @@ def build_de_gene_map(
 
     uns = getattr(adata, "uns", {}) if adata is not None else {}
 
+    if isinstance(uns, Mapping) and "rank_genes_groups_cov_all" in uns:
+        raw = uns.get("rank_genes_groups_cov_all")
+        if isinstance(raw, Mapping):
+            cond_map = {}
+            if hasattr(adata, "obs") and {"condition_name", "condition"}.issubset(
+                set(adata.obs.columns)
+            ):
+                cond_map = dict(
+                    adata.obs[["condition_name", "condition"]].drop_duplicates().values
+                )
+
+            for cond_name, genes in raw.items():
+                pert = str(cond_map.get(cond_name, cond_name))
+                if pert == "ctrl":
+                    continue
+                genes = [g for g in genes if g in name_to_idx]
+                if genes:
+                    de_map[pert] = torch.tensor(
+                        [name_to_idx[g] for g in genes], dtype=torch.long
+                    )
+
+    if de_map:
+        return de_map
+
     if isinstance(uns, Mapping) and "de_genes" in uns:
         raw = uns.get("de_genes")
         if isinstance(raw, Mapping):
@@ -199,7 +223,8 @@ def compute_composite_loss(
     max_de = int(loss_cfg.get("de_rank_sample_de", 256))
     max_non_de = int(loss_cfg.get("de_rank_sample_non_de", 256))
 
-    unique_perts = _unique_perts(perts)
+    perts_list = [str(p) for p in perts]
+    unique_perts = _unique_perts(perts_list)
     if not unique_perts:
         zero = torch.tensor(0.0, device=pred.device, dtype=pred.dtype)
         return zero, {"dist": 0.0, "proto": 0.0, "de_rank": 0.0, "dir": 0.0}
@@ -214,7 +239,6 @@ def compute_composite_loss(
     de_rank_losses = []
     dir_losses = []
 
-    perts_list = list(perts)
     for pert in unique_perts:
         mask = torch.tensor([p == pert for p in perts_list], device=pred.device)
         if mask.sum() == 0:
