@@ -356,6 +356,70 @@ def evaluate(
     model.eval()
 
     include_zero_gene = config["model"]["include_zero_gene"]
+    max_seq_len = config["model"]["max_seq_len"]
+
+    def _predict_batch_fallback(batch_data) -> torch.Tensor:
+        batch_size = len(batch_data.pert)
+        n_genes = len(gene_ids)
+        x: torch.Tensor = batch_data.x
+        if x.dim() == 1:
+            x = x.view(-1, 1)
+
+        if x.size(1) > 1:
+            ori_gene_values = x[:, 0].view(batch_size, -1)
+            pert_flags = x[:, 1].long().view(batch_size, -1)
+        else:
+            ori_gene_values = x.squeeze(-1).view(batch_size, n_genes)
+            pert_flags = torch.zeros(
+                batch_size, n_genes, dtype=torch.long, device=device
+            )
+            if hasattr(batch_data, "pert_idx"):
+                pert_idx = batch_data.pert_idx
+                for i in range(batch_size):
+                    idx = pert_idx[i] if isinstance(pert_idx, list) else pert_idx[i]
+                    if isinstance(idx, torch.Tensor):
+                        idx = idx.tolist()
+                    for p_idx in idx:
+                        if 0 <= p_idx < n_genes:
+                            pert_flags[i, p_idx] = 1
+
+        if include_zero_gene == "all":
+            input_gene_ids = torch.arange(n_genes, device=device)
+        else:
+            input_gene_ids = (
+                ori_gene_values.nonzero()[:, 1].flatten().unique().sort()[0]
+            )
+
+        if input_gene_ids.numel() == 0:
+            return torch.zeros_like(ori_gene_values)
+
+        if input_gene_ids.numel() > max_seq_len:
+            input_gene_ids = input_gene_ids[
+                torch.randperm(input_gene_ids.numel(), device=device)[:max_seq_len]
+            ]
+
+        input_values = ori_gene_values[:, input_gene_ids]
+        input_pert_flags = pert_flags[:, input_gene_ids]
+        mapped_input_gene_ids = map_raw_id_to_vocab_id(input_gene_ids, gene_ids)
+        mapped_input_gene_ids = mapped_input_gene_ids.repeat(batch_size, 1)
+        src_key_padding_mask = torch.zeros_like(
+            input_values, dtype=torch.bool, device=device
+        )
+        output_dict = model(
+            mapped_input_gene_ids,
+            input_values,
+            input_pert_flags,
+            src_key_padding_mask=src_key_padding_mask,
+            CLS=False,
+            CCE=False,
+            MVC=False,
+            ECS=False,
+            do_sample=True,
+        )
+        output_values = output_dict["mlm_output"].float()
+        pred_gene_values = torch.zeros_like(ori_gene_values)
+        pred_gene_values[:, input_gene_ids] = output_values
+        return pred_gene_values
 
     pert_cat = []
     pred = []
@@ -366,11 +430,15 @@ def evaluate(
         pert_cat.extend(batch_data.pert)
 
         with torch.no_grad():
-            p = model.pred_perturb(
-                batch_data,
-                include_zero_gene=include_zero_gene,
-                gene_ids=gene_ids,
-            )
+            x = batch_data.x
+            if x.dim() == 1 or (x.dim() == 2 and x.size(1) == 1):
+                p = _predict_batch_fallback(batch_data)
+            else:
+                p = model.pred_perturb(
+                    batch_data,
+                    include_zero_gene=include_zero_gene,
+                    gene_ids=gene_ids,
+                )
             t = batch_data.y
             pred.extend(p.cpu())
             truth.extend(t.cpu())
