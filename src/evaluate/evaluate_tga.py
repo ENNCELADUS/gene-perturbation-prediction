@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import defaultdict
+import hashlib
 from pathlib import Path
 from typing import Dict, List
 
@@ -114,7 +115,8 @@ def evaluate_tga(
     tga_model: TGA,
     candidate_conditions: List[str],
     top_k_values: List[int] = [1, 5, 8, 10],
-    mask_target_genes: bool = False,
+    mask_k: int = 0,
+    target_gene_pool: List[str] | None = None,
 ) -> Dict:
     """
     Evaluate TGD baseline on test conditions.
@@ -156,8 +158,14 @@ def evaluate_tga(
         if query_adata.n_obs == 0:
             continue
 
-        if mask_target_genes:
-            query_adata = apply_target_gene_mask(query_adata, condition, tga_model)
+        if mask_k > 0:
+            query_adata = apply_target_gene_mask(
+                query_adata,
+                condition,
+                tga_model,
+                mask_k=mask_k,
+                target_gene_pool=target_gene_pool,
+            )
 
         # Predict top-K (use max K value)
         max_k = max(top_k_values)
@@ -212,20 +220,37 @@ def evaluate_tga(
     return results
 
 
-def apply_target_gene_mask(query_adata, condition: str, tga_model: TGA):
-    genes = parse_condition_genes(condition)
+def apply_target_gene_mask(
+    query_adata,
+    condition: str,
+    tga_model: TGA,
+    mask_k: int,
+    target_gene_pool: List[str] | None,
+):
+    genes = sorted(parse_condition_genes(condition))
     if not genes:
         return query_adata
 
     if tga_model.gene_name_to_idx is None:
         return query_adata
 
+    if mask_k < len(genes):
+        mask_k = len(genes)
+
+    extra_genes = select_extra_mask_genes(
+        condition=condition,
+        target_genes=genes,
+        target_gene_pool=target_gene_pool or [],
+        extra_k=mask_k - len(genes),
+    )
+    mask_genes = genes + extra_genes
+
     X = query_adata.X
     if sparse.issparse(X):
         X = X.toarray()
 
     X = np.array(X, copy=True)
-    for gene in genes:
+    for gene in mask_genes:
         idx = tga_model.gene_name_to_idx.get(gene)
         if idx is None:
             continue
@@ -233,6 +258,32 @@ def apply_target_gene_mask(query_adata, condition: str, tga_model: TGA):
 
     query_adata.X = X
     return query_adata
+
+
+def select_extra_mask_genes(
+    condition: str,
+    target_genes: List[str],
+    target_gene_pool: List[str],
+    extra_k: int,
+) -> List[str]:
+    if extra_k <= 0:
+        return []
+
+    pool = [g for g in target_gene_pool if g not in target_genes]
+    if not pool:
+        return []
+
+    seed = int(hashlib.md5(condition.encode("utf-8")).hexdigest()[:8], 16)
+    rng = np.random.RandomState(seed)
+    sample_k = min(extra_k, len(pool))
+    return rng.choice(pool, size=sample_k, replace=False).tolist()
+
+
+def build_target_gene_pool(conditions: List[str]) -> List[str]:
+    pool = set()
+    for cond in conditions:
+        pool.update(parse_condition_genes(cond))
+    return sorted(pool)
 
 
 def main():
@@ -279,16 +330,20 @@ def main():
     print("\n[4/4] Running evaluation...")
     eval_config = config.get("evaluation", {})
     top_k_values = eval_config.get("top_k_values", [1, 5, 8, 10])
-    mask_target_genes = eval_config.get("mask", False)
-    if mask_target_genes:
-        print("  - Masking target gene expression (anti-cheat) enabled")
+    mask_k = eval_config.get("mask", 0)
+    if isinstance(mask_k, bool):
+        mask_k = int(mask_k)
+    if mask_k > 0:
+        print(f"  - Masking {mask_k} genes per query (anti-cheat) enabled")
+    target_gene_pool = build_target_gene_pool(dataset.all_conditions)
 
     results = evaluate_tga(
         dataset,
         tga,
         candidate_conditions,
         top_k_values=top_k_values,
-        mask_target_genes=mask_target_genes,
+        mask_k=mask_k,
+        target_gene_pool=target_gene_pool,
     )
 
     # Save results

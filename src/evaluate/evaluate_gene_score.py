@@ -13,6 +13,7 @@ from typing import Dict, List
 import yaml
 
 import numpy as np
+import hashlib
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -79,14 +80,28 @@ def mask_target_gene_values(
     values: torch.Tensor,
     conditions: List[str],
     vocab: Dict[str, int],
+    mask_k: int,
+    target_gene_pool: List[str],
     neutral_value: int = 0,
 ) -> torch.Tensor:
+    if mask_k <= 0:
+        return values
+
     masked_values = values.clone()
     for i, condition in enumerate(conditions):
-        target_genes = parse_condition_genes(condition)
+        target_genes = sorted(parse_condition_genes(condition))
         if not target_genes:
             continue
-        token_ids = [vocab[g] for g in target_genes if g in vocab and g != "<pad>"]
+        effective_k = max(mask_k, len(target_genes))
+
+        extra_genes = select_extra_mask_genes(
+            condition=condition,
+            target_genes=target_genes,
+            target_gene_pool=target_gene_pool,
+            extra_k=effective_k - len(target_genes),
+        )
+        mask_genes = target_genes + extra_genes
+        token_ids = [vocab[g] for g in mask_genes if g in vocab and g != "<pad>"]
         if not token_ids:
             continue
         row_gene_ids = genes[i]
@@ -95,6 +110,32 @@ def mask_target_gene_values(
             row_mask |= row_gene_ids == token_id
         masked_values[i][row_mask] = neutral_value
     return masked_values
+
+
+def select_extra_mask_genes(
+    condition: str,
+    target_genes: List[str],
+    target_gene_pool: List[str],
+    extra_k: int,
+) -> List[str]:
+    if extra_k <= 0:
+        return []
+
+    pool = [g for g in target_gene_pool if g not in target_genes]
+    if not pool:
+        return []
+
+    seed = int(hashlib.md5(condition.encode("utf-8")).hexdigest()[:8], 16)
+    rng = np.random.RandomState(seed)
+    sample_k = min(extra_k, len(pool))
+    return rng.choice(pool, size=sample_k, replace=False).tolist()
+
+
+def build_target_gene_pool(conditions: List[str]) -> List[str]:
+    pool = set()
+    for cond in conditions:
+        pool.update(parse_condition_genes(cond))
+    return sorted(pool)
 
 
 def main():
@@ -172,9 +213,12 @@ def main():
 
     print("\n[4/4] Scoring and ranking...")
     eval_config = config.get("evaluate", {})
-    mask_target_genes = eval_config.get("mask", False)
-    if mask_target_genes:
-        print("  - Masking target gene expression (anti-cheat) enabled")
+    mask_k = eval_config.get("mask", 0)
+    if isinstance(mask_k, bool):
+        mask_k = int(mask_k)
+    if mask_k > 0:
+        print(f"  - Masking {mask_k} genes per query (anti-cheat) enabled")
+    target_gene_pool = build_target_gene_pool(dataset.all_conditions)
 
     per_condition_rankings: Dict[str, List[List[str]]] = {
         cond: [] for cond in test_conditions
@@ -186,12 +230,14 @@ def main():
         padding_mask = batch["padding_mask"].to(device)
         conditions = batch["conditions"]
 
-        if mask_target_genes:
+        if mask_k > 0:
             values = mask_target_gene_values(
                 genes=genes,
                 values=values,
                 conditions=conditions,
                 vocab=model.backbone.vocab,
+                mask_k=mask_k,
+                target_gene_pool=target_gene_pool,
                 neutral_value=0,
             )
 
