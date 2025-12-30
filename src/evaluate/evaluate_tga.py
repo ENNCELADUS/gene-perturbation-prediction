@@ -217,7 +217,7 @@ def apply_target_gene_mask(query_adata, condition: str, tga_model: TGA):
     if not genes:
         return query_adata
 
-    if tga_model.gene_name_to_idx is None or tga_model.gene_means is None:
+    if tga_model.gene_name_to_idx is None:
         return query_adata
 
     X = query_adata.X
@@ -229,7 +229,7 @@ def apply_target_gene_mask(query_adata, condition: str, tga_model: TGA):
         idx = tga_model.gene_name_to_idx.get(gene)
         if idx is None:
             continue
-        X[:, idx] = tga_model.gene_means[idx]
+        X[:, idx] = 0.0
 
     query_adata.X = X
     return query_adata

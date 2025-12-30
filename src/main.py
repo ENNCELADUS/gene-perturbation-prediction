@@ -314,11 +314,8 @@ def run_route_b1_train(config: dict, args) -> dict:
     output_dir = Path(args.output_dir) if args.output_dir else None
     if output_dir is None:
         logging_config = config.get("logging", {})
-        base_dir = logging_config.get("output_dir", "results")
-        exp_name = logging_config.get(
-            "experiment_name", config["model"].get("encoder", "experiment")
-        )
-        output_dir = Path(base_dir) / exp_name
+        base_dir = logging_config.get("output_dir", "results/gene_score")
+        output_dir = Path(base_dir)
 
     sys.argv = [
         "train_gene_score",
@@ -347,14 +344,12 @@ def run_route_b1_eval(config: dict, args) -> dict:
     output_dir = Path(args.output_dir) if args.output_dir else None
     if output_dir is None:
         logging_config = config.get("logging", {})
-        base_dir = logging_config.get("output_dir", "results")
-        exp_name = logging_config.get(
-            "experiment_name", config["model"].get("encoder", "experiment")
-        )
-        output_dir = Path(base_dir) / exp_name
+        base_dir = logging_config.get("output_dir", "results/gene_score")
+        output_dir = Path(base_dir)
 
     checkpoint = args.checkpoint or str(output_dir / "best_model.pt")
-    output = str(output_dir / "eval_results.json")
+    eval_config = config.get("evaluate", {})
+    output = eval_config.get("output_path", str(output_dir / "eval_results.json"))
 
     sys.argv = [
         "evaluate_gene_score",

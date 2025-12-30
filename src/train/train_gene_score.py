@@ -239,21 +239,14 @@ def main():
 
     if args.output_dir == "results/gene_score":
         logging_cfg = config.get("logging", {})
-        base_dir = logging_cfg.get("output_dir", "results")
-        exp_name = logging_cfg.get(
-            "experiment_name", config.get("model", {}).get("encoder", "experiment")
-        )
-        args.output_dir = str(Path(base_dir) / exp_name)
+        base_dir = logging_cfg.get("output_dir", "results/gene_score")
+        args.output_dir = str(Path(base_dir))
 
     ddp = _setup_distributed()
     is_main = ddp["rank"] == 0
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    if is_main:
-        with open(output_dir / "config.yaml", "w") as f:
-            yaml.dump(config, f)
 
     if is_main:
         print("=" * 60)

@@ -23,7 +23,7 @@ baseline:
 evaluation:
   top_k_values: [1, 5, 8, 10, 20]
   mask: true  # Mask target gene expression at eval time
-  output_path: results/tga/eval_results.json
+  output_path: results/tga/eval_results_mask.json
 
 logging:
   output_dir: results/tga
