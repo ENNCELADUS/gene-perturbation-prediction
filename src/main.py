@@ -20,6 +20,8 @@ from src.utils.de_metrics import (
 )
 from src.model.zeroshot import ScGPTWrapper
 from src.model.baseline import BaselineWrapper
+from src.model.random_forest import RandomForestWrapper
+from src.model.ridge import RidgeWrapper
 from src.model.linear import LinearWrapper
 from src.data.loader import PerturbationDataLoader
 
@@ -38,7 +40,7 @@ def main():
     parser.add_argument(
         "--model_type",
         default="scgpt",
-        choices=["scgpt", "scgpt_finetuned", "baseline", "linear"],
+        choices=["scgpt", "scgpt_finetuned", "baseline", "linear", "ridge", "random_forest"],
         help="Model type to run (scgpt, scgpt_finetuned, baseline, or linear)",
     )
     parser.add_argument(
@@ -78,6 +80,8 @@ def main():
         "scgpt_finetuned": "scgpt_finetuned",
         "baseline": "baseline",
         "linear": "linear",
+        "ridge": "ridge",
+        "random_forest": "random_forest",
     }
     output_folder = output_folder_map.get(args.model_type, args.model_type)
 
@@ -104,6 +108,12 @@ def main():
     if args.model_type == "baseline":
         logger.info("Initializing Baseline Model Wrapper...")
         model_wrapper = BaselineWrapper(config, logger)
+    elif args.model_type in ("ridge", "random_forest"):
+        logger.info("Initializing Ridge Model Wrapper...")
+        model_wrapper = RidgeWrapper(config, logger)
+    elif args.model_type == "random_forest":
+        logger.info("Initializing Random Forest Model Wrapper...")
+        model_wrapper = RandomForestWrapper(config, logger)
     elif args.model_type == "linear":
         logger.info("Initializing Linear Model Wrapper...")
         model_wrapper = LinearWrapper(config, logger)
@@ -116,9 +126,9 @@ def main():
     logger.info("Initializing Data Loader...")
     data_loader = PerturbationDataLoader(config, model_wrapper.vocab, logger)
 
-    # Fit baseline model on training data (pre-compute mean expression)
-    if args.model_type == "baseline":
-        logger.info("Fitting baseline model on training data...")
+    # Fit baseline/ridge models on training data (pre-compute parameters)
+    if args.model_type in ("baseline", "ridge", "random_forest"):
+        logger.info(f"Fitting {args.model_type} model on training data...")
         train_adata = data_loader.get_train_adata()
         model_wrapper.fit_from_adata(
             train_adata,
@@ -188,11 +198,19 @@ def main():
 
             # Predict
             with torch.no_grad():
-                pred_expression = model_wrapper.predict(
-                    batch_data,
-                    gene_ids=gene_ids,
-                    amp=True,
-                )
+                if args.model_type == "ridge" or args.model_type == "random_forest":
+                    pred_expression = model_wrapper.predict(
+                        batch_data,
+                        gene_ids=gene_ids,
+                        amp=True,
+                        target_gene=target,
+                    )
+                else:
+                    pred_expression = model_wrapper.predict(
+                        batch_data,
+                        gene_ids=gene_ids,
+                        amp=True,
+                    )
 
             # Convert predictions to numpy
             if isinstance(pred_expression, torch.Tensor):

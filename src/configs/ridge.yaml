@@ -6,7 +6,7 @@ paths:
   data_dir: "../CellPerturb_VCC_Proj6/vcc_data/log1p"
   test_file: "test_lognorm.h5ad"
   train_file: "train_lognorm.h5ad"
-  output_dir: "results/baseline_djw"
+  output_dir: "results/ridge_djw"
   log_dir: "logs/baseline_djw" # 没有内容输出
 
 model:
