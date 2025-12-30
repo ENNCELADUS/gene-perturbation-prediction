@@ -1,8 +1,8 @@
 """
 Evaluation for Route B1 gene-level scoring.
 
-Ranks candidate conditions using compositional gene scores and evaluates
-Top-K metrics on test conditions.
+Ranks genes directly per query and evaluates Top-K gene metrics
+against the ground-truth target gene set.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from ..data import load_perturb_data
 from ..data.gene_score_collator import GeneScoreDataset, collate_gene_score_batch
-from ..evaluate.metrics import compute_all_metrics, parse_condition_genes
+from ..evaluate.metrics import parse_condition_genes
 from ..model.gene_score import GeneScoreModel
 
 
@@ -50,29 +50,58 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
-def build_condition_matrix(
-    conditions: List[str], gene_name_to_idx: Dict[str, int]
-) -> torch.Tensor:
-    matrix = np.zeros((len(conditions), len(gene_name_to_idx)), dtype=np.float32)
-    for i, cond in enumerate(conditions):
-        genes = parse_condition_genes(cond)
-        for g in genes:
-            if g in gene_name_to_idx:
-                matrix[i, gene_name_to_idx[g]] = 1.0
-    return torch.from_numpy(matrix)
+def compute_gene_metrics(
+    scores: List[np.ndarray],
+    targets: List[List[int]],
+    top_k_values: List[int],
+) -> Dict[str, float]:
+    metrics = {f"hit@{k}": 0.0 for k in top_k_values}
+    metrics.update({f"exact_hit@{k}": 0.0 for k in top_k_values})
+    metrics.update({f"recall@{k}": 0.0 for k in top_k_values})
+    metrics.update({f"ndcg@{k}": 0.0 for k in top_k_values})
+    mrr_sum = 0.0
+    n_queries = 0
 
+    for score_vec, target_genes in zip(scores, targets):
+        if not target_genes:
+            continue
+        n_queries += 1
+        target_set = set(target_genes)
+        ranking = np.argsort(-score_vec)
+        positions = np.empty_like(ranking)
+        positions[ranking] = np.arange(1, len(ranking) + 1)
+        min_rank = int(positions[list(target_set)].min())
+        mrr_sum += 1.0 / min_rank
 
-def aggregate_by_voting(per_cell_rankings: List[List[str]], k: int) -> List[str]:
-    from collections import defaultdict
+        for k in top_k_values:
+            topk = ranking[:k]
+            topk_set = set(topk.tolist())
+            overlap = len(topk_set & target_set)
+            metrics[f"hit@{k}"] += 1.0 if overlap > 0 else 0.0
+            metrics[f"exact_hit@{k}"] += 1.0 if target_set.issubset(topk_set) else 0.0
+            metrics[f"recall@{k}"] += overlap / len(target_set)
 
-    vote_counts = defaultdict(int)
-    for ranking in per_cell_rankings:
-        for rank, condition in enumerate(ranking):
-            weight = len(ranking) - rank
-            vote_counts[condition] += weight
+            dcg = 0.0
+            for rank, gene_idx in enumerate(topk, start=1):
+                if gene_idx in target_set:
+                    dcg += 1.0 / np.log2(rank + 1)
+            idcg = sum(
+                1.0 / np.log2(rank + 1)
+                for rank in range(1, min(len(target_set), k) + 1)
+            )
+            metrics[f"ndcg@{k}"] += dcg / idcg if idcg > 0 else 0.0
 
-    sorted_conditions = sorted(vote_counts.items(), key=lambda x: -x[1])
-    return [cond for cond, _ in sorted_conditions[:k]]
+    if n_queries == 0:
+        metrics = {k: 0.0 for k in metrics}
+        metrics["mrr"] = 0.0
+        metrics["n_queries"] = 0
+        return metrics
+
+    for key in list(metrics.keys()):
+        metrics[key] /= n_queries
+    metrics["mrr"] = mrr_sum / n_queries
+    metrics["n_queries"] = n_queries
+    return metrics
 
 
 def mask_target_gene_values(
@@ -168,9 +197,7 @@ def main():
     )
 
     test_conditions = dataset.test_conditions
-    all_conditions = dataset.all_conditions
     print(f"  - Test conditions: {len(test_conditions)}")
-    print(f"  - Candidate conditions: {len(all_conditions)}")
 
     print("\n[2/4] Loading model...")
     pretrained_dir = Path(config["model"].get("pretrained_dir", "model/scGPT"))
@@ -206,11 +233,6 @@ def main():
         num_workers=0,
     )
 
-    gene_name_to_idx = {g: i for i, g in enumerate(dataset.adata.var_names.tolist())}
-    condition_matrix = build_condition_matrix(all_conditions, gene_name_to_idx).to(
-        device
-    )
-
     print("\n[4/4] Scoring and ranking...")
     eval_config = config.get("evaluate", {})
     mask_k = eval_config.get("mask", 0)
@@ -218,11 +240,10 @@ def main():
         mask_k = int(mask_k)
     if mask_k > 0:
         print(f"  - Masking {mask_k} genes per query (anti-cheat) enabled")
-    target_gene_pool = build_target_gene_pool(dataset.all_conditions)
-
-    per_condition_rankings: Dict[str, List[List[str]]] = {
-        cond: [] for cond in test_conditions
-    }
+    target_gene_pool = build_target_gene_pool(dataset.test_conditions)
+    gene_name_to_idx = {g: i for i, g in enumerate(dataset.adata.var_names.tolist())}
+    all_scores: List[np.ndarray] = []
+    all_targets: List[List[int]] = []
 
     for batch in tqdm(test_loader, desc="Scoring"):
         genes = batch["genes"].to(device)
@@ -245,48 +266,53 @@ def main():
             with torch.cuda.amp.autocast(enabled=use_amp):
                 gene_scores = model(genes, values, padding_mask)  # (batch, n_genes)
 
-        condition_scores = torch.matmul(
-            gene_scores, condition_matrix.T.to(gene_scores.dtype)
-        )
-        top_k = max(args.top_k)
-        top_indices = torch.topk(condition_scores, k=top_k, dim=1).indices
+        for i, condition in enumerate(conditions):
+            target_genes = parse_condition_genes(condition)
+            if not target_genes:
+                continue
+            target_indices = [
+                gene_name_to_idx[g] for g in target_genes if g in gene_name_to_idx
+            ]
+            if not target_indices:
+                continue
+            all_scores.append(gene_scores[i].detach().cpu().numpy())
+            all_targets.append(target_indices)
 
-        for i, cond in enumerate(conditions):
-            ranking = [all_conditions[idx] for idx in top_indices[i].tolist()]
-            per_condition_rankings[cond].append(ranking)
-
-    aggregated_predictions = []
-    ground_truth = []
-    for condition, rankings in per_condition_rankings.items():
-        if not rankings:
-            continue
-        aggregated = aggregate_by_voting(rankings, k=max(args.top_k))
-        aggregated_predictions.append(aggregated)
-        ground_truth.append(condition)
-
-    metrics = compute_all_metrics(
-        predictions=aggregated_predictions,
-        ground_truth=ground_truth,
+    metrics = compute_gene_metrics(
+        scores=all_scores,
+        targets=all_targets,
         top_k_values=args.top_k,
-        candidate_pool=None,
-        include_macro=True,
     )
+    output_metrics = {"mrr": metrics.get("mrr", 0.0)}
+    for k in args.top_k:
+        output_metrics[f"exact_hit@{k}"] = metrics.get(f"exact_hit@{k}", 0.0)
+        output_metrics[f"relevant_hit@{k}"] = metrics.get(f"hit@{k}", 0.0)
+        output_metrics[f"recall@{k}"] = metrics.get(f"recall@{k}", 0.0)
+        output_metrics[f"ndcg@{k}"] = metrics.get(f"ndcg@{k}", 0.0)
+    results = {
+        "metrics": output_metrics,
+        "n_evaluated": len(all_targets),
+    }
 
     print("\n" + "=" * 60)
     print("Results:")
     print("=" * 60)
-    for metric_name, value in metrics.items():
-        if isinstance(value, float):
-            print(f"  {metric_name}: {value:.4f}")
-        else:
-            print(f"  {metric_name}: {value}")
+    for k in args.top_k:
+        exact = results["metrics"].get(f"exact_hit@{k}", 0)
+        relevant = results["metrics"].get(f"relevant_hit@{k}", 0)
+        recall = results["metrics"].get(f"recall@{k}", 0)
+        ndcg = results["metrics"].get(f"ndcg@{k}", 0)
+        print(
+            f"  Hit@{k}: exact={exact:.3f}, relevant={relevant:.3f}, recall={recall:.3f}, ndcg={ndcg:.3f}"
+        )
+    print(f"  MRR: {results['metrics'].get('mrr', 0):.3f}")
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     import json
 
     with open(output_path, "w") as f:
-        json.dump(metrics, f, indent=2)
+        json.dump(results, f, indent=2)
 
     print(f"\nResults saved to: {output_path}")
     print("=" * 60)
