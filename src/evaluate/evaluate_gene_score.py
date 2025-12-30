@@ -84,6 +84,7 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}")
+    use_amp = torch.cuda.is_available()
 
     print("\n[1/4] Loading dataset...")
     cond_split_config = config.get("condition_split", {})
@@ -149,7 +150,8 @@ def main():
         conditions = batch["conditions"]
 
         with torch.no_grad():
-            gene_scores = model(genes, values, padding_mask)  # (batch, n_genes)
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                gene_scores = model(genes, values, padding_mask)  # (batch, n_genes)
 
         condition_scores = torch.matmul(gene_scores, condition_matrix.T)
         top_k = max(args.top_k)
