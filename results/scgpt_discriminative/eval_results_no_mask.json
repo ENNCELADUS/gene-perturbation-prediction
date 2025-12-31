@@ -1,6 +1,6 @@
 {
   "metrics": {
-    "mrr": 0.02916391259315029,
+    "mrr": 0.0,
     "exact_hit@1": 0.0,
     "relevant_hit@1": 0.0,
     "recall@1": 0.0,
@@ -14,10 +14,9 @@
     "recall@10": 0.0,
     "ndcg@10": 0.0,
     "exact_hit@20": 0.0,
-    "relevant_hit@20": 0.10344827586206896,
-    "recall@20": 0.05172413793103448,
-    "ndcg@20": 0.015674726101793646
+    "relevant_hit@20": 0.0,
+    "recall@20": 0.0,
+    "ndcg@20": 0.0
   },
-  "n_evaluated": 29,
-  "n_candidates": 236
+  "n_evaluated": 0
 }
