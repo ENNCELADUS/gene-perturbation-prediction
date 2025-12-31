@@ -22,6 +22,5 @@
     "recall@20": 0.05172413793103448,
     "ndcg@20": 0.015674726101793646
   },
-  "n_evaluated": 29,
-  "n_candidates": 236
+  "n_evaluated": 29
 }
