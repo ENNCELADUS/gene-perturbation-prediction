@@ -1,0 +1,1018 @@
+INFO:datasets:PyTorch version 2.2.0+cu121 available.
+INFO:datasets:Polars version 1.36.1 available.
+INFO:datasets:JAX version 0.7.0 available.
+INFO:ZeroShotPerturbation:Starting Perturbation Pipeline with scgpt_finetuned model
+INFO:ZeroShotPerturbation:Model directory: model/scGPT_finetuned
+INFO:ZeroShotPerturbation:Results will be saved to: results/scgpt_finetuned
+INFO:ZeroShotPerturbation:Initializing scGPT Model Wrapper...
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/site-packages/torch/nn/modules/transformer.py:286: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer was not TransformerEncoderLayer
+  warnings.warn(f"enable_nested_tensor is True, but self.use_nested_tensor is False because {why_not_sparsity_fast_path}")
+INFO:ZeroShotPerturbation:Model vocab size: 60697, Saved checkpoint vocab size: 60697
+INFO:ZeroShotPerturbation:Loaded model from model/scGPT_finetuned/best_model.pt
+INFO:ZeroShotPerturbation:Initializing Data Loader...
+INFO:ZeroShotPerturbation:Loading training data from data/processed/train.h5ad
+INFO:ZeroShotPerturbation:Loading test data from data/processed/test.h5ad
+INFO:ZeroShotPerturbation:Found 38176 control cells.
+INFO:ZeroShotPerturbation:Processing 30 target genes...
+INFO:ZeroShotPerturbation:Predicting for target: AKT2
+INFO:ZeroShotPerturbation:Processing 938 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3896.24it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3207148.08it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  32%|███▏      | 115/362 [00:00<00:00, 1148.77it/s]Processing batches:  64%|██████▎   | 230/362 [00:05<00:03, 35.05it/s]  Processing batches:  77%|███████▋  | 279/362 [00:11<00:04, 19.79it/s]Processing batches:  85%|████████▍ | 306/362 [00:14<00:03, 16.36it/s]Processing batches:  89%|████████▉ | 323/362 [00:16<00:02, 14.70it/s]Processing batches:  92%|█████████▏| 334/362 [00:17<00:02, 13.71it/s]Processing batches:  94%|█████████▍| 342/362 [00:18<00:01, 13.01it/s]Processing batches:  96%|█████████▌| 348/362 [00:18<00:01, 12.44it/s]Processing batches:  97%|█████████▋| 352/362 [00:19<00:00, 12.05it/s]Processing batches:  98%|█████████▊| 355/362 [00:19<00:00, 11.70it/s]Processing batches:  99%|█████████▉| 358/362 [00:19<00:00, 11.32it/s]Processing batches:  99%|█████████▉| 360/362 [00:20<00:00, 11.07it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 11.04it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 17.78it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3188.37it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2616826.54it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  22%|██▏       | 81/362 [00:00<00:00, 809.63it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 563.65it/s]Processing batches:  67%|██████▋   | 244/362 [00:07<00:04, 24.08it/s] Processing batches:  77%|███████▋  | 278/362 [00:11<00:04, 17.43it/s]Processing batches:  83%|████████▎ | 299/362 [00:13<00:04, 15.05it/s]Processing batches:  86%|████████▋ | 313/362 [00:15<00:03, 13.71it/s]Processing batches:  89%|████████▉ | 323/362 [00:16<00:03, 12.85it/s]Processing batches:  91%|█████████ | 330/362 [00:17<00:02, 12.24it/s]Processing batches:  93%|█████████▎| 335/362 [00:17<00:02, 11.77it/s]Processing batches:  94%|█████████▎| 339/362 [00:18<00:02, 11.37it/s]Processing batches:  94%|█████████▍| 342/362 [00:18<00:01, 11.06it/s]Processing batches:  95%|█████████▌| 345/362 [00:18<00:01, 10.72it/s]Processing batches:  96%|█████████▌| 347/362 [00:18<00:01, 10.49it/s]Processing batches:  96%|█████████▋| 349/362 [00:19<00:01, 10.19it/s]Processing batches:  97%|█████████▋| 351/362 [00:19<00:01,  9.99it/s]Processing batches:  98%|█████████▊| 353/362 [00:19<00:00,  9.73it/s]Processing batches:  98%|█████████▊| 355/362 [00:19<00:00,  9.51it/s]Processing batches:  99%|█████████▊| 357/362 [00:20<00:00,  9.37it/s]Processing batches:  99%|█████████▉| 358/362 [00:20<00:00,  9.29it/s]Processing batches:  99%|█████████▉| 359/362 [00:20<00:00,  9.10it/s]Processing batches:  99%|█████████▉| 360/362 [00:20<00:00,  9.11it/s]Processing batches: 100%|█████████▉| 361/362 [00:20<00:00,  9.14it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 17.53it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target AKT2 - DES: 0.1963, MAE_top2k: 0.2317, n_DE: 3194
+INFO:ZeroShotPerturbation:Predicting for target: MAP3K7
+INFO:ZeroShotPerturbation:Processing 2019 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2849.39it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3105492.29it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:   9%|▉         | 34/362 [00:00<00:00, 339.49it/s]Processing batches:  38%|███▊      | 137/362 [00:00<00:00, 733.63it/s]Processing batches:  58%|█████▊    | 210/362 [00:04<00:03, 38.28it/s] Processing batches:  69%|██████▉   | 251/362 [00:10<00:06, 17.73it/s]Processing batches:  76%|███████▌  | 276/362 [00:13<00:06, 13.86it/s]Processing batches:  81%|████████  | 293/362 [00:15<00:05, 12.15it/s]Processing batches:  84%|████████▍ | 304/362 [00:17<00:05, 11.15it/s]Processing batches:  86%|████████▌ | 312/362 [00:18<00:04, 10.47it/s]Processing batches:  88%|████████▊ | 318/362 [00:19<00:04,  9.95it/s]Processing batches:  89%|████████▉ | 322/362 [00:19<00:04,  9.62it/s]Processing batches:  90%|████████▉ | 325/362 [00:20<00:03,  9.34it/s]Processing batches:  91%|█████████ | 328/362 [00:20<00:03,  8.97it/s]Processing batches:  91%|█████████ | 330/362 [00:21<00:03,  8.78it/s]Processing batches:  92%|█████████▏| 332/362 [00:21<00:03,  8.54it/s]Processing batches:  92%|█████████▏| 334/362 [00:21<00:03,  8.27it/s]Processing batches:  93%|█████████▎| 336/362 [00:21<00:03,  8.05it/s]Processing batches:  93%|█████████▎| 337/362 [00:22<00:03,  7.95it/s]Processing batches:  93%|█████████▎| 338/362 [00:22<00:03,  7.86it/s]Processing batches:  94%|█████████▎| 339/362 [00:22<00:02,  7.72it/s]Processing batches:  94%|█████████▍| 340/362 [00:22<00:02,  7.63it/s]Processing batches:  94%|█████████▍| 341/362 [00:22<00:02,  7.56it/s]Processing batches:  94%|█████████▍| 342/362 [00:22<00:02,  7.48it/s]Processing batches:  95%|█████████▍| 343/362 [00:22<00:02,  7.45it/s]Processing batches:  95%|█████████▌| 344/362 [00:23<00:02,  7.46it/s]Processing batches:  95%|█████████▌| 345/362 [00:23<00:02,  7.40it/s]Processing batches:  96%|█████████▌| 346/362 [00:23<00:02,  7.32it/s]Processing batches:  96%|█████████▌| 347/362 [00:23<00:02,  7.29it/s]Processing batches:  96%|█████████▌| 348/362 [00:23<00:01,  7.30it/s]Processing batches:  96%|█████████▋| 349/362 [00:23<00:01,  7.36it/s]Processing batches:  97%|█████████▋| 350/362 [00:23<00:01,  7.24it/s]Processing batches:  97%|█████████▋| 351/362 [00:23<00:01,  7.27it/s]Processing batches:  97%|█████████▋| 352/362 [00:24<00:01,  7.16it/s]Processing batches:  98%|█████████▊| 353/362 [00:24<00:01,  7.18it/s]Processing batches:  98%|█████████▊| 354/362 [00:24<00:01,  7.20it/s]Processing batches:  98%|█████████▊| 355/362 [00:24<00:00,  7.24it/s]Processing batches:  98%|█████████▊| 356/362 [00:24<00:00,  7.12it/s]Processing batches:  99%|█████████▊| 357/362 [00:24<00:00,  7.20it/s]Processing batches:  99%|█████████▉| 358/362 [00:24<00:00,  7.23it/s]Processing batches:  99%|█████████▉| 359/362 [00:25<00:00,  7.29it/s]Processing batches:  99%|█████████▉| 360/362 [00:25<00:00,  7.16it/s]Processing batches: 100%|█████████▉| 361/362 [00:25<00:00,  7.33it/s]Processing batches: 100%|██████████| 362/362 [00:25<00:00, 14.22it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2225.09it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2583660.40it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  27%|██▋       | 96/362 [00:00<00:00, 950.88it/s]Processing batches:  53%|█████▎    | 192/362 [00:01<00:01, 95.13it/s]Processing batches:  65%|██████▍   | 235/362 [00:07<00:05, 21.96it/s]Processing batches:  72%|███████▏  | 259/362 [00:11<00:06, 15.97it/s]Processing batches:  76%|███████▌  | 274/362 [00:13<00:06, 13.63it/s]Processing batches:  78%|███████▊  | 284/362 [00:14<00:06, 12.39it/s]Processing batches:  80%|████████  | 291/362 [00:15<00:06, 11.52it/s]Processing batches:  82%|████████▏ | 296/362 [00:16<00:06, 10.87it/s]Processing batches:  83%|████████▎ | 300/362 [00:16<00:05, 10.34it/s]Processing batches:  84%|████████▎ | 303/362 [00:17<00:05,  9.89it/s]Processing batches:  84%|████████▍ | 305/362 [00:17<00:05,  9.59it/s]Processing batches:  85%|████████▍ | 307/362 [00:17<00:05,  9.24it/s]Processing batches:  85%|████████▌ | 309/362 [00:18<00:05,  8.84it/s]Processing batches:  86%|████████▌ | 311/362 [00:18<00:06,  8.46it/s]Processing batches:  86%|████████▌ | 312/362 [00:18<00:06,  8.31it/s]Processing batches:  86%|████████▋ | 313/362 [00:18<00:06,  8.12it/s]Processing batches:  87%|████████▋ | 314/362 [00:18<00:06,  7.87it/s]Processing batches:  87%|████████▋ | 315/362 [00:18<00:06,  7.74it/s]Processing batches:  87%|████████▋ | 316/362 [00:19<00:06,  7.63it/s]Processing batches:  88%|████████▊ | 317/362 [00:19<00:05,  7.52it/s]Processing batches:  88%|████████▊ | 318/362 [00:19<00:05,  7.36it/s]Processing batches:  88%|████████▊ | 319/362 [00:19<00:05,  7.34it/s]Processing batches:  88%|████████▊ | 320/362 [00:19<00:05,  7.24it/s]Processing batches:  89%|████████▊ | 321/362 [00:19<00:05,  7.21it/s]Processing batches:  89%|████████▉ | 322/362 [00:19<00:05,  7.25it/s]Processing batches:  89%|████████▉ | 323/362 [00:20<00:05,  7.29it/s]Processing batches:  90%|████████▉ | 324/362 [00:20<00:05,  7.18it/s]Processing batches:  90%|████████▉ | 325/362 [00:20<00:05,  7.20it/s]Processing batches:  90%|█████████ | 326/362 [00:20<00:05,  7.05it/s]Processing batches:  90%|█████████ | 327/362 [00:20<00:04,  7.15it/s]Processing batches:  91%|█████████ | 328/362 [00:20<00:04,  7.13it/s]Processing batches:  91%|█████████ | 329/362 [00:20<00:04,  7.05it/s]Processing batches:  91%|█████████ | 330/362 [00:21<00:04,  7.02it/s]Processing batches:  91%|█████████▏| 331/362 [00:21<00:04,  7.07it/s]Processing batches:  92%|█████████▏| 332/362 [00:21<00:04,  7.14it/s]Processing batches:  92%|█████████▏| 333/362 [00:21<00:04,  7.06it/s]Processing batches:  92%|█████████▏| 334/362 [00:21<00:03,  7.09it/s]Processing batches:  93%|█████████▎| 335/362 [00:21<00:03,  7.00it/s]Processing batches:  93%|█████████▎| 336/362 [00:21<00:03,  7.05it/s]Processing batches:  93%|█████████▎| 337/362 [00:22<00:03,  7.10it/s]Processing batches:  93%|█████████▎| 338/362 [00:22<00:03,  6.94it/s]Processing batches:  94%|█████████▎| 339/362 [00:22<00:03,  7.07it/s]Processing batches:  94%|█████████▍| 340/362 [00:22<00:03,  7.12it/s]Processing batches:  94%|█████████▍| 341/362 [00:22<00:02,  7.17it/s]Processing batches:  94%|█████████▍| 342/362 [00:22<00:02,  7.12it/s]Processing batches:  95%|█████████▍| 343/362 [00:22<00:02,  7.16it/s]Processing batches:  95%|█████████▌| 344/362 [00:23<00:02,  7.15it/s]Processing batches:  95%|█████████▌| 345/362 [00:23<00:02,  7.17it/s]Processing batches:  96%|█████████▌| 346/362 [00:23<00:02,  7.07it/s]Processing batches:  96%|█████████▌| 347/362 [00:23<00:02,  7.17it/s]Processing batches:  96%|█████████▌| 348/362 [00:23<00:01,  7.06it/s]Processing batches:  96%|█████████▋| 349/362 [00:23<00:01,  7.26it/s]Processing batches:  97%|█████████▋| 350/362 [00:23<00:01,  7.28it/s]Processing batches:  97%|█████████▋| 351/362 [00:24<00:01,  7.12it/s]Processing batches:  97%|█████████▋| 352/362 [00:24<00:01,  7.20it/s]Processing batches:  98%|█████████▊| 353/362 [00:24<00:01,  7.11it/s]Processing batches:  98%|█████████▊| 354/362 [00:24<00:01,  7.08it/s]Processing batches:  98%|█████████▊| 355/362 [00:24<00:00,  7.12it/s]Processing batches:  98%|█████████▊| 356/362 [00:24<00:00,  7.22it/s]Processing batches:  99%|█████████▊| 357/362 [00:24<00:00,  7.07it/s]Processing batches:  99%|█████████▉| 358/362 [00:24<00:00,  7.17it/s]Processing batches:  99%|█████████▉| 359/362 [00:25<00:00,  7.02it/s]Processing batches:  99%|█████████▉| 360/362 [00:25<00:00,  7.09it/s]Processing batches: 100%|█████████▉| 361/362 [00:25<00:00,  7.26it/s]Processing batches: 100%|██████████| 362/362 [00:25<00:00, 14.21it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target MAP3K7 - DES: 0.1376, MAE_top2k: 0.2254, n_DE: 1911
+INFO:ZeroShotPerturbation:Predicting for target: ZNF426
+INFO:ZeroShotPerturbation:Processing 1132 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3942.02it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3065322.62it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  39%|███▉      | 141/362 [00:00<00:00, 1370.40it/s]Processing batches:  77%|███████▋  | 279/362 [00:11<00:04, 20.57it/s]  Processing batches:  78%|███████▊  | 281/362 [00:11<00:04, 20.23it/s]Processing batches:  93%|█████████▎| 338/362 [00:18<00:01, 14.01it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 17.11it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3003.44it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2529116.07it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  24%|██▍       | 87/362 [00:00<00:00, 845.91it/s]Processing batches:  48%|████▊     | 172/362 [00:00<00:00, 734.36it/s]Processing batches:  68%|██████▊   | 247/362 [00:08<00:05, 22.39it/s] Processing batches:  80%|███████▉  | 288/362 [00:12<00:04, 15.93it/s]Processing batches:  87%|████████▋ | 314/362 [00:15<00:03, 13.66it/s]Processing batches:  91%|█████████▏| 331/362 [00:17<00:02, 12.54it/s]Processing batches:  95%|█████████▍| 343/362 [00:19<00:01, 11.81it/s]Processing batches:  97%|█████████▋| 351/362 [00:20<00:00, 11.33it/s]Processing batches:  99%|█████████▊| 357/362 [00:21<00:00, 10.94it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 10.74it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 16.81it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target ZNF426 - DES: 0.1167, MAE_top2k: 0.2480, n_DE: 1834
+INFO:ZeroShotPerturbation:Predicting for target: DNMT1
+INFO:ZeroShotPerturbation:Processing 893 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4586.45it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3296371.06it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  45%|████▌     | 163/362 [00:00<00:00, 1625.87it/s]Processing batches:  45%|████▌     | 163/362 [00:11<00:00, 1625.87it/s]Processing batches:  79%|███████▉  | 286/362 [00:11<00:03, 20.31it/s]  Processing batches:  80%|███████▉  | 288/362 [00:11<00:03, 20.02it/s]Processing batches:  98%|█████████▊| 356/362 [00:19<00:00, 13.86it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 18.05it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3463.50it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2500923.96it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  27%|██▋       | 99/362 [00:00<00:00, 986.41it/s]Processing batches:  55%|█████▍    | 198/362 [00:02<00:01, 84.37it/s]Processing batches:  67%|██████▋   | 242/362 [00:06<00:04, 25.85it/s]Processing batches:  74%|███████▍  | 267/362 [00:09<00:04, 19.35it/s]Processing batches:  78%|███████▊  | 282/362 [00:11<00:04, 16.79it/s]Processing batches:  81%|████████  | 292/362 [00:12<00:04, 15.31it/s]Processing batches:  83%|████████▎ | 299/362 [00:13<00:04, 14.29it/s]Processing batches:  84%|████████▍ | 304/362 [00:13<00:04, 13.52it/s]Processing batches:  85%|████████▌ | 308/362 [00:14<00:04, 12.87it/s]Processing batches:  86%|████████▌ | 311/362 [00:14<00:04, 12.34it/s]Processing batches:  87%|████████▋ | 314/362 [00:14<00:04, 11.80it/s]Processing batches:  87%|████████▋ | 316/362 [00:15<00:04, 11.44it/s]Processing batches:  88%|████████▊ | 318/362 [00:15<00:03, 11.00it/s]Processing batches:  88%|████████▊ | 320/362 [00:15<00:03, 10.66it/s]Processing batches:  89%|████████▉ | 322/362 [00:15<00:03, 10.38it/s]Processing batches:  90%|████████▉ | 324/362 [00:15<00:03, 10.03it/s]Processing batches:  90%|█████████ | 326/362 [00:16<00:03,  9.79it/s]Processing batches:  91%|█████████ | 328/362 [00:16<00:03,  9.41it/s]Processing batches:  91%|█████████ | 329/362 [00:16<00:03,  9.32it/s]Processing batches:  91%|█████████ | 330/362 [00:16<00:03,  9.27it/s]Processing batches:  91%|█████████▏| 331/362 [00:16<00:03,  9.21it/s]Processing batches:  92%|█████████▏| 332/362 [00:16<00:03,  9.17it/s]Processing batches:  92%|█████████▏| 333/362 [00:17<00:03,  9.12it/s]Processing batches:  92%|█████████▏| 334/362 [00:17<00:03,  8.94it/s]Processing batches:  93%|█████████▎| 335/362 [00:17<00:03,  8.98it/s]Processing batches:  93%|█████████▎| 336/362 [00:17<00:02,  9.01it/s]Processing batches:  93%|█████████▎| 337/362 [00:17<00:02,  8.97it/s]Processing batches:  93%|█████████▎| 338/362 [00:17<00:02,  8.94it/s]Processing batches:  94%|█████████▎| 339/362 [00:17<00:02,  8.96it/s]Processing batches:  94%|█████████▍| 340/362 [00:17<00:02,  9.01it/s]Processing batches:  94%|█████████▍| 341/362 [00:17<00:02,  9.03it/s]Processing batches:  94%|█████████▍| 342/362 [00:18<00:02,  9.09it/s]Processing batches:  95%|█████████▍| 343/362 [00:18<00:02,  9.05it/s]Processing batches:  95%|█████████▌| 344/362 [00:18<00:01,  9.07it/s]Processing batches:  95%|█████████▌| 345/362 [00:18<00:01,  9.11it/s]Processing batches:  96%|█████████▌| 346/362 [00:18<00:01,  9.08it/s]Processing batches:  96%|█████████▌| 347/362 [00:18<00:01,  9.08it/s]Processing batches:  96%|█████████▌| 348/362 [00:18<00:01,  8.99it/s]Processing batches:  96%|█████████▋| 349/362 [00:18<00:01,  9.14it/s]Processing batches:  97%|█████████▋| 350/362 [00:18<00:01,  9.13it/s]Processing batches:  97%|█████████▋| 351/362 [00:19<00:01,  9.11it/s]Processing batches:  97%|█████████▋| 352/362 [00:19<00:01,  9.09it/s]Processing batches:  98%|█████████▊| 353/362 [00:19<00:00,  9.03it/s]Processing batches:  98%|█████████▊| 354/362 [00:19<00:00,  9.00it/s]Processing batches:  98%|█████████▊| 355/362 [00:19<00:00,  9.05it/s]Processing batches:  98%|█████████▊| 356/362 [00:19<00:00,  9.09it/s]Processing batches:  99%|█████████▊| 357/362 [00:19<00:00,  9.12it/s]Processing batches:  99%|█████████▉| 358/362 [00:19<00:00,  8.93it/s]Processing batches:  99%|█████████▉| 359/362 [00:19<00:00,  8.98it/s]Processing batches:  99%|█████████▉| 360/362 [00:19<00:00,  9.02it/s]Processing batches: 100%|█████████▉| 361/362 [00:20<00:00,  9.12it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 17.94it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target DNMT1 - DES: 0.5753, MAE_top2k: 0.3546, n_DE: 9157
+INFO:ZeroShotPerturbation:Predicting for target: SRC
+INFO:ZeroShotPerturbation:Processing 2403 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2614.90it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3240450.23it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  24%|██▍       | 87/362 [00:00<00:00, 867.66it/s]Processing batches:  48%|████▊     | 174/362 [00:00<00:00, 863.72it/s]Processing batches:  72%|███████▏  | 261/362 [00:11<00:06, 16.46it/s] Processing batches:  72%|███████▏  | 262/362 [00:11<00:06, 16.31it/s]Processing batches:  86%|████████▌ | 310/362 [00:18<00:04, 11.29it/s]Processing batches:  94%|█████████▎| 339/362 [00:22<00:02,  9.94it/s]Processing batches:  99%|█████████▉| 358/362 [00:25<00:00,  9.29it/s]Processing batches: 100%|██████████| 362/362 [00:25<00:00, 13.98it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 1194.28it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2284058.20it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  21%|██        | 75/362 [00:00<00:00, 746.61it/s]Processing batches:  41%|████▏     | 150/362 [00:00<00:00, 654.71it/s]Processing batches:  60%|█████▉    | 217/362 [00:05<00:05, 28.57it/s] Processing batches:  70%|███████   | 254/362 [00:10<00:06, 15.93it/s]Processing batches:  77%|███████▋  | 277/362 [00:14<00:06, 12.79it/s]Processing batches:  81%|████████  | 292/362 [00:16<00:06, 11.40it/s]Processing batches:  83%|████████▎ | 302/362 [00:17<00:05, 10.53it/s]Processing batches:  85%|████████▌ | 309/362 [00:18<00:05,  9.93it/s]Processing batches:  87%|████████▋ | 314/362 [00:19<00:05,  9.50it/s]Processing batches:  88%|████████▊ | 318/362 [00:20<00:04,  9.13it/s]Processing batches:  89%|████████▊ | 321/362 [00:20<00:04,  8.85it/s]Processing batches:  90%|████████▉ | 324/362 [00:21<00:04,  8.57it/s]Processing batches:  90%|█████████ | 326/362 [00:21<00:04,  8.35it/s]Processing batches:  91%|█████████ | 328/362 [00:21<00:04,  8.10it/s]Processing batches:  91%|█████████ | 330/362 [00:22<00:04,  7.85it/s]Processing batches:  92%|█████████▏| 332/362 [00:22<00:03,  7.64it/s]Processing batches:  92%|█████████▏| 333/362 [00:22<00:03,  7.50it/s]Processing batches:  92%|█████████▏| 334/362 [00:22<00:03,  7.39it/s]Processing batches:  93%|█████████▎| 335/362 [00:22<00:03,  7.33it/s]Processing batches:  93%|█████████▎| 336/362 [00:22<00:03,  7.23it/s]Processing batches:  93%|█████████▎| 337/362 [00:23<00:03,  7.15it/s]Processing batches:  93%|█████████▎| 338/362 [00:23<00:03,  7.04it/s]Processing batches:  94%|█████████▎| 339/362 [00:23<00:03,  7.03it/s]Processing batches:  94%|█████████▍| 340/362 [00:23<00:03,  6.97it/s]Processing batches:  94%|█████████▍| 341/362 [00:23<00:03,  6.94it/s]Processing batches:  94%|█████████▍| 342/362 [00:23<00:02,  7.04it/s]Processing batches:  95%|█████████▍| 343/362 [00:23<00:02,  6.85it/s]Processing batches:  95%|█████████▌| 344/362 [00:24<00:02,  6.89it/s]Processing batches:  95%|█████████▌| 345/362 [00:24<00:02,  6.96it/s]Processing batches:  96%|█████████▌| 346/362 [00:24<00:02,  6.89it/s]Processing batches:  96%|█████████▌| 347/362 [00:24<00:02,  6.89it/s]Processing batches:  96%|█████████▌| 348/362 [00:24<00:02,  6.88it/s]Processing batches:  96%|█████████▋| 349/362 [00:24<00:01,  6.87it/s]Processing batches:  97%|█████████▋| 350/362 [00:24<00:01,  6.85it/s]Processing batches:  97%|█████████▋| 351/362 [00:25<00:01,  6.88it/s]Processing batches:  97%|█████████▋| 352/362 [00:25<00:01,  6.86it/s]Processing batches:  98%|█████████▊| 353/362 [00:25<00:01,  6.93it/s]Processing batches:  98%|█████████▊| 354/362 [00:25<00:01,  6.83it/s]Processing batches:  98%|█████████▊| 355/362 [00:25<00:01,  6.76it/s]Processing batches:  98%|█████████▊| 356/362 [00:25<00:00,  6.87it/s]Processing batches:  99%|█████████▊| 357/362 [00:25<00:00,  6.88it/s]Processing batches:  99%|█████████▉| 358/362 [00:26<00:00,  6.84it/s]Processing batches:  99%|█████████▉| 359/362 [00:26<00:00,  6.99it/s]Processing batches:  99%|█████████▉| 360/362 [00:26<00:00,  6.94it/s]Processing batches: 100%|█████████▉| 361/362 [00:26<00:00,  7.06it/s]Processing batches: 100%|██████████| 362/362 [00:26<00:00, 13.60it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target SRC - DES: 0.1509, MAE_top2k: 0.2188, n_DE: 2266
+INFO:ZeroShotPerturbation:Predicting for target: MED13
+INFO:ZeroShotPerturbation:Processing 2787 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2372.34it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3180248.12it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  17%|█▋        | 62/362 [00:00<00:00, 618.63it/s]Processing batches:  36%|███▌      | 130/362 [00:00<00:00, 650.03it/s]Processing batches:  54%|█████▍    | 195/362 [00:02<00:02, 60.47it/s] Processing batches:  64%|██████▍   | 232/362 [00:08<00:06, 18.89it/s]Processing batches:  70%|███████   | 255/362 [00:11<00:07, 13.91it/s]Processing batches:  75%|███████▍  | 270/362 [00:13<00:07, 11.87it/s]Processing batches:  77%|███████▋  | 280/362 [00:15<00:07, 10.83it/s]Processing batches:  79%|███████▉  | 287/362 [00:16<00:07, 10.11it/s]Processing batches:  81%|████████  | 292/362 [00:17<00:07,  9.61it/s]Processing batches:  82%|████████▏ | 296/362 [00:17<00:07,  9.14it/s]Processing batches:  83%|████████▎ | 299/362 [00:18<00:07,  8.79it/s]Processing batches:  83%|████████▎ | 302/362 [00:18<00:07,  8.41it/s]Processing batches:  84%|████████▍ | 304/362 [00:18<00:07,  8.19it/s]Processing batches:  85%|████████▍ | 306/362 [00:19<00:07,  7.93it/s]Processing batches:  85%|████████▌ | 308/362 [00:19<00:07,  7.68it/s]Processing batches:  85%|████████▌ | 309/362 [00:19<00:07,  7.56it/s]Processing batches:  86%|████████▌ | 310/362 [00:19<00:06,  7.45it/s]Processing batches:  86%|████████▌ | 311/362 [00:19<00:06,  7.29it/s]Processing batches:  86%|████████▌ | 312/362 [00:20<00:06,  7.19it/s]Processing batches:  86%|████████▋ | 313/362 [00:20<00:06,  7.04it/s]Processing batches:  87%|████████▋ | 314/362 [00:20<00:06,  7.02it/s]Processing batches:  87%|████████▋ | 315/362 [00:20<00:06,  6.93it/s]Processing batches:  87%|████████▋ | 316/362 [00:20<00:06,  6.82it/s]Processing batches:  88%|████████▊ | 317/362 [00:20<00:06,  6.82it/s]Processing batches:  88%|████████▊ | 318/362 [00:21<00:06,  6.79it/s]Processing batches:  88%|████████▊ | 319/362 [00:21<00:06,  6.71it/s]Processing batches:  88%|████████▊ | 320/362 [00:21<00:06,  6.72it/s]Processing batches:  89%|████████▊ | 321/362 [00:21<00:06,  6.76it/s]Processing batches:  89%|████████▉ | 322/362 [00:21<00:05,  6.80it/s]Processing batches:  89%|████████▉ | 323/362 [00:21<00:05,  6.85it/s]Processing batches:  90%|████████▉ | 324/362 [00:21<00:05,  6.83it/s]Processing batches:  90%|████████▉ | 325/362 [00:22<00:05,  6.76it/s]Processing batches:  90%|█████████ | 326/362 [00:22<00:05,  6.66it/s]Processing batches:  90%|█████████ | 327/362 [00:22<00:05,  6.65it/s]Processing batches:  91%|█████████ | 328/362 [00:22<00:05,  6.62it/s]Processing batches:  91%|█████████ | 329/362 [00:22<00:04,  6.62it/s]Processing batches:  91%|█████████ | 330/362 [00:22<00:04,  6.55it/s]Processing batches:  91%|█████████▏| 331/362 [00:22<00:04,  6.60it/s]Processing batches:  92%|█████████▏| 332/362 [00:23<00:04,  6.63it/s]Processing batches:  92%|█████████▏| 333/362 [00:23<00:04,  6.53it/s]Processing batches:  92%|█████████▏| 334/362 [00:23<00:04,  6.52it/s]Processing batches:  93%|█████████▎| 335/362 [00:23<00:04,  6.54it/s]Processing batches:  93%|█████████▎| 336/362 [00:23<00:03,  6.53it/s]Processing batches:  93%|█████████▎| 337/362 [00:23<00:03,  6.52it/s]Processing batches:  93%|█████████▎| 338/362 [00:24<00:03,  6.57it/s]Processing batches:  94%|█████████▎| 339/362 [00:24<00:03,  6.62it/s]Processing batches:  94%|█████████▍| 340/362 [00:24<00:03,  6.53it/s]Processing batches:  94%|█████████▍| 341/362 [00:24<00:03,  6.59it/s]Processing batches:  94%|█████████▍| 342/362 [00:24<00:02,  6.69it/s]Processing batches:  95%|█████████▍| 343/362 [00:24<00:02,  6.70it/s]Processing batches:  95%|█████████▌| 344/362 [00:24<00:02,  6.63it/s]Processing batches:  95%|█████████▌| 345/362 [00:25<00:02,  6.66it/s]Processing batches:  96%|█████████▌| 346/362 [00:25<00:02,  6.62it/s]Processing batches:  96%|█████████▌| 347/362 [00:25<00:02,  6.61it/s]Processing batches:  96%|█████████▌| 348/362 [00:25<00:02,  6.60it/s]Processing batches:  96%|█████████▋| 349/362 [00:25<00:01,  6.54it/s]Processing batches:  97%|█████████▋| 350/362 [00:25<00:01,  6.56it/s]Processing batches:  97%|█████████▋| 351/362 [00:26<00:01,  6.60it/s]Processing batches:  97%|█████████▋| 352/362 [00:26<00:01,  6.61it/s]Processing batches:  98%|█████████▊| 353/362 [00:26<00:01,  6.58it/s]Processing batches:  98%|█████████▊| 354/362 [00:26<00:01,  6.40it/s]Processing batches:  98%|█████████▊| 355/362 [00:26<00:01,  6.51it/s]Processing batches:  98%|█████████▊| 356/362 [00:26<00:00,  6.61it/s]Processing batches:  99%|█████████▊| 357/362 [00:26<00:00,  6.60it/s]Processing batches:  99%|█████████▉| 358/362 [00:27<00:00,  6.61it/s]Processing batches:  99%|█████████▉| 359/362 [00:27<00:00,  6.65it/s]Processing batches:  99%|█████████▉| 360/362 [00:27<00:00,  6.57it/s]Processing batches: 100%|█████████▉| 361/362 [00:27<00:00,  6.66it/s]Processing batches: 100%|██████████| 362/362 [00:27<00:00, 13.10it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 1212.40it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 1969023.87it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  15%|█▍        | 54/362 [00:00<00:00, 524.07it/s]Processing batches:  30%|██▉       | 107/362 [00:00<00:00, 486.60it/s]Processing batches:  49%|████▊     | 176/362 [00:00<00:00, 571.21it/s]Processing batches:  65%|██████▍   | 234/362 [00:08<00:07, 17.94it/s] Processing batches:  75%|███████▍  | 270/362 [00:14<00:07, 12.36it/s]Processing batches:  81%|████████  | 293/362 [00:17<00:06, 10.60it/s]Processing batches:  85%|████████▌ | 309/362 [00:20<00:05,  9.60it/s]Processing batches:  88%|████████▊ | 320/362 [00:21<00:04,  9.01it/s]Processing batches:  91%|█████████ | 328/362 [00:23<00:03,  8.61it/s]Processing batches:  92%|█████████▏| 334/362 [00:24<00:03,  8.28it/s]Processing batches:  93%|█████████▎| 338/362 [00:24<00:02,  8.06it/s]Processing batches:  94%|█████████▍| 341/362 [00:25<00:02,  7.88it/s]Processing batches:  95%|█████████▌| 344/362 [00:25<00:02,  7.67it/s]Processing batches:  96%|█████████▌| 346/362 [00:25<00:02,  7.54it/s]Processing batches:  96%|█████████▌| 348/362 [00:26<00:01,  7.40it/s]Processing batches:  97%|█████████▋| 350/362 [00:26<00:01,  7.23it/s]Processing batches:  97%|█████████▋| 352/362 [00:26<00:01,  7.08it/s]Processing batches:  98%|█████████▊| 353/362 [00:26<00:01,  7.03it/s]Processing batches:  98%|█████████▊| 354/362 [00:27<00:01,  6.92it/s]Processing batches:  98%|█████████▊| 355/362 [00:27<00:01,  6.83it/s]Processing batches:  98%|█████████▊| 356/362 [00:27<00:00,  6.77it/s]Processing batches:  99%|█████████▊| 357/362 [00:27<00:00,  6.72it/s]Processing batches:  99%|█████████▉| 358/362 [00:27<00:00,  6.73it/s]Processing batches:  99%|█████████▉| 359/362 [00:27<00:00,  6.69it/s]Processing batches:  99%|█████████▉| 360/362 [00:28<00:00,  6.60it/s]Processing batches: 100%|█████████▉| 361/362 [00:28<00:00,  6.69it/s]Processing batches: 100%|██████████| 362/362 [00:28<00:00, 12.82it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target MED13 - DES: 0.3871, MAE_top2k: 0.2293, n_DE: 6484
+INFO:ZeroShotPerturbation:Predicting for target: KDR
+INFO:ZeroShotPerturbation:Processing 2056 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2912.71it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3260092.70it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  23%|██▎       | 84/362 [00:00<00:00, 835.71it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 788.46it/s]Processing batches:  72%|███████▏  | 261/362 [00:11<00:05, 17.14it/s] Processing batches:  72%|███████▏  | 262/362 [00:11<00:05, 16.94it/s]Processing batches:  85%|████████▍ | 306/362 [00:17<00:04, 11.98it/s]Processing batches:  92%|█████████▏| 333/362 [00:20<00:02, 10.51it/s]Processing batches:  97%|█████████▋| 351/362 [00:23<00:01,  9.79it/s]Processing batches: 100%|██████████| 362/362 [00:24<00:00, 14.59it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2825.40it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3320620.76it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  18%|█▊        | 64/362 [00:00<00:00, 622.14it/s]Processing batches:  35%|███▌      | 127/362 [00:00<00:00, 619.04it/s]Processing batches:  52%|█████▏    | 189/362 [00:01<00:01, 102.61it/s]Processing batches:  62%|██████▏   | 225/362 [00:06<00:06, 22.45it/s] Processing batches:  69%|██████▊   | 248/362 [00:09<00:07, 15.87it/s]Processing batches:  73%|███████▎  | 263/362 [00:11<00:07, 13.35it/s]Processing batches:  75%|███████▌  | 273/362 [00:12<00:07, 12.04it/s]Processing batches:  77%|███████▋  | 280/362 [00:13<00:07, 11.27it/s]Processing batches:  79%|███████▊  | 285/362 [00:14<00:07, 10.66it/s]Processing batches:  80%|███████▉  | 289/362 [00:15<00:07, 10.16it/s]Processing batches:  81%|████████  | 292/362 [00:15<00:07,  9.80it/s]Processing batches:  81%|████████▏ | 295/362 [00:15<00:07,  9.35it/s]Processing batches:  82%|████████▏ | 297/362 [00:16<00:07,  9.01it/s]Processing batches:  83%|████████▎ | 299/362 [00:16<00:07,  8.77it/s]Processing batches:  83%|████████▎ | 301/362 [00:16<00:07,  8.41it/s]Processing batches:  84%|████████▎ | 303/362 [00:17<00:07,  8.13it/s]Processing batches:  84%|████████▍ | 304/362 [00:17<00:07,  8.05it/s]Processing batches:  84%|████████▍ | 305/362 [00:17<00:07,  7.94it/s]Processing batches:  85%|████████▍ | 306/362 [00:17<00:07,  7.75it/s]Processing batches:  85%|████████▍ | 307/362 [00:17<00:07,  7.62it/s]Processing batches:  85%|████████▌ | 308/362 [00:17<00:07,  7.54it/s]Processing batches:  85%|████████▌ | 309/362 [00:17<00:07,  7.46it/s]Processing batches:  86%|████████▌ | 310/362 [00:18<00:07,  7.37it/s]Processing batches:  86%|████████▌ | 311/362 [00:18<00:06,  7.33it/s]Processing batches:  86%|████████▌ | 312/362 [00:18<00:06,  7.32it/s]Processing batches:  86%|████████▋ | 313/362 [00:18<00:06,  7.29it/s]Processing batches:  87%|████████▋ | 314/362 [00:18<00:06,  7.32it/s]Processing batches:  87%|████████▋ | 315/362 [00:18<00:06,  7.31it/s]Processing batches:  87%|████████▋ | 316/362 [00:18<00:06,  7.27it/s]Processing batches:  88%|████████▊ | 317/362 [00:19<00:06,  7.26it/s]Processing batches:  88%|████████▊ | 318/362 [00:19<00:06,  7.28it/s]Processing batches:  88%|████████▊ | 319/362 [00:19<00:05,  7.28it/s]Processing batches:  88%|████████▊ | 320/362 [00:19<00:05,  7.29it/s]Processing batches:  89%|████████▊ | 321/362 [00:19<00:05,  7.34it/s]Processing batches:  89%|████████▉ | 322/362 [00:19<00:05,  7.43it/s]Processing batches:  89%|████████▉ | 323/362 [00:19<00:05,  7.43it/s]Processing batches:  90%|████████▉ | 324/362 [00:19<00:05,  7.43it/s]Processing batches:  90%|████████▉ | 325/362 [00:20<00:05,  7.39it/s]Processing batches:  90%|█████████ | 326/362 [00:20<00:04,  7.39it/s]Processing batches:  90%|█████████ | 327/362 [00:20<00:04,  7.34it/s]Processing batches:  91%|█████████ | 328/362 [00:20<00:04,  7.18it/s]Processing batches:  91%|█████████ | 329/362 [00:20<00:04,  7.20it/s]Processing batches:  91%|█████████ | 330/362 [00:20<00:04,  7.26it/s]Processing batches:  91%|█████████▏| 331/362 [00:20<00:04,  7.26it/s]Processing batches:  92%|█████████▏| 332/362 [00:21<00:04,  7.28it/s]Processing batches:  92%|█████████▏| 333/362 [00:21<00:04,  7.16it/s]Processing batches:  92%|█████████▏| 334/362 [00:21<00:03,  7.17it/s]Processing batches:  93%|█████████▎| 335/362 [00:21<00:03,  7.27it/s]Processing batches:  93%|█████████▎| 336/362 [00:21<00:03,  7.26it/s]Processing batches:  93%|█████████▎| 337/362 [00:21<00:03,  7.26it/s]Processing batches:  93%|█████████▎| 338/362 [00:21<00:03,  7.02it/s]Processing batches:  94%|█████████▎| 339/362 [00:22<00:03,  7.31it/s]Processing batches:  94%|█████████▍| 340/362 [00:22<00:03,  7.31it/s]Processing batches:  94%|█████████▍| 341/362 [00:22<00:02,  7.32it/s]Processing batches:  94%|█████████▍| 342/362 [00:22<00:02,  7.39it/s]Processing batches:  95%|█████████▍| 343/362 [00:22<00:02,  7.29it/s]Processing batches:  95%|█████████▌| 344/362 [00:22<00:02,  7.33it/s]Processing batches:  95%|█████████▌| 345/362 [00:22<00:02,  7.38it/s]Processing batches:  96%|█████████▌| 346/362 [00:23<00:02,  7.36it/s]Processing batches:  96%|█████████▌| 347/362 [00:23<00:02,  7.36it/s]Processing batches:  96%|█████████▌| 348/362 [00:23<00:01,  7.23it/s]Processing batches:  96%|█████████▋| 349/362 [00:23<00:01,  7.38it/s]Processing batches:  97%|█████████▋| 350/362 [00:23<00:01,  7.38it/s]Processing batches:  97%|█████████▋| 351/362 [00:23<00:01,  7.37it/s]Processing batches:  97%|█████████▋| 352/362 [00:23<00:01,  7.35it/s]Processing batches:  98%|█████████▊| 353/362 [00:23<00:01,  7.14it/s]Processing batches:  98%|█████████▊| 354/362 [00:24<00:01,  7.15it/s]Processing batches:  98%|█████████▊| 355/362 [00:24<00:00,  7.23it/s]Processing batches:  98%|█████████▊| 356/362 [00:24<00:00,  7.32it/s]Processing batches:  99%|█████████▊| 357/362 [00:24<00:00,  7.32it/s]Processing batches:  99%|█████████▉| 358/362 [00:24<00:00,  7.35it/s]Processing batches:  99%|█████████▉| 359/362 [00:24<00:00,  7.11it/s]Processing batches:  99%|█████████▉| 360/362 [00:24<00:00,  7.24it/s]Processing batches: 100%|█████████▉| 361/362 [00:25<00:00,  7.35it/s]Processing batches: 100%|██████████| 362/362 [00:25<00:00, 14.39it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target KDR - DES: 0.1318, MAE_top2k: 0.2235, n_DE: 1616
+INFO:ZeroShotPerturbation:Predicting for target: EIF4B
+INFO:ZeroShotPerturbation:Processing 1585 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3428.12it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3324551.35it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  21%|██        | 75/362 [00:00<00:00, 729.91it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 540.89it/s]Processing batches:  67%|██████▋   | 241/362 [00:07<00:05, 22.53it/s] Processing batches:  76%|███████▌  | 274/362 [00:11<00:05, 16.15it/s]Processing batches:  81%|████████  | 294/362 [00:14<00:04, 13.96it/s]Processing batches:  85%|████████▍ | 307/362 [00:15<00:04, 12.72it/s]Processing batches:  87%|████████▋ | 316/362 [00:17<00:03, 11.89it/s]Processing batches:  89%|████████▉ | 323/362 [00:17<00:03, 11.30it/s]Processing batches:  91%|█████████ | 328/362 [00:18<00:03, 10.84it/s]Processing batches:  92%|█████████▏| 332/362 [00:19<00:02, 10.45it/s]Processing batches:  93%|█████████▎| 335/362 [00:19<00:02, 10.14it/s]Processing batches:  93%|█████████▎| 338/362 [00:19<00:02,  9.78it/s]Processing batches:  94%|█████████▍| 340/362 [00:20<00:02,  9.57it/s]Processing batches:  94%|█████████▍| 342/362 [00:20<00:02,  9.32it/s]Processing batches:  95%|█████████▌| 344/362 [00:20<00:01,  9.12it/s]Processing batches:  96%|█████████▌| 346/362 [00:20<00:01,  8.91it/s]Processing batches:  96%|█████████▌| 348/362 [00:21<00:01,  8.67it/s]Processing batches:  96%|█████████▋| 349/362 [00:21<00:01,  8.63it/s]Processing batches:  97%|█████████▋| 350/362 [00:21<00:01,  8.54it/s]Processing batches:  97%|█████████▋| 351/362 [00:21<00:01,  8.45it/s]Processing batches:  97%|█████████▋| 352/362 [00:21<00:01,  8.37it/s]Processing batches:  98%|█████████▊| 353/362 [00:21<00:01,  8.18it/s]Processing batches:  98%|█████████▊| 354/362 [00:21<00:00,  8.12it/s]Processing batches:  98%|█████████▊| 355/362 [00:21<00:00,  8.13it/s]Processing batches:  98%|█████████▊| 356/362 [00:22<00:00,  8.17it/s]Processing batches:  99%|█████████▊| 357/362 [00:22<00:00,  8.12it/s]Processing batches:  99%|█████████▉| 358/362 [00:22<00:00,  7.96it/s]Processing batches:  99%|█████████▉| 359/362 [00:22<00:00,  8.02it/s]Processing batches:  99%|█████████▉| 360/362 [00:22<00:00,  8.05it/s]Processing batches: 100%|█████████▉| 361/362 [00:22<00:00,  8.13it/s]Processing batches: 100%|██████████| 362/362 [00:22<00:00, 15.90it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2966.27it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3353217.61it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  27%|██▋       | 99/362 [00:00<00:00, 983.72it/s]Processing batches:  55%|█████▍    | 198/362 [00:02<00:02, 72.40it/s]Processing batches:  67%|██████▋   | 242/362 [00:07<00:05, 22.44it/s]Processing batches:  73%|███████▎  | 266/362 [00:11<00:05, 16.89it/s]Processing batches:  78%|███████▊  | 281/362 [00:12<00:05, 14.68it/s]Processing batches:  80%|████████  | 291/362 [00:14<00:05, 13.39it/s]Processing batches:  82%|████████▏ | 298/362 [00:15<00:05, 12.46it/s]Processing batches:  84%|████████▎ | 303/362 [00:15<00:05, 11.79it/s]Processing batches:  85%|████████▍ | 307/362 [00:16<00:04, 11.20it/s]Processing batches:  86%|████████▌ | 310/362 [00:16<00:04, 10.77it/s]Processing batches:  86%|████████▋ | 313/362 [00:16<00:04, 10.27it/s]Processing batches:  87%|████████▋ | 315/362 [00:17<00:04,  9.97it/s]Processing batches:  88%|████████▊ | 317/362 [00:17<00:04,  9.62it/s]Processing batches:  88%|████████▊ | 319/362 [00:17<00:04,  9.33it/s]Processing batches:  89%|████████▊ | 321/362 [00:18<00:04,  9.02it/s]Processing batches:  89%|████████▉ | 322/362 [00:18<00:04,  8.90it/s]Processing batches:  89%|████████▉ | 323/362 [00:18<00:04,  8.81it/s]Processing batches:  90%|████████▉ | 324/362 [00:18<00:04,  8.65it/s]Processing batches:  90%|████████▉ | 325/362 [00:18<00:04,  8.49it/s]Processing batches:  90%|█████████ | 326/362 [00:18<00:04,  8.37it/s]Processing batches:  90%|█████████ | 327/362 [00:18<00:04,  8.23it/s]Processing batches:  91%|█████████ | 328/362 [00:18<00:04,  8.06it/s]Processing batches:  91%|█████████ | 329/362 [00:19<00:04,  7.99it/s]Processing batches:  91%|█████████ | 330/362 [00:19<00:03,  8.01it/s]Processing batches:  91%|█████████▏| 331/362 [00:19<00:03,  7.95it/s]Processing batches:  92%|█████████▏| 332/362 [00:19<00:03,  7.94it/s]Processing batches:  92%|█████████▏| 333/362 [00:19<00:03,  7.78it/s]Processing batches:  92%|█████████▏| 334/362 [00:19<00:03,  7.78it/s]Processing batches:  93%|█████████▎| 335/362 [00:19<00:03,  7.86it/s]Processing batches:  93%|█████████▎| 336/362 [00:19<00:03,  7.79it/s]Processing batches:  93%|█████████▎| 337/362 [00:20<00:03,  7.86it/s]Processing batches:  93%|█████████▎| 338/362 [00:20<00:03,  7.73it/s]Processing batches:  94%|█████████▎| 339/362 [00:20<00:02,  7.82it/s]Processing batches:  94%|█████████▍| 340/362 [00:20<00:02,  7.84it/s]Processing batches:  94%|█████████▍| 341/362 [00:20<00:02,  7.87it/s]Processing batches:  94%|█████████▍| 342/362 [00:20<00:02,  7.95it/s]Processing batches:  95%|█████████▍| 343/362 [00:20<00:02,  7.98it/s]Processing batches:  95%|█████████▌| 344/362 [00:20<00:02,  7.86it/s]Processing batches:  95%|█████████▌| 345/362 [00:21<00:02,  7.91it/s]Processing batches:  96%|█████████▌| 346/362 [00:21<00:02,  7.90it/s]Processing batches:  96%|█████████▌| 347/362 [00:21<00:01,  7.91it/s]Processing batches:  96%|█████████▌| 348/362 [00:21<00:01,  7.88it/s]Processing batches:  96%|█████████▋| 349/362 [00:21<00:01,  7.98it/s]Processing batches:  97%|█████████▋| 350/362 [00:21<00:01,  7.86it/s]Processing batches:  97%|█████████▋| 351/362 [00:21<00:01,  7.88it/s]Processing batches:  97%|█████████▋| 352/362 [00:21<00:01,  7.89it/s]Processing batches:  98%|█████████▊| 353/362 [00:22<00:01,  7.91it/s]Processing batches:  98%|█████████▊| 354/362 [00:22<00:01,  7.87it/s]Processing batches:  98%|█████████▊| 355/362 [00:22<00:00,  7.77it/s]Processing batches:  98%|█████████▊| 356/362 [00:22<00:00,  7.88it/s]Processing batches:  99%|█████████▊| 357/362 [00:22<00:00,  7.89it/s]Processing batches:  99%|█████████▉| 358/362 [00:22<00:00,  7.91it/s]Processing batches:  99%|█████████▉| 359/362 [00:22<00:00,  7.94it/s]Processing batches:  99%|█████████▉| 360/362 [00:22<00:00,  7.97it/s]Processing batches: 100%|█████████▉| 361/362 [00:23<00:00,  7.84it/s]Processing batches: 100%|██████████| 362/362 [00:23<00:00, 15.62it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target EIF4B - DES: 0.3943, MAE_top2k: 0.2377, n_DE: 6287
+INFO:ZeroShotPerturbation:Predicting for target: SIX4
+INFO:ZeroShotPerturbation:Processing 642 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5343.06it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3261074.07it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  28%|██▊       | 103/362 [00:00<00:00, 1021.80it/s]Processing batches:  57%|█████▋    | 206/362 [00:02<00:02, 62.92it/s]  Processing batches:  69%|██████▉   | 251/362 [00:07<00:04, 25.09it/s]Processing batches:  76%|███████▌  | 276/362 [00:10<00:04, 19.48it/s]Processing batches:  81%|████████  | 292/362 [00:11<00:04, 17.03it/s]Processing batches:  84%|████████▎ | 303/362 [00:13<00:03, 15.55it/s]Processing batches:  86%|████████▌ | 310/362 [00:13<00:03, 14.64it/s]Processing batches:  87%|████████▋ | 316/362 [00:14<00:03, 13.84it/s]Processing batches:  88%|████████▊ | 320/362 [00:14<00:03, 13.28it/s]Processing batches:  89%|████████▉ | 323/362 [00:15<00:03, 12.81it/s]Processing batches:  90%|█████████ | 326/362 [00:15<00:02, 12.35it/s]Processing batches:  91%|█████████ | 328/362 [00:15<00:02, 11.93it/s]Processing batches:  91%|█████████ | 330/362 [00:15<00:02, 11.59it/s]Processing batches:  92%|█████████▏| 332/362 [00:16<00:02, 11.24it/s]Processing batches:  92%|█████████▏| 334/362 [00:16<00:02, 10.77it/s]Processing batches:  93%|█████████▎| 336/362 [00:16<00:02, 10.53it/s]Processing batches:  93%|█████████▎| 338/362 [00:16<00:02, 10.31it/s]Processing batches:  94%|█████████▍| 340/362 [00:16<00:02, 10.15it/s]Processing batches:  94%|█████████▍| 342/362 [00:17<00:02,  9.96it/s]Processing batches:  95%|█████████▌| 344/362 [00:17<00:01,  9.89it/s]Processing batches:  95%|█████████▌| 345/362 [00:17<00:01,  9.83it/s]Processing batches:  96%|█████████▌| 346/362 [00:17<00:01,  9.78it/s]Processing batches:  96%|█████████▌| 347/362 [00:17<00:01,  9.75it/s]Processing batches:  96%|█████████▌| 348/362 [00:17<00:01,  9.72it/s]Processing batches:  96%|█████████▋| 349/362 [00:17<00:01,  9.77it/s]Processing batches:  97%|█████████▋| 350/362 [00:17<00:01,  9.69it/s]Processing batches:  97%|█████████▋| 351/362 [00:18<00:01,  9.67it/s]Processing batches:  97%|█████████▋| 352/362 [00:18<00:01,  9.66it/s]Processing batches:  98%|█████████▊| 353/362 [00:18<00:00,  9.66it/s]Processing batches:  98%|█████████▊| 354/362 [00:18<00:00,  9.63it/s]Processing batches:  98%|█████████▊| 355/362 [00:18<00:00,  9.60it/s]Processing batches:  98%|█████████▊| 356/362 [00:18<00:00,  9.67it/s]Processing batches:  99%|█████████▊| 357/362 [00:18<00:00,  9.66it/s]Processing batches:  99%|█████████▉| 358/362 [00:18<00:00,  9.63it/s]Processing batches:  99%|█████████▉| 359/362 [00:18<00:00,  9.68it/s]Processing batches:  99%|█████████▉| 360/362 [00:18<00:00,  9.63it/s]Processing batches: 100%|█████████▉| 361/362 [00:19<00:00,  9.69it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.91it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3222.67it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 1759262.65it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  14%|█▍        | 50/362 [00:00<00:00, 496.76it/s]Processing batches:  44%|████▍     | 161/362 [00:00<00:00, 830.73it/s]Processing batches:  67%|██████▋   | 244/362 [00:06<00:04, 27.07it/s] Processing batches:  80%|████████  | 290/362 [00:11<00:03, 18.17it/s]Processing batches:  88%|████████▊ | 318/362 [00:14<00:02, 15.48it/s]Processing batches:  93%|█████████▎| 337/362 [00:16<00:01, 14.09it/s]Processing batches:  97%|█████████▋| 350/362 [00:18<00:00, 13.26it/s]Processing batches:  99%|█████████▉| 359/362 [00:19<00:00, 12.69it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.67it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target SIX4 - DES: 0.1538, MAE_top2k: 0.2332, n_DE: 3263
+INFO:ZeroShotPerturbation:Predicting for target: TFAM
+INFO:ZeroShotPerturbation:Processing 1105 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4068.19it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3254496.22it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  35%|███▍      | 126/362 [00:00<00:00, 1256.47it/s]Processing batches:  70%|██████▉   | 252/362 [00:08<00:04, 25.71it/s]  Processing batches:  84%|████████▍ | 305/362 [00:14<00:03, 16.97it/s]Processing batches:  92%|█████████▏| 334/362 [00:17<00:01, 14.57it/s]Processing batches:  97%|█████████▋| 352/362 [00:19<00:00, 13.42it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 17.23it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2398.80it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2171123.92it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  20%|██        | 74/362 [00:00<00:00, 736.91it/s]Processing batches:  41%|████      | 148/362 [00:00<00:00, 680.50it/s]Processing batches:  60%|█████▉    | 217/362 [00:04<00:04, 35.46it/s] Processing batches:  70%|███████   | 255/362 [00:08<00:05, 19.55it/s]Processing batches:  77%|███████▋  | 279/362 [00:11<00:05, 15.71it/s]Processing batches:  81%|████████▏ | 295/362 [00:13<00:04, 13.94it/s]Processing batches:  85%|████████▍ | 306/362 [00:14<00:04, 12.87it/s]Processing batches:  87%|████████▋ | 314/362 [00:15<00:03, 12.11it/s]Processing batches:  88%|████████▊ | 320/362 [00:16<00:03, 11.55it/s]Processing batches:  90%|████████▉ | 324/362 [00:17<00:03, 11.16it/s]Processing batches:  90%|█████████ | 327/362 [00:17<00:03, 10.83it/s]Processing batches:  91%|█████████ | 330/362 [00:17<00:03, 10.49it/s]Processing batches:  92%|█████████▏| 332/362 [00:18<00:02, 10.24it/s]Processing batches:  92%|█████████▏| 334/362 [00:18<00:02,  9.97it/s]Processing batches:  93%|█████████▎| 336/362 [00:18<00:02,  9.74it/s]Processing batches:  93%|█████████▎| 338/362 [00:18<00:02,  9.50it/s]Processing batches:  94%|█████████▍| 340/362 [00:18<00:02,  9.32it/s]Processing batches:  94%|█████████▍| 342/362 [00:19<00:02,  9.14it/s]Processing batches:  95%|█████████▍| 343/362 [00:19<00:02,  9.08it/s]Processing batches:  95%|█████████▌| 344/362 [00:19<00:02,  8.90it/s]Processing batches:  95%|█████████▌| 345/362 [00:19<00:01,  8.96it/s]Processing batches:  96%|█████████▌| 346/362 [00:19<00:01,  8.87it/s]Processing batches:  96%|█████████▌| 347/362 [00:19<00:01,  8.81it/s]Processing batches:  96%|█████████▌| 348/362 [00:19<00:01,  8.75it/s]Processing batches:  96%|█████████▋| 349/362 [00:20<00:01,  8.81it/s]Processing batches:  97%|█████████▋| 350/362 [00:20<00:01,  8.54it/s]Processing batches:  97%|█████████▋| 351/362 [00:20<00:01,  8.56it/s]Processing batches:  97%|█████████▋| 352/362 [00:20<00:01,  8.54it/s]Processing batches:  98%|█████████▊| 353/362 [00:20<00:01,  8.59it/s]Processing batches:  98%|█████████▊| 354/362 [00:20<00:00,  8.54it/s]Processing batches:  98%|█████████▊| 355/362 [00:20<00:00,  8.62it/s]Processing batches:  98%|█████████▊| 356/362 [00:20<00:00,  8.68it/s]Processing batches:  99%|█████████▊| 357/362 [00:20<00:00,  8.47it/s]Processing batches:  99%|█████████▉| 358/362 [00:21<00:00,  8.58it/s]Processing batches:  99%|█████████▉| 359/362 [00:21<00:00,  8.60it/s]Processing batches:  99%|█████████▉| 360/362 [00:21<00:00,  8.63it/s]Processing batches: 100%|█████████▉| 361/362 [00:21<00:00,  8.72it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 16.85it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target TFAM - DES: 0.2998, MAE_top2k: 0.2648, n_DE: 5173
+INFO:ZeroShotPerturbation:Predicting for target: MAST2
+INFO:ZeroShotPerturbation:Processing 1029 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4403.47it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3250450.76it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  26%|██▌       | 95/362 [00:00<00:00, 941.29it/s]Processing batches:  52%|█████▏    | 190/362 [00:01<00:01, 135.39it/s]Processing batches:  65%|██████▍   | 234/362 [00:06<00:04, 26.87it/s] Processing batches:  72%|███████▏  | 259/362 [00:09<00:05, 19.45it/s]Processing batches:  76%|███████▌  | 274/362 [00:10<00:05, 16.62it/s]Processing batches:  78%|███████▊  | 284/362 [00:11<00:05, 15.12it/s]Processing batches:  80%|████████  | 291/362 [00:12<00:05, 14.11it/s]Processing batches:  82%|████████▏ | 296/362 [00:13<00:04, 13.32it/s]Processing batches:  83%|████████▎ | 300/362 [00:13<00:04, 12.68it/s]Processing batches:  84%|████████▎ | 303/362 [00:14<00:04, 12.13it/s]Processing batches:  85%|████████▍ | 306/362 [00:14<00:04, 11.59it/s]Processing batches:  85%|████████▌ | 308/362 [00:14<00:04, 11.23it/s]Processing batches:  86%|████████▌ | 310/362 [00:14<00:04, 10.79it/s]Processing batches:  86%|████████▌ | 312/362 [00:15<00:04, 10.43it/s]Processing batches:  87%|████████▋ | 314/362 [00:15<00:04, 10.11it/s]Processing batches:  87%|████████▋ | 316/362 [00:15<00:04,  9.74it/s]Processing batches:  88%|████████▊ | 318/362 [00:15<00:04,  9.53it/s]Processing batches:  88%|████████▊ | 319/362 [00:15<00:04,  9.43it/s]Processing batches:  88%|████████▊ | 320/362 [00:16<00:04,  9.14it/s]Processing batches:  89%|████████▊ | 321/362 [00:16<00:04,  9.11it/s]Processing batches:  89%|████████▉ | 322/362 [00:16<00:04,  9.12it/s]Processing batches:  89%|████████▉ | 323/362 [00:16<00:04,  9.12it/s]Processing batches:  90%|████████▉ | 324/362 [00:16<00:04,  9.04it/s]Processing batches:  90%|████████▉ | 325/362 [00:16<00:04,  9.02it/s]Processing batches:  90%|█████████ | 326/362 [00:16<00:04,  8.85it/s]Processing batches:  90%|█████████ | 327/362 [00:16<00:03,  8.84it/s]Processing batches:  91%|█████████ | 328/362 [00:16<00:03,  8.77it/s]Processing batches:  91%|█████████ | 329/362 [00:17<00:03,  8.77it/s]Processing batches:  91%|█████████ | 330/362 [00:17<00:03,  8.84it/s]Processing batches:  91%|█████████▏| 331/362 [00:17<00:03,  8.72it/s]Processing batches:  92%|█████████▏| 332/362 [00:17<00:03,  8.74it/s]Processing batches:  92%|█████████▏| 333/362 [00:17<00:03,  8.65it/s]Processing batches:  92%|█████████▏| 334/362 [00:17<00:03,  8.81it/s]Processing batches:  93%|█████████▎| 335/362 [00:17<00:03,  8.83it/s]Processing batches:  93%|█████████▎| 336/362 [00:17<00:02,  8.80it/s]Processing batches:  93%|█████████▎| 337/362 [00:17<00:02,  8.80it/s]Processing batches:  93%|█████████▎| 338/362 [00:18<00:02,  8.60it/s]Processing batches:  94%|█████████▎| 339/362 [00:18<00:02,  8.89it/s]Processing batches:  94%|█████████▍| 340/362 [00:18<00:02,  8.57it/s]Processing batches:  94%|█████████▍| 341/362 [00:18<00:02,  8.92it/s]Processing batches:  94%|█████████▍| 342/362 [00:18<00:02,  8.98it/s]Processing batches:  95%|█████████▍| 343/362 [00:18<00:02,  8.96it/s]Processing batches:  95%|█████████▌| 344/362 [00:18<00:02,  8.95it/s]Processing batches:  95%|█████████▌| 345/362 [00:18<00:01,  8.82it/s]Processing batches:  96%|█████████▌| 346/362 [00:18<00:01,  8.91it/s]Processing batches:  96%|█████████▌| 347/362 [00:19<00:01,  8.86it/s]Processing batches:  96%|█████████▌| 348/362 [00:19<00:01,  8.87it/s]Processing batches:  96%|█████████▋| 349/362 [00:19<00:01,  8.94it/s]Processing batches:  97%|█████████▋| 350/362 [00:19<00:01,  8.65it/s]Processing batches:  97%|█████████▋| 351/362 [00:19<00:01,  8.71it/s]Processing batches:  97%|█████████▋| 352/362 [00:19<00:01,  8.74it/s]Processing batches:  98%|█████████▊| 353/362 [00:19<00:01,  8.81it/s]Processing batches:  98%|█████████▊| 354/362 [00:19<00:00,  8.80it/s]Processing batches:  98%|█████████▊| 355/362 [00:20<00:00,  8.79it/s]Processing batches:  98%|█████████▊| 356/362 [00:20<00:00,  8.87it/s]Processing batches:  99%|█████████▊| 357/362 [00:20<00:00,  8.67it/s]Processing batches:  99%|█████████▉| 358/362 [00:20<00:00,  8.75it/s]Processing batches:  99%|█████████▉| 359/362 [00:20<00:00,  8.83it/s]Processing batches:  99%|█████████▉| 360/362 [00:20<00:00,  8.68it/s]Processing batches: 100%|█████████▉| 361/362 [00:20<00:00,  8.98it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 17.44it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2296.99it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 1942344.56it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  17%|█▋        | 63/362 [00:00<00:00, 596.62it/s]Processing batches:  35%|███▌      | 127/362 [00:00<00:00, 604.93it/s]Processing batches:  52%|█████▏    | 188/362 [00:01<00:01, 130.90it/s]Processing batches:  62%|██████▏   | 224/362 [00:05<00:05, 27.03it/s] Processing batches:  68%|██████▊   | 247/362 [00:07<00:06, 19.03it/s]Processing batches:  72%|███████▏  | 262/362 [00:09<00:06, 16.06it/s]Processing batches:  75%|███████▌  | 272/362 [00:10<00:06, 14.41it/s]Processing batches:  77%|███████▋  | 279/362 [00:11<00:06, 13.45it/s]Processing batches:  78%|███████▊  | 284/362 [00:12<00:06, 12.72it/s]Processing batches:  80%|███████▉  | 288/362 [00:12<00:06, 12.16it/s]Processing batches:  80%|████████  | 291/362 [00:12<00:06, 11.67it/s]Processing batches:  81%|████████  | 294/362 [00:13<00:06, 11.19it/s]Processing batches:  82%|████████▏ | 296/362 [00:13<00:06, 10.80it/s]Processing batches:  82%|████████▏ | 298/362 [00:13<00:06, 10.46it/s]Processing batches:  83%|████████▎ | 300/362 [00:13<00:06, 10.14it/s]Processing batches:  83%|████████▎ | 302/362 [00:14<00:06,  9.82it/s]Processing batches:  84%|████████▍ | 304/362 [00:14<00:06,  9.50it/s]Processing batches:  85%|████████▍ | 306/362 [00:14<00:06,  9.31it/s]Processing batches:  85%|████████▍ | 307/362 [00:14<00:05,  9.20it/s]Processing batches:  85%|████████▌ | 308/362 [00:14<00:06,  8.98it/s]Processing batches:  85%|████████▌ | 309/362 [00:15<00:05,  8.92it/s]Processing batches:  86%|████████▌ | 310/362 [00:15<00:05,  8.90it/s]Processing batches:  86%|████████▌ | 311/362 [00:15<00:05,  8.86it/s]Processing batches:  86%|████████▌ | 312/362 [00:15<00:05,  8.79it/s]Processing batches:  86%|████████▋ | 313/362 [00:15<00:05,  8.60it/s]Processing batches:  87%|████████▋ | 314/362 [00:15<00:05,  8.64it/s]Processing batches:  87%|████████▋ | 315/362 [00:15<00:05,  8.67it/s]Processing batches:  87%|████████▋ | 316/362 [00:15<00:05,  8.71it/s]Processing batches:  88%|████████▊ | 317/362 [00:15<00:05,  8.66it/s]Processing batches:  88%|████████▊ | 318/362 [00:16<00:05,  8.37it/s]Processing batches:  88%|████████▊ | 319/362 [00:16<00:05,  8.46it/s]Processing batches:  88%|████████▊ | 320/362 [00:16<00:04,  8.57it/s]Processing batches:  89%|████████▊ | 321/362 [00:16<00:04,  8.70it/s]Processing batches:  89%|████████▉ | 322/362 [00:16<00:04,  8.77it/s]Processing batches:  89%|████████▉ | 323/362 [00:16<00:04,  8.87it/s]Processing batches:  90%|████████▉ | 324/362 [00:16<00:04,  8.87it/s]Processing batches:  90%|████████▉ | 325/362 [00:16<00:04,  8.64it/s]Processing batches:  90%|█████████ | 326/362 [00:17<00:04,  8.72it/s]Processing batches:  90%|█████████ | 327/362 [00:17<00:04,  8.70it/s]Processing batches:  91%|█████████ | 328/362 [00:17<00:03,  8.68it/s]Processing batches:  91%|█████████ | 329/362 [00:17<00:03,  8.49it/s]Processing batches:  91%|█████████ | 330/362 [00:17<00:03,  8.70it/s]Processing batches:  91%|█████████▏| 331/362 [00:17<00:03,  8.65it/s]Processing batches:  92%|█████████▏| 332/362 [00:17<00:03,  8.69it/s]Processing batches:  92%|█████████▏| 333/362 [00:17<00:03,  8.57it/s]Processing batches:  92%|█████████▏| 334/362 [00:17<00:03,  8.66it/s]Processing batches:  93%|█████████▎| 335/362 [00:18<00:03,  8.69it/s]Processing batches:  93%|█████████▎| 336/362 [00:18<00:02,  8.72it/s]Processing batches:  93%|█████████▎| 337/362 [00:18<00:02,  8.62it/s]Processing batches:  93%|█████████▎| 338/362 [00:18<00:02,  8.66it/s]Processing batches:  94%|█████████▎| 339/362 [00:18<00:02,  8.76it/s]Processing batches:  94%|█████████▍| 340/362 [00:18<00:02,  8.72it/s]Processing batches:  94%|█████████▍| 341/362 [00:18<00:02,  8.78it/s]Processing batches:  94%|█████████▍| 342/362 [00:18<00:02,  8.80it/s]Processing batches:  95%|█████████▍| 343/362 [00:18<00:02,  8.79it/s]Processing batches:  95%|█████████▌| 344/362 [00:19<00:02,  8.76it/s]Processing batches:  95%|█████████▌| 345/362 [00:19<00:01,  8.84it/s]Processing batches:  96%|█████████▌| 346/362 [00:19<00:01,  8.77it/s]Processing batches:  96%|█████████▌| 347/362 [00:19<00:01,  8.57it/s]Processing batches:  96%|█████████▌| 348/362 [00:19<00:01,  8.48it/s]Processing batches:  96%|█████████▋| 349/362 [00:19<00:01,  8.76it/s]Processing batches:  97%|█████████▋| 350/362 [00:19<00:01,  8.81it/s]Processing batches:  97%|█████████▋| 351/362 [00:19<00:01,  8.76it/s]Processing batches:  97%|█████████▋| 352/362 [00:20<00:01,  8.79it/s]Processing batches:  98%|█████████▊| 353/362 [00:20<00:01,  8.74it/s]Processing batches:  98%|█████████▊| 354/362 [00:20<00:00,  8.72it/s]Processing batches:  98%|█████████▊| 355/362 [00:20<00:00,  8.60it/s]Processing batches:  98%|█████████▊| 356/362 [00:20<00:00,  8.69it/s]Processing batches:  99%|█████████▊| 357/362 [00:20<00:00,  8.72it/s]Processing batches:  99%|█████████▉| 358/362 [00:20<00:00,  8.76it/s]Processing batches:  99%|█████████▉| 359/362 [00:20<00:00,  8.81it/s]Processing batches:  99%|█████████▉| 360/362 [00:20<00:00,  8.83it/s]Processing batches: 100%|█████████▉| 361/362 [00:21<00:00,  8.75it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 17.15it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target MAST2 - DES: 0.1289, MAE_top2k: 0.2333, n_DE: 2056
+INFO:ZeroShotPerturbation:Predicting for target: SMAGP
+INFO:ZeroShotPerturbation:Processing 788 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4750.06it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3292935.70it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  45%|████▍     | 162/362 [00:00<00:00, 1614.36it/s]Processing batches:  45%|████▍     | 162/362 [00:14<00:00, 1614.36it/s]Processing batches:  86%|████████▌ | 312/362 [00:14<00:02, 18.48it/s]  Processing batches:  87%|████████▋ | 314/362 [00:14<00:02, 18.28it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.43it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 1878.33it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2864866.50it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  22%|██▏       | 80/362 [00:00<00:00, 797.49it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 582.13it/s]Processing batches:  68%|██████▊   | 245/362 [00:07<00:04, 24.48it/s] Processing batches:  77%|███████▋  | 280/362 [00:11<00:04, 17.79it/s]Processing batches:  83%|████████▎ | 302/362 [00:13<00:03, 15.32it/s]Processing batches:  87%|████████▋ | 316/362 [00:15<00:03, 14.03it/s]Processing batches:  90%|█████████ | 326/362 [00:16<00:02, 13.18it/s]Processing batches:  92%|█████████▏| 333/362 [00:16<00:02, 12.55it/s]Processing batches:  93%|█████████▎| 338/362 [00:17<00:01, 12.09it/s]Processing batches:  94%|█████████▍| 342/362 [00:17<00:01, 11.72it/s]Processing batches:  95%|█████████▌| 345/362 [00:18<00:01, 11.42it/s]Processing batches:  96%|█████████▌| 348/362 [00:18<00:01, 11.08it/s]Processing batches:  97%|█████████▋| 350/362 [00:18<00:01, 10.87it/s]Processing batches:  97%|█████████▋| 352/362 [00:18<00:00, 10.61it/s]Processing batches:  98%|█████████▊| 354/362 [00:19<00:00, 10.34it/s]Processing batches:  98%|█████████▊| 356/362 [00:19<00:00, 10.12it/s]Processing batches:  99%|█████████▉| 358/362 [00:19<00:00,  9.92it/s]Processing batches:  99%|█████████▉| 360/362 [00:19<00:00,  9.75it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 10.01it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 18.07it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target SMAGP - DES: 0.2077, MAE_top2k: 0.2275, n_DE: 3212
+INFO:ZeroShotPerturbation:Predicting for target: XRCC4
+INFO:ZeroShotPerturbation:Processing 591 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5482.75it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3254635.89it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  31%|███       | 113/362 [00:00<00:00, 1118.28it/s]Processing batches:  62%|██████▏   | 225/362 [00:04<00:03, 40.55it/s]  Processing batches:  75%|███████▌  | 273/362 [00:09<00:04, 21.88it/s]Processing batches:  83%|████████▎ | 300/362 [00:12<00:03, 17.88it/s]Processing batches:  88%|████████▊ | 317/362 [00:14<00:02, 15.97it/s]Processing batches:  91%|█████████ | 328/362 [00:15<00:02, 14.85it/s]Processing batches:  93%|█████████▎| 336/362 [00:16<00:01, 14.04it/s]Processing batches:  94%|█████████▍| 342/362 [00:16<00:01, 13.40it/s]Processing batches:  96%|█████████▌| 346/362 [00:17<00:01, 12.96it/s]Processing batches:  96%|█████████▋| 349/362 [00:17<00:01, 12.59it/s]Processing batches:  97%|█████████▋| 352/362 [00:18<00:00, 12.19it/s]Processing batches:  98%|█████████▊| 354/362 [00:18<00:00, 11.90it/s]Processing batches:  98%|█████████▊| 356/362 [00:18<00:00, 11.58it/s]Processing batches:  99%|█████████▉| 358/362 [00:18<00:00, 11.27it/s]Processing batches:  99%|█████████▉| 360/362 [00:18<00:00, 10.97it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 11.19it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.06it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2317.30it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 1971839.83it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  45%|████▌     | 164/362 [00:00<00:00, 1634.18it/s]Processing batches:  45%|████▌     | 164/362 [00:11<00:00, 1634.18it/s]Processing batches:  80%|███████▉  | 288/362 [00:11<00:03, 21.16it/s]  Processing batches:  80%|████████  | 290/362 [00:11<00:03, 20.88it/s]Processing batches:  99%|█████████▉| 358/362 [00:18<00:00, 14.57it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 19.04it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target XRCC4 - DES: 0.2303, MAE_top2k: 0.2585, n_DE: 4486
+INFO:ZeroShotPerturbation:Predicting for target: HMGN1
+INFO:ZeroShotPerturbation:Processing 2004 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2982.09it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3287225.99it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  25%|██▍       | 89/362 [00:00<00:00, 881.28it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 861.53it/s]Processing batches:  74%|███████▍  | 268/362 [00:11<00:05, 16.62it/s] Processing batches:  74%|███████▍  | 269/362 [00:11<00:05, 16.48it/s]Processing batches:  88%|████████▊ | 317/362 [00:18<00:03, 11.73it/s]Processing batches:  96%|█████████▌| 346/362 [00:22<00:01, 10.39it/s]Processing batches: 100%|██████████| 362/362 [00:24<00:00, 14.84it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 1152.76it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2169571.03it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  18%|█▊        | 65/362 [00:00<00:00, 633.54it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 814.15it/s]Processing batches:  72%|███████▏  | 262/362 [00:11<00:05, 17.16it/s] Processing batches:  73%|███████▎  | 263/362 [00:11<00:05, 16.99it/s]Processing batches:  85%|████████▍ | 307/362 [00:17<00:04, 11.91it/s]Processing batches:  92%|█████████▏| 334/362 [00:21<00:02, 10.43it/s]Processing batches:  97%|█████████▋| 352/362 [00:23<00:01,  9.71it/s]Processing batches: 100%|██████████| 362/362 [00:25<00:00, 14.36it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target HMGN1 - DES: 0.1382, MAE_top2k: 0.2288, n_DE: 2040
+INFO:ZeroShotPerturbation:Predicting for target: GSK3B
+INFO:ZeroShotPerturbation:Processing 1059 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4234.53it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3244887.31it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  23%|██▎       | 82/362 [00:00<00:00, 816.21it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 864.13it/s]Processing batches:  74%|███████▍  | 268/362 [00:10<00:04, 19.53it/s] Processing batches:  87%|████████▋ | 316/362 [00:15<00:03, 14.79it/s]Processing batches:  95%|█████████▌| 345/362 [00:18<00:01, 13.14it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 17.37it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2878.73it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2283026.74it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  39%|███▉      | 142/362 [00:00<00:00, 1413.74it/s]Processing batches:  78%|███████▊  | 284/362 [00:12<00:03, 20.03it/s]  Processing batches:  79%|███████▉  | 286/362 [00:12<00:03, 19.74it/s]Processing batches:  95%|█████████▌| 345/362 [00:19<00:01, 13.84it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 17.18it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target GSK3B - DES: 0.2665, MAE_top2k: 0.2503, n_DE: 4417
+INFO:ZeroShotPerturbation:Predicting for target: TMBIM6
+INFO:ZeroShotPerturbation:Processing 505 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5645.09it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3307297.15it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 1769.19it/s]Processing batches:  50%|█████     | 181/362 [00:14<00:00, 1769.19it/s]Processing batches:  90%|█████████ | 326/362 [00:14<00:01, 18.29it/s]  Processing batches:  90%|█████████ | 327/362 [00:14<00:01, 18.21it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.56it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4450.19it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2612589.28it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 1533.45it/s]Processing batches:  50%|█████     | 181/362 [00:15<00:00, 1533.45it/s]Processing batches:  92%|█████████▏| 334/362 [00:15<00:01, 17.76it/s]  Processing batches:  93%|█████████▎| 336/362 [00:15<00:01, 17.62it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.47it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target TMBIM6 - DES: 0.1139, MAE_top2k: 0.2049, n_DE: 1299
+INFO:ZeroShotPerturbation:Predicting for target: PMEL
+INFO:ZeroShotPerturbation:Processing 356 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 6186.29it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3293507.77it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  38%|███▊      | 136/362 [00:00<00:00, 1317.71it/s]Processing batches:  74%|███████▍  | 268/362 [00:08<00:03, 25.88it/s]  Processing batches:  90%|████████▉ | 324/362 [00:14<00:02, 18.36it/s]Processing batches:  98%|█████████▊| 355/362 [00:17<00:00, 16.09it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.99it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2466.51it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2028542.82it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  44%|████▍     | 159/362 [00:00<00:00, 1565.95it/s]Processing batches:  87%|████████▋ | 316/362 [00:13<00:02, 19.77it/s]  Processing batches:  88%|████████▊ | 318/362 [00:13<00:02, 19.57it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.93it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target PMEL - DES: 0.1205, MAE_top2k: 0.2195, n_DE: 1486
+INFO:ZeroShotPerturbation:Predicting for target: DAXX
+INFO:ZeroShotPerturbation:Processing 1332 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3863.94it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3174390.57it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  21%|██        | 76/362 [00:00<00:00, 751.28it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 550.11it/s]Processing batches:  67%|██████▋   | 242/362 [00:07<00:05, 23.20it/s] Processing batches:  76%|███████▌  | 275/362 [00:11<00:05, 16.71it/s]Processing batches:  82%|████████▏ | 296/362 [00:13<00:04, 14.39it/s]Processing batches:  86%|████████▌ | 310/362 [00:15<00:03, 13.08it/s]Processing batches:  88%|████████▊ | 319/362 [00:16<00:03, 12.28it/s]Processing batches:  90%|█████████ | 326/362 [00:17<00:03, 11.70it/s]Processing batches:  91%|█████████▏| 331/362 [00:18<00:02, 11.24it/s]Processing batches:  93%|█████████▎| 335/362 [00:18<00:02, 10.86it/s]Processing batches:  93%|█████████▎| 338/362 [00:19<00:02, 10.54it/s]Processing batches:  94%|█████████▍| 341/362 [00:19<00:02, 10.22it/s]Processing batches:  95%|█████████▍| 343/362 [00:19<00:01, 10.00it/s]Processing batches:  95%|█████████▌| 345/362 [00:19<00:01,  9.78it/s]Processing batches:  96%|█████████▌| 347/362 [00:20<00:01,  9.46it/s]Processing batches:  96%|█████████▋| 349/362 [00:20<00:01,  9.28it/s]Processing batches:  97%|█████████▋| 351/362 [00:20<00:01,  9.10it/s]Processing batches:  97%|█████████▋| 352/362 [00:20<00:01,  9.00it/s]Processing batches:  98%|█████████▊| 353/362 [00:20<00:01,  8.82it/s]Processing batches:  98%|█████████▊| 354/362 [00:20<00:00,  8.72it/s]Processing batches:  98%|█████████▊| 355/362 [00:21<00:00,  8.68it/s]Processing batches:  98%|█████████▊| 356/362 [00:21<00:00,  8.67it/s]Processing batches:  99%|█████████▊| 357/362 [00:21<00:00,  8.61it/s]Processing batches:  99%|█████████▉| 358/362 [00:21<00:00,  8.58it/s]Processing batches:  99%|█████████▉| 359/362 [00:21<00:00,  8.42it/s]Processing batches:  99%|█████████▉| 360/362 [00:21<00:00,  8.47it/s]Processing batches: 100%|█████████▉| 361/362 [00:21<00:00,  8.52it/s]Processing batches: 100%|██████████| 362/362 [00:21<00:00, 16.57it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 1688.87it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2040935.95it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  22%|██▏       | 79/362 [00:00<00:00, 761.88it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 776.43it/s]Processing batches:  72%|███████▏  | 259/362 [00:09<00:05, 19.54it/s] Processing batches:  83%|████████▎ | 302/362 [00:14<00:04, 14.61it/s]Processing batches:  91%|█████████ | 329/362 [00:18<00:02, 12.79it/s]Processing batches:  96%|█████████▌| 346/362 [00:20<00:01, 11.88it/s]Processing batches:  99%|█████████▉| 358/362 [00:21<00:00, 11.27it/s]Processing batches: 100%|██████████| 362/362 [00:22<00:00, 16.32it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target DAXX - DES: 0.2077, MAE_top2k: 0.2231, n_DE: 3192
+INFO:ZeroShotPerturbation:Predicting for target: METTL14
+INFO:ZeroShotPerturbation:Processing 468 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5878.49it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3298521.81it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  30%|███       | 109/362 [00:00<00:00, 1087.86it/s]Processing batches:  60%|██████    | 218/362 [00:03<00:03, 47.14it/s]  Processing batches:  73%|███████▎  | 265/362 [00:08<00:04, 23.25it/s]Processing batches:  80%|████████  | 291/362 [00:11<00:03, 18.75it/s]Processing batches:  85%|████████▍ | 307/362 [00:13<00:03, 16.73it/s]Processing batches:  88%|████████▊ | 318/362 [00:14<00:02, 15.46it/s]Processing batches:  90%|█████████ | 326/362 [00:15<00:02, 14.57it/s]Processing batches:  92%|█████████▏| 332/362 [00:15<00:02, 13.82it/s]Processing batches:  93%|█████████▎| 336/362 [00:16<00:01, 13.32it/s]Processing batches:  94%|█████████▎| 339/362 [00:16<00:01, 12.79it/s]Processing batches:  94%|█████████▍| 342/362 [00:16<00:01, 12.31it/s]Processing batches:  95%|█████████▌| 344/362 [00:16<00:01, 12.05it/s]Processing batches:  96%|█████████▌| 346/362 [00:17<00:01, 11.75it/s]Processing batches:  96%|█████████▌| 348/362 [00:17<00:01, 11.41it/s]Processing batches:  97%|█████████▋| 350/362 [00:17<00:01, 11.15it/s]Processing batches:  97%|█████████▋| 352/362 [00:17<00:00, 10.86it/s]Processing batches:  98%|█████████▊| 354/362 [00:17<00:00, 10.62it/s]Processing batches:  98%|█████████▊| 356/362 [00:18<00:00, 10.49it/s]Processing batches:  99%|█████████▉| 358/362 [00:18<00:00, 10.33it/s]Processing batches:  99%|█████████▉| 360/362 [00:18<00:00, 10.24it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 10.28it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.32it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5353.29it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3327614.92it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  15%|█▌        | 55/362 [00:00<00:00, 466.26it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 680.22it/s]Processing batches:  69%|██████▊   | 248/362 [00:07<00:04, 26.26it/s] Processing batches:  79%|███████▊  | 285/362 [00:10<00:04, 19.00it/s]Processing batches:  85%|████████▌ | 308/362 [00:13<00:03, 16.21it/s]Processing batches:  89%|████████▉ | 323/362 [00:14<00:02, 14.90it/s]Processing batches:  92%|█████████▏| 333/362 [00:15<00:02, 14.00it/s]Processing batches:  94%|█████████▍| 341/362 [00:16<00:01, 13.26it/s]Processing batches:  96%|█████████▌| 347/362 [00:17<00:01, 12.63it/s]Processing batches:  97%|█████████▋| 351/362 [00:17<00:00, 12.29it/s]Processing batches:  98%|█████████▊| 354/362 [00:18<00:00, 12.02it/s]Processing batches:  99%|█████████▊| 357/362 [00:18<00:00, 11.55it/s]Processing batches:  99%|█████████▉| 359/362 [00:18<00:00, 11.37it/s]Processing batches: 100%|█████████▉| 361/362 [00:18<00:00, 11.13it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.15it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target METTL14 - DES: 0.7272, MAE_top2k: 0.6268, n_DE: 10227
+INFO:ZeroShotPerturbation:Predicting for target: MAU2
+INFO:ZeroShotPerturbation:Processing 1021 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4373.62it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3300244.42it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  32%|███▏      | 115/362 [00:00<00:00, 1145.17it/s]Processing batches:  64%|██████▎   | 230/362 [00:05<00:03, 34.35it/s]  Processing batches:  77%|███████▋  | 279/362 [00:11<00:04, 19.57it/s]Processing batches:  85%|████████▍ | 306/362 [00:14<00:03, 16.19it/s]Processing batches:  89%|████████▉ | 323/362 [00:16<00:02, 14.54it/s]Processing batches:  92%|█████████▏| 334/362 [00:17<00:02, 13.57it/s]Processing batches:  94%|█████████▍| 342/362 [00:18<00:01, 12.89it/s]Processing batches:  96%|█████████▌| 348/362 [00:19<00:01, 12.34it/s]Processing batches:  97%|█████████▋| 352/362 [00:19<00:00, 11.96it/s]Processing batches:  98%|█████████▊| 355/362 [00:19<00:00, 11.58it/s]Processing batches:  99%|█████████▉| 358/362 [00:20<00:00, 11.24it/s]Processing batches:  99%|█████████▉| 360/362 [00:20<00:00, 10.95it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 10.98it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 17.59it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4213.26it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3325571.91it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  18%|█▊        | 66/362 [00:00<00:00, 578.44it/s]Processing batches:  36%|███▋      | 132/362 [00:00<00:00, 620.97it/s]Processing batches:  54%|█████▍    | 195/362 [00:01<00:02, 79.20it/s] Processing batches:  64%|██████▍   | 231/362 [00:05<00:05, 25.26it/s]Processing batches:  70%|██████▉   | 253/362 [00:08<00:05, 18.66it/s]Processing batches:  74%|███████▍  | 268/362 [00:10<00:05, 15.87it/s]Processing batches:  77%|███████▋  | 278/362 [00:11<00:05, 14.38it/s]Processing batches:  79%|███████▊  | 285/362 [00:12<00:05, 13.42it/s]Processing batches:  80%|████████  | 290/362 [00:12<00:05, 12.75it/s]Processing batches:  81%|████████  | 294/362 [00:13<00:05, 12.12it/s]Processing batches:  82%|████████▏ | 297/362 [00:13<00:05, 11.66it/s]Processing batches:  83%|████████▎ | 300/362 [00:13<00:05, 11.18it/s]Processing batches:  83%|████████▎ | 302/362 [00:14<00:05, 10.84it/s]Processing batches:  84%|████████▍ | 304/362 [00:14<00:05, 10.46it/s]Processing batches:  85%|████████▍ | 306/362 [00:14<00:05, 10.16it/s]Processing batches:  85%|████████▌ | 308/362 [00:14<00:05,  9.82it/s]Processing batches:  86%|████████▌ | 310/362 [00:14<00:05,  9.58it/s]Processing batches:  86%|████████▌ | 312/362 [00:15<00:05,  9.28it/s]Processing batches:  86%|████████▋ | 313/362 [00:15<00:05,  9.14it/s]Processing batches:  87%|████████▋ | 314/362 [00:15<00:05,  9.17it/s]Processing batches:  87%|████████▋ | 315/362 [00:15<00:05,  9.11it/s]Processing batches:  87%|████████▋ | 316/362 [00:15<00:05,  9.02it/s]Processing batches:  88%|████████▊ | 317/362 [00:15<00:05,  8.78it/s]Processing batches:  88%|████████▊ | 318/362 [00:15<00:04,  8.80it/s]Processing batches:  88%|████████▊ | 319/362 [00:16<00:04,  8.82it/s]Processing batches:  88%|████████▊ | 320/362 [00:16<00:04,  8.85it/s]Processing batches:  89%|████████▊ | 321/362 [00:16<00:04,  8.85it/s]Processing batches:  89%|████████▉ | 322/362 [00:16<00:04,  8.62it/s]Processing batches:  89%|████████▉ | 323/362 [00:16<00:04,  8.72it/s]Processing batches:  90%|████████▉ | 324/362 [00:16<00:04,  8.78it/s]Processing batches:  90%|████████▉ | 325/362 [00:16<00:04,  8.83it/s]Processing batches:  90%|█████████ | 326/362 [00:16<00:04,  8.81it/s]Processing batches:  90%|█████████ | 327/362 [00:16<00:03,  8.79it/s]Processing batches:  91%|█████████ | 328/362 [00:17<00:03,  8.51it/s]Processing batches:  91%|█████████ | 329/362 [00:17<00:03,  8.72it/s]Processing batches:  91%|█████████ | 330/362 [00:17<00:03,  8.77it/s]Processing batches:  91%|█████████▏| 331/362 [00:17<00:03,  8.76it/s]Processing batches:  92%|█████████▏| 332/362 [00:17<00:03,  8.71it/s]Processing batches:  92%|█████████▏| 333/362 [00:17<00:03,  8.65it/s]Processing batches:  92%|█████████▏| 334/362 [00:17<00:03,  8.73it/s]Processing batches:  93%|█████████▎| 335/362 [00:17<00:03,  8.80it/s]Processing batches:  93%|█████████▎| 336/362 [00:17<00:02,  8.82it/s]Processing batches:  93%|█████████▎| 337/362 [00:18<00:02,  8.65it/s]Processing batches:  93%|█████████▎| 338/362 [00:18<00:02,  8.64it/s]Processing batches:  94%|█████████▎| 339/362 [00:18<00:02,  8.89it/s]Processing batches:  94%|█████████▍| 340/362 [00:18<00:02,  8.85it/s]Processing batches:  94%|█████████▍| 341/362 [00:18<00:02,  8.89it/s]Processing batches:  94%|█████████▍| 342/362 [00:18<00:02,  8.88it/s]Processing batches:  95%|█████████▍| 343/362 [00:18<00:02,  8.85it/s]Processing batches:  95%|█████████▌| 344/362 [00:18<00:02,  8.84it/s]Processing batches:  95%|█████████▌| 345/362 [00:18<00:01,  8.88it/s]Processing batches:  96%|█████████▌| 346/362 [00:19<00:01,  8.82it/s]Processing batches:  96%|█████████▌| 347/362 [00:19<00:01,  8.83it/s]Processing batches:  96%|█████████▌| 348/362 [00:19<00:01,  8.82it/s]Processing batches:  96%|█████████▋| 349/362 [00:19<00:01,  8.93it/s]Processing batches:  97%|█████████▋| 350/362 [00:19<00:01,  8.92it/s]Processing batches:  97%|█████████▋| 351/362 [00:19<00:01,  8.61it/s]Processing batches:  97%|█████████▋| 352/362 [00:19<00:01,  8.67it/s]Processing batches:  98%|█████████▊| 353/362 [00:19<00:01,  8.75it/s]Processing batches:  98%|█████████▊| 354/362 [00:20<00:00,  8.75it/s]Processing batches:  98%|█████████▊| 355/362 [00:20<00:00,  8.80it/s]Processing batches:  98%|█████████▊| 356/362 [00:20<00:00,  8.88it/s]Processing batches:  99%|█████████▊| 357/362 [00:20<00:00,  8.87it/s]Processing batches:  99%|█████████▉| 358/362 [00:20<00:00,  8.72it/s]Processing batches:  99%|█████████▉| 359/362 [00:20<00:00,  8.77it/s]Processing batches:  99%|█████████▉| 360/362 [00:20<00:00,  8.82it/s]Processing batches: 100%|█████████▉| 361/362 [00:20<00:00,  8.91it/s]Processing batches: 100%|██████████| 362/362 [00:20<00:00, 17.34it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target MAU2 - DES: 0.5312, MAE_top2k: 0.3027, n_DE: 8174
+INFO:ZeroShotPerturbation:Predicting for target: NDUFB4
+INFO:ZeroShotPerturbation:Processing 1413 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 3693.79it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3254635.89it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  18%|█▊        | 66/362 [00:00<00:00, 640.03it/s]Processing batches:  47%|████▋     | 169/362 [00:00<00:00, 859.59it/s]Processing batches:  71%|███████   | 256/362 [00:09<00:05, 20.62it/s] Processing batches:  84%|████████▍ | 304/362 [00:15<00:03, 14.75it/s]Processing batches:  92%|█████████▏| 333/362 [00:18<00:02, 12.85it/s]Processing batches:  97%|█████████▋| 352/362 [00:21<00:00, 11.87it/s]Processing batches: 100%|██████████| 362/362 [00:22<00:00, 16.30it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 1968.69it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2261444.44it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  31%|███       | 112/362 [00:00<00:00, 1119.55it/s]Processing batches:  62%|██████▏   | 224/362 [00:05<00:03, 34.78it/s]  Processing batches:  75%|███████▌  | 272/362 [00:11<00:04, 18.52it/s]Processing batches:  83%|████████▎ | 299/362 [00:14<00:04, 15.12it/s]Processing batches:  87%|████████▋ | 316/362 [00:16<00:03, 13.46it/s]Processing batches:  90%|█████████ | 327/362 [00:18<00:02, 12.54it/s]Processing batches:  93%|█████████▎| 335/362 [00:19<00:02, 11.85it/s]Processing batches:  94%|█████████▍| 341/362 [00:20<00:01, 11.30it/s]Processing batches:  95%|█████████▌| 345/362 [00:20<00:01, 10.94it/s]Processing batches:  96%|█████████▌| 348/362 [00:20<00:01, 10.60it/s]Processing batches:  97%|█████████▋| 351/362 [00:21<00:01, 10.25it/s]Processing batches:  98%|█████████▊| 353/362 [00:21<00:00, 10.01it/s]Processing batches:  98%|█████████▊| 355/362 [00:21<00:00,  9.74it/s]Processing batches:  99%|█████████▊| 357/362 [00:22<00:00,  9.43it/s]Processing batches:  99%|█████████▉| 359/362 [00:22<00:00,  9.18it/s]Processing batches: 100%|█████████▉| 361/362 [00:22<00:00,  9.01it/s]Processing batches: 100%|██████████| 362/362 [00:22<00:00, 16.04it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target NDUFB4 - DES: 0.1971, MAE_top2k: 0.2139, n_DE: 3399
+INFO:ZeroShotPerturbation:Predicting for target: KDM1A
+INFO:ZeroShotPerturbation:Processing 352 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 6241.52it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3209999.00it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 940.06it/s]Processing batches:  77%|███████▋  | 277/362 [00:09<00:03, 23.38it/s] Processing batches:  88%|████████▊ | 317/362 [00:13<00:02, 18.41it/s]Processing batches:  94%|█████████▎| 339/362 [00:15<00:01, 16.53it/s]Processing batches:  98%|█████████▊| 353/362 [00:17<00:00, 15.43it/s]Processing batches: 100%|██████████| 362/362 [00:17<00:00, 20.16it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4058.35it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2161285.27it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  38%|███▊      | 139/362 [00:00<00:00, 1263.13it/s]Processing batches:  73%|███████▎  | 266/362 [00:08<00:03, 26.21it/s]  Processing batches:  88%|████████▊ | 319/362 [00:13<00:02, 18.64it/s]Processing batches:  96%|█████████▋| 349/362 [00:16<00:00, 16.27it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 20.00it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target KDM1A - DES: 0.7453, MAE_top2k: 0.5887, n_DE: 11141
+INFO:ZeroShotPerturbation:Predicting for target: TXNDC9
+INFO:ZeroShotPerturbation:Processing 514 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5633.72it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3282530.36it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 1508.58it/s]Processing batches:  92%|█████████▏| 332/362 [00:15<00:01, 17.88it/s]  Processing batches:  92%|█████████▏| 333/362 [00:15<00:01, 17.80it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.47it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2663.05it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 1955164.66it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  20%|█▉        | 72/362 [00:00<00:00, 670.79it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 773.31it/s]Processing batches:  72%|███████▏  | 259/362 [00:08<00:04, 23.64it/s] Processing batches:  83%|████████▎ | 302/362 [00:12<00:03, 17.55it/s]Processing batches:  91%|█████████ | 328/362 [00:15<00:02, 15.39it/s]Processing batches:  95%|█████████▌| 345/362 [00:16<00:01, 14.20it/s]Processing batches:  99%|█████████▊| 357/362 [00:18<00:00, 13.46it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.44it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target TXNDC9 - DES: 0.1219, MAE_top2k: 0.2382, n_DE: 1755
+INFO:ZeroShotPerturbation:Predicting for target: CALM3
+INFO:ZeroShotPerturbation:Processing 681 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4946.11it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3246693.34it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  35%|███▌      | 128/362 [00:00<00:00, 1273.29it/s]Processing batches:  71%|███████   | 256/362 [00:08<00:03, 26.88it/s]  Processing batches:  86%|████████▌ | 310/362 [00:13<00:02, 18.03it/s]Processing batches:  94%|█████████▍| 340/362 [00:17<00:01, 15.54it/s]Processing batches:  99%|█████████▉| 359/362 [00:19<00:00, 14.30it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.66it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2773.09it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2066857.90it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  14%|█▍        | 50/362 [00:00<00:00, 471.78it/s]Processing batches:  36%|███▌      | 131/362 [00:00<00:00, 652.51it/s]Processing batches:  54%|█████▍    | 197/362 [00:02<00:02, 76.58it/s] Processing batches:  65%|██████▍   | 235/362 [00:06<00:04, 26.10it/s]Processing batches:  71%|███████▏  | 258/362 [00:08<00:05, 19.54it/s]Processing batches:  75%|███████▌  | 273/362 [00:10<00:05, 16.78it/s]Processing batches:  78%|███████▊  | 284/362 [00:11<00:05, 15.17it/s]Processing batches:  81%|████████  | 292/362 [00:12<00:04, 14.08it/s]Processing batches:  82%|████████▏ | 298/362 [00:12<00:04, 13.31it/s]Processing batches:  83%|████████▎ | 302/362 [00:13<00:04, 12.78it/s]Processing batches:  84%|████████▍ | 305/362 [00:13<00:04, 12.30it/s]Processing batches:  85%|████████▌ | 308/362 [00:13<00:04, 11.86it/s]Processing batches:  86%|████████▌ | 310/362 [00:14<00:04, 11.49it/s]Processing batches:  86%|████████▌ | 312/362 [00:14<00:04, 11.17it/s]Processing batches:  87%|████████▋ | 314/362 [00:14<00:04, 10.86it/s]Processing batches:  87%|████████▋ | 316/362 [00:14<00:04, 10.50it/s]Processing batches:  88%|████████▊ | 318/362 [00:14<00:04, 10.26it/s]Processing batches:  88%|████████▊ | 320/362 [00:15<00:04, 10.00it/s]Processing batches:  89%|████████▉ | 322/362 [00:15<00:04,  9.92it/s]Processing batches:  90%|████████▉ | 324/362 [00:15<00:03,  9.70it/s]Processing batches:  90%|████████▉ | 325/362 [00:15<00:03,  9.67it/s]Processing batches:  90%|█████████ | 326/362 [00:15<00:03,  9.62it/s]Processing batches:  90%|█████████ | 327/362 [00:15<00:03,  9.57it/s]Processing batches:  91%|█████████ | 328/362 [00:16<00:03,  9.52it/s]Processing batches:  91%|█████████ | 329/362 [00:16<00:03,  9.46it/s]Processing batches:  91%|█████████ | 330/362 [00:16<00:03,  9.25it/s]Processing batches:  91%|█████████▏| 331/362 [00:16<00:03,  9.21it/s]Processing batches:  92%|█████████▏| 332/362 [00:16<00:03,  9.34it/s]Processing batches:  92%|█████████▏| 333/362 [00:16<00:03,  9.37it/s]Processing batches:  92%|█████████▏| 334/362 [00:16<00:02,  9.36it/s]Processing batches:  93%|█████████▎| 335/362 [00:16<00:02,  9.05it/s]Processing batches:  93%|█████████▎| 336/362 [00:16<00:02,  9.17it/s]Processing batches:  93%|█████████▎| 337/362 [00:16<00:02,  9.21it/s]Processing batches:  93%|█████████▎| 338/362 [00:17<00:02,  9.27it/s]Processing batches:  94%|█████████▎| 339/362 [00:17<00:02,  9.35it/s]Processing batches:  94%|█████████▍| 340/362 [00:17<00:02,  9.41it/s]Processing batches:  94%|█████████▍| 341/362 [00:17<00:02,  9.41it/s]Processing batches:  94%|█████████▍| 342/362 [00:17<00:02,  9.30it/s]Processing batches:  95%|█████████▍| 343/362 [00:17<00:02,  9.34it/s]Processing batches:  95%|█████████▌| 344/362 [00:17<00:01,  9.42it/s]Processing batches:  95%|█████████▌| 345/362 [00:17<00:01,  9.50it/s]Processing batches:  96%|█████████▌| 346/362 [00:17<00:01,  9.37it/s]Processing batches:  96%|█████████▌| 347/362 [00:18<00:01,  9.40it/s]Processing batches:  96%|█████████▌| 348/362 [00:18<00:01,  9.44it/s]Processing batches:  96%|█████████▋| 349/362 [00:18<00:01,  9.54it/s]Processing batches:  97%|█████████▋| 350/362 [00:18<00:01,  9.50it/s]Processing batches:  97%|█████████▋| 351/362 [00:18<00:01,  9.43it/s]Processing batches:  97%|█████████▋| 352/362 [00:18<00:01,  9.43it/s]Processing batches:  98%|█████████▊| 353/362 [00:18<00:00,  9.33it/s]Processing batches:  98%|█████████▊| 354/362 [00:18<00:00,  9.46it/s]Processing batches:  98%|█████████▊| 355/362 [00:18<00:00,  9.44it/s]Processing batches:  98%|█████████▊| 356/362 [00:18<00:00,  9.46it/s]Processing batches:  99%|█████████▊| 357/362 [00:19<00:00,  9.47it/s]Processing batches:  99%|█████████▉| 358/362 [00:19<00:00,  9.49it/s]Processing batches:  99%|█████████▉| 359/362 [00:19<00:00,  9.48it/s]Processing batches:  99%|█████████▉| 360/362 [00:19<00:00,  9.48it/s]Processing batches: 100%|█████████▉| 361/362 [00:19<00:00,  9.53it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.48it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target CALM3 - DES: 0.1394, MAE_top2k: 0.1770, n_DE: 2424
+INFO:ZeroShotPerturbation:Predicting for target: C1QBP
+INFO:ZeroShotPerturbation:Processing 711 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4937.38it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3185324.33it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  37%|███▋      | 134/362 [00:00<00:00, 1301.56it/s]Processing batches:  73%|███████▎  | 265/362 [00:09<00:03, 24.77it/s]  Processing batches:  88%|████████▊ | 320/362 [00:15<00:02, 17.34it/s]Processing batches:  97%|█████████▋| 351/362 [00:18<00:00, 15.11it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.63it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 2368.99it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2624978.93it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  43%|████▎     | 156/362 [00:00<00:00, 1551.27it/s]Processing batches:  43%|████▎     | 156/362 [00:13<00:00, 1551.27it/s]Processing batches:  83%|████████▎ | 302/362 [00:13<00:03, 19.28it/s]  Processing batches:  84%|████████▍ | 304/362 [00:13<00:03, 19.05it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.35it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target C1QBP - DES: 0.4953, MAE_top2k: 0.2671, n_DE: 7747
+INFO:ZeroShotPerturbation:Predicting for target: MBTPS1
+INFO:ZeroShotPerturbation:Processing 626 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5360.13it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3213263.40it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  34%|███▎      | 122/362 [00:00<00:00, 1215.52it/s]Processing batches:  67%|██████▋   | 244/362 [00:06<00:03, 30.77it/s]  Processing batches:  82%|████████▏ | 296/362 [00:12<00:03, 19.45it/s]Processing batches:  90%|████████▉ | 325/362 [00:15<00:02, 16.47it/s]Processing batches:  95%|█████████▍| 343/362 [00:17<00:01, 15.00it/s]Processing batches:  98%|█████████▊| 355/362 [00:18<00:00, 14.10it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.99it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5011.12it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3285659.29it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  20%|█▉        | 72/362 [00:00<00:00, 714.89it/s]Processing batches:  40%|███▉      | 144/362 [00:00<00:00, 699.57it/s]Processing batches:  59%|█████▉    | 214/362 [00:03<00:03, 42.65it/s] Processing batches:  70%|██████▉   | 253/362 [00:07<00:04, 22.20it/s]Processing batches:  77%|███████▋  | 277/362 [00:10<00:04, 17.72it/s]Processing batches:  81%|████████  | 293/362 [00:12<00:04, 15.64it/s]Processing batches:  84%|████████▍ | 304/362 [00:13<00:04, 14.39it/s]Processing batches:  86%|████████▌ | 312/362 [00:14<00:03, 13.54it/s]Processing batches:  88%|████████▊ | 318/362 [00:14<00:03, 12.90it/s]Processing batches:  89%|████████▉ | 323/362 [00:15<00:03, 12.38it/s]Processing batches:  90%|█████████ | 327/362 [00:15<00:02, 11.88it/s]Processing batches:  91%|█████████ | 330/362 [00:16<00:02, 11.54it/s]Processing batches:  92%|█████████▏| 332/362 [00:16<00:02, 11.30it/s]Processing batches:  92%|█████████▏| 334/362 [00:16<00:02, 11.04it/s]Processing batches:  93%|█████████▎| 336/362 [00:16<00:02, 10.66it/s]Processing batches:  93%|█████████▎| 338/362 [00:16<00:02, 10.43it/s]Processing batches:  94%|█████████▍| 340/362 [00:17<00:02, 10.17it/s]Processing batches:  94%|█████████▍| 342/362 [00:17<00:01, 10.04it/s]Processing batches:  95%|█████████▌| 344/362 [00:17<00:01,  9.92it/s]Processing batches:  96%|█████████▌| 346/362 [00:17<00:01,  9.81it/s]Processing batches:  96%|█████████▌| 348/362 [00:17<00:01,  9.71it/s]Processing batches:  96%|█████████▋| 349/362 [00:18<00:01,  9.73it/s]Processing batches:  97%|█████████▋| 350/362 [00:18<00:01,  9.70it/s]Processing batches:  97%|█████████▋| 351/362 [00:18<00:01,  9.62it/s]Processing batches:  97%|█████████▋| 352/362 [00:18<00:01,  9.62it/s]Processing batches:  98%|█████████▊| 353/362 [00:18<00:00,  9.56it/s]Processing batches:  98%|█████████▊| 354/362 [00:18<00:00,  9.46it/s]Processing batches:  98%|█████████▊| 356/362 [00:18<00:00,  9.52it/s]Processing batches:  99%|█████████▊| 357/362 [00:18<00:00,  9.60it/s]Processing batches:  99%|█████████▉| 358/362 [00:18<00:00,  9.57it/s]Processing batches:  99%|█████████▉| 359/362 [00:19<00:00,  9.59it/s]Processing batches:  99%|█████████▉| 360/362 [00:19<00:00,  9.61it/s]Processing batches: 100%|█████████▉| 361/362 [00:19<00:00,  9.59it/s]Processing batches: 100%|██████████| 362/362 [00:19<00:00, 18.71it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target MBTPS1 - DES: 0.3922, MAE_top2k: 0.3152, n_DE: 6547
+INFO:ZeroShotPerturbation:Predicting for target: ZNF562
+INFO:ZeroShotPerturbation:Processing 418 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5949.37it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3279832.89it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 922.14it/s]Processing batches:  76%|███████▌  | 275/362 [00:09<00:03, 23.37it/s] Processing batches:  87%|████████▋ | 314/362 [00:13<00:02, 18.35it/s]Processing batches:  93%|█████████▎| 336/362 [00:15<00:01, 16.41it/s]Processing batches:  97%|█████████▋| 350/362 [00:17<00:00, 15.29it/s]Processing batches:  99%|█████████▉| 359/362 [00:17<00:00, 14.57it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.90it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4497.91it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2622709.29it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  48%|████▊     | 175/362 [00:00<00:00, 1745.67it/s]Processing batches:  97%|█████████▋| 350/362 [00:17<00:00, 17.40it/s]  Processing batches:  97%|█████████▋| 352/362 [00:17<00:00, 17.28it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.80it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target ZNF562 - DES: 0.0972, MAE_top2k: 0.2374, n_DE: 1121
+INFO:ZeroShotPerturbation:Predicting for target: PHF10
+INFO:ZeroShotPerturbation:Processing 450 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5845.72it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3279123.77it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  40%|████      | 146/362 [00:00<00:00, 1419.21it/s]Processing batches:  80%|███████▉  | 288/362 [00:10<00:03, 22.48it/s]  Processing batches:  80%|████████  | 290/362 [00:11<00:03, 22.17it/s]Processing batches:  97%|█████████▋| 350/362 [00:17<00:00, 15.70it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.76it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4514.86it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2587539.37it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  20%|█▉        | 72/362 [00:00<00:00, 683.19it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 659.09it/s]Processing batches:  69%|██████▉   | 249/362 [00:07<00:04, 25.69it/s] Processing batches:  79%|███████▉  | 286/362 [00:10<00:04, 18.79it/s]Processing batches:  85%|████████▌ | 309/362 [00:13<00:03, 16.29it/s]Processing batches:  90%|████████▉ | 324/362 [00:14<00:02, 14.93it/s]Processing batches:  93%|█████████▎| 335/362 [00:15<00:01, 13.99it/s]Processing batches:  95%|█████████▍| 343/362 [00:16<00:01, 13.30it/s]Processing batches:  96%|█████████▋| 349/362 [00:17<00:01, 12.83it/s]Processing batches:  98%|█████████▊| 353/362 [00:17<00:00, 12.46it/s]Processing batches:  98%|█████████▊| 356/362 [00:18<00:00, 12.18it/s]Processing batches:  99%|█████████▉| 359/362 [00:18<00:00, 11.86it/s]Processing batches: 100%|█████████▉| 361/362 [00:18<00:00, 11.65it/s]Processing batches: 100%|██████████| 362/362 [00:18<00:00, 19.49it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target PHF10 - DES: 0.1763, MAE_top2k: 0.2749, n_DE: 2711
+INFO:ZeroShotPerturbation:Predicting for target: FDPS
+INFO:ZeroShotPerturbation:Processing 154 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 7133.17it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3278840.21it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 181/362 [00:00<00:00, 1703.26it/s]Processing batches:  50%|█████     | 181/362 [00:11<00:00, 1703.26it/s]Processing batches:  82%|████████▏ | 298/362 [00:11<00:02, 22.10it/s]  Processing batches:  83%|████████▎ | 300/362 [00:11<00:02, 21.83it/s]Processing batches: 100%|██████████| 362/362 [00:17<00:00, 21.23it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 4152.78it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2125901.05it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  36%|███▌      | 131/362 [00:00<00:00, 1303.22it/s]Processing batches:  72%|███████▏  | 262/362 [00:07<00:03, 28.99it/s]  Processing batches:  88%|████████▊ | 317/362 [00:12<00:02, 19.99it/s]Processing batches:  96%|█████████▌| 348/362 [00:15<00:00, 17.33it/s]Processing batches: 100%|██████████| 362/362 [00:17<00:00, 21.19it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target FDPS - DES: 0.1868, MAE_top2k: 0.3484, n_DE: 3191
+INFO:ZeroShotPerturbation:Predicting for target: OXA1L
+INFO:ZeroShotPerturbation:Processing 63 cells in batches of 16
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+/public/home/wangar2023/.conda/envs/scgpt/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 8019.70it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 3184521.75it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 1111.70it/s]Processing batches:  81%|████████  | 294/362 [00:10<00:02, 23.55it/s]  Processing batches:  82%|████████▏ | 296/362 [00:10<00:02, 23.22it/s]Processing batches:  95%|█████████▍| 343/362 [00:14<00:01, 17.72it/s]Processing batches: 100%|██████████| 362/362 [00:16<00:00, 22.18it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:pdex._single_cell:Log1p status: True
+INFO:pdex._single_cell:Precomputing masks for each target gene
+Identifying target masks:   0%|          | 0/2 [00:00<?, ?it/s]Identifying target masks: 100%|██████████| 2/2 [00:00<00:00, 5618.63it/s]
+INFO:pdex._single_cell:Precomputing variable indices for each feature
+Identifying variable indices:   0%|          | 0/18080 [00:00<?, ?it/s]Identifying variable indices: 100%|██████████| 18080/18080 [00:00<00:00, 2533763.78it/s]
+INFO:pdex._single_cell:Creating shared memory memory matrix for parallel computing
+INFO:pdex._single_cell:Creating generator of all combinations: N=36160
+INFO:pdex._single_cell:Creating generator of all batches: N=362
+INFO:pdex._single_cell:Initializing parallel processing pool
+INFO:pdex._single_cell:Processing batches
+Processing batches:   0%|          | 0/362 [00:00<?, ?it/s]Processing batches:  50%|█████     | 182/362 [00:00<00:00, 1174.46it/s]Processing batches:  50%|█████     | 182/362 [00:10<00:00, 1174.46it/s]Processing batches:  83%|████████▎ | 300/362 [00:10<00:02, 23.03it/s]  Processing batches:  83%|████████▎ | 302/362 [00:10<00:02, 22.75it/s]Processing batches:  97%|█████████▋| 352/362 [00:15<00:00, 17.45it/s]Processing batches: 100%|██████████| 362/362 [00:16<00:00, 22.29it/s]
+INFO:pdex._single_cell:Flattening results
+INFO:pdex._single_cell:Closing shared memory pool
+INFO:ZeroShotPerturbation:Target OXA1L - DES: 0.0915, MAE_top2k: 0.3850, n_DE: 2666
+INFO:ZeroShotPerturbation:Results saved to results/scgpt_finetuned/perturbation_metrics.csv
+INFO:ZeroShotPerturbation:==================================================
+INFO:ZeroShotPerturbation:Final Test Metrics (per eval_metrics.md Section 4.2.2):
+INFO:ZeroShotPerturbation:--------------------------------------------------
+INFO:ZeroShotPerturbation:Three DE Metrics (raw, averaged):
+INFO:ZeroShotPerturbation:  pds_nrank:             0.5089
+INFO:ZeroShotPerturbation:  mae:                   0.2763
+INFO:ZeroShotPerturbation:  des:                   0.2620
+INFO:ZeroShotPerturbation:--------------------------------------------------
+INFO:ZeroShotPerturbation:Overall Score (0-100, from meaned metrics):
+INFO:ZeroShotPerturbation:  overall_score:         6.27
+INFO:ZeroShotPerturbation:==================================================
