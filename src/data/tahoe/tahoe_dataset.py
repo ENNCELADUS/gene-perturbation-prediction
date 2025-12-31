@@ -76,11 +76,12 @@ class TahoeDataset:
 
     def create_drug_split(
         self,
-        unseen_single_gene_fraction: float = 0.25,
-        n_unseen_single_genes: Optional[int] = None,
-        single_seen_val_ratio: float = 0.1,
-        multi_train_ratio: float = 0.65,
+        test_ratio: float = 0.15,
+        single_val_ratio: float = 0.1,
         multi_val_ratio: float = 0.1,
+        single_target_test_per_gene: int = 0,
+        multi_test_max_targets: int = 2,
+        multi_test_fallback_max_targets: int = 3,
         min_cells_per_condition: int = 5,
         seed: int = 42,
         save_path: Optional[str | Path] = None,
@@ -89,11 +90,12 @@ class TahoeDataset:
         Create a drug-based condition-level split.
 
         Args:
-            unseen_single_gene_fraction: Fraction of unique single-target genes to hold out
-            n_unseen_single_genes: Optional explicit count of unseen single-target genes
-            single_seen_val_ratio: Validation ratio for seen single-target drugs
-            multi_train_ratio: Train ratio for seen multi-target drugs
-            multi_val_ratio: Validation ratio for seen multi-target drugs
+            test_ratio: Fraction of drugs held out as test
+            single_val_ratio: Validation ratio for single-target drugs (after holdouts)
+            multi_val_ratio: Validation ratio for remaining multi-target drugs
+            single_target_test_per_gene: Hold out up to this many single-target drugs per gene
+            multi_test_max_targets: Max target count allowed in multi-target test (preferred)
+            multi_test_fallback_max_targets: Fallback max target count if not enough tests
             min_cells_per_condition: Minimum cells to keep a condition
             seed: Random seed
             save_path: Optional path to save split JSON
@@ -105,11 +107,12 @@ class TahoeDataset:
             raise RuntimeError("Must call load() before create_drug_split()")
 
         splitter = TahoeDrugSplitter(
-            unseen_single_gene_fraction=unseen_single_gene_fraction,
-            n_unseen_single_genes=n_unseen_single_genes,
-            single_seen_val_ratio=single_seen_val_ratio,
-            multi_train_ratio=multi_train_ratio,
+            test_ratio=test_ratio,
+            single_val_ratio=single_val_ratio,
             multi_val_ratio=multi_val_ratio,
+            single_target_test_per_gene=single_target_test_per_gene,
+            multi_test_max_targets=multi_test_max_targets,
+            multi_test_fallback_max_targets=multi_test_fallback_max_targets,
             min_cells_per_condition=min_cells_per_condition,
             seed=seed,
         )
@@ -264,34 +267,40 @@ def parse_args() -> argparse.Namespace:
         help="Random seed for the split.",
     )
     parser.add_argument(
-        "--unseen-single-gene-fraction",
+        "--test-ratio",
         type=float,
         default=0.15,
-        help="Fraction of single-target genes held out as unseen.",
+        help="Fraction of drugs held out as test.",
     )
     parser.add_argument(
-        "--n-unseen-single-genes",
-        type=int,
-        default=None,
-        help="Optional explicit count of unseen single-target genes.",
-    )
-    parser.add_argument(
-        "--single-seen-val-ratio",
+        "--single-val-ratio",
         type=float,
-        default=0.15,
-        help="Validation ratio for seen single-target drugs.",
-    )
-    parser.add_argument(
-        "--multi-train-ratio",
-        type=float,
-        default=0.75,
-        help="Train ratio for seen multi-target drugs.",
+        default=0.1,
+        help="Validation ratio for single-target drugs (after holdouts).",
     )
     parser.add_argument(
         "--multi-val-ratio",
         type=float,
-        default=0.15,
-        help="Validation ratio for seen multi-target drugs.",
+        default=0.1,
+        help="Validation ratio for remaining multi-target drugs.",
+    )
+    parser.add_argument(
+        "--single-target-test-per-gene",
+        type=int,
+        default=0,
+        help="Hold out up to this many single-target drugs per gene.",
+    )
+    parser.add_argument(
+        "--multi-test-max-targets",
+        type=int,
+        default=2,
+        help="Max target count allowed in multi-target test (preferred).",
+    )
+    parser.add_argument(
+        "--multi-test-fallback-max-targets",
+        type=int,
+        default=3,
+        help="Fallback max target count if not enough tests.",
     )
     parser.add_argument(
         "--min-cells-per-condition",
@@ -307,11 +316,12 @@ def main() -> None:
     dataset = TahoeDataset(args.input)
     dataset.load()
     dataset.create_drug_split(
-        unseen_single_gene_fraction=args.unseen_single_gene_fraction,
-        n_unseen_single_genes=args.n_unseen_single_genes,
-        single_seen_val_ratio=args.single_seen_val_ratio,
-        multi_train_ratio=args.multi_train_ratio,
+        test_ratio=args.test_ratio,
+        single_val_ratio=args.single_val_ratio,
         multi_val_ratio=args.multi_val_ratio,
+        single_target_test_per_gene=args.single_target_test_per_gene,
+        multi_test_max_targets=args.multi_test_max_targets,
+        multi_test_fallback_max_targets=args.multi_test_fallback_max_targets,
         min_cells_per_condition=args.min_cells_per_condition,
         seed=args.seed,
         save_path=args.output,
