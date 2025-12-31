@@ -1,0 +1,1169 @@
+==========================================
+Step 0: Splitting data (30 test genes excluded from train)...
+==========================================
+Split data already exists, skipping data splitting...
+==========================================
+Step 1: Converting data to GEARS format...
+==========================================
+GEARS data already exists, skipping conversion...
+==========================================
+Step 2: Finetuning scGPT with DDP...
+==========================================
+Detected 3 GPUs
+Using device: cuda:0, Saving to model/scGPT_finetuned
+scGPT - INFO - Running on 2025-12-30 22:42:47
+scGPT - INFO - Config: {'paths': {'model_dir': 'model/scGPT', 'finetuned_model_dir': 'model/scGPT_finetuned', 'data_dir': 'data/processed', 'test_file': 'test.h5ad', 'train_file': 'train.h5ad', 'output_dir': 'results', 'gears_data_dir': 'data/processed/gears', 'dataset_name': 'vcc'}, 'model': {'pad_token': '<pad>', 'pad_value': 0, 'max_seq_len': 1536, 'include_zero_gene': 'batch-wise', 'embsize': 512, 'd_hid': 512, 'nlayers': 12, 'nhead': 8, 'n_layers_cls': 3, 'dropout': 0.0, 'use_fast_transformer': True}, 'inference': {'batch_size': 16, 'eval_batch_size': 16, 'seed': 42, 'control_target_gene': 'non-targeting'}, 'data': {'special_tokens': ['<pad>', '<cls>', '<eoc>'], 'pert_pad_id': 0}, 'training': {'MLM': True, 'CLS': False, 'CCE': False, 'MVC': False, 'ECS': False, 'amp': True, 'freeze_encoder': True, 'freeze_prefixes': ['encoder', 'value_encoder', 'transformer_encoder']}, 'optimizer': {'lr': 0.0001, 'batch_size': 64, 'eval_batch_size': 64, 'epochs': 15, 'schedule_interval': 1, 'schedule_gamma': 0.9, 'early_stop': 10, 'grad_clip': 1.0}, 'loss': {'sw1_weight': 0.6, 'proto_weight': 0.25, 'de_rank_weight': 0.1, 'dir_weight': 0.05, 'sw1_projections': 32, 'proto_tau': 0.1, 'de_rank_tau': 0.2, 'dir_tau': 0.2, 'de_rank_sample_de': 256, 'de_rank_sample_non_de': 256, 'de_gene_top_k': 500, 'inject_de_genes': True, 'de_inject_max': 512}, 'load_param_prefixes': ['encoder', 'value_encoder', 'transformer_encoder'], 'split': {'test_genes_file': 'data/raw/test_set.csv', 'train_ratio': 0.834, 'val_ratio': 0.166, 'seed': 42}, 'metrics': {'mae_top_k': 2000, 'des_top_k': None, 'de_fdr': 0.05}, 'early_stopping': {'metric': 'overall_score'}, 'logging': {'log_interval': 100, 'save_interval': 1}, 'hardware': {'device': 'cuda', 'ddp_timeout_minutes': 240}}
+scGPT - INFO - Loading data...
+scGPT - INFO - Dataset: 18080 genes, 17840 in vocab
+scGPT - INFO - DE gene map loaded for 120 perturbations
+scGPT - INFO - DE genes per pert: mean 500.0 | min 500 | max 500
+scGPT - INFO - DE map overlap: 120/120 conditions
+scGPT - INFO - Test: 30, Train: 100, Val: 20 perts
+scGPT - INFO - Loading pretrained model from model/scGPT/best_model.pt
+scGPT - INFO - Model config: embsize=512, nlayers=12, nheads=8
+scGPT - INFO - Train cells: 149609, Val cells: 28732
+scGPT - INFO - Loading pretrained model from model/scGPT/best_model.pt
+scGPT - INFO - Model config: embsize=512, nlayers=12, nheads=8
+scGPT - INFO - Loading parameter encoder.embedding.weight with shape torch.Size([60697, 512])
+scGPT - INFO - Loading parameter encoder.enc_norm.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter encoder.enc_norm.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.linear1.weight with shape torch.Size([512, 1])
+scGPT - INFO - Loading parameter value_encoder.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter value_encoder.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.norm.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.norm.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter encoder.embedding.weight with shape torch.Size([60697, 512])
+scGPT - INFO - Loading parameter encoder.enc_norm.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter encoder.enc_norm.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.linear1.weight with shape torch.Size([512, 1])
+scGPT - INFO - Loading parameter value_encoder.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter value_encoder.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.norm.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.norm.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Froze 50,278,400 params, training 1,581,059 params
+scGPT - INFO - Trainable: 3.0% of model
+scGPT - INFO - Trainable components: {'cls_decoder', 'decoder', 'pert_encoder'}
+scGPT - INFO - Loading pretrained model from model/scGPT/best_model.pt
+scGPT - INFO - Model config: embsize=512, nlayers=12, nheads=8
+scGPT - INFO - Loading parameter encoder.embedding.weight with shape torch.Size([60697, 512])
+scGPT - INFO - Loading parameter encoder.enc_norm.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter encoder.enc_norm.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.linear1.weight with shape torch.Size([512, 1])
+scGPT - INFO - Loading parameter value_encoder.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter value_encoder.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.norm.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter value_encoder.norm.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.0.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.1.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.2.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.3.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.4.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.5.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.6.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.7.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.8.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.9.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.10.norm2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.Wqkv.weight with shape torch.Size([1536, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.Wqkv.bias with shape torch.Size([1536])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.out_proj.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.self_attn.out_proj.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear1.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear2.weight with shape torch.Size([512, 512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.linear2.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm1.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm1.bias with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm2.weight with shape torch.Size([512])
+scGPT - INFO - Loading parameter transformer_encoder.layers.11.norm2.bias with shape torch.Size([512])
+scGPT - INFO - 
+============================================================
+Starting training...
+============================================================
+scGPT - INFO - | epoch   1 | 100/2375 batches | ms/batch 303.17 | loss 1.0773
+scGPT - INFO -   dist 0.0660 | proto 3.3574 | de_rank 1.0843 | dir 1.7987
+scGPT - INFO - | epoch   1 | 200/2375 batches | ms/batch 382.96 | loss 0.9072
+scGPT - INFO -   dist 0.0506 | proto 2.8340 | de_rank 0.9881 | dir 1.3913
+scGPT - INFO - | epoch   1 | 300/2375 batches | ms/batch 408.57 | loss 0.9185
+scGPT - INFO -   dist 0.0513 | proto 2.8950 | de_rank 0.9566 | dir 1.3663
+scGPT - INFO - | epoch   1 | 400/2375 batches | ms/batch 413.04 | loss 0.9115
+scGPT - INFO -   dist 0.0545 | proto 2.8629 | de_rank 0.9477 | dir 1.3648
+scGPT - INFO - | epoch   1 | 500/2375 batches | ms/batch 416.58 | loss 0.9086
+scGPT - INFO -   dist 0.0487 | proto 2.8687 | de_rank 0.9403 | dir 1.3635
+scGPT - INFO - | epoch   1 | 600/2375 batches | ms/batch 420.91 | loss 0.9190
+scGPT - INFO -   dist 0.0519 | proto 2.9045 | de_rank 0.9348 | dir 1.3646
+scGPT - INFO - | epoch   1 | 700/2375 batches | ms/batch 423.52 | loss 0.8971
+scGPT - INFO -   dist 0.0519 | proto 2.8245 | de_rank 0.9415 | dir 1.3138
+scGPT - INFO - | epoch   1 | 800/2375 batches | ms/batch 423.40 | loss 0.9060
+scGPT - INFO -   dist 0.0509 | proto 2.8618 | de_rank 0.9316 | dir 1.3381
+scGPT - INFO - | epoch   1 | 900/2375 batches | ms/batch 425.88 | loss 0.8937
+scGPT - INFO -   dist 0.0482 | proto 2.8268 | de_rank 0.9301 | dir 1.3016
+scGPT - INFO - | epoch   1 | 1000/2375 batches | ms/batch 425.05 | loss 0.9034
+scGPT - INFO -   dist 0.0490 | proto 2.8628 | de_rank 0.9188 | dir 1.3297
+scGPT - INFO - | epoch   1 | 1100/2375 batches | ms/batch 424.49 | loss 0.9002
+scGPT - INFO -   dist 0.0519 | proto 2.8441 | de_rank 0.9164 | dir 1.3281
+scGPT - INFO - | epoch   1 | 1200/2375 batches | ms/batch 425.65 | loss 0.8988
+scGPT - INFO -   dist 0.0555 | proto 2.8280 | de_rank 0.9204 | dir 1.3283
+scGPT - INFO - | epoch   1 | 1300/2375 batches | ms/batch 424.21 | loss 0.8852
+scGPT - INFO -   dist 0.0544 | proto 2.7831 | de_rank 0.9160 | dir 1.3034
+scGPT - INFO - | epoch   1 | 1400/2375 batches | ms/batch 422.32 | loss 0.9025
+scGPT - INFO -   dist 0.0512 | proto 2.8599 | de_rank 0.9163 | dir 1.3037
+scGPT - INFO - | epoch   1 | 1500/2375 batches | ms/batch 425.90 | loss 0.8916
+scGPT - INFO -   dist 0.0478 | proto 2.8284 | de_rank 0.9029 | dir 1.3102
+scGPT - INFO - | epoch   1 | 1600/2375 batches | ms/batch 427.29 | loss 0.8982
+scGPT - INFO -   dist 0.0552 | proto 2.8397 | de_rank 0.9065 | dir 1.2906
+scGPT - INFO - | epoch   1 | 1700/2375 batches | ms/batch 424.67 | loss 0.8986
+scGPT - INFO -   dist 0.0453 | proto 2.8578 | de_rank 0.9136 | dir 1.3116
+scGPT - INFO - | epoch   1 | 1800/2375 batches | ms/batch 425.93 | loss 0.8943
+scGPT - INFO -   dist 0.0482 | proto 2.8372 | de_rank 0.9072 | dir 1.3080
+scGPT - INFO - | epoch   1 | 1900/2375 batches | ms/batch 426.50 | loss 0.8982
+scGPT - INFO -   dist 0.0424 | proto 2.8636 | de_rank 0.9084 | dir 1.3200
+scGPT - INFO - | epoch   1 | 2000/2375 batches | ms/batch 426.99 | loss 0.9026
+scGPT - INFO -   dist 0.0457 | proto 2.8743 | de_rank 0.8994 | dir 1.3329
+scGPT - INFO - | epoch   1 | 2100/2375 batches | ms/batch 427.92 | loss 0.8993
+scGPT - INFO -   dist 0.0496 | proto 2.8509 | de_rank 0.9113 | dir 1.3138
+scGPT - INFO - | epoch   1 | 2200/2375 batches | ms/batch 429.94 | loss 0.8954
+scGPT - INFO -   dist 0.0444 | proto 2.8519 | de_rank 0.9122 | dir 1.2915
+scGPT - INFO - | epoch   1 | 2300/2375 batches | ms/batch 427.82 | loss 0.8791
+scGPT - INFO -   dist 0.0484 | proto 2.7762 | de_rank 0.9096 | dir 1.3005
+scGPT - INFO - | epoch   1 | time: 5150.70s | loss: 19.4788 | PDS: 0.5294 | DES: 0.2722 | MAE: 1.2803
+scGPT - INFO -   overall_score: 6.15
+scGPT - INFO -   -> New best (overall_score=6.15)
+scGPT - INFO - | epoch   2 | 100/2375 batches | ms/batch 430.80 | loss 0.8880
+scGPT - INFO -   dist 0.0518 | proto 2.7999 | de_rank 0.9122 | dir 1.3149
+scGPT - INFO - | epoch   2 | 200/2375 batches | ms/batch 426.36 | loss 0.8875
+scGPT - INFO -   dist 0.0480 | proto 2.8144 | de_rank 0.8978 | dir 1.3069
+scGPT - INFO - | epoch   2 | 300/2375 batches | ms/batch 424.73 | loss 0.8938
+scGPT - INFO -   dist 0.0462 | proto 2.8415 | de_rank 0.8978 | dir 1.3180
+scGPT - INFO - | epoch   2 | 400/2375 batches | ms/batch 425.63 | loss 0.8773
+scGPT - INFO -   dist 0.0498 | proto 2.7743 | de_rank 0.9026 | dir 1.2719
+scGPT - INFO - | epoch   2 | 500/2375 batches | ms/batch 427.51 | loss 0.8913
+scGPT - INFO -   dist 0.0472 | proto 2.8334 | de_rank 0.9062 | dir 1.2798
+scGPT - INFO - | epoch   2 | 600/2375 batches | ms/batch 426.90 | loss 0.8713
+scGPT - INFO -   dist 0.0489 | proto 2.7463 | de_rank 0.9037 | dir 1.2997
+scGPT - INFO - | epoch   2 | 700/2375 batches | ms/batch 427.43 | loss 0.8839
+scGPT - INFO -   dist 0.0508 | proto 2.7993 | de_rank 0.8931 | dir 1.2863
+scGPT - INFO - | epoch   2 | 800/2375 batches | ms/batch 432.15 | loss 0.8922
+scGPT - INFO -   dist 0.0493 | proto 2.8337 | de_rank 0.9001 | dir 1.2838
+scGPT - INFO - | epoch   2 | 900/2375 batches | ms/batch 429.54 | loss 0.8842
+scGPT - INFO -   dist 0.0502 | proto 2.7994 | de_rank 0.8936 | dir 1.2972
+scGPT - INFO - | epoch   2 | 1000/2375 batches | ms/batch 431.61 | loss 0.8854
+scGPT - INFO -   dist 0.0475 | proto 2.8127 | de_rank 0.9019 | dir 1.2698
+scGPT - INFO - | epoch   2 | 1100/2375 batches | ms/batch 430.13 | loss 0.8764
+scGPT - INFO -   dist 0.0531 | proto 2.7607 | de_rank 0.9022 | dir 1.2827
+scGPT - INFO - | epoch   2 | 1200/2375 batches | ms/batch 431.53 | loss 0.8877
+scGPT - INFO -   dist 0.0457 | proto 2.8239 | de_rank 0.9075 | dir 1.2709
+scGPT - INFO - | epoch   2 | 1300/2375 batches | ms/batch 431.42 | loss 0.8774
+scGPT - INFO -   dist 0.0514 | proto 2.7731 | de_rank 0.9018 | dir 1.2610
+scGPT - INFO - | epoch   2 | 1400/2375 batches | ms/batch 431.32 | loss 0.8850
+scGPT - INFO -   dist 0.0509 | proto 2.8039 | de_rank 0.8976 | dir 1.2737
+scGPT - INFO - | epoch   2 | 1500/2375 batches | ms/batch 431.80 | loss 0.8877
+scGPT - INFO -   dist 0.0519 | proto 2.8096 | de_rank 0.8947 | dir 1.2942
+scGPT - INFO - | epoch   2 | 1600/2375 batches | ms/batch 432.56 | loss 0.8820
+scGPT - INFO -   dist 0.0446 | proto 2.8025 | de_rank 0.9023 | dir 1.2874
+scGPT - INFO - | epoch   2 | 1700/2375 batches | ms/batch 430.96 | loss 0.8830
+scGPT - INFO -   dist 0.0557 | proto 2.7844 | de_rank 0.8983 | dir 1.2739
+scGPT - INFO - | epoch   2 | 1800/2375 batches | ms/batch 433.79 | loss 0.8900
+scGPT - INFO -   dist 0.0448 | proto 2.8318 | de_rank 0.9105 | dir 1.2828
+scGPT - INFO - | epoch   2 | 1900/2375 batches | ms/batch 434.02 | loss 0.8796
+scGPT - INFO -   dist 0.0427 | proto 2.7977 | de_rank 0.9002 | dir 1.2910
+scGPT - INFO - | epoch   2 | 2000/2375 batches | ms/batch 433.47 | loss 0.8783
+scGPT - INFO -   dist 0.0531 | proto 2.7723 | de_rank 0.8978 | dir 1.2718
+scGPT - INFO - | epoch   2 | 2100/2375 batches | ms/batch 432.56 | loss 0.8735
+scGPT - INFO -   dist 0.0518 | proto 2.7564 | de_rank 0.8990 | dir 1.2680
+scGPT - INFO - | epoch   2 | 2200/2375 batches | ms/batch 432.40 | loss 0.8794
+scGPT - INFO -   dist 0.0490 | proto 2.7894 | de_rank 0.8918 | dir 1.2688
+scGPT - INFO - | epoch   2 | 2300/2375 batches | ms/batch 429.60 | loss 0.8845
+scGPT - INFO -   dist 0.0451 | proto 2.8149 | de_rank 0.8879 | dir 1.2995
+scGPT - INFO - | epoch   2 | time: 5169.28s | loss: 18.9626 | PDS: 0.5294 | DES: 0.2719 | MAE: 1.2898
+scGPT - INFO -   overall_score: 6.14
+scGPT - INFO - | epoch   3 | 100/2375 batches | ms/batch 428.71 | loss 0.8715
+scGPT - INFO -   dist 0.0450 | proto 2.7588 | de_rank 0.9047 | dir 1.2861
+scGPT - INFO - | epoch   3 | 200/2375 batches | ms/batch 422.17 | loss 0.8923
+scGPT - INFO -   dist 0.0478 | proto 2.8441 | de_rank 0.8885 | dir 1.2744
+scGPT - INFO - | epoch   3 | 300/2375 batches | ms/batch 422.53 | loss 0.8867
+scGPT - INFO -   dist 0.0491 | proto 2.8164 | de_rank 0.8865 | dir 1.2888
+scGPT - INFO - | epoch   3 | 400/2375 batches | ms/batch 423.41 | loss 0.8830
+scGPT - INFO -   dist 0.0435 | proto 2.8121 | de_rank 0.8880 | dir 1.3018
+scGPT - INFO - | epoch   3 | 500/2375 batches | ms/batch 423.43 | loss 0.8797
+scGPT - INFO -   dist 0.0482 | proto 2.7897 | de_rank 0.8923 | dir 1.2821
+scGPT - INFO - | epoch   3 | 600/2375 batches | ms/batch 425.95 | loss 0.8839
+scGPT - INFO -   dist 0.0484 | proto 2.8058 | de_rank 0.8949 | dir 1.2782
+scGPT - INFO - | epoch   3 | 700/2375 batches | ms/batch 428.33 | loss 0.8758
+scGPT - INFO -   dist 0.0439 | proto 2.7871 | de_rank 0.8858 | dir 1.2815
+scGPT - INFO - | epoch   3 | 800/2375 batches | ms/batch 430.14 | loss 0.8775
+scGPT - INFO -   dist 0.0506 | proto 2.7791 | de_rank 0.8880 | dir 1.2716
+scGPT - INFO - | epoch   3 | 900/2375 batches | ms/batch 430.93 | loss 0.8794
+scGPT - INFO -   dist 0.0493 | proto 2.7887 | de_rank 0.8872 | dir 1.2789
+scGPT - INFO - | epoch   3 | 1000/2375 batches | ms/batch 431.24 | loss 0.8702
+scGPT - INFO -   dist 0.0506 | proto 2.7450 | de_rank 0.8887 | dir 1.2940
+scGPT - INFO - | epoch   3 | 1100/2375 batches | ms/batch 430.79 | loss 0.8845
+scGPT - INFO -   dist 0.0546 | proto 2.7971 | de_rank 0.8857 | dir 1.2775
+scGPT - INFO - | epoch   3 | 1200/2375 batches | ms/batch 433.00 | loss 0.8872
+scGPT - INFO -   dist 0.0513 | proto 2.8157 | de_rank 0.8914 | dir 1.2671
+scGPT - INFO - | epoch   3 | 1300/2375 batches | ms/batch 431.51 | loss 0.8699
+scGPT - INFO -   dist 0.0478 | proto 2.7522 | de_rank 0.8855 | dir 1.2920
+scGPT - INFO - | epoch   3 | 1400/2375 batches | ms/batch 432.03 | loss 0.8881
+scGPT - INFO -   dist 0.0504 | proto 2.8199 | de_rank 0.8777 | dir 1.3030
+scGPT - INFO - | epoch   3 | 1500/2375 batches | ms/batch 432.41 | loss 0.8731
+scGPT - INFO -   dist 0.0493 | proto 2.7639 | de_rank 0.8886 | dir 1.2744
+scGPT - INFO - | epoch   3 | 1600/2375 batches | ms/batch 434.73 | loss 0.8748
+scGPT - INFO -   dist 0.0495 | proto 2.7695 | de_rank 0.8852 | dir 1.2844
+scGPT - INFO - | epoch   3 | 1700/2375 batches | ms/batch 435.13 | loss 0.8723
+scGPT - INFO -   dist 0.0476 | proto 2.7619 | de_rank 0.8859 | dir 1.2928
+scGPT - INFO - | epoch   3 | 1800/2375 batches | ms/batch 432.73 | loss 0.8856
+scGPT - INFO -   dist 0.0496 | proto 2.8120 | de_rank 0.8909 | dir 1.2741
+scGPT - INFO - | epoch   3 | 1900/2375 batches | ms/batch 431.39 | loss 0.8765
+scGPT - INFO -   dist 0.0478 | proto 2.7822 | de_rank 0.8835 | dir 1.2783
+scGPT - INFO - | epoch   3 | 2000/2375 batches | ms/batch 428.95 | loss 0.8924
+scGPT - INFO -   dist 0.0455 | proto 2.8463 | de_rank 0.8855 | dir 1.2991
+scGPT - INFO - | epoch   3 | 2100/2375 batches | ms/batch 428.68 | loss 0.8836
+scGPT - INFO -   dist 0.0535 | proto 2.7950 | de_rank 0.8880 | dir 1.2784
+scGPT - INFO - | epoch   3 | 2200/2375 batches | ms/batch 427.71 | loss 0.8794
+scGPT - INFO -   dist 0.0459 | proto 2.7973 | de_rank 0.8871 | dir 1.2774
+scGPT - INFO - | epoch   3 | 2300/2375 batches | ms/batch 425.69 | loss 0.8809
+scGPT - INFO -   dist 0.0463 | proto 2.7989 | de_rank 0.8909 | dir 1.2854
+scGPT - INFO - | epoch   3 | time: 5151.95s | loss: 18.8879 | PDS: 0.5294 | DES: 0.2735 | MAE: 1.2852
+scGPT - INFO -   overall_score: 6.20
+scGPT - INFO -   -> New best (overall_score=6.20)
+scGPT - INFO - | epoch   4 | 100/2375 batches | ms/batch 430.83 | loss 0.8880
+scGPT - INFO -   dist 0.0524 | proto 2.8122 | de_rank 0.8912 | dir 1.2878
+scGPT - INFO - | epoch   4 | 200/2375 batches | ms/batch 426.68 | loss 0.8823
+scGPT - INFO -   dist 0.0435 | proto 2.8156 | de_rank 0.8807 | dir 1.2858
+scGPT - INFO - | epoch   4 | 300/2375 batches | ms/batch 426.24 | loss 0.8846
+scGPT - INFO -   dist 0.0489 | proto 2.8095 | de_rank 0.8741 | dir 1.3101
+scGPT - INFO - | epoch   4 | 400/2375 batches | ms/batch 426.30 | loss 0.8834
+scGPT - INFO -   dist 0.0510 | proto 2.7990 | de_rank 0.8863 | dir 1.2878
+scGPT - INFO - | epoch   4 | 500/2375 batches | ms/batch 428.27 | loss 0.8784
+scGPT - INFO -   dist 0.0518 | proto 2.7810 | de_rank 0.8792 | dir 1.2824
+scGPT - INFO - | epoch   4 | 600/2375 batches | ms/batch 429.70 | loss 0.8675
+scGPT - INFO -   dist 0.0516 | proto 2.7390 | de_rank 0.8833 | dir 1.2690
+scGPT - INFO - | epoch   4 | 700/2375 batches | ms/batch 430.67 | loss 0.8880
+scGPT - INFO -   dist 0.0440 | proto 2.8367 | de_rank 0.8825 | dir 1.2836
+scGPT - INFO - | epoch   4 | 800/2375 batches | ms/batch 431.06 | loss 0.8721
+scGPT - INFO -   dist 0.0511 | proto 2.7574 | de_rank 0.8810 | dir 1.2788
+scGPT - INFO - | epoch   4 | 900/2375 batches | ms/batch 430.17 | loss 0.8688
+scGPT - INFO -   dist 0.0525 | proto 2.7447 | de_rank 0.8744 | dir 1.2739
+scGPT - INFO - | epoch   4 | 1000/2375 batches | ms/batch 430.88 | loss 0.8783
+scGPT - INFO -   dist 0.0559 | proto 2.7734 | de_rank 0.8787 | dir 1.2706
+scGPT - INFO - | epoch   4 | 1100/2375 batches | ms/batch 429.85 | loss 0.8757
+scGPT - INFO -   dist 0.0430 | proto 2.7873 | de_rank 0.8801 | dir 1.2999
+scGPT - INFO - | epoch   4 | 1200/2375 batches | ms/batch 431.51 | loss 0.8834
+scGPT - INFO -   dist 0.0483 | proto 2.8094 | de_rank 0.8713 | dir 1.2985
+scGPT - INFO - | epoch   4 | 1300/2375 batches | ms/batch 431.05 | loss 0.8747
+scGPT - INFO -   dist 0.0523 | proto 2.7616 | de_rank 0.8805 | dir 1.2962
+scGPT - INFO - | epoch   4 | 1400/2375 batches | ms/batch 430.78 | loss 0.8731
+scGPT - INFO -   dist 0.0497 | proto 2.7652 | de_rank 0.8797 | dir 1.2787
+scGPT - INFO - | epoch   4 | 1500/2375 batches | ms/batch 428.73 | loss 0.8757
+scGPT - INFO -   dist 0.0452 | proto 2.7892 | de_rank 0.8784 | dir 1.2699
+scGPT - INFO - | epoch   4 | 1600/2375 batches | ms/batch 428.72 | loss 0.8757
+scGPT - INFO -   dist 0.0501 | proto 2.7754 | de_rank 0.8733 | dir 1.2884
+scGPT - INFO - | epoch   4 | 1700/2375 batches | ms/batch 427.00 | loss 0.8824
+scGPT - INFO -   dist 0.0488 | proto 2.8059 | de_rank 0.8771 | dir 1.2798
+scGPT - INFO - | epoch   4 | 1800/2375 batches | ms/batch 424.66 | loss 0.8815
+scGPT - INFO -   dist 0.0512 | proto 2.7973 | de_rank 0.8742 | dir 1.2802
+scGPT - INFO - | epoch   4 | 1900/2375 batches | ms/batch 424.41 | loss 0.8740
+scGPT - INFO -   dist 0.0449 | proto 2.7803 | de_rank 0.8779 | dir 1.2847
+scGPT - INFO - | epoch   4 | 2000/2375 batches | ms/batch 428.96 | loss 0.8801
+scGPT - INFO -   dist 0.0471 | proto 2.7997 | de_rank 0.8785 | dir 1.2809
+scGPT - INFO - | epoch   4 | 2100/2375 batches | ms/batch 427.71 | loss 0.8773
+scGPT - INFO -   dist 0.0496 | proto 2.7862 | de_rank 0.8693 | dir 1.2809
+scGPT - INFO - | epoch   4 | 2200/2375 batches | ms/batch 428.33 | loss 0.8801
+scGPT - INFO -   dist 0.0497 | proto 2.7941 | de_rank 0.8764 | dir 1.2824
+scGPT - INFO - | epoch   4 | 2300/2375 batches | ms/batch 432.32 | loss 0.8784
+scGPT - INFO -   dist 0.0445 | proto 2.7984 | de_rank 0.8795 | dir 1.2825
+scGPT - INFO - | epoch   4 | time: 5122.67s | loss: 18.7860 | PDS: 0.5294 | DES: 0.2696 | MAE: 1.2839
+scGPT - INFO -   overall_score: 6.05
+scGPT - INFO - | epoch   5 | 100/2375 batches | ms/batch 423.03 | loss 0.8834
+scGPT - INFO -   dist 0.0598 | proto 2.7791 | de_rank 0.8848 | dir 1.2861
+scGPT - INFO - | epoch   5 | 200/2375 batches | ms/batch 419.50 | loss 0.8711
+scGPT - INFO -   dist 0.0505 | proto 2.7559 | de_rank 0.8779 | dir 1.2806
+scGPT - INFO - | epoch   5 | 300/2375 batches | ms/batch 420.79 | loss 0.8812
+scGPT - INFO -   dist 0.0424 | proto 2.8182 | de_rank 0.8760 | dir 1.2714
+scGPT - INFO - | epoch   5 | 400/2375 batches | ms/batch 420.50 | loss 0.8773
+scGPT - INFO -   dist 0.0515 | proto 2.7827 | de_rank 0.8696 | dir 1.2744
+scGPT - INFO - | epoch   5 | 500/2375 batches | ms/batch 420.74 | loss 0.8703
+scGPT - INFO -   dist 0.0575 | proto 2.7393 | de_rank 0.8735 | dir 1.2725
+scGPT - INFO - | epoch   5 | 600/2375 batches | ms/batch 420.82 | loss 0.8785
+scGPT - INFO -   dist 0.0422 | proto 2.8080 | de_rank 0.8693 | dir 1.2840
+scGPT - INFO - | epoch   5 | 700/2375 batches | ms/batch 422.55 | loss 0.8623
+scGPT - INFO -   dist 0.0400 | proto 2.7466 | de_rank 0.8781 | dir 1.2767
+scGPT - INFO - | epoch   5 | 800/2375 batches | ms/batch 425.96 | loss 0.8768
+scGPT - INFO -   dist 0.0510 | proto 2.7783 | de_rank 0.8765 | dir 1.2781
+scGPT - INFO - | epoch   5 | 900/2375 batches | ms/batch 426.71 | loss 0.8784
+scGPT - INFO -   dist 0.0506 | proto 2.7876 | de_rank 0.8713 | dir 1.2799
+scGPT - INFO - | epoch   5 | 1000/2375 batches | ms/batch 432.92 | loss 0.8742
+scGPT - INFO -   dist 0.0523 | proto 2.7641 | de_rank 0.8760 | dir 1.2836
+scGPT - INFO - | epoch   5 | 1100/2375 batches | ms/batch 429.89 | loss 0.8835
+scGPT - INFO -   dist 0.0495 | proto 2.8116 | de_rank 0.8649 | dir 1.2880
+scGPT - INFO - | epoch   5 | 1200/2375 batches | ms/batch 429.59 | loss 0.8721
+scGPT - INFO -   dist 0.0526 | proto 2.7572 | de_rank 0.8718 | dir 1.2816
+scGPT - INFO - | epoch   5 | 1300/2375 batches | ms/batch 429.85 | loss 0.8742
+scGPT - INFO -   dist 0.0505 | proto 2.7698 | de_rank 0.8730 | dir 1.2839
+scGPT - INFO - | epoch   5 | 1400/2375 batches | ms/batch 429.99 | loss 0.8826
+scGPT - INFO -   dist 0.0486 | proto 2.8096 | de_rank 0.8657 | dir 1.2885
+scGPT - INFO - | epoch   5 | 1500/2375 batches | ms/batch 428.42 | loss 0.8722
+scGPT - INFO -   dist 0.0462 | proto 2.7716 | de_rank 0.8780 | dir 1.2740
+scGPT - INFO - | epoch   5 | 1600/2375 batches | ms/batch 429.59 | loss 0.8691
+scGPT - INFO -   dist 0.0473 | proto 2.7585 | de_rank 0.8645 | dir 1.2936
+scGPT - INFO - | epoch   5 | 1700/2375 batches | ms/batch 431.88 | loss 0.8907
+scGPT - INFO -   dist 0.0533 | proto 2.8287 | de_rank 0.8619 | dir 1.3077
+scGPT - INFO - | epoch   5 | 1800/2375 batches | ms/batch 435.97 | loss 0.8704
+scGPT - INFO -   dist 0.0551 | proto 2.7522 | de_rank 0.8674 | dir 1.2516
+scGPT - INFO - | epoch   5 | 1900/2375 batches | ms/batch 434.77 | loss 0.8773
+scGPT - INFO -   dist 0.0516 | proto 2.7821 | de_rank 0.8670 | dir 1.2815
+scGPT - INFO - | epoch   5 | 2000/2375 batches | ms/batch 434.68 | loss 0.8807
+scGPT - INFO -   dist 0.0458 | proto 2.8050 | de_rank 0.8698 | dir 1.2997
+scGPT - INFO - | epoch   5 | 2100/2375 batches | ms/batch 436.78 | loss 0.8701
+scGPT - INFO -   dist 0.0487 | proto 2.7589 | de_rank 0.8719 | dir 1.2798
+scGPT - INFO - | epoch   5 | 2200/2375 batches | ms/batch 434.48 | loss 0.8698
+scGPT - INFO -   dist 0.0475 | proto 2.7633 | de_rank 0.8702 | dir 1.2685
+scGPT - INFO - | epoch   5 | 2300/2375 batches | ms/batch 434.76 | loss 0.8731
+scGPT - INFO -   dist 0.0465 | proto 2.7774 | de_rank 0.8688 | dir 1.2789
+scGPT - INFO - | epoch   5 | time: 5175.77s | loss: 18.7005 | PDS: 0.5294 | DES: 0.2715 | MAE: 1.2880
+scGPT - INFO -   overall_score: 6.12
+scGPT - INFO - | epoch   6 | 100/2375 batches | ms/batch 428.06 | loss 0.8801
+scGPT - INFO -   dist 0.0546 | proto 2.7799 | de_rank 0.8750 | dir 1.2973
+scGPT - INFO - | epoch   6 | 200/2375 batches | ms/batch 422.83 | loss 0.8675
+scGPT - INFO -   dist 0.0507 | proto 2.7469 | de_rank 0.8672 | dir 1.2736
+scGPT - INFO - | epoch   6 | 300/2375 batches | ms/batch 424.15 | loss 0.8727
+scGPT - INFO -   dist 0.0457 | proto 2.7764 | de_rank 0.8659 | dir 1.2922
+scGPT - INFO - | epoch   6 | 400/2375 batches | ms/batch 423.77 | loss 0.8708
+scGPT - INFO -   dist 0.0441 | proto 2.7757 | de_rank 0.8660 | dir 1.2766
+scGPT - INFO - | epoch   6 | 500/2375 batches | ms/batch 422.89 | loss 0.8651
+scGPT - INFO -   dist 0.0534 | proto 2.7330 | de_rank 0.8660 | dir 1.2644
+scGPT - INFO - | epoch   6 | 600/2375 batches | ms/batch 424.19 | loss 0.8708
+scGPT - INFO -   dist 0.0481 | proto 2.7636 | de_rank 0.8717 | dir 1.2774
+scGPT - INFO - | epoch   6 | 700/2375 batches | ms/batch 425.17 | loss 0.8657
+scGPT - INFO -   dist 0.0449 | proto 2.7523 | de_rank 0.8588 | dir 1.2952
+scGPT - INFO - | epoch   6 | 800/2375 batches | ms/batch 427.64 | loss 0.8713
+scGPT - INFO -   dist 0.0457 | proto 2.7757 | de_rank 0.8606 | dir 1.2784
+scGPT - INFO - | epoch   6 | 900/2375 batches | ms/batch 427.91 | loss 0.8894
+scGPT - INFO -   dist 0.0526 | proto 2.8264 | de_rank 0.8626 | dir 1.3001
+scGPT - INFO - | epoch   6 | 1000/2375 batches | ms/batch 427.89 | loss 0.8728
+scGPT - INFO -   dist 0.0547 | proto 2.7568 | de_rank 0.8665 | dir 1.2826
+scGPT - INFO - | epoch   6 | 1100/2375 batches | ms/batch 429.44 | loss 0.8679
+scGPT - INFO -   dist 0.0461 | proto 2.7576 | de_rank 0.8681 | dir 1.2809
+scGPT - INFO - | epoch   6 | 1200/2375 batches | ms/batch 430.90 | loss 0.8715
+scGPT - INFO -   dist 0.0500 | proto 2.7623 | de_rank 0.8641 | dir 1.2899
+scGPT - INFO - | epoch   6 | 1300/2375 batches | ms/batch 430.93 | loss 0.8714
+scGPT - INFO -   dist 0.0435 | proto 2.7824 | de_rank 0.8596 | dir 1.2740
+scGPT - INFO - | epoch   6 | 1400/2375 batches | ms/batch 429.90 | loss 0.8691
+scGPT - INFO -   dist 0.0469 | proto 2.7642 | de_rank 0.8666 | dir 1.2644
+scGPT - INFO - | epoch   6 | 1500/2375 batches | ms/batch 428.39 | loss 0.8802
+scGPT - INFO -   dist 0.0578 | proto 2.7830 | de_rank 0.8546 | dir 1.2851
+scGPT - INFO - | epoch   6 | 1600/2375 batches | ms/batch 428.02 | loss 0.8675
+scGPT - INFO -   dist 0.0556 | proto 2.7376 | de_rank 0.8560 | dir 1.2829
+scGPT - INFO - | epoch   6 | 1700/2375 batches | ms/batch 426.20 | loss 0.8725
+scGPT - INFO -   dist 0.0454 | proto 2.7791 | de_rank 0.8663 | dir 1.2784
+scGPT - INFO - | epoch   6 | 1800/2375 batches | ms/batch 425.37 | loss 0.8732
+scGPT - INFO -   dist 0.0542 | proto 2.7629 | de_rank 0.8543 | dir 1.2908
+scGPT - INFO - | epoch   6 | 1900/2375 batches | ms/batch 426.38 | loss 0.8860
+scGPT - INFO -   dist 0.0435 | proto 2.8337 | de_rank 0.8631 | dir 1.3044
+scGPT - INFO - | epoch   6 | 2000/2375 batches | ms/batch 426.85 | loss 0.8654
+scGPT - INFO -   dist 0.0528 | proto 2.7360 | de_rank 0.8657 | dir 1.2627
+scGPT - INFO - | epoch   6 | 2100/2375 batches | ms/batch 427.71 | loss 0.8784
+scGPT - INFO -   dist 0.0448 | proto 2.8044 | de_rank 0.8534 | dir 1.3030
+scGPT - INFO - | epoch   6 | 2200/2375 batches | ms/batch 426.85 | loss 0.8667
+scGPT - INFO -   dist 0.0524 | proto 2.7423 | de_rank 0.8591 | dir 1.2745
+scGPT - INFO - | epoch   6 | 2300/2375 batches | ms/batch 423.69 | loss 0.8723
+scGPT - INFO -   dist 0.0509 | proto 2.7679 | de_rank 0.8623 | dir 1.2705
+scGPT - INFO - | epoch   6 | time: 5124.06s | loss: 18.6871 | PDS: 0.5294 | DES: 0.2738 | MAE: 1.2892
+scGPT - INFO -   overall_score: 6.21
+scGPT - INFO -   -> New best (overall_score=6.21)
+scGPT - INFO - | epoch   7 | 100/2375 batches | ms/batch 428.56 | loss 0.8783
+scGPT - INFO -   dist 0.0518 | proto 2.7851 | de_rank 0.8674 | dir 1.2845
+scGPT - INFO - | epoch   7 | 200/2375 batches | ms/batch 421.49 | loss 0.8619
+scGPT - INFO -   dist 0.0517 | proto 2.7290 | de_rank 0.8605 | dir 1.2517
+scGPT - INFO - | epoch   7 | 300/2375 batches | ms/batch 422.55 | loss 0.8668
+scGPT - INFO -   dist 0.0514 | proto 2.7480 | de_rank 0.8526 | dir 1.2744
+scGPT - INFO - | epoch   7 | 400/2375 batches | ms/batch 420.68 | loss 0.8727
+scGPT - INFO -   dist 0.0476 | proto 2.7769 | de_rank 0.8610 | dir 1.2760
+scGPT - INFO - | epoch   7 | 500/2375 batches | ms/batch 422.12 | loss 0.8737
+scGPT - INFO -   dist 0.0484 | proto 2.7778 | de_rank 0.8610 | dir 1.2810
+scGPT - INFO - | epoch   7 | 600/2375 batches | ms/batch 422.99 | loss 0.8664
+scGPT - INFO -   dist 0.0471 | proto 2.7555 | de_rank 0.8558 | dir 1.2735
+scGPT - INFO - | epoch   7 | 700/2375 batches | ms/batch 424.40 | loss 0.8747
+scGPT - INFO -   dist 0.0483 | proto 2.7837 | de_rank 0.8592 | dir 1.2770
+scGPT - INFO - | epoch   7 | 800/2375 batches | ms/batch 423.99 | loss 0.8654
+scGPT - INFO -   dist 0.0488 | proto 2.7447 | de_rank 0.8622 | dir 1.2745
+scGPT - INFO - | epoch   7 | 900/2375 batches | ms/batch 425.91 | loss 0.8705
+scGPT - INFO -   dist 0.0435 | proto 2.7765 | de_rank 0.8640 | dir 1.2783
+scGPT - INFO - | epoch   7 | 1000/2375 batches | ms/batch 425.66 | loss 0.8690
+scGPT - INFO -   dist 0.0494 | proto 2.7559 | de_rank 0.8528 | dir 1.3015
+scGPT - INFO - | epoch   7 | 1100/2375 batches | ms/batch 424.24 | loss 0.8772
+scGPT - INFO -   dist 0.0473 | proto 2.7973 | de_rank 0.8603 | dir 1.2691
+scGPT - INFO - | epoch   7 | 1200/2375 batches | ms/batch 426.01 | loss 0.8647
+scGPT - INFO -   dist 0.0489 | proto 2.7404 | de_rank 0.8610 | dir 1.2838
+scGPT - INFO - | epoch   7 | 1300/2375 batches | ms/batch 426.79 | loss 0.8576
+scGPT - INFO -   dist 0.0460 | proto 2.7211 | de_rank 0.8615 | dir 1.2715
+scGPT - INFO - | epoch   7 | 1400/2375 batches | ms/batch 425.54 | loss 0.8617
+scGPT - INFO -   dist 0.0453 | proto 2.7423 | de_rank 0.8597 | dir 1.2598
+scGPT - INFO - | epoch   7 | 1500/2375 batches | ms/batch 424.96 | loss 0.8610
+scGPT - INFO -   dist 0.0487 | proto 2.7298 | de_rank 0.8589 | dir 1.2682
+scGPT - INFO - | epoch   7 | 1600/2375 batches | ms/batch 424.03 | loss 0.8697
+scGPT - INFO -   dist 0.0509 | proto 2.7584 | de_rank 0.8544 | dir 1.2830
+scGPT - INFO - | epoch   7 | 1700/2375 batches | ms/batch 425.03 | loss 0.8822
+scGPT - INFO -   dist 0.0467 | proto 2.8189 | de_rank 0.8549 | dir 1.2803
+scGPT - INFO - | epoch   7 | 1800/2375 batches | ms/batch 425.60 | loss 0.8673
+scGPT - INFO -   dist 0.0530 | proto 2.7425 | de_rank 0.8595 | dir 1.2794
+scGPT - INFO - | epoch   7 | 1900/2375 batches | ms/batch 424.22 | loss 0.8802
+scGPT - INFO -   dist 0.0529 | proto 2.7928 | de_rank 0.8636 | dir 1.2794
+scGPT - INFO - | epoch   7 | 2000/2375 batches | ms/batch 422.00 | loss 0.8708
+scGPT - INFO -   dist 0.0443 | proto 2.7779 | de_rank 0.8551 | dir 1.2840
+scGPT - INFO - | epoch   7 | 2100/2375 batches | ms/batch 423.31 | loss 0.8647
+scGPT - INFO -   dist 0.0473 | proto 2.7468 | de_rank 0.8535 | dir 1.2852
+scGPT - INFO - | epoch   7 | 2200/2375 batches | ms/batch 426.01 | loss 0.8809
+scGPT - INFO -   dist 0.0489 | proto 2.8058 | de_rank 0.8558 | dir 1.2918
+scGPT - INFO - | epoch   7 | 2300/2375 batches | ms/batch 424.47 | loss 0.8723
+scGPT - INFO -   dist 0.0472 | proto 2.7768 | de_rank 0.8594 | dir 1.2755
+scGPT - INFO - | epoch   7 | time: 5166.18s | loss: 18.6569 | PDS: 0.5294 | DES: 0.2712 | MAE: 1.2854
+scGPT - INFO -   overall_score: 6.11
+scGPT - INFO - | epoch   8 | 100/2375 batches | ms/batch 425.23 | loss 0.8826
+scGPT - INFO -   dist 0.0417 | proto 2.8283 | de_rank 0.8648 | dir 1.2815
+scGPT - INFO - | epoch   8 | 200/2375 batches | ms/batch 417.64 | loss 0.8775
+scGPT - INFO -   dist 0.0529 | proto 2.7836 | de_rank 0.8511 | dir 1.2950
+scGPT - INFO - | epoch   8 | 300/2375 batches | ms/batch 419.55 | loss 0.8799
+scGPT - INFO -   dist 0.0501 | proto 2.8007 | de_rank 0.8566 | dir 1.2799
+scGPT - INFO - | epoch   8 | 400/2375 batches | ms/batch 418.01 | loss 0.8693
+scGPT - INFO -   dist 0.0458 | proto 2.7701 | de_rank 0.8552 | dir 1.2759
+scGPT - INFO - | epoch   8 | 500/2375 batches | ms/batch 419.96 | loss 0.8687
+scGPT - INFO -   dist 0.0504 | proto 2.7571 | de_rank 0.8555 | dir 1.2731
+scGPT - INFO - | epoch   8 | 600/2375 batches | ms/batch 421.53 | loss 0.8674
+scGPT - INFO -   dist 0.0514 | proto 2.7507 | de_rank 0.8484 | dir 1.2812
+scGPT - INFO - | epoch   8 | 700/2375 batches | ms/batch 426.48 | loss 0.8699
+scGPT - INFO -   dist 0.0452 | proto 2.7707 | de_rank 0.8568 | dir 1.2893
+scGPT - INFO - | epoch   8 | 800/2375 batches | ms/batch 428.64 | loss 0.8670
+scGPT - INFO -   dist 0.0457 | proto 2.7614 | de_rank 0.8537 | dir 1.2781
+scGPT - INFO - | epoch   8 | 900/2375 batches | ms/batch 427.50 | loss 0.8703
+scGPT - INFO -   dist 0.0489 | proto 2.7658 | de_rank 0.8555 | dir 1.2798
+scGPT - INFO - | epoch   8 | 1000/2375 batches | ms/batch 430.93 | loss 0.8615
+scGPT - INFO -   dist 0.0495 | proto 2.7294 | de_rank 0.8575 | dir 1.2734
+scGPT - INFO - | epoch   8 | 1100/2375 batches | ms/batch 429.87 | loss 0.8647
+scGPT - INFO -   dist 0.0536 | proto 2.7354 | de_rank 0.8506 | dir 1.2728
+scGPT - INFO - | epoch   8 | 1200/2375 batches | ms/batch 428.47 | loss 0.8683
+scGPT - INFO -   dist 0.0488 | proto 2.7587 | de_rank 0.8525 | dir 1.2811
+scGPT - INFO - | epoch   8 | 1300/2375 batches | ms/batch 427.17 | loss 0.8645
+scGPT - INFO -   dist 0.0504 | proto 2.7405 | de_rank 0.8555 | dir 1.2706
+scGPT - INFO - | epoch   8 | 1400/2375 batches | ms/batch 429.15 | loss 0.8620
+scGPT - INFO -   dist 0.0543 | proto 2.7223 | de_rank 0.8519 | dir 1.2729
+scGPT - INFO - | epoch   8 | 1500/2375 batches | ms/batch 429.99 | loss 0.8679
+scGPT - INFO -   dist 0.0423 | proto 2.7714 | de_rank 0.8535 | dir 1.2878
+scGPT - INFO - | epoch   8 | 1600/2375 batches | ms/batch 430.83 | loss 0.8677
+scGPT - INFO -   dist 0.0527 | proto 2.7487 | de_rank 0.8583 | dir 1.2627
+scGPT - INFO - | epoch   8 | 1700/2375 batches | ms/batch 430.27 | loss 0.8618
+scGPT - INFO -   dist 0.0487 | proto 2.7350 | de_rank 0.8537 | dir 1.2699
+scGPT - INFO - | epoch   8 | 1800/2375 batches | ms/batch 428.43 | loss 0.8656
+scGPT - INFO -   dist 0.0490 | proto 2.7504 | de_rank 0.8436 | dir 1.2845
+scGPT - INFO - | epoch   8 | 1900/2375 batches | ms/batch 426.30 | loss 0.8650
+scGPT - INFO -   dist 0.0479 | proto 2.7485 | de_rank 0.8508 | dir 1.2809
+scGPT - INFO - | epoch   8 | 2000/2375 batches | ms/batch 428.12 | loss 0.8693
+scGPT - INFO -   dist 0.0457 | proto 2.7700 | de_rank 0.8479 | dir 1.2908
+scGPT - INFO - | epoch   8 | 2100/2375 batches | ms/batch 426.09 | loss 0.8630
+scGPT - INFO -   dist 0.0485 | proto 2.7415 | de_rank 0.8486 | dir 1.2734
+scGPT - INFO - | epoch   8 | 2200/2375 batches | ms/batch 426.69 | loss 0.8660
+scGPT - INFO -   dist 0.0466 | proto 2.7551 | de_rank 0.8470 | dir 1.2905
+scGPT - INFO - | epoch   8 | 2300/2375 batches | ms/batch 426.27 | loss 0.8609
+scGPT - INFO -   dist 0.0458 | proto 2.7362 | de_rank 0.8467 | dir 1.2937
+scGPT - INFO - | epoch   8 | time: 5173.37s | loss: 18.6351 | PDS: 0.5294 | DES: 0.2753 | MAE: 1.2927
+scGPT - INFO -   overall_score: 6.27
+scGPT - INFO -   -> New best (overall_score=6.27)
+scGPT - INFO - | epoch   9 | 100/2375 batches | ms/batch 430.28 | loss 0.8771
+scGPT - INFO -   dist 0.0470 | proto 2.7961 | de_rank 0.8565 | dir 1.2838
+scGPT - INFO - | epoch   9 | 200/2375 batches | ms/batch 420.79 | loss 0.8651
+scGPT - INFO -   dist 0.0495 | proto 2.7479 | de_rank 0.8522 | dir 1.2639
+scGPT - INFO - | epoch   9 | 300/2375 batches | ms/batch 421.74 | loss 0.8682
+scGPT - INFO -   dist 0.0508 | proto 2.7528 | de_rank 0.8486 | dir 1.2938
+scGPT - INFO - | epoch   9 | 400/2375 batches | ms/batch 422.19 | loss 0.8614
+scGPT - INFO -   dist 0.0489 | proto 2.7312 | de_rank 0.8564 | dir 1.2728
+scGPT - INFO - | epoch   9 | 500/2375 batches | ms/batch 422.95 | loss 0.8760
+scGPT - INFO -   dist 0.0467 | proto 2.7964 | de_rank 0.8543 | dir 1.2688
+scGPT - INFO - | epoch   9 | 600/2375 batches | ms/batch 426.04 | loss 0.8676
+scGPT - INFO -   dist 0.0411 | proto 2.7768 | de_rank 0.8523 | dir 1.2695
+scGPT - INFO - | epoch   9 | 700/2375 batches | ms/batch 426.63 | loss 0.8594
+scGPT - INFO -   dist 0.0511 | proto 2.7192 | de_rank 0.8541 | dir 1.2697
+scGPT - INFO - | epoch   9 | 800/2375 batches | ms/batch 428.33 | loss 0.8689
+scGPT - INFO -   dist 0.0413 | proto 2.7801 | de_rank 0.8538 | dir 1.2742
+scGPT - INFO - | epoch   9 | 900/2375 batches | ms/batch 426.23 | loss 0.8585
+scGPT - INFO -   dist 0.0513 | proto 2.7153 | de_rank 0.8545 | dir 1.2677
+scGPT - INFO - | epoch   9 | 1000/2375 batches | ms/batch 428.03 | loss 0.8642
+scGPT - INFO -   dist 0.0452 | proto 2.7554 | de_rank 0.8467 | dir 1.2705
+scGPT - INFO - | epoch   9 | 1100/2375 batches | ms/batch 426.95 | loss 0.8615
+scGPT - INFO -   dist 0.0486 | proto 2.7346 | de_rank 0.8524 | dir 1.2693
+scGPT - INFO - | epoch   9 | 1200/2375 batches | ms/batch 423.90 | loss 0.8637
+scGPT - INFO -   dist 0.0485 | proto 2.7445 | de_rank 0.8485 | dir 1.2729
+scGPT - INFO - | epoch   9 | 1300/2375 batches | ms/batch 420.97 | loss 0.8680
+scGPT - INFO -   dist 0.0482 | proto 2.7669 | de_rank 0.8362 | dir 1.2747
+scGPT - INFO - | epoch   9 | 1400/2375 batches | ms/batch 426.75 | loss 0.8650
+scGPT - INFO -   dist 0.0478 | proto 2.7511 | de_rank 0.8406 | dir 1.2892
+scGPT - INFO - | epoch   9 | 1500/2375 batches | ms/batch 421.63 | loss 0.8699
+scGPT - INFO -   dist 0.0476 | proto 2.7730 | de_rank 0.8480 | dir 1.2647
+scGPT - INFO - | epoch   9 | 1600/2375 batches | ms/batch 420.52 | loss 0.8626
+scGPT - INFO -   dist 0.0500 | proto 2.7392 | de_rank 0.8473 | dir 1.2612
+scGPT - INFO - | epoch   9 | 1700/2375 batches | ms/batch 421.80 | loss 0.8720
+scGPT - INFO -   dist 0.0449 | proto 2.7860 | de_rank 0.8480 | dir 1.2750
+scGPT - INFO - | epoch   9 | 1800/2375 batches | ms/batch 424.72 | loss 0.8685
+scGPT - INFO -   dist 0.0481 | proto 2.7634 | de_rank 0.8439 | dir 1.2891
+scGPT - INFO - | epoch   9 | 1900/2375 batches | ms/batch 421.65 | loss 0.8647
+scGPT - INFO -   dist 0.0497 | proto 2.7459 | de_rank 0.8505 | dir 1.2682
+scGPT - INFO - | epoch   9 | 2000/2375 batches | ms/batch 422.02 | loss 0.8724
+scGPT - INFO -   dist 0.0501 | proto 2.7764 | de_rank 0.8443 | dir 1.2760
+scGPT - INFO - | epoch   9 | 2100/2375 batches | ms/batch 424.87 | loss 0.8648
+scGPT - INFO -   dist 0.0448 | proto 2.7566 | de_rank 0.8484 | dir 1.2785
+scGPT - INFO - | epoch   9 | 2200/2375 batches | ms/batch 425.67 | loss 0.8645
+scGPT - INFO -   dist 0.0484 | proto 2.7487 | de_rank 0.8512 | dir 1.2625
+scGPT - INFO - | epoch   9 | 2300/2375 batches | ms/batch 431.23 | loss 0.8741
+scGPT - INFO -   dist 0.0452 | proto 2.7916 | de_rank 0.8503 | dir 1.2817
+scGPT - INFO - | epoch   9 | time: 5172.83s | loss: 18.5563 | PDS: 0.5294 | DES: 0.2742 | MAE: 1.2890
+scGPT - INFO -   overall_score: 6.23
+scGPT - INFO - | epoch  10 | 100/2375 batches | ms/batch 424.10 | loss 0.8793
+scGPT - INFO -   dist 0.0533 | proto 2.7925 | de_rank 0.8547 | dir 1.2746
+scGPT - INFO - | epoch  10 | 200/2375 batches | ms/batch 417.80 | loss 0.8530
+scGPT - INFO -   dist 0.0395 | proto 2.7247 | de_rank 0.8468 | dir 1.2678
+scGPT - INFO - | epoch  10 | 300/2375 batches | ms/batch 420.50 | loss 0.8666
+scGPT - INFO -   dist 0.0486 | proto 2.7613 | de_rank 0.8416 | dir 1.2589
+scGPT - INFO - | epoch  10 | 400/2375 batches | ms/batch 420.44 | loss 0.8637
+scGPT - INFO -   dist 0.0514 | proto 2.7418 | de_rank 0.8421 | dir 1.2630
+scGPT - INFO - | epoch  10 | 500/2375 batches | ms/batch 419.33 | loss 0.8684
+scGPT - INFO -   dist 0.0538 | proto 2.7550 | de_rank 0.8384 | dir 1.2709
+scGPT - INFO - | epoch  10 | 600/2375 batches | ms/batch 421.17 | loss 0.8674
+scGPT - INFO -   dist 0.0481 | proto 2.7664 | de_rank 0.8431 | dir 1.2539
+scGPT - INFO - | epoch  10 | 700/2375 batches | ms/batch 421.87 | loss 0.8661
+scGPT - INFO -   dist 0.0454 | proto 2.7662 | de_rank 0.8456 | dir 1.2549
+scGPT - INFO - | epoch  10 | 800/2375 batches | ms/batch 423.73 | loss 0.8721
+scGPT - INFO -   dist 0.0490 | proto 2.7757 | de_rank 0.8513 | dir 1.2722
+scGPT - INFO - | epoch  10 | 900/2375 batches | ms/batch 424.55 | loss 0.8722
+scGPT - INFO -   dist 0.0517 | proto 2.7695 | de_rank 0.8479 | dir 1.2799
+scGPT - INFO - | epoch  10 | 1000/2375 batches | ms/batch 425.01 | loss 0.8654
+scGPT - INFO -   dist 0.0488 | proto 2.7520 | de_rank 0.8443 | dir 1.2750
+scGPT - INFO - | epoch  10 | 1100/2375 batches | ms/batch 425.97 | loss 0.8665
+scGPT - INFO -   dist 0.0475 | proto 2.7619 | de_rank 0.8441 | dir 1.2618
+scGPT - INFO - | epoch  10 | 1200/2375 batches | ms/batch 425.68 | loss 0.8610
+scGPT - INFO -   dist 0.0551 | proto 2.7246 | de_rank 0.8362 | dir 1.2645
+scGPT - INFO - | epoch  10 | 1300/2375 batches | ms/batch 425.62 | loss 0.8605
+scGPT - INFO -   dist 0.0488 | proto 2.7333 | de_rank 0.8455 | dir 1.2677
+scGPT - INFO - | epoch  10 | 1400/2375 batches | ms/batch 426.03 | loss 0.8563
+scGPT - INFO -   dist 0.0478 | proto 2.7215 | de_rank 0.8397 | dir 1.2653
+scGPT - INFO - | epoch  10 | 1500/2375 batches | ms/batch 424.41 | loss 0.8632
+scGPT - INFO -   dist 0.0508 | proto 2.7406 | de_rank 0.8395 | dir 1.2731
+scGPT - INFO - | epoch  10 | 1600/2375 batches | ms/batch 426.71 | loss 0.8652
+scGPT - INFO -   dist 0.0516 | proto 2.7441 | de_rank 0.8441 | dir 1.2770
+scGPT - INFO - | epoch  10 | 1700/2375 batches | ms/batch 426.73 | loss 0.8675
+scGPT - INFO -   dist 0.0512 | proto 2.7563 | de_rank 0.8424 | dir 1.2697
+scGPT - INFO - | epoch  10 | 1800/2375 batches | ms/batch 426.40 | loss 0.8609
+scGPT - INFO -   dist 0.0462 | proto 2.7392 | de_rank 0.8458 | dir 1.2755
+scGPT - INFO - | epoch  10 | 1900/2375 batches | ms/batch 426.04 | loss 0.8631
+scGPT - INFO -   dist 0.0467 | proto 2.7488 | de_rank 0.8465 | dir 1.2639
+scGPT - INFO - | epoch  10 | 2000/2375 batches | ms/batch 425.51 | loss 0.8631
+scGPT - INFO -   dist 0.0498 | proto 2.7412 | de_rank 0.8398 | dir 1.2787
+scGPT - INFO - | epoch  10 | 2100/2375 batches | ms/batch 427.26 | loss 0.8696
+scGPT - INFO -   dist 0.0505 | proto 2.7646 | de_rank 0.8428 | dir 1.2765
+scGPT - INFO - | epoch  10 | 2200/2375 batches | ms/batch 427.20 | loss 0.8610
+scGPT - INFO -   dist 0.0488 | proto 2.7371 | de_rank 0.8460 | dir 1.2566
+scGPT - INFO - | epoch  10 | 2300/2375 batches | ms/batch 428.33 | loss 0.8570
+scGPT - INFO -   dist 0.0456 | proto 2.7275 | de_rank 0.8401 | dir 1.2757
+scGPT - INFO - | epoch  10 | time: 5179.16s | loss: 18.5283 | PDS: 0.5294 | DES: 0.2758 | MAE: 1.2932
+scGPT - INFO -   overall_score: 6.29
+scGPT - INFO -   -> New best (overall_score=6.29)
+scGPT - INFO - | epoch  11 | 100/2375 batches | ms/batch 418.74 | loss 0.8677
+scGPT - INFO -   dist 0.0497 | proto 2.7546 | de_rank 0.8528 | dir 1.2783
+scGPT - INFO - | epoch  11 | 200/2375 batches | ms/batch 414.11 | loss 0.8592
+scGPT - INFO -   dist 0.0537 | proto 2.7197 | de_rank 0.8375 | dir 1.2660
+scGPT - INFO - | epoch  11 | 300/2375 batches | ms/batch 418.95 | loss 0.8676
+scGPT - INFO -   dist 0.0513 | proto 2.7522 | de_rank 0.8424 | dir 1.2904
+scGPT - INFO - | epoch  11 | 400/2375 batches | ms/batch 421.30 | loss 0.8775
+scGPT - INFO -   dist 0.0558 | proto 2.7817 | de_rank 0.8435 | dir 1.2851
+scGPT - INFO - | epoch  11 | 500/2375 batches | ms/batch 421.64 | loss 0.8662
+scGPT - INFO -   dist 0.0474 | proto 2.7607 | de_rank 0.8435 | dir 1.2654
+scGPT - INFO - | epoch  11 | 600/2375 batches | ms/batch 423.10 | loss 0.8678
+scGPT - INFO -   dist 0.0500 | proto 2.7600 | de_rank 0.8418 | dir 1.2720
+scGPT - INFO - | epoch  11 | 700/2375 batches | ms/batch 423.21 | loss 0.8614
+scGPT - INFO -   dist 0.0468 | proto 2.7418 | de_rank 0.8419 | dir 1.2743
+scGPT - INFO - | epoch  11 | 800/2375 batches | ms/batch 420.48 | loss 0.8604
+scGPT - INFO -   dist 0.0425 | proto 2.7495 | de_rank 0.8427 | dir 1.2650
+scGPT - INFO - | epoch  11 | 900/2375 batches | ms/batch 423.31 | loss 0.8686
+scGPT - INFO -   dist 0.0482 | proto 2.7660 | de_rank 0.8348 | dir 1.2940
+scGPT - INFO - | epoch  11 | 1000/2375 batches | ms/batch 423.64 | loss 0.8633
+scGPT - INFO -   dist 0.0493 | proto 2.7413 | de_rank 0.8457 | dir 1.2766
+scGPT - INFO - | epoch  11 | 1100/2375 batches | ms/batch 425.56 | loss 0.8660
+scGPT - INFO -   dist 0.0486 | proto 2.7567 | de_rank 0.8377 | dir 1.2766
+scGPT - INFO - | epoch  11 | 1200/2375 batches | ms/batch 426.84 | loss 0.8562
+scGPT - INFO -   dist 0.0474 | proto 2.7205 | de_rank 0.8416 | dir 1.2706
+scGPT - INFO - | epoch  11 | 1300/2375 batches | ms/batch 424.66 | loss 0.8802
+scGPT - INFO -   dist 0.0513 | proto 2.8043 | de_rank 0.8417 | dir 1.2824
+scGPT - INFO - | epoch  11 | 1400/2375 batches | ms/batch 425.32 | loss 0.8629
+scGPT - INFO -   dist 0.0510 | proto 2.7397 | de_rank 0.8412 | dir 1.2648
+scGPT - INFO - | epoch  11 | 1500/2375 batches | ms/batch 426.64 | loss 0.8622
+scGPT - INFO -   dist 0.0486 | proto 2.7395 | de_rank 0.8476 | dir 1.2667
+scGPT - INFO - | epoch  11 | 1600/2375 batches | ms/batch 427.98 | loss 0.8738
+scGPT - INFO -   dist 0.0518 | proto 2.7794 | de_rank 0.8403 | dir 1.2766
+scGPT - INFO - | epoch  11 | 1700/2375 batches | ms/batch 425.64 | loss 0.8776
+scGPT - INFO -   dist 0.0479 | proto 2.8032 | de_rank 0.8413 | dir 1.2776
+scGPT - INFO - | epoch  11 | 1800/2375 batches | ms/batch 426.80 | loss 0.8592
+scGPT - INFO -   dist 0.0492 | proto 2.7313 | de_rank 0.8410 | dir 1.2540
+scGPT - INFO - | epoch  11 | 1900/2375 batches | ms/batch 426.79 | loss 0.8606
+scGPT - INFO -   dist 0.0477 | proto 2.7391 | de_rank 0.8432 | dir 1.2568
+scGPT - INFO - | epoch  11 | 2000/2375 batches | ms/batch 428.36 | loss 0.8610
+scGPT - INFO -   dist 0.0528 | proto 2.7279 | de_rank 0.8393 | dir 1.2674
+scGPT - INFO - | epoch  11 | 2100/2375 batches | ms/batch 428.94 | loss 0.8619
+scGPT - INFO -   dist 0.0462 | proto 2.7478 | de_rank 0.8400 | dir 1.2649
+scGPT - INFO - | epoch  11 | 2200/2375 batches | ms/batch 427.13 | loss 0.8564
+scGPT - INFO -   dist 0.0506 | proto 2.7173 | de_rank 0.8361 | dir 1.2623
+scGPT - INFO - | epoch  11 | 2300/2375 batches | ms/batch 426.02 | loss 0.8614
+scGPT - INFO -   dist 0.0509 | proto 2.7361 | de_rank 0.8365 | dir 1.2634
+scGPT - INFO - | epoch  11 | time: 5175.61s | loss: 18.5287 | PDS: 0.5294 | DES: 0.2724 | MAE: 1.2881
+scGPT - INFO -   overall_score: 6.16
+scGPT - INFO - | epoch  12 | 100/2375 batches | ms/batch 420.99 | loss 0.8716
+scGPT - INFO -   dist 0.0454 | proto 2.7831 | de_rank 0.8459 | dir 1.2788
+scGPT - INFO - | epoch  12 | 200/2375 batches | ms/batch 417.40 | loss 0.8555
+scGPT - INFO -   dist 0.0474 | proto 2.7194 | de_rank 0.8385 | dir 1.2673
+scGPT - INFO - | epoch  12 | 300/2375 batches | ms/batch 418.56 | loss 0.8621
+scGPT - INFO -   dist 0.0463 | proto 2.7480 | de_rank 0.8363 | dir 1.2736
+scGPT - INFO - | epoch  12 | 400/2375 batches | ms/batch 417.45 | loss 0.8638
+scGPT - INFO -   dist 0.0479 | proto 2.7497 | de_rank 0.8400 | dir 1.2723
+scGPT - INFO - | epoch  12 | 500/2375 batches | ms/batch 419.39 | loss 0.8658
+scGPT - INFO -   dist 0.0525 | proto 2.7502 | de_rank 0.8369 | dir 1.2602
+scGPT - INFO - | epoch  12 | 600/2375 batches | ms/batch 419.71 | loss 0.8671
+scGPT - INFO -   dist 0.0507 | proto 2.7583 | de_rank 0.8350 | dir 1.2724
+scGPT - INFO - | epoch  12 | 700/2375 batches | ms/batch 420.82 | loss 0.8669
+scGPT - INFO -   dist 0.0490 | proto 2.7629 | de_rank 0.8291 | dir 1.2786
+scGPT - INFO - | epoch  12 | 800/2375 batches | ms/batch 421.08 | loss 0.8614
+scGPT - INFO -   dist 0.0470 | proto 2.7441 | de_rank 0.8361 | dir 1.2723
+scGPT - INFO - | epoch  12 | 900/2375 batches | ms/batch 418.14 | loss 0.8559
+scGPT - INFO -   dist 0.0428 | proto 2.7323 | de_rank 0.8368 | dir 1.2688
+scGPT - INFO - | epoch  12 | 1000/2375 batches | ms/batch 419.06 | loss 0.8631
+scGPT - INFO -   dist 0.0523 | proto 2.7363 | de_rank 0.8429 | dir 1.2673
+scGPT - INFO - | epoch  12 | 1100/2375 batches | ms/batch 421.86 | loss 0.8683
+scGPT - INFO -   dist 0.0499 | proto 2.7657 | de_rank 0.8319 | dir 1.2743
+scGPT - INFO - | epoch  12 | 1200/2375 batches | ms/batch 425.58 | loss 0.8578
+scGPT - INFO -   dist 0.0498 | proto 2.7271 | de_rank 0.8337 | dir 1.2552
+scGPT - INFO - | epoch  12 | 1300/2375 batches | ms/batch 424.90 | loss 0.8582
+scGPT - INFO -   dist 0.0440 | proto 2.7380 | de_rank 0.8400 | dir 1.2658
+scGPT - INFO - | epoch  12 | 1400/2375 batches | ms/batch 424.34 | loss 0.8677
+scGPT - INFO -   dist 0.0462 | proto 2.7737 | de_rank 0.8406 | dir 1.2495
+scGPT - INFO - | epoch  12 | 1500/2375 batches | ms/batch 424.02 | loss 0.8574
+scGPT - INFO -   dist 0.0506 | proto 2.7197 | de_rank 0.8366 | dir 1.2689
+scGPT - INFO - | epoch  12 | 1600/2375 batches | ms/batch 423.81 | loss 0.8577
+scGPT - INFO -   dist 0.0448 | proto 2.7361 | de_rank 0.8428 | dir 1.2498
+scGPT - INFO - | epoch  12 | 1700/2375 batches | ms/batch 423.02 | loss 0.8638
+scGPT - INFO -   dist 0.0493 | proto 2.7470 | de_rank 0.8441 | dir 1.2606
+scGPT - INFO - | epoch  12 | 1800/2375 batches | ms/batch 425.10 | loss 0.8642
+scGPT - INFO -   dist 0.0506 | proto 2.7483 | de_rank 0.8365 | dir 1.2630
+scGPT - INFO - | epoch  12 | 1900/2375 batches | ms/batch 424.71 | loss 0.8569
+scGPT - INFO -   dist 0.0488 | proto 2.7236 | de_rank 0.8378 | dir 1.2598
+scGPT - INFO - | epoch  12 | 2000/2375 batches | ms/batch 424.54 | loss 0.8599
+scGPT - INFO -   dist 0.0556 | proto 2.7190 | de_rank 0.8329 | dir 1.2694
+scGPT - INFO - | epoch  12 | 2100/2375 batches | ms/batch 428.32 | loss 0.8757
+scGPT - INFO -   dist 0.0486 | proto 2.7997 | de_rank 0.8392 | dir 1.2532
+scGPT - INFO - | epoch  12 | 2200/2375 batches | ms/batch 428.21 | loss 0.8546
+scGPT - INFO -   dist 0.0493 | proto 2.7118 | de_rank 0.8378 | dir 1.2651
+scGPT - INFO - | epoch  12 | 2300/2375 batches | ms/batch 427.07 | loss 0.8677
+scGPT - INFO -   dist 0.0437 | proto 2.7785 | de_rank 0.8356 | dir 1.2663
+scGPT - INFO - | epoch  12 | time: 5185.13s | loss: 18.4876 | PDS: 0.5294 | DES: 0.2715 | MAE: 1.2863
+scGPT - INFO -   overall_score: 6.12
+scGPT - INFO - | epoch  13 | 100/2375 batches | ms/batch 422.99 | loss 0.8686
+scGPT - INFO -   dist 0.0469 | proto 2.7675 | de_rank 0.8437 | dir 1.2835
+scGPT - INFO - | epoch  13 | 200/2375 batches | ms/batch 418.58 | loss 0.8602
+scGPT - INFO -   dist 0.0537 | proto 2.7270 | de_rank 0.8303 | dir 1.2637
+scGPT - INFO - | epoch  13 | 300/2375 batches | ms/batch 421.34 | loss 0.8608
+scGPT - INFO -   dist 0.0505 | proto 2.7363 | de_rank 0.8356 | dir 1.2563
+scGPT - INFO - | epoch  13 | 400/2375 batches | ms/batch 419.31 | loss 0.8624
+scGPT - INFO -   dist 0.0511 | proto 2.7435 | de_rank 0.8317 | dir 1.2554
+scGPT - INFO - | epoch  13 | 500/2375 batches | ms/batch 420.50 | loss 0.8613
+scGPT - INFO -   dist 0.0501 | proto 2.7418 | de_rank 0.8336 | dir 1.2488
+scGPT - INFO - | epoch  13 | 600/2375 batches | ms/batch 424.62 | loss 0.8656
+scGPT - INFO -   dist 0.0527 | proto 2.7508 | de_rank 0.8335 | dir 1.2588
+scGPT - INFO - | epoch  13 | 700/2375 batches | ms/batch 425.59 | loss 0.8633
+scGPT - INFO -   dist 0.0466 | proto 2.7535 | de_rank 0.8342 | dir 1.2704
+scGPT - INFO - | epoch  13 | 800/2375 batches | ms/batch 423.00 | loss 0.8652
+scGPT - INFO -   dist 0.0485 | proto 2.7572 | de_rank 0.8363 | dir 1.2643
+scGPT - INFO - | epoch  13 | 900/2375 batches | ms/batch 423.04 | loss 0.8631
+scGPT - INFO -   dist 0.0515 | proto 2.7427 | de_rank 0.8386 | dir 1.2526
+scGPT - INFO - | epoch  13 | 1000/2375 batches | ms/batch 424.77 | loss 0.8572
+scGPT - INFO -   dist 0.0472 | proto 2.7282 | de_rank 0.8374 | dir 1.2612
+scGPT - INFO - | epoch  13 | 1100/2375 batches | ms/batch 426.53 | loss 0.8566
+scGPT - INFO -   dist 0.0462 | proto 2.7301 | de_rank 0.8388 | dir 1.2496
+scGPT - INFO - | epoch  13 | 1200/2375 batches | ms/batch 426.20 | loss 0.8747
+scGPT - INFO -   dist 0.0426 | proto 2.8077 | de_rank 0.8310 | dir 1.2834
+scGPT - INFO - | epoch  13 | 1300/2375 batches | ms/batch 425.52 | loss 0.8590
+scGPT - INFO -   dist 0.0431 | proto 2.7437 | de_rank 0.8406 | dir 1.2622
+scGPT - INFO - | epoch  13 | 1400/2375 batches | ms/batch 426.16 | loss 0.8644
+scGPT - INFO -   dist 0.0473 | proto 2.7539 | de_rank 0.8319 | dir 1.2884
+scGPT - INFO - | epoch  13 | 1500/2375 batches | ms/batch 425.97 | loss 0.8592
+scGPT - INFO -   dist 0.0464 | proto 2.7400 | de_rank 0.8329 | dir 1.2620
+scGPT - INFO - | epoch  13 | 1600/2375 batches | ms/batch 429.19 | loss 0.8542
+scGPT - INFO -   dist 0.0447 | proto 2.7272 | de_rank 0.8255 | dir 1.2609
+scGPT - INFO - | epoch  13 | 1700/2375 batches | ms/batch 429.70 | loss 0.8574
+scGPT - INFO -   dist 0.0436 | proto 2.7420 | de_rank 0.8291 | dir 1.2577
+scGPT - INFO - | epoch  13 | 1800/2375 batches | ms/batch 429.00 | loss 0.8596
+scGPT - INFO -   dist 0.0477 | proto 2.7379 | de_rank 0.8318 | dir 1.2672
+scGPT - INFO - | epoch  13 | 1900/2375 batches | ms/batch 427.71 | loss 0.8641
+scGPT - INFO -   dist 0.0531 | proto 2.7412 | de_rank 0.8302 | dir 1.2775
+scGPT - INFO - | epoch  13 | 2000/2375 batches | ms/batch 426.52 | loss 0.8508
+scGPT - INFO -   dist 0.0498 | proto 2.6977 | de_rank 0.8297 | dir 1.2700
+scGPT - INFO - | epoch  13 | 2100/2375 batches | ms/batch 425.35 | loss 0.8624
+scGPT - INFO -   dist 0.0562 | proto 2.7320 | de_rank 0.8289 | dir 1.2563
+scGPT - INFO - | epoch  13 | 2200/2375 batches | ms/batch 424.71 | loss 0.8602
+scGPT - INFO -   dist 0.0483 | proto 2.7383 | de_rank 0.8290 | dir 1.2738
+scGPT - INFO - | epoch  13 | 2300/2375 batches | ms/batch 423.00 | loss 0.8600
+scGPT - INFO -   dist 0.0431 | proto 2.7488 | de_rank 0.8346 | dir 1.2692
+scGPT - INFO - | epoch  13 | time: 5160.97s | loss: 18.4790 | PDS: 0.5294 | DES: 0.2730 | MAE: 1.2886
+scGPT - INFO -   overall_score: 6.18
+scGPT - INFO - | epoch  14 | 100/2375 batches | ms/batch 426.03 | loss 0.8723
+scGPT - INFO -   dist 0.0517 | proto 2.7750 | de_rank 0.8392 | dir 1.2729
+scGPT - INFO - | epoch  14 | 200/2375 batches | ms/batch 418.79 | loss 0.8466
+scGPT - INFO -   dist 0.0462 | proto 2.6901 | de_rank 0.8301 | dir 1.2668
+scGPT - INFO - | epoch  14 | 300/2375 batches | ms/batch 420.24 | loss 0.8651
+scGPT - INFO -   dist 0.0450 | proto 2.7660 | de_rank 0.8348 | dir 1.2627
+scGPT - INFO - | epoch  14 | 400/2375 batches | ms/batch 417.80 | loss 0.8623
+scGPT - INFO -   dist 0.0543 | proto 2.7327 | de_rank 0.8318 | dir 1.2672
+scGPT - INFO - | epoch  14 | 500/2375 batches | ms/batch 420.14 | loss 0.8634
+scGPT - INFO -   dist 0.0537 | proto 2.7382 | de_rank 0.8359 | dir 1.2601
+scGPT - INFO - | epoch  14 | 600/2375 batches | ms/batch 420.91 | loss 0.8599
+scGPT - INFO -   dist 0.0451 | proto 2.7481 | de_rank 0.8276 | dir 1.2616
+scGPT - INFO - | epoch  14 | 700/2375 batches | ms/batch 420.55 | loss 0.8707
+scGPT - INFO -   dist 0.0475 | proto 2.7827 | de_rank 0.8299 | dir 1.2709
+scGPT - INFO - | epoch  14 | 800/2375 batches | ms/batch 425.95 | loss 0.8545
+scGPT - INFO -   dist 0.0451 | proto 2.7248 | de_rank 0.8346 | dir 1.2555
+scGPT - INFO - | epoch  14 | 900/2375 batches | ms/batch 425.40 | loss 0.8614
+scGPT - INFO -   dist 0.0495 | proto 2.7441 | de_rank 0.8292 | dir 1.2547
+scGPT - INFO - | epoch  14 | 1000/2375 batches | ms/batch 424.86 | loss 0.8564
+scGPT - INFO -   dist 0.0482 | proto 2.7278 | de_rank 0.8315 | dir 1.2484
+scGPT - INFO - | epoch  14 | 1100/2375 batches | ms/batch 424.66 | loss 0.8615
+scGPT - INFO -   dist 0.0518 | proto 2.7381 | de_rank 0.8317 | dir 1.2537
+scGPT - INFO - | epoch  14 | 1200/2375 batches | ms/batch 424.69 | loss 0.8573
+scGPT - INFO -   dist 0.0462 | proto 2.7320 | de_rank 0.8327 | dir 1.2665
+scGPT - INFO - | epoch  14 | 1300/2375 batches | ms/batch 424.42 | loss 0.8537
+scGPT - INFO -   dist 0.0463 | proto 2.7218 | de_rank 0.8296 | dir 1.2514
+scGPT - INFO - | epoch  14 | 1400/2375 batches | ms/batch 424.86 | loss 0.8616
+scGPT - INFO -   dist 0.0525 | proto 2.7368 | de_rank 0.8279 | dir 1.2622
+scGPT - INFO - | epoch  14 | 1500/2375 batches | ms/batch 424.52 | loss 0.8552
+scGPT - INFO -   dist 0.0457 | proto 2.7265 | de_rank 0.8294 | dir 1.2638
+scGPT - INFO - | epoch  14 | 1600/2375 batches | ms/batch 425.36 | loss 0.8603
+scGPT - INFO -   dist 0.0492 | proto 2.7396 | de_rank 0.8228 | dir 1.2722
+scGPT - INFO - | epoch  14 | 1700/2375 batches | ms/batch 428.23 | loss 0.8550
+scGPT - INFO -   dist 0.0506 | proto 2.7141 | de_rank 0.8270 | dir 1.2678
+scGPT - INFO - | epoch  14 | 1800/2375 batches | ms/batch 427.89 | loss 0.8712
+scGPT - INFO -   dist 0.0509 | proto 2.7788 | de_rank 0.8288 | dir 1.2609
+scGPT - INFO - | epoch  14 | 1900/2375 batches | ms/batch 426.36 | loss 0.8676
+scGPT - INFO -   dist 0.0557 | proto 2.7558 | de_rank 0.8227 | dir 1.2588
+scGPT - INFO - | epoch  14 | 2000/2375 batches | ms/batch 428.34 | loss 0.8589
+scGPT - INFO -   dist 0.0476 | proto 2.7389 | de_rank 0.8257 | dir 1.2623
+scGPT - INFO - | epoch  14 | 2100/2375 batches | ms/batch 428.01 | loss 0.8606
+scGPT - INFO -   dist 0.0504 | proto 2.7372 | de_rank 0.8303 | dir 1.2606
+scGPT - INFO - | epoch  14 | 2200/2375 batches | ms/batch 423.91 | loss 0.8640
+scGPT - INFO -   dist 0.0472 | proto 2.7589 | de_rank 0.8318 | dir 1.2566
+scGPT - INFO - | epoch  14 | 2300/2375 batches | ms/batch 424.49 | loss 0.8637
+scGPT - INFO -   dist 0.0488 | proto 2.7568 | de_rank 0.8221 | dir 1.2610
