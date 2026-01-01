@@ -55,7 +55,7 @@ echo "=============================================="
 
 echo "-> Merging H5AD shards"
 python src/data/tahoe/merge_tahoe_h5ad.py \
-    --input-glob "data/tahoe_mulGene_52drug/h5ad/*.h5ad" \
+    --input-glob "data/tahoe/shards/*.h5ad" \
     --output "data/tahoe/tahoe.h5ad"
 
 echo "=============================================="
