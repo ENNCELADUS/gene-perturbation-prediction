@@ -28,7 +28,7 @@ model:
 # Training
 training:
   epochs: 200
-  batch_size: 64
+  batch_size: 32
   head_learning_rate: 1.0e-4
   backbone_learning_rate: 1.0e-5
   weight_decay: 0.01
