@@ -30,8 +30,8 @@ def parse_args():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        required=True,
-        help="Finetuned gene-score model checkpoint",
+        default=None,
+        help="Finetuned gene-score model checkpoint (overrides config)",
     )
     parser.add_argument(
         "--output",
@@ -207,6 +207,12 @@ def main():
 
     test_conditions = dataset.test_conditions
     print(f"  - Test conditions: {len(test_conditions)}")
+
+    if args.checkpoint is None:
+        base_dir = config.get("logging", {}).get("output_dir", "results/gene_score")
+        args.checkpoint = eval_config.get(
+            "checkpoint_path", str(Path(base_dir) / "best_model.pt")
+        )
 
     print("\n[2/4] Loading model...")
     pretrained_dir = Path(config["model"].get("pretrained_dir", "model/scGPT"))
