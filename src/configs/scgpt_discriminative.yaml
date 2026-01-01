@@ -41,6 +41,8 @@ training:
   sample_weight_eps: 1.0
   weighted_samples_per_replica: null
   sampling_seed: 0
+  control_chunk_size: 0
+  control_no_grad: true
   balanced_sampling_n_conditions: 8
   balanced_sampling_n_cells: 4
   early_stopping_patience: 10

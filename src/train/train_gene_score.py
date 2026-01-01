@@ -385,6 +385,10 @@ def train_epoch(
                 control_values=control_values,
                 control_padding_mask=control_padding_mask,
                 control_counts=control_counts,
+                control_chunk_size=config.get("training", {}).get(
+                    "control_chunk_size", 0
+                ),
+                control_no_grad=config.get("training", {}).get("control_no_grad", True),
             )
             loss, loss_items = compute_loss(
                 logits,
@@ -459,6 +463,12 @@ def validate(
                     control_values=control_values,
                     control_padding_mask=control_padding_mask,
                     control_counts=control_counts,
+                    control_chunk_size=config.get("training", {}).get(
+                        "control_chunk_size", 0
+                    ),
+                    control_no_grad=config.get("training", {}).get(
+                        "control_no_grad", True
+                    ),
                 )
                 loss, _ = compute_loss(
                     logits,
