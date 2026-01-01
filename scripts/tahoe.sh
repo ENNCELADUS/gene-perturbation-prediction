@@ -19,8 +19,6 @@ conda activate vcc
 
 set -euo pipefail
 
-mkdir -p logs/scgpt
-
 detect_num_gpus() {
     if [[ -n "${SLURM_GPUS_ON_NODE:-}" ]]; then
         echo "$SLURM_GPUS_ON_NODE"
@@ -49,13 +47,29 @@ run_ddp() {
 }
 
 echo "=============================================="
-echo "STEP1: Data Preparation"
+echo "STEP1: Tahoe Raw Parquet -> H5AD"
+echo "=============================================="
+
+# echo "-> Converting parquet shards to per-file H5AD"
+# python src/data/tahoe/convert_tahoe_to_h5ad.py
+
+echo "-> Merging H5AD shards"
+python src/data/tahoe/merge_tahoe_h5ad.py \
+    --input-glob "data/tahoe_mulGene_52drug/h5ad/*.h5ad" \
+    --output "data/tahoe/tahoe.h5ad"
+
+echo "=============================================="
+echo "STEP2: Preprocess"
 echo "=============================================="
 
 echo "-> Normalizing and log1p preprocessing"
 python src/data/tahoe/preprocess_tahoe.py \
     --input "data/tahoe/tahoe.h5ad" \
     --output "data/processed/tahoe/tahoe_log1p.h5ad"
+
+echo "=============================================="
+echo "STEP3: Split"
+echo "=============================================="
 
 echo "-> Creating drug-based train/val/test split"
 python -m src.data.tahoe.tahoe_dataset \

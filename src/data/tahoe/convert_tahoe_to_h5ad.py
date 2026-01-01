@@ -3,6 +3,7 @@
 
 import glob
 from pathlib import Path
+from typing import Dict, Tuple
 
 import anndata as ad
 import numpy as np
@@ -25,6 +26,18 @@ def build_gene_vocabulary(files: list[str]) -> dict[int, int]:
 
     sorted_genes = sorted(all_genes)
     return {g: i for i, g in enumerate(sorted_genes)}
+
+
+def load_gene_metadata(path: Path) -> Tuple[Dict[int, str], Dict[int, str]]:
+    """Load Tahoe gene metadata (token_id -> gene_symbol / ensembl_id)."""
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Gene metadata not found: {path} (required for Tahoe gene mapping)"
+        )
+    df = pd.read_csv(path, usecols=["gene_symbol", "ensembl_id", "token_id"])
+    token_to_symbol = dict(zip(df["token_id"].astype(int), df["gene_symbol"]))
+    token_to_ensembl = dict(zip(df["token_id"].astype(int), df["ensembl_id"]))
+    return token_to_symbol, token_to_ensembl
 
 
 def process_parquet(
@@ -87,6 +100,7 @@ def main():
     data_dir = Path("data/tahoe_mulGene_52drug")
     output_dir = data_dir / "h5ad"
     output_dir.mkdir(parents=True, exist_ok=True)
+    gene_metadata_path = Path("data/tahoe/gene_metadata.csv")
 
     files = sorted(glob.glob(str(data_dir / "single_target_*.parquet")))
     print(f"Found {len(files)} parquet files")
@@ -97,9 +111,20 @@ def main():
     n_genes = len(gene_to_idx)
     print(f"Vocabulary size: {n_genes} genes")
 
+    token_to_symbol, token_to_ensembl = load_gene_metadata(gene_metadata_path)
+
     # Step 2: Build var DataFrame once
     idx_to_gene = {v: k for k, v in gene_to_idx.items()}
-    var = pd.DataFrame({"gene_idx": [idx_to_gene[i] for i in range(n_genes)]})
+    gene_idx = [idx_to_gene[i] for i in range(n_genes)]
+    gene_symbols = [token_to_symbol.get(tid, f"token_{tid}") for tid in gene_idx]
+    gene_ensembl = [token_to_ensembl.get(tid, "") for tid in gene_idx]
+    var = pd.DataFrame(
+        {
+            "gene_idx": gene_idx,
+            "gene_name": gene_symbols,
+            "ensembl_id": gene_ensembl,
+        }
+    )
     var.index = var.index.astype(str)
 
     # Step 3: Process each parquet and save immediately
