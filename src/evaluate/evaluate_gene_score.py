@@ -245,7 +245,11 @@ def main():
     if mask_k > 0:
         print(f"  - Masking {mask_k} genes per query (anti-cheat) enabled")
     target_gene_pool = build_target_gene_pool(dataset.test_conditions)
-    gene_name_to_idx = {g: i for i, g in enumerate(dataset.adata.var_names.tolist())}
+    if "gene_name" in dataset.adata.var.columns:
+        eval_gene_names = dataset.adata.var["gene_name"].tolist()
+    else:
+        eval_gene_names = dataset.adata.var_names.tolist()
+    gene_name_to_idx = {g: i for i, g in enumerate(eval_gene_names)}
     all_scores: List[np.ndarray] = []
     all_targets: List[List[int]] = []
 
