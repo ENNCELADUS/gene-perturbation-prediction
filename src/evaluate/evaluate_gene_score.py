@@ -219,7 +219,7 @@ def main():
 
     print("\n[3/4] Preparing evaluation data...")
     test_dataset = GeneScoreDataset(
-        adata=dataset.test_adata,
+        adata=dataset.adata,
         conditions=test_conditions,
         vocab=model.backbone.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
