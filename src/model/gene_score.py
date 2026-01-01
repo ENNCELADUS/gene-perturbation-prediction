@@ -120,6 +120,10 @@ class GeneScoreModel(nn.Module):
         gene_ids: torch.Tensor,
         values: torch.Tensor,
         padding_mask: torch.Tensor,
+        control_gene_ids: Optional[torch.Tensor] = None,
+        control_values: Optional[torch.Tensor] = None,
+        control_padding_mask: Optional[torch.Tensor] = None,
+        control_counts: Optional[int] = None,
         score_gene_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         outputs = self.backbone.model(
@@ -134,6 +138,38 @@ class GeneScoreModel(nn.Module):
             do_sample=False,
         )
         cell_emb = outputs["cell_emb"]
+        if control_gene_ids is not None:
+            if control_values is None or control_padding_mask is None:
+                raise ValueError(
+                    "control_values and control_padding_mask are required when "
+                    "control_gene_ids is provided."
+                )
+            control_outputs = self.backbone.model(
+                src=control_gene_ids,
+                values=control_values,
+                src_key_padding_mask=control_padding_mask,
+                batch_labels=None,
+                CLS=False,
+                CCE=False,
+                MVC=False,
+                ECS=False,
+                do_sample=False,
+            )
+            control_emb = control_outputs["cell_emb"]
+            batch_size = cell_emb.size(0)
+            if control_counts is None:
+                if control_emb.size(0) % batch_size != 0:
+                    raise ValueError(
+                        "control_counts is required when control batch size is "
+                        "not a multiple of the perturbed batch size."
+                    )
+                controls_per_sample = control_emb.size(0) // batch_size
+            else:
+                controls_per_sample = int(control_counts)
+            control_emb = control_emb.view(batch_size, controls_per_sample, -1)
+            control_mean = control_emb.mean(dim=1)
+            cell_emb = cell_emb - control_mean
+
         score_gene_ids = self._resolve_score_gene_ids(
             score_gene_ids, device=cell_emb.device
         )

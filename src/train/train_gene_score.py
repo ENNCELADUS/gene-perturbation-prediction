@@ -13,6 +13,7 @@ import torch
 from torch.utils.data import DataLoader, Sampler
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.nn.functional as F
 from tqdm import tqdm
 import json
 import yaml
@@ -124,19 +125,142 @@ def build_scheduler(
     return scheduler
 
 
+def sample_negatives(
+    logits_row: torch.Tensor,
+    neg_idx: torch.Tensor,
+    num_negatives: int,
+    hard_negative_ratio: float,
+) -> torch.Tensor:
+    """Sample negatives with a mix of hard and random choices."""
+    if num_negatives <= 0 or neg_idx.numel() <= num_negatives:
+        return neg_idx
+
+    hard_k = int(num_negatives * hard_negative_ratio)
+    hard_k = min(hard_k, neg_idx.numel())
+    rand_k = max(num_negatives - hard_k, 0)
+
+    hard_rel = None
+    if hard_k > 0:
+        neg_scores = logits_row[neg_idx]
+        hard_rel = torch.topk(neg_scores, k=hard_k).indices
+        hard_idx = neg_idx[hard_rel]
+    else:
+        hard_idx = torch.empty(0, dtype=neg_idx.dtype, device=neg_idx.device)
+
+    if rand_k > 0:
+        if hard_rel is not None and neg_idx.numel() > hard_k:
+            mask = torch.ones(
+                neg_idx.numel(), dtype=torch.bool, device=neg_idx.device
+            )
+            mask[hard_rel] = False
+            remaining = neg_idx[mask]
+        else:
+            remaining = neg_idx
+        if remaining.numel() == 0:
+            remaining = neg_idx
+        if rand_k <= remaining.numel():
+            perm = torch.randperm(remaining.numel(), device=neg_idx.device)[:rand_k]
+            rand_idx = remaining[perm]
+        else:
+            rand_idx = remaining[
+                torch.randint(
+                    0, remaining.numel(), (rand_k,), device=neg_idx.device
+                )
+            ]
+    else:
+        rand_idx = torch.empty(0, dtype=neg_idx.dtype, device=neg_idx.device)
+
+    return torch.cat([hard_idx, rand_idx], dim=0)
+
+
+def compute_loss(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    config: dict,
+) -> tuple[torch.Tensor, dict]:
+    """Compute weighted ranking + BCE loss."""
+    training_cfg = config.get("training", {})
+    ranking_weight = training_cfg.get("ranking_loss_weight", 1.0)
+    bce_weight = training_cfg.get("bce_loss_weight", 0.0)
+    num_negatives = training_cfg.get("ranking_num_negatives", 128)
+    margin = training_cfg.get("ranking_margin", 0.0)
+    hard_negative_ratio = training_cfg.get("ranking_hard_negative_ratio", 0.5)
+
+    loss_items: dict[str, float] = {}
+    total_loss = torch.tensor(0.0, device=logits.device)
+    ranking_losses: list[torch.Tensor] = []
+    bce_losses: list[torch.Tensor] = []
+
+    batch_size = logits.size(0)
+    for i in range(batch_size):
+        pos_idx = (targets[i] > 0).nonzero(as_tuple=False).squeeze(1)
+        if pos_idx.numel() == 0:
+            continue
+        neg_idx = (targets[i] == 0).nonzero(as_tuple=False).squeeze(1)
+        if neg_idx.numel() == 0:
+            continue
+
+        neg_sample = sample_negatives(
+            logits[i], neg_idx, num_negatives, hard_negative_ratio
+        )
+
+        if ranking_weight > 0:
+            pos_scores = logits[i, pos_idx]
+            neg_scores = logits[i, neg_sample]
+            if margin > 0:
+                pairwise = F.relu(
+                    margin - (pos_scores.unsqueeze(1) - neg_scores.unsqueeze(0))
+                )
+            else:
+                pairwise = F.softplus(
+                    neg_scores.unsqueeze(0) - pos_scores.unsqueeze(1)
+                )
+            ranking_losses.append(pairwise.mean())
+
+        if bce_weight > 0:
+            selected = torch.cat([pos_idx, neg_sample], dim=0)
+            selected = torch.unique(selected)
+            bce_losses.append(
+                F.binary_cross_entropy_with_logits(
+                    logits[i, selected], targets[i, selected]
+                )
+            )
+
+    if ranking_weight > 0:
+        ranking_loss = (
+            torch.stack(ranking_losses).mean()
+            if ranking_losses
+            else torch.tensor(0.0, device=logits.device)
+        )
+        total_loss = total_loss + ranking_weight * ranking_loss
+        loss_items["ranking_loss"] = ranking_loss.item()
+
+    if bce_weight > 0:
+        bce_loss = (
+            torch.stack(bce_losses).mean()
+            if bce_losses
+            else torch.tensor(0.0, device=logits.device)
+        )
+        total_loss = total_loss + bce_weight * bce_loss
+        loss_items["bce_loss"] = bce_loss.item()
+
+    loss_items["total_loss"] = total_loss.item()
+    return total_loss, loss_items
+
+
 def train_epoch(
     model: torch.nn.Module,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler._LRScheduler,
     device: str,
+    config: dict,
     scaler: torch.cuda.amp.GradScaler | None = None,
     sampler: DistributedSampler | None = None,
     max_steps: int | None = None,
     epoch: int = 0,
 ) -> Dict[str, float]:
     model.train()
-    loss_fn = torch.nn.BCEWithLogitsLoss()
     use_amp = scaler is not None and scaler.is_enabled()
 
     total_loss = 0.0
@@ -153,11 +277,23 @@ def train_epoch(
         genes = batch["genes"].to(device)
         values = batch["values"].to(device)
         padding_mask = batch["padding_mask"].to(device)
+        control_genes = batch["control_genes"].to(device)
+        control_values = batch["control_values"].to(device)
+        control_padding_mask = batch["control_padding_mask"].to(device)
+        control_counts = batch["control_counts"]
         targets = batch["targets"].to(device)
 
         with torch.cuda.amp.autocast(enabled=use_amp):
-            logits = model(genes, values, padding_mask)
-            loss = loss_fn(logits, targets)
+            logits = model(
+                genes,
+                values,
+                padding_mask,
+                control_gene_ids=control_genes,
+                control_values=control_values,
+                control_padding_mask=control_padding_mask,
+                control_counts=control_counts,
+            )
+            loss, loss_items = compute_loss(logits, targets, config)
 
         optimizer.zero_grad()
         if scaler is None:
@@ -175,12 +311,18 @@ def train_epoch(
         total_loss += loss.item()
         num_batches += 1
 
+        postfix = {
+            "loss": f"{loss.item():.4f}",
+            "avg_loss": f"{total_loss / num_batches:.4f}",
+            "lr": f"{scheduler.get_last_lr()[0]:.2e}",
+        }
+        if "ranking_loss" in loss_items:
+            postfix["rank"] = f"{loss_items['ranking_loss']:.4f}"
+        if "bce_loss" in loss_items:
+            postfix["bce"] = f"{loss_items['bce_loss']:.4f}"
+
         pbar.set_postfix(
-            {
-                "loss": f"{loss.item():.4f}",
-                "avg_loss": f"{total_loss / num_batches:.4f}",
-                "lr": f"{scheduler.get_last_lr()[0]:.2e}",
-            }
+            postfix
         )
 
     return {"train_loss": total_loss / num_batches if num_batches else 0.0}
@@ -190,10 +332,10 @@ def validate(
     model: torch.nn.Module,
     dataloader: DataLoader,
     device: str,
+    config: dict,
     use_amp: bool = False,
 ) -> Dict[str, float]:
     model.eval()
-    loss_fn = torch.nn.BCEWithLogitsLoss()
 
     total_loss = 0.0
     num_batches = 0
@@ -203,11 +345,23 @@ def validate(
             genes = batch["genes"].to(device)
             values = batch["values"].to(device)
             padding_mask = batch["padding_mask"].to(device)
+            control_genes = batch["control_genes"].to(device)
+            control_values = batch["control_values"].to(device)
+            control_padding_mask = batch["control_padding_mask"].to(device)
+            control_counts = batch["control_counts"]
             targets = batch["targets"].to(device)
 
             with torch.cuda.amp.autocast(enabled=use_amp):
-                logits = model(genes, values, padding_mask)
-                loss = loss_fn(logits, targets)
+                logits = model(
+                    genes,
+                    values,
+                    padding_mask,
+                    control_gene_ids=control_genes,
+                    control_values=control_values,
+                    control_padding_mask=control_padding_mask,
+                    control_counts=control_counts,
+                )
+                loss, _ = compute_loss(logits, targets, config)
 
             total_loss += loss.item()
             num_batches += 1
@@ -288,6 +442,8 @@ def main():
         conditions=dataset.train_conditions,
         vocab=vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
+        match_keys=config["data"].get("control_match_keys"),
+        n_control_samples=config["data"].get("control_n_samples", 8),
     )
 
     val_dataset = GeneScoreDataset(
@@ -295,6 +451,8 @@ def main():
         conditions=dataset.val_conditions,
         vocab=train_dataset.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
+        match_keys=config["data"].get("control_match_keys"),
+        n_control_samples=config["data"].get("control_n_samples", 8),
     )
 
     n_genes = dataset.adata.n_vars
@@ -411,6 +569,7 @@ def main():
             optimizer,
             scheduler,
             device,
+            config,
             scaler=scaler,
             sampler=train_sampler,
             max_steps=args.max_steps,
@@ -419,7 +578,7 @@ def main():
         val_metrics = {"val_loss": float("inf")}
         if is_main:
             val_metrics = validate(
-                model, val_loader, device, use_amp=scaler.is_enabled()
+                model, val_loader, device, config, use_amp=scaler.is_enabled()
             )
 
         if is_main:
