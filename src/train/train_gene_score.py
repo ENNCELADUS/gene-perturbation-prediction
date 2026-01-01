@@ -721,6 +721,7 @@ def main():
             model,
             device_ids=[ddp["local_rank"]] if torch.cuda.is_available() else None,
             output_device=ddp["local_rank"] if torch.cuda.is_available() else None,
+            broadcast_buffers=False,
         )
 
     best_val_loss = float("inf")
@@ -755,8 +756,9 @@ def main():
         )
         val_metrics = {"val_loss": float("inf")}
         if is_main:
+            eval_model = model.module if isinstance(model, DDP) else model
             val_metrics = validate(
-                model,
+                eval_model,
                 val_loader,
                 device,
                 config,
