@@ -223,6 +223,8 @@ def main():
         conditions=test_conditions,
         vocab=model.backbone.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
+        match_keys=config["data"].get("control_match_keys"),
+        n_control_samples=config["data"].get("control_n_samples", 8),
     )
     model.set_score_gene_ids(test_dataset.gene_ids)
     test_loader = DataLoader(
@@ -251,6 +253,10 @@ def main():
         genes = batch["genes"].to(device)
         values = batch["values"].to(device)
         padding_mask = batch["padding_mask"].to(device)
+        control_genes = batch["control_genes"].to(device)
+        control_values = batch["control_values"].to(device)
+        control_padding_mask = batch["control_padding_mask"].to(device)
+        control_counts = batch["control_counts"]
         conditions = batch["conditions"]
 
         if mask_k > 0:
@@ -266,7 +272,15 @@ def main():
 
         with torch.no_grad():
             with torch.cuda.amp.autocast(enabled=use_amp):
-                gene_scores = model(genes, values, padding_mask)  # (batch, n_genes)
+                gene_scores = model(
+                    genes,
+                    values,
+                    padding_mask,
+                    control_gene_ids=control_genes,
+                    control_values=control_values,
+                    control_padding_mask=control_padding_mask,
+                    control_counts=control_counts,
+                )  # (batch, n_genes)
 
         for i, condition in enumerate(conditions):
             target_genes = parse_condition_genes(condition)
