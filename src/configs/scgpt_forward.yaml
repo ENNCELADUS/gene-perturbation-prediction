@@ -68,7 +68,7 @@ retrieval:
   voting_weight: linear       # Voting aggregation: linear (rank-based decay)
 
 # Evaluation Settings
-evaluate:
+evaluation:
   # Metrics to compute (from src/evaluate/metrics.py)
   metrics:
     - top_k_accuracy          # Exact match Hit@K
