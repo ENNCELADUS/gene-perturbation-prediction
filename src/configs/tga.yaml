@@ -21,9 +21,9 @@ baseline:
   use_pseudobulk: true  # Average query cells before scoring
 
 evaluation:
-  top_k_values: [1, 5, 8, 10, 20]
-  mask: 0  # 0=off, K=mask K genes (must include true target genes)
-  output_path: results/tga/eval_results_no_mask.json
+  top_k_values: [1, 5, 8, 10, 20, 40]
+  mask: 10  # 0=off, K=mask K genes (must include true target genes)
+  output_path: results/tga/eval_results_mask10.json
 
 logging:
   output_dir: results/tga

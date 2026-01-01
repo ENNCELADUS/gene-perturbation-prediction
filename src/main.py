@@ -348,7 +348,7 @@ def run_route_b1_eval(config: dict, args) -> dict:
         output_dir = Path(base_dir)
 
     checkpoint = args.checkpoint or str(output_dir / "best_model.pt")
-    eval_config = config.get("evaluate", {})
+    eval_config = config.get("evaluation", {})
     output = eval_config.get("output_path", str(output_dir / "eval_results.json"))
 
     sys.argv = [

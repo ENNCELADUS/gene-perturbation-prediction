@@ -1,0 +1,30 @@
+{
+  "metrics": {
+    "mrr": 0.00022683917997339917,
+    "exact_hit@1": 0.0,
+    "relevant_hit@1": 0.0,
+    "recall@1": 0.0,
+    "ndcg@1": 0.0,
+    "exact_hit@5": 0.0,
+    "relevant_hit@5": 0.0,
+    "recall@5": 0.0,
+    "ndcg@5": 0.0,
+    "exact_hit@8": 0.0,
+    "relevant_hit@8": 0.0,
+    "recall@8": 0.0,
+    "ndcg@8": 0.0,
+    "exact_hit@10": 0.0,
+    "relevant_hit@10": 0.0,
+    "recall@10": 0.0,
+    "ndcg@10": 0.0,
+    "exact_hit@20": 0.0,
+    "relevant_hit@20": 0.0,
+    "recall@20": 0.0,
+    "ndcg@20": 0.0,
+    "exact_hit@40": 0.0,
+    "relevant_hit@40": 0.0,
+    "recall@40": 0.0,
+    "ndcg@40": 0.0
+  },
+  "n_evaluated": 29
+}

@@ -40,7 +40,11 @@ def parse_args():
         help="Output path",
     )
     parser.add_argument(
-        "--top_k", type=int, nargs="+", default=[1, 5, 10, 20], help="Top-K values"
+        "--top_k",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Top-K values (overrides config evaluation.top_k_values)",
     )
     return parser.parse_args()
 
@@ -170,11 +174,16 @@ def build_target_gene_pool(conditions: List[str]) -> List[str]:
 def main():
     args = parse_args()
     config = load_config(args.config)
+    eval_config = config.get("evaluation", {})
+    top_k_values = (
+        args.top_k
+        if args.top_k is not None
+        else eval_config.get("top_k_values", [1, 5, 8, 10, 20, 40])
+    )
 
     if args.output == "results/gene_score/eval_results.json":
-        eval_cfg = config.get("evaluate", {})
-        if eval_cfg.get("output_path"):
-            args.output = eval_cfg["output_path"]
+        if eval_config.get("output_path"):
+            args.output = eval_config["output_path"]
         else:
             logging_cfg = config.get("logging", {})
             base_dir = logging_cfg.get("output_dir", "results/gene_score")
@@ -238,7 +247,6 @@ def main():
     )
 
     print("\n[4/4] Scoring and ranking...")
-    eval_config = config.get("evaluate", {})
     mask_k = eval_config.get("mask", 0)
     if isinstance(mask_k, bool):
         mask_k = int(mask_k)
@@ -305,10 +313,10 @@ def main():
     metrics = compute_gene_metrics(
         scores=all_scores,
         targets=all_targets,
-        top_k_values=args.top_k,
+        top_k_values=top_k_values,
     )
     output_metrics = {"mrr": metrics.get("mrr", 0.0)}
-    for k in args.top_k:
+    for k in top_k_values:
         output_metrics[f"exact_hit@{k}"] = metrics.get(f"exact_hit@{k}", 0.0)
         output_metrics[f"relevant_hit@{k}"] = metrics.get(f"hit@{k}", 0.0)
         output_metrics[f"recall@{k}"] = metrics.get(f"recall@{k}", 0.0)
@@ -321,7 +329,7 @@ def main():
     print("\n" + "=" * 60)
     print("Results:")
     print("=" * 60)
-    for k in args.top_k:
+    for k in top_k_values:
         exact = results["metrics"].get(f"exact_hit@{k}", 0)
         relevant = results["metrics"].get(f"relevant_hit@{k}", 0)
         recall = results["metrics"].get(f"recall@{k}", 0)
