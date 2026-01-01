@@ -22,6 +22,11 @@ set -euo pipefail
 
 mkdir -p logs/scgpt
 
+export NCCL_ASYNC_ERROR_HANDLING=1
+export NCCL_BLOCKING_WAIT=1
+export NCCL_DEBUG=INFO
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+
 detect_num_gpus() {
     if [[ -n "${SLURM_GPUS_ON_NODE:-}" ]]; then
         echo "$SLURM_GPUS_ON_NODE"
