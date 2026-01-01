@@ -312,6 +312,8 @@ def main():
         freeze_encoder=config["model"].get("freeze_encoder", True),
         freeze_layers_up_to=freeze_layers_up_to,
         device=device,
+        score_mode=config.get("head", {}).get("score_mode", "dot"),
+        score_gene_ids=train_dataset.gene_ids,
         head_hidden_dim=config.get("head", {}).get("hidden_dim", 512),
         head_dropout=config.get("head", {}).get("dropout", 0.2),
     )
