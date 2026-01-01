@@ -543,7 +543,7 @@ def main():
     freeze_layers_up_to = max(n_layers - 1 - unfreeze_last_n_layers, -1)
 
     train_dataset = GeneScoreDataset(
-        adata=dataset.train_adata,
+        adata=dataset.adata,
         conditions=dataset.train_conditions,
         vocab=vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
@@ -555,7 +555,7 @@ def main():
     )
 
     val_dataset = GeneScoreDataset(
-        adata=dataset.val_adata,
+        adata=dataset.adata,
         conditions=dataset.val_conditions,
         vocab=train_dataset.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
