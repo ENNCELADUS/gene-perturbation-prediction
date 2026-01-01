@@ -35,6 +35,12 @@ training:
   warmup_ratio: 0.1
   unfreeze_last_n_layers: 1
   balanced_sampling: true
+  gene_weighted_sampling: true
+  sample_weight_alpha: 0.5
+  sample_weight_cap: 10.0
+  sample_weight_eps: 1.0
+  weighted_samples_per_replica: null
+  sampling_seed: 0
   balanced_sampling_n_conditions: 8
   balanced_sampling_n_cells: 4
   early_stopping_patience: 10
@@ -43,7 +49,14 @@ training:
   bce_loss_weight: 0.1
   ranking_num_negatives: 128
   ranking_margin: 0.0
-  ranking_hard_negative_ratio: 0.3
+  ranking_hard_negative_ratio: 0.25
+  ranking_hard_candidate_factor: 4.0
+  ranking_pos_weight_alpha: 0.5
+  ranking_pos_weight_cap: 10.0
+  ranking_pos_weight_eps: 1.0
+  bce_pos_weight_enabled: true
+  bce_pos_weight_cap: 50.0
+  bce_pos_weight_min: 1.0
 
 # Head
 head:

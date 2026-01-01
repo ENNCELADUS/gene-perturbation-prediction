@@ -42,6 +42,9 @@ class GeneScoreDataset(Dataset):
         condition_key: str = "condition",
         match_keys: Optional[Sequence[str]] = None,
         n_control_samples: int = 8,
+        sample_weight_alpha: Optional[float] = None,
+        sample_weight_cap: float = 10.0,
+        sample_weight_eps: float = 1.0,
         seed: int = 42,
     ):
         self.adata = adata
@@ -50,11 +53,18 @@ class GeneScoreDataset(Dataset):
         self.n_bins = n_bins
         self.control_key = control_key
         self.condition_key = condition_key
-        self.match_keys = list(match_keys) if match_keys is not None else [
-            "batch",
-            "cell_type",
-        ]
+        self.match_keys = (
+            list(match_keys)
+            if match_keys is not None
+            else [
+                "batch",
+                "cell_type",
+            ]
+        )
         self.n_control_samples = n_control_samples
+        self.sample_weight_alpha = sample_weight_alpha
+        self.sample_weight_cap = sample_weight_cap
+        self.sample_weight_eps = sample_weight_eps
         if self.n_control_samples <= 0:
             raise ValueError("n_control_samples must be a positive integer.")
         self.rng = np.random.RandomState(seed)
@@ -108,6 +118,30 @@ class GeneScoreDataset(Dataset):
             condition: self._condition_gene_indices(condition)
             for condition in self.condition_to_indices
         }
+        self.example_gene_indices: List[List[int]] = []
+        self.gene_counts = np.zeros(len(self.gene_names), dtype=np.int64)
+        for _, condition, _ in self.examples:
+            gene_indices = self.condition_to_gene_indices.get(condition, [])
+            self.example_gene_indices.append(gene_indices)
+            for gene_idx in gene_indices:
+                self.gene_counts[gene_idx] += 1
+
+        self.sample_weights: Optional[np.ndarray] = None
+        if self.sample_weight_alpha is not None and self.sample_weight_alpha > 0:
+            weights = []
+            for gene_indices in self.example_gene_indices:
+                if not gene_indices:
+                    weights.append(1.0)
+                    continue
+                counts = self.gene_counts[gene_indices].astype(np.float64)
+                inv = (
+                    1.0 / (counts + self.sample_weight_eps)
+                ) ** self.sample_weight_alpha
+                weight = float(inv.mean())
+                if self.sample_weight_cap is not None:
+                    weight = min(weight, self.sample_weight_cap)
+                weights.append(weight)
+            self.sample_weights = np.asarray(weights, dtype=np.float64)
 
         print(
             f"GeneScoreDataset: {len(self.examples)} perturbed cells across {len(self.condition_to_indices)} conditions"
@@ -172,6 +206,19 @@ class GeneScoreDataset(Dataset):
             return ()
         row = self.adata.obs.iloc[idx]
         return tuple(row[key] for key in self.match_keys)
+
+    def get_gene_weights(
+        self,
+        alpha: float,
+        cap: Optional[float] = None,
+        eps: float = 1.0,
+    ) -> np.ndarray:
+        """Compute per-gene weights based on inverse frequency."""
+        counts = self.gene_counts.astype(np.float64)
+        weights = (1.0 / (counts + eps)) ** alpha
+        if cap is not None:
+            weights = np.minimum(weights, cap)
+        return weights
 
 
 def collate_gene_score_batch(
