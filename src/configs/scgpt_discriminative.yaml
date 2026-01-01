@@ -29,15 +29,15 @@ model:
 training:
   epochs: 200
   batch_size: 32
-  head_learning_rate: 1.0e-4
-  backbone_learning_rate: 1.0e-5
-  weight_decay: 0.01
-  warmup_ratio: 0.1
-  unfreeze_last_n_layers: 1
+  head_learning_rate: 5.0e-5
+  backbone_learning_rate: 5.0e-6
+  weight_decay: 0.05
+  warmup_ratio: 0.2
+  unfreeze_last_n_layers: 2
   balanced_sampling: true
   gene_weighted_sampling: true
-  sample_weight_alpha: 0.5
-  sample_weight_cap: 10.0
+  sample_weight_alpha: 0.3
+  sample_weight_cap: 5.0
   sample_weight_eps: 1.0
   weighted_samples_per_replica: null
   sampling_seed: 0
@@ -45,16 +45,16 @@ training:
   control_no_grad: true
   balanced_sampling_n_conditions: 8
   balanced_sampling_n_cells: 4
-  early_stopping_patience: 10
+  early_stopping_patience: 6
   early_stopping_metric: val_loss
   ranking_loss_weight: 1.0
-  bce_loss_weight: 0.1
-  ranking_num_negatives: 128
+  bce_loss_weight: 0.02
+  ranking_num_negatives: 64
   ranking_margin: 0.0
-  ranking_hard_negative_ratio: 0.25
-  ranking_hard_candidate_factor: 4.0
-  ranking_pos_weight_alpha: 0.5
-  ranking_pos_weight_cap: 10.0
+  ranking_hard_negative_ratio: 0.15
+  ranking_hard_candidate_factor: 3.0
+  ranking_pos_weight_alpha: 0.3
+  ranking_pos_weight_cap: 5.0
   ranking_pos_weight_eps: 1.0
   bce_pos_weight_enabled: true
   bce_pos_weight_cap: 50.0
@@ -63,8 +63,8 @@ training:
 # Head
 head:
   score_mode: dot
-  hidden_dim: 512
-  dropout: 0.2
+  hidden_dim: 256
+  dropout: 0.35
 
 # Evaluation
 evaluation:
