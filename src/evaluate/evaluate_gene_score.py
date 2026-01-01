@@ -210,6 +210,7 @@ def main():
         freeze_encoder=True,
         freeze_layers_up_to=10,
         device=device,
+        score_mode=config.get("head", {}).get("score_mode", "dot"),
         head_hidden_dim=config.get("head", {}).get("hidden_dim", 512),
         head_dropout=config.get("head", {}).get("dropout", 0.2),
     )
@@ -223,6 +224,7 @@ def main():
         vocab=model.backbone.vocab,
         n_bins=config["model"].get("preprocess_binning", 51),
     )
+    model.set_score_gene_ids(test_dataset.gene_ids)
     test_loader = DataLoader(
         test_dataset,
         batch_size=config.get("training", {}).get("batch_size", 32),
