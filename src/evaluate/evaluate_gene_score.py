@@ -280,6 +280,10 @@ def main():
                     control_values=control_values,
                     control_padding_mask=control_padding_mask,
                     control_counts=control_counts,
+                    control_chunk_size=config.get("training", {}).get(
+                        "control_chunk_size", 0
+                    ),
+                    control_no_grad=True,
                 )  # (batch, n_genes)
 
         for i, condition in enumerate(conditions):

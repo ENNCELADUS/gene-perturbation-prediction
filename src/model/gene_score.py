@@ -8,6 +8,7 @@ matches cell embeddings to gene embeddings.
 from __future__ import annotations
 
 from typing import Optional, Sequence
+from contextlib import nullcontext
 import torch
 import torch.nn as nn
 
@@ -124,6 +125,8 @@ class GeneScoreModel(nn.Module):
         control_values: Optional[torch.Tensor] = None,
         control_padding_mask: Optional[torch.Tensor] = None,
         control_counts: Optional[int] = None,
+        control_chunk_size: Optional[int] = None,
+        control_no_grad: bool = True,
         score_gene_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         outputs = self.backbone.model(
@@ -144,18 +147,26 @@ class GeneScoreModel(nn.Module):
                     "control_values and control_padding_mask are required when "
                     "control_gene_ids is provided."
                 )
-            control_outputs = self.backbone.model(
-                src=control_gene_ids,
-                values=control_values,
-                src_key_padding_mask=control_padding_mask,
-                batch_labels=None,
-                CLS=False,
-                CCE=False,
-                MVC=False,
-                ECS=False,
-                do_sample=False,
-            )
-            control_emb = control_outputs["cell_emb"]
+            if control_chunk_size is None or control_chunk_size <= 0:
+                control_chunk_size = control_gene_ids.size(0)
+            control_embs = []
+            ctx = torch.no_grad() if control_no_grad else nullcontext()
+            with ctx:
+                for start in range(0, control_gene_ids.size(0), control_chunk_size):
+                    end = start + control_chunk_size
+                    control_outputs = self.backbone.model(
+                        src=control_gene_ids[start:end],
+                        values=control_values[start:end],
+                        src_key_padding_mask=control_padding_mask[start:end],
+                        batch_labels=None,
+                        CLS=False,
+                        CCE=False,
+                        MVC=False,
+                        ECS=False,
+                        do_sample=False,
+                    )
+                    control_embs.append(control_outputs["cell_emb"])
+            control_emb = torch.cat(control_embs, dim=0)
             batch_size = cell_emb.size(0)
             if control_counts is None:
                 if control_emb.size(0) % batch_size != 0:
