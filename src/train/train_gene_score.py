@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Sampler
+import torch.distributed as dist
+from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn.functional as F
@@ -18,6 +19,7 @@ from tqdm import tqdm
 import json
 import yaml
 import os
+import math
 
 from ..data import load_perturb_data
 from ..data.gene_score_collator import GeneScoreDataset, collate_gene_score_batch
@@ -61,6 +63,56 @@ class BalancedConditionBatchSampler(Sampler[List[int]]):
 
     def __len__(self) -> int:
         return self.steps_per_epoch
+
+
+class DistributedWeightedSampler(Sampler[int]):
+    """Distributed sampler that draws samples proportionally to weights."""
+
+    def __init__(
+        self,
+        weights: torch.Tensor | List[float],
+        num_samples: Optional[int] = None,
+        replacement: bool = True,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        seed: int = 0,
+    ):
+        if num_replicas is None or rank is None:
+            if not dist.is_available() or not dist.is_initialized():
+                raise ValueError("DistributedWeightedSampler requires initialized DDP.")
+            if num_replicas is None:
+                num_replicas = dist.get_world_size()
+            if rank is None:
+                rank = dist.get_rank()
+
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.weights = torch.as_tensor(weights, dtype=torch.double)
+        if num_samples is None:
+            num_samples = int(math.ceil(len(self.weights) / self.num_replicas))
+        self.num_samples = num_samples
+        self.total_size = self.num_samples * self.num_replicas
+        self.replacement = replacement
+        self.seed = seed
+        self.epoch = 0
+
+    def __iter__(self):
+        generator = torch.Generator()
+        generator.manual_seed(self.seed + self.epoch)
+        indices = torch.multinomial(
+            self.weights,
+            self.total_size,
+            replacement=self.replacement,
+            generator=generator,
+        )
+        indices = indices[self.rank : self.total_size : self.num_replicas]
+        return iter(indices.tolist())
+
+    def __len__(self) -> int:
+        return self.num_samples
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = epoch
 
 
 def parse_args():
@@ -125,11 +177,30 @@ def build_scheduler(
     return scheduler
 
 
+def compute_bce_pos_weight(
+    gene_counts: np.ndarray,
+    n_samples: int,
+    cap: float,
+    min_weight: float,
+) -> np.ndarray:
+    """Compute per-gene BCE pos_weight using global neg/pos ratio."""
+    counts = gene_counts.astype(np.float64)
+    denom = np.maximum(counts, 1.0)
+    neg = max(n_samples, 1) - counts
+    weights = neg / denom
+    if cap is not None:
+        weights = np.minimum(weights, cap)
+    if min_weight is not None:
+        weights = np.maximum(weights, min_weight)
+    return weights
+
+
 def sample_negatives(
     logits_row: torch.Tensor,
     neg_idx: torch.Tensor,
     num_negatives: int,
     hard_negative_ratio: float,
+    hard_candidate_factor: float,
 ) -> torch.Tensor:
     """Sample negatives with a mix of hard and random choices."""
     if num_negatives <= 0 or neg_idx.numel() <= num_negatives:
@@ -141,17 +212,25 @@ def sample_negatives(
 
     hard_rel = None
     if hard_k > 0:
-        neg_scores = logits_row[neg_idx]
+        candidate_size = int(num_negatives * hard_candidate_factor)
+        candidate_size = max(candidate_size, hard_k)
+        candidate_size = min(candidate_size, neg_idx.numel())
+        if candidate_size < neg_idx.numel():
+            perm = torch.randperm(neg_idx.numel(), device=neg_idx.device)[
+                :candidate_size
+            ]
+            candidate_idx = neg_idx[perm]
+        else:
+            candidate_idx = neg_idx
+        neg_scores = logits_row[candidate_idx]
         hard_rel = torch.topk(neg_scores, k=hard_k).indices
-        hard_idx = neg_idx[hard_rel]
+        hard_idx = candidate_idx[hard_rel]
     else:
         hard_idx = torch.empty(0, dtype=neg_idx.dtype, device=neg_idx.device)
 
     if rand_k > 0:
         if hard_rel is not None and neg_idx.numel() > hard_k:
-            mask = torch.ones(
-                neg_idx.numel(), dtype=torch.bool, device=neg_idx.device
-            )
+            mask = torch.ones(neg_idx.numel(), dtype=torch.bool, device=neg_idx.device)
             mask[hard_rel] = False
             remaining = neg_idx[mask]
         else:
@@ -163,9 +242,7 @@ def sample_negatives(
             rand_idx = remaining[perm]
         else:
             rand_idx = remaining[
-                torch.randint(
-                    0, remaining.numel(), (rand_k,), device=neg_idx.device
-                )
+                torch.randint(0, remaining.numel(), (rand_k,), device=neg_idx.device)
             ]
     else:
         rand_idx = torch.empty(0, dtype=neg_idx.dtype, device=neg_idx.device)
@@ -177,6 +254,8 @@ def compute_loss(
     logits: torch.Tensor,
     targets: torch.Tensor,
     config: dict,
+    ranking_pos_weights: Optional[torch.Tensor] = None,
+    bce_pos_weights: Optional[torch.Tensor] = None,
 ) -> tuple[torch.Tensor, dict]:
     """Compute weighted ranking + BCE loss."""
     training_cfg = config.get("training", {})
@@ -185,6 +264,8 @@ def compute_loss(
     num_negatives = training_cfg.get("ranking_num_negatives", 128)
     margin = training_cfg.get("ranking_margin", 0.0)
     hard_negative_ratio = training_cfg.get("ranking_hard_negative_ratio", 0.5)
+    hard_candidate_factor = training_cfg.get("ranking_hard_candidate_factor", 4.0)
+    bce_pos_weight_enabled = training_cfg.get("bce_pos_weight_enabled", False)
 
     loss_items: dict[str, float] = {}
     total_loss = torch.tensor(0.0, device=logits.device)
@@ -201,7 +282,11 @@ def compute_loss(
             continue
 
         neg_sample = sample_negatives(
-            logits[i], neg_idx, num_negatives, hard_negative_ratio
+            logits[i],
+            neg_idx,
+            num_negatives,
+            hard_negative_ratio,
+            hard_candidate_factor,
         )
 
         if ranking_weight > 0:
@@ -212,17 +297,23 @@ def compute_loss(
                     margin - (pos_scores.unsqueeze(1) - neg_scores.unsqueeze(0))
                 )
             else:
-                pairwise = F.softplus(
-                    neg_scores.unsqueeze(0) - pos_scores.unsqueeze(1)
-                )
+                pairwise = F.softplus(neg_scores.unsqueeze(0) - pos_scores.unsqueeze(1))
+            if ranking_pos_weights is not None:
+                pos_weights = ranking_pos_weights[pos_idx].to(pairwise.device)
+                pairwise = pairwise * pos_weights.unsqueeze(1)
             ranking_losses.append(pairwise.mean())
 
         if bce_weight > 0:
             selected = torch.cat([pos_idx, neg_sample], dim=0)
             selected = torch.unique(selected)
+            pos_weight = None
+            if bce_pos_weight_enabled and bce_pos_weights is not None:
+                pos_weight = bce_pos_weights[selected].to(logits.device)
             bce_losses.append(
                 F.binary_cross_entropy_with_logits(
-                    logits[i, selected], targets[i, selected]
+                    logits[i, selected],
+                    targets[i, selected],
+                    pos_weight=pos_weight,
                 )
             )
 
@@ -255,6 +346,8 @@ def train_epoch(
     scheduler: torch.optim.lr_scheduler._LRScheduler,
     device: str,
     config: dict,
+    ranking_pos_weights: Optional[torch.Tensor] = None,
+    bce_pos_weights: Optional[torch.Tensor] = None,
     scaler: torch.cuda.amp.GradScaler | None = None,
     sampler: DistributedSampler | None = None,
     max_steps: int | None = None,
@@ -266,7 +359,7 @@ def train_epoch(
     total_loss = 0.0
     num_batches = 0
 
-    if sampler is not None:
+    if sampler is not None and hasattr(sampler, "set_epoch"):
         sampler.set_epoch(epoch)
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch}")
@@ -293,7 +386,13 @@ def train_epoch(
                 control_padding_mask=control_padding_mask,
                 control_counts=control_counts,
             )
-            loss, loss_items = compute_loss(logits, targets, config)
+            loss, loss_items = compute_loss(
+                logits,
+                targets,
+                config,
+                ranking_pos_weights=ranking_pos_weights,
+                bce_pos_weights=bce_pos_weights,
+            )
 
         optimizer.zero_grad()
         if scaler is None:
@@ -321,9 +420,7 @@ def train_epoch(
         if "bce_loss" in loss_items:
             postfix["bce"] = f"{loss_items['bce_loss']:.4f}"
 
-        pbar.set_postfix(
-            postfix
-        )
+        pbar.set_postfix(postfix)
 
     return {"train_loss": total_loss / num_batches if num_batches else 0.0}
 
@@ -333,6 +430,8 @@ def validate(
     dataloader: DataLoader,
     device: str,
     config: dict,
+    ranking_pos_weights: Optional[torch.Tensor] = None,
+    bce_pos_weights: Optional[torch.Tensor] = None,
     use_amp: bool = False,
 ) -> Dict[str, float]:
     model.eval()
@@ -361,7 +460,13 @@ def validate(
                     control_padding_mask=control_padding_mask,
                     control_counts=control_counts,
                 )
-                loss, _ = compute_loss(logits, targets, config)
+                loss, _ = compute_loss(
+                    logits,
+                    targets,
+                    config,
+                    ranking_pos_weights=ranking_pos_weights,
+                    bce_pos_weights=bce_pos_weights,
+                )
 
             total_loss += loss.item()
             num_batches += 1
@@ -444,6 +549,9 @@ def main():
         n_bins=config["model"].get("preprocess_binning", 51),
         match_keys=config["data"].get("control_match_keys"),
         n_control_samples=config["data"].get("control_n_samples", 8),
+        sample_weight_alpha=config.get("training", {}).get("sample_weight_alpha"),
+        sample_weight_cap=config.get("training", {}).get("sample_weight_cap", 10.0),
+        sample_weight_eps=config.get("training", {}).get("sample_weight_eps", 1.0),
     )
 
     val_dataset = GeneScoreDataset(
@@ -453,9 +561,32 @@ def main():
         n_bins=config["model"].get("preprocess_binning", 51),
         match_keys=config["data"].get("control_match_keys"),
         n_control_samples=config["data"].get("control_n_samples", 8),
+        sample_weight_alpha=None,
     )
 
     n_genes = dataset.adata.n_vars
+
+    training_cfg = config.get("training", {})
+    ranking_pos_weights = None
+    if training_cfg.get("ranking_pos_weight_alpha"):
+        ranking_weights = train_dataset.get_gene_weights(
+            alpha=training_cfg.get("ranking_pos_weight_alpha", 0.5),
+            cap=training_cfg.get("ranking_pos_weight_cap", 10.0),
+            eps=training_cfg.get("ranking_pos_weight_eps", 1.0),
+        )
+        ranking_pos_weights = torch.tensor(
+            ranking_weights, dtype=torch.float32, device=device
+        )
+
+    bce_pos_weights = None
+    if training_cfg.get("bce_pos_weight_enabled", False):
+        bce_weights = compute_bce_pos_weight(
+            train_dataset.gene_counts,
+            n_samples=len(train_dataset),
+            cap=training_cfg.get("bce_pos_weight_cap", 50.0),
+            min_weight=training_cfg.get("bce_pos_weight_min", 1.0),
+        )
+        bce_pos_weights = torch.tensor(bce_weights, dtype=torch.float32, device=device)
 
     if is_main:
         print("\n[3/5] Loading model...")
@@ -481,33 +612,68 @@ def main():
     batch_size = config["training"].get("batch_size", 32)
     train_sampler = None
     val_sampler = None
+    train_loader = None
     if ddp["enabled"]:
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
 
     collate_vocab = train_dataset.vocab
 
-    if config["training"].get("balanced_sampling", False) and not ddp["enabled"]:
-        n_conditions = config["training"].get("balanced_sampling_n_conditions", 8)
-        n_cells = config["training"].get("balanced_sampling_n_cells", 4)
-        steps_per_epoch = max(1, len(train_dataset) // (n_conditions * n_cells))
-        batch_sampler = BalancedConditionBatchSampler(
-            train_dataset.condition_to_indices,
-            n_conditions=n_conditions,
-            n_cells_per_condition=n_cells,
-            steps_per_epoch=steps_per_epoch,
+    if config["training"].get("gene_weighted_sampling", False):
+        if train_dataset.sample_weights is None:
+            raise ValueError(
+                "gene_weighted_sampling enabled but sample_weights are not computed. "
+                "Set training.sample_weight_alpha > 0."
+            )
+        sampler_weights = torch.as_tensor(
+            train_dataset.sample_weights, dtype=torch.double
         )
+        if ddp["enabled"]:
+            sampler = DistributedWeightedSampler(
+                sampler_weights,
+                num_samples=config["training"].get("weighted_samples_per_replica"),
+                replacement=True,
+                seed=config["training"].get("sampling_seed", 0),
+            )
+        else:
+            sampler = WeightedRandomSampler(
+                sampler_weights,
+                num_samples=len(train_dataset),
+                replacement=True,
+            )
         train_loader = DataLoader(
             train_dataset,
-            batch_sampler=batch_sampler,
+            batch_size=batch_size,
+            shuffle=False,
+            sampler=sampler,
             collate_fn=lambda batch: collate_gene_score_batch(
                 batch, collate_vocab, n_genes
             ),
             num_workers=0,
         )
-    else:
-        if ddp["enabled"] and config["training"].get("balanced_sampling", False):
+        train_sampler = sampler
+    if train_loader is None and config["training"].get("balanced_sampling", False):
+        if ddp["enabled"]:
             if is_main:
                 print("Balanced sampling disabled under DDP; using DistributedSampler.")
+        else:
+            n_conditions = config["training"].get("balanced_sampling_n_conditions", 8)
+            n_cells = config["training"].get("balanced_sampling_n_cells", 4)
+            steps_per_epoch = max(1, len(train_dataset) // (n_conditions * n_cells))
+            batch_sampler = BalancedConditionBatchSampler(
+                train_dataset.condition_to_indices,
+                n_conditions=n_conditions,
+                n_cells_per_condition=n_cells,
+                steps_per_epoch=steps_per_epoch,
+            )
+            train_loader = DataLoader(
+                train_dataset,
+                batch_sampler=batch_sampler,
+                collate_fn=lambda batch: collate_gene_score_batch(
+                    batch, collate_vocab, n_genes
+                ),
+                num_workers=0,
+            )
+    if train_loader is None:
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
@@ -570,6 +736,8 @@ def main():
             scheduler,
             device,
             config,
+            ranking_pos_weights=ranking_pos_weights,
+            bce_pos_weights=bce_pos_weights,
             scaler=scaler,
             sampler=train_sampler,
             max_steps=args.max_steps,
@@ -578,7 +746,13 @@ def main():
         val_metrics = {"val_loss": float("inf")}
         if is_main:
             val_metrics = validate(
-                model, val_loader, device, config, use_amp=scaler.is_enabled()
+                model,
+                val_loader,
+                device,
+                config,
+                ranking_pos_weights=ranking_pos_weights,
+                bce_pos_weights=bce_pos_weights,
+                use_amp=scaler.is_enabled(),
             )
 
         if is_main:
