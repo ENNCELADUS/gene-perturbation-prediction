@@ -62,9 +62,9 @@ python -m src.data.tahoe.tahoe_dataset \
     --input "data/processed/tahoe/tahoe_log1p.h5ad" \
     --output "data/processed/tahoe/splits/tahoe_drug_split_seed42.json" \
     --seed 42 \
-    --test-ratio 0.15 \
+    --test-ratio 0.2 \
     --single-val-ratio 0.1 \
-    --multi-val-ratio 0.1 \
+    --multi-val-ratio 0.15 \
     --single-target-test-per-gene 0 \
-    --multi-test-max-targets 2 \
-    --multi-test-fallback-max-targets 3
+    --multi-test-max-targets 3 \
+    --multi-test-fallback-max-targets 4
