@@ -7,6 +7,7 @@ Supports multiple modes:
 - train/build_db/evaluate/full: Route A forward model pipeline
 - route_b1_train/route_b1_eval/route_b1_full: Route B1 gene-score pipeline
 - tga: Target-Gene Activation baseline evaluation
+- pca_knn: PCA+kNN baseline evaluation
 
 Usage:
     # Data preparation only
@@ -20,6 +21,9 @@ Usage:
 
     # TGA baseline
     python -m src.main --config src/configs/tga.yaml --mode tga
+
+    # PCA+kNN baseline
+    python -m src.main --config src/configs/pca_knn_baseline.yaml --mode pca_knn
 """
 
 import argparse
@@ -57,6 +61,7 @@ def parse_args():
             "route_b1_eval",
             "route_b1_full",
             "tga",
+            "pca_knn",
         ],
         help="Operation mode: data, train, build_db, evaluate, or full",
     )
@@ -419,6 +424,32 @@ def run_tga(config: dict, args) -> dict:
     return {"status": "tga_evaluation_complete", "results_path": output}
 
 
+def run_pca_knn(config: dict, args) -> dict:
+    """Run PCA+kNN baseline evaluation."""
+    from .evaluate.evaluate_pca_knn import main as eval_main
+    import sys
+
+    output = config.get("evaluation", {}).get(
+        "output_path", "results/pca_knn/eval_results.json"
+    )
+
+    sys.argv = [
+        "evaluate_pca_knn",
+        "--config",
+        args.config,
+        "--output",
+        output,
+    ]
+
+    print("\n" + "=" * 60)
+    print("MODE: PCA_KNN - PCA+kNN Baseline")
+    print("=" * 60)
+
+    eval_main()
+
+    return {"status": "pca_knn_evaluation_complete", "results_path": output}
+
+
 def main():
     """Main entry point with mode dispatch."""
     args = parse_args()
@@ -443,6 +474,8 @@ def main():
         results = run_route_b1_full(config, args)
     elif args.mode == "tga":
         results = run_tga(config, args)
+    elif args.mode == "pca_knn":
+        results = run_pca_knn(config, args)
     else:
         raise ValueError(f"Unknown mode: {args.mode}")
 
