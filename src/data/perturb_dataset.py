@@ -64,6 +64,7 @@ class PerturbDataset:
         double_freq_bins: int = 3,
         double_count_bins: int = 3,
         unseen_gene_count_bins: int = 3,
+        target_test_fraction: float | None = None,
         min_cells_per_condition: int = 50,
         min_cells_per_double: int = 30,
         seed: int = 42,
@@ -79,6 +80,7 @@ class PerturbDataset:
             double_freq_bins: Number of bins for per-gene double frequency
             double_count_bins: Number of bins for per-condition cell counts
             unseen_gene_count_bins: Bins for stratifying unseen single genes by cell count
+            target_test_fraction: Optional target fraction for test set after downsampling
             min_cells_per_condition: Minimum cells for single-gene conditions (filter threshold)
             min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
             seed: Random seed
@@ -104,6 +106,7 @@ class PerturbDataset:
             double_freq_bins=double_freq_bins,
             double_count_bins=double_count_bins,
             unseen_gene_count_bins=unseen_gene_count_bins,
+            target_test_fraction=target_test_fraction,
             seed=seed,
         )
 
@@ -300,6 +303,7 @@ def load_perturb_data(
     double_freq_bins: int = 3,
     double_count_bins: int = 3,
     unseen_gene_count_bins: int = 3,
+    target_test_fraction: float | None = None,
     min_cells_per_condition: int = 50,
     min_cells_per_double: int = 30,
     seed: int = 42,
@@ -317,6 +321,7 @@ def load_perturb_data(
         double_freq_bins: Number of bins for per-gene double frequency
         double_count_bins: Number of bins for per-condition cell counts
         unseen_gene_count_bins: Bins for stratifying unseen single genes by cell count
+        target_test_fraction: Optional target fraction for test set after downsampling
         min_cells_per_condition: Minimum cells for single-gene conditions
         min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
         seed: Random seed
@@ -343,6 +348,7 @@ def load_perturb_data(
             double_freq_bins=double_freq_bins,
             double_count_bins=double_count_bins,
             unseen_gene_count_bins=unseen_gene_count_bins,
+            target_test_fraction=target_test_fraction,
             min_cells_per_condition=min_cells_per_condition,
             min_cells_per_double=min_cells_per_double,
             seed=seed,
