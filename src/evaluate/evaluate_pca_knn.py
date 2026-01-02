@@ -346,22 +346,36 @@ def main():
     mask_k = eval_cfg.get("mask", 0)
     if isinstance(mask_k, bool):
         mask_k = int(mask_k)
+    mask_train = bool(baseline_cfg.get("mask_train", False))
 
     if mask_k > 0:
-        target_gene_pool = build_target_gene_pool(dataset.test_conditions)
+        train_val_pool = build_target_gene_pool(
+            dataset.train_conditions + dataset.val_conditions
+        )
+        test_pool = build_target_gene_pool(dataset.test_conditions)
+
+        if mask_train:
+            train_profiles = apply_mask_to_profiles(
+                train_profiles,
+                train_conditions,
+                gene_name_to_idx,
+                mask_k,
+                train_val_pool,
+            )
+
         val_profiles = apply_mask_to_profiles(
             val_profiles,
             val_conditions,
             gene_name_to_idx,
             mask_k,
-            target_gene_pool,
+            train_val_pool,
         )
         test_profiles = apply_mask_to_profiles(
             test_profiles,
             test_conditions,
             gene_name_to_idx,
             mask_k,
-            target_gene_pool,
+            test_pool,
         )
 
     n_components = baseline_cfg.get("n_components", 50)

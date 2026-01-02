@@ -23,6 +23,7 @@ baseline:
   weight_normalize: true
   clip_negative_similarity: true
   standardize: false
+  mask_train: true
   selection_metric: mrr
   random_state: 42
   eps: 1.0e-8
