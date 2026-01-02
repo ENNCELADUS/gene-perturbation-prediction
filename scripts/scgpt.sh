@@ -7,8 +7,8 @@
 #SBATCH --mem=300G
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:NVIDIAA40:4
-#SBATCH --output=logs/scgpt/slurm_%j.out
-#SBATCH --error=logs/scgpt/slurm_%j.err
+#SBATCH --output=logs/scgpt/v1.3/slurm_%j.out
+#SBATCH --error=logs/scgpt/v1.3/slurm_%j.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
@@ -54,13 +54,6 @@ run_ddp() {
     fi
 }
 
-echo "=============================================="
-echo "Route B1 Experiments"
-echo "=============================================="
-
-# ============================================
-# Route A: Forward Model + Retrieval
-# ============================================
 echo ""
 echo "=============================================="
 echo "Data Preparation"
