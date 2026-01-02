@@ -229,6 +229,7 @@ def main():
         head_hidden_dim=config.get("head", {}).get("hidden_dim", 512),
         head_dropout=config.get("head", {}).get("dropout", 0.2),
     )
+    print(f"Loading finetuned checkpoint from {args.checkpoint}")
     model.load(args.checkpoint, map_location=device)
     model.eval()
 
