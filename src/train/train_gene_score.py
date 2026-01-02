@@ -517,11 +517,20 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    eval_cfg = config.get("evaluation", {})
+    checkpoint_path_cfg = eval_cfg.get("checkpoint_path")
+    if checkpoint_path_cfg:
+        checkpoint_path = Path(checkpoint_path_cfg)
+    else:
+        checkpoint_path = output_dir / "best_model.pt"
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
     if is_main:
         print("=" * 60)
         print("Route B1 Gene-Score Training")
         print("=" * 60)
         print(f"Output: {output_dir}")
+        print(f"Checkpoint: {checkpoint_path}")
 
     device = f"cuda:{ddp['local_rank']}" if torch.cuda.is_available() else "cpu"
     if is_main:
@@ -774,7 +783,7 @@ def main():
         if is_main and val_metrics["val_loss"] < best_val_loss:
             best_val_loss = val_metrics["val_loss"]
             save_target = model.module if isinstance(model, DDP) else model
-            save_target.save(output_dir / "best_model.pt")
+            save_target.save(checkpoint_path)
             print(f"  ✓ Saved best model (val_loss={best_val_loss:.4f})")
 
         early_stop = False
@@ -812,7 +821,7 @@ def main():
     if is_main:
         print("\n" + "=" * 60)
         print(f"Training complete! Best val loss: {best_val_loss:.4f}")
-        print(f"Model saved to: {output_dir / 'best_model.pt'}")
+        print(f"Model saved to: {checkpoint_path}")
         print("=" * 60)
 
 
