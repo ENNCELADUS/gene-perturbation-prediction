@@ -32,9 +32,9 @@ baseline:
 
 evaluation:
   top_k_values: [1, 5, 10, 20, 40]
-  mask: 0
-  mask_all_targets: true
-  output_path: results/pca_knn/eval_results_mask_all_targets.json
+  mask: 10
+  mask_all_targets: false
+  output_path: results/pca_knn/eval_results_mask10.json
 
 logging:
   output_dir: results/pca_knn
