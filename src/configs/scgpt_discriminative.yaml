@@ -62,16 +62,16 @@ training:
 
 # Head
 head:
-  score_mode: dot
-  hidden_dim: 256
-  dropout: 0.35
+  score_mode: mlp
+  hidden_dim: 128
+  dropout: 0.4
 
 # Evaluation
 evaluation:
   checkpoint_path: results/scgpt_discriminative/best_model.pt
   top_k_values: [1, 5, 10, 20, 40]
   mask: 0  # 0=off, K=mask K genes (must include true target genes)
-  output_path: results/scgpt_discriminative/eval_v1.2_results_no_mask.json
+  output_path: results/scgpt_discriminative/eval_v1.4_results_no_mask.json
 
 # Logging
 logging:
