@@ -14,7 +14,7 @@ condition_split:
   min_cells_per_condition: 50     # Filter threshold for single-gene conditions
   min_cells_per_double: 30        # Lower threshold for double-gene conditions
   seed: 42
-  output_path: data/norman/splits/norman_condition_split_optimized_seed42.json
+  output_path: data/norman/splits/norman_condition_split_hard_seed42.json
 
 # Model Configuration
 model:
