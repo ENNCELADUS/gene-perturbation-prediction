@@ -20,6 +20,12 @@ conda activate vcc
 
 set -euo pipefail
 
+echo ""
+echo "=============================================="
+echo "Data Preparation"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
+
 echo "=============================================="
 echo "Running all baseline models"
 echo "=============================================="
