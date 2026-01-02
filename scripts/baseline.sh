@@ -27,6 +27,7 @@ echo "=============================================="
 echo ""
 echo "[1/2] Running PCA baseline..."
 echo "----------------------------------------------"
+python -m src.main --config src/configs/pca_knn_baseline.yaml --mode pca_knn
 
 
 echo ""
