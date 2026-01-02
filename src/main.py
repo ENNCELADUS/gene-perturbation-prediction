@@ -7,6 +7,7 @@ Supports multiple modes:
 - train/build_db/evaluate/full: Route A forward model pipeline
 - route_b1_train/route_b1_eval/route_b1_full: Route B1 gene-score pipeline
 - tga: Target-Gene Activation baseline evaluation
+- pca_knn: PCA+kNN baseline evaluation
 
 Usage:
     # Data preparation only
@@ -20,6 +21,9 @@ Usage:
 
     # TGA baseline
     python -m src.main --config src/configs/tga.yaml --mode tga
+
+    # PCA+kNN baseline
+    python -m src.main --config src/configs/pca_knn_baseline.yaml --mode pca_knn
 """
 
 import argparse
@@ -57,6 +61,7 @@ def parse_args():
             "route_b1_eval",
             "route_b1_full",
             "tga",
+            "pca_knn",
         ],
         help="Operation mode: data, train, build_db, evaluate, or full",
     )
@@ -143,11 +148,14 @@ def run_pipeline(config: dict, args) -> dict:
     dataset = load_perturb_data(
         h5ad_path=config["data"]["h5ad_path"],
         condition_split_path=split_path if use_existing_split else None,
+        unseen_gene_fraction=cond_split_config.get("unseen_gene_fraction", 0.15),
         seen_single_train_ratio=cond_split_config.get("seen_single_train_ratio", 0.9),
-        double_train_ratio=cond_split_config.get("double_train_ratio", 0.7),
-        double_val_ratio=cond_split_config.get("double_val_ratio", 0.15),
+        combo_seen2_train_ratio=cond_split_config.get("combo_seen2_train_ratio", 0.7),
+        combo_seen2_val_ratio=cond_split_config.get("combo_seen2_val_ratio", 0.15),
         double_freq_bins=cond_split_config.get("double_freq_bins", 3),
         double_count_bins=cond_split_config.get("double_count_bins", 3),
+        unseen_gene_count_bins=cond_split_config.get("unseen_gene_count_bins", 3),
+        target_test_fraction=cond_split_config.get("target_test_fraction"),
         min_cells_per_condition=cond_split_config.get("min_cells_per_condition", 50),
         min_cells_per_double=cond_split_config.get("min_cells_per_double", 30),
         seed=cond_split_config.get("seed", 42),
@@ -419,6 +427,32 @@ def run_tga(config: dict, args) -> dict:
     return {"status": "tga_evaluation_complete", "results_path": output}
 
 
+def run_pca_knn(config: dict, args) -> dict:
+    """Run PCA+kNN baseline evaluation."""
+    from .evaluate.evaluate_pca_knn import main as eval_main
+    import sys
+
+    output = config.get("evaluation", {}).get(
+        "output_path", "results/pca_knn/eval_results.json"
+    )
+
+    sys.argv = [
+        "evaluate_pca_knn",
+        "--config",
+        args.config,
+        "--output",
+        output,
+    ]
+
+    print("\n" + "=" * 60)
+    print("MODE: PCA_KNN - PCA+kNN Baseline")
+    print("=" * 60)
+
+    eval_main()
+
+    return {"status": "pca_knn_evaluation_complete", "results_path": output}
+
+
 def main():
     """Main entry point with mode dispatch."""
     args = parse_args()
@@ -443,6 +477,8 @@ def main():
         results = run_route_b1_full(config, args)
     elif args.mode == "tga":
         results = run_tga(config, args)
+    elif args.mode == "pca_knn":
+        results = run_pca_knn(config, args)
     else:
         raise ValueError(f"Unknown mode: {args.mode}")
 

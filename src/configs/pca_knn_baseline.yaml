@@ -1,0 +1,40 @@
+# PCA + kNN baseline configuration for reverse perturbation prediction
+
+data:
+  h5ad_path: data/norman/perturb_processed.h5ad
+
+condition_split:
+  unseen_gene_fraction: 0.15
+  seen_single_train_ratio: 0.9
+  combo_seen2_train_ratio: 0.7
+  combo_seen2_val_ratio: 0.15
+  double_freq_bins: 3
+  double_count_bins: 3
+  min_cells_per_condition: 50
+  min_cells_per_double: 30
+  target_test_fraction: 0.2
+  seed: 42
+  output_path: data/norman/splits/norman_condition_split_hard_seed42.json
+
+baseline:
+  name: pca_knn
+  n_components: [20, 50, 100]
+  k_values: [1, 3, 5, 10, 20]
+  metric: cosine
+  weight_mode: similarity
+  weight_normalize: true
+  clip_negative_similarity: true
+  standardize: false
+  mask_train: true
+  selection_metric: mrr
+  random_state: 42
+  eps: 1.0e-8
+
+evaluation:
+  top_k_values: [1, 5, 10, 20, 40]
+  mask: 10
+  mask_all_targets: false
+  output_path: results/pca_knn/eval_results_mask10.json
+
+logging:
+  output_dir: results/pca_knn

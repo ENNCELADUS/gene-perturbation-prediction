@@ -5,15 +5,17 @@ data:
   h5ad_path: data/norman/perturb_processed.h5ad
 
 condition_split:
+  unseen_gene_fraction: 0.15
   seen_single_train_ratio: 0.9
-  double_train_ratio: 0.7
-  double_val_ratio: 0.15
+  combo_seen2_train_ratio: 0.7
+  combo_seen2_val_ratio: 0.15
   double_freq_bins: 3
   double_count_bins: 3
   min_cells_per_condition: 50
   min_cells_per_double: 30
+  target_test_fraction: 0.2
   seed: 42
-  output_path: data/norman/splits/norman_condition_split_compositional_seed42.json
+  output_path: data/norman/splits/norman_condition_split_hard_seed42.json
 
 baseline:
   name: tga
