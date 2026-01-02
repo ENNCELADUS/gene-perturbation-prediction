@@ -23,6 +23,7 @@ if str(scgpt_path) not in sys.path:
 from scgpt.tokenizer.gene_tokenizer import tokenize_and_pad_batch
 
 from ..evaluate.metrics import parse_condition_genes
+from .condition_splits import NormanConditionSplitter
 from .preprocess_utils import preprocess_counts_to_bins, scgpt_binning
 
 
@@ -49,7 +50,7 @@ class GeneScoreDataset(Dataset):
         seed: int = 42,
     ):
         self.adata = adata
-        self.conditions = set(conditions)
+        self.conditions = set(self._normalize_condition(c) for c in conditions)
         self.vocab = vocab
         self.n_bins = n_bins
         self.control_key = control_key
@@ -110,15 +111,16 @@ class GeneScoreDataset(Dataset):
         self.condition_to_indices: Dict[str, List[int]] = {}
 
         for idx, condition in enumerate(self.adata.obs[self.condition_key]):
-            if condition == "ctrl":
+            normalized = self._normalize_condition(str(condition))
+            if normalized == "ctrl":
                 continue
-            if condition not in self.conditions:
+            if normalized not in self.conditions:
                 continue
             if self.adata.obs[self.control_key].iloc[idx] == 1:
                 continue
             match_key = self._get_match_key(idx)
-            self.examples.append((idx, condition, match_key))
-            self.condition_to_indices.setdefault(condition, []).append(
+            self.examples.append((idx, normalized, match_key))
+            self.condition_to_indices.setdefault(normalized, []).append(
                 len(self.examples) - 1
             )
 
@@ -207,6 +209,10 @@ class GeneScoreDataset(Dataset):
             self.gene_name_to_idx[g] for g in genes if g in self.gene_name_to_idx
         ]
         return indices
+
+    @staticmethod
+    def _normalize_condition(condition: str) -> str:
+        return NormanConditionSplitter.normalize_condition(condition)
 
     def _get_match_key(self, idx: int) -> Tuple:
         if not self.match_keys:
