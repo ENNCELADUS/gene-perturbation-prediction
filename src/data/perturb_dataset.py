@@ -57,11 +57,14 @@ class PerturbDataset:
 
     def create_condition_split(
         self,
+        unseen_gene_fraction: float = 0.15,
         seen_single_train_ratio: float = 0.9,
-        double_train_ratio: float = 0.7,
-        double_val_ratio: float = 0.15,
+        combo_seen2_train_ratio: float = 0.7,
+        combo_seen2_val_ratio: float = 0.15,
         double_freq_bins: int = 3,
         double_count_bins: int = 3,
+        unseen_gene_count_bins: int = 3,
+        target_test_fraction: float | None = None,
         min_cells_per_condition: int = 50,
         min_cells_per_double: int = 30,
         seed: int = 42,
@@ -70,11 +73,14 @@ class PerturbDataset:
         Create a Norman GEARS-style condition-level split.
 
         Args:
+            unseen_gene_fraction: Fraction of single genes held out as unseen
             seen_single_train_ratio: Train ratio for seen single-gene conditions
-            double_train_ratio: Train ratio for double-gene conditions
-            double_val_ratio: Val ratio for double-gene conditions (remaining → test)
+            combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
+            combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions (remaining → test)
             double_freq_bins: Number of bins for per-gene double frequency
             double_count_bins: Number of bins for per-condition cell counts
+            unseen_gene_count_bins: Bins for stratifying unseen single genes by cell count
+            target_test_fraction: Optional target fraction for test set after downsampling
             min_cells_per_condition: Minimum cells for single-gene conditions (filter threshold)
             min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
             seed: Random seed
@@ -93,11 +99,14 @@ class PerturbDataset:
 
         # Create splitter and split
         splitter = NormanConditionSplitter(
+            unseen_gene_fraction=unseen_gene_fraction,
             seen_single_train_ratio=seen_single_train_ratio,
-            double_train_ratio=double_train_ratio,
-            double_val_ratio=double_val_ratio,
+            combo_seen2_train_ratio=combo_seen2_train_ratio,
+            combo_seen2_val_ratio=combo_seen2_val_ratio,
             double_freq_bins=double_freq_bins,
             double_count_bins=double_count_bins,
+            unseen_gene_count_bins=unseen_gene_count_bins,
+            target_test_fraction=target_test_fraction,
             seed=seed,
         )
 
@@ -287,11 +296,14 @@ class PerturbDataset:
 def load_perturb_data(
     h5ad_path: str | Path,
     condition_split_path: Optional[str | Path] = None,
+    unseen_gene_fraction: float = 0.15,
     seen_single_train_ratio: float = 0.9,
-    double_train_ratio: float = 0.7,
-    double_val_ratio: float = 0.15,
+    combo_seen2_train_ratio: float = 0.7,
+    combo_seen2_val_ratio: float = 0.15,
     double_freq_bins: int = 3,
     double_count_bins: int = 3,
+    unseen_gene_count_bins: int = 3,
+    target_test_fraction: float | None = None,
     min_cells_per_condition: int = 50,
     min_cells_per_double: int = 30,
     seed: int = 42,
@@ -302,11 +314,14 @@ def load_perturb_data(
     Args:
         h5ad_path: Path to h5ad file
         condition_split_path: Path to existing condition split JSON (if None, creates new)
+        unseen_gene_fraction: Fraction of single genes held out as unseen
         seen_single_train_ratio: Train ratio for seen single-gene conditions
-        double_train_ratio: Train ratio for double-gene conditions
-        double_val_ratio: Val ratio for double-gene conditions (remaining → test)
+        combo_seen2_train_ratio: Train ratio for 2/2-seen double-gene conditions
+        combo_seen2_val_ratio: Val ratio for 2/2-seen double-gene conditions (remaining → test)
         double_freq_bins: Number of bins for per-gene double frequency
         double_count_bins: Number of bins for per-condition cell counts
+        unseen_gene_count_bins: Bins for stratifying unseen single genes by cell count
+        target_test_fraction: Optional target fraction for test set after downsampling
         min_cells_per_condition: Minimum cells for single-gene conditions
         min_cells_per_double: Minimum cells for double-gene conditions (lower to increase coverage)
         seed: Random seed
@@ -326,11 +341,14 @@ def load_perturb_data(
             ) from exc
     else:
         dataset.create_condition_split(
+            unseen_gene_fraction=unseen_gene_fraction,
             seen_single_train_ratio=seen_single_train_ratio,
-            double_train_ratio=double_train_ratio,
-            double_val_ratio=double_val_ratio,
+            combo_seen2_train_ratio=combo_seen2_train_ratio,
+            combo_seen2_val_ratio=combo_seen2_val_ratio,
             double_freq_bins=double_freq_bins,
             double_count_bins=double_count_bins,
+            unseen_gene_count_bins=unseen_gene_count_bins,
+            target_test_fraction=target_test_fraction,
             min_cells_per_condition=min_cells_per_condition,
             min_cells_per_double=min_cells_per_double,
             seed=seed,

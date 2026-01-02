@@ -20,6 +20,12 @@ conda activate vcc
 
 set -euo pipefail
 
+echo ""
+echo "=============================================="
+echo "Data Preparation"
+echo "=============================================="
+python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
+
 echo "=============================================="
 echo "Running all baseline models"
 echo "=============================================="
@@ -27,6 +33,7 @@ echo "=============================================="
 echo ""
 echo "[1/2] Running PCA baseline..."
 echo "----------------------------------------------"
+python -m src.main --config src/configs/pca_knn_baseline.yaml --mode pca_knn
 
 
 echo ""
