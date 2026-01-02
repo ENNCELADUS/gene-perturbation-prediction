@@ -4,7 +4,7 @@
 data:
   h5ad_path: data/norman/perturb_processed.h5ad
   control_match_keys: ["batch", "cell_type"]
-  control_n_samples: 12
+  control_n_samples: 8
 
 # Norman GEARS-style Condition-level split (optimized)
 condition_split:
@@ -48,11 +48,11 @@ training:
   early_stopping_patience: 6
   early_stopping_metric: val_loss
   ranking_loss_weight: 1.0
-  bce_loss_weight: 0.01
-  ranking_num_negatives: 64
-  ranking_margin: 0.1
-  ranking_hard_negative_ratio: 0.2
-  ranking_hard_candidate_factor: 4.0
+  bce_loss_weight: 0.03
+  ranking_num_negatives: 96
+  ranking_margin: 0.0
+  ranking_hard_negative_ratio: 0.1
+  ranking_hard_candidate_factor: 3.0
   ranking_pos_weight_alpha: 0.3
   ranking_pos_weight_cap: 5.0
   ranking_pos_weight_eps: 1.0
