@@ -13,6 +13,7 @@ condition_split:
   double_count_bins: 3
   min_cells_per_condition: 50
   min_cells_per_double: 30
+  target_test_fraction: 0.2
   seed: 42
   output_path: data/norman/splits/norman_condition_split_hard_seed42.json
 

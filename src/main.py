@@ -155,6 +155,7 @@ def run_pipeline(config: dict, args) -> dict:
         double_freq_bins=cond_split_config.get("double_freq_bins", 3),
         double_count_bins=cond_split_config.get("double_count_bins", 3),
         unseen_gene_count_bins=cond_split_config.get("unseen_gene_count_bins", 3),
+        target_test_fraction=cond_split_config.get("target_test_fraction"),
         min_cells_per_condition=cond_split_config.get("min_cells_per_condition", 50),
         min_cells_per_double=cond_split_config.get("min_cells_per_double", 30),
         seed=cond_split_config.get("seed", 42),

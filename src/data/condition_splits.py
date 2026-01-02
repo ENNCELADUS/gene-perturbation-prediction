@@ -82,6 +82,7 @@ class NormanConditionSplitter:
         double_freq_bins: int = 3,
         double_count_bins: int = 3,
         unseen_gene_count_bins: int = 3,
+        target_test_fraction: Optional[float] = None,
         seed: int = 42,
     ):
         """
@@ -95,6 +96,7 @@ class NormanConditionSplitter:
             double_freq_bins: Number of bins for per-gene double frequency
             double_count_bins: Number of bins for per-condition cell counts
             unseen_gene_count_bins: Bins for stratifying unseen single genes by cell count
+            target_test_fraction: Optional target fraction for test set after downsampling
             seed: Random seed for reproducibility
         """
         self.unseen_gene_fraction = unseen_gene_fraction
@@ -104,6 +106,7 @@ class NormanConditionSplitter:
         self.double_freq_bins = double_freq_bins
         self.double_count_bins = double_count_bins
         self.unseen_gene_count_bins = unseen_gene_count_bins
+        self.target_test_fraction = target_test_fraction
         self.seed = seed
 
     @staticmethod
@@ -337,6 +340,17 @@ class NormanConditionSplitter:
         test_strata["double_seen0"] = double_seen0
         test_strata["double_test"] = test_double_seen2 + double_seen1 + double_seen0
 
+        if self.target_test_fraction is not None:
+            (
+                test_conditions,
+                test_strata,
+            ) = self._downsample_test_conditions(
+                train_conditions=train_conditions,
+                val_conditions=val_conditions,
+                test_strata=test_strata,
+                rng=rng,
+            )
+
         return ConditionSplit(
             train_conditions=train_conditions,
             val_conditions=val_conditions,
@@ -345,6 +359,116 @@ class NormanConditionSplitter:
             unseen_genes=sorted(unseen_set),
             seed=self.seed,
         )
+
+    def _downsample_test_conditions(
+        self,
+        train_conditions: List[str],
+        val_conditions: List[str],
+        test_strata: Dict[str, List[str]],
+        rng: np.random.Generator,
+    ) -> tuple[List[str], Dict[str, List[str]]]:
+        if self.target_test_fraction is None:
+            return test_strata.get("single_unseen", []) + test_strata.get(
+                "double_test", []
+            ), test_strata
+
+        if not 0 < self.target_test_fraction < 1:
+            raise ValueError("target_test_fraction must be between 0 and 1.")
+
+        base = len(train_conditions) + len(val_conditions)
+        target_test = int(
+            round((self.target_test_fraction / (1 - self.target_test_fraction)) * base)
+        )
+
+        single_unseen = list(test_strata.get("single_unseen", []))
+        double_seen2 = list(test_strata.get("double_seen2", []))
+        double_seen1 = list(test_strata.get("double_seen1", []))
+        double_seen0 = list(test_strata.get("double_seen0", []))
+        current_test = (
+            len(single_unseen)
+            + len(double_seen2)
+            + len(double_seen1)
+            + len(double_seen0)
+        )
+
+        if target_test <= 0 or target_test >= current_test:
+            test_conditions = single_unseen + double_seen2 + double_seen1 + double_seen0
+            return test_conditions, test_strata
+
+        if target_test < len(single_unseen):
+            target_test = len(single_unseen)
+
+        remaining = target_test - len(single_unseen)
+        group_sizes = {
+            "double_seen2": len(double_seen2),
+            "double_seen1": len(double_seen1),
+            "double_seen0": len(double_seen0),
+        }
+        alloc = self._allocate_counts(group_sizes, remaining)
+
+        # Downsample seen2 by bin
+        seen2_bins = {
+            k: v for k, v in test_strata.items() if k.startswith("double_seen2_f")
+        }
+        if seen2_bins:
+            bin_sizes = {k: len(v) for k, v in seen2_bins.items()}
+            bin_alloc = self._allocate_counts(bin_sizes, alloc["double_seen2"])
+            new_seen2 = []
+            for key, items in seen2_bins.items():
+                keep = bin_alloc.get(key, 0)
+                sampled = self._sample_items(items, keep, rng)
+                test_strata[key] = sampled
+                new_seen2.extend(sampled)
+            double_seen2 = new_seen2
+        else:
+            double_seen2 = self._sample_items(double_seen2, alloc["double_seen2"], rng)
+
+        double_seen1 = self._sample_items(double_seen1, alloc["double_seen1"], rng)
+        double_seen0 = self._sample_items(double_seen0, alloc["double_seen0"], rng)
+
+        test_strata["double_seen2"] = double_seen2
+        test_strata["double_seen1"] = double_seen1
+        test_strata["double_seen0"] = double_seen0
+        test_strata["double_test"] = double_seen2 + double_seen1 + double_seen0
+
+        test_conditions = single_unseen + test_strata["double_test"]
+        rng.shuffle(test_conditions)
+        return test_conditions, test_strata
+
+    @staticmethod
+    def _allocate_counts(sizes: Dict[str, int], target: int) -> Dict[str, int]:
+        counts = {k: 0 for k in sizes}
+        total = sum(sizes.values())
+        if target <= 0 or total <= 0:
+            return counts
+        if target >= total:
+            return sizes
+
+        raw = {k: (target * (sizes[k] / total)) for k in sizes}
+        counts = {k: int(np.floor(raw[k])) for k in sizes}
+        remainder = target - sum(counts.values())
+        fractions = sorted(
+            ((k, raw[k] - counts[k]) for k in sizes), key=lambda x: x[1], reverse=True
+        )
+        for k, _ in fractions:
+            if remainder <= 0:
+                break
+            if counts[k] < sizes[k]:
+                counts[k] += 1
+                remainder -= 1
+
+        for k in counts:
+            counts[k] = min(counts[k], sizes[k])
+        return counts
+
+    @staticmethod
+    def _sample_items(items: List[str], k: int, rng: np.random.Generator) -> List[str]:
+        if k <= 0 or not items:
+            return []
+        if k >= len(items):
+            return list(items)
+        idx = rng.choice(len(items), size=k, replace=False)
+        return [items[i] for i in idx]
 
     def summary(self, split: ConditionSplit) -> Dict:
         """Generate summary statistics for a split."""

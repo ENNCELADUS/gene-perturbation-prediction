@@ -13,6 +13,7 @@ condition_split:
   combo_seen2_val_ratio: 0.15     # 15% val for 2/2-seen combos (remaining → test)
   min_cells_per_condition: 50     # Filter threshold for single-gene conditions
   min_cells_per_double: 30        # Lower threshold for double-gene conditions
+  target_test_fraction: 0.2
   seed: 42
   output_path: data/norman/splits/norman_condition_split_hard_seed42.json
 
