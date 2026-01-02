@@ -18,6 +18,8 @@ if str(scgpt_path) not in sys.path:
 
 from scgpt.tokenizer.gene_tokenizer import tokenize_and_pad_batch
 
+from .preprocess_utils import preprocess_counts_to_bins, scgpt_binning
+
 
 class ForwardModelDataset(Dataset):
     """
@@ -46,6 +48,13 @@ class ForwardModelDataset(Dataset):
         self.condition_key = condition_key
         self.max_control_per_condition = max_control_per_condition
         self.rng = np.random.RandomState(seed)
+        self.binning_rng = np.random.RandomState(seed + 1)
+
+        if "counts" in self.adata.layers:
+            self.expr_layer = "counts"
+        else:
+            self.expr_layer = None
+            print("Warning: counts layer missing; falling back to adata.X for inputs.")
 
         # Get control cells
         self.control_mask = adata.obs[control_key] == 1
@@ -89,19 +98,9 @@ class ForwardModelDataset(Dataset):
     def __getitem__(self, idx):
         ctrl_idx, pert_idx, condition = self.examples[idx]
 
-        # Get expression data (assuming adata.X is already log-normalized)
-        ctrl_expr = (
-            self.adata.X[ctrl_idx].toarray().flatten()
-            if hasattr(self.adata.X, "toarray")
-            else self.adata.X[ctrl_idx]
-        )
-        pert_expr = (
-            self.adata.X[pert_idx].toarray().flatten()
-            if hasattr(self.adata.X, "toarray")
-            else self.adata.X[pert_idx]
-        )
+        ctrl_expr = self._get_expression(ctrl_idx)
+        pert_expr = self._get_expression(pert_idx)
 
-        # Bin the expression values (scGPT uses binned continuous values)
         ctrl_binned = self._bin_expression(ctrl_expr)
         pert_binned = self._bin_expression(pert_expr)
 
@@ -127,17 +126,20 @@ class ForwardModelDataset(Dataset):
             "pert_gene_ids": pert_gene_ids,
         }
 
+    def _get_expression(self, idx: int) -> np.ndarray:
+        if self.expr_layer is None:
+            row = self.adata.X[idx]
+        else:
+            row = self.adata.layers[self.expr_layer][idx]
+        return row.toarray().flatten() if hasattr(row, "toarray") else np.array(row)
+
     def _bin_expression(self, expr: np.ndarray) -> np.ndarray:
-        """Bin expression values to [0, n_bins-1]."""
-        # scGPT uses percentile-based binning
-        expr_clip = np.clip(expr, 0, None)  # Remove negative values
-
-        # Simple linear binning (can be improved with percentile-based)
-        max_val = expr_clip.max() if expr_clip.max() > 0 else 1.0
-        binned = np.floor(expr_clip / max_val * (self.n_bins - 1)).astype(int)
-        binned = np.clip(binned, 0, self.n_bins - 1)
-
-        return binned
+        """scGPT-aligned: counts -> normalize_total -> log1p -> quantile binning."""
+        if self.expr_layer == "counts":
+            return preprocess_counts_to_bins(
+                expr, n_bins=self.n_bins, rng=self.binning_rng
+            )
+        return scgpt_binning(expr, n_bins=self.n_bins, rng=self.binning_rng)
 
     def _parse_condition(self, condition: str) -> List[str]:
         """Parse condition string to extract gene names (e.g., 'GENE1+GENE2' → ['GENE1', 'GENE2'])."""
