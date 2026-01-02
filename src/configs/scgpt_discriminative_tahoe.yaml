@@ -1,24 +1,24 @@
-# scGPT Route B1 Configuration (Gene-Level Scoring + Composition)
+# scGPT Discriminative Configuration (Tahoe Drug Split)
 
 # Data
 data:
-  h5ad_path: data/norman/perturb_processed.h5ad
-  control_match_keys: ["batch", "cell_type"]
-  control_n_samples: 16
+  dataset: tahoe
+  h5ad_path: data/processed/tahoe/tahoe_log1p.h5ad
+  control_match_keys: []
+  control_n_samples: 1
+  control_layer: ctrl
 
-# Norman GEARS-style Condition-level split (optimized)
+# Tahoe drug-based condition split
 condition_split:
-  unseen_gene_fraction: 0.15
-  seen_single_train_ratio: 0.9
-  combo_seen2_train_ratio: 0.7
-  combo_seen2_val_ratio: 0.15
-  double_freq_bins: 3
-  double_count_bins: 3
-  min_cells_per_condition: 50
-  min_cells_per_double: 30
-  target_test_fraction: 0.2
+  output_path: data/processed/tahoe/splits/tahoe_drug_split_seed42.json
   seed: 42
-  output_path: data/norman/splits/norman_condition_split_hard_seed42.json
+  test_ratio: 0.2
+  single_val_ratio: 0.1
+  multi_val_ratio: 0.15
+  single_target_test_per_gene: 0
+  multi_test_max_targets: 3
+  multi_test_fallback_max_targets: 4
+  min_cells_per_condition: 5
 
 # Model
 model:
@@ -70,12 +70,11 @@ head:
 
 # Evaluation
 evaluation:
-  checkpoint_path: model/scgpt_discriminative/v2.3/best_model.pt
+  checkpoint_path: results/scgpt_discriminative_tahoe/best_model.pt
   top_k_values: [1, 5, 10, 20, 40]
-  mask: 0  # 0=off, K=mask K genes (must include true target genes)
-  aggregate_by_condition: true
-  output_path: results/scgpt_discriminative/eval_v2.3_results_no_mask.json
+  mask: 0
+  output_path: results/scgpt_discriminative_tahoe/eval_results.json
 
 # Logging
 logging:
-  output_dir: results/scgpt_discriminative
+  output_dir: results/scgpt_discriminative_tahoe

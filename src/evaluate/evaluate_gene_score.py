@@ -8,6 +8,7 @@ against the ground-truth target gene set.
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 import yaml
@@ -259,6 +260,9 @@ def main():
         mask_k = int(mask_k)
     if mask_k > 0:
         print(f"  - Masking {mask_k} genes per query (anti-cheat) enabled")
+    aggregate_by_condition = bool(eval_config.get("aggregate_by_condition", True))
+    if aggregate_by_condition:
+        print("  - Aggregating gene scores per condition (mean)")
     target_gene_pool = build_target_gene_pool(dataset.test_conditions)
     if "gene_name" in dataset.adata.var.columns:
         eval_gene_names = dataset.adata.var["gene_name"].tolist()
@@ -267,6 +271,9 @@ def main():
     gene_name_to_idx = {g: i for i, g in enumerate(eval_gene_names)}
     all_scores: List[np.ndarray] = []
     all_targets: List[List[int]] = []
+    condition_scores: Dict[str, List[np.ndarray]] = defaultdict(list)
+    condition_targets: Dict[str, List[int]] = {}
+    n_cells_scored = 0
 
     for batch in tqdm(test_loader, desc="Scoring"):
         genes = batch["genes"].to(device)
@@ -314,7 +321,26 @@ def main():
             ]
             if not target_indices:
                 continue
-            all_scores.append(gene_scores[i].detach().cpu().numpy())
+            score_vec = gene_scores[i].detach().cpu().numpy()
+            if aggregate_by_condition:
+                condition_scores[condition].append(score_vec)
+                condition_targets.setdefault(condition, target_indices)
+            else:
+                all_scores.append(score_vec)
+                all_targets.append(target_indices)
+            n_cells_scored += 1
+
+    if aggregate_by_condition:
+        all_scores = []
+        all_targets = []
+        for condition, scores in condition_scores.items():
+            if not scores:
+                continue
+            target_indices = condition_targets.get(condition, [])
+            if not target_indices:
+                continue
+            mean_scores = np.mean(np.stack(scores, axis=0), axis=0)
+            all_scores.append(mean_scores)
             all_targets.append(target_indices)
 
     metrics = compute_gene_metrics(
@@ -331,11 +357,18 @@ def main():
     results = {
         "metrics": output_metrics,
         "n_evaluated": len(all_targets),
+        "n_cells_scored": n_cells_scored,
     }
+    if aggregate_by_condition:
+        results["n_conditions"] = len(all_targets)
 
     print("\n" + "=" * 60)
     print("Results:")
     print("=" * 60)
+    if aggregate_by_condition:
+        print(
+            f"  Conditions evaluated: {results['n_evaluated']}, cells scored: {n_cells_scored}"
+        )
     for k in top_k_values:
         exact = results["metrics"].get(f"exact_hit@{k}", 0)
         relevant = results["metrics"].get(f"relevant_hit@{k}", 0)
