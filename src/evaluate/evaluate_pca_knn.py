@@ -173,6 +173,21 @@ def apply_mask_to_profiles(
     return masked
 
 
+def apply_global_mask(
+    profiles: np.ndarray,
+    gene_name_to_idx: Dict[str, int],
+    mask_genes: List[str],
+) -> np.ndarray:
+    if not mask_genes:
+        return profiles
+
+    masked = np.array(profiles, copy=True)
+    indices = [gene_name_to_idx[g] for g in mask_genes if g in gene_name_to_idx]
+    if indices:
+        masked[:, indices] = 0.0
+    return masked
+
+
 def compute_neighbor_indices(
     train_emb: np.ndarray,
     query_emb: np.ndarray,
@@ -346,9 +361,23 @@ def main():
     mask_k = eval_cfg.get("mask", 0)
     if isinstance(mask_k, bool):
         mask_k = int(mask_k)
+    mask_all_targets = bool(eval_cfg.get("mask_all_targets", False))
     mask_train = bool(baseline_cfg.get("mask_train", False))
 
-    if mask_k > 0:
+    if mask_all_targets:
+        print("  - Masking all target genes for anti-cheat evaluation")
+        full_target_pool = build_target_gene_pool(dataset.all_conditions)
+        if mask_train:
+            train_profiles = apply_global_mask(
+                train_profiles, gene_name_to_idx, full_target_pool
+            )
+        val_profiles = apply_global_mask(
+            val_profiles, gene_name_to_idx, full_target_pool
+        )
+        test_profiles = apply_global_mask(
+            test_profiles, gene_name_to_idx, full_target_pool
+        )
+    elif mask_k > 0:
         train_val_pool = build_target_gene_pool(
             dataset.train_conditions + dataset.val_conditions
         )
