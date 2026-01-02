@@ -1,0 +1,82 @@
+# scGPT Route B1 Configuration (Conservative baseline with gene-weighted sampling)
+
+# Data
+data:
+  h5ad_path: data/norman/perturb_processed.h5ad
+  control_match_keys: ["batch", "cell_type"]
+  control_n_samples: 8
+
+# Norman GEARS-style Condition-level split (optimized)
+condition_split:
+  unseen_gene_fraction: 0.15
+  seen_single_train_ratio: 0.9
+  combo_seen2_train_ratio: 0.7
+  combo_seen2_val_ratio: 0.15
+  double_freq_bins: 3
+  double_count_bins: 3
+  min_cells_per_condition: 50
+  min_cells_per_double: 30
+  target_test_fraction: 0.2
+  seed: 42
+  output_path: data/norman/splits/norman_condition_split_hard_seed42.json
+
+# Model
+model:
+  encoder: scgpt
+  pretrained_dir: model/scGPT
+  freeze_encoder: true
+  preprocess_binning: 51
+
+# Training
+training:
+  epochs: 150
+  batch_size: 32
+  head_learning_rate: 5.0e-5
+  backbone_learning_rate: 5.0e-6
+  weight_decay: 0.05
+  warmup_ratio: 0.2
+  unfreeze_last_n_layers: 2
+  balanced_sampling: false
+  # Note: gene_weighted_sampling overrides balanced_sampling in the training loop.
+  gene_weighted_sampling: true
+  sample_weight_alpha: 0.3
+  sample_weight_cap: 5.0
+  sample_weight_eps: 1.0
+  weighted_samples_per_replica: null
+  sampling_seed: 0
+  control_chunk_size: 64
+  control_no_grad: true
+  balanced_sampling_n_conditions: 8
+  balanced_sampling_n_cells: 4
+  early_stopping_patience: 6
+  early_stopping_metric: val_loss
+  ranking_loss_weight: 1.0
+  bce_loss_weight: 0.05
+  ranking_num_negatives: 96
+  ranking_margin: 0.0
+  ranking_hard_negative_ratio: 0.1
+  ranking_hard_candidate_factor: 3.0
+  ranking_pos_weight_alpha: 0.3
+  ranking_pos_weight_cap: 5.0
+  ranking_pos_weight_eps: 1.0
+  bce_pos_weight_enabled: true
+  bce_pos_weight_cap: 50.0
+  bce_pos_weight_min: 1.0
+
+# Head
+head:
+  score_mode: dot
+  hidden_dim: 256
+  dropout: 0.3
+
+# Evaluation
+evaluation:
+  checkpoint_path: model/scgpt_discriminative/v3.1/best_model.pt
+  top_k_values: [1, 5, 10, 20, 40]
+  mask: 0  # 0=off, K=mask K genes (must include true target genes)
+  aggregate_by_condition: true
+  output_path: results/scgpt_discriminative/eval_v3.1_results_no_mask.json
+
+# Logging
+logging:
+  output_dir: results/scgpt_discriminative
