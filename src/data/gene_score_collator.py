@@ -23,6 +23,7 @@ if str(scgpt_path) not in sys.path:
 from scgpt.tokenizer.gene_tokenizer import tokenize_and_pad_batch
 
 from ..evaluate.metrics import parse_condition_genes
+from .preprocess_utils import preprocess_counts_to_bins, scgpt_binning
 
 
 class GeneScoreDataset(Dataset):
@@ -68,6 +69,13 @@ class GeneScoreDataset(Dataset):
         if self.n_control_samples <= 0:
             raise ValueError("n_control_samples must be a positive integer.")
         self.rng = np.random.RandomState(seed)
+        self.binning_rng = np.random.RandomState(seed + 1)
+
+        if "counts" in self.adata.layers:
+            self.expr_layer = "counts"
+        else:
+            self.expr_layer = None
+            print("Warning: counts layer missing; falling back to adata.X for inputs.")
 
         # Use 'gene_name' column if available (gene symbols),
         # otherwise fall back to var_names (may be Ensembl IDs)
@@ -153,11 +161,7 @@ class GeneScoreDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict:
         cell_idx, condition, match_key = self.examples[idx]
 
-        expr = (
-            self.adata.X[cell_idx].toarray().flatten()
-            if hasattr(self.adata.X, "toarray")
-            else self.adata.X[cell_idx]
-        )
+        expr = self._get_expression(cell_idx)
         expr_binned = self._bin_expression(expr)
 
         pert_gene_indices = self.condition_to_gene_indices.get(condition, [])
@@ -170,11 +174,7 @@ class GeneScoreDataset(Dataset):
         )
         control_exprs = []
         for ctrl_idx in control_indices:
-            ctrl_expr = (
-                self.adata.X[ctrl_idx].toarray().flatten()
-                if hasattr(self.adata.X, "toarray")
-                else self.adata.X[ctrl_idx]
-            )
+            ctrl_expr = self._get_expression(ctrl_idx)
             control_exprs.append(self._bin_expression(ctrl_expr))
         control_exprs = np.stack(control_exprs)
 
@@ -186,13 +186,20 @@ class GeneScoreDataset(Dataset):
             "pert_gene_indices": pert_gene_indices,
         }
 
+    def _get_expression(self, idx: int) -> np.ndarray:
+        if self.expr_layer is None:
+            row = self.adata.X[idx]
+        else:
+            row = self.adata.layers[self.expr_layer][idx]
+        return row.toarray().flatten() if hasattr(row, "toarray") else np.array(row)
+
     def _bin_expression(self, expr: np.ndarray) -> np.ndarray:
-        """Bin expression values to [0, n_bins-1]."""
-        expr_clip = np.clip(expr, 0, None)
-        max_val = expr_clip.max() if expr_clip.max() > 0 else 1.0
-        binned = np.floor(expr_clip / max_val * (self.n_bins - 1)).astype(int)
-        binned = np.clip(binned, 0, self.n_bins - 1)
-        return binned
+        """scGPT-aligned: counts -> normalize_total -> log1p -> quantile binning."""
+        if self.expr_layer == "counts":
+            return preprocess_counts_to_bins(
+                expr, n_bins=self.n_bins, rng=self.binning_rng
+            )
+        return scgpt_binning(expr, n_bins=self.n_bins, rng=self.binning_rng)
 
     def _condition_gene_indices(self, condition: str) -> List[int]:
         genes = parse_condition_genes(condition)
