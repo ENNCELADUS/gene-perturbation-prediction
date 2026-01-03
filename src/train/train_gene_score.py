@@ -558,7 +558,8 @@ def main():
     with open(pretrained_dir / "vocab.json") as f:
         vocab = json.load(f)
     n_layers = int(model_args.get("nlayers", 12))
-    unfreeze_last_n_layers = config["training"].get("unfreeze_last_n_layers", 1)
+    training_cfg = config.get("training", {})
+    unfreeze_last_n_layers = training_cfg.get("unfreeze_last_n_layers", 1)
     freeze_layers_up_to = max(n_layers - 1 - unfreeze_last_n_layers, -1)
 
     train_dataset = GeneScoreDataset(
@@ -587,7 +588,6 @@ def main():
 
     n_genes = dataset.adata.n_vars
 
-    training_cfg = config.get("training", {})
     ranking_pos_weights = None
     if training_cfg.get("ranking_pos_weight_alpha"):
         ranking_weights = train_dataset.get_gene_weights(
