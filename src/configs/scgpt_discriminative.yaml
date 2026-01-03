@@ -29,13 +29,13 @@ model:
 
 # Training
 training:
-  epochs: 150
+  epochs: 80
   batch_size: 32
-  head_learning_rate: 5.0e-5
-  backbone_learning_rate: 5.0e-6
-  weight_decay: 0.02
-  warmup_ratio: 0.2
-  unfreeze_last_n_layers: 2
+  head_learning_rate: 2.0e-5
+  backbone_learning_rate: 2.0e-6
+  weight_decay: 0.05
+  warmup_ratio: 0.3
+  unfreeze_last_n_layers: 1
   balanced_sampling: true
   gene_weighted_sampling: false
   sample_weight_alpha: 0.1
@@ -45,7 +45,7 @@ training:
   sampling_seed: 0
   control_chunk_size: 64
   control_no_grad: true
-  control_aggregate: false
+  control_aggregate: true
   balanced_sampling_n_conditions: 8
   balanced_sampling_n_cells: 4
   early_stopping_patience: 4
@@ -66,8 +66,8 @@ training:
 # Head
 head:
   score_mode: dot
-  hidden_dim: 384
-  dropout: 0.3
+  hidden_dim: 256
+  dropout: 0.4
 
 # Evaluation
 evaluation:
