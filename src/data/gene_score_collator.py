@@ -14,6 +14,7 @@ import sys
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from scipy import sparse
 
 # Add scGPT to path
 scgpt_path = Path(__file__).parent.parent.parent / "scGPT"
@@ -47,6 +48,7 @@ class GeneScoreDataset(Dataset):
         sample_weight_alpha: Optional[float] = None,
         sample_weight_cap: float = 10.0,
         sample_weight_eps: float = 1.0,
+        control_aggregate: bool = False,
         seed: int = 42,
     ):
         self.adata = adata
@@ -67,6 +69,7 @@ class GeneScoreDataset(Dataset):
         self.sample_weight_alpha = sample_weight_alpha
         self.sample_weight_cap = sample_weight_cap
         self.sample_weight_eps = sample_weight_eps
+        self.control_aggregate = control_aggregate
         if self.n_control_samples <= 0:
             raise ValueError("n_control_samples must be a positive integer.")
         self.rng = np.random.RandomState(seed)
@@ -106,6 +109,17 @@ class GeneScoreDataset(Dataset):
                 self.control_pool_by_key[key] = np.array(values)
         else:
             self.control_pool_by_key[()] = self.control_indices
+
+        self.control_mean_by_key: Dict[Tuple, np.ndarray] = {}
+        if self.control_aggregate:
+            for key, indices in self.control_pool_by_key.items():
+                if len(indices) == 0:
+                    continue
+                mean_vec = self._mean_expression(indices)
+                self.control_mean_by_key[key] = self._bin_expression(mean_vec)
+            if () not in self.control_mean_by_key and len(self.control_indices) > 0:
+                mean_vec = self._mean_expression(self.control_indices)
+                self.control_mean_by_key[()] = self._bin_expression(mean_vec)
 
         self.examples = []
         self.condition_to_indices: Dict[str, List[int]] = {}
@@ -167,18 +181,27 @@ class GeneScoreDataset(Dataset):
         expr_binned = self._bin_expression(expr)
 
         pert_gene_indices = self.condition_to_gene_indices.get(condition, [])
-        control_pool = self.control_pool_by_key.get(match_key)
-        if control_pool is None or len(control_pool) == 0:
-            control_pool = self.control_indices
-        replace = len(control_pool) < self.n_control_samples
-        control_indices = self.rng.choice(
-            control_pool, size=self.n_control_samples, replace=replace
-        )
-        control_exprs = []
-        for ctrl_idx in control_indices:
-            ctrl_expr = self._get_expression(ctrl_idx)
-            control_exprs.append(self._bin_expression(ctrl_expr))
-        control_exprs = np.stack(control_exprs)
+        if self.control_aggregate:
+            control_key = match_key if match_key in self.control_mean_by_key else ()
+            control_profile = self.control_mean_by_key.get(control_key)
+            if control_profile is None:
+                raise ValueError(
+                    "Control aggregation is enabled but no control profiles are available."
+                )
+            control_exprs = control_profile[None, :]
+        else:
+            control_pool = self.control_pool_by_key.get(match_key)
+            if control_pool is None or len(control_pool) == 0:
+                control_pool = self.control_indices
+            replace = len(control_pool) < self.n_control_samples
+            control_indices = self.rng.choice(
+                control_pool, size=self.n_control_samples, replace=replace
+            )
+            control_exprs = []
+            for ctrl_idx in control_indices:
+                ctrl_expr = self._get_expression(ctrl_idx)
+                control_exprs.append(self._bin_expression(ctrl_expr))
+            control_exprs = np.stack(control_exprs)
 
         return {
             "expr": expr_binned,
@@ -194,6 +217,17 @@ class GeneScoreDataset(Dataset):
         else:
             row = self.adata.layers[self.expr_layer][idx]
         return row.toarray().flatten() if hasattr(row, "toarray") else np.array(row)
+
+    def _mean_expression(self, indices: np.ndarray) -> np.ndarray:
+        if self.expr_layer is None:
+            mat = self.adata.X[indices]
+        else:
+            mat = self.adata.layers[self.expr_layer][indices]
+        if sparse.issparse(mat):
+            mean_vec = np.asarray(mat.mean(axis=0)).ravel()
+        else:
+            mean_vec = np.mean(np.asarray(mat), axis=0)
+        return mean_vec
 
     def _bin_expression(self, expr: np.ndarray) -> np.ndarray:
         """scGPT-aligned: counts -> normalize_total -> log1p -> quantile binning."""

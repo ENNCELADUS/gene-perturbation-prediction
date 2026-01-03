@@ -568,6 +568,7 @@ def main():
         n_bins=config["model"].get("preprocess_binning", 51),
         match_keys=config["data"].get("control_match_keys"),
         n_control_samples=config["data"].get("control_n_samples", 8),
+        control_aggregate=training_cfg.get("control_aggregate", False),
         sample_weight_alpha=config.get("training", {}).get("sample_weight_alpha"),
         sample_weight_cap=config.get("training", {}).get("sample_weight_cap", 10.0),
         sample_weight_eps=config.get("training", {}).get("sample_weight_eps", 1.0),
@@ -580,6 +581,7 @@ def main():
         n_bins=config["model"].get("preprocess_binning", 51),
         match_keys=config["data"].get("control_match_keys"),
         n_control_samples=config["data"].get("control_n_samples", 8),
+        control_aggregate=training_cfg.get("control_aggregate", False),
         sample_weight_alpha=None,
     )
 
