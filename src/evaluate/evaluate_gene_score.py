@@ -242,7 +242,6 @@ def main():
         n_bins=config["model"].get("preprocess_binning", 51),
         match_keys=config["data"].get("control_match_keys"),
         n_control_samples=config["data"].get("control_n_samples", 8),
-        control_aggregate=eval_config.get("control_aggregate", False),
     )
     model.set_score_gene_ids(test_dataset.gene_ids)
     test_loader = DataLoader(
