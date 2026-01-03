@@ -85,13 +85,13 @@ echo ""
 echo "=============================================="
 echo "[Route B1] Train Gene-Score Model (DDP if multi-GPU)"
 echo "=============================================="
-run_ddp -m src.main --config src/configs/scgpt_discriminative.yaml --mode route_b1_train
+run_ddp -m src.main --config src/configs/scgpt_discriminative_v3.yaml --mode route_b1_train
 
 echo ""
 echo "=============================================="
 echo "[Route B1] Evaluate Gene-Score Model"
 echo "=============================================="
-python -m src.main --config src/configs/scgpt_discriminative.yaml --mode route_b1_eval
+python -m src.main --config src/configs/scgpt_discriminative_v3.yaml --mode route_b1_eval
 
 echo ""
 echo "=============================================="
