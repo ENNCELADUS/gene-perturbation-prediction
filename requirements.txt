@@ -23,6 +23,7 @@ datasets>=2.10.0
 numba==0.62.1
 scib>=1.1.0
 scgpt>=0.2.0
+xgboost==2.1.4
 flash-attn==1.0.4  # requires CUDA/NVCC
 ipython
 

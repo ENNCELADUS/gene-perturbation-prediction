@@ -1,0 +1,507 @@
+"""
+Evaluation for tree-based gene scoring baselines (random forest / xgboost).
+
+Uses pseudobulk condition profiles and evaluates Top-K gene metrics
+against the ground-truth target gene set.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from itertools import product
+from pathlib import Path
+from typing import Dict, Iterable, List, Tuple
+
+import numpy as np
+import yaml
+from scipy import sparse
+
+from ..data import load_perturb_data
+from ..evaluate.evaluate_gene_score import compute_gene_metrics
+from ..evaluate.metrics import parse_condition_genes
+from ..model.tree_baseline import TreeGeneScorer
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Evaluate tree-based gene scoring baseline"
+    )
+    parser.add_argument("--config", type=str, required=True, help="Config file path")
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="results/tree_baseline/eval_results.json",
+        help="Output path for results JSON",
+    )
+    return parser.parse_args()
+
+
+def load_config(config_path: str) -> dict:
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+
+def get_cells_for_condition(dataset, condition: str):
+    """
+    Get cells for a condition, handling format variations.
+
+    The split uses normalized conditions (e.g., 'ATL1') but adata may use
+    original format (e.g., 'ATL1+ctrl' or 'ctrl+ATL1').
+    """
+    adata = dataset.adata
+    cond_col = dataset.condition_col
+
+    mask = adata.obs[cond_col] == condition
+    if mask.sum() > 0:
+        return adata[mask].copy()
+
+    genes = parse_condition_genes(condition)
+    if not genes:
+        return adata[mask].copy()
+
+    possible_formats = [condition]
+    if len(genes) == 1:
+        gene = list(genes)[0]
+        possible_formats.extend([f"{gene}+ctrl", f"ctrl+{gene}"])
+    elif len(genes) == 2:
+        g1, g2 = sorted(genes)
+        possible_formats.extend([f"{g1}+{g2}", f"{g2}+{g1}"])
+
+    for fmt in possible_formats:
+        mask = adata.obs[cond_col] == fmt
+        if mask.sum() > 0:
+            return adata[mask].copy()
+
+    return adata[adata.obs[cond_col] == "__NOMATCH__"].copy()
+
+
+def build_condition_profiles(
+    dataset, conditions: List[str]
+) -> Tuple[np.ndarray, List[str]]:
+    profiles = []
+    valid_conditions = []
+
+    for condition in conditions:
+        cond_adata = get_cells_for_condition(dataset, condition)
+        if cond_adata.n_obs == 0:
+            continue
+        X = cond_adata.X
+        if sparse.issparse(X):
+            X = X.toarray()
+        profile = np.mean(X, axis=0)
+        profiles.append(profile)
+        valid_conditions.append(condition)
+
+    if not profiles:
+        return np.empty((0, dataset.adata.n_vars)), []
+
+    return np.vstack(profiles), valid_conditions
+
+
+def build_label_matrix(
+    conditions: List[str],
+    gene_name_to_idx: Dict[str, int],
+    n_genes: int,
+) -> np.ndarray:
+    labels = np.zeros((len(conditions), n_genes), dtype=np.float32)
+    for i, condition in enumerate(conditions):
+        genes = parse_condition_genes(condition)
+        if not genes:
+            continue
+        indices = [gene_name_to_idx[g] for g in genes if g in gene_name_to_idx]
+        if indices:
+            labels[i, indices] = 1.0
+    return labels
+
+
+def select_extra_mask_genes(
+    condition: str,
+    target_genes: List[str],
+    target_gene_pool: List[str],
+    extra_k: int,
+) -> List[str]:
+    if extra_k <= 0:
+        return []
+
+    pool = [g for g in target_gene_pool if g not in target_genes]
+    if not pool:
+        return []
+
+    seed = int(hashlib.md5(condition.encode("utf-8")).hexdigest()[:8], 16)
+    rng = np.random.RandomState(seed)
+    sample_k = min(extra_k, len(pool))
+    return rng.choice(pool, size=sample_k, replace=False).tolist()
+
+
+def build_target_gene_pool(conditions: List[str]) -> List[str]:
+    pool = set()
+    for cond in conditions:
+        pool.update(parse_condition_genes(cond))
+    return sorted(pool)
+
+
+def apply_mask_to_profiles(
+    profiles: np.ndarray,
+    conditions: List[str],
+    gene_name_to_idx: Dict[str, int],
+    mask_k: int,
+    target_gene_pool: List[str],
+) -> np.ndarray:
+    if mask_k <= 0:
+        return profiles
+
+    masked = np.array(profiles, copy=True)
+    for i, condition in enumerate(conditions):
+        target_genes = sorted(parse_condition_genes(condition))
+        if not target_genes:
+            continue
+        effective_k = max(mask_k, len(target_genes))
+        extra_genes = select_extra_mask_genes(
+            condition=condition,
+            target_genes=target_genes,
+            target_gene_pool=target_gene_pool,
+            extra_k=effective_k - len(target_genes),
+        )
+        mask_genes = target_genes + extra_genes
+        for gene in mask_genes:
+            idx = gene_name_to_idx.get(gene)
+            if idx is None:
+                continue
+            masked[i, idx] = 0.0
+    return masked
+
+
+def apply_global_mask(
+    profiles: np.ndarray,
+    gene_name_to_idx: Dict[str, int],
+    mask_genes: List[str],
+) -> np.ndarray:
+    if not mask_genes:
+        return profiles
+
+    masked = np.array(profiles, copy=True)
+    indices = [gene_name_to_idx[g] for g in mask_genes if g in gene_name_to_idx]
+    if indices:
+        masked[:, indices] = 0.0
+    return masked
+
+
+def resolve_target_gene_pool(
+    mode: str,
+    train_conditions: List[str],
+    val_conditions: List[str],
+    test_conditions: List[str],
+    all_conditions: List[str],
+) -> List[str]:
+    if mode == "train":
+        return build_target_gene_pool(train_conditions)
+    if mode == "train_val":
+        return build_target_gene_pool(train_conditions + val_conditions)
+    if mode == "all":
+        return build_target_gene_pool(all_conditions)
+    if mode == "test":
+        return build_target_gene_pool(test_conditions)
+    raise ValueError("target_gene_pool must be one of train, train_val, test, all")
+
+
+def build_param_grid(model_type: str, cfg: dict) -> Iterable[Dict[str, object]]:
+    if model_type == "random_forest":
+        defaults = {
+            "n_estimators": 300,
+            "max_depth": None,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "max_features": "sqrt",
+            "bootstrap": True,
+            "n_jobs": -1,
+        }
+    else:
+        defaults = {
+            "n_estimators": 300,
+            "max_depth": 6,
+            "learning_rate": 0.05,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "min_child_weight": 1.0,
+            "reg_alpha": 0.0,
+            "reg_lambda": 1.0,
+            "objective": "reg:squarederror",
+            "tree_method": "auto",
+            "n_jobs": -1,
+            "verbosity": 0,
+        }
+
+    keys = list(defaults.keys())
+    values = []
+    for key in keys:
+        val = cfg.get(key, defaults[key])
+        if isinstance(val, list):
+            values.append(val)
+        else:
+            values.append([val])
+
+    for combo in product(*values):
+        yield dict(zip(keys, combo))
+
+
+def main():
+    args = parse_args()
+    config = load_config(args.config)
+
+    print("=" * 60)
+    print("Tree-based Baseline Evaluation")
+    print("=" * 60)
+
+    print("\n[1/4] Loading dataset...")
+    cond_split_config = config.get("condition_split", {})
+    dataset = load_perturb_data(
+        h5ad_path=config["data"]["h5ad_path"],
+        condition_split_path=cond_split_config.get("output_path"),
+        **{k: v for k, v in cond_split_config.items() if k != "output_path"},
+    )
+
+    print(f"  - Train conditions: {len(dataset.train_conditions)}")
+    print(f"  - Val conditions: {len(dataset.val_conditions)}")
+    print(f"  - Test conditions: {len(dataset.test_conditions)}")
+
+    if "gene_name" in dataset.adata.var.columns:
+        gene_names = dataset.adata.var["gene_name"].tolist()
+    else:
+        gene_names = dataset.adata.var_names.tolist()
+    gene_name_to_idx = {g: i for i, g in enumerate(gene_names)}
+    n_genes = len(gene_names)
+
+    print("\n[2/4] Building condition profiles...")
+    train_profiles, train_conditions = build_condition_profiles(
+        dataset, dataset.train_conditions
+    )
+    val_profiles, val_conditions = build_condition_profiles(
+        dataset, dataset.val_conditions
+    )
+    test_profiles, test_conditions = build_condition_profiles(
+        dataset, dataset.test_conditions
+    )
+
+    if train_profiles.shape[0] == 0:
+        raise RuntimeError("No training profiles found; check condition labels.")
+
+    train_labels = build_label_matrix(train_conditions, gene_name_to_idx, n_genes)
+
+    baseline_cfg = config.get("baseline", {})
+    eval_cfg = config.get("evaluation", {})
+    top_k_values = eval_cfg.get("top_k_values", [1, 5, 10, 20, 40])
+    mask_k = eval_cfg.get("mask", 0)
+    if isinstance(mask_k, bool):
+        mask_k = int(mask_k)
+    mask_all_targets = bool(eval_cfg.get("mask_all_targets", False))
+    mask_train = bool(baseline_cfg.get("mask_train", False))
+
+    if mask_all_targets:
+        print("  - Masking all target genes for anti-cheat evaluation")
+        full_target_pool = build_target_gene_pool(dataset.all_conditions)
+        if mask_train:
+            train_profiles = apply_global_mask(
+                train_profiles, gene_name_to_idx, full_target_pool
+            )
+        val_profiles = apply_global_mask(
+            val_profiles, gene_name_to_idx, full_target_pool
+        )
+        test_profiles = apply_global_mask(
+            test_profiles, gene_name_to_idx, full_target_pool
+        )
+    elif mask_k > 0:
+        train_val_pool = build_target_gene_pool(
+            dataset.train_conditions + dataset.val_conditions
+        )
+        test_pool = build_target_gene_pool(dataset.test_conditions)
+
+        if mask_train:
+            train_profiles = apply_mask_to_profiles(
+                train_profiles,
+                train_conditions,
+                gene_name_to_idx,
+                mask_k,
+                train_val_pool,
+            )
+
+        val_profiles = apply_mask_to_profiles(
+            val_profiles,
+            val_conditions,
+            gene_name_to_idx,
+            mask_k,
+            train_val_pool,
+        )
+        test_profiles = apply_mask_to_profiles(
+            test_profiles,
+            test_conditions,
+            gene_name_to_idx,
+            mask_k,
+            test_pool,
+        )
+
+    model_type = baseline_cfg.get("model_type", baseline_cfg.get("name", ""))
+    if not model_type:
+        model_type = "random_forest"
+    model_type = model_type.lower()
+    if model_type in {"rf", "randomforest"}:
+        model_type = "random_forest"
+    if model_type == "xgb":
+        model_type = "xgboost"
+
+    standardize = bool(baseline_cfg.get("standardize", False))
+    selection_metric = baseline_cfg.get("selection_metric", "mrr")
+    random_state = baseline_cfg.get("random_state", 42)
+
+    pool_mode = baseline_cfg.get("target_gene_pool", "train")
+    target_gene_pool = resolve_target_gene_pool(
+        pool_mode,
+        train_conditions=train_conditions,
+        val_conditions=val_conditions,
+        test_conditions=test_conditions,
+        all_conditions=dataset.all_conditions,
+    )
+    target_gene_indices = [
+        gene_name_to_idx[g] for g in target_gene_pool if g in gene_name_to_idx
+    ]
+    if not target_gene_indices:
+        raise RuntimeError("No target genes found; check condition parsing.")
+
+    print("\n[3/4] Selecting hyperparameters on validation set...")
+    best_score = -np.inf
+    best_params: Dict[str, object] = {}
+    best_val_metrics: Dict[str, float] = {}
+
+    for params in build_param_grid(model_type, baseline_cfg):
+        scorer = TreeGeneScorer(
+            model_type=model_type,
+            n_genes=n_genes,
+            target_gene_indices=target_gene_indices,
+            standardize=standardize,
+            random_state=random_state,
+            rf_params=params if model_type == "random_forest" else None,
+            xgb_params=params if model_type == "xgboost" else None,
+        )
+        scorer.fit(train_profiles, train_labels)
+        val_scores = scorer.predict_scores(val_profiles)
+
+        val_targets = []
+        val_score_list = []
+        for idx, condition in enumerate(val_conditions):
+            target_genes = parse_condition_genes(condition)
+            if not target_genes:
+                continue
+            target_indices = [
+                gene_name_to_idx[g] for g in target_genes if g in gene_name_to_idx
+            ]
+            if not target_indices:
+                continue
+            val_score_list.append(val_scores[idx])
+            val_targets.append(target_indices)
+
+        if not val_score_list:
+            continue
+
+        metrics = compute_gene_metrics(
+            scores=val_score_list,
+            targets=val_targets,
+            top_k_values=top_k_values,
+        )
+        score = metrics.get(selection_metric, -np.inf)
+        param_summary = ", ".join(f"{k}={v}" for k, v in params.items())
+        print(f"  - {param_summary}: {selection_metric}={score:.4f}")
+
+        if score > best_score:
+            best_score = score
+            best_params = params
+            best_val_metrics = metrics
+
+    if not best_params:
+        raise RuntimeError("No valid validation metrics; check splits and labels.")
+
+    print("\nSelected params:")
+    for key, value in best_params.items():
+        print(f"  - {key}={value}")
+
+    print("\n[4/4] Evaluating on test set...")
+    final_scorer = TreeGeneScorer(
+        model_type=model_type,
+        n_genes=n_genes,
+        target_gene_indices=target_gene_indices,
+        standardize=standardize,
+        random_state=random_state,
+        rf_params=best_params if model_type == "random_forest" else None,
+        xgb_params=best_params if model_type == "xgboost" else None,
+    )
+    final_scorer.fit(train_profiles, train_labels)
+    test_scores = final_scorer.predict_scores(test_profiles)
+
+    test_targets = []
+    test_score_list = []
+    for idx, condition in enumerate(test_conditions):
+        target_genes = parse_condition_genes(condition)
+        if not target_genes:
+            continue
+        target_indices = [
+            gene_name_to_idx[g] for g in target_genes if g in gene_name_to_idx
+        ]
+        if not target_indices:
+            continue
+        test_score_list.append(test_scores[idx])
+        test_targets.append(target_indices)
+
+    metrics = compute_gene_metrics(
+        scores=test_score_list,
+        targets=test_targets,
+        top_k_values=top_k_values,
+    )
+
+    output_metrics = {"mrr": metrics.get("mrr", 0.0)}
+    for k in top_k_values:
+        output_metrics[f"exact_hit@{k}"] = metrics.get(f"exact_hit@{k}", 0.0)
+        output_metrics[f"relevant_hit@{k}"] = metrics.get(f"hit@{k}", 0.0)
+        output_metrics[f"recall@{k}"] = metrics.get(f"recall@{k}", 0.0)
+        output_metrics[f"ndcg@{k}"] = metrics.get(f"ndcg@{k}", 0.0)
+
+    results = {
+        "metrics": output_metrics,
+        "n_evaluated": len(test_targets),
+        "best_params": best_params,
+        "val_metrics": best_val_metrics,
+    }
+
+    output_path = Path(args.output)
+    if args.output == "results/tree_baseline/eval_results.json":
+        if eval_cfg.get("output_path"):
+            output_path = Path(eval_cfg["output_path"])
+        else:
+            logging_cfg = config.get("logging", {})
+            base_dir = logging_cfg.get("output_dir", "results/tree_baseline")
+            output_path = Path(base_dir) / "eval_results.json"
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    print("\n" + "=" * 60)
+    print("Results Summary")
+    print("=" * 60)
+    for k in top_k_values:
+        exact = results["metrics"].get(f"exact_hit@{k}", 0)
+        relevant = results["metrics"].get(f"relevant_hit@{k}", 0)
+        recall = results["metrics"].get(f"recall@{k}", 0)
+        ndcg = results["metrics"].get(f"ndcg@{k}", 0)
+        print(
+            f"  Hit@{k}: exact={exact:.3f}, relevant={relevant:.3f}, "
+            f"recall={recall:.3f}, ndcg={ndcg:.3f}"
+        )
+    print(f"  MRR: {results['metrics'].get('mrr', 0):.3f}")
+    print(f"\nResults saved to: {output_path}")
+    print("=" * 60)
+
+    return results
+
+
+if __name__ == "__main__":
+    main()
