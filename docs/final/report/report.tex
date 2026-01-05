@@ -191,7 +191,6 @@ Figure~\ref{fig:target_crossover} illustrates the "Geometry vs. Semantics" trade
 \end{figure}
 
 \textbf{Explanation: Geometric vs. Semantic Reachability.}
-To interpret this divergence, we introduce two distinct modes of perturbation retrieval:
 To interpret this divergence, we introduce two distinct modes of perturbation retrieval. \textbf{Geometric Reachability} characterizes perturbations with strong, high-variance phenotypic signatures. In these cases, the perturbed state lies structurally close to the target definition in the raw gene expression space. Simple geometric neighbors (KNN) are sufficient to lock onto these targets. Conversely, \textbf{Semantic Reachability} characterizes perturbations with weak signals, combinatorial effects, or context-dependent regulation. Here, the raw expression distance is noisy or misleading. Retrieving these targets requires "semantic" inference—leveraging learned gene regulatory networks and context embeddings to map a subtle phenotype back to its driver, a capability unique to deep generative models.
 
 \textbf{Implication for System Design.}
