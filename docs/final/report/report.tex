@@ -103,17 +103,27 @@
 
     Formally, the input consists of a representation of the pre-perturbation cell state together with a perturbation descriptor, while the output is a high-dimensional vector capturing perturbation-induced gene expression changes across the transcriptome. This task is typically cast as a transcriptome-wide regression problem, where models are trained to minimize errors between predicted and observed expression changes.
 
-    Evaluation in this setting commonly relies on correlation-based or mean squared error (MSE)–based metrics, which aggregate prediction errors across all genes.
+    Evaluation in this setting commonly relies on correlation-based or mean squared error (MSE)–based metrics, which aggregate prediction errors across all genes. As a result, transcriptome-wide prediction accuracy has become a benchmark for assessing virtual cell models.
+
 
     \subsection{Motivation for Downstream Evaluation}
+While transcriptome-wide perturbation prediction provides a convenient and standardized proxy task, it does not fully reflect how virtual cell models are used in practice. In many biological and biomedical applications, the primary interest lies in identifying the key genes or pathways driving a perturbation-induced cellular response, rather than accurately predicting expression changes for all genes.
 
-    While transcriptome-wide perturbation prediction has become a standard proxy task for evaluating virtual cell models, it does not directly reflect how such models are ultimately used in practice. In many biological and biomedical applications, the primary interest lies in identifying the key genes or pathways driving a perturbation-induced cellular response, rather than accurately predicting the full transcriptome. This observation motivates us to consider downstream tasks that more directly assess the biological utility of virtual cell models.
+Moreover, transcriptome-wide metrics may obscure biologically meaningful failures. A model can achieve high overall correlation by accurately predicting large numbers of weakly responsive or non-informative genes, while failing to correctly identify the small subset of causal genes that drive the cellular response. This mismatch between evaluation metrics and downstream scientific objectives raises concerns about whether improvements in transcriptome-wide accuracy necessarily translate into greater biological utility.
+
+% While transcriptome-wide perturbation prediction has become a standard proxy task for evaluating virtual cell models, it does not directly reflect how such models are ultimately used in practice. In many biological and biomedical applications, the primary interest lies in identifying the key genes or pathways driving a perturbation-induced cellular response, rather than accurately predicting the full transcriptome. This observation motivates us to consider downstream tasks that more directly assess the biological utility of virtual cell models.
 
     \subsection{Reformulating the Task: Target Gene Identification as a Downstream Evaluation}
 
-    We reformulate the evaluation of virtual cell models as a downstream target gene identification task. Given a population of cells subjected to a known perturbation, the model is required to assign scores to candidate genes and rank them by their likelihood of being true perturbation targets. This formulation evaluates whether the model can correctly prioritize biologically relevant genes whose perturbation induces meaningful cellular changes.
+To address this limitation, we reformulate the evaluation of virtual cell models as a downstream target gene identification task. Given a population of cells subjected to a known perturbation, the model is required to assign scores to candidate genes and rank them according to their likelihood of being true perturbation targets.
 
-    Compared to transcriptome-wide regression, this task offers a lower-noise and more structured supervision signal. Ground-truth targets are typically available as binary labels or partial rankings, which reduces the influence of non-informative genes whose expression may fluctuate due to technical noise or unrelated biological variation. As a result, target gene identification provides a complementary and biologically grounded perspective for assessing the practical utility of virtual cell models.
+This formulation directly evaluates whether a model can correctly prioritize biologically relevant genes whose perturbation induces meaningful cellular changes. Compared to transcriptome-wide regression, target gene identification provides a more structured and lower-noise supervision signal. Ground-truth targets are typically available as binary labels or partial rankings, reducing the influence of non-informative genes whose expression may fluctuate due to technical noise or unrelated biological variation.
+
+As a result, downstream target gene identification offers a complementary and biologically grounded perspective for assessing the practical utility of virtual cell models.
+
+    % We reformulate the evaluation of virtual cell models as a downstream target gene identification task. Given a population of cells subjected to a known perturbation, the model is required to assign scores to candidate genes and rank them by their likelihood of being true perturbation targets. This formulation evaluates whether the model can correctly prioritize biologically relevant genes whose perturbation induces meaningful cellular changes.
+
+    % Compared to transcriptome-wide regression, this task offers a lower-noise and more structured supervision signal. Ground-truth targets are typically available as binary labels or partial rankings, which reduces the influence of non-informative genes whose expression may fluctuate due to technical noise or unrelated biological variation. As a result, target gene identification provides a complementary and biologically grounded perspective for assessing the practical utility of virtual cell models.
 
     \subsection{Our Contributions}
 
@@ -158,7 +168,7 @@
     In this work, we focus on two representative approaches for virtual cell modeling.
 
     \subsubsection{STATE}
-    STATE (Single-cell Transformer for Adaptive Transcriptomic Effects) is a transformer-based model designed to predict transcriptomic responses to genetic, signaling, and chemical perturbations while accounting for cellular heterogeneity within and across experiments. 
+    STATE (Single-cell Transformer for Adaptive Transcriptomic Effects) \cite{adduri_predicting_nodate} is a transformer-based model designed to predict transcriptomic responses to genetic, signaling, and chemical perturbations while accounting for cellular heterogeneity within and across experiments. 
     It leverages large-scale single-cell data, trained on over 100 million perturbed cells, to capture complex relationships between genes and accurately model perturbation effects.
     
     The model consists of two main modules:
@@ -172,6 +182,7 @@
     STATE has been shown to improve the discrimination of perturbation effects in large datasets and effectively identify differentially expressed genes. Moreover, it can generalize to novel cellular contexts where perturbations were not observed during training, highlighting the advantages of large-scale, data-driven models for virtual cell modeling.
     
     \subsubsection{scGPT}
+    scGPT \cite{cui_scgpt_2024} is a foundation model for single-cell biology...
     
     
     \subsection{Drug Perturbation Datasets}
@@ -251,6 +262,31 @@
     Importantly, there is no overlap of perturbation genes between the training, validation, and test sets, ensuring that models are evaluated on entirely unseen perturbation targets.
 
     \subsubsection{Evaluation metrics: MAE, PDS, DES}
+\paragraph{Perturbation Discrimination Score (PDS).}
+The Perturbation Discrimination Score (PDS) measures whether the predicted gene expression changes induced by different perturbations preserve the correct global directionality across all genes. For each perturbation $k \in \{1,\dots,N\}$, we first construct pseudobulk expressions by averaging all cells under the same perturbation, yielding the ground-truth pseudobulk $y_k \in \mathbb{R}^G$, the predicted pseudobulk $\hat y_k \in \mathbb{R}^G$, and the control (NTC) pseudobulk $y_{\mathrm{ntc}} \in \mathbb{R}^G$. Perturbation-induced expression changes are then defined as $\delta_k = y_k - y_{\mathrm{ntc}}$ and $\hat\delta_k = \hat y_k - y_{\mathrm{ntc}}$. For each predicted perturbation $\hat\delta_k$, we compute cosine similarities to all true perturbation deltas $\{\delta_j\}_{j=1}^N$ as
+\[
+S_{k,j} = \frac{\hat\delta_k \cdot \delta_j}{\|\hat\delta_k\|_2 \, \|\delta_j\|_2}.
+\]
+These similarities are ranked in descending order, and the rank of the correct perturbation $k$ is denoted by $R_k$ (with $1$ being the most similar). The final score is reported as the mean rank $\mathrm{PDS}_{\mathrm{rank}} = \frac{1}{N}\sum_{k=1}^N R_k$, or its normalized version $\mathrm{nPDS}_{\mathrm{rank}} = \frac{1}{N^2}\sum_{k=1}^N R_k$, where lower values indicate better perturbation discrimination.
+
+\paragraph{MAE on Top 2000 Genes by Ground-Truth Fold Change.}
+To focus evaluation on biologically meaningful signals, we additionally compute the mean absolute error (MAE) restricted to the genes with the largest true perturbation effects. For each perturbation $k$, we start from the raw (unnormalized) average counts $c_k \in \mathbb{R}^G$ and control counts $c_{\mathrm{ntc}} \in \mathbb{R}^G$, and compute the absolute log$_2$ fold change for each gene $g$ using a pseudocount of 1:
+\[
+\mathrm{LFC}_{k,g} = \left|\log_2(c_{k,g} + 1) - \log_2(c_{\mathrm{ntc},g} + 1)\right|.
+\]
+Genes are ranked by $\mathrm{LFC}_{k,g}$ in descending order, and the top 2000 genes form the index set $\Omega_k$. Using log1p-normalized pseudobulk expressions $y_k$ and $\hat y_k$ (the same representation as in PDS), the MAE is computed only over these selected genes and then averaged across perturbations:
+\[
+\mathrm{MAE}_{\mathrm{top2k}}
+=
+\frac{1}{N}
+\sum_{k=1}^N
+\left(
+\frac{1}{2000}
+\sum_{g \in \Omega_k}
+\left|\hat y_{k,g} - y_{k,g}\right|
+\right).
+\]
+This metric emphasizes prediction accuracy on genes that exhibit the strongest true responses to each perturbation.
 
     \subsubsection{Experiment Setup}
     
@@ -259,7 +295,72 @@
     \subsection{Target Gene Identification}
 
     \section{Extending to Drug Perturbations: Tahoe-100M}
-	
+
+    \subsection{Motivation}
+
+    While our primary experiments focus on gene perturbations, an important long-term
+    goal of virtual cell models is to support drug target discovery in realistic
+    pharmacological settings. Compared to genetic perturbations, drug perturbations
+    introduce additional complexity, including indirect regulatory effects, multi-target
+    mechanisms, and strong cell-line–specific responses.
+    
+    To explore whether perturbation modeling frameworks can be extended beyond
+    gene-level interventions, we conduct an exploratory study on the Tahoe-100M
+    drug perturbation dataset.
+
+    \subsection{Data Curation and Target Annotation}
+
+    The original Tahoe-100M dataset does not provide explicit annotations of drug
+    target genes, which makes supervised target identification infeasible. To enable
+    evaluation, we integrate external drug–target annotations obtained from a curated
+    dataset released on Hugging Face.
+    
+    Based on the availability and reliability of target annotations, we select a subset
+    of 52 drugs for our experiments. Details of Tahoe-100M data extraction and preprocessing are provided in Appendix A. After preprocessing, the extracted gene expression
+    matrix contains 62,710 genes in total, with approximately 31,597 genes observed
+    in the selected subset.
+
+    \subsection{Problem Formulation and Data Splitting}
+
+    We formulate drug target identification as a ranking problem: given drug-treated
+    cells and control cells, the model is expected to prioritize true target genes among
+    all candidate genes.
+    
+    To reduce information leakage across drugs, we perform a drug-level split. Single-
+    target drugs are retained in the training and validation sets. For multi-target drugs,
+    a drug is included in the test set only if all its target genes have appeared in the
+    training set. Drugs with a large number of targets are kept in training to stabilize
+    learning. In practice, overlap of target genes across different drugs is limited,
+    which further constrains the size of the test set.
+
+    \subsection{Baseline Modeling and Evaluation}
+
+    We evaluate drug perturbation effects using two simple baselines. First, we analyze
+    whether true target genes appear among the top 5, 10, 50, or 100 differentially
+    expressed genes. Second, we train a logistic regression classifier using gene-level
+    features derived from expression changes.
+    
+    Across both evaluations, the baselines fail to reliably identify true target genes,
+    with performance close to random guessing. These results indicate that naïve
+    expression-based approaches are insufficient for drug target discovery in this
+    setting.
+
+    \subsection{Challenges and Biological Observations}
+
+    We observe several factors that make drug target identification substantially more
+    challenging than gene perturbation prediction. First, expression changes of target
+    genes are often weak or even absent, potentially because drug effects primarily act
+    on protein activity rather than directly suppressing mRNA levels. Second, the time
+    elapsed after drug treatment is unknown, making it difficult to determine whether
+    the drug has taken effect beyond cell-cycle–related changes.
+    
+    Moreover, many drugs act on multiple targets and exhibit highly cell-line–specific
+    responses. In our experiments, data from different cancer cell lines are aggregated,
+    which may further obscure target-specific signals. These characteristics suggest
+    that Tahoe-100M reflects the complexity of real-world drug target discovery and
+    poses challenges that are not present in controlled gene perturbation benchmarks.
+
+
 	\section{Discussion}
 	
 	\section{Conclusion}
@@ -268,125 +369,77 @@
 	\section*{References}
 	
 	[1] 
+
+\bibliographystyle{alpha}
+\bibliography{reference}
+\clearpage
+\appendix
+\renewcommand{\thesection}{Appendix \Alph{section}}
+    
+\section{Tahoe-100M Data Extraction and Preprocessing Pipeline}
+
+\subsection{Input Data and Key Files}
+
+    We extract drug perturbation data from the Tahoe-100M dataset using locally
+    downloaded parquet files (\texttt{train*.parquet}). Each record contains gene
+    token IDs, expression values, drug identifiers, cell line IDs, plate information,
+    and sample metadata.
+    
+    To enable supervision for drug target identification, we integrate drug--target
+    annotations from an external curated dataset released on Hugging Face. In addition,
+    a JSON-based mapping from Tahoe gene token IDs to scGPT vocabulary IDs is used to
+    align the gene space with scGPT-based models. Genes not present in the scGPT
+    vocabulary are discarded.
+    
+    \subsection{Target Space Construction}
+    
+    Only drugs with at least one annotated target gene are retained. Each target gene
+    is mapped to a categorical label, forming a classification space defined by the
+    union of all observed targets. For multi-target drugs, each (drug, cell) sample is
+    expanded into multiple rows, one per target gene, with identical expression features
+    but different supervision labels. To prevent severe class imbalance, the number of
+    samples per target gene is capped.
+    
+    \subsection{Control Cell Matching Strategy}
+    
+    Drug-treated cells are paired with control cells treated with DMSO. A control cell
+    is identified if the drug name contains \texttt{DMSO}. For efficiency, only the first
+    encountered DMSO-treated cell for each (cell line, plate) key is stored and reused
+    for all corresponding treated cells. This design choice significantly reduces
+    computational overhead while providing a consistent reference state.
+    
+    \subsection{Gene Space Alignment and Quality Filtering}
+    
+    Since treated and control cells may contain different observed gene sets, control
+    expression vectors are aligned to the gene order of treated cells. Alignment is
+    performed by a two-pointer scan over sorted gene ID lists. Genes present in treated
+    cells but missing in controls are filled with zeros, while control-only genes are
+    discarded.
+    
+    To ensure sufficient overlap between treated and control gene spaces, we compute
+    an overlap ratio defined as
+    $
+    |G_{\text{treat}} \cap G_{\text{ctrl}}| / |G_{\text{treat}}|.
+    $
+    Samples with overlap ratio below a predefined threshold are discarded, preventing
+    excessive zero-filling in control expressions.
+    
+    \subsection{Output Dataset Format}
+    
+    The final dataset is stored as a sharded parquet collection. Each row corresponds
+    to a paired (treated, control) sample at single-target resolution. Stored fields
+    include treated gene IDs and expressions, aligned control expressions, drug and
+    target identifiers, cell metadata, and the overlap ratio used for filtering.
+    
+    \subsection{Key Configuration Parameters}
+    
+    \begin{itemize}
+        \item Control matching key: (\texttt{cell\_line\_id}, \texttt{plate})
+        \item Control fill value: 0.0
+        \item Overlap ratio threshold: 0.05
+        \item Maximum samples per target gene: 100{,}000
+    \end{itemize}
 	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	
 	
-\end{document}\documentclass{article}
-
-% Language setting
-% Replace `english' with e.g. `spanish' to change the document language
-\usepackage[english]{babel}
-
-% Set page size and margins
-% Replace `letterpaper' with `a4paper' for UK/EU standard size
-\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
-
-% Useful packages
-\usepackage{amsmath}
-\usepackage{graphicx}
-\usepackage[colorlinks=true, allcolors=blue]{hyperref}
-
-\title{Your Paper}
-\author{You}
-
-\begin{document}
-\maketitle
-
-\begin{abstract}
-Your abstract.
-\end{abstract}
-
-\section{Introduction}
-
-Your introduction goes here! Simply start writing your document and use the Recompile button to view the updated PDF preview. Examples of commonly used commands and features are listed below, to help you get started.
-
-Once you're familiar with the editor, you can find various project settings in the Overleaf menu, accessed via the button in the very top left of the editor. To view tutorials, user guides, and further documentation, please visit our \href{https://www.overleaf.com/learn}{help library}, or head to our plans page to \href{https://www.overleaf.com/user/subscription/plans}{choose your plan}.
-
-\section{Some examples to get started}
-
-\subsection{How to create Sections and Subsections}
-
-Simply use the section and subsection commands, as in this example document! With Overleaf, all the formatting and numbering is handled automatically according to the template you've chosen. If you're using the Visual Editor, you can also create new section and subsections via the buttons in the editor toolbar.
-
-\subsection{How to include Figures}
-
-First you have to upload the image file from your computer using the upload link in the file-tree menu. Then use the includegraphics command to include it in your document. Use the figure environment and the caption command to add a number and a caption to your figure. See the code for Figure \ref{fig:frog} in this section for an example.
-
-Note that your figure will automatically be placed in the most appropriate place for it, given the surrounding text and taking into account other figures or tables that may be close by. You can find out more about adding images to your documents in this help article on \href{https://www.overleaf.com/learn/how-to/Including_images_on_Overleaf}{including images on Overleaf}.
-
-\begin{figure}
-\centering
-\includegraphics[width=0.25\linewidth]{frog.jpg}
-\caption{\label{fig:frog}This frog was uploaded via the file-tree menu.}
-\end{figure}
-
-\subsection{How to add Tables}
-
-Use the table and tabular environments for basic tables --- see Table~\ref{tab:widgets}, for example. For more information, please see this help article on \href{https://www.overleaf.com/learn/latex/tables}{tables}.
-
-\begin{table}
-\centering
-\begin{tabular}{l|r}
-Item & Quantity \\\hline
-Widgets & 42 \\
-Gadgets & 13
-\end{tabular}
-\caption{\label{tab:widgets}An example table.}
-\end{table}
-
-\subsection{How to add Comments and Track Changes}
-
-Comments can be added to your project by highlighting some text and clicking ``Add comment'' in the top right of the editor pane. To view existing comments, click on the Review menu in the toolbar above. To reply to a comment, click on the Reply button in the lower right corner of the comment. You can close the Review pane by clicking its name on the toolbar when you're done reviewing for the time being.
-
-Track changes are available on all our \href{https://www.overleaf.com/user/subscription/plans}{premium plans}, and can be toggled on or off using the option at the top of the Review pane. Track changes allow you to keep track of every change made to the document, along with the person making the change.
-
-\subsection{How to add Lists}
-
-You can make lists with automatic numbering \dots
-
-\begin{enumerate}
-\item Like this,
-\item and like this.
-\end{enumerate}
-\dots or bullet points \dots
-\begin{itemize}
-\item Like this,
-\item and like this.
-\end{itemize}
-
-\subsection{How to write Mathematics}
-
-\LaTeX{} is great at typesetting mathematics. Let $X_1, X_2, \ldots, X_n$ be a sequence of independent and identically distributed random variables with $\text{E}[X_i] = \mu$ and $\text{Var}[X_i] = \sigma^2 < \infty$, and let
-\[S_n = \frac{X_1 + X_2 + \cdots + X_n}{n}
-      = \frac{1}{n}\sum_{i}^{n} X_i\]
-denote their mean. Then as $n$ approaches infinity, the random variables $\sqrt{n}(S_n - \mu)$ converge in distribution to a normal $\mathcal{N}(0, \sigma^2)$.
-
-
-\subsection{How to change the margins and paper size}
-
-Usually the template you're using will have the page margins and paper size set correctly for that use-case. For example, if you're using a journal article template provided by the journal publisher, that template will be formatted according to their requirements. In these cases, it's best not to alter the margins directly.
-
-If however you're using a more general template, such as this one, and would like to alter the margins, a common way to do so is via the geometry package. You can find the geometry package loaded in the preamble at the top of this example file, and if you'd like to learn more about how to adjust the settings, please visit this help article on \href{https://www.overleaf.com/learn/latex/page_size_and_margins}{page size and margins}.
-
-\subsection{How to change the document language and spell check settings}
-
-Overleaf supports many different languages, including multiple different languages within one document.
-
-To configure the document language, simply edit the option provided to the babel package in the preamble at the top of this example project. To learn more about the different options, please visit this help article on \href{https://www.overleaf.com/learn/latex/International_language_support}{international language support}.
-
-To change the spell check language, simply open the Overleaf menu at the top left of the editor window, scroll down to the spell check setting, and adjust accordingly.
-
-\subsection{How to add Citations and a References List}
-
-You can simply upload a \verb|.bib| file containing your BibTeX entries, created with a tool such as JabRef. You can then cite entries from it, like this: \cite{greenwade93}. Just remember to specify a bibliography style, as well as the filename of the \verb|.bib|. You can find a \href{https://www.overleaf.com/help/97-how-to-include-a-bibliography-using-bibtex}{video tutorial here} to learn more about BibTeX.
-
-If you have an \href{https://www.overleaf.com/user/subscription/plans}{upgraded account}, you can also import your Mendeley or Zotero library directly as a \verb|.bib| file, via the upload menu in the file-tree.
-
-\subsection{Good luck!}
-
-We hope you find Overleaf useful, and do take a look at our \href{https://www.overleaf.com/learn}{help library} for more tutorials and user guides! Please also let us know if you have any feedback using the \textbf{Contact us} link at the bottom of the Overleaf menu --- or use the contact form at \url{https://www.overleaf.com/contact}.
-
-\bibliographystyle{alpha}
-\bibliography{sample}
-
 \end{document}
