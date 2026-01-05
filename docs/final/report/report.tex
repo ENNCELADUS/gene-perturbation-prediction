@@ -160,8 +160,6 @@ The selection of these metrics addresses specific failure modes in predictive mo
 While forward benchmarks verify that a model can simulate \textit{effects}, therapeutic discovery necessitates inferring \textit{causes} from observed effects. This fundamental asymmetry motivates an explicit inversion of the perturbation–phenotype mapping, moving from verifying simulation accuracy to validating retrieval capability.
 
 
-\section{Methods}
-
 \section{Discussion}
 	
 \section{Conclusion}
@@ -174,122 +172,363 @@ While forward benchmarks verify that a model can simulate \textit{effects}, ther
 \appendix
 \renewcommand{\thesection}{Appendix \Alph{section}}
 
-\section{Supplementary Note 1: Methods and Experimental Details}
+\section{Supplementary Note 1: Methods}
 
-\subsection{Methods}
 
-\subsubsection{Transcriptome-wide Perturbation Prediction}
+\subsection{Transcriptome-wide Perturbation Prediction}
 
-\paragraph{STATE Implementation Pipeline}
-We implement the STATE model following the official open-source implementation released by the authors. In this work, we focus on the State Transition (ST) module of STATE, which is responsible for predicting perturbation-induced transcriptomic responses given control cells and perturbation conditions.
-
-\textbf{Data preprocessing.}
-We use the Arc Institute VCC competition support dataset (\texttt{competition\_support\_set}), which provides preprocessed single-cell RNA-seq data for H1 human embryonic stem cells. Gene expression values are transformed using a log1p normalization ($\log(1+x)$), which stabilizes variance and reduces the dominance of highly expressed genes. Control cells corresponding to non-targeting perturbations are retained and used as a reference state ($x_{\mathrm{ntc}}$).
-
-\textbf{Perturbation features.}
-Perturbation identities are represented using pretrained protein embeddings. Specifically, gene perturbations are encoded using ESM2-based perturbation feature vectors provided by the official STATE repository. These embeddings allow the model to incorporate prior biological information about gene identity (e.g., sequence homology) without directly accessing expression-level supervision, facilitating generalization to unseen genes.
-
-\textbf{Model architecture.}
-The ST module takes as input control cell expression profiles, perturbation embeddings, and batch embeddings to account for technical variability. All inputs are projected into a shared hidden space and processed by a Transformer backbone, which models how perturbations induce shifts in cellular state distributions. The output representations are mapped back to the gene expression space via a decoding head to generate predicted perturbed transcriptomes ($\hat{x}_{\mathrm{pert}}$).
-
-\subsubsection{scGPT Implementation}
-We adapt scGPT, a foundation model for single-cell biology, for the perturbation prediction task. The model is initialized with weights pre-trained on a massive scale single-cell corpus.
-
-\textbf{Forward Prediction (Fine-tuning).}
-For the forward task, we fine-tune scGPT using a modified masked language modeling (MLM) objective. The input sequence consists of gene expression tokens conditioned on a special perturbation token. The model is trained to reconstruct the expression of the perturbed state given the gene tokens and the perturbation condition. To prevent the model from learning technical artifacts, we apply random masking to batch indices during training.
-
-\subsection{From Transcriptome-wide Predictions to Target Gene Identification}
-We extend the modeling framework to solve the inverse problem: identifying the causal perturbation from a transcriptomic phenotype.
-
-\textbf{Task Formalization.}
-We define the task as a retrieval ranking problem. Given a query phenotypic signature $x_{\mathrm{phenotype}}$ (e.g., a differentially expressed profile), the model must output a ranked list of candidate perturbations $\text{Rank}(\mathcal{P})$ from the target space $\mathcal{P}$.
-
-\textbf{Reverse Mode Architecture.}
-We utilize the scGPT backbone in a classification setup. The observed cell state (phenotype) is tokenized and processed by the transformer. A classification head is attached to the \texttt{[CLS]} token embedding to predict a probability distribution over the candidate targets.
-
-\textbf{Hybrid Ranking Loss.}
-To handle the long-tail distribution of potential targets and improve retrieval performance, we implement a hybrid loss function:
+\paragraph{Problem Formulation.} The core task of the Transcriptome-wide Perturbation Prediction serves as the \textbf{Forward Problem}: predicting the transcriptomic consequence of a defined intervention. Formally:
 \[
-\mathcal{L} = \mathcal{L}_{\text{rank}} + \lambda \mathcal{L}_{\text{bce}}
+\text{given } (x, p) \;\Rightarrow\; \hat y = f(x, p)
 \]
-where $\mathcal{L}_{\text{rank}}$ is a ListMLE ranking loss that optimizes the relative order of candidates, and $\mathcal{L}_{\text{bce}}$ is a binary cross-entropy loss that learns independent target probabilities. To address class imbalance, we employ a dynamic negative sampling strategy, sampling 10 non-causal perturbations as negatives for every positive pair during each training epoch.
-
-\subsection{Experiments}
-
-\subsubsection{Transcriptome-wide Perturbation Prediction}
-
-\textbf{Dataset and Data Split.}
-To rigorously evaluate mechanistic generalization, we do not use a random cell split. Instead, we re-split the 150 gene perturbations from the VCC dataset into training, validation, and test sets at the perturbation level.
+where:
 \begin{itemize}
-    \item \textbf{Training:} 64\% of perturbation genes (approx. 96 genes).
-    \item \textbf{Validation:} 16\% of perturbation genes.
-    \item \textbf{Test:} 20\% (30 genes) held-out perturbation genes.
+    \item $x$ denotes the \textit{pre-perturbation cell state}, serving as the baseline. This is empirically represented by the distribution of control cells within the same experimental batch or cell type. For instance, in scGPT benchmarks on the Norman dataset, $x$ is approximated by the mean expression vector of all control cells ($1 \times M$ genes).
+    \item $p$ represents the \textit{known perturbation} (e.g., gene knockout, CRISPRi, or drug). This is typically encoded as a discrete gene identifier or a multidimensional perturbation embedding.
+    \item $\hat{y}$ is the \textit{predicted post-perturbation state}. The model is optimized to minimize the divergence between $\hat{y}$ and the experimentally observed expression profile $y$.
 \end{itemize}
-Control (non-targeting) cells are included in all splits to provide a consistent reference state. Importantly, there is no overlap of perturbation genes between the training, validation, and test sets, ensuring that models are evaluated on their ability to predict the effects of entirely unseen perturbation targets based on their embeddings.
+
 
 \subsubsection{Evaluation metrics: PDS, MAE, DES}
-To align evaluation with biological utility, we employ three complementary metrics.
 
-\textbf{Perturbation Discrimination Score (PDS).}
-The Perturbation Discrimination Score (PDS) measures whether the predicted gene expression changes induced by different perturbations preserve the correct global directionality across all genes. For each perturbation $k \in \{1,\dots,N\}$, we first construct pseudobulk expressions by averaging all cells under the same perturbation, yielding the ground-truth pseudobulk $y_k \in \mathbb{R}^G$, the predicted pseudobulk $\hat y_k \in \mathbb{R}^G$, and the control (NTC) pseudobulk $y_{\mathrm{ntc}} \in \mathbb{R}^G$. Perturbation-induced expression changes are then defined as $\delta_k = y_k - y_{\mathrm{ntc}}$ and $\hat\delta_k = \hat y_k - y_{\mathrm{ntc}}$.
-
-For each predicted perturbation $\hat\delta_k$, we compute cosine similarities to all true perturbation deltas $\{\delta_j\}_{j=1}^N$:
+\paragraph{Perturbation Discrimination Score (PDS).}
+The Perturbation Discrimination Score (PDS) measures whether the predicted gene expression changes induced by different perturbations preserve the correct global directionality across all genes. For each perturbation $k \in \{1,\dots,N\}$, we first construct pseudobulk expressions by averaging all cells under the same perturbation, yielding the ground-truth pseudobulk $y_k \in \mathbb{R}^G$, the predicted pseudobulk $\hat y_k \in \mathbb{R}^G$, and the control (NTC) pseudobulk $y_{\mathrm{ntc}} \in \mathbb{R}^G$. Perturbation-induced expression changes are then defined as $\delta_k = y_k - y_{\mathrm{ntc}}$ and $\hat\delta_k = \hat y_k - y_{\mathrm{ntc}}$. For each predicted perturbation $\hat\delta_k$, we compute cosine similarities to all true perturbation deltas $\{\delta_j\}_{j=1}^N$ as
 \[
 S_{k,j} = \frac{\hat\delta_k \cdot \delta_j}{\|\hat\delta_k\|_2 \, \|\delta_j\|_2}.
 \]
-These similarities are ranked, and the rank of the correct perturbation $k$ is denoted by $R_k$. The final score is reported as the mean rank normalized to the number of perturbations: $\mathrm{PDS}_{\mathrm{rank}} = \frac{1}{N}\sum_{k=1}^N R_k$.
+These similarities are ranked, and the rank of the correct perturbation $k$ is denoted by $R_k$. The final score is reported as the mean rank $\mathrm{PDS}_{\mathrm{rank}} = \frac{1}{N}\sum_{k=1}^N R_k$, or its normalized version $\mathrm{nPDS}_{\mathrm{rank}} = \frac{1}{N^2}\sum_{k=1}^N R_k$.
 
-\textit{Motivation:} In our task, we modify the original VCC PDS metric by replacing L1 distance with cosine similarity. An L1-based ranking can be biased toward vectors with smaller norms (conservative predictions), even when their directions are poorly aligned. The revised PDS places greater emphasis on directional correctness—whether genes are consistently predicted to be up- or down-regulated—addressing the "attenuation" often seen in single-cell models.
-
-\textbf{MAE on Top 2000 Genes (Top-2k MAE).}
-To focus evaluation on biologically meaningful signals rather than invariant background genes, we compute the Mean Absolute Error (MAE) restricted to genes with the largest true perturbation effects. For each perturbation $k$, genes are ranked by their absolute $\log_2$ fold change ($\mathrm{LFC}_{k,g}$) relative to control. The top 2000 genes form the index set $\Omega_k$.
+\paragraph{MAE on Top 2000 Genes by Ground-Truth Fold Change.}
+To focus evaluation on biologically meaningful signals, we additionally compute the mean absolute error (MAE) restricted to the genes with the largest true perturbation effects. For each perturbation $k$, we start from the raw (unnormalized) average counts $c_k \in \mathbb{R}^G$ and control counts $c_{\mathrm{ntc}} \in \mathbb{R}^G$, and compute the absolute log$_2$ fold change for each gene $g$ using a pseudocount of 1:
 \[
-\mathrm{MAE}_{\mathrm{top2k}} = \frac{1}{N} \sum_{k=1}^N \left( \frac{1}{2000} \sum_{g \in \Omega_k} \left|\hat y_{k,g} - y_{k,g}\right| \right)
+\mathrm{LFC}_{k,g} = \left|\log_2(c_{k,g} + 1) - \log_2(c_{\mathrm{ntc},g} + 1)\right|.
 \]
-This metric emphasizes prediction accuracy on genes that exhibit the strongest true responses.
+Genes are ranked by $\mathrm{LFC}_{k,g}$ in descending order, and the top 2000 genes form the index set $\Omega_k$. Using log1p-normalized pseudobulk expressions $y_k$ and $\hat y_k$ (the same representation as in PDS), the MAE is computed only over these selected genes and then averaged across perturbations:
+\[
+\mathrm{MAE}_{\mathrm{top2k}}
+=
+\frac{1}{N}
+\sum_{k=1}^N
+\left(
+\frac{1}{2000}
+\sum_{g \in \Omega_k}
+\left|\hat y_{k,g} - y_{k,g}\right|
+\right).
+\]
+This metric emphasizes prediction accuracy on genes that exhibit the strongest true responses to each perturbation.
 
-\textbf{Differential Expression Score (DES).}
-The Differential Expression Score (DES) measures how accurately a model recovers perturbation-induced differential gene expression. For each perturbation $k$, we identify significantly differentially expressed (DE) genes in both ground truth ($G_{k,\mathrm{true}}$) and prediction ($G_{k,\mathrm{pred}}$) using a Wilcoxon rank-sum test (FDR $\alpha = 0.05$, Benjamini--Hochberg correction).
-
-The score is defined as the recall of the true DE set:
+\paragraph{Differential Expression Score (DES).}
+The Differential Expression Score (DES) measures how accurately a model recovers perturbation-induced differential gene expression. For each perturbation $k \in \{1,\dots,N\}$, we first perform differential expression analysis between perturbed and control cells for both the predicted and ground-truth data using the Wilcoxon rank-sum test with tie correction, and identify significantly differentially expressed (DE) genes by controlling the false discovery rate at level $\alpha = 0.05$ with the Benjamini--Hochberg procedure. This yields a predicted DE gene set $G_{k,\mathrm{pred}}$ and a ground-truth DE gene set $G_{k,\mathrm{true}}$, with sizes $n_{k,\mathrm{pred}} = |G_{k,\mathrm{pred}}|$ and $n_{k,\mathrm{true}} = |G_{k,\mathrm{true}}|$, respectively. If $n_{k,\mathrm{pred}} \le n_{k,\mathrm{true}}$, the DES for perturbation $k$ is defined as the size of the intersection between the predicted and true DE gene sets, normalized by the size of the true set,
 \[
 \mathrm{DES}_k = \frac{|G_{k,\mathrm{pred}} \cap G_{k,\mathrm{true}}|}{n_{k,\mathrm{true}}}.
 \]
-If the model predicts more DE genes than exist in the truth ($n_{k,\mathrm{pred}} > n_{k,\mathrm{true}}$), we truncate the predicted set to the top $n_{k,\mathrm{true}}$ genes by LFC magnitude to prevent gaming the metric by over-prediction.
+If $n_{k,\mathrm{pred}} > n_{k,\mathrm{true}}$, to avoid overpenalizing predictions that overestimate differential expression, we construct a reduced predicted set $\tilde G_{k,\mathrm{pred}}$ by selecting the $n_{k,\mathrm{true}}$ genes with the largest absolute log fold changes (relative to control cells) from $G_{k,\mathrm{pred}}$, and compute
+\[
+\mathrm{DES}_k = \frac{|\tilde G_{k,\mathrm{pred}} \cap G_{k,\mathrm{true}}|}{n_{k,\mathrm{true}}}.
+\]
+The final DES is obtained by averaging $\mathrm{DES}_k$ across all perturbations.
+\paragraph{Overall score}
+We make a scale of each metric based on the cell-mean baseline model and calculate the overall score:
+$$
+S = \frac{DES_\text{scaled} + PDS_\text{scaled} + MAE_\text{scaled}}{3} \times 100
+$$
 
-\textbf{Overall Score.}
-To rank models, we calculate a scaled composite score based on the improvement over a cell-mean baseline.
+
+\subsubsection{STATE Implementation}
+
+We implement the STATE model following the official open-source implementation released by the authors.
+In this work, we focus on the \textit{State Transition (ST)} module of STATE, which is responsible for predicting
+perturbation-induced transcriptomic responses given control cells and perturbation conditions.
+
+\paragraph{Perturbation features.}
+Perturbation identities are represented using pretrained protein embeddings.
+Specifically, gene perturbations are encoded using ESM2-based perturbation feature vectors provided
+by the official STATE repository.
+These embeddings allow the model to incorporate prior biological information about gene identity
+without directly accessing expression-level supervision.
+
+\paragraph{Model architecture.}
+The ST module takes as input control cell expression profiles, perturbation embeddings, and batch embeddings
+to account for technical variability (Figure~\ref{fig:state_model}).
+All inputs are projected into a shared hidden space and processed by a Transformer backbone,
+which models how perturbations induce shifts in cellular state distributions.
+The output representations are mapped back to the gene expression space to generate predicted
+perturbed transcriptomes.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{img/state.png}
+    \caption{The architecture of the STATE model. The State Transition (ST) module integrates control expression, perturbation embeddings, and batch information to predict post-perturbation transcriptomic states.}
+    \label{fig:state_model}
+\end{figure}
+
+\subsubsection{scGPT Finetune}
+
+To adapt the scGPT foundation model for the specific task of predicting cellular responses to perturbations, we employ a transfer learning strategy that balances the retention of generalized biological knowledge with the flexibility to learn condition-specific dynamics.
+
+\paragraph{Model Initialization and Parameter Freezing.}
+We initialize the model using pre-trained scGPT checkpoints (Figure~\ref{fig:scgpt_forward}). To mitigate catastrophic forgetting and ensure computational efficiency, we adopt a partial freezing strategy. The core representation learning modules---specifically the gene token encoder, the continuous value encoder, and the central transformer encoder layers---are frozen. This preserves the model's pre-learned understanding of gene-gene interactions and cellular states.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{img/scGPT_forward.jpg}
+    \caption{Overview of the scGPT model adaptation for perturbation prediction. The model is initialized with pre-trained weights, with core modules frozen to retain biological knowledge, while the perturbation encoder and decoders are fine-tuned.}
+    \label{fig:scgpt_forward}
+\end{figure}
+
+Concurrently, we designate specific components as trainable to capture perturbation-specific features. A dedicated embedding layer (\texttt{pert\_encoder}) is optimized to represent distinct perturbation flags. The output assembly, specifically the affine expression decoder (\texttt{ExprDecoder}), remains trainable. This module utilizes coefficient and bias heads to reconstruct gene expression values. If the model is configured for explicit zero-probability modeling, the corresponding zero-prob heads are also optimized.
+
+\paragraph{Composite Loss Function.}
+The fine-tuning process minimizes a composite loss function designed to align predicted expression profiles with ground truth data while preserving biologically relevant differential expression signals. For each training batch, the total loss $\mathcal{L}_{total}$ is calculated as a weighted sum of four specific objectives.
+
+The Sliced Wasserstein-1 distance ($\mathcal{L}_{sw1}$) is employed as the Distribution Alignment component to minimize the distributional discrepancy between the predicted and actual gene expression profiles. A ProtoInfoNCE loss ($\mathcal{L}_{proto}$) is applied to pseudobulk deltas for Contrastive Learning, encouraging the model to distinguish between different perturbation effects in the latent space. When a Differential Expression (DE) gene map is available, two auxiliary losses are included: $\mathcal{L}_{de\_rank}$, which penalizes errors in the ranking of DE genes to prioritize biologically significant changes, and $\mathcal{L}_{dir}$, which enforces the correct directionality of regulation (up-regulation vs. down-regulation).
+
+In this study, the default weighting coefficients are set to $\lambda_{sw1}=0.60$, $\lambda_{proto}=0.25$, $\lambda_{rank}=0.10$, and $\lambda_{dir}=0.05$.
+
+\paragraph{Optimization Procedure.}
+Optimization is performed using Automatic Mixed Precision (AMP) combined with gradient scaling to maximize training throughput and numerical stability. To prevent overfitting, we implement an early stopping mechanism that monitors a validation metric (\texttt{overall\_score}). Training is halted if this score fails to improve within a specified patience window, and the checkpoint corresponding to the best validation performance is saved for inference.
+
+
+
+\subsection{Target Gene Identification}\label{sec:target_id_methods}
+
+\paragraph{Problem Formulation.}
+While forward prediction tests a model's understanding of causality, the actionable goal in drug discovery is the inverse: inferring the mechanism that explains an observed phenotype. We formulate this through two related inverse problems:
+
+\textbf{1. Reverse Perturbation Prediction (Inverse Problem).}
+This task asks: \textit{given an observed cellular response, what perturbation caused it?}
+Mathematically, given a control state $x$ and a perturbed state $y$, we seek the perturbation $\hat{p}$ that best explains the transition:
+\[
+\text{given } (x, y) \;\Rightarrow\; \hat p = g(x, y)
+\]
+Ideally, this is the perturbation that minimizes the discrepancy between the forward model's prediction and the observation:
+\[
+\hat p = g(x, y) = \arg\min_{p} d\!\left(f(x, p), y\right)
+\]
+
+\textbf{2. Target Discovery (Therapeutic Goal).}
+This extends the inverse framework to therapeutic intervention. Here, we aim to transform a disease state $x_{\text{abn}}$ into a desired healthy state $y_{\text{desired}}$:
+\[
+p^{*} = g(x_{\text{abn}}, y_{\text{desired}}) = \arg\min_{p} d\!\left(f(x_{\text{abn}}, p), y_{\text{desired}}\right)
+\]
+Here:
+\begin{itemize}
+    \item $x_{\text{abn}}$: The abnormal (e.g., disease-associated) cell state.
+    \item $y_{\text{desired}}$: The target state (e.g., healthy control or a specific functional profile).
+    \item $p$: The candidate perturbation/target (e.g., a gene KO from a discrete set).
+    \item $f(x_{\text{abn}}, p)$: The forward intervention effect model.
+    \item $d(\cdot,\cdot)$:\ A distance metric measuring how close the intervention brings the cell to the desired state.
+\end{itemize}
+
+We explore two methodological approaches to solve these problems:
+
+\textit{Route A: Forward Model-Based Retrieval.}
+This approach directly utilizes the forward simulator $f$. For every candidate perturbation $p \in \mathcal{P}$:
+1. Predict the outcome $\hat{y}_p = f(x_{\text{abn}}, p)$.
+2. Compute the distance to the target $d(\hat{y}_p, y_{\text{desired}})$.
+3. Rank candidates by minimizing this distance. Here, $g$ is implicitly defined by the optimization over $f$.
+
+A critical limitation of the route A framework employed by original scGPT paper is its reliance on a pre-defined, closed candidate set composed of enumerated gene combinations. While this approach is feasible for a restricted subspace---such as 20 genes yielding 210 distinct single- and double-gene perturbation classes---it suffers from prohibitive combinatorial explosion when applied to larger gene pools or when the specific number of target genes is unknown. As the search space expands to accommodate genome-wide candidates or higher-order interactions, the number of potential combinatorial targets increases exponentially, rendering the exhaustive generation and retrieval of candidate profiles computationally intractable. Consequently, due to these scalability constraints and the infeasibility of defining a discrete label space for unknown perturbation complexities, we exclude this combinatorial classification route from our methodology.
+
+
+\textit{Route B: Direct Inverse Mapping.}
+This approach learns a parameterized inverse function $g_\theta$ (e.g., a classifier or regressor) to directly predict the optimal perturbation:
+\[
+p^* \approx g_\theta(x_{\text{abn}}, y_{\text{desired}})
+\]
+Instead of explicitly modeling the transition, the model learns the mapping from (state, target) pairs to perturbations directly from data. This absorbs the forward dynamics and distance metric into the model weights.
+
+\paragraph{Evaluation Metrics.}
+To quantitatively assess the performance of the reverse perturbation prediction models, we employ a suite of ranking-based metrics. Let $\mathcal{C}_{test}$ denote the set of test perturbation conditions. For each condition $c \in \mathcal{C}_{test}$, let $\mathcal{G}_c^*$ be the set of ground-truth target genes, and let $\mathcal{G}_c^K$ represent the set of the top-$K$ genes identified by the model based on the predicted scores.
+
+\textbf{1. Mean Reciprocal Rank (MRR).} The Mean Reciprocal Rank evaluates the model's ability to place the correct perturbation targets at the top of the ranking list. Since a perturbation may involve multiple target genes (e.g., in combinatorial perturbations), we define the reciprocal rank based on the \textit{highest-ranked} (best) true target.
+\[
+\text{MRR} = \frac{1}{|\mathcal{C}_{test}|} \sum_{c \in \mathcal{C}_{test}} \max_{g \in \mathcal{G}_c^*} \frac{1}{\text{rank}(g)}
+\]
+where $\text{rank}(g)$ denotes the position of gene $g$ in the predicted descending order list (1-indexed). A higher MRR indicates that the first correct target appears earlier in the candidate list.
+
+\textbf{2. Exact Hit@K.} Exact Hit@K is a stringent metric that measures the proportion of test cases where the model successfully retrieves the \textit{entire} set of target genes within the top-$K$ predictions. This metric is particularly relevant for identifying complete combinatorial pairs.
+\[
+\text{Exact Hit@K} = \frac{1}{|\mathcal{C}_{test}|} \sum_{c \in \mathcal{C}_{test}} \mathbb{I}(\mathcal{G}_c^* \subseteq \mathcal{G}_c^K)
+\]
+where $\mathbb{I}(\cdot)$ is the indicator function, which equals 1 if the condition is true and 0 otherwise.
+
+\textbf{3. Relevant Hit@K.} Relevant Hit@K assesses the model's capacity to discover \textit{at least one} correct driver gene within the top-$K$ candidates. This metric reflects the practical utility of the model in experimental screening, where identifying a subset of drivers is often sufficient for further validation.
+\[
+\text{Relevant Hit@K} = \frac{1}{|\mathcal{C}_{test}|} \sum_{c \in \mathcal{C}_{test}} \mathbb{I}(\mathcal{G}_c^* \cap \mathcal{G}_c^K \neq \emptyset)
+\]
+
+\textbf{4. Recall@K.} Recall@K quantifies the fraction of ground-truth target genes that are successfully retrieved within the top-$K$ predictions. Unlike Relevant Hit@K, which is binary, Recall@K penalizes the model for missing parts of a combinatorial perturbation (e.g., finding only 1 gene of a 2-gene pair).
+\[
+\text{Recall@K} = \frac{1}{|\mathcal{C}_{test}|} \sum_{c \in \mathcal{C}_{test}} \frac{|\mathcal{G}_c^* \cap \mathcal{G}_c^K|}{|\mathcal{G}_c^*|}
+\]
+This metric provides a granular view of the model's retrieval completeness, particularly as $K$ increases (e.g., Recall@1, Recall@5, Recall@10, etc.).
+
+\subsubsection{Baseline Models}
+
+\paragraph{PCA + kNN Baseline.}
+To establish a retrieval-based baseline, we first aggregate single-cell gene expression vectors into pseudobulk profiles for each perturbation condition. This yields a feature vector $\mathbf{x}_c \in \mathbb{R}^G$ over $G$ genes, associated with a multi-hot label vector $\mathbf{y}_c \in \{0,1\}^G$ derived from the specific perturbation targets. To prevent trivial mappings (i.e., data leakage), we optionally mask the expression values of target genes within $\mathbf{x}_c$. We apply Principal Component Analysis (PCA) to the training profiles, projecting them into a latent space $\mathbf{z}_c = \mathbf{W}^\top \mathbf{x}_c \in \mathbb{R}^d$. For a given query condition $q$, we retrieve the $k$ nearest neighbors in the PCA space ($\mathcal{N}_k(q)$) using Cosine or Euclidean similarity. The final gene relevance scores $\mathbf{s}_q$ are computed via a weighted aggregation of the neighbors' labels. Hyperparameters, including the latent dimension $d$ and neighborhood size $k$, are optimized based on the Mean Reciprocal Rank (MRR) of the validation set before final evaluation on held-out test conditions.
+
+\paragraph{Random Forest Baseline.}
+Utilizing the same pseudobulk representations $\mathbf{x}_c$ as input, we employ a multi-output Random Forest regressor to predict continuous per-gene relevance scores $\hat{\mathbf{y}}_c \in \mathbb{R}^G$ (or a restricted subset of candidate targets). Each tree in the ensemble learns non-linear splits on the input features, and the final prediction constitutes an average over $T$ trees. Target vectors are constructed as multi-hot encodings of the condition labels, with optional input masking applied to ensure generalization. Hyperparameters such as the number of estimators $T$ and maximum tree depth are selected via validation MRR. The predicted score vectors are subsequently ranked to compute Top-K metrics on the test split.
+
+\paragraph{XGBoost Baseline.}
+We further benchmark performance using Gradient Boosted Decision Trees (GBDT) implemented via XGBoost in a multi-output regression setting. The model predicts per-gene scores by optimizing a squared-error objective function $\mathcal{L} = \sum_c \|\mathbf{y}_c - \hat{\mathbf{y}}_c\|_2^2$ through an additive training process, where $\eta$ represents the learning rate and $f_m$ represents the $m$-th tree. This approach captures non-linear gene-score relationships while managing model complexity through depth constraints and subsampling. As with other baselines, inputs $\mathbf{x}_c$ are subject to masking strategies to prevent leakage. Hyperparameters are tuned on validation MRR, and the final evaluation employs the same ranking-based metrics as the PCA+kNN and Random Forest baselines.
+
+\subsubsection{Fine-tuning scGPT for Discriminative Perturbation Prediction}
+
+This section details the methodology for the discriminative fine-tuning strategy ("Route B1"), which leverages the pre-trained scGPT backbone to identify perturbation targets at single-cell resolution. Unlike the pseudobulk baselines, this approach models the perturbation likelihood for every gene within individual cells, utilizing a control-aware embedding strategy to isolate perturbation-specific signals.
+
+\paragraph{Task Formulation.}
+The reverse perturbation prediction is formulated as a ranking problem. Given a perturbed single-cell expression profile $\mathbf{x}$ and its associated condition context, the model learns a scoring function $f(\mathbf{x}): \mathbb{R}^G \rightarrow \mathbb{R}^G$ that outputs a vector of logits $\hat{\mathbf{p}}$. These logits represent the likelihood of each gene being a target of the perturbation.
+The ground truth is represented as a multi-hot vector $\mathbf{y} \in \{0,1\}^G$, where $y_j = 1$ if gene $j$ is a target in the condition string (e.g., "GeneA+GeneB"), and 0 otherwise.
+
+\paragraph{Architecture and Input Processing.}
+The model architecture builds upon the scGPT transformer backbone. Single-cell expression counts are preprocessed via the standard scGPT pipeline: counts are normalized, log-transformed, and quantile-binned. Non-zero gene expressions are tokenized into gene-value pairs and prepended with a \texttt{[CLS]} token, yielding a sequence input for the encoder.
+
+To mitigate confounding biological variation (e.g., cell cycle or batch effects) and emphasize the perturbation signal, we employ a control-matched delta embedding strategy:
+\begin{itemize}
+    \item \textbf{Encoder Embedding:} The perturbed cell $i$ is embedded by the scGPT encoder to obtain a latent representation $\mathbf{e}_i$.
+    \item \textbf{Reference Aggregation:} We sample $K$ matched control cells sharing the same batch and cell-type metadata. Their embeddings are averaged to form a reference baseline: $\mathbf{e}_{ref} = \frac{1}{K}\sum_{k=1}^K \mathbf{e}_{i,k}^{\text{ctrl}}$.
+    \item \textbf{Delta Representation:} A perturbation-specific embedding $\mathbf{h}_i$ is computed by subtracting the reference signal:
+    \[
+    \mathbf{h}_i = \mathbf{e}_i - \mathbf{e}_{ref}
+    \]
+\end{itemize}
+The gene-scoring head projects this delta embedding $\mathbf{h}_i$ into the gene embedding space. Let $\mathbf{g}_j$ denote the pre-trained embedding for gene $j$. The score $s_{ij}$ for gene $j$ in cell $i$ is computed via a learnable projection $\mathbf{W}$ and a dot product:
+\[
+s_{ij} = \langle \mathbf{W} \mathbf{h}_i, \mathbf{g}_j \rangle
+\]
+Alternatively, a multi-layer perceptron (MLP) can be applied to the concatenation $[\mathbf{h}_i; \mathbf{g}_j]$.
+
+\paragraph{Optimization Objective.}
+The training objective is a composite loss function designed to rank true perturbation targets higher than non-targets while maintaining calibration. The total loss $\mathcal{L}$ is a weighted sum:
+\[
+\mathcal{L} = \lambda_{\text{rank}}\mathcal{L}_{\text{rank}} + \lambda_{\text{bce}}\mathcal{L}_{\text{bce}}
+\]
+In this study, we utilize weights $\lambda_{\text{rank}}=0.7$ and $\lambda_{\text{bce}}=0.1$. The components are defined as follows:
+\begin{itemize}
+    \item \textbf{Pairwise Ranking Loss ($\mathcal{L}_{\text{rank}}$):} This loss enforces that the scores of ground-truth target genes ($p \in \mathcal{P}$) are higher than those of sampled negative genes ($n \in \mathcal{N}$) by a margin $m$:
+    \[
+    \mathcal{L}_{\text{rank}} = \mathbb{E}_{p, n} \left[ \max(0, m - (s_{i,p} - s_{i,n})) \right]
+    \]
+    Negative samples $\mathcal{N}$ are drawn using a mix of random sampling and "hard negative" mining (high-scoring non-targets) to facilitate robust learning.
+    \item \textbf{Auxiliary Binary Cross-Entropy ($\mathcal{L}_{\text{bce}}$):} To stabilize training and provide probabilistic calibration, we apply BCE loss on the positive set plus a subset of sampled negatives. This avoids gradient dominance from the vast majority of non-target genes (class imbalance) while guiding the model to predict correct multi-hot labels.
+\end{itemize}
+
+\section{Supplementary Note 2: Experimental Details}
+
+
+\subsection{Transcriptome-wide Perturbation Prediction}
+
+\subsubsection{Experimental Setup}
+
+\paragraph{Data preprocessing.}
+We use the ARC Institute VCC competition support dataset (\texttt{competition\_support\_set}),
+which provides preprocessed single-cell RNA-seq data for H1 human embryonic stem cells.
+Gene expression values are transformed using a \texttt{log1p} normalization,
+which stabilizes variance and reduces the dominance of highly expressed genes.
+Control cells corresponding to non-targeting perturbations are retained and used as a reference state.
+
+\paragraph{Data Split.}
+
+Instead of using the original VCC split, we re-split 150 gene perturbations into training, validation, and test sets at the perturbation level to evaluate generalization to unseen perturbations.
+Specifically, 64\% of perturbation genes are used for training, 16\% for validation, and the remaining 20\% (30 genes) form a held-out test set.
+Control (non-targeting) cells are included in all splits to provide a consistent reference state.
+Importantly, there is no overlap of perturbation genes between the training, validation, and test sets, ensuring that models are evaluated on entirely unseen perturbation targets.
 
 \subsubsection{Main Results}
-We evaluated STATE and scGPT against representative baseline models (Ridge Regression, Random Forest Regression, and a trivial Cell-Mean baseline). The results are summarized in Table S1.
+    
+We select Ridge Regression and Random Forest Regression as representative baseline models, as their overall scores fall in the range of 1  to 2. Among all methods, the State Model achieves the best overall performance, with substantial improvements in both DES and PDS. The scGPT fine-tuned model also shows competitive performance in DES and overall score, but suffers from a significantly higher MAE. Overall, more complex models tend to improve DES and PDS, but these gains do not consistently translate into lower MAE. The detailed results are reported in Table~\ref{tab:model_comparison}.
 
 \begin{table}[t]
-    \caption{Performance comparison of perturbation prediction models.}
-    \label{tab:performance_comparison}
-    \centering
-    \begin{tabular}{lcccc}
-    \hline
-    Model  & PDS & MAE & DES & Overall \\
-    \hline
-    Cell-mean baseline         & 0.5167 & 0.1258 & 0.1075 & 0.00 \\
-    Ridge Regression           & 0.5167 & \textbf{0.1253} & 0.1466 & 1.59 \\
-    Random Forest Regression  & 0.5167 & \textbf{0.1253}  & 0.1360 & 1.19 \\
-    State Model               & \textbf{0.5367} & 0.1286 & \textbf{0.3023 } & \textbf{7.28} \\
-    scGPT finetune             & 0.5089 & 0.2763 & 0.2620 & 6.27 \\
-    \hline
-    \end{tabular}
+\caption{Performance comparison of different models.}
+\label{tab:model_comparison}
+\centering
+\begin{tabular}{lcccc}
+\hline
+Model  & PDS & MAE & DES & Overall \\
+\hline
+Cell-mean baseline         & 0.5167 & 0.1258 & 0.1075 & 0.00 \\
+Ridge Regression           & 0.5167 & \textbf{0.1253} & 0.1466 & 1.59 \\
+Random Forest Regression  & 0.5167 & \textbf{0.1253}  & 0.1360 & 1.19 \\
+State Model               & \textbf{0.5367} & 0.1286 & \textbf{0.3023 } & \textbf{7.28} \\
+scGPT finetune             & 0.5089 & 0.2763 & 0.2620 & 6.27 \\
+\hline
+\end{tabular}
 \end{table}
 
-\paragraph{Analysis of Results.}
-Among all methods, the STATE Model achieves the best overall performance, with substantial improvements in biologically relevant metrics (DES: 0.3023 vs 0.1466 for Ridge) and directional accuracy (PDS). The scGPT fine-tuned model also demonstrates competitive performance in DES (0.2620), confirming that deep models capture non-linear regulatory patterns better than linear baselines.
+The aim of the Virtual Cell Challenge (VCC) was to predict post-perturbation single-cell gene expression in the H1 cell based on 150 available perturbations. Though the dataset itself is single-cell, the competition metrics PDS (Perturbation Discrimination Score) and MAE (Mean Absolute Error) were calculated on the pseudobulk gene expression profiles. The third competition metric, DES (Differential Expression Score), in theory, is a more challenging metric as it does consider the single-cell expression distributions and uses standard differentially expressed gene algorithms to infer differentially expressed genes. 
 
-However, complex models do not consistently outperform simpler baselines on MAE. The simple linear regressions achieve the lowest MAE (0.1253), only marginally better than the cell-mean baseline (0.1258). This saturation suggests that MAE is dominated by invariant genes and is a poor differentiator of model quality in this context.
+Conceptually, DES evaluates a model’s ability to faithfully reproduce biologically interpretable perturbation effects, focusing on whether differentially expressed genes are correctly identified and whether the most influential genes are properly prioritized. As such, DES provides a direct measure of how well a model captures single-cell-level perturbation signals.
 
-The discrepancy between high DES/PDS and average MAE in deep models highlights the specific nature of their learning:
+Under these metrics, our model learns meaningful perturbation patterns at the single-cell level, as evidenced by non-trivial DES scores. However, the predicted expression changes for individual cells are often small or close to zero, causing the learned effects to be attenuated when aggregated into pseudobulk representations (\(\hat{\delta}_k\)). This attenuation partially explains the relatively low PDS scores observed.
+
+Furthermore, single-cell data are inherently noisy, which can interfere with effective model training. Since our model is optimized at the single-cell level rather than directly on pseudo-bulk, this mismatch likely further contributes to the lower performance on PDS.
+    
+
+\subsection{Target Gene Identification}
+
+\subsubsection{Experimental Setup}
+
+In our experiments, we instantiate these tasks (Section~\ref{sec:target_id_methods}) as follows:
 \begin{itemize}
-    \item \textbf{Attenuation:} Deep models learn meaningful single-cell patterns (high DES), but the predicted magnitudes are often dampened to minimize uncertainty, leading to smaller $\delta$ vectors. This lowers PDS if magnitude is considered, justifying our use of cosine similarity.
-    \item \textbf{Noise vs. Signal:} Single-cell data is inherently noisy. Deep models trained on single-cell losses may not optimize perfectly for pseudo-bulk metrics, whereas regression baselines trained to minimize variance often converge to the mean.
+    \item \textbf{Norman Dataset (Genetic Perturbations):} We define the task as \textit{Reverse Genetic Perturbation Identification}. The input is the perturbed expression profile (with optional control baseline), and the output is a ranking of potential perturbation genes. Ground truth labels are derived from Perturb-seq metadata, and performance is evaluated using ranking metrics (Hit@K, MRR, NDCG).
+    \item \textbf{Tahoe Dataset (Drug Perturbations):} We define the task as \textit{Reverse Drug Target Identification}. The input is the drug-treated vs. DMSO control profile (or delta signature). The output is a ranking of the drug's target gene. By focusing on the single-target subset, we ensure a clean label space for evaluation.
 \end{itemize}
-These findings reinforce our argument that evaluation must prioritize biological fidelity (DES/PDS) over global reconstruction error (MAE).
+
+\paragraph{Dataset and Preprocessing.}
+We evaluated our method using the Norman et al. Perturb-seq dataset, pre-processed via the GEARS framework. The dataset comprises $N=91,205$ cells and $G=5,045$ log-normalized Highly Variable Genes (HVGs). Gene symbols were mapped to the pre-trained scGPT vocabulary to ensure compatibility. While control cells (unperturbed) were retained to serve as references for computing perturbation-specific shifts (e.g., delta embeddings), the "control" class itself was excluded from the target label space.
+
+\paragraph{Condition Filtering and Canonicalization.}
+To ensure robust statistical modeling, we applied quality control filters to the perturbation conditions. Conditions were first canonicalized to enforce lexicographic order (e.g., treating $A+B$ and $B+A$ as identical) and to remove redundant control strings. We subsequently filtered out conditions with insufficient cell coverage, requiring a minimum of 50 cells for single-gene perturbations and 30 cells for combinatorial (double) perturbations. This process yielded a curated set of valid conditions for splitting.
+
+\paragraph{Compositional Splitting Strategy.}
+We employed a strict condition-level splitting strategy to prevent data leakage, ensuring that no perturbation condition appeared in more than one data split (train/validation/test). To rigorously test the model's ability to generalize to novel biological contexts, we adopted a "compositional split" design:
+\begin{itemize}
+    \item \textbf{Unseen Single Genes:} A fraction of single-gene perturbations (15\%) was held out as "unseen."
+    \item \textbf{Combinatorial Logic:} Combinatorial perturbations were categorized based on the training visibility of their constituent genes. "Seen2" doubles (where both genes are present in the training set as singles) were stratified by gene frequency and cell count to ensure balanced distribution across splits. Conversely, "Seen1" (one gene unseen) and "Seen0" (both genes unseen) combinations were exclusively allocated to the test set to evaluate zero-shot generalization.
+\end{itemize}
+
+\paragraph{Dataset Statistics.}
+The final filtered dataset consisted of 236 unique perturbation conditions across 83,803 cells. Using a fixed random seed (42), the data was partitioned as follows:
+\begin{itemize}
+    \item \textbf{Training Set:} 147 conditions (56,580 cells), comprising 81 single perturbations and 66 "Seen2" doubles.
+    \item \textbf{Validation Set:} 23 conditions (6,560 cells).
+    \item \textbf{Test Set:} 66 conditions (20,712 cells).
+\end{itemize}
+To facilitate detailed performance analysis, the test set was further stratified into four generalization tiers: 15 unseen single perturbations, 15 "Seen2" doubles, 31 "Seen1" doubles, and 5 "Seen0" doubles. This split was persisted and applied uniformly across all benchmarked models (scGPT, PCA+kNN, Random Forest, XGBoost) to ensure a standardized evaluation protocol. 
+
+\subsubsection{Results}
+
+The quantitative results for the Reverse Genetic Perturbation Identification task are summarized in Table~\ref{tab:reverse_prediction_results}. Interestingly, robust baselines operating on pseudobulk profiles (PCA+kNN and Random Forest) outperform the scGPT single-cell fine-tuning approach in top-ranking metrics, such as MRR (0.3602 vs 0.1975). This indicates that for immediate precision (Hit@1, Hit@5), the aggregated signal used by pseudobulk methods is cleaner and more discriminative than noisy single-cell logits. However, as the retrieval window expands (Hit@20, Hit@40), scGPT demonstrates superior recall, significantly overtaking the baselines (Recall@40 of 0.5152 vs 0.3684). This suggests that while scGPT successfully identifies valid perturbation signals, it tends to rank them lower in the candidate list, likely due to the difficulty of optimizing rank-based objectives directly on high-variance single-cell data.
+
+\begin{table}[h]
+\caption{Performance comparison of scGPT and baseline models on the Norman dataset for Reverse Perturbation Prediction. Best results are bolded.}
+\label{tab:reverse_prediction_results}
+\centering
+\begin{tabular}{lcccc}
+\hline
+Metric & scGPT & PCA+kNN & Random Forest & XGBoost \\
+\hline
+MRR & 0.1975 & \textbf{0.3602} & 0.3232 & 0.3323 \\
+Exact Hit@1 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
+Relevant Hit@1 & 0.1039 & \textbf{0.3158} & 0.2105 & 0.2368 \\
+Recall@1 & 0.0520 & \textbf{0.1579} & 0.1053 & 0.1184 \\
+Exact Hit@5 & 0.0526 & \textbf{0.1053} & 0.0789 & 0.0789 \\
+Relevant Hit@5 & 0.2922 & 0.4211 & \textbf{0.4737} & 0.4211 \\
+Recall@5 & 0.1631 & 0.2632 & \textbf{0.2763} & 0.2500 \\
+Exact Hit@10 & 0.0963 & 0.1053 & \textbf{0.1316} & 0.1053 \\
+Relevant Hit@10 & 0.4155 & 0.4211 & \textbf{0.5000} & \textbf{0.5000} \\
+Recall@10 & 0.2492 & 0.2632 & \textbf{0.3158} & 0.3026 \\
+Exact Hit@20 & \textbf{0.2123} & 0.1053 & 0.1842 & 0.1842 \\
+Relevant Hit@20 & \textbf{0.5731} & 0.4211 & 0.5000 & 0.5526 \\
+Recall@20 & \textbf{0.3927} & 0.2632 & 0.3421 & 0.3684 \\
+Exact Hit@40 & \textbf{0.3476} & 0.1053 & 0.1842 & 0.1842 \\
+Relevant Hit@40 & \textbf{0.6828} & 0.4211 & 0.5263 & 0.5526 \\
+Recall@40 & \textbf{0.5152} & 0.2632 & 0.3553 & 0.3684 \\
+\hline
+\end{tabular}
+\end{table}
 
 \end{document}
