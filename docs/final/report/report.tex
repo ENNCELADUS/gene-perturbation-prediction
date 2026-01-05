@@ -85,361 +85,211 @@
 	\end{abstract}
 	
 	
-	\section{Introduction}
+\section{Introduction}
 
-    \subsection{Background}
+\subsection{Phenotypic screening creates an inverse problem}
 
-    Cells are the fundamental functional units of biological systems, whose states and behaviors are governed by complex regulatory mechanisms. Understanding how cellular transcriptomes respond to perturbations—such as gene knockouts or drug treatments—across different cell types and conditions is a central problem in biology and medicine.
+Phenotypic drug discovery has historically been a cornerstone of therapeutic development, uniquely capable of identifying compounds that rescue disease states in a physiologically relevant context without requiring prior knowledge of a specific molecular target. However, this ``target-agnostic'' success comes with a fundamental \textbf{inverse problem}: while the therapeutic effect—the phenotype—is observed, the underlying molecular mechanism of action (MoA) or target often remains unknown, necessitating a complex and laborious target deconvolution process. Unlike target-based approaches that proceed from cause to effect, phenotypic screening presents us with the effect, requiring us to solve for the cause.
 
-    Although advances in single-cell RNA sequencing and CRISPR-based perturbation technologies have enabled large-scale measurement of transcriptional responses, systematic experimental exploration remains prohibitively expensive and limited in throughput. As a result, only a small fraction of all possible perturbations can be tested in practice.
+High-throughput transcriptomic profiling has emerged as a critical bridge in this gap, offering a high-dimensional, information-rich ``fingerprint'' of cellular states that reflects the downstream consequences of upstream perturbations. By defining the biological phenotype as a computable vector, it becomes possible to systematically map the causal relationship between a perturbation (whether genetic or chemical) and its resulting cellular state. This capability transforms the biological question into a data-driven inference task: if we can quantify the phenotypic shift, can we identify the perturbation that caused it?
 
-    Early attempts to construct comprehensive “whole-cell” computational models date back to the late 1990s, but were constrained by sparse data, simplified biological assumptions, and limited computational resources. Recently, the availability of large-scale single-cell atlases, rich perturbation datasets, and modern machine learning methods has renewed interest in this direction. In particular, the concept of the AI Virtual Cell (AIVC) has been proposed as a data-driven framework capable of modeling and simulating cellular responses under diverse perturbations and conditions.
-
-    Within this context, foundation models for single-cell data, such as scGPT, offer a promising avenue for learning transferable cellular representations and enabling predictive modeling of perturbation responses.
-
-    \subsection{Problem Setting: Predicting Transcriptomic Responses to Perturbations}
-
-    In the standard Virtual Cell Challenge (VCC) setting, the task is formulated as predicting transcriptomic responses to perturbations. Given an initial cellular state and a specified perturbation, such as a gene knockout or chemical treatment, the model is required to predict the resulting changes in gene expression induced by the perturbation.
-
-    Formally, the input consists of a representation of the pre-perturbation cell state together with a perturbation descriptor, while the output is a high-dimensional vector capturing perturbation-induced gene expression changes across the transcriptome. This task is typically cast as a transcriptome-wide regression problem, where models are trained to minimize errors between predicted and observed expression changes.
-
-    Evaluation in this setting commonly relies on correlation-based or mean squared error (MSE)–based metrics, which aggregate prediction errors across all genes. As a result, transcriptome-wide prediction accuracy has become a benchmark for assessing virtual cell models.
+Recent advances in artificial intelligence have begun to address this by proposing the construction of ``Virtual Cells''—high-fidelity simulators learned directly from large-scale biological data. As highlighted by Roohani et al.~\cite{roohani_virtual_2025}, these systems are expected to learn the fundamental relationship between cell state and function, with the primary intent of predicting the consequences of perturbations—such as gene knockdowns or drug treatments—across diverse cell contexts. While much of the current effort focuses on this \textbf{forward prediction}, the ultimate utility of AI Virtual Cells (AIVCs) extends beyond mere simulation to ``closing the loop'' for discovery. Bunne et al.~\cite{bunne_how_2024} articulate a vision where AIVCs serve as engines for \textbf{in silico experimentation}, capable of simulating the effects of varying interventions to propose potential causal factors behind observed phenotypes. Although computation alone may not fully resolve all causal links, AIVCs offer the critical potential to drastically \textbf{``reduce the space of possible hypotheses''}, thereby accelerating the identification of underlying mechanisms and new drug targets. This positions the Virtual Cell not just as a simulator, but as a computational partner for target deconvolution in phenotypic drug discovery.
 
 
-    \subsection{Motivation for Downstream Evaluation}
-While transcriptome-wide perturbation prediction provides a convenient and standardized proxy task, it does not fully reflect how virtual cell models are used in practice. In many biological and biomedical applications, the primary interest lies in identifying the key genes or pathways driving a perturbation-induced cellular response, rather than accurately predicting expression changes for all genes.
+\subsection{The community’s asymmetry: optimizing forward metrics vs answering actionable questions}
 
-Moreover, transcriptome-wide metrics may obscure biologically meaningful failures. A model can achieve high overall correlation by accurately predicting large numbers of weakly responsive or non-informative genes, while failing to correctly identify the small subset of causal genes that drive the cellular response. This mismatch between evaluation metrics and downstream scientific objectives raises concerns about whether improvements in transcriptome-wide accuracy necessarily translate into greater biological utility.
+The field currently faces a critical asymmetry: while immense effort is poured into optimizing forward prediction metrics, empirical gains remain marginal. A systematic benchmark across diverse datasets reveals that complex deep learning models do not consistently outperform simpler alternatives, with performance often heavily confounded by perturbation effect sizes rather than architectural superiority~\cite{li_systematic_2024}. More strikingly, recent rigorous evaluations serve as a wake-up call, demonstrating that state-of-the-art models for perturbation prediction do not yet consistently outperform simple linear baselines or even trivial mean predictions~\cite{ahlmann-eltze_deep-learning-based_nodate}. This suggests that the singular pursuit of minimizing reconstruction error (MSE) may not inherently lead to the actionable causal discovery required for drug development.
 
-% While transcriptome-wide perturbation prediction has become a standard proxy task for evaluating virtual cell models, it does not directly reflect how such models are ultimately used in practice. In many biological and biomedical applications, the primary interest lies in identifying the key genes or pathways driving a perturbation-induced cellular response, rather than accurately predicting the full transcriptome. This observation motivates us to consider downstream tasks that more directly assess the biological utility of virtual cell models.
 
-    \subsection{Reformulating the Task: Target Gene Identification as a Downstream Evaluation}
+\subsection{Reframing: invert the causal chain to make models actionable}
 
-To address this limitation, we reformulate the evaluation of virtual cell models as a downstream target gene identification task. Given a population of cells subjected to a known perturbation, the model is required to assign scores to candidate genes and rank them according to their likelihood of being true perturbation targets.
+To bridge the gap between model performance and biological discovery, we propose a fundamental reframing of the Virtual Cell’s utility: shifting the focus from \textbf{forward simulation} (predicting the expression profile of a known perturbation) to \textbf{reverse retrieval} (inferring the causal perturbation of an observed profile). This is not an arbitrary task invention but a rigorous operationalization of the "in silico reverse perturbation prediction" paradigm already emerging in foundational models. For instance, \textbf{scGPT}~\cite{cui_scgpt_2024} explicitly formalizes this as a top-K retrieval task, demonstrating that foundation models can learn to rank potential genetic drivers based on their alignment with a target cell state. By adopting this retrieval-based formulation, we align the model’s output directly with the decision-making logic of drug discovery: generating a ranked list of probable targets for experimental validation.
 
-This formulation directly evaluates whether a model can correctly prioritize biologically relevant genes whose perturbation induces meaningful cellular changes. Compared to transcriptome-wide regression, target gene identification provides a more structured and lower-noise supervision signal. Ground-truth targets are typically available as binary labels or partial rankings, reducing the influence of non-informative genes whose expression may fluctuate due to technical noise or unrelated biological variation.
+This inversion transforms the Virtual Cell from a descriptive simulator into a prescriptive engine for \textbf{therapeutic target identification}. This utility has been notably demonstrated by \textbf{Geneformer}~\cite{theodoris_transfer_2023}, which leveraged transfer learning on large-scale data to move beyond mere expression forecasting, successfully prioritizing candidate therapeutic targets and key network regulators for cardiomyopathy. However, reliable reverse inference requires models to possess true mechanistic reasoning rather than simple pattern matching, particularly when dealing with the combinatorial complexity of biological systems. As evidenced by \textbf{GEARS}~\cite{roohani_predicting_2024}, incorporating biological inductive biases—such as gene regulatory graphs—is essential for generalizing to unseen perturbations and combinatorial sets that lack direct experimental training data. Similarly, achieving robust target discovery requires models (like the transformer-based STATE~\cite{adduri_predicting_nodate}) to model distributions across \textbf{sets of cells}, enabling mechanistic generalization to novel cellular contexts where training data may be sparse or absent. By closing this causal loop, we move from optimizing abstract error metrics to answering the actionable question: \textit{what perturbation caused this phenotype?}
 
-As a result, downstream target gene identification offers a complementary and biologically grounded perspective for assessing the practical utility of virtual cell models.
+\subsection{Contributions}
 
-    % We reformulate the evaluation of virtual cell models as a downstream target gene identification task. Given a population of cells subjected to a known perturbation, the model is required to assign scores to candidate genes and rank them by their likelihood of being true perturbation targets. This formulation evaluates whether the model can correctly prioritize biologically relevant genes whose perturbation induces meaningful cellular changes.
+In this work, we close the loop between forward simulation and reverse inference, presenting a unified framework that repurposes the Virtual Cell from a predictive simulator into a prescriptive engine for target discovery. Our primary contributions are as follows:
 
-    % Compared to transcriptome-wide regression, this task offers a lower-noise and more structured supervision signal. Ground-truth targets are typically available as binary labels or partial rankings, which reduces the influence of non-informative genes whose expression may fluctuate due to technical noise or unrelated biological variation. As a result, target gene identification provides a complementary and biologically grounded perspective for assessing the practical utility of virtual cell models.
+\begin{enumerate}
+    \item \textbf{Rigorous Evaluation of Forward Generalization:} We establish a strict evaluation protocol for forward perturbation prediction using the \textbf{Virtual Cell Challenge (VCC)} dataset~\cite{roohani_virtual_2025}. Unlike standard benchmarks that often rely on random cell-splits, we enforce \textbf{perturbation-level splits} to test true mechanistic generalization. By evaluating state-of-the-art models (including scGPT and STATE) against biologically grounded metrics (DES, PDS) rather than simple reconstruction error, we validate their capacity to capture causal perturbation-response maps beyond mere data fitting.
 
-    \subsection{Our Contributions}
+    \item \textbf{A Unified Paradigm for Reverse Target Retrieval:} We formally define the task of \textbf{in silico reverse perturbation prediction} as a retrieval and ranking problem. We demonstrate that this paradigm—which takes a transcriptomic phenotype as query to retrieve the most probable causal agents—can be effectively generalized across different perturbation modalities. This validates the feasibility of using deep perturbation models to bridge the gap between phenotypic screening readouts and target identification, aligning drug-induced signatures with genetic ground truths.
 
-    In this project, we make the following contributions:
+    \item \textbf{Decoupling Geometric and Semantic Inference:} We uncover a critical \textbf{"Geometry vs. Semantics" trade-off} in phenotypic retrieval. Our comparative analysis reveals that while simple heuristic baselines (e.g., PCA-KNN) excel at "head" precision for strong phenotypes via geometric similarity, pre-trained foundation models (e.g., scGPT) demonstrate superior robustness and "tail" recall. This finding suggests that foundation models uniquely capture the semantic context required for deciphering complex or subtle biological signals that lie beyond simple geometric proximity.
+\end{enumerate}
+
+\section*{Author Contributions}
+
+\begin{itemize}
+    \item \textbf{Anrui Wang}: Implemented scGPT experiments to fulfill the Virtual Cell Challenge (VCC) requirements, evaluated model performance, adapted scGPT to leverage the improved VCC evaluation metrics, and created scGPT-based models specifically for target gene identification, enabling a more biologically meaningful assessment of predictions.
     
-    \begin{itemize}
-        \item We reimplemented a more biologically informed set of evaluation metrics for the Virtual Cell Challenge (VCC) and applied them to a subset of 150 known gene perturbations, with a revised train/validation/test split. Using these metrics, we benchmarked the performance of two representative virtual cell models: STATE and scGPT.
-        
-        \item We adapted scGPT to leverage the improved VCC evaluation metrics and created scGPT-based models specifically for \textbf{target gene identification}, enabling a more biologically meaningful assessment of model predictions.
-        
-        \item We extended our evaluation beyond gene perturbations to drug perturbations and provide an exploratory study on the \textbf{Tahoe-100M} dataset, highlighting the challenges.
-    \end{itemize}
-
-    \section*{Author Contributions}
-
-    \begin{itemize}
-        \item \textbf{Anrui Wang}: Implemented scGPT experiments to fulfill the Virtual Cell Challenge (VCC) requirements, evaluated model performance, adapted scGPT to leverage the improved VCC evaluation metrics, and created scGPT-based models specifically for target gene identification, enabling a more biologically meaningful assessment of predictions.
-        
-        \item \textbf{Jiawen Dai}: Reimplemented a more biologically informed set of evaluation metrics for the Virtual Cell Challenge (VCC), conducted baseline experiments for VCC models, and extracted relevant data from the Tahoe-100M dataset.
-        
-        \item \textbf{Yiting Qi}: Implemented STATE experiments to fulfill the VCC requirements and evaluate performance, conducted studies on the Tahoe-100M dataset, and developed baseline models for target gene prediction on the Tahoe-100M dataset.
-    \end{itemize}
+    \item \textbf{Jiawen Dai}: Reimplemented a more biologically informed set of evaluation metrics for the Virtual Cell Challenge (VCC), conducted baseline experiments for VCC models, and extracted relevant data from the Tahoe-100M dataset.
+    
+    \item \textbf{Yiting Qi}: Implemented STATE experiments to fulfill the VCC requirements and evaluate performance, conducted studies on the Tahoe-100M dataset, and developed baseline models for target gene prediction on the Tahoe-100M dataset.
+\end{itemize}
+	
 
 
+\section{Forward validation as a credibility scaffold}
 
-    \section{Related Work}
+\subsection{Forward prediction on VCC under perturbation-level splits}
 
-    \subsection{Gene Perturbation Benchmarks}
-    Standardized benchmarks are essential for evaluating virtual cell models. 
-    The Virtual Cell Challenge (VCC) provides dedicated single-cell genetic perturbation datasets generated by silencing 300 selected genes in H1 human embryonic stem cells using CRISPR interference. 
-    The data include approximately 300,000 single-cell RNA-seq profiles measured with 10x Genomics GEM-X Flex and Illumina sequencing. 
-    For the challenge, the dataset is split into training (150 perturbations, ~183,000 cells), validation (50 perturbations), and final test (100 held-out perturbations). 
-    Perturbations are categorized based on their effect sizes: strong (more than 100 differentially expressed genes), subtle (10-100 DEGs), and negligible (<10 DEGs). 
-    This benchmark enables systematic assessment of transcriptome-wide prediction.
-    
-    The Norman dataset is another commonly used benchmark in single-cell perturbation modeling. 
-    In scGPT, it was used for a reverse perturbation prediction task, where the model predicts the source of genetic perturbations given the resulting cell state. 
-    For example, a subset of 20 genes is used to construct single- or double-gene perturbation combinations, yielding a closed candidate set of 210 perturbation conditions. 
-    The model is fine-tuned on a subset of known perturbations and evaluated by retrieving the top-K candidate perturbations that best match the observed cell states.
-    
-    \subsection{State-of-the-art Models}
-    In this work, we focus on two representative approaches for virtual cell modeling.
+To establish a rigorous baseline for virtual cell capabilities, we first benchmarked state-of-the-art models on the \textbf{Virtual Cell Challenge (VCC)} dataset. Unlike standard evaluations that often rely on random cell splits—which risk simplifying the task to cellular interpolation—we enforced a strict \textbf{perturbation-level split}. In this setting, the models were tasked with predicting the transcriptional effects of genetic perturbations that were entirely unseen during training, thereby testing true mechanistic generalization rather than pattern memorization.
 
-    \subsubsection{STATE}
-    STATE (Single-cell Transformer for Adaptive Transcriptomic Effects) \cite{adduri_predicting_nodate} is a transformer-based model designed to predict transcriptomic responses to genetic, signaling, and chemical perturbations while accounting for cellular heterogeneity within and across experiments. 
-    It leverages large-scale single-cell data, trained on over 100 million perturbed cells, to capture complex relationships between genes and accurately model perturbation effects.
-    
-    The model consists of two main modules:
-    
-    \begin{itemize}
-        \item \textbf{State Embedding (SE)}: This module learns high-dimensional representations of single cells using self-supervised training. Each gene is first embedded using a protein language model (ESM2) and then processed via a Transformer to model gene-gene interactions. For each cell, the top high-expression genes are selected to form a sequence, augmented with expression-weighted embeddings. The output of a [CLS] token is combined with a dataset token ([DS]) to produce the final cell embedding vector.
-    
-        \item \textbf{State Transition (ST)}: This module learns how perturbations alter cell states through supervised training. The input includes embeddings of control cells, perturbation conditions, and batch information to account for technical variability. These are combined and passed through a Transformer backbone to predict perturbed gene expression profiles. The model is trained using a Maximum Mean Discrepancy (MMD) loss to align the predicted distribution with the observed distribution of perturbed cells, ensuring that the predicted cellular responses capture realistic biological variation.
-    \end{itemize}
-    
-    STATE has been shown to improve the discrimination of perturbation effects in large datasets and effectively identify differentially expressed genes. Moreover, it can generalize to novel cellular contexts where perturbations were not observed during training, highlighting the advantages of large-scale, data-driven models for virtual cell modeling.
-    
-    \subsubsection{scGPT}
-    scGPT \cite{cui_scgpt_2024} is a foundation model for single-cell biology...
-    
-    
-    \subsection{Drug Perturbation Datasets}
-    Beyond gene-level perturbations, large-scale datasets such as \textbf{Tahoe-100M} provide systematic profiling of drug responses across diverse cell states. Tahoe-100M is currently the largest single-cell perturbation dataset, containing over 100 million cells sampled from 1,344 experimental conditions, including 380 chemical compounds applied at multiple concentrations across approximately 50 cancer cell lines and 14 experimental plates. 
-    
-    The dataset includes cell-level metadata such as experimental plate ID, cell cycle phase, and cell cycle scores (S\_score, G2M\_score), enabling more detailed analyses of cellular heterogeneity under chemical perturbations. These data allow evaluation of virtual cell models in pharmacological contexts and testing their generalization beyond single-gene interventions.
+We evaluated two representative model architectures: \textbf{STATE}, which leverages cell-set modeling to capture distributional shifts across cellular contexts, and \textbf{scGPT}, a foundational model that utilizes large-scale pre-training to learn generalizable gene-gene interactions. By systematically comparing these models alongside linear baselines, we defined the current performance boundary for forward prediction (Figure 2). This "forward validation" step serves as a necessary credibility scaffold; it confirms that the underlying embeddings capture sufficient biological signal to support the more complex inference tasks required for target discovery, without assuming that forward simulation is the endpoint of the modeling effort. All implementation details, including data splits and hyperparameter configurations, are detailed in Supplementary Note 1.
 
-    
-    \subsection{Connection to Our Work}
-    Our work builds upon and integrates the methodologies of both STATE and scGPT for practical evaluation and target gene identification. Specifically:
-    
-    \begin{itemize}
-        \item We utilize the \textbf{State Transition (ST)} module from STATE to predict transcriptomic responses, applied to a subset of 150 known gene perturbations from the VCC H1 perturbation dataset. We also implement a revised train/validation/test split to systematically benchmark model performance on these perturbations.
-        
-        \item Using \textbf{scGPT}, we finetune the model to leverage the improved VCC evaluation metrics, applied to the same 150 known perturbations with the revised data split. This enables a direct comparison of scGPT and STATE on the VCC benchmark under more biologically informed metrics.
-        
-        \item We further extend scGPT for \textbf{target gene identification}, creating scGPT-based models capable of ranking candidate genes by their likelihood of being true perturbation targets. For these downstream tasks, we incorporate the Norman dataset as a source of perturbation data to fine-tune and validate the model. 
-        
-        \item Finally, we conduct preliminary exploration on the \textbf{Tahoe-100M} drug perturbation dataset to assess the feasibility of applying scGPT to larger-scale pharmacological perturbations, although full target gene prediction on this dataset remains future work.
-    \end{itemize}
-    
-    This progression illustrates the workflow of our study: starting from transcriptome-wide perturbation prediction using STATE’s ST module, benchmarking and finetuning scGPT with improved VCC metrics, and moving towards biologically meaningful downstream evaluation in target gene identification.
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=1.0\textwidth]{img/forward_result.png}
+    \caption{\textbf{Evaluation Metrics and Scoring Framework.} The Virtual Cell Challenge utilizes a composite scoring system derived from three complementary metrics to assess forward prediction performance. (A) Differential Expression Score (DES): Measures the model's fidelity in recovering biologically interpretable signals by calculating the overlap (precision and recall) between predicted and ground-truth differentially expressed genes (DEGs). (B) Perturbation Discrimination Score (PDS): A ranking-based metric that evaluates whether a predicted pseudo-bulk profile is more similar to its corresponding ground truth than to other perturbations. To mitigate biases toward vectors with small norms, PDS utilizes cosine similarity to emphasize directional alignment over magnitude. (C) Mean Absolute Error (Top-2k MAE): Captures the global reconstruction accuracy by computing the element-wise error across the top 2,000 highly variable genes. (D) Overall Score: A weighted aggregation of the individual metrics used to rank model performance, enforcing a balance between global fit (MAE), directional correctness (PDS), and biological specificity (DES).}
+    \label{fig:forward_result}
+\end{figure}
+
+\subsection{Why we evaluate biology, not just numbers}
+In evaluating these models, we depart from a reliance on raw reconstruction errors, which can be misleading in transcriptomic data. Conventional metrics like Mean Absolute Error (MAE) are frequently dominated by the high baseline expression of invariant genes, potentially awarding high scores to trivial "mean-prediction" baselines while failing to distinguish true biological replicates from unrelated perturbations. Instead, as illustrated in Figure 2, we prioritize metrics that assess the \textbf{perturbation delta ($\delta$)}—the specific causal shift in gene expression induced by the intervention relative to controls.
+We focus on two biologically interpretable metrics to serve as our primary credibility scaffold:
+\begin{itemize}
+\item \textbf{Differential Expression Score (DES):} This metric evaluates the model’s ability to recover the specific set of differentially expressed genes (DEGs). By measuring the overlap (precision and recall) between predicted and ground-truth DEGs, DES verifies whether the model faithfully recapitulates the biologically interpretable effects of a perturbation, rather than merely fitting global statistical distributions.
+\item \textbf{Perturbation Discrimination Score (PDS):} Adapted here to utilize cosine similarity, PDS assesses the directional fidelity of the predicted shift. This ensures that the model correctly ranks the true perturbation as the most similar candidate among all possibilities. Unlike L1-based rankings, this approach emphasizes the alignment of up- or down-regulation vectors rather than signal magnitude, mitigating the penalty on "attenuated" predictions often seen in single-cell modeling.
+\end{itemize}
+This evaluation philosophy aligns with the "delta-based" validation advocated in recent foundational studies, ensuring that high performance reflects the capture of causal regulatory signals rather than the preservation of static cell-type identity.
+\paragraph{Metric Analysis and Failure Modes}
+The selection of these metrics addresses specific failure modes in predictive modeling (Figure 2D). While MAE provides a necessary baseline for global statistical fit, it remains largely insensitive to subtle, biologically meaningful shifts. Consequently, DES serves as the strictest test of biological utility, ensuring the model identifies the precise gene sets driving the phenotype. Furthermore, the adaptation of PDS addresses the "attenuation" phenomenon, where models correctly predict the direction of regulation but with dampened magnitude compared to ground truth. By prioritizing vector direction (cosine similarity) over Euclidean distance, we reward models that capture the correct regulatory mechanism even if the signal strength is conservative.
+\subsection{Takeaway: forward is necessary but not sufficient}
+While forward benchmarks verify that a model can simulate \textit{effects}, therapeutic discovery necessitates inferring \textit{causes} from observed effects. This fundamental asymmetry motivates an explicit inversion of the perturbation–phenotype mapping, moving from verifying simulation accuracy to validating retrieval capability.
 
 
+\section{Methods}
+
+\section{Discussion}
+	
+\section{Conclusion}
 	
 	
-	\section{Methods}
-
-	\subsection{Transcriptome-wide Perturbation Prediction}
-
-    \subsubsection{STATE Implementation Pipeline}
-
-    We implement the STATE model following the official open-source implementation released by the authors.
-    In this work, we focus on the \textit{State Transition (ST)} module of STATE, which is responsible for predicting
-    perturbation-induced transcriptomic responses given control cells and perturbation conditions.
-    
-    \paragraph{Data preprocessing.}
-    We use the ARC Institute VCC competition support dataset (\texttt{competition\_support\_set}),
-    which provides preprocessed single-cell RNA-seq data for H1 human embryonic stem cells.
-    Gene expression values are transformed using a \texttt{log1p} normalization,
-    which stabilizes variance and reduces the dominance of highly expressed genes.
-    Control cells corresponding to non-targeting perturbations are retained and used as a reference state.
-    
-    \paragraph{Perturbation features.}
-    Perturbation identities are represented using pretrained protein embeddings.
-    Specifically, gene perturbations are encoded using ESM2-based perturbation feature vectors provided
-    by the official STATE repository.
-    These embeddings allow the model to incorporate prior biological information about gene identity
-    without directly accessing expression-level supervision.
-    
-    \paragraph{Model architecture.}
-    The ST module takes as input control cell expression profiles, perturbation embeddings, and batch embeddings
-    to account for technical variability.
-    All inputs are projected into a shared hidden space and processed by a Transformer backbone,
-    which models how perturbations induce shifts in cellular state distributions.
-    The output representations are mapped back to the gene expression space to generate predicted
-    perturbed transcriptomes.
-
-    \subsubsection{scGPT}
-
-	
-	
-	\subsection{From Transcriptome-wide Predictions to Target Gene Identification} 
-
-	
-	
-	\section{Experiments}
-	
-	\subsection{Transcriptome-wide Perturbation Prediction}
-	
-	\subsubsection{Dataset and Data Split}
-
-    Instead of using the original VCC split, we re-split 150 gene perturbations into training, validation, and test sets at the perturbation level to evaluate generalization to unseen perturbations.
-    
-    Specifically, 64\% of perturbation genes are used for training, 16\% for validation, and the remaining 20\% (30 genes) form a held-out test set.
-    Control (non-targeting) cells are included in all splits to provide a consistent reference state.
-    Importantly, there is no overlap of perturbation genes between the training, validation, and test sets, ensuring that models are evaluated on entirely unseen perturbation targets.
-
-    \subsubsection{Evaluation metrics: MAE, PDS, DES}
-\paragraph{Perturbation Discrimination Score (PDS).}
-The Perturbation Discrimination Score (PDS) measures whether the predicted gene expression changes induced by different perturbations preserve the correct global directionality across all genes. For each perturbation $k \in \{1,\dots,N\}$, we first construct pseudobulk expressions by averaging all cells under the same perturbation, yielding the ground-truth pseudobulk $y_k \in \mathbb{R}^G$, the predicted pseudobulk $\hat y_k \in \mathbb{R}^G$, and the control (NTC) pseudobulk $y_{\mathrm{ntc}} \in \mathbb{R}^G$. Perturbation-induced expression changes are then defined as $\delta_k = y_k - y_{\mathrm{ntc}}$ and $\hat\delta_k = \hat y_k - y_{\mathrm{ntc}}$. For each predicted perturbation $\hat\delta_k$, we compute cosine similarities to all true perturbation deltas $\{\delta_j\}_{j=1}^N$ as
-\[
-S_{k,j} = \frac{\hat\delta_k \cdot \delta_j}{\|\hat\delta_k\|_2 \, \|\delta_j\|_2}.
-\]
-These similarities are ranked in descending order, and the rank of the correct perturbation $k$ is denoted by $R_k$ (with $1$ being the most similar). The final score is reported as the mean rank $\mathrm{PDS}_{\mathrm{rank}} = \frac{1}{N}\sum_{k=1}^N R_k$, or its normalized version $\mathrm{nPDS}_{\mathrm{rank}} = \frac{1}{N^2}\sum_{k=1}^N R_k$, where lower values indicate better perturbation discrimination.
-
-\paragraph{MAE on Top 2000 Genes by Ground-Truth Fold Change.}
-To focus evaluation on biologically meaningful signals, we additionally compute the mean absolute error (MAE) restricted to the genes with the largest true perturbation effects. For each perturbation $k$, we start from the raw (unnormalized) average counts $c_k \in \mathbb{R}^G$ and control counts $c_{\mathrm{ntc}} \in \mathbb{R}^G$, and compute the absolute log$_2$ fold change for each gene $g$ using a pseudocount of 1:
-\[
-\mathrm{LFC}_{k,g} = \left|\log_2(c_{k,g} + 1) - \log_2(c_{\mathrm{ntc},g} + 1)\right|.
-\]
-Genes are ranked by $\mathrm{LFC}_{k,g}$ in descending order, and the top 2000 genes form the index set $\Omega_k$. Using log1p-normalized pseudobulk expressions $y_k$ and $\hat y_k$ (the same representation as in PDS), the MAE is computed only over these selected genes and then averaged across perturbations:
-\[
-\mathrm{MAE}_{\mathrm{top2k}}
-=
-\frac{1}{N}
-\sum_{k=1}^N
-\left(
-\frac{1}{2000}
-\sum_{g \in \Omega_k}
-\left|\hat y_{k,g} - y_{k,g}\right|
-\right).
-\]
-This metric emphasizes prediction accuracy on genes that exhibit the strongest true responses to each perturbation.
-
-    \subsubsection{Experiment Setup}
-    
-    \subsubsection{Main Results}
-
-    \subsection{Target Gene Identification}
-
-    \section{Extending to Drug Perturbations: Tahoe-100M}
-
-    \subsection{Motivation}
-
-    While our primary experiments focus on gene perturbations, an important long-term
-    goal of virtual cell models is to support drug target discovery in realistic
-    pharmacological settings. Compared to genetic perturbations, drug perturbations
-    introduce additional complexity, including indirect regulatory effects, multi-target
-    mechanisms, and strong cell-line–specific responses.
-    
-    To explore whether perturbation modeling frameworks can be extended beyond
-    gene-level interventions, we conduct an exploratory study on the Tahoe-100M
-    drug perturbation dataset.
-
-    \subsection{Data Curation and Target Annotation}
-
-    The original Tahoe-100M dataset does not provide explicit annotations of drug
-    target genes, which makes supervised target identification infeasible. To enable
-    evaluation, we integrate external drug–target annotations obtained from a curated
-    dataset released on Hugging Face.
-    
-    Based on the availability and reliability of target annotations, we select a subset
-    of 52 drugs for our experiments. Details of Tahoe-100M data extraction and preprocessing are provided in Appendix A. After preprocessing, the extracted gene expression
-    matrix contains 62,710 genes in total, with approximately 31,597 genes observed
-    in the selected subset.
-
-    \subsection{Problem Formulation and Data Splitting}
-
-    We formulate drug target identification as a ranking problem: given drug-treated
-    cells and control cells, the model is expected to prioritize true target genes among
-    all candidate genes.
-    
-    To reduce information leakage across drugs, we perform a drug-level split. Single-
-    target drugs are retained in the training and validation sets. For multi-target drugs,
-    a drug is included in the test set only if all its target genes have appeared in the
-    training set. Drugs with a large number of targets are kept in training to stabilize
-    learning. In practice, overlap of target genes across different drugs is limited,
-    which further constrains the size of the test set.
-
-    \subsection{Baseline Modeling and Evaluation}
-
-    We evaluate drug perturbation effects using two simple baselines. First, we analyze
-    whether true target genes appear among the top 5, 10, 50, or 100 differentially
-    expressed genes. Second, we train a logistic regression classifier using gene-level
-    features derived from expression changes.
-    
-    Across both evaluations, the baselines fail to reliably identify true target genes,
-    with performance close to random guessing. These results indicate that naïve
-    expression-based approaches are insufficient for drug target discovery in this
-    setting.
-
-    \subsection{Challenges and Biological Observations}
-
-    We observe several factors that make drug target identification substantially more
-    challenging than gene perturbation prediction. First, expression changes of target
-    genes are often weak or even absent, potentially because drug effects primarily act
-    on protein activity rather than directly suppressing mRNA levels. Second, the time
-    elapsed after drug treatment is unknown, making it difficult to determine whether
-    the drug has taken effect beyond cell-cycle–related changes.
-    
-    Moreover, many drugs act on multiple targets and exhibit highly cell-line–specific
-    responses. In our experiments, data from different cancer cell lines are aggregated,
-    which may further obscure target-specific signals. These characteristics suggest
-    that Tahoe-100M reflects the complexity of real-world drug target discovery and
-    poses challenges that are not present in controlled gene perturbation benchmarks.
-
-
-	\section{Discussion}
-	
-	\section{Conclusion}
-	
-	
-	\section*{References}
-	
-	[1] 
 
 \bibliographystyle{alpha}
 \bibliography{reference}
 \clearpage
 \appendix
 \renewcommand{\thesection}{Appendix \Alph{section}}
-    
-\section{Tahoe-100M Data Extraction and Preprocessing Pipeline}
 
-\subsection{Input Data and Key Files}
+\section{Supplementary Note 1: Methods and Experimental Details}
 
-    We extract drug perturbation data from the Tahoe-100M dataset using locally
-    downloaded parquet files (\texttt{train*.parquet}). Each record contains gene
-    token IDs, expression values, drug identifiers, cell line IDs, plate information,
-    and sample metadata.
-    
-    To enable supervision for drug target identification, we integrate drug--target
-    annotations from an external curated dataset released on Hugging Face. In addition,
-    a JSON-based mapping from Tahoe gene token IDs to scGPT vocabulary IDs is used to
-    align the gene space with scGPT-based models. Genes not present in the scGPT
-    vocabulary are discarded.
-    
-    \subsection{Target Space Construction}
-    
-    Only drugs with at least one annotated target gene are retained. Each target gene
-    is mapped to a categorical label, forming a classification space defined by the
-    union of all observed targets. For multi-target drugs, each (drug, cell) sample is
-    expanded into multiple rows, one per target gene, with identical expression features
-    but different supervision labels. To prevent severe class imbalance, the number of
-    samples per target gene is capped.
-    
-    \subsection{Control Cell Matching Strategy}
-    
-    Drug-treated cells are paired with control cells treated with DMSO. A control cell
-    is identified if the drug name contains \texttt{DMSO}. For efficiency, only the first
-    encountered DMSO-treated cell for each (cell line, plate) key is stored and reused
-    for all corresponding treated cells. This design choice significantly reduces
-    computational overhead while providing a consistent reference state.
-    
-    \subsection{Gene Space Alignment and Quality Filtering}
-    
-    Since treated and control cells may contain different observed gene sets, control
-    expression vectors are aligned to the gene order of treated cells. Alignment is
-    performed by a two-pointer scan over sorted gene ID lists. Genes present in treated
-    cells but missing in controls are filled with zeros, while control-only genes are
-    discarded.
-    
-    To ensure sufficient overlap between treated and control gene spaces, we compute
-    an overlap ratio defined as
-    $
-    |G_{\text{treat}} \cap G_{\text{ctrl}}| / |G_{\text{treat}}|.
-    $
-    Samples with overlap ratio below a predefined threshold are discarded, preventing
-    excessive zero-filling in control expressions.
-    
-    \subsection{Output Dataset Format}
-    
-    The final dataset is stored as a sharded parquet collection. Each row corresponds
-    to a paired (treated, control) sample at single-target resolution. Stored fields
-    include treated gene IDs and expressions, aligned control expressions, drug and
-    target identifiers, cell metadata, and the overlap ratio used for filtering.
-    
-    \subsection{Key Configuration Parameters}
-    
-    \begin{itemize}
-        \item Control matching key: (\texttt{cell\_line\_id}, \texttt{plate})
-        \item Control fill value: 0.0
-        \item Overlap ratio threshold: 0.05
-        \item Maximum samples per target gene: 100{,}000
-    \end{itemize}
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	
-	
+\subsection{Methods}
+
+\subsubsection{Transcriptome-wide Perturbation Prediction}
+
+\paragraph{STATE Implementation Pipeline}
+We implement the STATE model following the official open-source implementation released by the authors. In this work, we focus on the State Transition (ST) module of STATE, which is responsible for predicting perturbation-induced transcriptomic responses given control cells and perturbation conditions.
+
+\textbf{Data preprocessing.}
+We use the Arc Institute VCC competition support dataset (\texttt{competition\_support\_set}), which provides preprocessed single-cell RNA-seq data for H1 human embryonic stem cells. Gene expression values are transformed using a log1p normalization ($\log(1+x)$), which stabilizes variance and reduces the dominance of highly expressed genes. Control cells corresponding to non-targeting perturbations are retained and used as a reference state ($x_{\mathrm{ntc}}$).
+
+\textbf{Perturbation features.}
+Perturbation identities are represented using pretrained protein embeddings. Specifically, gene perturbations are encoded using ESM2-based perturbation feature vectors provided by the official STATE repository. These embeddings allow the model to incorporate prior biological information about gene identity (e.g., sequence homology) without directly accessing expression-level supervision, facilitating generalization to unseen genes.
+
+\textbf{Model architecture.}
+The ST module takes as input control cell expression profiles, perturbation embeddings, and batch embeddings to account for technical variability. All inputs are projected into a shared hidden space and processed by a Transformer backbone, which models how perturbations induce shifts in cellular state distributions. The output representations are mapped back to the gene expression space via a decoding head to generate predicted perturbed transcriptomes ($\hat{x}_{\mathrm{pert}}$).
+
+\subsubsection{scGPT Implementation}
+We adapt scGPT, a foundation model for single-cell biology, for the perturbation prediction task. The model is initialized with weights pre-trained on a massive scale single-cell corpus.
+
+\textbf{Forward Prediction (Fine-tuning).}
+For the forward task, we fine-tune scGPT using a modified masked language modeling (MLM) objective. The input sequence consists of gene expression tokens conditioned on a special perturbation token. The model is trained to reconstruct the expression of the perturbed state given the gene tokens and the perturbation condition. To prevent the model from learning technical artifacts, we apply random masking to batch indices during training.
+
+\subsection{From Transcriptome-wide Predictions to Target Gene Identification}
+We extend the modeling framework to solve the inverse problem: identifying the causal perturbation from a transcriptomic phenotype.
+
+\textbf{Task Formalization.}
+We define the task as a retrieval ranking problem. Given a query phenotypic signature $x_{\mathrm{phenotype}}$ (e.g., a differentially expressed profile), the model must output a ranked list of candidate perturbations $\text{Rank}(\mathcal{P})$ from the target space $\mathcal{P}$.
+
+\textbf{Reverse Mode Architecture.}
+We utilize the scGPT backbone in a classification setup. The observed cell state (phenotype) is tokenized and processed by the transformer. A classification head is attached to the \texttt{[CLS]} token embedding to predict a probability distribution over the candidate targets.
+
+\textbf{Hybrid Ranking Loss.}
+To handle the long-tail distribution of potential targets and improve retrieval performance, we implement a hybrid loss function:
+\[
+\mathcal{L} = \mathcal{L}_{\text{rank}} + \lambda \mathcal{L}_{\text{bce}}
+\]
+where $\mathcal{L}_{\text{rank}}$ is a ListMLE ranking loss that optimizes the relative order of candidates, and $\mathcal{L}_{\text{bce}}$ is a binary cross-entropy loss that learns independent target probabilities. To address class imbalance, we employ a dynamic negative sampling strategy, sampling 10 non-causal perturbations as negatives for every positive pair during each training epoch.
+
+\subsection{Experiments}
+
+\subsubsection{Transcriptome-wide Perturbation Prediction}
+
+\textbf{Dataset and Data Split.}
+To rigorously evaluate mechanistic generalization, we do not use a random cell split. Instead, we re-split the 150 gene perturbations from the VCC dataset into training, validation, and test sets at the perturbation level.
+\begin{itemize}
+    \item \textbf{Training:} 64\% of perturbation genes (approx. 96 genes).
+    \item \textbf{Validation:} 16\% of perturbation genes.
+    \item \textbf{Test:} 20\% (30 genes) held-out perturbation genes.
+\end{itemize}
+Control (non-targeting) cells are included in all splits to provide a consistent reference state. Importantly, there is no overlap of perturbation genes between the training, validation, and test sets, ensuring that models are evaluated on their ability to predict the effects of entirely unseen perturbation targets based on their embeddings.
+
+\subsubsection{Evaluation metrics: PDS, MAE, DES}
+To align evaluation with biological utility, we employ three complementary metrics.
+
+\textbf{Perturbation Discrimination Score (PDS).}
+The Perturbation Discrimination Score (PDS) measures whether the predicted gene expression changes induced by different perturbations preserve the correct global directionality across all genes. For each perturbation $k \in \{1,\dots,N\}$, we first construct pseudobulk expressions by averaging all cells under the same perturbation, yielding the ground-truth pseudobulk $y_k \in \mathbb{R}^G$, the predicted pseudobulk $\hat y_k \in \mathbb{R}^G$, and the control (NTC) pseudobulk $y_{\mathrm{ntc}} \in \mathbb{R}^G$. Perturbation-induced expression changes are then defined as $\delta_k = y_k - y_{\mathrm{ntc}}$ and $\hat\delta_k = \hat y_k - y_{\mathrm{ntc}}$.
+
+For each predicted perturbation $\hat\delta_k$, we compute cosine similarities to all true perturbation deltas $\{\delta_j\}_{j=1}^N$:
+\[
+S_{k,j} = \frac{\hat\delta_k \cdot \delta_j}{\|\hat\delta_k\|_2 \, \|\delta_j\|_2}.
+\]
+These similarities are ranked, and the rank of the correct perturbation $k$ is denoted by $R_k$. The final score is reported as the mean rank normalized to the number of perturbations: $\mathrm{PDS}_{\mathrm{rank}} = \frac{1}{N}\sum_{k=1}^N R_k$.
+
+\textit{Motivation:} In our task, we modify the original VCC PDS metric by replacing L1 distance with cosine similarity. An L1-based ranking can be biased toward vectors with smaller norms (conservative predictions), even when their directions are poorly aligned. The revised PDS places greater emphasis on directional correctness—whether genes are consistently predicted to be up- or down-regulated—addressing the "attenuation" often seen in single-cell models.
+
+\textbf{MAE on Top 2000 Genes (Top-2k MAE).}
+To focus evaluation on biologically meaningful signals rather than invariant background genes, we compute the Mean Absolute Error (MAE) restricted to genes with the largest true perturbation effects. For each perturbation $k$, genes are ranked by their absolute $\log_2$ fold change ($\mathrm{LFC}_{k,g}$) relative to control. The top 2000 genes form the index set $\Omega_k$.
+\[
+\mathrm{MAE}_{\mathrm{top2k}} = \frac{1}{N} \sum_{k=1}^N \left( \frac{1}{2000} \sum_{g \in \Omega_k} \left|\hat y_{k,g} - y_{k,g}\right| \right)
+\]
+This metric emphasizes prediction accuracy on genes that exhibit the strongest true responses.
+
+\textbf{Differential Expression Score (DES).}
+The Differential Expression Score (DES) measures how accurately a model recovers perturbation-induced differential gene expression. For each perturbation $k$, we identify significantly differentially expressed (DE) genes in both ground truth ($G_{k,\mathrm{true}}$) and prediction ($G_{k,\mathrm{pred}}$) using a Wilcoxon rank-sum test (FDR $\alpha = 0.05$, Benjamini--Hochberg correction).
+
+The score is defined as the recall of the true DE set:
+\[
+\mathrm{DES}_k = \frac{|G_{k,\mathrm{pred}} \cap G_{k,\mathrm{true}}|}{n_{k,\mathrm{true}}}.
+\]
+If the model predicts more DE genes than exist in the truth ($n_{k,\mathrm{pred}} > n_{k,\mathrm{true}}$), we truncate the predicted set to the top $n_{k,\mathrm{true}}$ genes by LFC magnitude to prevent gaming the metric by over-prediction.
+
+\textbf{Overall Score.}
+To rank models, we calculate a scaled composite score based on the improvement over a cell-mean baseline.
+
+\subsubsection{Main Results}
+We evaluated STATE and scGPT against representative baseline models (Ridge Regression, Random Forest Regression, and a trivial Cell-Mean baseline). The results are summarized in Table S1.
+
+\begin{table}[t]
+    \caption{Performance comparison of perturbation prediction models.}
+    \label{tab:performance_comparison}
+    \centering
+    \begin{tabular}{lcccc}
+    \hline
+    Model  & PDS & MAE & DES & Overall \\
+    \hline
+    Cell-mean baseline         & 0.5167 & 0.1258 & 0.1075 & 0.00 \\
+    Ridge Regression           & 0.5167 & \textbf{0.1253} & 0.1466 & 1.59 \\
+    Random Forest Regression  & 0.5167 & \textbf{0.1253}  & 0.1360 & 1.19 \\
+    State Model               & \textbf{0.5367} & 0.1286 & \textbf{0.3023 } & \textbf{7.28} \\
+    scGPT finetune             & 0.5089 & 0.2763 & 0.2620 & 6.27 \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\paragraph{Analysis of Results.}
+Among all methods, the STATE Model achieves the best overall performance, with substantial improvements in biologically relevant metrics (DES: 0.3023 vs 0.1466 for Ridge) and directional accuracy (PDS). The scGPT fine-tuned model also demonstrates competitive performance in DES (0.2620), confirming that deep models capture non-linear regulatory patterns better than linear baselines.
+
+However, complex models do not consistently outperform simpler baselines on MAE. The simple linear regressions achieve the lowest MAE (0.1253), only marginally better than the cell-mean baseline (0.1258). This saturation suggests that MAE is dominated by invariant genes and is a poor differentiator of model quality in this context.
+
+The discrepancy between high DES/PDS and average MAE in deep models highlights the specific nature of their learning:
+\begin{itemize}
+    \item \textbf{Attenuation:} Deep models learn meaningful single-cell patterns (high DES), but the predicted magnitudes are often dampened to minimize uncertainty, leading to smaller $\delta$ vectors. This lowers PDS if magnitude is considered, justifying our use of cosine similarity.
+    \item \textbf{Noise vs. Signal:} Single-cell data is inherently noisy. Deep models trained on single-cell losses may not optimize perfectly for pseudo-bulk metrics, whereas regression baselines trained to minimize variance often converge to the mean.
+\end{itemize}
+These findings reinforce our argument that evaluation must prioritize biological fidelity (DES/PDS) over global reconstruction error (MAE).
+
 \end{document}
