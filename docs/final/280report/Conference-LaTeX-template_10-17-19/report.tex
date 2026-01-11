@@ -1,80 +1,42 @@
-\documentclass{article}
-
-
-% if you need to pass options to natbib, use, e.g.:
-%     \PassOptionsToPackage{numbers, compress}{natbib}
-% before loading neurips_2023
-
-
-% ready for submission
-%\usepackage{neurips_2023}
-\usepackage[final]{neurips_2023}
-
-\makeatletter
-\renewcommand{\@noticestring}{}
-\makeatother
-
-% to compile a preprint version, e.g., for submission to arXiv, add add the
-% [preprint] option:
-%     \usepackage[preprint]{neurips_2023}
-
-
-% to compile a camera-ready version, add the [final] option, e.g.:
-%     \usepackage[final]{neurips_2023}
-
-
-% to avoid loading the natbib package, add option nonatbib:
-%    \usepackage[nonatbib]{neurips_2023}
-
-
-\usepackage[utf8]{inputenc} % allow utf-8 input
-\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-\usepackage{hyperref}       % hyperlinks
-\usepackage{url}            % simple URL typesetting
-\usepackage{booktabs}       % professional-quality tables
-\usepackage{amsfonts}       % blackboard math symbols
-\usepackage{nicefrac}       % compact symbols for 1/2, etc.
-\usepackage{microtype}      % microtypography
-\usepackage{xcolor}         % colors
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
 \usepackage{graphicx}
-\usepackage{algorithm}      % 提供 algorithm 环境
-\usepackage{algpseudocode}  % 提供 algorithm 语法支持
-\usepackage{algorithmicx}   % 提供 algorithm 扩展功能
-\usepackage{multirow}
-
-\usepackage{amssymb}    % 数学符号扩展
-\usepackage{amsmath}
-\DeclareMathOperator*{\argmin}{arg\,min}
-\DeclareMathOperator*{\argmax}{arg\,max}
-\title{Beyond Forward Prediction: Reverse Perturbation Retrieval as a Bridge from Transcriptomic Phenotypes to Drug Targets}
-
-
-% The \author macro works with any number of authors. There are two commands
-% used to separate the names and addresses of multiple authors: \And and \AND.
-%
-% Using \And between authors leaves it to LaTeX to determine where to break the
-% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
-% authors names on the first line, and the last on the second line, try using
-% \AND instead of \And before the third author name.
-
-
-
-\author{
-	Anrui Wang \\
-	2023533015 \\
-	\texttt{wangar2023@shanghaitech.edu.cn}\\
-	\And
-	Jiawen Dai \\
-	2023533132 \\
-	\texttt{daijw2023@shanghaitech.edu.cn}\\
-	\AND
-	Yiting Qi \\
-	2023533043 \\
-	\texttt{qiyt2023@shanghaitech.edu.cn}\\
-}
-
-
+\usepackage{textcomp}
+\usepackage{xcolor}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
+
+\title{Conference Paper Title*\\}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+}
 
 \maketitle
 
@@ -87,11 +49,11 @@ Phenotypic drug discovery faces a fundamental "inverse problem": while therapeut
 
 \subsection{Phenotypic screening creates an inverse problem}
 
-Phenotypic drug discovery has historically been a cornerstone of therapeutic development, uniquely capable of identifying compounds that rescue disease states in a physiologically relevant context without requiring prior knowledge of a specific molecular target. However, this ``target-agnostic'' success comes with a fundamental \textbf{inverse problem}: while the therapeutic effect—the phenotype—is observed, the underlying molecular mechanism of action (MoA) or target often remains unknown, necessitating a complex and laborious target deconvolution process. Unlike target-based approaches that proceed from cause to effect, phenotypic screening presents us with the effect, requiring us to solve for the cause.
+Phenotypic drug discovery has historically been a cornerstone of therapeutic development, uniquely capable of identifying compounds that rescue disease states in a physiologically relevant context without requiring prior knowledge of a specific molecular target. However, this target-agnostic success comes with a fundamental \textbf{inverse problem}: while the therapeutic effect—the phenotype—is observed, the underlying molecular mechanism of action (MoA) or target often remains unknown, necessitating a complex and laborious target deconvolution process. Unlike target-based approaches that proceed from cause to effect, phenotypic screening presents us with the effect, requiring us to solve for the cause.
 
 High-throughput transcriptomic profiling has emerged as a critical bridge in this gap, offering a high-dimensional, information-rich ``fingerprint'' of cellular states that reflects the downstream consequences of upstream perturbations. By defining the biological phenotype as a computable vector, it becomes possible to systematically map the causal relationship between a perturbation (whether genetic or chemical) and its resulting cellular state. This capability transforms the biological question into a data-driven inference task: if we can quantify the phenotypic shift, can we identify the perturbation that caused it?
 
-Recent advances in artificial intelligence have begun to address this by proposing the construction of ``Virtual Cells''—high-fidelity simulators learned directly from large-scale biological data. As highlighted by Roohani et al.~\cite{roohani_virtual_2025}, these systems are expected to learn the fundamental relationship between cell state and function, with the primary intent of predicting the consequences of perturbations—such as gene knockdowns or drug treatments—across diverse cell contexts. While much of the current effort focuses on this \textbf{forward prediction}, the ultimate utility of AI Virtual Cells (AIVCs) extends beyond mere simulation to ``closing the loop'' for discovery. Bunne et al.~\cite{bunne_how_2024} articulate a vision where AIVCs serve as engines for \textbf{in silico experimentation}, capable of simulating the effects of varying interventions to propose potential causal factors behind observed phenotypes. Although computation alone may not fully resolve all causal links, AIVCs offer the critical potential to drastically \textbf{``reduce the space of possible hypotheses''}, thereby accelerating the identification of underlying mechanisms and new drug targets. This positions the Virtual Cell not just as a simulator, but as a computational partner for target deconvolution in phenotypic drug discovery.
+Recent advances in artificial intelligence have begun to address this by proposing the construction of ``Virtual Cells''—high-fidelity simulators learned directly from large-scale biological data. As highlighted by Roohani et al.~\cite{roohani_virtual_2025}, these systems are expected to learn the fundamental relationship between cell state and function, with the primary intent of predicting the consequences of perturbations—such as gene knockdowns or drug treatments—across diverse cell contexts. While much of the current effort focuses on this \textbf{forward prediction}, the ultimate utility of AI Virtual Cells (AIVCs) extends beyond mere simulation to ``closing the loop'' for discovery. Bunne et al.~\cite{bunne_how_2024} articulate a vision where AIVCs serve as engines for in silico experimentation, capable of simulating the effects of varying interventions to propose potential causal factors behind observed phenotypes. Although computation alone may not fully resolve all causal links, AIVCs offer the critical potential to drastically \textbf{reduce the space of possible hypotheses}, thereby accelerating the identification of underlying mechanisms and new drug targets. This positions the Virtual Cell not just as a simulator, but as a computational partner for target deconvolution in phenotypic drug discovery.
 
 
 \subsection{The community’s asymmetry: optimizing forward metrics vs answering actionable questions}
@@ -103,18 +65,18 @@ The field currently faces a critical asymmetry: while immense effort is poured i
 
 To bridge the gap between model performance and biological discovery, we propose a fundamental reframing of the Virtual Cell’s utility: shifting the focus from \textbf{forward simulation} (predicting the expression profile of a known perturbation) to \textbf{reverse retrieval} (inferring the causal perturbation of an observed profile). This is not an arbitrary task invention but a rigorous operationalization of the "in silico reverse perturbation prediction" paradigm already emerging in foundational models. For instance, \textbf{scGPT}~\cite{cui_scgpt_2024} explicitly formalizes this as a top-K retrieval task, demonstrating that foundation models can learn to rank potential genetic drivers based on their alignment with a target cell state. By adopting this retrieval-based formulation, we align the model’s output directly with the decision-making logic of drug discovery: generating a ranked list of probable targets for experimental validation.
 
-This inversion transforms the Virtual Cell from a descriptive simulator into a prescriptive engine for \textbf{therapeutic target identification}. This utility has been notably demonstrated by \textbf{Geneformer}~\cite{theodoris_transfer_2023}, which leveraged transfer learning on large-scale data to move beyond mere expression forecasting, successfully prioritizing candidate therapeutic targets and key network regulators for cardiomyopathy. However, reliable reverse inference requires models to possess true mechanistic reasoning rather than simple pattern matching, particularly when dealing with the combinatorial complexity of biological systems. As evidenced by \textbf{GEARS}~\cite{roohani_predicting_2024}, incorporating biological inductive biases—such as gene regulatory graphs—is essential for generalizing to unseen perturbations and combinatorial sets that lack direct experimental training data. Similarly, achieving robust target discovery requires models (like the transformer-based STATE~\cite{adduri_predicting_nodate}) to model distributions across \textbf{sets of cells}, enabling mechanistic generalization to novel cellular contexts where training data may be sparse or absent. By closing this causal loop, we move from optimizing abstract error metrics to answering the actionable question: \textit{what perturbation caused this phenotype?}
+This inversion transforms the Virtual Cell from a descriptive simulator into a prescriptive engine for therapeutic target identification. This utility has been notably demonstrated by \textbf{Geneformer}~\cite{theodoris_transfer_2023}, which leveraged transfer learning on large-scale data to move beyond mere expression forecasting, successfully prioritizing candidate therapeutic targets and key network regulators for cardiomyopathy. However, reliable reverse inference requires models to possess true mechanistic reasoning rather than simple pattern matching, particularly when dealing with the combinatorial complexity of biological systems. As evidenced by \textbf{GEARS}~\cite{roohani_predicting_2024}, incorporating biological inductive biases—such as gene regulatory graphs—is essential for generalizing to unseen perturbations and combinatorial sets that lack direct experimental training data. Similarly, achieving robust target discovery requires models (like the transformer-based STATE~\cite{adduri_predicting_nodate}) to model distributions across sets of cells, enabling mechanistic generalization to novel cellular contexts where training data may be sparse or absent. By closing this causal loop, we move from optimizing abstract error metrics to answering the actionable question: \textit{what perturbation caused this phenotype?}
 
 \subsection{Contributions}
 
-In this work, we close the loop between forward simulation and reverse inference, presenting a unified framework that repurposes the Virtual Cell from a predictive simulator into a prescriptive engine for target discovery. We ground this framework by establishing a strict evaluation protocol for forward perturbation prediction using the \textbf{Virtual Cell Challenge (VCC)} dataset~\cite{roohani_virtual_2025}. By enforcing \textbf{perturbation-level splits} and prioritizing biologically grounded metrics (DES, PDS) over simple reconstruction error, we ensure that state-of-the-art models (including scGPT and STATE) capture true causal perturbation-response maps rather than merely fitting statistical noise. Transitioning from simulation to inference, we formally operationalize \textbf{in silico reverse perturbation prediction} as a retrieval and ranking problem. This paradigm shift—treating transcriptomic phenotypes as queries to identify causal agents—demonstrates that deep perturbation models can effectively bridge the gap between phenotypic screening readouts and genetic ground truths. Crucially, our investigation uncovers a fundamental \textbf{``Geometry vs. Semantics'' trade-off} in phenotypic retrieval. While heuristic baselines like PCA-KNN excel at identifying strong, ``geometrically reachable'' phenotypes, pre-trained foundation models such as scGPT demonstrate superior robustness in retrieving the ``long tail'' of subtle signals, suggesting they uniquely capture the semantic context required for deciphering complex biological mechanisms.
+In this work, we close the loop between forward simulation and reverse inference, presenting a unified framework that repurposes the Virtual Cell from a predictive simulator into a prescriptive engine for target discovery. We ground this framework by establishing a strict evaluation protocol for forward perturbation prediction using the \textbf{Virtual Cell Challenge (VCC)} dataset~\cite{roohani_virtual_2025}. By enforcing perturbation-level splits and prioritizing biologically grounded metrics (DES, PDS) over simple reconstruction error, we ensure that state-of-the-art models (including scGPT and STATE) capture true causal perturbation-response maps rather than merely fitting statistical noise. Transitioning from simulation to inference, we formally operationalize in silico reverse perturbation prediction as a retrieval and ranking problem. This paradigm shift—treating transcriptomic phenotypes as queries to identify causal agents—demonstrates that deep perturbation models can effectively bridge the gap between phenotypic screening readouts and genetic ground truths. Crucially, our investigation uncovers a fundamental \textbf{``Geometry vs. Semantics'' trade-off} in phenotypic retrieval. While heuristic baselines like PCA-KNN excel at identifying strong, ``geometrically reachable'' phenotypes, pre-trained foundation models such as scGPT demonstrate superior robustness in retrieving the ``long tail'' of subtle signals, suggesting they uniquely capture the semantic context required for deciphering complex biological mechanisms.
 
 \section*{Author Contributions}
 
 \begin{itemize}
-    \item \textbf{Anrui Wang}: Implemented scGPT experiments to fulfill the Virtual Cell Challenge (VCC) requirements, evaluated model performance, adapted scGPT to leverage the improved VCC evaluation metrics, and created scGPT-based models specifically for target gene identification, enabling a more biologically meaningful assessment of predictions.
+    \item \textbf{Anrui Wang}: Implemented scGPT experiments to fulfill the VCC requirements, evaluated model performance, adapted scGPT to leverage the improved VCC evaluation metrics, and created scGPT-based models specifically for target gene identification, enabling a more biologically meaningful assessment of predictions.
     
-    \item \textbf{Jiawen Dai}: Reimplemented a more biologically informed set of evaluation metrics for the Virtual Cell Challenge (VCC), conducted baseline experiments for VCC models, and extracted relevant data from the Tahoe-100M dataset.
+    \item \textbf{Jiawen Dai}: Reimplemented a more biologically informed set of evaluation metrics for the VCC, conducted baseline experiments for VCC models, and extracted relevant data from the Tahoe-100M dataset.
     
     \item \textbf{Yiting Qi}: Implemented STATE experiments to fulfill the VCC requirements and evaluate performance, conducted studies on the Tahoe-100M dataset, and developed baseline models for target gene prediction on the Tahoe-100M dataset.
 \end{itemize}
@@ -125,13 +87,13 @@ In this work, we close the loop between forward simulation and reverse inference
 
 \subsection{Forward prediction on VCC under perturbation-level splits}
 
-We anchored our investigation by benchmarking state-of-the-art models on the \textbf{Virtual Cell Challenge (VCC)} dataset, establishing a rigorous baseline for virtual cell capabilities. Diverging from standard evaluations that rely on random cell splits—a practice that risks reducing the task to mere cellular interpolation—we enforced a strict \textbf{perturbation-level split}. This rigorous setting tasked models with predicting the transcriptional effects of genetic perturbations entirely unseen during training, effectively isolating true mechanistic generalization from simple pattern memorization.
+We anchored our investigation by benchmarking state-of-the-art models on the VCC dataset, establishing a rigorous baseline for virtual cell capabilities. Diverging from standard evaluations that rely on random cell splits—a practice that risks reducing the task to mere cellular interpolation—we enforced a strict perturbation-level split. This rigorous setting tasked models with predicting the transcriptional effects of genetic perturbations entirely unseen during training, effectively isolating true mechanistic generalization from simple pattern memorization.
 
 We evaluated two representative model architectures: \textbf{STATE}, which leverages cell-set modeling to capture distributional shifts across cellular contexts, and \textbf{scGPT}, a foundational model that utilizes large-scale pre-training to learn generalizable gene-gene interactions. By systematically comparing these models alongside linear baselines, we defined the current performance boundary for forward prediction (Figure~\ref{fig:forward_result}). This "forward validation" step serves as a necessary credibility scaffold; it confirms that the underlying embeddings capture sufficient biological signal to support the more complex inference tasks required for target discovery, without assuming that forward simulation is the endpoint of the modeling effort. All implementation details, including data splits and hyperparameter configurations, are detailed in Supplementary Note 1.
 
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=1.0\textwidth]{img/forward_result.png}
+    \includegraphics[width=0.48\textwidth]{img/forward_result.png}
     \caption{\textbf{Evaluation Metrics and Scoring Framework.} The Virtual Cell Challenge utilizes a composite scoring system derived from three complementary metrics to assess forward prediction performance. (A) Differential Expression Score (DES): Measures the model's fidelity in recovering biologically interpretable signals by calculating the overlap (precision and recall) between predicted and ground-truth differentially expressed genes (DEGs). (B) Perturbation Discrimination Score (PDS): A ranking-based metric that evaluates whether a predicted pseudo-bulk profile is more similar to its corresponding ground truth than to other perturbations. To mitigate biases toward vectors with small norms, PDS utilizes cosine similarity to emphasize directional alignment over magnitude. (C) Mean Absolute Error (Top-2k MAE): Captures the global reconstruction accuracy by computing the element-wise error across the top 2,000 highly variable genes. (D) Overall Score: A weighted aggregation of the individual metrics used to rank model performance, enforcing a balance between global fit (MAE), directional correctness (PDS), and biological specificity (DES).}
     \label{fig:forward_result}
 \end{figure}
@@ -147,7 +109,7 @@ To further investigate these failure modes, we selected \textbf{MED13} from the 
 
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=0.8\textwidth]{img/state_predicttion.png}
+    \includegraphics[width=0.48\textwidth]{img/state_predicttion.png}
     \caption{\textbf{Analysis of Prediction Failure on MED13.} Despite achieving high global metrics, the STATE model fails to predict the specific downregulation of the target gene MED13. The predicted expression change follows a normal distribution centered at zero (conservative prediction), contrasting with the true downregulation observed in the ground truth. This highlights the model's tendency to revert to a mean-zero shift when encountering unseen perturbations, a phenomenon not fully captured by aggregate metrics like MAE.}
     \label{fig:state_prediction}
 \end{figure}
@@ -165,7 +127,7 @@ To bridge the gap between transcriptomic modeling and therapeutic target discove
 
 \begin{center}
 \fbox{
-\begin{minipage}{\linewidth}
+\begin{minipage}{0.95\columnwidth}
 \textbf{Box 1: Task Definition – Reverse Perturbation Retrieval}\\
 \textbf{Query:} An observed post-perturbation transcriptomic phenotype (signature), denoted as $y_{\text{obs}}$. \\
 \textbf{Database:} A discrete search space of candidate targets $\mathcal{P}$ (e.g., genome-wide gene knockouts). \\
@@ -178,14 +140,14 @@ This formulation aligns with the "reverse retrieval" setting proposed in recent 
 
 \subsection{Main empirical finding: geometry vs. semantics}
 
-We evaluated the retrieval performance of fine-tuned scGPT against robust linear and non-linear baselines (PCA-KNN, Random Forest, XGBoost) on the Norman et al. dataset. Our results reveal a distinct trade-off between local precision and global recall, suggesting a dichotomy in how different models access causal mechanisms.
+We evaluated the retrieval performance of fine-tuned scGPT against robust linear and non-linear baselines (PCA-KNN, Random Forest, XGBoost) on the Norman et al. dataset. Comprehensive methodological details, including the scGPT fine-tuning architecture (Figure~\ref{fig:scgpt_reverse}) and baseline implementations, are provided in Supplementary Note 1. Our results reveal a distinct trade-off between local precision and global recall, suggesting a dichotomy in how different models access causal mechanisms.
 
 \textbf{Phenomenon: The Cross-over Effect.}
 Figure~\ref{fig:target_crossover} illustrates the "Geometry vs. Semantics" trade-off observed in the target identification task. The bars represent Relevant Hit@K (the probability of retrieving at least one correct driver), while the dashed lines track Recall@K (the fraction of ground-truth targets recovered). At strictly local retrieval windows (K=1 to K=10), shallow baselines such as PCA-KNN (light blue) and Random Forest (red) outperform scGPT, validating their efficiency in identifying "geometrically reachable" targets with strong phenotypic signatures. However, a decisive performance crossover occurs as the window expands: at K=40, scGPT (dark blue) surpasses all baselines, achieving a Recall of approximately 0.52 compared to 0.26 for PCA-KNN. This trend demonstrates that while baselines excel at high-precision "head" retrieval, scGPT possesses the "semantic reachability" necessary to retrieve the "long tail" of complex or subtle perturbation signals that simpler models miss.
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=0.8\textwidth]{img/target.png}
+    \includegraphics[width=0.48\textwidth]{img/target.png}
     \caption{\textbf{The "Cross-over" Effect in Reverse Perturbation Retrieval on the Norman Dataset.} Comparison of foundation model (scGPT) performance against geometric (PCA-KNN) and ensemble (Random Forest, XGBoost) baselines across varying retrieval window sizes (K).}
     \label{fig:target_crossover}
 \end{figure}
@@ -245,11 +207,11 @@ Based on the ``Geometry vs. Semantics'' trade-off uncovered in our retrieval ben
 This suggests the optimal path forward is not a monolithic model, but a tiered hybrid system. Such a framework would employ geometric models for the high-precision, low-cost screening of dominant effects, while leveraging deep generative models to decipher robust targets hidden within non-linear regulatory landscapes. This approach mirrors the success of Geneformer, which demonstrated that transfer learning can prioritize therapeutic candidates beyond mere expression forecasting. Furthermore, to support this semantic reasoning, future systems must incorporate biological inductive biases—such as the gene regulatory graphs utilized by GEARS or the cell-set distribution modeling of STATE—to improve generalization to unseen combinatorial perturbations.
 
 \subsection{Limitations}
-Validating the feasibility of in silico reverse perturbation establishes a foundational proof-of-concept, yet bridging the divide to industrial application requires navigating three distinct critical boundaries. The most formidable challenge lies in the \textbf{``Inference Gap'' in pharmacological perturbations}. While genetic target retrieval proved successful on the Norman dataset, extending this logic to pharmacological contexts (Tahoe-100M) exposes a fundamental escalation in complexity. Unlike the direct mechanism of CRISPR, drugs operate at the protein level, producing transcriptomic signatures that are merely downstream echoes confounded by polypharmacology. Bridging this gap demands transcending unimodal scRNA-seq by integrating orthogonal readouts, such as proteomics, to mechanically link protein-level binding with transcriptional outcomes.
+Validating the feasibility of in silico reverse perturbation establishes a foundational proof-of-concept, yet bridging the divide to industrial application requires navigating three distinct critical boundaries. The most formidable challenge lies in the ``Inference Gap'' in pharmacological perturbations. While genetic target retrieval proved successful on the Norman dataset, extending this logic to pharmacological contexts (Tahoe-100M) exposes a fundamental escalation in complexity. Unlike the direct mechanism of CRISPR, drugs operate at the protein level, producing transcriptomic signatures that are merely downstream echoes confounded by polypharmacology. Bridging this gap demands transcending unimodal scRNA-seq by integrating orthogonal readouts, such as proteomics, to mechanically link protein-level binding with transcriptional outcomes.
 
-Compounding this difficulty is the \textbf{Annotation Scarcity in Large-Scale Atlases}. Our analysis of Tahoe-100M reveals that current massive perturbation datasets lack the ``verifiable ground truth'' density required for rigorous benchmarking; the fact that standard baselines perform near random guessing points to a data limitation rather than a model failure. Meaningful progress therefore necessitates a strategic shift: moving away from the aggregation of massive, noisy datasets and toward the curation of ``gold-standard'' subsets where drug-target interactions are biochemically validated within the specific assay context.
+Compounding this difficulty is the Annotation Scarcity in Large-Scale Atlases. Our analysis of Tahoe-100M reveals that current massive perturbation datasets lack the ``verifiable ground truth'' density required for rigorous benchmarking; the fact that standard baselines perform near random guessing points to a data limitation rather than a model failure. Meaningful progress therefore necessitates a strategic shift: moving away from the aggregation of massive, noisy datasets and toward the curation of ``gold-standard'' subsets where drug-target interactions are biochemically validated within the specific assay context.
 
-Beneath these data challenges lies a technical limitation in \textbf{Ranking Precision for Deep Models}. Although scGPT excels at recalling complex targets, it trails simple baselines in Mean Reciprocal Rank (MRR), suggesting that while it captures the correct semantic signal, it struggles to isolate it from the inherent noise of single-cell logits to achieve top-tier ranking. Future architectural iterations must prioritizing specialized ranking loss functions or denoising objectives capable of refining these broad semantic signals into precise, top-k predictions.
+Beneath these data challenges lies a technical limitation in Ranking Precision for Deep Models. Although scGPT excels at recalling complex targets, it trails simple baselines in Mean Reciprocal Rank (MRR), suggesting that while it captures the correct semantic signal, it struggles to isolate it from the inherent noise of single-cell logits to achieve top-tier ranking. Future architectural iterations must prioritizing specialized ranking loss functions or denoising objectives capable of refining these broad semantic signals into precise, top-k predictions.
 
 \newpage
 \bibliographystyle{unsrt}
@@ -354,7 +316,7 @@ perturbed transcriptomes.
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.9\textwidth]{img/state.png}
+    \includegraphics[width=0.48\textwidth]{img/state.png}
     \caption{The architecture of the STATE model. The State Transition (ST) module integrates control expression, perturbation embeddings, and batch information to predict post-perturbation transcriptomic states.}
     \label{fig:state_model}
 \end{figure}
@@ -368,7 +330,7 @@ We initialize the model using pre-trained scGPT checkpoints (Figure~\ref{fig:scg
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.9\textwidth]{img/scGPT_forward.jpg}
+    \includegraphics[width=0.48\textwidth]{img/scGPT_forward.jpg}
     \caption{Overview of the scGPT model adaptation for perturbation prediction. The model is initialized with pre-trained weights, with core modules frozen to retain biological knowledge, while the perturbation encoder and decoders are fine-tuned.}
     \label{fig:scgpt_forward}
 \end{figure}
@@ -481,7 +443,14 @@ The reverse perturbation prediction is formulated as a ranking problem. Given a 
 The ground truth is represented as a multi-hot vector $\mathbf{y} \in \{0,1\}^G$, where $y_j = 1$ if gene $j$ is a target in the condition string (e.g., "GeneA+GeneB"), and 0 otherwise.
 
 \paragraph{Architecture and Input Processing.}
-The model architecture builds upon the scGPT transformer backbone. Single-cell expression counts are preprocessed via the standard scGPT pipeline: counts are normalized, log-transformed, and quantile-binned. Non-zero gene expressions are tokenized into gene-value pairs and prepended with a \texttt{[CLS]} token, yielding a sequence input for the encoder.
+The model architecture builds upon the scGPT transformer backbone (Figure~\ref{fig:scgpt_reverse}). Single-cell expression counts are preprocessed via the standard scGPT pipeline: counts are normalized, log-transformed, and quantile-binned. Non-zero gene expressions are tokenized into gene-value pairs and prepended with a \texttt{[CLS]} token, yielding a sequence input for the encoder.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.48\textwidth]{img/scGPT_pipeline_standalone_export.pdf}
+    \caption{Architecture of the scGPT-based reverse perturbation prediction model. The model processes perturbed cells through the scGPT encoder to generate cell embeddings. A control-matched delta embedding strategy is employed, where reference control embeddings are subtracted from perturbed embeddings to isolate perturbation-specific signals. The resulting delta embedding is then projected through a gene-scoring head that computes similarity scores against all candidate gene embeddings to rank potential perturbation targets.}
+    \label{fig:scgpt_reverse}
+\end{figure}
 
 To mitigate confounding biological variation (e.g., cell cycle or batch effects) and emphasize the perturbation signal, we employ a control-matched delta embedding strategy:
 \begin{itemize}
