@@ -1,20 +1,68 @@
 # Repository Guidelines
 
+## Quick Context
+- **What**: A virtual cell framework that shifts from forward prediction (simulating perturbation effects) to "Reverse Perturbation Retrieval" (inferring causal genetic or pharmacological targets from observed transcriptomic phenotypes). Evaluates foundation models (e.g., scGPT, STATE) on datasets like Virtual Cell Challenge (VCC), Norman, and Tahoe-100M.
+- **Goal**: Reproducible, config-driven pipelines for Pretraining, Finetuning, and Evaluation.
+- **Role**: Act as a careful junior engineer. Follow **Plan → Confirm → Code**.
+
 ## Project Structure & Module Organization
-Core automation sits in `scripts/` (data preview and visualization helpers) and the vendorized `scGPT/` modules/tests. Keep raw AnnData or CSV inputs inside `data/raw/` (gitignored) and write derived features to `data/processed/`. Docs live in `docs/`, and notebooks stay in `notebook/` with outputs cleared before commit.
+Standard Deep Learning project layout:
+- `src/model/`: Neural network architectures (`nn.Module` subclasses).
+- `src/train/`: Training logic, including `Trainer` classes and strategies.
+- `src/evaluate/`: Evaluation scripts and logic.
+- `src/utils/`: Shared utilities (logging, config parsing, device management).
+- `src/configs/`: YAML configuration files for experiments.
+- `scripts/`: Shell scripts for orchestration (e.g., `scgpt.sh`).
+- `tests/`: Project tests (Unit, Integration, E2E).
+
+## Environment Requirement (Critical)
+- Always run Python-related commands inside the `vcc` conda environment for this repository.
+- Activate with: `source /opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh && conda activate vcc`
+- Prefix every Bash tool call that runs Python, pytest, ruff, mypy, or any script with the command above.
+- If `vcc` is not active, stop and activate it before continuing.
+
+## Code Style
+Act as a careful junior engineer with strong tooling.
+- **Core**: Write clean, efficient Python 3.10+. Prefer composition. Be concise.
+- **Structure**: Target 200-400 line files (max 600). Keep functions <50 lines. Organize by feature.
+- **Naming**: `snake_case` (files/funcs), `PascalCase` (classes), `UPPER_SNAKE` (constants).
+- **Quality**:
+  - No `print` statements (use logging).
+  - No hardcoded values (use config).
+  - Max nesting level: 4.
+  - Strict type hints (avoid `Any`).
+- **Best Practices**:
+  - Absolute imports only (`from src.x import y`).
+  - Google-style docstrings.
+  - Handle specific exceptions (no bare `except`).
+
 
 ## Build, Test, and Development Commands
-- `source ~/.bashrc(.zshrc for mac) && conda activate vcc`: activate conda environment to run python.
-- `ruff format . && ruff check . --fix`: applies PEP 8 formatting and autofixes lint issues using the repo `pyproject.toml`.
-
-## Coding Style & Naming Conventions
-Target Python 3.11 with 4-space indentation, snake_case functions, and UpperCamelCase classes. Keep modules cohesive, favor f-strings for logging, and document new entry points with concise docstrings that list required AnnData keys or files. Add type hints when touching tensors or sparse matrices. Run `ruff format` (configured for PEP 8 in `pyproject.toml`) before `ruff check --fix`, and reserve inline comments for non-obvious control flow.
+- **Environment (required before Python commands)**: `conda activate vcc`
+- **Linting**: `ruff check --fix .` (Fixes lint errors)
+- **Formatting**: `ruff format .` (Formats code)
+- **Testing**: `python -m pytest` (Runs all tests)
+- **Orchestration**: Use shell scripts in `scripts/` to run pipelines on hpc. Avoid running `python src/run.py` directly.
 
 ## Testing Guidelines
-No CI exists yet, so run the command list locally and note the data slice in the PR. Guard preprocessing code with quick assertions (row counts, sparsity bounds) and prefer deterministic sampling so reviewers can replicate outputs. Extend `scGPT/tests/` or add new pytest modules when altering tokenizer or model logic, and run `pytest scGPT/tests -k <feature>` before requesting review.
+- **Framework**: `pytest`.
+- **Coverage**: Aim for ≥80% coverage on touched modules.
+- **Workflow**: Test-Driven Development (TDD) — Write failing tests -> Implement -> Refactor.
+- **Types**:
+  - **Unit**: Fast, isolated tests for functions/classes.
+  - **Integration**: Database/API interactions.
+  - **E2E**: Critical user flows.
 
 ## Commit & Pull Request Guidelines
-Commits stay short and imperative (`Add project proposal`, `Update README.md`), so group logical changes and avoid mixing environment bumps with analytical notebooks. A pull request should explain motivation, highlight key files, list the commands/tests you ran, and summarize any regenerated artifacts. Mention the data location used, link to the tracking issue, and wait for one reviewer plus a passing local check (pytest or data preview) before merging.
+- **Commits**: Conventional Commits format `<type>: <description>`
+  - Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`, `ci`.
+- **Branches**: `short-description` (e.g., `new-scheduler`, `fix-nans`). Rebase on `main` before merging.
+- **Pull Requests**:
+  - Summarize changes and context.
+  - Include a test plan and verification results.
+  - Address all critical review feedback.
 
-## Data Handling & Configuration
-Keep raw `.h5ad` and large `.csv` files in `data/raw/` (not in Git history). Document download steps in `docs/`, expose configuration flags or env vars instead of hard-coded paths, scrub secrets from notebooks, and remove temporary configs when experiments finish. Version derived metadata (plots, metrics) for reproducibility.
+## Security & Best Practices
+- **Secrets**: Never commit API keys or `.env` files. Use environment variables.
+- **Validation**: Sanitize all user inputs.
+- **Dependencies**: Periodically review and update dependencies.
