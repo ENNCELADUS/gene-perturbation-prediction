@@ -5,12 +5,39 @@ Reverse perturbation prediction for CRISPR Perturb-seq data using retrieval-base
 ## Quick Start
 
 ```bash
-conda create -n vcc python=3.11 -y
-conda activate vcc
-pip install -r requirements.txt
+# Install Python once if needed
+uv python install 3.11
 
-python -m src.main --config src/configs/pca.yaml
+# Create or update the project environment
+uv sync
+
+# Run the main pipeline
+uv run vcc --config src/configs/scgpt_discriminative.yaml
+
+# Run tests
+uv run pytest
 ```
+
+## Environment Management
+
+This repository now uses `pyproject.toml + uv` as the only supported Python
+environment workflow.
+
+- Create or refresh the local virtualenv: `uv sync`
+- Run CLI entry points: `uv run vcc --config src/configs/scgpt_discriminative.yaml`
+- Run Tahoe pipeline entry point: `uv run vcc-tahoe --config src_tahoe/configs/scgpt_discriminative_tahoe.yaml`
+- Run tests: `uv run pytest`
+- Run lint/format: `uv run ruff check --fix .` and `uv run ruff format .`
+
+Notes:
+- `pyproject.toml` and `uv.lock` are the single sources of truth for Python dependencies.
+- Plain `uv sync` installs the default development toolchain, including `ipython`, `pytest`, `ruff`, `tabulate`, and `xgboost`.
+- Tree-model baselines use the `baseline` extra for `xgboost`.
+- Some code paths expect either an installed `scgpt` package or a populated local
+  `scGPT/` checkout.
+- `flash-attn` is intentionally not locked in the shared environment because it
+  requires a CUDA/NVCC build host. Install it manually on GPU machines after
+  `uv sync` if your training path still needs it.
 
 ## Repository Layout
 

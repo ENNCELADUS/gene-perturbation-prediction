@@ -15,11 +15,11 @@ This implementation performs zero-shot perturbation prediction using a pre-train
 
 **1. Interactive Run:**
 ```bash
-# Activate environment
-source ~/.bashrc && conda activate vcc
+# Sync the project environment
+uv sync
 
 # Run the pipeline
-python src/main.py --config src/configs/config.yaml
+uv run python src/main.py --config src/configs/config.yaml
 ```
 
 **2. Batch Job (SLURM):**
