@@ -11,13 +11,10 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
+set -euo pipefail
+
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
-
-source ~/.bashrc
-conda activate vcc
-
-set -euo pipefail
 
 detect_num_gpus() {
     if [[ -n "${SLURM_GPUS_ON_NODE:-}" ]]; then
@@ -51,10 +48,10 @@ echo "STEP1: Tahoe Raw Parquet -> H5AD"
 echo "=============================================="
 
 # echo "-> Converting parquet shards to per-file H5AD"
-# python src/data/tahoe/convert_tahoe_to_h5ad.py
+# uv run python src/data/tahoe/convert_tahoe_to_h5ad.py
 
 echo "-> Merging H5AD shards"
-python src/data/tahoe/merge_tahoe_h5ad.py \
+uv run python src/data/tahoe/merge_tahoe_h5ad.py \
     --input-glob "data/tahoe/shards/*.h5ad" \
     --output "data/tahoe/tahoe.h5ad"
 
@@ -63,7 +60,7 @@ echo "STEP2: Preprocess"
 echo "=============================================="
 
 echo "-> Normalizing and log1p preprocessing"
-python src/data/tahoe/preprocess_tahoe.py \
+uv run python src/data/tahoe/preprocess_tahoe.py \
     --input "data/tahoe/tahoe.h5ad" \
     --output "data/processed/tahoe/tahoe_log1p.h5ad"
 
@@ -72,7 +69,7 @@ echo "STEP3: Split"
 echo "=============================================="
 
 echo "-> Creating drug-based train/val/test split"
-python -m src.data.tahoe.tahoe_dataset \
+uv run python -m src.data.tahoe.tahoe_dataset \
     --input "data/processed/tahoe/tahoe_log1p.h5ad" \
     --output "data/processed/tahoe/splits/tahoe_drug_split_seed42.json" \
     --seed 42 \

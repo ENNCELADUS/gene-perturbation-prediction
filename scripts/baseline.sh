@@ -11,20 +11,16 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
+set -euo pipefail
+
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
-
-# Load conda environment
-source ~/.bashrc
-conda activate vcc
-
-set -euo pipefail
 
 echo ""
 echo "=============================================="
 echo "Data Preparation"
 echo "=============================================="
-python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
+uv run python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
 
 echo "=============================================="
 echo "Running all baseline models"
@@ -33,7 +29,7 @@ echo "=============================================="
 echo ""
 echo "[1/2] Running PCA baseline..."
 echo "----------------------------------------------"
-python -m src.main --config src/configs/pca_knn_baseline.yaml --mode pca_knn
+uv run python -m src.main --config src/configs/pca_knn_baseline.yaml --mode pca_knn
 
 
 echo ""

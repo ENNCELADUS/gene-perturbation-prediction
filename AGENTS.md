@@ -16,10 +16,10 @@ Standard Deep Learning project layout:
 - `tests/`: Project tests (Unit, Integration, E2E).
 
 ## Environment Requirement (Critical)
-- Always run Python-related commands inside the `vcc` conda environment for this repository.
-- Activate with: `source /opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh && conda activate vcc`
-- Prefix every Bash tool call that runs Python, pytest, ruff, mypy, or any script with the command above.
-- If `vcc` is not active, stop and activate it before continuing.
+- This repository uses `uv` with the project-local `.venv` as the only supported Python environment workflow.
+- Sync the environment with: `uv sync`
+- Prefix every Bash tool call that runs Python, pytest, ruff, mypy, or any script with `uv run`.
+- If dependencies are missing or the lockfile changed, run `uv sync` before continuing.
 
 ## Code Style
 Act as a careful junior engineer with strong tooling.
@@ -38,10 +38,10 @@ Act as a careful junior engineer with strong tooling.
 
 
 ## Build, Test, and Development Commands
-- **Environment (required before Python commands)**: `conda activate vcc`
-- **Linting**: `ruff check --fix .` (Fixes lint errors)
-- **Formatting**: `ruff format .` (Formats code)
-- **Testing**: `python -m pytest` (Runs all tests)
+- **Environment (required before Python commands)**: `uv sync`
+- **Linting**: `uv run ruff check --fix .` (Fixes lint errors)
+- **Formatting**: `uv run ruff format .` (Formats code)
+- **Testing**: `uv run python -m pytest` (Runs all tests)
 - **Orchestration**: Use shell scripts in `scripts/` to run pipelines on hpc. Avoid running `python src/run.py` directly.
 
 ## Testing Guidelines

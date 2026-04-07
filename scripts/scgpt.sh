@@ -12,13 +12,10 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
+set -euo pipefail
+
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
-
-source ~/.bashrc
-conda activate scgpt
-
-set -euo pipefail
 
 mkdir -p logs/scgpt
 
@@ -48,9 +45,9 @@ echo "Detected GPUs: ${NUM_GPUS}"
 
 run_ddp() {
     if [[ "${NUM_GPUS}" -gt 1 ]]; then
-        torchrun --standalone --nproc_per_node="${NUM_GPUS}" "$@"
+        uv run torchrun --standalone --nproc_per_node="${NUM_GPUS}" "$@"
     else
-        python "$@"
+        uv run python "$@"
     fi
 }
 
@@ -58,7 +55,7 @@ echo ""
 echo "=============================================="
 echo "Data Preparation"
 echo "=============================================="
-python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
+uv run python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
 
 # echo ""
 # echo "=============================================="
@@ -91,7 +88,7 @@ echo ""
 echo "=============================================="
 echo "[Route B1] Evaluate Gene-Score Model"
 echo "=============================================="
-python -m src.main --config src/configs/scgpt_discriminative_v3.yaml --mode route_b1_eval
+uv run python -m src.main --config src/configs/scgpt_discriminative_v3.yaml --mode route_b1_eval
 
 echo ""
 echo "=============================================="
