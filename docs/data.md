@@ -65,7 +65,7 @@ run_config:
   stages: ["prepare", "train", "evaluate"]
 
 data_config:
-  condition_split_path: results/scgpt/norman_gene_heldout_split.yaml
+  condition_split_path: data/norman/norman_gene_heldout_split.yaml
   condition_split:
     train: []
     validation: []
