@@ -1,5 +1,5 @@
 """
-Gene-level scoring model for Route B1.
+Gene-level scoring model for inverse perturbation retrieval.
 
 Wraps a frozen scGPT backbone and a trainable gene-scoring head that
 matches cell embeddings to gene embeddings.
@@ -12,7 +12,7 @@ from contextlib import nullcontext
 import torch
 import torch.nn as nn
 
-from .scgpt_forward import ScGPTForward
+from src.model.scgpt_backbone import ScGPTBackbone
 
 
 class GeneScoreModel(nn.Module):
@@ -37,7 +37,7 @@ class GeneScoreModel(nn.Module):
         self.n_genes = n_genes
         self.score_mode = score_mode
 
-        self.backbone = ScGPTForward(
+        self.backbone = ScGPTBackbone(
             checkpoint_path=checkpoint_path,
             vocab_path=vocab_path,
             args_path=args_path,

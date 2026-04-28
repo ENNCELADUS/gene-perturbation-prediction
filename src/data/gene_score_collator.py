@@ -1,5 +1,5 @@
 """
-Data collator for Route B1 gene-level scoring.
+Data collator for scGPT gene-level scoring.
 
 Builds batches of perturbed cells with multi-hot gene targets derived
 from condition labels.
@@ -29,7 +29,7 @@ from .preprocess_utils import preprocess_counts_to_bins, scgpt_binning
 
 class GeneScoreDataset(Dataset):
     """
-    Dataset for gene-level scoring (Route B1).
+    Dataset for scGPT gene-level scoring.
 
     Each example is a perturbed cell with matched control cells for delta embeddings.
     """

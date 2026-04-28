@@ -1,5 +1,5 @@
 """
-Evaluation for Route B1 gene-level scoring.
+Evaluation for scGPT gene-level scoring.
 
 Ranks genes directly per query and evaluates Top-K gene metrics
 against the ground-truth target gene set.
@@ -26,7 +26,7 @@ from ..model.gene_score import GeneScoreModel
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Evaluate Route B1 gene-score model")
+    parser = argparse.ArgumentParser(description="Evaluate scGPT gene-score model")
     parser.add_argument("--config", type=str, required=True, help="Config file")
     parser.add_argument(
         "--checkpoint",
@@ -191,7 +191,7 @@ def main():
             args.output = str(Path(base_dir) / "eval_results.json")
 
     print("=" * 60)
-    print("Route B1 Gene-Score Evaluation")
+    print("scGPT Gene-Score Evaluation")
     print("=" * 60)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"

@@ -1,49 +1,78 @@
-# Data: Norman Dataset Splits and scGPT Fine-Tuning Input
+# Data Contract
 
-## Norman split logic (current)
+This repository currently targets Norman-style CRISPR Perturb-seq data for
+inverse perturbation retrieval. Tahoe-specific preprocessing has been removed
+from the active source tree.
 
-**Condition-level split (generalization tracks)**  
-Implemented in `src/data/condition_splits.py` and triggered by `--track`
-in `src/main.py`.
+## AnnData Input
 
-- `in_dist`: random condition holdout by ratios.
-- `unseen_combo`: all single-gene conditions in train; some gene-pair
-  conditions held out for val/test only if both genes appear in train singles.
-- `unseen_gene`: hold out a set of genes; any condition containing those genes
-  goes to test; remaining conditions split into train/val.
-- Saved as JSON to `condition_split.output_path`
-  (e.g. `data/norman/splits/condition_split_in_dist_seed42.json`).
-- Train/val/test:
-  - `in_dist`: random condition split by `train_ratio/val_ratio/test_ratio`.
-  - `unseen_combo`: train = all singles + remaining pairs; val/test = held-out pairs.
-  - `unseen_gene`: test = any condition with held-out genes; train/val = remaining
-    conditions by `train_ratio/val_ratio`.
+The expected input is configured by `data.h5ad_path`, for example:
 
-## scGPT fine-tuning data expectations
-
-Fine-tuning code path: `src/train/finetune.py` + `src/model/scgpt.py`.
-
-**Required AnnData layout**
-- `adata.X`: expression matrix (dense or sparse).
-- `adata.obs["condition"]`: perturbation labels (e.g. `GENE1`, `GENE1+GENE2`).
-- `adata.obs["control"]`: control indicator (1 for control, 0 for perturbed).
-- `adata.var["gene_name"]` or `adata.var.index`: gene symbols used to map
-  into scGPT vocab (non-matching genes are dropped).
-
-**What gets fed into scGPT**
-- `ScGPTEncoder.encode_adata(adata)` uses gene names to build token IDs and
-  computes CLS embeddings via scGPT.
-- Fine-tuning uses **reference cells only**:
-  `dataset.get_ref_adata_for_conditions(dataset.all_conditions)`.
-- Labels are taken from `adata.obs["condition"]`.
-
-## Code interface (current)
-
-**Condition split (required for train/val/test splits)**
-```python
-from src.data import ConditionSplitter
-
-splitter = ConditionSplitter(train_ratio=0.7, val_ratio=0.1, test_ratio=0.2, seed=42)
-cond_split = splitter.split(dataset.all_conditions, track="in_dist")  # or unseen_combo/unseen_gene
-dataset.apply_condition_split(cond_split)
+```yaml
+data:
+  h5ad_path: data/norman/perturb_processed.h5ad
 ```
+
+The AnnData object must provide:
+
+- `X`: cell-by-gene expression matrix.
+- `var_names`: gene symbols used as candidate perturbation genes.
+- `obs.condition`: perturbation label such as `ctrl`, `GENE+ctrl`, or
+  `GENE1+GENE2`.
+
+Optional fields used when available:
+
+- `obs.batch`
+- `obs.cell_type`
+
+These can be listed in `data.control_match_keys` so scGPT training/evaluation
+samples control cells from compatible batches or cell types.
+
+## Condition Labels
+
+Condition strings are parsed as `+`-separated gene names. The token `ctrl` is
+ignored when extracting target genes.
+
+Examples:
+
+```text
+ctrl              -> {}
+FOSB+ctrl         -> {FOSB}
+CNN1+MAPK1        -> {CNN1, MAPK1}
+```
+
+## Split Artifact
+
+The condition-level split is configured under `condition_split` and saved to
+`condition_split.output_path`.
+
+```yaml
+condition_split:
+  output_path: data/norman/splits/norman_condition_split_hard_seed42.json
+  seed: 42
+```
+
+The split is condition-based, not cell-random. Cells from the same perturbation
+condition must not appear across train, validation, and test splits.
+
+The active split supports:
+
+- train conditions
+- validation conditions
+- test conditions
+- optional test strata metadata for seen/unseen gene-combination regimes
+
+## Model Inputs
+
+Simple baselines consume expression features and condition-derived target gene
+sets.
+
+The scGPT gene-score model consumes:
+
+- perturbed query cell expression
+- optional matched control cells
+- target labels derived from `obs.condition`
+- scGPT token ids mapped from `var_names`
+
+For leakage-sensitive evaluation, target gene expression can be masked before
+ranking. This is controlled by each model config's `evaluation.mask` field.

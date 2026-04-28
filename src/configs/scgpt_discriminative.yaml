@@ -1,4 +1,4 @@
-# scGPT Route B1 Configuration (Gene-Level Scoring + Composition)
+# scGPT gene-score configuration for inverse perturbation retrieval
 
 # Data
 data:
