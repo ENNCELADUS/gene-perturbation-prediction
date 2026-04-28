@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import joblib
+from tqdm.auto import tqdm
 
 from src.utils.data import build_pseudobulk_matrices
 from src.utils.metrics import compute_gene_metrics, target_indices_for_conditions
@@ -13,21 +14,48 @@ from src.utils.metrics import compute_gene_metrics, target_indices_for_condition
 
 def run(config: dict) -> dict:
     """Predict gene scores and compute retrieval metrics."""
-    data = build_pseudobulk_matrices(config)
-    artifact = joblib.load(_checkpoint_path(config))
-    X_test = data["matrices"]["test"]
-    test_conditions = data["conditions"]["test"]
-    if X_test.shape[0] == 0:
-        raise ValueError(
-            "Random forest evaluation requires at least one test condition"
-        )
+    with tqdm(
+        total=5,
+        desc="random_forest evaluate",
+        unit="step",
+        dynamic_ncols=True,
+        disable=_disable_tqdm(config),
+    ) as progress:
+        data = build_pseudobulk_matrices(config)
+        progress.update()
+        artifact = joblib.load(_checkpoint_path(config))
+        progress.update()
+        X_test = data["matrices"]["test"]
+        test_conditions = data["conditions"]["test"]
+        if X_test.shape[0] == 0:
+            raise ValueError(
+                "Random forest evaluation requires at least one test condition"
+            )
 
-    raw_scores = artifact["model"].predict(X_test)
-    scores = [raw_scores[row_idx] for row_idx in range(raw_scores.shape[0])]
-    targets = target_indices_for_conditions(test_conditions, data["gene_name_to_idx"])
-    top_k_values = config.get("evaluation_config", {}).get("top_k_values", [1, 5, 10])
-    metrics = compute_gene_metrics(scores, targets, top_k_values)
-    _write_json(config["run_config"].get("eval_log_path"), {"metrics": metrics})
+        raw_scores = artifact["model"].predict(X_test)
+        progress.update()
+        scores = [
+            raw_scores[row_idx]
+            for row_idx in tqdm(
+                range(raw_scores.shape[0]),
+                desc="random_forest query",
+                unit="query",
+                dynamic_ncols=True,
+                disable=_disable_tqdm(config),
+            )
+        ]
+        targets = target_indices_for_conditions(
+            test_conditions,
+            data["gene_name_to_idx"],
+        )
+        top_k_values = config.get("evaluation_config", {}).get(
+            "top_k_values",
+            [1, 5, 10],
+        )
+        metrics = compute_gene_metrics(scores, targets, top_k_values)
+        progress.update()
+        _write_json(config["run_config"].get("eval_log_path"), {"metrics": metrics})
+        progress.update()
     return {"metrics": metrics}
 
 
@@ -49,3 +77,7 @@ def _write_json(path: str | None, payload: dict) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w") as handle:
         json.dump(payload, handle, indent=2)
+
+
+def _disable_tqdm(config: dict) -> bool:
+    return bool(config["run_config"].get("disable_tqdm", False))

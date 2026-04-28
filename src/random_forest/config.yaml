@@ -1,5 +1,5 @@
 run_config:
-  stages: ["prepare", "train", "evaluate"]
+  stages: ["train", "evaluate"]
   seed: 42
   study_name: norman
   train_log_path: logs/random_forest/train/norman.log
@@ -17,6 +17,7 @@ data_config:
   h5ad_path: data/norman/perturb_processed.h5ad
   condition_key: condition
   control_key: control
+  condition_split_path: data/norman/norman_gene_heldout_split.yaml
   condition_split:
     train: []
     validation: []

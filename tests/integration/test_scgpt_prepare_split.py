@@ -52,7 +52,7 @@ def test_scgpt_prepare_generates_gene_heldout_condition_split_artifact(
     )
     adata.write_h5ad(h5ad_path)
     config = {
-        "run_config": {"stages": ["prepare"], "seed": 11},
+        "run_config": {"stages": ["prepare"], "seed": 11, "study_name": "test"},
         "device_config": {
             "device": "cpu",
             "ddp_enabled": False,
@@ -128,7 +128,7 @@ def test_scgpt_prepare_rejects_random_condition_strategy(tmp_path: Path) -> None
     )
     adata.write_h5ad(h5ad_path)
     config = {
-        "run_config": {"stages": ["prepare"], "seed": 11},
+        "run_config": {"stages": ["prepare"], "seed": 11, "study_name": "test"},
         "device_config": {
             "device": "cpu",
             "ddp_enabled": False,

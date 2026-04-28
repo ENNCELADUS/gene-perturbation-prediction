@@ -8,7 +8,11 @@ from src.utils.config import validate_config
 
 def base_config(model: str = "pca_knn", stages: list[str] | None = None) -> dict:
     return {
-        "run_config": {"stages": stages or ["evaluate"], "seed": 47},
+        "run_config": {
+            "stages": stages or ["evaluate"],
+            "seed": 47,
+            "study_name": "test",
+        },
         "device_config": {
             "device": "cpu",
             "ddp_enabled": False,

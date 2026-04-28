@@ -60,6 +60,7 @@ temp/
 # Model checkpoints
 *.pt
 *.pth
+*.joblib
 
 # Test Results
 tests/integration/results/
