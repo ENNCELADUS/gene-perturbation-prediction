@@ -17,5 +17,16 @@ set -euo pipefail
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
 
-uv run accelerate launch --num_processes 4 --module src.main \
-  --config src/scgpt/configs/norman.yaml
+CONFIG_PATH="${CONFIG_PATH:-src/scgpt/configs/norman.yaml}"
+NGPUS="${NGPUS:-4}"
+export HF_DATASETS_OFFLINE=1
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export UV_OFFLINE=1
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-${SLURM_CPUS_PER_TASK:-1}}"
+
+uv run --locked --no-sync --offline python -m torch.distributed.run \
+  --standalone \
+  --nproc_per_node="$NGPUS" \
+  --module src.main \
+  --config "$CONFIG_PATH"
