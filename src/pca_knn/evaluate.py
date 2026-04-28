@@ -58,7 +58,8 @@ def _checkpoint_path(config: dict) -> Path:
     path = config["run_config"].get("save_checkpoint_path")
     if path:
         return Path(path)
-    return Path("results/pca_knn/model.joblib")
+    study_name = config["run_config"]["study_name"]
+    return Path("model") / "pca_knn" / study_name / "model.joblib"
 
 
 def _write_json(path: str | None, payload: dict) -> None:

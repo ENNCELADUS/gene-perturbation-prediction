@@ -92,9 +92,10 @@ Every model config must contain these top-level sections:
 run_config:
   stages: ["prepare", "train", "evaluate"]
   seed: 42
-  train_log_path:
-  eval_log_path:
-  save_checkpoint_path:
+  study_name: norman
+  train_log_path: logs/pca_knn/train/norman.log
+  eval_log_path: logs/pca_knn/evaluate/norman.log
+  save_checkpoint_path: model/pca_knn/norman/model.joblib
   load_checkpoint_path:
   save_best_only: true
 
@@ -127,8 +128,24 @@ run is configured as:
 ```yaml
 run_config:
   stages: ["evaluate"]
-  load_checkpoint_path: results/scgpt/best_model.pt
+  study_name: norman
+  load_checkpoint_path: model/scgpt_gene_score/norman/best_model.pt
 ```
+
+Logs and model artifacts have separate roots:
+
+- study identity: `run_config.study_name`
+- runtime logs: `logs/{model_name}/train/{study_name}.log` and
+  `logs/{model_name}/evaluate/{study_name}.log`
+- trained model artifacts: `model/{model_name}/{study_name}/...`
+- pretrained scGPT backbone: `model/scGPT/`
+
+Do not save finetuned scGPT checkpoints under `model/scGPT/`. That directory is
+reserved for the upstream backbone files loaded from `pretrained_dir`. Use a
+distinct trained-model directory such as
+`model/scgpt_gene_score/norman/best_model.pt`; this avoids conflicts with the
+pretrained `model/scGPT/best_model.pt`, including on case-insensitive
+filesystems.
 
 `flash-attn` is optional and is not part of the locked dependency set. Keep
 `use_fast_transformer: false` unless the runtime environment has the required

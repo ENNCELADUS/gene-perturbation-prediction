@@ -16,7 +16,7 @@ from src.utils.data import (
 def run(config: dict) -> dict:
     """Generate a condition-level split artifact when config does not define one."""
     data_config = config["data_config"]
-    split_path = _split_path(data_config)
+    split_path = _split_path(config)
     inline_split = data_config.get("condition_split", {})
     if isinstance(inline_split, Mapping) and any(inline_split.values()):
         split = get_condition_splits(config)
@@ -51,8 +51,18 @@ def run(config: dict) -> dict:
     }
 
 
-def _split_path(data_config: Mapping[str, object]) -> Path:
+def _split_path(config: Mapping[str, object]) -> Path:
+    data_config = config.get("data_config", {})
+    if not isinstance(data_config, Mapping):
+        raise ValueError("data_config must be a mapping")
     path = data_config.get("condition_split_path")
     if path:
         return Path(str(path))
-    return Path("results/scgpt/norman_condition_split.yaml")
+    run_config = config.get("run_config", {})
+    study_name = "norman"
+    if isinstance(run_config, Mapping) and run_config.get("study_name"):
+        study_name = str(run_config["study_name"])
+    h5ad_path = data_config.get("h5ad_path")
+    if h5ad_path:
+        return Path(str(h5ad_path)).with_name(f"{study_name}_condition_split.yaml")
+    return Path("data") / study_name / f"{study_name}_condition_split.yaml"

@@ -44,6 +44,9 @@ def validate_config(config: Mapping[str, object]) -> None:
         )
 
     run_config = _require_mapping(config, "run_config")
+    study_name = run_config.get("study_name")
+    if not isinstance(study_name, str) or not study_name.strip():
+        raise ValueError("run_config.study_name must be a non-empty string")
     stages = run_config.get("stages")
     if not isinstance(stages, list) or not stages:
         raise ValueError("run_config.stages must be a non-empty list")

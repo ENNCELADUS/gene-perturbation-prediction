@@ -1,10 +1,11 @@
 run_config:
   stages: ["prepare", "train", "evaluate"]
   seed: 42
-  train_log_path: results/scgpt/train.log
-  eval_log_path: results/scgpt/eval_results.json
-  save_checkpoint_path: results/scgpt/best_model.pt
-  load_checkpoint_path: results/scgpt/best_model.pt
+  study_name: norman
+  train_log_path: logs/scgpt/train/norman.log
+  eval_log_path: logs/scgpt/evaluate/norman.log
+  save_checkpoint_path: model/scgpt_gene_score/norman/best_model.pt
+  load_checkpoint_path: model/scgpt_gene_score/norman/best_model.pt
   save_best_only: true
 
 device_config:
