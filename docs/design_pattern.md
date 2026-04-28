@@ -5,7 +5,7 @@ This repo is organized in a flattened “model-first” manner.
 ```
 src/
   __init__.py
-  cli.py
+  main.py
 
   utils/
     __init__.py

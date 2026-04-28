@@ -9,6 +9,7 @@ description = "Reverse Perturbation Prediction for CRISPR Perturb-seq"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "accelerate>=1.0.0",
     "anndata==0.12.6",
     "h5py==3.15.1",
     "numba==0.62.1",
@@ -51,6 +52,10 @@ dev = [
 
 [tool.uv]
 default-groups = ["dev"]
+
+# flash-attn is intentionally not declared here. It is a CUDA/build-host-specific
+# optional acceleration backend for scGPT, and should be installed manually on
+# compatible GPU machines after `uv sync` when needed.
 
 [project.scripts]
 vcc = "src.main:main"
