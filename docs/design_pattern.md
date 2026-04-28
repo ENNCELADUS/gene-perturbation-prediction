@@ -32,6 +32,7 @@ src/
     __init__.py
     configs/
       norman.yaml
+    prepare.py
     data.py
     model.py
     train.py
@@ -68,12 +69,12 @@ Avoid creating handmade trainer frameworks. Keep it simple, explicit, and readab
 
 ```yaml
 run_config:
-  stages: ["evaluate"]
+  stages: ["prepare", "train", "evaluate"]
   seed: 47
-  train_log_path:
-  eval_log_path:
-  save_checkpoint_path:
-  load_checkpoint_path:
+  train_log_path: results/scgpt/train.log
+  eval_log_path: results/scgpt/eval_results.json
+  save_checkpoint_path: results/scgpt/best_model.pt
+  load_checkpoint_path: results/scgpt/best_model.pt
   save_best_only: true
 
 device_config:
@@ -82,79 +83,39 @@ device_config:
   use_mixed_precision: true
 
 data_config:
-  dataloader:
-    train_dataset: "data/PRING/species_processed_data/human/BFS/human_train_ppi.txt"
-    valid_dataset: "data/PRING/species_processed_data/human/BFS/human_val_ppi.txt"
-    test_dataset: "data/PRING/species_processed_data/human/BFS/human_test_ppi.txt"
-    num_workers: 4
-    pin_memory: true
-    drop_last: true
+  h5ad_path: data/norman/perturb_processed.h5ad
+  condition_key: condition
+  control_key: control
+  control_n_samples: 16
+  num_workers: 0
+  condition_split_path: results/scgpt/norman_condition_split.yaml
+  condition_split:
+    train: []
+    validation: []
+    test: []
+  split_config:
+    strategy: random_condition
+    train_fraction: 0.8
+    validation_fraction: 0.1
+    test_fraction: 0.1
 
 model_config:
-  model: "v3"
-  input_dim: 1536
-  d_model: 512
-  encoder_layers: 3
-  cross_attn_layers: 3
-  n_heads: 8
-  mlp_head:
-    hidden_dims: [512, 256, 128]
-    dropout: 0.20
-    activation: "gelu"
-    norm: "layernorm"
-  regularization:
-    dropout: 0.10
-    token_dropout: 0.10
-    cross_attention_dropout: 0.10
-    stochastic_depth: 0.10
+  model: scgpt
+  pretrained_dir: model/scGPT
+  freeze_encoder: true
+  freeze_layers_up_to: 10
+  preprocess_binning: 51
+  score_mode: dot
+  head_hidden_dim: 512
+  head_dropout: 0.2
 
 training_config:
   epochs: 50
   batch_size: 32
-  early_stopping_patience: 10
-  monitor_metric: "auprc"
-  logging:
-    validation_metrics: ["auprc", "auroc", "f1", "accuracy"]
-  optimizer:
-    type: "adamw"
-    lr: 0.0001
-    beta1: 0.9
-    beta2: 0.999
-    eps: 1.0e-8
-    weight_decay: 0.05
-  scheduler:
-    type: "onecycle"
-    max_lr: 0.0001
-    pct_start: 0.10
-    div_factor: 25
-    final_div_factor: 10000
-    anneal_strategy: "cos"
-  loss:
-    type: "bce_with_logits"
-    pos_weight: 1.0
-    label_smoothing: 0.05
-  strategy:
-    type: "none"
-  domain_adaptation:
-    enabled: false
-    method: "none"  # none | shot
-    target_split: "test"
-    epochs: 15
-    beta: 0.3
-    entropy_weight: 1.0
-    diversity_weight: 1.0
-    epsilon: 1.0e-5
-    freeze_prefixes: ["output_head"]
-    optimizer:
-      type: "sgd"
-      lr: 1.0e-4
-      momentum: 0.9
-      weight_decay: 1.0e-3
-    scheduler:
-      type: "shot_poly"  # shot_poly | none
-      gamma: 10.0
-      power: 0.75
+  learning_rate: 5.0e-5
+  weight_decay: 0.01
+  max_grad_norm: 1.0
 
-evaluate:
-  metrics:
+evaluation_config:
+  top_k_values: [1, 5, 10, 20, 40]
 ```

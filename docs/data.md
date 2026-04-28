@@ -43,7 +43,11 @@ CNN1+MAPK1        -> {CNN1, MAPK1}
 
 ## Split Artifact
 
-The condition-level split is configured under `data_config.condition_split`.
+The split is condition-based, not cell-random. Cells from the same perturbation
+condition must not appear across train, validation, and test splits.
+
+Small experiments can define the condition-level split inline under
+`data_config.condition_split`.
 
 ```yaml
 data_config:
@@ -53,8 +57,31 @@ data_config:
     test: ["A+B"]
 ```
 
-The split is condition-based, not cell-random. Cells from the same perturbation
-condition must not appear across train, validation, and test splits.
+For Norman runs, the default scGPT config uses a generated split artifact because
+the source `.h5ad` does not need to contain train/test columns:
+
+```yaml
+run_config:
+  stages: ["prepare", "train", "evaluate"]
+
+data_config:
+  condition_split_path: results/scgpt/norman_condition_split.yaml
+  condition_split:
+    train: []
+    validation: []
+    test: []
+  split_config:
+    strategy: random_condition
+    train_fraction: 0.8
+    validation_fraction: 0.1
+    test_fraction: 0.1
+```
+
+`src/scgpt/prepare.py` reads unique non-control conditions from
+`obs.condition`, normalizes labels such as `GENE+ctrl` to `GENE`, shuffles them
+with `run_config.seed`, and writes `condition_split_path`. Later stages read the
+artifact through `data_config.condition_split_path` when inline split lists are
+empty.
 
 The active split supports:
 
