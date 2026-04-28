@@ -85,6 +85,10 @@ def _build_model(
         score_mode=str(model_config.get("score_mode", "dot")),
         head_hidden_dim=int(model_config.get("head_hidden_dim", 512)),
         head_dropout=float(model_config.get("head_dropout", 0.2)),
+        use_fast_transformer=bool(model_config.get("use_fast_transformer", False)),
+        fast_transformer_backend=str(
+            model_config.get("fast_transformer_backend", "flash")
+        ),
         device=device,
     )
 

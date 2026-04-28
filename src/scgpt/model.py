@@ -25,6 +25,8 @@ class ScGPTBackbone(nn.Module):
         args_path: str | Path,
         freeze_encoder: bool = True,
         freeze_layers_up_to: int = 10,
+        use_fast_transformer: bool = False,
+        fast_transformer_backend: str = "flash",
         device: str | torch.device = "cpu",
     ) -> None:
         super().__init__()
@@ -33,6 +35,8 @@ class ScGPTBackbone(nn.Module):
         self.args_path = Path(args_path)
         self.freeze_encoder = freeze_encoder
         self.freeze_layers_up_to = freeze_layers_up_to
+        self.use_fast_transformer = use_fast_transformer
+        self.fast_transformer_backend = fast_transformer_backend
         self.device = device
         with self.vocab_path.open() as vocab_file:
             self.vocab = json.load(vocab_file)
@@ -71,8 +75,8 @@ class ScGPTBackbone(nn.Module):
             cell_emb_style="cls",
             mvc_decoder_style="inner product",
             explicit_zero_prob=False,
-            use_fast_transformer=True,
-            fast_transformer_backend="flash",
+            use_fast_transformer=self.use_fast_transformer,
+            fast_transformer_backend=self.fast_transformer_backend,
             pre_norm=False,
         )
 
@@ -111,6 +115,8 @@ class GeneScoreModel(nn.Module):
         score_mode: str = "dot",
         head_hidden_dim: int = 512,
         head_dropout: float = 0.2,
+        use_fast_transformer: bool = False,
+        fast_transformer_backend: str = "flash",
         device: str | torch.device = "cpu",
     ) -> None:
         super().__init__()
@@ -122,6 +128,8 @@ class GeneScoreModel(nn.Module):
             args_path=args_path,
             freeze_encoder=freeze_encoder,
             freeze_layers_up_to=freeze_layers_up_to,
+            use_fast_transformer=use_fast_transformer,
+            fast_transformer_backend=fast_transformer_backend,
             device=device,
         )
         emb_dim = int(self.backbone.args["embsize"])
