@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import joblib
-import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 

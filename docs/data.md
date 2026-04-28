@@ -6,10 +6,10 @@ from the active source tree.
 
 ## AnnData Input
 
-The expected input is configured by `data.h5ad_path`, for example:
+The expected input is configured by `data_config.h5ad_path`, for example:
 
 ```yaml
-data:
+data_config:
   h5ad_path: data/norman/perturb_processed.h5ad
 ```
 
@@ -25,8 +25,8 @@ Optional fields used when available:
 - `obs.batch`
 - `obs.cell_type`
 
-These can be listed in `data.control_match_keys` so scGPT training/evaluation
-samples control cells from compatible batches or cell types.
+scGPT uses `data_config.control_n_samples` to sample control cells for
+delta-style cell embeddings.
 
 ## Condition Labels
 
@@ -43,13 +43,14 @@ CNN1+MAPK1        -> {CNN1, MAPK1}
 
 ## Split Artifact
 
-The condition-level split is configured under `condition_split` and saved to
-`condition_split.output_path`.
+The condition-level split is configured under `data_config.condition_split`.
 
 ```yaml
-condition_split:
-  output_path: data/norman/splits/norman_condition_split_hard_seed42.json
-  seed: 42
+data_config:
+  condition_split:
+    train: ["A"]
+    validation: ["B"]
+    test: ["A+B"]
 ```
 
 The split is condition-based, not cell-random. Cells from the same perturbation
@@ -75,4 +76,5 @@ The scGPT gene-score model consumes:
 - scGPT token ids mapped from `var_names`
 
 For leakage-sensitive evaluation, target gene expression can be masked before
-ranking. This is controlled by each model config's `evaluation.mask` field.
+ranking when the model implements masking. Evaluation options live under
+`evaluation_config`.

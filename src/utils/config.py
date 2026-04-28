@@ -73,7 +73,9 @@ def resolve_path(path_value: str | None) -> Path | None:
     return Path(path_value)
 
 
-def _require_mapping(config: Mapping[str, object], section: str) -> Mapping[str, object]:
+def _require_mapping(
+    config: Mapping[str, object], section: str
+) -> Mapping[str, object]:
     value = config.get(section)
     if not isinstance(value, Mapping):
         raise ValueError(f"{section} must be a mapping")

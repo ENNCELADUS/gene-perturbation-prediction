@@ -1,8 +1,3 @@
-"""Utility functions for VCC project."""
+"""Shared helpers for config-driven perturbation retrieval pipelines."""
 
-from .io import save_config, load_config
-
-__all__ = [
-    "save_config",
-    "load_config",
-]
+__all__: list[str] = []

@@ -47,10 +47,10 @@ For CRISPRa datasets, the perturbed target gene can be visibly upregulated in
 the observed expression profile. Masked evaluation reduces this shortcut by
 zeroing or hiding target-gene expression before ranking.
 
-The active configs expose this as:
+Configs expose evaluation options under:
 
 ```yaml
-evaluation:
+evaluation_config:
   mask: 10
 ```
 

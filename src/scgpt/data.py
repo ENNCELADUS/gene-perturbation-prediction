@@ -74,7 +74,10 @@ class GeneScoreDataset(Dataset):
         return {
             "expr": _bin_expression(_row_array(self.adata, cell_idx), self.n_bins),
             "control_exprs": np.stack(
-                [_bin_expression(_row_array(self.adata, idx), self.n_bins) for idx in controls]
+                [
+                    _bin_expression(_row_array(self.adata, idx), self.n_bins)
+                    for idx in controls
+                ]
             ),
             "gene_ids": self.gene_ids,
             "condition": condition,

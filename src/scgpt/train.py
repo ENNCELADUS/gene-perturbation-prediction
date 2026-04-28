@@ -54,7 +54,9 @@ def run(config: dict) -> dict:
         for batch in loader:
             optimizer.zero_grad()
             logits = _forward(model, batch)
-            loss = F.binary_cross_entropy_with_logits(logits, batch["targets"].to(logits.device))
+            loss = F.binary_cross_entropy_with_logits(
+                logits, batch["targets"].to(logits.device)
+            )
             runtime.backward(loss)
             runtime.clip_grad_norm_(model.parameters(), max_grad_norm)
             optimizer.step()

@@ -12,7 +12,7 @@ uv python install 3.11
 uv sync
 
 # Run the main pipeline
-uv run vcc --config src/configs/scgpt_discriminative.yaml
+uv run --module src.main --config src/scgpt/configs/norman.yaml
 
 # Run tests
 uv run pytest
@@ -24,14 +24,13 @@ This repository now uses `pyproject.toml + uv` as the only supported Python
 environment workflow.
 
 - Create or refresh the local virtualenv: `uv sync`
-- Run CLI entry points: `uv run vcc --config src/configs/scgpt_discriminative.yaml`
+- Run CLI entry points: `uv run --module src.main --config src/scgpt/configs/norman.yaml`
 - Run tests: `uv run pytest`
 - Run lint/format: `uv run ruff check --fix .` and `uv run ruff format .`
 
 Notes:
 - `pyproject.toml` and `uv.lock` are the single sources of truth for Python dependencies.
-- Plain `uv sync` installs the default development toolchain, including `ipython`, `pytest`, `ruff`, `tabulate`, and `xgboost`.
-- Tree-model baselines use the `baseline` extra for `xgboost`.
+- Plain `uv sync` installs the default development toolchain, including `ipython`, `pytest`, `ruff`, and `tabulate`.
 - Some code paths expect either an installed `scgpt` package or a populated local
   `scGPT/` checkout.
 - `flash-attn` is intentionally not locked in the shared environment because it
@@ -43,11 +42,9 @@ Notes:
 ```
 .
 ├── src/                # Core pipeline package
-│   ├── configs/        # Experiment configuration files
-│   ├── data/           # Dataset loading and split logic
-│   ├── evaluate/       # Evaluation metrics and helpers
-│   ├── model/          # Encoders and retrieval models
-│   ├── train/          # Training and fine-tuning flows
+│   ├── pca_knn/        # PCA+kNN baseline pipeline
+│   ├── random_forest/  # Random forest baseline pipeline
+│   ├── scgpt/          # scGPT gene-score pipeline
 │   └── utils/          # Shared utilities
 ├── scripts/            # Automation helpers and SLURM runners
 ├── scGPT/              # Vendorized scGPT modules and tests
