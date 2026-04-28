@@ -42,4 +42,5 @@ def _checkpoint_path(config: dict) -> Path:
     path = config["run_config"].get("save_checkpoint_path")
     if path:
         return Path(path)
-    return Path("results/random_forest/model.joblib")
+    study_name = config["run_config"]["study_name"]
+    return Path("model") / "random_forest" / study_name / "model.joblib"
