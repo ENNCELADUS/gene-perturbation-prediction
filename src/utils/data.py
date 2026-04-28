@@ -59,70 +59,67 @@ def load_condition_split(path: str | Path) -> dict[str, list[str]]:
         split = yaml.safe_load(handle)
     if not isinstance(split, Mapping):
         raise ValueError(f"Condition split artifact must be a mapping: {path}")
-    return {
-        "train": _normalize_conditions(split.get("train", [])),
-        "validation": _normalize_conditions(
-            split.get("validation", split.get("val", []))
-        ),
-        "test": _normalize_conditions(split.get("test", [])),
-    }
+    if isinstance(split.get("conditions"), Mapping):
+        split = split["conditions"]
+    return _normalize_split(split)
 
 
-def save_condition_split(split: Mapping[str, Sequence[str]], path: str | Path) -> None:
+def save_condition_split(split: Mapping[str, object], path: str | Path) -> None:
     """Persist a condition split artifact as YAML."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "train": _normalize_conditions(split.get("train", [])),
-        "validation": _normalize_conditions(
-            split.get("validation", split.get("val", []))
-        ),
-        "test": _normalize_conditions(split.get("test", [])),
-    }
+    payload = _normalize_split_artifact(split)
     with output_path.open("w") as handle:
         yaml.safe_dump(payload, handle, sort_keys=False)
 
 
-def infer_condition_splits(
+def infer_gene_heldout_condition_split(
     adata: ad.AnnData,
     condition_key: str = "condition",
-    seed: int = 42,
-    train_fraction: float = 0.8,
-    validation_fraction: float = 0.1,
-    test_fraction: float = 0.1,
-) -> dict[str, list[str]]:
-    """Create a deterministic condition-level split from AnnData labels."""
+    train_gene_fraction: float = 0.7,
+    validation_gene_fraction: float = 0.1,
+    test_gene_fraction: float = 0.2,
+    min_cells_per_condition: int = 1,
+) -> dict[str, object]:
+    """Create a deterministic gene-held-out Norman condition split artifact."""
+    condition_counts = _condition_counts(adata, condition_key)
     conditions = sorted(
-        {
-            normalize_condition(str(condition))
-            for condition in adata.obs[condition_key].tolist()
-        }
+        condition
+        for condition, count in condition_counts.items()
+        if count >= min_cells_per_condition and parse_condition_genes(condition)
     )
-    perturbed_conditions = [
-        condition for condition in conditions if parse_condition_genes(condition)
-    ]
-    if not perturbed_conditions:
+    if not conditions:
         raise ValueError(
             "Cannot infer split without non-control perturbation conditions"
         )
 
-    rng = np.random.RandomState(seed)
-    shuffled = [
-        perturbed_conditions[index]
-        for index in rng.permutation(len(perturbed_conditions))
-    ]
-    n_conditions = len(shuffled)
-    validation_count = _fraction_count(n_conditions, validation_fraction)
-    test_count = _fraction_count(n_conditions, test_fraction)
-    while validation_count + test_count >= n_conditions and validation_count > 0:
-        validation_count -= 1
-    while validation_count + test_count >= n_conditions and test_count > 0:
-        test_count -= 1
-    train_count = n_conditions - validation_count - test_count
+    genes = sorted(
+        {
+            gene
+            for condition in conditions
+            for gene in parse_condition_genes(condition)
+        }
+    )
+    gene_split = _split_genes_by_fraction(
+        genes,
+        train_gene_fraction=train_gene_fraction,
+        validation_gene_fraction=validation_gene_fraction,
+        test_gene_fraction=test_gene_fraction,
+    )
+    condition_split = _assign_conditions_by_gene_split(conditions, gene_split)
     return {
-        "train": shuffled[:train_count],
-        "validation": shuffled[train_count : train_count + validation_count],
-        "test": shuffled[train_count + validation_count :],
+        "strategy": "gene_heldout",
+        "genes": gene_split,
+        "conditions": condition_split,
+        "stats": _split_stats(
+            gene_split=gene_split,
+            condition_split=condition_split,
+            target_fractions={
+                "train": train_gene_fraction,
+                "validation": validation_gene_fraction,
+                "test": test_gene_fraction,
+            },
+        ),
     }
 
 
@@ -193,6 +190,40 @@ def _normalize_conditions(value: object) -> list[str]:
     return [normalize_condition(str(condition)) for condition in value]
 
 
+def _normalize_split(split: Mapping[str, object]) -> dict[str, list[str]]:
+    return {
+        "train": _normalize_conditions(split.get("train", [])),
+        "validation": _normalize_conditions(
+            split.get("validation", split.get("val", []))
+        ),
+        "test": _normalize_conditions(split.get("test", [])),
+    }
+
+
+def _normalize_split_artifact(split: Mapping[str, object]) -> dict[str, object]:
+    if isinstance(split.get("conditions"), Mapping):
+        payload = dict(split)
+        payload["conditions"] = _normalize_split(split["conditions"])
+        if isinstance(split.get("genes"), Mapping):
+            payload["genes"] = {
+                "train": _string_list(split["genes"].get("train", [])),
+                "validation": _string_list(
+                    split["genes"].get("validation", split["genes"].get("val", []))
+                ),
+                "test": _string_list(split["genes"].get("test", [])),
+            }
+        return payload
+    return _normalize_split(split)
+
+
+def _string_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        raise ValueError("split gene entries must be lists of strings")
+    return [str(item) for item in value]
+
+
 def _has_split_values(split: Mapping[str, object]) -> bool:
     return any(bool(split.get(key)) for key in ("train", "validation", "val", "test"))
 
@@ -201,3 +232,83 @@ def _fraction_count(n_items: int, fraction: float) -> int:
     if fraction <= 0:
         return 0
     return max(1, int(round(n_items * fraction)))
+
+
+def _condition_counts(adata: ad.AnnData, condition_key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for condition in adata.obs[condition_key].tolist():
+        normalized = normalize_condition(str(condition))
+        counts[normalized] = counts.get(normalized, 0) + 1
+    return counts
+
+
+def _split_genes_by_fraction(
+    genes: Sequence[str],
+    train_gene_fraction: float,
+    validation_gene_fraction: float,
+    test_gene_fraction: float,
+) -> dict[str, list[str]]:
+    if not genes:
+        raise ValueError("Cannot split empty gene list")
+    n_genes = len(genes)
+    validation_count = _fraction_count(n_genes, validation_gene_fraction)
+    test_count = _fraction_count(n_genes, test_gene_fraction)
+    while validation_count + test_count >= n_genes and validation_count > 0:
+        validation_count -= 1
+    while validation_count + test_count >= n_genes and test_count > 0:
+        test_count -= 1
+    train_count = n_genes - validation_count - test_count
+    return {
+        "train": list(genes[:train_count]),
+        "validation": list(genes[train_count : train_count + validation_count]),
+        "test": list(genes[train_count + validation_count :]),
+    }
+
+
+def _assign_conditions_by_gene_split(
+    conditions: Sequence[str],
+    gene_split: Mapping[str, Sequence[str]],
+) -> dict[str, list[str]]:
+    validation_genes = set(gene_split["validation"])
+    test_genes = set(gene_split["test"])
+    split = {"train": [], "validation": [], "test": []}
+    for condition in conditions:
+        genes = parse_condition_genes(condition)
+        if genes & test_genes:
+            split["test"].append(condition)
+        elif genes & validation_genes:
+            split["validation"].append(condition)
+        else:
+            split["train"].append(condition)
+    return split
+
+
+def _split_stats(
+    gene_split: Mapping[str, Sequence[str]],
+    condition_split: Mapping[str, Sequence[str]],
+    target_fractions: Mapping[str, float],
+) -> dict[str, object]:
+    n_conditions = sum(len(condition_split[split]) for split in condition_split)
+    condition_fractions = {
+        split: _safe_fraction(len(condition_split[split]), n_conditions)
+        for split in ("train", "validation", "test")
+    }
+    return {
+        "n_train_genes": len(gene_split["train"]),
+        "n_validation_genes": len(gene_split["validation"]),
+        "n_test_genes": len(gene_split["test"]),
+        "n_train_conditions": len(condition_split["train"]),
+        "n_validation_conditions": len(condition_split["validation"]),
+        "n_test_conditions": len(condition_split["test"]),
+        "condition_fractions": condition_fractions,
+        "condition_fraction_deltas": {
+            split: condition_fractions[split] - float(target_fractions[split])
+            for split in ("train", "validation", "test")
+        },
+    }
+
+
+def _safe_fraction(numerator: int, denominator: int) -> float:
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator

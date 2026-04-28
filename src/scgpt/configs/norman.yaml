@@ -18,16 +18,17 @@ data_config:
   control_key: control
   control_n_samples: 16
   num_workers: 0
-  condition_split_path: results/scgpt/norman_condition_split.yaml
+  condition_split_path: results/scgpt/norman_gene_heldout_split.yaml
   condition_split:
     train: []
     validation: []
     test: []
   split_config:
-    strategy: random_condition
-    train_fraction: 0.8
-    validation_fraction: 0.1
-    test_fraction: 0.1
+    strategy: gene_heldout
+    train_gene_fraction: 0.7
+    validation_gene_fraction: 0.1
+    test_gene_fraction: 0.2
+    min_cells_per_condition: 1
 
 model_config:
   model: scgpt
