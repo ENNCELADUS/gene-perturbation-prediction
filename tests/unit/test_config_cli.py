@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from src import main
-from src.utils.config import validate_config
+from src.utils.config import load_config, validate_config
 
 
 def base_config(model: str = "pca_knn", stages: list[str] | None = None) -> dict:
@@ -27,6 +29,15 @@ def test_parse_args_accepts_only_config() -> None:
     args = main.parse_args(["--config", "src/scgpt/configs/norman.yaml"])
 
     assert args.config == "src/scgpt/configs/norman.yaml"
+
+
+def test_scgpt_0429_ablation_configs_are_valid() -> None:
+    config_dir = Path("src/scgpt/configs/0429")
+    config_paths = sorted(config_dir.glob("*.yaml"))
+
+    assert config_paths
+    for config_path in config_paths:
+        validate_config(load_config(config_path))
 
 
 def test_parse_args_rejects_stage_like_cli_args() -> None:

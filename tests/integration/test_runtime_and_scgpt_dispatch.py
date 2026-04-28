@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import logging
 from pathlib import Path
 
@@ -320,7 +321,7 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
     monkeypatch.setattr(
         scgpt_train,
         "get_condition_splits",
-        lambda config: {"train": ["A"], "validation": [], "test": []},
+        lambda config: {"train": ["A"], "validation": ["B"], "test": []},
     )
     monkeypatch.setattr(scgpt_train, "GeneScoreDataset", lambda **kwargs: FakeDataset())
     monkeypatch.setattr(
@@ -335,6 +336,7 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
             "seed": 7,
             "study_name": "test",
             "save_checkpoint_path": str(tmp_path / "model.pt"),
+            "train_log_path": str(tmp_path / "logs" / "scgpt.log"),
             "disable_tqdm": True,
         },
         "device_config": {
@@ -344,7 +346,7 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
         },
         "data_config": {
             "h5ad_path": "unused.h5ad",
-            "condition_split": {"train": ["A"]},
+            "condition_split": {"train": ["A"], "validation": ["B"]},
         },
         "model_config": {"model": "scgpt", "pretrained_dir": str(pretrained_dir)},
         "training_config": {"epochs": 2, "batch_size": 1},
@@ -362,3 +364,244 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
     assert "scGPT train epoch 1/2 complete: batches=2" in caplog.text
     assert "mean_loss=" in caplog.text
     assert "gpu_memory=not_available" in caplog.text
+    step_log_path = tmp_path / "logs" / "training_step.csv"
+    rows = list(csv.DictReader(step_log_path.open()))
+    assert rows[0].keys() >= {"Epoch", "Epoch Time", "Train Loss", "Val Loss"}
+    assert [row["Epoch"] for row in rows] == ["1", "2"]
+    assert all(float(row["Epoch Time"]) >= 0.0 for row in rows)
+    assert all(float(row["Train Loss"]) > 0.0 for row in rows)
+    assert all(float(row["Val Loss"]) > 0.0 for row in rows)
+
+
+def test_scgpt_train_stops_early_when_val_loss_stalls(
+    monkeypatch,
+    tmp_path: Path,
+    caplog,
+) -> None:
+    class FakeRuntime:
+        def __init__(self, config: dict) -> None:
+            self.device = torch.device("cpu")
+
+        def prepare(self, *objects):
+            return objects
+
+        def backward(self, loss: torch.Tensor) -> None:
+            loss.backward()
+
+        def clip_grad_norm_(self, parameters, max_norm: float) -> None:
+            return None
+
+        def save_state_dict(self, model: torch.nn.Module, path: str | Path) -> None:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_text("saved")
+
+    class FakeDataset(torch.utils.data.Dataset):
+        gene_ids = torch.tensor([0, 1])
+
+        def __len__(self) -> int:
+            return 2
+
+        def __getitem__(self, index: int) -> dict:
+            return {"index": index}
+
+    class FakeModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.bias = torch.nn.Parameter(torch.tensor(0.0))
+
+        def forward(
+            self,
+            gene_ids: torch.Tensor,
+            values: torch.Tensor,
+            padding_mask: torch.Tensor,
+            **kwargs,
+        ) -> torch.Tensor:
+            return self.bias.expand(values.shape[0], 2)
+
+    def fake_collate(batch: list[dict], vocab: dict, n_genes: int) -> dict:
+        return {
+            "genes": torch.tensor([[1, 2]]),
+            "values": torch.tensor([[1.0, 1.0]]),
+            "padding_mask": torch.tensor([[False, False]]),
+            "control_genes": torch.tensor([[1, 2]]),
+            "control_values": torch.tensor([[1.0, 1.0]]),
+            "control_padding_mask": torch.tensor([[False, False]]),
+            "control_counts": 1,
+            "targets": torch.tensor([[1.0, 0.0]]),
+        }
+
+    pretrained_dir = tmp_path / "pretrained"
+    pretrained_dir.mkdir()
+    (pretrained_dir / "vocab.json").write_text('{"<pad>": 0, "A": 1, "B": 2}')
+
+    monkeypatch.setattr(scgpt_train, "AccelerateRuntime", FakeRuntime, raising=False)
+    monkeypatch.setattr(
+        scgpt_train,
+        "load_adata",
+        lambda path: type("Adata", (), {"n_vars": 2})(),
+    )
+    monkeypatch.setattr(
+        scgpt_train,
+        "get_condition_splits",
+        lambda config: {"train": ["A"], "validation": ["B"], "test": []},
+    )
+    monkeypatch.setattr(scgpt_train, "GeneScoreDataset", lambda **kwargs: FakeDataset())
+    monkeypatch.setattr(
+        scgpt_train,
+        "_build_model",
+        lambda *args, **kwargs: FakeModel(),
+    )
+    monkeypatch.setattr(scgpt_train, "collate_gene_score_batch", fake_collate)
+    config = {
+        "run_config": {
+            "stages": ["train"],
+            "seed": 7,
+            "study_name": "test",
+            "save_checkpoint_path": str(tmp_path / "model.pt"),
+            "train_log_path": str(tmp_path / "logs" / "scgpt.log"),
+            "disable_tqdm": True,
+        },
+        "device_config": {
+            "device": "cpu",
+            "ddp_enabled": False,
+            "use_mixed_precision": False,
+        },
+        "data_config": {
+            "h5ad_path": "unused.h5ad",
+            "condition_split": {"train": ["A"], "validation": ["B"]},
+        },
+        "model_config": {"model": "scgpt", "pretrained_dir": str(pretrained_dir)},
+        "training_config": {
+            "epochs": 10,
+            "batch_size": 1,
+            "early_stopping": {"patience": 3, "monitor": "val_loss"},
+        },
+    }
+
+    with caplog.at_level(logging.INFO, logger=scgpt_train.LOGGER.name):
+        result = scgpt_train.run(config)
+
+    rows = list(csv.DictReader((tmp_path / "logs" / "training_step.csv").open()))
+    assert result["epochs_trained"] == 4
+    assert [row["Epoch"] for row in rows] == ["1", "2", "3", "4"]
+    assert "early stopping triggered at epoch 4" in caplog.text
+
+
+def test_scgpt_train_save_best_only_keeps_best_val_loss_checkpoint(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    class FakeRuntime:
+        save_count = 0
+
+        def __init__(self, config: dict) -> None:
+            self.device = torch.device("cpu")
+
+        def prepare(self, *objects):
+            return objects
+
+        def backward(self, loss: torch.Tensor) -> None:
+            loss.backward()
+
+        def clip_grad_norm_(self, parameters, max_norm: float) -> None:
+            return None
+
+        def save_state_dict(self, model: torch.nn.Module, path: str | Path) -> None:
+            FakeRuntime.save_count += 1
+            output_path = Path(path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(str(FakeRuntime.save_count))
+
+    class FakeDataset(torch.utils.data.Dataset):
+        gene_ids = torch.tensor([0, 1])
+
+        def __len__(self) -> int:
+            return 1
+
+        def __getitem__(self, index: int) -> dict:
+            return {"index": index}
+
+    class FakeModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.bias = torch.nn.Parameter(torch.tensor(0.0))
+
+        def forward(
+            self,
+            gene_ids: torch.Tensor,
+            values: torch.Tensor,
+            padding_mask: torch.Tensor,
+            **kwargs,
+        ) -> torch.Tensor:
+            return self.bias.expand(values.shape[0], 2)
+
+    def fake_collate(batch: list[dict], vocab: dict, n_genes: int) -> dict:
+        return {
+            "genes": torch.tensor([[1, 2]]),
+            "values": torch.tensor([[1.0, 1.0]]),
+            "padding_mask": torch.tensor([[False, False]]),
+            "control_genes": torch.tensor([[1, 2]]),
+            "control_values": torch.tensor([[1.0, 1.0]]),
+            "control_padding_mask": torch.tensor([[False, False]]),
+            "control_counts": 1,
+            "targets": torch.tensor([[1.0, 0.0]]),
+        }
+
+    pretrained_dir = tmp_path / "pretrained"
+    pretrained_dir.mkdir()
+    (pretrained_dir / "vocab.json").write_text('{"<pad>": 0, "A": 1, "B": 2}')
+    val_losses = iter([0.5, 0.4, 0.6])
+    checkpoint_path = tmp_path / "model.pt"
+
+    monkeypatch.setattr(scgpt_train, "AccelerateRuntime", FakeRuntime, raising=False)
+    monkeypatch.setattr(
+        scgpt_train,
+        "load_adata",
+        lambda path: type("Adata", (), {"n_vars": 2})(),
+    )
+    monkeypatch.setattr(
+        scgpt_train,
+        "get_condition_splits",
+        lambda config: {"train": ["A"], "validation": ["B"], "test": []},
+    )
+    monkeypatch.setattr(scgpt_train, "GeneScoreDataset", lambda **kwargs: FakeDataset())
+    monkeypatch.setattr(
+        scgpt_train,
+        "_build_model",
+        lambda *args, **kwargs: FakeModel(),
+    )
+    monkeypatch.setattr(scgpt_train, "collate_gene_score_batch", fake_collate)
+    monkeypatch.setattr(
+        scgpt_train,
+        "_evaluate_loss",
+        lambda **kwargs: next(val_losses),
+    )
+    config = {
+        "run_config": {
+            "stages": ["train"],
+            "seed": 7,
+            "study_name": "test",
+            "save_checkpoint_path": str(checkpoint_path),
+            "save_best_only": True,
+            "save_best_monitor": "val_loss",
+            "disable_tqdm": True,
+        },
+        "device_config": {
+            "device": "cpu",
+            "ddp_enabled": False,
+            "use_mixed_precision": False,
+        },
+        "data_config": {
+            "h5ad_path": "unused.h5ad",
+            "condition_split": {"train": ["A"], "validation": ["B"]},
+        },
+        "model_config": {"model": "scgpt", "pretrained_dir": str(pretrained_dir)},
+        "training_config": {"epochs": 3, "batch_size": 1},
+    }
+
+    result = scgpt_train.run(config)
+
+    assert result["best_epoch"] == 2
+    assert result["best_monitor"] == "val_loss"
+    assert result["best_monitor_value"] == 0.4
+    assert checkpoint_path.read_text() == "2"

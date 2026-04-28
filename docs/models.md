@@ -25,32 +25,6 @@ scores each held-out test cell independently for single-cell retrieval metrics.
 It is a compact supervised baseline for testing whether classical ML can recover
 target genes without a foundation-model backbone.
 
-Recommended starting config:
-
-```yaml
-model_config:
-  model: random_forest
-  n_estimators: 300
-  max_depth: 8
-  min_samples_leaf: 2
-  n_jobs: -1
-  estimator_chunk_size: 10
-```
-
-Suggested first sweep:
-
-| study name suffix | max_depth | min_samples_leaf | purpose |
-|---|---:|---:|---|
-| `depth4_leaf2` | 4 | 2 | shallow, lower variance |
-| `depth8_leaf2` | 8 | 2 | default candidate |
-| `depth12_leaf2` | 12 | 2 | higher capacity |
-| `depth8_leaf1` | 8 | 1 | less regularized leaf size |
-| `depth8_leaf4` | 8 | 4 | more regularized leaf size |
-| `full_leaf2` | null | 2 | overfit check |
-
-Use distinct `run_config.study_name`, log paths, and checkpoint paths for each
-sweep run so artifacts do not overwrite each other.
-
 ## scGPT Gene Score
 
 Config: `src/scgpt/configs/norman.yaml`
