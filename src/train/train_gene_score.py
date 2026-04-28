@@ -1,5 +1,5 @@
 """
-Training script for Route B1 gene-level scoring.
+Training script for scGPT gene-level scoring.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ class DistributedWeightedSampler(Sampler[int]):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train Route B1 gene-score model")
+    parser = argparse.ArgumentParser(description="Train scGPT gene-score model")
     parser.add_argument("--config", type=str, required=True, help="Config file")
     parser.add_argument(
         "--max_steps",
@@ -527,7 +527,7 @@ def main():
 
     if is_main:
         print("=" * 60)
-        print("Route B1 Gene-Score Training")
+        print("scGPT Gene-Score Training")
         print("=" * 60)
         print(f"Output: {output_dir}")
         print(f"Checkpoint: {checkpoint_path}")

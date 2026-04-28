@@ -25,7 +25,6 @@ environment workflow.
 
 - Create or refresh the local virtualenv: `uv sync`
 - Run CLI entry points: `uv run vcc --config src/configs/scgpt_discriminative.yaml`
-- Run Tahoe pipeline entry point: `uv run vcc-tahoe --config src_tahoe/configs/scgpt_discriminative_tahoe.yaml`
 - Run tests: `uv run pytest`
 - Run lint/format: `uv run ruff check --fix .` and `uv run ruff format .`
 
@@ -63,6 +62,6 @@ Notes:
 ## Documentation
 
 - Data splits and AnnData requirements: `docs/data.md`
-- Metrics and evaluation: `docs/eval_metrics.md`
-- Project overview: `docs/project-intro/introduction.md`
-- scGPT reference notes: `docs/references/scGPT.md`
+- Task definition: `docs/task.md`
+- Model overview: `docs/models.md`
+- Metrics and evaluation: `docs/metrics.md`

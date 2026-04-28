@@ -54,10 +54,9 @@ default-groups = ["dev"]
 
 [project.scripts]
 vcc = "src.main:main"
-vcc-tahoe = "src_tahoe.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src", "src_tahoe"]
+packages = ["src"]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -65,7 +64,6 @@ include = [
     "/pyproject.toml",
     "/scripts",
     "/src",
-    "/src_tahoe",
 ]
 
 [tool.ruff]
