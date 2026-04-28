@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from src.utils.metrics import (
     build_gene_ranking_diagnostics,
@@ -34,6 +35,14 @@ def test_compute_gene_metrics_reports_relevant_exact_recall_ndcg() -> None:
     assert metrics["n_queries"] == 2
 
 
+def test_compute_gene_metrics_rejects_misaligned_query_counts() -> None:
+    scores = [np.array([0.9, 0.1], dtype=np.float32)]
+    targets = [[0], [1]]
+
+    with pytest.raises(ValueError, match="scores and targets"):
+        compute_gene_metrics(scores, targets, top_k_values=[1])
+
+
 def test_compute_combo_metrics_uses_exact_and_gene_overlap_semantics() -> None:
     predictions = [
         ["CNN1+MAPK1", "FOSB+UBASH3B"],
@@ -62,6 +71,7 @@ def test_build_gene_ranking_diagnostics_reports_target_ranks_and_hits() -> None:
         conditions=["A+C", "B"],
         top_k_values=[1, 2],
         top_n_predictions=2,
+        query_ids=[10, 11],
         split_genes={
             "train": ["A"],
             "validation": ["B"],
@@ -82,6 +92,7 @@ def test_build_gene_ranking_diagnostics_reports_target_ranks_and_hits() -> None:
 
     first_query = diagnostics["per_query"][0]
     assert first_query["condition"] == "A+C"
+    assert first_query["cell_index"] == 10
     assert first_query["target_ranks"] == {"A": 1, "C": 2}
     assert first_query["target_scores"] == {"A": 0.9, "C": 0.8}
     assert first_query["best_target_gene"] == "A"
@@ -117,3 +128,33 @@ def test_build_gene_ranking_diagnostics_records_low_rank_targets() -> None:
         {"gene": "A", "rank": 1, "score": 0.9, "is_target": False},
         {"gene": "B", "rank": 2, "score": 0.8, "is_target": False},
     ]
+
+
+def test_build_gene_ranking_diagnostics_rejects_misaligned_inputs() -> None:
+    with pytest.raises(ValueError, match="scores and conditions"):
+        build_gene_ranking_diagnostics(
+            scores=[np.array([0.9, 0.1], dtype=np.float32)],
+            targets=[[0]],
+            gene_names=["A", "B"],
+            conditions=["A", "B"],
+            top_k_values=[1],
+        )
+
+    with pytest.raises(ValueError, match="score vector width"):
+        build_gene_ranking_diagnostics(
+            scores=[np.array([0.9], dtype=np.float32)],
+            targets=[[0]],
+            gene_names=["A", "B"],
+            conditions=["A"],
+            top_k_values=[1],
+        )
+
+    with pytest.raises(ValueError, match="scores and query_ids"):
+        build_gene_ranking_diagnostics(
+            scores=[np.array([0.9, 0.1], dtype=np.float32)],
+            targets=[[0]],
+            gene_names=["A", "B"],
+            conditions=["A"],
+            top_k_values=[1],
+            query_ids=[10, 11],
+        )

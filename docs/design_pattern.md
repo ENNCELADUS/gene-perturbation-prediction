@@ -120,7 +120,14 @@ training_config: {}
 
 evaluation_config:
   top_k_values: [1, 5, 10, 20, 40]
+  diagnostics:
+    enabled: true
+    top_n_predictions: 10
 ```
+
+Evaluation stages must score single cells. Baseline training stages may build
+condition-level pseudobulk examples, but `evaluate` must treat each held-out
+perturbed cell as one query and report cell-averaged metrics.
 
 `run_config.stages` controls all orchestration. For example, an evaluation-only
 run is configured as:

@@ -7,9 +7,10 @@ ranked gene list for inverse perturbation retrieval.
 
 Config: `src/pca_knn/config.yaml`
 
-PCA-kNN embeds query cells and training cells into a lower-dimensional
-expression space, retrieves nearby training examples, and transfers target-gene
-evidence from neighbors to candidate genes.
+PCA-kNN trains its PCA space on condition-level pseudobulk profiles, then embeds
+each held-out test cell as an individual query. It retrieves nearby training
+condition profiles and transfers target-gene evidence from neighbors to
+candidate genes.
 
 This is a non-parametric baseline. It is useful for checking whether local
 expression similarity already explains the inverse retrieval task.
@@ -19,8 +20,10 @@ expression similarity already explains the inverse retrieval task.
 Config: `src/random_forest/config.yaml`
 
 The random forest baseline treats the task as multi-label gene prediction from
-expression features. It is a compact supervised baseline for testing whether
-classical ML can recover target genes without a foundation-model backbone.
+expression features. It trains on condition-level pseudobulk examples, then
+scores each held-out test cell independently for single-cell retrieval metrics.
+It is a compact supervised baseline for testing whether classical ML can recover
+target genes without a foundation-model backbone.
 
 Recommended starting config:
 

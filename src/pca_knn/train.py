@@ -59,6 +59,7 @@ def run(config: dict) -> dict:
                 "scaler": scaler,
                 "train_embeddings": train_embeddings,
                 "train_labels": labels,
+                "train_conditions": train_conditions,
                 "gene_names": data["gene_names"],
             },
             checkpoint_path,

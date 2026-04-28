@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 import anndata as ad
+import joblib
 import numpy as np
 import pandas as pd
+import pytest
 
 from src import main
 
@@ -88,12 +90,15 @@ def test_pca_knn_full_pipeline_runs_from_config(tmp_path: Path) -> None:
         "train",
         "evaluate",
     ]
-    assert results["stages"][-1]["metrics"]["n_queries"] == 1
+    assert results["stages"][-1]["metrics"]["n_queries"] == 2
     log_payload = json.loads(
         Path(baseline_config(tmp_path, "pca_knn")["run_config"]["eval_log_path"])
         .read_text()
     )
-    assert log_payload["diagnostics"]["per_query"][0]["condition"] == "A+B"
+    assert log_payload["diagnostics"]["summary"]["n_queries"] == 2
+    per_query = log_payload["diagnostics"]["per_query"]
+    assert [query["condition"] for query in per_query] == ["A+B", "A+B"]
+    assert [query["cell_index"] for query in per_query] == [6, 7]
     assert "nearest_neighbors" in log_payload["diagnostics"]["per_query"][0]
 
 
@@ -107,11 +112,33 @@ def test_random_forest_full_pipeline_runs_from_config(tmp_path: Path) -> None:
         "train",
         "evaluate",
     ]
-    assert results["stages"][-1]["metrics"]["n_queries"] == 1
+    assert results["stages"][-1]["metrics"]["n_queries"] == 2
     log_payload = json.loads(
         Path(baseline_config(tmp_path, "random_forest")["run_config"]["eval_log_path"])
         .read_text()
     )
-    assert log_payload["diagnostics"]["summary"]["n_queries"] == 1
-    assert log_payload["diagnostics"]["per_query"][0]["condition"] == "A+B"
+    assert log_payload["diagnostics"]["summary"]["n_queries"] == 2
+    per_query = log_payload["diagnostics"]["per_query"]
+    assert [query["condition"] for query in per_query] == ["A+B", "A+B"]
+    assert [query["cell_index"] for query in per_query] == [6, 7]
     assert "nearest_neighbors" not in log_payload["diagnostics"]["per_query"][0]
+
+
+@pytest.mark.parametrize("model", ["pca_knn", "random_forest"])
+def test_baseline_evaluate_rejects_checkpoint_gene_order_mismatch(
+    tmp_path: Path,
+    model: str,
+) -> None:
+    write_tiny_adata(tmp_path / "tiny.h5ad")
+    config = baseline_config(tmp_path, model)
+    config["run_config"]["stages"] = ["train"]
+    main.run_from_config(config)
+
+    checkpoint_path = Path(config["run_config"]["save_checkpoint_path"])
+    artifact = joblib.load(checkpoint_path)
+    artifact["gene_names"] = list(reversed(artifact["gene_names"]))
+    joblib.dump(artifact, checkpoint_path)
+
+    config["run_config"]["stages"] = ["evaluate"]
+    with pytest.raises(ValueError, match="gene order"):
+        main.run_from_config(config)
