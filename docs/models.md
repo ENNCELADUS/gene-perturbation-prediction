@@ -40,6 +40,11 @@ It does not generate post-perturbation profiles for all candidate conditions.
 The shared scGPT loader and inverse gene-score model live in `src/scgpt/model.py`.
 Training and evaluation are driven by `run_config.stages` in the model config.
 
+During training, scGPT writes one row per epoch to `training_step.csv` next to
+`run_config.train_log_path`. The GPU column records only `GPU Max Allocated`,
+which is the CUDA peak allocated memory for monitoring OOM risk; it does not
+include PyTorch cache `allocated` or `reserved` values.
+
 ## Architecture Plot
 
 The scGPT architecture visualization is stored under:

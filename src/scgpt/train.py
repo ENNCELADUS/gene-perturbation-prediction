@@ -34,7 +34,7 @@ TRAINING_STEP_FIELDS = [
     "Val NDCG@5",
     "Val NDCG@10",
     "Val MRR",
-    "GPU Memory",
+    "GPU Max Allocated",
 ]
 
 
@@ -151,17 +151,17 @@ def run(config: dict) -> dict:
             top_k_values=VALIDATION_TOP_K_VALUES,
         )
         epoch_time = time.perf_counter() - epoch_started_at
-        gpu_memory = _gpu_memory_summary(runtime.device)
+        gpu_max_allocated = _gpu_max_allocated_summary(runtime.device)
         log_primary_info(
             LOGGER,
             "scGPT train epoch %d/%d complete: batches=%d mean_loss=%.6f "
-            "val_loss=%s %s",
+            "val_loss=%s gpu_max_allocated=%s",
             epoch_number,
             epochs,
             n_batches,
             mean_loss,
             _format_optional_loss(val_loss),
-            gpu_memory,
+            gpu_max_allocated,
         )
         _append_training_step_log(
             path=step_log_path,
@@ -170,7 +170,7 @@ def run(config: dict) -> dict:
             train_loss=mean_loss,
             val_loss=val_loss,
             val_metrics=val_metrics,
-            gpu_memory=gpu_memory,
+            gpu_max_allocated=gpu_max_allocated,
         )
         checkpoint_monitor_value = _monitor_value(
             monitor=str(checkpoint_state["monitor"]),
@@ -482,7 +482,7 @@ def _append_training_step_log(
     train_loss: float,
     val_loss: float | None,
     val_metrics: dict[str, float | int],
-    gpu_memory: str,
+    gpu_max_allocated: str,
 ) -> None:
     if path is None or not is_primary_rank():
         return
@@ -509,7 +509,7 @@ def _append_training_step_log(
                     val_metrics.get("ndcg@10")
                 ),
                 "Val MRR": _format_optional_metric(val_metrics.get("mrr")),
-                "GPU Memory": gpu_memory,
+                "GPU Max Allocated": gpu_max_allocated,
             }
         )
 
@@ -536,23 +536,16 @@ def _target_indices_from_matrix(targets: torch.Tensor) -> list[list[int]]:
     ]
 
 
-def _gpu_memory_summary(device: torch.device) -> str:
+def _gpu_max_allocated_summary(device: torch.device) -> str:
     device = torch.device(device)
     if device.type != "cuda" or not torch.cuda.is_available():
-        return "gpu_memory=not_available"
+        return "not_available"
 
     device_index = (
         device.index if device.index is not None else torch.cuda.current_device()
     )
-    allocated_gb = torch.cuda.memory_allocated(device_index) / 1024**3
-    reserved_gb = torch.cuda.memory_reserved(device_index) / 1024**3
     max_allocated_gb = torch.cuda.max_memory_allocated(device_index) / 1024**3
-    return (
-        "gpu_memory="
-        f"allocated={allocated_gb:.3f}GB "
-        f"reserved={reserved_gb:.3f}GB "
-        f"max_allocated={max_allocated_gb:.3f}GB"
-    )
+    return f"{max_allocated_gb:.3f}GB"
 
 
 def _forward(model, batch: dict) -> torch.Tensor:
