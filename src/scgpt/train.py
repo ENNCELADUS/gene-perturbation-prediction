@@ -17,10 +17,25 @@ from src.scgpt.losses import GeneScoreLoss, GeneScoreLossConfig, build_gene_scor
 from src.scgpt.model import GeneScoreModel
 from src.utils.data import get_condition_splits, load_adata
 from src.utils.distributed import disable_tqdm, is_primary_rank, log_primary_info
+from src.utils.metrics import compute_gene_metrics
 from src.utils.runtime import AccelerateRuntime
 
 LOGGER = logging.getLogger(__name__)
-TRAINING_STEP_FIELDS = ["Epoch", "Epoch Time", "Train Loss", "Val Loss", "GPU Memory"]
+VALIDATION_TOP_K_VALUES = [1, 5, 10]
+TRAINING_STEP_FIELDS = [
+    "Epoch",
+    "Epoch Time",
+    "Train Loss",
+    "Val Loss",
+    "Val Recall@1",
+    "Val Recall@5",
+    "Val Recall@10",
+    "Val NDCG@1",
+    "Val NDCG@5",
+    "Val NDCG@10",
+    "Val MRR",
+    "GPU Memory",
+]
 
 
 def run(config: dict) -> dict:
@@ -128,11 +143,12 @@ def run(config: dict) -> dict:
             example_count=epoch_example_count,
             device=runtime.device,
         )
-        val_loss = _evaluate_loss(
+        val_loss, val_metrics = _evaluate_validation(
             model=model,
             loader=validation_loader,
             loss_fn=loss_fn,
             runtime=runtime,
+            top_k_values=VALIDATION_TOP_K_VALUES,
         )
         epoch_time = time.perf_counter() - epoch_started_at
         gpu_memory = _gpu_memory_summary(runtime.device)
@@ -153,6 +169,7 @@ def run(config: dict) -> dict:
             epoch_time=epoch_time,
             train_loss=mean_loss,
             val_loss=val_loss,
+            val_metrics=val_metrics,
             gpu_memory=gpu_memory,
         )
         checkpoint_monitor_value = _monitor_value(
@@ -378,34 +395,53 @@ def _should_stop_early(
     return int(state["epochs_without_improvement"]) >= int(state["patience"])
 
 
-def _evaluate_loss(
+def _evaluate_validation(
     model: torch.nn.Module,
     loader: DataLoader | None,
     loss_fn: GeneScoreLoss,
     runtime: AccelerateRuntime,
-) -> float | None:
+    top_k_values: list[int],
+) -> tuple[float | None, dict[str, float | int]]:
     if loader is None:
-        return None
+        return None, {}
 
     model.eval()
     loss_sum = 0.0
     example_count = 0
+    scores = []
+    target_indices = []
     with torch.no_grad():
         for batch in loader:
             logits = _forward(model, batch)
-            targets = batch["targets"].to(logits.device)
-            loss = loss_fn(logits, targets)
-            batch_size = int(targets.shape[0])
+            target_matrix = batch["targets"].to(logits.device)
+            loss = loss_fn(logits, target_matrix)
+            batch_size = int(target_matrix.shape[0])
             loss_sum += float(loss.detach().cpu()) * batch_size
             example_count += batch_size
+            gathered_logits = _gather_for_metrics(runtime, logits)
+            gathered_targets = _gather_for_metrics(runtime, target_matrix)
+            scores.extend(row.cpu().numpy() for row in gathered_logits)
+            target_indices.extend(_target_indices_from_matrix(gathered_targets.cpu()))
     if example_count == 0:
-        return None
-    return _mean_loss(
+        return None, {}
+    val_loss = _mean_loss(
         runtime=runtime,
         loss_sum=loss_sum,
         example_count=example_count,
         device=runtime.device,
     )
+    metrics = compute_gene_metrics(scores, target_indices, top_k_values)
+    return val_loss, metrics
+
+
+def _gather_for_metrics(
+    runtime: AccelerateRuntime,
+    tensor: torch.Tensor,
+) -> torch.Tensor:
+    gather_for_metrics = getattr(runtime, "gather_for_metrics", None)
+    if callable(gather_for_metrics):
+        return gather_for_metrics(tensor)
+    return tensor
 
 
 def _mean_loss(
@@ -445,6 +481,7 @@ def _append_training_step_log(
     epoch_time: float,
     train_loss: float,
     val_loss: float | None,
+    val_metrics: dict[str, float | int],
     gpu_memory: str,
 ) -> None:
     if path is None or not is_primary_rank():
@@ -457,6 +494,21 @@ def _append_training_step_log(
                 "Epoch Time": f"{epoch_time:.3f}",
                 "Train Loss": f"{train_loss:.6f}",
                 "Val Loss": _format_optional_loss(val_loss),
+                "Val Recall@1": _format_optional_metric(
+                    val_metrics.get("recall@1")
+                ),
+                "Val Recall@5": _format_optional_metric(
+                    val_metrics.get("recall@5")
+                ),
+                "Val Recall@10": _format_optional_metric(
+                    val_metrics.get("recall@10")
+                ),
+                "Val NDCG@1": _format_optional_metric(val_metrics.get("ndcg@1")),
+                "Val NDCG@5": _format_optional_metric(val_metrics.get("ndcg@5")),
+                "Val NDCG@10": _format_optional_metric(
+                    val_metrics.get("ndcg@10")
+                ),
+                "Val MRR": _format_optional_metric(val_metrics.get("mrr")),
                 "GPU Memory": gpu_memory,
             }
         )
@@ -471,6 +523,17 @@ def _training_step_log_path(config: dict) -> Path | None:
 
 def _format_optional_loss(loss: float | None) -> str:
     return "" if loss is None else f"{loss:.6f}"
+
+
+def _format_optional_metric(value: float | int | None) -> str:
+    return "" if value is None else f"{float(value):.6f}"
+
+
+def _target_indices_from_matrix(targets: torch.Tensor) -> list[list[int]]:
+    return [
+        torch.nonzero(row > 0, as_tuple=False).flatten().tolist()
+        for row in targets
+    ]
 
 
 def _gpu_memory_summary(device: torch.device) -> str:
