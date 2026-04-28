@@ -18,7 +18,9 @@ def run(config: dict) -> dict:
     X_test = data["matrices"]["test"]
     test_conditions = data["conditions"]["test"]
     if X_test.shape[0] == 0:
-        raise ValueError("Random forest evaluation requires at least one test condition")
+        raise ValueError(
+            "Random forest evaluation requires at least one test condition"
+        )
 
     raw_scores = artifact["model"].predict(X_test)
     scores = [raw_scores[row_idx] for row_idx in range(raw_scores.shape[0])]

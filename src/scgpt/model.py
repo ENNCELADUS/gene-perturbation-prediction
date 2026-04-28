@@ -215,7 +215,9 @@ class GeneScoreModel(nn.Module):
                 output = self.backbone.model(
                     src=control_gene_ids[start : start + chunk_size],
                     values=control_values[start : start + chunk_size],
-                    src_key_padding_mask=control_padding_mask[start : start + chunk_size],
+                    src_key_padding_mask=control_padding_mask[
+                        start : start + chunk_size
+                    ],
                     batch_labels=None,
                     CLS=False,
                     CCE=False,

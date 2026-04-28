@@ -34,7 +34,9 @@ def get_condition_splits(config: Mapping[str, object]) -> dict[str, list[str]]:
         raise ValueError("data_config.condition_split must be a mapping")
     return {
         "train": _normalize_conditions(split.get("train", [])),
-        "validation": _normalize_conditions(split.get("validation", split.get("val", []))),
+        "validation": _normalize_conditions(
+            split.get("validation", split.get("val", []))
+        ),
         "test": _normalize_conditions(split.get("test", [])),
     }
 

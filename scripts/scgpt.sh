@@ -16,3 +16,6 @@ set -euo pipefail
 
 ROOT_DIR="/public/home/wangar2023/VCC_Project"
 cd "$ROOT_DIR" || { echo "Error: Cannot access project root: $ROOT_DIR" >&2; exit 1; }
+
+uv run accelerate launch --num_processes 4 --module src.main \
+  --config src/scgpt/configs/norman.yaml

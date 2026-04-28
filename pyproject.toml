@@ -27,9 +27,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-baseline = [
-    "xgboost==2.1.4",
-]
 research = [
     "datasets>=2.10.0",
     "scib>=1.1.0",
@@ -47,7 +44,6 @@ dev = [
     "pytest>=8.3.5",
     "ruff>=0.11.8",
     "tabulate==0.9.0",
-    "xgboost==2.1.4",
 ]
 
 [tool.uv]

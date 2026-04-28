@@ -58,7 +58,9 @@ def run(config: dict) -> dict:
             )
             scores.extend(row.cpu().numpy() for row in logits)
             targets.extend(
-                target_indices_for_conditions(batch["conditions"], dataset.gene_name_to_idx)
+                target_indices_for_conditions(
+                    batch["conditions"], dataset.gene_name_to_idx
+                )
             )
     top_k_values = config.get("evaluation_config", {}).get("top_k_values", [1, 5, 10])
     metrics = compute_gene_metrics(scores, targets, top_k_values)
