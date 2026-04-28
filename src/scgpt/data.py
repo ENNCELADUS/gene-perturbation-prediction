@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from src.utils.distributed import suppress_torchtext_deprecation_warning
 from src.utils.metrics import normalize_condition, parse_condition_genes
 
 
@@ -142,6 +143,7 @@ def _tokenizer():
     scgpt_path = Path(__file__).parents[2] / "scGPT"
     if str(scgpt_path) not in sys.path:
         sys.path.insert(0, str(scgpt_path))
+    suppress_torchtext_deprecation_warning()
     from scgpt.tokenizer.gene_tokenizer import tokenize_and_pad_batch
 
     return tokenize_and_pad_batch

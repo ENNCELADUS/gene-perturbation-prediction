@@ -9,6 +9,7 @@ from sklearn.ensemble import RandomForestRegressor
 from tqdm.auto import tqdm
 
 from src.utils.data import build_pseudobulk_matrices
+from src.utils.distributed import disable_tqdm
 from src.utils.metrics import build_label_matrix
 
 
@@ -19,7 +20,7 @@ def run(config: dict) -> dict:
         desc="random_forest train",
         unit="step",
         dynamic_ncols=True,
-        disable=_disable_tqdm(config),
+        disable=disable_tqdm(config),
     ) as progress:
         data = build_pseudobulk_matrices(config)
         progress.update()
@@ -42,7 +43,7 @@ def run(config: dict) -> dict:
             labels=labels,
             model_config=model_config,
             seed=config["run_config"].get("seed"),
-            disable_tqdm=_disable_tqdm(config),
+            disable_tqdm=disable_tqdm(config),
         )
         progress.update()
         checkpoint_path = _checkpoint_path(config)
@@ -97,7 +98,3 @@ def _checkpoint_path(config: dict) -> Path:
         return Path(path)
     study_name = config["run_config"]["study_name"]
     return Path("model") / "random_forest" / study_name / "model.joblib"
-
-
-def _disable_tqdm(config: dict) -> bool:
-    return bool(config["run_config"].get("disable_tqdm", False))
