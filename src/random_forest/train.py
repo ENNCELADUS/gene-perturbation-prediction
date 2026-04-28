@@ -66,6 +66,7 @@ def _fit_random_forest_with_progress(
     model = RandomForestRegressor(
         n_estimators=0,
         max_depth=model_config.get("max_depth"),
+        min_samples_leaf=int(model_config.get("min_samples_leaf", 1)),
         random_state=seed,
         n_jobs=int(model_config.get("n_jobs", 1)),
         warm_start=True,
