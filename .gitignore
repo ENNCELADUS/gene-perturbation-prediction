@@ -70,13 +70,11 @@ docs/references
 hpdex/
 cell-eval/
 csc286_eval.py
-/logs/
 *.pptx
 *.key
 
 # TeX
 *.aux
-*.log
 *.out
 *.toc
 *.fls

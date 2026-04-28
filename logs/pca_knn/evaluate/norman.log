@@ -1,0 +1,26 @@
+{
+  "metrics": {
+    "relevant_hit@1": 0.3,
+    "relevant_hit@5": 0.54,
+    "relevant_hit@10": 0.58,
+    "relevant_hit@20": 0.58,
+    "relevant_hit@40": 0.6,
+    "exact_hit@1": 0.0,
+    "exact_hit@5": 0.0,
+    "exact_hit@10": 0.0,
+    "exact_hit@20": 0.0,
+    "exact_hit@40": 0.02,
+    "recall@1": 0.15,
+    "recall@5": 0.27,
+    "recall@10": 0.29,
+    "recall@20": 0.29,
+    "recall@40": 0.31,
+    "ndcg@1": 0.3,
+    "ndcg@5": 0.2591562022525578,
+    "ndcg@10": 0.26789249972528434,
+    "ndcg@20": 0.26789249972528434,
+    "ndcg@40": 0.2720527916788145,
+    "mrr": 0.39191548027898343,
+    "n_queries": 50
+  }
+}
