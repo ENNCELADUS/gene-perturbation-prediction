@@ -366,11 +366,30 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
     assert "gpu_memory=not_available" in caplog.text
     step_log_path = tmp_path / "logs" / "training_step.csv"
     rows = list(csv.DictReader(step_log_path.open()))
-    assert rows[0].keys() >= {"Epoch", "Epoch Time", "Train Loss", "Val Loss"}
+    assert rows[0].keys() >= {
+        "Epoch",
+        "Epoch Time",
+        "Train Loss",
+        "Val Loss",
+        "Val Recall@1",
+        "Val Recall@5",
+        "Val Recall@10",
+        "Val NDCG@1",
+        "Val NDCG@5",
+        "Val NDCG@10",
+        "Val MRR",
+    }
     assert [row["Epoch"] for row in rows] == ["1", "2"]
     assert all(float(row["Epoch Time"]) >= 0.0 for row in rows)
     assert all(float(row["Train Loss"]) > 0.0 for row in rows)
     assert all(float(row["Val Loss"]) > 0.0 for row in rows)
+    assert all(float(row["Val Recall@1"]) == 1.0 for row in rows)
+    assert all(float(row["Val Recall@5"]) == 1.0 for row in rows)
+    assert all(float(row["Val Recall@10"]) == 1.0 for row in rows)
+    assert all(float(row["Val NDCG@1"]) == 1.0 for row in rows)
+    assert all(float(row["Val NDCG@5"]) == 1.0 for row in rows)
+    assert all(float(row["Val NDCG@10"]) == 1.0 for row in rows)
+    assert all(float(row["Val MRR"]) == 1.0 for row in rows)
 
 
 def test_scgpt_train_stops_early_when_val_loss_stalls(
@@ -573,8 +592,8 @@ def test_scgpt_train_save_best_only_keeps_best_val_loss_checkpoint(
     monkeypatch.setattr(scgpt_train, "collate_gene_score_batch", fake_collate)
     monkeypatch.setattr(
         scgpt_train,
-        "_evaluate_loss",
-        lambda **kwargs: next(val_losses),
+        "_evaluate_validation",
+        lambda **kwargs: (next(val_losses), {}),
     )
     config = {
         "run_config": {
