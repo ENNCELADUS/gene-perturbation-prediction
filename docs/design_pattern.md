@@ -1,6 +1,8 @@
 # Directory Structure Design
 
-This repo is organized in a flattened “model-first” manner.
+This repository uses a flattened, model-first layout. Shared behavior lives in
+`src/utils`; each active model owns its own `prepare.py`, `train.py`, and
+`evaluate.py` stage files.
 
 ```text
 src/
@@ -39,84 +41,113 @@ src/
     evaluate.py
 ```
 
-## Huggingface Accelerate Usage
+## CLI Contract
 
-This repo uses `huggingface/accelerate` for distributed training.
+`src.main` is intentionally thin. It accepts only a model config path:
 
-### Accelerate Boundaries
+```bash
+uv run --module src.main --config src/scgpt/configs/norman.yaml
+```
 
-Hugging Face Accelerate is suitable for managing:
+Distributed scGPT runs are launched through Hugging Face Accelerate:
 
-- Device placement
-- Distributed training
-- Gradient accumulation
-- Mixed precision
-- Checkpoint save/load
-- Logging integration
+```bash
+uv run accelerate launch --module src.main \
+  --config src/scgpt/configs/norman.yaml
+```
 
-However, it is not recommended for business orchestration. Specifically:
+Do not add CLI flags for model name, stage, checkpoint path, output path, or
+max-step overrides. The config file is the only source of truth. `src.main`
+validates the config, reads `model_config.model`, and executes
+`run_config.stages` in order by importing:
 
-`scgpt/train.py` should:
-1. Load config
-2. Prepare dataset/model/optimizer
-3. `accelerator.prepare(...)`
-4. Train loop
-5. Save checkpoint
+```text
+src.{model_config.model}.{stage}.run(config)
+```
 
-Avoid creating handmade trainer frameworks. Keep it simple, explicit, and readable.
+Allowed models are:
 
-## Configuration File Convention
+- `pca_knn`
+- `random_forest`
+- `scgpt`
+
+Allowed stages are:
+
+- `prepare`
+- `train`
+- `evaluate`
+
+Each stage file must expose:
+
+```python
+def run(config: dict) -> dict:
+    ...
+```
+
+## Shared Config Schema
+
+Every model config must contain these top-level sections:
 
 ```yaml
 run_config:
   stages: ["prepare", "train", "evaluate"]
-  seed: 47
-  train_log_path: results/scgpt/train.log
-  eval_log_path: results/scgpt/eval_results.json
-  save_checkpoint_path: results/scgpt/best_model.pt
-  load_checkpoint_path: results/scgpt/best_model.pt
+  seed: 42
+  train_log_path:
+  eval_log_path:
+  save_checkpoint_path:
+  load_checkpoint_path:
   save_best_only: true
 
 device_config:
-  device: "cuda"
-  ddp_enabled: true
-  use_mixed_precision: true
+  device: "cpu"          # "cpu" | "cuda"
+  ddp_enabled: false     # DDP is activated by accelerate launch
+  use_mixed_precision: false
 
 data_config:
   h5ad_path: data/norman/perturb_processed.h5ad
   condition_key: condition
   control_key: control
-  control_n_samples: 16
-  num_workers: 0
-  condition_split_path: results/scgpt/norman_gene_heldout_split.yaml
   condition_split:
     train: []
     validation: []
     test: []
-  split_config:
-    strategy: gene_heldout
-    train_gene_fraction: 0.7
-    validation_gene_fraction: 0.1
-    test_gene_fraction: 0.2
-    min_cells_per_condition: 1
 
 model_config:
-  model: scgpt
-  pretrained_dir: model/scGPT
-  freeze_encoder: true
-  freeze_layers_up_to: 10
-  preprocess_binning: 51
-  score_mode: dot
-  head_hidden_dim: 512
-  head_dropout: 0.2
+  model: pca_knn         # pca_knn | random_forest | scgpt
 
-training_config:
-  epochs: 50
-  batch_size: 32
-  learning_rate: 5.0e-5
-  weight_decay: 0.01
-  max_grad_norm: 1.0
+training_config: {}
 
 evaluation_config:
   top_k_values: [1, 5, 10, 20, 40]
 ```
+
+`run_config.stages` controls all orchestration. For example, an evaluation-only
+run is configured as:
+
+```yaml
+run_config:
+  stages: ["evaluate"]
+  load_checkpoint_path: results/scgpt/best_model.pt
+```
+
+`flash-attn` is optional and is not part of the locked dependency set. Keep
+`use_fast_transformer: false` unless the runtime environment has the required
+flash attention stack installed and validated.
+
+## Accelerate Boundaries
+
+The small `src/utils/runtime.py::AccelerateRuntime` wrapper owns device
+placement, mixed precision, DDP preparation, gradient clipping, checkpoint save,
+and metric gathering.
+
+scGPT training and evaluation should use Accelerate for:
+
+- `accelerator.prepare(...)`
+- `accelerator.backward(...)`
+- `accelerator.clip_grad_norm_(...)`
+- `accelerator.gather_for_metrics(...)`
+- main-process checkpoint/log writes
+- process synchronization
+
+Accelerate is not the business orchestrator. The stage order still comes only
+from `run_config.stages`, and `src.main` remains the only entry point.
