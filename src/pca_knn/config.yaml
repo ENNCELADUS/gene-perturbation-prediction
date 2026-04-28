@@ -33,3 +33,6 @@ training_config: {}
 
 evaluation_config:
   top_k_values: [1, 5, 10, 20, 40]
+  diagnostics:
+    enabled: true
+    top_n_predictions: 10

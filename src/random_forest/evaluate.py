@@ -8,8 +8,12 @@ from pathlib import Path
 import joblib
 from tqdm.auto import tqdm
 
-from src.utils.data import build_pseudobulk_matrices
-from src.utils.metrics import compute_gene_metrics, target_indices_for_conditions
+from src.utils.data import build_pseudobulk_matrices, get_gene_splits
+from src.utils.metrics import (
+    build_gene_ranking_diagnostics,
+    compute_gene_metrics,
+    target_indices_for_conditions,
+)
 
 
 def run(config: dict) -> dict:
@@ -53,8 +57,19 @@ def run(config: dict) -> dict:
             [1, 5, 10],
         )
         metrics = compute_gene_metrics(scores, targets, top_k_values)
+        payload: dict[str, object] = {"metrics": metrics}
+        if _diagnostics_enabled(config):
+            payload["diagnostics"] = build_gene_ranking_diagnostics(
+                scores=scores,
+                targets=targets,
+                gene_names=data["gene_names"],
+                conditions=test_conditions,
+                top_k_values=top_k_values,
+                top_n_predictions=_top_n_predictions(config),
+                split_genes=get_gene_splits(config),
+            )
         progress.update()
-        _write_json(config["run_config"].get("eval_log_path"), {"metrics": metrics})
+        _write_json(config["run_config"].get("eval_log_path"), payload)
         progress.update()
     return {"metrics": metrics}
 
@@ -77,6 +92,20 @@ def _write_json(path: str | None, payload: dict) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w") as handle:
         json.dump(payload, handle, indent=2)
+
+
+def _diagnostics_enabled(config: dict) -> bool:
+    diagnostics = config.get("evaluation_config", {}).get("diagnostics", {})
+    if not isinstance(diagnostics, dict):
+        return False
+    return bool(diagnostics.get("enabled", False))
+
+
+def _top_n_predictions(config: dict) -> int:
+    diagnostics = config.get("evaluation_config", {}).get("diagnostics", {})
+    if not isinstance(diagnostics, dict):
+        return 10
+    return int(diagnostics.get("top_n_predictions", 10))
 
 
 def _disable_tqdm(config: dict) -> bool:

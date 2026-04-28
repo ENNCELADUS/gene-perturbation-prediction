@@ -53,6 +53,32 @@ def get_condition_splits(config: Mapping[str, object]) -> dict[str, list[str]]:
     }
 
 
+def get_gene_splits(config: Mapping[str, object]) -> dict[str, list[str]]:
+    """Read gene split lists from a split artifact when available."""
+    data_config = config.get("data_config", {})
+    if not isinstance(data_config, Mapping):
+        raise ValueError("data_config must be a mapping")
+
+    split: object = data_config.get("condition_split", {})
+    split_path = data_config.get("condition_split_path")
+    if split_path:
+        path = Path(str(split_path))
+        if path.exists():
+            with path.open() as handle:
+                split = yaml.safe_load(handle)
+
+    if not isinstance(split, Mapping):
+        return {}
+    genes = split.get("genes")
+    if not isinstance(genes, Mapping):
+        return {}
+    return {
+        "train": _string_list(genes.get("train", [])),
+        "validation": _string_list(genes.get("validation", genes.get("val", []))),
+        "test": _string_list(genes.get("test", [])),
+    }
+
+
 def load_condition_split(path: str | Path) -> dict[str, list[str]]:
     """Load a condition split artifact."""
     with Path(path).open() as handle:
