@@ -107,14 +107,26 @@ def test_scgpt_evaluate_uses_accelerate_runtime(monkeypatch, tmp_path: Path) -> 
     (pretrained_dir / "vocab.json").write_text('{"<pad>": 0, "A": 1, "B": 2}')
 
     monkeypatch.setattr(scgpt_evaluate, "AccelerateRuntime", FakeRuntime, raising=False)
-    monkeypatch.setattr(scgpt_evaluate, "load_adata", lambda path: type("Adata", (), {"n_vars": 2})())
+    monkeypatch.setattr(
+        scgpt_evaluate,
+        "load_adata",
+        lambda path: type("Adata", (), {"n_vars": 2})(),
+    )
     monkeypatch.setattr(
         scgpt_evaluate,
         "get_condition_splits",
         lambda config: {"train": [], "validation": [], "test": ["A"]},
     )
-    monkeypatch.setattr(scgpt_evaluate, "GeneScoreDataset", lambda **kwargs: FakeDataset())
-    monkeypatch.setattr(scgpt_evaluate, "_build_model", lambda *args, **kwargs: FakeModel())
+    monkeypatch.setattr(
+        scgpt_evaluate,
+        "GeneScoreDataset",
+        lambda **kwargs: FakeDataset(),
+    )
+    monkeypatch.setattr(
+        scgpt_evaluate,
+        "_build_model",
+        lambda *args, **kwargs: FakeModel(),
+    )
 
     def fake_collate(batch: list[dict], vocab: dict, n_genes: int) -> dict:
         return {
