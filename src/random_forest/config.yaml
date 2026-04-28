@@ -31,7 +31,14 @@ model_config:
   n_jobs: -1
   estimator_chunk_size: 10
 
-training_config: {}
+training_config:
+  hyperparameter_search:
+    enabled: true
+    selection_metric: mrr
+    n_estimators_grid: [100, 300]
+    max_depth_grid: [8, 16, null]
+    min_samples_leaf_grid: [1, 2]
+    max_features_grid: ["sqrt", 0.5]
 
 evaluation_config:
   top_k_values: [1, 5, 10, 20, 40]
