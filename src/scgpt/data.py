@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from src.utils.metrics import parse_condition_genes
+from src.utils.metrics import normalize_condition, parse_condition_genes
 
 
 class GeneScoreDataset(Dataset):
@@ -29,7 +29,7 @@ class GeneScoreDataset(Dataset):
         seed: int = 42,
     ) -> None:
         self.adata = adata
-        self.conditions = set(conditions)
+        self.conditions = {normalize_condition(condition) for condition in conditions}
         self.vocab = vocab
         self.n_bins = n_bins
         self.condition_key = condition_key
@@ -44,11 +44,14 @@ class GeneScoreDataset(Dataset):
         self.control_indices = np.where(adata.obs[control_key].to_numpy() == 1)[0]
         if len(self.control_indices) == 0:
             raise ValueError("scGPT gene scoring requires control cells")
-        self.examples = [
-            (idx, str(condition))
-            for idx, condition in enumerate(adata.obs[condition_key].tolist())
-            if str(condition) in self.conditions and idx not in self.control_indices
-        ]
+        self.examples = []
+        for idx, condition in enumerate(adata.obs[condition_key].tolist()):
+            normalized_condition = normalize_condition(str(condition))
+            if (
+                normalized_condition in self.conditions
+                and idx not in self.control_indices
+            ):
+                self.examples.append((idx, normalized_condition))
         self.gene_counts = np.zeros(len(self.gene_names), dtype=np.int64)
         self.example_gene_indices = []
         for _, condition in self.examples:
