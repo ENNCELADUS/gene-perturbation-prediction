@@ -32,6 +32,7 @@ def compute_gene_metrics(
     top_k_values: Sequence[int],
 ) -> dict[str, float | int]:
     """Compute gene-ranking metrics for multi-label target genes."""
+    _validate_scores_and_targets(scores, targets)
     metrics: dict[str, float | int] = {
         f"relevant_hit@{k}": 0.0 for k in top_k_values
     }
@@ -125,10 +126,19 @@ def build_gene_ranking_diagnostics(
     conditions: Sequence[str],
     top_k_values: Sequence[int],
     top_n_predictions: int = 10,
+    query_ids: Sequence[int] | None = None,
     split_genes: Mapping[str, Sequence[str]] | None = None,
     nearest_neighbors: Sequence[Sequence[Mapping[str, object]]] | None = None,
 ) -> dict[str, object]:
     """Build per-query ranking diagnostics for gene retrieval outputs."""
+    _validate_diagnostic_inputs(
+        scores=scores,
+        targets=targets,
+        gene_names=gene_names,
+        conditions=conditions,
+        query_ids=query_ids,
+        nearest_neighbors=nearest_neighbors,
+    )
     top_n = max(1, min(int(top_n_predictions), len(gene_names)))
     split_lookup = _build_split_lookup(split_genes)
     per_query: list[dict[str, object]] = []
@@ -190,6 +200,8 @@ def build_gene_ranking_diagnostics(
                 for rank, gene_idx in enumerate(ranking[:top_n], start=1)
             ],
         }
+        if query_ids is not None:
+            query_payload["cell_index"] = int(query_ids[query_idx])
 
         if split_lookup:
             membership = {
@@ -271,6 +283,59 @@ def target_indices_for_conditions(
         ]
         targets.append(indices)
     return targets
+
+
+def _validate_scores_and_targets(
+    scores: Sequence[np.ndarray],
+    targets: Sequence[Sequence[int]],
+) -> None:
+    if len(scores) != len(targets):
+        raise ValueError(
+            "scores and targets must have the same number of queries: "
+            f"{len(scores)} != {len(targets)}"
+        )
+    for query_idx, (score_vec, target_indices) in enumerate(zip(scores, targets)):
+        score_array = np.asarray(score_vec)
+        if score_array.ndim != 1:
+            raise ValueError(f"score vector at query {query_idx} must be 1D")
+        for target_idx in target_indices:
+            if int(target_idx) < 0 or int(target_idx) >= score_array.shape[0]:
+                raise ValueError(
+                    f"target index {target_idx} at query {query_idx} is outside "
+                    f"score vector width {score_array.shape[0]}"
+                )
+
+
+def _validate_diagnostic_inputs(
+    scores: Sequence[np.ndarray],
+    targets: Sequence[Sequence[int]],
+    gene_names: Sequence[str],
+    conditions: Sequence[str],
+    query_ids: Sequence[int] | None,
+    nearest_neighbors: Sequence[Sequence[Mapping[str, object]]] | None,
+) -> None:
+    _validate_scores_and_targets(scores, targets)
+    if len(scores) != len(conditions):
+        raise ValueError(
+            "scores and conditions must have the same number of queries: "
+            f"{len(scores)} != {len(conditions)}"
+        )
+    if query_ids is not None and len(scores) != len(query_ids):
+        raise ValueError(
+            "scores and query_ids must have the same number of queries: "
+            f"{len(scores)} != {len(query_ids)}"
+        )
+    if nearest_neighbors is not None and len(scores) != len(nearest_neighbors):
+        raise ValueError(
+            "scores and nearest_neighbors must have the same number of queries: "
+            f"{len(scores)} != {len(nearest_neighbors)}"
+        )
+    for query_idx, score_vec in enumerate(scores):
+        if np.asarray(score_vec).shape[0] != len(gene_names):
+            raise ValueError(
+                "score vector width must match gene_names length at query "
+                f"{query_idx}: {np.asarray(score_vec).shape[0]} != {len(gene_names)}"
+            )
 
 
 def _build_split_lookup(

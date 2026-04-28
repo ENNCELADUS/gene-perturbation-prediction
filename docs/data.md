@@ -88,8 +88,13 @@ and 20% test. Conditions are then assigned by gene membership:
 
 ## Model Inputs
 
-Simple baselines consume expression features and condition-derived target gene
-sets.
+Simple baselines may train on condition-level pseudobulk expression features and
+condition-derived target gene sets.
+
+Evaluation inputs are always single-cell. For every condition in the test split,
+each matching perturbed cell becomes one query with the same condition-derived
+target gene set. Reported `n_queries` and aggregate metrics therefore count
+cells, not perturbation conditions.
 
 The scGPT gene-score model consumes:
 

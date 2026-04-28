@@ -10,6 +10,11 @@ Given a post-perturbation expression profile, the system ranks genes that could
 explain the observed state. For multi-gene perturbations, the target label is the
 set of perturbed genes parsed from the condition string.
 
+Evaluation is single-cell by contract: each perturbed cell is one retrieval
+query, and aggregate metrics are averaged over cells. Training stages may use
+condition-level pseudobulk representations for simple baselines, but evaluation
+must score individual held-out cells.
+
 ## Scope
 
 The active codebase focuses on direct inverse retrieval models and baselines.

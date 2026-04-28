@@ -10,7 +10,12 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
-from src.utils.data import build_pseudobulk_matrices, get_gene_splits
+from src.utils.data import (
+    build_single_cell_matrices,
+    get_condition_splits,
+    get_gene_splits,
+    validate_artifact_gene_order,
+)
 from src.utils.metrics import (
     build_gene_ranking_diagnostics,
     compute_gene_metrics,
@@ -28,9 +33,14 @@ def run(config: dict) -> dict:
         dynamic_ncols=True,
         disable=_disable_tqdm(config),
     ) as progress:
-        data = build_pseudobulk_matrices(config)
+        data = build_single_cell_matrices(config, split_names=("test",))
         progress.update()
         artifact = joblib.load(_checkpoint_path(config))
+        validate_artifact_gene_order(
+            artifact.get("gene_names"),
+            data["gene_names"],
+            "PCA+kNN",
+        )
         progress.update()
         X_test = data["matrices"]["test"]
         test_conditions = data["conditions"]["test"]
@@ -68,11 +78,15 @@ def run(config: dict) -> dict:
                 conditions=test_conditions,
                 top_k_values=top_k_values,
                 top_n_predictions=_top_n_predictions(config),
+                query_ids=data["cell_indices"]["test"],
                 split_genes=get_gene_splits(config),
                 nearest_neighbors=_nearest_neighbor_diagnostics(
                     neighbors=neighbors,
                     distances=distances,
-                    train_conditions=data["conditions"]["train"],
+                    train_conditions=artifact.get(
+                        "train_conditions",
+                        get_condition_splits(config)["train"],
+                    ),
                 ),
             )
         progress.update()

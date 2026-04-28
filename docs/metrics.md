@@ -6,15 +6,20 @@ candidate perturbation combinations.
 ## Gene-Level Metrics
 
 Gene-level evaluation starts from a ranked list of candidate genes for each
-query cell or condition.
+query cell. Condition-level pseudobulk can be used during training, but
+evaluation metrics are computed over individual perturbed cells.
 
 Common metrics:
 
-- `hit@K`: at least one true target gene appears in the top K genes.
+- `relevant_hit@K`: at least one true target gene appears in the top K genes.
 - `exact_hit@K`: all true target genes appear in the top K genes.
 - `mrr`: reciprocal rank of the first relevant target gene, averaged over
   queries.
 - `ndcg@K`: ranking quality with higher credit for relevant genes near the top.
+
+`n_queries` is the number of evaluated perturbed cells, not the number of
+conditions. If multiple cells share the same perturbation condition, each cell
+contributes separately to the aggregate metrics.
 
 For a two-gene perturbation such as `CNN1+MAPK1`, gene-level `exact_hit@K`
 means both `CNN1` and `MAPK1` are present in the top K ranked genes. This is not
@@ -33,7 +38,7 @@ FOSB+UBASH3B
 
 Common metrics:
 
-- `correct_hit@K`: the exact true perturbation condition appears in the top K
+- `exact_hit@K`: the exact true perturbation condition appears in the top K
   candidate conditions.
 - `relevant_hit@K`: at least one top K candidate condition shares one or more
   genes with the true perturbation condition.
