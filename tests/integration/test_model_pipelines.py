@@ -43,6 +43,7 @@ def baseline_config(tmp_path: Path, model: str) -> dict:
         "run_config": {
             "stages": ["prepare", "train", "evaluate"],
             "seed": 7,
+            "study_name": "test",
             "save_checkpoint_path": str(artifact_dir / "model.joblib"),
             "eval_log_path": str(artifact_dir / "eval.json"),
         },

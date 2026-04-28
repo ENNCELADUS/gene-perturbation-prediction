@@ -42,7 +42,11 @@ def test_scgpt_dispatch_invokes_stage_boundaries(monkeypatch) -> None:
 
     monkeypatch.setattr(main, "import_stage_runner", fake_import_stage_runner)
     config = {
-        "run_config": {"stages": ["train", "evaluate"], "seed": 7},
+        "run_config": {
+            "stages": ["train", "evaluate"],
+            "seed": 7,
+            "study_name": "test",
+        },
         "device_config": {
             "device": "cpu",
             "ddp_enabled": False,
@@ -143,7 +147,7 @@ def test_scgpt_evaluate_uses_accelerate_runtime(monkeypatch, tmp_path: Path) -> 
 
     monkeypatch.setattr(scgpt_evaluate, "collate_gene_score_batch", fake_collate)
     config = {
-        "run_config": {"stages": ["evaluate"], "seed": 7},
+        "run_config": {"stages": ["evaluate"], "seed": 7, "study_name": "test"},
         "device_config": {
             "device": "cpu",
             "ddp_enabled": False,
