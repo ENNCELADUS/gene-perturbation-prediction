@@ -1,362 +1,59 @@
-#!/usr/bin/env python
-"""Main entry point for reverse perturbation retrieval workflows.
+"""Config-driven entry point for inverse perturbation retrieval pipelines."""
 
-Supports:
-- data: load data and save condition splits
-- route_b1_train/route_b1_eval/route_b1_full: scGPT gene-score pipeline
-- tga: Target-Gene Activation baseline evaluation
-- pca_knn: PCA+kNN baseline evaluation
-
-Usage:
-    # Data preparation only
-    python -m src.main --config src/configs/scgpt_discriminative.yaml --mode data
-
-    # scGPT gene-score training
-    run_ddp -m src.main \
-        --config src/configs/scgpt_discriminative.yaml \
-        --mode route_b1_train
-
-    # scGPT gene-score evaluation
-    python -m src.main \
-        --config src/configs/scgpt_discriminative.yaml \
-        --mode route_b1_eval
-
-    # TGA baseline
-    python -m src.main --config src/configs/tga.yaml --mode tga
-
-    # PCA+kNN baseline
-    python -m src.main --config src/configs/pca_knn_baseline.yaml --mode pca_knn
-"""
+from __future__ import annotations
 
 import argparse
-import json
-from datetime import datetime
-from pathlib import Path
+import importlib
+import logging
+from collections.abc import Callable, Sequence
+from typing import Any
 
-import yaml
+from src.utils.config import load_config, set_seed, validate_config
 
-from .data import load_perturb_data, NormanConditionSplitter
-
-
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Reverse Perturbation Retrieval"
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        required=True,
-        help="Path to config file (e.g., src/configs/scgpt_discriminative.yaml)",
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="data",
-        choices=[
-            "data",
-            "route_b1_train",
-            "route_b1_eval",
-            "route_b1_full",
-            "tga",
-            "pca_knn",
-        ],
-        help="Operation mode",
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default=None,
-        help="Override output directory from config",
-    )
-    parser.add_argument(
-        "--experiment_name",
-        type=str,
-        default=None,
-        help="Override experiment name from config",
-    )
-    parser.add_argument(
-        "--checkpoint",
-        type=str,
-        default=None,
-        help="Model checkpoint path for gene-score evaluation.",
-    )
-    parser.add_argument(
-        "--max_steps",
-        type=int,
-        default=None,
-        help="Max training steps (for smoke testing)",
-    )
-    return parser.parse_args()
+LOGGER = logging.getLogger(__name__)
 
 
-def load_config(config_path: str) -> dict:
-    """Load configuration from YAML file."""
-    with open(config_path) as f:
-        return yaml.safe_load(f)
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse the minimal CLI contract."""
+    parser = argparse.ArgumentParser(description="Reverse perturbation retrieval")
+    parser.add_argument("--config", required=True, help="Path to model config YAML")
+    return parser.parse_args(argv)
 
 
-def run_pipeline(config: dict, args) -> dict:
-    """
-    Load dataset and save condition split (DATA mode).
-
-    Args:
-        config: Configuration dictionary
-        args: Command line arguments
-
-    Returns:
-        Results dictionary with dataset summary
-    """
-    # Setup output directory
-    output_dir = args.output_dir or config["logging"]["output_dir"]
-    experiment_name = args.experiment_name or config["logging"].get(
-        "experiment_name", config["model"]["encoder"]
-    )
-    if args.mode == "data":
-        run_dir = None
-    else:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_dir = Path(output_dir) / experiment_name / timestamp
-        run_dir.mkdir(parents=True, exist_ok=True)
-
-    print("=" * 60)
-    print(f"Data Loading - {config['model']['encoder'].upper()}")
-    print("=" * 60)
-    if run_dir is not None:
-        print(f"Output: {run_dir}")
-
-    # Load data
-    print("\n[1/2] Loading dataset...")
-    cond_split_config = config.get("condition_split", {})
-
-    # Check if split file exists
-    split_path = Path(cond_split_config.get("output_path", ""))
-    use_existing_split = False
-
-    if split_path.exists():
-        print(f"  ✓ Using existing split: {split_path}")
-        use_existing_split = True
-
-    dataset = load_perturb_data(
-        h5ad_path=config["data"]["h5ad_path"],
-        condition_split_path=split_path if use_existing_split else None,
-        unseen_gene_fraction=cond_split_config.get("unseen_gene_fraction", 0.15),
-        seen_single_train_ratio=cond_split_config.get("seen_single_train_ratio", 0.9),
-        combo_seen2_train_ratio=cond_split_config.get("combo_seen2_train_ratio", 0.7),
-        combo_seen2_val_ratio=cond_split_config.get("combo_seen2_val_ratio", 0.15),
-        double_freq_bins=cond_split_config.get("double_freq_bins", 3),
-        double_count_bins=cond_split_config.get("double_count_bins", 3),
-        unseen_gene_count_bins=cond_split_config.get("unseen_gene_count_bins", 3),
-        target_test_fraction=cond_split_config.get("target_test_fraction"),
-        min_cells_per_condition=cond_split_config.get("min_cells_per_condition", 50),
-        min_cells_per_double=cond_split_config.get("min_cells_per_double", 30),
-        seed=cond_split_config.get("seed", 42),
-    )
-
-    # Print summary
-    summary = dataset.summary()
-    print(f"  - Total cells: {summary['n_cells']}")
-    print(f"  - Genes: {summary['n_genes']}")
-    print(f"  - Total conditions: {summary['n_conditions']}")
-    if summary.get("has_condition_split"):
-        print(f"  - Train conditions: {summary['n_train_conditions']}")
-        print(f"  - Val conditions: {summary['n_val_conditions']}")
-        print(f"  - Test conditions: {summary['n_test_conditions']}")
-        print(f"  - Test strata: {summary.get('test_strata_counts', {})}")
-
-    # Save condition split artifact
-    print("\n[2/2] Saving condition split artifact...")
-    cond_split_config = config.get("condition_split", {})
-    split_path = Path(
-        cond_split_config.get(
-            "output_path",
-            "data/norman/splits/"
-            f"norman_condition_split_seed{cond_split_config.get('seed', 42)}.json",
-        )
-    )
-    split_path.parent.mkdir(parents=True, exist_ok=True)
-    dataset.condition_split.save(split_path)
-    print(f"  - Saved to: {split_path}")
-
-    # Print split summary
-    if dataset.condition_split:
-        splitter_temp = NormanConditionSplitter(seed=cond_split_config.get("seed", 42))
-        split_summary = splitter_temp.summary(dataset.condition_split)
-        print(f"  - Split summary: {split_summary}")
-
-    results = {"config": config, "summary": summary}
-
-    if run_dir is not None:
-        with open(run_dir / "summary.json", "w") as f:
-            json.dump(results, f, indent=2)
-
-        print("\n" + "=" * 60)
-        print(f"Summary saved to: {run_dir / 'summary.json'}")
-        print("=" * 60)
-
-    return results
+def import_stage_runner(model_name: str, stage_name: str) -> Callable[[dict], dict]:
+    """Import a model stage runner."""
+    module = importlib.import_module(f"src.{model_name}.{stage_name}")
+    runner = getattr(module, "run", None)
+    if not callable(runner):
+        raise ValueError(f"src.{model_name}.{stage_name} must expose run(config)")
+    return runner
 
 
-def run_route_b1_train(config: dict, args) -> dict:
-    """Run scGPT gene-score training."""
-    from .train.train_gene_score import main as train_main
-    import sys
+def run_from_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Validate config and execute configured stages in order."""
+    validate_config(config)
+    run_config = config["run_config"]
+    model_name = config["model_config"]["model"]
+    set_seed(run_config.get("seed"))
 
-    output_dir = Path(args.output_dir) if args.output_dir else None
-    if output_dir is None:
-        logging_config = config.get("logging", {})
-        base_dir = logging_config.get("output_dir", "results/gene_score")
-        output_dir = Path(base_dir)
-
-    sys.argv = [
-        "train_gene_score",
-        "--config",
-        args.config,
-        "--output_dir",
-        str(output_dir),
-    ]
-    if args.max_steps:
-        sys.argv.extend(["--max_steps", str(args.max_steps)])
-
-    print("\n" + "=" * 60)
-    print("MODE: SCGPT_TRAIN - Gene-Score Model")
-    print("=" * 60)
-
-    train_main()
-
-    return {"status": "route_b1_training_complete"}
+    results: list[dict[str, Any]] = []
+    for stage_name in run_config["stages"]:
+        LOGGER.info("Running %s.%s", model_name, stage_name)
+        runner = import_stage_runner(model_name, stage_name)
+        stage_result = runner(config)
+        if not isinstance(stage_result, dict):
+            stage_result = {"result": stage_result}
+        results.append({"stage": stage_name, **stage_result})
+    return {"model": model_name, "stages": results}
 
 
-def run_route_b1_eval(config: dict, args) -> dict:
-    """Run scGPT gene-score evaluation."""
-    from .evaluate.evaluate_gene_score import main as eval_main
-    import sys
-
-    output_dir = Path(args.output_dir) if args.output_dir else None
-    if output_dir is None:
-        logging_config = config.get("logging", {})
-        base_dir = logging_config.get("output_dir", "results/gene_score")
-        output_dir = Path(base_dir)
-
-    eval_config = config.get("evaluation", {})
-    checkpoint = (
-        args.checkpoint
-        or eval_config.get("checkpoint_path")
-        or str(output_dir / "best_model.pt")
-    )
-    output = eval_config.get("output_path", str(output_dir / "eval_results.json"))
-
-    sys.argv = [
-        "evaluate_gene_score",
-        "--config",
-        args.config,
-        "--checkpoint",
-        checkpoint,
-        "--output",
-        output,
-    ]
-
-    print("\n" + "=" * 60)
-    print("MODE: SCGPT_EVAL - Gene-Score Evaluation")
-    print("=" * 60)
-
-    eval_main()
-
-    return {"status": "route_b1_evaluation_complete", "results_path": output}
-
-
-def run_route_b1_full(config: dict, args) -> dict:
-    """Run the scGPT gene-score pipeline: train then evaluate."""
-    print("\n" + "=" * 60)
-    print("MODE: SCGPT_FULL - Complete Pipeline")
-    print("=" * 60)
-
-    print("\n[STAGE 1/2] Training Gene-Score Model")
-    run_route_b1_train(config, args)
-
-    print("\n[STAGE 2/2] Evaluating Gene-Score Model")
-    results = run_route_b1_eval(config, args)
-
-    print("\n" + "=" * 60)
-    print("SCGPT GENE-SCORE PIPELINE COMPLETE")
-    print("=" * 60)
-
-    return results
-
-
-def run_tga(config: dict, args) -> dict:
-    """Run TGA baseline evaluation."""
-    from .evaluate.evaluate_tga import main as tga_main
-    import sys
-
-    output = config.get("evaluation", {}).get(
-        "output_path", "results/tgd/eval_results.json"
-    )
-
-    sys.argv = [
-        "evaluate_tgd",
-        "--config",
-        args.config,
-        "--output",
-        output,
-    ]
-
-    print("\n" + "=" * 60)
-    print("MODE: TGA - Target-Gene Activation Baseline")
-    print("=" * 60)
-
-    tga_main()
-
-    return {"status": "tga_evaluation_complete", "results_path": output}
-
-
-def run_pca_knn(config: dict, args) -> dict:
-    """Run PCA+kNN baseline evaluation."""
-    from .evaluate.evaluate_pca_knn import main as eval_main
-    import sys
-
-    output = config.get("evaluation", {}).get(
-        "output_path", "results/pca_knn/eval_results.json"
-    )
-
-    sys.argv = [
-        "evaluate_pca_knn",
-        "--config",
-        args.config,
-        "--output",
-        output,
-    ]
-
-    print("\n" + "=" * 60)
-    print("MODE: PCA_KNN - PCA+kNN Baseline")
-    print("=" * 60)
-
-    eval_main()
-
-    return {"status": "pca_knn_evaluation_complete", "results_path": output}
-
-
-def main():
-    """Main entry point with mode dispatch."""
-    args = parse_args()
+def main(argv: Sequence[str] | None = None) -> dict[str, Any]:
+    """CLI entry point."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+    args = parse_args(argv)
     config = load_config(args.config)
-
-    # Dispatch based on mode
-    if args.mode == "data":
-        results = run_pipeline(config, args)
-    elif args.mode == "route_b1_train":
-        results = run_route_b1_train(config, args)
-    elif args.mode == "route_b1_eval":
-        results = run_route_b1_eval(config, args)
-    elif args.mode == "route_b1_full":
-        results = run_route_b1_full(config, args)
-    elif args.mode == "tga":
-        results = run_tga(config, args)
-    elif args.mode == "pca_knn":
-        results = run_pca_knn(config, args)
-    else:
-        raise ValueError(f"Unknown mode: {args.mode}")
-
+    results = run_from_config(config)
+    LOGGER.info("Completed %s stage(s)", len(results["stages"]))
     return results
 
 
