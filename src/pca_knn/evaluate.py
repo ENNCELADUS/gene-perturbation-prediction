@@ -10,8 +10,13 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
-from src.utils.data import build_pseudobulk_matrices
-from src.utils.metrics import compute_gene_metrics, target_indices_for_conditions
+from src.utils.data import build_pseudobulk_matrices, get_gene_splits
+from src.utils.metrics import (
+    build_gene_ranking_diagnostics,
+    compute_gene_metrics,
+    parse_condition_genes,
+    target_indices_for_conditions,
+)
 
 
 def run(config: dict) -> dict:
@@ -37,7 +42,7 @@ def run(config: dict) -> dict:
         X_proc = scaler.transform(X_test) if scaler is not None else X_test
         query_embeddings = pca.transform(X_proc)
         progress.update()
-        scores = _knn_scores(
+        scores, neighbors, distances = _knn_scores(
             train_embeddings=artifact["train_embeddings"],
             train_labels=artifact["train_labels"],
             query_embeddings=query_embeddings,
@@ -54,8 +59,24 @@ def run(config: dict) -> dict:
             [1, 5, 10],
         )
         metrics = compute_gene_metrics(scores, targets, top_k_values)
+        payload: dict[str, object] = {"metrics": metrics}
+        if _diagnostics_enabled(config):
+            payload["diagnostics"] = build_gene_ranking_diagnostics(
+                scores=scores,
+                targets=targets,
+                gene_names=data["gene_names"],
+                conditions=test_conditions,
+                top_k_values=top_k_values,
+                top_n_predictions=_top_n_predictions(config),
+                split_genes=get_gene_splits(config),
+                nearest_neighbors=_nearest_neighbor_diagnostics(
+                    neighbors=neighbors,
+                    distances=distances,
+                    train_conditions=data["conditions"]["train"],
+                ),
+            )
         progress.update()
-        _write_json(config["run_config"].get("eval_log_path"), {"metrics": metrics})
+        _write_json(config["run_config"].get("eval_log_path"), payload)
         progress.update()
     return {"metrics": metrics}
 
@@ -66,11 +87,11 @@ def _knn_scores(
     query_embeddings: np.ndarray,
     k: int,
     disable_tqdm: bool = False,
-) -> list[np.ndarray]:
+) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
     k = max(1, min(k, train_embeddings.shape[0]))
     distances = cdist(query_embeddings, train_embeddings, metric="euclidean")
     neighbors = np.argsort(distances, axis=1)[:, :k]
-    return [
+    scores = [
         train_labels[row].mean(axis=0)
         for row in tqdm(
             neighbors,
@@ -80,6 +101,7 @@ def _knn_scores(
             disable=disable_tqdm,
         )
     ]
+    return scores, neighbors, distances
 
 
 def _checkpoint_path(config: dict) -> Path:
@@ -100,6 +122,40 @@ def _write_json(path: str | None, payload: dict) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w") as handle:
         json.dump(payload, handle, indent=2)
+
+
+def _nearest_neighbor_diagnostics(
+    neighbors: np.ndarray,
+    distances: np.ndarray,
+    train_conditions: list[str],
+) -> list[list[dict[str, object]]]:
+    return [
+        [
+            {
+                "condition": train_conditions[int(train_idx)],
+                "distance": round(float(distances[query_idx, int(train_idx)]), 6),
+                "target_genes": sorted(
+                    parse_condition_genes(train_conditions[int(train_idx)])
+                ),
+            }
+            for train_idx in neighbor_row
+        ]
+        for query_idx, neighbor_row in enumerate(neighbors)
+    ]
+
+
+def _diagnostics_enabled(config: dict) -> bool:
+    diagnostics = config.get("evaluation_config", {}).get("diagnostics", {})
+    if not isinstance(diagnostics, dict):
+        return False
+    return bool(diagnostics.get("enabled", False))
+
+
+def _top_n_predictions(config: dict) -> int:
+    diagnostics = config.get("evaluation_config", {}).get("diagnostics", {})
+    if not isinstance(diagnostics, dict):
+        return 10
+    return int(diagnostics.get("top_n_predictions", 10))
 
 
 def _disable_tqdm(config: dict) -> bool:

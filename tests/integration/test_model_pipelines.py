@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import anndata as ad
@@ -70,7 +71,10 @@ def baseline_config(tmp_path: Path, model: str) -> dict:
             "n_estimators": 4,
             "max_depth": 3,
         },
-        "evaluation_config": {"top_k_values": [1, 2]},
+        "evaluation_config": {
+            "top_k_values": [1, 2],
+            "diagnostics": {"enabled": True, "top_n_predictions": 2},
+        },
     }
 
 
@@ -85,6 +89,12 @@ def test_pca_knn_full_pipeline_runs_from_config(tmp_path: Path) -> None:
         "evaluate",
     ]
     assert results["stages"][-1]["metrics"]["n_queries"] == 1
+    log_payload = json.loads(
+        Path(baseline_config(tmp_path, "pca_knn")["run_config"]["eval_log_path"])
+        .read_text()
+    )
+    assert log_payload["diagnostics"]["per_query"][0]["condition"] == "A+B"
+    assert "nearest_neighbors" in log_payload["diagnostics"]["per_query"][0]
 
 
 def test_random_forest_full_pipeline_runs_from_config(tmp_path: Path) -> None:
@@ -98,3 +108,10 @@ def test_random_forest_full_pipeline_runs_from_config(tmp_path: Path) -> None:
         "evaluate",
     ]
     assert results["stages"][-1]["metrics"]["n_queries"] == 1
+    log_payload = json.loads(
+        Path(baseline_config(tmp_path, "random_forest")["run_config"]["eval_log_path"])
+        .read_text()
+    )
+    assert log_payload["diagnostics"]["summary"]["n_queries"] == 1
+    assert log_payload["diagnostics"]["per_query"][0]["condition"] == "A+B"
+    assert "nearest_neighbors" not in log_payload["diagnostics"]["per_query"][0]

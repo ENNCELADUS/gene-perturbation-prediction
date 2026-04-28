@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections import Counter, defaultdict
+from statistics import mean, median
+from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -116,6 +118,130 @@ def compute_combo_metrics(
     return metrics
 
 
+def build_gene_ranking_diagnostics(
+    scores: Sequence[np.ndarray],
+    targets: Sequence[Sequence[int]],
+    gene_names: Sequence[str],
+    conditions: Sequence[str],
+    top_k_values: Sequence[int],
+    top_n_predictions: int = 10,
+    split_genes: Mapping[str, Sequence[str]] | None = None,
+    nearest_neighbors: Sequence[Sequence[Mapping[str, object]]] | None = None,
+) -> dict[str, object]:
+    """Build per-query ranking diagnostics for gene retrieval outputs."""
+    top_n = max(1, min(int(top_n_predictions), len(gene_names)))
+    split_lookup = _build_split_lookup(split_genes)
+    per_query: list[dict[str, object]] = []
+    best_ranks: list[int] = []
+    rank_bins = Counter[str]()
+    query_type_counts = Counter[str]()
+    split_group_counts = Counter[str]()
+    split_group_hit_sums: dict[str, dict[int, float]] = defaultdict(
+        lambda: {int(k): 0.0 for k in top_k_values}
+    )
+
+    for query_idx, (score_vec, target_indices) in enumerate(zip(scores, targets)):
+        target_set = {int(idx) for idx in target_indices}
+        if not target_set:
+            continue
+
+        ranking = np.argsort(-score_vec)
+        positions = np.empty_like(ranking)
+        positions[ranking] = np.arange(1, len(ranking) + 1)
+        target_genes = [gene_names[idx] for idx in sorted(target_set)]
+        target_ranks = {
+            gene_names[idx]: int(positions[idx]) for idx in sorted(target_set)
+        }
+        target_scores = {
+            gene_names[idx]: _score_value(score_vec[idx]) for idx in sorted(target_set)
+        }
+        best_target_idx = min(target_set, key=lambda idx: int(positions[idx]))
+        best_rank = int(positions[best_target_idx])
+        hit_at: dict[str, bool] = {}
+        recall_at: dict[str, float] = {}
+        for k_value in top_k_values:
+            k = int(k_value)
+            topk_set = set(ranking[:k].tolist())
+            overlap = len(topk_set & target_set)
+            hit_at[str(k)] = overlap > 0
+            recall_at[str(k)] = overlap / len(target_set)
+
+        query_type = "single_gene" if len(target_set) == 1 else "combo"
+        query_type_counts[query_type] += 1
+        rank_bins[_rank_bin(best_rank)] += 1
+        best_ranks.append(best_rank)
+
+        query_payload: dict[str, object] = {
+            "condition": conditions[query_idx],
+            "target_genes": target_genes,
+            "target_ranks": target_ranks,
+            "target_scores": target_scores,
+            "best_target_gene": gene_names[best_target_idx],
+            "best_target_rank": best_rank,
+            "hit_at": hit_at,
+            "recall_at": recall_at,
+            "top_predictions": [
+                {
+                    "gene": gene_names[int(gene_idx)],
+                    "rank": rank,
+                    "score": _score_value(score_vec[int(gene_idx)]),
+                    "is_target": int(gene_idx) in target_set,
+                }
+                for rank, gene_idx in enumerate(ranking[:top_n], start=1)
+            ],
+        }
+
+        if split_lookup:
+            membership = {
+                gene: split_lookup.get(gene, "unknown") for gene in target_genes
+            }
+            split_group = _split_group(membership.values())
+            query_payload["target_split_membership"] = membership
+            query_payload["target_split_group"] = split_group
+            split_group_counts[split_group] += 1
+            for k_value in top_k_values:
+                split_group_hit_sums[split_group][int(k_value)] += float(
+                    hit_at[str(int(k_value))]
+                )
+
+        if nearest_neighbors is not None:
+            query_payload["nearest_neighbors"] = [
+                dict(neighbor) for neighbor in nearest_neighbors[query_idx]
+            ]
+
+        per_query.append(query_payload)
+
+    summary: dict[str, object] = {
+        "n_queries": len(per_query),
+        "n_candidate_genes": len(gene_names),
+        "top_n_predictions": top_n,
+        "best_target_rank": _rank_summary(best_ranks),
+        "target_rank_bins": {
+            "<=1": rank_bins["<=1"],
+            "<=5": rank_bins["<=5"],
+            "<=10": rank_bins["<=10"],
+            "<=20": rank_bins["<=20"],
+            "<=40": rank_bins["<=40"],
+            ">40": rank_bins[">40"],
+        },
+        "query_type_counts": dict(query_type_counts),
+    }
+    if split_lookup:
+        summary["target_split_group_metrics"] = {
+            group: {
+                "n_queries": count,
+                **{
+                    f"hit@{int(k_value)}": split_group_hit_sums[group][int(k_value)]
+                    / count
+                    for k_value in top_k_values
+                },
+            }
+            for group, count in sorted(split_group_counts.items())
+        }
+
+    return {"summary": summary, "per_query": per_query}
+
+
 def build_label_matrix(
     conditions: Sequence[str],
     gene_name_to_idx: dict[str, int],
@@ -145,6 +271,47 @@ def target_indices_for_conditions(
         ]
         targets.append(indices)
     return targets
+
+
+def _build_split_lookup(
+    split_genes: Mapping[str, Sequence[str]] | None,
+) -> dict[str, str]:
+    if not split_genes:
+        return {}
+    lookup = {}
+    for split_name, genes in split_genes.items():
+        for gene in genes:
+            lookup[str(gene)] = str(split_name)
+    return lookup
+
+
+def _rank_summary(ranks: Sequence[int]) -> dict[str, float | int | None]:
+    if not ranks:
+        return {"mean": None, "median": None, "min": None, "max": None}
+    return {
+        "mean": mean(ranks),
+        "median": median(ranks),
+        "min": min(ranks),
+        "max": max(ranks),
+    }
+
+
+def _rank_bin(rank: int) -> str:
+    for upper_bound in (1, 5, 10, 20, 40):
+        if rank <= upper_bound:
+            return f"<={upper_bound}"
+    return ">40"
+
+
+def _score_value(value: float | np.floating) -> float:
+    return round(float(value), 6)
+
+
+def _split_group(split_names: Iterable[str]) -> str:
+    unique_names = sorted(set(split_names))
+    if len(unique_names) == 1:
+        return f"{unique_names[0]}-only"
+    return "+".join(unique_names)
 
 
 def _ndcg_for_topk(topk: np.ndarray, target_set: set[int]) -> float:

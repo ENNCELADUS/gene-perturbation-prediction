@@ -22,5 +22,6863 @@
     "ndcg@40": 0.2720527916788145,
     "mrr": 0.39191548027898343,
     "n_queries": 50
+  },
+  "diagnostics": {
+    "summary": {
+      "n_queries": 50,
+      "n_candidate_genes": 5045,
+      "top_n_predictions": 10,
+      "best_target_rank": {
+        "mean": 789.78,
+        "median": 4.0,
+        "min": 1,
+        "max": 5003
+      },
+      "target_rank_bins": {
+        "<=1": 15,
+        "<=5": 12,
+        "<=10": 2,
+        "<=20": 0,
+        "<=40": 1,
+        ">40": 20
+      },
+      "query_type_counts": {
+        "combo": 38,
+        "single_gene": 12
+      },
+      "target_split_group_metrics": {
+        "test+train": {
+          "n_queries": 32,
+          "hit@1": 0.46875,
+          "hit@5": 0.84375,
+          "hit@10": 0.90625,
+          "hit@20": 0.90625,
+          "hit@40": 0.90625
+        },
+        "test+validation": {
+          "n_queries": 4,
+          "hit@1": 0.0,
+          "hit@5": 0.0,
+          "hit@10": 0.0,
+          "hit@20": 0.0,
+          "hit@40": 0.0
+        },
+        "test-only": {
+          "n_queries": 14,
+          "hit@1": 0.0,
+          "hit@5": 0.0,
+          "hit@10": 0.0,
+          "hit@20": 0.0,
+          "hit@40": 0.07142857142857142
+        }
+      }
+    },
+    "per_query": [
+      {
+        "condition": "BAK1+TMSB4X",
+        "target_genes": [
+          "BAK1",
+          "TMSB4X"
+        ],
+        "target_ranks": {
+          "BAK1": 1,
+          "TMSB4X": 3848
+        },
+        "target_scores": {
+          "BAK1": 0.4,
+          "TMSB4X": 0.0
+        },
+        "best_target_gene": "BAK1",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "BAK1",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": true
+          },
+          {
+            "gene": "BCL2L11",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "RUNX1T1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "KIF2C",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 5,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "BAK1": "train",
+          "TMSB4X": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "BAK1",
+            "distance": 1.484075,
+            "target_genes": [
+              "BAK1"
+            ]
+          },
+          {
+            "condition": "BCL2L11",
+            "distance": 1.492413,
+            "target_genes": [
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "KIF2C",
+            "distance": 1.573269,
+            "target_genes": [
+              "KIF2C"
+            ]
+          },
+          {
+            "condition": "BAK1+BCL2L11",
+            "distance": 1.583097,
+            "target_genes": [
+              "BAK1",
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "RUNX1T1",
+            "distance": 1.596971,
+            "target_genes": [
+              "RUNX1T1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "BCL2L11+TGFBR2",
+        "target_genes": [
+          "BCL2L11",
+          "TGFBR2"
+        ],
+        "target_ranks": {
+          "BCL2L11": 1,
+          "TGFBR2": 2665
+        },
+        "target_scores": {
+          "BCL2L11": 0.4,
+          "TGFBR2": 0.0
+        },
+        "best_target_gene": "BCL2L11",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "BCL2L11",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": true
+          },
+          {
+            "gene": "BAK1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K5",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "C19orf26",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "BCL2L11": "train",
+          "TGFBR2": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "MAP4K3",
+            "distance": 1.276573,
+            "target_genes": [
+              "MAP4K3"
+            ]
+          },
+          {
+            "condition": "MAP4K5",
+            "distance": 1.280313,
+            "target_genes": [
+              "MAP4K5"
+            ]
+          },
+          {
+            "condition": "BCL2L11",
+            "distance": 1.317185,
+            "target_genes": [
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "C19orf26",
+            "distance": 1.366906,
+            "target_genes": [
+              "C19orf26"
+            ]
+          },
+          {
+            "condition": "BAK1+BCL2L11",
+            "distance": 1.370462,
+            "target_genes": [
+              "BAK1",
+              "BCL2L11"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "BPGM+ZBTB1",
+        "target_genes": [
+          "BPGM",
+          "ZBTB1"
+        ],
+        "target_ranks": {
+          "BPGM": 2,
+          "ZBTB1": 477
+        },
+        "target_scores": {
+          "BPGM": 0.4,
+          "ZBTB1": 0.0
+        },
+        "best_target_gene": "BPGM",
+        "best_target_rank": 2,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "BPGM",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": true
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00327",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "BPGM": "train",
+          "ZBTB1": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "BPGM+SAMD1",
+            "distance": 1.777665,
+            "target_genes": [
+              "BPGM",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "BPGM",
+            "distance": 2.302399,
+            "target_genes": [
+              "BPGM"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 2.433141,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 2.523232,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 2.596109,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "C19orf26+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "C19orf26"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2662,
+          "C19orf26": 3
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "C19orf26": 0.2
+        },
+        "best_target_gene": "C19orf26",
+        "best_target_rank": 3,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PRTG",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "IGDCC3",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "C19orf26",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "IER5L",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATL1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "C19orf26": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "ATL1",
+            "distance": 1.811759,
+            "target_genes": [
+              "ATL1"
+            ]
+          },
+          {
+            "condition": "IGDCC3",
+            "distance": 2.133723,
+            "target_genes": [
+              "IGDCC3"
+            ]
+          },
+          {
+            "condition": "PRTG",
+            "distance": 2.209551,
+            "target_genes": [
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "C19orf26",
+            "distance": 2.235427,
+            "target_genes": [
+              "C19orf26"
+            ]
+          },
+          {
+            "condition": "IER5L",
+            "distance": 2.287289,
+            "target_genes": [
+              "IER5L"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "CBL+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "CBL"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2663,
+          "CBL": 1
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "CBL": 0.4
+        },
+        "best_target_gene": "CBL",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "CBL",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": true
+          },
+          {
+            "gene": "PRTG",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "BPGM",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00327",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "CBL": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL",
+            "distance": 1.687774,
+            "target_genes": [
+              "CBL"
+            ]
+          },
+          {
+            "condition": "PRTG",
+            "distance": 2.07215,
+            "target_genes": [
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "BPGM",
+            "distance": 2.164395,
+            "target_genes": [
+              "BPGM"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 2.269951,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12",
+            "distance": 2.30737,
+            "target_genes": [
+              "PTPN12"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "CBL+UBASH3A",
+        "target_genes": [
+          "CBL",
+          "UBASH3A"
+        ],
+        "target_ranks": {
+          "CBL": 6,
+          "UBASH3A": 1717
+        },
+        "target_scores": {
+          "CBL": 0.2,
+          "UBASH3A": 0.0
+        },
+        "best_target_gene": "CBL",
+        "best_target_rank": 6,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN9",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATL1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "DNAJC15",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SERP2",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "CBL": "train",
+          "UBASH3A": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 1.59454,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "ATL1",
+            "distance": 2.073231,
+            "target_genes": [
+              "ATL1"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 2.079525,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 2.177437,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 2.189098,
+            "target_genes": [
+              "PTPN1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "CBL+UBASH3B",
+        "target_genes": [
+          "CBL",
+          "UBASH3B"
+        ],
+        "target_ranks": {
+          "CBL": 1,
+          "UBASH3B": 1153
+        },
+        "target_scores": {
+          "CBL": 0.6,
+          "UBASH3B": 0.0
+        },
+        "best_target_gene": "CBL",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "CBL",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 2,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CNN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "CBL": "train",
+          "UBASH3B": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 2.054484,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 2.257469,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "CBL+CNN1",
+            "distance": 2.2591,
+            "target_genes": [
+              "CBL",
+              "CNN1"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 2.573124,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 2.580541,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "CEBPA+ZC3HAV1",
+        "target_genes": [
+          "ZC3HAV1",
+          "CEBPA"
+        ],
+        "target_ranks": {
+          "ZC3HAV1": 4038,
+          "CEBPA": 1
+        },
+        "target_scores": {
+          "ZC3HAV1": 0.0,
+          "CEBPA": 0.8
+        },
+        "best_target_gene": "CEBPA",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "CEBPA",
+            "rank": 1,
+            "score": 0.8,
+            "is_target": true
+          },
+          {
+            "gene": "CEBPB",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "KLF1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CEBPE",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOSB",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZC3HAV1": "test",
+          "CEBPA": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CEBPA",
+            "distance": 2.050283,
+            "target_genes": [
+              "CEBPA"
+            ]
+          },
+          {
+            "condition": "CEBPA+CEBPB",
+            "distance": 2.292175,
+            "target_genes": [
+              "CEBPA",
+              "CEBPB"
+            ]
+          },
+          {
+            "condition": "CEBPA+KLF1",
+            "distance": 2.678966,
+            "target_genes": [
+              "CEBPA",
+              "KLF1"
+            ]
+          },
+          {
+            "condition": "CEBPA+CEBPE",
+            "distance": 2.922962,
+            "target_genes": [
+              "CEBPA",
+              "CEBPE"
+            ]
+          },
+          {
+            "condition": "CEBPB+FOSB",
+            "distance": 3.830569,
+            "target_genes": [
+              "CEBPB",
+              "FOSB"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "CEBPE+ZC3HAV1",
+        "target_genes": [
+          "ZC3HAV1",
+          "CEBPE"
+        ],
+        "target_ranks": {
+          "ZC3HAV1": 4038,
+          "CEBPE": 3
+        },
+        "target_scores": {
+          "ZC3HAV1": 0.0,
+          "CEBPE": 0.2
+        },
+        "best_target_gene": "CEBPE",
+        "best_target_rank": 3,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "RUNX1T1",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CELF2",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CEBPE",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "FOSB",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBFA2T3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZC3HAV1": "test",
+          "CEBPE": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CELF2",
+            "distance": 1.610149,
+            "target_genes": [
+              "CELF2"
+            ]
+          },
+          {
+            "condition": "FOSB",
+            "distance": 1.927077,
+            "target_genes": [
+              "FOSB"
+            ]
+          },
+          {
+            "condition": "CEBPE+RUNX1T1",
+            "distance": 2.027438,
+            "target_genes": [
+              "CEBPE",
+              "RUNX1T1"
+            ]
+          },
+          {
+            "condition": "CBFA2T3",
+            "distance": 2.361903,
+            "target_genes": [
+              "CBFA2T3"
+            ]
+          },
+          {
+            "condition": "RUNX1T1",
+            "distance": 2.385073,
+            "target_genes": [
+              "RUNX1T1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "CNN1+UBASH3A",
+        "target_genes": [
+          "CNN1",
+          "UBASH3A"
+        ],
+        "target_ranks": {
+          "CNN1": 4,
+          "UBASH3A": 1717
+        },
+        "target_scores": {
+          "CNN1": 0.2,
+          "UBASH3A": 0.0
+        },
+        "best_target_gene": "CNN1",
+        "best_target_rank": 4,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "CBL",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 2,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CNN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "CNN1": "train",
+          "UBASH3A": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+CNN1",
+            "distance": 1.239247,
+            "target_genes": [
+              "CBL",
+              "CNN1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 3.095468,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 3.173488,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 3.176815,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 3.411092,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "CNN1+UBASH3B",
+        "target_genes": [
+          "UBASH3B",
+          "CNN1"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1153,
+          "CNN1": 4
+        },
+        "target_scores": {
+          "UBASH3B": 0.0,
+          "CNN1": 0.2
+        },
+        "best_target_gene": "CNN1",
+        "best_target_rank": 4,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "CBL",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 2,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CNN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test",
+          "CNN1": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+CNN1",
+            "distance": 0.944266,
+            "target_genes": [
+              "CBL",
+              "CNN1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 2.742495,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 3.124101,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 3.22549,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 3.29273,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "DLX2+ZBTB10",
+        "target_genes": [
+          "DLX2",
+          "ZBTB10"
+        ],
+        "target_ranks": {
+          "DLX2": 2765,
+          "ZBTB10": 4349
+        },
+        "target_scores": {
+          "DLX2": 0.0,
+          "ZBTB10": 0.0
+        },
+        "best_target_gene": "DLX2",
+        "best_target_rank": 2765,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXA3",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "FOXL2",
+            "rank": 2,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "FOXF1",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HOXB9",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "DLX2": "train",
+          "ZBTB10": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "FOXA3+FOXL2",
+            "distance": 4.296136,
+            "target_genes": [
+              "FOXA3",
+              "FOXL2"
+            ]
+          },
+          {
+            "condition": "FOXF1+FOXL2",
+            "distance": 4.655883,
+            "target_genes": [
+              "FOXF1",
+              "FOXL2"
+            ]
+          },
+          {
+            "condition": "FOXA3+HOXB9",
+            "distance": 4.983074,
+            "target_genes": [
+              "FOXA3",
+              "HOXB9"
+            ]
+          },
+          {
+            "condition": "FOXA1+FOXL2",
+            "distance": 5.341855,
+            "target_genes": [
+              "FOXA1",
+              "FOXL2"
+            ]
+          },
+          {
+            "condition": "FOXA3+FOXF1",
+            "distance": 5.388823,
+            "target_genes": [
+              "FOXA3",
+              "FOXF1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "ELMSAN1+ZBTB10",
+        "target_genes": [
+          "ZBTB10",
+          "ELMSAN1"
+        ],
+        "target_ranks": {
+          "ZBTB10": 4348,
+          "ELMSAN1": 553
+        },
+        "target_scores": {
+          "ZBTB10": 0.0,
+          "ELMSAN1": 0.0
+        },
+        "best_target_gene": "ELMSAN1",
+        "best_target_rank": 553,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXF1",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA1",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "HOXB9",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA3",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MIDN",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATP8A2",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "GPR12",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "USP12-AS2",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TNFRSF19",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-428O18.6",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZBTB10": "test",
+          "ELMSAN1": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "FOXA3+FOXF1",
+            "distance": 2.824171,
+            "target_genes": [
+              "FOXA3",
+              "FOXF1"
+            ]
+          },
+          {
+            "condition": "FOXA1+FOXF1",
+            "distance": 2.83395,
+            "target_genes": [
+              "FOXA1",
+              "FOXF1"
+            ]
+          },
+          {
+            "condition": "MIDN",
+            "distance": 2.896734,
+            "target_genes": [
+              "MIDN"
+            ]
+          },
+          {
+            "condition": "FOXF1+HOXB9",
+            "distance": 2.906302,
+            "target_genes": [
+              "FOXF1",
+              "HOXB9"
+            ]
+          },
+          {
+            "condition": "FOXA1+HOXB9",
+            "distance": 2.930777,
+            "target_genes": [
+              "FOXA1",
+              "HOXB9"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "ETS2+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "ETS2"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2662,
+          "ETS2": 3
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "ETS2": 0.2
+        },
+        "best_target_gene": "ETS2",
+        "best_target_rank": 3,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "MAPK1",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "RUNX1T1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ETS2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "CNN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "IGDCC3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ISL2",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATP8A2",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "GPR12",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "USP12-AS2",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TNFRSF19",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "ETS2": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "ETS2",
+            "distance": 1.472129,
+            "target_genes": [
+              "ETS2"
+            ]
+          },
+          {
+            "condition": "ISL2",
+            "distance": 2.129113,
+            "target_genes": [
+              "ISL2"
+            ]
+          },
+          {
+            "condition": "RUNX1T1",
+            "distance": 2.195421,
+            "target_genes": [
+              "RUNX1T1"
+            ]
+          },
+          {
+            "condition": "IGDCC3+MAPK1",
+            "distance": 2.225631,
+            "target_genes": [
+              "IGDCC3",
+              "MAPK1"
+            ]
+          },
+          {
+            "condition": "CNN1+MAPK1",
+            "distance": 2.258007,
+            "target_genes": [
+              "CNN1",
+              "MAPK1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "FOSB+UBASH3B",
+        "target_genes": [
+          "UBASH3B",
+          "FOSB"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1162,
+          "FOSB": 6
+        },
+        "target_scores": {
+          "UBASH3B": 0.0,
+          "FOSB": 0.2
+        },
+        "best_target_gene": "FOSB",
+        "best_target_rank": 6,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CELF2",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "KIAA1804",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ARRDC3",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CEBPE",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOSB",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test",
+          "FOSB": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CELF2",
+            "distance": 1.765398,
+            "target_genes": [
+              "CELF2"
+            ]
+          },
+          {
+            "condition": "KIAA1804",
+            "distance": 1.953231,
+            "target_genes": [
+              "KIAA1804"
+            ]
+          },
+          {
+            "condition": "FOSB+PTPN12",
+            "distance": 1.959001,
+            "target_genes": [
+              "FOSB",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "CEBPE+PTPN12",
+            "distance": 2.042939,
+            "target_genes": [
+              "CEBPE",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "ARRDC3",
+            "distance": 2.098884,
+            "target_genes": [
+              "ARRDC3"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "FOXL2+ZNF318",
+        "target_genes": [
+          "FOXL2",
+          "ZNF318"
+        ],
+        "target_ranks": {
+          "FOXL2": 1,
+          "ZNF318": 5002
+        },
+        "target_scores": {
+          "FOXL2": 0.4,
+          "ZNF318": 0.0
+        },
+        "best_target_gene": "FOXL2",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXL2",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": true
+          },
+          {
+            "gene": "C3orf72",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "POU3F2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MEIS1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-428O18.6",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "CDX2",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "GPR12",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "FOXL2": "train",
+          "ZNF318": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "C3orf72",
+            "distance": 1.582846,
+            "target_genes": [
+              "C3orf72"
+            ]
+          },
+          {
+            "condition": "FOXL2",
+            "distance": 2.057767,
+            "target_genes": [
+              "FOXL2"
+            ]
+          },
+          {
+            "condition": "FOXA3",
+            "distance": 2.072946,
+            "target_genes": [
+              "FOXA3"
+            ]
+          },
+          {
+            "condition": "FOXL2+MEIS1",
+            "distance": 2.258522,
+            "target_genes": [
+              "FOXL2",
+              "MEIS1"
+            ]
+          },
+          {
+            "condition": "POU3F2",
+            "distance": 2.347684,
+            "target_genes": [
+              "POU3F2"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "HOXC13+ZC3HAV1",
+        "target_genes": [
+          "ZC3HAV1",
+          "HOXC13"
+        ],
+        "target_ranks": {
+          "ZC3HAV1": 4023,
+          "HOXC13": 2
+        },
+        "target_scores": {
+          "ZC3HAV1": 0.0,
+          "HOXC13": 0.2
+        },
+        "best_target_gene": "HOXC13",
+        "best_target_rank": 2,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXA3",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HOXC13",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "KIAA1804",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MEIS1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZC3HAV1": "test",
+          "HOXC13": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "HOXC13",
+            "distance": 1.988921,
+            "target_genes": [
+              "HOXC13"
+            ]
+          },
+          {
+            "condition": "MEIS1",
+            "distance": 2.2862,
+            "target_genes": [
+              "MEIS1"
+            ]
+          },
+          {
+            "condition": "KIAA1804",
+            "distance": 2.331073,
+            "target_genes": [
+              "KIAA1804"
+            ]
+          },
+          {
+            "condition": "FOXA3",
+            "distance": 2.507087,
+            "target_genes": [
+              "FOXA3"
+            ]
+          },
+          {
+            "condition": "FOXA1",
+            "distance": 2.556239,
+            "target_genes": [
+              "FOXA1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "IGDCC3+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "IGDCC3"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2662,
+          "IGDCC3": 1
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "IGDCC3": 0.6
+        },
+        "best_target_gene": "IGDCC3",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "IGDCC3",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "PRTG",
+            "rank": 2,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "ETS2",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 4,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 5,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00540",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "IGDCC3": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "IGDCC3",
+            "distance": 0.826247,
+            "target_genes": [
+              "IGDCC3"
+            ]
+          },
+          {
+            "condition": "PRTG",
+            "distance": 1.256315,
+            "target_genes": [
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "IGDCC3+PRTG",
+            "distance": 1.495939,
+            "target_genes": [
+              "IGDCC3",
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "ETS2+PRTG",
+            "distance": 2.205627,
+            "target_genes": [
+              "ETS2",
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "ETS2+IGDCC3",
+            "distance": 2.329216,
+            "target_genes": [
+              "ETS2",
+              "IGDCC3"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "IGDCC3+ZBTB25",
+        "target_genes": [
+          "ZBTB25",
+          "IGDCC3"
+        ],
+        "target_ranks": {
+          "ZBTB25": 478,
+          "IGDCC3": 2
+        },
+        "target_scores": {
+          "ZBTB25": 0.0,
+          "IGDCC3": 0.2
+        },
+        "best_target_gene": "IGDCC3",
+        "best_target_rank": 2,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PRTG",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "IGDCC3",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATL1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 7,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "P2RX7",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZBTB25": "test",
+          "IGDCC3": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "IGDCC3+PRTG",
+            "distance": 2.590224,
+            "target_genes": [
+              "IGDCC3",
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 2.740795,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 3.009127,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "PRTG",
+            "distance": 3.0549,
+            "target_genes": [
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "ATL1",
+            "distance": 3.100219,
+            "target_genes": [
+              "ATL1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "KLF1+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "KLF1"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2663,
+          "KLF1": 1
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "KLF1": 1.0
+        },
+        "best_target_gene": "KLF1",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "KLF1",
+            "rank": 1,
+            "score": 1.0,
+            "is_target": true
+          },
+          {
+            "gene": "AHR",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP2K6",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "BAK1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "KLF1": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "KLF1",
+            "distance": 1.15791,
+            "target_genes": [
+              "KLF1"
+            ]
+          },
+          {
+            "condition": "BAK1+KLF1",
+            "distance": 1.24206,
+            "target_genes": [
+              "BAK1",
+              "KLF1"
+            ]
+          },
+          {
+            "condition": "KLF1+MAP2K6",
+            "distance": 1.794715,
+            "target_genes": [
+              "KLF1",
+              "MAP2K6"
+            ]
+          },
+          {
+            "condition": "AHR+KLF1",
+            "distance": 2.019289,
+            "target_genes": [
+              "AHR",
+              "KLF1"
+            ]
+          },
+          {
+            "condition": "FOXA1+KLF1",
+            "distance": 3.081473,
+            "target_genes": [
+              "FOXA1",
+              "KLF1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "MAPK1+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "MAPK1"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2663,
+          "MAPK1": 1
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "MAPK1": 0.6
+        },
+        "best_target_gene": "MAPK1",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "MAPK1",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "ETS2",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "MAP7D1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CNN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "IGDCC3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-271M24.2",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "GPR12",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TNFRSF19",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "USP12-AS2",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "MAPK1": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "ETS2",
+            "distance": 1.092819,
+            "target_genes": [
+              "ETS2"
+            ]
+          },
+          {
+            "condition": "MAPK1",
+            "distance": 1.182177,
+            "target_genes": [
+              "MAPK1"
+            ]
+          },
+          {
+            "condition": "CNN1+MAPK1",
+            "distance": 2.231437,
+            "target_genes": [
+              "CNN1",
+              "MAPK1"
+            ]
+          },
+          {
+            "condition": "ETS2+MAP7D1",
+            "distance": 2.8428,
+            "target_genes": [
+              "ETS2",
+              "MAP7D1"
+            ]
+          },
+          {
+            "condition": "IGDCC3+MAPK1",
+            "distance": 2.988129,
+            "target_genes": [
+              "IGDCC3",
+              "MAPK1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "OSR2+UBASH3B",
+        "target_genes": [
+          "OSR2",
+          "UBASH3B"
+        ],
+        "target_ranks": {
+          "OSR2": 5,
+          "UBASH3B": 1155
+        },
+        "target_scores": {
+          "OSR2": 0.2,
+          "UBASH3B": 0.0
+        },
+        "best_target_gene": "OSR2",
+        "best_target_rank": 5,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RUNX1T1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ISL2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "BAK1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "OSR2",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "MAP7D1",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "OSR2": "train",
+          "UBASH3B": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "OSR2+PTPN12",
+            "distance": 1.376702,
+            "target_genes": [
+              "OSR2",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "RUNX1T1",
+            "distance": 2.014456,
+            "target_genes": [
+              "RUNX1T1"
+            ]
+          },
+          {
+            "condition": "ISL2",
+            "distance": 2.095864,
+            "target_genes": [
+              "ISL2"
+            ]
+          },
+          {
+            "condition": "MAP7D1",
+            "distance": 2.240153,
+            "target_genes": [
+              "MAP7D1"
+            ]
+          },
+          {
+            "condition": "BAK1",
+            "distance": 2.287615,
+            "target_genes": [
+              "BAK1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "PRTG+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "PRTG"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2662,
+          "PRTG": 1
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "PRTG": 0.6
+        },
+        "best_target_gene": "PRTG",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PRTG",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "IGDCC3",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "ETS2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATL1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00327",
+            "rank": 5,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "PRTG": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "PRTG",
+            "distance": 0.787946,
+            "target_genes": [
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "IGDCC3+PRTG",
+            "distance": 1.337723,
+            "target_genes": [
+              "IGDCC3",
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "IGDCC3",
+            "distance": 1.712594,
+            "target_genes": [
+              "IGDCC3"
+            ]
+          },
+          {
+            "condition": "ETS2+PRTG",
+            "distance": 2.311063,
+            "target_genes": [
+              "ETS2",
+              "PRTG"
+            ]
+          },
+          {
+            "condition": "ATL1",
+            "distance": 2.869545,
+            "target_genes": [
+              "ATL1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "PTPN12+UBASH3A",
+        "target_genes": [
+          "PTPN12",
+          "UBASH3A"
+        ],
+        "target_ranks": {
+          "PTPN12": 1,
+          "UBASH3A": 1717
+        },
+        "target_scores": {
+          "PTPN12": 0.6,
+          "UBASH3A": 0.0
+        },
+        "best_target_gene": "PTPN12",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "PTPN12": "train",
+          "UBASH3A": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 0.955661,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 1.317642,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 1.730701,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 1.810357,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 2.452693,
+            "target_genes": [
+              "PTPN1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "PTPN12+UBASH3B",
+        "target_genes": [
+          "PTPN12",
+          "UBASH3B"
+        ],
+        "target_ranks": {
+          "PTPN12": 1,
+          "UBASH3B": 1153
+        },
+        "target_scores": {
+          "PTPN12": 0.6,
+          "UBASH3B": 0.0
+        },
+        "best_target_gene": "PTPN12",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "PTPN12": "train",
+          "UBASH3B": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 0.852221,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 1.163932,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 1.819002,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 1.856229,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 2.267611,
+            "target_genes": [
+              "PTPN1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "PTPN12+ZBTB10",
+        "target_genes": [
+          "PTPN12",
+          "ZBTB10"
+        ],
+        "target_ranks": {
+          "PTPN12": 3958,
+          "ZBTB10": 4350
+        },
+        "target_scores": {
+          "PTPN12": 0.0,
+          "ZBTB10": 0.0
+        },
+        "best_target_gene": "PTPN12",
+        "best_target_rank": 3958,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXA3",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "POU3F2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXF1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CITED1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBFA2T3",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HOXC13",
+            "rank": 7,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "PTPN12": "train",
+          "ZBTB10": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "HOXC13",
+            "distance": 2.798311,
+            "target_genes": [
+              "HOXC13"
+            ]
+          },
+          {
+            "condition": "CITED1",
+            "distance": 2.843289,
+            "target_genes": [
+              "CITED1"
+            ]
+          },
+          {
+            "condition": "FOXA3",
+            "distance": 2.847867,
+            "target_genes": [
+              "FOXA3"
+            ]
+          },
+          {
+            "condition": "CBFA2T3+POU3F2",
+            "distance": 2.936405,
+            "target_genes": [
+              "CBFA2T3",
+              "POU3F2"
+            ]
+          },
+          {
+            "condition": "FOXA1+FOXF1",
+            "distance": 3.038375,
+            "target_genes": [
+              "FOXA1",
+              "FOXF1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "PTPN12+ZBTB25",
+        "target_genes": [
+          "PTPN12",
+          "ZBTB25"
+        ],
+        "target_ranks": {
+          "PTPN12": 1,
+          "ZBTB25": 478
+        },
+        "target_scores": {
+          "PTPN12": 0.6,
+          "ZBTB25": 0.0
+        },
+        "best_target_gene": "PTPN12",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "PTPN12": "train",
+          "ZBTB25": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 0.959381,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 1.228072,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 1.837495,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 1.926982,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 2.339613,
+            "target_genes": [
+              "PTPN1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "PTPN9+UBASH3B",
+        "target_genes": [
+          "UBASH3B",
+          "PTPN9"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1153,
+          "PTPN9": 2
+        },
+        "target_scores": {
+          "UBASH3B": 0.0,
+          "PTPN9": 0.4
+        },
+        "best_target_gene": "PTPN9",
+        "best_target_rank": 2,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": true
+          },
+          {
+            "gene": "CBL",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test",
+          "PTPN9": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 0.767389,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 1.138776,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 1.309913,
+            "target_genes": [
+              "PTPN1"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 2.172499,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 2.31995,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "RHOXF2BB+ZBTB25",
+        "target_genes": [
+          "RHOXF2BB",
+          "ZBTB25"
+        ],
+        "target_ranks": {
+          "RHOXF2BB": 4,
+          "ZBTB25": 480
+        },
+        "target_scores": {
+          "RHOXF2BB": 0.2,
+          "ZBTB25": 0.0
+        },
+        "best_target_gene": "RHOXF2BB",
+        "best_target_rank": 4,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN9",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATL1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RHOXF2BB",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CLDN6",
+            "rank": 7,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SERP2",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "RHOXF2BB": "train",
+          "ZBTB25": "test"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "RHOXF2BB",
+            "distance": 2.602986,
+            "target_genes": [
+              "RHOXF2BB"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 2.811325,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 2.953386,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "ATL1",
+            "distance": 3.014286,
+            "target_genes": [
+              "ATL1"
+            ]
+          },
+          {
+            "condition": "CLDN6",
+            "distance": 3.117637,
+            "target_genes": [
+              "CLDN6"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "SAMD1+TGFBR2",
+        "target_genes": [
+          "TGFBR2",
+          "SAMD1"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2662,
+          "SAMD1": 4
+        },
+        "target_scores": {
+          "TGFBR2": 0.0,
+          "SAMD1": 0.2
+        },
+        "best_target_gene": "SAMD1",
+        "best_target_rank": 4,
+        "hit_at": {
+          "1": false,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "PRTG",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "IGDCC3",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CDKN1B",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "CDX2",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test",
+          "SAMD1": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "SAMD1",
+            "distance": 1.539332,
+            "target_genes": [
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 2.288264,
+            "target_genes": [
+              "PTPN1"
+            ]
+          },
+          {
+            "condition": "IGDCC3",
+            "distance": 2.295729,
+            "target_genes": [
+              "IGDCC3"
+            ]
+          },
+          {
+            "condition": "CDKN1B",
+            "distance": 2.297992,
+            "target_genes": [
+              "CDKN1B"
+            ]
+          },
+          {
+            "condition": "PRTG",
+            "distance": 2.317816,
+            "target_genes": [
+              "PRTG"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "SAMD1+UBASH3B",
+        "target_genes": [
+          "UBASH3B",
+          "SAMD1"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1154,
+          "SAMD1": 1
+        },
+        "target_scores": {
+          "UBASH3B": 0.0,
+          "SAMD1": 0.6
+        },
+        "best_target_gene": "SAMD1",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "SAMD1",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "BPGM",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CCDC122",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SERP2",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test",
+          "SAMD1": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 1.419879,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 2.102706,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 2.118899,
+            "target_genes": [
+              "PTPN1"
+            ]
+          },
+          {
+            "condition": "BPGM+SAMD1",
+            "distance": 2.21067,
+            "target_genes": [
+              "BPGM",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "SAMD1",
+            "distance": 2.421516,
+            "target_genes": [
+              "SAMD1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "SAMD1+ZBTB1",
+        "target_genes": [
+          "ZBTB1",
+          "SAMD1"
+        ],
+        "target_ranks": {
+          "ZBTB1": 492,
+          "SAMD1": 1
+        },
+        "target_scores": {
+          "ZBTB1": 0.0,
+          "SAMD1": 0.6
+        },
+        "best_target_gene": "SAMD1",
+        "best_target_rank": 1,
+        "hit_at": {
+          "1": true,
+          "5": true,
+          "10": true,
+          "20": true,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.5,
+          "5": 0.5,
+          "10": 0.5,
+          "20": 0.5,
+          "40": 0.5
+        },
+        "top_predictions": [
+          {
+            "gene": "SAMD1",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": true
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "BPGM",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CCDC122",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SERP2",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZBTB1": "test",
+          "SAMD1": "train"
+        },
+        "target_split_group": "test+train",
+        "nearest_neighbors": [
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 2.07662,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "SAMD1",
+            "distance": 2.929781,
+            "target_genes": [
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "BPGM+SAMD1",
+            "distance": 2.998082,
+            "target_genes": [
+              "BPGM",
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 3.040449,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 3.099049,
+            "target_genes": [
+              "PTPN1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "SGK1+TBX3",
+        "target_genes": [
+          "SGK1",
+          "TBX3"
+        ],
+        "target_ranks": {
+          "SGK1": 4810,
+          "TBX3": 267
+        },
+        "target_scores": {
+          "SGK1": 0.0,
+          "TBX3": 0.0
+        },
+        "best_target_gene": "TBX3",
+        "best_target_rank": 267,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXA3",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "IER5L",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CDKN1A",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CDKN1B",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "GPR12",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "USP12-AS2",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-428O18.6",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "CDX2",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "SGK1": "validation",
+          "TBX3": "test"
+        },
+        "target_split_group": "test+validation",
+        "nearest_neighbors": [
+          {
+            "condition": "CDKN1B",
+            "distance": 2.142734,
+            "target_genes": [
+              "CDKN1B"
+            ]
+          },
+          {
+            "condition": "SAMD1",
+            "distance": 2.23255,
+            "target_genes": [
+              "SAMD1"
+            ]
+          },
+          {
+            "condition": "FOXA3",
+            "distance": 2.459634,
+            "target_genes": [
+              "FOXA3"
+            ]
+          },
+          {
+            "condition": "CDKN1A",
+            "distance": 2.465006,
+            "target_genes": [
+              "CDKN1A"
+            ]
+          },
+          {
+            "condition": "IER5L",
+            "distance": 2.497914,
+            "target_genes": [
+              "IER5L"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "SNAI1+UBASH3B",
+        "target_genes": [
+          "UBASH3B",
+          "SNAI1"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1151,
+          "SNAI1": 1430
+        },
+        "target_scores": {
+          "UBASH3B": 0.0,
+          "SNAI1": 0.0
+        },
+        "best_target_gene": "UBASH3B",
+        "best_target_rank": 1151,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN9",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXF1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CDKN1B",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "USP12-AS2",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-428O18.6",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "CDX2",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test",
+          "SNAI1": "validation"
+        },
+        "target_split_group": "test+validation",
+        "nearest_neighbors": [
+          {
+            "condition": "FOXA3",
+            "distance": 2.044429,
+            "target_genes": [
+              "FOXA3"
+            ]
+          },
+          {
+            "condition": "PTPN9",
+            "distance": 2.130364,
+            "target_genes": [
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "CDKN1B",
+            "distance": 2.135446,
+            "target_genes": [
+              "CDKN1B"
+            ]
+          },
+          {
+            "condition": "FOXF1",
+            "distance": 2.257135,
+            "target_genes": [
+              "FOXF1"
+            ]
+          },
+          {
+            "condition": "FOXA1",
+            "distance": 2.270911,
+            "target_genes": [
+              "FOXA1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "SNAI1+ZBTB10",
+        "target_genes": [
+          "ZBTB10",
+          "SNAI1"
+        ],
+        "target_ranks": {
+          "ZBTB10": 4350,
+          "SNAI1": 1432
+        },
+        "target_scores": {
+          "ZBTB10": 0.0,
+          "SNAI1": 0.0
+        },
+        "best_target_gene": "SNAI1",
+        "best_target_rank": 1432,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXA3",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "FOXF1",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "FOXL2",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "HOXB9",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HOXA13",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "GPR12",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-271M24.2",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZBTB10": "test",
+          "SNAI1": "validation"
+        },
+        "target_split_group": "test+validation",
+        "nearest_neighbors": [
+          {
+            "condition": "FOXA3+FOXL2",
+            "distance": 4.012887,
+            "target_genes": [
+              "FOXA3",
+              "FOXL2"
+            ]
+          },
+          {
+            "condition": "FOXF1+FOXL2",
+            "distance": 4.082323,
+            "target_genes": [
+              "FOXF1",
+              "FOXL2"
+            ]
+          },
+          {
+            "condition": "FOXA3+HOXB9",
+            "distance": 4.359833,
+            "target_genes": [
+              "FOXA3",
+              "HOXB9"
+            ]
+          },
+          {
+            "condition": "FOXA3+FOXF1",
+            "distance": 4.531694,
+            "target_genes": [
+              "FOXA3",
+              "FOXF1"
+            ]
+          },
+          {
+            "condition": "HOXA13",
+            "distance": 4.599668,
+            "target_genes": [
+              "HOXA13"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "TBX2+TBX3",
+        "target_genes": [
+          "TBX3",
+          "TBX2"
+        ],
+        "target_ranks": {
+          "TBX3": 267,
+          "TBX2": 2452
+        },
+        "target_scores": {
+          "TBX3": 0.0,
+          "TBX2": 0.0
+        },
+        "best_target_gene": "TBX3",
+        "best_target_rank": 267,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN9",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ARRDC3",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HK2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "KIF18B",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CDKN1B",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-428O18.6",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "CDX2",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FLT1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L2",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TBX3": "test",
+          "TBX2": "validation"
+        },
+        "target_split_group": "test+validation",
+        "nearest_neighbors": [
+          {
+            "condition": "PTPN9",
+            "distance": 2.081841,
+            "target_genes": [
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "CDKN1B",
+            "distance": 2.248242,
+            "target_genes": [
+              "CDKN1B"
+            ]
+          },
+          {
+            "condition": "ARRDC3",
+            "distance": 2.294149,
+            "target_genes": [
+              "ARRDC3"
+            ]
+          },
+          {
+            "condition": "KIF18B",
+            "distance": 2.375589,
+            "target_genes": [
+              "KIF18B"
+            ]
+          },
+          {
+            "condition": "HK2",
+            "distance": 2.385758,
+            "target_genes": [
+              "HK2"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "TBX3",
+        "target_genes": [
+          "TBX3"
+        ],
+        "target_ranks": {
+          "TBX3": 268
+        },
+        "target_scores": {
+          "TBX3": 0.0
+        },
+        "best_target_gene": "TBX3",
+        "best_target_rank": 268,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXF1",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K5",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ARRDC3",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HK2",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PLK4",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L2",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TBX3": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "FOXF1",
+            "distance": 1.548412,
+            "target_genes": [
+              "FOXF1"
+            ]
+          },
+          {
+            "condition": "MAP4K5",
+            "distance": 1.549716,
+            "target_genes": [
+              "MAP4K5"
+            ]
+          },
+          {
+            "condition": "HK2",
+            "distance": 1.569967,
+            "target_genes": [
+              "HK2"
+            ]
+          },
+          {
+            "condition": "PLK4",
+            "distance": 1.589765,
+            "target_genes": [
+              "PLK4"
+            ]
+          },
+          {
+            "condition": "ARRDC3",
+            "distance": 1.592301,
+            "target_genes": [
+              "ARRDC3"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "TGFBR2",
+        "target_genes": [
+          "TGFBR2"
+        ],
+        "target_ranks": {
+          "TGFBR2": 2665
+        },
+        "target_scores": {
+          "TGFBR2": 0.0
+        },
+        "best_target_gene": "TGFBR2",
+        "best_target_rank": 2665,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "BCL2L11",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "BAK1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K5",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAML2",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TGFBR2": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "BCL2L11",
+            "distance": 0.743933,
+            "target_genes": [
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "MAP4K3",
+            "distance": 0.936918,
+            "target_genes": [
+              "MAP4K3"
+            ]
+          },
+          {
+            "condition": "MAP4K5",
+            "distance": 0.982836,
+            "target_genes": [
+              "MAP4K5"
+            ]
+          },
+          {
+            "condition": "BAK1+BCL2L11",
+            "distance": 1.034586,
+            "target_genes": [
+              "BAK1",
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "MAML2",
+            "distance": 1.068587,
+            "target_genes": [
+              "MAML2"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "TMSB4X",
+        "target_genes": [
+          "TMSB4X"
+        ],
+        "target_ranks": {
+          "TMSB4X": 3848
+        },
+        "target_scores": {
+          "TMSB4X": 0.0
+        },
+        "best_target_gene": "TMSB4X",
+        "best_target_rank": 3848,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "KMT2A",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RUNX1T1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "KIF2C",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ARRDC3",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "BCL2L11",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TMSB4X": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "KIF2C",
+            "distance": 1.376026,
+            "target_genes": [
+              "KIF2C"
+            ]
+          },
+          {
+            "condition": "BCL2L11",
+            "distance": 1.434179,
+            "target_genes": [
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "KMT2A",
+            "distance": 1.479323,
+            "target_genes": [
+              "KMT2A"
+            ]
+          },
+          {
+            "condition": "ARRDC3",
+            "distance": 1.561105,
+            "target_genes": [
+              "ARRDC3"
+            ]
+          },
+          {
+            "condition": "RUNX1T1",
+            "distance": 1.604695,
+            "target_genes": [
+              "RUNX1T1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "TP73",
+        "target_genes": [
+          "TP73"
+        ],
+        "target_ranks": {
+          "TP73": 3384
+        },
+        "target_scores": {
+          "TP73": 0.0
+        },
+        "best_target_gene": "TP73",
+        "best_target_rank": 3384,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "LYL1",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXL2",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA1",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATL1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PRDM1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBFA2T3",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA3",
+            "rank": 7,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "POU3F2",
+            "rank": 8,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "IER5L",
+            "rank": 9,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "USP12-AS2",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TP73": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "CBFA2T3+PRDM1",
+            "distance": 4.544235,
+            "target_genes": [
+              "CBFA2T3",
+              "PRDM1"
+            ]
+          },
+          {
+            "condition": "IER5L+LYL1",
+            "distance": 4.558184,
+            "target_genes": [
+              "IER5L",
+              "LYL1"
+            ]
+          },
+          {
+            "condition": "ATL1",
+            "distance": 4.695063,
+            "target_genes": [
+              "ATL1"
+            ]
+          },
+          {
+            "condition": "FOXL2+POU3F2",
+            "distance": 4.790924,
+            "target_genes": [
+              "FOXL2",
+              "POU3F2"
+            ]
+          },
+          {
+            "condition": "FOXA1+FOXA3",
+            "distance": 5.020886,
+            "target_genes": [
+              "FOXA1",
+              "FOXA3"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "TSC22D1",
+        "target_genes": [
+          "TSC22D1"
+        ],
+        "target_ranks": {
+          "TSC22D1": 27
+        },
+        "target_scores": {
+          "TSC22D1": 0.0
+        },
+        "best_target_gene": "TSC22D1",
+        "best_target_rank": 27,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": true
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 1.0
+        },
+        "top_predictions": [
+          {
+            "gene": "KMT2A",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "KIF2C",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ARRDC3",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "KIF18B",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L2",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "TSC22D1": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "KIF2C",
+            "distance": 0.915433,
+            "target_genes": [
+              "KIF2C"
+            ]
+          },
+          {
+            "condition": "KMT2A",
+            "distance": 0.915945,
+            "target_genes": [
+              "KMT2A"
+            ]
+          },
+          {
+            "condition": "ARRDC3",
+            "distance": 0.951067,
+            "target_genes": [
+              "ARRDC3"
+            ]
+          },
+          {
+            "condition": "MAP4K3",
+            "distance": 0.952423,
+            "target_genes": [
+              "MAP4K3"
+            ]
+          },
+          {
+            "condition": "KIF18B",
+            "distance": 1.090511,
+            "target_genes": [
+              "KIF18B"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "UBASH3A",
+        "target_genes": [
+          "UBASH3A"
+        ],
+        "target_ranks": {
+          "UBASH3A": 1719
+        },
+        "target_scores": {
+          "UBASH3A": 0.0
+        },
+        "best_target_gene": "UBASH3A",
+        "best_target_rank": 1719,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "MAP4K5",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HK2",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "KIF2C",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ARRDC3",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3A": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "ARRDC3",
+            "distance": 0.768852,
+            "target_genes": [
+              "ARRDC3"
+            ]
+          },
+          {
+            "condition": "MAP4K3",
+            "distance": 0.8109,
+            "target_genes": [
+              "MAP4K3"
+            ]
+          },
+          {
+            "condition": "KIF2C",
+            "distance": 0.825987,
+            "target_genes": [
+              "KIF2C"
+            ]
+          },
+          {
+            "condition": "HK2",
+            "distance": 0.917031,
+            "target_genes": [
+              "HK2"
+            ]
+          },
+          {
+            "condition": "MAP4K5",
+            "distance": 0.928253,
+            "target_genes": [
+              "MAP4K5"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "UBASH3A+UBASH3B",
+        "target_genes": [
+          "UBASH3B",
+          "UBASH3A"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1153,
+          "UBASH3A": 1717
+        },
+        "target_scores": {
+          "UBASH3B": 0.0,
+          "UBASH3A": 0.0
+        },
+        "best_target_gene": "UBASH3B",
+        "best_target_rank": 1153,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN9",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CDKN1B",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test",
+          "UBASH3A": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL",
+            "distance": 1.225059,
+            "target_genes": [
+              "CBL"
+            ]
+          },
+          {
+            "condition": "PTPN9",
+            "distance": 1.473005,
+            "target_genes": [
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12",
+            "distance": 1.480868,
+            "target_genes": [
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "CDKN1B",
+            "distance": 1.653832,
+            "target_genes": [
+              "CDKN1B"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 1.874305,
+            "target_genes": [
+              "PTPN1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "UBASH3B",
+        "target_genes": [
+          "UBASH3B"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1154
+        },
+        "target_scores": {
+          "UBASH3B": 0.0
+        },
+        "best_target_gene": "UBASH3B",
+        "best_target_rank": 1154,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "CBL",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ARRDC3",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HK2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "ATP8A2",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "PTPN9",
+            "distance": 0.85167,
+            "target_genes": [
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "CBL",
+            "distance": 1.089323,
+            "target_genes": [
+              "CBL"
+            ]
+          },
+          {
+            "condition": "HK2",
+            "distance": 1.297962,
+            "target_genes": [
+              "HK2"
+            ]
+          },
+          {
+            "condition": "PTPN12",
+            "distance": 1.342054,
+            "target_genes": [
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "ARRDC3",
+            "distance": 1.423945,
+            "target_genes": [
+              "ARRDC3"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "UBASH3B+ZBTB25",
+        "target_genes": [
+          "UBASH3B",
+          "ZBTB25"
+        ],
+        "target_ranks": {
+          "UBASH3B": 1153,
+          "ZBTB25": 478
+        },
+        "target_scores": {
+          "UBASH3B": 0.0,
+          "ZBTB25": 0.0
+        },
+        "best_target_gene": "ZBTB25",
+        "best_target_rank": 478,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN12",
+            "rank": 1,
+            "score": 0.6,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN9",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 3,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "SAMD1",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00427",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "SLC46A3",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "UBASH3B": "test",
+          "ZBTB25": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL+PTPN9",
+            "distance": 1.197389,
+            "target_genes": [
+              "CBL",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "PTPN12+PTPN9",
+            "distance": 1.375632,
+            "target_genes": [
+              "PTPN12",
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "CBL+PTPN12",
+            "distance": 1.698359,
+            "target_genes": [
+              "CBL",
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN1",
+            "distance": 1.772887,
+            "target_genes": [
+              "PTPN1"
+            ]
+          },
+          {
+            "condition": "PTPN12+SAMD1",
+            "distance": 1.933526,
+            "target_genes": [
+              "PTPN12",
+              "SAMD1"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "ZBTB1",
+        "target_genes": [
+          "ZBTB1"
+        ],
+        "target_ranks": {
+          "ZBTB1": 479
+        },
+        "target_scores": {
+          "ZBTB1": 0.0
+        },
+        "best_target_gene": "ZBTB1",
+        "best_target_rank": 479,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "CBL",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "IER5L",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "EGR1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CDKN1B",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L2",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZBTB1": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL",
+            "distance": 1.886229,
+            "target_genes": [
+              "CBL"
+            ]
+          },
+          {
+            "condition": "PTPN12",
+            "distance": 2.049355,
+            "target_genes": [
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "EGR1",
+            "distance": 2.052,
+            "target_genes": [
+              "EGR1"
+            ]
+          },
+          {
+            "condition": "IER5L",
+            "distance": 2.100213,
+            "target_genes": [
+              "IER5L"
+            ]
+          },
+          {
+            "condition": "CDKN1B",
+            "distance": 2.216856,
+            "target_genes": [
+              "CDKN1B"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "ZBTB10",
+        "target_genes": [
+          "ZBTB10"
+        ],
+        "target_ranks": {
+          "ZBTB10": 4350
+        },
+        "target_scores": {
+          "ZBTB10": 0.0
+        },
+        "best_target_gene": "ZBTB10",
+        "best_target_rank": 4350,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "FOXA1",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "FOXF1",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "FOXL2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "C3orf72",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "FOXA3",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MIDN",
+            "rank": 6,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZBTB10": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "FOXA1+FOXF1",
+            "distance": 2.550274,
+            "target_genes": [
+              "FOXA1",
+              "FOXF1"
+            ]
+          },
+          {
+            "condition": "FOXA3+FOXF1",
+            "distance": 2.624915,
+            "target_genes": [
+              "FOXA3",
+              "FOXF1"
+            ]
+          },
+          {
+            "condition": "MIDN",
+            "distance": 2.757837,
+            "target_genes": [
+              "MIDN"
+            ]
+          },
+          {
+            "condition": "FOXA1+FOXL2",
+            "distance": 2.872589,
+            "target_genes": [
+              "FOXA1",
+              "FOXL2"
+            ]
+          },
+          {
+            "condition": "C3orf72",
+            "distance": 2.910024,
+            "target_genes": [
+              "C3orf72"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "ZBTB25",
+        "target_genes": [
+          "ZBTB25"
+        ],
+        "target_ranks": {
+          "ZBTB25": 479
+        },
+        "target_scores": {
+          "ZBTB25": 0.0
+        },
+        "best_target_gene": "ZBTB25",
+        "best_target_rank": 479,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "PTPN9",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RREB1",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K5",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PTPN12",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CBL",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-271M24.2",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00327",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZBTB25": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "CBL",
+            "distance": 1.062359,
+            "target_genes": [
+              "CBL"
+            ]
+          },
+          {
+            "condition": "PTPN12",
+            "distance": 1.243982,
+            "target_genes": [
+              "PTPN12"
+            ]
+          },
+          {
+            "condition": "PTPN9",
+            "distance": 1.296655,
+            "target_genes": [
+              "PTPN9"
+            ]
+          },
+          {
+            "condition": "RREB1",
+            "distance": 1.616289,
+            "target_genes": [
+              "RREB1"
+            ]
+          },
+          {
+            "condition": "MAP4K5",
+            "distance": 1.750955,
+            "target_genes": [
+              "MAP4K5"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "ZC3HAV1",
+        "target_genes": [
+          "ZC3HAV1"
+        ],
+        "target_ranks": {
+          "ZC3HAV1": 4024
+        },
+        "target_scores": {
+          "ZC3HAV1": 0.0
+        },
+        "best_target_gene": "ZC3HAV1",
+        "best_target_rank": 4024,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "BAK1",
+            "rank": 1,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "BCL2L11",
+            "rank": 2,
+            "score": 0.4,
+            "is_target": false
+          },
+          {
+            "gene": "MAML2",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "CSRNP1",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 5,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "ALOX5AP",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZC3HAV1": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "MAML2",
+            "distance": 1.159135,
+            "target_genes": [
+              "MAML2"
+            ]
+          },
+          {
+            "condition": "BCL2L11",
+            "distance": 1.167786,
+            "target_genes": [
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "CSRNP1",
+            "distance": 1.244384,
+            "target_genes": [
+              "CSRNP1"
+            ]
+          },
+          {
+            "condition": "BAK1",
+            "distance": 1.248511,
+            "target_genes": [
+              "BAK1"
+            ]
+          },
+          {
+            "condition": "BAK1+BCL2L11",
+            "distance": 1.286563,
+            "target_genes": [
+              "BAK1",
+              "BCL2L11"
+            ]
+          }
+        ]
+      },
+      {
+        "condition": "ZNF318",
+        "target_genes": [
+          "ZNF318"
+        ],
+        "target_ranks": {
+          "ZNF318": 5003
+        },
+        "target_scores": {
+          "ZNF318": 0.0
+        },
+        "best_target_gene": "ZNF318",
+        "best_target_rank": 5003,
+        "hit_at": {
+          "1": false,
+          "5": false,
+          "10": false,
+          "20": false,
+          "40": false
+        },
+        "recall_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0,
+          "20": 0.0,
+          "40": 0.0
+        },
+        "top_predictions": [
+          {
+            "gene": "MAP4K5",
+            "rank": 1,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "HK2",
+            "rank": 2,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "MAP4K3",
+            "rank": 3,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "BCL2L11",
+            "rank": 4,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "PLK4",
+            "rank": 5,
+            "score": 0.2,
+            "is_target": false
+          },
+          {
+            "gene": "RP11-34P13.8",
+            "rank": 6,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "FRY",
+            "rank": 7,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "LINC00545",
+            "rank": 8,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "TEX26-AS1",
+            "rank": 9,
+            "score": 0.0,
+            "is_target": false
+          },
+          {
+            "gene": "N4BP2L1",
+            "rank": 10,
+            "score": 0.0,
+            "is_target": false
+          }
+        ],
+        "target_split_membership": {
+          "ZNF318": "test"
+        },
+        "target_split_group": "test-only",
+        "nearest_neighbors": [
+          {
+            "condition": "MAP4K3",
+            "distance": 0.860533,
+            "target_genes": [
+              "MAP4K3"
+            ]
+          },
+          {
+            "condition": "MAP4K5",
+            "distance": 0.92284,
+            "target_genes": [
+              "MAP4K5"
+            ]
+          },
+          {
+            "condition": "BCL2L11",
+            "distance": 1.068869,
+            "target_genes": [
+              "BCL2L11"
+            ]
+          },
+          {
+            "condition": "HK2",
+            "distance": 1.089846,
+            "target_genes": [
+              "HK2"
+            ]
+          },
+          {
+            "condition": "PLK4",
+            "distance": 1.190819,
+            "target_genes": [
+              "PLK4"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }
