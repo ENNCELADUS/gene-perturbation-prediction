@@ -363,7 +363,7 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
     assert "scGPT train epoch 2/2 started" in caplog.text
     assert "scGPT train epoch 1/2 complete: batches=2" in caplog.text
     assert "mean_loss=" in caplog.text
-    assert "gpu_memory=not_available" in caplog.text
+    assert "gpu_max_allocated=not_available" in caplog.text
     step_log_path = tmp_path / "logs" / "training_step.csv"
     rows = list(csv.DictReader(step_log_path.open()))
     assert rows[0].keys() >= {
@@ -378,7 +378,9 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
         "Val NDCG@5",
         "Val NDCG@10",
         "Val MRR",
+        "GPU Max Allocated",
     }
+    assert "GPU Memory" not in rows[0]
     assert [row["Epoch"] for row in rows] == ["1", "2"]
     assert all(float(row["Epoch Time"]) >= 0.0 for row in rows)
     assert all(float(row["Train Loss"]) > 0.0 for row in rows)
@@ -390,6 +392,7 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
     assert all(float(row["Val NDCG@5"]) == 1.0 for row in rows)
     assert all(float(row["Val NDCG@10"]) == 1.0 for row in rows)
     assert all(float(row["Val MRR"]) == 1.0 for row in rows)
+    assert all(row["GPU Max Allocated"] == "not_available" for row in rows)
 
 
 def test_scgpt_train_stops_early_when_val_loss_stalls(
