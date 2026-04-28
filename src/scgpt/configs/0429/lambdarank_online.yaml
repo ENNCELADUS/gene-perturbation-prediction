@@ -1,13 +1,12 @@
 run_config:
-  stages: ["train", "evaluate"]
+  stages: ["prepare", "train", "evaluate"]
   seed: 42
-  study_name: norman
-  train_log_path: logs/scgpt/train/norman.log
-  eval_log_path: logs/scgpt/evaluate/norman.log
-  save_checkpoint_path: model/scgpt_gene_score/norman/best_model.pt
-  load_checkpoint_path: model/scgpt_gene_score/norman/best_model.pt
+  study_name: norman_0429_lambdarank_online
+  train_log_path: logs/scgpt/0429/lambdarank_online/train.log
+  eval_log_path: logs/scgpt/0429/lambdarank_online/evaluate.log
+  save_checkpoint_path: model/scgpt_gene_score/0429/lambdarank_online/best_model.pt
+  load_checkpoint_path: model/scgpt_gene_score/0429/lambdarank_online/best_model.pt
   save_best_only: true
-  save_best_monitor: val_loss
 
 device_config:
   device: "cuda"
@@ -51,7 +50,7 @@ training_config:
   weight_decay: 0.01
   max_grad_norm: 1.0
   loss:
-    name: sampled_pairwise
+    name: sampled_lambdarank
     hard_negative_source: online
     hard_negatives: 64
     random_negatives: 64
