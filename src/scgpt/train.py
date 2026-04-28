@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 from src.scgpt.data import GeneScoreDataset, collate_gene_score_batch
 from src.scgpt.model import GeneScoreModel
 from src.utils.data import get_condition_splits, load_adata
+from src.utils.distributed import disable_tqdm, log_primary_info
 from src.utils.runtime import AccelerateRuntime
+
+LOGGER = logging.getLogger(__name__)
 
 
 def run(config: dict) -> dict:
@@ -49,17 +54,49 @@ def run(config: dict) -> dict:
     model, optimizer, loader = runtime.prepare(model, optimizer, loader)
     epochs = int(config.get("training_config", {}).get("epochs", 1))
     max_grad_norm = float(config.get("training_config", {}).get("max_grad_norm", 1.0))
-    for _ in range(epochs):
+    progress_disabled = disable_tqdm(config)
+    for epoch_idx in range(epochs):
+        epoch_number = epoch_idx + 1
+        log_primary_info(
+            LOGGER,
+            "scGPT train epoch %d/%d started",
+            epoch_number,
+            epochs,
+        )
         model.train()
-        for batch in loader:
+        epoch_loss = 0.0
+        n_batches = 0
+        batch_iter = tqdm(
+            loader,
+            desc=f"scgpt train epoch {epoch_number}/{epochs}",
+            unit="batch",
+            dynamic_ncols=True,
+            disable=progress_disabled,
+            leave=False,
+        )
+        for batch in batch_iter:
             optimizer.zero_grad()
             logits = _forward(model, batch)
             loss = F.binary_cross_entropy_with_logits(
                 logits, batch["targets"].to(logits.device)
             )
+            loss_value = float(loss.detach().cpu())
+            epoch_loss += loss_value
+            n_batches += 1
+            batch_iter.set_postfix(loss=f"{loss_value:.4f}")
             runtime.backward(loss)
             runtime.clip_grad_norm_(model.parameters(), max_grad_norm)
             optimizer.step()
+        mean_loss = epoch_loss / n_batches if n_batches else 0.0
+        log_primary_info(
+            LOGGER,
+            "scGPT train epoch %d/%d complete: batches=%d mean_loss=%.6f %s",
+            epoch_number,
+            epochs,
+            n_batches,
+            mean_loss,
+            _gpu_memory_summary(runtime.device),
+        )
     checkpoint_path = config["run_config"].get("save_checkpoint_path")
     if checkpoint_path:
         runtime.save_state_dict(model, checkpoint_path)
@@ -90,6 +127,25 @@ def _build_model(
             model_config.get("fast_transformer_backend", "flash")
         ),
         device=device,
+    )
+
+
+def _gpu_memory_summary(device: torch.device) -> str:
+    device = torch.device(device)
+    if device.type != "cuda" or not torch.cuda.is_available():
+        return "gpu_memory=not_available"
+
+    device_index = (
+        device.index if device.index is not None else torch.cuda.current_device()
+    )
+    allocated_gb = torch.cuda.memory_allocated(device_index) / 1024**3
+    reserved_gb = torch.cuda.memory_reserved(device_index) / 1024**3
+    max_allocated_gb = torch.cuda.max_memory_allocated(device_index) / 1024**3
+    return (
+        "gpu_memory="
+        f"allocated={allocated_gb:.3f}GB "
+        f"reserved={reserved_gb:.3f}GB "
+        f"max_allocated={max_allocated_gb:.3f}GB"
     )
 
 

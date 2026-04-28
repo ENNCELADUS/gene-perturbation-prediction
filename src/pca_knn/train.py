@@ -10,6 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 from src.utils.data import build_pseudobulk_matrices
+from src.utils.distributed import disable_tqdm
 from src.utils.metrics import build_label_matrix
 
 
@@ -20,7 +21,7 @@ def run(config: dict) -> dict:
         desc="pca_knn train",
         unit="step",
         dynamic_ncols=True,
-        disable=_disable_tqdm(config),
+        disable=disable_tqdm(config),
     ) as progress:
         data = build_pseudobulk_matrices(config)
         progress.update()
@@ -74,7 +75,3 @@ def _checkpoint_path(config: dict) -> Path:
         return Path(path)
     study_name = config["run_config"]["study_name"]
     return Path("model") / "pca_knn" / study_name / "model.joblib"
-
-
-def _disable_tqdm(config: dict) -> bool:
-    return bool(config["run_config"].get("disable_tqdm", False))

@@ -16,6 +16,7 @@ from src.utils.data import (
     get_gene_splits,
     validate_artifact_gene_order,
 )
+from src.utils.distributed import disable_tqdm
 from src.utils.metrics import (
     build_gene_ranking_diagnostics,
     compute_gene_metrics,
@@ -31,7 +32,7 @@ def run(config: dict) -> dict:
         desc="pca_knn evaluate",
         unit="step",
         dynamic_ncols=True,
-        disable=_disable_tqdm(config),
+        disable=disable_tqdm(config),
     ) as progress:
         data = build_single_cell_matrices(config, split_names=("test",))
         progress.update()
@@ -57,7 +58,7 @@ def run(config: dict) -> dict:
             train_labels=artifact["train_labels"],
             query_embeddings=query_embeddings,
             k=int(config["model_config"].get("n_neighbors", 5)),
-            disable_tqdm=_disable_tqdm(config),
+            disable_tqdm=disable_tqdm(config),
         )
         progress.update()
         targets = target_indices_for_conditions(
@@ -170,7 +171,3 @@ def _top_n_predictions(config: dict) -> int:
     if not isinstance(diagnostics, dict):
         return 10
     return int(diagnostics.get("top_n_predictions", 10))
-
-
-def _disable_tqdm(config: dict) -> bool:
-    return bool(config["run_config"].get("disable_tqdm", False))

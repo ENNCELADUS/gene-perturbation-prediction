@@ -14,6 +14,7 @@ shim. C++ extension types cannot be used as base classes in Python, so
 ``class GeneVocab(torchtext.vocab.Vocab)`` raises TypeError at import time.
 """
 
+import warnings
 from typing import Dict, Iterable, List, Optional, Union
 
 # ---------------------------------------------------------------------------
@@ -26,6 +27,11 @@ torchtext_import_error: Optional[str] = None
 torchtext_vocab_is_subclassable: bool = False
 
 try:
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Torchtext is deprecated.*",
+        category=UserWarning,
+    )
     from torchtext.vocab import Vocab as _torchtext_vocab_cls  # noqa: F401
 
     torchtext_import_succeeded = True

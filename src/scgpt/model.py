@@ -12,6 +12,11 @@ from typing import Sequence
 import torch
 import torch.nn as nn
 
+from src.utils.distributed import (
+    log_primary_info,
+    suppress_torchtext_deprecation_warning,
+)
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -52,6 +57,7 @@ class ScGPTBackbone(nn.Module):
         scgpt_path = Path(__file__).parents[2] / "scGPT"
         if str(scgpt_path) not in sys.path:
             sys.path.insert(0, str(scgpt_path))
+        suppress_torchtext_deprecation_warning()
         from scgpt.model.model import TransformerModel
 
         return TransformerModel(
@@ -90,7 +96,7 @@ class ScGPTBackbone(nn.Module):
         }
         model_state.update(compatible)
         self.model.load_state_dict(model_state, strict=True)
-        LOGGER.info("Loaded %d scGPT parameters", len(compatible))
+        log_primary_info(LOGGER, "Loaded %d scGPT parameters", len(compatible))
 
     def _apply_freeze_strategy(self) -> None:
         for param in self.model.parameters():

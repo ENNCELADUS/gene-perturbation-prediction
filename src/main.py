@@ -9,6 +9,10 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from src.utils.config import load_config, set_seed, validate_config
+from src.utils.distributed import (
+    configure_process_output,
+    log_primary_info,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +42,7 @@ def run_from_config(config: dict[str, Any]) -> dict[str, Any]:
 
     results: list[dict[str, Any]] = []
     for stage_name in run_config["stages"]:
-        LOGGER.info("Running %s.%s", model_name, stage_name)
+        log_primary_info(LOGGER, "Running %s.%s", model_name, stage_name)
         runner = import_stage_runner(model_name, stage_name)
         stage_result = runner(config)
         if not isinstance(stage_result, dict):
@@ -49,11 +53,12 @@ def run_from_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None) -> dict[str, Any]:
     """CLI entry point."""
+    configure_process_output()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     args = parse_args(argv)
     config = load_config(args.config)
     results = run_from_config(config)
-    LOGGER.info("Completed %s stage(s)", len(results["stages"]))
+    log_primary_info(LOGGER, "Completed %s stage(s)", len(results["stages"]))
     return results
 
 
