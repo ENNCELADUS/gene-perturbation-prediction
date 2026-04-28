@@ -78,27 +78,13 @@ data_config:
     min_cells_per_condition: 1
 ```
 
-`src/scgpt/prepare.py` reads unique non-control conditions from
-`obs.condition`, normalizes labels such as `GENE+ctrl` to `GENE`, partitions
-perturbation genes into 70% train, 10% validation, and 20% test, then assigns
-conditions by held-out gene membership:
+The split first partitions perturbation genes into 70% train, 10% validation,
+and 20% test. Conditions are then assigned by gene membership:
 
-- all genes in the train partition -> train
+- all genes are train genes -> train
 - contains a validation gene and no test gene -> validation
 - contains a test gene -> test
-
-The generated artifact stores both the gene partition and the induced condition
-split. It also records final condition fractions and deltas from the target
-70/10/20 ratio, because graph edges can make condition counts differ from gene
-counts. Later stages read the artifact through `data_config.condition_split_path`
-when inline split lists are empty.
-
-The active split supports:
-
-- train conditions
-- validation conditions
-- test conditions
-- optional test strata metadata for seen/unseen gene-combination regimes
+- `ctrl` is a shared reference/control condition and is not part of split metrics
 
 ## Model Inputs
 

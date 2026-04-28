@@ -39,6 +39,8 @@ model_config:
   score_mode: dot
   head_hidden_dim: 512
   head_dropout: 0.2
+  use_fast_transformer: false
+  fast_transformer_backend: flash
 
 training_config:
   epochs: 50
