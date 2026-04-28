@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Mapping
 
 from src.utils.data import (
+    infer_gene_heldout_condition_split,
     get_condition_splits,
-    infer_condition_splits,
     load_adata,
     save_condition_split,
 )
@@ -25,23 +25,29 @@ def run(config: dict) -> dict:
         split_config = data_config.get("split_config", {})
         if not isinstance(split_config, Mapping):
             raise ValueError("data_config.split_config must be a mapping")
-        strategy = split_config.get("strategy", "random_condition")
-        if strategy != "random_condition":
-            raise ValueError("Only random_condition split strategy is supported")
-        split = infer_condition_splits(
+        strategy = split_config.get("strategy", "gene_heldout")
+        if strategy != "gene_heldout":
+            raise ValueError("Only gene_heldout split strategy is supported")
+        split = infer_gene_heldout_condition_split(
             adata=adata,
             condition_key=str(data_config.get("condition_key", "condition")),
-            seed=int(config["run_config"].get("seed", 42)),
-            train_fraction=float(split_config.get("train_fraction", 0.8)),
-            validation_fraction=float(split_config.get("validation_fraction", 0.1)),
-            test_fraction=float(split_config.get("test_fraction", 0.1)),
+            train_gene_fraction=float(split_config.get("train_gene_fraction", 0.7)),
+            validation_gene_fraction=float(
+                split_config.get("validation_gene_fraction", 0.1)
+            ),
+            test_gene_fraction=float(split_config.get("test_gene_fraction", 0.2)),
+            min_cells_per_condition=int(split_config.get("min_cells_per_condition", 1)),
         )
     save_condition_split(split, split_path)
+    conditions = split["conditions"] if "conditions" in split else split
+    raw_stats = split.get("stats", {})
+    stats = raw_stats if isinstance(raw_stats, Mapping) else {}
     return {
         "split_path": str(split_path),
-        "n_train": len(split["train"]),
-        "n_validation": len(split["validation"]),
-        "n_test": len(split["test"]),
+        "n_train": len(conditions["train"]),
+        "n_validation": len(conditions["validation"]),
+        "n_test": len(conditions["test"]),
+        **stats,
     }
 
 

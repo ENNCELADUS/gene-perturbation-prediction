@@ -57,31 +57,41 @@ data_config:
     test: ["A+B"]
 ```
 
-For Norman runs, the default scGPT config uses a generated split artifact because
-the source `.h5ad` does not need to contain train/test columns:
+For Norman runs, the default scGPT config uses a generated gene-held-out split
+artifact because the source `.h5ad` does not need to contain train/test columns:
 
 ```yaml
 run_config:
   stages: ["prepare", "train", "evaluate"]
 
 data_config:
-  condition_split_path: results/scgpt/norman_condition_split.yaml
+  condition_split_path: results/scgpt/norman_gene_heldout_split.yaml
   condition_split:
     train: []
     validation: []
     test: []
   split_config:
-    strategy: random_condition
-    train_fraction: 0.8
-    validation_fraction: 0.1
-    test_fraction: 0.1
+    strategy: gene_heldout
+    train_gene_fraction: 0.7
+    validation_gene_fraction: 0.1
+    test_gene_fraction: 0.2
+    min_cells_per_condition: 1
 ```
 
 `src/scgpt/prepare.py` reads unique non-control conditions from
-`obs.condition`, normalizes labels such as `GENE+ctrl` to `GENE`, shuffles them
-with `run_config.seed`, and writes `condition_split_path`. Later stages read the
-artifact through `data_config.condition_split_path` when inline split lists are
-empty.
+`obs.condition`, normalizes labels such as `GENE+ctrl` to `GENE`, partitions
+perturbation genes into 70% train, 10% validation, and 20% test, then assigns
+conditions by held-out gene membership:
+
+- all genes in the train partition -> train
+- contains a validation gene and no test gene -> validation
+- contains a test gene -> test
+
+The generated artifact stores both the gene partition and the induced condition
+split. It also records final condition fractions and deltas from the target
+70/10/20 ratio, because graph edges can make condition counts differ from gene
+counts. Later stages read the artifact through `data_config.condition_split_path`
+when inline split lists are empty.
 
 The active split supports:
 
