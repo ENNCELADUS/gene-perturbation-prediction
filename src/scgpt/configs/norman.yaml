@@ -1,5 +1,5 @@
 run_config:
-  stages: ["train", "evaluate"]
+  stages: ["prepare", "train", "evaluate"]
   seed: 42
   train_log_path: results/scgpt/train.log
   eval_log_path: results/scgpt/eval_results.json
@@ -18,10 +18,16 @@ data_config:
   control_key: control
   control_n_samples: 16
   num_workers: 0
+  condition_split_path: results/scgpt/norman_condition_split.yaml
   condition_split:
     train: []
     validation: []
     test: []
+  split_config:
+    strategy: random_condition
+    train_fraction: 0.8
+    validation_fraction: 0.1
+    test_fraction: 0.1
 
 model_config:
   model: scgpt
