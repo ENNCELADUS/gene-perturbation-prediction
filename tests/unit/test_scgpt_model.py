@@ -60,12 +60,20 @@ def test_scgpt_train_and_evaluate_pass_configured_flash_backend(
         }
     }
 
-    scgpt_train._build_model(config, n_genes=2, gene_ids=torch.tensor([1, 2]), device="cpu")
+    scgpt_train._build_model(
+        config,
+        n_genes=2,
+        gene_ids=torch.tensor([1, 2]),
+        device="cpu",
+    )
     scgpt_evaluate._build_model(
         config, n_genes=2, gene_ids=torch.tensor([1, 2]), device=torch.device("cpu")
     )
 
-    assert [kwargs["use_fast_transformer"] for kwargs in captured_kwargs] == [True, True]
+    assert [kwargs["use_fast_transformer"] for kwargs in captured_kwargs] == [
+        True,
+        True,
+    ]
     assert [kwargs["fast_transformer_backend"] for kwargs in captured_kwargs] == [
         "flash",
         "flash",

@@ -27,6 +27,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+flash = [
+    "flash-attn>=2.5.8,<3; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 research = [
     "datasets>=2.10.0",
     "scib>=1.1.0",
@@ -48,10 +51,6 @@ dev = [
 
 [tool.uv]
 default-groups = ["dev"]
-
-# flash-attn is intentionally not declared here. It is a CUDA/build-host-specific
-# optional acceleration backend for scGPT, and should be installed manually on
-# compatible GPU machines after `uv sync` when needed.
 
 [project.scripts]
 vcc = "src.main:main"
