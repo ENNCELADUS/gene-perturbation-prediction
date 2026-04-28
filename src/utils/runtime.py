@@ -39,6 +39,10 @@ class AccelerateRuntime:
         """Backpropagate through Accelerate."""
         self.accelerator.backward(loss)
 
+    def gather_for_metrics(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Gather tensors across processes for metric computation."""
+        return self.accelerator.gather_for_metrics(tensor)
+
     def clip_grad_norm_(self, parameters, max_norm: float) -> None:
         """Clip gradients through Accelerate."""
         self.accelerator.clip_grad_norm_(parameters, max_norm)
