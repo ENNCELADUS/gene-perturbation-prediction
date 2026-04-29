@@ -40,6 +40,15 @@ def test_scgpt_0429_ablation_configs_are_valid() -> None:
         validate_config(load_config(config_path))
 
 
+def test_scgpt_0430_architecture_configs_are_valid() -> None:
+    config_dir = Path("src/scgpt/configs/0430_architecture")
+    config_paths = sorted(config_dir.glob("*.yaml"))
+
+    assert config_paths
+    for config_path in config_paths:
+        validate_config(load_config(config_path))
+
+
 def test_parse_args_rejects_stage_like_cli_args() -> None:
     with pytest.raises(SystemExit):
         main.parse_args(["--config", "config.yaml", "--mode", "train"])
