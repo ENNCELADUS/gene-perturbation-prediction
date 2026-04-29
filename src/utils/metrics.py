@@ -32,10 +32,45 @@ def compute_gene_metrics(
     top_k_values: Sequence[int],
 ) -> dict[str, float | int]:
     """Compute gene-ranking metrics for multi-label target genes."""
-    _validate_scores_and_targets(scores, targets)
+    metrics = _compute_gene_metrics_core(scores, targets, top_k_values)
+    metrics.update(_compute_stratified_gene_metrics(scores, targets, top_k_values))
+    return metrics
+
+
+def compute_cardinality_metrics(
+    cardinality_logits: Sequence[np.ndarray],
+    targets: Sequence[Sequence[int]],
+) -> dict[str, float | int]:
+    """Compute target-set cardinality metrics from cardinality logits."""
+    if len(cardinality_logits) != len(targets):
+        raise ValueError(
+            "cardinality_logits and targets must have the same number of queries: "
+            f"{len(cardinality_logits)} != {len(targets)}"
+        )
+    if len(cardinality_logits) == 0:
+        return {"cardinality_accuracy": 0.0, "cardinality_mae": 0.0}
+    predicted = [int(np.argmax(logits)) for logits in cardinality_logits]
+    truth = [len(target) for target in targets]
+    errors = [abs(pred - true) for pred, true in zip(predicted, truth)]
     metrics: dict[str, float | int] = {
-        f"relevant_hit@{k}": 0.0 for k in top_k_values
+        "cardinality_accuracy": mean(
+            float(pred == true) for pred, true in zip(predicted, truth)
+        ),
+        "cardinality_mae": mean(errors),
     }
+    for cardinality, count in sorted(Counter(predicted).items()):
+        metrics[f"predicted_cardinality_{cardinality}"] = int(count)
+    return metrics
+
+
+def _compute_gene_metrics_core(
+    scores: Sequence[np.ndarray],
+    targets: Sequence[Sequence[int]],
+    top_k_values: Sequence[int],
+) -> dict[str, float | int]:
+    """Compute unstratified gene-ranking metrics."""
+    _validate_scores_and_targets(scores, targets)
+    metrics: dict[str, float | int] = {f"relevant_hit@{k}": 0.0 for k in top_k_values}
     metrics.update({f"exact_hit@{k}": 0.0 for k in top_k_values})
     metrics.update({f"recall@{k}": 0.0 for k in top_k_values})
     metrics.update({f"ndcg@{k}": 0.0 for k in top_k_values})
@@ -75,15 +110,39 @@ def compute_gene_metrics(
     return metrics
 
 
+def _compute_stratified_gene_metrics(
+    scores: Sequence[np.ndarray],
+    targets: Sequence[Sequence[int]],
+    top_k_values: Sequence[int],
+) -> dict[str, float | int]:
+    stratified: dict[str, float | int] = {}
+    groups = {
+        "single_gene": [idx for idx, target in enumerate(targets) if len(target) == 1],
+        "combo": [idx for idx, target in enumerate(targets) if len(target) > 1],
+    }
+    for prefix, indices in groups.items():
+        if not indices:
+            stratified[f"{prefix}_n_queries"] = 0
+            continue
+        group_scores = [scores[idx] for idx in indices]
+        group_targets = [targets[idx] for idx in indices]
+        group_metrics = _compute_gene_metrics_core(
+            group_scores,
+            group_targets,
+            top_k_values,
+        )
+        for key, value in group_metrics.items():
+            stratified[f"{prefix}_{key}"] = value
+    return stratified
+
+
 def compute_combo_metrics(
     predictions: Sequence[Sequence[str]],
     ground_truth: Sequence[str],
     top_k_values: Sequence[int],
 ) -> dict[str, float | int]:
     """Compute exact and one-gene-overlap metrics for condition rankings."""
-    metrics: dict[str, float | int] = {
-        f"exact_hit@{k}": 0.0 for k in top_k_values
-    }
+    metrics: dict[str, float | int] = {f"exact_hit@{k}": 0.0 for k in top_k_values}
     metrics.update({f"relevant_hit@{k}": 0.0 for k in top_k_values})
     reciprocal_rank_sum = 0.0
     n_queries = 0

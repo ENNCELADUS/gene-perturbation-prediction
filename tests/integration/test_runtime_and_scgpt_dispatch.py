@@ -395,6 +395,115 @@ def test_scgpt_train_reports_epoch_progress_and_memory(
     assert all(row["GPU Max Allocated"] == "not_available" for row in rows)
 
 
+def test_scgpt_train_adds_auxiliary_losses_from_model_output(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    class FakeRuntime:
+        def __init__(self, config: dict) -> None:
+            self.device = torch.device("cpu")
+
+        def prepare(self, *objects):
+            return objects
+
+        def backward(self, loss: torch.Tensor) -> None:
+            loss.backward()
+
+        def clip_grad_norm_(self, parameters, max_norm: float) -> None:
+            return None
+
+        def save_state_dict(self, model: torch.nn.Module, path: str | Path) -> None:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_text("saved")
+
+    class FakeDataset(torch.utils.data.Dataset):
+        gene_ids = torch.tensor([0, 1])
+
+        def __len__(self) -> int:
+            return 1
+
+        def __getitem__(self, index: int) -> dict:
+            return {"index": index}
+
+    class FakeModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.bias = torch.nn.Parameter(torch.tensor(0.0))
+
+        def forward(
+            self,
+            gene_ids: torch.Tensor,
+            values: torch.Tensor,
+            padding_mask: torch.Tensor,
+            **kwargs,
+        ) -> dict[str, torch.Tensor | dict[str, torch.Tensor]]:
+            return {
+                "logits": self.bias.expand(values.shape[0], 2),
+                "auxiliary_losses": {"cycle": self.bias * 0.0 + 2.0},
+            }
+
+    def fake_collate(batch: list[dict], vocab: dict, n_genes: int) -> dict:
+        return {
+            "genes": torch.tensor([[1, 2]]),
+            "values": torch.tensor([[1.0, 1.0]]),
+            "padding_mask": torch.tensor([[False, False]]),
+            "control_genes": torch.tensor([[1, 2]]),
+            "control_values": torch.tensor([[1.0, 1.0]]),
+            "control_padding_mask": torch.tensor([[False, False]]),
+            "control_counts": 1,
+            "targets": torch.tensor([[1.0, 0.0]]),
+        }
+
+    pretrained_dir = tmp_path / "pretrained"
+    pretrained_dir.mkdir()
+    (pretrained_dir / "vocab.json").write_text('{"<pad>": 0, "A": 1, "B": 2}')
+
+    monkeypatch.setattr(scgpt_train, "AccelerateRuntime", FakeRuntime, raising=False)
+    monkeypatch.setattr(
+        scgpt_train,
+        "load_adata",
+        lambda path: type("Adata", (), {"n_vars": 2})(),
+    )
+    monkeypatch.setattr(
+        scgpt_train,
+        "get_condition_splits",
+        lambda config: {"train": ["A"], "validation": [], "test": []},
+    )
+    monkeypatch.setattr(scgpt_train, "GeneScoreDataset", lambda **kwargs: FakeDataset())
+    monkeypatch.setattr(
+        scgpt_train,
+        "_build_model",
+        lambda *args, **kwargs: FakeModel(),
+    )
+    monkeypatch.setattr(scgpt_train, "collate_gene_score_batch", fake_collate)
+    config = {
+        "run_config": {
+            "stages": ["train"],
+            "seed": 7,
+            "study_name": "test",
+            "save_checkpoint_path": str(tmp_path / "model.pt"),
+            "train_log_path": str(tmp_path / "logs" / "scgpt.log"),
+            "disable_tqdm": True,
+        },
+        "device_config": {
+            "device": "cpu",
+            "ddp_enabled": False,
+            "use_mixed_precision": False,
+        },
+        "data_config": {
+            "h5ad_path": "unused.h5ad",
+            "condition_split": {"train": ["A"], "validation": []},
+        },
+        "model_config": {"model": "scgpt", "pretrained_dir": str(pretrained_dir)},
+        "training_config": {"epochs": 1, "batch_size": 1},
+    }
+
+    scgpt_train.run(config)
+
+    rows = list(csv.DictReader((tmp_path / "logs" / "training_step.csv").open()))
+    assert float(rows[0]["Train Loss"]) > 2.0
+
+
 def test_scgpt_train_stops_early_when_val_loss_stalls(
     monkeypatch,
     tmp_path: Path,

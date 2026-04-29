@@ -13,11 +13,20 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from src.scgpt.data import GeneScoreDataset, collate_gene_score_batch
+from src.scgpt.factory import build_gene_score_model
 from src.scgpt.losses import GeneScoreLoss, GeneScoreLossConfig, build_gene_score_loss
-from src.scgpt.model import GeneScoreModel
+from src.scgpt.output import (
+    cardinality_logits_from_output,
+    logits_from_output,
+    loss_from_output,
+)
 from src.utils.data import get_condition_splits, get_gene_splits, load_adata
 from src.utils.distributed import disable_tqdm, is_primary_rank, log_primary_info
-from src.utils.metrics import compute_gene_metrics, parse_condition_genes
+from src.utils.metrics import (
+    compute_cardinality_metrics,
+    compute_gene_metrics,
+    parse_condition_genes,
+)
 from src.utils.runtime import AccelerateRuntime
 
 LOGGER = logging.getLogger(__name__)
@@ -83,7 +92,13 @@ def run(config: dict) -> dict:
         if validation_dataset is not None
         else None
     )
-    model = _build_model(config, adata.n_vars, dataset.gene_ids, runtime.device)
+    model = _build_model(
+        config,
+        adata.n_vars,
+        dataset.gene_ids,
+        runtime.device,
+        gene_names=getattr(dataset, "gene_names", None),
+    )
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=float(config.get("training_config", {}).get("learning_rate", 1e-4)),
@@ -130,9 +145,10 @@ def run(config: dict) -> dict:
         )
         for batch in batch_iter:
             optimizer.zero_grad()
-            logits = _forward(model, batch)
+            model_output = _forward_output(model, batch, include_aux=True)
+            logits = logits_from_output(model_output)
             targets = batch["targets"].to(logits.device)
-            loss = loss_fn(logits, targets)
+            loss = loss_from_output(loss_fn, model_output, targets)
             loss_value = float(loss.detach().cpu())
             batch_size = int(targets.shape[0])
             epoch_loss_sum += loss_value * batch_size
@@ -258,25 +274,15 @@ def _build_model(
     n_genes: int,
     gene_ids,
     device: torch.device,
-) -> GeneScoreModel:
-    model_config = config["model_config"]
-    pretrained_dir = Path(model_config.get("pretrained_dir", "model/scGPT"))
-    return GeneScoreModel(
+    gene_names: list[str] | None = None,
+):
+    return build_gene_score_model(
+        config=config,
         n_genes=n_genes,
-        checkpoint_path=pretrained_dir / "best_model.pt",
-        vocab_path=pretrained_dir / "vocab.json",
-        args_path=pretrained_dir / "args.json",
-        score_gene_ids=gene_ids,
-        freeze_encoder=bool(model_config.get("freeze_encoder", True)),
-        freeze_layers_up_to=int(model_config.get("freeze_layers_up_to", 10)),
-        score_mode=str(model_config.get("score_mode", "dot")),
-        head_hidden_dim=int(model_config.get("head_hidden_dim", 512)),
-        head_dropout=float(model_config.get("head_dropout", 0.2)),
-        use_fast_transformer=bool(model_config.get("use_fast_transformer", False)),
-        fast_transformer_backend=str(
-            model_config.get("fast_transformer_backend", "flash")
-        ),
-        device=device,
+        gene_ids=gene_ids,
+        device=torch.device(device),
+        gene_names=gene_names,
+        logger=LOGGER,
     )
 
 
@@ -314,6 +320,7 @@ def _validation_candidate_indices(
         if gene in gene_name_to_idx
     }
     return sorted(indices) if indices else None
+
 
 def _build_early_stopping(config: dict) -> dict[str, float | int | str] | None:
     training_config = config.get("training_config", {})
@@ -420,9 +427,7 @@ def _should_stop_early(
         state["epochs_without_improvement"] = 0
         return False
 
-    state["epochs_without_improvement"] = int(
-        state["epochs_without_improvement"]
-    ) + 1
+    state["epochs_without_improvement"] = int(state["epochs_without_improvement"]) + 1
     return int(state["epochs_without_improvement"]) >= int(state["patience"])
 
 
@@ -442,11 +447,13 @@ def _evaluate_validation(
     example_count = 0
     scores = []
     target_indices = []
+    cardinality_logits = []
     with torch.no_grad():
         for batch in loader:
-            logits = _forward(model, batch)
+            model_output = _forward_output(model, batch, include_aux=True)
+            logits = logits_from_output(model_output)
             target_matrix = batch["targets"].to(logits.device)
-            loss = loss_fn(logits, target_matrix)
+            loss = loss_from_output(loss_fn, model_output, target_matrix)
             batch_size = int(target_matrix.shape[0])
             loss_sum += float(loss.detach().cpu()) * batch_size
             example_count += batch_size
@@ -454,6 +461,15 @@ def _evaluate_validation(
             gathered_targets = _gather_for_metrics(runtime, target_matrix)
             scores.extend(row.cpu().numpy() for row in gathered_logits)
             target_indices.extend(_target_indices_from_matrix(gathered_targets.cpu()))
+            gathered_cardinality = cardinality_logits_from_output(model_output)
+            if gathered_cardinality is not None:
+                gathered_cardinality = _gather_for_metrics(
+                    runtime,
+                    gathered_cardinality,
+                )
+                cardinality_logits.extend(
+                    row.cpu().numpy() for row in gathered_cardinality
+                )
     if example_count == 0:
         return None, {}
     val_loss = _mean_loss(
@@ -468,6 +484,8 @@ def _evaluate_validation(
         candidate_indices,
     )
     metrics = compute_gene_metrics(metric_scores, metric_targets, top_k_values)
+    if cardinality_logits:
+        metrics.update(compute_cardinality_metrics(cardinality_logits, target_indices))
     return val_loss, metrics
 
 
@@ -552,20 +570,12 @@ def _append_training_step_log(
                 "Epoch Time": f"{epoch_time:.3f}",
                 "Train Loss": f"{train_loss:.6f}",
                 "Val Loss": _format_optional_loss(val_loss),
-                "Val Recall@1": _format_optional_metric(
-                    val_metrics.get("recall@1")
-                ),
-                "Val Recall@5": _format_optional_metric(
-                    val_metrics.get("recall@5")
-                ),
-                "Val Recall@10": _format_optional_metric(
-                    val_metrics.get("recall@10")
-                ),
+                "Val Recall@1": _format_optional_metric(val_metrics.get("recall@1")),
+                "Val Recall@5": _format_optional_metric(val_metrics.get("recall@5")),
+                "Val Recall@10": _format_optional_metric(val_metrics.get("recall@10")),
                 "Val NDCG@1": _format_optional_metric(val_metrics.get("ndcg@1")),
                 "Val NDCG@5": _format_optional_metric(val_metrics.get("ndcg@5")),
-                "Val NDCG@10": _format_optional_metric(
-                    val_metrics.get("ndcg@10")
-                ),
+                "Val NDCG@10": _format_optional_metric(val_metrics.get("ndcg@10")),
                 "Val MRR": _format_optional_metric(val_metrics.get("mrr")),
                 "GPU Max Allocated": gpu_max_allocated,
             }
@@ -589,8 +599,7 @@ def _format_optional_metric(value: float | int | None) -> str:
 
 def _target_indices_from_matrix(targets: torch.Tensor) -> list[list[int]]:
     return [
-        torch.nonzero(row > 0, as_tuple=False).flatten().tolist()
-        for row in targets
+        torch.nonzero(row > 0, as_tuple=False).flatten().tolist() for row in targets
     ]
 
 
@@ -607,6 +616,11 @@ def _gpu_max_allocated_summary(device: torch.device) -> str:
 
 
 def _forward(model, batch: dict) -> torch.Tensor:
+    return logits_from_output(_forward_output(model, batch, include_aux=False))
+
+
+def _forward_output(model, batch: dict, include_aux: bool):
+    targets = batch["targets"].to(batch["values"].device) if include_aux else None
     return model(
         batch["genes"],
         batch["values"],
@@ -615,4 +629,6 @@ def _forward(model, batch: dict) -> torch.Tensor:
         control_values=batch["control_values"],
         control_padding_mask=batch["control_padding_mask"],
         control_counts=batch["control_counts"],
+        targets=targets,
+        return_aux=include_aux,
     )

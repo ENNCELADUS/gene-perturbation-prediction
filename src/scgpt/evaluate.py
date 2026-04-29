@@ -9,9 +9,10 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.scgpt.data import GeneScoreDataset, collate_gene_score_batch
-from src.scgpt.model import GeneScoreModel
+from src.scgpt.factory import build_gene_score_model
+from src.scgpt.output import cardinality_logits_from_output, logits_from_output
 from src.utils.data import get_condition_splits, load_adata
-from src.utils.metrics import compute_gene_metrics
+from src.utils.metrics import compute_cardinality_metrics, compute_gene_metrics
 from src.utils.runtime import AccelerateRuntime
 
 
@@ -33,7 +34,13 @@ def run(config: dict) -> dict:
         n_control_samples=int(config["data_config"].get("control_n_samples", 8)),
         seed=int(config["run_config"].get("seed", 42)),
     )
-    model = _build_model(config, adata.n_vars, dataset.gene_ids, runtime.device)
+    model = _build_model(
+        config,
+        adata.n_vars,
+        dataset.gene_ids,
+        runtime.device,
+        gene_names=getattr(dataset, "gene_names", None),
+    )
     checkpoint_path = config["run_config"].get("load_checkpoint_path")
     if checkpoint_path:
         model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
@@ -48,9 +55,10 @@ def run(config: dict) -> dict:
     model.eval()
     scores = []
     targets = []
+    cardinality_logits = []
     with torch.no_grad():
         for batch in loader:
-            logits = model(
+            model_output = model(
                 batch["genes"].to(runtime.device),
                 batch["values"].to(runtime.device),
                 batch["padding_mask"].to(runtime.device),
@@ -59,14 +67,25 @@ def run(config: dict) -> dict:
                 control_padding_mask=batch["control_padding_mask"].to(runtime.device),
                 control_counts=batch["control_counts"],
             )
+            logits = logits_from_output(model_output)
             gathered_logits = runtime.gather_for_metrics(logits)
             gathered_targets = runtime.gather_for_metrics(
                 batch["targets"].to(logits.device)
             )
             scores.extend(row.cpu().numpy() for row in gathered_logits)
             targets.extend(_target_indices_from_matrix(gathered_targets.cpu()))
+            batch_cardinality_logits = cardinality_logits_from_output(model_output)
+            if batch_cardinality_logits is not None:
+                gathered_cardinality = runtime.gather_for_metrics(
+                    batch_cardinality_logits
+                )
+                cardinality_logits.extend(
+                    row.cpu().numpy() for row in gathered_cardinality
+                )
     top_k_values = config.get("evaluation_config", {}).get("top_k_values", [1, 5, 10])
     metrics = compute_gene_metrics(scores, targets, top_k_values)
+    if cardinality_logits:
+        metrics.update(compute_cardinality_metrics(cardinality_logits, targets))
     if runtime.is_main_process:
         _write_json(config["run_config"].get("eval_log_path"), {"metrics": metrics})
     runtime.wait_for_everyone()
@@ -78,33 +97,21 @@ def _build_model(
     n_genes: int,
     gene_ids,
     device: torch.device,
-) -> GeneScoreModel:
-    model_config = config["model_config"]
-    pretrained_dir = Path(model_config.get("pretrained_dir", "model/scGPT"))
-    return GeneScoreModel(
+    gene_names: list[str] | None = None,
+):
+    return build_gene_score_model(
+        config=config,
         n_genes=n_genes,
-        checkpoint_path=pretrained_dir / "best_model.pt",
-        vocab_path=pretrained_dir / "vocab.json",
-        args_path=pretrained_dir / "args.json",
-        score_gene_ids=gene_ids,
-        freeze_encoder=bool(model_config.get("freeze_encoder", True)),
-        freeze_layers_up_to=int(model_config.get("freeze_layers_up_to", 10)),
-        score_mode=str(model_config.get("score_mode", "dot")),
-        head_hidden_dim=int(model_config.get("head_hidden_dim", 512)),
-        head_dropout=float(model_config.get("head_dropout", 0.2)),
-        use_fast_transformer=bool(model_config.get("use_fast_transformer", False)),
-        fast_transformer_backend=str(
-            model_config.get("fast_transformer_backend", "flash")
-        ),
-        device=device,
+        gene_ids=gene_ids,
+        device=torch.device(device),
+        gene_names=gene_names,
     )
 
 
 def _target_indices_from_matrix(targets: torch.Tensor) -> list[list[int]]:
     """Convert gathered multi-hot targets to index lists."""
     return [
-        torch.nonzero(row > 0, as_tuple=False).flatten().tolist()
-        for row in targets
+        torch.nonzero(row > 0, as_tuple=False).flatten().tolist() for row in targets
     ]
 
 

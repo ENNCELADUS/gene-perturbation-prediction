@@ -1,0 +1,84 @@
+run_config:
+  stages: ["train", "evaluate"]
+  seed: 42
+  study_name: norman_0430_architecture_06_no_contrast_encoder
+  train_log_path: logs/scgpt/0430_architecture/06_no_contrast_encoder/train.log
+  eval_log_path: logs/scgpt/0430_architecture/06_no_contrast_encoder/evaluate.log
+  save_checkpoint_path: model/scgpt_gene_score/0430_architecture/06_no_contrast_encoder/best_model.pt
+  load_checkpoint_path: model/scgpt_gene_score/0430_architecture/06_no_contrast_encoder/best_model.pt
+  save_best_only: true
+
+device_config:
+  device: "cuda"
+  ddp_enabled: true
+  use_mixed_precision: true
+
+data_config:
+  h5ad_path: data/norman/perturb_processed.h5ad
+  condition_key: condition
+  control_key: control
+  control_n_samples: 16
+  num_workers: 0
+  condition_split_path: data/norman/norman_gene_heldout_split.yaml
+  condition_split:
+    train: []
+    validation: []
+    test: []
+  split_config:
+    strategy: gene_heldout
+    train_gene_fraction: 0.8
+    validation_gene_fraction: 0.09
+    test_gene_fraction: 0.11
+    min_cells_per_condition: 1
+
+model_config:
+  model: scgpt
+  pretrained_dir: model/scGPT
+  freeze_encoder: true
+  freeze_layers_up_to: 10
+  preprocess_binning: 51
+  score_mode: causal_set
+  head_hidden_dim: 512
+  head_dropout: 0.2
+  graph:
+    enabled: true
+    source: coexpression
+    path: data/norman/graphs/0430_architecture_coexpression_top50.csv
+    top_k: 50
+    directed: false
+    include_controls: true
+  architecture:
+    use_graph_encoder: true
+    graph_message_layers: 2
+    use_contrast_encoder: false
+    use_slots: true
+    n_target_slots: 4
+    slot_aggregation: logsumexp
+    use_cardinality_head: true
+    max_cardinality: 4
+    cardinality_loss_weight: 0.1
+    use_cycle_loss: true
+    cycle_loss_weight: 0.1
+    alignment_heads: 4
+  use_fast_transformer: false
+  fast_transformer_backend: flash
+
+training_config:
+  epochs: 20
+  batch_size: 128
+  learning_rate: 5.0e-5
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  loss:
+    name: sampled_pairwise
+    hard_negative_source: online
+    hard_negatives: 64
+    random_negatives: 64
+    temperature: 1.0
+    margin: 0.0
+  early_stopping:
+    patience: 3
+    monitor: val_loss
+
+evaluation_config:
+  top_k_values: [1, 5, 10, 20, 40]

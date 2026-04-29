@@ -5,6 +5,7 @@ import pytest
 
 from src.utils.metrics import (
     build_gene_ranking_diagnostics,
+    compute_cardinality_metrics,
     compute_combo_metrics,
     compute_gene_metrics,
     parse_condition_genes,
@@ -33,6 +34,29 @@ def test_compute_gene_metrics_reports_relevant_exact_recall_ndcg() -> None:
     assert metrics["recall@2"] == 1.0
     assert metrics["ndcg@2"] == 1.0
     assert metrics["n_queries"] == 2
+    assert metrics["single_gene_n_queries"] == 1
+    assert metrics["combo_n_queries"] == 1
+    assert metrics["single_gene_exact_hit@1"] == 1.0
+    assert metrics["combo_recall@1"] == 0.5
+
+
+def test_compute_cardinality_metrics_reports_accuracy_mae_and_distribution() -> None:
+    cardinality_logits = np.asarray(
+        [
+            [0.0, 3.0, -1.0],
+            [0.0, -1.0, 3.0],
+            [0.0, 3.0, -1.0],
+        ],
+        dtype=np.float32,
+    )
+    targets = [[0], [1, 2], [0, 1]]
+
+    metrics = compute_cardinality_metrics(cardinality_logits, targets)
+
+    assert metrics["cardinality_accuracy"] == 2 / 3
+    assert metrics["cardinality_mae"] == 1 / 3
+    assert metrics["predicted_cardinality_1"] == 2
+    assert metrics["predicted_cardinality_2"] == 1
 
 
 def test_compute_gene_metrics_rejects_misaligned_query_counts() -> None:
@@ -86,9 +110,10 @@ def test_build_gene_ranking_diagnostics_reports_target_ranks_and_hits() -> None:
         "combo": 1,
         "single_gene": 1,
     }
-    assert diagnostics["summary"]["target_split_group_metrics"]["test+train"][
-        "hit@2"
-    ] == 1.0
+    assert (
+        diagnostics["summary"]["target_split_group_metrics"]["test+train"]["hit@2"]
+        == 1.0
+    )
 
     first_query = diagnostics["per_query"][0]
     assert first_query["condition"] == "A+C"

@@ -9,6 +9,7 @@ import torch
 
 from src.scgpt.model import ScGPTBackbone
 from src.scgpt import evaluate as scgpt_evaluate
+from src.scgpt import factory as scgpt_factory
 from src.scgpt import train as scgpt_train
 
 
@@ -49,8 +50,7 @@ def test_scgpt_train_and_evaluate_pass_configured_flash_backend(
         def __init__(self, **kwargs) -> None:
             captured_kwargs.append(kwargs)
 
-    monkeypatch.setattr(scgpt_train, "GeneScoreModel", FakeGeneScoreModel)
-    monkeypatch.setattr(scgpt_evaluate, "GeneScoreModel", FakeGeneScoreModel)
+    monkeypatch.setattr(scgpt_factory, "GeneScoreModel", FakeGeneScoreModel)
     config = {
         "model_config": {
             "model": "scgpt",
@@ -78,6 +78,62 @@ def test_scgpt_train_and_evaluate_pass_configured_flash_backend(
         "flash",
         "flash",
     ]
+
+
+def test_scgpt_train_build_model_passes_causal_set_graph_config(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    captured_kwargs: list[dict] = []
+
+    class FakeGeneScoreModel:
+        def __init__(self, **kwargs) -> None:
+            captured_kwargs.append(kwargs)
+
+    edge_path = tmp_path / "edges.csv"
+    edge_path.write_text("source,target,weight\nA,B,0.5\n")
+    monkeypatch.setattr(scgpt_factory, "GeneScoreModel", FakeGeneScoreModel)
+    config = {
+        "run_config": {"study_name": "causal_set_test"},
+        "model_config": {
+            "model": "scgpt",
+            "pretrained_dir": str(tmp_path),
+            "score_mode": "causal_set",
+            "graph": {
+                "enabled": True,
+                "source": "edge_list",
+                "path": str(edge_path),
+                "directed": False,
+            },
+            "architecture": {
+                "use_graph_encoder": True,
+                "use_contrast_encoder": True,
+                "use_slots": True,
+                "use_cardinality_head": True,
+                "use_cycle_loss": True,
+            },
+        },
+    }
+
+    scgpt_train._build_model(
+        config,
+        n_genes=2,
+        gene_ids=torch.tensor([1, 2]),
+        device=torch.device("cpu"),
+        gene_names=["A", "B"],
+    )
+
+    kwargs = captured_kwargs[0]
+    assert kwargs["score_mode"] == "causal_set"
+    assert kwargs["use_graph_encoder"] is True
+    assert kwargs["use_slots"] is True
+    assert kwargs["use_cardinality_head"] is True
+    assert kwargs["use_cycle_loss"] is True
+    assert kwargs["gene_graph_edge_index"].tolist() == [[0, 1], [1, 0]]
+    assert torch.allclose(
+        kwargs["gene_graph_edge_weight"],
+        torch.tensor([0.5, 0.5]),
+    )
 
 
 def _install_fake_scgpt_module(monkeypatch) -> None:
