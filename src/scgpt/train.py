@@ -15,9 +15,9 @@ from tqdm.auto import tqdm
 from src.scgpt.data import GeneScoreDataset, collate_gene_score_batch
 from src.scgpt.losses import GeneScoreLoss, GeneScoreLossConfig, build_gene_score_loss
 from src.scgpt.model import GeneScoreModel
-from src.utils.data import get_condition_splits, load_adata
+from src.utils.data import get_condition_splits, get_gene_splits, load_adata
 from src.utils.distributed import disable_tqdm, is_primary_rank, log_primary_info
-from src.utils.metrics import compute_gene_metrics
+from src.utils.metrics import compute_gene_metrics, parse_condition_genes
 from src.utils.runtime import AccelerateRuntime
 
 LOGGER = logging.getLogger(__name__)
@@ -60,6 +60,11 @@ def run(config: dict) -> dict:
     )
     if len(validation_dataset) == 0:
         validation_dataset = None
+    validation_candidate_indices = _validation_candidate_indices(
+        config=config,
+        split=split,
+        gene_name_to_idx=getattr(dataset, "gene_name_to_idx", None),
+    )
     loader = _build_loader(
         dataset=dataset,
         vocab=vocab,
@@ -149,6 +154,7 @@ def run(config: dict) -> dict:
             loss_fn=loss_fn,
             runtime=runtime,
             top_k_values=VALIDATION_TOP_K_VALUES,
+            candidate_indices=validation_candidate_indices,
         )
         epoch_time = time.perf_counter() - epoch_started_at
         gpu_max_allocated = _gpu_max_allocated_summary(runtime.device)
@@ -284,6 +290,31 @@ def _build_loss(config: dict) -> GeneScoreLoss:
     return build_gene_score_loss(GeneScoreLossConfig.from_mapping(loss_config))
 
 
+def _validation_candidate_indices(
+    config: dict,
+    split: dict[str, list[str]],
+    gene_name_to_idx: dict[str, int] | None,
+) -> list[int] | None:
+    if gene_name_to_idx is None:
+        return None
+
+    candidate_genes: set[str] = set()
+    gene_splits = get_gene_splits(config)
+    for genes in gene_splits.values():
+        candidate_genes.update(str(gene) for gene in genes)
+
+    if not candidate_genes:
+        for conditions in split.values():
+            for condition in conditions:
+                candidate_genes.update(parse_condition_genes(condition))
+
+    indices = {
+        int(gene_name_to_idx[gene])
+        for gene in candidate_genes
+        if gene in gene_name_to_idx
+    }
+    return sorted(indices) if indices else None
+
 def _build_early_stopping(config: dict) -> dict[str, float | int | str] | None:
     training_config = config.get("training_config", {})
     if not isinstance(training_config, dict):
@@ -401,6 +432,7 @@ def _evaluate_validation(
     loss_fn: GeneScoreLoss,
     runtime: AccelerateRuntime,
     top_k_values: list[int],
+    candidate_indices: list[int] | None = None,
 ) -> tuple[float | None, dict[str, float | int]]:
     if loader is None:
         return None, {}
@@ -430,8 +462,34 @@ def _evaluate_validation(
         example_count=example_count,
         device=runtime.device,
     )
-    metrics = compute_gene_metrics(scores, target_indices, top_k_values)
+    metric_scores, metric_targets = _restrict_metrics_to_candidates(
+        scores,
+        target_indices,
+        candidate_indices,
+    )
+    metrics = compute_gene_metrics(metric_scores, metric_targets, top_k_values)
     return val_loss, metrics
+
+
+def _restrict_metrics_to_candidates(
+    scores,
+    target_indices: list[list[int]],
+    candidate_indices: list[int] | None,
+):
+    if candidate_indices is None:
+        return scores, target_indices
+
+    candidates = [int(index) for index in candidate_indices]
+    index_lookup = {
+        source_idx: candidate_idx
+        for candidate_idx, source_idx in enumerate(candidates)
+    }
+    restricted_scores = [score_vec[candidates] for score_vec in scores]
+    restricted_targets = [
+        [index_lookup[int(index)] for index in indices if int(index) in index_lookup]
+        for indices in target_indices
+    ]
+    return restricted_scores, restricted_targets
 
 
 def _gather_for_metrics(
