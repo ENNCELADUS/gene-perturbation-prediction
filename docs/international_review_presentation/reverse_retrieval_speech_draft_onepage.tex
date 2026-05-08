@@ -1,0 +1,68 @@
+\documentclass[10pt]{article}
+\usepackage[letterpaper,top=0.31in,bottom=0.31in,left=0.40in,right=0.40in]{geometry}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\pagestyle{empty}
+\setlength{\parskip}{2.8pt}
+\setlength{\parindent}{1.35em}
+\emergencystretch=1.5em
+
+\newcommand{\slidetitle}[1]{\vspace{0.22em}\noindent{\normalsize\textbf{#1}}\par\vspace{-0.04em}}
+
+\begin{document}
+\fontsize{11.2}{13.55}\selectfont
+
+\noindent{\fontsize{14.3}{15.5}\selectfont \textbf{Speech Draft: AI Virtual Cell Models for Reverse Perturbation Retrieval}}\par
+\vspace{0.3em}
+
+Hello everyone, my name is \textbf{Anrui Wang}. Today I will present our course project, supervised by \textbf{Prof. Jie Zheng}. The project is titled \textbf{AI Virtual Cell Models for Reverse Perturbation Retrieval from Transcriptomic Cell States}. It was developed in \textbf{AI for Science and Engineering}, where we explored how AI models can be adapted to scientific questions.
+
+\slidetitle{Slide 1}
+
+Can AI read a cell state and infer its hidden cause?
+
+\textbf{Single-cell biology} technologies now allow us to measure cells at a detailed molecular level. Instead of treating a tissue as one average sample, we can observe many cell types and abnormal cell states.
+
+In this project, we treat \textbf{gene expression} as a \textbf{molecular fingerprint} of a cell state. The question is not only what the fingerprint looks like, but what may have caused it.
+
+\slidetitle{Slide 2}
+
+A human cell contains thousands of genes, but only a small number may be useful targets in a specific disease context.
+
+Testing every possible gene in the lab is expensive and slow. So AI can be useful if it helps \textbf{narrow the search space}.
+
+Here, the input is a \textbf{transcriptomic fingerprint}. The output is a \textbf{ranked shortlist} of candidate genes. This is not a final biological answer. It is a set of \textbf{hypotheses} that can guide later experiments.
+
+\slidetitle{Slide 3}
+
+In a standard biology experiment, the direction is forward. Researchers start with cells, apply a \textbf{gene perturbation}, and measure how the cell state changes.
+
+Our project reverses that direction. We start from the observed abnormal cell state and ask which perturbation gene could have produced a similar change.
+
+This is \textbf{reverse perturbation retrieval}. The model does not prove the true cause. It ranks possible causes for \textbf{follow-up validation}.
+
+\slidetitle{Slide 4}
+
+We did not train a model from scratch. We adapted \textbf{scGPT}, a \textbf{single-cell foundation model}, as an encoder for transcriptomic cell states.
+
+The perturbed cell state is encoded into a compact representation. \textbf{Matched control cells} are also encoded as a reference baseline.
+
+By comparing the perturbed state with this baseline, the model focuses on the change that may be caused by the perturbation, rather than unrelated cell variation.
+
+Then a \textbf{gene scoring head} converts this perturbation signal into a ranked list of candidate genes.
+
+This design helped us see that the model is only one part of the system. The \textbf{framing} and \textbf{evaluation setting} also affect whether the output is useful.
+
+\slidetitle{Slide 5}
+
+Our main takeaway is the process of turning an \textbf{interdisciplinary question} into a working AI research task.
+
+First, we learned to translate a \textbf{biomedical need} into an AI task. This required us to ask what kind of output would actually help a biologist.
+
+Second, we learned to adapt a \textbf{foundation model} for a real dataset, connecting single-cell information to candidate ranking.
+
+Third, we learned to \textbf{redesign test cases} to better reflect real biological use. Public datasets are valuable, but their default settings do not always match the practical question.
+
+More broadly, the course project trained us to think across disciplines: from \textbf{biological motivation} to \textbf{AI model} and \textbf{evaluation design}.
+
+\end{document}
