@@ -1,68 +1,179 @@
-# VCC - Reverse Perturbation Prediction
+# Cancer Dependency Prediction from Perturbation-Induced Transcriptomes
 
-Reverse perturbation prediction for CRISPR Perturb-seq data using retrieval-based/classification methods.
+This project connects virtual-cell perturbation modeling with cancer dependency and
+synthetic-lethality target prioritization. The core question is:
 
-## Quick Start
+> Given a cancer cell line and a gene perturbation, can the post-perturbation
+> transcriptomic response predict whether that perturbation creates a meaningful
+> fitness, vulnerability, or dependency phenotype?
+
+The current framing is deliberately narrower than "predict synthetic lethality"
+end-to-end. DepMap/Achilles CRISPR gene-effect scores provide population-level
+dependency labels, not single-cell death labels and not strict SL labels. The
+project first learns the link from perturbation-induced transcriptomic response
+to cancer dependency, then uses context specificity to prioritize SL-like
+candidates.
+
+![Core technical framing](docs/images/core.png)
+
+## Project Definition
+
+The project is organized around a three-node chain:
+
+1. **Perturbation**: cell line plus perturbation target gene, usually CRISPRi or
+   CRISPR knockout for the first supervised setting.
+2. **Post-perturbation transcriptome**: observed or predicted scRNA-seq response,
+   represented as pseudobulk delta expression, top-DE signatures, pathway
+   activity, or learned embeddings.
+3. **Dependency / essentiality phenotype**: DepMap-style gene-effect score,
+   vulnerability score, or target ranking for the same cell line and gene.
+
+The current supervised task is:
+
+```text
+(cell line, perturbation gene, post-perturbation transcriptomic response)
+    -> DepMap CRISPR gene-effect / dependency score
+```
+
+The matched key is **(cell line, perturbation gene)**. All data integration should
+preserve that key explicitly.
+
+## Technical Roadmap
+
+![Project roadmap](docs/images/roadmap.png)
+
+### Stage 1: Observed Response to Dependency
+
+Use real post-perturbation transcriptomes from Perturb-seq / CROP-seq /
+CRISPRi-seq and align them to DepMap/Achilles labels. This stage avoids relying
+on an imperfect forward perturbation model.
+
+Primary proof-of-concept:
+
+- start with K562 where CRISPRi Perturb-seq resources are strongest;
+- extend to HCT116, A549, or other cancer cell lines only when cell-line and
+  perturbation-gene identifiers can be aligned cleanly;
+- prioritize CRISPRi or knockout data for DepMap CRISPR gene-effect alignment;
+- treat Norman CRISPRa as a useful perturbation-response reference, not as the
+  primary label-aligned dataset for knockout dependency prediction.
+
+### Stage 2: Virtual-Cell Extension
+
+After Stage 1 establishes that transcriptomic response contains dependency
+signal, connect a forward perturbation model:
+
+```text
+basal cancer cell state + candidate perturbation
+    -> predicted post-perturbation transcriptome
+    -> dependency / essentiality predictor
+    -> target ranking
+```
+
+Candidate forward models may include scGPT, GEARS, STATE, or simple additive /
+linear baselines. The point is to quantify whether predicted transcriptomes are
+good enough for downstream dependency ranking, not to assume that forward
+prediction is solved.
+
+### Stage 3: SL Candidate Prioritization
+
+Synthetic lethality requires context specificity. A gene that is essential in a
+cell line is not automatically synthetic lethal. SL-like prioritization should
+add one or more context filters:
+
+- mutation or copy-number background;
+- lineage or cancer-type specificity;
+- normal-cell or less-vulnerable cancer-cell contrast;
+- pathway-specific dependency evidence;
+- TCGA/CCLE/DepMap context metadata.
+
+## Data Sources and Roles
+
+| Source | Role | Notes |
+| --- | --- | --- |
+| Perturb-seq / CROP-seq / CRISPRi-seq | Mechanistic response input | Provides post-perturbation scRNA-seq, pseudobulk signatures, or delta expression. |
+| DepMap / Achilles / CCLE | Supervision and context | Provides CRISPR gene-effect scores, dependency labels, omics, lineage, and mutation context. |
+| CancerSCEM / SCAR / CancerSEA | State annotation | Used for apoptosis, stress, cell-cycle, EMT, DNA-damage, or other cancer-state interpretation. |
+| TCGA / patient omics | Disease context | Useful for biomarker-specific framing and translational interpretation after cell-line proof-of-concept. |
+| LINCS L1000 / Tahoe-100M | Later extensions | Useful for bulk or drug perturbation expansion after the gene-perturbation task is stable. |
+
+Minimum useful aligned training record:
+
+```text
+cell_line_id
+perturbation_gene_id
+perturbation_modality
+control_expression
+post_perturbation_expression
+delta_expression_or_embedding
+depmap_gene_effect_score
+cell_line_context_metadata
+```
+
+## Evaluation
+
+Use continuous dependency prediction as the default target. Binary essential /
+non-essential labels can be derived later, but threshold choices should be
+reported explicitly.
+
+Recommended metrics:
+
+- Spearman or Pearson correlation for gene-effect regression;
+- mean squared error or mean absolute error for calibrated score prediction;
+- AUROC / AUPRC if using binary essentiality labels;
+- ranking metrics for top-k target prioritization;
+- within-cell-line and cross-cell-line generalization splits;
+- biological interpretation of high-scoring targets and response programs.
+
+## Current Repository State
+
+This `main` branch has been cleaned of legacy VCC training code and old reports.
+It currently serves as a project framing and rebuild base.
+
+Project assets:
+
+- `README.md`: human-facing project overview and roadmap.
+- `AGENTS.md` / `CLAUDE.md`: instructions for AI coding agents.
+- `docs/discussion/0408.md`: 2026-04-08 project discussion notes.
+- `docs/discussion/0429.md`: 2026-04-29 project discussion notes.
+- `docs/images/core.png`: triangular technical framing diagram.
+- `docs/images/roadmap.png`: staged project roadmap diagram.
+- `data/norman/splits/`: retained Norman split metadata.
+- `scGPT/`: local scGPT reference code.
+- `pyproject.toml` / `uv.lock`: Python environment metadata.
+
+The old `src/`, `src_tahoe/`, `scripts/`, and historical result folders were
+removed from `main`. Do not document or rely on old `uv run vcc` pipeline
+commands until the implementation package is rebuilt.
+
+## Environment
+
+This repository uses `uv` with a project-local `.venv`.
 
 ```bash
-# Install Python once if needed
 uv python install 3.11
-
-# Create or update the project environment
 uv sync
-
-# Run the main pipeline
-uv run vcc --config src/configs/scgpt_discriminative.yaml
-
-# Run tests
-uv run pytest
+uv run python -c "import anndata, scanpy, torch, scgpt; print('environment ok')"
 ```
 
-## Environment Management
+Use `uv run` for Python tooling:
 
-This repository now uses `pyproject.toml + uv` as the only supported Python
-environment workflow.
-
-- Create or refresh the local virtualenv: `uv sync`
-- Run CLI entry points: `uv run vcc --config src/configs/scgpt_discriminative.yaml`
-- Run Tahoe pipeline entry point: `uv run vcc-tahoe --config src_tahoe/configs/scgpt_discriminative_tahoe.yaml`
-- Run tests: `uv run pytest`
-- Run lint/format: `uv run ruff check --fix .` and `uv run ruff format .`
-
-Notes:
-- `pyproject.toml` and `uv.lock` are the single sources of truth for Python dependencies.
-- Plain `uv sync` installs the default development toolchain, including `ipython`, `pytest`, `ruff`, `tabulate`, and `xgboost`.
-- Tree-model baselines use the `baseline` extra for `xgboost`.
-- Some code paths expect either an installed `scgpt` package or a populated local
-  `scGPT/` checkout.
-- `flash-attn` is intentionally not locked in the shared environment because it
-  requires a CUDA/NVCC build host. Install it manually on GPU machines after
-  `uv sync` if your training path still needs it.
-
-## Repository Layout
-
-```
-.
-├── src/                # Core pipeline package
-│   ├── configs/        # Experiment configuration files
-│   ├── data/           # Dataset loading and split logic
-│   ├── evaluate/       # Evaluation metrics and helpers
-│   ├── model/          # Encoders and retrieval models
-│   ├── train/          # Training and fine-tuning flows
-│   └── utils/          # Shared utilities
-├── scripts/            # Automation helpers and SLURM runners
-├── scGPT/              # Vendorized scGPT modules and tests
-├── data/
-│   ├── raw/            # Raw inputs (gitignored)
-│   └── processed/      # Derived features
-├── docs/               # Project documentation and references
-├── tests/              # Project tests
-└── cell-eval/          # Standalone evaluation package
+```bash
+uv run ruff check .
+uv run ruff format .
+uv run python -m pytest
 ```
 
-## Documentation
+Tests may be absent while the implementation is being rebuilt. If no tests are
+present, document that explicitly in the change summary instead of treating the
+test command as a successful verification step.
 
-- Data splits and AnnData requirements: `docs/data.md`
-- Metrics and evaluation: `docs/eval_metrics.md`
-- Project overview: `docs/project-intro/introduction.md`
-- scGPT reference notes: `docs/references/scGPT.md`
+## Terminology Guardrails
+
+- Say **dependency prediction** or **essentiality ranking** for the supervised
+  DepMap task.
+- Say **SL candidate prioritization** only after adding context-specificity
+  evidence.
+- Do not call DepMap gene-effect scores single-cell death labels.
+- Do not equate gene essentiality with synthetic lethality.
+- Do not directly align CRISPRa activation perturbations with CRISPR knockout
+  dependency labels without an explicit modality caveat.
