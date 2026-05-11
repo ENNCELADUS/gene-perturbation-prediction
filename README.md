@@ -135,6 +135,7 @@ Project assets:
 - `AGENTS.md` / `CLAUDE.md`: instructions for AI coding agents.
 - `docs/discussion/0408.md`: 2026-04-08 project discussion notes.
 - `docs/discussion/0429.md`: 2026-04-29 project discussion notes.
+- `docs/data/`: concise dataset cards for downloaded Stage 1 data.
 - `docs/images/core.png`: triangular technical framing diagram.
 - `docs/images/roadmap.png`: staged project roadmap diagram.
 - `data/norman/splits/`: retained Norman split metadata.
