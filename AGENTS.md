@@ -80,6 +80,7 @@ cell, TCGA, CCLE, or DepMap context evidence before using SL language.
 - `CLAUDE.md`: Claude-agent instructions.
 - `docs/discussion/0408.md`: 2026-04-08 discussion notes.
 - `docs/discussion/0429.md`: 2026-04-29 discussion notes.
+- `docs/data/`: concise dataset cards for downloaded Stage 1 data.
 - `docs/images/core.png`: triangular technical route diagram.
 - `docs/images/roadmap.png`: staged roadmap diagram.
 - `data/norman/splits/`: retained Norman split metadata.
