@@ -83,12 +83,16 @@ cell, TCGA, CCLE, or DepMap context evidence before using SL language.
 - `docs/data/`: concise dataset cards for downloaded Stage 1 data.
 - `docs/images/core.png`: triangular technical route diagram.
 - `docs/images/roadmap.png`: staged roadmap diagram.
+- `configs/replogle_k562_baseline.yaml`: Replogle K562 B→C baseline config.
+- `src/vcc_dependency_baseline/`: implemented feature-building and
+  cross-validation baseline package.
+- `tests/`: synthetic-data tests for the baseline package.
 - `data/norman/splits/`: retained Norman split metadata.
 - `scGPT/`: local scGPT reference code.
 - `pyproject.toml` and `uv.lock`: Python dependency metadata.
 
-If you reintroduce implementation code, create a clear package layout and update
-`README.md`, `AGENTS.md`, `CLAUDE.md`, and any relevant docs in the same change.
+Do not rely on old `vcc` or `vcc-tahoe` commands. The active implemented entry
+point is `uv run vcc-dep-baseline`.
 
 ## Environment Requirement
 
