@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from vcc_dependency_baseline.config import BaselineConfig
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -82,7 +85,26 @@ def run_cv(config: BaselineConfig, features_npz: Path | None = None) -> CvPaths:
             ("delta_all", "delta_mask_target"),
         ),
     ]
+    total_fits = _count_internal_fit_steps(
+        config=config,
+        evaluation_scopes=evaluation_scopes,
+        feature_sets=feature_sets,
+        model_specs=model_specs,
+    )
+    progress = {"completed": 0, "total": total_fits}
+    LOGGER.info(
+        "Starting CV run: n_splits=%s n_repeats=%s internal_fit_steps=%s",
+        config.cv.n_splits,
+        config.cv.n_repeats,
+        total_fits,
+    )
     for evaluation_scope, row_indices, allowed_features in evaluation_scopes:
+        LOGGER.info(
+            "Starting scope=%s rows=%s features=%s",
+            evaluation_scope,
+            row_indices.size,
+            ",".join(allowed_features),
+        )
         scope_metrics, scope_predictions = _run_internal_cv_scope(
             config=config,
             evaluation_scope=evaluation_scope,
@@ -94,6 +116,7 @@ def run_cv(config: BaselineConfig, features_npz: Path | None = None) -> CvPaths:
             y=y,
             n_cells=n_cells,
             genes=genes,
+            progress=progress,
         )
         metric_rows.extend(scope_metrics)
         prediction_rows.extend(scope_predictions)
@@ -175,6 +198,7 @@ def _run_internal_cv_scope(
     y: np.ndarray,
     n_cells: np.ndarray,
     genes: np.ndarray,
+    progress: dict[str, int],
 ) -> tuple[list[dict[str, object]], list[pd.DataFrame]]:
     if row_indices.size < config.cv.n_splits:
         msg = (
@@ -195,6 +219,14 @@ def _run_internal_cv_scope(
     for fold_index, (train_local, test_local) in enumerate(
         splitter.split(row_indices, y_bins)
     ):
+        LOGGER.info(
+            "Starting scope=%s fold=%s/%s train_rows=%s test_rows=%s",
+            evaluation_scope,
+            fold_index + 1,
+            config.cv.n_splits * config.cv.n_repeats,
+            len(train_local),
+            len(test_local),
+        )
         train_idx = row_indices[train_local]
         test_idx = row_indices[test_local]
         sample_weight = _sample_weights(n_cells[train_idx])
@@ -215,6 +247,18 @@ def _run_internal_cv_scope(
                     fitted = clone(model)
                     fitted.fit(x_train, y[train_idx], **fit_params)
                     pred = fitted.predict(x_test)
+                    progress["completed"] += 1
+                    LOGGER.info(
+                        "Completed fit %s/%s scope=%s fold=%s feature=%s "
+                        "model=%s weighting=%s",
+                        progress["completed"],
+                        progress["total"],
+                        evaluation_scope,
+                        fold_index + 1,
+                        feature_name,
+                        model_name,
+                        weighting,
+                    )
                     metric_rows.append(
                         {
                             "evaluation_scope": evaluation_scope,
@@ -259,6 +303,38 @@ def _run_internal_cv_scope(
                         metric_rows.extend(external_metrics)
                         prediction_rows.extend(external_predictions)
     return metric_rows, prediction_rows
+
+
+def _count_internal_fit_steps(
+    *,
+    config: BaselineConfig,
+    evaluation_scopes: list[tuple[str, np.ndarray, tuple[str, ...]]],
+    feature_sets: dict[str, np.ndarray],
+    model_specs: list[tuple[str, object, bool]],
+) -> int:
+    steps_per_repeat = 0
+    for _scope, row_indices, allowed_features in evaluation_scopes:
+        if row_indices.size < config.cv.n_splits:
+            continue
+        fold_train_rows = row_indices.size - math.ceil(
+            row_indices.size / config.cv.n_splits
+        )
+        for feature_name in allowed_features:
+            x_train_shape = (
+                fold_train_rows,
+                feature_sets[feature_name].shape[1],
+            )
+            for model_name, _model, supports_weight in model_specs:
+                if not _compatible_model_feature_shape(
+                    model_name,
+                    feature_name,
+                    x_train_shape,
+                ):
+                    continue
+                steps_per_repeat += 1
+                if supports_weight:
+                    steps_per_repeat += 1
+    return steps_per_repeat * config.cv.n_splits * config.cv.n_repeats
 
 
 def _load_external_evaluations(
@@ -469,12 +545,18 @@ def _model_specs(config: BaselineConfig) -> list[tuple[str, object, bool]]:
 def _compatible_model_feature(
     model_name: str, feature_name: str, x_train: np.ndarray
 ) -> bool:
+    return _compatible_model_feature_shape(model_name, feature_name, x_train.shape)
+
+
+def _compatible_model_feature_shape(
+    model_name: str, feature_name: str, x_train_shape: tuple[int, int]
+) -> bool:
     if not model_name.startswith("pca"):
         return True
     if feature_name not in {"delta_all", "delta_mask_target"}:
         return False
     n_components = int(model_name.removeprefix("pca").removesuffix("_ridge"))
-    return n_components <= min(x_train.shape[0], x_train.shape[1])
+    return n_components <= min(x_train_shape[0], x_train_shape[1])
 
 
 def _fit_params_for_sample_weight(
