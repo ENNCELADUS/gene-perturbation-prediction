@@ -351,11 +351,17 @@ def _stratification_bins(y: np.ndarray, requested_bins: int) -> np.ndarray:
 
 
 def _corr(func: object, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    if np.std(y_true) == 0 or np.std(y_pred) == 0:
+    if _is_constant(y_true) or _is_constant(y_pred):
         return np.nan
     result = func(y_true, y_pred)
     statistic = result.statistic if hasattr(result, "statistic") else result[0]
     return float(statistic)
+
+
+def _is_constant(values: np.ndarray) -> bool:
+    if values.size <= 1:
+        return True
+    return bool(np.allclose(values, values[0]))
 
 
 def _top_enrichment(labels: np.ndarray, score: np.ndarray, fraction: float) -> float:

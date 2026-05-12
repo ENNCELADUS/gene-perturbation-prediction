@@ -12,7 +12,7 @@ from vcc_dependency_baseline.config import (
     DataConfig,
     FeatureConfig,
 )
-from vcc_dependency_baseline.evaluation import run_cv
+from vcc_dependency_baseline.evaluation import regression_metrics, run_cv
 from vcc_dependency_baseline.features import build_features
 
 
@@ -58,6 +58,16 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
     assert {"mean_label", "ridge"}.issubset(set(summary["model"]))
     assert {"unweighted", "sqrt_n_cells"}.issubset(set(summary["weighting"]))
     assert not predictions.empty
+
+
+def test_regression_metrics_skip_correlation_for_constant_predictions() -> None:
+    metrics = regression_metrics(
+        np.asarray([-2.0, -1.0, 0.0]),
+        np.asarray([0.5, 0.5, 0.5]),
+    )
+
+    assert np.isnan(metrics["spearman"])
+    assert np.isnan(metrics["pearson"])
 
 
 def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:
