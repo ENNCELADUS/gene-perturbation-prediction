@@ -21,6 +21,13 @@ class DataConfig:
     matched_label_col: str = "has_depmap_label"
     n_cells_col: str = "n_cells_or_pseudobulk"
     external_overlap_csvs: tuple[Path, ...] = ()
+    external_evaluations: tuple[ExternalEvaluationConfig, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExternalEvaluationConfig:
+    name: str
+    features_npz: Path
 
 
 @dataclass(frozen=True)
@@ -69,6 +76,18 @@ def _tuple_path(values: Any) -> tuple[Path, ...]:
     return tuple(_path(value) for value in values)
 
 
+def _external_evaluations(values: Any) -> tuple[ExternalEvaluationConfig, ...]:
+    if values is None:
+        return ()
+    return tuple(
+        ExternalEvaluationConfig(
+            name=str(value["name"]),
+            features_npz=_path(value["features_npz"]),
+        )
+        for value in values
+    )
+
+
 def load_config(path: str | Path) -> BaselineConfig:
     """Load a YAML config file."""
     config_path = _path(path)
@@ -91,6 +110,9 @@ def load_config(path: str | Path) -> BaselineConfig:
             matched_label_col=data.get("matched_label_col", "has_depmap_label"),
             n_cells_col=data.get("n_cells_col", "n_cells_or_pseudobulk"),
             external_overlap_csvs=_tuple_path(data.get("external_overlap_csvs")),
+            external_evaluations=_external_evaluations(
+                data.get("external_evaluations")
+            ),
         ),
         features=FeatureConfig(
             chunk_size=int(features.get("chunk_size", 4096)),

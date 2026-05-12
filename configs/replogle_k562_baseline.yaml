@@ -12,6 +12,7 @@ data:
     - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_adamson_depmap_overlap.csv
     - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_dixit_depmap_overlap.csv
     - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_norman_depmap_overlap.csv
+  external_evaluations: []
 
 features:
   chunk_size: 4096

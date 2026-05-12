@@ -38,6 +38,14 @@ class CvPaths:
     config_json: Path
 
 
+@dataclass(frozen=True)
+class ExternalEvaluationData:
+    name: str
+    feature_sets: dict[str, np.ndarray]
+    y: np.ndarray
+    genes: np.ndarray
+
+
 def run_cv(config: BaselineConfig, features_npz: Path | None = None) -> CvPaths:
     """Run repeated stratified cross-validation on built features."""
     output_dir = config.data.output_dir / "cv"
@@ -59,61 +67,36 @@ def run_cv(config: BaselineConfig, features_npz: Path | None = None) -> CvPaths:
 
     feature_sets = _feature_sets(delta, burden, n_cells, target_indices)
     model_specs = _model_specs(config)
-    y_bins = _stratification_bins(y, config.cv.stratify_bins)
-    splitter = RepeatedStratifiedKFold(
-        n_splits=config.cv.n_splits,
-        n_repeats=config.cv.n_repeats,
-        random_state=config.cv.random_state,
-    )
-
+    external_evaluations = _load_external_evaluations(config)
     metric_rows: list[dict[str, object]] = []
     prediction_rows: list[pd.DataFrame] = []
-
-    for fold_index, (train_idx, test_idx) in enumerate(splitter.split(delta, y_bins)):
-        sample_weight = _sample_weights(n_cells[train_idx])
-        for feature_name, x in feature_sets.items():
-            x_train = x[train_idx]
-            x_test = x[test_idx]
-            for model_name, model, supports_weight in model_specs:
-                if not _compatible_model_feature(model_name, feature_name, x_train):
-                    continue
-                weighting_modes = ["unweighted"]
-                if supports_weight:
-                    weighting_modes.append("sqrt_n_cells")
-                for weighting in weighting_modes:
-                    fit_params = {}
-                    if weighting == "sqrt_n_cells":
-                        fit_params = _fit_params_for_sample_weight(model, sample_weight)
-                    fitted = clone(model)
-                    fitted.fit(x_train, y[train_idx], **fit_params)
-                    pred = fitted.predict(x_test)
-                    metric_rows.append(
-                        {
-                            "fold": fold_index,
-                            "feature_set": feature_name,
-                            "model": model_name,
-                            "weighting": weighting,
-                            **regression_metrics(y[test_idx], pred),
-                            **ranking_metrics(
-                                y[test_idx],
-                                pred,
-                                config.cv.essential_thresholds,
-                            ),
-                        }
-                    )
-                    prediction_rows.append(
-                        pd.DataFrame(
-                            {
-                                "fold": fold_index,
-                                "feature_set": feature_name,
-                                "model": model_name,
-                                "weighting": weighting,
-                                "perturbation_gene": genes[test_idx],
-                                "y_true": y[test_idx],
-                                "y_pred": pred,
-                            }
-                        )
-                    )
+    evaluation_scopes = [
+        (
+            "internal_cv_all",
+            np.arange(len(y), dtype=np.int64),
+            tuple(feature_sets.keys()),
+        ),
+        (
+            "internal_cv_target_index_valid",
+            np.flatnonzero(target_indices >= 0),
+            ("delta_all", "delta_mask_target"),
+        ),
+    ]
+    for evaluation_scope, row_indices, allowed_features in evaluation_scopes:
+        scope_metrics, scope_predictions = _run_internal_cv_scope(
+            config=config,
+            evaluation_scope=evaluation_scope,
+            row_indices=row_indices,
+            allowed_features=allowed_features,
+            feature_sets=feature_sets,
+            model_specs=model_specs,
+            external_evaluations=external_evaluations,
+            y=y,
+            n_cells=n_cells,
+            genes=genes,
+        )
+        metric_rows.extend(scope_metrics)
+        prediction_rows.extend(scope_predictions)
 
     fold_metrics = pd.DataFrame(metric_rows)
     summary = summarize_metrics(fold_metrics)
@@ -152,13 +135,17 @@ def summarize_metrics(fold_metrics: pd.DataFrame) -> pd.DataFrame:
     metric_cols = [
         col
         for col in fold_metrics.columns
-        if col not in {"fold", "feature_set", "model", "weighting"}
+        if col not in {"evaluation_scope", "fold", "feature_set", "model", "weighting"}
         and pd.api.types.is_numeric_dtype(fold_metrics[col])
     ]
     rows = []
-    grouped = fold_metrics.groupby(["feature_set", "model", "weighting"], dropna=False)
-    for (feature_set, model, weighting), group in grouped:
+    grouped = fold_metrics.groupby(
+        ["evaluation_scope", "feature_set", "model", "weighting"],
+        dropna=False,
+    )
+    for (evaluation_scope, feature_set, model, weighting), group in grouped:
         row: dict[str, object] = {
+            "evaluation_scope": evaluation_scope,
             "feature_set": feature_set,
             "model": model,
             "weighting": weighting,
@@ -170,10 +157,177 @@ def summarize_metrics(fold_metrics: pd.DataFrame) -> pd.DataFrame:
             row[f"{metric}_std"] = values.std(ddof=1) if len(values) > 1 else np.nan
         rows.append(row)
     return pd.DataFrame(rows).sort_values(
-        ["spearman_mean", "pearson_mean"],
-        ascending=[False, False],
+        ["evaluation_scope", "spearman_mean", "pearson_mean"],
+        ascending=[True, False, False],
         na_position="last",
     )
+
+
+def _run_internal_cv_scope(
+    *,
+    config: BaselineConfig,
+    evaluation_scope: str,
+    row_indices: np.ndarray,
+    allowed_features: tuple[str, ...],
+    feature_sets: dict[str, np.ndarray],
+    model_specs: list[tuple[str, object, bool]],
+    external_evaluations: tuple[ExternalEvaluationData, ...],
+    y: np.ndarray,
+    n_cells: np.ndarray,
+    genes: np.ndarray,
+) -> tuple[list[dict[str, object]], list[pd.DataFrame]]:
+    if row_indices.size < config.cv.n_splits:
+        msg = (
+            f"Evaluation scope {evaluation_scope!r} has {row_indices.size} rows, "
+            f"fewer than n_splits={config.cv.n_splits}"
+        )
+        raise ValueError(msg)
+
+    scope_y = y[row_indices]
+    y_bins = _stratification_bins(scope_y, config.cv.stratify_bins)
+    splitter = RepeatedStratifiedKFold(
+        n_splits=config.cv.n_splits,
+        n_repeats=config.cv.n_repeats,
+        random_state=config.cv.random_state,
+    )
+    metric_rows: list[dict[str, object]] = []
+    prediction_rows: list[pd.DataFrame] = []
+    for fold_index, (train_local, test_local) in enumerate(
+        splitter.split(row_indices, y_bins)
+    ):
+        train_idx = row_indices[train_local]
+        test_idx = row_indices[test_local]
+        sample_weight = _sample_weights(n_cells[train_idx])
+        for feature_name in allowed_features:
+            x = feature_sets[feature_name]
+            x_train = x[train_idx]
+            x_test = x[test_idx]
+            for model_name, model, supports_weight in model_specs:
+                if not _compatible_model_feature(model_name, feature_name, x_train):
+                    continue
+                weighting_modes = ["unweighted"]
+                if supports_weight:
+                    weighting_modes.append("sqrt_n_cells")
+                for weighting in weighting_modes:
+                    fit_params = {}
+                    if weighting == "sqrt_n_cells":
+                        fit_params = _fit_params_for_sample_weight(model, sample_weight)
+                    fitted = clone(model)
+                    fitted.fit(x_train, y[train_idx], **fit_params)
+                    pred = fitted.predict(x_test)
+                    metric_rows.append(
+                        {
+                            "evaluation_scope": evaluation_scope,
+                            "fold": fold_index,
+                            "feature_set": feature_name,
+                            "model": model_name,
+                            "weighting": weighting,
+                            **regression_metrics(y[test_idx], pred),
+                            **ranking_metrics(
+                                y[test_idx],
+                                pred,
+                                config.cv.essential_thresholds,
+                            ),
+                        }
+                    )
+                    prediction_rows.append(
+                        pd.DataFrame(
+                            {
+                                "evaluation_scope": evaluation_scope,
+                                "fold": fold_index,
+                                "feature_set": feature_name,
+                                "model": model_name,
+                                "weighting": weighting,
+                                "perturbation_gene": genes[test_idx],
+                                "y_true": y[test_idx],
+                                "y_pred": pred,
+                            }
+                        )
+                    )
+                    if evaluation_scope == "internal_cv_all":
+                        external_metrics, external_predictions = (
+                            _evaluate_external_datasets(
+                                config=config,
+                                external_evaluations=external_evaluations,
+                                fold_index=fold_index,
+                                feature_name=feature_name,
+                                model_name=model_name,
+                                weighting=weighting,
+                                fitted=fitted,
+                            )
+                        )
+                        metric_rows.extend(external_metrics)
+                        prediction_rows.extend(external_predictions)
+    return metric_rows, prediction_rows
+
+
+def _load_external_evaluations(
+    config: BaselineConfig,
+) -> tuple[ExternalEvaluationData, ...]:
+    datasets: list[ExternalEvaluationData] = []
+    for external in config.data.external_evaluations:
+        feature_data = np.load(external.features_npz, allow_pickle=True)
+        delta = feature_data["delta"].astype(np.float32)
+        burden = feature_data["response_burden"].astype(np.float32)
+        n_cells = feature_data["n_cells"].astype(np.float64)
+        target_indices = feature_data["target_gene_index"].astype(np.int64)
+        datasets.append(
+            ExternalEvaluationData(
+                name=external.name,
+                feature_sets=_feature_sets(delta, burden, n_cells, target_indices),
+                y=feature_data["y"].astype(np.float64),
+                genes=feature_data["perturbation_gene"].astype(str),
+            )
+        )
+    return tuple(datasets)
+
+
+def _evaluate_external_datasets(
+    *,
+    config: BaselineConfig,
+    external_evaluations: tuple[ExternalEvaluationData, ...],
+    fold_index: int,
+    feature_name: str,
+    model_name: str,
+    weighting: str,
+    fitted: object,
+) -> tuple[list[dict[str, object]], list[pd.DataFrame]]:
+    metric_rows: list[dict[str, object]] = []
+    prediction_rows: list[pd.DataFrame] = []
+    for external in external_evaluations:
+        if feature_name not in external.feature_sets:
+            continue
+        pred = fitted.predict(external.feature_sets[feature_name])
+        metric_rows.append(
+            {
+                "evaluation_scope": f"external:{external.name}",
+                "fold": fold_index,
+                "feature_set": feature_name,
+                "model": model_name,
+                "weighting": weighting,
+                **regression_metrics(external.y, pred),
+                **ranking_metrics(
+                    external.y,
+                    pred,
+                    config.cv.essential_thresholds,
+                ),
+            }
+        )
+        prediction_rows.append(
+            pd.DataFrame(
+                {
+                    "evaluation_scope": f"external:{external.name}",
+                    "fold": fold_index,
+                    "feature_set": feature_name,
+                    "model": model_name,
+                    "weighting": weighting,
+                    "perturbation_gene": external.genes,
+                    "y_true": external.y,
+                    "y_pred": pred,
+                }
+            )
+        )
+    return metric_rows, prediction_rows
 
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
