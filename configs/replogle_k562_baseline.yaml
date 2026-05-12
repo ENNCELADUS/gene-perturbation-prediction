@@ -20,7 +20,7 @@ features:
 
 cv:
   n_splits: 5
-  n_repeats: 5
+  n_repeats: 1
   random_state: 42
   stratify_bins: 10
   pca_components: [20, 50, 100]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -13,6 +14,10 @@ from vcc_dependency_baseline.features import build_features
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
     parser = argparse.ArgumentParser(
         prog="vcc-dep-baseline",
         description="Build and evaluate Replogle K562 B->C dependency baselines.",
