@@ -57,6 +57,22 @@ Primary proof-of-concept:
 - treat Norman CRISPRa as a useful perturbation-response reference, not as the
   primary label-aligned dataset for knockout dependency prediction.
 
+Current implemented baseline:
+
+```bash
+uv run vcc-dep-baseline build-features --config configs/replogle_k562_baseline.yaml
+uv run vcc-dep-baseline run-cv --config configs/replogle_k562_baseline.yaml
+uv run vcc-dep-baseline summarize --results-dir /home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/cv
+```
+
+This baseline builds gene-level Replogle K562 delta-expression features from
+`obs["gene"]`, excludes matched rows whose DepMap GeneEffect is missing, and
+evaluates repeated stratified cross-validation against continuous K562
+CRISPRGeneEffect labels. It reports simple controls, ridge / elastic-net, PCA
+ridge, and tabular nonlinear baselines before any MIL or foundation-model
+embeddings, with both unweighted and square-root-`n_cells`-weighted fits where
+the estimator supports sample weights.
+
 ### Stage 2: Virtual-Cell Extension
 
 After Stage 1 establishes that transcriptomic response contains dependency
@@ -138,13 +154,16 @@ Project assets:
 - `docs/data/`: concise dataset cards for downloaded Stage 1 data.
 - `docs/images/core.png`: triangular technical framing diagram.
 - `docs/images/roadmap.png`: staged project roadmap diagram.
+- `configs/replogle_k562_baseline.yaml`: Replogle K562 B→C baseline config.
+- `src/vcc_dependency_baseline/`: feature building and CV baseline package.
+- `tests/`: synthetic-data tests for the baseline package.
 - `data/norman/splits/`: retained Norman split metadata.
 - `scGPT/`: local scGPT reference code.
 - `pyproject.toml` / `uv.lock`: Python environment metadata.
 
-The old `src/`, `src_tahoe/`, `scripts/`, and historical result folders were
-removed from `main`. Do not document or rely on old `uv run vcc` pipeline
-commands until the implementation package is rebuilt.
+The old `src_tahoe/`, `scripts/`, and historical result folders were removed
+from `main`. Do not document or rely on old `uv run vcc` or `uv run vcc-tahoe`
+pipeline commands.
 
 ## Environment
 
@@ -162,6 +181,7 @@ Use `uv run` for Python tooling:
 uv run ruff check .
 uv run ruff format .
 uv run python -m pytest
+uv run vcc-dep-baseline build-features --config configs/replogle_k562_baseline.yaml
 ```
 
 Tests may be absent while the implementation is being rebuilt. If no tests are

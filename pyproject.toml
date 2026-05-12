@@ -53,25 +53,24 @@ dev = [
 default-groups = ["dev"]
 
 [project.scripts]
-vcc = "src.main:main"
-vcc-tahoe = "src_tahoe.main:main"
+vcc-dep-baseline = "vcc_dependency_baseline.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src", "src_tahoe"]
+packages = ["src/vcc_dependency_baseline"]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/README.md",
     "/pyproject.toml",
-    "/scripts",
     "/src",
-    "/src_tahoe",
+    "/configs",
+    "/tests",
 ]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-src = ["src"]
+src = ["src", "tests"]
 extend-exclude = [
     "scGPT",
     "data/",
