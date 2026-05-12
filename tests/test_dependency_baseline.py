@@ -78,6 +78,7 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
 
     cv_paths = run_cv(config)
     summary = pd.read_csv(cv_paths.summary_csv)
+    fold_metrics = pd.read_csv(cv_paths.fold_metrics_csv)
     predictions = pd.read_csv(cv_paths.predictions_csv)
     assert {
         "internal_cv_all",
@@ -100,6 +101,13 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
         predictions["evaluation_scope"] == "internal_cv_target_index_valid"
     ]
     assert (target_valid_predictions["target_gene_index"] >= 0).all()
+    assert {"fit_seconds", "spearman_defined", "pearson_defined"}.issubset(
+        set(fold_metrics.columns)
+    )
+    assert fold_metrics["fit_seconds"].ge(0).all()
+    mean_label_rows = fold_metrics["model"] == "mean_label"
+    assert not fold_metrics.loc[mean_label_rows, "spearman_defined"].any()
+    assert not fold_metrics.loc[mean_label_rows, "pearson_defined"].any()
     assert not predictions.empty
 
 
@@ -111,6 +119,8 @@ def test_regression_metrics_skip_correlation_for_constant_predictions() -> None:
 
     assert np.isnan(metrics["spearman"])
     assert np.isnan(metrics["pearson"])
+    assert metrics["spearman_defined"] is False
+    assert metrics["pearson_defined"] is False
 
 
 def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:

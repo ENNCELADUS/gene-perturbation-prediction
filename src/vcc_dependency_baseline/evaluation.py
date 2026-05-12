@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -245,7 +246,9 @@ def _run_internal_cv_scope(
                     if weighting == "sqrt_n_cells":
                         fit_params = _fit_params_for_sample_weight(model, sample_weight)
                     fitted = clone(model)
+                    fit_started = time.perf_counter()
                     fitted.fit(x_train, y[train_idx], **fit_params)
+                    fit_seconds = time.perf_counter() - fit_started
                     pred = fitted.predict(x_test)
                     progress["completed"] += 1
                     LOGGER.info(
@@ -266,6 +269,7 @@ def _run_internal_cv_scope(
                             "feature_set": feature_name,
                             "model": model_name,
                             "weighting": weighting,
+                            "fit_seconds": fit_seconds,
                             **regression_metrics(y[test_idx], pred),
                             **ranking_metrics(
                                 y[test_idx],
@@ -298,6 +302,7 @@ def _run_internal_cv_scope(
                                 model_name=model_name,
                                 weighting=weighting,
                                 fitted=fitted,
+                                fit_seconds=fit_seconds,
                             )
                         )
                         metric_rows.extend(external_metrics)
@@ -367,6 +372,7 @@ def _evaluate_external_datasets(
     model_name: str,
     weighting: str,
     fitted: object,
+    fit_seconds: float,
 ) -> tuple[list[dict[str, object]], list[pd.DataFrame]]:
     metric_rows: list[dict[str, object]] = []
     prediction_rows: list[pd.DataFrame] = []
@@ -381,6 +387,7 @@ def _evaluate_external_datasets(
                 "feature_set": feature_name,
                 "model": model_name,
                 "weighting": weighting,
+                "fit_seconds": fit_seconds,
                 **regression_metrics(external.y, pred),
                 **ranking_metrics(
                     external.y,
@@ -408,9 +415,13 @@ def _evaluate_external_datasets(
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     """Compute regression metrics with constant-input guards."""
+    spearman = _corr(spearmanr, y_true, y_pred)
+    pearson = _corr(pearsonr, y_true, y_pred)
     return {
-        "spearman": _corr(spearmanr, y_true, y_pred),
-        "pearson": _corr(pearsonr, y_true, y_pred),
+        "spearman": spearman,
+        "spearman_defined": not np.isnan(spearman),
+        "pearson": pearson,
+        "pearson_defined": not np.isnan(pearson),
         "rmse": float(math.sqrt(mean_squared_error(y_true, y_pred))),
         "mae": float(mean_absolute_error(y_true, y_pred)),
         "r2": float(r2_score(y_true, y_pred)),
@@ -479,7 +490,14 @@ def _model_specs(config: BaselineConfig) -> list[tuple[str, object, bool]]:
             make_pipeline(
                 SimpleImputer(strategy="median"),
                 StandardScaler(),
-                ElasticNet(alpha=0.01, l1_ratio=0.1, max_iter=5000, random_state=0),
+                ElasticNet(
+                    alpha=0.02,
+                    l1_ratio=0.1,
+                    max_iter=20000,
+                    tol=1e-3,
+                    selection="random",
+                    random_state=0,
+                ),
             ),
             True,
         ),
