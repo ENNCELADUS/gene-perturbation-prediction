@@ -10,6 +10,7 @@ from vcc_dependency_baseline.config import (
     BaselineConfig,
     CvConfig,
     DataConfig,
+    ExternalEvaluationConfig,
     FeatureConfig,
 )
 from vcc_dependency_baseline.evaluation import regression_metrics, run_cv
@@ -49,14 +50,56 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
     assert feature_data["delta"].shape == (6, 5)
     assert feature_data["response_burden"].shape[0] == 6
 
+    external_features_npz = tmp_path / "synthetic_external_features.npz"
+    np.savez_compressed(
+        external_features_npz,
+        delta=feature_data["delta"][:4],
+        response_burden=feature_data["response_burden"][:4],
+        y=feature_data["y"][:4],
+        n_cells=feature_data["n_cells"][:4],
+        target_gene_index=feature_data["target_gene_index"][:4],
+        perturbation_gene=feature_data["perturbation_gene"][:4],
+    )
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+            external_evaluations=(
+                ExternalEvaluationConfig(
+                    name="synthetic_holdout",
+                    features_npz=external_features_npz,
+                ),
+            ),
+        ),
+        features=config.features,
+        cv=config.cv,
+    )
+
     cv_paths = run_cv(config)
     summary = pd.read_csv(cv_paths.summary_csv)
     predictions = pd.read_csv(cv_paths.predictions_csv)
+    assert {
+        "internal_cv_all",
+        "internal_cv_target_index_valid",
+        "external:synthetic_holdout",
+    }.issubset(set(summary["evaluation_scope"]))
     assert {"delta_all", "delta_mask_target", "n_cells_only"}.issubset(
         set(summary["feature_set"])
     )
     assert {"mean_label", "ridge"}.issubset(set(summary["model"]))
     assert {"unweighted", "sqrt_n_cells"}.issubset(set(summary["weighting"]))
+    target_valid_summary = summary.loc[
+        summary["evaluation_scope"] == "internal_cv_target_index_valid"
+    ]
+    assert set(target_valid_summary["feature_set"]) == {
+        "delta_all",
+        "delta_mask_target",
+    }
+    target_valid_predictions = predictions.loc[
+        predictions["evaluation_scope"] == "internal_cv_target_index_valid"
+    ]
+    assert (target_valid_predictions["target_gene_index"] >= 0).all()
     assert not predictions.empty
 
 

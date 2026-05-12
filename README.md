@@ -73,6 +73,16 @@ ridge, and tabular nonlinear baselines before any MIL or foundation-model
 embeddings, with both unweighted and square-root-`n_cells`-weighted fits where
 the estimator supports sample weights.
 
+`run-cv` now emits explicit evaluation scopes:
+
+- `internal_cv_all`: the full Replogle internal repeated stratified CV.
+- `internal_cv_target_index_valid`: a separate repeated stratified CV restricted
+  to rows with `target_gene_index >= 0`, comparing only `delta_all` and
+  `delta_mask_target`.
+- `external:<name>`: optional external holdout reports produced from configured
+  aligned feature packs, evaluated with the exact model instances trained on
+  each `internal_cv_all` fold.
+
 ### Stage 2: Virtual-Cell Extension
 
 After Stage 1 establishes that transcriptomic response contains dependency
