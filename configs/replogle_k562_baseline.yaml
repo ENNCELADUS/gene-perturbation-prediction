@@ -14,6 +14,17 @@ data:
     - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_norman_depmap_overlap.csv
   external_evaluations: []
 
+experiment:
+  name: replogle_k562_b_to_c_baseline
+  seed: 42
+  run_id: null
+  result_formats: [parquet, csv]
+  checkpoint_policy: all_cv_and_final
+  save_predictions: true
+  save_rankings: true
+  save_splits: true
+  topk_candidates: [20, 50, 100]
+
 features:
   chunk_size: 4096
   top_abs_delta_sizes: [50, 100, 500]
@@ -26,3 +37,42 @@ cv:
   pca_components: [20, 50, 100]
   model_set: full
   essential_thresholds: [-0.5, -1.0]
+
+selection:
+  scopes: null
+  features: null
+  models: null
+  folds: null
+  weightings: null
+
+models:
+  mean_label:
+    enabled: true
+  ridge:
+    enabled: true
+    alpha: 10.0
+  elastic_net:
+    enabled: true
+    alpha: 0.02
+    l1_ratio: 0.1
+    max_iter: 20000
+    tol: 0.001
+    selection: random
+  pca_ridge:
+    enabled: true
+    components: [20, 50, 100]
+    alpha: 10.0
+  random_forest:
+    enabled: true
+    n_estimators: 300
+    min_samples_leaf: 5
+    n_jobs: -1
+  xgboost:
+    enabled: true
+    n_estimators: 300
+    max_depth: 3
+    learning_rate: 0.03
+    subsample: 0.8
+    colsample_bytree: 0.8
+    objective: reg:squarederror
+    n_jobs: 4

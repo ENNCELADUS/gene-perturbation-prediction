@@ -62,7 +62,9 @@ Current implemented baseline:
 ```bash
 uv run vcc-dep-baseline build-features --config configs/replogle_k562_baseline.yaml
 uv run vcc-dep-baseline run-cv --config configs/replogle_k562_baseline.yaml
-uv run vcc-dep-baseline summarize --results-dir /home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/cv
+RUN_DIR=$(cat /home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/latest_run.txt)
+uv run vcc-dep-baseline fit-final --config configs/replogle_k562_baseline.yaml --run-id "$(basename "$RUN_DIR")"
+uv run vcc-dep-baseline summarize --results-dir "$RUN_DIR"
 ```
 
 This baseline builds gene-level Replogle K562 delta-expression features from
@@ -71,7 +73,9 @@ evaluates repeated stratified cross-validation against continuous K562
 CRISPRGeneEffect labels. It reports simple controls, ridge / elastic-net, PCA
 ridge, and tabular nonlinear baselines before any MIL or foundation-model
 embeddings, with both unweighted and square-root-`n_cells`-weighted fits where
-the estimator supports sample weights.
+the estimator supports sample weights. Each CV run writes to
+`output_dir/runs/{run_id}/` with metrics, predictions, split manifests,
+rankings, top-k candidate tables, and `joblib` checkpoints.
 
 `run-cv` now emits explicit evaluation scopes:
 
@@ -165,7 +169,7 @@ Project assets:
 - `docs/images/core.png`: triangular technical framing diagram.
 - `docs/images/roadmap.png`: staged project roadmap diagram.
 - `configs/replogle_k562_baseline.yaml`: Replogle K562 B→C baseline config.
-- `src/vcc_dependency_baseline/`: feature building and CV baseline package.
+- `src/dependency_baseline/`: feature building and CV baseline package.
 - `tests/`: synthetic-data tests for the baseline package.
 - `data/norman/splits/`: retained Norman split metadata.
 - `scGPT/`: local scGPT reference code.

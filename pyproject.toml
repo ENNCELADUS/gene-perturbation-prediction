@@ -53,10 +53,10 @@ dev = [
 default-groups = ["dev"]
 
 [project.scripts]
-vcc-dep-baseline = "vcc_dependency_baseline.cli:main"
+vcc-dep-baseline = "dependency_baseline.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/vcc_dependency_baseline"]
+packages = ["src/dependency_baseline"]
 
 [tool.hatch.build.targets.sdist]
 include = [

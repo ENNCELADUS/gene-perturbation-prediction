@@ -12,7 +12,7 @@ import pandas as pd
 from scipy import sparse
 from tqdm import tqdm
 
-from vcc_dependency_baseline.config import BaselineConfig
+from dependency_baseline.config import BaselineConfig
 
 
 @dataclass(frozen=True)
