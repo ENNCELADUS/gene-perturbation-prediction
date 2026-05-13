@@ -6,15 +6,16 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 
-from vcc_dependency_baseline.config import (
+from dependency_baseline.config import (
     BaselineConfig,
     CvConfig,
     DataConfig,
     ExternalEvaluationConfig,
     FeatureConfig,
+    SelectionConfig,
 )
-from vcc_dependency_baseline.evaluation import regression_metrics, run_cv
-from vcc_dependency_baseline.features import build_features
+from dependency_baseline.evaluation import fit_final, regression_metrics, run_cv
+from dependency_baseline.features import build_features
 
 
 def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
@@ -77,9 +78,20 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
     )
 
     cv_paths = run_cv(config)
+    assert cv_paths.run_dir.exists()
+    assert cv_paths.manifest_json.exists()
+    assert cv_paths.config_json.exists()
+    assert cv_paths.splits_csv.exists()
+    assert cv_paths.model_manifest_csv.exists()
+    assert cv_paths.topk_candidates_csv.exists()
+    assert (cv_paths.run_dir / "fold_metrics.parquet").exists()
+    assert (cv_paths.run_dir / "predictions.parquet").exists()
     summary = pd.read_csv(cv_paths.summary_csv)
     fold_metrics = pd.read_csv(cv_paths.fold_metrics_csv)
     predictions = pd.read_csv(cv_paths.predictions_csv)
+    splits = pd.read_csv(cv_paths.splits_csv)
+    model_manifest = pd.read_csv(cv_paths.model_manifest_csv)
+    topk_candidates = pd.read_csv(cv_paths.topk_candidates_csv)
     assert {
         "internal_cv_all",
         "internal_cv_target_index_valid",
@@ -109,6 +121,75 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
     assert not fold_metrics.loc[mean_label_rows, "spearman_defined"].any()
     assert not fold_metrics.loc[mean_label_rows, "pearson_defined"].any()
     assert not predictions.empty
+    assert not splits.empty
+    checkpoint_exists = model_manifest["checkpoint_path"].map(
+        lambda value: Path(value).exists()
+    )
+    assert checkpoint_exists.all()
+    assert {"rank", "predicted_dependency_score", "top_k"}.issubset(
+        set(topk_candidates.columns)
+    )
+    test_splits = splits.loc[splits["split"] == "test"]
+    merged = predictions.loc[
+        predictions["evaluation_scope"].str.startswith("internal_cv")
+    ].merge(
+        test_splits,
+        on=["evaluation_scope", "fold", "perturbation_gene"],
+        how="left",
+        indicator=True,
+    )
+    assert (merged["_merge"] == "both").all()
+
+    single_paths = run_cv(
+        config,
+        run_id="single_job",
+        selection=SelectionConfig(
+            scopes=("internal_cv_all",),
+            features=("delta_all",),
+            models=("ridge",),
+            folds=(0,),
+            weightings=("unweighted",),
+        ),
+    )
+    single_metrics = pd.read_csv(single_paths.fold_metrics_csv)
+    assert len(single_metrics) == 2
+    internal_single = single_metrics.loc[
+        single_metrics["evaluation_scope"] == "internal_cv_all"
+    ]
+    assert len(internal_single) == 1
+    assert internal_single.iloc[0]["model"] == "ridge"
+    assert internal_single.iloc[0]["feature_set"] == "delta_all"
+    assert internal_single.iloc[0]["fold"] == 0
+
+    resumed_paths = run_cv(
+        config,
+        run_id="single_job",
+        resume=True,
+        selection=SelectionConfig(
+            scopes=("internal_cv_all",),
+            features=("delta_all",),
+            models=("ridge",),
+            folds=(0,),
+            weightings=("unweighted",),
+        ),
+    )
+    resumed_metrics = pd.read_csv(resumed_paths.fold_metrics_csv)
+    assert len(resumed_metrics) == len(single_metrics)
+
+    final_paths = fit_final(
+        config,
+        run_id="final_job",
+        selection=SelectionConfig(
+            features=("delta_all",),
+            models=("ridge",),
+            weightings=("unweighted",),
+        ),
+    )
+    final_manifest = pd.read_csv(final_paths.final_model_manifest_csv)
+    final_rankings = pd.read_csv(final_paths.final_rankings_csv)
+    assert len(final_manifest) == 1
+    assert Path(final_manifest.iloc[0]["checkpoint_path"]).exists()
+    assert {"rank", "predicted_dependency_score"}.issubset(set(final_rankings.columns))
 
 
 def test_regression_metrics_skip_correlation_for_constant_predictions() -> None:
