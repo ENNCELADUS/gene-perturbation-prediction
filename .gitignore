@@ -40,28 +40,17 @@ wheels/
 # Data files
 *.h5ad
 *.csv
-!docs/experiment/
-!docs/experiment/baselines/
-!docs/experiment/baselines/**/
-!docs/experiment/baselines/**/summary_metrics.csv
-!docs/experiment/baselines/**/metrics_table.csv
-docs/experiment/baselines/**/artifacts/
-docs/experiment/baselines/**/features/
-docs/experiment/baselines/**/models/
-docs/experiment/baselines/**/rankings/
-docs/experiment/baselines/**/runs/
-docs/experiment/baselines/**/completed_jobs.jsonl
-docs/experiment/baselines/**/final_*.*
-docs/experiment/baselines/**/fold_metrics.*
-docs/experiment/baselines/**/model_manifest.*
-docs/experiment/baselines/**/predictions.*
-docs/experiment/baselines/**/ranking_summary.*
-docs/experiment/baselines/**/run_manifest.json
-docs/experiment/baselines/**/splits.*
-docs/experiment/baselines/**/topk_candidates.*
+*.joblib
 *.zip
 *.parquet
 *.pkl
+data/**/features
+data/**/interim
+data/**/manifests
+results/**/features
+results/**/runs/**/artifacts
+results/**/runs/**/*.json
+results/**/latest_run.txt
 
 # Conda
 .conda/
