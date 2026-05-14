@@ -49,7 +49,7 @@ Imported from `richard@10.20.161.54:/home/richard/projects/VCC/results/replogle_
 ## Files
 
 - `cv_config.json`: original remote CV configuration.
-- `summary_metrics.csv`: aggregate metrics across the original baseline and PCA RandomForest ablation rows.
-- `fold_metrics.csv`: per-fold metrics, including PCA RandomForest rows.
-- `predictions.csv`: per-gene held-out predictions, including PCA RandomForest rows.
+- `summary_metrics.csv`: curated aggregate metrics across the original baseline and PCA RandomForest ablation rows.
+- `fold_metrics.parquet`: per-fold metrics, including PCA RandomForest rows.
+- `predictions.parquet`: per-gene held-out predictions, including PCA RandomForest rows.
 - `metrics_table.csv`: selected rows from `summary_metrics.csv` used in the table above.

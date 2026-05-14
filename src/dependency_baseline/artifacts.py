@@ -31,22 +31,52 @@ from dependency_baseline.metrics import (
 @dataclass(frozen=True)
 class CvPaths:
     run_dir: Path
-    fold_metrics_csv: Path
+    fold_metrics_path: Path
     summary_csv: Path
-    predictions_csv: Path
+    predictions_path: Path
     config_json: Path
     manifest_json: Path
-    splits_csv: Path
-    model_manifest_csv: Path
-    topk_candidates_csv: Path
+    splits_path: Path
+    model_manifest_path: Path
+    topk_candidates_path: Path
+    log_file: Path
+
+    @property
+    def fold_metrics_csv(self) -> Path:
+        return self.fold_metrics_path
+
+    @property
+    def predictions_csv(self) -> Path:
+        return self.predictions_path
+
+    @property
+    def splits_csv(self) -> Path:
+        return self.splits_path
+
+    @property
+    def model_manifest_csv(self) -> Path:
+        return self.model_manifest_path
+
+    @property
+    def topk_candidates_csv(self) -> Path:
+        return self.topk_candidates_path
 
 
 @dataclass(frozen=True)
 class FinalFitPaths:
     run_dir: Path
-    final_model_manifest_csv: Path
-    final_rankings_csv: Path
+    final_model_manifest_path: Path
+    final_rankings_path: Path
     manifest_json: Path
+    log_file: Path
+
+    @property
+    def final_model_manifest_csv(self) -> Path:
+        return self.final_model_manifest_path
+
+    @property
+    def final_rankings_csv(self) -> Path:
+        return self.final_rankings_path
 
 
 @dataclass(frozen=True)
@@ -64,18 +94,22 @@ class ArtifactStore:
     def __init__(
         self,
         run_dir: Path,
-        result_formats: tuple[str, ...],
+        human_result_tables: tuple[str, ...],
+        machine_result_format: str,
         topk_values: tuple[int, ...],
         save_predictions: bool,
         save_rankings: bool,
     ) -> None:
         self.run_dir = run_dir
-        self.result_formats = result_formats
+        self.results_dir = run_dir / "results"
+        self.artifacts_dir = run_dir / "artifacts"
+        self.human_result_tables = set(human_result_tables)
+        self.machine_result_format = machine_result_format
         self.topk_values = topk_values
         self.save_predictions = save_predictions
         self.save_rankings = save_rankings
-        self.completed_jobs_path = run_dir / "completed_jobs.jsonl"
-        self.rankings_dir = run_dir / "rankings"
+        self.completed_jobs_path = self.artifacts_dir / "completed_jobs.jsonl"
+        self.rankings_dir = self.artifacts_dir / "rankings"
         self.tables = {
             name: self._load_table(name)
             for name in (
@@ -200,21 +234,29 @@ class ArtifactStore:
             write_formats(
                 self.rankings_dir / filename,
                 rank_predictions(group),
-                self.result_formats,
+                (self.machine_result_format,),
             )
 
     def _write_table(self, table_name: str, table: pd.DataFrame) -> None:
         if table.empty:
             return
-        write_formats(self.run_dir / table_name, table, self.result_formats)
+        if table_name in self.human_result_tables:
+            write_formats(self.results_dir / table_name, table, ("csv",))
+            return
+        write_formats(
+            self.artifacts_dir / table_name,
+            table,
+            (self.machine_result_format,),
+        )
 
     def _load_table(self, table_name: str) -> pd.DataFrame:
-        parquet_path = self.run_dir / f"{table_name}.parquet"
-        csv_path = self.run_dir / f"{table_name}.csv"
-        if parquet_path.exists():
-            return pd.read_parquet(parquet_path)
-        if csv_path.exists():
-            return pd.read_csv(csv_path)
+        for base_path in table_base_candidates(self.run_dir, table_name):
+            parquet_path = base_path.with_suffix(".parquet")
+            csv_path = base_path.with_suffix(".csv")
+            if parquet_path.exists():
+                return pd.read_parquet(parquet_path)
+            if csv_path.exists():
+                return pd.read_csv(csv_path)
         return pd.DataFrame()
 
     def _load_completed_jobs(self) -> set[str]:
@@ -238,6 +280,7 @@ class ArtifactStore:
             "completed_at": utc_now(),
             "checkpoint_path": model_manifest_row.get("checkpoint_path"),
         }
+        self.completed_jobs_path.parent.mkdir(parents=True, exist_ok=True)
         with self.completed_jobs_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, sort_keys=True) + "\n")
         self.completed_jobs.add(job)
@@ -253,9 +296,7 @@ def create_run_context(
     config_path: Path | None,
 ) -> RunContext:
     """Create or resume a run directory and update latest-run pointer."""
-    feature_path = (
-        features_npz or config.data.output_dir / "replogle_k562_delta_features.npz"
-    )
+    feature_path = features_npz or resolve_feature_npz(config.data.output_dir)
     resolved_run_id = run_id or config.experiment.run_id or default_run_id()
     run_dir = config.data.output_dir / "runs" / resolved_run_id
     if run_dir.exists() and not resume and any(run_dir.iterdir()):
@@ -290,6 +331,7 @@ def manifest_base(
         "command": list(context.command),
         "config_path": str(context.config_path) if context.config_path else None,
         "features_npz": str(context.feature_path),
+        "artifact_layout_version": 2,
         "started_at": utc_now(),
         "resume": resume,
         "git_sha": git_sha(short=False),
@@ -324,25 +366,253 @@ def write_cv_config(
     )
 
 
+def features_dir(output_dir: Path) -> Path:
+    """Return the feature artifact directory for an experiment output root."""
+    return output_dir / "features"
+
+
+def feature_npz_path(output_dir: Path) -> Path:
+    """Return the v2 feature NPZ path."""
+    return features_dir(output_dir) / "replogle_k562_delta_features.npz"
+
+
+def feature_metadata_path(output_dir: Path) -> Path:
+    """Return the v2 feature metadata path."""
+    return features_dir(output_dir) / "feature_metadata.parquet"
+
+
+def feature_qa_path(output_dir: Path) -> Path:
+    """Return the v2 human-readable feature QA path."""
+    return features_dir(output_dir) / "feature_qa.md"
+
+
+def feature_summary_path(output_dir: Path) -> Path:
+    """Return the v2 machine-readable feature summary path."""
+    return features_dir(output_dir) / "feature_summary.json"
+
+
+def resolve_feature_npz(output_dir: Path) -> Path:
+    """Resolve feature NPZ with v2 path first, then legacy root path."""
+    v2_path = feature_npz_path(output_dir)
+    if v2_path.exists():
+        return v2_path
+    return output_dir / "replogle_k562_delta_features.npz"
+
+
+def read_feature_metadata(output_dir: Path) -> pd.DataFrame:
+    """Read feature metadata from v2 or legacy location."""
+    v2_path = feature_metadata_path(output_dir)
+    if v2_path.exists():
+        return pd.read_parquet(v2_path)
+    legacy_path = output_dir / "replogle_k562_feature_metadata.csv"
+    return pd.read_csv(legacy_path)
+
+
+def table_base_candidates(run_dir: Path, table_name: str) -> tuple[Path, ...]:
+    """Return v2 and legacy base paths for a named run table."""
+    return (
+        run_dir / "results" / table_name,
+        run_dir / "artifacts" / table_name,
+        run_dir / table_name,
+    )
+
+
+def table_base(run_dir: Path, table_name: str, human_tables: set[str]) -> Path:
+    """Return the v2 base path for a named run table."""
+    if table_name in human_tables:
+        return run_dir / "results" / table_name
+    return run_dir / "artifacts" / table_name
+
+
 def summarize_results(results_dir: Path) -> tuple[Path, Path | None]:
     """Rebuild summary metrics and ranking summary for a result directory."""
-    fold_metrics = read_table(results_dir / "fold_metrics")
+    fold_metrics = read_named_table(results_dir, "fold_metrics")
     summary = summarize_metrics(fold_metrics)
-    write_formats(results_dir / "summary_metrics", summary, ("parquet", "csv"))
-    topk_base = results_dir / "topk_candidates"
+    write_formats(results_dir / "results" / "summary_metrics", summary, ("csv",))
+    topk_base = _existing_named_table_base(results_dir, "topk_candidates")
     ranking_summary_path: Path | None = None
-    if (
-        topk_base.with_suffix(".parquet").exists()
-        or topk_base.with_suffix(".csv").exists()
-    ):
+    if topk_base is not None:
         ranking_summary = summarize_rankings(read_table(topk_base))
         write_formats(
-            results_dir / "ranking_summary",
+            results_dir / "artifacts" / "ranking_summary",
             ranking_summary,
-            ("parquet", "csv"),
+            ("parquet",),
         )
-        ranking_summary_path = results_dir / "ranking_summary.csv"
-    return results_dir / "summary_metrics.csv", ranking_summary_path
+        ranking_summary_path = results_dir / "artifacts" / "ranking_summary.parquet"
+    return results_dir / "results" / "summary_metrics.csv", ranking_summary_path
+
+
+def organize_artifacts(results_dir: Path, logs_dir: Path | None = None) -> None:
+    """Migrate an experiment output directory to artifact layout v2."""
+    results_dir = results_dir.expanduser()
+    _migrate_feature_artifacts(results_dir)
+    _migrate_legacy_cv_dir(results_dir)
+    run_root = results_dir / "runs"
+    if not run_root.exists():
+        return
+    default_logs_dir = results_dir.parent.parent / "logs"
+    source_logs_dir = logs_dir or default_logs_dir
+    for run_dir in sorted(path for path in run_root.iterdir() if path.is_dir()):
+        _organize_run_dir(run_dir, source_logs_dir)
+
+
+def _migrate_feature_artifacts(results_dir: Path) -> None:
+    destination = features_dir(results_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    _move_if_exists(
+        results_dir / "replogle_k562_delta_features.npz",
+        feature_npz_path(results_dir),
+    )
+    legacy_metadata = results_dir / "replogle_k562_feature_metadata.csv"
+    if legacy_metadata.exists():
+        pd.read_csv(legacy_metadata).to_parquet(
+            feature_metadata_path(results_dir),
+            index=False,
+        )
+        legacy_metadata.unlink()
+    _move_if_exists(
+        results_dir / "replogle_k562_feature_qa.md",
+        feature_qa_path(results_dir),
+    )
+    _move_if_exists(
+        results_dir / "replogle_k562_feature_summary.json",
+        feature_summary_path(results_dir),
+    )
+
+
+def _migrate_legacy_cv_dir(results_dir: Path) -> None:
+    legacy_cv = results_dir / "cv"
+    if not legacy_cv.exists():
+        return
+    target = results_dir / "runs" / "legacy_cv_20260513"
+    suffix = 1
+    while target.exists():
+        suffix += 1
+        target = results_dir / "runs" / f"legacy_cv_20260513_{suffix}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    legacy_cv.replace(target)
+
+
+def _organize_run_dir(run_dir: Path, logs_dir: Path) -> None:
+    (run_dir / "results").mkdir(parents=True, exist_ok=True)
+    (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
+    (run_dir / "logs").mkdir(parents=True, exist_ok=True)
+    _migrate_human_table(run_dir, "summary_metrics")
+    for table_name in (
+        "fold_metrics",
+        "predictions",
+        "splits",
+        "model_manifest",
+        "ranking_summary",
+        "topk_candidates",
+        "final_model_manifest",
+        "final_rankings",
+    ):
+        _migrate_machine_table(run_dir, table_name)
+    _migrate_rankings(run_dir)
+    _move_if_exists(
+        run_dir / "completed_jobs.jsonl",
+        run_dir / "artifacts" / "completed_jobs.jsonl",
+    )
+    _migrate_run_log(run_dir, logs_dir)
+    _update_layout_manifest(run_dir)
+
+
+def _migrate_human_table(run_dir: Path, table_name: str) -> None:
+    existing = _existing_named_table_base(run_dir, table_name)
+    if existing is None:
+        return
+    table = read_table(existing)
+    write_formats(run_dir / "results" / table_name, table, ("csv",))
+    _remove_table_files(run_dir / table_name)
+    _remove_table_files(run_dir / "artifacts" / table_name)
+
+
+def _migrate_machine_table(run_dir: Path, table_name: str) -> None:
+    existing = _existing_named_table_base(run_dir, table_name)
+    if existing is None:
+        return
+    table = read_table(existing)
+    write_formats(run_dir / "artifacts" / table_name, table, ("parquet",))
+    _remove_table_files(run_dir / table_name)
+    _remove_table_files(run_dir / "results" / table_name)
+    _remove_csv_if_exists(run_dir / "artifacts" / f"{table_name}.csv")
+
+
+def _migrate_rankings(run_dir: Path) -> None:
+    for rankings_dir in (run_dir / "rankings", run_dir / "artifacts" / "rankings"):
+        if not rankings_dir.exists():
+            continue
+        for path in sorted(rankings_dir.glob("*")):
+            if path.suffix not in {".csv", ".parquet"}:
+                continue
+            target_base = run_dir / "artifacts" / "rankings" / path.stem
+            table = read_table(path.with_suffix(""))
+            write_formats(target_base, table, ("parquet",))
+            if path.suffix == ".csv" or rankings_dir == run_dir / "rankings":
+                path.unlink()
+        if rankings_dir == run_dir / "rankings":
+            _remove_empty_dir(rankings_dir)
+
+
+def _migrate_run_log(run_dir: Path, logs_dir: Path) -> None:
+    source = logs_dir / f"{run_dir.name}.log"
+    target = run_dir / "logs" / "run.log"
+    _move_if_exists(source, target)
+
+
+def _update_layout_manifest(run_dir: Path) -> None:
+    manifest_path = run_dir / "run_manifest.json"
+    if manifest_path.exists():
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    else:
+        payload = {
+            "run_id": run_dir.name,
+            "run_dir": str(run_dir.resolve()),
+            "status": "completed",
+        }
+    payload["artifact_layout_version"] = 2
+    missing = [
+        name
+        for name in (
+            "splits",
+            "model_manifest",
+            "ranking_summary",
+            "topk_candidates",
+        )
+        if _existing_named_table_base(run_dir, name) is None
+    ]
+    if missing:
+        payload["missing_artifacts"] = missing
+    payload["organized_at"] = utc_now()
+    write_json(manifest_path, payload)
+
+
+def _move_if_exists(source: Path, destination: Path) -> None:
+    if not source.exists() or source == destination:
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        source.unlink()
+        return
+    source.replace(destination)
+
+
+def _remove_table_files(base_path: Path) -> None:
+    for suffix in (".csv", ".parquet"):
+        _remove_csv_if_exists(base_path.with_suffix(suffix))
+
+
+def _remove_csv_if_exists(path: Path) -> None:
+    if path.exists():
+        path.unlink()
+
+
+def _remove_empty_dir(path: Path) -> None:
+    try:
+        path.rmdir()
+    except OSError:
+        pass
 
 
 def set_seed(seed: int) -> None:
@@ -445,6 +715,24 @@ def read_table(base_path: Path) -> pd.DataFrame:
         return pd.read_csv(csv_path)
     msg = f"Missing table: {base_path}.parquet or {base_path}.csv"
     raise FileNotFoundError(msg)
+
+
+def read_named_table(run_dir: Path, table_name: str) -> pd.DataFrame:
+    """Read a named run table from v2 or legacy layout."""
+    base_path = _existing_named_table_base(run_dir, table_name)
+    if base_path is None:
+        msg = f"Missing named table {table_name!r} under run directory: {run_dir}"
+        raise FileNotFoundError(msg)
+    return read_table(base_path)
+
+
+def _existing_named_table_base(run_dir: Path, table_name: str) -> Path | None:
+    for base_path in table_base_candidates(run_dir, table_name):
+        if base_path.with_suffix(".parquet").exists() or base_path.with_suffix(
+            ".csv"
+        ).exists():
+            return base_path
+    return None
 
 
 def write_json(path: Path, payload: dict[str, object]) -> None:

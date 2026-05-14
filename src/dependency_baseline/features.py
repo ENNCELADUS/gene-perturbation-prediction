@@ -12,25 +12,35 @@ import pandas as pd
 from scipy import sparse
 from tqdm import tqdm
 
+from dependency_baseline.artifacts import (
+    feature_metadata_path,
+    feature_npz_path,
+    feature_qa_path,
+    feature_summary_path,
+)
 from dependency_baseline.config import BaselineConfig
 
 
 @dataclass(frozen=True)
 class FeaturePaths:
     features_npz: Path
-    metadata_csv: Path
+    metadata_path: Path
     qa_report_md: Path
     summary_json: Path
+
+    @property
+    def metadata_csv(self) -> Path:
+        return self.metadata_path
 
 
 def build_features(config: BaselineConfig) -> FeaturePaths:
     """Build perturbation-level delta features from an AnnData file."""
-    output_dir = config.data.output_dir
+    output_dir = config.data.output_dir / "features"
     output_dir.mkdir(parents=True, exist_ok=True)
-    features_npz = output_dir / "replogle_k562_delta_features.npz"
-    metadata_csv = output_dir / "replogle_k562_feature_metadata.csv"
-    qa_report_md = output_dir / "replogle_k562_feature_qa.md"
-    summary_json = output_dir / "replogle_k562_feature_summary.json"
+    features_npz = feature_npz_path(config.data.output_dir)
+    metadata_path = feature_metadata_path(config.data.output_dir)
+    qa_report_md = feature_qa_path(config.data.output_dir)
+    summary_json = feature_summary_path(config.data.output_dir)
 
     overlap = pd.read_csv(config.data.overlap_csv)
     numeric_overlap = _numeric_training_rows(overlap, config)
@@ -76,7 +86,7 @@ def build_features(config: BaselineConfig) -> FeaturePaths:
     metadata["feature_row"] = np.arange(len(metadata))
     metadata["observed_n_cells"] = perturb_counts
     metadata["target_gene_index"] = target_indices
-    metadata.to_csv(metadata_csv, index=False)
+    metadata.to_parquet(metadata_path, index=False)
 
     np.savez_compressed(
         features_npz,
@@ -112,7 +122,7 @@ def build_features(config: BaselineConfig) -> FeaturePaths:
         encoding="utf-8",
     )
 
-    return FeaturePaths(features_npz, metadata_csv, qa_report_md, summary_json)
+    return FeaturePaths(features_npz, metadata_path, qa_report_md, summary_json)
 
 
 def response_burden(delta: np.ndarray, top_abs_sizes: tuple[int, ...]) -> pd.DataFrame:
