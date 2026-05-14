@@ -16,6 +16,10 @@ from dependency_baseline.config import (
 )
 from dependency_baseline.evaluation import fit_final, regression_metrics, run_cv
 from dependency_baseline.features import build_features
+from dependency_baseline.models import (
+    build_model_specs,
+    compatible_model_feature_shape,
+)
 
 
 def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
@@ -175,6 +179,59 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
     )
     resumed_metrics = pd.read_csv(resumed_paths.fold_metrics_csv)
     assert len(resumed_metrics) == len(single_metrics)
+
+    pca_forest_config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+        ),
+        features=config.features,
+        cv=config.cv,
+        models={
+            "mean_label": {"enabled": False},
+            "ridge": {"enabled": False},
+            "elastic_net": {"enabled": False},
+            "pca_ridge": {"enabled": False},
+            "random_forest": {"enabled": False},
+            "pca_random_forest": {
+                "enabled": True,
+                "components": [2],
+                "n_estimators": 5,
+                "min_samples_leaf": 1,
+                "n_jobs": 1,
+            },
+            "xgboost": {"enabled": False},
+        },
+    )
+    pca_forest_specs = build_model_specs(pca_forest_config)
+    assert [spec.name for spec in pca_forest_specs] == ["pca2_random_forest"]
+    assert compatible_model_feature_shape(
+        "pca2_random_forest",
+        "delta_all",
+        (3, 5),
+    )
+    assert not compatible_model_feature_shape(
+        "pca2_random_forest",
+        "response_burden",
+        (3, 6),
+    )
+    pca_forest_paths = run_cv(
+        pca_forest_config,
+        feature_paths.features_npz,
+        run_id="pca_forest_job",
+        selection=SelectionConfig(
+            scopes=("internal_cv_all",),
+            features=("delta_all",),
+            models=("pca2_random_forest",),
+            folds=(0,),
+            weightings=("unweighted",),
+        ),
+    )
+    pca_forest_metrics = pd.read_csv(pca_forest_paths.fold_metrics_csv)
+    assert len(pca_forest_metrics) == 1
+    assert pca_forest_metrics.iloc[0]["model"] == "pca2_random_forest"
+    assert pca_forest_metrics.iloc[0]["feature_set"] == "delta_all"
 
     final_paths = fit_final(
         config,

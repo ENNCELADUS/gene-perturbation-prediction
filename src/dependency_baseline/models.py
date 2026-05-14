@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 
@@ -37,6 +38,7 @@ def build_model_specs(config: BaselineConfig) -> list[ModelSpec]:
     _add_elastic_net(specs, models, config)
     _add_pca_ridge(specs, models, config)
     _add_random_forest(specs, models, config)
+    _add_pca_random_forest(specs, models, config)
     _add_xgboost(specs, models, config)
     return specs
 
@@ -77,7 +79,7 @@ def compatible_model_feature_shape(
         return True
     if feature_name not in {"delta_all", "delta_mask_target"}:
         return False
-    n_components = int(model_name.removeprefix("pca").removesuffix("_ridge"))
+    n_components = _pca_component_count(model_name)
     return n_components <= min(x_train_shape[0], x_train_shape[1])
 
 
@@ -218,6 +220,42 @@ def _add_random_forest(
     )
 
 
+def _add_pca_random_forest(
+    specs: list[ModelSpec],
+    models: dict[str, dict[str, object]],
+    config: BaselineConfig,
+) -> None:
+    pca_forest_config = models.get("pca_random_forest", {})
+    if not pca_forest_config.get("enabled", config.cv.model_set != "quick"):
+        return
+    for n_components in pca_forest_config.get("components", config.cv.pca_components):
+        n_components = int(n_components)
+        specs.append(
+            ModelSpec(
+                f"pca{n_components}_random_forest",
+                make_pipeline(
+                    SimpleImputer(strategy="median"),
+                    StandardScaler(),
+                    PCA(
+                        n_components=n_components,
+                        random_state=config.cv.random_state,
+                    ),
+                    RandomForestRegressor(
+                        n_estimators=int(
+                            pca_forest_config.get("n_estimators", 300)
+                        ),
+                        min_samples_leaf=int(
+                            pca_forest_config.get("min_samples_leaf", 5)
+                        ),
+                        random_state=config.cv.random_state,
+                        n_jobs=int(pca_forest_config.get("n_jobs", -1)),
+                    ),
+                ),
+                True,
+            )
+        )
+
+
 def _add_xgboost(
     specs: list[ModelSpec],
     models: dict[str, dict[str, object]],
@@ -252,3 +290,10 @@ def _add_xgboost(
         )
     except ImportError:
         LOGGER.info("xgboost is enabled but not installed; skipping")
+
+
+def _pca_component_count(model_name: str) -> int:
+    match = re.fullmatch(r"pca(?P<n_components>\d+)_.+", model_name)
+    if match is None:
+        raise ValueError(f"Invalid PCA model name: {model_name}")
+    return int(match.group("n_components"))
