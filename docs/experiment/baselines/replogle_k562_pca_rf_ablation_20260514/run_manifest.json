@@ -1,0 +1,175 @@
+{
+  "command": [
+    "/home/richard/projects/VCC/src/dependency_baseline/cli.py",
+    "run-cv",
+    "--config",
+    "configs/replogle_k562_baseline.yaml",
+    "--run-id",
+    "pca_rf_unweighted_20260514",
+    "--scope",
+    "internal_cv_all",
+    "--scope",
+    "internal_cv_target_index_valid",
+    "--feature-set",
+    "delta_all",
+    "--feature-set",
+    "delta_mask_target",
+    "--model",
+    "random_forest",
+    "--model",
+    "pca20_random_forest",
+    "--model",
+    "pca50_random_forest",
+    "--model",
+    "pca100_random_forest",
+    "--model",
+    "pca50_ridge",
+    "--weighting",
+    "unweighted"
+  ],
+  "command_name": "run-cv",
+  "config_path": "configs/replogle_k562_baseline.yaml",
+  "ended_at": "2026-05-14T11:05:08Z",
+  "experiment_name": "replogle_k562_b_to_c_baseline",
+  "features_npz": "/home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/replogle_k562_delta_features.npz",
+  "git_sha": "ff3d37f405c5db9525d30b0fc6d5531bfd6040d3",
+  "hostname": "richard-Lenovo-ThinkBook-16p-Gen-4",
+  "packages": {
+    "joblib": "1.5.3",
+    "numpy": "1.26.4",
+    "pandas": "2.1.4",
+    "scikit-learn": "1.7.2",
+    "scipy": "1.16.3",
+    "torch": "2.2.0",
+    "xgboost": null
+  },
+  "pid": 48660,
+  "platform": "Linux-6.17.0-23-generic-x86_64-with-glibc2.39",
+  "python": "3.11.15 (main, Mar  3 2026, 14:59:53) [Clang 21.1.4 ]",
+  "resolved_config": {
+    "cv": {
+      "essential_thresholds": [
+        -0.5,
+        -1.0
+      ],
+      "model_set": "full",
+      "n_repeats": 1,
+      "n_splits": 5,
+      "pca_components": [
+        20,
+        50,
+        100
+      ],
+      "random_state": 42,
+      "stratify_bins": 10
+    },
+    "data": {
+      "control_label": "non-targeting",
+      "depmap_label_col": "depmap_gene_effect",
+      "external_evaluations": [],
+      "external_overlap_csvs": [
+        "/home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_adamson_depmap_overlap.csv",
+        "/home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_dixit_depmap_overlap.csv",
+        "/home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_norman_depmap_overlap.csv"
+      ],
+      "h5ad_path": "/home/richard/projects/VCC/data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad",
+      "matched_label_col": "has_depmap_label",
+      "n_cells_col": "n_cells_or_pseudobulk",
+      "obs_perturbation_col": "gene",
+      "output_dir": "/home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline",
+      "overlap_csv": "/home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv",
+      "var_gene_symbol_col": "gene_name"
+    },
+    "experiment": {
+      "checkpoint_policy": "all_cv_and_final",
+      "name": "replogle_k562_b_to_c_baseline",
+      "result_formats": [
+        "parquet",
+        "csv"
+      ],
+      "run_id": null,
+      "save_predictions": true,
+      "save_rankings": true,
+      "save_splits": true,
+      "seed": 42,
+      "topk_candidates": [
+        20,
+        50,
+        100
+      ]
+    },
+    "features": {
+      "chunk_size": 4096,
+      "top_abs_delta_sizes": [
+        50,
+        100,
+        500
+      ]
+    },
+    "models": {
+      "elastic_net": {
+        "alpha": 0.02,
+        "enabled": true,
+        "l1_ratio": 0.1,
+        "max_iter": 20000,
+        "selection": "random",
+        "tol": 0.001
+      },
+      "mean_label": {
+        "enabled": true
+      },
+      "pca_random_forest": {
+        "components": [
+          20,
+          50,
+          100
+        ],
+        "enabled": true,
+        "min_samples_leaf": 5,
+        "n_estimators": 300,
+        "n_jobs": -1
+      },
+      "pca_ridge": {
+        "alpha": 10.0,
+        "components": [
+          20,
+          50,
+          100
+        ],
+        "enabled": true
+      },
+      "random_forest": {
+        "enabled": true,
+        "min_samples_leaf": 5,
+        "n_estimators": 300,
+        "n_jobs": -1
+      },
+      "ridge": {
+        "alpha": 10.0,
+        "enabled": true
+      },
+      "xgboost": {
+        "colsample_bytree": 0.8,
+        "enabled": true,
+        "learning_rate": 0.03,
+        "max_depth": 3,
+        "n_estimators": 300,
+        "n_jobs": 4,
+        "objective": "reg:squarederror",
+        "subsample": 0.8
+      }
+    },
+    "selection": {
+      "features": null,
+      "folds": null,
+      "models": null,
+      "scopes": null,
+      "weightings": null
+    }
+  },
+  "resume": false,
+  "run_dir": "/home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/runs/pca_rf_unweighted_20260514",
+  "run_id": "pca_rf_unweighted_20260514",
+  "started_at": "2026-05-14T10:19:48Z",
+  "status": "completed"
+}
