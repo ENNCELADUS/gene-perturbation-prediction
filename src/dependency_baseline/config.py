@@ -142,6 +142,13 @@ def _model_config(values: Any, cv: CvConfig) -> dict[str, dict[str, Any]]:
             "components": list(cv.pca_components),
             "alpha": 10.0,
         },
+        "pca_random_forest": {
+            "enabled": cv.model_set != "quick",
+            "components": list(cv.pca_components),
+            "n_estimators": 300,
+            "min_samples_leaf": 5,
+            "n_jobs": -1,
+        },
         "random_forest": {
             "enabled": cv.model_set != "quick",
             "n_estimators": 300,
@@ -162,6 +169,7 @@ def _model_config(values: Any, cv: CvConfig) -> dict[str, dict[str, Any]]:
     if cv.model_set == "quick":
         models["elastic_net"]["enabled"] = False
         models["pca_ridge"]["enabled"] = False
+        models["pca_random_forest"]["enabled"] = False
 
     if values is None:
         return models
