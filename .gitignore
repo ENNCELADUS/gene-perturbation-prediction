@@ -40,7 +40,11 @@ wheels/
 # Data files
 *.h5ad
 *.csv
-!docs/experiment/baselines/**/*.csv
+!docs/experiment/
+!docs/experiment/baselines/
+!docs/experiment/baselines/**/
+!docs/experiment/baselines/**/summary_metrics.csv
+!docs/experiment/baselines/**/metrics_table.csv
 *.zip
 *.parquet
 *.pkl
