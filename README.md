@@ -74,8 +74,10 @@ CRISPRGeneEffect labels. It reports simple controls, ridge / elastic-net, PCA
 ridge, and tabular nonlinear baselines before any MIL or foundation-model
 embeddings, with both unweighted and square-root-`n_cells`-weighted fits where
 the estimator supports sample weights. Each CV run writes to
-`output_dir/runs/{run_id}/` with metrics, predictions, split manifests,
-rankings, top-k candidate tables, and `joblib` checkpoints.
+`output_dir/runs/{run_id}/` with human-facing summaries under `results/`,
+machine-readable analysis tables under `artifacts/`, run logs under `logs/`,
+and `joblib` checkpoints under `models/`. Reusable feature-building artifacts
+live in `output_dir/features/`.
 
 `run-cv` now emits explicit evaluation scopes:
 

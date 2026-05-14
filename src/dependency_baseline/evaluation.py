@@ -17,6 +17,7 @@ from dependency_baseline.artifacts import (
     create_run_context,
     job_key,
     manifest_base,
+    read_feature_metadata,
     set_seed,
     summarize_results as summarize_results,
     utc_now,
@@ -75,6 +76,7 @@ def run_cv(
     selection: SelectionConfig | None = None,
     command: tuple[str, ...] = (),
     config_path: Path | None = None,
+    log_file: Path | None = None,
 ) -> CvPaths:
     """Run repeated stratified CV with incremental artifacts and checkpoints."""
     set_seed(config.experiment.seed)
@@ -86,11 +88,12 @@ def run_cv(
         command=command,
         config_path=config_path,
     )
+    actual_log_file, log_handler = _attach_run_log(context.run_dir, log_file)
     store = _artifact_store(config, context.run_dir)
     manifest = manifest_base(config, context, "run-cv", resume)
     write_json(
         context.run_dir / "run_manifest.json",
-        {**manifest, "status": "running"},
+        {**manifest, "status": "running", "log_file": str(actual_log_file)},
     )
     write_cv_config(config, context.feature_path, context.run_dir / "cv_config.json")
 
@@ -98,14 +101,26 @@ def run_cv(
         execute_cv(config, context.feature_path, store, selection, resume)
         write_json(
             context.run_dir / "run_manifest.json",
-            {**manifest, "status": "completed", "ended_at": utc_now()},
+            {
+                **manifest,
+                "status": "completed",
+                "ended_at": utc_now(),
+                "log_file": str(actual_log_file),
+            },
         )
     except Exception:
         write_json(
             context.run_dir / "run_manifest.json",
-            {**manifest, "status": "failed", "ended_at": utc_now()},
+            {
+                **manifest,
+                "status": "failed",
+                "ended_at": utc_now(),
+                "log_file": str(actual_log_file),
+            },
         )
         raise
+    finally:
+        _detach_run_log(log_handler)
     return _cv_paths(context.run_dir)
 
 
@@ -117,6 +132,7 @@ def fit_final(
     selection: SelectionConfig | None = None,
     command: tuple[str, ...] = (),
     config_path: Path | None = None,
+    log_file: Path | None = None,
 ) -> FinalFitPaths:
     """Fit selected models on all numeric Replogle rows and save checkpoints."""
     set_seed(config.experiment.seed)
@@ -128,11 +144,12 @@ def fit_final(
         command=command,
         config_path=config_path,
     )
+    actual_log_file, log_handler = _attach_run_log(context.run_dir, log_file)
     store = _artifact_store(config, context.run_dir)
     manifest = manifest_base(config, context, "fit-final", True)
     write_json(
         context.run_dir / "final_manifest.json",
-        {**manifest, "status": "running"},
+        {**manifest, "status": "running", "log_file": str(actual_log_file)},
     )
 
     try:
@@ -145,26 +162,42 @@ def fit_final(
         )
         write_json(
             context.run_dir / "final_manifest.json",
-            {**manifest, "status": "completed", "ended_at": utc_now()},
+            {
+                **manifest,
+                "status": "completed",
+                "ended_at": utc_now(),
+                "log_file": str(actual_log_file),
+            },
         )
     except Exception:
         write_json(
             context.run_dir / "final_manifest.json",
-            {**manifest, "status": "failed", "ended_at": utc_now()},
+            {
+                **manifest,
+                "status": "failed",
+                "ended_at": utc_now(),
+                "log_file": str(actual_log_file),
+            },
         )
         raise
+    finally:
+        _detach_run_log(log_handler)
     return FinalFitPaths(
         run_dir=context.run_dir,
-        final_model_manifest_csv=context.run_dir / "final_model_manifest.csv",
-        final_rankings_csv=context.run_dir / "final_rankings.csv",
+        final_model_manifest_path=context.run_dir
+        / "artifacts"
+        / "final_model_manifest.parquet",
+        final_rankings_path=context.run_dir / "artifacts" / "final_rankings.parquet",
         manifest_json=context.run_dir / "final_manifest.json",
+        log_file=actual_log_file,
     )
 
 
 def _artifact_store(config: BaselineConfig, run_dir: Path) -> ArtifactStore:
     return ArtifactStore(
         run_dir,
-        config.experiment.result_formats,
+        config.experiment.human_result_tables,
+        config.experiment.machine_result_format,
         config.experiment.topk_candidates,
         config.experiment.save_predictions,
         config.experiment.save_rankings,
@@ -174,15 +207,38 @@ def _artifact_store(config: BaselineConfig, run_dir: Path) -> ArtifactStore:
 def _cv_paths(run_dir: Path) -> CvPaths:
     return CvPaths(
         run_dir=run_dir,
-        fold_metrics_csv=run_dir / "fold_metrics.csv",
-        summary_csv=run_dir / "summary_metrics.csv",
-        predictions_csv=run_dir / "predictions.csv",
+        fold_metrics_path=run_dir / "artifacts" / "fold_metrics.parquet",
+        summary_csv=run_dir / "results" / "summary_metrics.csv",
+        predictions_path=run_dir / "artifacts" / "predictions.parquet",
         config_json=run_dir / "cv_config.json",
         manifest_json=run_dir / "run_manifest.json",
-        splits_csv=run_dir / "splits.csv",
-        model_manifest_csv=run_dir / "model_manifest.csv",
-        topk_candidates_csv=run_dir / "topk_candidates.csv",
+        splits_path=run_dir / "artifacts" / "splits.parquet",
+        model_manifest_path=run_dir / "artifacts" / "model_manifest.parquet",
+        topk_candidates_path=run_dir / "artifacts" / "topk_candidates.parquet",
+        log_file=run_dir / "logs" / "run.log",
     )
+
+
+def _attach_run_log(
+    run_dir: Path,
+    log_file: Path | None,
+) -> tuple[Path, logging.Handler]:
+    actual_log_file = log_file or run_dir / "logs" / "run.log"
+    actual_log_file.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(actual_log_file, mode="a", encoding="utf-8")
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    root_logger = logging.getLogger()
+    if root_logger.level > logging.INFO:
+        root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(handler)
+    return actual_log_file, handler
+
+
+def _detach_run_log(handler: logging.Handler) -> None:
+    root_logger = logging.getLogger()
+    root_logger.removeHandler(handler)
+    handler.close()
 
 
 def execute_cv(
@@ -194,9 +250,7 @@ def execute_cv(
 ) -> None:
     """Run all selected internal CV jobs and optional external evaluations."""
     feature_data = load_feature_arrays(feature_path)
-    metadata = pd.read_csv(
-        config.data.output_dir / "replogle_k562_feature_metadata.csv"
-    )
+    metadata = read_feature_metadata(config.data.output_dir)
     all_feature_sets = feature_sets(
         feature_data["delta"],
         feature_data["response_burden"],

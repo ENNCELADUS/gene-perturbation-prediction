@@ -14,7 +14,13 @@ from dependency_baseline.config import (
     FeatureConfig,
     SelectionConfig,
 )
-from dependency_baseline.evaluation import fit_final, regression_metrics, run_cv
+from dependency_baseline.artifacts import organize_artifacts
+from dependency_baseline.evaluation import (
+    fit_final,
+    regression_metrics,
+    run_cv,
+    summarize_results,
+)
 from dependency_baseline.features import build_features
 from dependency_baseline.models import (
     build_model_specs,
@@ -43,10 +49,12 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
 
     feature_paths = build_features(config)
     assert feature_paths.features_npz.exists()
-    assert feature_paths.metadata_csv.exists()
+    assert feature_paths.metadata_path.exists()
     assert feature_paths.qa_report_md.exists()
+    assert feature_paths.features_npz.parent.name == "features"
+    assert feature_paths.metadata_path.name == "feature_metadata.parquet"
 
-    metadata = pd.read_csv(feature_paths.metadata_csv)
+    metadata = pd.read_parquet(feature_paths.metadata_path)
     assert len(metadata) == 6
     assert metadata["depmap_gene_effect"].notna().all()
     assert metadata["observed_n_cells"].min() == 3
@@ -85,17 +93,29 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
     assert cv_paths.run_dir.exists()
     assert cv_paths.manifest_json.exists()
     assert cv_paths.config_json.exists()
-    assert cv_paths.splits_csv.exists()
-    assert cv_paths.model_manifest_csv.exists()
-    assert cv_paths.topk_candidates_csv.exists()
-    assert (cv_paths.run_dir / "fold_metrics.parquet").exists()
-    assert (cv_paths.run_dir / "predictions.parquet").exists()
+    assert cv_paths.log_file.exists()
+    assert cv_paths.splits_path.exists()
+    assert cv_paths.model_manifest_path.exists()
+    assert cv_paths.topk_candidates_path.exists()
+    assert cv_paths.summary_csv == cv_paths.run_dir / "results" / "summary_metrics.csv"
+    assert cv_paths.summary_csv.exists()
+    assert cv_paths.fold_metrics_path == (
+        cv_paths.run_dir / "artifacts" / "fold_metrics.parquet"
+    )
+    assert cv_paths.predictions_path == (
+        cv_paths.run_dir / "artifacts" / "predictions.parquet"
+    )
+    assert cv_paths.fold_metrics_path.exists()
+    assert cv_paths.predictions_path.exists()
+    assert not (cv_paths.run_dir / "fold_metrics.csv").exists()
+    assert not (cv_paths.run_dir / "predictions.csv").exists()
+    assert not (cv_paths.run_dir / "summary_metrics.csv").exists()
     summary = pd.read_csv(cv_paths.summary_csv)
-    fold_metrics = pd.read_csv(cv_paths.fold_metrics_csv)
-    predictions = pd.read_csv(cv_paths.predictions_csv)
-    splits = pd.read_csv(cv_paths.splits_csv)
-    model_manifest = pd.read_csv(cv_paths.model_manifest_csv)
-    topk_candidates = pd.read_csv(cv_paths.topk_candidates_csv)
+    fold_metrics = pd.read_parquet(cv_paths.fold_metrics_path)
+    predictions = pd.read_parquet(cv_paths.predictions_path)
+    splits = pd.read_parquet(cv_paths.splits_path)
+    model_manifest = pd.read_parquet(cv_paths.model_manifest_path)
+    topk_candidates = pd.read_parquet(cv_paths.topk_candidates_path)
     assert {
         "internal_cv_all",
         "internal_cv_target_index_valid",
@@ -155,7 +175,7 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
             weightings=("unweighted",),
         ),
     )
-    single_metrics = pd.read_csv(single_paths.fold_metrics_csv)
+    single_metrics = pd.read_parquet(single_paths.fold_metrics_path)
     assert len(single_metrics) == 2
     internal_single = single_metrics.loc[
         single_metrics["evaluation_scope"] == "internal_cv_all"
@@ -177,7 +197,7 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
             weightings=("unweighted",),
         ),
     )
-    resumed_metrics = pd.read_csv(resumed_paths.fold_metrics_csv)
+    resumed_metrics = pd.read_parquet(resumed_paths.fold_metrics_path)
     assert len(resumed_metrics) == len(single_metrics)
 
     pca_forest_config = BaselineConfig(
@@ -228,7 +248,7 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
             weightings=("unweighted",),
         ),
     )
-    pca_forest_metrics = pd.read_csv(pca_forest_paths.fold_metrics_csv)
+    pca_forest_metrics = pd.read_parquet(pca_forest_paths.fold_metrics_path)
     assert len(pca_forest_metrics) == 1
     assert pca_forest_metrics.iloc[0]["model"] == "pca2_random_forest"
     assert pca_forest_metrics.iloc[0]["feature_set"] == "delta_all"
@@ -242,11 +262,20 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
             weightings=("unweighted",),
         ),
     )
-    final_manifest = pd.read_csv(final_paths.final_model_manifest_csv)
-    final_rankings = pd.read_csv(final_paths.final_rankings_csv)
+    assert final_paths.log_file.exists()
+    final_manifest = pd.read_parquet(final_paths.final_model_manifest_path)
+    final_rankings = pd.read_parquet(final_paths.final_rankings_path)
     assert len(final_manifest) == 1
     assert Path(final_manifest.iloc[0]["checkpoint_path"]).exists()
     assert {"rank", "predicted_dependency_score"}.issubset(set(final_rankings.columns))
+
+    summary_path, ranking_summary_path = summarize_results(cv_paths.run_dir)
+    assert summary_path == cv_paths.summary_csv
+    assert ranking_summary_path == (
+        cv_paths.run_dir / "artifacts" / "ranking_summary.parquet"
+    )
+    assert summary_path.exists()
+    assert ranking_summary_path.exists()
 
 
 def test_regression_metrics_skip_correlation_for_constant_predictions() -> None:
@@ -259,6 +288,84 @@ def test_regression_metrics_skip_correlation_for_constant_predictions() -> None:
     assert np.isnan(metrics["pearson"])
     assert metrics["spearman_defined"] is False
     assert metrics["pearson_defined"] is False
+
+
+def test_organize_artifacts_migrates_legacy_layout(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    pd.DataFrame({"feature_row": [0], "perturbation_gene": ["GENE1"]}).to_csv(
+        results_dir / "replogle_k562_feature_metadata.csv",
+        index=False,
+    )
+    np.savez_compressed(results_dir / "replogle_k562_delta_features.npz", x=[1])
+    (results_dir / "replogle_k562_feature_qa.md").write_text("qa", encoding="utf-8")
+    (results_dir / "replogle_k562_feature_summary.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+
+    run_dir = results_dir / "runs" / "legacy_run"
+    rankings_dir = run_dir / "rankings"
+    rankings_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "job_key": ["job"],
+            "evaluation_scope": ["internal_cv_all"],
+            "fold": [0],
+            "feature_set": ["delta_all"],
+            "model": ["ridge"],
+            "weighting": ["unweighted"],
+            "spearman": [0.1],
+        }
+    ).to_csv(run_dir / "fold_metrics.csv", index=False)
+    pd.DataFrame(
+        {
+            "evaluation_scope": ["internal_cv_all"],
+            "feature_set": ["delta_all"],
+            "model": ["ridge"],
+            "weighting": ["unweighted"],
+            "n_folds": [1],
+            "spearman_mean": [0.1],
+        }
+    ).to_csv(run_dir / "summary_metrics.csv", index=False)
+    pd.DataFrame({"job_key": ["job"], "perturbation_gene": ["GENE1"]}).to_csv(
+        run_dir / "predictions.csv",
+        index=False,
+    )
+    pd.DataFrame({"rank": [1], "perturbation_gene": ["GENE1"]}).to_csv(
+        rankings_dir / "internal_cv_all__delta_all__ridge__unweighted.csv",
+        index=False,
+    )
+    (run_dir / "completed_jobs.jsonl").write_text(
+        '{"job_key": "job"}\n',
+        encoding="utf-8",
+    )
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "legacy_run.log").write_text("log", encoding="utf-8")
+
+    organize_artifacts(results_dir, logs_dir)
+
+    assert (results_dir / "features" / "replogle_k562_delta_features.npz").exists()
+    assert (results_dir / "features" / "feature_metadata.parquet").exists()
+    assert not (results_dir / "replogle_k562_feature_metadata.csv").exists()
+    assert (run_dir / "results" / "summary_metrics.csv").exists()
+    assert (run_dir / "artifacts" / "fold_metrics.parquet").exists()
+    assert (run_dir / "artifacts" / "predictions.parquet").exists()
+    assert (run_dir / "artifacts" / "completed_jobs.jsonl").exists()
+    assert (
+        run_dir
+        / "artifacts"
+        / "rankings"
+        / "internal_cv_all__delta_all__ridge__unweighted.parquet"
+    ).exists()
+    assert (run_dir / "logs" / "run.log").read_text(encoding="utf-8") == "log"
+    assert not (run_dir / "fold_metrics.csv").exists()
+    assert not (run_dir / "predictions.csv").exists()
+    legacy_ranking_csv = (
+        rankings_dir / "internal_cv_all__delta_all__ridge__unweighted.csv"
+    )
+    assert not legacy_ranking_csv.exists()
 
 
 def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:

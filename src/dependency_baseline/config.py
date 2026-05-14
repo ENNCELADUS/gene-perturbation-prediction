@@ -52,7 +52,8 @@ class ExperimentConfig:
     name: str = "replogle_k562_b_to_c_baseline"
     seed: int = 42
     run_id: str | None = None
-    result_formats: tuple[str, ...] = ("parquet", "csv")
+    human_result_tables: tuple[str, ...] = ("summary_metrics",)
+    machine_result_format: str = "parquet"
     checkpoint_policy: str = "all_cv_and_final"
     save_predictions: bool = True
     save_rankings: bool = True
@@ -232,10 +233,13 @@ def load_config(path: str | Path) -> BaselineConfig:
             name=experiment.get("name", "replogle_k562_b_to_c_baseline"),
             seed=int(experiment.get("seed", 42)),
             run_id=experiment.get("run_id"),
-            result_formats=_tuple_str_or_none(
-                experiment.get("result_formats")
+            human_result_tables=_tuple_str_or_none(
+                experiment.get("human_result_tables")
             )
-            or ("parquet", "csv"),
+            or ("summary_metrics",),
+            machine_result_format=str(
+                experiment.get("machine_result_format", "parquet")
+            ),
             checkpoint_policy=experiment.get(
                 "checkpoint_policy",
                 "all_cv_and_final",

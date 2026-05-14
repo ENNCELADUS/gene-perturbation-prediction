@@ -18,7 +18,8 @@ experiment:
   name: replogle_k562_b_to_c_baseline
   seed: 42
   run_id: null
-  result_formats: [parquet, csv]
+  human_result_tables: [summary_metrics]
+  machine_result_format: parquet
   checkpoint_policy: all_cv_and_final
   save_predictions: true
   save_rankings: true

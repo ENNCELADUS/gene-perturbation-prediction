@@ -9,6 +9,7 @@ import sys
 
 from dependency_baseline.config import SelectionConfig
 from dependency_baseline.config import load_config
+from dependency_baseline.artifacts import organize_artifacts
 from dependency_baseline.evaluation import fit_final, run_cv, summarize_results
 from dependency_baseline.features import build_features
 
@@ -37,6 +38,7 @@ def main() -> None:
     cv_parser.add_argument("--model", action="append", default=None)
     cv_parser.add_argument("--fold", action="append", type=int, default=None)
     cv_parser.add_argument("--weighting", action="append", default=None)
+    cv_parser.add_argument("--log-file", type=Path, default=None)
 
     final_parser = subparsers.add_parser("fit-final")
     final_parser.add_argument("--config", required=True, type=Path)
@@ -45,16 +47,21 @@ def main() -> None:
     final_parser.add_argument("--feature-set", action="append", default=None)
     final_parser.add_argument("--model", action="append", default=None)
     final_parser.add_argument("--weighting", action="append", default=None)
+    final_parser.add_argument("--log-file", type=Path, default=None)
 
     summarize_parser = subparsers.add_parser("summarize")
     summarize_parser.add_argument("--results-dir", required=True, type=Path)
+
+    organize_parser = subparsers.add_parser("organize-artifacts")
+    organize_parser.add_argument("--results-dir", required=True, type=Path)
+    organize_parser.add_argument("--logs-dir", type=Path, default=None)
 
     args = parser.parse_args()
     if args.command == "build-features":
         config = load_config(args.config)
         paths = build_features(config)
         print(f"features: {paths.features_npz}")
-        print(f"metadata: {paths.metadata_csv}")
+        print(f"metadata: {paths.metadata_path}")
         print(f"qa: {paths.qa_report_md}")
     elif args.command == "run-cv":
         config = load_config(args.config)
@@ -66,13 +73,15 @@ def main() -> None:
             selection=_selection_from_args(args),
             command=tuple(sys.argv),
             config_path=args.config,
+            log_file=args.log_file,
         )
         print(f"run dir: {paths.run_dir}")
-        print(f"fold metrics: {paths.fold_metrics_csv}")
+        print(f"fold metrics: {paths.fold_metrics_path}")
         print(f"summary: {paths.summary_csv}")
-        print(f"predictions: {paths.predictions_csv}")
-        print(f"model manifest: {paths.model_manifest_csv}")
-        print(f"top-k candidates: {paths.topk_candidates_csv}")
+        print(f"predictions: {paths.predictions_path}")
+        print(f"model manifest: {paths.model_manifest_path}")
+        print(f"top-k candidates: {paths.topk_candidates_path}")
+        print(f"log: {paths.log_file}")
     elif args.command == "fit-final":
         config = load_config(args.config)
         paths = fit_final(
@@ -82,15 +91,20 @@ def main() -> None:
             selection=_selection_from_args(args),
             command=tuple(sys.argv),
             config_path=args.config,
+            log_file=args.log_file,
         )
         print(f"run dir: {paths.run_dir}")
-        print(f"final model manifest: {paths.final_model_manifest_csv}")
-        print(f"final rankings: {paths.final_rankings_csv}")
+        print(f"final model manifest: {paths.final_model_manifest_path}")
+        print(f"final rankings: {paths.final_rankings_path}")
+        print(f"log: {paths.log_file}")
     elif args.command == "summarize":
         summary_path, ranking_summary_path = summarize_results(args.results_dir)
         print(f"summary: {summary_path}")
         if ranking_summary_path is not None:
             print(f"ranking summary: {ranking_summary_path}")
+    elif args.command == "organize-artifacts":
+        organize_artifacts(args.results_dir, args.logs_dir)
+        print(f"organized: {args.results_dir}")
 
 
 def _selection_from_args(args: argparse.Namespace) -> SelectionConfig:
