@@ -1,13 +1,13 @@
 # Replogle K562 B->C Baseline Metrics
 
-Imported on 2026-05-14 from `richard@10.20.161.54:/home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/cv`.
+Imported from `richard@10.20.161.54:/home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline`.
 
 ## Run Setup
 
 - Task: predict DepMap K562 CRISPR GeneEffect from Replogle K562 perturbation pseudobulk delta expression.
-- Evaluation: repeated stratified CV with `5` folds x `1` repeat, random seed `42`, `10` GeneEffect quantile bins.
-- Source feature artifact on remote: `/home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/replogle_k562_delta_features.npz`.
-- Values below are fold means. Standard deviations and all model rows are in `summary_metrics.csv`.
+- Main baseline evaluation: 5-fold CV x 1 repeat, random seed `42`, 10 GeneEffect quantile bins.
+- PCA RandomForest ablation: `pca_rf_unweighted_20260514`, same split policy, unweighted, `delta_all` and `delta_mask_target` only.
+- Values below are fold means. Standard deviations and all rows are in `summary_metrics.csv`.
 
 ## Concise Metrics Table
 
@@ -23,26 +23,33 @@ Imported on 2026-05-14 from `richard@10.20.161.54:/home/richard/projects/VCC/res
 | internal_cv_all | PCA50 delta + Ridge | 0.485 | 0.474 | 0.619 | 0.472 | 0.224 | 0.738 | 1.982 |
 | internal_cv_all | PCA100 delta + Ridge | 0.481 | 0.474 | 0.619 | 0.472 | 0.224 | 0.736 | 2.006 |
 | internal_cv_all | full delta + RandomForest | 0.476 | 0.481 | 0.616 | 0.472 | 0.231 | 0.734 | 2.006 |
+| internal_cv_all | PCA20 delta + RandomForest | 0.492 | 0.490 | 0.613 | 0.466 | 0.238 | 0.742 | 1.958 |
+| internal_cv_all | PCA50 delta + RandomForest | 0.494 | 0.493 | 0.612 | 0.462 | 0.242 | 0.742 | 2.077 |
+| internal_cv_all | PCA100 delta + RandomForest | 0.491 | 0.483 | 0.616 | 0.463 | 0.232 | 0.742 | 1.936 |
 | internal_cv_all | PCA50 delta + Ridge, n_cells weighted | 0.484 | 0.471 | 0.621 | 0.472 | 0.220 | 0.736 | 1.982 |
 | internal_cv_all | target-masked PCA50 delta + Ridge | 0.484 | 0.473 | 0.619 | 0.472 | 0.224 | 0.737 | 1.982 |
 | internal_cv_all | target-masked delta + RandomForest | 0.474 | 0.479 | 0.617 | 0.472 | 0.229 | 0.734 | 2.053 |
+| internal_cv_all | target-masked PCA50 delta + RandomForest | 0.496 | 0.492 | 0.612 | 0.463 | 0.241 | 0.742 | 2.031 |
 | internal_cv_target_index_valid | target-valid full delta + Ridge | 0.313 | 0.331 | 0.723 | 0.559 | -0.058 | 0.648 | 1.652 |
 | internal_cv_target_index_valid | target-valid masked delta + Ridge | 0.310 | 0.327 | 0.727 | 0.562 | -0.071 | 0.646 | 1.677 |
 | internal_cv_target_index_valid | target-valid PCA50 delta + Ridge | 0.459 | 0.448 | 0.629 | 0.482 | 0.197 | 0.721 | 1.850 |
 | internal_cv_target_index_valid | target-valid masked PCA50 + Ridge | 0.459 | 0.448 | 0.629 | 0.482 | 0.197 | 0.721 | 1.850 |
 | internal_cv_target_index_valid | target-valid delta + RandomForest | 0.445 | 0.446 | 0.629 | 0.485 | 0.196 | 0.719 | 1.923 |
 | internal_cv_target_index_valid | target-valid masked delta + RandomForest | 0.442 | 0.443 | 0.630 | 0.486 | 0.194 | 0.717 | 1.923 |
+| internal_cv_target_index_valid | target-valid PCA50 delta + RandomForest | 0.467 | 0.469 | 0.621 | 0.475 | 0.218 | 0.724 | 1.873 |
+| internal_cv_target_index_valid | target-valid masked PCA50 delta + RandomForest | 0.466 | 0.468 | 0.621 | 0.475 | 0.216 | 0.725 | 1.924 |
 
 ## Main Readout
 
-- Best internal row by Spearman: `delta_all + pca50_ridge (unweighted)`, Spearman `0.485`, Pearson `0.474`, RMSE `0.619`, MAE `0.472`, AUROC at GeneEffect `< -1.0` `0.738`.
-- Target masking on target-index-valid genes does not materially reduce PCA50 Ridge performance: Spearman change `-0.0001` (`0.459` full vs `0.459` masked).
+- Best internal row by Spearman: `delta_mask_target + pca50_random_forest (unweighted)`, Spearman `0.496`, Pearson `0.492`, RMSE `0.612`, MAE `0.463`, AUROC at GeneEffect `< -1.0` `0.742`.
+- PCA50 RandomForest improves over full-delta RandomForest: Spearman `+0.018` and AUROC GE `< -1.0` `+0.008`.
+- Target masking does not hurt PCA50 RandomForest: internal Spearman change `+0.001`, target-valid Spearman change `-0.001`.
 - `n_cells_only` is near-random by Spearman/AUROC, while response-burden features retain a moderate signal, so the useful signal is not explained by cell-count alone.
 
 ## Files
 
-- `cv_config.json`: remote CV configuration.
-- `summary_metrics.csv`: all aggregate metrics for every scope, feature set, model, and weighting.
-- `fold_metrics.csv`: per-fold metrics.
-- `predictions.csv`: per-gene held-out predictions for each CV job.
+- `cv_config.json`: original remote CV configuration.
+- `summary_metrics.csv`: aggregate metrics across the original baseline and PCA RandomForest ablation rows.
+- `fold_metrics.csv`: per-fold metrics, including PCA RandomForest rows.
+- `predictions.csv`: per-gene held-out predictions, including PCA RandomForest rows.
 - `metrics_table.csv`: selected rows from `summary_metrics.csv` used in the table above.
