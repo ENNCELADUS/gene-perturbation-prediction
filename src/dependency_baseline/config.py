@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from dependency_baseline.program_scores import DEFAULT_PROGRAM_SCORE_SETS
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -34,6 +36,21 @@ class ExternalEvaluationConfig:
 class FeatureConfig:
     chunk_size: int = 4096
     top_abs_delta_sizes: tuple[int, ...] = (50, 100, 500)
+    program_score_sets: tuple[str, ...] = DEFAULT_PROGRAM_SCORE_SETS
+
+
+@dataclass(frozen=True)
+class ViabilityAxisArtifactConfig:
+    name: str
+    url: str
+    sha256: str
+
+
+@dataclass(frozen=True)
+class ViabilityAxisConfig:
+    enabled: bool = False
+    cache_dir: Path | None = None
+    artifacts: tuple[ViabilityAxisArtifactConfig, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -77,6 +94,7 @@ class BaselineConfig:
     cv: CvConfig
     experiment: ExperimentConfig = field(default_factory=ExperimentConfig)
     selection: SelectionConfig = field(default_factory=SelectionConfig)
+    viability_axis: ViabilityAxisConfig = field(default_factory=ViabilityAxisConfig)
     models: dict[str, dict[str, Any]] | None = None
 
 
@@ -126,6 +144,25 @@ def _external_evaluations(values: Any) -> tuple[ExternalEvaluationConfig, ...]:
     )
 
 
+def _viability_axis_config(values: Any) -> ViabilityAxisConfig:
+    if values is None:
+        return ViabilityAxisConfig()
+    artifacts = tuple(
+        ViabilityAxisArtifactConfig(
+            name=str(value["name"]),
+            url=str(value["url"]),
+            sha256=str(value["sha256"]),
+        )
+        for value in values.get("artifacts", ())
+    )
+    cache_dir = values.get("cache_dir")
+    return ViabilityAxisConfig(
+        enabled=bool(values.get("enabled", False)),
+        cache_dir=_path(cache_dir) if cache_dir else None,
+        artifacts=artifacts,
+    )
+
+
 def _model_config(values: Any, cv: CvConfig) -> dict[str, dict[str, Any]]:
     models: dict[str, dict[str, Any]] = {
         "mean_label": {"enabled": True},
@@ -165,6 +202,44 @@ def _model_config(values: Any, cv: CvConfig) -> dict[str, dict[str, Any]]:
             "colsample_bytree": 0.8,
             "objective": "reg:squarederror",
             "n_jobs": 4,
+        },
+        "lasso": {
+            "enabled": False,
+            "alpha": 0.01,
+            "max_iter": 20000,
+            "tol": 1e-3,
+            "selection": "random",
+        },
+        "nar_viability_axis": {
+            "enabled": None,
+            "alpha": 10.0,
+            "n_score_columns": 2,
+            "score_ridge": True,
+            "score_plus_burden_ridge": True,
+            "resid_pca50_ridge": True,
+            "resid_pca50_random_forest": True,
+            "n_estimators": 300,
+            "min_samples_leaf": 5,
+            "n_jobs": -1,
+        },
+        "signal_decomposition": {
+            "enabled": False,
+            "alpha": 10.0,
+            "lasso_alpha": 0.01,
+            "n_score_columns": None,
+            "pca_components": 50,
+            "score_ridge": True,
+            "resid_pca_ridge": True,
+            "resid_pca_random_forest": True,
+            "resid_pca_plus_scores_ridge": True,
+            "resid_pca_plus_scores_random_forest": True,
+            "resid_lasso": True,
+            "program_score_ridge": True,
+            "program_score_elastic_net": True,
+            "program_score_random_forest": True,
+            "n_estimators": 300,
+            "min_samples_leaf": 5,
+            "n_jobs": -1,
         },
     }
     if cv.model_set == "quick":
@@ -227,6 +302,8 @@ def load_config(path: str | Path) -> BaselineConfig:
                 features.get("top_abs_delta_sizes"),
                 (50, 100, 500),
             ),
+            program_score_sets=_tuple_str_or_none(features.get("program_score_sets"))
+            or DEFAULT_PROGRAM_SCORE_SETS,
         ),
         cv=cv_config,
         experiment=ExperimentConfig(
@@ -259,5 +336,6 @@ def load_config(path: str | Path) -> BaselineConfig:
             folds=_tuple_int_or_none(selection.get("folds")),
             weightings=_tuple_str_or_none(selection.get("weightings")),
         ),
+        viability_axis=_viability_axis_config(raw.get("viability_axis")),
         models=_model_config(raw.get("models"), cv_config),
     )

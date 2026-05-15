@@ -44,6 +44,22 @@ Imported from `richard@10.20.161.54:/home/richard/projects/VCC/results/replogle_
 - In the direct Ridge leakage check, target masking changes Spearman only slightly: `-0.005` on `internal_cv_all` and `-0.003` on the target-index-valid subset.
 - `n_cells_only` is near-random by Spearman/AUROC, while response-burden features retain a moderate signal, so the useful signal is not explained by cell-count alone.
 
+## Follow-Up Audit
+
+- 2026-05-15 NAR viability-axis audit:
+  [`docs/experiment/replogle_k562_viability_axis_audit_5x1_main.md`](../../replogle_k562_viability_axis_audit_5x1_main.md).
+- Main conclusion: the NAR viability score alone is not enough to explain the
+  B->C signal, but response burden accounts for a large fraction of it.
+  Fold-local NAR residualization preserves PCA50 RandomForest performance
+  (`0.503` Spearman vs `0.494` baseline), while PCA50 Ridge drops (`0.400` vs
+  `0.485`), suggesting the linear model relies more on the generic viability
+  axis than the nonlinear PCA RandomForest.
+- 2026-05-15 next-step implementation:
+  `configs/replogle_k562_signal_decomposition_5x1_main.yaml` adds the planned
+  NAR+response-burden nuisance residualization audit, curated biological
+  program-score features, residualized PCA+score models, and sparse Lasso /
+  ElasticNet checks for the main 5-fold x 1 setup.
+
 ## Files
 
 - `cv_config.json`: original remote CV configuration.

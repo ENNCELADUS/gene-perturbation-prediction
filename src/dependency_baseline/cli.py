@@ -12,6 +12,7 @@ from dependency_baseline.config import load_config
 from dependency_baseline.artifacts import organize_artifacts
 from dependency_baseline.evaluation import fit_final, run_cv, summarize_results
 from dependency_baseline.features import build_features
+from dependency_baseline.viability_report import write_viability_axis_report
 
 
 def main() -> None:
@@ -55,6 +56,12 @@ def main() -> None:
     organize_parser = subparsers.add_parser("organize-artifacts")
     organize_parser.add_argument("--results-dir", required=True, type=Path)
     organize_parser.add_argument("--logs-dir", type=Path, default=None)
+
+    viability_report_parser = subparsers.add_parser("viability-axis-report")
+    viability_report_parser.add_argument("--run-dir", required=True, type=Path)
+    viability_report_parser.add_argument("--features", required=True, type=Path)
+    viability_report_parser.add_argument("--output", required=True, type=Path)
+    viability_report_parser.add_argument("--baseline-predictions", type=Path)
 
     args = parser.parse_args()
     if args.command == "build-features":
@@ -105,6 +112,14 @@ def main() -> None:
     elif args.command == "organize-artifacts":
         organize_artifacts(args.results_dir, args.logs_dir)
         print(f"organized: {args.results_dir}")
+    elif args.command == "viability-axis-report":
+        report_path = write_viability_axis_report(
+            run_dir=args.run_dir,
+            features_npz=args.features,
+            output_path=args.output,
+            baseline_predictions=args.baseline_predictions,
+        )
+        print(f"report: {report_path}")
 
 
 def _selection_from_args(args: argparse.Namespace) -> SelectionConfig:
