@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import anndata as ad
@@ -13,6 +14,8 @@ from dependency_baseline.config import (
     ExternalEvaluationConfig,
     FeatureConfig,
     SelectionConfig,
+    ViabilityAxisArtifactConfig,
+    ViabilityAxisConfig,
 )
 from dependency_baseline.artifacts import organize_artifacts
 from dependency_baseline.evaluation import (
@@ -23,8 +26,17 @@ from dependency_baseline.evaluation import (
 )
 from dependency_baseline.features import build_features
 from dependency_baseline.models import (
+    NuisanceResidualizer,
+    ResidualizedPCAWithScores,
+    ViabilityAxisResidualizer,
     build_model_specs,
     compatible_model_feature_shape,
+    fit_estimator,
+)
+from dependency_baseline.program_scores import build_program_scores
+from dependency_baseline.viability_axis import (
+    file_sha256,
+    parse_coefficient_csv,
 )
 
 
@@ -62,12 +74,15 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
     feature_data = np.load(feature_paths.features_npz, allow_pickle=True)
     assert feature_data["delta"].shape == (6, 5)
     assert feature_data["response_burden"].shape[0] == 6
+    assert feature_data["program_scores"].shape[0] == 6
 
     external_features_npz = tmp_path / "synthetic_external_features.npz"
     np.savez_compressed(
         external_features_npz,
         delta=feature_data["delta"][:4],
         response_burden=feature_data["response_burden"][:4],
+        program_scores=feature_data["program_scores"][:4],
+        program_score_columns=feature_data["program_score_columns"],
         y=feature_data["y"][:4],
         n_cells=feature_data["n_cells"][:4],
         target_gene_index=feature_data["target_gene_index"][:4],
@@ -288,6 +303,181 @@ def test_regression_metrics_skip_correlation_for_constant_predictions() -> None:
     assert np.isnan(metrics["pearson"])
     assert metrics["spearman_defined"] is False
     assert metrics["pearson_defined"] is False
+
+
+def test_nar_coefficient_parsing_and_feature_scoring(tmp_path: Path) -> None:
+    coefficient_path = tmp_path / "nar_local.csv"
+    coefficient_path.write_text(
+        ",pr_gene_symbol,coefficient\n1,GENE1,2.0\n2,HOUSE,-1.0\nINTERCEPT,0.5,0.5\n",
+        encoding="utf-8",
+    )
+    coefficients, intercept = parse_coefficient_csv(coefficient_path)
+    assert intercept == 0.5
+    assert coefficients.to_dict() == {"GENE1": 2.0, "HOUSE": -1.0}
+
+    h5ad_path, overlap_path = _write_synthetic_replogle_inputs(tmp_path)
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+        ),
+        features=FeatureConfig(chunk_size=4, top_abs_delta_sizes=(2, 3)),
+        cv=CvConfig(n_splits=2, n_repeats=1, pca_components=(2,)),
+        viability_axis=ViabilityAxisConfig(
+            enabled=True,
+            artifacts=(
+                ViabilityAxisArtifactConfig(
+                    name="local",
+                    url=str(coefficient_path),
+                    sha256=file_sha256(coefficient_path),
+                ),
+            ),
+        ),
+    )
+
+    feature_paths = build_features(config)
+    feature_data = np.load(feature_paths.features_npz, allow_pickle=True)
+    assert feature_data["nar_viability_scores"].shape == (6, 1)
+    assert feature_data["nar_viability_score_columns"].tolist() == ["nar_local_score"]
+    summary = json.loads(feature_paths.summary_json.read_text(encoding="utf-8"))
+    model_summary = summary["viability_axis_models"][0]
+    assert model_summary["n_matched_expression_genes"] == 2
+    assert model_summary["n_missing_expression_genes"] == 0
+
+
+def test_viability_axis_residualizer_removes_score_linear_signal() -> None:
+    score = np.asarray([[0.0], [1.0], [2.0], [3.0]], dtype=np.float32)
+    delta = np.column_stack(
+        [
+            10.0 + 2.0 * score[:, 0],
+            -1.0 - 3.0 * score[:, 0],
+            np.asarray([1.0, 1.0, 1.0, 1.0]),
+        ]
+    ).astype(np.float32)
+    x = np.hstack([delta, score])
+
+    residualizer = ViabilityAxisResidualizer(n_score_columns=1).fit(x)
+    residual = residualizer.transform(x)
+
+    assert np.allclose(residual[:, :2], 0.0, atol=1e-5)
+    assert np.allclose(residual[:, 2], 0.0, atol=1e-5)
+
+
+def test_program_scores_align_symbols_and_report_missing_genes() -> None:
+    delta = np.asarray(
+        [
+            [1.0, 2.0, -1.0],
+            [3.0, 4.0, -2.0],
+        ],
+        dtype=np.float32,
+    )
+    result = build_program_scores(
+        delta=delta,
+        gene_symbols=["E2F1", "MCM2", "HOUSE"],
+        program_sets=("cell_cycle_e2f",),
+    )
+
+    assert result.score_columns == ("program_cell_cycle_e2f_mean_delta",)
+    assert np.allclose(result.scores.iloc[:, 0].to_numpy(), [1.5, 3.5])
+    assert result.qa_rows[0]["n_matched_expression_genes"] == 2
+    assert result.qa_rows[0]["n_missing_expression_genes"] > 0
+
+
+def test_residualized_pca_with_scores_appends_nuisance_scores() -> None:
+    score = np.asarray([[0.0], [1.0], [2.0], [3.0]], dtype=np.float32)
+    delta = np.column_stack(
+        [
+            10.0 + 2.0 * score[:, 0],
+            np.asarray([0.0, 1.0, 0.0, 1.0]),
+        ]
+    ).astype(np.float32)
+    x = np.hstack([delta, score])
+
+    transformed = ResidualizedPCAWithScores(
+        n_score_columns=1,
+        n_components=1,
+        random_state=7,
+    ).fit_transform(x)
+
+    assert transformed.shape == (4, 2)
+    assert np.allclose(transformed[:, -1], score[:, 0])
+    assert np.allclose(
+        NuisanceResidualizer(n_score_columns=1).fit(x).transform(x)[:, 0],
+        0.0,
+        atol=1e-5,
+    )
+
+
+def test_signal_decomposition_model_specs_fit_synthetic_data(tmp_path: Path) -> None:
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=tmp_path / "missing.h5ad",
+            overlap_csv=tmp_path / "missing.csv",
+            output_dir=tmp_path / "outputs",
+        ),
+        features=FeatureConfig(),
+        cv=CvConfig(n_splits=2, n_repeats=1, pca_components=(2,)),
+        models={
+            "mean_label": {"enabled": False},
+            "ridge": {"enabled": False},
+            "elastic_net": {"enabled": False},
+            "pca_ridge": {"enabled": False},
+            "random_forest": {"enabled": False},
+            "pca_random_forest": {"enabled": False},
+            "xgboost": {"enabled": False},
+            "nar_viability_axis": {"enabled": False},
+            "signal_decomposition": {
+                "enabled": True,
+                "n_score_columns": 2,
+                "pca_components": 2,
+                "n_estimators": 5,
+                "min_samples_leaf": 1,
+                "n_jobs": 1,
+            },
+        },
+    )
+    specs = build_model_specs(config)
+    spec_by_name = {spec.name: spec for spec in specs}
+    assert {
+        "nuisance_score_ridge",
+        "nuisance_resid_pca2_ridge",
+        "nuisance_resid_pca2_random_forest",
+        "nuisance_resid_pca2_plus_scores_ridge",
+        "nuisance_resid_pca2_plus_scores_random_forest",
+        "nuisance_resid_lasso",
+        "program_score_ridge",
+        "program_score_elastic_net",
+        "program_score_random_forest",
+    }.issubset(spec_by_name)
+
+    rng = np.random.default_rng(7)
+    nuisance_x = rng.normal(size=(8, 5)).astype(np.float32)
+    residual_x = rng.normal(size=(8, 7)).astype(np.float32)
+    program_x = rng.normal(size=(8, 4)).astype(np.float32)
+    y = rng.normal(size=8)
+    weights = np.ones(8)
+    fit_inputs = {
+        "nuisance_score_ridge": nuisance_x,
+        "nuisance_resid_pca2_ridge": residual_x,
+        "nuisance_resid_pca2_random_forest": residual_x,
+        "nuisance_resid_pca2_plus_scores_ridge": residual_x,
+        "nuisance_resid_pca2_plus_scores_random_forest": residual_x,
+        "nuisance_resid_lasso": residual_x,
+        "program_score_ridge": program_x,
+        "program_score_elastic_net": program_x,
+        "program_score_random_forest": program_x,
+    }
+    for model_name, x in fit_inputs.items():
+        fitted, fit_seconds = fit_estimator(
+            spec_by_name[model_name],
+            x,
+            y,
+            weights,
+            "unweighted",
+        )
+        assert fit_seconds >= 0
+        assert fitted.predict(x).shape == (8,)
 
 
 def test_organize_artifacts_migrates_legacy_layout(tmp_path: Path) -> None:

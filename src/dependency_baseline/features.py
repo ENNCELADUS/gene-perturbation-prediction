@@ -19,6 +19,8 @@ from dependency_baseline.artifacts import (
     feature_summary_path,
 )
 from dependency_baseline.config import BaselineConfig
+from dependency_baseline.program_scores import build_program_scores
+from dependency_baseline.viability_axis import build_viability_axis_scores
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,19 @@ def build_features(config: BaselineConfig) -> FeaturePaths:
         burden = response_burden(delta, config.features.top_abs_delta_sizes)
         var_symbols = _var_symbols(adata, config.data.var_gene_symbol_col)
         target_indices = _target_indices(labels, var_symbols)
+        program_scores = build_program_scores(
+            delta=delta,
+            gene_symbols=var_symbols,
+            program_sets=config.features.program_score_sets,
+        )
+        viability_axis = build_viability_axis_scores(
+            delta=delta,
+            gene_symbols=var_symbols,
+            config=config.viability_axis,
+            default_cache_dir=config.data.output_dir
+            / "external"
+            / "nar_viability_axis",
+        )
     finally:
         adata.file.close()
 
@@ -88,17 +103,33 @@ def build_features(config: BaselineConfig) -> FeaturePaths:
     metadata["target_gene_index"] = target_indices
     metadata.to_parquet(metadata_path, index=False)
 
-    np.savez_compressed(
-        features_npz,
-        delta=delta,
-        response_burden=burden.to_numpy(dtype=np.float32),
-        y=metadata[config.data.depmap_label_col].to_numpy(dtype=np.float32),
-        n_cells=metadata["observed_n_cells"].to_numpy(dtype=np.float32),
-        target_gene_index=np.asarray(target_indices, dtype=np.int32),
-        perturbation_gene=np.asarray(labels, dtype=object),
-        expression_gene_symbol=np.asarray(var_symbols, dtype=object),
-        response_burden_columns=np.asarray(burden.columns.tolist(), dtype=object),
-    )
+    feature_payload: dict[str, np.ndarray] = {
+        "delta": delta,
+        "response_burden": burden.to_numpy(dtype=np.float32),
+        "program_scores": program_scores.scores.to_numpy(dtype=np.float32),
+        "y": metadata[config.data.depmap_label_col].to_numpy(dtype=np.float32),
+        "n_cells": metadata["observed_n_cells"].to_numpy(dtype=np.float32),
+        "target_gene_index": np.asarray(target_indices, dtype=np.int32),
+        "perturbation_gene": np.asarray(labels, dtype=object),
+        "expression_gene_symbol": np.asarray(var_symbols, dtype=object),
+        "response_burden_columns": np.asarray(burden.columns.tolist(), dtype=object),
+        "program_score_columns": np.asarray(
+            program_scores.score_columns,
+            dtype=object,
+        ),
+    }
+    viability_axis_qa: list[dict[str, object]] = []
+    if viability_axis is not None:
+        feature_payload["nar_viability_scores"] = viability_axis.scores.to_numpy(
+            dtype=np.float32,
+        )
+        feature_payload["nar_viability_score_columns"] = np.asarray(
+            viability_axis.score_columns,
+            dtype=object,
+        )
+        viability_axis_qa = viability_axis.qa_rows
+
+    np.savez_compressed(features_npz, **feature_payload)
 
     summary = {
         "n_overlap_rows": int(len(overlap)),
@@ -114,6 +145,13 @@ def build_features(config: BaselineConfig) -> FeaturePaths:
         "median_cells_per_perturbation": float(np.median(perturb_counts)),
         "max_cells_per_perturbation": int(perturb_counts.max()),
         "n_missing_target_gene_indices": int(np.sum(np.asarray(target_indices) < 0)),
+        "viability_axis_enabled": bool(config.viability_axis.enabled),
+        "viability_axis_score_columns": list(
+            viability_axis.score_columns if viability_axis is not None else ()
+        ),
+        "viability_axis_models": viability_axis_qa,
+        "program_score_columns": list(program_scores.score_columns),
+        "program_score_sets": program_scores.qa_rows,
         "external_overlap_tables": external_sanity,
     }
     summary_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -226,7 +264,12 @@ def _qa_report(
     lines.extend(
         f"- `{key}`: {value}"
         for key, value in summary.items()
-        if key != "external_overlap_tables"
+        if key
+        not in {
+            "external_overlap_tables",
+            "viability_axis_models",
+            "program_score_sets",
+        }
     )
     lines.extend(
         [
@@ -256,6 +299,18 @@ def _qa_report(
         lines.append(pd.DataFrame(external_sanity).to_markdown(index=False))
     else:
         lines.append("No external overlap tables configured.")
+    lines.extend(["", "## NAR Viability-Axis Models", ""])
+    viability_axis_rows = summary.get("viability_axis_models", [])
+    if viability_axis_rows:
+        lines.append(pd.DataFrame(viability_axis_rows).to_markdown(index=False))
+    else:
+        lines.append("Not enabled.")
+    lines.extend(["", "## Program Score Sets", ""])
+    program_score_rows = summary.get("program_score_sets", [])
+    if program_score_rows:
+        lines.append(pd.DataFrame(program_score_rows).to_markdown(index=False))
+    else:
+        lines.append("None configured.")
     lines.extend(
         [
             "",

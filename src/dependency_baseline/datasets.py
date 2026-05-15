@@ -32,21 +32,34 @@ class ExternalEvaluationData:
 def load_feature_arrays(feature_path: Path) -> dict[str, np.ndarray]:
     """Load dependency baseline feature arrays from NPZ."""
     feature_data = np.load(feature_path, allow_pickle=True)
-    return {
+    arrays = {
         "delta": feature_data["delta"].astype(np.float32),
         "response_burden": feature_data["response_burden"].astype(np.float32),
+        "program_scores": feature_data["program_scores"].astype(np.float32),
         "y": feature_data["y"].astype(np.float64),
         "n_cells": feature_data["n_cells"].astype(np.float64),
         "target_gene_index": feature_data["target_gene_index"].astype(np.int64),
         "genes": feature_data["perturbation_gene"].astype(str),
+        "program_score_columns": feature_data["program_score_columns"].astype(str),
     }
+    if "nar_viability_scores" in feature_data:
+        arrays["nar_viability_scores"] = feature_data["nar_viability_scores"].astype(
+            np.float32
+        )
+        arrays["nar_viability_score_columns"] = feature_data[
+            "nar_viability_score_columns"
+        ].astype(str)
+    return arrays
 
 
 def feature_sets(
     delta: np.ndarray,
     burden: np.ndarray,
+    program_scores: np.ndarray,
     n_cells: np.ndarray,
     target_indices: np.ndarray,
+    nar_viability_scores: np.ndarray | None = None,
+    nar_viability_score_columns: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
     """Build named feature matrices used by the model ladder."""
     target_delta = np.full((delta.shape[0], 1), np.nan, dtype=np.float32)
@@ -55,13 +68,41 @@ def feature_sets(
 
     delta_masked = delta.copy()
     delta_masked[valid, target_indices[valid]] = 0.0
-    return {
+    sets = {
         "delta_all": delta,
         "delta_mask_target": delta_masked,
         "response_burden": burden,
+        "program_scores": program_scores,
+        "program_scores_plus_burden": np.hstack([program_scores, burden]).astype(
+            np.float32
+        ),
         "target_knockdown_only": target_delta,
         "n_cells_only": n_cells.reshape(-1, 1).astype(np.float32),
     }
+    if nar_viability_scores is not None:
+        residual_scores = _residualizer_score_columns(
+            nar_viability_scores,
+            nar_viability_score_columns,
+        )
+        nuisance_scores = np.hstack([residual_scores, burden]).astype(np.float32)
+        sets["nar_viability_scores"] = nar_viability_scores
+        sets["nar_viability_scores_plus_burden"] = np.hstack(
+            [nar_viability_scores, burden]
+        ).astype(np.float32)
+        sets["nar_resid_delta_all"] = np.hstack([delta, residual_scores]).astype(
+            np.float32
+        )
+        sets["nar_resid_delta_mask_target"] = np.hstack(
+            [delta_masked, residual_scores]
+        ).astype(np.float32)
+        sets["nuisance_scores"] = nuisance_scores
+        sets["nuisance_resid_delta_all"] = np.hstack([delta, nuisance_scores]).astype(
+            np.float32
+        )
+        sets["nuisance_resid_delta_mask_target"] = np.hstack(
+            [delta_masked, nuisance_scores]
+        ).astype(np.float32)
+    return sets
 
 
 def selected_scopes(
@@ -124,17 +165,48 @@ def load_external_evaluations(
         feature_data = np.load(external.features_npz, allow_pickle=True)
         delta = feature_data["delta"].astype(np.float32)
         burden = feature_data["response_burden"].astype(np.float32)
+        program_scores = feature_data["program_scores"].astype(np.float32)
         n_cells = feature_data["n_cells"].astype(np.float64)
         target_indices = feature_data["target_gene_index"].astype(np.int64)
+        nar_scores = (
+            feature_data["nar_viability_scores"].astype(np.float32)
+            if "nar_viability_scores" in feature_data
+            else None
+        )
+        nar_score_columns = (
+            feature_data["nar_viability_score_columns"].astype(str)
+            if "nar_viability_score_columns" in feature_data
+            else None
+        )
         datasets.append(
             ExternalEvaluationData(
                 name=external.name,
-                feature_sets=feature_sets(delta, burden, n_cells, target_indices),
+                feature_sets=feature_sets(
+                    delta,
+                    burden,
+                    program_scores,
+                    n_cells,
+                    target_indices,
+                    nar_scores,
+                    nar_score_columns,
+                ),
                 y=feature_data["y"].astype(np.float64),
                 genes=feature_data["perturbation_gene"].astype(str),
             )
         )
     return tuple(datasets)
+
+
+def _residualizer_score_columns(
+    nar_viability_scores: np.ndarray,
+    nar_viability_score_columns: np.ndarray | None,
+) -> np.ndarray:
+    if nar_viability_score_columns is None:
+        return nar_viability_scores
+    keep = nar_viability_score_columns != "nar_mean_score"
+    if not keep.any():
+        return nar_viability_scores
+    return nar_viability_scores[:, keep]
 
 
 def count_internal_fit_steps(

@@ -254,8 +254,11 @@ def execute_cv(
     all_feature_sets = feature_sets(
         feature_data["delta"],
         feature_data["response_burden"],
+        feature_data["program_scores"],
         feature_data["n_cells"],
         feature_data["target_gene_index"],
+        feature_data.get("nar_viability_scores"),
+        feature_data.get("nar_viability_score_columns"),
     )
     merged_selection = merge_selection(config.selection, selection)
     scopes = selected_scopes(
@@ -314,8 +317,11 @@ def execute_final_fit(
     all_feature_sets = feature_sets(
         feature_data["delta"],
         feature_data["response_burden"],
+        feature_data["program_scores"],
         feature_data["n_cells"],
         feature_data["target_gene_index"],
+        feature_data.get("nar_viability_scores"),
+        feature_data.get("nar_viability_score_columns"),
     )
     merged_selection = merge_selection(config.selection, selection)
     selected_features = filter_names(
