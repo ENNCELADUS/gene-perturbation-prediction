@@ -583,6 +583,87 @@ def test_build_external_features_aligns_to_reference_gene_space(tmp_path: Path) 
     assert summary["n_missing_reference_genes"] == 1
 
 
+def test_build_external_features_maps_source_labels_to_gene_level(
+    tmp_path: Path,
+) -> None:
+    reference_path = tmp_path / "reference_features.npz"
+    np.savez_compressed(
+        reference_path,
+        expression_gene_symbol=np.asarray(["GENE1", "GENE2"], dtype=object),
+    )
+    source_path = tmp_path / "adamson_style.h5ad"
+    obs = pd.DataFrame(
+        {
+            "perturbation": [
+                "control",
+                "control",
+                "GENE1_guideA",
+                "GENE1_guideB",
+                "GENE2_guideA",
+            ]
+        }
+    )
+    var = pd.DataFrame(
+        {"gene_name": ["GENE1", "GENE2"]},
+        index=["var1", "var2"],
+    )
+    ad.AnnData(
+        X=np.asarray(
+            [
+                [1.0, 1.0],
+                [1.0, 1.0],
+                [3.0, 1.0],
+                [5.0, 1.0],
+                [1.0, 4.0],
+            ],
+            dtype=np.float32,
+        ),
+        obs=obs,
+        var=var,
+    ).write_h5ad(source_path)
+    overlap_path = tmp_path / "adamson_style_overlap.csv"
+    pd.DataFrame(
+        {
+            "source_dataset": ["external_source", "external_source", "external_source"],
+            "source_perturbation_label": [
+                "GENE1_guideA",
+                "GENE1_guideB",
+                "GENE2_guideA",
+            ],
+            "perturbation_gene": ["GENE1", "GENE1", "GENE2"],
+            "depmap_gene_column": ["GENE1 (1)", "GENE1 (1)", "GENE2 (2)"],
+            "has_depmap_label": [True, True, True],
+            "depmap_gene_effect": [-1.0, -1.0, -0.5],
+            "n_cells_or_pseudobulk": [1, 1, 1],
+        }
+    ).to_csv(overlap_path, index=False)
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=source_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+            external_feature_sources=(
+                ExternalFeatureSourceConfig(
+                    name="external_source",
+                    h5ad_path=source_path,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+            ),
+        ),
+        features=FeatureConfig(chunk_size=2, top_abs_delta_sizes=(1,)),
+        cv=CvConfig(n_splits=2, n_repeats=1, pca_components=(2,)),
+    )
+
+    paths = build_external_features(config, reference_path, "external_test")
+    feature_data = np.load(paths.features_npz, allow_pickle=True)
+    metadata = pd.read_parquet(paths.metadata_path)
+
+    assert feature_data["perturbation_gene"].astype(str).tolist() == ["GENE1", "GENE2"]
+    assert metadata["external_row_count"].tolist() == [2, 1]
+    assert np.allclose(feature_data["delta"], [[3.0, 0.0], [0.0, 3.0]])
+
+
 def test_organize_artifacts_migrates_legacy_layout(tmp_path: Path) -> None:
     results_dir = tmp_path / "results"
     results_dir.mkdir()
