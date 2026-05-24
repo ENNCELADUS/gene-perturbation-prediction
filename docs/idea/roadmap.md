@@ -51,7 +51,8 @@ Current implementation:
 - DepMap model: K562 / `ACH-000551`.
 - Matched key: `(cell line, perturbation gene)`.
 - Training rows: `1917` Replogle genes with numeric K562 GeneEffect labels.
-- Auxiliary sources reserved for later validation: Adamson K562, Dixit K562, Norman 2019.
+- External validation source: Adamson K562 CRISPRi Perturb-seq.
+- Auxiliary sources reserved for later response-only checks: Dixit K562 and Norman 2019.
 - Norman is CRISPRa and should remain an auxiliary response benchmark, not direct knockout-dependency supervision.
 
 Status: done for Replogle K562 v0.
@@ -96,7 +97,7 @@ Is the B->C signal mostly a generic viability / proliferation / response-burden 
 
 Completed experiment:
 
-- Doc: `docs/experiment/replogle_k562_viability_axis_audit_5x1_main.md`.
+- Doc: `docs/experiment/baselines/replogle_k562_viability_axis_audit_5x1_main.md`.
 - Main audit: NAR Achilles/CTRP viability-axis scores.
 - Follow-up: NAR + response-burden nuisance residualization and curated program scores.
 
@@ -130,19 +131,36 @@ Question:
 Does the Replogle-trained B->C signal transfer beyond the original dataset?
 ```
 
-Next required experiments:
+Completed experiment:
 
-- Train on Replogle K562 and test on Adamson K562 where identifiers and modality are compatible.
-- Use Dixit only as a small TF sanity check because it covers few unique targets.
-- Keep Norman separate because CRISPRa activation does not directly match DepMap CRISPR knockout labels.
-- Re-run burden, target-leakage, and nuisance-axis diagnostics on any external validation set.
+- Doc: `docs/experiment/baselines/adamson_external_ensemble/README.md`.
+- Setup: train model variants on Replogle K562 5-fold CV, then evaluate the
+  mean prediction across fold models on combined Adamson K562.
+- External feature pack: Adamson pilot, UPR epistasis, and UPR Perturb-seq,
+  aggregated to `85` gene-level rows.
+- Primary scope: `external_ensemble:adamson_k562`.
+- Strict sensitivity scope:
+  `external_ensemble_target_heldout:adamson_k562`, using only fold models whose
+  Replogle train split did not contain the Adamson target gene.
 
-Decision gate:
+Key results:
 
-- If external K562 transfer preserves meaningful ranking signal, continue toward learned embeddings and forward perturbation models.
-- If transfer collapses, treat Phase 1 as dataset-specific and prioritize representation / batch / modality robustness before SL claims.
+| Model / check | Adamson Spearman | Adamson R2 | AUROC GE < -1.0 | Interpretation |
+| --- | ---: | ---: | ---: | --- |
+| `pca50_ridge_alpha100` primary ensemble | 0.500 | 0.263 | 0.886 | Best external-transfer row. |
+| `pca50_ridge_alpha100` target-heldout | 0.490 | 0.247 | 0.863 | Similar performance under stricter target-exposure sensitivity. |
+| `pca50_random_forest_leaf3` primary ensemble | 0.385 | -0.143 | 0.791 | Replogle CV winner transfers worse than PCA Ridge. |
+| `xgboost_depth4_lr0p03` primary ensemble | 0.024 | -0.170 | 0.586 | Nonlinear tree boosting does not transfer in this setting. |
 
-Status: not completed.
+Current conclusion:
+
+The B->C bridge passes the first same-cell-line external-transfer gate. The
+strongest current downstream model is not the Replogle CV winner; it is the more
+regularized `pca50_ridge_alpha100`, which is less expressive but transfers
+better to Adamson. This supports continuing the roadmap, with the caveat that
+Adamson has only `85` gene-level rows and is UPR-biased.
+
+Status: completed for K562 Replogle -> Adamson observed-transcriptome transfer.
 
 ## Phase 3: Predicted Transcriptomes
 
@@ -173,6 +191,9 @@ Required evaluation:
 - compare observed-B -> C against predicted-B -> C;
 - quantify how forward-model error affects dependency ranking;
 - report whether top dependency candidates are stable under predicted transcriptomes.
+- use `pca50_ridge_alpha100` as the first downstream predictor because it has the
+  best Adamson external transfer, while keeping `pca50_random_forest_leaf3` as an
+  internal-CV comparator.
 
 Status: not completed. Current experiments use observed transcriptomes only.
 
@@ -253,6 +274,8 @@ The roadmap still holds, but only with staged claims:
 | The signal is not merely cell count or direct target-expression leakage. | Supported by Phase 1 checks. |
 | The signal is partly generic response burden / viability-like biology. | Supported by Phase 1b. |
 | The signal also contains residual transcriptomic structure beyond NAR viability scores. | Supported by Phase 1b. |
+| The observed-transcriptome B->C signal transfers from Replogle to Adamson K562. | Supported by Phase 2, strongest with PCA Ridge. |
+| Replogle internal CV winner is also the best external-transfer model. | Not supported; PCA RandomForest wins internal CV but PCA Ridge transfers better. |
 | Predicted transcriptomes can replace observed transcriptomes for dependency ranking. | Not yet tested. |
 | DepMap GeneEffect labels are true SL labels. | Not supported; they are dependency labels. |
 | The pipeline can prioritize SL targets. | Plausible future layer, requires multi-context selectivity and external SL validation. |
@@ -263,16 +286,30 @@ The concise current conclusion is:
 Perturbation-induced transcriptomic responses contain measurable dependency
 signal, but the current K562 evidence is best interpreted as dependency
 prediction with mixed generic response-burden and residual transcriptomic
-structure. The path to SL target prioritization remains viable only after
-external validation, forward-model error analysis, and context-specific
-selectivity validation.
+structure. The first external validation is positive: Replogle-trained PCA Ridge
+transfers to Adamson K562 with `0.500` primary Spearman and `0.490`
+target-heldout Spearman. The path to SL target prioritization remains viable,
+but still requires forward-model error analysis and context-specific selectivity
+validation before making SL claims.
 ```
 
 ## Immediate Next Steps
 
-1. Run Replogle -> Adamson K562 external validation.
-2. Freeze a robust response representation: delta PCA, response-burden features, pathway scores, or embeddings.
-3. Quantify CRISPRi-vs-CRISPR-KO and dataset-transfer effects.
-4. Test predicted-B -> C using simple forward baselines before foundation models.
-5. Build a multi-cell-line DepMap context-specific dependency table for SL-like ranking.
-6. Validate top SL-like candidates against curated or experimental SL evidence.
+1. Add confidence intervals and source-sensitivity for Adamson external
+   transfer: bootstrap the `85` Adamson genes, report per-source subsets, and
+   check whether the PCA Ridge advantage survives the small UPR-biased test set.
+2. Freeze the first downstream predictor set for predicted-transcriptome tests:
+   primary `pca50_ridge_alpha100`, comparator `pca50_random_forest_leaf3`, and
+   negative-control `ridge_alpha100`.
+3. Run a predicted-B -> C pilot with simple forward baselines before virtual-cell
+   foundation models: mean-response, nearest-neighbor / gene-program response,
+   and linear additive perturbation baselines.
+4. Compare observed-B -> C against predicted-B -> C on the same Replogle folds
+   and Adamson external set; report Spearman drop, top-k dependency overlap, and
+   whether GeneEffect `< -1.0` ranking survives.
+5. Only after the simple predicted-B pilot is quantified, introduce a virtual
+   cell model such as GEARS/scGPT/STATE and test whether it improves downstream
+   dependency ranking beyond the simple forward baselines.
+6. In parallel, start a multi-cell-line DepMap context table for SL-like ranking:
+   mutation/copy-number/lineage contexts, target selectivity, and pan-essential
+   penalties.
