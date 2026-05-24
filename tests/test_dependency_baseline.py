@@ -595,8 +595,8 @@ def test_build_external_features_maps_source_labels_to_gene_level(
     obs = pd.DataFrame(
         {
             "perturbation": [
-                "control",
-                "control",
+                "*",
+                "*",
                 "GENE1_guideA",
                 "GENE1_guideB",
                 "GENE2_guideA",
