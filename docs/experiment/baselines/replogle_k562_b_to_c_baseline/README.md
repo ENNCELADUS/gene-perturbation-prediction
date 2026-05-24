@@ -24,6 +24,9 @@ Imported from `richard@10.20.161.54:/home/richard/projects/VCC/results/replogle_
 | internal_cv_all | PCA20 delta + RandomForest | 0.492 | 0.490 | 0.613 | 0.466 | 0.238 | 0.742 | 1.958 |
 | internal_cv_all | PCA50 delta + RandomForest | 0.494 | 0.493 | 0.612 | 0.462 | 0.242 | 0.742 | 2.077 |
 | internal_cv_all | PCA100 delta + RandomForest | 0.491 | 0.483 | 0.616 | 0.463 | 0.232 | 0.742 | 1.936 |
+| internal_cv_all | full delta + strict MLP | 0.376 | 0.392 | 0.678 | 0.505 | 0.069 | 0.683 | 1.793 |
+| internal_cv_all | PCA50 delta + strict MLP | 0.431 | 0.421 | 0.667 | 0.487 | 0.096 | 0.707 | 1.912 |
+| internal_cv_all | PCA100 delta + strict MLP | 0.364 | 0.373 | 0.700 | 0.511 | 0.006 | 0.678 | 1.792 |
 | internal_cv_all | PCA50 delta + Ridge, n_cells weighted | 0.484 | 0.471 | 0.621 | 0.472 | 0.220 | 0.736 | 1.982 |
 
 ## Leakage And Bias Checks
@@ -41,13 +44,15 @@ Imported from `richard@10.20.161.54:/home/richard/projects/VCC/results/replogle_
 
 - Best main-model row shown here: `delta_all + pca50_random_forest (unweighted)`, Spearman `0.494`, Pearson `0.493`, RMSE `0.612`, MAE `0.462`, AUROC at GeneEffect `< -1.0` `0.742`.
 - PCA50 RandomForest improves over full-delta RandomForest: Spearman `+0.018` and AUROC GE `< -1.0` `+0.008`.
+- 2026-05-24 strict MLP follow-up did not beat PCA+Ridge/RF on Replogle CV;
+  best MLP row was PCA50 strict MLP with Spearman `0.431`.
 - In the direct Ridge leakage check, target masking changes Spearman only slightly: `-0.005` on `internal_cv_all` and `-0.003` on the target-index-valid subset.
 - `n_cells_only` is near-random by Spearman/AUROC, while response-burden features retain a moderate signal, so the useful signal is not explained by cell-count alone.
 
 ## Follow-Up Audit
 
 - 2026-05-15 NAR viability-axis audit:
-  [`docs/experiment/replogle_k562_viability_axis_audit_5x1_main.md`](../../replogle_k562_viability_axis_audit_5x1_main.md).
+  [`docs/experiment/baselines/replogle_k562_viability_axis_audit_5x1_main.md`](../replogle_k562_viability_axis_audit_5x1_main.md).
 - Main conclusion: the NAR viability score alone is not enough to explain the
   B->C signal, but response burden accounts for a large fraction of it.
   Fold-local NAR residualization preserves PCA50 RandomForest performance
