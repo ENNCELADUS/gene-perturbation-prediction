@@ -400,6 +400,7 @@ def _detect_control_label(labels: np.ndarray, configured: str | None) -> str:
         return configured
     lower_to_label = {label.lower(): label for label in unique}
     for candidate in (
+        "*",
         "control",
         "non-targeting",
         "non-targeting control",
