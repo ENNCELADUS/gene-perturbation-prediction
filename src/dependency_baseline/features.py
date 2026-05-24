@@ -183,23 +183,16 @@ def build_external_features(
     reference_genes = reference["expression_gene_symbol"].astype(str).tolist()
     overlap = pd.read_csv(config.data.overlap_csv)
     numeric_overlap = _numeric_training_rows(overlap, config)
-    label_to_y = dict(
-        zip(
-            numeric_overlap["perturbation_gene"].astype(str),
-            numeric_overlap[config.data.depmap_label_col].astype(float),
-            strict=True,
-        )
-    )
-    labels = sorted(label_to_y)
     source_rows: list[pd.DataFrame] = []
     source_delta: list[np.ndarray] = []
     source_qa: list[dict[str, object]] = []
 
     for source in config.data.external_feature_sources:
+        source_overlap = _external_source_overlap(numeric_overlap, source.name)
         rows, delta, qa = _build_external_source_rows(
             source=source,
-            labels=labels,
-            label_to_y=label_to_y,
+            overlap=source_overlap,
+            depmap_label_col=config.data.depmap_label_col,
             reference_genes=reference_genes,
             chunk_size=config.features.chunk_size,
         )
@@ -304,13 +297,22 @@ def response_burden(delta: np.ndarray, top_abs_sizes: tuple[int, ...]) -> pd.Dat
 def _build_external_source_rows(
     *,
     source: ExternalFeatureSourceConfig,
-    labels: list[str],
-    label_to_y: dict[str, float],
+    overlap: pd.DataFrame,
+    depmap_label_col: str,
     reference_genes: list[str],
     chunk_size: int,
 ) -> tuple[pd.DataFrame, np.ndarray, dict[str, object]]:
     adata = ad.read_h5ad(source.h5ad_path, backed="r")
     try:
+        label_col = _source_perturbation_label_col(overlap)
+        source_overlap = (
+            overlap.assign(source_perturbation_label=overlap[label_col].astype(str))
+            .drop_duplicates(["source_perturbation_label", "perturbation_gene"])
+            .sort_values("source_perturbation_label")
+            .reset_index(drop=True)
+        )
+        labels = source_overlap["source_perturbation_label"].astype(str).tolist()
+        label_metadata = source_overlap.set_index("source_perturbation_label")
         obs_labels = adata.obs[source.obs_perturbation_col].astype(str).to_numpy()
         control_label = _detect_control_label(obs_labels, source.control_label)
         group_labels = [control_label, *labels]
@@ -346,11 +348,18 @@ def _build_external_source_rows(
         rows = pd.DataFrame(
             {
                 "source_dataset": source.name,
-                "perturbation_gene": kept_labels,
+                "source_perturbation_label": kept_labels,
+                "perturbation_gene": label_metadata.loc[
+                    kept_labels, "perturbation_gene"
+                ]
+                .astype(str)
+                .to_numpy(),
                 "observed_n_cells": counts[1:][keep].astype(int),
             }
         )
-        rows["depmap_gene_effect"] = rows["perturbation_gene"].map(label_to_y)
+        rows["depmap_gene_effect"] = label_metadata.loc[
+            kept_labels, depmap_label_col
+        ].to_numpy(dtype=float)
         qa = {
             "source_dataset": source.name,
             "h5ad_path": str(source.h5ad_path),
@@ -365,6 +374,21 @@ def _build_external_source_rows(
         return rows, aligned_delta, qa
     finally:
         adata.file.close()
+
+
+def _external_source_overlap(overlap: pd.DataFrame, source_name: str) -> pd.DataFrame:
+    if "source_dataset" not in overlap.columns:
+        return overlap.copy()
+    source_rows = overlap.loc[overlap["source_dataset"].astype(str) == source_name]
+    if source_rows.empty:
+        return overlap.copy()
+    return source_rows.copy()
+
+
+def _source_perturbation_label_col(overlap: pd.DataFrame) -> str:
+    if "source_perturbation_label" in overlap.columns:
+        return "source_perturbation_label"
+    return "perturbation_gene"
 
 
 def _detect_control_label(labels: np.ndarray, configured: str | None) -> str:
