@@ -8,12 +8,13 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
-from sklearn.base import BaseEstimator, TransformerMixin, clone
+from sklearn.base import BaseEstimator, RegressorMixin, TransformerMixin, clone
 from sklearn.decomposition import PCA
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import ElasticNet, Lasso, Ridge
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -40,6 +41,7 @@ def build_model_specs(config: BaselineConfig) -> list[ModelSpec]:
     _add_pca_ridge(specs, models, config)
     _add_random_forest(specs, models, config)
     _add_pca_random_forest(specs, models, config)
+    _add_mlp(specs, models, config)
     _add_nar_viability_axis_models(specs, models, config)
     _add_signal_decomposition_models(specs, models, config)
     _add_xgboost(specs, models, config)
@@ -108,6 +110,13 @@ def compatible_model_feature_shape(
     }:
         return feature_name in {"program_scores", "program_scores_plus_burden"}
     if not model_name.startswith("pca"):
+        if model_name == "mlp_raw":
+            return feature_name in {"delta_all", "delta_mask_target"}
+        if model_name.startswith("mlp_pca"):
+            if feature_name not in {"delta_all", "delta_mask_target"}:
+                return False
+            n_components = _mlp_pca_component_count(model_name)
+            return n_components <= min(x_train_shape[0], x_train_shape[1])
         return True
     if feature_name not in {"delta_all", "delta_mask_target"}:
         return False
@@ -204,6 +213,137 @@ class ResidualizedPCAWithScores(BaseEstimator, TransformerMixin):
         residual = self.residualizer_.transform(matrix)
         pcs = self.pca_.transform(self.scaler_.transform(residual))
         return np.hstack([pcs, scores]).astype(np.float32)
+
+
+class TorchMLPRegressor(BaseEstimator, RegressorMixin):
+    """Small PyTorch MLP regressor with an inner early-stopping split."""
+
+    def __init__(
+        self,
+        hidden_units: tuple[int, ...] = (64, 16),
+        dropout: float = 0.2,
+        learning_rate: float = 1e-3,
+        weight_decay: float = 1e-2,
+        max_epochs: int = 1000,
+        patience: int = 75,
+        min_delta: float = 1e-4,
+        validation_fraction: float = 0.15,
+        validation_bins: int = 10,
+        random_state: int = 42,
+        device: str = "auto",
+    ) -> None:
+        self.hidden_units = hidden_units
+        self.dropout = dropout
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.max_epochs = max_epochs
+        self.patience = patience
+        self.min_delta = min_delta
+        self.validation_fraction = validation_fraction
+        self.validation_bins = validation_bins
+        self.random_state = random_state
+        self.device = device
+
+    def fit(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        sample_weight: np.ndarray | None = None,
+    ) -> "TorchMLPRegressor":
+        """Fit the MLP and retain the best inner-validation checkpoint."""
+        import torch
+        from torch import nn
+
+        self.torch_version_ = torch.__version__
+        self.device_ = _resolve_torch_device(self.device, torch)
+        _set_torch_seed(self.random_state, torch)
+
+        matrix = np.asarray(x, dtype=np.float32)
+        labels = np.asarray(y, dtype=np.float32).reshape(-1, 1)
+        weights = (
+            np.asarray(sample_weight, dtype=np.float32).reshape(-1, 1)
+            if sample_weight is not None
+            else np.ones_like(labels, dtype=np.float32)
+        )
+        train_idx, valid_idx = _inner_validation_split(
+            labels.ravel(),
+            validation_fraction=float(self.validation_fraction),
+            validation_bins=int(self.validation_bins),
+            random_state=int(self.random_state),
+        )
+        self.validation_indices_ = valid_idx
+        self.training_indices_ = train_idx
+
+        self.model_ = _build_torch_mlp(
+            input_dim=matrix.shape[1],
+            hidden_units=tuple(int(unit) for unit in self.hidden_units),
+            dropout=float(self.dropout),
+            torch=torch,
+            nn=nn,
+        ).to(self.device_)
+        optimizer = torch.optim.AdamW(
+            self.model_.parameters(),
+            lr=float(self.learning_rate),
+            weight_decay=float(self.weight_decay),
+        )
+        x_train = torch.as_tensor(matrix[train_idx], device=self.device_)
+        y_train = torch.as_tensor(labels[train_idx], device=self.device_)
+        w_train = torch.as_tensor(weights[train_idx], device=self.device_)
+        x_valid = torch.as_tensor(matrix[valid_idx], device=self.device_)
+        y_valid = torch.as_tensor(labels[valid_idx], device=self.device_)
+        w_valid = torch.as_tensor(weights[valid_idx], device=self.device_)
+
+        best_state = None
+        best_loss = float("inf")
+        best_epoch = 0
+        epochs_without_improvement = 0
+        self.train_loss_ = float("nan")
+        self.best_validation_loss_ = float("nan")
+
+        for epoch in range(1, int(self.max_epochs) + 1):
+            self.model_.train()
+            optimizer.zero_grad()
+            prediction = self.model_(x_train)
+            loss = _weighted_mse(prediction, y_train, w_train)
+            loss.backward()
+            optimizer.step()
+
+            self.model_.eval()
+            with torch.no_grad():
+                valid_prediction = self.model_(x_valid)
+                valid_loss = _weighted_mse(valid_prediction, y_valid, w_valid)
+            valid_loss_value = float(valid_loss.detach().cpu().item())
+            self.train_loss_ = float(loss.detach().cpu().item())
+            if valid_loss_value < best_loss - float(self.min_delta):
+                best_loss = valid_loss_value
+                best_epoch = epoch
+                best_state = {
+                    key: value.detach().cpu().clone()
+                    for key, value in self.model_.state_dict().items()
+                }
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                if epochs_without_improvement >= int(self.patience):
+                    break
+
+        if best_state is not None:
+            self.model_.load_state_dict(best_state)
+        self.best_epoch_ = best_epoch
+        self.n_epochs_run_ = epoch
+        self.best_validation_loss_ = best_loss
+        return self
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        """Predict continuous dependency scores."""
+        import torch
+
+        matrix = np.asarray(x, dtype=np.float32)
+        self.model_.eval()
+        with torch.no_grad():
+            tensor = torch.as_tensor(matrix, device=self.device_)
+            prediction = self.model_(tensor).detach().cpu().numpy()
+        return prediction.reshape(-1).astype(np.float64)
 
 
 def filter_models(
@@ -432,6 +572,58 @@ def _add_pca_random_forest(
                         n_jobs=int(pca_forest_config.get("n_jobs", -1)),
                     ),
                 ),
+                True,
+            )
+        )
+
+
+def _add_mlp(
+    specs: list[ModelSpec],
+    models: dict[str, dict[str, object]],
+    config: BaselineConfig,
+) -> None:
+    mlp_config = models.get("mlp", {})
+    if not mlp_config.get("enabled", False):
+        return
+    variants = mlp_config.get("variants") or (
+        {"name": "raw", "pca_components": None},
+        {"name": "pca50", "pca_components": 50},
+        {"name": "pca100", "pca_components": 100},
+    )
+    for variant in variants:
+        variant_name = str(variant.get("name", "mlp"))
+        pca_components = variant.get("pca_components")
+        estimator = TorchMLPRegressor(
+            hidden_units=tuple(mlp_config.get("hidden_units", (64, 16))),
+            dropout=float(mlp_config.get("dropout", 0.2)),
+            learning_rate=float(mlp_config.get("learning_rate", 1e-3)),
+            weight_decay=float(mlp_config.get("weight_decay", 1e-2)),
+            max_epochs=int(mlp_config.get("max_epochs", 1000)),
+            patience=int(mlp_config.get("patience", 75)),
+            min_delta=float(mlp_config.get("min_delta", 1e-4)),
+            validation_fraction=float(mlp_config.get("validation_fraction", 0.15)),
+            validation_bins=int(
+                mlp_config.get("validation_bins", config.cv.stratify_bins)
+            ),
+            random_state=int(mlp_config.get("random_state", config.cv.random_state)),
+            device=str(mlp_config.get("device", "auto")),
+        )
+        pipeline_steps: list[object] = [
+            SimpleImputer(strategy="median"),
+            StandardScaler(),
+        ]
+        if pca_components is not None:
+            pipeline_steps.append(
+                PCA(
+                    n_components=int(pca_components),
+                    random_state=config.cv.random_state,
+                )
+            )
+        pipeline_steps.append(estimator)
+        specs.append(
+            ModelSpec(
+                f"mlp_{variant_name}",
+                make_pipeline(*pipeline_steps),
                 True,
             )
         )
@@ -731,3 +923,97 @@ def _pca_component_count(model_name: str) -> int:
     if match is None:
         raise ValueError(f"Invalid PCA model name: {model_name}")
     return int(match.group("n_components"))
+
+
+def _mlp_pca_component_count(model_name: str) -> int:
+    match = re.fullmatch(r"mlp_pca(?P<n_components>\d+)", model_name)
+    if match is None:
+        raise ValueError(f"Invalid MLP PCA model name: {model_name}")
+    return int(match.group("n_components"))
+
+
+def _resolve_torch_device(device: str, torch: object) -> str:
+    if device != "auto":
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    mps_backend = getattr(torch.backends, "mps", None)
+    if mps_backend is not None and mps_backend.is_available():
+        return "mps"
+    return "cpu"
+
+
+def _set_torch_seed(seed: int, torch: object) -> None:
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def _build_torch_mlp(
+    *,
+    input_dim: int,
+    hidden_units: tuple[int, ...],
+    dropout: float,
+    torch: object,
+    nn: object,
+) -> object:
+    del torch
+    layers: list[object] = []
+    previous_dim = input_dim
+    for hidden_dim in hidden_units:
+        layers.extend(
+            [
+                nn.Linear(previous_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+            ]
+        )
+        previous_dim = hidden_dim
+    layers.append(nn.Linear(previous_dim, 1))
+    return nn.Sequential(*layers)
+
+
+def _weighted_mse(prediction: object, target: object, weight: object) -> object:
+    return (weight * (prediction - target).pow(2)).sum() / weight.sum()
+
+
+def _inner_validation_split(
+    y: np.ndarray,
+    *,
+    validation_fraction: float,
+    validation_bins: int,
+    random_state: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    row_indices = np.arange(y.shape[0], dtype=np.int64)
+    n_valid = max(1, int(np.ceil(y.shape[0] * validation_fraction)))
+    if n_valid >= y.shape[0]:
+        n_valid = max(1, y.shape[0] - 1)
+    stratify = _stratification_labels(y, min(validation_bins, y.shape[0] // 2))
+    if stratify is not None and np.unique(stratify).size <= n_valid:
+        try:
+            train_idx, valid_idx = train_test_split(
+                row_indices,
+                test_size=n_valid,
+                random_state=random_state,
+                stratify=stratify,
+            )
+            return np.sort(train_idx), np.sort(valid_idx)
+        except ValueError:
+            pass
+    rng = np.random.default_rng(random_state)
+    shuffled = rng.permutation(row_indices)
+    return np.sort(shuffled[n_valid:]), np.sort(shuffled[:n_valid])
+
+
+def _stratification_labels(y: np.ndarray, bins: int) -> np.ndarray | None:
+    if bins < 2 or np.unique(y).size < 2:
+        return None
+    quantiles = np.linspace(0.0, 1.0, bins + 1)
+    edges = np.unique(np.quantile(y, quantiles))
+    if edges.size <= 2:
+        return None
+    labels = np.digitize(y, edges[1:-1], right=True)
+    counts = np.bincount(labels)
+    if counts.size < 2 or counts.min() < 2:
+        return None
+    return labels

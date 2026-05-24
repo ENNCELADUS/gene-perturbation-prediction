@@ -17,6 +17,7 @@ from dependency_baseline.config import (
     SelectionConfig,
     ViabilityAxisArtifactConfig,
     ViabilityAxisConfig,
+    load_config,
 )
 from dependency_baseline.artifacts import organize_artifacts
 from dependency_baseline.evaluation import (
@@ -29,6 +30,7 @@ from dependency_baseline.features import build_external_features, build_features
 from dependency_baseline.models import (
     NuisanceResidualizer,
     ResidualizedPCAWithScores,
+    TorchMLPRegressor,
     ViabilityAxisResidualizer,
     build_model_specs,
     compatible_model_feature_shape,
@@ -499,6 +501,162 @@ def test_signal_decomposition_model_specs_fit_synthetic_data(tmp_path: Path) -> 
         )
         assert fit_seconds >= 0
         assert fitted.predict(x).shape == (8,)
+
+
+def test_torch_mlp_regressor_fits_deterministically() -> None:
+    rng = np.random.default_rng(7)
+    x = rng.normal(size=(24, 6)).astype(np.float32)
+    y = (0.4 * x[:, 0] - 0.2 * np.square(x[:, 1]) + 0.1 * x[:, 2]).astype(
+        np.float64
+    )
+    first = TorchMLPRegressor(
+        hidden_units=(8, 4),
+        dropout=0.1,
+        max_epochs=25,
+        patience=5,
+        min_delta=0.0,
+        validation_fraction=0.2,
+        validation_bins=3,
+        random_state=11,
+        device="cpu",
+    ).fit(x, y)
+    second = TorchMLPRegressor(
+        hidden_units=(8, 4),
+        dropout=0.1,
+        max_epochs=25,
+        patience=5,
+        min_delta=0.0,
+        validation_fraction=0.2,
+        validation_bins=3,
+        random_state=11,
+        device="cpu",
+    ).fit(x, y)
+
+    first_pred = first.predict(x)
+    second_pred = second.predict(x)
+
+    assert first_pred.shape == (24,)
+    assert np.allclose(first_pred, second_pred)
+    assert first.best_epoch_ >= 1
+    assert 1 <= first.n_epochs_run_ <= 25
+    assert np.isfinite(first.best_validation_loss_)
+    assert first.device_ == "cpu"
+    assert isinstance(first.torch_version_, str)
+
+
+def test_mlp_model_specs_and_compatibility(tmp_path: Path) -> None:
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=tmp_path / "missing.h5ad",
+            overlap_csv=tmp_path / "missing.csv",
+            output_dir=tmp_path / "outputs",
+        ),
+        features=FeatureConfig(),
+        cv=CvConfig(n_splits=2, n_repeats=1, pca_components=(2,)),
+        models={
+            "mean_label": {"enabled": False},
+            "ridge": {"enabled": False},
+            "elastic_net": {"enabled": False},
+            "pca_ridge": {"enabled": False},
+            "random_forest": {"enabled": False},
+            "pca_random_forest": {"enabled": False},
+            "xgboost": {"enabled": False},
+            "mlp": {
+                "enabled": True,
+                "hidden_units": [8, 4],
+                "max_epochs": 3,
+                "patience": 2,
+                "device": "cpu",
+                "variants": [
+                    {"name": "raw", "pca_components": None},
+                    {"name": "pca2", "pca_components": 2},
+                ],
+            },
+        },
+    )
+
+    names = [spec.name for spec in build_model_specs(config)]
+
+    assert names == ["mlp_raw", "mlp_pca2"]
+    assert compatible_model_feature_shape("mlp_raw", "delta_all", (5, 6))
+    assert not compatible_model_feature_shape("mlp_raw", "response_burden", (5, 1))
+    assert compatible_model_feature_shape("mlp_pca2", "delta_mask_target", (5, 6))
+    assert not compatible_model_feature_shape("mlp_pca2", "program_scores", (5, 6))
+    assert not compatible_model_feature_shape("mlp_pca10", "delta_all", (5, 6))
+
+
+def test_mlp_cv_writes_artifacts_on_synthetic_data(tmp_path: Path) -> None:
+    h5ad_path, overlap_path = _write_synthetic_replogle_inputs(tmp_path)
+    base_config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+        ),
+        features=FeatureConfig(chunk_size=4, top_abs_delta_sizes=(2, 3)),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, pca_components=(2,)),
+    )
+    feature_paths = build_features(base_config)
+    config = BaselineConfig(
+        data=base_config.data,
+        features=base_config.features,
+        cv=base_config.cv,
+        selection=SelectionConfig(
+            scopes=("internal_cv_all",),
+            features=("delta_all",),
+            models=("mlp_pca2",),
+            folds=(0,),
+            weightings=("unweighted",),
+        ),
+        models={
+            "mean_label": {"enabled": False},
+            "ridge": {"enabled": False},
+            "elastic_net": {"enabled": False},
+            "pca_ridge": {"enabled": False},
+            "random_forest": {"enabled": False},
+            "pca_random_forest": {"enabled": False},
+            "xgboost": {"enabled": False},
+            "mlp": {
+                "enabled": True,
+                "hidden_units": [8, 4],
+                "dropout": 0.1,
+                "max_epochs": 3,
+                "patience": 2,
+                "validation_fraction": 0.25,
+                "validation_bins": 2,
+                "device": "cpu",
+                "variants": [{"name": "pca2", "pca_components": 2}],
+            },
+        },
+    )
+
+    cv_paths = run_cv(config, feature_paths.features_npz, run_id="mlp_job")
+    fold_metrics = pd.read_parquet(cv_paths.fold_metrics_path)
+    model_manifest = pd.read_parquet(cv_paths.model_manifest_path)
+
+    assert len(fold_metrics) == 1
+    assert fold_metrics.iloc[0]["model"] == "mlp_pca2"
+    assert fold_metrics.iloc[0]["feature_set"] == "delta_all"
+    assert Path(model_manifest.iloc[0]["checkpoint_path"]).exists()
+    assert model_manifest.iloc[0]["torch_device"] == "cpu"
+    assert model_manifest.iloc[0]["torch_random_state"] == 7
+    assert model_manifest.iloc[0]["torch_best_epoch"] >= 1
+    assert model_manifest.iloc[0]["torch_n_epochs_run"] <= 3
+    assert np.isfinite(model_manifest.iloc[0]["torch_best_validation_loss"])
+
+
+def test_strict_mlp_config_loads_expected_variants() -> None:
+    config = load_config("configs/replogle_k562_strict_mlp_baseline.yaml")
+
+    assert config.selection.scopes == ("internal_cv_all",)
+    assert config.selection.features == ("delta_all",)
+    assert config.selection.models == ("mlp_raw", "mlp_pca50", "mlp_pca100")
+    assert config.selection.weightings == ("unweighted",)
+    assert [spec.name for spec in build_model_specs(config)] == [
+        "mlp_raw",
+        "mlp_pca50",
+        "mlp_pca100",
+    ]
 
 
 def test_model_variant_names_are_deterministic(tmp_path: Path) -> None:

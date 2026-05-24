@@ -584,6 +584,7 @@ def _persist_cv_fit(
             "checkpoint_path": str(path),
             "n_train": len(train_idx),
             "n_test": len(test_idx),
+            **_estimator_training_metadata(fitted),
         },
     )
 
@@ -895,6 +896,7 @@ def _fit_one_final_model(
         "fit_seconds": fit_seconds,
         "checkpoint_path": str(path),
         "n_train": len(feature_data["y"]),
+        **_estimator_training_metadata(fitted),
         **regression_metrics(feature_data["y"], pred),
         **ranking_metrics(feature_data["y"], pred, config.cv.essential_thresholds),
     }
@@ -920,6 +922,23 @@ def _fit_one_final_model(
         spec.name,
         weighting,
     )
+
+
+def _estimator_training_metadata(fitted: object) -> dict[str, object]:
+    estimator = fitted.steps[-1][1] if hasattr(fitted, "steps") else fitted
+    metadata: dict[str, object] = {}
+    field_map = {
+        "device_": "torch_device",
+        "torch_version_": "torch_version",
+        "random_state": "torch_random_state",
+        "best_epoch_": "torch_best_epoch",
+        "n_epochs_run_": "torch_n_epochs_run",
+        "best_validation_loss_": "torch_best_validation_loss",
+    }
+    for attr, column in field_map.items():
+        if hasattr(estimator, attr):
+            metadata[column] = getattr(estimator, attr)
+    return metadata
 
 
 def _metric_row(
