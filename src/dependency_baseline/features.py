@@ -18,7 +18,7 @@ from dependency_baseline.artifacts import (
     feature_qa_path,
     feature_summary_path,
 )
-from dependency_baseline.config import BaselineConfig
+from dependency_baseline.config import BaselineConfig, ExternalFeatureSourceConfig
 from dependency_baseline.program_scores import build_program_scores
 from dependency_baseline.viability_axis import build_viability_axis_scores
 
@@ -163,25 +163,283 @@ def build_features(config: BaselineConfig) -> FeaturePaths:
     return FeaturePaths(features_npz, metadata_path, qa_report_md, summary_json)
 
 
+def build_external_features(
+    config: BaselineConfig,
+    reference_features_npz: Path,
+    external_name: str = "adamson_k562",
+) -> FeaturePaths:
+    """Build an external feature pack aligned to a reference feature space."""
+    if not config.data.external_feature_sources:
+        msg = "No data.external_feature_sources configured"
+        raise ValueError(msg)
+    output_dir = config.data.output_dir / "features" / "external" / external_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    features_npz = output_dir / f"{external_name}_features.npz"
+    metadata_path = output_dir / "feature_metadata.parquet"
+    qa_report_md = output_dir / "feature_qa.md"
+    summary_json = output_dir / "feature_summary.json"
+
+    reference = np.load(reference_features_npz, allow_pickle=True)
+    reference_genes = reference["expression_gene_symbol"].astype(str).tolist()
+    overlap = pd.read_csv(config.data.overlap_csv)
+    numeric_overlap = _numeric_training_rows(overlap, config)
+    label_to_y = dict(
+        zip(
+            numeric_overlap["perturbation_gene"].astype(str),
+            numeric_overlap[config.data.depmap_label_col].astype(float),
+            strict=True,
+        )
+    )
+    labels = sorted(label_to_y)
+    source_rows: list[pd.DataFrame] = []
+    source_delta: list[np.ndarray] = []
+    source_qa: list[dict[str, object]] = []
+
+    for source in config.data.external_feature_sources:
+        rows, delta, qa = _build_external_source_rows(
+            source=source,
+            labels=labels,
+            label_to_y=label_to_y,
+            reference_genes=reference_genes,
+            chunk_size=config.features.chunk_size,
+        )
+        source_qa.append(qa)
+        if rows.empty:
+            continue
+        source_rows.append(rows)
+        source_delta.append(delta)
+
+    if not source_rows:
+        msg = "No configured external source produced numeric perturbation rows"
+        raise ValueError(msg)
+
+    row_metadata = pd.concat(source_rows, ignore_index=True)
+    row_delta = np.vstack(source_delta).astype(np.float32)
+    metadata, delta = _aggregate_external_gene_rows(row_metadata, row_delta)
+    burden = response_burden(delta, config.features.top_abs_delta_sizes)
+    target_indices = _target_indices(
+        metadata["perturbation_gene"].astype(str).tolist(),
+        reference_genes,
+    )
+    program_scores = build_program_scores(
+        delta=delta,
+        gene_symbols=reference_genes,
+        program_sets=config.features.program_score_sets,
+    )
+    metadata["feature_row"] = np.arange(len(metadata))
+    metadata["target_gene_index"] = target_indices
+    metadata.to_parquet(metadata_path, index=False)
+
+    np.savez_compressed(
+        features_npz,
+        delta=delta.astype(np.float32),
+        response_burden=burden.to_numpy(dtype=np.float32),
+        program_scores=program_scores.scores.to_numpy(dtype=np.float32),
+        y=metadata[config.data.depmap_label_col].to_numpy(dtype=np.float32),
+        n_cells=metadata["observed_n_cells"].to_numpy(dtype=np.float32),
+        target_gene_index=np.asarray(target_indices, dtype=np.int32),
+        perturbation_gene=metadata["perturbation_gene"]
+        .astype(str)
+        .to_numpy(dtype=object),
+        expression_gene_symbol=np.asarray(reference_genes, dtype=object),
+        response_burden_columns=np.asarray(burden.columns.tolist(), dtype=object),
+        program_score_columns=np.asarray(program_scores.score_columns, dtype=object),
+        source_dataset=metadata["source_dataset"].astype(str).to_numpy(dtype=object),
+        external_row_count=metadata["external_row_count"].to_numpy(dtype=np.int32),
+    )
+
+    observed_mask = ~np.isnan(delta).all(axis=0)
+    summary = {
+        "external_name": external_name,
+        "n_source_rows": int(len(row_metadata)),
+        "n_gene_rows": int(len(metadata)),
+        "n_reference_genes": int(len(reference_genes)),
+        "n_observed_reference_genes": int(observed_mask.sum()),
+        "n_missing_reference_genes": int((~observed_mask).sum()),
+        "min_cells_per_gene": int(metadata["observed_n_cells"].min()),
+        "median_cells_per_gene": float(np.median(metadata["observed_n_cells"])),
+        "max_cells_per_gene": int(metadata["observed_n_cells"].max()),
+        "sources": source_qa,
+        "program_score_columns": list(program_scores.score_columns),
+        "program_score_sets": program_scores.qa_rows,
+    }
+    summary_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    qa_report_md.write_text(
+        _external_qa_report(summary, metadata, config),
+        encoding="utf-8",
+    )
+
+    return FeaturePaths(features_npz, metadata_path, qa_report_md, summary_json)
+
+
 def response_burden(delta: np.ndarray, top_abs_sizes: tuple[int, ...]) -> pd.DataFrame:
     """Compute TRADE-inspired scalar summaries from delta expression."""
     abs_delta = np.abs(delta)
     positive = np.clip(delta, 0, None)
     negative = np.clip(delta, None, 0)
+    observed = ~np.isnan(delta)
+    observed_counts = np.maximum(observed.sum(axis=1), 1)
     data: dict[str, np.ndarray] = {
-        "delta_l1_mean": abs_delta.mean(axis=1),
-        "delta_l2": np.linalg.norm(delta, axis=1),
-        "delta_variance": delta.var(axis=1),
-        "delta_positive_mean": positive.mean(axis=1),
-        "delta_negative_abs_mean": np.abs(negative).mean(axis=1),
-        "delta_max_abs": abs_delta.max(axis=1),
+        "delta_l1_mean": np.nanmean(abs_delta, axis=1),
+        "delta_l2": np.sqrt(np.nansum(delta * delta, axis=1)),
+        "delta_variance": np.nanvar(delta, axis=1),
+        "delta_positive_mean": np.nansum(positive, axis=1) / observed_counts,
+        "delta_negative_abs_mean": np.nansum(np.abs(negative), axis=1)
+        / observed_counts,
+        "delta_max_abs": np.nanmax(abs_delta, axis=1),
     }
     n_genes = delta.shape[1]
     for size in top_abs_sizes:
         k = min(size, n_genes)
-        top_values = np.partition(abs_delta, n_genes - k, axis=1)[:, n_genes - k :]
-        data[f"delta_top{k}_abs_mean"] = top_values.mean(axis=1)
-    return pd.DataFrame(data)
+        partition_input = np.nan_to_num(abs_delta, nan=-np.inf)
+        top_values = np.partition(partition_input, n_genes - k, axis=1)[
+            :,
+            n_genes - k :,
+        ]
+        top_values[top_values == -np.inf] = np.nan
+        data[f"delta_top{k}_abs_mean"] = np.nanmean(top_values, axis=1)
+    return pd.DataFrame(data).fillna(0.0)
+
+
+def _build_external_source_rows(
+    *,
+    source: ExternalFeatureSourceConfig,
+    labels: list[str],
+    label_to_y: dict[str, float],
+    reference_genes: list[str],
+    chunk_size: int,
+) -> tuple[pd.DataFrame, np.ndarray, dict[str, object]]:
+    adata = ad.read_h5ad(source.h5ad_path, backed="r")
+    try:
+        obs_labels = adata.obs[source.obs_perturbation_col].astype(str).to_numpy()
+        control_label = _detect_control_label(obs_labels, source.control_label)
+        group_labels = [control_label, *labels]
+        sums, counts = _chunked_group_sums(
+            matrix=adata.X,
+            obs_labels=obs_labels,
+            group_labels=group_labels,
+            chunk_size=chunk_size,
+        )
+        if counts[0] == 0:
+            msg = f"Control label {control_label!r} has no cells in {source.name}"
+            raise ValueError(msg)
+        control_mean = sums[0] / counts[0]
+        keep = counts[1:] > 0
+        kept_labels = np.asarray(labels, dtype=object)[keep].astype(str)
+        if kept_labels.size == 0:
+            qa = {
+                "source_dataset": source.name,
+                "h5ad_path": str(source.h5ad_path),
+                "control_label": control_label,
+                "control_cells": int(counts[0]),
+                "numeric_labels_with_cells": 0,
+            }
+            return pd.DataFrame(), np.empty((0, len(reference_genes))), qa
+        perturb_means = sums[1:][keep] / counts[1:][keep, None]
+        source_delta = (perturb_means - control_mean[None, :]).astype(np.float32)
+        source_genes = _var_symbols(adata, source.var_gene_symbol_col)
+        aligned_delta = _align_delta_to_reference(
+            source_delta,
+            source_genes,
+            reference_genes,
+        )
+        rows = pd.DataFrame(
+            {
+                "source_dataset": source.name,
+                "perturbation_gene": kept_labels,
+                "observed_n_cells": counts[1:][keep].astype(int),
+            }
+        )
+        rows["depmap_gene_effect"] = rows["perturbation_gene"].map(label_to_y)
+        qa = {
+            "source_dataset": source.name,
+            "h5ad_path": str(source.h5ad_path),
+            "control_label": control_label,
+            "control_cells": int(counts[0]),
+            "numeric_labels_with_cells": int(len(rows)),
+            "expression_genes": int(len(source_genes)),
+            "matched_reference_genes": int(
+                len(set(source_genes).intersection(reference_genes))
+            ),
+        }
+        return rows, aligned_delta, qa
+    finally:
+        adata.file.close()
+
+
+def _detect_control_label(labels: np.ndarray, configured: str | None) -> str:
+    unique = pd.Index(labels.astype(str)).unique().tolist()
+    if configured:
+        if configured not in set(unique):
+            msg = f"Configured control label {configured!r} not found"
+            raise ValueError(msg)
+        return configured
+    lower_to_label = {label.lower(): label for label in unique}
+    for candidate in (
+        "control",
+        "non-targeting",
+        "non-targeting control",
+        "unperturbed",
+        "mock",
+    ):
+        if candidate in lower_to_label:
+            return lower_to_label[candidate]
+    control_like = [
+        label
+        for label in unique
+        if "control" in label.lower() or "non-target" in label.lower()
+    ]
+    if len(control_like) == 1:
+        return str(control_like[0])
+    msg = "Could not auto-detect a unique control label"
+    raise ValueError(msg)
+
+
+def _align_delta_to_reference(
+    delta: np.ndarray,
+    source_genes: list[str],
+    reference_genes: list[str],
+) -> np.ndarray:
+    source_index = {}
+    for index, gene in enumerate(source_genes):
+        source_index.setdefault(gene, index)
+    aligned = np.full((delta.shape[0], len(reference_genes)), np.nan, dtype=np.float32)
+    for output_index, gene in enumerate(reference_genes):
+        input_index = source_index.get(gene)
+        if input_index is not None:
+            aligned[:, output_index] = delta[:, input_index]
+    return aligned
+
+
+def _aggregate_external_gene_rows(
+    metadata: pd.DataFrame,
+    delta: np.ndarray,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    rows = []
+    deltas = []
+    for gene, group in metadata.groupby("perturbation_gene", sort=True):
+        indices = group.index.to_numpy()
+        weights = group["observed_n_cells"].to_numpy(dtype=np.float64)
+        weighted = delta[indices] * weights[:, None]
+        denom = np.where(~np.isnan(delta[indices]), weights[:, None], 0.0).sum(axis=0)
+        numerator = np.nansum(weighted, axis=0)
+        gene_delta = np.divide(
+            numerator,
+            denom,
+            out=np.full(delta.shape[1], np.nan, dtype=np.float64),
+            where=denom > 0,
+        )
+        rows.append(
+            {
+                "perturbation_gene": gene,
+                "depmap_gene_effect": float(group["depmap_gene_effect"].mean()),
+                "observed_n_cells": int(group["observed_n_cells"].sum()),
+                "source_dataset": ";".join(sorted(group["source_dataset"].unique())),
+                "external_row_count": int(len(group)),
+            }
+        )
+        deltas.append(gene_delta.astype(np.float32))
+    return pd.DataFrame(rows), np.vstack(deltas).astype(np.float32)
 
 
 def _numeric_training_rows(
@@ -320,6 +578,57 @@ def _qa_report(
             "The Replogle features are observed surviving/captured post-CRISPRi "
             "transcriptomes, so survivor bias and CRISPRi-to-CRISPR-KO mismatch "
             "must remain explicit in interpretation.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _external_qa_report(
+    summary: dict[str, object],
+    metadata: pd.DataFrame,
+    config: BaselineConfig,
+) -> str:
+    lines = [
+        "# External Feature QA",
+        "",
+        "This report is generated by `vcc-dep-baseline build-external-features`.",
+        "",
+        "## Summary",
+        "",
+    ]
+    lines.extend(
+        f"- `{key}`: {value}"
+        for key, value in summary.items()
+        if key not in {"sources", "program_score_sets"}
+    )
+    lines.extend(["", "## Sources", ""])
+    sources = summary.get("sources", [])
+    if sources:
+        lines.append(pd.DataFrame(sources).to_markdown(index=False))
+    else:
+        lines.append("None.")
+    lines.extend(["", "## Source Dataset Breakdown", ""])
+    breakdown = (
+        metadata.assign(source_dataset=metadata["source_dataset"].str.split(";"))
+        .explode("source_dataset")
+        .groupby("source_dataset", as_index=False)
+        .agg(
+            genes=("perturbation_gene", "nunique"),
+            total_cells=("observed_n_cells", "sum"),
+        )
+    )
+    lines.append(breakdown.to_markdown(index=False))
+    lines.extend(
+        [
+            "",
+            "## Caveat",
+            "",
+            "External features are aligned to the Replogle reference gene order. "
+            "Reference genes not observed in the external source are encoded as "
+            "`NaN` and should be handled by trained imputers inside model pipelines.",
+            "",
+            f"Label column: `{config.data.depmap_label_col}`.",
             "",
         ]
     )

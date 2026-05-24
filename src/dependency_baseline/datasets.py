@@ -27,6 +27,7 @@ class ExternalEvaluationData:
     feature_sets: dict[str, np.ndarray]
     y: np.ndarray
     genes: np.ndarray
+    metadata: pd.DataFrame
 
 
 def load_feature_arrays(feature_path: Path) -> dict[str, np.ndarray]:
@@ -192,9 +193,25 @@ def load_external_evaluations(
                 ),
                 y=feature_data["y"].astype(np.float64),
                 genes=feature_data["perturbation_gene"].astype(str),
+                metadata=_external_metadata_frame(feature_data),
             )
         )
     return tuple(datasets)
+
+
+def _external_metadata_frame(feature_data: np.lib.npyio.NpzFile) -> pd.DataFrame:
+    metadata = pd.DataFrame(
+        {
+            "perturbation_gene": feature_data["perturbation_gene"].astype(str),
+        }
+    )
+    if "source_dataset" in feature_data:
+        metadata["source_dataset"] = feature_data["source_dataset"].astype(str)
+    if "external_row_count" in feature_data:
+        metadata["external_row_count"] = feature_data["external_row_count"].astype(int)
+    if "n_cells" in feature_data:
+        metadata["external_n_cells"] = feature_data["n_cells"].astype(float)
+    return metadata
 
 
 def _residualizer_score_columns(

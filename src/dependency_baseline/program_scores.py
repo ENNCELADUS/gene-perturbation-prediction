@@ -209,7 +209,9 @@ def build_program_scores(
         ]
         column_name = f"program_{program_name}_mean_delta"
         if matched_indices:
-            score = delta[:, matched_indices].mean(axis=1)
+            with np.errstate(invalid="ignore"):
+                score = np.nanmean(delta[:, matched_indices], axis=1)
+            score = np.nan_to_num(score, nan=0.0)
         else:
             score = np.zeros(delta.shape[0], dtype=np.float32)
         score_data[column_name] = score.astype(np.float32)

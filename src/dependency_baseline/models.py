@@ -233,17 +233,54 @@ def _add_ridge(
     ridge_config = models.get("ridge", {})
     if not ridge_config.get("enabled", True):
         return
-    specs.append(
-        ModelSpec(
-            "ridge",
-            make_pipeline(
-                SimpleImputer(strategy="median"),
-                StandardScaler(),
-                Ridge(alpha=float(ridge_config.get("alpha", 10.0))),
-            ),
-            True,
-        )
+    variants = ridge_config.get("variants")
+    if variants:
+        for variant in variants:
+            alpha = float(variant.get("alpha", ridge_config.get("alpha", 10.0)))
+            specs.append(_ridge_spec(f"ridge_alpha{_param_token(alpha)}", alpha))
+        return
+    specs.append(_ridge_spec("ridge", float(ridge_config.get("alpha", 10.0))))
+
+
+def _ridge_spec(name: str, alpha: float) -> ModelSpec:
+    return ModelSpec(
+        name,
+        make_pipeline(
+            SimpleImputer(strategy="median"),
+            StandardScaler(),
+            Ridge(alpha=alpha),
+        ),
+        True,
     )
+
+
+def _param_token(value: float | int) -> str:
+    text = f"{float(value):g}"
+    return text.replace("-", "neg").replace(".", "p")
+
+
+def _variant_values(
+    family_config: dict[str, object],
+    default_components: tuple[int, ...],
+) -> list[dict[str, object]]:
+    variants = family_config.get("variants")
+    if variants:
+        return [dict(variant) for variant in variants]
+    return [
+        {"components": component}
+        for component in family_config.get(
+            "components",
+            default_components,
+        )
+    ]
+
+
+def _variant_component(variant: dict[str, object]) -> int:
+    value = variant.get("components", variant.get("n_components"))
+    if value is None:
+        msg = "PCA model variant must define components or n_components"
+        raise ValueError(msg)
+    return int(value)
 
 
 def _add_elastic_net(
@@ -309,11 +346,16 @@ def _add_pca_ridge(
     pca_config = models.get("pca_ridge", {})
     if not pca_config.get("enabled", config.cv.model_set != "quick"):
         return
-    for n_components in pca_config.get("components", config.cv.pca_components):
-        n_components = int(n_components)
+    has_variants = bool(pca_config.get("variants"))
+    for variant in _variant_values(pca_config, config.cv.pca_components):
+        n_components = _variant_component(variant)
+        alpha = float(variant.get("alpha", pca_config.get("alpha", 10.0)))
+        name = f"pca{n_components}_ridge"
+        if has_variants:
+            name = f"{name}_alpha{_param_token(alpha)}"
         specs.append(
             ModelSpec(
-                f"pca{n_components}_ridge",
+                name,
                 make_pipeline(
                     SimpleImputer(strategy="median"),
                     StandardScaler(),
@@ -321,7 +363,7 @@ def _add_pca_ridge(
                         n_components=n_components,
                         random_state=config.cv.random_state,
                     ),
-                    Ridge(alpha=float(pca_config.get("alpha", 10.0))),
+                    Ridge(alpha=alpha),
                 ),
                 True,
             )
@@ -361,11 +403,21 @@ def _add_pca_random_forest(
     pca_forest_config = models.get("pca_random_forest", {})
     if not pca_forest_config.get("enabled", config.cv.model_set != "quick"):
         return
-    for n_components in pca_forest_config.get("components", config.cv.pca_components):
-        n_components = int(n_components)
+    has_variants = bool(pca_forest_config.get("variants"))
+    for variant in _variant_values(pca_forest_config, config.cv.pca_components):
+        n_components = _variant_component(variant)
+        min_samples_leaf = int(
+            variant.get(
+                "min_samples_leaf",
+                pca_forest_config.get("min_samples_leaf", 5),
+            )
+        )
+        name = f"pca{n_components}_random_forest"
+        if has_variants:
+            name = f"{name}_leaf{min_samples_leaf}"
         specs.append(
             ModelSpec(
-                f"pca{n_components}_random_forest",
+                name,
                 make_pipeline(
                     SimpleImputer(strategy="median"),
                     StandardScaler(),
@@ -375,9 +427,7 @@ def _add_pca_random_forest(
                     ),
                     RandomForestRegressor(
                         n_estimators=int(pca_forest_config.get("n_estimators", 300)),
-                        min_samples_leaf=int(
-                            pca_forest_config.get("min_samples_leaf", 5)
-                        ),
+                        min_samples_leaf=min_samples_leaf,
                         random_state=config.cv.random_state,
                         n_jobs=int(pca_forest_config.get("n_jobs", -1)),
                     ),
@@ -639,25 +689,39 @@ def _add_xgboost(
     try:
         from xgboost import XGBRegressor
 
-        specs.append(
-            ModelSpec(
-                "xgboost",
-                make_pipeline(
-                    SimpleImputer(strategy="median"),
-                    XGBRegressor(
-                        n_estimators=int(xgb_config.get("n_estimators", 300)),
-                        max_depth=int(xgb_config.get("max_depth", 3)),
-                        learning_rate=float(xgb_config.get("learning_rate", 0.03)),
-                        subsample=float(xgb_config.get("subsample", 0.8)),
-                        colsample_bytree=float(xgb_config.get("colsample_bytree", 0.8)),
-                        objective=str(xgb_config.get("objective", "reg:squarederror")),
-                        random_state=config.cv.random_state,
-                        n_jobs=int(xgb_config.get("n_jobs", 4)),
-                    ),
-                ),
-                True,
+        variants = xgb_config.get("variants") or [{}]
+        has_variants = bool(xgb_config.get("variants"))
+        for variant in variants:
+            max_depth = int(variant.get("max_depth", xgb_config.get("max_depth", 3)))
+            learning_rate = float(
+                variant.get("learning_rate", xgb_config.get("learning_rate", 0.03))
             )
-        )
+            name = "xgboost"
+            if has_variants:
+                name = f"xgboost_depth{max_depth}_lr{_param_token(learning_rate)}"
+            specs.append(
+                ModelSpec(
+                    name,
+                    make_pipeline(
+                        SimpleImputer(strategy="median"),
+                        XGBRegressor(
+                            n_estimators=int(xgb_config.get("n_estimators", 300)),
+                            max_depth=max_depth,
+                            learning_rate=learning_rate,
+                            subsample=float(xgb_config.get("subsample", 0.8)),
+                            colsample_bytree=float(
+                                xgb_config.get("colsample_bytree", 0.8)
+                            ),
+                            objective=str(
+                                xgb_config.get("objective", "reg:squarederror")
+                            ),
+                            random_state=config.cv.random_state,
+                            n_jobs=int(xgb_config.get("n_jobs", 4)),
+                        ),
+                    ),
+                    True,
+                )
+            )
     except ImportError:
         LOGGER.info("xgboost is enabled but not installed; skipping")
 
