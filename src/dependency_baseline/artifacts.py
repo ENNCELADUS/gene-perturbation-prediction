@@ -200,6 +200,30 @@ class ArtifactStore:
         self._write_table("final_model_manifest", self.tables["final_model_manifest"])
         self._write_table("final_rankings", self.tables["final_rankings"])
 
+    def write_external_ensemble_results(
+        self,
+        metrics: pd.DataFrame,
+        predictions: pd.DataFrame,
+    ) -> None:
+        """Persist external ensemble metrics and predictions."""
+        if metrics.empty or predictions.empty:
+            return
+        write_formats(
+            self.artifacts_dir / "external_ensemble_metrics",
+            metrics,
+            (self.machine_result_format,),
+        )
+        write_formats(
+            self.artifacts_dir / "external_ensemble_predictions",
+            predictions,
+            (self.machine_result_format,),
+        )
+        write_formats(
+            self.results_dir / "external_ensemble_metrics",
+            metrics,
+            ("csv",),
+        )
+
     def _refresh_summaries(self) -> None:
         fold_metrics = self.tables["fold_metrics"]
         if not fold_metrics.empty:
@@ -641,10 +665,7 @@ def checkpoint_path(
     """Return checkpoint path for one CV or final model."""
     if evaluation_scope == "final":
         return (
-            run_dir
-            / "models"
-            / "final"
-            / f"{feature_set}__{model}__{weighting}.joblib"
+            run_dir / "models" / "final" / f"{feature_set}__{model}__{weighting}.joblib"
         )
     return (
         run_dir
@@ -665,8 +686,7 @@ def job_key(
 ) -> str:
     """Stable unique key for one model fit/evaluation job."""
     return "|".join(
-        str(value)
-        for value in (evaluation_scope, fold, feature_set, model, weighting)
+        str(value) for value in (evaluation_scope, fold, feature_set, model, weighting)
     )
 
 
@@ -728,9 +748,10 @@ def read_named_table(run_dir: Path, table_name: str) -> pd.DataFrame:
 
 def _existing_named_table_base(run_dir: Path, table_name: str) -> Path | None:
     for base_path in table_base_candidates(run_dir, table_name):
-        if base_path.with_suffix(".parquet").exists() or base_path.with_suffix(
-            ".csv"
-        ).exists():
+        if (
+            base_path.with_suffix(".parquet").exists()
+            or base_path.with_suffix(".csv").exists()
+        ):
             return base_path
     return None
 

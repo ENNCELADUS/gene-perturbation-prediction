@@ -24,12 +24,22 @@ class DataConfig:
     n_cells_col: str = "n_cells_or_pseudobulk"
     external_overlap_csvs: tuple[Path, ...] = ()
     external_evaluations: tuple[ExternalEvaluationConfig, ...] = ()
+    external_feature_sources: tuple[ExternalFeatureSourceConfig, ...] = ()
 
 
 @dataclass(frozen=True)
 class ExternalEvaluationConfig:
     name: str
     features_npz: Path
+
+
+@dataclass(frozen=True)
+class ExternalFeatureSourceConfig:
+    name: str
+    h5ad_path: Path
+    obs_perturbation_col: str = "perturbation"
+    control_label: str | None = None
+    var_gene_symbol_col: str = "gene_name"
 
 
 @dataclass(frozen=True)
@@ -139,6 +149,23 @@ def _external_evaluations(values: Any) -> tuple[ExternalEvaluationConfig, ...]:
         ExternalEvaluationConfig(
             name=str(value["name"]),
             features_npz=_path(value["features_npz"]),
+        )
+        for value in values
+    )
+
+
+def _external_feature_sources(values: Any) -> tuple[ExternalFeatureSourceConfig, ...]:
+    if values is None:
+        return ()
+    return tuple(
+        ExternalFeatureSourceConfig(
+            name=str(value["name"]),
+            h5ad_path=_path(value["h5ad_path"]),
+            obs_perturbation_col=str(value.get("obs_perturbation_col", "perturbation")),
+            control_label=(
+                str(value["control_label"]) if value.get("control_label") else None
+            ),
+            var_gene_symbol_col=str(value.get("var_gene_symbol_col", "gene_name")),
         )
         for value in values
     )
@@ -294,6 +321,9 @@ def load_config(path: str | Path) -> BaselineConfig:
             external_overlap_csvs=_tuple_path(data.get("external_overlap_csvs")),
             external_evaluations=_external_evaluations(
                 data.get("external_evaluations")
+            ),
+            external_feature_sources=_external_feature_sources(
+                data.get("external_feature_sources")
             ),
         ),
         features=FeatureConfig(

@@ -12,6 +12,7 @@ from dependency_baseline.config import (
     CvConfig,
     DataConfig,
     ExternalEvaluationConfig,
+    ExternalFeatureSourceConfig,
     FeatureConfig,
     SelectionConfig,
     ViabilityAxisArtifactConfig,
@@ -24,7 +25,7 @@ from dependency_baseline.evaluation import (
     run_cv,
     summarize_results,
 )
-from dependency_baseline.features import build_features
+from dependency_baseline.features import build_external_features, build_features
 from dependency_baseline.models import (
     NuisanceResidualizer,
     ResidualizedPCAWithScores,
@@ -136,6 +137,26 @@ def test_build_features_and_run_quick_cv(tmp_path: Path) -> None:
         "internal_cv_target_index_valid",
         "external:synthetic_holdout",
     }.issubset(set(summary["evaluation_scope"]))
+    ensemble_metrics_path = (
+        cv_paths.run_dir / "artifacts" / "external_ensemble_metrics.parquet"
+    )
+    ensemble_predictions_path = (
+        cv_paths.run_dir / "artifacts" / "external_ensemble_predictions.parquet"
+    )
+    assert ensemble_metrics_path.exists()
+    assert ensemble_predictions_path.exists()
+    ensemble_metrics = pd.read_parquet(ensemble_metrics_path)
+    ensemble_predictions = pd.read_parquet(ensemble_predictions_path)
+    assert "external_ensemble:synthetic_holdout" in set(
+        ensemble_metrics["evaluation_scope"]
+    )
+    assert ensemble_predictions["ensemble_size"].max() == 2
+    heldout = ensemble_predictions.loc[
+        ensemble_predictions["evaluation_scope"]
+        == "external_ensemble_target_heldout:synthetic_holdout"
+    ]
+    assert not heldout.empty
+    assert heldout["ensemble_size"].max() == 1
     assert {"delta_all", "delta_mask_target", "n_cells_only"}.issubset(
         set(summary["feature_set"])
     )
@@ -480,6 +501,88 @@ def test_signal_decomposition_model_specs_fit_synthetic_data(tmp_path: Path) -> 
         assert fitted.predict(x).shape == (8,)
 
 
+def test_model_variant_names_are_deterministic(tmp_path: Path) -> None:
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=tmp_path / "missing.h5ad",
+            overlap_csv=tmp_path / "missing.csv",
+            output_dir=tmp_path / "outputs",
+        ),
+        features=FeatureConfig(),
+        cv=CvConfig(n_splits=2, n_repeats=1, pca_components=(2,)),
+        models={
+            "mean_label": {"enabled": False},
+            "ridge": {"enabled": True, "variants": [{"alpha": 1}, {"alpha": 10}]},
+            "elastic_net": {"enabled": False},
+            "pca_ridge": {
+                "enabled": True,
+                "variants": [{"components": 2, "alpha": 1}],
+            },
+            "random_forest": {"enabled": False},
+            "pca_random_forest": {
+                "enabled": True,
+                "n_estimators": 5,
+                "variants": [{"components": 2, "min_samples_leaf": 3}],
+            },
+            "xgboost": {
+                "enabled": True,
+                "n_estimators": 5,
+                "variants": [{"max_depth": 3, "learning_rate": 0.03}],
+            },
+        },
+    )
+
+    names = [spec.name for spec in build_model_specs(config)]
+
+    assert names == [
+        "ridge_alpha1",
+        "ridge_alpha10",
+        "pca2_ridge_alpha1",
+        "pca2_random_forest_leaf3",
+        "xgboost_depth3_lr0p03",
+    ]
+
+
+def test_build_external_features_aligns_to_reference_gene_space(tmp_path: Path) -> None:
+    reference_path = tmp_path / "reference_features.npz"
+    np.savez_compressed(
+        reference_path,
+        expression_gene_symbol=np.asarray(["GENE1", "GENE2", "GENE3"], dtype=object),
+    )
+    source_path, overlap_path = _write_synthetic_external_inputs(tmp_path)
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=source_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+            depmap_label_col="depmap_gene_effect",
+            external_feature_sources=(
+                ExternalFeatureSourceConfig(
+                    name="external_source",
+                    h5ad_path=source_path,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+            ),
+        ),
+        features=FeatureConfig(chunk_size=2, top_abs_delta_sizes=(2,)),
+        cv=CvConfig(n_splits=2, n_repeats=1, pca_components=(2,)),
+    )
+
+    paths = build_external_features(config, reference_path, "external_test")
+    feature_data = np.load(paths.features_npz, allow_pickle=True)
+    metadata = pd.read_parquet(paths.metadata_path)
+
+    assert feature_data["delta"].shape == (2, 3)
+    assert feature_data["perturbation_gene"].astype(str).tolist() == ["GENE1", "GENE2"]
+    assert metadata["source_dataset"].tolist() == ["external_source", "external_source"]
+    assert np.isnan(feature_data["delta"][:, 1]).all()
+    assert not np.isnan(feature_data["delta"][:, 0]).all()
+    assert not np.isnan(feature_data["delta"][:, 2]).all()
+    summary = json.loads(paths.summary_json.read_text(encoding="utf-8"))
+    assert summary["n_missing_reference_genes"] == 1
+
+
 def test_organize_artifacts_migrates_legacy_layout(tmp_path: Path) -> None:
     results_dir = tmp_path / "results"
     results_dir.mkdir()
@@ -611,5 +714,41 @@ def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:
         }
     )
     overlap_path = tmp_path / "overlap.csv"
+    overlap.to_csv(overlap_path, index=False)
+    return h5ad_path, overlap_path
+
+
+def _write_synthetic_external_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    labels = ["control", "control", "GENE1", "GENE1", "GENE2", "GENE2"]
+    matrix = np.asarray(
+        [
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [3.0, 1.0, 2.0],
+            [3.0, 1.0, 2.0],
+            [2.0, 1.0, 4.0],
+            [2.0, 1.0, 4.0],
+        ],
+        dtype=np.float32,
+    )
+    obs = pd.DataFrame({"perturbation": labels})
+    var = pd.DataFrame(
+        {"gene_name": ["GENE3", "EXTRA", "GENE1"]},
+        index=["var3", "var_extra", "var1"],
+    )
+    adata = ad.AnnData(X=matrix, obs=obs, var=var)
+    h5ad_path = tmp_path / "synthetic_external.h5ad"
+    adata.write_h5ad(h5ad_path)
+
+    overlap = pd.DataFrame(
+        {
+            "perturbation_gene": ["GENE1", "GENE2"],
+            "depmap_gene_column": ["GENE1 (1)", "GENE2 (2)"],
+            "has_depmap_label": [True, True],
+            "depmap_gene_effect": [-1.0, -0.5],
+            "n_cells_or_pseudobulk": [2, 2],
+        }
+    )
+    overlap_path = tmp_path / "external_overlap.csv"
     overlap.to_csv(overlap_path, index=False)
     return h5ad_path, overlap_path

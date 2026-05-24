@@ -11,7 +11,7 @@ from dependency_baseline.config import SelectionConfig
 from dependency_baseline.config import load_config
 from dependency_baseline.artifacts import organize_artifacts
 from dependency_baseline.evaluation import fit_final, run_cv, summarize_results
-from dependency_baseline.features import build_features
+from dependency_baseline.features import build_external_features, build_features
 from dependency_baseline.viability_report import write_viability_axis_report
 
 
@@ -28,6 +28,11 @@ def main() -> None:
 
     build_parser = subparsers.add_parser("build-features")
     build_parser.add_argument("--config", required=True, type=Path)
+
+    external_build_parser = subparsers.add_parser("build-external-features")
+    external_build_parser.add_argument("--config", required=True, type=Path)
+    external_build_parser.add_argument("--reference-features", required=True, type=Path)
+    external_build_parser.add_argument("--external-name", default="adamson_k562")
 
     cv_parser = subparsers.add_parser("run-cv")
     cv_parser.add_argument("--config", required=True, type=Path)
@@ -67,6 +72,16 @@ def main() -> None:
     if args.command == "build-features":
         config = load_config(args.config)
         paths = build_features(config)
+        print(f"features: {paths.features_npz}")
+        print(f"metadata: {paths.metadata_path}")
+        print(f"qa: {paths.qa_report_md}")
+    elif args.command == "build-external-features":
+        config = load_config(args.config)
+        paths = build_external_features(
+            config,
+            args.reference_features,
+            args.external_name,
+        )
         print(f"features: {paths.features_npz}")
         print(f"metadata: {paths.metadata_path}")
         print(f"qa: {paths.qa_report_md}")

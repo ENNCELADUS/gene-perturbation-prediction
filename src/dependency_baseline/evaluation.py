@@ -303,6 +303,7 @@ def execute_cv(
             selection=merged_selection,
             resume=resume,
         )
+    _write_external_ensemble_results(config, store)
 
 
 def execute_final_fit(
@@ -630,7 +631,207 @@ def _evaluate_external_datasets(
                 "y_pred": pred,
             }
         )
+        predictions = predictions.merge(
+            external.metadata,
+            on="perturbation_gene",
+            how="left",
+        )
         store.append_external_result(metric_row, predictions)
+
+
+def _write_external_ensemble_results(
+    config: BaselineConfig,
+    store: ArtifactStore,
+) -> None:
+    predictions = store.tables["predictions"]
+    if predictions.empty or "evaluation_scope" not in predictions:
+        return
+    external = predictions.loc[
+        predictions["evaluation_scope"].astype(str).str.startswith("external:")
+    ].copy()
+    if external.empty:
+        return
+    selected = _selected_cv_models(store.tables["summary_metrics"])
+    if selected:
+        external = external.loc[external["model"].isin(selected)].copy()
+    if external.empty:
+        return
+
+    train_lookup = _train_gene_lookup(store.tables["splits"])
+    primary_predictions = _ensemble_predictions(
+        external,
+        train_lookup,
+        target_heldout=False,
+    )
+    heldout_predictions = _ensemble_predictions(
+        external,
+        train_lookup,
+        target_heldout=True,
+    )
+    ensemble_predictions = pd.concat(
+        [primary_predictions, heldout_predictions],
+        ignore_index=True,
+    )
+    metrics = _ensemble_metrics(config, ensemble_predictions)
+    store.write_external_ensemble_results(metrics, ensemble_predictions)
+
+
+def _selected_cv_models(summary: pd.DataFrame) -> set[str]:
+    if summary.empty:
+        return set()
+    required = {
+        "evaluation_scope",
+        "feature_set",
+        "model",
+        "weighting",
+        "spearman_mean",
+    }
+    if not required.issubset(summary.columns):
+        return set()
+    scoped = summary.loc[
+        (summary["evaluation_scope"] == "internal_cv_all")
+        & (summary["feature_set"] == "delta_all")
+        & (summary["weighting"] == "unweighted")
+    ].copy()
+    if scoped.empty:
+        return set()
+    scoped["model_family"] = scoped["model"].map(_model_family)
+    sort_columns = ["model_family", "spearman_mean"]
+    ascending = [True, False]
+    if "auroc_lt_neg1p0_mean" in scoped.columns:
+        sort_columns.append("auroc_lt_neg1p0_mean")
+        ascending.append(False)
+    if "rmse_mean" in scoped.columns:
+        sort_columns.append("rmse_mean")
+        ascending.append(True)
+    ranked = scoped.sort_values(sort_columns, ascending=ascending, na_position="last")
+    return set(ranked.groupby("model_family", sort=False).head(1)["model"].astype(str))
+
+
+def _model_family(model_name: str) -> str:
+    if model_name == "ridge" or model_name.startswith("ridge_alpha"):
+        return "ridge"
+    if "random_forest" in model_name and model_name.startswith("pca"):
+        return "pca_random_forest"
+    if "_ridge" in model_name and model_name.startswith("pca"):
+        return "pca_ridge"
+    if model_name.startswith("xgboost"):
+        return "xgboost"
+    return model_name
+
+
+def _train_gene_lookup(splits: pd.DataFrame) -> dict[int, set[str]]:
+    if splits.empty:
+        return {}
+    train = splits.loc[
+        (splits["evaluation_scope"] == "internal_cv_all") & (splits["split"] == "train")
+    ]
+    return {
+        int(fold): set(group["perturbation_gene"].astype(str))
+        for fold, group in train.groupby("fold")
+    }
+
+
+def _ensemble_predictions(
+    predictions: pd.DataFrame,
+    train_lookup: dict[int, set[str]],
+    *,
+    target_heldout: bool,
+) -> pd.DataFrame:
+    rows = []
+    for key, group in predictions.groupby(
+        ["evaluation_scope", "feature_set", "model", "weighting", "perturbation_gene"],
+        dropna=False,
+    ):
+        evaluation_scope, feature_set, model, weighting, gene = key
+        eligible = group
+        if target_heldout:
+            keep = [
+                str(gene) not in train_lookup.get(int(row.fold), set())
+                for row in group.itertuples(index=False)
+            ]
+            eligible = group.loc[keep]
+            ensemble_scope = str(evaluation_scope).replace(
+                "external:",
+                "external_ensemble_target_heldout:",
+                1,
+            )
+        else:
+            ensemble_scope = str(evaluation_scope).replace(
+                "external:",
+                "external_ensemble:",
+                1,
+            )
+        if eligible.empty:
+            continue
+        row = {
+            "job_key": "__".join(
+                [
+                    ensemble_scope,
+                    str(feature_set),
+                    str(model),
+                    str(weighting),
+                    str(gene),
+                ]
+            ),
+            "evaluation_scope": ensemble_scope,
+            "fold": -1,
+            "feature_set": feature_set,
+            "model": model,
+            "model_family": _model_family(str(model)),
+            "weighting": weighting,
+            "perturbation_gene": gene,
+            "y_true": float(eligible["y_true"].mean()),
+            "y_pred": float(eligible["y_pred"].mean()),
+            "ensemble_size": int(len(eligible)),
+        }
+        for column in ("source_dataset", "external_row_count", "external_n_cells"):
+            if column in eligible.columns:
+                values = eligible[column].dropna().astype(str).unique()
+                row[column] = ";".join(sorted(values))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _ensemble_metrics(
+    config: BaselineConfig,
+    predictions: pd.DataFrame,
+) -> pd.DataFrame:
+    if predictions.empty:
+        return pd.DataFrame()
+    rows = []
+    grouped = predictions.groupby(
+        ["evaluation_scope", "feature_set", "model", "model_family", "weighting"],
+        dropna=False,
+    )
+    for key, group in grouped:
+        evaluation_scope, feature_set, model, model_family, weighting = key
+        row = {
+            "evaluation_scope": evaluation_scope,
+            "feature_set": feature_set,
+            "model": model,
+            "model_family": model_family,
+            "weighting": weighting,
+            "n_genes": int(group["perturbation_gene"].nunique()),
+            "mean_ensemble_size": float(group["ensemble_size"].mean()),
+            "min_ensemble_size": int(group["ensemble_size"].min()),
+            "max_ensemble_size": int(group["ensemble_size"].max()),
+            **regression_metrics(
+                group["y_true"].to_numpy(),
+                group["y_pred"].to_numpy(),
+            ),
+            **ranking_metrics(
+                group["y_true"].to_numpy(),
+                group["y_pred"].to_numpy(),
+                config.cv.essential_thresholds,
+            ),
+        }
+        rows.append(row)
+    return pd.DataFrame(rows).sort_values(
+        ["evaluation_scope", "spearman", "pearson"],
+        ascending=[True, False, False],
+        na_position="last",
+    )
 
 
 def _fit_final_feature(

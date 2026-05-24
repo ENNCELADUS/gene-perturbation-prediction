@@ -1,0 +1,40 @@
+data:
+  h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_upr_perturb_seq.h5ad
+  overlap_csv: data/sl_dependency_v0/interim/k562_adamson_depmap_overlap.csv
+  output_dir: results/replogle_k562_adamson_ensemble
+  obs_perturbation_col: perturbation
+  control_label: control
+  var_gene_symbol_col: gene_name
+  depmap_label_col: depmap_gene_effect
+  matched_label_col: has_depmap_label
+  n_cells_col: n_cells_or_pseudobulk
+  external_feature_sources:
+    - name: adamson_pilot
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_pilot.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
+    - name: adamson_upr_epistasis
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_upr_epistasis.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
+    - name: adamson_upr_perturb_seq
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_upr_perturb_seq.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
+
+experiment:
+  name: adamson_k562_external_features
+  seed: 42
+
+features:
+  chunk_size: 4096
+  top_abs_delta_sizes: [50, 100, 500]
+
+cv:
+  n_splits: 5
+  n_repeats: 1
+  random_state: 42
+  stratify_bins: 10
+  pca_components: [20, 50, 100]
+  model_set: full
+  essential_thresholds: [-0.5, -1.0]
