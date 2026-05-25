@@ -10,10 +10,13 @@ import sys
 from dependency_baseline.config import SelectionConfig
 from dependency_baseline.config import load_config
 from dependency_baseline.artifacts import organize_artifacts
-from dependency_baseline.cell_bags import build_cell_bags
+from dependency_baseline.cell_bags import build_cell_bags, build_external_cell_bags
 from dependency_baseline.evaluation import fit_final, run_cv, summarize_results
 from dependency_baseline.features import build_external_features, build_features
-from dependency_baseline.single_cell import run_single_cell_cv
+from dependency_baseline.single_cell import (
+    evaluate_single_cell_external,
+    run_single_cell_cv,
+)
 from dependency_baseline.viability_report import write_viability_axis_report
 
 
@@ -33,6 +36,11 @@ def main() -> None:
 
     build_cell_bags_parser = subparsers.add_parser("build-cell-bags")
     build_cell_bags_parser.add_argument("--config", required=True, type=Path)
+
+    external_cell_bags_parser = subparsers.add_parser("build-external-cell-bags")
+    external_cell_bags_parser.add_argument("--config", required=True, type=Path)
+    external_cell_bags_parser.add_argument("--reference-bags", required=True, type=Path)
+    external_cell_bags_parser.add_argument("--external-name", default="adamson_k562")
 
     external_build_parser = subparsers.add_parser("build-external-features")
     external_build_parser.add_argument("--config", required=True, type=Path)
@@ -68,6 +76,16 @@ def main() -> None:
     single_cell_cv_parser.add_argument("--weighting", action="append", default=None)
     single_cell_cv_parser.add_argument("--log-file", type=Path, default=None)
 
+    single_cell_external_parser = subparsers.add_parser("evaluate-single-cell-external")
+    single_cell_external_parser.add_argument("--config", required=True, type=Path)
+    single_cell_external_parser.add_argument("--run-dir", required=True, type=Path)
+    single_cell_external_parser.add_argument(
+        "--external-bags",
+        required=True,
+        type=Path,
+    )
+    single_cell_external_parser.add_argument("--external-name", default="adamson_k562")
+
     final_parser = subparsers.add_parser("fit-final")
     final_parser.add_argument("--config", required=True, type=Path)
     final_parser.add_argument("--features", type=Path, default=None)
@@ -100,6 +118,16 @@ def main() -> None:
     elif args.command == "build-cell-bags":
         config = load_config(args.config)
         paths = build_cell_bags(config)
+        print(f"bags: {paths.bags_npz}")
+        print(f"metadata: {paths.metadata_path}")
+        print(f"summary: {paths.summary_json}")
+    elif args.command == "build-external-cell-bags":
+        config = load_config(args.config)
+        paths = build_external_cell_bags(
+            config,
+            args.reference_bags,
+            args.external_name,
+        )
         print(f"bags: {paths.bags_npz}")
         print(f"metadata: {paths.metadata_path}")
         print(f"summary: {paths.summary_json}")
@@ -151,6 +179,16 @@ def main() -> None:
         print(f"model manifest: {paths.model_manifest_path}")
         print(f"top-k candidates: {paths.topk_candidates_path}")
         print(f"log: {paths.log_file}")
+    elif args.command == "evaluate-single-cell-external":
+        config = load_config(args.config)
+        metrics_path, predictions_path = evaluate_single_cell_external(
+            config,
+            run_dir=args.run_dir,
+            external_bags_npz=args.external_bags,
+            external_name=args.external_name,
+        )
+        print(f"external ensemble metrics: {metrics_path}")
+        print(f"external ensemble predictions: {predictions_path}")
     elif args.command == "fit-final":
         config = load_config(args.config)
         paths = fit_final(

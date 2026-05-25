@@ -35,6 +35,11 @@ from dependency_baseline.datasets import (
 )
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
 from dependency_baseline.models import sample_weights
+from dependency_baseline.evaluation import (
+    _ensemble_metrics,
+    _ensemble_predictions,
+    _train_gene_lookup,
+)
 
 
 CellBags = Sequence[np.ndarray]
@@ -320,6 +325,46 @@ def run_single_cell_cv(
     return _cv_paths(context.run_dir)
 
 
+def evaluate_single_cell_external(
+    config: BaselineConfig,
+    *,
+    run_dir: Path,
+    external_bags_npz: Path,
+    external_name: str,
+) -> tuple[Path, Path]:
+    """Evaluate existing single-cell CV checkpoints on an external bag artifact."""
+    store = ArtifactStore(
+        run_dir,
+        config.experiment.human_result_tables,
+        config.experiment.machine_result_format,
+        config.experiment.topk_candidates,
+        config.experiment.save_predictions,
+        config.experiment.save_rankings,
+    )
+    external = load_cell_bag_data(external_bags_npz, config)
+    manifest = store.tables["model_manifest"]
+    if manifest.empty:
+        msg = f"Missing model_manifest under run directory: {run_dir}"
+        raise FileNotFoundError(msg)
+    keep = (
+        (manifest["evaluation_scope"] == "internal_cv_all")
+        & (manifest["feature_set"] == FEATURE_SET_NAME)
+        & manifest["checkpoint_path"].notna()
+    )
+    selected = manifest.loc[keep].copy()
+    if selected.empty:
+        msg = "No internal single-cell CV checkpoints found for external evaluation"
+        raise ValueError(msg)
+
+    for row in selected.itertuples(index=False):
+        _evaluate_one_external_checkpoint(config, store, external, external_name, row)
+    _write_single_cell_external_ensemble_results(config, store)
+    return (
+        run_dir / "artifacts" / "external_ensemble_metrics.parquet",
+        run_dir / "artifacts" / "external_ensemble_predictions.parquet",
+    )
+
+
 def load_cell_bag_data(path: Path, config: BaselineConfig) -> CellBagData:
     """Load a single-cell bag artifact pack."""
     payload = np.load(path, allow_pickle=True)
@@ -338,6 +383,74 @@ def load_cell_bag_data(path: Path, config: BaselineConfig) -> CellBagData:
         metadata=metadata,
         n_pcs=int(cells.shape[1]),
     )
+
+
+def _evaluate_one_external_checkpoint(
+    config: BaselineConfig,
+    store: ArtifactStore,
+    external: CellBagData,
+    external_name: str,
+    row: object,
+) -> None:
+    model = joblib.load(Path(row.checkpoint_path))
+    pred = model.predict(external.bags)
+    evaluation_scope = f"external:{external_name}"
+    job = job_key(
+        evaluation_scope,
+        int(row.fold),
+        str(row.feature_set),
+        str(row.model),
+        str(row.weighting),
+    )
+    metric_row = {
+        "job_key": job,
+        "evaluation_scope": evaluation_scope,
+        "fold": int(row.fold),
+        "feature_set": str(row.feature_set),
+        "model": str(row.model),
+        "weighting": str(row.weighting),
+        "fit_seconds": float(row.fit_seconds),
+        **regression_metrics(external.y, pred),
+        **ranking_metrics(external.y, pred, config.cv.essential_thresholds),
+    }
+    predictions = pd.DataFrame(
+        {
+            "job_key": job,
+            "evaluation_scope": evaluation_scope,
+            "fold": int(row.fold),
+            "feature_set": str(row.feature_set),
+            "model": str(row.model),
+            "weighting": str(row.weighting),
+            "perturbation_gene": external.genes,
+            "y_true": external.y,
+            "y_pred": pred,
+        }
+    )
+    metadata = external.metadata.copy()
+    if "observed_n_cells" in metadata.columns:
+        metadata["external_n_cells"] = metadata["observed_n_cells"].astype(float)
+    predictions = predictions.merge(metadata, on="perturbation_gene", how="left")
+    store.append_external_result(metric_row, predictions)
+
+
+def _write_single_cell_external_ensemble_results(
+    config: BaselineConfig,
+    store: ArtifactStore,
+) -> None:
+    predictions = store.tables["predictions"]
+    if predictions.empty or "evaluation_scope" not in predictions:
+        return
+    external = predictions.loc[
+        predictions["evaluation_scope"].astype(str).str.startswith("external:")
+    ].copy()
+    if external.empty:
+        return
+    train_lookup = _train_gene_lookup(store.tables["splits"])
+    primary = _ensemble_predictions(external, train_lookup, target_heldout=False)
+    heldout = _ensemble_predictions(external, train_lookup, target_heldout=True)
+    ensemble_predictions = pd.concat([primary, heldout], ignore_index=True)
+    metrics = _ensemble_metrics(config, ensemble_predictions)
+    store.write_external_ensemble_results(metrics, ensemble_predictions)
 
 
 def resolve_cell_bags_npz(output_dir: Path) -> Path:

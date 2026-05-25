@@ -6,14 +6,20 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 
-from dependency_baseline.cell_bags import build_cell_bags
+from dependency_baseline.cell_bags import build_cell_bags, build_external_cell_bags
 from dependency_baseline.config import (
     BaselineConfig,
     CvConfig,
     DataConfig,
+    ExternalFeatureSourceConfig,
+    FeatureConfig,
     SingleCellConfig,
 )
-from dependency_baseline.single_cell import DeepSetsRegressor, run_single_cell_cv
+from dependency_baseline.single_cell import (
+    DeepSetsRegressor,
+    evaluate_single_cell_external,
+    run_single_cell_cv,
+)
 
 
 def test_build_cell_bags_creates_aligned_single_cell_artifacts(
@@ -139,6 +145,128 @@ def test_run_single_cell_cv_writes_comparable_artifacts(tmp_path: Path) -> None:
     )
 
 
+def test_build_external_cell_bags_merges_adamson_sources_by_gene(
+    tmp_path: Path,
+) -> None:
+    reference_h5ad, reference_overlap = _write_synthetic_replogle_inputs(tmp_path)
+    source_a, source_b, external_overlap = _write_synthetic_external_cell_inputs(
+        tmp_path
+    )
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=reference_h5ad,
+            overlap_csv=reference_overlap,
+            output_dir=tmp_path / "outputs",
+            external_overlap_csvs=(external_overlap,),
+            external_feature_sources=(
+                ExternalFeatureSourceConfig(
+                    name="source_a",
+                    h5ad_path=source_a,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+                ExternalFeatureSourceConfig(
+                    name="source_b",
+                    h5ad_path=source_b,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+            ),
+        ),
+        features=FeatureConfig(chunk_size=2),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
+        single_cell=SingleCellConfig(n_hvg=5, n_pcs=3),
+    )
+    reference_paths = build_cell_bags(config)
+
+    external_paths = build_external_cell_bags(
+        config,
+        reference_paths.bags_npz,
+        external_name="adamson_k562",
+    )
+
+    payload = np.load(external_paths.bags_npz, allow_pickle=True)
+    metadata = pd.read_parquet(external_paths.metadata_path)
+    assert payload["perturbation_gene"].astype(str).tolist() == ["GENE1", "GENE2"]
+    assert payload["bag_offsets"].tolist() == [0, 4, 6]
+    assert metadata["observed_n_cells"].tolist() == [4, 2]
+    assert metadata["external_row_count"].tolist() == [2, 1]
+    assert metadata["source_dataset"].tolist() == ["source_a;source_b", "source_b"]
+
+
+def test_evaluate_single_cell_external_uses_existing_checkpoints_only(
+    tmp_path: Path,
+) -> None:
+    reference_h5ad, reference_overlap = _write_synthetic_replogle_inputs(tmp_path)
+    source_a, source_b, external_overlap = _write_synthetic_external_cell_inputs(
+        tmp_path
+    )
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=reference_h5ad,
+            overlap_csv=reference_overlap,
+            output_dir=tmp_path / "outputs",
+            external_overlap_csvs=(external_overlap,),
+            external_feature_sources=(
+                ExternalFeatureSourceConfig(
+                    name="source_a",
+                    h5ad_path=source_a,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+                ExternalFeatureSourceConfig(
+                    name="source_b",
+                    h5ad_path=source_b,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+            ),
+        ),
+        features=FeatureConfig(chunk_size=2),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
+        single_cell=SingleCellConfig(
+            n_hvg=5,
+            n_pcs=3,
+            max_cells_per_bag=4,
+            hidden_units=(8,),
+            bag_hidden_units=(8,),
+            max_epochs=5,
+            patience=2,
+            batch_size=2,
+            device="cpu",
+        ),
+    )
+    reference_paths = build_cell_bags(config)
+    cv_paths = run_single_cell_cv(config, reference_paths.bags_npz, run_id="cv")
+    external_paths = build_external_cell_bags(
+        config,
+        reference_paths.bags_npz,
+        external_name="adamson_k562",
+    )
+
+    evaluate_single_cell_external(
+        config,
+        run_dir=cv_paths.run_dir,
+        external_bags_npz=external_paths.bags_npz,
+        external_name="adamson_k562",
+    )
+
+    fold_metrics = pd.read_parquet(cv_paths.fold_metrics_path)
+    ensemble_metrics = pd.read_parquet(
+        cv_paths.run_dir / "artifacts" / "external_ensemble_metrics.parquet"
+    )
+    ensemble_predictions = pd.read_parquet(
+        cv_paths.run_dir / "artifacts" / "external_ensemble_predictions.parquet"
+    )
+    assert "external:adamson_k562" in set(fold_metrics["evaluation_scope"])
+    assert {
+        "external_ensemble:adamson_k562",
+        "external_ensemble_target_heldout:adamson_k562",
+    }.issubset(set(ensemble_metrics["evaluation_scope"]))
+    assert ensemble_predictions["perturbation_gene"].nunique() == 2
+    assert ensemble_predictions["ensemble_size"].min() >= 1
+
+
 def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:
     genes = ["GENE1", "GENE2", "GENE3", "GENE4", "GENE5", "GENE6"]
     expression_symbols = ["GENE1", "GENE2", "GENE3", "GENE4", "HOUSE"]
@@ -193,3 +321,73 @@ def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:
     overlap_path = tmp_path / "overlap.csv"
     overlap.to_csv(overlap_path, index=False)
     return h5ad_path, overlap_path
+
+
+def _write_synthetic_external_cell_inputs(
+    tmp_path: Path,
+) -> tuple[Path, Path, Path]:
+    source_a = tmp_path / "source_a.h5ad"
+    ad.AnnData(
+        X=np.asarray(
+            [
+                [1.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0, 1.0],
+                [3.0, 1.0, 1.0, 1.0, 1.0],
+                [4.0, 1.0, 1.0, 1.0, 1.0],
+            ],
+            dtype=np.float32,
+        ),
+        obs=pd.DataFrame(
+            {"perturbation": ["control", "control", "GENE1_a", "GENE1_a"]}
+        ),
+        var=pd.DataFrame(
+            {"gene_name": ["GENE1", "GENE2", "GENE3", "GENE4", "HOUSE"]},
+            index=[f"a{i}" for i in range(5)],
+        ),
+    ).write_h5ad(source_a)
+
+    source_b = tmp_path / "source_b.h5ad"
+    ad.AnnData(
+        X=np.asarray(
+            [
+                [2.0, 2.0, 2.0, 2.0],
+                [2.0, 2.0, 2.0, 2.0],
+                [5.0, 2.0, 2.0, 2.0],
+                [5.0, 2.0, 2.0, 2.0],
+                [2.0, 6.0, 2.0, 2.0],
+                [2.0, 6.0, 2.0, 2.0],
+            ],
+            dtype=np.float32,
+        ),
+        obs=pd.DataFrame(
+            {
+                "perturbation": [
+                    "control",
+                    "control",
+                    "GENE1_b",
+                    "GENE1_b",
+                    "GENE2_b",
+                    "GENE2_b",
+                ]
+            }
+        ),
+        var=pd.DataFrame(
+            {"gene_name": ["GENE1", "GENE2", "GENE4", "HOUSE"]},
+            index=[f"b{i}" for i in range(4)],
+        ),
+    ).write_h5ad(source_b)
+
+    overlap = pd.DataFrame(
+        {
+            "source_dataset": ["source_a", "source_b", "source_b"],
+            "source_perturbation_label": ["GENE1_a", "GENE1_b", "GENE2_b"],
+            "perturbation_gene": ["GENE1", "GENE1", "GENE2"],
+            "depmap_gene_column": ["GENE1 (1)", "GENE1 (1)", "GENE2 (2)"],
+            "has_depmap_label": [True, True, True],
+            "depmap_gene_effect": [-1.0, -1.0, -0.5],
+            "n_cells_or_pseudobulk": [2, 2, 2],
+        }
+    )
+    overlap_path = tmp_path / "external_overlap.csv"
+    overlap.to_csv(overlap_path, index=False)
+    return source_a, source_b, overlap_path
