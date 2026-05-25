@@ -1,21 +1,21 @@
 # Roadmap: Perturbation Transcriptomes to SL Target Prioritization
 
-Status date: 2026-05-24
+Status date: 2026-05-25
 
 This project should be read as a staged research program, not as an end-to-end
 synthetic-lethality predictor at the current stage. The current validated link is:
 
 ```text
-observed post-perturbation transcriptome
-    -> DepMap GeneEffect / dependency ranking
+single-cell perturbation response distribution
+    -> population-level dependency ranking
 ```
 
 The intended final link is:
 
 ```text
 basal cancer context + candidate perturbation
-    -> predicted post-perturbation transcriptome
-    -> dependency score
+    -> observed or predicted response distribution
+    -> population-level dependency score
     -> context-specific SL-like target ranking
     -> known-SL / experimental validation
 ```
@@ -25,7 +25,7 @@ basal cancer context + candidate perturbation
 | Node | Meaning | Current data source |
 | --- | --- | --- |
 | A: cancer context + perturbation | Cell line and target gene, e.g. K562 + gene knockdown | Replogle K562 CRISPRi perturbations; later DepMap/CCLE contexts |
-| B: post-perturbation transcriptome | Measured or predicted response state after perturbation | Perturb-seq pseudobulk delta expression |
+| B: post-perturbation response distribution | Measured or predicted bag of single cells after perturbation | Replogle single-cell Perturb-seq; pseudobulk delta is the current baseline summary |
 | C: dependency phenotype | Population-level fitness consequence of target loss | DepMap CRISPR GeneEffect |
 | D: SL-like candidate | Target whose dependency is selective for a cancer context | Future multi-cell-line DepMap/CCLE/TCGA filtering |
 | E: true SL evidence | Context-target or gene-pair interaction evidence | Future known SL databases, combinatorial screens, or wet-lab validation |
@@ -33,7 +33,13 @@ basal cancer context + candidate perturbation
 The first claim is deliberately narrow: perturbation-induced transcriptomes may
 contain predictive signal about downstream dependency. DepMap GeneEffect is a
 population-level fitness label, not a single-cell death label and not a strict
-synthetic-lethality label.
+synthetic-lethality label. Therefore the supervised unit is a perturbation-level
+bag, not an individual cell:
+
+```text
+B_c,g = distribution of post-perturbation cells
+phi(B_c,g) -> GeneEffect(c, g)
+```
 
 ## Phase 0: Data Alignment
 
@@ -62,8 +68,8 @@ Status: done for Replogle K562 v0.
 Question:
 
 ```text
-Given the observed post-perturbation transcriptome B,
-can we predict the DepMap dependency phenotype C?
+Given the observed post-perturbation response distribution B,
+can we predict the population-level dependency phenotype C?
 ```
 
 Completed experiment:
@@ -84,8 +90,24 @@ Key results:
 
 Current conclusion:
 
-The B->C bridge is viable as a first-stage benchmark. It is not strong enough to
-claim mechanistic SL discovery, but it is clearly better than trivial controls.
+The observed B->C bridge is viable, but current models compress each
+perturbation's single-cell distribution into pseudobulk features. The next
+modeling step should treat all cells under `(cell line, perturbation gene)` as a
+bag and learn a set-to-label / multiple-instance predictor:
+
+```text
+{post-perturbation cells for (c, g)}
+    -> response embedding
+    -> GeneEffect(c, g)
+```
+
+This avoids pretending that each cell has an independent GeneEffect label and
+lets the model test whether heterogeneity, rare stressed subpopulations, and
+distribution shape add signal beyond mean delta expression.
+
+Recommended first architecture: cell encoder + attention/summary pooling +
+response-burden/program covariates + perturbation-gene embedding -> ranking and
+GeneEffect regression head; add a context encoder when moving beyond K562.
 
 ## Phase 1b: Viability-Axis and Signal-Decomposition Audit
 
@@ -122,6 +144,10 @@ current B->C signal =
     generic perturbation response / burden
     + residual transcriptomic structure
 ```
+
+For Set-MIL, response burden, cell count, cell-cycle/state composition, and
+program scores should be explicit covariates or nuisance controls, not hidden
+shortcuts.
 
 ## Phase 2: External Response Validation
 
@@ -160,7 +186,71 @@ regularized `pca50_ridge_alpha100`, which is less expressive but transfers
 better to Adamson. This supports continuing the roadmap, with the caveat that
 Adamson has only `85` gene-level rows and is UPR-biased.
 
+The recommended next step after Phase 2 is **not** to move directly into AIVC or
+other predicted transcriptomes. The safer next gate is an observed-transcriptome
+MIL / Set-learning version of B->C:
+
+```text
+Replogle single-cell bag under perturbation g
+    -> DepMap GeneEffect(g)
+```
+
+This directly tests whether single-cell heterogeneity adds dependency signal
+beyond the current pseudobulk summaries before introducing forward-model error.
+
 Status: completed for K562 Replogle -> Adamson observed-transcriptome transfer.
+
+## Phase 2.5: Observed Single-Cell Set-MIL Dependency Predictor
+
+Question:
+
+```text
+Does the full observed single-cell response distribution improve dependency
+prediction beyond pseudobulk mean delta and response-burden baselines?
+```
+
+Primary supervised unit:
+
+```text
+Replogle single-cell bag under perturbation g
+    -> DepMap GeneEffect(K562, g)
+```
+
+Required comparisons:
+
+- pseudobulk delta + `pca50_ridge_alpha100`;
+- pseudobulk delta + `pca50_random_forest_leaf3`;
+- response burden + Ridge;
+- target-masked pseudobulk baselines;
+- `n_cells_only` negative control.
+
+Required controls:
+
+- keep one GeneEffect label per perturbation bag; do not assign independent
+  dependency labels to individual cells;
+- make cell count, response burden, cell-cycle/state composition, and program
+  scores explicit covariates or nuisance controls;
+- preserve target-heldout sensitivity where possible, especially for any
+  perturbation-gene embedding;
+- report internal Replogle CV and Adamson transfer, not just in-dataset metrics.
+
+Decision rule:
+
+```text
+If Set-MIL does not significantly beat pseudobulk or burden baselines,
+do not prioritize AIVC predicted-transcriptome experiments yet.
+```
+
+Rationale:
+
+Observed pseudobulk B->C already shows signal, and external response validation
+shows some cross-dataset stability. The next uncertainty is whether
+single-cell heterogeneity, rare stressed subpopulations, or distribution shape
+provide extra dependency signal. If they do not, then predicted transcriptomes
+are a high-risk next layer because forward perturbation error will amplify the
+downstream dependency uncertainty.
+
+Status: next recommended modeling phase.
 
 ## Phase 3: Predicted Transcriptomes
 
@@ -168,6 +258,13 @@ Question:
 
 ```text
 Can a forward perturbation model predict B well enough that predicted B still supports C?
+```
+
+Entry condition:
+
+```text
+Phase 2.5 shows that observed single-cell Set-MIL adds meaningful signal
+beyond pseudobulk delta, response burden, and target-masked baselines.
 ```
 
 Planned route:
@@ -191,11 +288,13 @@ Required evaluation:
 - compare observed-B -> C against predicted-B -> C;
 - quantify how forward-model error affects dependency ranking;
 - report whether top dependency candidates are stable under predicted transcriptomes.
-- use `pca50_ridge_alpha100` as the first downstream predictor because it has the
-  best Adamson external transfer, while keeping `pca50_random_forest_leaf3` as an
-  internal-CV comparator.
+- use the best observed-B downstream predictor as the primary downstream model;
+- keep `pca50_ridge_alpha100` as the conservative pseudobulk comparator because
+  it has the best Adamson external transfer, and keep
+  `pca50_random_forest_leaf3` as an internal-CV comparator.
 
-Status: not completed. Current experiments use observed transcriptomes only.
+Status: deferred until the observed single-cell Set-MIL gate is tested. Current
+experiments use observed transcriptomes only.
 
 ## Phase 4: Dependency to SL-Like Prioritization
 
@@ -275,6 +374,8 @@ The roadmap still holds, but only with staged claims:
 | The signal is partly generic response burden / viability-like biology. | Supported by Phase 1b. |
 | The signal also contains residual transcriptomic structure beyond NAR viability scores. | Supported by Phase 1b. |
 | The observed-transcriptome B->C signal transfers from Replogle to Adamson K562. | Supported by Phase 2, strongest with PCA Ridge. |
+| Single-cell heterogeneity improves B->C prediction beyond pseudobulk summaries. | Not yet tested; this is the next A->B->C modeling target. |
+| AIVC / forward-predicted transcriptomes should be the immediate next experiment. | Not supported; first test observed single-cell Set-MIL against pseudobulk and burden baselines. |
 | Replogle internal CV winner is also the best external-transfer model. | Not supported; PCA RandomForest wins internal CV but PCA Ridge transfers better. |
 | Predicted transcriptomes can replace observed transcriptomes for dependency ranking. | Not yet tested. |
 | DepMap GeneEffect labels are true SL labels. | Not supported; they are dependency labels. |
@@ -284,32 +385,31 @@ The concise current conclusion is:
 
 ```text
 Perturbation-induced transcriptomic responses contain measurable dependency
-signal, but the current K562 evidence is best interpreted as dependency
-prediction with mixed generic response-burden and residual transcriptomic
-structure. The first external validation is positive: Replogle-trained PCA Ridge
-transfers to Adamson K562 with `0.500` primary Spearman and `0.490`
-target-heldout Spearman. The path to SL target prioritization remains viable,
-but still requires forward-model error analysis and context-specific selectivity
-validation before making SL claims.
+signal, but the current K562 evidence comes from pseudobulk summaries of
+single-cell Perturb-seq. The next A->B->C question is whether a Set-MIL
+dependency ranker can use the full observed response distribution to beat
+pseudobulk PCA Ridge / RandomForest, response burden, and target-masked
+baselines without losing Adamson transfer. If it cannot, moving directly to AIVC
+predicted transcriptomes is high risk because forward-model error will further
+amplify downstream uncertainty. SL claims still require forward-model error
+analysis, multi-context selectivity, and true SL evidence.
 ```
 
 ## Immediate Next Steps
 
-1. Add confidence intervals and source-sensitivity for Adamson external
-   transfer: bootstrap the `85` Adamson genes, report per-source subsets, and
-   check whether the PCA Ridge advantage survives the small UPR-biased test set.
-2. Freeze the first downstream predictor set for predicted-transcriptome tests:
-   primary `pca50_ridge_alpha100`, comparator `pca50_random_forest_leaf3`, and
-   negative-control `ridge_alpha100`.
-3. Run a predicted-B -> C pilot with simple forward baselines before virtual-cell
-   foundation models: mean-response, nearest-neighbor / gene-program response,
-   and linear additive perturbation baselines.
-4. Compare observed-B -> C against predicted-B -> C on the same Replogle folds
-   and Adamson external set; report Spearman drop, top-k dependency overlap, and
-   whether GeneEffect `< -1.0` ranking survives.
-5. Only after the simple predicted-B pilot is quantified, introduce a virtual
-   cell model such as GEARS/scGPT/STATE and test whether it improves downstream
-   dependency ranking beyond the simple forward baselines.
-6. In parallel, start a multi-cell-line DepMap context table for SL-like ranking:
-   mutation/copy-number/lineage contexts, target selectivity, and pan-essential
-   penalties.
+1. Build a Replogle Set-MIL dependency predictor: each perturbation gene is a
+   bag of post-perturbation cells, and the label is the single DepMap GeneEffect
+   for `(K562, target gene)`.
+2. Compare Set-MIL against the frozen pseudobulk baselines:
+   `pca50_ridge_alpha100`, `pca50_random_forest_leaf3`, `response_burden +
+   ridge`, target-masked models, and `n_cells_only`.
+3. Make the Set-MIL head ranking-aware: report GeneEffect regression, dependency
+   ranking, GeneEffect `< -1.0` classification, and top-k enrichment.
+4. Add nuisance controls for response burden, cell count, cell-cycle/state
+   composition, and program scores so attention/subpopulation gains are not just
+   generic stress shortcuts.
+5. Add a graph-regularized perturbation-gene encoder after the plain Set-MIL
+   baseline is established, using GO/PPI/coessentiality/pathway or protein
+   complex priors to test held-out target generalization.
+6. Keep the predicted-B pilot and multi-context SL-like ranking as later layers
+   after the observed single-cell distribution -> dependency bridge is tested.

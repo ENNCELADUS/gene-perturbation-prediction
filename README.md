@@ -91,8 +91,22 @@ live in `output_dir/features/`.
 
 ### Stage 2: Virtual-Cell Extension
 
-After Stage 1 establishes that transcriptomic response contains dependency
-signal, connect a forward perturbation model:
+After Stage 1 establishes that observed transcriptomic response contains
+dependency signal, first add an observed single-cell MIL / Set-learning gate
+before connecting a forward perturbation model:
+
+```text
+Replogle single-cell bag under perturbation g
+    -> DepMap GeneEffect(g)
+```
+
+This gate should test whether single-cell heterogeneity improves dependency
+prediction beyond pseudobulk delta, response-burden, and target-masked
+baselines. If it does not, predicted-transcriptome experiments are high risk
+because forward-model error will further amplify downstream uncertainty.
+
+Only after that observed single-cell gate is informative, connect a forward
+perturbation model:
 
 ```text
 basal cancer cell state + candidate perturbation
