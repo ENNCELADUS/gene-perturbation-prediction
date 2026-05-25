@@ -50,6 +50,23 @@ class FeatureConfig:
 
 
 @dataclass(frozen=True)
+class SingleCellConfig:
+    n_hvg: int = 2000
+    n_pcs: int = 128
+    max_cells_per_bag: int = 256
+    hidden_units: tuple[int, ...] = (128, 64)
+    bag_hidden_units: tuple[int, ...] = (64,)
+    dropout: float = 0.1
+    learning_rate: float = 1e-3
+    weight_decay: float = 1e-3
+    max_epochs: int = 500
+    patience: int = 40
+    validation_fraction: float = 0.15
+    batch_size: int = 32
+    device: str = "auto"
+
+
+@dataclass(frozen=True)
 class ViabilityAxisArtifactConfig:
     name: str
     url: str
@@ -100,10 +117,11 @@ class SelectionConfig:
 @dataclass(frozen=True)
 class BaselineConfig:
     data: DataConfig
-    features: FeatureConfig
-    cv: CvConfig
+    features: FeatureConfig = field(default_factory=FeatureConfig)
+    cv: CvConfig = field(default_factory=CvConfig)
     experiment: ExperimentConfig = field(default_factory=ExperimentConfig)
     selection: SelectionConfig = field(default_factory=SelectionConfig)
+    single_cell: SingleCellConfig = field(default_factory=SingleCellConfig)
     viability_axis: ViabilityAxisConfig = field(default_factory=ViabilityAxisConfig)
     models: dict[str, dict[str, Any]] | None = None
 
@@ -128,6 +146,12 @@ def _tuple_str_or_none(values: Any) -> tuple[str, ...] | None:
     if values is None:
         return None
     return tuple(str(value) for value in values)
+
+
+def _tuple_int_or_default(values: Any, default: tuple[int, ...]) -> tuple[int, ...]:
+    if values is None:
+        return default
+    return tuple(int(value) for value in values)
 
 
 def _tuple_int_or_none(values: Any) -> tuple[int, ...] | None:
@@ -309,6 +333,7 @@ def load_config(path: str | Path) -> BaselineConfig:
 
     data = raw.get("data", {})
     features = raw.get("features", {})
+    single_cell = raw.get("single_cell", {})
     cv = raw.get("cv", {})
     experiment = raw.get("experiment", {})
     selection = raw.get("selection", {})
@@ -383,6 +408,27 @@ def load_config(path: str | Path) -> BaselineConfig:
             models=_tuple_str_or_none(selection.get("models")),
             folds=_tuple_int_or_none(selection.get("folds")),
             weightings=_tuple_str_or_none(selection.get("weightings")),
+        ),
+        single_cell=SingleCellConfig(
+            n_hvg=int(single_cell.get("n_hvg", 2000)),
+            n_pcs=int(single_cell.get("n_pcs", 128)),
+            max_cells_per_bag=int(single_cell.get("max_cells_per_bag", 256)),
+            hidden_units=_tuple_int_or_default(
+                single_cell.get("hidden_units"),
+                (128, 64),
+            ),
+            bag_hidden_units=_tuple_int_or_default(
+                single_cell.get("bag_hidden_units"),
+                (64,),
+            ),
+            dropout=float(single_cell.get("dropout", 0.1)),
+            learning_rate=float(single_cell.get("learning_rate", 1e-3)),
+            weight_decay=float(single_cell.get("weight_decay", 1e-3)),
+            max_epochs=int(single_cell.get("max_epochs", 500)),
+            patience=int(single_cell.get("patience", 40)),
+            validation_fraction=float(single_cell.get("validation_fraction", 0.15)),
+            batch_size=int(single_cell.get("batch_size", 32)),
+            device=str(single_cell.get("device", "auto")),
         ),
         viability_axis=_viability_axis_config(raw.get("viability_axis")),
         models=_model_config(raw.get("models"), cv_config),
