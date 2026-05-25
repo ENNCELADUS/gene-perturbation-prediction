@@ -37,8 +37,22 @@ continuous DepMap/Achilles CRISPR gene-effect scores.
 
 ### Stage 2: Virtual-Cell Extension
 
-After Stage 1 is validated, connect a forward perturbation model such as scGPT,
-GEARS, STATE, or a simple additive / linear baseline:
+After Stage 1 and same-cell-line external response validation, do **not** move
+directly into AIVC / predicted transcriptomes. First test an observed
+single-cell MIL / Set-learning B->C model:
+
+```text
+Replogle single-cell bag under perturbation g
+    -> DepMap GeneEffect(g)
+```
+
+Compare it against pseudobulk delta + Ridge / RandomForest, response-burden
+baselines, target-masked baselines, and cell-count controls. If Set-MIL does not
+significantly improve over those baselines, predicted-transcriptome experiments
+are high risk because forward-model error will amplify downstream uncertainty.
+
+Only after that gate, connect a forward perturbation model such as scGPT, GEARS,
+STATE, or a simple additive / linear baseline:
 
 ```text
 basal cell state + candidate perturbation
