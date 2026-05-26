@@ -74,7 +74,8 @@ can we predict the population-level dependency phenotype C?
 
 Completed experiment:
 
-- Doc: `docs/experiment/baselines/replogle_k562_b_to_c_baseline/README.md`.
+- Doc:
+  `docs/experiment/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer.md`.
 - Setup: Replogle K562 pseudobulk delta expression -> DepMap K562 CRISPR GeneEffect.
 - Evaluation: `internal_cv_all`, 5-fold CV x 1 repeat, seed `42`.
 - Best main row: `delta_all + pca50_random_forest`.
@@ -119,7 +120,7 @@ Is the B->C signal mostly a generic viability / proliferation / response-burden 
 
 Completed experiment:
 
-- Doc: `docs/experiment/baselines/replogle_k562_viability_axis_audit_5x1_main.md`.
+- Doc: `docs/experiment/02_replogle_k562_viability_axis_audit.md`.
 - Main audit: NAR Achilles/CTRP viability-axis scores.
 - Follow-up: NAR + response-burden nuisance residualization and curated program scores.
 
@@ -159,7 +160,8 @@ Does the Replogle-trained B->C signal transfer beyond the original dataset?
 
 Completed experiment:
 
-- Doc: `docs/experiment/baselines/adamson_external_ensemble/README.md`.
+- Doc:
+  `docs/experiment/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer.md`.
 - Setup: train model variants on Replogle K562 5-fold CV, then evaluate the
   mean prediction across fold models on combined Adamson K562.
 - External feature pack: Adamson pilot, UPR epistasis, and UPR Perturb-seq,
@@ -198,7 +200,7 @@ Replogle single-cell bag under perturbation g
 This directly tests whether single-cell heterogeneity adds dependency signal
 beyond the current pseudobulk summaries before introducing forward-model error.
 
-Status: completed for K562 Replogle -> Adamson observed-transcriptome transfer.
+Status: completed for K562 Replogle -> Adamson observed pseudobulk transfer.
 
 ## Phase 2.5: Observed Single-Cell Set-MIL Dependency Predictor
 
@@ -216,23 +218,34 @@ Replogle single-cell bag under perturbation g
     -> DepMap GeneEffect(K562, g)
 ```
 
-Required comparisons:
+Completed experiment:
 
-- pseudobulk delta + `pca50_ridge_alpha100`;
-- pseudobulk delta + `pca50_random_forest_leaf3`;
-- response burden + Ridge;
-- target-masked pseudobulk baselines;
-- `n_cells_only` negative control.
+- Doc: `docs/experiment/03_replogle_k562_single_cell_deepsets_adamson.md`.
+- Setup: Replogle K562 single-cell bags in 128-dimensional PCA delta space.
+- Model: `deepsets_pca128_meanpool`.
+- Evaluation: Replogle 5-fold CV plus Adamson external ensemble and
+  target-heldout ensemble.
 
-Required controls:
+Key results:
 
+| Model / check | Spearman | AUROC GE < -1.0 | Interpretation |
+| --- | ---: | ---: | --- |
+| Deep Sets Replogle CV, unweighted | 0.484 | 0.736 | Competitive with pseudobulk PCA Ridge / RF, not clearly better. |
+| Deep Sets Adamson ensemble, unweighted | 0.505 | 0.854 | Strong same-cell-line external transfer. |
+| Deep Sets Adamson target-heldout, unweighted | 0.431 | 0.813 | Positive but weaker under stricter target-exposure sensitivity. |
+| Deep Sets Adamson ensemble, sqrt_n_cells | 0.482 | 0.847 | Cell-count weighting does not improve this run. |
+
+Remaining controls:
+
+- compare stronger pooling / attention variants directly against frozen
+  pseudobulk `pca50_ridge_alpha100`, `pca50_random_forest_leaf3`,
+  response-burden Ridge, target-masked models, and `n_cells_only`;
 - keep one GeneEffect label per perturbation bag; do not assign independent
   dependency labels to individual cells;
 - make cell count, response burden, cell-cycle/state composition, and program
   scores explicit covariates or nuisance controls;
 - preserve target-heldout sensitivity where possible, especially for any
-  perturbation-gene embedding;
-- report internal Replogle CV and Adamson transfer, not just in-dataset metrics.
+  perturbation-gene embedding.
 
 Decision rule:
 
@@ -250,7 +263,7 @@ provide extra dependency signal. If they do not, then predicted transcriptomes
 are a high-risk next layer because forward perturbation error will amplify the
 downstream dependency uncertainty.
 
-Status: next recommended modeling phase.
+Status: first observed single-cell Deep Sets baseline completed on 2026-05-26.
 
 ## Phase 3: Predicted Transcriptomes
 
@@ -266,6 +279,10 @@ Entry condition:
 Phase 2.5 shows that observed single-cell Set-MIL adds meaningful signal
 beyond pseudobulk delta, response burden, and target-masked baselines.
 ```
+
+Current status of the entry condition: not yet met. The first Deep Sets run is
+competitive and transfers to Adamson, but it does not clearly beat the
+pseudobulk baselines.
 
 Planned route:
 
@@ -374,8 +391,8 @@ The roadmap still holds, but only with staged claims:
 | The signal is partly generic response burden / viability-like biology. | Supported by Phase 1b. |
 | The signal also contains residual transcriptomic structure beyond NAR viability scores. | Supported by Phase 1b. |
 | The observed-transcriptome B->C signal transfers from Replogle to Adamson K562. | Supported by Phase 2, strongest with PCA Ridge. |
-| Single-cell heterogeneity improves B->C prediction beyond pseudobulk summaries. | Not yet tested; this is the next A->B->C modeling target. |
-| AIVC / forward-predicted transcriptomes should be the immediate next experiment. | Not supported; first test observed single-cell Set-MIL against pseudobulk and burden baselines. |
+| Single-cell heterogeneity improves B->C prediction beyond pseudobulk summaries. | First Deep Sets gate completed; competitive but not yet better than pseudobulk. |
+| AIVC / forward-predicted transcriptomes should be the immediate next experiment. | Not supported; first improve observed single-cell Set-MIL beyond pseudobulk and burden baselines. |
 | Replogle internal CV winner is also the best external-transfer model. | Not supported; PCA RandomForest wins internal CV but PCA Ridge transfers better. |
 | Predicted transcriptomes can replace observed transcriptomes for dependency ranking. | Not yet tested. |
 | DepMap GeneEffect labels are true SL labels. | Not supported; they are dependency labels. |
@@ -385,22 +402,22 @@ The concise current conclusion is:
 
 ```text
 Perturbation-induced transcriptomic responses contain measurable dependency
-signal, but the current K562 evidence comes from pseudobulk summaries of
-single-cell Perturb-seq. The next A->B->C question is whether a Set-MIL
-dependency ranker can use the full observed response distribution to beat
-pseudobulk PCA Ridge / RandomForest, response burden, and target-masked
-baselines without losing Adamson transfer. If it cannot, moving directly to AIVC
-predicted transcriptomes is high risk because forward-model error will further
-amplify downstream uncertainty. SL claims still require forward-model error
-analysis, multi-context selectivity, and true SL evidence.
+signal. The first single-cell Deep Sets baseline shows that observed cell bags
+can match pseudobulk-level performance and transfer to Adamson, but it has not
+yet proven that heterogeneity adds signal beyond mean-delta summaries. The next
+A->B->C question is whether stronger Set-MIL variants plus explicit nuisance
+controls can beat pseudobulk PCA Ridge / RandomForest, response burden, and
+target-masked baselines without losing Adamson transfer. Until then, moving
+directly to AIVC predicted transcriptomes is high risk because forward-model
+error will further amplify downstream uncertainty. SL claims still require
+forward-model error analysis, multi-context selectivity, and true SL evidence.
 ```
 
 ## Immediate Next Steps
 
-1. Build a Replogle Set-MIL dependency predictor: each perturbation gene is a
-   bag of post-perturbation cells, and the label is the single DepMap GeneEffect
-   for `(K562, target gene)`.
-2. Compare Set-MIL against the frozen pseudobulk baselines:
+1. Extend the completed mean-pooling Deep Sets baseline with stronger set
+   pooling, attention, or distribution-summary variants.
+2. Compare each Set-MIL variant against the frozen pseudobulk baselines:
    `pca50_ridge_alpha100`, `pca50_random_forest_leaf3`, `response_burden +
    ridge`, target-masked models, and `n_cells_only`.
 3. Make the Set-MIL head ranking-aware: report GeneEffect regression, dependency

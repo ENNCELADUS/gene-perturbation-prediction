@@ -1,8 +1,0 @@
-{
-  "n_splits": 5,
-  "n_repeats": 1,
-  "random_state": 42,
-  "stratify_bins": 10,
-  "model_set": "full",
-  "features_npz": "/home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/replogle_k562_delta_features.npz"
-}
