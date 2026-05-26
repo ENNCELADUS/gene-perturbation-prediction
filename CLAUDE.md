@@ -1,4 +1,6 @@
-# Repository Guidelines
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Quick Context
 
@@ -12,15 +14,118 @@
 - **Role**: Act as a careful junior engineer. Follow **Plan -> Confirm -> Code**
   for non-trivial research or implementation changes.
 
-## Research Framing
+## Commands
 
-Use this framing when updating docs, designing data schemas, or rebuilding code:
+```bash
+# Environment
+uv sync                              # Install/sync all dependencies
+uv run python -c "import anndata, scanpy, torch; print('ok')"
+
+# Lint and format
+uv run ruff check .                  # Lint
+uv run ruff format .                 # Format
+uv run ruff check --fix .            # Auto-fix lint issues
+
+# Tests
+uv run python -m pytest              # Full test suite
+uv run python -m pytest tests/test_dependency_baseline.py  # Pseudobulk tests
+uv run python -m pytest tests/test_single_cell_baseline.py # Deep Sets tests
+uv run python -m pytest -k "test_build_features"           # Single test by name
+
+# Pipeline CLI (requires data files not in git)
+uv run vcc-dep-baseline build-features --config configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
+uv run vcc-dep-baseline run-cv --config configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
+uv run vcc-dep-baseline build-cell-bags --config configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
+uv run vcc-dep-baseline run-single-cell-cv --config configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
+uv run vcc-dep-baseline summarize --results-dir <run_dir>
+```
+
+## Pipeline Architecture
+
+The `src/dependency_baseline/` package implements a two-track prediction pipeline:
+
+### Track 1: Pseudobulk Delta Baseline
+
+```
+h5ad + overlap_csv → build-features → features.npz
+                                           ↓
+                              run-cv (RepeatedStratifiedKFold)
+                                           ↓
+                              fit-final → checkpoints + rankings
+```
+
+**Feature construction** (`features.py`): Reads backed h5ad in chunks
+(`_chunked_group_sums`), computes per-perturbation pseudobulk mean, subtracts
+control mean to get delta expression. Derives response burden scalars, curated
+biological program scores, and optional NAR viability-axis scores.
+
+**Feature sets** (`datasets.py:feature_sets()`): Builds named feature matrices
+from the NPZ — `delta_all`, `delta_mask_target`, `response_burden`,
+`program_scores`, `nar_viability_scores`, `nuisance_resid_delta_all`, etc. The
+`compatible_model_feature` function in `models.py` gates which models can
+consume which feature sets.
+
+**Model ladder** (`models.py:build_model_specs()`): Constructs sklearn pipelines
+from config. Each `ModelSpec` has a name, estimator, and `supports_weight` flag.
+Models include DummyRegressor, Ridge, ElasticNet, PCA+Ridge, PCA+RandomForest,
+XGBoost, TorchMLPRegressor, and signal-decomposition variants with
+`NuisanceResidualizer`.
+
+**Evaluation loop** (`evaluation.py:execute_cv()`): Iterates over scopes ×
+folds × features × models × weightings. Each fit is identified by a `job_key`
+string for resume support. Results accumulate in `ArtifactStore` which writes
+fold metrics, predictions, model manifests, and top-k candidates.
+
+### Track 2: Single-Cell Deep Sets
+
+```
+h5ad → build-cell-bags → bags.npz (PCA-projected per-cell arrays)
+                              ↓
+              run-single-cell-cv (DeepSetsRegressor)
+                              ↓
+              evaluate-single-cell-external (Adamson transfer)
+```
+
+**Cell bags** (`cell_bags.py`): Computes HVG → PCA on control cells, projects
+all cells into PC space, subtracts control centroid, groups by perturbation gene
+into ragged bags stored as offsets into a flat array.
+
+**Deep Sets** (`single_cell.py:DeepSetsRegressor`): phi network encodes each
+cell, mean-pooling aggregates the bag, rho network predicts GeneEffect. Handles
+ragged bags via padding + mask. Inner early-stopping validation split.
+
+### Shared Infrastructure
+
+- **Config** (`config.py`): Frozen dataclasses loaded from YAML. `BaselineConfig`
+  is the root containing `DataConfig`, `FeatureConfig`, `CvConfig`,
+  `SingleCellConfig`, `ViabilityAxisConfig`, `ExperimentConfig`, `SelectionConfig`.
+- **Artifacts** (`artifacts.py`): `ArtifactStore` manages incremental parquet
+  writes, checkpoint paths, run manifests, and resume state.
+- **Metrics** (`metrics.py`): Spearman, Pearson, RMSE, MAE, R2 for regression;
+  AUROC, AUPRC, top-5% enrichment at configurable thresholds for ranking.
+- **SelectionConfig**: Runtime filter that narrows scopes, features, models,
+  folds, and weightings without changing model definitions. Applied via CLI
+  `--scope`, `--feature-set`, `--model`, `--fold`, `--weighting` flags.
+
+### Config Files
+
+Configs in `configs/experiments/` are grouped to match `docs/experiment/`.
+Adamson held-out test settings are embedded in the experiment configs that use
+Adamson instead of being maintained as a standalone Adamson config. Key patterns:
+- `models:` block defines the model ladder with `enabled` flags and hyperparams.
+- `selection:` block filters what actually runs (useful for partial reruns).
+- `viability_axis:` enables NAR death-signature residualization.
+- `models.signal_decomposition:` enables program-score and nuisance-residualized
+  model families.
+- Model `variants:` lists create grid searches (e.g., multiple alpha values).
+
+## Research Framing
 
 ```text
 cell line + perturbation gene
-    -> observed or predicted post-perturbation transcriptome
-    -> dependency / essentiality score
-    -> context-specific target ranking
+    → observed or predicted post-perturbation transcriptome
+    → dependency / essentiality score
+    → context-specific target ranking
 ```
 
 The matched training key is **(cell line, perturbation gene)**. Preserve it in
@@ -28,144 +133,57 @@ all intermediate tables, filenames, and model inputs.
 
 ### Stage 1: Observed Transcriptome to Dependency
 
-First build the supervised downstream task with real post-perturbation
-transcriptomes. Inputs may be pseudobulk delta expression, top-DE signatures,
-pathway scores, or foundation-model embeddings. Labels should default to
-continuous DepMap/Achilles CRISPR gene-effect scores.
+Build the supervised downstream task with real post-perturbation transcriptomes.
+Labels default to continuous DepMap/Achilles CRISPR gene-effect scores.
 
 ### Stage 2: Virtual-Cell Extension
 
-After Stage 1 and same-cell-line external response validation, do **not** move
-directly into AIVC / predicted transcriptomes. First test an observed
-single-cell MIL / Set-learning B->C model:
-
-```text
-Replogle single-cell bag under perturbation g
-    -> DepMap GeneEffect(g)
-```
-
-Compare it against pseudobulk delta + Ridge / RandomForest, response-burden
-baselines, target-masked baselines, and cell-count controls. If Set-MIL does not
-significantly improve over those baselines, predicted-transcriptome experiments
-are high risk because forward-model error will amplify downstream uncertainty.
-
-Only after that gate, connect a forward perturbation model such as scGPT, GEARS,
-STATE, or a simple additive / linear baseline:
-
-```text
-basal cell state + candidate perturbation
-    -> predicted post-perturbation transcriptome
-    -> downstream dependency predictor
-```
-
-Do not assume forward perturbation prediction is solved. Quantify how forward
-model error affects downstream ranking.
+After Stage 1, first test observed single-cell MIL / Set-learning (Deep Sets)
+before connecting a forward perturbation model. If Set-MIL does not improve over
+pseudobulk baselines, predicted-transcriptome experiments are high risk.
 
 ### Stage 3: SL Candidate Prioritization
 
 Synthetic lethality requires context specificity. A DepMap essential gene is not
-automatically an SL target. Use mutation, copy-number, lineage, pathway, normal
-cell, TCGA, CCLE, or DepMap context evidence before using SL language.
+automatically an SL target. Require mutation, copy-number, lineage, or pathway
+context evidence before using SL language.
 
 ## Data Rules
 
-- Prioritize CRISPRi or knockout Perturb-seq / CROP-seq data for alignment with
-  DepMap CRISPR gene-effect labels.
-- K562 is the natural proof-of-concept start because several Perturb-seq
-  resources exist there. HCT116 and A549 are extension candidates only after
-  identifier alignment is clear.
-- Norman is CRISPRa. Treat it as a perturbation-response reference or auxiliary
-  benchmark, not as a direct knockout-dependency label alignment source.
-- DepMap labels are population-level fitness / proliferation readouts. They are
-  not single-cell death labels.
-- Required alignment fields should include cell-line ID, perturbation gene
-  symbol/ID, perturbation modality, expression matrix or signature, and DepMap
-  model/gene identifiers.
-- Raw `*.h5ad`, `*.csv`, checkpoints, and other large data artifacts are
-  gitignored. Keep only lightweight metadata and reproducible processing code in
-  git.
-
-## Current Project Structure
-
-- `README.md`: human-facing project description, roadmap, and setup notes.
-- `AGENTS.md`: Codex/OpenAI-agent instructions.
-- `CLAUDE.md`: Claude-agent instructions.
-- `docs/discussion/0408.md`: 2026-04-08 discussion notes.
-- `docs/discussion/0429.md`: 2026-04-29 discussion notes.
-- `docs/data/`: concise dataset cards for downloaded Stage 1 data.
-- `docs/experiment/`: numbered experiment summaries, one markdown file per
-  experiment sequence.
-- `docs/images/core.png`: triangular technical route diagram.
-- `docs/images/roadmap.png`: staged roadmap diagram.
-- `configs/replogle_k562_baseline.yaml`: Replogle K562 B→C baseline config.
-- `configs/replogle_k562_single_cell_deepsets.yaml`: observed single-cell
-  Deep Sets bag baseline config.
-- `src/dependency_baseline/`: implemented feature-building and
-  cross-validation baseline package.
-- `tests/`: synthetic-data tests for the baseline package.
-- `data/norman/splits/`: retained Norman split metadata.
-- `scGPT/`: local scGPT reference code.
-- `pyproject.toml` and `uv.lock`: Python dependency metadata.
-
-Do not rely on old `vcc` or `vcc-tahoe` commands. The active implemented entry
-point is `uv run vcc-dep-baseline`.
-
-## Environment Requirement
-
-- This repository uses `uv` with the project-local `.venv` as the supported
-  Python environment workflow.
-- Sync the environment with `uv sync`.
-- Prefix every Bash tool call that runs Python, pytest, ruff, mypy, or a Python
-  script with `uv run`.
-- If dependencies are missing or the lockfile changed, run `uv sync` before
-  continuing.
-- Do not document old `uv run vcc` or `uv run vcc-tahoe` commands as valid until
-  the corresponding packages exist again.
+- Prioritize CRISPRi or knockout Perturb-seq data for DepMap alignment.
+- K562 is the proof-of-concept cell line. HCT116/A549 are extensions.
+- Norman is CRISPRa — treat as auxiliary, not primary label alignment.
+- DepMap labels are population-level fitness readouts, not single-cell death.
+- Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored.
 
 ## Code Style
 
-When implementation code is present:
-
 - Python 3.11+, strict type hints, absolute imports, Google-style docstrings.
-- Prefer composition and small functions. Target functions under 50 lines and
-  files under 600 lines.
-- No `print` statements in library or pipeline code; use logging.
-- No hardcoded dataset paths, thresholds, or model settings; use config.
-- Handle specific exceptions. Do not use bare `except`.
+- Prefer composition and small functions. Target <50 lines per function, <600
+  lines per file.
+- No `print` in library code; use `logging`.
+- No hardcoded paths or thresholds; use config.
+- Handle specific exceptions. No bare `except`.
 
-## Testing and Verification
+## Environment
 
-- Use `pytest` for tests.
-- Use `uv run python -m pytest` for the full test suite once tests exist.
-- Use `uv run ruff check .` and `uv run ruff format .` for lint/format.
-- If the repo is in a docs-only or rebuild-base state with no tests, say that
-  explicitly in the final response.
-- For data or modeling changes, include a focused verification plan even if the
-  full experiment cannot run locally.
+- Uses `uv` with project-local `.venv`.
+- Prefix all Python/pytest/ruff invocations with `uv run`.
+- Run `uv sync` if dependencies are missing or lockfile changed.
+- The only valid CLI entry point is `uv run vcc-dep-baseline`.
 
-## Documentation Hygiene
+## Commit Guidelines
 
-- Keep project framing synchronized across `README.md`, `AGENTS.md`, and
-  `CLAUDE.md`.
-- Use absolute dates in status notes and discussion summaries.
-- Do not leave stale references to removed paths such as `src/`, `src_tahoe/`,
-  `scripts/`, or old result folders unless clearly labeled as removed legacy
-  material.
-- When the data route changes, update the role of each data source and the
-  matched key assumptions.
+- Conventional Commits: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`,
+  `chore`, `ci`.
+- PRs should summarize the change, list touched data assumptions, and include
+  verification results.
 
-## Commit and Pull Request Guidelines
+## Terminology Guardrails
 
-- Commits use Conventional Commits: `feat`, `fix`, `perf`, `refactor`, `docs`,
-  `test`, `chore`, or `ci`.
-- PRs should summarize the research or code change, list touched data
-  assumptions, and include verification results or an explicit reason tests were
-  not run.
-
-## Security and Data Practices
-
-- Never commit API keys, `.env` files, credentials, private patient data, or
-  large raw datasets.
-- Use environment variables for secrets.
-- Sanitize user-provided paths and config values at system boundaries.
-- Review `git diff` before pushing.
+- Say **dependency prediction** or **essentiality ranking** for the DepMap task.
+- Say **SL candidate prioritization** only with context-specificity evidence.
+- Do not call DepMap scores single-cell death labels.
+- Do not equate gene essentiality with synthetic lethality.
+- Do not align CRISPRa perturbations with knockout dependency labels without a
+  modality caveat.

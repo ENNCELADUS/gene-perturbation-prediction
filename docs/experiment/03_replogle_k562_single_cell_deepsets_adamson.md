@@ -1,85 +1,103 @@
-# Replogle K562 Single-Cell Deep Sets and Adamson Transfer
+# Replogle K562 Single-Cell MIL and Adamson Transfer
 
 Run dates: 2026-05-25 to 2026-05-26
 
-Canonical remote result path after the 2026-05-26 artifact reorganization:
+## Scope
 
-- `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/runs/20260525_185722_nogit`
+This experiment asks whether observed Replogle K562 single-cell perturbation
+bags can predict DepMap K562 CRISPR GeneEffect and transfer to Adamson K562
+Perturb-seq. The matched prediction key is perturbation gene. Each gene is one
+bag of post-perturbation surviving cells; the label is the population-level
+DepMap GeneEffect for that gene.
 
-Config:
+Training and validation use Replogle K562 CRISPRi essential Perturb-seq with
+5-fold `internal_cv_all`, seed `42`. External evaluation uses combined Adamson
+K562 pilot, UPR epistasis, and UPR Perturb-seq bags. Adamson metrics are
+checkpoint-only ensembles: no retraining on Adamson labels.
 
-- `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml`
+## Compared Runs
 
-## Run Setup
+| Purpose | Config | Result path |
+| --- | --- | --- |
+| First PCA Deep Sets baseline | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/runs/20260525_185722_nogit` |
+| Controlled PCA/scVI/HVG mean-pool vs attention matrix | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/runs/attention_mil_20260526_180353` |
 
-- Task: predict DepMap K562 CRISPR GeneEffect from observed single-cell
-  perturbation-response bags.
-- Training data: Replogle K562 CRISPRi essential Perturb-seq.
-- External test: combined Adamson K562 pilot, UPR epistasis, and UPR
-  Perturb-seq.
-- Representation: each perturbation gene is one bag of post-perturbation cells.
-  Cell features are PCA coordinates of cell-level delta expression in the
-  Replogle HVG/PCA space.
-- Model: Deep Sets regression, `deepsets_pca128_meanpool`, with a shared cell
-  encoder and mean pooling over each gene-level bag.
-- Validation: Replogle `internal_cv_all`, 5-fold CV x 1 repeat, seed `42`.
-- External evaluation: existing fold checkpoints only; no Replogle retraining.
-- Primary external scope: `external_ensemble:adamson_k562`.
-- Sensitivity scope: `external_ensemble_target_heldout:adamson_k562`, averaging
-  only fold models whose Replogle train split did not contain the Adamson target
-  gene.
+The comparison table below uses the controlled multi-embedding run so PCA Deep
+Sets, scVI Deep Sets, HVG Deep Sets, and their attention counterparts are
+compared under the same CV/external logic.
 
 ## Feature QA
 
-| Item | Value |
-| --- | ---: |
-| Replogle bags | 1917 |
-| Replogle cells | 280066 |
-| Adamson source perturbation rows | 116 |
-| Adamson gene-level bags | 85 |
-| Adamson cells | 58267 |
-| PCA dimensions | 128 |
-| HVGs used for PCA | 2000 |
-| Adamson median cells per gene | 606 |
+| Feature pack | Replogle bags | Replogle cells | Adamson bags | Adamson cells | Dimension | Adamson median cells/gene |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PCA128 delta | 1917 | 280066 | 85 | 58267 | 128 | 606 |
+| scVI128 delta | 1917 | 280066 | 85 | 58267 | 128 | 606 |
+| HVG2000 delta | 1917 | 280066 | 85 | 58267 | 2000 | 606 |
 
-## 5-Fold Validation and Adamson Test
+scVI external encoding is reference-only: Adamson cells are encoded with the
+frozen Replogle scVI model via `SCVI.load(model_dir, adata=query)`. No Adamson
+query fine-tuning is used.
 
-| Scope | Weighting | Genes | Mean ensemble size | Spearman | Pearson | RMSE | MAE | R2 | AUROC GE < -1.0 | AUPRC GE < -1.0 | Top 5% enrich GE < -1.0 |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Replogle CV | unweighted | 1917 | - | 0.484 | 0.473 | 0.622 | 0.472 | 0.217 | 0.736 | - | 1.935 |
-| Replogle CV | sqrt_n_cells | 1917 | - | 0.474 | 0.463 | 0.628 | 0.479 | 0.200 | 0.733 | - | 1.935 |
-| Adamson ensemble | unweighted | 85 | 5.00 | 0.505 | 0.487 | 0.676 | 0.552 | 0.082 | 0.854 | 0.639 | 3.238 |
-| Adamson ensemble | sqrt_n_cells | 85 | 5.00 | 0.482 | 0.444 | 0.697 | 0.566 | 0.023 | 0.847 | 0.575 | 2.429 |
-| Adamson target-heldout | unweighted | 85 | 2.65 | 0.431 | 0.423 | 0.692 | 0.571 | 0.036 | 0.813 | 0.572 | 3.238 |
-| Adamson target-heldout | sqrt_n_cells | 85 | 2.65 | 0.432 | 0.348 | 0.723 | 0.588 | -0.050 | 0.809 | 0.545 | 2.429 |
+## Primary Results
 
-## Main Readout
+Primary rows use `unweighted` training. `Adamson heldout` averages only fold
+models whose Replogle train split did not contain the Adamson target gene.
 
-- The first observed single-cell Deep Sets baseline is competitive with the
-  pseudobulk Replogle CV baseline but does not clearly beat it: unweighted
-  Replogle CV Spearman is `0.484`, close to pseudobulk PCA Ridge / RandomForest
-  at about `0.49`.
-- Adamson transfer is strong for the primary unweighted ensemble: Spearman
-  `0.505`, AUROC at GeneEffect `< -1.0` `0.854`, and top-5% enrichment `3.238`.
-- Target-heldout Adamson remains positive but drops to `0.431` Spearman, so some
-  of the primary transfer signal may depend on fold models that saw the same
-  target in Replogle training.
-- `sqrt_n_cells` weighting does not improve this run; unweighted is the primary
-  comparison row.
-- This result passes the "single-cell bags are usable" gate, but it does not yet
-  prove that bag-level heterogeneity improves over pseudobulk mean-delta
-  summaries. The next experiment should add stronger set pooling / attention,
-  burden and state-composition controls, and direct paired comparison against
-  frozen pseudobulk models.
+| Feature | Pooling model | Replogle CV Spearman | Replogle CV AUROC | Adamson Spearman | Adamson AUROC | Adamson AUPRC | Adamson heldout Spearman |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PCA128 delta | Deep Sets mean | 0.484 | 0.736 | 0.504 | 0.854 | 0.639 | 0.431 |
+| PCA128 delta | Gated attention | 0.471 | 0.731 | 0.485 | 0.856 | 0.637 | 0.435 |
+| scVI128 delta | Deep Sets mean | 0.489 | 0.744 | 0.545 | 0.889 | 0.714 | 0.514 |
+| scVI128 delta | Gated attention | 0.478 | 0.739 | 0.552 | 0.893 | 0.725 | 0.509 |
+| HVG2000 delta | Deep Sets mean | 0.480 | 0.735 | 0.412 | 0.781 | 0.540 | 0.369 |
+| HVG2000 delta | Gated attention | 0.478 | 0.735 | 0.410 | 0.756 | 0.538 | 0.354 |
 
-## Files
+## Sensitivity: `sqrt_n_cells`
 
-- Replogle bags:
-  `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/single_cell_bags/replogle_k562_single_cell_bags.npz`.
-- Adamson bags:
-  `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/external/adamson_k562_single_cell_bags/adamson_k562_single_cell_bags.npz`.
-- Checkpoint manifest: `artifacts/model_manifest.parquet`.
-- Replogle and per-fold Adamson metrics: `artifacts/fold_metrics.parquet`.
-- Replogle and per-fold Adamson predictions: `artifacts/predictions.parquet`.
-- Adamson ensemble metrics: `artifacts/external_ensemble_metrics.parquet`.
-- Adamson ensemble predictions: `artifacts/external_ensemble_predictions.parquet`.
+| Feature | Pooling model | Replogle CV Spearman | Adamson Spearman | Adamson heldout Spearman |
+| --- | --- | ---: | ---: | ---: |
+| PCA128 delta | Deep Sets mean | 0.475 | 0.481 | 0.433 |
+| PCA128 delta | Gated attention | 0.465 | 0.470 | 0.374 |
+| scVI128 delta | Deep Sets mean | 0.488 | 0.509 | 0.481 |
+| scVI128 delta | Gated attention | 0.472 | 0.505 | 0.457 |
+| HVG2000 delta | Deep Sets mean | 0.468 | 0.410 | 0.299 |
+| HVG2000 delta | Gated attention | 0.468 | 0.396 | 0.286 |
+
+## Readout
+
+- scVI128 is the best representation in this matrix. It improves Adamson
+  transfer over PCA128 and HVG2000, with the best primary Adamson row from
+  scVI128 gated attention: Spearman `0.552`, AUROC `0.893`, AUPRC `0.725`.
+- Attention pooling does not consistently beat mean pooling within embedding.
+  Unweighted Spearman deltas for attention minus mean are: PCA `-0.013`
+  Replogle / `-0.019` Adamson / `+0.004` heldout; scVI `-0.011` Replogle /
+  `+0.007` Adamson / `-0.005` heldout; HVG `-0.002` Replogle / `-0.002`
+  Adamson / `-0.016` heldout.
+- The original PCA Deep Sets baseline remains a useful floor: Adamson transfer
+  is strong (`0.504` Spearman), but scVI128 gives the clearest gain.
+- HVG2000 does not help in this configuration despite more input dimensions,
+  suggesting the MIL head benefits from a compressed reference embedding.
+- `sqrt_n_cells` weighting is not preferred; it lowers the main Spearman
+  comparisons for most rows.
+- Attention weights are exported for diagnostics of prediction relevance only.
+  They should not be interpreted as causal attribution for cell states.
+
+## Artifacts
+
+All paths below are relative to
+`results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/`.
+
+| Artifact | Path |
+| --- | --- |
+| PCA128 Replogle bags | `features/single_cell_bags/replogle_k562_single_cell_bags.npz` |
+| scVI128 Replogle bags | `features/single_cell_bags/single_cell_scvi_delta/replogle_k562_single_cell_scvi_delta_bags.npz` |
+| HVG2000 Replogle bags | `features/single_cell_bags/single_cell_hvg_delta/replogle_k562_single_cell_hvg_delta_bags.npz` |
+| PCA128 Adamson bags | `features/external/adamson_k562_single_cell_bags/adamson_k562_single_cell_bags.npz` |
+| scVI128 Adamson bags | `features/external/adamson_k562_single_cell_scvi_delta_bags/adamson_k562_single_cell_scvi_delta_bags.npz` |
+| HVG2000 Adamson bags | `features/external/adamson_k562_single_cell_hvg_delta_bags/adamson_k562_single_cell_hvg_delta_bags.npz` |
+| Fold metrics | `runs/attention_mil_20260526_180353/artifacts/fold_metrics.parquet` |
+| Predictions | `runs/attention_mil_20260526_180353/artifacts/predictions.parquet` |
+| External ensemble metrics | `runs/attention_mil_20260526_180353/artifacts/external_ensemble_metrics.parquet` |
+| External ensemble predictions | `runs/attention_mil_20260526_180353/artifacts/external_ensemble_predictions.parquet` |
+| Attention weights | `runs/attention_mil_20260526_180353/artifacts/single_cell_attention_weights.parquet` |
+| scVI/HVG external resume log | `logs/attention_mil_20260526_180353_external_resume_20260526_224836.log` |
