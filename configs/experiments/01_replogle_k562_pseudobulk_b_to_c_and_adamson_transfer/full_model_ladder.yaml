@@ -1,7 +1,7 @@
 data:
-  h5ad_path: /home/richard/projects/VCC/data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad
-  overlap_csv: /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv
-  output_dir: /home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline
+  h5ad_path: data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad
+  overlap_csv: data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv
+  output_dir: results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer
   obs_perturbation_col: gene
   control_label: non-targeting
   var_gene_symbol_col: gene_name
@@ -9,13 +9,26 @@ data:
   matched_label_col: has_depmap_label
   n_cells_col: n_cells_or_pseudobulk
   external_overlap_csvs:
-    - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_adamson_depmap_overlap.csv
-    - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_dixit_depmap_overlap.csv
-    - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_norman_depmap_overlap.csv
-  external_evaluations: []
+    - data/sl_dependency_v0/interim/k562_adamson_depmap_overlap.csv
+  external_evaluations:
+    - name: adamson_k562
+      features_npz: results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/features/external/adamson_k562/adamson_k562_features.npz
+  external_feature_sources:
+    - name: adamson_pilot
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_pilot.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
+    - name: adamson_upr_epistasis
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_upr_epistasis.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
+    - name: adamson_upr_perturb_seq
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_upr_perturb_seq.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
 
 experiment:
-  name: replogle_k562_b_to_c_baseline
+  name: replogle_k562_pseudobulk_full_model_ladder
   seed: 42
   run_id: null
   human_result_tables: [summary_metrics]

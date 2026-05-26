@@ -1,16 +1,31 @@
 data:
-  h5ad_path: /home/richard/projects/VCC/data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad
-  overlap_csv: /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv
-  output_dir: /home/richard/projects/VCC/results/replogle_k562_single_cell_deepsets
+  h5ad_path: data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad
+  overlap_csv: data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv
+  output_dir: results/experiments/03_replogle_k562_single_cell_deepsets_adamson
   obs_perturbation_col: gene
   control_label: non-targeting
   var_gene_symbol_col: gene_name
   depmap_label_col: depmap_gene_effect
   matched_label_col: has_depmap_label
   n_cells_col: n_cells_or_pseudobulk
+  external_overlap_csvs:
+    - data/sl_dependency_v0/interim/k562_adamson_depmap_overlap.csv
+  external_feature_sources:
+    - name: adamson_pilot
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_pilot.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
+    - name: adamson_upr_epistasis
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_upr_epistasis.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
+    - name: adamson_upr_perturb_seq
+      h5ad_path: data/sl_dependency_v0/raw/adamson/adamson_2016_upr_perturb_seq.h5ad
+      obs_perturbation_col: perturbation
+      var_gene_symbol_col: gene_name
 
 experiment:
-  name: replogle_k562_single_cell_deepsets
+  name: replogle_k562_single_cell_deepsets_adamson
   seed: 42
   run_id: null
   human_result_tables: [summary_metrics]

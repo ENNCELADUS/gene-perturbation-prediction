@@ -1,0 +1,92 @@
+data:
+  h5ad_path: data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad
+  overlap_csv: data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv
+  output_dir: results/experiments/02_replogle_k562_viability_axis_audit
+  obs_perturbation_col: gene
+  control_label: non-targeting
+  var_gene_symbol_col: gene_name
+  depmap_label_col: depmap_gene_effect
+  matched_label_col: has_depmap_label
+  n_cells_col: n_cells_or_pseudobulk
+  external_overlap_csvs: []
+  external_evaluations: []
+
+experiment:
+  name: replogle_k562_viability_axis_main
+  seed: 42
+  run_id: null
+  human_result_tables: [summary_metrics]
+  machine_result_format: parquet
+  checkpoint_policy: all_cv_and_final
+  save_predictions: true
+  save_rankings: true
+  save_splits: true
+  topk_candidates: [20, 50, 100]
+
+features:
+  chunk_size: 4096
+  top_abs_delta_sizes: [50, 100, 500]
+
+viability_axis:
+  enabled: true
+  artifacts:
+    - name: achilles
+      url: https://raw.githubusercontent.com/bence-szalai/Cell-death-signatures/master/models/achilles.csv
+      sha256: ea1f1847c6f7d07c06e80f8156e1bd0309dc875285fdc7874356060f3d527793
+    - name: ctrp
+      url: https://raw.githubusercontent.com/bence-szalai/Cell-death-signatures/master/models/ctrp.csv
+      sha256: 1d753ad074c13cdda7669d7c99c9337374f2724856da25f07056ba096f42480f
+
+cv:
+  n_splits: 5
+  n_repeats: 1
+  random_state: 42
+  stratify_bins: 10
+  pca_components: [20, 50, 100]
+  model_set: full
+  essential_thresholds: [-0.5, -1.0]
+
+selection:
+  scopes: [internal_cv_all]
+  features: null
+  models: null
+  folds: null
+  weightings: [unweighted]
+
+models:
+  mean_label:
+    enabled: true
+  ridge:
+    enabled: true
+    alpha: 10.0
+  elastic_net:
+    enabled: true
+    alpha: 0.02
+    l1_ratio: 0.1
+    max_iter: 20000
+    tol: 0.001
+    selection: random
+  pca_ridge:
+    enabled: true
+    components: [20, 50, 100]
+    alpha: 10.0
+  random_forest:
+    enabled: true
+    n_estimators: 300
+    min_samples_leaf: 5
+    n_jobs: -1
+  pca_random_forest:
+    enabled: true
+    components: [20, 50, 100]
+    n_estimators: 300
+    min_samples_leaf: 5
+    n_jobs: -1
+  xgboost:
+    enabled: false
+  nar_viability_axis:
+    enabled: true
+    alpha: 10.0
+    n_score_columns: 2
+    n_estimators: 300
+    min_samples_leaf: 5
+    n_jobs: -1
