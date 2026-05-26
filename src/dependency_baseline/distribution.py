@@ -669,6 +669,7 @@ def _execute_distribution_cv(
                 continue
             train_idx = row_indices[train_local]
             test_idx = row_indices[test_local]
+            gmm_cache: dict[int, GaussianMixture] = {}
             for feature_name in selected_features:
                 del feature_name
                 for model_name in selected_models:
@@ -694,6 +695,7 @@ def _execute_distribution_cv(
                             model_name,
                             weighting,
                             job,
+                            gmm_cache,
                         )
 
 
@@ -709,12 +711,16 @@ def _fit_distribution_fold(
     model_name: str,
     weighting: str,
     job: str,
+    gmm_cache: dict[int, GaussianMixture],
 ) -> None:
     del weighting
     spec = _parse_distribution_model_name(model_name)
     train_bags = tuple(data.bags[index] for index in train_idx)
     test_bags = tuple(data.bags[index] for index in test_idx)
-    gmm = _fit_fold_gmm(config, data, train_idx, spec["k"], fold_index)
+    gmm = gmm_cache.get(spec["k"])
+    if gmm is None:
+        gmm = _fit_fold_gmm(config, data, train_idx, spec["k"], fold_index)
+        gmm_cache[spec["k"]] = gmm
     started = time.perf_counter()
     if spec["family"] == "cloudpred":
         model = CloudPredDistributionRegressor(
