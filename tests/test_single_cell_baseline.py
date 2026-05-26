@@ -20,6 +20,8 @@ from dependency_baseline.config import (
 from dependency_baseline.single_cell import (
     AttentionMILRegressor,
     DeepSetsRegressor,
+    MultiHeadAttentionMILRegressor,
+    _attention_orthogonality_penalty,
     evaluate_single_cell_external,
     run_single_cell_cv,
 )
@@ -139,6 +141,72 @@ def test_attention_mil_regressor_ignores_padding_and_exports_weights() -> None:
     assert padded_indices[0].tolist() == [0, 1]
 
 
+def test_multihead_attention_mil_regressor_exports_head_weights() -> None:
+    train_bags = (
+        np.asarray([[1.0, 0.0], [1.0, 0.0]], dtype=np.float32),
+        np.asarray([[0.0, 1.0], [0.0, 1.0]], dtype=np.float32),
+        np.asarray([[2.0, 0.0], [2.0, 0.0]], dtype=np.float32),
+        np.asarray([[0.0, 2.0], [0.0, 2.0]], dtype=np.float32),
+    )
+    y = np.asarray([-1.0, 1.0, -2.0, 2.0], dtype=np.float32)
+    model = MultiHeadAttentionMILRegressor(
+        input_dim=2,
+        hidden_units=(8,),
+        bag_hidden_units=(8,),
+        attention_heads=4,
+        attention_orthogonality_lambda=0.01,
+        max_cells_per_bag=4,
+        max_epochs=20,
+        patience=5,
+        batch_size=2,
+        random_state=3,
+        device="cpu",
+    )
+    model.fit(train_bags, y)
+
+    original = np.asarray([[1.0, 0.0], [1.0, 0.0]], dtype=np.float32)
+    padded = np.asarray(
+        [[1.0, 0.0], [1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+        dtype=np.float32,
+    )
+
+    pred_original, weights, indices = model.predict_with_attention((original,))
+    pred_padded, padded_weights, padded_indices = model.predict_with_attention(
+        (padded,),
+        observed_counts=np.asarray([2]),
+    )
+
+    np.testing.assert_allclose(pred_original, pred_padded, atol=1e-6)
+    assert weights[0].shape == (4, 2)
+    assert padded_weights[0].shape == (4, 2)
+    np.testing.assert_allclose(weights[0].sum(axis=1), np.ones(4), atol=1e-6)
+    np.testing.assert_allclose(padded_weights[0].sum(axis=1), np.ones(4), atol=1e-6)
+    assert indices[0].tolist() == [0, 1]
+    assert padded_indices[0].tolist() == [0, 1]
+    assert np.isfinite(model.best_validation_orthogonality_penalty_)
+
+
+def test_attention_orthogonality_penalty_prefers_disjoint_heads() -> None:
+    import torch
+
+    mask = torch.ones((1, 4), dtype=torch.bool)
+    identical = torch.tensor(
+        [[[0.7, 0.1, 0.1, 0.1], [0.7, 0.1, 0.1, 0.1]]],
+        dtype=torch.float32,
+    )
+    disjoint = torch.tensor(
+        [[[0.9, 0.1, 0.0, 0.0], [0.0, 0.0, 0.1, 0.9]]],
+        dtype=torch.float32,
+    )
+
+    identical_penalty = _attention_orthogonality_penalty(identical, mask)
+    disjoint_penalty = _attention_orthogonality_penalty(disjoint, mask)
+
+    assert torch.isfinite(identical_penalty)
+    assert torch.isfinite(disjoint_penalty)
+    assert float(disjoint_penalty) < float(identical_penalty)
+
+
 def test_build_cell_bags_supports_hvg_feature_pack(tmp_path: Path) -> None:
     h5ad_path, overlap_path = _write_synthetic_replogle_inputs(tmp_path)
     config = BaselineConfig(
@@ -202,7 +270,11 @@ def test_run_single_cell_cv_writes_comparable_artifacts(tmp_path: Path) -> None:
     predictions = pd.read_parquet(cv_paths.predictions_path)
     model_manifest = pd.read_parquet(cv_paths.model_manifest_path)
     assert set(fold_metrics["feature_set"]) == {"single_cell_pc_delta"}
-    assert {"deepsets_pca3_meanpool", "attnmil_pca3_gated"}.issubset(
+    assert {
+        "deepsets_pca3_meanpool",
+        "attnmil_pca3_gated",
+        "mhattnmil_pca3_gated4_ortho001",
+    }.issubset(
         set(fold_metrics["model"])
     )
     assert {"unweighted", "sqrt_n_cells"}.issubset(set(fold_metrics["weighting"]))
@@ -213,10 +285,21 @@ def test_run_single_cell_cv_writes_comparable_artifacts(tmp_path: Path) -> None:
     attention = pd.read_parquet(
         cv_paths.run_dir / "artifacts" / "single_cell_attention_weights.parquet"
     )
-    assert set(attention["model"]) == {"attnmil_pca3_gated"}
-    assert attention.groupby(["job_key", "perturbation_gene"])[
+    assert {
+        "attnmil_pca3_gated",
+        "mhattnmil_pca3_gated4_ortho001",
+    }.issubset(set(attention["model"]))
+    assert "attention_head" in attention.columns
+    assert attention.groupby(["job_key", "perturbation_gene", "attention_head"])[
         "attention_weight"
     ].sum().between(0.999, 1.001).all()
+    diagnostics = pd.read_parquet(
+        cv_paths.run_dir
+        / "artifacts"
+        / "single_cell_attention_head_diagnostics.parquet"
+    )
+    assert "orthogonality_penalty" in diagnostics.columns
+    assert "mhattnmil_pca3_gated4_ortho001" in set(diagnostics["model"])
 
 
 def test_build_external_cell_bags_merges_adamson_sources_by_gene(

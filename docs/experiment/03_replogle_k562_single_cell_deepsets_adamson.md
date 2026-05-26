@@ -101,3 +101,34 @@ All paths below are relative to
 | External ensemble predictions | `runs/attention_mil_20260526_180353/artifacts/external_ensemble_predictions.parquet` |
 | Attention weights | `runs/attention_mil_20260526_180353/artifacts/single_cell_attention_weights.parquet` |
 | scVI/HVG external resume log | `logs/attention_mil_20260526_180353_external_resume_20260526_224836.log` |
+
+## Planned Extension: Multi-head Gated Attention MIL
+
+The next advanced baseline adds a MultiMIL-style gated attention pooling model
+without changing the cell-state feature construction. It reuses the existing
+PCA128, scVI128, and HVG2000 single-cell delta bag artifacts and trains only the
+new multi-head model:
+
+`cell delta embeddings -> shared phi -> 4 gated attention heads -> concat pooled heads -> rho -> GeneEffect`
+
+Implementation details:
+
+- Config: `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/multihead_attention_mil.yaml`.
+- Models: `mhattnmil_pca128_gated4_ortho001`,
+  `mhattnmil_scvi128_gated4_ortho001`, and
+  `mhattnmil_hvg2000_gated4_ortho001`.
+- Training uses `unweighted` only, `max_cells_per_bag=256`, shared
+  `hidden_units=[128, 64]`, `bag_hidden_units=[64]`, and no gene or cell-line
+  covariates.
+- Orthogonality regularization uses lambda `0.01` on the mean squared
+  off-diagonal cosine similarity between L2-normalized attention maps in each
+  bag.
+- Primary metric is Adamson overall Spearman from checkpoint-only external
+  ensemble evaluation. Adamson target-heldout Spearman, AUROC, AUPRC, and
+  Replogle CV Spearman remain secondary readouts.
+- Attention weights are exported in long format with `attention_head`; each
+  `(job_key, perturbation_gene, attention_head)` sums to 1 over evaluated cells.
+- Head diagnostics are written to
+  `artifacts/single_cell_attention_head_diagnostics.parquet`, including entropy,
+  effective cell count, mean off-diagonal head cosine, and orthogonality
+  penalty.

@@ -62,6 +62,9 @@ class SingleCellConfig:
     max_cells_per_bag: int = 256
     hidden_units: tuple[int, ...] = (128, 64)
     bag_hidden_units: tuple[int, ...] = (64,)
+    attention_heads: int = 4
+    attention_orthogonality_lambda: float = 0.01
+    attention_orthogonality: str = "cosine_squared_offdiag"
     dropout: float = 0.1
     learning_rate: float = 1e-3
     weight_decay: float = 1e-3
@@ -433,6 +436,16 @@ def load_config(path: str | Path) -> BaselineConfig:
             bag_hidden_units=_tuple_int_or_default(
                 single_cell.get("bag_hidden_units"),
                 (64,),
+            ),
+            attention_heads=int(single_cell.get("attention_heads", 4)),
+            attention_orthogonality_lambda=float(
+                single_cell.get("attention_orthogonality_lambda", 0.01),
+            ),
+            attention_orthogonality=str(
+                single_cell.get(
+                    "attention_orthogonality",
+                    "cosine_squared_offdiag",
+                )
             ),
             dropout=float(single_cell.get("dropout", 0.1)),
             learning_rate=float(single_cell.get("learning_rate", 1e-3)),

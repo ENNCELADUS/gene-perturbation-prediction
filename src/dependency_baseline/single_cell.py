@@ -12,6 +12,7 @@ import copy
 import joblib
 import numpy as np
 import pandas as pd
+import torch
 from torch import nn
 
 from dependency_baseline.cell_bags import PCA_FEATURE_SET
@@ -67,6 +68,9 @@ class DeepSetsRegressor:
         input_dim: int,
         hidden_units: tuple[int, ...] = (128, 64),
         bag_hidden_units: tuple[int, ...] = (64,),
+        attention_heads: int = 4,
+        attention_orthogonality_lambda: float = 0.01,
+        attention_orthogonality: str = "cosine_squared_offdiag",
         dropout: float = 0.1,
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-3,
@@ -82,6 +86,9 @@ class DeepSetsRegressor:
         self.input_dim = input_dim
         self.hidden_units = hidden_units
         self.bag_hidden_units = bag_hidden_units
+        self.attention_heads = attention_heads
+        self.attention_orthogonality_lambda = attention_orthogonality_lambda
+        self.attention_orthogonality = attention_orthogonality
         self.dropout = dropout
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
@@ -163,20 +170,31 @@ class DeepSetsRegressor:
                     dtype=torch.float32,
                     device=self.device_,
                 )
-                pred = self.model_(
+                pred, penalty = self._forward_for_loss(
                     x_batch.to(self.device_),
                     mask_batch.to(self.device_),
                 )
-                loss = ((pred - target) ** 2 * weight).sum() / weight.sum()
+                mse_loss = ((pred - target) ** 2 * weight).sum() / weight.sum()
+                loss = self._regularized_loss(mse_loss, penalty)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 losses.append(float(loss.detach().cpu()))
+                self.train_mse_loss_ = float(mse_loss.detach().cpu())
+                self.train_orthogonality_penalty_ = (
+                    float(penalty.detach().cpu()) if penalty is not None else 0.0
+                )
 
             self.train_loss_ = float(np.mean(losses))
-            validation_loss = self._loss_on_indices(bags, y_array, weights, valid_idx)
+            (
+                validation_loss,
+                validation_mse_loss,
+                validation_penalty,
+            ) = self._loss_components_on_indices(bags, y_array, weights, valid_idx)
             if validation_loss < best_loss - 1e-6:
                 best_loss = validation_loss
+                self.best_validation_mse_loss_ = validation_mse_loss
+                self.best_validation_orthogonality_penalty_ = validation_penalty
                 best_state = copy.deepcopy(self.model_.state_dict())
                 stale_epochs = 0
             else:
@@ -190,6 +208,17 @@ class DeepSetsRegressor:
         self.best_epoch_ = int(self.n_epochs_run_ - stale_epochs)
         self.model_.load_state_dict(best_state)
         return self
+
+    def _forward_for_loss(
+        self,
+        x: object,
+        mask: object,
+    ) -> tuple[object, object | None]:
+        return self.model_(x, mask), None
+
+    def _regularized_loss(self, mse_loss: object, penalty: object | None) -> object:
+        del penalty
+        return mse_loss
 
     def _build_module(
         self,
@@ -206,17 +235,19 @@ class DeepSetsRegressor:
             dropout=dropout,
         )
 
-    def _loss_on_indices(
+    def _loss_components_on_indices(
         self,
         bags: CellBags,
         y: np.ndarray,
         sample_weight: np.ndarray,
         indices: np.ndarray,
-    ) -> float:
+    ) -> tuple[float, float, float]:
         import torch
 
         self.model_.eval()
         losses = []
+        mse_losses = []
+        penalties = []
         with torch.no_grad():
             for start in range(0, len(indices), int(self.batch_size)):
                 batch_indices = indices[start : start + int(self.batch_size)]
@@ -236,14 +267,30 @@ class DeepSetsRegressor:
                     dtype=torch.float32,
                     device=self.device_,
                 )
-                pred = self.model_(
+                pred, penalty = self._forward_for_loss(
                     x_batch.to(self.device_),
                     mask_batch.to(self.device_),
                 )
-                loss = ((pred - target) ** 2 * weight).sum() / weight.sum()
+                mse_loss = ((pred - target) ** 2 * weight).sum() / weight.sum()
+                loss = self._regularized_loss(mse_loss, penalty)
                 losses.append(float(loss.cpu()))
+                mse_losses.append(float(mse_loss.cpu()))
+                penalties.append(float(penalty.cpu()) if penalty is not None else 0.0)
         self.model_.train()
-        return float(np.mean(losses))
+        return (
+            float(np.mean(losses)),
+            float(np.mean(mse_losses)),
+            float(np.mean(penalties)),
+        )
+
+    def _loss_on_indices(
+        self,
+        bags: CellBags,
+        y: np.ndarray,
+        sample_weight: np.ndarray,
+        indices: np.ndarray,
+    ) -> float:
+        return self._loss_components_on_indices(bags, y, sample_weight, indices)[0]
 
     def predict(
         self,
@@ -332,6 +379,94 @@ class AttentionMILRegressor(DeepSetsRegressor):
                     valid = mask_np[row_index]
                     attention_weights.append(
                         attn_np[row_index, valid].astype(np.float64)
+                    )
+                    cell_indices.append(index_batch[row_index][valid].astype(np.int64))
+        return (
+            np.concatenate(predictions).astype(np.float64),
+            attention_weights,
+            cell_indices,
+        )
+
+
+class MultiHeadAttentionMILRegressor(AttentionMILRegressor):
+    """Multi-head gated attention MIL regressor for bag-level labels."""
+
+    def _build_module(
+        self,
+        *,
+        input_dim: int,
+        hidden_units: tuple[int, ...],
+        bag_hidden_units: tuple[int, ...],
+        dropout: float,
+    ) -> nn.Module:
+        return _MultiHeadAttentionMILModule(
+            input_dim=input_dim,
+            hidden_units=hidden_units,
+            bag_hidden_units=bag_hidden_units,
+            dropout=dropout,
+            attention_heads=int(self.attention_heads),
+        )
+
+    def _forward_for_loss(
+        self,
+        x: object,
+        mask: object,
+    ) -> tuple[object, object | None]:
+        prediction, attention = self.model_(x, mask, return_attention=True)
+        return prediction, _attention_orthogonality_penalty(attention, mask)
+
+    def _regularized_loss(self, mse_loss: object, penalty: object | None) -> object:
+        if self.attention_orthogonality != "cosine_squared_offdiag":
+            msg = (
+                "Unsupported attention_orthogonality="
+                f"{self.attention_orthogonality!r}"
+            )
+            raise ValueError(msg)
+        if penalty is None:
+            return mse_loss
+        return mse_loss + float(self.attention_orthogonality_lambda) * penalty
+
+    def predict_with_attention(
+        self,
+        bags: CellBags,
+        observed_counts: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray]]:
+        """Predict labels and return K attention maps per evaluated bag."""
+        import torch
+
+        if not hasattr(self, "model_"):
+            msg = (
+                "MultiHeadAttentionMILRegressor must be fitted before "
+                "predict_with_attention"
+            )
+            raise ValueError(msg)
+        self.model_.eval()
+        predictions: list[np.ndarray] = []
+        attention_weights: list[np.ndarray] = []
+        cell_indices: list[np.ndarray] = []
+        counts = None if observed_counts is None else np.asarray(observed_counts)
+        with torch.no_grad():
+            for start in range(0, len(bags), int(self.batch_size)):
+                stop = min(start + int(self.batch_size), len(bags))
+                x_batch, mask_batch, index_batch = _batch_tensors(
+                    bags[start:stop],
+                    max_cells_per_bag=int(self.max_cells_per_bag),
+                    rng=None,
+                    observed_counts=None if counts is None else counts[start:stop],
+                    return_indices=True,
+                )
+                pred, attn = self.model_(
+                    x_batch.to(self.device_),
+                    mask_batch.to(self.device_),
+                    return_attention=True,
+                )
+                predictions.append(pred.cpu().numpy())
+                attn_np = attn.cpu().numpy()
+                mask_np = mask_batch.numpy()
+                for row_index in range(attn_np.shape[0]):
+                    valid = mask_np[row_index]
+                    attention_weights.append(
+                        attn_np[row_index][:, valid].astype(np.float64)
                     )
                     cell_indices.append(index_batch[row_index][valid].astype(np.int64))
         return (
@@ -480,6 +615,13 @@ def evaluate_single_cell_external(
 def load_cell_bag_data(path: Path, config: BaselineConfig) -> CellBagData:
     """Load a single-cell bag artifact pack."""
     del config
+    if not path.exists():
+        msg = (
+            "Missing single-cell bag artifact: "
+            f"{path}. Build or sync the expected PCA/scVI/HVG bag NPZ before "
+            "running single-cell MIL evaluation."
+        )
+        raise FileNotFoundError(msg)
     payload = np.load(path, allow_pickle=True)
     cells = payload["cell_delta_pcs"].astype(np.float32)
     offsets = payload["bag_offsets"].astype(np.int64)
@@ -487,6 +629,9 @@ def load_cell_bag_data(path: Path, config: BaselineConfig) -> CellBagData:
         cells[offsets[index] : offsets[index + 1]] for index in range(len(offsets) - 1)
     )
     metadata_path = path.parent / "feature_metadata.parquet"
+    if not metadata_path.exists():
+        msg = f"Missing single-cell bag metadata: {metadata_path}"
+        raise FileNotFoundError(msg)
     metadata = pd.read_parquet(metadata_path)
     return CellBagData(
         bags=bags,
@@ -567,6 +712,20 @@ def _evaluate_one_external_checkpoint(
                 bag_indices=np.arange(len(external.bags), dtype=np.int64),
                 attention_weights=attention_weights,
                 cell_indices=cell_indices,
+            ),
+        )
+        _append_attention_head_diagnostics(
+            store.run_dir,
+            _attention_head_diagnostics_frame(
+                job_key_value=job,
+                evaluation_scope=evaluation_scope,
+                fold=int(row.fold),
+                feature_set=str(row.feature_set),
+                model_name=model_name,
+                weighting=str(row.weighting),
+                data=external,
+                bag_indices=np.arange(len(external.bags), dtype=np.int64),
+                attention_weights=attention_weights,
             ),
         )
 
@@ -690,6 +849,79 @@ class _AttentionMILModule(nn.Module):
         if return_attention:
             return prediction, attention
         return prediction
+
+
+class _MultiHeadAttentionMILModule(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_units: tuple[int, ...],
+        bag_hidden_units: tuple[int, ...],
+        dropout: float,
+        attention_heads: int,
+    ) -> None:
+        super().__init__()
+        if attention_heads < 2:
+            msg = "attention_heads must be at least 2 for multi-head attention MIL"
+            raise ValueError(msg)
+        self.attention_heads = int(attention_heads)
+        self.phi = _mlp(input_dim, hidden_units, dropout)
+        phi_dim = hidden_units[-1] if hidden_units else input_dim
+        self.attention_v = nn.Linear(phi_dim, self.attention_heads * phi_dim)
+        self.attention_u = nn.Linear(phi_dim, self.attention_heads * phi_dim)
+        self.attention_w = nn.Parameter(torch.empty(self.attention_heads, phi_dim))
+        nn.init.xavier_uniform_(self.attention_w)
+        self.rho = _mlp(
+            self.attention_heads * phi_dim,
+            (*bag_hidden_units, 1),
+            dropout,
+        )
+
+    def forward(
+        self,
+        x: object,
+        mask: object,
+        *,
+        return_attention: bool = False,
+    ) -> object:
+        encoded = self.phi(x)
+        batch_size, n_cells, phi_dim = encoded.shape
+        v = self.attention_v(encoded).view(
+            batch_size,
+            n_cells,
+            self.attention_heads,
+            phi_dim,
+        )
+        u = self.attention_u(encoded).view(
+            batch_size,
+            n_cells,
+            self.attention_heads,
+            phi_dim,
+        )
+        gated = v.tanh() * u.sigmoid()
+        scores = (gated * self.attention_w.view(1, 1, self.attention_heads, phi_dim))
+        scores = scores.sum(dim=-1).permute(0, 2, 1)
+        scores = scores.masked_fill(~mask.unsqueeze(1), -1.0e9)
+        attention = scores.softmax(dim=-1)
+        attention = attention * mask.unsqueeze(1).to(attention.dtype)
+        attention = attention / attention.sum(dim=-1, keepdim=True).clamp_min(1.0e-12)
+        pooled = (attention.unsqueeze(-1) * encoded.unsqueeze(1)).sum(dim=2)
+        prediction = self.rho(pooled.flatten(start_dim=1)).squeeze(-1)
+        if return_attention:
+            return prediction, attention
+        return prediction
+
+
+def _attention_orthogonality_penalty(attention: object, mask: object) -> object:
+    del mask
+    heads = attention.shape[1]
+    if heads < 2:
+        return attention.new_tensor(0.0)
+    normalized = attention / attention.norm(dim=-1, keepdim=True).clamp_min(1.0e-12)
+    gram = normalized @ normalized.transpose(1, 2)
+    eye = torch.eye(heads, dtype=gram.dtype, device=gram.device).unsqueeze(0)
+    off_diag = gram * (1.0 - eye)
+    return off_diag.square().sum() / (attention.shape[0] * heads * (heads - 1))
 
 
 def _mlp(
@@ -843,6 +1075,11 @@ def _fit_single_cell_fold(
         input_dim=data.n_pcs,
         hidden_units=config.single_cell.hidden_units,
         bag_hidden_units=config.single_cell.bag_hidden_units,
+        attention_heads=config.single_cell.attention_heads,
+        attention_orthogonality_lambda=(
+            config.single_cell.attention_orthogonality_lambda
+        ),
+        attention_orthogonality=config.single_cell.attention_orthogonality,
         dropout=config.single_cell.dropout,
         learning_rate=config.single_cell.learning_rate,
         weight_decay=config.single_cell.weight_decay,
@@ -915,6 +1152,28 @@ def _fit_single_cell_fold(
             "torch_best_epoch": getattr(model, "best_epoch_", None),
             "torch_n_epochs_run": getattr(model, "n_epochs_run_", None),
             "torch_best_validation_loss": getattr(model, "best_validation_loss_", None),
+            "torch_train_mse_loss": getattr(model, "train_mse_loss_", None),
+            "torch_train_orthogonality_penalty": getattr(
+                model,
+                "train_orthogonality_penalty_",
+                None,
+            ),
+            "torch_best_validation_mse_loss": getattr(
+                model,
+                "best_validation_mse_loss_",
+                None,
+            ),
+            "torch_best_validation_orthogonality_penalty": getattr(
+                model,
+                "best_validation_orthogonality_penalty_",
+                None,
+            ),
+            "attention_heads": getattr(model, "attention_heads", None),
+            "attention_orthogonality_lambda": getattr(
+                model,
+                "attention_orthogonality_lambda",
+                None,
+            ),
         },
     )
     if _is_attention_model(model_name):
@@ -933,6 +1192,20 @@ def _fit_single_cell_fold(
                 cell_indices=cell_indices,
             ),
         )
+        _append_attention_head_diagnostics(
+            run_dir,
+            _attention_head_diagnostics_frame(
+                job_key_value=job,
+                evaluation_scope=evaluation_scope,
+                fold=fold_index,
+                feature_set=feature_name,
+                model_name=model_name,
+                weighting=weighting,
+                data=data,
+                bag_indices=test_idx,
+                attention_weights=attention_weights,
+            ),
+        )
     LOGGER.info(
         "Completed single-cell CV fold=%s model=%s weighting=%s",
         fold_index,
@@ -946,6 +1219,7 @@ def _model_names(data: CellBagData) -> tuple[str, ...]:
     return (
         f"deepsets_{token}_meanpool",
         f"attnmil_{token}_gated",
+        f"mhattnmil_{token}_gated4_ortho001",
     )
 
 
@@ -960,13 +1234,20 @@ def _feature_token(data: CellBagData) -> str:
 
 
 def _is_attention_model(model_name: str) -> bool:
-    return str(model_name).startswith("attnmil_")
+    return str(model_name).startswith(("attnmil_", "mhattnmil_"))
+
+
+def _is_multihead_attention_model(model_name: str) -> bool:
+    return str(model_name).startswith("mhattnmil_")
 
 
 def _make_single_cell_model(model_name: str, **kwargs: object) -> DeepSetsRegressor:
-    model_cls = (
-        AttentionMILRegressor if _is_attention_model(model_name) else DeepSetsRegressor
-    )
+    if _is_multihead_attention_model(model_name):
+        model_cls = MultiHeadAttentionMILRegressor
+    elif _is_attention_model(model_name):
+        model_cls = AttentionMILRegressor
+    else:
+        model_cls = DeepSetsRegressor
     return model_cls(**kwargs)
 
 
@@ -988,11 +1269,66 @@ def _attention_weight_frame(
         metadata_row = data.metadata.iloc[int(bag_index)]
         feature_row = int(metadata_row.get("feature_row", int(bag_index)))
         gene = str(data.genes[int(bag_index)])
-        for position, weight in zip(
-            cell_indices[local_index],
-            attention_weights[local_index],
-            strict=True,
-        ):
+        weights = np.asarray(attention_weights[local_index], dtype=np.float64)
+        if weights.ndim == 1:
+            weights = weights[None, :]
+        for head_index, head_weights in enumerate(weights):
+            for position, weight in zip(
+                cell_indices[local_index],
+                head_weights,
+                strict=True,
+            ):
+                rows.append(
+                    {
+                        "job_key": job_key_value,
+                        "evaluation_scope": evaluation_scope,
+                        "fold": int(fold),
+                        "feature_set": feature_set,
+                        "model": model_name,
+                        "weighting": weighting,
+                        "perturbation_gene": gene,
+                        "feature_row": feature_row,
+                        "attention_head": int(head_index),
+                        "evaluated_cell_position": int(position),
+                        "attention_weight": float(weight),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def _attention_head_diagnostics_frame(
+    *,
+    job_key_value: str,
+    evaluation_scope: str,
+    fold: int,
+    feature_set: str,
+    model_name: str,
+    weighting: str,
+    data: CellBagData,
+    bag_indices: np.ndarray,
+    attention_weights: list[np.ndarray],
+) -> pd.DataFrame:
+    rows = []
+    for local_index, bag_index in enumerate(bag_indices):
+        weights = np.asarray(attention_weights[local_index], dtype=np.float64)
+        if weights.ndim == 1:
+            weights = weights[None, :]
+        clipped = np.clip(weights, 1.0e-12, 1.0)
+        entropy = -(clipped * np.log(clipped)).sum(axis=1)
+        effective_cells = 1.0 / np.square(weights).sum(axis=1).clip(min=1.0e-12)
+        if weights.shape[0] > 1:
+            norm = np.linalg.norm(weights, axis=1, keepdims=True).clip(min=1.0e-12)
+            gram = (weights / norm) @ (weights / norm).T
+            off_diag = gram[~np.eye(weights.shape[0], dtype=bool)]
+            mean_similarity = float(off_diag.mean())
+            penalty = float(np.square(off_diag).mean())
+        else:
+            mean_similarity = float("nan")
+            penalty = 0.0
+        metadata_row = data.metadata.iloc[int(bag_index)]
+        feature_row = int(metadata_row.get("feature_row", int(bag_index)))
+        gene = str(data.genes[int(bag_index)])
+        for head_index in range(weights.shape[0]):
             rows.append(
                 {
                     "job_key": job_key_value,
@@ -1003,8 +1339,13 @@ def _attention_weight_frame(
                     "weighting": weighting,
                     "perturbation_gene": gene,
                     "feature_row": feature_row,
-                    "evaluated_cell_position": int(position),
-                    "attention_weight": float(weight),
+                    "attention_head": int(head_index),
+                    "attention_entropy": float(entropy[head_index]),
+                    "attention_effective_cell_count": float(
+                        effective_cells[head_index]
+                    ),
+                    "mean_offdiag_head_cosine": mean_similarity,
+                    "orthogonality_penalty": penalty,
                 }
             )
     return pd.DataFrame(rows)
@@ -1017,12 +1358,15 @@ def _append_attention_weights(run_dir: Path, weights: pd.DataFrame) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         existing = pd.read_parquet(path)
+        if "attention_head" not in existing.columns:
+            existing["attention_head"] = 0
         weights = (
             pd.concat([existing, weights], ignore_index=True)
             .drop_duplicates(
                 [
                     "job_key",
                     "perturbation_gene",
+                    "attention_head",
                     "evaluated_cell_position",
                 ],
                 keep="last",
@@ -1030,6 +1374,31 @@ def _append_attention_weights(run_dir: Path, weights: pd.DataFrame) -> None:
             .reset_index(drop=True)
         )
     weights.to_parquet(path, index=False)
+
+
+def _append_attention_head_diagnostics(
+    run_dir: Path,
+    diagnostics: pd.DataFrame,
+) -> None:
+    if diagnostics.empty:
+        return
+    path = run_dir / "artifacts" / "single_cell_attention_head_diagnostics.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = pd.read_parquet(path)
+        diagnostics = (
+            pd.concat([existing, diagnostics], ignore_index=True)
+            .drop_duplicates(
+                [
+                    "job_key",
+                    "perturbation_gene",
+                    "attention_head",
+                ],
+                keep="last",
+            )
+            .reset_index(drop=True)
+        )
+    diagnostics.to_parquet(path, index=False)
 
 
 def _cv_paths(run_dir: Path) -> CvPaths:

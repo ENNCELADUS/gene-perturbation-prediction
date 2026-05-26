@@ -665,7 +665,7 @@ def test_strict_mlp_config_loads_expected_variants() -> None:
 def test_experiment_configs_follow_grouped_layout() -> None:
     config_paths = sorted(Path("configs/experiments").glob("*/*.yaml"))
 
-    assert len(config_paths) == 8
+    assert len(config_paths) == 9
     assert not Path("configs/adamson_k562_external_features.yaml").exists()
 
     for path in config_paths:
@@ -696,6 +696,20 @@ def test_experiment_configs_follow_grouped_layout() -> None:
     assert not single_cell_config.data.external_evaluations
     assert len(single_cell_config.data.external_feature_sources) == 3
     assert "adamson" in single_cell_config.data.external_overlap_csvs[0].name
+
+    multihead_config = load_config(
+        "configs/experiments/"
+        "03_replogle_k562_single_cell_deepsets_adamson/"
+        "multihead_attention_mil.yaml"
+    )
+    assert multihead_config.single_cell.attention_heads == 4
+    assert multihead_config.single_cell.attention_orthogonality_lambda == 0.01
+    assert multihead_config.selection.weightings == ("unweighted",)
+    assert multihead_config.selection.models == (
+        "mhattnmil_pca128_gated4_ortho001",
+        "mhattnmil_scvi128_gated4_ortho001",
+        "mhattnmil_hvg2000_gated4_ortho001",
+    )
 
 
 def test_model_variant_names_are_deterministic(tmp_path: Path) -> None:
