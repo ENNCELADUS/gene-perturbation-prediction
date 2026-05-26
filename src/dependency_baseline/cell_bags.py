@@ -275,6 +275,10 @@ def _build_replogle_scvi_bags(
 
 def _import_scvi() -> object:
     try:
+        import sys
+        import types
+
+        import jax
         import numpy as _np
         import scipy.linalg as _scipy_linalg
 
@@ -282,6 +286,10 @@ def _import_scvi() -> object:
             _scipy_linalg.tril = _np.tril
         if not hasattr(_scipy_linalg, "triu"):
             _scipy_linalg.triu = _np.triu
+        if "jaxlib.xla_extension" not in sys.modules:
+            xla_extension = types.ModuleType("jaxlib.xla_extension")
+            xla_extension.Device = jax.Device
+            sys.modules["jaxlib.xla_extension"] = xla_extension
         import scvi
     except ImportError as error:  # pragma: no cover - depends on optional runtime
         msg = "scvi-tools is required to build single_cell_scvi_delta bags"
