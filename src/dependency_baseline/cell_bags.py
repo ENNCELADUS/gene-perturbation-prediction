@@ -497,14 +497,15 @@ class _ScviProjector:
             raw[:, valid] = _dense_float32(matrix[:, source_indices[valid]])
         query = ad.AnnData(raw)
         query.var_names = self.reference_symbols
-        query_model = scvi.model.SCVI.load_query_data(
-            query,
-            str(self.model_dir),
-            freeze_dropout=True,
-            freeze_expression=True,
-            freeze_batchnorm_encoder=True,
-            freeze_batchnorm_decoder=True,
-        )
+        try:
+            query_model = scvi.model.SCVI.load(str(self.model_dir), adata=query)
+        except Exception as error:
+            msg = (
+                "Frozen scVI external encoding is unsupported for this reference "
+                "model/runtime. Refusing Adamson query fine-tuning; rebuild or "
+                "evaluate a non-scVI feature set instead."
+            )
+            raise RuntimeError(msg) from error
         del source
         return np.asarray(query_model.get_latent_representation(), dtype=np.float32)
 
