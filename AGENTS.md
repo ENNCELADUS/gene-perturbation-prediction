@@ -8,9 +8,7 @@
   dependency and synthetic-lethality target prioritization.
 - **Core task**: Predict DepMap-style CRISPR gene-effect / dependency scores from
   observed or predicted post-perturbation transcriptomic responses.
-- **Current branch state**: `main` is a cleaned rebuild base. Legacy `src/`,
-  `src_tahoe/`, `scripts/`, reports, and historical result folders were removed.
-  Do not assume old pipeline entry points are runnable.
+- **Current branch state**: `main` contains the experiment pipelines.
 - **Role**: Act as a careful junior engineer. Follow **Plan -> Confirm -> Code**
   for non-trivial research or implementation changes.
 
@@ -95,9 +93,13 @@ cell, TCGA, CCLE, or DepMap context evidence before using SL language.
 - `docs/discussion/0408.md`: 2026-04-08 discussion notes.
 - `docs/discussion/0429.md`: 2026-04-29 discussion notes.
 - `docs/data/`: concise dataset cards for downloaded Stage 1 data.
+- `docs/experiment/`: numbered experiment summaries, one markdown file per
+  experiment sequence.
 - `docs/images/core.png`: triangular technical route diagram.
 - `docs/images/roadmap.png`: staged roadmap diagram.
 - `configs/replogle_k562_baseline.yaml`: Replogle K562 B→C baseline config.
+- `configs/replogle_k562_single_cell_deepsets.yaml`: observed single-cell
+  Deep Sets bag baseline config.
 - `src/dependency_baseline/`: implemented feature-building and
   cross-validation baseline package.
 - `tests/`: synthetic-data tests for the baseline package.
