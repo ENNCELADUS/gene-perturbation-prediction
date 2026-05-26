@@ -76,6 +76,34 @@ class SingleCellConfig:
 
 
 @dataclass(frozen=True)
+class DistributionConfig:
+    component_counts: tuple[int, ...] = (32,)
+    sensitivity_component_counts: tuple[int, ...] = (16, 64)
+    covariance_type: str = "diag"
+    prototype_fit_scope: str = "train_genes_plus_controls"
+    feature_blocks: str = "occupancy_first"
+    views: tuple[str, ...] = ("centered", "deltap")
+    weightings: tuple[str, ...] = ("unweighted",)
+    ridge_alphas: tuple[float, ...] = (1.0, 10.0, 100.0)
+    random_forest_n_estimators: int = 300
+    random_forest_min_samples_leaf: int = 5
+    random_forest_n_jobs: int = -1
+    mlp_hidden_units: tuple[int, ...] = (32,)
+    mlp_max_epochs: int = 300
+    mlp_patience: int = 30
+    cloudpred_hidden_units: tuple[int, ...] = (32,)
+    cloudpred_learning_rate: float = 1e-3
+    cloudpred_weight_decay: float = 1e-3
+    cloudpred_max_epochs: int = 300
+    cloudpred_patience: int = 30
+    cloudpred_validation_fraction: float = 0.15
+    cloudpred_batch_size: int = 32
+    max_gmm_fit_cells: int | None = None
+    max_cells_per_bag: int = 512
+    device: str = "auto"
+
+
+@dataclass(frozen=True)
 class ViabilityAxisArtifactConfig:
     name: str
     url: str
@@ -131,6 +159,7 @@ class BaselineConfig:
     experiment: ExperimentConfig = field(default_factory=ExperimentConfig)
     selection: SelectionConfig = field(default_factory=SelectionConfig)
     single_cell: SingleCellConfig = field(default_factory=SingleCellConfig)
+    distribution: DistributionConfig = field(default_factory=DistributionConfig)
     viability_axis: ViabilityAxisConfig = field(default_factory=ViabilityAxisConfig)
     models: dict[str, dict[str, Any]] | None = None
 
@@ -167,6 +196,12 @@ def _tuple_int_or_none(values: Any) -> tuple[int, ...] | None:
     if values is None:
         return None
     return tuple(int(value) for value in values)
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(value)
 
 
 def _tuple_path(values: Any) -> tuple[Path, ...]:
@@ -343,6 +378,7 @@ def load_config(path: str | Path) -> BaselineConfig:
     data = raw.get("data", {})
     features = raw.get("features", {})
     single_cell = raw.get("single_cell", {})
+    distribution = raw.get("distribution", {})
     cv = raw.get("cv", {})
     experiment = raw.get("experiment", {})
     selection = raw.get("selection", {})
@@ -455,6 +491,61 @@ def load_config(path: str | Path) -> BaselineConfig:
             validation_fraction=float(single_cell.get("validation_fraction", 0.15)),
             batch_size=int(single_cell.get("batch_size", 32)),
             device=str(single_cell.get("device", "auto")),
+        ),
+        distribution=DistributionConfig(
+            component_counts=_tuple_int(
+                distribution.get("component_counts"),
+                (32,),
+            ),
+            sensitivity_component_counts=_tuple_int(
+                distribution.get("sensitivity_component_counts"),
+                (16, 64),
+            ),
+            covariance_type=str(distribution.get("covariance_type", "diag")),
+            prototype_fit_scope=str(
+                distribution.get("prototype_fit_scope", "train_genes_plus_controls")
+            ),
+            feature_blocks=str(distribution.get("feature_blocks", "occupancy_first")),
+            views=_tuple_str_or_none(distribution.get("views"))
+            or ("centered", "deltap"),
+            weightings=_tuple_str_or_none(distribution.get("weightings"))
+            or ("unweighted",),
+            ridge_alphas=_tuple_float(
+                distribution.get("ridge_alphas"),
+                (1.0, 10.0, 100.0),
+            ),
+            random_forest_n_estimators=int(
+                distribution.get("random_forest_n_estimators", 300)
+            ),
+            random_forest_min_samples_leaf=int(
+                distribution.get("random_forest_min_samples_leaf", 5)
+            ),
+            random_forest_n_jobs=int(distribution.get("random_forest_n_jobs", -1)),
+            mlp_hidden_units=_tuple_int_or_default(
+                distribution.get("mlp_hidden_units"),
+                (32,),
+            ),
+            mlp_max_epochs=int(distribution.get("mlp_max_epochs", 300)),
+            mlp_patience=int(distribution.get("mlp_patience", 30)),
+            cloudpred_hidden_units=_tuple_int_or_default(
+                distribution.get("cloudpred_hidden_units"),
+                (32,),
+            ),
+            cloudpred_learning_rate=float(
+                distribution.get("cloudpred_learning_rate", 1e-3)
+            ),
+            cloudpred_weight_decay=float(
+                distribution.get("cloudpred_weight_decay", 1e-3)
+            ),
+            cloudpred_max_epochs=int(distribution.get("cloudpred_max_epochs", 300)),
+            cloudpred_patience=int(distribution.get("cloudpred_patience", 30)),
+            cloudpred_validation_fraction=float(
+                distribution.get("cloudpred_validation_fraction", 0.15)
+            ),
+            cloudpred_batch_size=int(distribution.get("cloudpred_batch_size", 32)),
+            max_gmm_fit_cells=_int_or_none(distribution.get("max_gmm_fit_cells")),
+            max_cells_per_bag=int(distribution.get("max_cells_per_bag", 512)),
+            device=str(distribution.get("device", "auto")),
         ),
         viability_axis=_viability_axis_config(raw.get("viability_axis")),
         models=_model_config(raw.get("models"), cv_config),

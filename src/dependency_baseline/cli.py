@@ -12,6 +12,10 @@ from dependency_baseline.config import load_config
 from dependency_baseline.artifacts import organize_artifacts
 from dependency_baseline.cell_bags import build_cell_bags, build_external_cell_bags
 from dependency_baseline.evaluation import fit_final, run_cv, summarize_results
+from dependency_baseline.distribution import (
+    evaluate_distribution_external,
+    run_distribution_cv,
+)
 from dependency_baseline.features import build_external_features, build_features
 from dependency_baseline.single_cell import (
     evaluate_single_cell_external,
@@ -88,6 +92,36 @@ def main() -> None:
     )
     single_cell_external_parser.add_argument("--external-name", default="adamson_k562")
     single_cell_external_parser.add_argument("--feature-set", default=None)
+
+    distribution_cv_parser = subparsers.add_parser("run-distribution-cv")
+    distribution_cv_parser.add_argument("--config", required=True, type=Path)
+    distribution_cv_parser.add_argument("--bags", type=Path, default=None)
+    distribution_cv_parser.add_argument("--run-id", type=str, default=None)
+    distribution_cv_parser.add_argument("--resume", action="store_true")
+    distribution_cv_parser.add_argument("--scope", action="append", default=None)
+    distribution_cv_parser.add_argument("--feature-set", action="append", default=None)
+    distribution_cv_parser.add_argument("--model", action="append", default=None)
+    distribution_cv_parser.add_argument(
+        "--fold",
+        action="append",
+        type=int,
+        default=None,
+    )
+    distribution_cv_parser.add_argument("--weighting", action="append", default=None)
+    distribution_cv_parser.add_argument("--log-file", type=Path, default=None)
+
+    distribution_external_parser = subparsers.add_parser(
+        "evaluate-distribution-external"
+    )
+    distribution_external_parser.add_argument("--config", required=True, type=Path)
+    distribution_external_parser.add_argument("--run-dir", required=True, type=Path)
+    distribution_external_parser.add_argument(
+        "--external-bags",
+        required=True,
+        type=Path,
+    )
+    distribution_external_parser.add_argument("--external-name", default="adamson_k562")
+    distribution_external_parser.add_argument("--feature-set", default=None)
 
     final_parser = subparsers.add_parser("fit-final")
     final_parser.add_argument("--config", required=True, type=Path)
@@ -193,6 +227,36 @@ def main() -> None:
     elif args.command == "evaluate-single-cell-external":
         config = load_config(args.config)
         metrics_path, predictions_path = evaluate_single_cell_external(
+            config,
+            run_dir=args.run_dir,
+            external_bags_npz=args.external_bags,
+            external_name=args.external_name,
+            feature_set=args.feature_set,
+        )
+        print(f"external ensemble metrics: {metrics_path}")
+        print(f"external ensemble predictions: {predictions_path}")
+    elif args.command == "run-distribution-cv":
+        config = load_config(args.config)
+        paths = run_distribution_cv(
+            config,
+            args.bags,
+            run_id=args.run_id,
+            resume=args.resume,
+            selection=_selection_from_args(args),
+            command=tuple(sys.argv),
+            config_path=args.config,
+            log_file=args.log_file,
+        )
+        print(f"run dir: {paths.run_dir}")
+        print(f"fold metrics: {paths.fold_metrics_path}")
+        print(f"summary: {paths.summary_csv}")
+        print(f"predictions: {paths.predictions_path}")
+        print(f"model manifest: {paths.model_manifest_path}")
+        print(f"top-k candidates: {paths.topk_candidates_path}")
+        print(f"log: {paths.log_file}")
+    elif args.command == "evaluate-distribution-external":
+        config = load_config(args.config)
+        metrics_path, predictions_path = evaluate_distribution_external(
             config,
             run_dir=args.run_dir,
             external_bags_npz=args.external_bags,
