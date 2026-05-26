@@ -76,40 +76,52 @@ def build_cell_bags(
         selected_mean = mean[selected_gene_indices]
         selected_std = std[selected_gene_indices]
         if feature_set == PCA_FEATURE_SET:
-            bag_arrays, observed_counts, control_centroid, extra_payload = (
-                _build_replogle_pca_bags(
-                    adata,
-                    obs_labels,
-                    genes,
-                    selected_gene_indices,
-                    selected_mean,
-                    selected_std,
-                    config,
-                )
+            (
+                bag_arrays,
+                observed_counts,
+                control_centroid,
+                control_embeddings,
+                extra_payload,
+            ) = _build_replogle_pca_bags(
+                adata,
+                obs_labels,
+                genes,
+                selected_gene_indices,
+                selected_mean,
+                selected_std,
+                config,
             )
         elif feature_set == HVG_FEATURE_SET:
-            bag_arrays, observed_counts, control_centroid, extra_payload = (
-                _build_replogle_hvg_bags(
-                    adata,
-                    obs_labels,
-                    genes,
-                    selected_gene_indices,
-                    selected_mean,
-                    selected_std,
-                    config,
-                )
+            (
+                bag_arrays,
+                observed_counts,
+                control_centroid,
+                control_embeddings,
+                extra_payload,
+            ) = _build_replogle_hvg_bags(
+                adata,
+                obs_labels,
+                genes,
+                selected_gene_indices,
+                selected_mean,
+                selected_std,
+                config,
             )
         else:
-            bag_arrays, observed_counts, control_centroid, extra_payload = (
-                _build_replogle_scvi_bags(
-                    adata,
-                    obs_labels,
-                    genes,
-                    selected_gene_indices,
-                    selected_symbols,
-                    config,
-                    output_dir,
-                )
+            (
+                bag_arrays,
+                observed_counts,
+                control_centroid,
+                control_embeddings,
+                extra_payload,
+            ) = _build_replogle_scvi_bags(
+                adata,
+                obs_labels,
+                genes,
+                selected_gene_indices,
+                selected_symbols,
+                config,
+                output_dir,
             )
         bag_offsets = [0]
         for count in observed_counts:
@@ -132,6 +144,7 @@ def build_cell_bags(
             hvg_mean=selected_mean.astype(np.float32),
             hvg_std=selected_std.astype(np.float32),
             control_embedding_centroid=control_centroid.astype(np.float32),
+            control_cell_delta_pcs=control_embeddings.astype(np.float32),
             **extra_payload,
         )
     finally:
@@ -166,7 +179,7 @@ def _build_replogle_pca_bags(
     selected_mean: np.ndarray,
     selected_std: np.ndarray,
     config: BaselineConfig,
-) -> tuple[list[np.ndarray], list[int], np.ndarray, dict[str, object]]:
+) -> tuple[list[np.ndarray], list[int], np.ndarray, np.ndarray, dict[str, object]]:
     n_components = min(
         int(config.single_cell.n_pcs),
         int(adata.n_obs),
@@ -180,7 +193,8 @@ def _build_replogle_pca_bags(
         n_components=n_components,
         chunk_size=config.features.chunk_size,
     )
-    bag_arrays, observed_counts, control_centroid = _collect_projected_bags(
+    bag_arrays, observed_counts, control_centroid, control_embeddings = (
+        _collect_projected_bags(
         matrix=adata.X,
         obs_labels=obs_labels,
         genes=genes,
@@ -194,6 +208,7 @@ def _build_replogle_pca_bags(
         control_label=config.data.control_label,
         chunk_size=config.features.chunk_size,
     )
+    )
     payload = {
         "pca_components": pca.components_.astype(np.float32),
         "pca_mean": pca.mean_.astype(np.float32),
@@ -202,7 +217,7 @@ def _build_replogle_pca_bags(
             dtype=np.float32,
         ),
     }
-    return bag_arrays, observed_counts, control_centroid, payload
+    return bag_arrays, observed_counts, control_centroid, control_embeddings, payload
 
 
 def _build_replogle_hvg_bags(
@@ -213,8 +228,9 @@ def _build_replogle_hvg_bags(
     selected_mean: np.ndarray,
     selected_std: np.ndarray,
     config: BaselineConfig,
-) -> tuple[list[np.ndarray], list[int], np.ndarray, dict[str, object]]:
-    bag_arrays, observed_counts, control_centroid = _collect_projected_bags(
+) -> tuple[list[np.ndarray], list[int], np.ndarray, np.ndarray, dict[str, object]]:
+    bag_arrays, observed_counts, control_centroid, control_embeddings = (
+        _collect_projected_bags(
         matrix=adata.X,
         obs_labels=obs_labels,
         genes=genes,
@@ -225,7 +241,8 @@ def _build_replogle_hvg_bags(
         control_label=config.data.control_label,
         chunk_size=config.features.chunk_size,
     )
-    return bag_arrays, observed_counts, control_centroid, {}
+    )
+    return bag_arrays, observed_counts, control_centroid, control_embeddings, {}
 
 
 def _build_replogle_scvi_bags(
@@ -236,7 +253,7 @@ def _build_replogle_scvi_bags(
     selected_symbols: list[str],
     config: BaselineConfig,
     output_dir: Path,
-) -> tuple[list[np.ndarray], list[int], np.ndarray, dict[str, object]]:
+) -> tuple[list[np.ndarray], list[int], np.ndarray, np.ndarray, dict[str, object]]:
     scvi = _import_scvi()
 
     selected = _dense_float32(adata.X[:, selected_gene_indices])
@@ -259,7 +276,12 @@ def _build_replogle_scvi_bags(
     latent = np.asarray(model.get_latent_representation(), dtype=np.float32)
     model_dir = output_dir / "scvi_model"
     model.save(str(model_dir), overwrite=True, save_anndata=False)
-    bag_arrays, observed_counts, control_centroid = _collect_latent_bags(
+    (
+        bag_arrays,
+        observed_counts,
+        control_centroid,
+        control_embeddings,
+    ) = _collect_latent_bags(
         latent,
         obs_labels,
         genes,
@@ -270,7 +292,7 @@ def _build_replogle_scvi_bags(
         "scvi_latent_dim": np.asarray(int(config.single_cell.scvi_latent_dim)),
         "scvi_tools_version": np.asarray(getattr(scvi, "__version__", "unknown")),
     }
-    return bag_arrays, observed_counts, control_centroid, payload
+    return bag_arrays, observed_counts, control_centroid, control_embeddings, payload
 
 
 def _import_scvi() -> object:
@@ -330,11 +352,12 @@ def build_external_cell_bags(
     overlap = pd.read_csv(overlap_path)
     numeric_overlap = _numeric_training_rows(overlap, config)
     source_rows: list[pd.DataFrame] = []
-    source_bags: list[list[np.ndarray]] = []
+    source_bags: list[np.ndarray] = []
+    source_control_bags: list[np.ndarray] = []
     source_qa = []
     for source in _external_sources(config, external_name):
         source_overlap = _external_source_overlap(numeric_overlap, source.name)
-        rows, bags, qa = _build_external_cell_source_rows(
+        rows, bags, control_bag, qa = _build_external_cell_source_rows(
             source=source,
             overlap=source_overlap,
             depmap_label_col=config.data.depmap_label_col,
@@ -348,18 +371,26 @@ def build_external_cell_bags(
         if rows.empty:
             continue
         source_rows.append(rows)
-        source_bags.extend([[bag] for bag in bags])
+        source_bags.extend(bags)
+        source_control_bags.extend(
+            [control_bag.astype(np.float32) for _bag in bags]
+        )
 
     if not source_rows:
         msg = "No configured external source produced numeric single-cell bags"
         raise ValueError(msg)
     row_metadata = pd.concat(source_rows, ignore_index=True)
-    flat_bags = [bags[0] for bags in source_bags]
-    metadata, gene_bags = _aggregate_external_cell_gene_rows(row_metadata, flat_bags)
+    metadata, gene_bags = _aggregate_external_cell_gene_rows(row_metadata, source_bags)
     bag_offsets = [0]
     for bag in gene_bags:
         bag_offsets.append(bag_offsets[-1] + bag.shape[0])
     cell_embeddings = np.vstack(gene_bags).astype(np.float32)
+    source_bag_offsets = [0]
+    for bag in source_bags:
+        source_bag_offsets.append(source_bag_offsets[-1] + bag.shape[0])
+    source_control_offsets = [0]
+    for bag in source_control_bags:
+        source_control_offsets.append(source_control_offsets[-1] + bag.shape[0])
 
     metadata["feature_row"] = np.arange(len(metadata))
     metadata.to_parquet(metadata_path, index=False)
@@ -377,6 +408,19 @@ def build_external_cell_bags(
         external_row_count=metadata["external_row_count"].to_numpy(dtype=np.int32),
         reference_bags_npz=str(reference_bags_npz),
         selected_gene_symbol=np.asarray(reference_symbols, dtype=object),
+        source_cell_delta_pcs=np.vstack(source_bags).astype(np.float32),
+        source_bag_offsets=np.asarray(source_bag_offsets, dtype=np.int64),
+        source_control_cell_delta_pcs=np.vstack(source_control_bags).astype(np.float32),
+        source_control_offsets=np.asarray(source_control_offsets, dtype=np.int64),
+        source_perturbation_gene=row_metadata["perturbation_gene"]
+        .astype(str)
+        .to_numpy(dtype=object),
+        source_dataset_by_row=row_metadata["source_dataset"]
+        .astype(str)
+        .to_numpy(dtype=object),
+        source_observed_n_cells=row_metadata["observed_n_cells"].to_numpy(
+            dtype=np.float32
+        ),
     )
     summary = {
         "external_name": external_name,
@@ -595,9 +639,10 @@ def _collect_projected_bags(
     projector: object,
     control_label: str,
     chunk_size: int,
-) -> tuple[list[np.ndarray], list[int], np.ndarray]:
+) -> tuple[list[np.ndarray], list[int], np.ndarray, np.ndarray]:
     group_to_index = {gene: index for index, gene in enumerate(genes)}
     grouped_embeddings: list[list[np.ndarray]] = [[] for _gene in genes]
+    control_chunks: list[np.ndarray] = []
     control_sum: np.ndarray | None = None
     control_count = 0
     for start in range(0, matrix.shape[0], chunk_size):
@@ -616,7 +661,9 @@ def _collect_projected_bags(
             control_sum = np.zeros(embeddings.shape[1], dtype=np.float64)
         control_mask = labels == control_label
         if np.any(control_mask):
-            control_sum += embeddings[control_mask].sum(axis=0, dtype=np.float64)
+            control_values = embeddings[control_mask].astype(np.float32)
+            control_chunks.append(control_values)
+            control_sum += control_values.sum(axis=0, dtype=np.float64)
             control_count += int(control_mask.sum())
         for gene, group_index in group_to_index.items():
             mask = labels == gene
@@ -626,6 +673,9 @@ def _collect_projected_bags(
         msg = f"Control label {control_label!r} has no cells"
         raise ValueError(msg)
     control_centroid = control_sum / float(control_count)
+    control_embeddings = (
+        np.vstack(control_chunks).astype(np.float32) - control_centroid[None, :]
+    ).astype(np.float32)
     bag_arrays = []
     observed_counts = []
     for gene, chunks in zip(genes, grouped_embeddings, strict=True):
@@ -635,7 +685,7 @@ def _collect_projected_bags(
         embeddings = np.vstack(chunks).astype(np.float32)
         observed_counts.append(int(embeddings.shape[0]))
         bag_arrays.append((embeddings - control_centroid[None, :]).astype(np.float32))
-    return bag_arrays, observed_counts, control_centroid
+    return bag_arrays, observed_counts, control_centroid, control_embeddings
 
 
 def _collect_latent_bags(
@@ -644,12 +694,15 @@ def _collect_latent_bags(
     genes: list[str],
     *,
     control_label: str,
-) -> tuple[list[np.ndarray], list[int], np.ndarray]:
+) -> tuple[list[np.ndarray], list[int], np.ndarray, np.ndarray]:
     control_mask = obs_labels == control_label
     if not np.any(control_mask):
         msg = f"Control label {control_label!r} has no cells"
         raise ValueError(msg)
     control_centroid = latent[control_mask].mean(axis=0, dtype=np.float64)
+    control_embeddings = (
+        latent[control_mask].astype(np.float32) - control_centroid[None, :]
+    ).astype(np.float32)
     bag_arrays = []
     observed_counts = []
     for gene in genes:
@@ -660,7 +713,7 @@ def _collect_latent_bags(
         values = latent[mask].astype(np.float32)
         observed_counts.append(int(values.shape[0]))
         bag_arrays.append((values - control_centroid[None, :]).astype(np.float32))
-    return bag_arrays, observed_counts, control_centroid
+    return bag_arrays, observed_counts, control_centroid, control_embeddings
 
 
 def _collect_pc_bags(
@@ -790,7 +843,7 @@ def _build_external_cell_source_rows(
     reference_std: np.ndarray,
     projector: object,
     chunk_size: int,
-) -> tuple[pd.DataFrame, list[np.ndarray], dict[str, object]]:
+) -> tuple[pd.DataFrame, list[np.ndarray], np.ndarray, dict[str, object]]:
     adata = ad.read_h5ad(source.h5ad_path, backed="r")
     try:
         label_col = _source_perturbation_label_col(overlap)
@@ -813,7 +866,7 @@ def _build_external_cell_source_rows(
                 source_indices,
                 reference_mean,
             )
-            rows, bags, control_count = _external_rows_from_embeddings(
+            rows, bags, control_bag, control_count = _external_rows_from_embeddings(
                 embeddings=latent,
                 obs_labels=obs_labels,
                 control_label=control_label,
@@ -836,13 +889,14 @@ def _build_external_cell_source_rows(
                     sum(index < 0 for index in source_indices)
                 ),
             }
-            return pd.DataFrame(rows), bags, qa
+            return pd.DataFrame(rows), bags, control_bag, qa
 
         first_projected = projector.transform(
             np.zeros((1, len(reference_symbols)), dtype=np.float32)
         )
         control_sum = np.zeros(first_projected.shape[1], dtype=np.float64)
         control_count = 0
+        control_chunks: list[np.ndarray] = []
         grouped: list[list[np.ndarray]] = [[] for _label in labels]
         label_to_index = {label: index for index, label in enumerate(labels)}
         for start in range(0, adata.n_obs, chunk_size):
@@ -859,7 +913,9 @@ def _build_external_cell_source_rows(
             )
             control_mask = block_labels == control_label
             if np.any(control_mask):
-                control_sum += pcs[control_mask].sum(axis=0, dtype=np.float64)
+                control_values = pcs[control_mask].astype(np.float32)
+                control_chunks.append(control_values)
+                control_sum += control_values.sum(axis=0, dtype=np.float64)
                 control_count += int(control_mask.sum())
             for label, index in label_to_index.items():
                 mask = block_labels == label
@@ -869,6 +925,9 @@ def _build_external_cell_source_rows(
             msg = f"Control label {control_label!r} has no cells in {source.name}"
             raise ValueError(msg)
         control_centroid = control_sum / float(control_count)
+        control_bag = (
+            np.vstack(control_chunks).astype(np.float32) - control_centroid[None, :]
+        ).astype(np.float32)
         rows = []
         bags = []
         for label, chunks in zip(labels, grouped, strict=True):
@@ -899,7 +958,7 @@ def _build_external_cell_source_rows(
             "matched_reference_hvgs": int(sum(index >= 0 for index in source_indices)),
             "missing_reference_hvgs": int(sum(index < 0 for index in source_indices)),
         }
-        return pd.DataFrame(rows), bags, qa
+        return pd.DataFrame(rows), bags, control_bag, qa
     finally:
         adata.file.close()
 
@@ -946,12 +1005,15 @@ def _external_rows_from_embeddings(
     label_metadata: pd.DataFrame,
     source_name: str,
     depmap_label_col: str,
-) -> tuple[list[dict[str, object]], list[np.ndarray], int]:
+) -> tuple[list[dict[str, object]], list[np.ndarray], np.ndarray, int]:
     control_mask = obs_labels == control_label
     if not np.any(control_mask):
         msg = f"Control label {control_label!r} has no cells in {source_name}"
         raise ValueError(msg)
     control_centroid = embeddings[control_mask].mean(axis=0, dtype=np.float64)
+    control_bag = (
+        embeddings[control_mask].astype(np.float32) - control_centroid[None, :]
+    ).astype(np.float32)
     rows = []
     bags = []
     for label in labels:
@@ -971,7 +1033,7 @@ def _external_rows_from_embeddings(
                 depmap_label_col: float(label_metadata.loc[label, depmap_label_col]),
             }
         )
-    return rows, bags, int(control_mask.sum())
+    return rows, bags, control_bag, int(control_mask.sum())
 
 
 def _aggregate_external_cell_gene_rows(

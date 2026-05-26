@@ -13,9 +13,17 @@ from dependency_baseline.config import (
     BaselineConfig,
     CvConfig,
     DataConfig,
+    DistributionConfig,
     ExternalFeatureSourceConfig,
     FeatureConfig,
     SingleCellConfig,
+)
+from dependency_baseline.distribution import (
+    _features_for_bags,
+    _fit_fold_gmm,
+    evaluate_distribution_external,
+    load_distribution_bag_data,
+    run_distribution_cv,
 )
 from dependency_baseline.single_cell import (
     AttentionMILRegressor,
@@ -61,6 +69,11 @@ def test_build_cell_bags_creates_aligned_single_cell_artifacts(
     assert payload["cell_delta_pcs"].shape[0] == 18
     assert payload["cell_delta_pcs"].shape[1] <= 5
     assert payload["bag_offsets"].tolist() == [0, 3, 6, 9, 12, 15, 18]
+    assert payload["control_cell_delta_pcs"].shape[0] == 4
+    assert (
+        payload["control_cell_delta_pcs"].shape[1]
+        == payload["cell_delta_pcs"].shape[1]
+    )
     np.testing.assert_allclose(payload["y"], metadata["depmap_gene_effect"].to_numpy())
     assert (
         payload["perturbation_gene"].astype(str).tolist()
@@ -349,6 +362,13 @@ def test_build_external_cell_bags_merges_adamson_sources_by_gene(
     assert metadata["observed_n_cells"].tolist() == [4, 2]
     assert metadata["external_row_count"].tolist() == [2, 1]
     assert metadata["source_dataset"].tolist() == ["source_a;source_b", "source_b"]
+    assert payload["source_bag_offsets"].tolist() == [0, 2, 4, 6]
+    assert payload["source_control_offsets"].tolist() == [0, 2, 4, 6]
+    assert payload["source_perturbation_gene"].astype(str).tolist() == [
+        "GENE1",
+        "GENE1",
+        "GENE2",
+    ]
 
 
 def test_build_external_scvi_cell_bags_uses_frozen_reference_model(
@@ -510,6 +530,113 @@ def test_evaluate_single_cell_external_uses_existing_checkpoints_only(
     }.issubset(set(ensemble_metrics["evaluation_scope"]))
     assert ensemble_predictions["perturbation_gene"].nunique() == 2
     assert ensemble_predictions["ensemble_size"].min() >= 1
+
+
+def test_distribution_features_and_fold_gmm_are_fold_local(tmp_path: Path) -> None:
+    h5ad_path, overlap_path = _write_synthetic_replogle_inputs(tmp_path)
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+        ),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
+        single_cell=SingleCellConfig(n_hvg=5, n_pcs=3),
+        distribution=DistributionConfig(
+            component_counts=(2,),
+            sensitivity_component_counts=(),
+            max_gmm_fit_cells=12,
+        ),
+    )
+    bag_paths = build_cell_bags(config)
+    data = load_distribution_bag_data(bag_paths.bags_npz, config)
+    train_idx = np.asarray([0, 1, 2], dtype=np.int64)
+    test_genes = set(data.genes[[3, 4, 5]].astype(str))
+
+    gmm = _fit_fold_gmm(config, data, train_idx, n_components=2, fold_index=0)
+    centered = _features_for_bags(gmm, data.bags[:2], "centered", np.zeros(6))
+    control = _features_for_bags(gmm, (data.control_bag,), "centered", np.zeros(6))[0]
+    deltap = _features_for_bags(gmm, data.bags[:2], "deltap", control)
+
+    assert centered.shape == (2, 6)
+    assert deltap.shape == (2, 8)
+    assert test_genes.isdisjoint(set(gmm.fit_gene_names_.astype(str)))
+
+
+def test_run_distribution_cv_and_external_writes_artifacts(tmp_path: Path) -> None:
+    reference_h5ad, reference_overlap = _write_synthetic_replogle_inputs(tmp_path)
+    source_a, source_b, external_overlap = _write_synthetic_external_cell_inputs(
+        tmp_path
+    )
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=reference_h5ad,
+            overlap_csv=reference_overlap,
+            output_dir=tmp_path / "outputs",
+            external_overlap_csvs=(external_overlap,),
+            external_feature_sources=(
+                ExternalFeatureSourceConfig(
+                    name="source_a",
+                    h5ad_path=source_a,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+                ExternalFeatureSourceConfig(
+                    name="source_b",
+                    h5ad_path=source_b,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+            ),
+        ),
+        features=FeatureConfig(chunk_size=2),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
+        single_cell=SingleCellConfig(n_hvg=5, n_pcs=3),
+        distribution=DistributionConfig(
+            component_counts=(2,),
+            sensitivity_component_counts=(),
+            ridge_alphas=(1.0,),
+            random_forest_n_estimators=5,
+            cloudpred_max_epochs=2,
+            cloudpred_patience=1,
+            cloudpred_batch_size=2,
+            cloudpred_hidden_units=(4,),
+            max_cells_per_bag=4,
+            max_gmm_fit_cells=16,
+            device="cpu",
+        ),
+    )
+    reference_paths = build_cell_bags(config)
+    cv_paths = run_distribution_cv(config, reference_paths.bags_npz, run_id="dist")
+    external_paths = build_external_cell_bags(
+        config,
+        reference_paths.bags_npz,
+        external_name="adamson_k562",
+    )
+
+    evaluate_distribution_external(
+        config,
+        run_dir=cv_paths.run_dir,
+        external_bags_npz=external_paths.bags_npz,
+        external_name="adamson_k562",
+    )
+
+    fold_metrics = pd.read_parquet(cv_paths.fold_metrics_path)
+    manifest = pd.read_parquet(cv_paths.model_manifest_path)
+    ensemble_metrics = pd.read_parquet(
+        cv_paths.run_dir / "artifacts" / "external_ensemble_metrics.parquet"
+    )
+    assert {
+        "gmm_pca3_k2_centered_ridge_alpha1",
+        "gmm_pca3_k2_deltap_rf",
+        "cloudpred_pca3_k2_centered",
+        "cloudpred_pca3_k2_deltap",
+    }.issubset(set(fold_metrics["model"]))
+    assert manifest["checkpoint_path"].map(lambda value: Path(value).exists()).all()
+    assert {
+        "external_ensemble:adamson_k562",
+        "external_ensemble_target_heldout:adamson_k562",
+    }.issubset(set(ensemble_metrics["evaluation_scope"]))
 
 
 def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:
