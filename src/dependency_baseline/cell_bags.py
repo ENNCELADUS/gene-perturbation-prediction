@@ -237,11 +237,7 @@ def _build_replogle_scvi_bags(
     config: BaselineConfig,
     output_dir: Path,
 ) -> tuple[list[np.ndarray], list[int], np.ndarray, dict[str, object]]:
-    try:
-        import scvi
-    except ImportError as error:  # pragma: no cover - depends on optional runtime
-        msg = "scvi-tools is required to build single_cell_scvi_delta bags"
-        raise ImportError(msg) from error
+    scvi = _import_scvi()
 
     selected = _dense_float32(adata.X[:, selected_gene_indices])
     scvi_adata = ad.AnnData(selected)
@@ -275,6 +271,22 @@ def _build_replogle_scvi_bags(
         "scvi_tools_version": np.asarray(getattr(scvi, "__version__", "unknown")),
     }
     return bag_arrays, observed_counts, control_centroid, payload
+
+
+def _import_scvi() -> object:
+    try:
+        import numpy as _np
+        import scipy.linalg as _scipy_linalg
+
+        if not hasattr(_scipy_linalg, "tril"):
+            _scipy_linalg.tril = _np.tril
+        if not hasattr(_scipy_linalg, "triu"):
+            _scipy_linalg.triu = _np.triu
+        import scvi
+    except ImportError as error:  # pragma: no cover - depends on optional runtime
+        msg = "scvi-tools is required to build single_cell_scvi_delta bags"
+        raise ImportError(msg) from error
+    return scvi
 
 
 def build_external_cell_bags(
@@ -469,11 +481,7 @@ class _ScviProjector:
         source_indices: np.ndarray,
         reference_mean: np.ndarray,
     ) -> np.ndarray:
-        try:
-            import scvi
-        except ImportError as error:  # pragma: no cover - depends on optional runtime
-            msg = "scvi-tools is required to build external single_cell_scvi_delta bags"
-            raise ImportError(msg) from error
+        scvi = _import_scvi()
 
         raw = np.tile(reference_mean[None, :], (matrix.shape[0], 1)).astype(np.float32)
         valid = source_indices >= 0
