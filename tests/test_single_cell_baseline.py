@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import anndata as ad
 import numpy as np
 import pandas as pd
 
+from dependency_baseline import cell_bags as cell_bag_module
 from dependency_baseline.cell_bags import build_cell_bags, build_external_cell_bags
 from dependency_baseline.config import (
     BaselineConfig,
@@ -264,6 +266,94 @@ def test_build_external_cell_bags_merges_adamson_sources_by_gene(
     assert metadata["observed_n_cells"].tolist() == [4, 2]
     assert metadata["external_row_count"].tolist() == [2, 1]
     assert metadata["source_dataset"].tolist() == ["source_a;source_b", "source_b"]
+
+
+def test_build_external_scvi_cell_bags_uses_frozen_reference_model(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    reference_h5ad, reference_overlap = _write_synthetic_replogle_inputs(tmp_path)
+    source_a, source_b, external_overlap = _write_synthetic_external_cell_inputs(
+        tmp_path
+    )
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=reference_h5ad,
+            overlap_csv=reference_overlap,
+            output_dir=tmp_path / "outputs",
+            external_overlap_csvs=(external_overlap,),
+            external_feature_sources=(
+                ExternalFeatureSourceConfig(
+                    name="source_a",
+                    h5ad_path=source_a,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+                ExternalFeatureSourceConfig(
+                    name="source_b",
+                    h5ad_path=source_b,
+                    obs_perturbation_col="perturbation",
+                    var_gene_symbol_col="gene_name",
+                ),
+            ),
+        ),
+        features=FeatureConfig(chunk_size=2),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
+        single_cell=SingleCellConfig(n_hvg=5, n_pcs=3),
+    )
+    model_dir = tmp_path / "scvi_model"
+    model_dir.mkdir()
+    reference_bags = tmp_path / "reference_scvi_bags.npz"
+    np.savez_compressed(
+        reference_bags,
+        feature_set=np.asarray("single_cell_scvi_delta", dtype=object),
+        selected_gene_symbol=np.asarray(
+            ["GENE1", "GENE2", "GENE3", "GENE4", "HOUSE"],
+            dtype=object,
+        ),
+        hvg_mean=np.ones(5, dtype=np.float32),
+        hvg_std=np.ones(5, dtype=np.float32),
+        scvi_model_dir=np.asarray(str(model_dir), dtype=object),
+    )
+    calls = []
+
+    class FakeScviModel:
+        def __init__(self, adata: ad.AnnData) -> None:
+            self.adata = adata
+
+        def get_latent_representation(self) -> np.ndarray:
+            return np.asarray(self.adata.X[:, :3], dtype=np.float32)
+
+    class FakeScvi:
+        @staticmethod
+        def load(path: str, adata: ad.AnnData) -> FakeScviModel:
+            calls.append((path, adata.n_obs, adata.n_vars))
+            return FakeScviModel(adata)
+
+        @staticmethod
+        def load_query_data(*_args, **_kwargs):
+            raise AssertionError("query fine-tuning path should not be used")
+
+    monkeypatch.setattr(
+        cell_bag_module,
+        "_import_scvi",
+        lambda: SimpleNamespace(model=SimpleNamespace(SCVI=FakeScvi)),
+    )
+
+    external_paths = build_external_cell_bags(
+        config,
+        reference_bags,
+        external_name="adamson_k562",
+        feature_set="single_cell_scvi_delta",
+    )
+
+    payload = np.load(external_paths.bags_npz, allow_pickle=True)
+    metadata = pd.read_parquet(external_paths.metadata_path)
+    assert str(payload["feature_set"].item()) == "single_cell_scvi_delta"
+    assert payload["cell_delta_pcs"].shape == (6, 3)
+    assert payload["bag_offsets"].tolist() == [0, 4, 6]
+    assert metadata["observed_n_cells"].tolist() == [4, 2]
+    assert calls == [(str(model_dir), 4, 5), (str(model_dir), 6, 5)]
 
 
 def test_evaluate_single_cell_external_uses_existing_checkpoints_only(
