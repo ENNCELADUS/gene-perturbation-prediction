@@ -2,11 +2,19 @@
 
 Run dates: 2026-05-14 to 2026-05-24
 
-Remote result paths:
+Canonical remote result path after the 2026-05-26 artifact reorganization:
 
-- Replogle CV baseline: `results/replogle_k562_b_to_c_baseline`
-- Adamson external ensemble:
-  `results/replogle_k562_adamson_ensemble/runs/replogle_train_val_adamson_ensemble_20260524`
+- Replogle 5-fold CV and Adamson external ensemble:
+  `results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/runs/replogle_train_val_adamson_ensemble_20260524`
+
+Configs:
+
+- Full model ladder:
+  `configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml`
+- Adamson transfer grid:
+  `configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/adamson_transfer_grid.yaml`
+- Strict MLP variant:
+  `configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/strict_mlp.yaml`
 
 ## Run Setup
 
@@ -64,12 +72,10 @@ Adamson was not used for model selection.
 
 ## Files
 
-- Replogle CV: `summary_metrics.csv`, `fold_metrics.parquet`,
-  `predictions.parquet`, and model checkpoints under
-  `results/replogle_k562_b_to_c_baseline`.
-- Adamson transfer: `results/summary_metrics.csv`,
+- Replogle CV and Adamson transfer: `results/summary_metrics.csv`,
   `results/external_ensemble_metrics.csv`,
   `artifacts/external_ensemble_predictions.parquet`,
   `artifacts/external_ensemble_metrics.parquet`,
   `artifacts/fold_metrics.parquet`, `artifacts/predictions.parquet`, and
-  `artifacts/splits.parquet` under the Adamson ensemble run.
+  `artifacts/splits.parquet` under
+  `results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/runs/replogle_train_val_adamson_ensemble_20260524`.

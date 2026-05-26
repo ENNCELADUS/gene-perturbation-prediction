@@ -60,10 +60,17 @@ Primary proof-of-concept:
 Current implemented pseudobulk baseline:
 
 ```bash
-uv run vcc-dep-baseline build-features --config configs/replogle_k562_baseline.yaml
-uv run vcc-dep-baseline run-cv --config configs/replogle_k562_baseline.yaml
-RUN_DIR=$(cat /home/richard/projects/VCC/results/replogle_k562_b_to_c_baseline/latest_run.txt)
-uv run vcc-dep-baseline fit-final --config configs/replogle_k562_baseline.yaml --run-id "$(basename "$RUN_DIR")"
+PSEUDOBULK_CONFIG=configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
+PSEUDOBULK_FEATURES=results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/features/replogle_k562_delta_features.npz
+
+uv run vcc-dep-baseline build-features --config "$PSEUDOBULK_CONFIG"
+uv run vcc-dep-baseline build-external-features \
+  --config "$PSEUDOBULK_CONFIG" \
+  --reference-features "$PSEUDOBULK_FEATURES" \
+  --external-name adamson_k562
+uv run vcc-dep-baseline run-cv --config "$PSEUDOBULK_CONFIG"
+RUN_DIR=$(cat results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/latest_run.txt)
+uv run vcc-dep-baseline fit-final --config "$PSEUDOBULK_CONFIG" --run-id "$(basename "$RUN_DIR")"
 uv run vcc-dep-baseline summarize --results-dir "$RUN_DIR"
 ```
 
@@ -92,16 +99,18 @@ live in `output_dir/features/`.
 Current implemented single-cell bag baseline:
 
 ```bash
-uv run vcc-dep-baseline build-cell-bags --config configs/replogle_k562_single_cell_deepsets.yaml
-uv run vcc-dep-baseline run-single-cell-cv --config configs/replogle_k562_single_cell_deepsets.yaml
+SINGLE_CELL_CONFIG=configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
+
+uv run vcc-dep-baseline build-cell-bags --config "$SINGLE_CELL_CONFIG"
+uv run vcc-dep-baseline run-single-cell-cv --config "$SINGLE_CELL_CONFIG"
 uv run vcc-dep-baseline build-external-cell-bags \
-  --config configs/replogle_k562_single_cell_deepsets.yaml \
-  --reference-bags results/replogle_k562_single_cell_deepsets/features/single_cell_bags/replogle_k562_single_cell_bags.npz \
+  --config "$SINGLE_CELL_CONFIG" \
+  --reference-bags results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/single_cell_bags/replogle_k562_single_cell_bags.npz \
   --external-name adamson_k562
 uv run vcc-dep-baseline evaluate-single-cell-external \
-  --config configs/replogle_k562_single_cell_deepsets.yaml \
-  --run-dir results/replogle_k562_single_cell_deepsets/runs/<run_id> \
-  --external-bags results/replogle_k562_single_cell_deepsets/features/external/adamson_k562_single_cell_bags/adamson_k562_single_cell_bags.npz \
+  --config "$SINGLE_CELL_CONFIG" \
+  --run-dir results/experiments/03_replogle_k562_single_cell_deepsets_adamson/runs/<run_id> \
+  --external-bags results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/external/adamson_k562_single_cell_bags/adamson_k562_single_cell_bags.npz \
   --external-name adamson_k562
 ```
 
@@ -208,9 +217,9 @@ Project assets:
   experiment sequence.
 - `docs/images/core.png`: triangular technical framing diagram.
 - `docs/images/roadmap.png`: staged project roadmap diagram.
-- `configs/replogle_k562_baseline.yaml`: Replogle K562 B→C baseline config.
-- `configs/replogle_k562_single_cell_deepsets.yaml`: observed single-cell
-  Deep Sets bag baseline config.
+- `configs/experiments/`: experiment-grouped YAML configs aligned with
+  `docs/experiment/`; Adamson held-out test settings live inside the experiment
+  configs that use Adamson.
 - `src/dependency_baseline/`: feature building and CV baseline package.
 - `tests/`: synthetic-data tests for the baseline package.
 - `data/norman/splits/`: retained Norman split metadata.
@@ -237,7 +246,7 @@ Use `uv run` for Python tooling:
 uv run ruff check .
 uv run ruff format .
 uv run python -m pytest
-uv run vcc-dep-baseline build-features --config configs/replogle_k562_baseline.yaml
+uv run vcc-dep-baseline build-features --config configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
 ```
 
 Tests are present under `tests/`. If a future branch removes tests during a

@@ -2,10 +2,16 @@
 
 Run date: 2026-05-15
 
-Remote result paths:
+Canonical remote result paths after the 2026-05-26 artifact reorganization:
 
-- `results/replogle_k562_viability_axis_audit_5x1_main/runs/viability_axis_5x1_main_20260515`
-- `results/replogle_k562_signal_decomposition_5x1_main/runs/signal_decomposition_5x1_main_20260515`
+- Main audit:
+  `results/experiments/02_replogle_k562_viability_axis_audit/runs/viability_axis_5x1_main_20260515`
+- Signal decomposition:
+  `results/experiments/02_replogle_k562_viability_axis_audit/runs/signal_decomposition_5x1_main_20260515`
+
+Note: on the remote PC inspected on 2026-05-26, the previous per-config result
+roots were present as empty placeholders and the documented run artifacts were
+not present.
 
 ## Run Setup
 
@@ -18,8 +24,10 @@ Remote result paths:
   unweighted.
 - Viability anchors: 2019 NAR Achilles and CTRP cell-death/proliferation
   coefficients from `bence-szalai/Cell-death-signatures`.
-- Main config: `configs/replogle_k562_viability_axis_audit_5x1_main.yaml`.
-- Follow-up config: `configs/replogle_k562_signal_decomposition_5x1_main.yaml`.
+- Main config:
+  `configs/experiments/02_replogle_k562_viability_axis_audit/viability_axis_main.yaml`.
+- Follow-up config:
+  `configs/experiments/02_replogle_k562_viability_axis_audit/signal_decomposition_main.yaml`.
 
 ## Feature QA
 

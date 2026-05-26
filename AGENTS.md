@@ -97,9 +97,9 @@ cell, TCGA, CCLE, or DepMap context evidence before using SL language.
   experiment sequence.
 - `docs/images/core.png`: triangular technical route diagram.
 - `docs/images/roadmap.png`: staged roadmap diagram.
-- `configs/replogle_k562_baseline.yaml`: Replogle K562 B→C baseline config.
-- `configs/replogle_k562_single_cell_deepsets.yaml`: observed single-cell
-  Deep Sets bag baseline config.
+- `configs/experiments/`: experiment-grouped YAML configs aligned with
+  `docs/experiment/`; Adamson held-out test settings live inside the experiment
+  configs that use Adamson.
 - `src/dependency_baseline/`: implemented feature-building and
   cross-validation baseline package.
 - `tests/`: synthetic-data tests for the baseline package.

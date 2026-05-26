@@ -1,21 +1,18 @@
 data:
-  h5ad_path: /home/richard/projects/VCC/data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad
-  overlap_csv: /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv
-  output_dir: /home/richard/projects/VCC/results/replogle_k562_viability_axis_audit_5x1_main
+  h5ad_path: data/sl_dependency_v0/raw/replogle/K562_essential_normalized_singlecell_01.h5ad
+  overlap_csv: data/sl_dependency_v0/interim/k562_replogle_depmap_overlap.csv
+  output_dir: results/experiments/02_replogle_k562_viability_axis_audit
   obs_perturbation_col: gene
   control_label: non-targeting
   var_gene_symbol_col: gene_name
   depmap_label_col: depmap_gene_effect
   matched_label_col: has_depmap_label
   n_cells_col: n_cells_or_pseudobulk
-  external_overlap_csvs:
-    - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_adamson_depmap_overlap.csv
-    - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_dixit_depmap_overlap.csv
-    - /home/richard/projects/VCC/data/sl_dependency_v0/interim/k562_norman_depmap_overlap.csv
+  external_overlap_csvs: []
   external_evaluations: []
 
 experiment:
-  name: replogle_k562_viability_axis_audit_5x1_main
+  name: replogle_k562_viability_axis_extended_5x5
   seed: 42
   run_id: null
   human_result_tables: [summary_metrics]
@@ -42,36 +39,45 @@ viability_axis:
 
 cv:
   n_splits: 5
-  n_repeats: 1
+  n_repeats: 5
   random_state: 42
   stratify_bins: 10
-  pca_components: [20, 50, 100]
+  pca_components: [50]
   model_set: full
   essential_thresholds: [-0.5, -1.0]
 
 selection:
   scopes: [internal_cv_all]
-  features: null
-  models: null
-  folds: null
+  features:
+    - delta_all
+    - delta_mask_target
+    - response_burden
+    - nar_viability_scores
+    - nar_viability_scores_plus_burden
+    - nar_resid_delta_all
+    - nar_resid_delta_mask_target
+  models:
+    - ridge
+    - pca50_ridge
+    - random_forest
+    - pca50_random_forest
+    - nar_score_ridge
+    - nar_score_plus_burden_ridge
+    - nar_resid_pca50_ridge
+    - nar_resid_pca50_random_forest
   weightings: [unweighted]
 
 models:
   mean_label:
-    enabled: true
+    enabled: false
   ridge:
     enabled: true
     alpha: 10.0
   elastic_net:
-    enabled: true
-    alpha: 0.02
-    l1_ratio: 0.1
-    max_iter: 20000
-    tol: 0.001
-    selection: random
+    enabled: false
   pca_ridge:
     enabled: true
-    components: [20, 50, 100]
+    components: [50]
     alpha: 10.0
   random_forest:
     enabled: true
@@ -80,7 +86,7 @@ models:
     n_jobs: -1
   pca_random_forest:
     enabled: true
-    components: [20, 50, 100]
+    components: [50]
     n_estimators: 300
     min_samples_leaf: 5
     n_jobs: -1

@@ -646,7 +646,10 @@ def test_mlp_cv_writes_artifacts_on_synthetic_data(tmp_path: Path) -> None:
 
 
 def test_strict_mlp_config_loads_expected_variants() -> None:
-    config = load_config("configs/replogle_k562_strict_mlp_baseline.yaml")
+    config = load_config(
+        "configs/experiments/"
+        "01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/strict_mlp.yaml"
+    )
 
     assert config.selection.scopes == ("internal_cv_all",)
     assert config.selection.features == ("delta_all",)
@@ -657,6 +660,42 @@ def test_strict_mlp_config_loads_expected_variants() -> None:
         "mlp_pca50",
         "mlp_pca100",
     ]
+
+
+def test_experiment_configs_follow_grouped_layout() -> None:
+    config_paths = sorted(Path("configs/experiments").glob("*/*.yaml"))
+
+    assert len(config_paths) == 7
+    assert not Path("configs/adamson_k562_external_features.yaml").exists()
+
+    for path in config_paths:
+        config = load_config(path)
+        output_dir = config.data.output_dir.as_posix()
+        assert output_dir.startswith("results/experiments/")
+        assert "/home/richard/projects/VCC" not in output_dir
+        assert "results/replogle_k562_" not in output_dir
+
+    stage1_paths = [
+        path
+        for path in config_paths
+        if "01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer" in path.parts
+    ]
+    assert len(stage1_paths) == 3
+    for path in stage1_paths:
+        config = load_config(path)
+        assert [external.name for external in config.data.external_evaluations] == [
+            "adamson_k562"
+        ]
+        assert len(config.data.external_feature_sources) == 3
+
+    single_cell_config = load_config(
+        "configs/experiments/"
+        "03_replogle_k562_single_cell_deepsets_adamson/"
+        "deepsets_cv_and_adamson.yaml"
+    )
+    assert not single_cell_config.data.external_evaluations
+    assert len(single_cell_config.data.external_feature_sources) == 3
+    assert "adamson" in single_cell_config.data.external_overlap_csvs[0].name
 
 
 def test_model_variant_names_are_deterministic(tmp_path: Path) -> None:

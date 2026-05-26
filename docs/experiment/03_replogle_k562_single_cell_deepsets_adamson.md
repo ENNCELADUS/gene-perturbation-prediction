@@ -2,9 +2,13 @@
 
 Run dates: 2026-05-25 to 2026-05-26
 
-Remote result path:
+Canonical remote result path after the 2026-05-26 artifact reorganization:
 
-- `results/replogle_k562_single_cell_deepsets/runs/20260525_185722_nogit`
+- `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/runs/20260525_185722_nogit`
+
+Config:
+
+- `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml`
 
 ## Run Setup
 
@@ -71,9 +75,9 @@ Remote result path:
 ## Files
 
 - Replogle bags:
-  `results/replogle_k562_single_cell_deepsets/features/single_cell_bags/replogle_k562_single_cell_bags.npz`.
+  `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/single_cell_bags/replogle_k562_single_cell_bags.npz`.
 - Adamson bags:
-  `results/replogle_k562_single_cell_deepsets/features/external/adamson_k562_single_cell_bags/adamson_k562_single_cell_bags.npz`.
+  `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/external/adamson_k562_single_cell_bags/adamson_k562_single_cell_bags.npz`.
 - Checkpoint manifest: `artifacts/model_manifest.parquet`.
 - Replogle and per-fold Adamson metrics: `artifacts/fold_metrics.parquet`.
 - Replogle and per-fold Adamson predictions: `artifacts/predictions.parquet`.
