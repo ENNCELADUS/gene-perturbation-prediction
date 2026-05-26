@@ -53,6 +53,12 @@ class FeatureConfig:
 class SingleCellConfig:
     n_hvg: int = 2000
     n_pcs: int = 128
+    feature_sets: tuple[str, ...] = ("single_cell_pc_delta",)
+    scvi_latent_dim: int = 128
+    scvi_hidden_units: int = 128
+    scvi_layers: int = 1
+    scvi_max_epochs: int = 400
+    scvi_batch_size: int = 128
     max_cells_per_bag: int = 256
     hidden_units: tuple[int, ...] = (128, 64)
     bag_hidden_units: tuple[int, ...] = (64,)
@@ -412,6 +418,13 @@ def load_config(path: str | Path) -> BaselineConfig:
         single_cell=SingleCellConfig(
             n_hvg=int(single_cell.get("n_hvg", 2000)),
             n_pcs=int(single_cell.get("n_pcs", 128)),
+            feature_sets=_tuple_str_or_none(single_cell.get("feature_sets"))
+            or ("single_cell_pc_delta",),
+            scvi_latent_dim=int(single_cell.get("scvi_latent_dim", 128)),
+            scvi_hidden_units=int(single_cell.get("scvi_hidden_units", 128)),
+            scvi_layers=int(single_cell.get("scvi_layers", 1)),
+            scvi_max_epochs=int(single_cell.get("scvi_max_epochs", 400)),
+            scvi_batch_size=int(single_cell.get("scvi_batch_size", 128)),
             max_cells_per_bag=int(single_cell.get("max_cells_per_bag", 256)),
             hidden_units=_tuple_int_or_default(
                 single_cell.get("hidden_units"),

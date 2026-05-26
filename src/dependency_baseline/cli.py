@@ -36,11 +36,13 @@ def main() -> None:
 
     build_cell_bags_parser = subparsers.add_parser("build-cell-bags")
     build_cell_bags_parser.add_argument("--config", required=True, type=Path)
+    build_cell_bags_parser.add_argument("--feature-set", action="append", default=None)
 
     external_cell_bags_parser = subparsers.add_parser("build-external-cell-bags")
     external_cell_bags_parser.add_argument("--config", required=True, type=Path)
     external_cell_bags_parser.add_argument("--reference-bags", required=True, type=Path)
     external_cell_bags_parser.add_argument("--external-name", default="adamson_k562")
+    external_cell_bags_parser.add_argument("--feature-set", default=None)
 
     external_build_parser = subparsers.add_parser("build-external-features")
     external_build_parser.add_argument("--config", required=True, type=Path)
@@ -85,6 +87,7 @@ def main() -> None:
         type=Path,
     )
     single_cell_external_parser.add_argument("--external-name", default="adamson_k562")
+    single_cell_external_parser.add_argument("--feature-set", default=None)
 
     final_parser = subparsers.add_parser("fit-final")
     final_parser.add_argument("--config", required=True, type=Path)
@@ -117,16 +120,24 @@ def main() -> None:
         print(f"qa: {paths.qa_report_md}")
     elif args.command == "build-cell-bags":
         config = load_config(args.config)
-        paths = build_cell_bags(config)
-        print(f"bags: {paths.bags_npz}")
-        print(f"metadata: {paths.metadata_path}")
-        print(f"summary: {paths.summary_json}")
+        feature_sets = (
+            tuple(args.feature_set)
+            if args.feature_set
+            else config.single_cell.feature_sets
+        )
+        for feature_set in feature_sets:
+            paths = build_cell_bags(config, feature_set=feature_set)
+            print(f"feature set: {feature_set}")
+            print(f"bags: {paths.bags_npz}")
+            print(f"metadata: {paths.metadata_path}")
+            print(f"summary: {paths.summary_json}")
     elif args.command == "build-external-cell-bags":
         config = load_config(args.config)
         paths = build_external_cell_bags(
             config,
             args.reference_bags,
             args.external_name,
+            feature_set=args.feature_set,
         )
         print(f"bags: {paths.bags_npz}")
         print(f"metadata: {paths.metadata_path}")
@@ -186,6 +197,7 @@ def main() -> None:
             run_dir=args.run_dir,
             external_bags_npz=args.external_bags,
             external_name=args.external_name,
+            feature_set=args.feature_set,
         )
         print(f"external ensemble metrics: {metrics_path}")
         print(f"external ensemble predictions: {predictions_path}")

@@ -665,7 +665,7 @@ def test_strict_mlp_config_loads_expected_variants() -> None:
 def test_experiment_configs_follow_grouped_layout() -> None:
     config_paths = sorted(Path("configs/experiments").glob("*/*.yaml"))
 
-    assert len(config_paths) == 7
+    assert len(config_paths) == 8
     assert not Path("configs/adamson_k562_external_features.yaml").exists()
 
     for path in config_paths:

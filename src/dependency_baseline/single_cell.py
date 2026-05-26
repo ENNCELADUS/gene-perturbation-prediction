@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from torch import nn
 
+from dependency_baseline.cell_bags import PCA_FEATURE_SET
 from dependency_baseline.artifacts import (
     ArtifactStore,
     CvPaths,
@@ -43,8 +44,7 @@ from dependency_baseline.evaluation import (
 
 
 CellBags = Sequence[np.ndarray]
-FEATURE_SET_NAME = "single_cell_pc_delta"
-MODEL_NAME_TEMPLATE = "deepsets_pca{n_pcs}_meanpool"
+FEATURE_SET_NAME = PCA_FEATURE_SET
 LOGGER = logging.getLogger(__name__)
 
 
@@ -56,6 +56,7 @@ class CellBagData:
     genes: np.ndarray
     metadata: pd.DataFrame
     n_pcs: int
+    feature_set: str
 
 
 class DeepSetsRegressor:
@@ -126,7 +127,7 @@ class DeepSetsRegressor:
         )
         self.training_indices_ = train_idx
         self.validation_indices_ = valid_idx
-        self.model_ = _DeepSetsModule(
+        self.model_ = self._build_module(
             input_dim=int(self.input_dim),
             hidden_units=tuple(int(value) for value in self.hidden_units),
             bag_hidden_units=tuple(int(value) for value in self.bag_hidden_units),
@@ -190,6 +191,21 @@ class DeepSetsRegressor:
         self.model_.load_state_dict(best_state)
         return self
 
+    def _build_module(
+        self,
+        *,
+        input_dim: int,
+        hidden_units: tuple[int, ...],
+        bag_hidden_units: tuple[int, ...],
+        dropout: float,
+    ) -> nn.Module:
+        return _DeepSetsModule(
+            input_dim=input_dim,
+            hidden_units=hidden_units,
+            bag_hidden_units=bag_hidden_units,
+            dropout=dropout,
+        )
+
     def _loss_on_indices(
         self,
         bags: CellBags,
@@ -238,7 +254,7 @@ class DeepSetsRegressor:
         import torch
 
         if not hasattr(self, "model_"):
-            msg = "DeepSetsRegressor must be fitted before predict"
+            msg = f"{type(self).__name__} must be fitted before predict"
             raise ValueError(msg)
         self.model_.eval()
         predictions: list[np.ndarray] = []
@@ -260,6 +276,71 @@ class DeepSetsRegressor:
         return np.concatenate(predictions).astype(np.float64)
 
 
+class AttentionMILRegressor(DeepSetsRegressor):
+    """Single-head gated attention MIL regressor for bag-level labels."""
+
+    def _build_module(
+        self,
+        *,
+        input_dim: int,
+        hidden_units: tuple[int, ...],
+        bag_hidden_units: tuple[int, ...],
+        dropout: float,
+    ) -> nn.Module:
+        return _AttentionMILModule(
+            input_dim=input_dim,
+            hidden_units=hidden_units,
+            bag_hidden_units=bag_hidden_units,
+            dropout=dropout,
+        )
+
+    def predict_with_attention(
+        self,
+        bags: CellBags,
+        observed_counts: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray]]:
+        """Predict labels and return attention weights over evaluated cell subsets."""
+        import torch
+
+        if not hasattr(self, "model_"):
+            msg = "AttentionMILRegressor must be fitted before predict_with_attention"
+            raise ValueError(msg)
+        self.model_.eval()
+        predictions: list[np.ndarray] = []
+        attention_weights: list[np.ndarray] = []
+        cell_indices: list[np.ndarray] = []
+        counts = None if observed_counts is None else np.asarray(observed_counts)
+        with torch.no_grad():
+            for start in range(0, len(bags), int(self.batch_size)):
+                stop = min(start + int(self.batch_size), len(bags))
+                x_batch, mask_batch, index_batch = _batch_tensors(
+                    bags[start:stop],
+                    max_cells_per_bag=int(self.max_cells_per_bag),
+                    rng=None,
+                    observed_counts=None if counts is None else counts[start:stop],
+                    return_indices=True,
+                )
+                pred, attn = self.model_(
+                    x_batch.to(self.device_),
+                    mask_batch.to(self.device_),
+                    return_attention=True,
+                )
+                predictions.append(pred.cpu().numpy())
+                attn_np = attn.cpu().numpy()
+                mask_np = mask_batch.numpy()
+                for row_index in range(attn_np.shape[0]):
+                    valid = mask_np[row_index]
+                    attention_weights.append(
+                        attn_np[row_index, valid].astype(np.float64)
+                    )
+                    cell_indices.append(index_batch[row_index][valid].astype(np.int64))
+        return (
+            np.concatenate(predictions).astype(np.float64),
+            attention_weights,
+            cell_indices,
+        )
+
+
 def run_single_cell_cv(
     config: BaselineConfig,
     bags_npz: Path | None = None,
@@ -271,12 +352,28 @@ def run_single_cell_cv(
     config_path: Path | None = None,
     log_file: Path | None = None,
 ) -> CvPaths:
-    """Run repeated stratified CV for the observed single-cell Deep Sets baseline."""
+    """Run repeated stratified CV for observed single-cell set baselines."""
     set_seed(config.experiment.seed)
-    bag_path = bags_npz or resolve_cell_bags_npz(config.data.output_dir)
+    merged_selection = merge_selection(config.selection, selection)
+    feature_sets = (
+        (_feature_set_from_bag_path(bags_npz),)
+        if bags_npz is not None
+        else filter_names(config.single_cell.feature_sets, merged_selection.features)
+    )
+    if not feature_sets:
+        msg = "No single-cell feature sets selected"
+        raise ValueError(msg)
+    bag_paths = (
+        (bags_npz,)
+        if bags_npz is not None
+        else tuple(
+            resolve_cell_bags_npz_for_feature(config.data.output_dir, feature_set)
+            for feature_set in feature_sets
+        )
+    )
     context = create_run_context(
         config=config,
-        features_npz=bag_path,
+        features_npz=bag_paths[0],
         run_id=run_id,
         resume=resume,
         command=command,
@@ -298,8 +395,16 @@ def run_single_cell_cv(
     )
     write_cv_config(config, context.feature_path, context.run_dir / "cv_config.json")
     try:
-        data = load_cell_bag_data(context.feature_path, config)
-        _execute_single_cell_cv(config, context.run_dir, store, data, selection, resume)
+        for bag_path in bag_paths:
+            data = load_cell_bag_data(bag_path, config)
+            _execute_single_cell_cv(
+                config,
+                context.run_dir,
+                store,
+                data,
+                selection,
+                resume,
+            )
         write_json(
             context.run_dir / "run_manifest.json",
             {
@@ -331,6 +436,7 @@ def evaluate_single_cell_external(
     run_dir: Path,
     external_bags_npz: Path,
     external_name: str,
+    feature_set: str | None = None,
 ) -> tuple[Path, Path]:
     """Evaluate existing single-cell CV checkpoints on an external bag artifact."""
     store = ArtifactStore(
@@ -342,13 +448,19 @@ def evaluate_single_cell_external(
         config.experiment.save_rankings,
     )
     external = load_cell_bag_data(external_bags_npz, config)
+    if feature_set is not None and external.feature_set != feature_set:
+        msg = (
+            f"External bags feature_set={external.feature_set!r} does not match "
+            f"requested feature_set={feature_set!r}"
+        )
+        raise ValueError(msg)
     manifest = store.tables["model_manifest"]
     if manifest.empty:
         msg = f"Missing model_manifest under run directory: {run_dir}"
         raise FileNotFoundError(msg)
     keep = (
         (manifest["evaluation_scope"] == "internal_cv_all")
-        & (manifest["feature_set"] == FEATURE_SET_NAME)
+        & (manifest["feature_set"] == external.feature_set)
         & manifest["checkpoint_path"].notna()
     )
     selected = manifest.loc[keep].copy()
@@ -367,6 +479,7 @@ def evaluate_single_cell_external(
 
 def load_cell_bag_data(path: Path, config: BaselineConfig) -> CellBagData:
     """Load a single-cell bag artifact pack."""
+    del config
     payload = np.load(path, allow_pickle=True)
     cells = payload["cell_delta_pcs"].astype(np.float32)
     offsets = payload["bag_offsets"].astype(np.int64)
@@ -382,6 +495,7 @@ def load_cell_bag_data(path: Path, config: BaselineConfig) -> CellBagData:
         genes=payload["perturbation_gene"].astype(str),
         metadata=metadata,
         n_pcs=int(cells.shape[1]),
+        feature_set=_feature_set_from_payload(payload),
     )
 
 
@@ -393,13 +507,21 @@ def _evaluate_one_external_checkpoint(
     row: object,
 ) -> None:
     model = joblib.load(Path(row.checkpoint_path))
-    pred = model.predict(external.bags)
+    model_name = str(row.model)
+    if _is_attention_model(model_name):
+        pred, attention_weights, cell_indices = model.predict_with_attention(
+            external.bags
+        )
+    else:
+        pred = model.predict(external.bags)
+        attention_weights = []
+        cell_indices = []
     evaluation_scope = f"external:{external_name}"
     job = job_key(
         evaluation_scope,
         int(row.fold),
         str(row.feature_set),
-        str(row.model),
+        model_name,
         str(row.weighting),
     )
     metric_row = {
@@ -407,7 +529,7 @@ def _evaluate_one_external_checkpoint(
         "evaluation_scope": evaluation_scope,
         "fold": int(row.fold),
         "feature_set": str(row.feature_set),
-        "model": str(row.model),
+        "model": model_name,
         "weighting": str(row.weighting),
         "fit_seconds": float(row.fit_seconds),
         **regression_metrics(external.y, pred),
@@ -419,7 +541,7 @@ def _evaluate_one_external_checkpoint(
             "evaluation_scope": evaluation_scope,
             "fold": int(row.fold),
             "feature_set": str(row.feature_set),
-            "model": str(row.model),
+            "model": model_name,
             "weighting": str(row.weighting),
             "perturbation_gene": external.genes,
             "y_true": external.y,
@@ -431,6 +553,22 @@ def _evaluate_one_external_checkpoint(
         metadata["external_n_cells"] = metadata["observed_n_cells"].astype(float)
     predictions = predictions.merge(metadata, on="perturbation_gene", how="left")
     store.append_external_result(metric_row, predictions)
+    if _is_attention_model(model_name):
+        _append_attention_weights(
+            store.run_dir,
+            _attention_weight_frame(
+                job_key_value=job,
+                evaluation_scope=evaluation_scope,
+                fold=int(row.fold),
+                feature_set=str(row.feature_set),
+                model_name=model_name,
+                weighting=str(row.weighting),
+                data=external,
+                bag_indices=np.arange(len(external.bags), dtype=np.int64),
+                attention_weights=attention_weights,
+                cell_indices=cell_indices,
+            ),
+        )
 
 
 def _write_single_cell_external_ensemble_results(
@@ -455,12 +593,44 @@ def _write_single_cell_external_ensemble_results(
 
 def resolve_cell_bags_npz(output_dir: Path) -> Path:
     """Resolve the default single-cell bag NPZ path."""
+    return resolve_cell_bags_npz_for_feature(output_dir, FEATURE_SET_NAME)
+
+
+def resolve_cell_bags_npz_for_feature(output_dir: Path, feature_set: str) -> Path:
+    """Resolve a single-cell bag NPZ path for one feature set."""
+    if feature_set == FEATURE_SET_NAME:
+        return (
+            output_dir
+            / "features"
+            / "single_cell_bags"
+            / "replogle_k562_single_cell_bags.npz"
+        )
     return (
         output_dir
         / "features"
         / "single_cell_bags"
-        / "replogle_k562_single_cell_bags.npz"
+        / feature_set
+        / f"replogle_k562_{feature_set}_bags.npz"
     )
+
+
+def _feature_set_from_payload(payload: object) -> str:
+    if "feature_set" not in payload:
+        return FEATURE_SET_NAME
+    value = payload["feature_set"]
+    if np.asarray(value).shape == ():
+        return str(value.item())
+    return str(np.asarray(value).astype(str).reshape(-1)[0])
+
+
+def _feature_set_from_bag_path(path: Path | None) -> str:
+    if path is None:
+        return FEATURE_SET_NAME
+    payload = np.load(path, allow_pickle=True)
+    try:
+        return _feature_set_from_payload(payload)
+    finally:
+        payload.close()
 
 
 class _DeepSetsModule(nn.Module):
@@ -482,6 +652,44 @@ class _DeepSetsModule(nn.Module):
         denom = weights.sum(dim=1).clamp_min(1.0)
         pooled = (encoded * weights).sum(dim=1) / denom
         return self.rho(pooled).squeeze(-1)
+
+
+class _AttentionMILModule(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_units: tuple[int, ...],
+        bag_hidden_units: tuple[int, ...],
+        dropout: float,
+    ) -> None:
+        super().__init__()
+        self.phi = _mlp(input_dim, hidden_units, dropout)
+        phi_dim = hidden_units[-1] if hidden_units else input_dim
+        self.attention_v = nn.Linear(phi_dim, phi_dim)
+        self.attention_u = nn.Linear(phi_dim, phi_dim)
+        self.attention_w = nn.Linear(phi_dim, 1, bias=False)
+        self.rho = _mlp(phi_dim, (*bag_hidden_units, 1), dropout)
+
+    def forward(
+        self,
+        x: object,
+        mask: object,
+        *,
+        return_attention: bool = False,
+    ) -> object:
+        encoded = self.phi(x)
+        gated = self.attention_w(
+            self.attention_v(encoded).tanh() * self.attention_u(encoded).sigmoid()
+        ).squeeze(-1)
+        scores = gated.masked_fill(~mask, -1.0e9)
+        attention = scores.softmax(dim=1)
+        attention = attention * mask.to(attention.dtype)
+        attention = attention / attention.sum(dim=1, keepdim=True).clamp_min(1.0e-12)
+        pooled = (encoded * attention.unsqueeze(-1)).sum(dim=1)
+        prediction = self.rho(pooled).squeeze(-1)
+        if return_attention:
+            return prediction, attention
+        return prediction
 
 
 def _mlp(
@@ -507,11 +715,13 @@ def _batch_tensors(
     max_cells_per_bag: int,
     rng: np.random.Generator | None,
     observed_counts: np.ndarray | None,
-) -> tuple[object, object]:
+    return_indices: bool = False,
+) -> tuple[object, object] | tuple[object, object, list[np.ndarray]]:
     import torch
 
     bag_arrays = []
     masks = []
+    selected_indices = []
     width = int(max_cells_per_bag)
     input_dim = int(bags[0].shape[1])
     for bag_index, bag in enumerate(bags):
@@ -520,6 +730,7 @@ def _batch_tensors(
         if observed_counts is not None:
             observed = min(int(observed_counts[bag_index]), array.shape[0])
         real = array[:observed]
+        selected = np.arange(real.shape[0], dtype=np.int64)
         if real.shape[0] > width:
             if rng is None:
                 selected = np.linspace(0, real.shape[0] - 1, width, dtype=np.int64)
@@ -532,7 +743,13 @@ def _batch_tensors(
         mask[: real.shape[0]] = True
         bag_arrays.append(padded)
         masks.append(mask)
-    return torch.as_tensor(np.stack(bag_arrays)), torch.as_tensor(np.stack(masks))
+        padded_indices = np.full(width, -1, dtype=np.int64)
+        padded_indices[: selected.shape[0]] = selected
+        selected_indices.append(padded_indices)
+    tensors = torch.as_tensor(np.stack(bag_arrays)), torch.as_tensor(np.stack(masks))
+    if return_indices:
+        return (*tensors, selected_indices)
+    return tensors
 
 
 def _execute_single_cell_cv(
@@ -545,15 +762,19 @@ def _execute_single_cell_cv(
 ) -> None:
     merged_selection = merge_selection(config.selection, selection)
     scopes = [
-        ("internal_cv_all", np.arange(len(data.y), dtype=np.int64), (FEATURE_SET_NAME,))
+        (
+            "internal_cv_all",
+            np.arange(len(data.y), dtype=np.int64),
+            (data.feature_set,),
+        )
     ]
     if merged_selection.scopes is not None:
         allowed_scopes = set(merged_selection.scopes)
         scopes = [scope for scope in scopes if scope[0] in allowed_scopes]
     if config.experiment.save_splits:
         store.write_splits(split_manifest(config, scopes, data.y, data.genes))
-    selected_features = filter_names((FEATURE_SET_NAME,), merged_selection.features)
-    selected_models = filter_names((_model_name(data),), merged_selection.models)
+    selected_features = filter_names((data.feature_set,), merged_selection.features)
+    selected_models = filter_names(_model_names(data), merged_selection.models)
     selected_weightings = filter_names(
         ("unweighted", "sqrt_n_cells"),
         merged_selection.weightings,
@@ -617,7 +838,8 @@ def _fit_single_cell_fold(
     test_bags = tuple(data.bags[index] for index in test_idx)
     weights = sample_weights(data.n_cells[train_idx])
     fit_weight = weights if weighting == "sqrt_n_cells" else None
-    model = DeepSetsRegressor(
+    model = _make_single_cell_model(
+        model_name,
         input_dim=data.n_pcs,
         hidden_units=config.single_cell.hidden_units,
         bag_hidden_units=config.single_cell.bag_hidden_units,
@@ -636,7 +858,12 @@ def _fit_single_cell_fold(
     started = time.perf_counter()
     model.fit(train_bags, data.y[train_idx], sample_weight=fit_weight)
     fit_seconds = time.perf_counter() - started
-    pred = model.predict(test_bags)
+    if _is_attention_model(model_name):
+        pred, attention_weights, cell_indices = model.predict_with_attention(test_bags)
+    else:
+        pred = model.predict(test_bags)
+        attention_weights = []
+        cell_indices = []
     path = checkpoint_path(
         run_dir,
         evaluation_scope,
@@ -690,6 +917,22 @@ def _fit_single_cell_fold(
             "torch_best_validation_loss": getattr(model, "best_validation_loss_", None),
         },
     )
+    if _is_attention_model(model_name):
+        _append_attention_weights(
+            run_dir,
+            _attention_weight_frame(
+                job_key_value=job,
+                evaluation_scope=evaluation_scope,
+                fold=fold_index,
+                feature_set=feature_name,
+                model_name=model_name,
+                weighting=weighting,
+                data=data,
+                bag_indices=test_idx,
+                attention_weights=attention_weights,
+                cell_indices=cell_indices,
+            ),
+        )
     LOGGER.info(
         "Completed single-cell CV fold=%s model=%s weighting=%s",
         fold_index,
@@ -698,8 +941,95 @@ def _fit_single_cell_fold(
     )
 
 
-def _model_name(data: CellBagData) -> str:
-    return MODEL_NAME_TEMPLATE.format(n_pcs=data.n_pcs)
+def _model_names(data: CellBagData) -> tuple[str, ...]:
+    token = _feature_token(data)
+    return (
+        f"deepsets_{token}_meanpool",
+        f"attnmil_{token}_gated",
+    )
+
+
+def _feature_token(data: CellBagData) -> str:
+    if data.feature_set == FEATURE_SET_NAME:
+        return f"pca{data.n_pcs}"
+    if data.feature_set == "single_cell_scvi_delta":
+        return f"scvi{data.n_pcs}"
+    if data.feature_set == "single_cell_hvg_delta":
+        return f"hvg{data.n_pcs}"
+    return data.feature_set.replace("single_cell_", "").replace("_delta", "")
+
+
+def _is_attention_model(model_name: str) -> bool:
+    return str(model_name).startswith("attnmil_")
+
+
+def _make_single_cell_model(model_name: str, **kwargs: object) -> DeepSetsRegressor:
+    model_cls = (
+        AttentionMILRegressor if _is_attention_model(model_name) else DeepSetsRegressor
+    )
+    return model_cls(**kwargs)
+
+
+def _attention_weight_frame(
+    *,
+    job_key_value: str,
+    evaluation_scope: str,
+    fold: int,
+    feature_set: str,
+    model_name: str,
+    weighting: str,
+    data: CellBagData,
+    bag_indices: np.ndarray,
+    attention_weights: list[np.ndarray],
+    cell_indices: list[np.ndarray],
+) -> pd.DataFrame:
+    rows = []
+    for local_index, bag_index in enumerate(bag_indices):
+        metadata_row = data.metadata.iloc[int(bag_index)]
+        feature_row = int(metadata_row.get("feature_row", int(bag_index)))
+        gene = str(data.genes[int(bag_index)])
+        for position, weight in zip(
+            cell_indices[local_index],
+            attention_weights[local_index],
+            strict=True,
+        ):
+            rows.append(
+                {
+                    "job_key": job_key_value,
+                    "evaluation_scope": evaluation_scope,
+                    "fold": int(fold),
+                    "feature_set": feature_set,
+                    "model": model_name,
+                    "weighting": weighting,
+                    "perturbation_gene": gene,
+                    "feature_row": feature_row,
+                    "evaluated_cell_position": int(position),
+                    "attention_weight": float(weight),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _append_attention_weights(run_dir: Path, weights: pd.DataFrame) -> None:
+    if weights.empty:
+        return
+    path = run_dir / "artifacts" / "single_cell_attention_weights.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = pd.read_parquet(path)
+        weights = (
+            pd.concat([existing, weights], ignore_index=True)
+            .drop_duplicates(
+                [
+                    "job_key",
+                    "perturbation_gene",
+                    "evaluated_cell_position",
+                ],
+                keep="last",
+            )
+            .reset_index(drop=True)
+        )
+    weights.to_parquet(path, index=False)
 
 
 def _cv_paths(run_dir: Path) -> CvPaths:
