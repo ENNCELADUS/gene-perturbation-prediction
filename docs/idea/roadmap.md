@@ -1,6 +1,6 @@
 # Roadmap: Perturbation Transcriptomes to SL Target Prioritization
 
-Status date: 2026-05-25
+Status date: 2026-05-27
 
 This project should be read as a staged research program, not as an end-to-end
 synthetic-lethality predictor at the current stage. The current validated link is:
@@ -25,7 +25,7 @@ basal cancer context + candidate perturbation
 | Node | Meaning | Current data source |
 | --- | --- | --- |
 | A: cancer context + perturbation | Cell line and target gene, e.g. K562 + gene knockdown | Replogle K562 CRISPRi perturbations; later DepMap/CCLE contexts |
-| B: post-perturbation response distribution | Measured or predicted bag of single cells after perturbation | Replogle single-cell Perturb-seq; pseudobulk delta is the current baseline summary |
+| B: post-perturbation response distribution | Measured or predicted bag of single cells after perturbation | Replogle single-cell Perturb-seq; scVI/GMM distribution regression is the current strongest observed-B summary |
 | C: dependency phenotype | Population-level fitness consequence of target loss | DepMap CRISPR GeneEffect |
 | D: SL-like candidate | Target whose dependency is selective for a cancer context | Future multi-cell-line DepMap/CCLE/TCGA filtering |
 | E: true SL evidence | Context-target or gene-pair interaction evidence | Future known SL databases, combinatorial screens, or wet-lab validation |
@@ -91,10 +91,10 @@ Key results:
 
 Current conclusion:
 
-The observed B->C bridge is viable, but current models compress each
-perturbation's single-cell distribution into pseudobulk features. The next
-modeling step should treat all cells under `(cell line, perturbation gene)` as a
-bag and learn a set-to-label / multiple-instance predictor:
+The observed B->C bridge is viable, but pseudobulk features compress each
+perturbation's single-cell distribution. The next modeling step was to treat all
+cells under `(cell line, perturbation gene)` as a bag and learn a set-to-label,
+multiple-instance, or distribution-regression predictor:
 
 ```text
 {post-perturbation cells for (c, g)}
@@ -106,9 +106,10 @@ This avoids pretending that each cell has an independent GeneEffect label and
 lets the model test whether heterogeneity, rare stressed subpopulations, and
 distribution shape add signal beyond mean delta expression.
 
-Recommended first architecture: cell encoder + attention/summary pooling +
-response-burden/program covariates + perturbation-gene embedding -> ranking and
-GeneEffect regression head; add a context encoder when moving beyond K562.
+The first mean-pooling and attention MIL versions were competitive but not
+decisive. The current strongest observed-B architecture is a scVI latent-space
+distribution summary: fold-local diagonal GMM prototypes over cells, occupancy /
+`deltap` features, and a regularized Ridge head.
 
 ## Phase 1b: Viability-Axis and Signal-Decomposition Audit
 
@@ -202,13 +203,14 @@ beyond the current pseudobulk summaries before introducing forward-model error.
 
 Status: completed for K562 Replogle -> Adamson observed pseudobulk transfer.
 
-## Phase 2.5: Observed Single-Cell Set-MIL Dependency Predictor
+## Phase 2.5: Observed Single-Cell Distribution Dependency Predictor
 
 Question:
 
 ```text
 Does the full observed single-cell response distribution improve dependency
-prediction beyond pseudobulk mean delta and response-burden baselines?
+prediction beyond pseudobulk mean delta, response-burden, and attention-MIL
+baselines?
 ```
 
 Primary supervised unit:
@@ -221,8 +223,11 @@ Replogle single-cell bag under perturbation g
 Completed experiment:
 
 - Doc: `docs/experiment/03_replogle_k562_single_cell_deepsets_adamson.md`.
-- Setup: Replogle K562 single-cell bags in 128-dimensional PCA delta space.
-- Model: `deepsets_pca128_meanpool`.
+- Setup: Replogle K562 single-cell bags in PCA128, scVI128, and HVG2000 delta
+  spaces.
+- Models: Deep Sets mean pooling, single-head gated attention, multi-head gated
+  attention, frozen diagonal-GMM distribution regression, and CloudPred-like
+  trainable prototype regression.
 - Evaluation: Replogle 5-fold CV plus Adamson external ensemble and
   target-heldout ensemble.
 
@@ -234,36 +239,31 @@ Key results:
 | Deep Sets Adamson ensemble, unweighted | 0.505 | 0.854 | Strong same-cell-line external transfer. |
 | Deep Sets Adamson target-heldout, unweighted | 0.431 | 0.813 | Positive but weaker under stricter target-exposure sensitivity. |
 | Deep Sets Adamson ensemble, sqrt_n_cells | 0.482 | 0.847 | Cell-count weighting does not improve this run. |
+| scVI128 gated attention Adamson ensemble | 0.552 | 0.893 | Best attention-MIL row; improves over PCA/HVG but not enough to settle the distribution-shape question. |
+| scVI128 GMM K64 deltap Ridge Adamson ensemble | 0.664 | 0.911 | Best primary Adamson row; strongly beats attention and pseudobulk transfer. |
+| scVI128 GMM K64 centered Ridge target-heldout | 0.668 | 0.912 | Best strict target-heldout row; preserves transfer when target-exposed fold models are removed. |
+| scVI128 CloudPred-like K32 Adamson ensemble | 0.602 | 0.902 | Better than attention, but below frozen GMM Ridge. |
+| PCA128 GMM best target-heldout row | 0.487 | 0.783 | Positive but does not improve over the original PCA Deep Sets primary Adamson row. |
 
-Remaining controls:
-
-- compare stronger pooling / attention variants directly against frozen
-  pseudobulk `pca50_ridge_alpha100`, `pca50_random_forest_leaf3`,
-  response-burden Ridge, target-masked models, and `n_cells_only`;
-- keep one GeneEffect label per perturbation bag; do not assign independent
-  dependency labels to individual cells;
-- make cell count, response burden, cell-cycle/state composition, and program
-  scores explicit covariates or nuisance controls;
-- preserve target-heldout sensitivity where possible, especially for any
-  perturbation-gene embedding.
-
-Decision rule:
+Decision rule result:
 
 ```text
-If Set-MIL does not significantly beat pseudobulk or burden baselines,
-do not prioritize AIVC predicted-transcriptome experiments yet.
+Observed single-cell distribution regression clears the Phase 2.5 gate.
 ```
 
 Rationale:
 
 Observed pseudobulk B->C already shows signal, and external response validation
-shows some cross-dataset stability. The next uncertainty is whether
-single-cell heterogeneity, rare stressed subpopulations, or distribution shape
-provide extra dependency signal. If they do not, then predicted transcriptomes
-are a high-risk next layer because forward perturbation error will amplify the
-downstream dependency uncertainty.
+shows some cross-dataset stability. The Phase 2.5 uncertainty was whether
+single-cell heterogeneity or distribution shape provides extra dependency signal
+beyond mean summaries and attention pooling. The scVI128 GMM/prototype rows now
+answer yes for same-cell-line Replogle -> Adamson transfer: primary Adamson
+Spearman reaches `0.664`, and target-heldout Spearman reaches `0.668`. The
+strongest version is a simple frozen distribution summary plus Ridge, not a more
+expressive end-to-end CloudPred-like head. This supports a constrained
+predicted-B pilot, while still requiring explicit forward-model error analysis.
 
-Status: first observed single-cell Deep Sets baseline completed on 2026-05-26.
+Status: observed single-cell distribution gate passed for K562 on 2026-05-27.
 
 ## Phase 3: Predicted Transcriptomes
 
@@ -276,13 +276,14 @@ Can a forward perturbation model predict B well enough that predicted B still su
 Entry condition:
 
 ```text
-Phase 2.5 shows that observed single-cell Set-MIL adds meaningful signal
-beyond pseudobulk delta, response burden, and target-masked baselines.
+Phase 2.5 shows that observed single-cell distribution regression adds
+meaningful signal beyond pseudobulk delta, attention-MIL, and target-heldout
+sensitivities.
 ```
 
-Current status of the entry condition: not yet met. The first Deep Sets run is
-competitive and transfers to Adamson, but it does not clearly beat the
-pseudobulk baselines.
+Current status of the entry condition: met for a constrained pilot. The primary
+downstream observed-B model should be scVI128 GMM/prototype distribution
+regression, with pseudobulk PCA Ridge and scVI attention retained as comparators.
 
 Planned route:
 
@@ -305,13 +306,14 @@ Required evaluation:
 - compare observed-B -> C against predicted-B -> C;
 - quantify how forward-model error affects dependency ranking;
 - report whether top dependency candidates are stable under predicted transcriptomes.
-- use the best observed-B downstream predictor as the primary downstream model;
+- use scVI128 GMM/prototype Ridge as the primary observed-B downstream model;
 - keep `pca50_ridge_alpha100` as the conservative pseudobulk comparator because
   it has the best Adamson external transfer, and keep
-  `pca50_random_forest_leaf3` as an internal-CV comparator.
+  `pca50_random_forest_leaf3` as an internal-CV comparator;
+- keep scVI128 gated attention as the neural MIL comparator.
 
-Status: deferred until the observed single-cell Set-MIL gate is tested. Current
-experiments use observed transcriptomes only.
+Status: ready for a conservative predicted-B pilot after 2026-05-27. Current
+completed experiments still use observed transcriptomes only.
 
 ## Phase 4: Dependency to SL-Like Prioritization
 
@@ -390,9 +392,9 @@ The roadmap still holds, but only with staged claims:
 | The signal is not merely cell count or direct target-expression leakage. | Supported by Phase 1 checks. |
 | The signal is partly generic response burden / viability-like biology. | Supported by Phase 1b. |
 | The signal also contains residual transcriptomic structure beyond NAR viability scores. | Supported by Phase 1b. |
-| The observed-transcriptome B->C signal transfers from Replogle to Adamson K562. | Supported by Phase 2, strongest with PCA Ridge. |
-| Single-cell heterogeneity improves B->C prediction beyond pseudobulk summaries. | First Deep Sets gate completed; competitive but not yet better than pseudobulk. |
-| AIVC / forward-predicted transcriptomes should be the immediate next experiment. | Not supported; first improve observed single-cell Set-MIL beyond pseudobulk and burden baselines. |
+| The observed-transcriptome B->C signal transfers from Replogle to Adamson K562. | Supported by Phase 2 pseudobulk and Phase 2.5 single-cell distribution transfer. |
+| Single-cell heterogeneity improves B->C prediction beyond pseudobulk summaries. | Supported for K562 by scVI128 GMM/prototype distribution regression: Adamson Spearman `0.664`, target-heldout `0.668`. |
+| AIVC / forward-predicted transcriptomes should be the immediate next experiment. | Supported only as a constrained Phase 3 pilot using the observed-B distribution predictor and explicit forward-error analysis. |
 | Replogle internal CV winner is also the best external-transfer model. | Not supported; PCA RandomForest wins internal CV but PCA Ridge transfers better. |
 | Predicted transcriptomes can replace observed transcriptomes for dependency ranking. | Not yet tested. |
 | DepMap GeneEffect labels are true SL labels. | Not supported; they are dependency labels. |
@@ -402,31 +404,33 @@ The concise current conclusion is:
 
 ```text
 Perturbation-induced transcriptomic responses contain measurable dependency
-signal. The first single-cell Deep Sets baseline shows that observed cell bags
-can match pseudobulk-level performance and transfer to Adamson, but it has not
-yet proven that heterogeneity adds signal beyond mean-delta summaries. The next
-A->B->C question is whether stronger Set-MIL variants plus explicit nuisance
-controls can beat pseudobulk PCA Ridge / RandomForest, response burden, and
-target-masked baselines without losing Adamson transfer. Until then, moving
-directly to AIVC predicted transcriptomes is high risk because forward-model
-error will further amplify downstream uncertainty. SL claims still require
-forward-model error analysis, multi-context selectivity, and true SL evidence.
+signal. Mean-pooling and attention MIL show that observed cell bags can match
+pseudobulk-level performance and transfer to Adamson, but the decisive Phase 2.5
+gain comes from treating the bag as a cell-state distribution. scVI128
+GMM/prototype distribution regression substantially improves Adamson transfer
+over attention-MIL and pseudobulk comparators while preserving target-heldout
+performance. The next A->B->C question is no longer whether observed
+single-cell distributions carry useful signal; it is whether predicted
+post-perturbation distributions can preserve enough of that signal for dependency
+ranking. SL claims still require forward-model error analysis, multi-context
+selectivity, and true SL evidence.
 ```
 
 ## Immediate Next Steps
 
-1. Extend the completed mean-pooling Deep Sets baseline with stronger set
-   pooling, attention, or distribution-summary variants.
-2. Compare each Set-MIL variant against the frozen pseudobulk baselines:
-   `pca50_ridge_alpha100`, `pca50_random_forest_leaf3`, `response_burden +
-   ridge`, target-masked models, and `n_cells_only`.
-3. Make the Set-MIL head ranking-aware: report GeneEffect regression, dependency
-   ranking, GeneEffect `< -1.0` classification, and top-k enrichment.
-4. Add nuisance controls for response burden, cell count, cell-cycle/state
-   composition, and program scores so attention/subpopulation gains are not just
-   generic stress shortcuts.
-5. Add a graph-regularized perturbation-gene encoder after the plain Set-MIL
-   baseline is established, using GO/PPI/coessentiality/pathway or protein
-   complex priors to test held-out target generalization.
-6. Keep the predicted-B pilot and multi-context SL-like ranking as later layers
-   after the observed single-cell distribution -> dependency bridge is tested.
+1. Freeze scVI128 GMM/prototype Ridge as the primary observed-B downstream
+   predictor for K562 dependency ranking; keep pseudobulk `pca50_ridge_alpha100`
+   and scVI128 gated attention as required comparators.
+2. Add nuisance-control reporting around the distribution model: response
+   burden, cell count, cell-cycle/state composition, program scores, and
+   target-masked checks where feasible.
+3. Run a conservative predicted-B pilot: compare observed-B -> C against
+   predicted-B -> C using simple additive / linear perturbation baselines before
+   heavier GEARS, scGPT, or STATE-style forward models.
+4. Quantify forward-model error propagation: distribution reconstruction error,
+   dependency Spearman/AUROC/AUPRC, target-heldout behavior, and top-k dependency
+   candidate stability.
+5. Add graph-regularized perturbation-gene encoders only after the predicted-B
+   pilot establishes a stable downstream evaluation loop.
+6. Keep multi-context SL-like ranking as a later layer after predicted
+   transcriptome error and multi-cell-line context expansion are tested.
