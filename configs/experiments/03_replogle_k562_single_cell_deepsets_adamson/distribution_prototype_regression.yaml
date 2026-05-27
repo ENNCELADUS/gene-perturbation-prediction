@@ -32,7 +32,7 @@ experiment:
   machine_result_format: parquet
   checkpoint_policy: all_cv_and_final
   save_predictions: true
-  save_rankings: true
+  save_rankings: false
   save_splits: true
   topk_candidates: [20, 50, 100]
 
