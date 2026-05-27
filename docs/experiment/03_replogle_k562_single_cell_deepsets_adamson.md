@@ -1,6 +1,6 @@
 # Replogle K562 Single-Cell MIL and Adamson Transfer
 
-Run dates: 2026-05-25 to 2026-05-26
+Run dates: 2026-05-25 to 2026-05-27
 
 ## Scope
 
@@ -22,11 +22,17 @@ checkpoint-only ensembles: no retraining on Adamson labels.
 | First PCA Deep Sets baseline | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/runs/20260525_185722_nogit` |
 | Controlled PCA/scVI/HVG mean-pool vs attention matrix | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/runs/attention_mil_20260526_180353` |
 | Multi-head gated attention MIL | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/multihead_attention_mil.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/runs/multihead_attention_mil_20260526_233442` |
+| Distribution / prototype regression | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression/runs/distribution_proto_20260527_013948` |
 
 The comparison table below uses the controlled multi-embedding run for mean
 pooling and single-head attention, plus the follow-up multi-head run for the
-advanced MIL baseline. The multi-head run reuses the same PCA/scVI/HVG bag
-artifacts, runs only `unweighted` models, and uses the same CV/external logic.
+advanced MIL baseline and the completed distribution/prototype run for frozen
+GMM and CloudPred-like distribution regression. The multi-head and distribution
+runs reuse the same PCA/scVI/HVG bag logic, run only `unweighted` models, and
+use the same CV/external checkpoint ensemble logic. The distribution run
+completed PCA128 and scVI128 Adamson evaluation; HVG2000 CloudPred training was
+stopped by GPU OOM after fold 0 frozen-GMM rows, so HVG distribution rows are not
+used for the primary comparison.
 
 ## Feature QA
 
@@ -50,9 +56,13 @@ models whose Replogle train split did not contain the Adamson target gene.
 | PCA128 delta | Deep Sets mean | 0.484 | 0.736 | 0.504 | 0.854 | 0.639 | 0.431 |
 | PCA128 delta | Gated attention | 0.471 | 0.731 | 0.485 | 0.856 | 0.637 | 0.435 |
 | PCA128 delta | Multi-head gated attention | 0.469 | 0.732 | 0.466 | 0.848 | 0.602 | 0.450 |
+| PCA128 delta | GMM prototype K64 deltap Ridge alpha1 | 0.414 | 0.774 | 0.488 | 0.810 | 0.738 | 0.487 |
 | scVI128 delta | Deep Sets mean | 0.489 | 0.744 | 0.545 | 0.889 | 0.714 | 0.514 |
 | scVI128 delta | Gated attention | 0.478 | 0.739 | 0.552 | 0.893 | 0.725 | 0.509 |
 | scVI128 delta | Multi-head gated attention | 0.474 | 0.736 | 0.541 | 0.895 | 0.717 | 0.507 |
+| scVI128 delta | GMM prototype K64 deltap Ridge alpha1 | 0.639 | 0.899 | 0.664 | 0.911 | 0.785 | 0.639 |
+| scVI128 delta | GMM prototype K64 centered Ridge alpha100 | 0.636 | 0.898 | 0.663 | 0.908 | 0.793 | 0.668 |
+| scVI128 delta | CloudPred-like K32 centered | 0.601 | 0.899 | 0.602 | 0.902 | 0.734 | 0.593 |
 | HVG2000 delta | Deep Sets mean | 0.480 | 0.735 | 0.412 | 0.781 | 0.540 | 0.369 |
 | HVG2000 delta | Gated attention | 0.478 | 0.735 | 0.410 | 0.756 | 0.538 | 0.354 |
 | HVG2000 delta | Multi-head gated attention | 0.458 | 0.726 | 0.387 | 0.724 | 0.503 | 0.293 |
@@ -70,15 +80,27 @@ models whose Replogle train split did not contain the Adamson target gene.
 
 ## Readout
 
-- scVI128 is the best representation in this matrix. It improves Adamson
-  transfer over PCA128 and HVG2000, with the best primary Adamson Spearman row
-  from scVI128 single-head gated attention: Spearman `0.552`, AUROC `0.893`,
-  AUPRC `0.725`.
+- scVI128 is the best representation in this matrix. The best overall Adamson
+  transfer row is now scVI128 GMM prototype distribution regression with K64
+  deltap Ridge alpha1: Spearman `0.664`, AUROC `0.911`, AUPRC `0.785`, and
+  heldout Spearman `0.639`. The best target-heldout row is the adjacent scVI128
+  K64 centered Ridge alpha100 model: primary Adamson Spearman `0.663`, heldout
+  Spearman `0.668`, AUROC `0.912`, and AUPRC `0.799`.
+- Distribution / prototype regression is the first single-cell method in this
+  experiment to clearly beat the previous Adamson transfer gate. Relative to the
+  earlier best scVI128 single-head gated attention row (`0.552` Spearman,
+  `0.893` AUROC, `0.725` AUPRC), the best scVI GMM row improves Adamson
+  Spearman by `+0.112` and AUPRC by `+0.060`. It also clears the planned
+  success threshold of Adamson Spearman `>=0.572` and heldout Spearman `>=0.494`.
 - Attention pooling does not consistently beat mean pooling within embedding.
   Unweighted Spearman deltas for attention minus mean are: PCA `-0.013`
   Replogle / `-0.019` Adamson / `+0.004` heldout; scVI `-0.011` Replogle /
   `+0.007` Adamson / `-0.005` heldout; HVG `-0.002` Replogle / `-0.002`
   Adamson / `-0.016` heldout.
+- The strongest distribution rows are simple frozen GMM occupancy features plus
+  Ridge, not the end-to-end CloudPred-like head. The best CloudPred-like scVI row
+  reaches Adamson Spearman `0.602` and heldout Spearman `0.593`, which is better
+  than attention but below the frozen scVI GMM Ridge rows.
 - Multi-head gated attention with 4 heads and orthogonality regularization does
   not improve the primary transfer metric in this v1. The best multi-head row is
   scVI128 with Adamson Spearman `0.541`, AUROC `0.895`, AUPRC `0.717`, and
@@ -87,11 +109,16 @@ models whose Replogle train split did not contain the Adamson target gene.
   single-head attention (`0.450` vs `0.435`) but lowers Adamson overall Spearman
   (`0.466` vs `0.485`).
 - The original PCA Deep Sets baseline remains a useful floor: Adamson transfer
-  is strong (`0.504` Spearman), but scVI128 gives the clearest gain.
+  is strong (`0.504` Spearman). PCA distribution regression is mixed: the best
+  PCA target-heldout distribution row reaches heldout Spearman `0.487` with
+  primary Adamson Spearman `0.488`, but it does not improve over the original
+  PCA Deep Sets primary Adamson Spearman.
 - HVG2000 does not help in this configuration despite more input dimensions,
   suggesting the MIL head benefits from a compressed reference embedding. This
   remains true for multi-head attention, where HVG2000 drops to `0.387` Adamson
-  Spearman and `0.293` heldout Spearman.
+  Spearman and `0.293` heldout Spearman. The distribution run did not complete
+  HVG2000 CloudPred because of CUDA OOM, and only fold 0 frozen-GMM HVG rows are
+  available, so HVG distribution is not interpreted.
 - `sqrt_n_cells` weighting is not preferred; it lowers the main Spearman
   comparisons for most rows.
 - Attention weights are exported for diagnostics of prediction relevance only.
@@ -99,33 +126,12 @@ models whose Replogle train split did not contain the Adamson target gene.
   counts, and head-similarity diagnostics. These weights should not be
   interpreted as causal attribution for cell states.
 
-## Planned Follow-up: Distribution / Prototype Regression
-
-The next implemented comparison treats each perturbation bag as an empirical
-cell-state distribution rather than as instances for MIL attention.
-
-| Branch | Feature view | Prototype fit | Supervised head |
-| --- | --- | --- | --- |
-| Frozen diagonal GMM | `centered`, `deltap` | Replogle train-fold genes plus controls only | Ridge alpha `1/10/100`, RandomForest |
-| Frozen diagonal GMM sensitivity | `centered`, `deltap` | K `16` and `64` | Same heads; MLP only for scVI K `32` |
-| CloudPred-like | `centered`, `deltap` | K `32` initialized from fold-local GMM | Trainable prototypes plus small prediction head |
-
-The experiment config is
-`configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression.yaml`.
-It reuses the PCA128, scVI128, and HVG2000 single-cell bag feature sets, Replogle
-5-fold `internal_cv_all`, and Adamson checkpoint-only external evaluation.
-
-Success is judged primarily by Adamson transfer: the distribution model should
-reach Adamson Spearman at least `0.572` and keep target-heldout Spearman at least
-`0.494` to justify continuing this route. Current context rows are scVI128
-single-head gated attention at Adamson Spearman `0.552` / AUPRC `0.725`, scVI128
-Deep Sets heldout Spearman `0.514`, and pseudobulk `pca50_ridge_alpha100`
-Adamson Spearman `0.500`.
-
 ## Artifacts
 
-All paths below are relative to
+Attention/MIL paths below are relative to
 `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/`.
+Distribution/prototype paths are relative to
+`results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression/`.
 
 | Artifact | Path |
 | --- | --- |
@@ -147,3 +153,8 @@ All paths below are relative to
 | Multi-head external ensemble predictions | `runs/multihead_attention_mil_20260526_233442/artifacts/external_ensemble_predictions.parquet` |
 | Multi-head attention weights | `runs/multihead_attention_mil_20260526_233442/artifacts/single_cell_attention_weights.parquet` |
 | Multi-head attention head diagnostics | `runs/multihead_attention_mil_20260526_233442/artifacts/single_cell_attention_head_diagnostics.parquet` |
+| Distribution PCA/scVI fold metrics | `runs/distribution_proto_20260527_013948/artifacts/fold_metrics.parquet` |
+| Distribution PCA/scVI predictions | `runs/distribution_proto_20260527_013948/artifacts/predictions.parquet` |
+| Distribution PCA/scVI external ensemble metrics | `runs/distribution_proto_20260527_013948/artifacts/external_ensemble_metrics.parquet` |
+| Distribution PCA/scVI external ensemble predictions | `runs/distribution_proto_20260527_013948/artifacts/external_ensemble_predictions.parquet` |
+| Distribution PCA/scVI external log | `logs/adamson_pca_scvi_external_20260527_170826.log` |
