@@ -23,6 +23,7 @@ checkpoint-only ensembles: no retraining on Adamson labels.
 | Controlled PCA/scVI/HVG mean-pool vs attention matrix | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/runs/attention_mil_20260526_180353` |
 | Multi-head gated attention MIL | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/multihead_attention_mil.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/runs/multihead_attention_mil_20260526_233442` |
 | Distribution / prototype regression | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression/runs/distribution_proto_20260527_013948` |
+| Adamson validation distribution sweep | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_adamson_validation_sweep.yaml` | planned under `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_adamson_validation_sweep/` |
 
 The comparison table below uses the controlled multi-embedding run for mean
 pooling and single-head attention, plus the follow-up multi-head run for the
@@ -125,6 +126,28 @@ models whose Replogle train split did not contain the Adamson target gene.
   Multi-head attention additionally exports per-head entropy, effective cell
   counts, and head-similarity diagnostics. These weights should not be
   interpreted as causal attribution for cell states.
+
+## Adamson Validation Sweep
+
+Planned on 2026-05-27. This follow-up is explicitly an Adamson-guided
+validation sweep, not an untouched external-test claim. The current reference
+row is scVI128 frozen GMM K64 Ridge with Adamson Spearman `0.664`; the sweep
+target is Adamson Spearman `>=0.679` while retaining target-heldout Spearman
+`>=0.648`.
+
+The sweep keeps scVI128 as the main representation, keeps PCA128 as a compressed
+non-scVI control, and replaces HVG2000 with dimensioned HVG500 and HVG1000
+feature sets to avoid the prior HVG2000 OOM path. Frozen GMM models run
+`K=32/64/96`, centered and deltap views, Ridge alpha
+`0.1/0.3/1/3/10/30/100/300`, and the current RF anchor. MLP and CloudPred-like
+branches run only for scVI128 and PCA128 at primary `K=32/64`; HVG500/HVG1000
+are frozen-GMM controls only.
+
+Model selection should first filter by Adamson target-heldout Spearman
+`>=0.648`, then rank surviving rows by primary Adamson Spearman. If Adamson is
+used this way, later writeups should call it external validation and reserve a
+new dataset, perturbation family, or held-out target panel for a cleaner final
+test.
 
 ## Artifacts
 

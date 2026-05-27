@@ -972,6 +972,7 @@ def _distribution_model_names(
     )
     views = tuple(config.distribution.views)
     names: list[str] = []
+    trainable_tokens = ("pca", "scvi")
     for k in (*primary_ks, *sensitivity_ks):
         for view in views:
             for alpha in config.distribution.ridge_alphas:
@@ -979,11 +980,12 @@ def _distribution_model_names(
                     f"gmm_{token}_k{k}_{view}_ridge_alpha{_param_token(alpha)}"
                 )
             names.append(f"gmm_{token}_k{k}_{view}_rf")
-            if token.startswith("scvi") and k in primary_ks:
+            if token.startswith(trainable_tokens) and k in primary_ks:
                 names.append(f"gmm_{token}_k{k}_{view}_mlp")
     for k in primary_ks:
         for view in views:
-            names.append(f"cloudpred_{token}_k{k}_{view}")
+            if token.startswith(trainable_tokens):
+                names.append(f"cloudpred_{token}_k{k}_{view}")
     return tuple(names)
 
 

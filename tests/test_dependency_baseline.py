@@ -665,7 +665,7 @@ def test_strict_mlp_config_loads_expected_variants() -> None:
 def test_experiment_configs_follow_grouped_layout() -> None:
     config_paths = sorted(Path("configs/experiments").glob("*/*.yaml"))
 
-    assert len(config_paths) == 10
+    assert len(config_paths) == 11
     assert not Path("configs/adamson_k562_external_features.yaml").exists()
 
     for path in config_paths:
@@ -720,6 +720,30 @@ def test_experiment_configs_follow_grouped_layout() -> None:
     assert distribution_config.distribution.sensitivity_component_counts == (16, 64)
     assert distribution_config.distribution.views == ("centered", "deltap")
     assert distribution_config.selection.weightings == ("unweighted",)
+
+    distribution_sweep_config = load_config(
+        "configs/experiments/"
+        "03_replogle_k562_single_cell_deepsets_adamson/"
+        "distribution_adamson_validation_sweep.yaml"
+    )
+    assert distribution_sweep_config.single_cell.feature_sets == (
+        "single_cell_scvi_delta",
+        "single_cell_pc_delta",
+        "single_cell_hvg500_delta",
+        "single_cell_hvg1000_delta",
+    )
+    assert distribution_sweep_config.distribution.component_counts == (32, 64)
+    assert distribution_sweep_config.distribution.sensitivity_component_counts == (96,)
+    assert distribution_sweep_config.distribution.ridge_alphas == (
+        0.1,
+        0.3,
+        1.0,
+        3.0,
+        10.0,
+        30.0,
+        100.0,
+        300.0,
+    )
 
 
 def test_model_variant_names_are_deterministic(tmp_path: Path) -> None:
