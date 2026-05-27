@@ -16,10 +16,13 @@ from dependency_baseline.config import (
     DistributionConfig,
     ExternalFeatureSourceConfig,
     FeatureConfig,
+    SelectionConfig,
     SingleCellConfig,
 )
 from dependency_baseline.distribution import (
+    DistributionBagData,
     _features_for_bags,
+    _distribution_model_names,
     _fit_fold_gmm,
     evaluate_distribution_external,
     load_distribution_bag_data,
@@ -240,6 +243,34 @@ def test_build_cell_bags_supports_hvg_feature_pack(tmp_path: Path) -> None:
     assert str(payload["feature_set"].item()) == "single_cell_hvg_delta"
     assert payload["cell_delta_pcs"].shape == (18, 5)
     assert metadata["observed_n_cells"].tolist() == [3, 3, 3, 3, 3, 3]
+
+
+def test_dimensioned_hvg_bags_have_distinct_paths_and_dimensions(
+    tmp_path: Path,
+) -> None:
+    h5ad_path, overlap_path = _write_synthetic_replogle_inputs(tmp_path)
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+        ),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
+        single_cell=SingleCellConfig(n_hvg=5, n_pcs=3),
+    )
+
+    hvg3_paths = build_cell_bags(config, feature_set="single_cell_hvg3_delta")
+    hvg4_paths = build_cell_bags(config, feature_set="single_cell_hvg4_delta")
+
+    hvg3_payload = np.load(hvg3_paths.bags_npz, allow_pickle=True)
+    hvg4_payload = np.load(hvg4_paths.bags_npz, allow_pickle=True)
+    assert hvg3_paths.bags_npz.parent.name == "single_cell_hvg3_delta"
+    assert hvg4_paths.bags_npz.parent.name == "single_cell_hvg4_delta"
+    assert hvg3_paths.bags_npz != hvg4_paths.bags_npz
+    assert str(hvg3_payload["feature_set"].item()) == "single_cell_hvg3_delta"
+    assert str(hvg4_payload["feature_set"].item()) == "single_cell_hvg4_delta"
+    assert hvg3_payload["cell_delta_pcs"].shape == (18, 3)
+    assert hvg4_payload["cell_delta_pcs"].shape == (18, 4)
 
 
 def test_run_single_cell_cv_writes_comparable_artifacts(tmp_path: Path) -> None:
@@ -563,6 +594,56 @@ def test_distribution_features_and_fold_gmm_are_fold_local(tmp_path: Path) -> No
     assert test_genes.isdisjoint(set(gmm.fit_gene_names_.astype(str)))
 
 
+def test_distribution_sweep_model_names_follow_feature_rules() -> None:
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=Path("missing.h5ad"),
+            overlap_csv=Path("missing.csv"),
+            output_dir=Path("missing_outputs"),
+        ),
+        distribution=DistributionConfig(
+            component_counts=(2, 3),
+            sensitivity_component_counts=(4,),
+            ridge_alphas=(1.0,),
+            views=("centered",),
+        )
+    )
+    pca_data = DistributionBagData(
+        bags=(np.zeros((2, 3), dtype=np.float32),),
+        y=np.zeros(1, dtype=np.float32),
+        n_cells=np.ones(1, dtype=np.float32),
+        genes=np.asarray(["GENE1"], dtype=object),
+        metadata=pd.DataFrame({"perturbation_gene": ["GENE1"]}),
+        feature_set="single_cell_pc_delta",
+        input_dim=3,
+        control_bag=np.zeros((2, 3), dtype=np.float32),
+    )
+    hvg_data = DistributionBagData(
+        bags=(np.zeros((2, 5), dtype=np.float32),),
+        y=np.zeros(1, dtype=np.float32),
+        n_cells=np.ones(1, dtype=np.float32),
+        genes=np.asarray(["GENE1"], dtype=object),
+        metadata=pd.DataFrame({"perturbation_gene": ["GENE1"]}),
+        feature_set="single_cell_hvg500_delta",
+        input_dim=5,
+        control_bag=np.zeros((2, 5), dtype=np.float32),
+    )
+
+    pca_models = set(_distribution_model_names(config, pca_data))
+    hvg_models = set(_distribution_model_names(config, hvg_data))
+
+    assert "gmm_pca3_k2_centered_mlp" in pca_models
+    assert "gmm_pca3_k3_centered_mlp" in pca_models
+    assert "cloudpred_pca3_k2_centered" in pca_models
+    assert "cloudpred_pca3_k3_centered" in pca_models
+    assert "gmm_pca3_k4_centered_ridge_alpha1" in pca_models
+    assert "gmm_pca3_k4_centered_mlp" not in pca_models
+    assert "cloudpred_pca3_k4_centered" not in pca_models
+    assert "gmm_hvg500_k4_centered_ridge_alpha1" in hvg_models
+    assert "gmm_hvg500_k2_centered_mlp" not in hvg_models
+    assert "cloudpred_hvg500_k2_centered" not in hvg_models
+
+
 def test_run_distribution_cv_and_external_writes_artifacts(tmp_path: Path) -> None:
     reference_h5ad, reference_overlap = _write_synthetic_replogle_inputs(tmp_path)
     source_a, source_b, external_overlap = _write_synthetic_external_cell_inputs(
@@ -592,6 +673,14 @@ def test_run_distribution_cv_and_external_writes_artifacts(tmp_path: Path) -> No
         features=FeatureConfig(chunk_size=2),
         cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
         single_cell=SingleCellConfig(n_hvg=5, n_pcs=3),
+        selection=SelectionConfig(
+            models=(
+                "gmm_pca3_k2_centered_ridge_alpha1",
+                "gmm_pca3_k2_deltap_rf",
+                "cloudpred_pca3_k2_centered",
+                "cloudpred_pca3_k2_deltap",
+            )
+        ),
         distribution=DistributionConfig(
             component_counts=(2,),
             sensitivity_component_counts=(),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -31,6 +32,7 @@ class CellBagPaths:
 PCA_FEATURE_SET = "single_cell_pc_delta"
 SCVI_FEATURE_SET = "single_cell_scvi_delta"
 HVG_FEATURE_SET = "single_cell_hvg_delta"
+HVG_DIMENSIONED_FEATURE_RE = re.compile(r"single_cell_hvg(?P<n_hvg>\d+)_delta")
 SUPPORTED_SINGLE_CELL_FEATURE_SETS = (
     PCA_FEATURE_SET,
     SCVI_FEATURE_SET,
@@ -70,7 +72,7 @@ def build_cell_bags(
         )
         selected_gene_indices = _select_hvg_indices(
             variance,
-            config.single_cell.n_hvg,
+            _hvg_count_for_feature_set(feature_set, config.single_cell.n_hvg),
         )
         selected_symbols = [var_symbols[index] for index in selected_gene_indices]
         selected_mean = mean[selected_gene_indices]
@@ -91,7 +93,7 @@ def build_cell_bags(
                 selected_std,
                 config,
             )
-        elif feature_set == HVG_FEATURE_SET:
+        elif _is_hvg_feature_set(feature_set):
             (
                 bag_arrays,
                 observed_counts,
@@ -464,13 +466,32 @@ def _select_hvg_indices(variance: np.ndarray, requested: int) -> np.ndarray:
 
 
 def _validate_feature_set(feature_set: str) -> None:
-    if feature_set not in SUPPORTED_SINGLE_CELL_FEATURE_SETS:
+    if feature_set not in SUPPORTED_SINGLE_CELL_FEATURE_SETS and not (
+        _is_dimensioned_hvg_feature_set(feature_set)
+    ):
         allowed = ", ".join(SUPPORTED_SINGLE_CELL_FEATURE_SETS)
         msg = (
             f"Unsupported single-cell feature set {feature_set!r}; "
-            f"expected one of {allowed}"
+            f"expected one of {allowed} or single_cell_hvg<N>_delta"
         )
         raise ValueError(msg)
+
+
+def _is_dimensioned_hvg_feature_set(feature_set: str) -> bool:
+    return HVG_DIMENSIONED_FEATURE_RE.fullmatch(feature_set) is not None
+
+
+def _is_hvg_feature_set(feature_set: str) -> bool:
+    return feature_set == HVG_FEATURE_SET or _is_dimensioned_hvg_feature_set(
+        feature_set
+    )
+
+
+def _hvg_count_for_feature_set(feature_set: str, default: int) -> int:
+    match = HVG_DIMENSIONED_FEATURE_RE.fullmatch(feature_set)
+    if match is None:
+        return int(default)
+    return int(match.group("n_hvg"))
 
 
 def _feature_set_from_payload(payload: object) -> str:
@@ -558,7 +579,7 @@ def _external_projector_from_reference(
     reference: object,
     feature_set: str,
 ) -> object:
-    if feature_set == HVG_FEATURE_SET:
+    if _is_hvg_feature_set(feature_set):
         return _IdentityProjector()
     if feature_set == SCVI_FEATURE_SET:
         if "scvi_model_dir" not in reference:
