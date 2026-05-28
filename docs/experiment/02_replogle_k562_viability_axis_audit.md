@@ -2,6 +2,9 @@
 
 Run date: 2026-05-15
 
+Model card:
+[`docs/experiment/model-card/02_replogle_k562_viability_axis_audit.md`](model-card/02_replogle_k562_viability_axis_audit.md)
+
 Canonical remote result paths after the 2026-05-26 artifact reorganization:
 
 - Main audit:
