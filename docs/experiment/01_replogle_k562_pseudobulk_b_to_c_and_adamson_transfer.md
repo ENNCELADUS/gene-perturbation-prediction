@@ -2,6 +2,9 @@
 
 Run dates: 2026-05-14 to 2026-05-24
 
+Model card:
+[`docs/experiment/model-card/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer.md`](model-card/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer.md)
+
 Canonical remote result path after the 2026-05-26 artifact reorganization:
 
 - Replogle 5-fold CV and Adamson external ensemble:

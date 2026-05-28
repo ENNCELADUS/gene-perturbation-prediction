@@ -1,6 +1,9 @@
 # Replogle K562 Single-Cell MIL and Adamson Transfer
 
-Run dates: 2026-05-25 to 2026-05-27
+Run dates: 2026-05-25 to 2026-05-28
+
+Model card:
+[`docs/experiment/model-card/03_replogle_k562_single_cell_deepsets_adamson.md`](model-card/03_replogle_k562_single_cell_deepsets_adamson.md)
 
 ## Scope
 
@@ -23,7 +26,7 @@ checkpoint-only ensembles: no retraining on Adamson labels.
 | Controlled PCA/scVI/HVG mean-pool vs attention matrix | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/runs/attention_mil_20260526_180353` |
 | Multi-head gated attention MIL | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/multihead_attention_mil.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/runs/multihead_attention_mil_20260526_233442` |
 | Distribution / prototype regression | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression/runs/distribution_proto_20260527_013948` |
-| Adamson validation distribution sweep | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_adamson_validation_sweep.yaml` | planned under `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_adamson_validation_sweep/` |
+| Adamson validation distribution sweep | `configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_adamson_validation_sweep.yaml` | `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_adamson_validation_sweep/runs/adamson_validation_sweep_reuse_fixed_20260527_223111` |
 
 The comparison table below uses the controlled multi-embedding run for mean
 pooling and single-head attention, plus the follow-up multi-head run for the
@@ -33,7 +36,10 @@ runs reuse the same PCA/scVI/HVG bag logic, run only `unweighted` models, and
 use the same CV/external checkpoint ensemble logic. The distribution run
 completed PCA128 and scVI128 Adamson evaluation; HVG2000 CloudPred training was
 stopped by GPU OOM after fold 0 frozen-GMM rows, so HVG distribution rows are not
-used for the primary comparison.
+used for the primary comparison. The Adamson validation sweep reused the prior
+PCA128/scVI128 bag artifacts, completed PCA128/scVI128 CV and Adamson ensemble
+evaluation, and produced only partial HVG500 CV rows; HVG500/HVG1000 rows are
+therefore not merged into the primary comparison.
 
 ## Feature QA
 
@@ -57,13 +63,17 @@ models whose Replogle train split did not contain the Adamson target gene.
 | PCA128 delta | Deep Sets mean | 0.484 | 0.736 | 0.504 | 0.854 | 0.639 | 0.431 |
 | PCA128 delta | Gated attention | 0.471 | 0.731 | 0.485 | 0.856 | 0.637 | 0.435 |
 | PCA128 delta | Multi-head gated attention | 0.469 | 0.732 | 0.466 | 0.848 | 0.602 | 0.450 |
-| PCA128 delta | GMM prototype K64 deltap Ridge alpha1 | 0.414 | 0.774 | 0.488 | 0.810 | 0.738 | 0.487 |
+| PCA128 delta | GMM prototype K64 deltap Ridge alpha1 | 0.457 | 0.724 | 0.488 | 0.810 | 0.738 | 0.487 |
+| PCA128 delta | Adamson sweep GMM prototype K64 deltap RF | 0.458 | 0.726 | 0.509 | 0.821 | 0.712 | 0.387 |
+| PCA128 delta | Adamson sweep GMM prototype K64 deltap Ridge alpha1 | 0.459 | 0.726 | 0.494 | 0.813 | 0.743 | 0.491 |
 | scVI128 delta | Deep Sets mean | 0.489 | 0.744 | 0.545 | 0.889 | 0.714 | 0.514 |
 | scVI128 delta | Gated attention | 0.478 | 0.739 | 0.552 | 0.893 | 0.725 | 0.509 |
 | scVI128 delta | Multi-head gated attention | 0.474 | 0.736 | 0.541 | 0.895 | 0.717 | 0.507 |
-| scVI128 delta | GMM prototype K64 deltap Ridge alpha1 | 0.639 | 0.899 | 0.664 | 0.911 | 0.785 | 0.639 |
-| scVI128 delta | GMM prototype K64 centered Ridge alpha100 | 0.636 | 0.898 | 0.663 | 0.908 | 0.793 | 0.668 |
-| scVI128 delta | CloudPred-like K32 centered | 0.601 | 0.899 | 0.602 | 0.902 | 0.734 | 0.593 |
+| scVI128 delta | GMM prototype K64 deltap Ridge alpha1 | 0.439 | 0.715 | 0.664 | 0.911 | 0.785 | 0.639 |
+| scVI128 delta | GMM prototype K64 centered Ridge alpha100 | 0.445 | 0.718 | 0.663 | 0.908 | 0.793 | 0.668 |
+| scVI128 delta | Adamson sweep GMM prototype K64 centered Ridge alpha30 | 0.438 | 0.714 | 0.666 | 0.911 | 0.798 | 0.637 |
+| scVI128 delta | Adamson sweep GMM prototype K64 centered Ridge alpha300 | 0.447 | 0.719 | 0.665 | 0.911 | 0.806 | 0.669 |
+| scVI128 delta | CloudPred-like K32 centered | 0.466 | 0.731 | 0.602 | 0.902 | 0.734 | 0.593 |
 | HVG2000 delta | Deep Sets mean | 0.480 | 0.735 | 0.412 | 0.781 | 0.540 | 0.369 |
 | HVG2000 delta | Gated attention | 0.478 | 0.735 | 0.410 | 0.756 | 0.538 | 0.354 |
 | HVG2000 delta | Multi-head gated attention | 0.458 | 0.726 | 0.387 | 0.724 | 0.503 | 0.293 |
@@ -81,18 +91,20 @@ models whose Replogle train split did not contain the Adamson target gene.
 
 ## Readout
 
-- scVI128 is the best representation in this matrix. The best overall Adamson
-  transfer row is now scVI128 GMM prototype distribution regression with K64
-  deltap Ridge alpha1: Spearman `0.664`, AUROC `0.911`, AUPRC `0.785`, and
-  heldout Spearman `0.639`. The best target-heldout row is the adjacent scVI128
-  K64 centered Ridge alpha100 model: primary Adamson Spearman `0.663`, heldout
-  Spearman `0.668`, AUROC `0.912`, and AUPRC `0.799`.
+- scVI128 is the best representation in this matrix. The best primary Adamson
+  transfer row after the 2026-05-28 validation sweep is scVI128 GMM prototype
+  distribution regression with K64 centered Ridge alpha30: Spearman `0.666`,
+  AUROC `0.911`, AUPRC `0.798`, and heldout Spearman `0.637`. The best row under
+  the predefined heldout constraint is scVI128 K64 centered Ridge alpha300: primary
+  Spearman `0.665`, heldout Spearman `0.669`, AUROC `0.911`, and AUPRC `0.806`.
 - Distribution / prototype regression is the first single-cell method in this
   experiment to clearly beat the previous Adamson transfer gate. Relative to the
   earlier best scVI128 single-head gated attention row (`0.552` Spearman,
   `0.893` AUROC, `0.725` AUPRC), the best scVI GMM row improves Adamson
-  Spearman by `+0.112` and AUPRC by `+0.060`. It also clears the planned
-  success threshold of Adamson Spearman `>=0.572` and heldout Spearman `>=0.494`.
+  Spearman by `+0.114` and AUPRC by `+0.073`. It clears the original
+  distribution-regression gate of Adamson Spearman `>=0.572` and heldout
+  Spearman `>=0.494`, but the 2026-05-28 Adamson validation sweep did not clear
+  the more aggressive primary sweep target of `>=0.679`.
 - Attention pooling does not consistently beat mean pooling within embedding.
   Unweighted Spearman deltas for attention minus mean are: PCA `-0.013`
   Replogle / `-0.019` Adamson / `+0.004` heldout; scVI `-0.011` Replogle /
@@ -110,10 +122,12 @@ models whose Replogle train split did not contain the Adamson target gene.
   single-head attention (`0.450` vs `0.435`) but lowers Adamson overall Spearman
   (`0.466` vs `0.485`).
 - The original PCA Deep Sets baseline remains a useful floor: Adamson transfer
-  is strong (`0.504` Spearman). PCA distribution regression is mixed: the best
-  PCA target-heldout distribution row reaches heldout Spearman `0.487` with
-  primary Adamson Spearman `0.488`, but it does not improve over the original
-  PCA Deep Sets primary Adamson Spearman.
+  is strong (`0.504` Spearman). PCA distribution regression is mixed: the
+  Adamson sweep raises the best PCA primary row to `0.509` Spearman with K64
+  deltap RF, but that row has weak heldout Spearman (`0.387`). The best PCA
+  heldout row is K64 deltap Ridge alpha1 with primary Spearman `0.494` and
+  heldout Spearman `0.491`, still below scVI and not clearly better than the
+  original PCA Deep Sets primary metric.
 - HVG2000 does not help in this configuration despite more input dimensions,
   suggesting the MIL head benefits from a compressed reference embedding. This
   remains true for multi-head attention, where HVG2000 drops to `0.387` Adamson
@@ -129,25 +143,25 @@ models whose Replogle train split did not contain the Adamson target gene.
 
 ## Adamson Validation Sweep
 
-Planned on 2026-05-27. This follow-up is explicitly an Adamson-guided
-validation sweep, not an untouched external-test claim. The current reference
-row is scVI128 frozen GMM K64 Ridge with Adamson Spearman `0.664`; the sweep
-target is Adamson Spearman `>=0.679` while retaining target-heldout Spearman
-`>=0.648`.
+Run on 2026-05-27 to 2026-05-28. This follow-up is explicitly an Adamson-guided
+validation sweep, not an untouched external-test claim. The reference row before
+the sweep was scVI128 frozen GMM K64 Ridge with Adamson Spearman `0.664`; the
+sweep target was Adamson Spearman `>=0.679` while retaining target-heldout
+Spearman `>=0.648`.
 
-The sweep keeps scVI128 as the main representation, keeps PCA128 as a compressed
-non-scVI control, and replaces HVG2000 with dimensioned HVG500 and HVG1000
-feature sets to avoid the prior HVG2000 OOM path. Frozen GMM models run
+The completed part of the sweep reused prior PCA128/scVI128 bag artifacts and
+evaluated Adamson ensembles for those two feature sets. Frozen GMM models ran
 `K=32/64/96`, centered and deltap views, Ridge alpha
-`0.1/0.3/1/3/10/30/100/300`, and the current RF anchor. MLP and CloudPred-like
-branches run only for scVI128 and PCA128 at primary `K=32/64`; HVG500/HVG1000
-are frozen-GMM controls only.
+`0.1/0.3/1/3/10/30/100/300`, and the existing RF anchor. MLP and CloudPred-like
+branches ran for scVI128 and PCA128 at primary `K=32/64`. HVG500 CV was partial
+and HVG1000 was not run to completion, so neither is interpreted here.
 
-Model selection should first filter by Adamson target-heldout Spearman
-`>=0.648`, then rank surviving rows by primary Adamson Spearman. If Adamson is
-used this way, later writeups should call it external validation and reserve a
-new dataset, perturbation family, or held-out target panel for a cleaner final
-test.
+The best primary row is scVI128 K64 centered Ridge alpha30 with Adamson Spearman
+`0.666` and heldout Spearman `0.637`. Applying the predefined heldout filter
+(`>=0.648`) selects scVI128 K64 centered Ridge alpha300 with Adamson Spearman
+`0.665` and heldout Spearman `0.669`. This is a stable reproduction of the
+distribution-regression gain, but not a meaningful improvement over the previous
+best primary Adamson Spearman.
 
 ## Artifacts
 
@@ -155,6 +169,8 @@ Attention/MIL paths below are relative to
 `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/attention_mil_multi_embedding/`.
 Distribution/prototype paths are relative to
 `results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_prototype_regression/`.
+Adamson validation sweep paths are relative to
+`results/experiments/03_replogle_k562_single_cell_deepsets_adamson/distribution_adamson_validation_sweep/`.
 
 | Artifact | Path |
 | --- | --- |
@@ -181,3 +197,8 @@ Distribution/prototype paths are relative to
 | Distribution PCA/scVI external ensemble metrics | `runs/distribution_proto_20260527_013948/artifacts/external_ensemble_metrics.parquet` |
 | Distribution PCA/scVI external ensemble predictions | `runs/distribution_proto_20260527_013948/artifacts/external_ensemble_predictions.parquet` |
 | Distribution PCA/scVI external log | `logs/adamson_pca_scvi_external_20260527_170826.log` |
+| Adamson sweep PCA/scVI fold metrics | `runs/adamson_validation_sweep_reuse_fixed_20260527_223111/artifacts/fold_metrics.parquet` |
+| Adamson sweep PCA/scVI predictions | `runs/adamson_validation_sweep_reuse_fixed_20260527_223111/artifacts/predictions.parquet` |
+| Adamson sweep PCA/scVI external ensemble metrics | `runs/adamson_validation_sweep_reuse_fixed_20260527_223111/artifacts/external_ensemble_metrics.parquet` |
+| Adamson sweep PCA/scVI external ensemble predictions | `runs/adamson_validation_sweep_reuse_fixed_20260527_223111/artifacts/external_ensemble_predictions.parquet` |
+| Adamson sweep PCA/scVI external log | `logs/adamson_scvi_pca_external_20260528_131916.log` |
