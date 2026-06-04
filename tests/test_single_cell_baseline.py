@@ -16,6 +16,7 @@ from dependency_baseline.config import (
     DistributionConfig,
     ExternalFeatureSourceConfig,
     FeatureConfig,
+    PredictedBConfig,
     SelectionConfig,
     SingleCellConfig,
 )
@@ -27,6 +28,10 @@ from dependency_baseline.distribution import (
     evaluate_distribution_external,
     load_distribution_bag_data,
     run_distribution_cv,
+)
+from dependency_baseline.predicted_b import (
+    _a_to_b_features,
+    run_predicted_b_cv,
 )
 from dependency_baseline.single_cell import (
     AttentionMILRegressor,
@@ -726,6 +731,120 @@ def test_run_distribution_cv_and_external_writes_artifacts(tmp_path: Path) -> No
         "external_ensemble:adamson_k562",
         "external_ensemble_target_heldout:adamson_k562",
     }.issubset(set(ensemble_metrics["evaluation_scope"]))
+
+
+def test_predicted_b_features_mask_target_without_onehot() -> None:
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=Path("unused.h5ad"),
+            overlap_csv=Path("unused.csv"),
+            output_dir=Path("unused"),
+        )
+    )
+    expression = np.asarray([[1.0, 2.0, 3.0]], dtype=np.float32)
+
+    features = _a_to_b_features(
+        config,
+        expression,
+        "GENE2",
+        {"GENE2": 1},
+    )
+    absent_target_features = _a_to_b_features(
+        config,
+        expression,
+        "MISSING",
+        {"GENE2": 1},
+    )
+
+    np.testing.assert_allclose(features, [[1.0, 0.0, 3.0]])
+    assert features.shape == expression.shape
+    np.testing.assert_allclose(absent_target_features, expression)
+
+
+def test_run_predicted_b_cv_writes_fold_local_artifacts(tmp_path: Path) -> None:
+    h5ad_path, overlap_path = _write_synthetic_replogle_inputs(tmp_path)
+    config = BaselineConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+        ),
+        cv=CvConfig(n_splits=2, n_repeats=1, random_state=7, model_set="quick"),
+        single_cell=SingleCellConfig(
+            n_hvg=5,
+            feature_sets=("single_cell_hvg_delta",),
+        ),
+        distribution=DistributionConfig(max_gmm_fit_cells=None),
+        predicted_b=PredictedBConfig(
+            feature_set="single_cell_hvg_delta",
+            methods=("mean_delta_ridge", "pseudo_pair_ridge"),
+            gmm_components=2,
+            c_ridge_alpha=1.0,
+            max_pred_cells_per_gene=3,
+            max_pair_samples_per_gene=2,
+            pairing_strata_cols=("cell_line",),
+        ),
+    )
+
+    paths = run_predicted_b_cv(
+        config,
+        run_id="predicted_b",
+        selection=SelectionConfig(folds=(0,)),
+    )
+
+    fold_metrics = pd.read_parquet(paths.fold_metrics_path)
+    predictions = pd.read_parquet(paths.predictions_path)
+    splits = pd.read_parquet(paths.splits_path)
+    manifest = pd.read_parquet(paths.model_manifest_path)
+    assert set(fold_metrics["model"]) == {
+        "mean_delta_ridge",
+        "pseudo_pair_ridge",
+    }
+    expected_reconstruction_cols = {
+        "a_to_b_train_mean_rmse",
+        "a_to_b_train_mean_mae",
+        "a_to_b_test_mean_rmse",
+        "a_to_b_test_mean_mae",
+    }
+    assert expected_reconstruction_cols.issubset(fold_metrics.columns)
+    assert "a_to_b_mean_rmse" not in fold_metrics.columns
+    assert "a_to_b_mean_mae" not in fold_metrics.columns
+    assert np.isfinite(fold_metrics[list(expected_reconstruction_cols)]).all().all()
+    assert (fold_metrics["predicted_cells_per_gene"] == 3).all()
+    assert predictions["perturbation_gene"].nunique() == 3
+    assert manifest["featureizer_scope"].eq(
+        "fold_local_train_genes_plus_controls"
+    ).all()
+    for model in ("mean_delta_ridge", "pseudo_pair_ridge"):
+        metadata = pd.read_parquet(
+            paths.run_dir
+            / "artifacts"
+            / "predicted_b"
+            / model
+            / "fold_0"
+            / "bag_metadata.parquet"
+        )
+        assert metadata["predicted_n_cells"].eq(3).all()
+        assert "onehot_trained" not in metadata.columns
+        reconstruction = pd.read_parquet(
+            paths.run_dir
+            / "artifacts"
+            / "predicted_b"
+            / model
+            / "fold_0"
+            / "a_to_b_reconstruction_metrics.parquet"
+        )
+        assert expected_reconstruction_cols.issubset(reconstruction.columns)
+        test_genes = set(
+            splits.loc[
+                (splits["fold"] == 0) & (splits["split"] == "test"),
+                "perturbation_gene",
+            ]
+        )
+        train_metadata_genes = set(
+            metadata.loc[metadata["split"] == "train", "perturbation_gene"]
+        )
+        assert not train_metadata_genes & test_genes
 
 
 def _write_synthetic_replogle_inputs(tmp_path: Path) -> tuple[Path, Path]:

@@ -17,6 +17,7 @@ from dependency_baseline.distribution import (
     run_distribution_cv,
 )
 from dependency_baseline.features import build_external_features, build_features
+from dependency_baseline.predicted_b import run_predicted_b_cv
 from dependency_baseline.single_cell import (
     evaluate_single_cell_external,
     run_single_cell_cv,
@@ -122,6 +123,15 @@ def main() -> None:
     )
     distribution_external_parser.add_argument("--external-name", default="adamson_k562")
     distribution_external_parser.add_argument("--feature-set", default=None)
+
+    predicted_b_parser = subparsers.add_parser("run-predicted-b-cv")
+    predicted_b_parser.add_argument("--config", required=True, type=Path)
+    predicted_b_parser.add_argument("--run-id", type=str, default=None)
+    predicted_b_parser.add_argument("--resume", action="store_true")
+    predicted_b_parser.add_argument("--scope", action="append", default=None)
+    predicted_b_parser.add_argument("--model", action="append", default=None)
+    predicted_b_parser.add_argument("--fold", action="append", type=int, default=None)
+    predicted_b_parser.add_argument("--log-file", type=Path, default=None)
 
     final_parser = subparsers.add_parser("fit-final")
     final_parser.add_argument("--config", required=True, type=Path)
@@ -265,6 +275,23 @@ def main() -> None:
         )
         print(f"external ensemble metrics: {metrics_path}")
         print(f"external ensemble predictions: {predictions_path}")
+    elif args.command == "run-predicted-b-cv":
+        config = load_config(args.config)
+        paths = run_predicted_b_cv(
+            config,
+            run_id=args.run_id,
+            resume=args.resume,
+            selection=_selection_from_args(args),
+            command=tuple(sys.argv),
+            config_path=args.config,
+            log_file=args.log_file,
+        )
+        print(f"run dir: {paths.run_dir}")
+        print(f"fold metrics: {paths.fold_metrics_path}")
+        print(f"summary: {paths.summary_csv}")
+        print(f"predictions: {paths.predictions_path}")
+        print(f"model manifest: {paths.model_manifest_path}")
+        print(f"log: {paths.log_file}")
     elif args.command == "fit-final":
         config = load_config(args.config)
         paths = fit_final(

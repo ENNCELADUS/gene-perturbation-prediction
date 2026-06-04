@@ -150,6 +150,16 @@ linear baselines. The point is to quantify whether predicted transcriptomes are
 good enough for downstream dependency ranking, not to assume that forward
 prediction is solved.
 
+Current implemented predicted-B pilot:
+
+```bash
+uv run vcc-dep-baseline run-predicted-b-cv \
+  --config configs/experiments/04_k562_linear_predicted_b_to_c/linear_predicted_b_cv.yaml
+```
+
+This runs fold-local linear A->B baselines before AIVC: A->B, scVI/GMM
+featureization, and the B_hat->C Ridge head are trained inside each CV fold.
+
 ### Stage 3: SL Candidate Prioritization
 
 Synthetic lethality requires context specificity. A gene that is essential in a

@@ -80,6 +80,7 @@ csc286_eval.py
 /logs/
 *.pptx
 *.key
+docs/literature/
 
 # TeX
 *.aux
