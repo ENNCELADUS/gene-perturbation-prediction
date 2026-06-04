@@ -665,7 +665,7 @@ def test_strict_mlp_config_loads_expected_variants() -> None:
 def test_experiment_configs_follow_grouped_layout() -> None:
     config_paths = sorted(Path("configs/experiments").glob("*/*.yaml"))
 
-    assert len(config_paths) == 11
+    assert len(config_paths) == 12
     assert not Path("configs/adamson_k562_external_features.yaml").exists()
 
     for path in config_paths:
@@ -744,6 +744,21 @@ def test_experiment_configs_follow_grouped_layout() -> None:
         100.0,
         300.0,
     )
+
+    predicted_b_config = load_config(
+        "configs/experiments/"
+        "04_k562_linear_predicted_b_to_c/"
+        "linear_predicted_b_cv.yaml"
+    )
+    assert predicted_b_config.predicted_b.feature_set == "single_cell_scvi_delta"
+    assert predicted_b_config.predicted_b.methods == (
+        "mean_delta_ridge",
+        "pseudo_pair_ridge",
+    )
+    assert predicted_b_config.predicted_b.gmm_components == 64
+    assert predicted_b_config.predicted_b.gmm_view == "centered"
+    assert predicted_b_config.predicted_b.c_ridge_alpha == 300.0
+    assert predicted_b_config.predicted_b.max_pred_cells_per_gene == 512
 
 
 def test_model_variant_names_are_deterministic(tmp_path: Path) -> None:

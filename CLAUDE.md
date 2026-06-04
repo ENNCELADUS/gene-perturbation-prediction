@@ -90,6 +90,10 @@ h5ad → build-cell-bags → bags.npz (PCA-projected per-cell arrays)
 all cells into PC space, subtracts control centroid, groups by perturbation gene
 into ragged bags stored as offsets into a flat array.
 
+**Predicted-B runner** (`predicted_b.py`): Runs fold-local linear A->B baselines
+that generate predicted post-perturbation bags, then train scVI/GMM Ridge B_hat
+-> C predictors inside each CV fold.
+
 **Deep Sets** (`single_cell.py:DeepSetsRegressor`): phi network encodes each
 cell, mean-pooling aggregates the bag, rho network predicts GeneEffect. Handles
 ragged bags via padding + mask. Inner early-stopping validation split.
@@ -114,6 +118,7 @@ Adamson held-out test settings are embedded in the experiment configs that use
 Adamson instead of being maintained as a standalone Adamson config. Key patterns:
 - `models:` block defines the model ladder with `enabled` flags and hyperparams.
 - `selection:` block filters what actually runs (useful for partial reruns).
+- `predicted_b:` configures fold-local A->B->C linear predicted-B baselines.
 - `viability_axis:` enables NAR death-signature residualization.
 - `models.signal_decomposition:` enables program-score and nuisance-residualized
   model families.

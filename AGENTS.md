@@ -101,7 +101,8 @@ cell, TCGA, CCLE, or DepMap context evidence before using SL language.
   `docs/experiment/`; Adamson held-out test settings live inside the experiment
   configs that use Adamson.
 - `src/dependency_baseline/`: implemented feature-building and
-  cross-validation baseline package.
+  cross-validation baseline package, including observed-B and predicted-B
+  dependency baselines.
 - `tests/`: synthetic-data tests for the baseline package.
 - `data/norman/splits/`: retained Norman split metadata.
 - `scGPT/`: local scGPT reference code.

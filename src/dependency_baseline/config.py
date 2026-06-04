@@ -104,6 +104,23 @@ class DistributionConfig:
 
 
 @dataclass(frozen=True)
+class PredictedBConfig:
+    feature_set: str = "single_cell_scvi_delta"
+    methods: tuple[str, ...] = ("mean_delta_ridge", "pseudo_pair_ridge")
+    a_to_b_alpha: float = 10.0
+    gmm_components: int = 64
+    gmm_view: str = "centered"
+    c_ridge_alpha: float = 300.0
+    predicted_cells_per_gene: str = "capped_control_panel"
+    max_pred_cells_per_gene: int = 512
+    max_pair_samples_per_gene: int = 64
+    pairing_strata_cols: tuple[str, ...] = ()
+    mask_value: float = 0.0
+    clip_min: float | None = 0.0
+    scvi_query_batch_cells: int = 8192
+
+
+@dataclass(frozen=True)
 class ViabilityAxisArtifactConfig:
     name: str
     url: str
@@ -160,6 +177,7 @@ class BaselineConfig:
     selection: SelectionConfig = field(default_factory=SelectionConfig)
     single_cell: SingleCellConfig = field(default_factory=SingleCellConfig)
     distribution: DistributionConfig = field(default_factory=DistributionConfig)
+    predicted_b: PredictedBConfig = field(default_factory=PredictedBConfig)
     viability_axis: ViabilityAxisConfig = field(default_factory=ViabilityAxisConfig)
     models: dict[str, dict[str, Any]] | None = None
 
@@ -379,6 +397,7 @@ def load_config(path: str | Path) -> BaselineConfig:
     features = raw.get("features", {})
     single_cell = raw.get("single_cell", {})
     distribution = raw.get("distribution", {})
+    predicted_b = raw.get("predicted_b", {})
     cv = raw.get("cv", {})
     experiment = raw.get("experiment", {})
     selection = raw.get("selection", {})
@@ -546,6 +565,42 @@ def load_config(path: str | Path) -> BaselineConfig:
             max_gmm_fit_cells=_int_or_none(distribution.get("max_gmm_fit_cells")),
             max_cells_per_bag=int(distribution.get("max_cells_per_bag", 512)),
             device=str(distribution.get("device", "auto")),
+        ),
+        predicted_b=PredictedBConfig(
+            feature_set=str(
+                predicted_b.get("feature_set", "single_cell_scvi_delta")
+            ),
+            methods=_tuple_str_or_none(predicted_b.get("methods"))
+            or ("mean_delta_ridge", "pseudo_pair_ridge"),
+            a_to_b_alpha=float(predicted_b.get("a_to_b_alpha", 10.0)),
+            gmm_components=int(predicted_b.get("gmm_components", 64)),
+            gmm_view=str(predicted_b.get("gmm_view", "centered")),
+            c_ridge_alpha=float(predicted_b.get("c_ridge_alpha", 300.0)),
+            predicted_cells_per_gene=str(
+                predicted_b.get(
+                    "predicted_cells_per_gene",
+                    "capped_control_panel",
+                )
+            ),
+            max_pred_cells_per_gene=int(
+                predicted_b.get("max_pred_cells_per_gene", 512)
+            ),
+            max_pair_samples_per_gene=int(
+                predicted_b.get("max_pair_samples_per_gene", 64)
+            ),
+            pairing_strata_cols=_tuple_str_or_none(
+                predicted_b.get("pairing_strata_cols")
+            )
+            or (),
+            mask_value=float(predicted_b.get("mask_value", 0.0)),
+            clip_min=(
+                None
+                if predicted_b.get("clip_min", 0.0) is None
+                else float(predicted_b.get("clip_min", 0.0))
+            ),
+            scvi_query_batch_cells=int(
+                predicted_b.get("scvi_query_batch_cells", 8192)
+            ),
         ),
         viability_axis=_viability_axis_config(raw.get("viability_axis")),
         models=_model_config(raw.get("models"), cv_config),
