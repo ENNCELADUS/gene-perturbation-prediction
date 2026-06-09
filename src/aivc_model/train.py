@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Mapping
-from contextlib import nullcontext
 from datetime import datetime, timezone
 import json
 import logging
@@ -160,6 +159,7 @@ def run_training(
         projector_weight,
         projector_bias,
         extra_genes=extra_genes,
+        emit_checkpoint_output=accelerator.is_main_process,
     )
     batch_lookup = load_state_batch_lookup(config.state.model_dir)
     weights = _loss_weights(config)
@@ -174,9 +174,27 @@ def run_training(
         if external is not None
         else split.test
     )
-    train_loader = _gene_loader(split.train, shuffle=True, seed=config.train.seed)
-    val_loader = _gene_loader(split.val, shuffle=False, seed=config.train.seed)
-    test_loader = _gene_loader(eval_indices, shuffle=False, seed=config.train.seed)
+    train_loader = _gene_loader(
+        split.train,
+        shuffle=True,
+        seed=config.train.seed,
+        gene_batch_size=config.train.gene_batch_size,
+        world_size=accelerator.num_processes,
+    )
+    val_loader = _gene_loader(
+        split.val,
+        shuffle=False,
+        seed=config.train.seed,
+        gene_batch_size=config.train.gene_batch_size,
+        world_size=accelerator.num_processes,
+    )
+    test_loader = _gene_loader(
+        eval_indices,
+        shuffle=False,
+        seed=config.train.seed,
+        gene_batch_size=config.train.gene_batch_size,
+        world_size=accelerator.num_processes,
+    )
     model, optimizer, train_loader, val_loader, test_loader = accelerator.prepare(
         model,
         optimizer,
@@ -189,72 +207,64 @@ def run_training(
     logs: list[dict[str, float]] = []
     best_val_loss = math.inf
     last_val_loss = math.nan
-    train_context = (
-        accelerator.join_uneven_inputs([model])
-        if accelerator.num_processes > 1
-        else nullcontext()
-    )
-    with train_context:
-        for epoch in range(1, config.train.max_epochs + 1):
-            _reset_peak_gpu_memory(accelerator.device)
-            train_row = _run_epoch(
-                model,
-                data,
-                train_loader,
-                weights,
-                optimizer,
-                rng,
-                config.train.cell_set_len,
+    for epoch in range(1, config.train.max_epochs + 1):
+        _reset_peak_gpu_memory(accelerator.device)
+        train_row = _run_epoch(
+            model,
+            data,
+            train_loader,
+            weights,
+            optimizer,
+            rng,
+            config.train.cell_set_len,
+            accelerator,
+            batch_lookup,
+            epoch=epoch,
+            max_epochs=config.train.max_epochs,
+        )
+        val_row, _val_predictions = _evaluate(
+            model,
+            data,
+            val_loader,
+            weights,
+            rng,
+            config.train.cell_set_len,
+            accelerator,
+            batch_lookup,
+            pad_short=True,
+        )
+        gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(accelerator)
+        if accelerator.is_main_process:
+            last_val_loss = float(val_row.get("total_loss", math.nan))
+            row = {
+                "epoch": epoch,
+                "gpu_peak_memory_allocated_mb": gpu_peak_memory_allocated_mb,
+                **_prefix(train_row, "train"),
+                **_prefix(val_row, "val"),
+            }
+            logs.append(row)
+            _write_csv_if_main(
+                pd.DataFrame(logs),
+                run_dir / "train_log.csv",
                 accelerator,
-                batch_lookup,
-                epoch=epoch,
-                max_epochs=config.train.max_epochs,
             )
-            val_row, _val_predictions = _evaluate(
-                model,
-                data,
-                val_loader,
-                weights,
-                rng,
-                config.train.cell_set_len,
-                accelerator,
-                batch_lookup,
-                pad_short=True,
-            )
-            gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(
-                accelerator
-            )
-            if accelerator.is_main_process:
-                last_val_loss = float(val_row.get("total_loss", math.nan))
-                row = {
-                    "epoch": epoch,
-                    "gpu_peak_memory_allocated_mb": gpu_peak_memory_allocated_mb,
-                    **_prefix(train_row, "train"),
-                    **_prefix(val_row, "val"),
-                }
-                logs.append(row)
-                _write_csv_if_main(
-                    pd.DataFrame(logs),
-                    run_dir / "train_log.csv",
+            if _is_better_loss(last_val_loss, best_val_loss):
+                best_val_loss = last_val_loss
+                _save_model_checkpoint(
                     accelerator,
+                    model,
+                    models_dir / "best",
+                    {
+                        "checkpoint_kind": "best",
+                        "epoch": epoch,
+                        "selection_metric": "val_total_loss",
+                        "selection_mode": "min",
+                        "metric_value": best_val_loss,
+                        "run_id": run_id,
+                        "train_log": str(run_dir / "train_log.csv"),
+                    },
                 )
-                if _is_better_loss(last_val_loss, best_val_loss):
-                    best_val_loss = last_val_loss
-                    _save_model_checkpoint(
-                        accelerator,
-                        model,
-                        models_dir / "best",
-                        {
-                            "checkpoint_kind": "best",
-                            "epoch": epoch,
-                            "selection_metric": "val_total_loss",
-                            "selection_mode": "min",
-                            "metric_value": best_val_loss,
-                            "run_id": run_id,
-                            "train_log": str(run_dir / "train_log.csv"),
-                        },
-                    )
-            accelerator.wait_for_everyone()
+        accelerator.wait_for_everyone()
 
     evaluation_scope = (
         f"external:{config.external_test.name}"
@@ -325,15 +335,22 @@ def run_training(
     }
 
 
-class _GeneIndexDataset(Dataset[int]):
-    def __init__(self, indices: np.ndarray) -> None:
+class _GeneIndexDataset(Dataset[dict[str, int | bool]]):
+    def __init__(self, indices: np.ndarray, is_padding: np.ndarray) -> None:
+        if len(indices) != len(is_padding):
+            msg = "indices and is_padding must have the same length"
+            raise ValueError(msg)
         self._indices = [int(index) for index in indices]
+        self._is_padding = [bool(value) for value in is_padding]
 
     def __len__(self) -> int:
         return len(self._indices)
 
-    def __getitem__(self, index: int) -> int:
-        return self._indices[index]
+    def __getitem__(self, index: int) -> dict[str, int | bool]:
+        return {
+            "index": self._indices[index],
+            "is_padding": self._is_padding[index],
+        }
 
 
 def _make_accelerator(config: AivcConfig) -> Accelerator:
@@ -554,14 +571,58 @@ def _wait_for_scvi_latent_cache(
         sleep_fn(min(poll_seconds, timeout_seconds - elapsed))
 
 
-def _gene_loader(indices: np.ndarray, *, shuffle: bool, seed: int) -> DataLoader[int]:
+def _gene_loader(
+    indices: np.ndarray,
+    *,
+    shuffle: bool,
+    seed: int,
+    gene_batch_size: int,
+    world_size: int,
+) -> DataLoader[dict[str, torch.Tensor]]:
+    if gene_batch_size < 1:
+        msg = "gene_batch_size must be at least 1"
+        raise ValueError(msg)
     generator = torch.Generator()
     generator.manual_seed(seed)
+    padded_indices, is_padding = _pad_gene_indices(
+        indices,
+        batch_size=gene_batch_size,
+        world_size=world_size,
+    )
     return DataLoader(
-        _GeneIndexDataset(indices),
-        batch_size=1,
+        _GeneIndexDataset(padded_indices, is_padding),
+        batch_size=gene_batch_size,
         shuffle=shuffle,
         generator=generator,
+    )
+
+
+def _pad_gene_indices(
+    indices: np.ndarray,
+    *,
+    batch_size: int,
+    world_size: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    if batch_size < 1:
+        msg = "batch_size must be at least 1"
+        raise ValueError(msg)
+    if world_size < 1:
+        msg = "world_size must be at least 1"
+        raise ValueError(msg)
+    normalized = np.asarray(indices, dtype=np.int64)
+    is_padding = np.zeros(len(normalized), dtype=bool)
+    if len(normalized) == 0:
+        return normalized, is_padding
+    step_size = int(batch_size) * int(world_size)
+    remainder = len(normalized) % step_size
+    if remainder == 0:
+        return normalized, is_padding
+    pad_count = step_size - remainder
+    repeats = int(math.ceil(pad_count / len(normalized)))
+    padding = np.tile(normalized, repeats)[:pad_count]
+    return (
+        np.concatenate([normalized, padding]).astype(np.int64),
+        np.concatenate([is_padding, np.ones(pad_count, dtype=bool)]),
     )
 
 
@@ -584,6 +645,7 @@ def _build_model(
     projector_weight: np.ndarray,
     projector_bias: np.ndarray,
     extra_genes: tuple[str, ...] = (),
+    emit_checkpoint_output: bool = True,
 ) -> AivcModel:
     pert_dim = config.state.pert_dim
     known_vectors = load_perturbation_vectors(config.state.known_perturbation_vectors)
@@ -596,6 +658,7 @@ def _build_model(
         input_dim=config.state.input_dim or data.input_dim,
         output_dim=output_dim,
         pert_dim=pert_dim,
+        emit_checkpoint_output=emit_checkpoint_output,
     )
     perturbations = PerturbationVectorAdapter(
         sorted({*(str(gene) for gene in data.genes), *extra_genes}),
@@ -626,7 +689,7 @@ def _build_model(
 def _run_epoch(
     model: torch.nn.Module,
     data: GeneBags,
-    indices: DataLoader[int],
+    indices: DataLoader[dict[str, torch.Tensor]],
     weights: LossWeights,
     optimizer: torch.optim.Optimizer,
     rng: np.random.Generator,
@@ -649,33 +712,42 @@ def _run_epoch(
         dynamic_ncols=True,
         file=sys.stdout,
     )
-    for index in iterator:
-        loss_row, _pred_y, _obs_y = _loss_for_index(
-            model,
-            data,
-            _batch_index(index),
-            weights,
-            rng,
-            cell_set_len,
-            accelerator.device,
-            batch_lookup,
-            pad_short=True,
-        )
+    for batch in iterator:
         optimizer.zero_grad(set_to_none=True)
-        total = loss_row["total_tensor"]
-        if not isinstance(total, torch.Tensor):
+        batch_losses: list[torch.Tensor] = []
+        for gene_index in _batch_indices(batch):
+            loss_row, _pred_y, _obs_y = _loss_for_index(
+                model,
+                data,
+                gene_index,
+                weights,
+                rng,
+                cell_set_len,
+                accelerator.device,
+                batch_lookup,
+                pad_short=True,
+            )
+            total = loss_row["total_tensor"]
+            if not isinstance(total, torch.Tensor):
+                msg = "Expected tensor loss for backward"
+                raise TypeError(msg)
+            batch_losses.append(total)
+            rows.append({k: v for k, v in loss_row.items() if k != "total_tensor"})
+        if not batch_losses:
+            continue
+        total_loss = torch.stack(batch_losses).sum()
+        if not isinstance(total_loss, torch.Tensor):
             msg = "Expected tensor loss for backward"
             raise TypeError(msg)
-        accelerator.backward(total)
+        accelerator.backward(total_loss)
         optimizer.step()
-        rows.append({k: v for k, v in loss_row.items() if k != "total_tensor"})
     return _mean_rows(_gather_rows(rows, accelerator))
 
 
 def _evaluate(
     model: torch.nn.Module,
     data: GeneBags,
-    indices: DataLoader[int],
+    indices: DataLoader[dict[str, torch.Tensor]],
     weights: LossWeights,
     rng: np.random.Generator,
     cell_set_len: int,
@@ -687,30 +759,39 @@ def _evaluate(
     rows = []
     pred_rows = []
     with torch.no_grad():
-        for index in indices:
-            gene_index = _batch_index(index)
-            loss_row, pred_y, obs_y = _loss_for_index(
-                model,
-                data,
-                gene_index,
-                weights,
-                rng,
-                cell_set_len,
-                accelerator.device,
-                batch_lookup,
-                pad_short=pad_short,
-            )
-            rows.append({k: v for k, v in loss_row.items() if k != "total_tensor"})
-            pred_rows.append(
-                {
-                    "perturbation_gene": str(data.genes[gene_index]),
-                    "y_true": float(data.y[gene_index]),
-                    "y_pred": float(pred_y),
-                    "y_obs_anchor": float(obs_y),
-                    "control_fallback_count": float(loss_row["control_fallback_count"]),
-                    "n_chunks": float(loss_row["n_chunks"]),
-                }
-            )
+        for batch in indices:
+            padding_flags = _batch_padding_flags(batch)
+            for gene_index, is_padding in zip(
+                _batch_indices(batch),
+                padding_flags,
+                strict=True,
+            ):
+                loss_row, pred_y, obs_y = _loss_for_index(
+                    model,
+                    data,
+                    gene_index,
+                    weights,
+                    rng,
+                    cell_set_len,
+                    accelerator.device,
+                    batch_lookup,
+                    pad_short=pad_short,
+                )
+                if is_padding:
+                    continue
+                rows.append({k: v for k, v in loss_row.items() if k != "total_tensor"})
+                pred_rows.append(
+                    {
+                        "perturbation_gene": str(data.genes[gene_index]),
+                        "y_true": float(data.y[gene_index]),
+                        "y_pred": float(pred_y),
+                        "y_obs_anchor": float(obs_y),
+                        "control_fallback_count": float(
+                            loss_row["control_fallback_count"]
+                        ),
+                        "n_chunks": float(loss_row["n_chunks"]),
+                    }
+                )
     all_rows = _gather_rows(rows, accelerator)
     all_pred_rows = _gather_rows(pred_rows, accelerator)
     summary = _mean_rows(all_rows)
@@ -809,12 +890,27 @@ def _loss_for_index(
     )
 
 
-def _batch_index(index: Any) -> int:
-    if isinstance(index, torch.Tensor):
-        return int(index.reshape(-1)[0].item())
-    if isinstance(index, list | tuple):
-        return int(index[0])
-    return int(index)
+def _batch_indices(batch: Any) -> list[int]:
+    if isinstance(batch, Mapping):
+        return _batch_indices(batch["index"])
+    if isinstance(batch, torch.Tensor):
+        return [int(value.item()) for value in batch.reshape(-1)]
+    if isinstance(batch, list | tuple):
+        return [int(value) for value in batch]
+    return [int(batch)]
+
+
+def _batch_padding_flags(batch: Any) -> list[bool]:
+    if isinstance(batch, Mapping):
+        values = batch.get("is_padding")
+        if values is None:
+            return [False] * len(_batch_indices(batch))
+        if isinstance(values, torch.Tensor):
+            return [bool(value.item()) for value in values.reshape(-1)]
+        if isinstance(values, list | tuple):
+            return [bool(value) for value in values]
+        return [bool(values)]
+    return [False] * len(_batch_indices(batch))
 
 
 def _batch_tensor(

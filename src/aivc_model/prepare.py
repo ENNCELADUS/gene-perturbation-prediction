@@ -131,6 +131,7 @@ class TrainConfig:
     learning_rate: float = 1e-4
     weight_decay: float = 1e-4
     cell_set_len: int = 128
+    gene_batch_size: int = 1
     device: str = "auto"
     float32_matmul_precision: str | None = "high"
 
@@ -1723,6 +1724,7 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         learning_rate=float(values.get("learning_rate", 1e-4)),
         weight_decay=float(values.get("weight_decay", 1e-4)),
         cell_set_len=int(cell_set_len),
+        gene_batch_size=int(values.get("gene_batch_size", 1)),
         device=str(values.get("device", "auto")),
         float32_matmul_precision=_str_or_none(
             values.get("float32_matmul_precision", "high")

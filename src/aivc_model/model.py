@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 import importlib
+import os
 from pathlib import Path
 from typing import Any
 
@@ -362,18 +364,42 @@ class AivcModel(nn.Module):
         hvg_energy_terms: list[torch.Tensor] = []
         latent_mean_delta_terms: list[torch.Tensor] = []
         latent_energy_terms: list[torch.Tensor] = []
-        for control, target_expression, target_latent, batch_indices in zip(
-            control_chunks,
+        if not (
+            len(control_chunks)
+            == len(target_expression_chunks)
+            == len(target_latent_chunks)
+            == len(batch_index_chunks)
+        ):
+            msg = "All chunk inputs must have the same length"
+            raise ValueError(msg)
+        chunk_sizes = [int(control.shape[0]) for control in control_chunks]
+        batched_control = torch.cat(control_chunks, dim=0)
+        batched_batch_indices = _concat_optional_batch_indices(
+            batch_index_chunks,
+            chunk_sizes,
+            batched_control.device,
+        )
+        batched_prediction, batched_latent = self.predict_bag(
+            batched_control,
+            gene,
+            batched_batch_indices,
+        )
+        predicted_expression_chunks = batched_prediction.split(chunk_sizes, dim=0)
+        batched_latent_chunks = batched_latent.split(chunk_sizes, dim=0)
+        chunk_iter = zip(
+            predicted_expression_chunks,
+            batched_latent_chunks,
             target_expression_chunks,
             target_latent_chunks,
-            batch_index_chunks,
             strict=True,
-        ):
-            predicted_expression, predicted_latent = self.predict_bag(
-                control,
-                gene,
-                batch_indices,
-            )
+        )
+        for chunk_values in chunk_iter:
+            (
+                predicted_expression,
+                predicted_latent,
+                target_expression,
+                target_latent,
+            ) = chunk_values
             predicted_latent_chunks.append(predicted_latent)
             hvg_mean_delta_terms.append(
                 _mean_delta_loss(
@@ -448,6 +474,22 @@ def _energy_distance(predicted: torch.Tensor, target: torch.Tensor) -> torch.Ten
     return (2.0 * cross - pred_self - target_self).clamp_min(0.0)
 
 
+def _concat_optional_batch_indices(
+    batch_index_chunks: tuple[torch.Tensor | None, ...],
+    chunk_sizes: list[int],
+    device: torch.device,
+) -> torch.Tensor | None:
+    if all(batch_indices is None for batch_indices in batch_index_chunks):
+        return None
+    normalized = [
+        batch_indices.to(device)
+        if batch_indices is not None
+        else torch.zeros(size, dtype=torch.long, device=device)
+        for batch_indices, size in zip(batch_index_chunks, chunk_sizes, strict=True)
+    ]
+    return torch.cat(normalized, dim=0)
+
+
 def fit_fixed_gmm(
     bags: tuple[np.ndarray, ...],
     control_bag: np.ndarray,
@@ -490,6 +532,7 @@ def load_state_model(
     input_dim: int,
     output_dim: int,
     pert_dim: int,
+    emit_checkpoint_output: bool = True,
 ) -> nn.Module:
     """Load a STATE checkpoint model or a small mock backend."""
     if backend == "linear_mock":
@@ -499,4 +542,15 @@ def load_state_model(
         raise ValueError(msg)
     module = importlib.import_module("state.tx.models.state_transition")
     cls = getattr(module, "StateTransitionPerturbationModel")
-    return cls.load_from_checkpoint(str(checkpoint_path), strict=False)
+    output_context = (
+        nullcontext() if emit_checkpoint_output else _suppress_checkpoint_output()
+    )
+    with output_context:
+        return cls.load_from_checkpoint(str(checkpoint_path), strict=False)
+
+
+@contextmanager
+def _suppress_checkpoint_output() -> Any:
+    with open(os.devnull, "w", encoding="utf-8") as devnull:
+        with redirect_stdout(devnull), redirect_stderr(devnull):
+            yield
