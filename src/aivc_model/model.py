@@ -335,6 +335,28 @@ class AivcModel(nn.Module):
         y: torch.Tensor,
         weights: LossWeights,
     ) -> dict[str, torch.Tensor]:
+        return self.forward(
+            gene=gene,
+            control_chunks=control_chunks,
+            target_expression_chunks=target_expression_chunks,
+            target_latent_chunks=target_latent_chunks,
+            batch_index_chunks=batch_index_chunks,
+            y=y,
+            weights=weights,
+        )
+
+    def forward(
+        self,
+        *,
+        gene: str,
+        control_chunks: tuple[torch.Tensor, ...],
+        target_expression_chunks: tuple[torch.Tensor, ...],
+        target_latent_chunks: tuple[torch.Tensor, ...],
+        batch_index_chunks: tuple[torch.Tensor | None, ...],
+        y: torch.Tensor,
+        weights: LossWeights,
+    ) -> dict[str, torch.Tensor]:
+        """Compute one gene-level A->B->C loss through the module forward path."""
         predicted_latent_chunks: list[torch.Tensor] = []
         hvg_mean_delta_terms: list[torch.Tensor] = []
         hvg_energy_terms: list[torch.Tensor] = []

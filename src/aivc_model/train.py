@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 import sys
+from typing import Any
 
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from accelerate import Accelerator, DataLoaderConfiguration
+from accelerate.utils import broadcast_object_list, gather_object, set_seed
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import DataLoader, Dataset
 
 from aivc_model.model import (
     AivcModel,
@@ -48,23 +54,35 @@ def main() -> None:
     parser.add_argument("--config", required=True, type=Path)
     args = parser.parse_args()
     config = load_config(args.config)
-    paths = run_training(config)
-    print(f"run dir: {paths['run_dir']}")
-    print(f"train log: {paths['train_log']}")
-    print(f"test metrics: {paths['test_metrics']}")
+    accelerator = _make_accelerator(config)
+    paths = run_training(config, accelerator=accelerator)
+    if accelerator.is_main_process:
+        print(f"run dir: {paths['run_dir']}")
+        print(f"train log: {paths['train_log']}")
+        print(f"test metrics: {paths['test_metrics']}")
 
 
-def run_training(config: AivcConfig) -> dict[str, Path]:
+def run_training(
+    config: AivcConfig,
+    accelerator: Accelerator | None = None,
+) -> dict[str, Path]:
     """Run one train/val/test STATE-ready AIVC experiment."""
-    _set_seed(config.train.seed)
-    device = _resolve_device(config.train.device)
+    accelerator = accelerator or _make_accelerator(config)
+    set_seed(config.train.seed)
+    run_id = _resolve_run_id(config, accelerator)
+    run_dir = config.data.output_dir / "runs" / run_id
+    artifacts_dir = run_dir / "artifacts"
+    models_dir = run_dir / "models"
+    if accelerator.is_main_process:
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        models_dir.mkdir(parents=True, exist_ok=True)
+    accelerator.wait_for_everyone()
+
     data = load_gene_bags(config)
     split = make_gene_split(data.genes, data.y, config.split)
-    run_dir = _run_dir(config)
-    artifacts_dir = run_dir / "artifacts"
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
-    data = with_scvi_teacher_latents(config, data, split, artifacts_dir)
+    data = _with_rank_safe_scvi_teacher(config, data, split, artifacts_dir, accelerator)
     external = load_external_gene_bags(config, data, artifacts_dir)
+
     train_expr = np.vstack(
         [data.control_input, *[data.input_bags[i] for i in split.train]]
     )
@@ -95,56 +113,94 @@ def run_training(config: AivcConfig) -> dict[str, Path]:
         projector_bias,
         extra_genes=extra_genes,
     )
-    model.to(device)
     batch_lookup = load_state_batch_lookup(config.state.model_dir)
-    weights = LossWeights(
-        latent_mean_delta=config.loss.latent_mean_delta_weight,
-        latent_energy=config.loss.latent_energy_weight,
-        hvg_mean_delta=config.loss.hvg_mean_delta_weight,
-        hvg_energy=config.loss.hvg_energy_weight,
-        pred_c=config.loss.pred_c_weight,
-        obs_c=config.loss.obs_c_weight,
-        occupancy=config.loss.occupancy_weight,
-    )
+    weights = _loss_weights(config)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.train.learning_rate,
         weight_decay=config.train.weight_decay,
     )
-    rng = np.random.default_rng(config.train.seed)
-    logs = []
-    for epoch in range(1, config.train.max_epochs + 1):
-        train_row = _run_epoch(
-            model,
-            data,
-            split.train,
-            weights,
-            optimizer,
-            rng,
-            config.train.cell_set_len,
-            device,
-            batch_lookup,
-        )
-        val_row, _val_predictions = _evaluate(
-            model,
-            data,
-            split.val,
-            weights,
-            rng,
-            config.train.cell_set_len,
-            device,
-            batch_lookup,
-            pad_short=True,
-        )
-        row = {"epoch": epoch, **_prefix(train_row, "train"), **_prefix(val_row, "val")}
-        logs.append(row)
-        pd.DataFrame(logs).to_csv(run_dir / "train_log.csv", index=False)
     eval_data = external.data if external is not None else data
     eval_indices = (
         np.arange(len(eval_data.genes), dtype=np.int64)
         if external is not None
         else split.test
     )
+    train_loader = _gene_loader(split.train, shuffle=True, seed=config.train.seed)
+    val_loader = _gene_loader(split.val, shuffle=False, seed=config.train.seed)
+    test_loader = _gene_loader(eval_indices, shuffle=False, seed=config.train.seed)
+    model, optimizer, train_loader, val_loader, test_loader = accelerator.prepare(
+        model,
+        optimizer,
+        train_loader,
+        val_loader,
+        test_loader,
+    )
+    rng = np.random.default_rng(config.train.seed + accelerator.process_index)
+
+    logs: list[dict[str, float]] = []
+    best_val_loss = math.inf
+    last_val_loss = math.nan
+    train_context = (
+        accelerator.join_uneven_inputs([model])
+        if accelerator.num_processes > 1
+        else nullcontext()
+    )
+    with train_context:
+        for epoch in range(1, config.train.max_epochs + 1):
+            train_row = _run_epoch(
+                model,
+                data,
+                train_loader,
+                weights,
+                optimizer,
+                rng,
+                config.train.cell_set_len,
+                accelerator,
+                batch_lookup,
+            )
+            val_row, _val_predictions = _evaluate(
+                model,
+                data,
+                val_loader,
+                weights,
+                rng,
+                config.train.cell_set_len,
+                accelerator,
+                batch_lookup,
+                pad_short=True,
+            )
+            if accelerator.is_main_process:
+                last_val_loss = float(val_row.get("total_loss", math.nan))
+                row = {
+                    "epoch": epoch,
+                    **_prefix(train_row, "train"),
+                    **_prefix(val_row, "val"),
+                }
+                logs.append(row)
+                _write_csv_if_main(
+                    pd.DataFrame(logs),
+                    run_dir / "train_log.csv",
+                    accelerator,
+                )
+                if _is_better_loss(last_val_loss, best_val_loss):
+                    best_val_loss = last_val_loss
+                    _save_model_checkpoint(
+                        accelerator,
+                        model,
+                        models_dir / "best",
+                        {
+                            "checkpoint_kind": "best",
+                            "epoch": epoch,
+                            "selection_metric": "val_total_loss",
+                            "selection_mode": "min",
+                            "metric_value": best_val_loss,
+                            "run_id": run_id,
+                            "train_log": str(run_dir / "train_log.csv"),
+                        },
+                    )
+            accelerator.wait_for_everyone()
+
     evaluation_scope = (
         f"external:{config.external_test.name}"
         if external is not None and config.external_test is not None
@@ -153,38 +209,153 @@ def run_training(config: AivcConfig) -> dict[str, Path]:
     test_row, test_predictions = _evaluate(
         model,
         eval_data,
-        eval_indices,
+        test_loader,
         weights,
         rng,
         config.train.cell_set_len,
-        device,
+        accelerator,
         batch_lookup,
         pad_short=False,
     )
-    test_row = {"evaluation_scope": evaluation_scope, **test_row}
-    test_predictions.insert(0, "evaluation_scope", evaluation_scope)
-    test_predictions["perturbation_has_known_vector"] = test_predictions[
-        "perturbation_gene"
-    ].map(model.perturbations.has_known_vector)
-    if external is not None:
-        test_predictions = test_predictions.merge(
-            external.data.metadata,
-            on="perturbation_gene",
-            how="left",
-            suffixes=("", "_metadata"),
+    if accelerator.is_main_process:
+        test_row = {"evaluation_scope": evaluation_scope, **test_row}
+        test_predictions.insert(0, "evaluation_scope", evaluation_scope)
+        unwrapped = accelerator.unwrap_model(model)
+        test_predictions["perturbation_has_known_vector"] = test_predictions[
+            "perturbation_gene"
+        ].map(unwrapped.perturbations.has_known_vector)
+        if external is not None:
+            test_predictions = test_predictions.merge(
+                external.data.metadata,
+                on="perturbation_gene",
+                how="left",
+                suffixes=("", "_metadata"),
+            )
+            (artifacts_dir / "external_test_qa.json").write_text(
+                json.dumps(external.qa, indent=2),
+                encoding="utf-8",
+            )
+        _write_csv_if_main(
+            pd.DataFrame([test_row]),
+            run_dir / "test_metrics.csv",
+            accelerator,
         )
-        (artifacts_dir / "external_test_qa.json").write_text(
-            json.dumps(external.qa, indent=2),
-            encoding="utf-8",
+        _write_csv_if_main(
+            test_predictions,
+            artifacts_dir / "test_predictions.csv",
+            accelerator,
         )
-    pd.DataFrame([test_row]).to_csv(run_dir / "test_metrics.csv", index=False)
-    test_predictions.to_csv(artifacts_dir / "test_predictions.csv", index=False)
-    _write_split_artifact(data, split, artifacts_dir / "gene_splits.csv")
+        _write_split_artifact(data, split, artifacts_dir / "gene_splits.csv")
+        _save_model_checkpoint(
+            accelerator,
+            model,
+            models_dir / "final",
+            {
+                "checkpoint_kind": "final",
+                "epoch": config.train.max_epochs,
+                "selection_metric": "val_total_loss",
+                "selection_mode": "min",
+                "metric_value": last_val_loss,
+                "best_metric_value": best_val_loss,
+                "run_id": run_id,
+                "train_log": str(run_dir / "train_log.csv"),
+                "test_metrics": str(run_dir / "test_metrics.csv"),
+            },
+        )
+    accelerator.wait_for_everyone()
     return {
         "run_dir": run_dir,
         "train_log": run_dir / "train_log.csv",
         "test_metrics": run_dir / "test_metrics.csv",
     }
+
+
+class _GeneIndexDataset(Dataset[int]):
+    def __init__(self, indices: np.ndarray) -> None:
+        self._indices = [int(index) for index in indices]
+
+    def __len__(self) -> int:
+        return len(self._indices)
+
+    def __getitem__(self, index: int) -> int:
+        return self._indices[index]
+
+
+def _make_accelerator(config: AivcConfig) -> Accelerator:
+    dataloader_config = DataLoaderConfiguration(
+        even_batches=False,
+        use_seedable_sampler=True,
+        data_seed=config.train.seed,
+    )
+    return Accelerator(
+        cpu=config.train.device == "cpu",
+        dataloader_config=dataloader_config,
+    )
+
+
+def _resolve_run_id(config: AivcConfig, accelerator: Accelerator) -> str:
+    run_id = config.train.run_id
+    if accelerator.is_main_process and run_id is None:
+        run_id = datetime.now(timezone.utc).strftime("state_aivc_%Y%m%dT%H%M%SZ")
+    values: list[str | None] = [run_id]
+    broadcast_object_list(values, from_process=0)
+    if values[0] is None:
+        msg = "Failed to resolve distributed run_id"
+        raise RuntimeError(msg)
+    return str(values[0])
+
+
+def _with_rank_safe_scvi_teacher(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    artifacts_dir: Path,
+    accelerator: Accelerator,
+) -> GeneBags:
+    if config.projector.teacher != "scvi":
+        return data
+    if accelerator.is_main_process:
+        data = with_scvi_teacher_latents(
+            config,
+            data,
+            split,
+            artifacts_dir,
+            fit_teacher=True,
+        )
+    accelerator.wait_for_everyone()
+    if not accelerator.is_main_process:
+        data = with_scvi_teacher_latents(
+            config,
+            data,
+            split,
+            artifacts_dir,
+            fit_teacher=False,
+        )
+    accelerator.wait_for_everyone()
+    return data
+
+
+def _gene_loader(indices: np.ndarray, *, shuffle: bool, seed: int) -> DataLoader[int]:
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    return DataLoader(
+        _GeneIndexDataset(indices),
+        batch_size=1,
+        shuffle=shuffle,
+        generator=generator,
+    )
+
+
+def _loss_weights(config: AivcConfig) -> LossWeights:
+    return LossWeights(
+        latent_mean_delta=config.loss.latent_mean_delta_weight,
+        latent_energy=config.loss.latent_energy_weight,
+        hvg_mean_delta=config.loss.hvg_mean_delta_weight,
+        hvg_energy=config.loss.hvg_energy_weight,
+        pred_c=config.loss.pred_c_weight,
+        obs_c=config.loss.obs_c_weight,
+        occupancy=config.loss.occupancy_weight,
+    )
 
 
 def _build_model(
@@ -234,14 +405,14 @@ def _build_model(
 
 
 def _run_epoch(
-    model: AivcModel,
+    model: torch.nn.Module,
     data: GeneBags,
-    indices: np.ndarray,
+    indices: DataLoader[int],
     weights: LossWeights,
     optimizer: torch.optim.Optimizer,
     rng: np.random.Generator,
     cell_set_len: int,
-    device: torch.device,
+    accelerator: Accelerator,
     batch_lookup: dict[str, int],
 ) -> dict[str, float]:
     model.train()
@@ -250,29 +421,33 @@ def _run_epoch(
         loss_row, _pred_y, _obs_y = _loss_for_index(
             model,
             data,
-            int(index),
+            _batch_index(index),
             weights,
             rng,
             cell_set_len,
-            device,
+            accelerator.device,
             batch_lookup,
             pad_short=True,
         )
-        optimizer.zero_grad()
-        loss_row["total_tensor"].backward()
+        optimizer.zero_grad(set_to_none=True)
+        total = loss_row["total_tensor"]
+        if not isinstance(total, torch.Tensor):
+            msg = "Expected tensor loss for backward"
+            raise TypeError(msg)
+        accelerator.backward(total)
         optimizer.step()
         rows.append({k: v for k, v in loss_row.items() if k != "total_tensor"})
-    return _mean_rows(rows)
+    return _mean_rows(_gather_rows(rows, accelerator))
 
 
 def _evaluate(
-    model: AivcModel,
+    model: torch.nn.Module,
     data: GeneBags,
-    indices: np.ndarray,
+    indices: DataLoader[int],
     weights: LossWeights,
     rng: np.random.Generator,
     cell_set_len: int,
-    device: torch.device,
+    accelerator: Accelerator,
     batch_lookup: dict[str, int],
     pad_short: bool,
 ) -> tuple[dict[str, float], pd.DataFrame]:
@@ -281,31 +456,42 @@ def _evaluate(
     pred_rows = []
     with torch.no_grad():
         for index in indices:
+            gene_index = _batch_index(index)
             loss_row, pred_y, obs_y = _loss_for_index(
                 model,
                 data,
-                int(index),
+                gene_index,
                 weights,
                 rng,
                 cell_set_len,
-                device,
+                accelerator.device,
                 batch_lookup,
                 pad_short=pad_short,
             )
             rows.append({k: v for k, v in loss_row.items() if k != "total_tensor"})
             pred_rows.append(
                 {
-                    "perturbation_gene": str(data.genes[index]),
-                    "y_true": float(data.y[index]),
+                    "perturbation_gene": str(data.genes[gene_index]),
+                    "y_true": float(data.y[gene_index]),
                     "y_pred": float(pred_y),
                     "y_obs_anchor": float(obs_y),
                     "control_fallback_count": float(loss_row["control_fallback_count"]),
                     "n_chunks": float(loss_row["n_chunks"]),
                 }
             )
-    summary = _mean_rows(rows)
-    predictions = pd.DataFrame(pred_rows)
-    if not predictions.empty:
+    all_rows = _gather_rows(rows, accelerator)
+    all_pred_rows = _gather_rows(pred_rows, accelerator)
+    summary = _mean_rows(all_rows)
+    prediction_columns = [
+        "perturbation_gene",
+        "y_true",
+        "y_pred",
+        "y_obs_anchor",
+        "control_fallback_count",
+        "n_chunks",
+    ]
+    predictions = pd.DataFrame(all_pred_rows, columns=prediction_columns)
+    if accelerator.is_main_process and not predictions.empty:
         y_true = predictions["y_true"].to_numpy(dtype=np.float64)
         y_pred = predictions["y_pred"].to_numpy(dtype=np.float64)
         summary.update(regression_metrics(y_true, y_pred))
@@ -314,7 +500,7 @@ def _evaluate(
 
 
 def _loss_for_index(
-    model: AivcModel,
+    model: torch.nn.Module,
     data: GeneBags,
     index: int,
     weights: LossWeights,
@@ -361,7 +547,7 @@ def _loss_for_index(
         _batch_tensor(chunk.target_batch, batch_lookup, device) for chunk in chunks
     )
     y = torch.tensor(float(data.y[index]), dtype=torch.float32, device=device)
-    losses = model.losses_for_gene(
+    losses = model(
         gene=gene,
         control_chunks=control_chunks,
         target_expression_chunks=target_expression_chunks,
@@ -391,6 +577,14 @@ def _loss_for_index(
     )
 
 
+def _batch_index(index: Any) -> int:
+    if isinstance(index, torch.Tensor):
+        return int(index.reshape(-1)[0].item())
+    if isinstance(index, list | tuple):
+        return int(index[0])
+    return int(index)
+
+
 def _batch_tensor(
     labels: np.ndarray | None,
     batch_lookup: dict[str, int],
@@ -402,6 +596,16 @@ def _batch_tensor(
     return torch.as_tensor(batch_encoded, dtype=torch.long, device=device)
 
 
+def _gather_rows(
+    rows: list[dict[str, float] | dict[str, object]],
+    accelerator: Accelerator,
+) -> list[dict[str, Any]]:
+    gathered = gather_object(rows)
+    if not accelerator.is_main_process:
+        return []
+    return [row for row in gathered if isinstance(row, dict)]
+
+
 def _mean_rows(rows: list[dict[str, float]]) -> dict[str, float]:
     if not rows:
         return {}
@@ -411,6 +615,38 @@ def _mean_rows(rows: list[dict[str, float]]) -> dict[str, float]:
 
 def _prefix(row: dict[str, float], prefix: str) -> dict[str, float]:
     return {f"{prefix}_{key}": value for key, value in row.items()}
+
+
+def _is_better_loss(value: float, best_value: float) -> bool:
+    return math.isfinite(value) and value < best_value
+
+
+def _write_csv_if_main(
+    frame: pd.DataFrame,
+    path: Path,
+    accelerator: Accelerator,
+) -> None:
+    if not accelerator.is_main_process:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(path, index=False)
+
+
+def _save_model_checkpoint(
+    accelerator: Accelerator,
+    model: torch.nn.Module,
+    path: Path,
+    metadata: dict[str, object],
+) -> None:
+    if not accelerator.is_main_process:
+        return
+    path.mkdir(parents=True, exist_ok=True)
+    unwrapped = accelerator.unwrap_model(model)
+    accelerator.save(unwrapped.state_dict(), path / "pytorch_model.bin")
+    (path / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def _write_split_artifact(data: GeneBags, split: GeneSplit, path: Path) -> None:
@@ -431,32 +667,12 @@ def _write_split_artifact(data: GeneBags, split: GeneSplit, path: Path) -> None:
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
-def _run_dir(config: AivcConfig) -> Path:
-    run_id = config.train.run_id or datetime.now(timezone.utc).strftime(
-        "state_aivc_%Y%m%dT%H%M%SZ"
-    )
-    run_dir = config.data.output_dir / "runs" / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
-
-
 def _infer_pert_dim(known_vectors: dict[str, np.ndarray]) -> int:
     if not known_vectors:
         msg = "state.pert_dim is required when no known perturbation vectors are given"
         raise ValueError(msg)
     first = next(iter(known_vectors.values()))
     return int(first.shape[0])
-
-
-def _resolve_device(value: str) -> torch.device:
-    if value == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(value)
-
-
-def _set_seed(seed: int) -> None:
-    np.random.seed(seed)
-    torch.manual_seed(seed)
 
 
 if __name__ == "__main__":

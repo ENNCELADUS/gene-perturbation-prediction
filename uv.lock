@@ -2957,6 +2957,7 @@ name = "vcc"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "accelerate" },
     { name = "anndata" },
     { name = "arc-state" },
     { name = "h5py" },
@@ -3003,6 +3004,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "accelerate", specifier = ">=1.13.0" },
     { name = "anndata", specifier = ">=0.12.10" },
     { name = "arc-state", git = "https://github.com/ArcInstitute/state.git?rev=bf4fbc9ea35bf4d1e91afe201b663dec5d8bdd48" },
     { name = "datasets", marker = "extra == 'research'", specifier = ">=2.10.0" },
