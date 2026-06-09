@@ -60,7 +60,7 @@ projector:
   trainable: true
   scvi_max_epochs: 100
   scvi_batch_size: 256
-  scvi_num_workers: null
+  scvi_num_workers: 4
   scvi_hidden_units: 128
   scvi_layers: 2
   scvi_dropout: 0.1

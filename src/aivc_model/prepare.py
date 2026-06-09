@@ -1006,12 +1006,32 @@ def _scvi_datasplitter_kwargs(config: ProjectorConfig) -> dict[str, object]:
     num_workers = (
         max(0, int(config.scvi_num_workers))
         if config.scvi_num_workers is not None
-        else max(1, (os.cpu_count() or 1) - 1)
+        else _auto_scvi_num_workers()
     )
     return {
         "num_workers": num_workers,
         "persistent_workers": num_workers > 0,
     }
+
+
+def _auto_scvi_num_workers() -> int:
+    cpu_count = os.cpu_count() or 1
+    candidates = [max(1, cpu_count - 1)]
+    slurm_cpus = _positive_env_int("SLURM_CPUS_PER_TASK")
+    if slurm_cpus is not None:
+        candidates.append(max(1, slurm_cpus - 1))
+    return min(8, *candidates)
+
+
+def _positive_env_int(name: str) -> int | None:
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _scvi_trainer_kwargs(config: ProjectorConfig) -> dict[str, object]:
