@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.mixture import GaussianMixture
 import torch
 
+import aivc_model.train as train_module
 from aivc_model.model import (
     AivcModel,
     ExpressionToLatentProjector,
@@ -368,6 +369,152 @@ def test_non_rank_scvi_path_requires_valid_latent_cache(tmp_path: Path) -> None:
         raise AssertionError("missing scVI latent cache should fail on non-rank0 path")
 
     assert not _scvi_latent_cache_dir(artifacts_dir).exists()
+
+
+def test_scvi_cache_subprocess_env_removes_distributed_state() -> None:
+    env = train_module._isolated_scvi_cache_env(
+        {
+            "RANK": "1",
+            "LOCAL_RANK": "1",
+            "WORLD_SIZE": "4",
+            "LOCAL_WORLD_SIZE": "4",
+            "MASTER_ADDR": "127.0.0.1",
+            "MASTER_PORT": "29500",
+            "TORCHELASTIC_RUN_ID": "job",
+            "ACCELERATE_USE_CPU": "false",
+            "SLURM_PROCID": "1",
+            "SLURM_NTASKS": "4",
+            "SLURM_CPUS_PER_TASK": "32",
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+            "PYTHONPATH": "src",
+        }
+    )
+
+    for key in (
+        "RANK",
+        "LOCAL_RANK",
+        "WORLD_SIZE",
+        "LOCAL_WORLD_SIZE",
+        "MASTER_ADDR",
+        "MASTER_PORT",
+        "TORCHELASTIC_RUN_ID",
+        "ACCELERATE_USE_CPU",
+        "SLURM_PROCID",
+        "SLURM_NTASKS",
+    ):
+        assert key not in env
+    assert env["SLURM_CPUS_PER_TASK"] == "32"
+    assert env["CUDA_VISIBLE_DEVICES"] == "0"
+    assert env["PYTHONPATH"] == "src"
+
+
+def test_wait_for_scvi_latent_cache_retries_until_cache_is_valid(
+    tmp_path: Path,
+) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    artifacts_dir = tmp_path / "artifacts"
+    sleeps: list[float] = []
+
+    def write_cache_after_first_miss(seconds: float) -> None:
+        sleeps.append(seconds)
+        _write_scvi_latent_cache(config, data, split, artifacts_dir, None)
+
+    loaded, external = train_module._wait_for_scvi_latent_cache(
+        config,
+        data,
+        split,
+        None,
+        artifacts_dir,
+        timeout_seconds=1.0,
+        poll_seconds=0.01,
+        sleep_fn=write_cache_after_first_miss,
+    )
+
+    assert sleeps
+    assert external is None
+    np.testing.assert_allclose(loaded.control_latent, data.control_latent)
+
+
+def test_wait_for_scvi_latent_cache_timeout_includes_last_reason(
+    tmp_path: Path,
+) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    artifacts_dir = tmp_path / "artifacts"
+
+    try:
+        train_module._wait_for_scvi_latent_cache(
+            config,
+            data,
+            split,
+            None,
+            artifacts_dir,
+            timeout_seconds=0.0,
+            poll_seconds=0.0,
+        )
+    except TimeoutError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("missing scVI latent cache should time out")
+
+    assert str(artifacts_dir) in message
+    assert "COMPLETE" in message
+
+
+def test_rank0_scvi_orchestration_runs_subprocess_then_reads_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeAccelerator:
+        is_main_process = True
+
+        def __init__(self) -> None:
+            self.barrier_count = 0
+
+        def wait_for_everyone(self) -> None:
+            self.barrier_count += 1
+
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    accelerator = FakeAccelerator()
+    calls: list[Path] = []
+
+    def fake_subprocess(config_path: Path, artifacts_dir: Path) -> None:
+        calls.append(config_path)
+        _write_scvi_latent_cache(config, data, split, artifacts_dir, None)
+
+    monkeypatch.setattr(train_module, "_run_scvi_cache_subprocess", fake_subprocess)
+
+    loaded, external = train_module._with_rank_safe_scvi_teacher(
+        config,
+        data,
+        split,
+        None,
+        tmp_path / "artifacts",
+        accelerator,
+        config_path=tmp_path / "config.yaml",
+    )
+
+    assert calls == [tmp_path / "config.yaml"]
+    assert accelerator.barrier_count == 1
+    assert external is None
+    np.testing.assert_allclose(loaded.control_latent, data.control_latent)
 
 
 def test_train_val_chunks_cover_cells_and_pad_short_chunk() -> None:

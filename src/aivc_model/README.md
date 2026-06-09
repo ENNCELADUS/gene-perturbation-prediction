@@ -70,12 +70,17 @@ warning when the surrounding job is launched by Accelerate.
 `train.float32_matmul_precision: high` sets PyTorch matmul precision before
 CUDA/scVI training to avoid Tensor Core performance warnings.
 
-scVI teacher latents are materialized before the AIVC epoch loop. Rank0 writes a
-validated run-local cache under `artifacts/scvi_teacher_latents/`; other ranks
-wait and then read that cache. The cache is reused only when its metadata matches
-the current primary genes, external-test identity, feature names, latent
-dimension, seed, and teacher settings. During a cache miss, rank0 loads the saved
-teacher once and logs projection progress every 50 genes.
+scVI teacher latents are materialized before the AIVC epoch loop. Rank0 launches
+an isolated cache-only subprocess for this preprocessing stage: distributed
+environment variables are removed and `CUDA_VISIBLE_DEVICES` is narrowed to one
+GPU, while the later AIVC training stage still uses the requested Accelerate
+ranks. Rank0 writes a validated run-local cache under
+`artifacts/scvi_teacher_latents/`; other ranks poll that cache for up to 24 hours
+and only enter the DDP training barrier after metadata validation succeeds. The
+cache is reused only when its metadata matches the current primary genes,
+external-test identity, feature names, latent dimension, seed, and teacher
+settings. During a cache miss, rank0 loads the saved teacher once and logs
+projection progress every 50 genes.
 
 After dependency or lockfile changes, run:
 

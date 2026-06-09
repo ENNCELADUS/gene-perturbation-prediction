@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Mapping
 from contextlib import nullcontext
 from datetime import datetime, timezone
 import json
 import logging
 import math
+import os
 from pathlib import Path
+import subprocess
 import sys
+import time
 from typing import Any
 
 if __package__ is None or __package__ == "":
@@ -53,16 +57,32 @@ from aivc_model.prepare import (
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
 
 _LOGGER = logging.getLogger(__name__)
+_SCVI_CACHE_WAIT_TIMEOUT_SECONDS = 24 * 60 * 60
+_SCVI_CACHE_POLL_SECONDS = 30.0
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train STATE-ready AIVC A->B->C.")
     parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument(
+        "--materialize-scvi-cache-only",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--artifacts-dir", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     config = load_config(args.config)
+    if args.materialize_scvi_cache_only:
+        if args.artifacts_dir is None:
+            parser.error(
+                "--artifacts-dir is required with --materialize-scvi-cache-only"
+            )
+        _configure_cache_only_logging()
+        _materialize_scvi_cache_only(config, args.artifacts_dir)
+        return
     accelerator = _make_accelerator(config)
     _configure_logging(accelerator)
-    paths = run_training(config, accelerator=accelerator)
+    paths = run_training(config, accelerator=accelerator, config_path=args.config)
     if accelerator.is_main_process:
         print(f"run dir: {paths['run_dir']}")
         print(f"train log: {paths['train_log']}")
@@ -72,6 +92,7 @@ def main() -> None:
 def run_training(
     config: AivcConfig,
     accelerator: Accelerator | None = None,
+    config_path: Path | None = None,
 ) -> dict[str, Path]:
     """Run one train/val/test STATE-ready AIVC experiment."""
     accelerator = accelerator or _make_accelerator(config)
@@ -102,6 +123,7 @@ def run_training(
         external,
         artifacts_dir,
         accelerator,
+        config_path=config_path,
     )
 
     train_expr = np.vstack(
@@ -323,6 +345,14 @@ def _configure_logging(accelerator: Accelerator) -> None:
     logging.getLogger("aivc_model").setLevel(level)
 
 
+def _configure_cache_only_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger("aivc_model").setLevel(logging.INFO)
+
+
 def _configure_float32_matmul_precision(config: AivcConfig) -> None:
     precision = config.train.float32_matmul_precision
     if precision is None:
@@ -353,32 +383,161 @@ def _with_rank_safe_scvi_teacher(
     external: Any,
     artifacts_dir: Path,
     accelerator: Accelerator,
+    *,
+    config_path: Path | None = None,
 ) -> tuple[GeneBags, Any]:
     if config.projector.teacher != "scvi":
         return data, external
     if accelerator.is_main_process:
-        data, external = with_cached_scvi_teacher_latents(
+        if config_path is None:
+            _LOGGER.warning(
+                "No config path supplied; materializing scVI cache in rank0 process"
+            )
+            with_cached_scvi_teacher_latents(
+                config,
+                data,
+                split,
+                artifacts_dir,
+                external=external,
+                fit_teacher=True,
+                log_fn=_LOGGER.info,
+            )
+        else:
+            _run_scvi_cache_subprocess(config_path, artifacts_dir)
+        data, external = _wait_for_scvi_latent_cache(
             config,
             data,
             split,
+            external,
             artifacts_dir,
-            external=external,
-            fit_teacher=True,
-            log_fn=_LOGGER.info,
+            timeout_seconds=0.0,
+            poll_seconds=0.0,
         )
-    accelerator.wait_for_everyone()
-    if not accelerator.is_main_process:
-        data, external = with_cached_scvi_teacher_latents(
+    else:
+        data, external = _wait_for_scvi_latent_cache(
             config,
             data,
             split,
+            external,
             artifacts_dir,
-            external=external,
-            fit_teacher=False,
-            log_fn=_LOGGER.info,
         )
     accelerator.wait_for_everyone()
     return data, external
+
+
+def _materialize_scvi_cache_only(config: AivcConfig, artifacts_dir: Path) -> None:
+    """Materialize the scVI latent cache outside the Accelerate process group."""
+    set_seed(config.train.seed)
+    _configure_float32_matmul_precision(config)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    data = load_gene_bags(config)
+    split = make_gene_split(data.genes, data.y, config.split)
+    external = load_external_gene_bags(
+        config,
+        data,
+        artifacts_dir,
+        project_scvi=False,
+    )
+    with_cached_scvi_teacher_latents(
+        config,
+        data,
+        split,
+        artifacts_dir,
+        external=external,
+        fit_teacher=True,
+        log_fn=_LOGGER.info,
+    )
+
+
+def _run_scvi_cache_subprocess(config_path: Path, artifacts_dir: Path) -> None:
+    cmd = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--config",
+        str(config_path),
+        "--materialize-scvi-cache-only",
+        "--artifacts-dir",
+        str(artifacts_dir),
+    ]
+    _LOGGER.info("Starting isolated rank0 scVI latent cache materialization")
+    subprocess.run(
+        cmd,
+        check=True,
+        env=_isolated_scvi_cache_env(os.environ),
+    )
+    _LOGGER.info("Finished isolated rank0 scVI latent cache materialization")
+
+
+def _isolated_scvi_cache_env(source: Mapping[str, str]) -> dict[str, str]:
+    env = dict(source)
+    distributed_keys = {
+        "RANK",
+        "LOCAL_RANK",
+        "WORLD_SIZE",
+        "LOCAL_WORLD_SIZE",
+        "GROUP_RANK",
+        "ROLE_RANK",
+        "ROLE_WORLD_SIZE",
+        "MASTER_ADDR",
+        "MASTER_PORT",
+        "SLURM_PROCID",
+        "SLURM_LOCALID",
+        "SLURM_NTASKS",
+        "SLURM_NPROCS",
+        "SLURM_NODEID",
+        "SLURM_STEP_ID",
+        "SLURM_STEP_NUM_TASKS",
+    }
+    for key in tuple(env):
+        if (
+            key in distributed_keys
+            or key.startswith("TORCHELASTIC_")
+            or key.startswith("ACCELERATE_")
+        ):
+            env.pop(key, None)
+    visible_devices = env.get("CUDA_VISIBLE_DEVICES")
+    if visible_devices:
+        first_device = visible_devices.split(",", maxsplit=1)[0].strip()
+        if first_device:
+            env["CUDA_VISIBLE_DEVICES"] = first_device
+    return env
+
+
+def _wait_for_scvi_latent_cache(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    external: Any,
+    artifacts_dir: Path,
+    *,
+    timeout_seconds: float = _SCVI_CACHE_WAIT_TIMEOUT_SECONDS,
+    poll_seconds: float = _SCVI_CACHE_POLL_SECONDS,
+    sleep_fn: Callable[[float], None] = time.sleep,
+    monotonic_fn: Callable[[], float] = time.monotonic,
+) -> tuple[GeneBags, Any]:
+    started_at = monotonic_fn()
+    last_error = "cache has not been checked yet"
+    while True:
+        try:
+            return with_cached_scvi_teacher_latents(
+                config,
+                data,
+                split,
+                artifacts_dir,
+                external=external,
+                fit_teacher=False,
+                log_fn=_LOGGER.info,
+            )
+        except FileNotFoundError as exc:
+            last_error = str(exc)
+        elapsed = monotonic_fn() - started_at
+        if elapsed >= timeout_seconds:
+            msg = (
+                "Timed out waiting for rank0 scVI latent cache after "
+                f"{elapsed:.1f}s at {artifacts_dir}: {last_error}"
+            )
+            raise TimeoutError(msg) from None
+        sleep_fn(min(poll_seconds, timeout_seconds - elapsed))
 
 
 def _gene_loader(indices: np.ndarray, *, shuffle: bool, seed: int) -> DataLoader[int]:
