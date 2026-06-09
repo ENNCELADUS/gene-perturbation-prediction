@@ -14,8 +14,6 @@ project first learns the link from perturbation-induced transcriptomic response
 to cancer dependency, then uses context specificity to prioritize SL-like
 candidates.
 
-![Core technical framing](docs/images/core.png)
-
 ## Project Definition
 
 The project is organized around a three-node chain:
@@ -39,8 +37,6 @@ The matched key is **(cell line, perturbation gene)**. All data integration shou
 preserve that key explicitly.
 
 ## Technical Roadmap
-
-![Project roadmap](docs/images/roadmap.png)
 
 ### Stage 1: Observed Response to Dependency
 
@@ -247,7 +243,7 @@ This repository uses `uv` with a project-local `.venv`.
 ```bash
 uv python install 3.11
 uv sync
-uv run python -c "import anndata, scanpy, torch, scgpt; print('environment ok')"
+uv run python -c "import anndata, scanpy, torch, scvi; print('environment ok')"
 ```
 
 Use `uv run` for Python tooling:

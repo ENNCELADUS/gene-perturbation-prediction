@@ -68,6 +68,8 @@ temp/
 # Model checkpoints
 *.pt
 *.pth
+*.ckpt
+model/checkpoints/state/
 
 # Test Results
 tests/integration/results/
