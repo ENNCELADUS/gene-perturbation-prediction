@@ -64,10 +64,12 @@ runtime can optimize multiple genes per rank per optimizer step with
 `train.gene_batch_size`. The local optimizer batch is
 `gene_batch_size` genes/rank/step, and the global DDP batch is
 `num_processes * gene_batch_size` genes/step. Gene losses are summed inside the
-local optimizer step. DDP loaders pad each split to even rank step counts; eval
-padding is forwarded for synchronization but excluded from metrics and
-prediction artifacts. Accelerate DDP is configured with unused-parameter
-detection for sparse per-gene perturbation-vector parameters.
+local optimizer step through a single DDP-wrapped `model(...)` forward. DDP
+loaders pad each split to even rank step counts; eval padding is forwarded for
+synchronization but excluded from metrics and prediction artifacts. Metric and
+prediction collection uses fixed-shape tensor collectives, not Python object
+gather. Accelerate DDP is configured with unused-parameter detection for sparse
+per-gene perturbation-vector parameters.
 
 The current Replogle K562 STATE experiment uses `train.cell_set_len: 256`,
 `state.cell_set_len: 256`, `train.gene_batch_size: 4`, and a scaled

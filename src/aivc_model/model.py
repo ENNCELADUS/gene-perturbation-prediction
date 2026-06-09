@@ -350,6 +350,128 @@ class AivcModel(nn.Module):
     def forward(
         self,
         *,
+        gene: str | tuple[str, ...],
+        control_chunks: tuple[torch.Tensor, ...] | tuple[tuple[torch.Tensor, ...], ...],
+        target_expression_chunks: tuple[torch.Tensor, ...]
+        | tuple[tuple[torch.Tensor, ...], ...],
+        target_latent_chunks: tuple[torch.Tensor, ...]
+        | tuple[tuple[torch.Tensor, ...], ...],
+        batch_index_chunks: tuple[torch.Tensor | None, ...]
+        | tuple[tuple[torch.Tensor | None, ...], ...],
+        y: torch.Tensor,
+        weights: LossWeights,
+    ) -> dict[str, torch.Tensor]:
+        """Compute one gene-level A->B->C loss through the module forward path."""
+        if not isinstance(gene, str):
+            return self._forward_gene_batch(
+                gene=gene,
+                control_chunks=control_chunks,
+                target_expression_chunks=target_expression_chunks,
+                target_latent_chunks=target_latent_chunks,
+                batch_index_chunks=batch_index_chunks,
+                y=y,
+                weights=weights,
+            )
+        return self._forward_one_gene(
+            gene=gene,
+            control_chunks=control_chunks,
+            target_expression_chunks=target_expression_chunks,
+            target_latent_chunks=target_latent_chunks,
+            batch_index_chunks=batch_index_chunks,
+            y=y,
+            weights=weights,
+        )
+
+    def _forward_gene_batch(
+        self,
+        *,
+        gene: tuple[str, ...],
+        control_chunks: tuple[tuple[torch.Tensor, ...], ...],
+        target_expression_chunks: tuple[tuple[torch.Tensor, ...], ...],
+        target_latent_chunks: tuple[tuple[torch.Tensor, ...], ...],
+        batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
+        y: torch.Tensor,
+        weights: LossWeights,
+    ) -> dict[str, torch.Tensor]:
+        if not (
+            len(gene)
+            == len(control_chunks)
+            == len(target_expression_chunks)
+            == len(target_latent_chunks)
+            == len(batch_index_chunks)
+        ):
+            msg = "All gene batch inputs must have the same length"
+            raise ValueError(msg)
+        y_values = y.reshape(-1)
+        if y_values.shape[0] != len(gene):
+            msg = "Batched y must have one value per gene"
+            raise ValueError(msg)
+        per_gene_losses = [
+            self._forward_one_gene(
+                gene=current_gene,
+                control_chunks=current_control,
+                target_expression_chunks=current_target_expression,
+                target_latent_chunks=current_target_latent,
+                batch_index_chunks=current_batch_indices,
+                y=y_values[index],
+                weights=weights,
+            )
+            for index, (
+                current_gene,
+                current_control,
+                current_target_expression,
+                current_target_latent,
+                current_batch_indices,
+            ) in enumerate(
+                zip(
+                    gene,
+                    control_chunks,
+                    target_expression_chunks,
+                    target_latent_chunks,
+                    batch_index_chunks,
+                    strict=True,
+                )
+            )
+        ]
+        stacked = {
+            key: torch.stack([losses[key] for losses in per_gene_losses])
+            for key in (
+                "total",
+                "hvg_mean_delta",
+                "hvg_energy",
+                "latent_mean_delta",
+                "latent_energy",
+                "pred_c",
+                "obs_c",
+                "occupancy",
+                "pred_y",
+                "obs_y",
+            )
+        }
+        return {
+            "total": stacked["total"].sum(),
+            "hvg_mean_delta": stacked["hvg_mean_delta"].mean(),
+            "hvg_energy": stacked["hvg_energy"].mean(),
+            "latent_mean_delta": stacked["latent_mean_delta"].mean(),
+            "latent_energy": stacked["latent_energy"].mean(),
+            "pred_c": stacked["pred_c"].mean(),
+            "obs_c": stacked["obs_c"].mean(),
+            "occupancy": stacked["occupancy"].mean(),
+            "pred_y": stacked["pred_y"],
+            "obs_y": stacked["obs_y"],
+            "per_gene_total_loss": stacked["total"],
+            "per_gene_hvg_mean_delta": stacked["hvg_mean_delta"],
+            "per_gene_hvg_energy": stacked["hvg_energy"],
+            "per_gene_latent_mean_delta": stacked["latent_mean_delta"],
+            "per_gene_latent_energy": stacked["latent_energy"],
+            "per_gene_pred_c": stacked["pred_c"],
+            "per_gene_obs_c": stacked["obs_c"],
+            "per_gene_occupancy": stacked["occupancy"],
+        }
+
+    def _forward_one_gene(
+        self,
+        *,
         gene: str,
         control_chunks: tuple[torch.Tensor, ...],
         target_expression_chunks: tuple[torch.Tensor, ...],
@@ -358,7 +480,6 @@ class AivcModel(nn.Module):
         y: torch.Tensor,
         weights: LossWeights,
     ) -> dict[str, torch.Tensor]:
-        """Compute one gene-level A->B->C loss through the module forward path."""
         predicted_latent_chunks: list[torch.Tensor] = []
         hvg_mean_delta_terms: list[torch.Tensor] = []
         hvg_energy_terms: list[torch.Tensor] = []
