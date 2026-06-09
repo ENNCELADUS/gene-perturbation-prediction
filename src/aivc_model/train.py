@@ -13,7 +13,10 @@ import sys
 from typing import Any
 
 if __package__ is None or __package__ == "":
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    src_root = str(Path(__file__).resolve().parents[1])
+    if src_root in sys.path:
+        sys.path.remove(src_root)
+    sys.path.insert(0, src_root)
 
 from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import broadcast_object_list, gather_object, set_seed

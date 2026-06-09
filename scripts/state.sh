@@ -29,7 +29,7 @@ if [ ! -d ".venv" ]; then
   exit 1
 fi
 
-export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 mkdir -p results/state
