@@ -35,4 +35,7 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 mkdir -p results/state
 
 echo "Running STATE AIVC with config: $CONFIG_PATH"
-uv run --locked --no-sync --offline python src/aivc_model/train.py --config "$CONFIG_PATH"
+srun uv run --locked --no-sync --offline accelerate launch \
+  --num_processes 4 \
+  src/aivc_model/train.py \
+  --config "$CONFIG_PATH"

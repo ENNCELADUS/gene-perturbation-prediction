@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+import json
 import os
 import pickle
 from pathlib import Path
@@ -205,6 +207,8 @@ def load_external_gene_bags(
     config: AivcConfig,
     reference: GeneBags,
     artifacts_dir: Path,
+    *,
+    project_scvi: bool = True,
 ) -> ExternalGeneBags | None:
     """Load and merge a configured external test set in the reference feature space."""
     if config.external_test is None:
@@ -271,18 +275,16 @@ def load_external_gene_bags(
         if control_batch_bags
         else None
     )
-    if config.projector.teacher == "scvi":
+    if config.projector.teacher == "scvi" and project_scvi:
         scvi = _import_scvi()
         model_dir = artifacts_dir / "scvi_teacher_model"
-        control_latent = _scvi_latent(
+        control_latent, merged_latent_bags = _project_scvi_latent_groups(
             scvi,
             model_dir,
             control_input,
+            merged_input_bags,
             reference.feature_names,
-        )
-        merged_latent_bags = tuple(
-            _scvi_latent(scvi, model_dir, bag, reference.feature_names)
-            for bag in merged_input_bags
+            progress_label=f"external:{config.external_test.name}",
         )
 
     qa = {
@@ -595,11 +597,42 @@ def with_scvi_teacher_latents(
     fit_teacher: bool = True,
 ) -> GeneBags:
     """Fit a train-only scVI teacher and replace latent bags with scVI latents."""
+    data, _external = with_cached_scvi_teacher_latents(
+        config,
+        data,
+        split,
+        artifacts_dir,
+        external=None,
+        fit_teacher=fit_teacher,
+    )
+    return data
+
+
+def with_cached_scvi_teacher_latents(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    artifacts_dir: Path,
+    *,
+    external: ExternalGeneBags | None = None,
+    fit_teacher: bool = True,
+    progress_interval: int = 50,
+    log_fn: Callable[[str], None] | None = None,
+) -> tuple[GeneBags, ExternalGeneBags | None]:
+    """Fit or reuse train-only scVI teacher latents from a run-local cache."""
     if config.projector.teacher != "scvi":
-        return data
+        return data, external
+    cached = _load_scvi_latent_cache(config, data, split, artifacts_dir, external)
+    if cached is not None:
+        _log(log_fn, "Reusing cached scVI teacher latents")
+        return cached
+    if not fit_teacher:
+        msg = f"Validated scVI latent cache is missing in {artifacts_dir}"
+        raise FileNotFoundError(msg)
     scvi = _import_scvi()
     model_dir = artifacts_dir / "scvi_teacher_model"
     if fit_teacher:
+        _log(log_fn, "Fitting rank0 scVI teacher model")
         train_matrix = np.vstack(
             [data.control_input, *(data.input_bags[index] for index in split.train)]
         ).astype(np.float32)
@@ -623,22 +656,350 @@ def with_scvi_teacher_latents(
                 **_scvi_trainer_kwargs(config.projector),
             )
         model.save(str(model_dir), overwrite=True, save_anndata=False)
-    control_latent = _scvi_latent(
+    elif not model_dir.exists():
+        msg = f"scVI teacher model is missing at {model_dir}"
+        raise FileNotFoundError(msg)
+    _log(log_fn, "Projecting scVI teacher latents")
+    data, external = _materialize_scvi_latents(
         scvi,
         model_dir,
-        data.control_input,
-        data.feature_names,
-    )
-    latent_bags = tuple(
-        _scvi_latent(scvi, model_dir, bag, data.feature_names)
-        for bag in data.input_bags
-    )
-    return replace(
         data,
-        latent_bags=latent_bags,
+        external,
+        progress_interval=progress_interval,
+        log_fn=log_fn,
+    )
+    _write_scvi_latent_cache(config, data, split, artifacts_dir, external)
+    _log(log_fn, "Wrote scVI teacher latent cache")
+    return data, external
+
+
+def _materialize_scvi_latents(
+    scvi: object,
+    model_dir: Path,
+    data: GeneBags,
+    external: ExternalGeneBags | None,
+    *,
+    progress_interval: int,
+    log_fn: Callable[[str], None] | None,
+) -> tuple[GeneBags, ExternalGeneBags | None]:
+    external_name = str(external.qa["external_name"]) if external is not None else None
+    datasets = [
+        ("primary", data.control_input, data.input_bags, data.feature_names),
+    ]
+    if external is not None and external_name is not None:
+        datasets.append(
+            (
+                f"external:{external_name}",
+                external.data.control_input,
+                external.data.input_bags,
+                external.data.feature_names,
+            )
+        )
+    projected = _project_scvi_latent_collections(
+        scvi,
+        model_dir,
+        tuple(datasets),
+        progress_interval=progress_interval,
+        log_fn=log_fn,
+    )
+    control_latent, latent_bags = projected[0]
+    data = replace(
+        data,
         control_latent=control_latent,
+        latent_bags=latent_bags,
         latent_dim=int(control_latent.shape[1]),
     )
+    if external is None:
+        return data, None
+    external_control_latent, external_latent_bags = projected[1]
+    external = replace(
+        external,
+        data=replace(
+            external.data,
+            control_latent=external_control_latent,
+            latent_bags=external_latent_bags,
+            latent_dim=int(external_control_latent.shape[1]),
+        ),
+    )
+    return data, external
+
+
+def _load_scvi_latent_cache(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    artifacts_dir: Path,
+    external: ExternalGeneBags | None,
+) -> tuple[GeneBags, ExternalGeneBags | None] | None:
+    cache_dir = _scvi_latent_cache_dir(artifacts_dir)
+    if not (cache_dir / "COMPLETE").exists():
+        return None
+    metadata_path = cache_dir / "metadata.json"
+    primary_path = cache_dir / "primary.npz"
+    if not metadata_path.exists() or not primary_path.exists():
+        return None
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    expected = _scvi_cache_metadata(config, data, split, external)
+    if metadata != expected:
+        return None
+    primary = np.load(primary_path, allow_pickle=False)
+    data = replace(
+        data,
+        control_latent=np.asarray(primary["control"], dtype=np.float32),
+        latent_bags=tuple(
+            np.asarray(primary[f"bag_{index}"], dtype=np.float32)
+            for index in range(len(data.input_bags))
+        ),
+        latent_dim=int(primary["control"].shape[1]),
+    )
+    if external is None:
+        return data, None
+    external_path = cache_dir / "external.npz"
+    if not external_path.exists():
+        return None
+    external_payload = np.load(external_path, allow_pickle=False)
+    external = replace(
+        external,
+        data=replace(
+            external.data,
+            control_latent=np.asarray(external_payload["control"], dtype=np.float32),
+            latent_bags=tuple(
+                np.asarray(external_payload[f"bag_{index}"], dtype=np.float32)
+                for index in range(len(external.data.input_bags))
+            ),
+            latent_dim=int(external_payload["control"].shape[1]),
+        ),
+    )
+    return data, external
+
+
+def _write_scvi_latent_cache(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    artifacts_dir: Path,
+    external: ExternalGeneBags | None,
+) -> None:
+    cache_dir = _scvi_latent_cache_dir(artifacts_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    complete_path = cache_dir / "COMPLETE"
+    complete_path.unlink(missing_ok=True)
+    _write_npz_atomic(
+        cache_dir / "primary.npz",
+        _latent_payload(data.control_latent, data.latent_bags),
+    )
+    external_path = cache_dir / "external.npz"
+    if external is None:
+        external_path.unlink(missing_ok=True)
+    else:
+        _write_npz_atomic(
+            external_path,
+            _latent_payload(external.data.control_latent, external.data.latent_bags),
+        )
+    _write_json_atomic(
+        cache_dir / "metadata.json",
+        _scvi_cache_metadata(config, data, split, external),
+    )
+    _write_text_atomic(complete_path, "ok\n")
+
+
+def _project_scvi_latent_groups(
+    scvi: object,
+    model_dir: Path,
+    control: np.ndarray,
+    bags: tuple[np.ndarray, ...],
+    feature_names: np.ndarray | None,
+    *,
+    progress_label: str,
+    progress_interval: int = 50,
+    log_fn: Callable[[str], None] | None = None,
+) -> tuple[np.ndarray, tuple[np.ndarray, ...]]:
+    return _project_scvi_latent_collections(
+        scvi,
+        model_dir,
+        ((progress_label, control, bags, feature_names),),
+        progress_interval=progress_interval,
+        log_fn=log_fn,
+    )[0]
+
+
+def _project_scvi_latent_collections(
+    scvi: object,
+    model_dir: Path,
+    datasets: tuple[
+        tuple[str, np.ndarray, tuple[np.ndarray, ...], np.ndarray | None],
+        ...,
+    ],
+    *,
+    progress_interval: int,
+    log_fn: Callable[[str], None] | None,
+) -> tuple[tuple[np.ndarray, tuple[np.ndarray, ...]], ...]:
+    feature_names = _shared_feature_names(datasets)
+    matrices: list[np.ndarray] = []
+    ranges: list[tuple[np.ndarray, tuple[np.ndarray, ...]]] = []
+    offset = 0
+    for _label, control, bags, _names in datasets:
+        control_matrix = np.asarray(control, dtype=np.float32)
+        matrices.append(control_matrix)
+        control_range = np.arange(offset, offset + control_matrix.shape[0])
+        offset += control_matrix.shape[0]
+        bag_ranges = []
+        for bag in bags:
+            bag_matrix = np.asarray(bag, dtype=np.float32)
+            matrices.append(bag_matrix)
+            bag_ranges.append(np.arange(offset, offset + bag_matrix.shape[0]))
+            offset += bag_matrix.shape[0]
+        ranges.append((control_range, tuple(bag_ranges)))
+    query = ad.AnnData(np.vstack(matrices).astype(np.float32))
+    if feature_names is not None:
+        query.var_names = feature_names.astype(str)
+    projected: list[tuple[np.ndarray, tuple[np.ndarray, ...]]] = []
+    with _suppress_normalized_x_warning():
+        model = scvi.model.SCVI.load(str(model_dir), adata=query)
+        for label, _control, bags, _names in datasets:
+            dataset_index = len(projected)
+            control_range, bag_ranges = ranges[dataset_index]
+            control_latent = np.asarray(
+                model.get_latent_representation(indices=control_range),
+                dtype=np.float32,
+            )
+            latent_bags: list[np.ndarray] = []
+            step = max(1, int(progress_interval))
+            for start in range(0, len(bags), step):
+                end = min(start + step, len(bags))
+                batch_ranges = bag_ranges[start:end]
+                batch_indices = np.concatenate(batch_ranges)
+                batch_latent = np.asarray(
+                    model.get_latent_representation(indices=batch_indices),
+                    dtype=np.float32,
+                )
+                batch_offsets = np.cumsum(
+                    [0, *(bags[index].shape[0] for index in range(start, end))]
+                )
+                latent_bags.extend(
+                    batch_latent[batch_offsets[index] : batch_offsets[index + 1]]
+                    for index in range(end - start)
+                )
+                _log(
+                    log_fn,
+                    f"Projected {label} scVI latents for {end}/{len(bags)} genes",
+                )
+            projected.append((control_latent, tuple(latent_bags)))
+    return tuple(projected)
+
+
+def _shared_feature_names(
+    datasets: tuple[
+        tuple[str, np.ndarray, tuple[np.ndarray, ...], np.ndarray | None],
+        ...,
+    ],
+) -> np.ndarray | None:
+    names = datasets[0][3]
+    for _label, _control, _bags, other in datasets[1:]:
+        if names is None and other is None:
+            continue
+        if (
+            names is None
+            or other is None
+            or not np.array_equal(
+                names.astype(str),
+                other.astype(str),
+            )
+        ):
+            msg = "scVI latent cache requires matching feature names across datasets"
+            raise ValueError(msg)
+    return names
+
+
+def _scvi_cache_metadata(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    external: ExternalGeneBags | None,
+) -> dict[str, object]:
+    return {
+        "version": 1,
+        "teacher": "scvi",
+        "latent_dim": int(config.projector.latent_dim),
+        "seed": int(config.train.seed),
+        "teacher_config": {
+            "scvi_max_epochs": int(config.projector.scvi_max_epochs),
+            "scvi_batch_size": int(config.projector.scvi_batch_size),
+            "scvi_hidden_units": int(config.projector.scvi_hidden_units),
+            "scvi_layers": int(config.projector.scvi_layers),
+            "scvi_dropout": float(config.projector.scvi_dropout),
+        },
+        "train_genes": [str(data.genes[index]) for index in split.train],
+        "primary": _cache_dataset_metadata(data),
+        "external": (
+            {
+                "name": str(external.qa["external_name"]),
+                **_cache_dataset_metadata(external.data),
+            }
+            if external is not None
+            else None
+        ),
+    }
+
+
+def _cache_dataset_metadata(data: GeneBags) -> dict[str, object]:
+    return {
+        "genes": [str(gene) for gene in data.genes],
+        "control_shape": [int(value) for value in data.control_input.shape],
+        "input_shapes": [
+            [int(value) for value in bag.shape] for bag in data.input_bags
+        ],
+        "feature_names": (
+            data.feature_names.astype(str).tolist()
+            if data.feature_names is not None
+            else None
+        ),
+    }
+
+
+def _latent_payload(
+    control_latent: np.ndarray,
+    latent_bags: tuple[np.ndarray, ...],
+) -> dict[str, np.ndarray]:
+    payload = {"control": np.asarray(control_latent, dtype=np.float32)}
+    payload.update(
+        {
+            f"bag_{index}": np.asarray(bag, dtype=np.float32)
+            for index, bag in enumerate(latent_bags)
+        }
+    )
+    return payload
+
+
+def _scvi_latent_cache_dir(artifacts_dir: Path) -> Path:
+    return artifacts_dir / "scvi_teacher_latents"
+
+
+def _write_npz_atomic(path: Path, arrays: dict[str, np.ndarray]) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    with tmp_path.open("wb") as handle:
+        np.savez_compressed(handle, **arrays)
+    tmp_path.replace(path)
+
+
+def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
+
+
+def _write_text_atomic(path: Path, value: str) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(value, encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _log(log_fn: Callable[[str], None] | None, message: str) -> None:
+    if log_fn is not None:
+        log_fn(message)
 
 
 def _scvi_datasplitter_kwargs(config: ProjectorConfig) -> dict[str, object]:
@@ -1454,20 +1815,6 @@ def _import_scvi() -> object:
         msg = "scvi-tools is required when projector.teacher is 'scvi'"
         raise ImportError(msg) from error
     return scvi
-
-
-def _scvi_latent(
-    scvi: object,
-    model_dir: Path,
-    matrix: np.ndarray,
-    feature_names: np.ndarray | None,
-) -> np.ndarray:
-    query = ad.AnnData(np.asarray(matrix, dtype=np.float32))
-    if feature_names is not None:
-        query.var_names = feature_names.astype(str)
-    with _suppress_normalized_x_warning():
-        model = scvi.model.SCVI.load(str(model_dir), adata=query)
-        return np.asarray(model.get_latent_representation(), dtype=np.float32)
 
 
 @contextmanager

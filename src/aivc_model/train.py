@@ -6,6 +6,7 @@ import argparse
 from contextlib import nullcontext
 from datetime import datetime, timezone
 import json
+import logging
 import math
 from pathlib import Path
 import sys
@@ -44,9 +45,11 @@ from aivc_model.prepare import (
     load_state_batch_lookup,
     make_cell_set_chunks,
     make_gene_split,
-    with_scvi_teacher_latents,
+    with_cached_scvi_teacher_latents,
 )
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -55,6 +58,7 @@ def main() -> None:
     args = parser.parse_args()
     config = load_config(args.config)
     accelerator = _make_accelerator(config)
+    _configure_logging(accelerator)
     paths = run_training(config, accelerator=accelerator)
     if accelerator.is_main_process:
         print(f"run dir: {paths['run_dir']}")
@@ -68,6 +72,7 @@ def run_training(
 ) -> dict[str, Path]:
     """Run one train/val/test STATE-ready AIVC experiment."""
     accelerator = accelerator or _make_accelerator(config)
+    _configure_logging(accelerator)
     set_seed(config.train.seed)
     _configure_float32_matmul_precision(config)
     run_id = _resolve_run_id(config, accelerator)
@@ -81,8 +86,20 @@ def run_training(
 
     data = load_gene_bags(config)
     split = make_gene_split(data.genes, data.y, config.split)
-    data = _with_rank_safe_scvi_teacher(config, data, split, artifacts_dir, accelerator)
-    external = load_external_gene_bags(config, data, artifacts_dir)
+    external = load_external_gene_bags(
+        config,
+        data,
+        artifacts_dir,
+        project_scvi=config.projector.teacher != "scvi",
+    )
+    data, external = _with_rank_safe_scvi_teacher(
+        config,
+        data,
+        split,
+        external,
+        artifacts_dir,
+        accelerator,
+    )
 
     train_expr = np.vstack(
         [data.control_input, *[data.input_bags[i] for i in split.train]]
@@ -294,6 +311,15 @@ def _make_accelerator(config: AivcConfig) -> Accelerator:
     )
 
 
+def _configure_logging(accelerator: Accelerator) -> None:
+    level = logging.INFO if accelerator.is_main_process else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger("aivc_model").setLevel(level)
+
+
 def _configure_float32_matmul_precision(config: AivcConfig) -> None:
     precision = config.train.float32_matmul_precision
     if precision is None:
@@ -321,30 +347,35 @@ def _with_rank_safe_scvi_teacher(
     config: AivcConfig,
     data: GeneBags,
     split: GeneSplit,
+    external: Any,
     artifacts_dir: Path,
     accelerator: Accelerator,
-) -> GeneBags:
+) -> tuple[GeneBags, Any]:
     if config.projector.teacher != "scvi":
-        return data
+        return data, external
     if accelerator.is_main_process:
-        data = with_scvi_teacher_latents(
+        data, external = with_cached_scvi_teacher_latents(
             config,
             data,
             split,
             artifacts_dir,
+            external=external,
             fit_teacher=True,
+            log_fn=_LOGGER.info,
         )
     accelerator.wait_for_everyone()
     if not accelerator.is_main_process:
-        data = with_scvi_teacher_latents(
+        data, external = with_cached_scvi_teacher_latents(
             config,
             data,
             split,
             artifacts_dir,
+            external=external,
             fit_teacher=False,
+            log_fn=_LOGGER.info,
         )
     accelerator.wait_for_everyone()
-    return data
+    return data, external
 
 
 def _gene_loader(indices: np.ndarray, *, shuffle: bool, seed: int) -> DataLoader[int]:
