@@ -854,7 +854,12 @@ train:
     train_log = pd.read_csv(paths["train_log"])
     test_metrics = pd.read_csv(paths["test_metrics"])
     assert len(train_log) == 2
-    assert {"epoch", "train_total_loss", "val_total_loss"}.issubset(train_log.columns)
+    assert {
+        "epoch",
+        "gpu_peak_memory_allocated_mb",
+        "train_total_loss",
+        "val_total_loss",
+    }.issubset(train_log.columns)
     expected_loss_cols = {
         "hvg_mean_delta",
         "hvg_energy",

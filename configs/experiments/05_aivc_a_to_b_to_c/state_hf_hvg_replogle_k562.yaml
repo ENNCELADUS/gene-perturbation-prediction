@@ -86,7 +86,7 @@ loss:
   occupancy_weight: 0.1
 
 train:
-  run_id: null
+  run_id: state_hvg_replogle_k562
   seed: 42
   max_epochs: 50
   learning_rate: 0.0001
