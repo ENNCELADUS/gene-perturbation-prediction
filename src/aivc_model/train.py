@@ -22,7 +22,11 @@ if __package__ is None or __package__ == "":
         sys.path.remove(src_root)
     sys.path.insert(0, src_root)
 
-from accelerate import Accelerator, DataLoaderConfiguration
+from accelerate import (
+    Accelerator,
+    DataLoaderConfiguration,
+    DistributedDataParallelKwargs,
+)
 from accelerate.utils import broadcast_object_list, gather_object, set_seed
 import numpy as np
 import pandas as pd
@@ -330,9 +334,11 @@ def _make_accelerator(config: AivcConfig) -> Accelerator:
         use_seedable_sampler=True,
         data_seed=config.train.seed,
     )
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     return Accelerator(
         cpu=config.train.device == "cpu",
         dataloader_config=dataloader_config,
+        kwargs_handlers=[ddp_kwargs],
     )
 
 

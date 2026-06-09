@@ -121,6 +121,17 @@ def test_external_only_perturbation_vector_uses_mean_initialization() -> None:
     np.testing.assert_allclose(missing.detach().numpy(), np.asarray([1.0, 0.0]))
 
 
+def test_one_gene_step_leaves_other_missing_vectors_without_grad() -> None:
+    adapter = PerturbationVectorAdapter(["GENE1", "GENE2"], {}, pert_dim=2)
+
+    current = adapter("GENE1")
+    other = adapter("GENE2")
+    current.square().sum().backward()
+
+    assert current.grad is not None
+    assert other.grad is None
+
+
 def test_state_pt_perturbation_map_loads_vectors(tmp_path: Path) -> None:
     path = tmp_path / "pert_onehot_map.pt"
     torch.save(
@@ -515,6 +526,15 @@ def test_rank0_scvi_orchestration_runs_subprocess_then_reads_cache(
     assert accelerator.barrier_count == 1
     assert external is None
     np.testing.assert_allclose(loaded.control_latent, data.control_latent)
+
+
+def test_accelerator_enables_ddp_unused_parameter_detection(tmp_path: Path) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+
+    accelerator = train_module._make_accelerator(config)
+
+    assert accelerator.ddp_handler is not None
+    assert accelerator.ddp_handler.find_unused_parameters is True
 
 
 def test_train_val_chunks_cover_cells_and_pad_short_chunk() -> None:

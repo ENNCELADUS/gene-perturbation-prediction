@@ -59,6 +59,8 @@ srun uv run --locked --no-sync --offline accelerate launch --num_processes 4 src
 The training loop uses `Accelerator` for rank/device setup, model wrapping,
 gradient synchronization, distributed gene-index sharding, and rank0-only CSV,
 artifact, and checkpoint writes.
+AIVC trains one perturbation gene per step, so Accelerate DDP is configured with
+unused-parameter detection for sparse per-gene perturbation-vector parameters.
 
 When `projector.teacher: scvi`, the rank0 teacher fit configures Lightning
 quietly for this internal preprocessing step: set `scvi_num_workers` explicitly
