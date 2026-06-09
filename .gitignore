@@ -52,6 +52,13 @@ results/**/runs/**/artifacts
 results/**/runs/**/*.json
 results/**/latest_run.txt
 
+# Experiment result convenience symlinks
+results/replogle_k562_adamson_ensemble
+results/replogle_k562_signal_decomposition_5x1_main
+results/replogle_k562_single_cell_deepsets
+results/replogle_k562_strict_mlp_baseline
+results/replogle_k562_viability_axis_audit_5x1_main
+
 # Conda
 .conda/
 .condarc
