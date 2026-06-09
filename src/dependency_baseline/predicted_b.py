@@ -806,6 +806,15 @@ def _fit_fold_scvi(
     fold_index: int,
     method: str,
 ) -> Path:
+    model_dir = _fold_scvi_model_dir(run_dir, method, fold_index)
+    if (model_dir / "model.pt").exists():
+        LOGGER.info(
+            "Reusing existing fold-local scVI model for fold=%s method=%s",
+            fold_index,
+            method,
+        )
+        return model_dir
+
     scvi = _import_scvi()
     train_matrix = np.vstack(
         [data.control_matrix, *(data.train_cells[gene] for gene in train_genes)]
@@ -825,7 +834,12 @@ def _fit_fold_scvi(
         batch_size=int(config.single_cell.scvi_batch_size),
         early_stopping=True,
     )
-    model_dir = (
+    model.save(str(model_dir), overwrite=True, save_anndata=False)
+    return model_dir
+
+
+def _fold_scvi_model_dir(run_dir: Path, method: str, fold_index: int) -> Path:
+    return (
         run_dir
         / "artifacts"
         / "predicted_b"
@@ -833,8 +847,6 @@ def _fit_fold_scvi(
         / f"fold_{fold_index}"
         / "scvi_model"
     )
-    model.save(str(model_dir), overwrite=True, save_anndata=False)
-    return model_dir
 
 
 def _fit_predicted_gmm(
