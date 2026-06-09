@@ -584,32 +584,35 @@ def with_scvi_teacher_latents(
     data: GeneBags,
     split: GeneSplit,
     artifacts_dir: Path,
+    *,
+    fit_teacher: bool = True,
 ) -> GeneBags:
     """Fit a train-only scVI teacher and replace latent bags with scVI latents."""
     if config.projector.teacher != "scvi":
         return data
     scvi = _import_scvi()
-    train_matrix = np.vstack(
-        [data.control_input, *(data.input_bags[index] for index in split.train)]
-    ).astype(np.float32)
-    train_adata = ad.AnnData(train_matrix)
-    if data.feature_names is not None:
-        train_adata.var_names = data.feature_names.astype(str)
-    scvi.model.SCVI.setup_anndata(train_adata)
-    model = scvi.model.SCVI(
-        train_adata,
-        n_latent=int(config.projector.latent_dim),
-        n_hidden=int(config.projector.scvi_hidden_units),
-        n_layers=int(config.projector.scvi_layers),
-        dropout_rate=float(config.projector.scvi_dropout),
-    )
-    model.train(
-        max_epochs=int(config.projector.scvi_max_epochs),
-        batch_size=int(config.projector.scvi_batch_size),
-        early_stopping=True,
-    )
     model_dir = artifacts_dir / "scvi_teacher_model"
-    model.save(str(model_dir), overwrite=True, save_anndata=False)
+    if fit_teacher:
+        train_matrix = np.vstack(
+            [data.control_input, *(data.input_bags[index] for index in split.train)]
+        ).astype(np.float32)
+        train_adata = ad.AnnData(train_matrix)
+        if data.feature_names is not None:
+            train_adata.var_names = data.feature_names.astype(str)
+        scvi.model.SCVI.setup_anndata(train_adata)
+        model = scvi.model.SCVI(
+            train_adata,
+            n_latent=int(config.projector.latent_dim),
+            n_hidden=int(config.projector.scvi_hidden_units),
+            n_layers=int(config.projector.scvi_layers),
+            dropout_rate=float(config.projector.scvi_dropout),
+        )
+        model.train(
+            max_epochs=int(config.projector.scvi_max_epochs),
+            batch_size=int(config.projector.scvi_batch_size),
+            early_stopping=True,
+        )
+        model.save(str(model_dir), overwrite=True, save_anndata=False)
     control_latent = _scvi_latent(
         scvi,
         model_dir,

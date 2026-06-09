@@ -30,7 +30,7 @@ from aivc_model.prepare import (
     make_cell_set_chunks,
     make_gene_split,
 )
-from aivc_model.train import run_training
+from aivc_model.train import _write_csv_if_main, run_training
 from aivc_model.prepare import load_config
 
 
@@ -292,6 +292,26 @@ def test_pred_c_loss_backprops_into_mock_state() -> None:
     assert any(torch.any(grad != 0) for grad in grads)
 
 
+def test_aivc_forward_matches_loss_helper() -> None:
+    model, _state_model = _build_tiny_aivc_model()
+    kwargs = {
+        "gene": "GENE1",
+        "control_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
+        "target_expression_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
+        "target_latent_chunks": (torch.randn(3, 2), torch.randn(2, 2)),
+        "batch_index_chunks": (None, None),
+        "y": torch.tensor(-1.0),
+        "weights": _loss_weights(),
+    }
+
+    forward_losses = model(**kwargs)
+    helper_losses = model.losses_for_gene(**kwargs)
+
+    assert set(forward_losses) == set(helper_losses)
+    for key in forward_losses:
+        assert torch.allclose(forward_losses[key], helper_losses[key])
+
+
 def test_a_to_b_set_loss_is_target_order_invariant() -> None:
     model, _state_model = _build_tiny_aivc_model()
     control = torch.zeros(4, 3)
@@ -430,6 +450,10 @@ train:
     assert paths["train_log"].exists()
     assert paths["test_metrics"].exists()
     assert (paths["run_dir"] / "artifacts" / "test_predictions.csv").exists()
+    assert (paths["run_dir"] / "models" / "best" / "pytorch_model.bin").exists()
+    assert (paths["run_dir"] / "models" / "best" / "metadata.json").exists()
+    assert (paths["run_dir"] / "models" / "final" / "pytorch_model.bin").exists()
+    assert (paths["run_dir"] / "models" / "final" / "metadata.json").exists()
     train_log = pd.read_csv(paths["train_log"])
     test_metrics = pd.read_csv(paths["test_metrics"])
     assert len(train_log) == 2
@@ -446,6 +470,24 @@ train:
     }
     assert expected_loss_cols.issubset(test_metrics.columns)
     assert {"rmse", "spearman"}.issubset(test_metrics.columns)
+
+
+def test_csv_writer_is_main_process_only(tmp_path: Path) -> None:
+    class FakeAccelerator:
+        def __init__(self, is_main_process: bool) -> None:
+            self.is_main_process = is_main_process
+
+    path = tmp_path / "nested" / "table.csv"
+    frame = pd.DataFrame({"value": [1]})
+
+    _write_csv_if_main(frame, path, FakeAccelerator(False))
+
+    assert not path.exists()
+
+    _write_csv_if_main(frame, path, FakeAccelerator(True))
+
+    assert path.exists()
+    assert pd.read_csv(path)["value"].tolist() == [1]
 
 
 def test_external_adamson_sources_merge_and_mean_impute_missing_genes(
@@ -507,6 +549,8 @@ def test_train_smoke_writes_external_adamson_outputs(tmp_path: Path) -> None:
     assert "perturbation_has_known_vector" in predictions.columns
     assert not predictions["perturbation_has_known_vector"].any()
     assert (run_dir / "artifacts" / "external_test_qa.json").exists()
+    assert (run_dir / "models" / "best" / "pytorch_model.bin").exists()
+    assert (run_dir / "models" / "final" / "pytorch_model.bin").exists()
 
 
 def _loss_weights() -> LossWeights:

@@ -9,6 +9,7 @@ description = "Reverse Perturbation Prediction for CRISPR Perturb-seq"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "accelerate>=1.13.0",
     "anndata>=0.12.10",
     "arc-state @ git+https://github.com/ArcInstitute/state.git@bf4fbc9ea35bf4d1e91afe201b663dec5d8bdd48",
     "h5py==3.15.1",

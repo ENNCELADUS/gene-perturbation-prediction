@@ -43,6 +43,16 @@ Run through the project `uv` environment:
 uv run python src/aivc_model/train.py --config <config.yaml>
 ```
 
+For multi-GPU DDP training, launch the same entrypoint with Accelerate:
+
+```bash
+uv run accelerate launch src/aivc_model/train.py --config <config.yaml>
+```
+
+The training loop uses `Accelerator` for rank/device setup, model wrapping,
+gradient synchronization, distributed gene-index sharding, and rank0-only CSV,
+artifact, and checkpoint writes.
+
 After dependency or lockfile changes, run:
 
 ```bash
