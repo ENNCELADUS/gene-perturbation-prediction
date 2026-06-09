@@ -7,8 +7,8 @@
 #SBATCH --mem=300G
 #SBATCH --cpus-per-task=32
 #SBATCH --gres=gpu:NVIDIAA40:4
-#SBATCH --output=logs/state/slurm_%j.out
-#SBATCH --error=logs/state/slurm_%j.err
+#SBATCH --output=results/state/slurm_%j.out
+#SBATCH --error=results/state/slurm_%j.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=2162352828@qq.com
 
@@ -32,7 +32,7 @@ fi
 export PYTHONPATH="$PWD:${PYTHONPATH:-}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
-mkdir -p logs/state
+mkdir -p results/state
 
 echo "Running STATE AIVC with config: $CONFIG_PATH"
 uv run --locked --no-sync --offline python src/aivc_model/train.py --config "$CONFIG_PATH"
