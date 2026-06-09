@@ -622,12 +622,20 @@ def with_cached_scvi_teacher_latents(
     """Fit or reuse train-only scVI teacher latents from a run-local cache."""
     if config.projector.teacher != "scvi":
         return data, external
-    cached = _load_scvi_latent_cache(config, data, split, artifacts_dir, external)
+    cached, cache_reason = _load_scvi_latent_cache_with_reason(
+        config,
+        data,
+        split,
+        artifacts_dir,
+        external,
+    )
     if cached is not None:
         _log(log_fn, "Reusing cached scVI teacher latents")
         return cached
     if not fit_teacher:
-        msg = f"Validated scVI latent cache is missing in {artifacts_dir}"
+        msg = (
+            f"Validated scVI latent cache is missing in {artifacts_dir}: {cache_reason}"
+        )
         raise FileNotFoundError(msg)
     scvi = _import_scvi()
     model_dir = artifacts_dir / "scvi_teacher_model"
@@ -731,46 +739,84 @@ def _load_scvi_latent_cache(
     artifacts_dir: Path,
     external: ExternalGeneBags | None,
 ) -> tuple[GeneBags, ExternalGeneBags | None] | None:
+    cached, _reason = _load_scvi_latent_cache_with_reason(
+        config,
+        data,
+        split,
+        artifacts_dir,
+        external,
+    )
+    return cached
+
+
+def _load_scvi_latent_cache_with_reason(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    artifacts_dir: Path,
+    external: ExternalGeneBags | None,
+) -> tuple[tuple[GeneBags, ExternalGeneBags | None] | None, str | None]:
     cache_dir = _scvi_latent_cache_dir(artifacts_dir)
     if not (cache_dir / "COMPLETE").exists():
-        return None
+        return None, f"{cache_dir / 'COMPLETE'} does not exist"
     metadata_path = cache_dir / "metadata.json"
     primary_path = cache_dir / "primary.npz"
-    if not metadata_path.exists() or not primary_path.exists():
-        return None
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if not metadata_path.exists():
+        return None, f"{metadata_path} does not exist"
+    if not primary_path.exists():
+        return None, f"{primary_path} does not exist"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return None, f"{metadata_path} is not valid JSON: {exc}"
     expected = _scvi_cache_metadata(config, data, split, external)
     if metadata != expected:
-        return None
-    primary = np.load(primary_path, allow_pickle=False)
-    data = replace(
-        data,
-        control_latent=np.asarray(primary["control"], dtype=np.float32),
-        latent_bags=tuple(
+        return None, f"{metadata_path} does not match current config/data"
+    try:
+        primary = np.load(primary_path, allow_pickle=False)
+    except OSError as exc:
+        return None, f"{primary_path} could not be loaded: {exc}"
+    try:
+        primary_control = np.asarray(primary["control"], dtype=np.float32)
+        primary_latent_bags = tuple(
             np.asarray(primary[f"bag_{index}"], dtype=np.float32)
             for index in range(len(data.input_bags))
-        ),
-        latent_dim=int(primary["control"].shape[1]),
+        )
+    except (KeyError, ValueError) as exc:
+        return None, f"{primary_path} is incomplete or incompatible: {exc}"
+    data = replace(
+        data,
+        control_latent=primary_control,
+        latent_bags=primary_latent_bags,
+        latent_dim=int(primary_control.shape[1]),
     )
     if external is None:
-        return data, None
+        return (data, None), None
     external_path = cache_dir / "external.npz"
     if not external_path.exists():
-        return None
-    external_payload = np.load(external_path, allow_pickle=False)
+        return None, f"{external_path} does not exist"
+    try:
+        external_payload = np.load(external_path, allow_pickle=False)
+    except OSError as exc:
+        return None, f"{external_path} could not be loaded: {exc}"
+    try:
+        external_control = np.asarray(external_payload["control"], dtype=np.float32)
+        external_latent_bags = tuple(
+            np.asarray(external_payload[f"bag_{index}"], dtype=np.float32)
+            for index in range(len(external.data.input_bags))
+        )
+    except (KeyError, ValueError) as exc:
+        return None, f"{external_path} is incomplete or incompatible: {exc}"
     external = replace(
         external,
         data=replace(
             external.data,
-            control_latent=np.asarray(external_payload["control"], dtype=np.float32),
-            latent_bags=tuple(
-                np.asarray(external_payload[f"bag_{index}"], dtype=np.float32)
-                for index in range(len(external.data.input_bags))
-            ),
-            latent_dim=int(external_payload["control"].shape[1]),
+            control_latent=external_control,
+            latent_bags=external_latent_bags,
+            latent_dim=int(external_control.shape[1]),
         ),
     )
-    return data, external
+    return (data, external), None
 
 
 def _write_scvi_latent_cache(

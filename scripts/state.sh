@@ -37,5 +37,8 @@ mkdir -p results/state
 echo "Running STATE AIVC with config: $CONFIG_PATH"
 srun uv run --locked --no-sync --offline accelerate launch \
   --num_processes 4 \
+  --num_machines 1 \
+  --mixed_precision no \
+  --dynamo_backend no \
   src/aivc_model/train.py \
   --config "$CONFIG_PATH"
