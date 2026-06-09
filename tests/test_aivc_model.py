@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 import anndata as ad
 import numpy as np
@@ -20,7 +21,11 @@ from aivc_model.model import (
 )
 from aivc_model.prepare import (
     GeneBags,
+    ProjectorConfig,
     SplitConfig,
+    _scvi_datasplitter_kwargs,
+    _suppress_scvi_lightning_warnings,
+    _scvi_trainer_kwargs,
     encode_batch_labels,
     fit_linear_projector,
     load_external_gene_bags,
@@ -138,6 +143,41 @@ def test_state_batch_lookup_encodes_gem_group_labels(tmp_path: Path) -> None:
 
     assert lookup == {"31": 1, "25": 0}
     np.testing.assert_array_equal(encoded, np.asarray([1, 0, 0]))
+
+
+def test_scvi_teacher_kwargs_reduce_lightning_warning_noise() -> None:
+    config = ProjectorConfig(scvi_num_workers=4)
+
+    datasplitter_kwargs = _scvi_datasplitter_kwargs(config)
+    trainer_kwargs = _scvi_trainer_kwargs(config)
+
+    assert datasplitter_kwargs == {"num_workers": 4, "persistent_workers": True}
+    assert trainer_kwargs["logger"] is False
+    assert trainer_kwargs["enable_progress_bar"] is False
+    assert trainer_kwargs["enable_model_summary"] is False
+
+
+def test_scvi_teacher_warning_context_filters_known_noise() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with _suppress_scvi_lightning_warnings(ProjectorConfig()):
+            warnings.warn(
+                "The `srun` command is available on your system but is not used.",
+                UserWarning,
+            )
+            warnings.warn(
+                "adata.X does not contain unnormalized count data. "
+                "Are you sure this is what you want?",
+                UserWarning,
+            )
+            warnings.warn("unrelated warning", UserWarning)
+
+    messages = [str(item.message) for item in caught]
+    assert "unrelated warning" in messages
+    assert not any("The `srun` command is available" in message for message in messages)
+    assert not any(
+        "adata.X does not contain unnormalized" in message for message in messages
+    )
 
 
 def test_train_val_chunks_cover_cells_and_pad_short_chunk() -> None:

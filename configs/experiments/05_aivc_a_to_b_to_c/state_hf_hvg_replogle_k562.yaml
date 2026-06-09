@@ -60,9 +60,12 @@ projector:
   trainable: true
   scvi_max_epochs: 100
   scvi_batch_size: 256
+  scvi_num_workers: null
   scvi_hidden_units: 128
   scvi_layers: 2
   scvi_dropout: 0.1
+  scvi_disable_lightning_logger: true
+  scvi_suppress_slurm_warning: true
 
 gmm:
   n_components: 64
@@ -90,3 +93,4 @@ train:
   weight_decay: 0.0001
   cell_set_len: 128
   device: auto
+  float32_matmul_precision: high

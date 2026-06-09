@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
+import os
 import pickle
 from pathlib import Path
 from typing import Any
+import warnings
 
 import anndata as ad
 import numpy as np
@@ -86,9 +89,12 @@ class ProjectorConfig:
     trainable: bool = True
     scvi_max_epochs: int = 100
     scvi_batch_size: int = 256
+    scvi_num_workers: int | None = None
     scvi_hidden_units: int = 128
     scvi_layers: int = 2
     scvi_dropout: float = 0.1
+    scvi_disable_lightning_logger: bool = True
+    scvi_suppress_slurm_warning: bool = True
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,7 @@ class TrainConfig:
     weight_decay: float = 1e-4
     cell_set_len: int = 128
     device: str = "auto"
+    float32_matmul_precision: str | None = "high"
 
 
 @dataclass(frozen=True)
@@ -599,19 +606,22 @@ def with_scvi_teacher_latents(
         train_adata = ad.AnnData(train_matrix)
         if data.feature_names is not None:
             train_adata.var_names = data.feature_names.astype(str)
-        scvi.model.SCVI.setup_anndata(train_adata)
-        model = scvi.model.SCVI(
-            train_adata,
-            n_latent=int(config.projector.latent_dim),
-            n_hidden=int(config.projector.scvi_hidden_units),
-            n_layers=int(config.projector.scvi_layers),
-            dropout_rate=float(config.projector.scvi_dropout),
-        )
-        model.train(
-            max_epochs=int(config.projector.scvi_max_epochs),
-            batch_size=int(config.projector.scvi_batch_size),
-            early_stopping=True,
-        )
+        with _suppress_scvi_lightning_warnings(config.projector):
+            scvi.model.SCVI.setup_anndata(train_adata)
+            model = scvi.model.SCVI(
+                train_adata,
+                n_latent=int(config.projector.latent_dim),
+                n_hidden=int(config.projector.scvi_hidden_units),
+                n_layers=int(config.projector.scvi_layers),
+                dropout_rate=float(config.projector.scvi_dropout),
+            )
+            model.train(
+                max_epochs=int(config.projector.scvi_max_epochs),
+                batch_size=int(config.projector.scvi_batch_size),
+                early_stopping=True,
+                datasplitter_kwargs=_scvi_datasplitter_kwargs(config.projector),
+                **_scvi_trainer_kwargs(config.projector),
+            )
         model.save(str(model_dir), overwrite=True, save_anndata=False)
     control_latent = _scvi_latent(
         scvi,
@@ -629,6 +639,91 @@ def with_scvi_teacher_latents(
         control_latent=control_latent,
         latent_dim=int(control_latent.shape[1]),
     )
+
+
+def _scvi_datasplitter_kwargs(config: ProjectorConfig) -> dict[str, object]:
+    num_workers = (
+        max(0, int(config.scvi_num_workers))
+        if config.scvi_num_workers is not None
+        else max(1, (os.cpu_count() or 1) - 1)
+    )
+    return {
+        "num_workers": num_workers,
+        "persistent_workers": num_workers > 0,
+    }
+
+
+def _scvi_trainer_kwargs(config: ProjectorConfig) -> dict[str, object]:
+    kwargs: dict[str, object] = {
+        "enable_progress_bar": False,
+        "enable_model_summary": False,
+    }
+    if config.scvi_disable_lightning_logger:
+        kwargs["logger"] = False
+    return kwargs
+
+
+@contextmanager
+def _suppress_scvi_lightning_warnings(config: ProjectorConfig) -> Any:
+    info_patchers = (
+        _patch_lightning_fit_stop_info() if config.scvi_disable_lightning_logger else ()
+    )
+    if not config.scvi_suppress_slurm_warning:
+        try:
+            yield
+        finally:
+            _restore_lightning_info(info_patchers)
+        return
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=(
+                    r".*The `srun` command is available on your system but is not "
+                    r"used.*"
+                ),
+                category=Warning,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message=r"adata\.X does not contain unnormalized count data.*",
+                category=UserWarning,
+            )
+            yield
+    finally:
+        _restore_lightning_info(info_patchers)
+
+
+def _patch_lightning_fit_stop_info() -> tuple[tuple[object, object], ...]:
+    originals = []
+    for module_name in (
+        "lightning.pytorch.loops.fit_loop",
+        "pytorch_lightning.loops.fit_loop",
+    ):
+        try:
+            module = __import__(module_name, fromlist=["rank_zero_info"])
+        except ImportError:
+            continue
+        original = getattr(module, "rank_zero_info", None)
+        if original is None:
+            continue
+
+        def filtered_info(
+            *args: Any, _original: object = original, **kwargs: Any
+        ) -> Any:
+            message = str(args[0]) if args else ""
+            if message.startswith("`Trainer.fit` stopped: `max_epochs="):
+                return None
+            return _original(*args, **kwargs)
+
+        originals.append((module, original))
+        setattr(module, "rank_zero_info", filtered_info)
+    return tuple(originals)
+
+
+def _restore_lightning_info(originals: tuple[tuple[object, object], ...]) -> None:
+    for module, original in originals:
+        setattr(module, "rank_zero_info", original)
 
 
 def _load_metadata(config: DataConfig) -> pd.DataFrame:
@@ -1145,12 +1240,19 @@ def _projector_config(values: dict[str, Any]) -> ProjectorConfig:
         teacher=str(values.get("teacher", "obsm")),
         latent_dim=int(values.get("latent_dim", 128)),
         ridge_alpha=float(values.get("ridge_alpha", 1.0)),
-        trainable=bool(values.get("trainable", True)),
+        trainable=_bool_value(values.get("trainable", True)),
         scvi_max_epochs=int(values.get("scvi_max_epochs", 100)),
         scvi_batch_size=int(values.get("scvi_batch_size", 256)),
+        scvi_num_workers=_int_or_none(values.get("scvi_num_workers")),
         scvi_hidden_units=int(values.get("scvi_hidden_units", 128)),
         scvi_layers=int(values.get("scvi_layers", 2)),
         scvi_dropout=float(values.get("scvi_dropout", 0.1)),
+        scvi_disable_lightning_logger=_bool_value(
+            values.get("scvi_disable_lightning_logger", True)
+        ),
+        scvi_suppress_slurm_warning=_bool_value(
+            values.get("scvi_suppress_slurm_warning", True)
+        ),
     )
 
 
@@ -1195,6 +1297,9 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         weight_decay=float(values.get("weight_decay", 1e-4)),
         cell_set_len=int(cell_set_len),
         device=str(values.get("device", "auto")),
+        float32_matmul_precision=_str_or_none(
+            values.get("float32_matmul_precision", "high")
+        ),
     )
 
 
@@ -1202,6 +1307,14 @@ def _tuple_or_none(values: Any) -> tuple[str, ...] | None:
     if values is None:
         return None
     return tuple(str(value) for value in values)
+
+
+def _bool_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def _str_or_none(value: Any) -> str | None:
@@ -1352,5 +1465,17 @@ def _scvi_latent(
     query = ad.AnnData(np.asarray(matrix, dtype=np.float32))
     if feature_names is not None:
         query.var_names = feature_names.astype(str)
-    model = scvi.model.SCVI.load(str(model_dir), adata=query)
-    return np.asarray(model.get_latent_representation(), dtype=np.float32)
+    with _suppress_normalized_x_warning():
+        model = scvi.model.SCVI.load(str(model_dir), adata=query)
+        return np.asarray(model.get_latent_representation(), dtype=np.float32)
+
+
+@contextmanager
+def _suppress_normalized_x_warning() -> Any:
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"adata\.X does not contain unnormalized count data.*",
+            category=UserWarning,
+        )
+        yield

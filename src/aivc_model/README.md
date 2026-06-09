@@ -53,6 +53,14 @@ The training loop uses `Accelerator` for rank/device setup, model wrapping,
 gradient synchronization, distributed gene-index sharding, and rank0-only CSV,
 artifact, and checkpoint writes.
 
+When `projector.teacher: scvi`, the rank0 teacher fit configures Lightning
+quietly for this internal preprocessing step: `scvi_num_workers: null` auto-uses
+CPU workers, `scvi_disable_lightning_logger: true` disables Lightning experiment
+logger setup, and `scvi_suppress_slurm_warning: true` filters Lightning's
+irrelevant `srun` warning when the surrounding job is launched by Accelerate.
+`train.float32_matmul_precision: high` sets PyTorch matmul precision before
+CUDA/scVI training to avoid Tensor Core performance warnings.
+
 After dependency or lockfile changes, run:
 
 ```bash

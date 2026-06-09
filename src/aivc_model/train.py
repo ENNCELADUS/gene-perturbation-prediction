@@ -69,6 +69,7 @@ def run_training(
     """Run one train/val/test STATE-ready AIVC experiment."""
     accelerator = accelerator or _make_accelerator(config)
     set_seed(config.train.seed)
+    _configure_float32_matmul_precision(config)
     run_id = _resolve_run_id(config, accelerator)
     run_dir = config.data.output_dir / "runs" / run_id
     artifacts_dir = run_dir / "artifacts"
@@ -291,6 +292,17 @@ def _make_accelerator(config: AivcConfig) -> Accelerator:
         cpu=config.train.device == "cpu",
         dataloader_config=dataloader_config,
     )
+
+
+def _configure_float32_matmul_precision(config: AivcConfig) -> None:
+    precision = config.train.float32_matmul_precision
+    if precision is None:
+        return
+    allowed = {"highest", "high", "medium"}
+    if precision not in allowed:
+        msg = f"train.float32_matmul_precision must be one of {sorted(allowed)} or null"
+        raise ValueError(msg)
+    torch.set_float32_matmul_precision(precision)
 
 
 def _resolve_run_id(config: AivcConfig, accelerator: Accelerator) -> str:
