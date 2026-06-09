@@ -59,8 +59,20 @@ srun uv run --locked --no-sync --offline accelerate launch --num_processes 4 src
 The training loop uses `Accelerator` for rank/device setup, model wrapping,
 gradient synchronization, distributed gene-index sharding, and rank0-only CSV,
 artifact, and checkpoint writes.
-AIVC trains one perturbation gene per step, so Accelerate DDP is configured with
-unused-parameter detection for sparse per-gene perturbation-vector parameters.
+AIVC keeps one perturbation gene bag as the biological training unit, but the
+runtime can optimize multiple genes per rank per optimizer step with
+`train.gene_batch_size`. The local optimizer batch is
+`gene_batch_size` genes/rank/step, and the global DDP batch is
+`num_processes * gene_batch_size` genes/step. Gene losses are summed inside the
+local optimizer step. DDP loaders pad each split to even rank step counts; eval
+padding is forwarded for synchronization but excluded from metrics and
+prediction artifacts. Accelerate DDP is configured with unused-parameter
+detection for sparse per-gene perturbation-vector parameters.
+
+The current Replogle K562 STATE experiment uses `train.cell_set_len: 256`,
+`state.cell_set_len: 256`, `train.gene_batch_size: 4`, and a scaled
+`train.learning_rate: 0.000025` because the four local gene losses are summed
+before backward.
 
 When `projector.teacher: scvi`, the rank0 teacher fit configures Lightning
 quietly for this internal preprocessing step: set `scvi_num_workers` explicitly

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+import math
 from pathlib import Path
+import sys
+import types
 import warnings
 
 import anndata as ad
@@ -10,6 +13,7 @@ import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
 import torch
+import torch.nn.functional as F
 
 import aivc_model.train as train_module
 from aivc_model.model import (
@@ -537,6 +541,172 @@ def test_accelerator_enables_ddp_unused_parameter_detection(tmp_path: Path) -> N
     assert accelerator.ddp_handler.find_unused_parameters is True
 
 
+def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> None:
+    default_config = load_config(_write_scvi_cache_config(tmp_path))
+    config_path = tmp_path / "gene_batch.yaml"
+    config_path.write_text(
+        _write_scvi_cache_config(tmp_path)
+        .read_text(encoding="utf-8")
+        .replace("  device: cpu\n", "  device: cpu\n  gene_batch_size: 4\n"),
+        encoding="utf-8",
+    )
+
+    parsed = load_config(config_path)
+
+    assert default_config.train.gene_batch_size == 1
+    assert parsed.train.gene_batch_size == 4
+
+
+def test_padded_gene_loader_marks_padding_for_even_ddp_steps() -> None:
+    padded, is_padding = train_module._pad_gene_indices(
+        np.arange(5, dtype=np.int64),
+        batch_size=4,
+        world_size=2,
+    )
+
+    assert padded.tolist() == [0, 1, 2, 3, 4, 0, 1, 2]
+    assert is_padding.tolist() == [False, False, False, False, False, True, True, True]
+
+    loader = train_module._gene_loader(
+        np.arange(5, dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=4,
+        world_size=2,
+    )
+    batches = list(loader)
+
+    assert [batch["index"].tolist() for batch in batches] == [
+        [0, 1, 2, 3],
+        [4, 0, 1, 2],
+    ]
+    assert [batch["is_padding"].tolist() for batch in batches] == [
+        [False, False, False, False],
+        [False, True, True, True],
+    ]
+
+
+def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> None:
+    param = torch.nn.Parameter(torch.tensor(1.0))
+    model = torch.nn.Module()
+    model.param = param
+
+    class CountingOptimizer(torch.optim.SGD):
+        def __init__(self, params: list[torch.nn.Parameter]) -> None:
+            super().__init__(params, lr=0.1)
+            self.step_count = 0
+            self.last_grad = math.nan
+
+        def step(self, closure=None):  # type: ignore[override]
+            self.step_count += 1
+            self.last_grad = float(param.grad.detach())
+            return None
+
+    def fake_loss_for_index(
+        model_arg: torch.nn.Module,
+        data: GeneBags,
+        index: int,
+        weights: LossWeights,
+        rng: np.random.Generator,
+        cell_set_len: int,
+        device: torch.device,
+        batch_lookup: dict[str, int],
+        pad_short: bool,
+    ) -> tuple[dict[str, float | torch.Tensor], float, float]:
+        del data, weights, rng, cell_set_len, device, batch_lookup, pad_short
+        loss = model_arg.param * float(index + 1)
+        return {"total_tensor": loss, "total_loss": float(index + 1)}, 0.0, 0.0
+
+    monkeypatch.setattr(train_module, "_loss_for_index", fake_loss_for_index)
+    accelerator = train_module.Accelerator(cpu=True)
+    optimizer = CountingOptimizer([param])
+    loader = train_module._gene_loader(
+        np.arange(4, dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=4,
+        world_size=1,
+    )
+
+    row = train_module._run_epoch(
+        model,
+        _toy_gene_bags_with_batches(),
+        loader,
+        _loss_weights(),
+        optimizer,
+        np.random.default_rng(1),
+        2,
+        accelerator,
+        {},
+        epoch=1,
+        max_epochs=1,
+    )
+
+    assert optimizer.step_count == 1
+    assert optimizer.last_grad == 10.0
+    assert row["total_loss"] == 2.5
+
+
+def test_evaluate_filters_padding_rows_after_forward(monkeypatch) -> None:
+    calls: list[int] = []
+
+    data = types.SimpleNamespace(
+        genes=np.asarray(["G1", "G2", "G3"], dtype=object),
+        y=np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
+    )
+
+    def fake_loss_for_index(
+        model: torch.nn.Module,
+        data_arg: GeneBags,
+        index: int,
+        weights: LossWeights,
+        rng: np.random.Generator,
+        cell_set_len: int,
+        device: torch.device,
+        batch_lookup: dict[str, int],
+        pad_short: bool,
+    ) -> tuple[dict[str, float | torch.Tensor], float, float]:
+        del model, data_arg, weights, rng, cell_set_len, device, batch_lookup, pad_short
+        calls.append(index)
+        value = float(index + 1)
+        return (
+            {
+                "total_tensor": torch.tensor(value),
+                "total_loss": value,
+                "control_fallback_count": 0.0,
+                "n_chunks": 1.0,
+            },
+            value,
+            value,
+        )
+
+    monkeypatch.setattr(train_module, "_loss_for_index", fake_loss_for_index)
+    accelerator = train_module.Accelerator(cpu=True)
+    loader = train_module._gene_loader(
+        np.arange(3, dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=2,
+        world_size=2,
+    )
+
+    summary, predictions = train_module._evaluate(
+        torch.nn.Identity(),
+        data,
+        loader,
+        _loss_weights(),
+        np.random.default_rng(1),
+        2,
+        accelerator,
+        {},
+        pad_short=True,
+    )
+
+    assert calls == [0, 1, 2, 0]
+    assert predictions["perturbation_gene"].tolist() == ["G1", "G2", "G3"]
+    assert summary["total_loss"] == 2.0
+
+
 def test_train_val_chunks_cover_cells_and_pad_short_chunk() -> None:
     data = _toy_gene_bags_with_batches()
     rng = np.random.default_rng(3)
@@ -707,6 +877,37 @@ def test_aivc_forward_matches_loss_helper() -> None:
     assert set(forward_losses) == set(helper_losses)
     for key in forward_losses:
         assert torch.allclose(forward_losses[key], helper_losses[key])
+
+
+def test_aivc_forward_batches_chunks_without_changing_losses() -> None:
+    model, state_model = _build_counting_aivc_model()
+    kwargs = {
+        "gene": "GENE1",
+        "control_chunks": (
+            torch.tensor([[0.0, 1.0, 2.0], [1.0, 2.0, 3.0]]),
+            torch.tensor([[2.0, 3.0, 4.0]]),
+        ),
+        "target_expression_chunks": (
+            torch.tensor([[1.0, 1.5, 2.5], [1.5, 2.5, 3.5]]),
+            torch.tensor([[2.5, 3.5, 4.5]]),
+        ),
+        "target_latent_chunks": (
+            torch.tensor([[1.0, 1.5], [1.5, 2.5]]),
+            torch.tensor([[2.5, 3.5]]),
+        ),
+        "batch_index_chunks": (None, None),
+        "y": torch.tensor(-1.0),
+        "weights": _loss_weights(),
+    }
+
+    expected = _legacy_chunk_loop_losses(model, **kwargs)
+    state_model.call_shapes.clear()
+    actual = model(**kwargs)
+
+    assert state_model.call_shapes == [3]
+    assert set(actual) == set(expected)
+    for key in actual:
+        assert torch.allclose(actual[key], expected[key], atol=1e-6)
 
 
 def test_a_to_b_set_loss_is_target_order_invariant() -> None:
@@ -955,6 +1156,35 @@ def test_train_smoke_writes_external_adamson_outputs(tmp_path: Path) -> None:
     assert (run_dir / "models" / "final" / "pytorch_model.bin").exists()
 
 
+def test_load_state_model_can_suppress_checkpoint_stdout(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    module = types.ModuleType("state.tx.models.state_transition")
+
+    class FakeStateTransitionPerturbationModel:
+        @classmethod
+        def load_from_checkpoint(cls, path: str, strict: bool) -> torch.nn.Module:
+            print("StateTransitionPerturbationModel(...)")
+            assert path == str(tmp_path / "state.ckpt")
+            assert strict is False
+            return torch.nn.Identity()
+
+    module.StateTransitionPerturbationModel = FakeStateTransitionPerturbationModel
+    monkeypatch.setitem(sys.modules, "state.tx.models.state_transition", module)
+
+    model = load_state_model(
+        backend="state_checkpoint",
+        checkpoint_path=tmp_path / "state.ckpt",
+        input_dim=3,
+        output_dim=3,
+        pert_dim=2,
+        emit_checkpoint_output=False,
+    )
+
+    assert isinstance(model, torch.nn.Identity)
+    assert capsys.readouterr().out == ""
+
+
 def _loss_weights() -> LossWeights:
     return LossWeights(
         latent_mean_delta=1.0,
@@ -1004,6 +1234,160 @@ def _build_tiny_aivc_model() -> tuple[AivcModel, torch.nn.Module]:
         control_latent_mean=np.zeros(2, dtype=np.float32),
     )
     return model, state_model
+
+
+class _CountingStateModel(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.eye(3))
+        self.call_shapes: list[int] = []
+
+    def forward(
+        self,
+        batch: dict[str, torch.Tensor],
+        padded: bool = False,
+    ) -> torch.Tensor:
+        del padded
+        control = batch["ctrl_cell_emb"]
+        pert = batch["pert_emb"]
+        self.call_shapes.append(int(control.shape[0]))
+        return control @ self.weight + 0.1 * pert[:, :3]
+
+
+def _build_counting_aivc_model() -> tuple[AivcModel, _CountingStateModel]:
+    state_model = _CountingStateModel()
+    perturbations = PerturbationVectorAdapter(["GENE1"], {}, pert_dim=3)
+    weight = np.asarray([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=np.float32)
+    bias = np.asarray([0.0, 0.0], dtype=np.float32)
+    projector = ExpressionToLatentProjector(weight, bias, trainable=False)
+    control_latent = np.asarray([[0.0, 0.0], [0.1, 0.1]], dtype=np.float32)
+    featureizer = fit_fixed_gmm(
+        (
+            control_latent,
+            np.asarray([[1.0, 1.0], [1.1, 1.1]], dtype=np.float32),
+        ),
+        control_latent,
+        n_components=2,
+        covariance_floor=1e-4,
+        random_state=7,
+        max_fit_cells=None,
+    )
+    model = AivcModel(
+        state_adapter=StateForwardAdapter(state_model),
+        perturbations=perturbations,
+        projector=projector,
+        featureizer=featureizer,
+        c_head=MLPHead(featureizer.output_dim, (8,), 0.0),
+        control_expression_mean=np.zeros(3, dtype=np.float32),
+        control_latent_mean=np.zeros(2, dtype=np.float32),
+    )
+    return model, state_model
+
+
+def _legacy_chunk_loop_losses(
+    model: AivcModel,
+    *,
+    gene: str,
+    control_chunks: tuple[torch.Tensor, ...],
+    target_expression_chunks: tuple[torch.Tensor, ...],
+    target_latent_chunks: tuple[torch.Tensor, ...],
+    batch_index_chunks: tuple[torch.Tensor | None, ...],
+    y: torch.Tensor,
+    weights: LossWeights,
+) -> dict[str, torch.Tensor]:
+    predicted_latent_chunks: list[torch.Tensor] = []
+    hvg_mean_delta_terms: list[torch.Tensor] = []
+    hvg_energy_terms: list[torch.Tensor] = []
+    latent_mean_delta_terms: list[torch.Tensor] = []
+    latent_energy_terms: list[torch.Tensor] = []
+    for control, target_expression, target_latent, batch_indices in zip(
+        control_chunks,
+        target_expression_chunks,
+        target_latent_chunks,
+        batch_index_chunks,
+        strict=True,
+    ):
+        predicted_expression, predicted_latent = model.predict_bag(
+            control,
+            gene,
+            batch_indices,
+        )
+        predicted_latent_chunks.append(predicted_latent)
+        hvg_mean_delta_terms.append(
+            _test_mean_delta_loss(
+                predicted_expression,
+                target_expression,
+                model.control_expression_mean,
+            )
+        )
+        hvg_energy_terms.append(
+            _test_energy_distance(predicted_expression, target_expression)
+        )
+        latent_mean_delta_terms.append(
+            _test_mean_delta_loss(
+                predicted_latent,
+                target_latent,
+                model.control_latent_mean,
+            )
+        )
+        latent_energy_terms.append(
+            _test_energy_distance(predicted_latent, target_latent)
+        )
+    predicted_latent = torch.cat(predicted_latent_chunks, dim=0)
+    target_latent = torch.cat(target_latent_chunks, dim=0)
+    hvg_mean_delta = torch.stack(hvg_mean_delta_terms).mean()
+    hvg_energy = torch.stack(hvg_energy_terms).mean()
+    latent_mean_delta = torch.stack(latent_mean_delta_terms).mean()
+    latent_energy = torch.stack(latent_energy_terms).mean()
+    pred_y = model.predict_c_from_latent(predicted_latent)
+    obs_y = model.predict_c_from_latent(target_latent)
+    pred_c = F.mse_loss(pred_y.view(()), y.view(()))
+    obs_c = F.mse_loss(obs_y.view(()), y.view(()))
+    pred_occ = model.featureizer._occupancy(predicted_latent)
+    obs_occ = model.featureizer._occupancy(target_latent)
+    occupancy = F.mse_loss(pred_occ, obs_occ)
+    total = (
+        float(weights.hvg_mean_delta) * hvg_mean_delta
+        + float(weights.hvg_energy) * hvg_energy
+        + float(weights.latent_mean_delta) * latent_mean_delta
+        + float(weights.latent_energy) * latent_energy
+        + float(weights.pred_c) * pred_c
+        + float(weights.obs_c) * obs_c
+        + float(weights.occupancy) * occupancy
+    )
+    return {
+        "total": total,
+        "hvg_mean_delta": hvg_mean_delta,
+        "hvg_energy": hvg_energy,
+        "latent_mean_delta": latent_mean_delta,
+        "latent_energy": latent_energy,
+        "pred_c": pred_c,
+        "obs_c": obs_c,
+        "occupancy": occupancy,
+        "pred_y": pred_y.view(()),
+        "obs_y": obs_y.view(()),
+    }
+
+
+def _test_mean_delta_loss(
+    predicted: torch.Tensor,
+    target: torch.Tensor,
+    control_mean: torch.Tensor,
+) -> torch.Tensor:
+    return F.mse_loss(
+        predicted.mean(dim=0) - control_mean,
+        target.mean(dim=0) - control_mean,
+    )
+
+
+def _test_energy_distance(
+    predicted: torch.Tensor,
+    target: torch.Tensor,
+) -> torch.Tensor:
+    cross = torch.cdist(predicted, target).mean()
+    pred_self = torch.cdist(predicted, predicted).mean()
+    target_self = torch.cdist(target, target).mean()
+    return (2.0 * cross - pred_self - target_self).clamp_min(0.0)
 
 
 def _toy_gene_bags_with_batches() -> GeneBags:
