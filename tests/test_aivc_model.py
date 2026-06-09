@@ -154,7 +154,7 @@ def test_state_batch_lookup_encodes_gem_group_labels(tmp_path: Path) -> None:
     np.testing.assert_array_equal(encoded, np.asarray([1, 0, 0]))
 
 
-def test_scvi_teacher_kwargs_reduce_lightning_warning_noise() -> None:
+def test_scvi_teacher_kwargs_reduce_lightning_warning_noise(monkeypatch) -> None:
     config = ProjectorConfig(scvi_num_workers=4)
 
     datasplitter_kwargs = _scvi_datasplitter_kwargs(config)
@@ -164,6 +164,10 @@ def test_scvi_teacher_kwargs_reduce_lightning_warning_noise() -> None:
     assert trainer_kwargs["logger"] is False
     assert trainer_kwargs["enable_progress_bar"] is False
     assert trainer_kwargs["enable_model_summary"] is False
+
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "32")
+    auto_kwargs = _scvi_datasplitter_kwargs(ProjectorConfig(scvi_num_workers=None))
+    assert auto_kwargs == {"num_workers": 8, "persistent_workers": True}
 
 
 def test_scvi_teacher_warning_context_filters_known_noise() -> None:

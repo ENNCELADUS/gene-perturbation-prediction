@@ -61,10 +61,12 @@ gradient synchronization, distributed gene-index sharding, and rank0-only CSV,
 artifact, and checkpoint writes.
 
 When `projector.teacher: scvi`, the rank0 teacher fit configures Lightning
-quietly for this internal preprocessing step: `scvi_num_workers: null` auto-uses
-CPU workers, `scvi_disable_lightning_logger: true` disables Lightning experiment
-logger setup, and `scvi_suppress_slurm_warning: true` filters Lightning's
-irrelevant `srun` warning when the surrounding job is launched by Accelerate.
+quietly for this internal preprocessing step: set `scvi_num_workers` explicitly
+for cluster runs. The Replogle STATE config uses `4` to avoid large fork storms
+during scVI preprocessing; `null` auto-selects a Slurm-aware value capped at 8.
+`scvi_disable_lightning_logger: true` disables Lightning experiment logger setup,
+and `scvi_suppress_slurm_warning: true` filters Lightning's irrelevant `srun`
+warning when the surrounding job is launched by Accelerate.
 `train.float32_matmul_precision: high` sets PyTorch matmul precision before
 CUDA/scVI training to avoid Tensor Core performance warnings.
 
