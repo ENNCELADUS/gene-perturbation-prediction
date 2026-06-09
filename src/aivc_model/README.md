@@ -49,6 +49,13 @@ For multi-GPU DDP training, launch the same entrypoint with Accelerate:
 uv run accelerate launch src/aivc_model/train.py --config <config.yaml>
 ```
 
+On Slurm, use `srun` around the Accelerate launch so the job allocation and the
+Python process topology agree:
+
+```bash
+srun uv run --locked --no-sync --offline accelerate launch --num_processes 4 src/aivc_model/train.py --config <config.yaml>
+```
+
 The training loop uses `Accelerator` for rank/device setup, model wrapping,
 gradient synchronization, distributed gene-index sharding, and rank0-only CSV,
 artifact, and checkpoint writes.
@@ -60,6 +67,13 @@ logger setup, and `scvi_suppress_slurm_warning: true` filters Lightning's
 irrelevant `srun` warning when the surrounding job is launched by Accelerate.
 `train.float32_matmul_precision: high` sets PyTorch matmul precision before
 CUDA/scVI training to avoid Tensor Core performance warnings.
+
+scVI teacher latents are materialized before the AIVC epoch loop. Rank0 writes a
+validated run-local cache under `artifacts/scvi_teacher_latents/`; other ranks
+wait and then read that cache. The cache is reused only when its metadata matches
+the current primary genes, external-test identity, feature names, latent
+dimension, seed, and teacher settings. During a cache miss, rank0 loads the saved
+teacher once and logs projection progress every 50 genes.
 
 After dependency or lockfile changes, run:
 

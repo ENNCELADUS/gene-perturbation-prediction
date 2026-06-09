@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 from pathlib import Path
 import warnings
 
@@ -21,22 +23,29 @@ from aivc_model.model import (
 )
 from aivc_model.prepare import (
     GeneBags,
+    GeneSplit,
     ProjectorConfig,
     SplitConfig,
+    _load_scvi_latent_cache,
+    _project_scvi_latent_collections,
+    _project_scvi_latent_groups,
     _scvi_datasplitter_kwargs,
+    _scvi_latent_cache_dir,
     _suppress_scvi_lightning_warnings,
     _scvi_trainer_kwargs,
+    _write_scvi_latent_cache,
     encode_batch_labels,
     fit_linear_projector,
     load_external_gene_bags,
+    load_config,
     load_perturbation_vectors,
     load_gene_bags,
     load_state_batch_lookup,
     make_cell_set_chunks,
     make_gene_split,
+    with_cached_scvi_teacher_latents,
 )
 from aivc_model.train import _write_csv_if_main, run_training
-from aivc_model.prepare import load_config
 
 
 def test_make_gene_split_is_disjoint() -> None:
@@ -178,6 +187,183 @@ def test_scvi_teacher_warning_context_filters_known_noise() -> None:
     assert not any(
         "adata.X does not contain unnormalized" in message for message in messages
     )
+
+
+def test_scvi_projection_loads_teacher_once_for_all_datasets(tmp_path: Path) -> None:
+    load_calls = []
+
+    class FakeLoadedModel:
+        def __init__(self, query: ad.AnnData) -> None:
+            self.query = query
+
+        def get_latent_representation(self, indices: np.ndarray) -> np.ndarray:
+            matrix = np.asarray(self.query.X, dtype=np.float32)
+            return matrix[np.asarray(indices, dtype=np.int64), :2] + 10.0
+
+    class FakeSCVIModel:
+        @staticmethod
+        def load(model_dir: str, adata: ad.AnnData) -> FakeLoadedModel:
+            load_calls.append((model_dir, int(adata.n_obs)))
+            return FakeLoadedModel(adata)
+
+    class FakeModelNamespace:
+        SCVI = FakeSCVIModel
+
+    class FakeScvi:
+        model = FakeModelNamespace
+
+    control = np.asarray([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], dtype=np.float32)
+    bags = (
+        np.asarray([[1.0, 2.0, 3.0]], dtype=np.float32),
+        np.asarray([[4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], dtype=np.float32),
+    )
+    external_control = np.asarray([[9.0, 10.0, 11.0]], dtype=np.float32)
+    external_bags = (np.asarray([[12.0, 13.0, 14.0]], dtype=np.float32),)
+    logs: list[str] = []
+
+    projected = _project_scvi_latent_collections(
+        FakeScvi,
+        tmp_path / "teacher",
+        (
+            ("primary", control, bags, np.asarray(["G0", "G1", "G2"], dtype=object)),
+            (
+                "external:adamson",
+                external_control,
+                external_bags,
+                np.asarray(["G0", "G1", "G2"], dtype=object),
+            ),
+        ),
+        progress_interval=1,
+        log_fn=logs.append,
+    )
+    control_latent, latent_bags = projected[0]
+    external_control_latent, external_latent_bags = projected[1]
+
+    assert len(load_calls) == 1
+    assert load_calls[0][1] == 7
+    np.testing.assert_allclose(control_latent, control[:, :2] + 10.0)
+    np.testing.assert_allclose(latent_bags[0], bags[0][:, :2] + 10.0)
+    np.testing.assert_allclose(latent_bags[1], bags[1][:, :2] + 10.0)
+    np.testing.assert_allclose(
+        external_control_latent,
+        external_control[:, :2] + 10.0,
+    )
+    np.testing.assert_allclose(
+        external_latent_bags[0],
+        external_bags[0][:, :2] + 10.0,
+    )
+    assert logs[-1] == "Projected external:adamson scVI latents for 1/1 genes"
+
+
+def test_scvi_projection_group_helper_returns_one_dataset(tmp_path: Path) -> None:
+    class FakeLoadedModel:
+        def __init__(self, query: ad.AnnData) -> None:
+            self.query = query
+
+        def get_latent_representation(self, indices: np.ndarray) -> np.ndarray:
+            matrix = np.asarray(self.query.X, dtype=np.float32)
+            return matrix[np.asarray(indices, dtype=np.int64), :1]
+
+    class FakeSCVIModel:
+        @staticmethod
+        def load(_model_dir: str, adata: ad.AnnData) -> FakeLoadedModel:
+            return FakeLoadedModel(adata)
+
+    class FakeModelNamespace:
+        SCVI = FakeSCVIModel
+
+    class FakeScvi:
+        model = FakeModelNamespace
+
+    control_latent, latent_bags = _project_scvi_latent_groups(
+        FakeScvi,
+        tmp_path / "teacher",
+        np.asarray([[0.0, 1.0]], dtype=np.float32),
+        (np.asarray([[2.0, 3.0]], dtype=np.float32),),
+        None,
+        progress_label="single",
+    )
+
+    np.testing.assert_allclose(control_latent, np.asarray([[0.0]], dtype=np.float32))
+    np.testing.assert_allclose(latent_bags[0], np.asarray([[2.0]], dtype=np.float32))
+
+
+def test_scvi_latent_cache_round_trips_valid_metadata(tmp_path: Path) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    projected = replace(
+        data,
+        control_latent=data.control_latent + 1.0,
+        latent_bags=tuple(bag + 1.0 for bag in data.latent_bags),
+    )
+    artifacts_dir = tmp_path / "artifacts"
+
+    _write_scvi_latent_cache(config, projected, split, artifacts_dir, None)
+    loaded = _load_scvi_latent_cache(config, data, split, artifacts_dir, None)
+
+    assert (_scvi_latent_cache_dir(artifacts_dir) / "COMPLETE").exists()
+    assert loaded is not None
+    loaded_data, loaded_external = loaded
+    assert loaded_external is None
+    np.testing.assert_allclose(loaded_data.control_latent, projected.control_latent)
+    np.testing.assert_allclose(loaded_data.latent_bags[0], projected.latent_bags[0])
+
+
+def test_scvi_latent_cache_rejects_incomplete_or_mismatched_metadata(
+    tmp_path: Path,
+) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    artifacts_dir = tmp_path / "artifacts"
+    _write_scvi_latent_cache(config, data, split, artifacts_dir, None)
+    cache_dir = _scvi_latent_cache_dir(artifacts_dir)
+
+    (cache_dir / "COMPLETE").unlink()
+    assert _load_scvi_latent_cache(config, data, split, artifacts_dir, None) is None
+
+    (cache_dir / "COMPLETE").write_text("ok\n", encoding="utf-8")
+    metadata_path = cache_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["latent_dim"] = 99
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    assert _load_scvi_latent_cache(config, data, split, artifacts_dir, None) is None
+
+
+def test_non_rank_scvi_path_requires_valid_latent_cache(tmp_path: Path) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    artifacts_dir = tmp_path / "artifacts"
+
+    try:
+        with_cached_scvi_teacher_latents(
+            config,
+            data,
+            split,
+            artifacts_dir,
+            fit_teacher=False,
+        )
+    except FileNotFoundError:
+        pass
+    else:
+        raise AssertionError("missing scVI latent cache should fail on non-rank0 path")
+
+    assert not _scvi_latent_cache_dir(artifacts_dir).exists()
 
 
 def test_train_val_chunks_cover_cells_and_pad_short_chunk() -> None:
@@ -704,6 +890,40 @@ def _write_toy_inputs(tmp_path: Path) -> tuple[Path, Path]:
     overlap_path = tmp_path / "overlap.csv"
     overlap.to_csv(overlap_path, index=False)
     return h5ad_path, overlap_path
+
+
+def _write_scvi_cache_config(tmp_path: Path) -> Path:
+    config_path = tmp_path / "scvi_cache.yaml"
+    config_path.write_text(
+        f"""
+data:
+  h5ad_path: {tmp_path / "unused.h5ad"}
+  overlap_csv: {tmp_path / "unused.csv"}
+  output_dir: {tmp_path / "outputs"}
+  obs_perturbation_col: gene
+  control_label: non-targeting
+state:
+  backend: linear_mock
+  input_dim: 3
+  output_dim: 3
+  pert_dim: 2
+projector:
+  teacher: scvi
+  latent_dim: 2
+  ridge_alpha: 0.1
+  trainable: true
+  scvi_max_epochs: 3
+  scvi_hidden_units: 8
+  scvi_layers: 1
+  scvi_dropout: 0.0
+train:
+  run_id: cache
+  seed: 13
+  max_epochs: 1
+  device: cpu
+""",
+    )
+    return config_path
 
 
 def _write_toy_external_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
