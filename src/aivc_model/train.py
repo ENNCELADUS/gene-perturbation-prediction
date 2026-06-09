@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 from aivc_model.model import (
     AivcModel,
@@ -195,6 +196,7 @@ def run_training(
     )
     with train_context:
         for epoch in range(1, config.train.max_epochs + 1):
+            _reset_peak_gpu_memory(accelerator.device)
             train_row = _run_epoch(
                 model,
                 data,
@@ -205,6 +207,8 @@ def run_training(
                 config.train.cell_set_len,
                 accelerator,
                 batch_lookup,
+                epoch=epoch,
+                max_epochs=config.train.max_epochs,
             )
             val_row, _val_predictions = _evaluate(
                 model,
@@ -217,10 +221,14 @@ def run_training(
                 batch_lookup,
                 pad_short=True,
             )
+            gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(
+                accelerator
+            )
             if accelerator.is_main_process:
                 last_val_loss = float(val_row.get("total_loss", math.nan))
                 row = {
                     "epoch": epoch,
+                    "gpu_peak_memory_allocated_mb": gpu_peak_memory_allocated_mb,
                     **_prefix(train_row, "train"),
                     **_prefix(val_row, "val"),
                 }
@@ -625,10 +633,23 @@ def _run_epoch(
     cell_set_len: int,
     accelerator: Accelerator,
     batch_lookup: dict[str, int],
+    *,
+    epoch: int,
+    max_epochs: int,
 ) -> dict[str, float]:
     model.train()
     rows = []
-    for index in indices:
+    total = len(indices)
+    iterator = tqdm(
+        indices,
+        desc=f"epoch {epoch}/{max_epochs}",
+        total=total,
+        miniters=max(1, math.ceil(total / 10)),
+        disable=not accelerator.is_main_process,
+        dynamic_ncols=True,
+        file=sys.stdout,
+    )
+    for index in iterator:
         loss_row, _pred_y, _obs_y = _loss_for_index(
             model,
             data,
@@ -830,6 +851,25 @@ def _prefix(row: dict[str, float], prefix: str) -> dict[str, float]:
 
 def _is_better_loss(value: float, best_value: float) -> bool:
     return math.isfinite(value) and value < best_value
+
+
+def _reset_peak_gpu_memory(device: torch.device) -> None:
+    if device.type != "cuda" or not torch.cuda.is_available():
+        return
+    torch.cuda.reset_peak_memory_stats(device)
+
+
+def _global_peak_gpu_memory_allocated_mb(accelerator: Accelerator) -> float:
+    local_peak = math.nan
+    if accelerator.device.type == "cuda" and torch.cuda.is_available():
+        local_peak = torch.cuda.max_memory_allocated(accelerator.device) / (1024**2)
+    gathered = gather_object([local_peak])
+    if not accelerator.is_main_process:
+        return math.nan
+    finite_values = [float(value) for value in gathered if math.isfinite(float(value))]
+    if not finite_values:
+        return math.nan
+    return max(finite_values)
 
 
 def _write_csv_if_main(
