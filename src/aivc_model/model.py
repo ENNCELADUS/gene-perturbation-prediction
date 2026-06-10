@@ -359,6 +359,7 @@ class AivcModel(nn.Module):
         batch_index_chunks: tuple[torch.Tensor | None, ...],
         y: torch.Tensor,
         weights: LossWeights,
+        gene_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         return self.forward(
             gene=gene,
@@ -368,6 +369,7 @@ class AivcModel(nn.Module):
             batch_index_chunks=batch_index_chunks,
             y=y,
             weights=weights,
+            gene_mask=gene_mask,
         )
 
     def forward(
@@ -383,6 +385,7 @@ class AivcModel(nn.Module):
         | tuple[tuple[torch.Tensor | None, ...], ...],
         y: torch.Tensor,
         weights: LossWeights,
+        gene_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """Compute one gene-level A->B->C loss through the module forward path."""
         if not isinstance(gene, str):
@@ -394,7 +397,11 @@ class AivcModel(nn.Module):
                 batch_index_chunks=batch_index_chunks,
                 y=y,
                 weights=weights,
+                gene_mask=gene_mask,
             )
+        if gene_mask is not None and gene_mask.reshape(-1).shape[0] != 1:
+            msg = "Single-gene forward requires a scalar gene_mask"
+            raise ValueError(msg)
         return self._forward_one_gene(
             gene=gene,
             control_chunks=control_chunks,
@@ -415,6 +422,7 @@ class AivcModel(nn.Module):
         batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
         y: torch.Tensor,
         weights: LossWeights,
+        gene_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         if not (
             len(gene)
@@ -429,6 +437,15 @@ class AivcModel(nn.Module):
         if y_values.shape[0] != len(gene):
             msg = "Batched y must have one value per gene"
             raise ValueError(msg)
+        if gene_mask is None:
+            valid_mask = torch.ones(len(gene), dtype=torch.bool, device=y_values.device)
+        else:
+            valid_mask = gene_mask.reshape(-1).to(
+                device=y_values.device, dtype=torch.bool
+            )
+            if valid_mask.shape[0] != len(gene):
+                msg = "gene_mask must have one value per gene"
+                raise ValueError(msg)
         per_gene_losses = [
             self._forward_one_gene(
                 gene=current_gene,
@@ -471,24 +488,31 @@ class AivcModel(nn.Module):
                 "obs_y",
             )
         }
+        valid_count = valid_mask.sum().clamp_min(1)
         pred_rank = _pairwise_ranknet_loss(
-            stacked["pred_y"],
-            y_values,
+            stacked["pred_y"][valid_mask],
+            y_values[valid_mask],
             tau=float(weights.pred_rank_tau),
             pair_margin=float(weights.pred_rank_pair_margin),
             pair_weight_clip=float(weights.pred_rank_pair_weight_clip),
         )
         weighted_rank = float(weights.pred_rank) * pred_rank
-        per_gene_total = stacked["total"] + weighted_rank / max(len(gene), 1)
+        rank_share = weighted_rank / valid_count.to(dtype=stacked["total"].dtype)
+        per_gene_total = torch.where(
+            valid_mask,
+            stacked["total"] + rank_share,
+            stacked["total"] * 0.0,
+        )
+        total = stacked["total"][valid_mask].sum() + weighted_rank
         return {
-            "total": per_gene_total.sum(),
-            "hvg_mean_delta": stacked["hvg_mean_delta"].mean(),
-            "hvg_energy": stacked["hvg_energy"].mean(),
-            "latent_mean_delta": stacked["latent_mean_delta"].mean(),
-            "latent_energy": stacked["latent_energy"].mean(),
-            "pred_c": stacked["pred_c"].mean(),
-            "obs_c": stacked["obs_c"].mean(),
-            "occupancy": stacked["occupancy"].mean(),
+            "total": total,
+            "hvg_mean_delta": _masked_mean(stacked["hvg_mean_delta"], valid_mask),
+            "hvg_energy": _masked_mean(stacked["hvg_energy"], valid_mask),
+            "latent_mean_delta": _masked_mean(stacked["latent_mean_delta"], valid_mask),
+            "latent_energy": _masked_mean(stacked["latent_energy"], valid_mask),
+            "pred_c": _masked_mean(stacked["pred_c"], valid_mask),
+            "obs_c": _masked_mean(stacked["obs_c"], valid_mask),
+            "occupancy": _masked_mean(stacked["occupancy"], valid_mask),
             "pred_rank": pred_rank,
             "pred_y": stacked["pred_y"],
             "obs_y": stacked["obs_y"],
@@ -500,7 +524,11 @@ class AivcModel(nn.Module):
             "per_gene_pred_c": stacked["pred_c"],
             "per_gene_obs_c": stacked["obs_c"],
             "per_gene_occupancy": stacked["occupancy"],
-            "per_gene_pred_rank": pred_rank.expand(len(gene)),
+            "per_gene_pred_rank": torch.where(
+                valid_mask,
+                pred_rank.expand(len(gene)),
+                pred_rank.expand(len(gene)) * 0.0,
+            ),
         }
 
     def _forward_one_gene(
@@ -519,6 +547,9 @@ class AivcModel(nn.Module):
         hvg_energy_terms: list[torch.Tensor] = []
         latent_mean_delta_terms: list[torch.Tensor] = []
         latent_energy_terms: list[torch.Tensor] = []
+        compute_hvg_energy = float(weights.hvg_energy) != 0.0
+        compute_latent_energy = float(weights.latent_energy) != 0.0
+        compute_occupancy = float(weights.occupancy) != 0.0
         if not (
             len(control_chunks)
             == len(target_expression_chunks)
@@ -563,9 +594,10 @@ class AivcModel(nn.Module):
                     self.control_expression_mean,
                 )
             )
-            hvg_energy_terms.append(
-                _energy_distance(predicted_expression, target_expression)
-            )
+            if compute_hvg_energy:
+                hvg_energy_terms.append(
+                    _energy_distance(predicted_expression, target_expression)
+                )
             latent_mean_delta_terms.append(
                 _mean_delta_loss(
                     predicted_latent,
@@ -573,22 +605,34 @@ class AivcModel(nn.Module):
                     self.control_latent_mean,
                 )
             )
-            latent_energy_terms.append(
-                _energy_distance(predicted_latent, target_latent)
-            )
+            if compute_latent_energy:
+                latent_energy_terms.append(
+                    _energy_distance(predicted_latent, target_latent)
+                )
         predicted_latent = torch.cat(predicted_latent_chunks, dim=0)
         target_latent = torch.cat(target_latent_chunks, dim=0)
         hvg_mean_delta = torch.stack(hvg_mean_delta_terms).mean()
-        hvg_energy = torch.stack(hvg_energy_terms).mean()
+        hvg_energy = (
+            torch.stack(hvg_energy_terms).mean()
+            if compute_hvg_energy
+            else _zero_like_loss(batched_prediction)
+        )
         latent_mean_delta = torch.stack(latent_mean_delta_terms).mean()
-        latent_energy = torch.stack(latent_energy_terms).mean()
+        latent_energy = (
+            torch.stack(latent_energy_terms).mean()
+            if compute_latent_energy
+            else _zero_like_loss(predicted_latent)
+        )
         pred_y = self.predict_c_from_latent(predicted_latent)
         obs_y = self.predict_c_from_latent(target_latent)
         pred_c = F.mse_loss(pred_y.view(()), y.view(()))
         obs_c = F.mse_loss(obs_y.view(()), y.view(()))
-        pred_occ = self.featureizer._occupancy(predicted_latent)
-        obs_occ = self.featureizer._occupancy(target_latent)
-        occupancy = F.mse_loss(pred_occ, obs_occ)
+        if compute_occupancy:
+            pred_occ = self.featureizer._occupancy(predicted_latent)
+            obs_occ = self.featureizer._occupancy(target_latent)
+            occupancy = F.mse_loss(pred_occ, obs_occ)
+        else:
+            occupancy = _zero_like_loss(pred_y)
         pred_rank = pred_y.sum() * 0.0
         total = (
             float(weights.hvg_mean_delta) * hvg_mean_delta
@@ -622,6 +666,16 @@ def _mean_delta_loss(
     predicted_delta = predicted.mean(dim=0) - control_mean
     target_delta = target.mean(dim=0) - control_mean
     return F.mse_loss(predicted_delta, target_delta)
+
+
+def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    if bool(mask.any().item()):
+        return values[mask].mean()
+    return values.sum() * 0.0
+
+
+def _zero_like_loss(reference: torch.Tensor) -> torch.Tensor:
+    return reference.sum() * 0.0
 
 
 def _energy_distance(predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:

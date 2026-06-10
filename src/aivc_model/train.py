@@ -95,6 +95,12 @@ _PREDICTION_COLUMNS = [
     "control_fallback_count",
     "n_chunks",
 ]
+_FINAL_PREDICTION_COLUMNS = [
+    "perturbation_gene",
+    "y_true",
+    "y_pred",
+    "n_chunks",
+]
 
 
 def main() -> None:
@@ -313,16 +319,13 @@ def run_training(
         if external is not None and config.external_test is not None
         else "internal_test"
     )
-    test_row, test_predictions = _evaluate(
+    test_row, test_predictions = _evaluate_prediction_only_final(
         model,
         eval_data,
         test_loader,
-        _loss_weights(config, epoch=config.train.max_epochs),
-        rng,
         config.train.cell_set_len,
         accelerator,
         batch_lookup,
-        pad_short=False,
     )
     if accelerator.is_main_process:
         test_row = {"evaluation_scope": evaluation_scope, **test_row}
@@ -790,6 +793,12 @@ def _run_epoch(
         gene_indices = _batch_indices(batch)
         if not gene_indices:
             continue
+        padding_flags = _batch_padding_flags(batch)
+        valid_mask = torch.tensor(
+            [not flag for flag in padding_flags],
+            dtype=torch.bool,
+            device=accelerator.device,
+        )
         model_inputs, fallback_counts, n_chunks = _model_inputs_for_indices(
             data,
             gene_indices,
@@ -799,6 +808,7 @@ def _run_epoch(
             batch_lookup,
             pad_short=True,
         )
+        model_inputs["gene_mask"] = valid_mask
         losses = model(weights=weights, **model_inputs)
         total_loss = losses["total"]
         if not isinstance(total_loss, torch.Tensor):
@@ -806,12 +816,14 @@ def _run_epoch(
             raise TypeError(msg)
         accelerator.backward(total_loss)
         optimizer.step()
-        metric_sum = metric_sum + _metric_tensor_from_losses(
+        metric_tensor = _metric_tensor_from_losses(
             losses,
             fallback_counts,
             n_chunks,
-        ).detach().sum(dim=0)
-        metric_count += len(gene_indices)
+        ).detach()
+        if valid_mask.any():
+            metric_sum = metric_sum + metric_tensor[valid_mask].sum(dim=0)
+            metric_count += int(valid_mask.sum().item())
     return _reduce_metric_mean(metric_sum, metric_count, accelerator)
 
 
@@ -836,6 +848,11 @@ def _evaluate(
             if not gene_indices:
                 continue
             padding_flags = _batch_padding_flags(batch)
+            valid_mask = torch.tensor(
+                [not flag for flag in padding_flags],
+                dtype=torch.bool,
+                device=accelerator.device,
+            )
             model_inputs, fallback_counts, n_chunks = _model_inputs_for_indices(
                 data,
                 gene_indices,
@@ -845,17 +862,13 @@ def _evaluate(
                 batch_lookup,
                 pad_short=pad_short,
             )
+            model_inputs["gene_mask"] = valid_mask
             losses = model(weights=weights, **model_inputs)
             metric_tensor = _metric_tensor_from_losses(
                 losses,
                 fallback_counts,
                 n_chunks,
             ).detach()
-            valid_mask = torch.tensor(
-                [not flag for flag in padding_flags],
-                dtype=torch.bool,
-                device=accelerator.device,
-            )
             if valid_mask.any():
                 metric_sum = metric_sum + metric_tensor[valid_mask].sum(dim=0)
                 metric_count += int(valid_mask.sum().item())
@@ -881,6 +894,142 @@ def _evaluate(
         summary.update(_prefix(regression_metrics(y_true, y_obs), "obs"))
         summary.update(_prefix(ranking_metrics(y_true, y_obs, (-0.5, -1.0)), "obs"))
     return summary, predictions
+
+
+def _evaluate_prediction_only_final(
+    model: torch.nn.Module,
+    data: GeneBags,
+    indices: DataLoader[dict[str, torch.Tensor]],
+    cell_set_len: int,
+    accelerator: Accelerator,
+    batch_lookup: dict[str, int],
+) -> tuple[dict[str, float], pd.DataFrame]:
+    """Evaluate final y_pred from controls plus perturbation identity only."""
+    model.eval()
+    inference_model = accelerator.unwrap_model(model)
+    inference_model.eval()
+    pred_tensors = []
+    with torch.no_grad():
+        for batch in indices:
+            gene_indices = _batch_indices(batch)
+            if not gene_indices:
+                continue
+            padding_flags = _batch_padding_flags(batch)
+            pred_tensors.append(
+                _final_prediction_tensor(
+                    inference_model,
+                    data,
+                    gene_indices,
+                    padding_flags,
+                    cell_set_len,
+                    accelerator.device,
+                    batch_lookup,
+                )
+            )
+    predictions = _gather_final_predictions(pred_tensors, data, accelerator)
+    summary: dict[str, float] = {}
+    if accelerator.is_main_process and not predictions.empty:
+        y_true = predictions["y_true"].to_numpy(dtype=np.float64)
+        y_pred = predictions["y_pred"].to_numpy(dtype=np.float64)
+        summary.update(regression_metrics(y_true, y_pred))
+        summary.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
+    return summary, predictions
+
+
+def _final_prediction_tensor(
+    model: torch.nn.Module,
+    data: GeneBags,
+    gene_indices: list[int],
+    padding_flags: list[bool],
+    cell_set_len: int,
+    device: torch.device,
+    batch_lookup: dict[str, int],
+) -> torch.Tensor:
+    if cell_set_len < 1:
+        msg = "cell_set_len must be at least 1"
+        raise ValueError(msg)
+    y_pred: list[torch.Tensor] = []
+    n_chunks: list[float] = []
+    for index in gene_indices:
+        gene = str(data.genes[index])
+        latent_chunks = []
+        chunk_count = 0
+        for start in range(0, data.control_input.shape[0], int(cell_set_len)):
+            end = min(start + int(cell_set_len), data.control_input.shape[0])
+            control_chunk = torch.as_tensor(
+                data.control_input[start:end].astype(np.float32),
+                dtype=torch.float32,
+                device=device,
+            )
+            batch_indices = _control_batch_tensor(
+                data, start, end, batch_lookup, device
+            )
+            _pred_expression, predicted_latent = model.predict_bag(
+                control_chunk,
+                gene,
+                batch_indices,
+            )
+            latent_chunks.append(predicted_latent)
+            chunk_count += 1
+        y_pred.append(model.predict_c_from_latent(torch.cat(latent_chunks, dim=0)))
+        n_chunks.append(float(chunk_count))
+    return torch.stack(
+        [
+            torch.as_tensor(gene_indices, dtype=torch.float32, device=device),
+            torch.as_tensor(padding_flags, dtype=torch.float32, device=device),
+            torch.as_tensor(
+                [float(data.y[index]) for index in gene_indices],
+                dtype=torch.float32,
+                device=device,
+            ),
+            torch.stack(y_pred).reshape(-1).detach().to(dtype=torch.float32),
+            torch.as_tensor(n_chunks, dtype=torch.float32, device=device),
+        ],
+        dim=1,
+    )
+
+
+def _control_batch_tensor(
+    data: GeneBags,
+    start: int,
+    end: int,
+    batch_lookup: dict[str, int],
+    device: torch.device,
+) -> torch.Tensor | None:
+    labels = data.control_batch[start:end] if data.control_batch is not None else None
+    return _batch_tensor(labels, batch_lookup, device)
+
+
+def _gather_final_predictions(
+    pred_tensors: list[torch.Tensor],
+    data: GeneBags,
+    accelerator: Accelerator,
+) -> pd.DataFrame:
+    if pred_tensors:
+        local_predictions = torch.cat(pred_tensors, dim=0)
+    else:
+        local_predictions = torch.empty(
+            (0, 5),
+            dtype=torch.float32,
+            device=accelerator.device,
+        )
+    gathered = accelerator.gather(local_predictions)
+    if not accelerator.is_main_process:
+        return pd.DataFrame(columns=_FINAL_PREDICTION_COLUMNS)
+    gathered = gathered.detach().cpu()
+    if gathered.numel() == 0:
+        return pd.DataFrame(columns=_FINAL_PREDICTION_COLUMNS)
+    gathered = gathered[gathered[:, 1] < 0.5]
+    rows = [
+        {
+            "perturbation_gene": str(data.genes[int(row[0].item())]),
+            "y_true": float(row[2].item()),
+            "y_pred": float(row[3].item()),
+            "n_chunks": float(row[4].item()),
+        }
+        for row in gathered
+    ]
+    return pd.DataFrame(rows, columns=_FINAL_PREDICTION_COLUMNS)
 
 
 def _model_inputs_for_indices(

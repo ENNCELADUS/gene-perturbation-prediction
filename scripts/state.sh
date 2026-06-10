@@ -32,8 +32,6 @@ fi
 export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
-mkdir -p results/state
-
 echo "Running STATE AIVC with config: $CONFIG_PATH"
 srun uv run --locked --no-sync --offline accelerate launch \
   --num_processes 4 \

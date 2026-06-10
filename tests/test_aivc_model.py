@@ -15,6 +15,7 @@ from sklearn.mixture import GaussianMixture
 import torch
 import torch.nn.functional as F
 
+import aivc_model.model as model_module
 import aivc_model.train as train_module
 from aivc_model.model import (
     AivcModel,
@@ -28,11 +29,14 @@ from aivc_model.model import (
     _pairwise_ranknet_loss,
 )
 from aivc_model.prepare import (
+    DataConfig,
     GeneBags,
     GeneSplit,
     ProjectorConfig,
     SplitConfig,
+    _load_metadata,
     _load_scvi_latent_cache,
+    _merge_external_gene_rows,
     _project_scvi_latent_collections,
     _project_scvi_latent_groups,
     _scvi_datasplitter_kwargs,
@@ -624,6 +628,7 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
             batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
             y: torch.Tensor,
             weights: LossWeights,
+            gene_mask: torch.Tensor | None = None,
         ) -> dict[str, torch.Tensor]:
             batch_size = len(gene)
             del (
@@ -634,6 +639,7 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
                 batch_index_chunks,
                 y,
                 weights,
+                gene_mask,
             )
             values = torch.arange(
                 1,
@@ -707,6 +713,107 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
     assert row["total_loss"] == 1.5
 
 
+def test_run_epoch_zero_weights_padding_for_loss_metrics_and_count() -> None:
+    class MaskedBatchLossModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.param = torch.nn.Parameter(torch.tensor(1.0))
+            self.seen_masks: list[list[bool]] = []
+
+        def forward(
+            self,
+            *,
+            gene: tuple[str, ...],
+            control_chunks: tuple[tuple[torch.Tensor, ...], ...],
+            target_expression_chunks: tuple[tuple[torch.Tensor, ...], ...],
+            target_latent_chunks: tuple[tuple[torch.Tensor, ...], ...],
+            batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
+            y: torch.Tensor,
+            weights: LossWeights,
+            gene_mask: torch.Tensor | None = None,
+        ) -> dict[str, torch.Tensor]:
+            del (
+                gene,
+                control_chunks,
+                target_expression_chunks,
+                target_latent_chunks,
+                batch_index_chunks,
+                y,
+                weights,
+            )
+            assert gene_mask is not None
+            self.seen_masks.append(gene_mask.detach().cpu().tolist())
+            values = torch.arange(
+                1,
+                len(gene_mask) + 1,
+                dtype=torch.float32,
+                device=self.param.device,
+            )
+            per_gene_total = self.param * values
+            total = per_gene_total[gene_mask].sum()
+            return {
+                "total": total,
+                "hvg_mean_delta": per_gene_total[gene_mask].mean(),
+                "hvg_energy": per_gene_total[gene_mask].mean(),
+                "latent_mean_delta": per_gene_total[gene_mask].mean(),
+                "latent_energy": per_gene_total[gene_mask].mean(),
+                "pred_c": per_gene_total[gene_mask].mean(),
+                "obs_c": per_gene_total[gene_mask].mean(),
+                "occupancy": per_gene_total[gene_mask].mean(),
+                "pred_rank": per_gene_total[gene_mask].mean(),
+                "pred_y": values,
+                "obs_y": values,
+                "per_gene_total_loss": per_gene_total,
+                "per_gene_hvg_mean_delta": values,
+                "per_gene_hvg_energy": values,
+                "per_gene_latent_mean_delta": values,
+                "per_gene_latent_energy": values,
+                "per_gene_pred_c": values,
+                "per_gene_obs_c": values,
+                "per_gene_occupancy": values,
+                "per_gene_pred_rank": values,
+            }
+
+    class CountingOptimizer(torch.optim.SGD):
+        def __init__(self, params: list[torch.nn.Parameter]) -> None:
+            super().__init__(params, lr=0.1)
+            self.last_grad = math.nan
+
+        def step(self, closure=None):  # type: ignore[override]
+            self.last_grad = float(model.param.grad.detach())
+            return None
+
+    model = MaskedBatchLossModel()
+    accelerator = train_module.Accelerator(cpu=True)
+    optimizer = CountingOptimizer([model.param])
+    loader = train_module._gene_loader(
+        np.asarray([0], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=2,
+        world_size=1,
+    )
+
+    row = train_module._run_epoch(
+        model,
+        _toy_gene_bags_with_batches(),
+        loader,
+        _loss_weights(),
+        optimizer,
+        np.random.default_rng(1),
+        2,
+        accelerator,
+        {},
+        epoch=1,
+        max_epochs=1,
+    )
+
+    assert model.seen_masks == [[True, False]]
+    assert optimizer.last_grad == 1.0
+    assert row["total_loss"] == 1.0
+    assert row["hvg_mean_delta"] == 1.0
+
+
 def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
     class BatchOnlyModel(torch.nn.Module):
         def __init__(self) -> None:
@@ -724,6 +831,7 @@ def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
             batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
             y: torch.Tensor,
             weights: LossWeights,
+            gene_mask: torch.Tensor | None = None,
         ) -> dict[str, torch.Tensor]:
             del (
                 control_chunks,
@@ -732,6 +840,7 @@ def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
                 batch_index_chunks,
                 y,
                 weights,
+                gene_mask,
             )
             if isinstance(gene, str):
                 raise AssertionError("expected one batched forward call")
@@ -881,6 +990,112 @@ def test_evaluate_uses_tensor_gather_and_filters_padding(monkeypatch) -> None:
     assert predictions["perturbation_gene"].tolist() == ["GENE1"]
     assert len(predictions) == 1
     assert math.isfinite(summary["total_loss"])
+
+
+def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
+    monkeypatch,
+) -> None:
+    class RecordingState(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.eye(3))
+            self.chunk_sizes: list[int] = []
+            self.batch_values: list[list[int]] = []
+
+        def forward(
+            self,
+            batch: dict[str, torch.Tensor],
+            padded: bool = False,
+        ) -> torch.Tensor:
+            del padded
+            control = batch["ctrl_cell_emb"]
+            self.chunk_sizes.append(int(control.shape[0]))
+            self.batch_values.append(batch["batch"].detach().cpu().tolist())
+            return control @ self.weight
+
+    def fail_target_chunking(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("final prediction must not inspect target B chunks")
+
+    model, _state_model = _build_tiny_aivc_model()
+    recording_state = RecordingState()
+    model.state_adapter = StateForwardAdapter(recording_state)
+    data = replace(
+        _toy_gene_bags_with_batches(),
+        control_input=np.arange(15, dtype=np.float32).reshape(5, 3),
+        control_batch=np.asarray(
+            ["batch_a", "batch_b", "batch_a", "batch_b", "batch_c"],
+            dtype=object,
+        ),
+    )
+    accelerator = train_module.Accelerator(cpu=True)
+    loader = train_module._gene_loader(
+        np.asarray([0], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=1,
+        world_size=1,
+    )
+    monkeypatch.setattr(train_module, "make_cell_set_chunks", fail_target_chunking)
+
+    summary, predictions = train_module._evaluate_prediction_only_final(
+        model,
+        data,
+        loader,
+        cell_set_len=2,
+        accelerator=accelerator,
+        batch_lookup={"batch_a": 3, "batch_b": 4, "batch_c": 5},
+    )
+
+    assert recording_state.chunk_sizes == [2, 2, 1]
+    assert recording_state.batch_values == [[3, 4], [3, 4], [5]]
+    assert predictions["perturbation_gene"].tolist() == ["GENE1"]
+    assert predictions["n_chunks"].tolist() == [3.0]
+    assert "y_obs_anchor" not in predictions.columns
+    assert set(summary) >= {"rmse", "spearman"}
+
+
+def test_final_prediction_only_unwraps_prepared_model() -> None:
+    class WrappedModel(torch.nn.Module):
+        def __init__(self, module: torch.nn.Module) -> None:
+            super().__init__()
+            self.module = module
+
+        def forward(self, *args: object, **kwargs: object) -> object:
+            return self.module(*args, **kwargs)
+
+    class FakeAccelerator:
+        is_main_process = True
+        device = torch.device("cpu")
+
+        def unwrap_model(self, model: torch.nn.Module) -> torch.nn.Module:
+            assert isinstance(model, WrappedModel)
+            return model.module
+
+        def gather(self, value: torch.Tensor) -> torch.Tensor:
+            return value
+
+    model, _state_model = _build_tiny_aivc_model()
+    wrapped = WrappedModel(model)
+    data = _toy_gene_bags_with_batches()
+    loader = train_module._gene_loader(
+        np.asarray([0], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=1,
+        world_size=1,
+    )
+
+    _summary, predictions = train_module._evaluate_prediction_only_final(
+        wrapped,
+        data,
+        loader,
+        cell_set_len=2,
+        accelerator=FakeAccelerator(),  # type: ignore[arg-type]
+        batch_lookup={},
+    )
+
+    assert predictions["perturbation_gene"].tolist() == ["GENE1"]
 
 
 def test_gpu_peak_memory_uses_tensor_gather(monkeypatch) -> None:
@@ -1139,6 +1354,111 @@ def test_aivc_batched_forward_backprops_each_gene_vector() -> None:
     assert model.perturbations.missing_vectors["g1"].grad is not None
 
 
+def test_aivc_batched_forward_gene_mask_excludes_padding_from_ranknet_and_loss() -> (
+    None
+):
+    model, _state_model = _build_tiny_aivc_model()
+    model.perturbations = PerturbationVectorAdapter(
+        ["GENE1", "GENE2", "GENE3"],
+        {},
+        pert_dim=2,
+    )
+    common_kwargs = {
+        "gene": ("GENE1", "GENE2", "GENE3"),
+        "control_chunks": (
+            (torch.randn(2, 3),),
+            (torch.randn(2, 3),),
+            (torch.randn(2, 3),),
+        ),
+        "target_expression_chunks": (
+            (torch.randn(2, 3),),
+            (torch.randn(2, 3),),
+            (torch.randn(2, 3),),
+        ),
+        "target_latent_chunks": (
+            (torch.randn(2, 2),),
+            (torch.randn(2, 2),),
+            (torch.randn(2, 2),),
+        ),
+        "batch_index_chunks": ((None,), (None,), (None,)),
+        "y": torch.tensor([-1.0, 10.0, -0.2]),
+        "weights": LossWeights(
+            latent_mean_delta=1.0,
+            latent_energy=1.0,
+            hvg_mean_delta=0.1,
+            hvg_energy=0.1,
+            pred_c=1.0,
+            obs_c=0.25,
+            occupancy=0.1,
+            pred_rank=5.0,
+            pred_rank_tau=0.25,
+            pred_rank_pair_margin=0.0,
+            pred_rank_pair_weight_clip=2.0,
+        ),
+    }
+
+    masked = model(
+        **common_kwargs,
+        gene_mask=torch.tensor([True, False, True]),
+    )
+    unmasked = model(**common_kwargs)
+    all_true = model(
+        **common_kwargs,
+        gene_mask=torch.tensor([True, True, True]),
+    )
+    expected_rank = _pairwise_ranknet_loss(
+        masked["pred_y"][[0, 2]],
+        common_kwargs["y"][[0, 2]],
+        tau=0.25,
+        pair_margin=0.0,
+        pair_weight_clip=2.0,
+    )
+    expected_total = (
+        masked["per_gene_total_loss"][[0, 2]].sum()
+        + masked["per_gene_pred_rank"][[0, 2]].sum() * 0.0
+    )
+
+    assert torch.allclose(masked["pred_rank"], expected_rank)
+    assert masked["per_gene_total_loss"][1].item() == 0.0
+    assert torch.allclose(masked["total"], expected_total)
+    assert not torch.allclose(masked["pred_rank"], unmasked["pred_rank"])
+    assert torch.allclose(all_true["total"], unmasked["total"])
+    assert torch.allclose(all_true["pred_rank"], unmasked["pred_rank"])
+
+
+def test_aivc_batched_forward_all_padding_returns_differentiable_zero() -> None:
+    model, _state_model = _build_two_gene_aivc_model()
+
+    losses = model(
+        gene=("GENE1", "GENE2"),
+        control_chunks=((torch.randn(2, 3),), (torch.randn(2, 3),)),
+        target_expression_chunks=((torch.randn(2, 3),), (torch.randn(2, 3),)),
+        target_latent_chunks=((torch.randn(2, 2),), (torch.randn(2, 2),)),
+        batch_index_chunks=((None,), (None,)),
+        y=torch.tensor([-1.0, -0.5]),
+        weights=LossWeights(
+            latent_mean_delta=1.0,
+            latent_energy=1.0,
+            hvg_mean_delta=0.1,
+            hvg_energy=0.1,
+            pred_c=1.0,
+            obs_c=0.25,
+            occupancy=0.1,
+            pred_rank=5.0,
+            pred_rank_tau=0.25,
+            pred_rank_pair_margin=0.0,
+            pred_rank_pair_weight_clip=2.0,
+        ),
+        gene_mask=torch.tensor([False, False]),
+    )
+
+    assert losses["total"].requires_grad
+    assert losses["total"].item() == 0.0
+    assert losses["pred_rank"].item() == 0.0
+    assert losses["per_gene_total_loss"].tolist() == [0.0, 0.0]
+    losses["total"].backward()
+
+
 def test_pairwise_ranknet_filters_small_label_margins() -> None:
     pred_y = torch.tensor([0.0, 0.5, 1.0])
     y = torch.tensor([0.0, 0.1, 1.0])
@@ -1200,6 +1520,86 @@ def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None
     assert model.projector.linear.weight.grad is not None
     assert model.c_head.net[-1].weight.grad is not None
     assert model.perturbations.missing_vectors["g0"].grad is not None
+
+
+def test_zero_weight_expensive_losses_skip_extra_compute(monkeypatch) -> None:
+    model, _state_model = _build_tiny_aivc_model()
+    original_occupancy = model.featureizer._occupancy
+    occupancy_calls: list[tuple[int, ...]] = []
+
+    def counting_occupancy(bag: torch.Tensor) -> torch.Tensor:
+        occupancy_calls.append(tuple(bag.shape))
+        return original_occupancy(bag)
+
+    def fail_energy(
+        predicted: torch.Tensor,
+        target: torch.Tensor,
+    ) -> torch.Tensor:
+        del predicted, target
+        raise AssertionError("zero-weight energy loss should not be computed")
+
+    monkeypatch.setattr(model.featureizer, "_occupancy", counting_occupancy)
+    monkeypatch.setattr(model_module, "_energy_distance", fail_energy)
+
+    losses = model.losses_for_gene(
+        gene="GENE1",
+        control_chunks=(torch.randn(2, 3),),
+        target_expression_chunks=(torch.randn(2, 3),),
+        target_latent_chunks=(torch.randn(2, 2),),
+        batch_index_chunks=(None,),
+        y=torch.tensor(-1.0),
+        weights=LossWeights(
+            latent_mean_delta=0.1,
+            latent_energy=0.0,
+            hvg_mean_delta=0.01,
+            hvg_energy=0.0,
+            pred_c=2.0,
+            obs_c=0.25,
+            occupancy=0.0,
+        ),
+    )
+
+    assert len(occupancy_calls) == 2
+    assert losses["hvg_energy"].item() == 0.0
+    assert losses["latent_energy"].item() == 0.0
+    assert losses["occupancy"].item() == 0.0
+    assert losses["hvg_energy"].requires_grad
+    assert losses["latent_energy"].requires_grad
+    assert losses["occupancy"].requires_grad
+
+
+def test_nonzero_expensive_losses_match_previous_math() -> None:
+    model, _state_model = _build_tiny_aivc_model()
+    kwargs = {
+        "gene": "GENE1",
+        "control_chunks": (torch.randn(3, 3),),
+        "target_expression_chunks": (torch.randn(3, 3),),
+        "target_latent_chunks": (torch.randn(3, 2),),
+        "batch_index_chunks": (None,),
+        "y": torch.tensor(-0.5),
+        "weights": LossWeights(
+            latent_mean_delta=0.1,
+            latent_energy=0.2,
+            hvg_mean_delta=0.01,
+            hvg_energy=0.3,
+            pred_c=2.0,
+            obs_c=0.25,
+            occupancy=0.4,
+        ),
+    }
+
+    losses = model.losses_for_gene(**kwargs)
+    legacy_losses = _legacy_chunk_loop_losses(model, **kwargs)
+
+    for key in (
+        "total",
+        "hvg_energy",
+        "latent_energy",
+        "occupancy",
+        "pred_c",
+        "obs_c",
+    ):
+        assert torch.allclose(losses[key], legacy_losses[key], atol=1e-6)
 
 
 def test_a_to_b_set_loss_is_target_order_invariant() -> None:
@@ -1364,9 +1764,11 @@ train:
         "pred_rank",
         "total_loss",
     }
-    assert expected_loss_cols.issubset(test_metrics.columns)
+    assert expected_loss_cols.isdisjoint(test_metrics.columns)
     assert {"rmse", "spearman"}.issubset(test_metrics.columns)
-    assert {"obs_rmse", "obs_spearman"}.issubset(test_metrics.columns)
+    assert {"obs_rmse", "obs_spearman"}.isdisjoint(test_metrics.columns)
+    predictions = pd.read_csv(paths["run_dir"] / "artifacts" / "test_predictions.csv")
+    assert "y_obs_anchor" not in predictions.columns
 
 
 def test_csv_writer_is_main_process_only(tmp_path: Path) -> None:
@@ -1420,6 +1822,115 @@ def test_external_adamson_sources_merge_and_mean_impute_missing_genes(
     np.testing.assert_allclose(external.data.input_bags[0][:, 1], reference_fill[1])
 
 
+def test_primary_metadata_duplicate_labels_aggregate_when_consistent(
+    tmp_path: Path,
+) -> None:
+    overlap_path = tmp_path / "overlap.csv"
+    pd.DataFrame(
+        {
+            "perturbation_gene": ["GENE1", "GENE1", "GENE2"],
+            "depmap_gene_effect": [-1.0, -1.0 + 1e-9, -0.5],
+            "has_depmap_label": [True, True, True],
+        }
+    ).to_csv(overlap_path, index=False)
+
+    metadata = _load_metadata(
+        DataConfig(
+            h5ad_path=tmp_path / "unused.h5ad",
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+        )
+    )
+
+    assert metadata["perturbation_gene"].tolist() == ["GENE1", "GENE2"]
+    assert math.isclose(metadata["depmap_gene_effect"].iloc[0], -1.0)
+
+
+def test_primary_metadata_duplicate_labels_raise_when_conflicting(
+    tmp_path: Path,
+) -> None:
+    overlap_path = tmp_path / "overlap.csv"
+    pd.DataFrame(
+        {
+            "perturbation_gene": ["GENE1", "GENE1"],
+            "depmap_gene_effect": [-1.0, -0.9],
+            "has_depmap_label": [True, True],
+        }
+    ).to_csv(overlap_path, index=False)
+
+    try:
+        _load_metadata(
+            DataConfig(
+                h5ad_path=tmp_path / "unused.h5ad",
+                overlap_csv=overlap_path,
+                output_dir=tmp_path / "outputs",
+            )
+        )
+    except ValueError as exc:
+        assert "Conflicting DepMap labels" in str(exc)
+    else:
+        raise AssertionError("conflicting duplicate labels should fail")
+
+
+def test_external_merge_duplicate_labels_aggregate_when_consistent() -> None:
+    row_metadata = pd.DataFrame(
+        {
+            "source_dataset": ["source_a", "source_b"],
+            "perturbation_gene": ["GENE1", "GENE1"],
+            "depmap_gene_effect": [-1.0, -1.0 + 1e-9],
+            "observed_n_cells": [2, 3],
+        }
+    )
+    input_bags = [
+        np.ones((2, 2), dtype=np.float32),
+        np.zeros((3, 2), dtype=np.float32),
+    ]
+    latent_bags = [bag.copy() for bag in input_bags]
+
+    metadata, merged_input, _merged_latent, _merged_batch = _merge_external_gene_rows(
+        row_metadata,
+        input_bags,
+        latent_bags,
+        None,
+        "depmap_gene_effect",
+    )
+
+    assert metadata["perturbation_gene"].tolist() == ["GENE1"]
+    assert metadata["external_row_count"].tolist() == [2]
+    assert metadata["observed_n_cells"].tolist() == [5]
+    assert merged_input[0].shape == (5, 2)
+    assert math.isclose(metadata["depmap_gene_effect"].iloc[0], -1.0)
+
+
+def test_external_merge_duplicate_labels_raise_when_conflicting() -> None:
+    row_metadata = pd.DataFrame(
+        {
+            "source_dataset": ["source_a", "source_b"],
+            "perturbation_gene": ["GENE1", "GENE1"],
+            "depmap_gene_effect": [-1.0, -0.9],
+            "observed_n_cells": [2, 3],
+        }
+    )
+    input_bags = [
+        np.ones((2, 2), dtype=np.float32),
+        np.zeros((3, 2), dtype=np.float32),
+    ]
+    latent_bags = [bag.copy() for bag in input_bags]
+
+    try:
+        _merge_external_gene_rows(
+            row_metadata,
+            input_bags,
+            latent_bags,
+            None,
+            "depmap_gene_effect",
+        )
+    except ValueError as exc:
+        assert "Conflicting DepMap labels" in str(exc)
+    else:
+        raise AssertionError("conflicting external labels should fail")
+
+
 def test_train_smoke_writes_external_adamson_outputs(tmp_path: Path) -> None:
     h5ad_path, overlap_path = _write_toy_inputs(tmp_path)
     source_a, source_b, external_overlap = _write_toy_external_inputs(tmp_path)
@@ -1443,6 +1954,9 @@ def test_train_smoke_writes_external_adamson_outputs(tmp_path: Path) -> None:
     assert set(predictions["perturbation_gene"]) == {"GENE1", "GENE5"}
     assert set(predictions["evaluation_scope"]) == {"external:adamson_k562"}
     assert "source_dataset" in predictions.columns
+    assert "y_obs_anchor" not in predictions.columns
+    assert not any(column.startswith("obs_") for column in test_metrics.columns)
+    assert "hvg_mean_delta" not in test_metrics.columns
     assert "perturbation_has_known_vector" in predictions.columns
     assert not predictions["perturbation_has_known_vector"].any()
     assert (run_dir / "artifacts" / "external_test_qa.json").exists()

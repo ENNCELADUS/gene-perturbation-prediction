@@ -51,6 +51,13 @@ A downstream predictor trained and evaluated on `B_hat` features. It tests
 whether a predicted response distribution preserves enough signal for dependency
 ranking.
 
+### Prediction-Only Final Evaluation
+
+The final internal or external test path for A->B->C models. It predicts
+GeneEffect from control cells plus perturbation identity only, without using the
+evaluated gene's observed post-perturbation response bag, target cell counts, or
+target batch labels.
+
 ### Fold-Local A->B->C
 
 A no-leakage evaluation setup where each CV fold trains A->B, the response-space

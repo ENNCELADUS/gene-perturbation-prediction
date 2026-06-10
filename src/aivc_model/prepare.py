@@ -19,6 +19,9 @@ from scipy import sparse
 from sklearn.model_selection import train_test_split
 import yaml
 
+_LABEL_RTOL = 1e-6
+_LABEL_ATOL = 1e-8
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -1169,7 +1172,11 @@ def _load_metadata(config: DataConfig) -> pd.DataFrame:
     if "perturbation_gene" not in frame.columns:
         msg = "overlap_csv must include perturbation_gene"
         raise ValueError(msg)
-    return frame.reset_index(drop=True)
+    return _aggregate_consistent_gene_metadata(
+        frame,
+        config.depmap_label_col,
+        context="overlap_csv",
+    )
 
 
 def _load_external_metadata(config: AivcConfig) -> pd.DataFrame:
@@ -1184,6 +1191,64 @@ def _load_external_metadata(config: AivcConfig) -> pd.DataFrame:
         msg = "external_test.overlap_csv must include perturbation_gene"
         raise ValueError(msg)
     return frame.reset_index(drop=True)
+
+
+def _aggregate_consistent_gene_metadata(
+    frame: pd.DataFrame,
+    depmap_label_col: str,
+    *,
+    context: str,
+) -> pd.DataFrame:
+    rows = []
+    for gene, group in frame.groupby("perturbation_gene", sort=False):
+        first = group.iloc[0].copy()
+        first[depmap_label_col] = _consistent_depmap_label(
+            group,
+            depmap_label_col,
+            gene=str(gene),
+            context=context,
+        )
+        rows.append(first)
+    return pd.DataFrame(rows).reset_index(drop=True)
+
+
+def _consistent_depmap_label(
+    group: pd.DataFrame,
+    depmap_label_col: str,
+    *,
+    gene: str,
+    context: str,
+) -> float:
+    labels = group[depmap_label_col].to_numpy(dtype=np.float64)
+    reference = float(labels[0])
+    if not np.all(np.isclose(labels, reference, rtol=_LABEL_RTOL, atol=_LABEL_ATOL)):
+        msg = (
+            f"Conflicting DepMap labels for perturbation_gene={gene!r} "
+            f"in {context}: {labels.tolist()}"
+        )
+        raise ValueError(msg)
+    return float(labels.mean())
+
+
+def _aggregate_consistent_source_metadata(
+    frame: pd.DataFrame,
+    depmap_label_col: str,
+) -> pd.DataFrame:
+    rows = []
+    grouped = frame.groupby(
+        ["source_perturbation_label", "perturbation_gene"],
+        sort=True,
+    )
+    for (source_label, gene), group in grouped:
+        first = group.iloc[0].copy()
+        first[depmap_label_col] = _consistent_depmap_label(
+            group,
+            depmap_label_col,
+            gene=str(gene),
+            context=f"external source label {source_label!r}",
+        )
+        rows.append(first)
+    return pd.DataFrame(rows).reset_index(drop=True)
 
 
 def _load_external_source(
@@ -1218,11 +1283,9 @@ def _load_external_source(
     )
     batch_labels = _optional_obs_labels(adata, batch_col)
     label_col = _source_perturbation_label_col(metadata)
-    source_metadata = (
-        metadata.assign(source_perturbation_label=metadata[label_col].astype(str))
-        .drop_duplicates(["source_perturbation_label", "perturbation_gene"])
-        .sort_values("source_perturbation_label")
-        .reset_index(drop=True)
+    source_metadata = _aggregate_consistent_source_metadata(
+        metadata.assign(source_perturbation_label=metadata[label_col].astype(str)),
+        config.data.depmap_label_col,
     )
     control_mask = obs_labels == control_label
     if not np.any(control_mask):
@@ -1336,6 +1399,12 @@ def _merge_external_gene_rows(
     merged_latent_bags = []
     merged_batch_bags = []
     for gene, group in rows.groupby("perturbation_gene", sort=True):
+        label = _consistent_depmap_label(
+            group,
+            depmap_label_col,
+            gene=str(gene),
+            context="external_test.overlap_csv",
+        )
         source_indices = group["_source_row"].to_numpy(dtype=np.int64)
         merged_input_bags.append(
             np.vstack([input_bags[index] for index in source_indices]).astype(
@@ -1357,7 +1426,7 @@ def _merge_external_gene_rows(
         first["source_dataset"] = ";".join(sorted(set(source_names)))
         first["external_row_count"] = int(len(group))
         first["observed_n_cells"] = int(group["observed_n_cells"].sum())
-        first[depmap_label_col] = float(group[depmap_label_col].iloc[0])
+        first[depmap_label_col] = label
         first.pop("_source_row", None)
         merged_rows.append(first)
     metadata = pd.DataFrame(merged_rows).reset_index(drop=True)
