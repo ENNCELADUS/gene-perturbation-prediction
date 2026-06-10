@@ -22,7 +22,7 @@ if [ -f "$HOME/.bashrc" ]; then
   source "$HOME/.bashrc"
 fi
 
-CONFIG_PATH="configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562.yaml"
+CONFIG_PATH="configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml"
 
 if [ ! -d ".venv" ]; then
   echo "Missing .venv. Run 'uv sync' before running STATE AIVC."
@@ -38,7 +38,7 @@ echo "Running STATE AIVC with config: $CONFIG_PATH"
 srun uv run --locked --no-sync --offline accelerate launch \
   --num_processes 4 \
   --num_machines 1 \
-  --mixed_precision no \
+  --mixed_precision bf16 \
   --dynamo_backend no \
   src/aivc_model/train.py \
   --config "$CONFIG_PATH"

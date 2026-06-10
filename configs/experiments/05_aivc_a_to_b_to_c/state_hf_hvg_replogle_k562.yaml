@@ -92,6 +92,6 @@ train:
   learning_rate: 0.000025
   weight_decay: 0.0001
   cell_set_len: 256
-  gene_batch_size: 4
+  gene_batch_size: 16
   device: auto
   float32_matmul_precision: high

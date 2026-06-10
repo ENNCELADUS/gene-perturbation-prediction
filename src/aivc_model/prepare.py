@@ -121,6 +121,12 @@ class LossConfig:
     pred_c_weight: float = 1.0
     obs_c_weight: float = 0.25
     occupancy_weight: float = 0.1
+    pred_rank_weight: float = 0.0
+    pred_rank_tau: float = 0.25
+    pred_rank_pair_margin: float = 0.0
+    pred_rank_pair_weight_clip: float = 2.0
+    b_loss_anneal_epochs: int = 0
+    b_loss_anneal_final_fraction: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -134,6 +140,7 @@ class TrainConfig:
     gene_batch_size: int = 1
     device: str = "auto"
     float32_matmul_precision: str | None = "high"
+    freeze_state: bool = False
 
 
 @dataclass(frozen=True)
@@ -1712,6 +1719,14 @@ def _loss_config(values: dict[str, Any]) -> LossConfig:
         pred_c_weight=float(values.get("pred_c_weight", 1.0)),
         obs_c_weight=float(values.get("obs_c_weight", 0.25)),
         occupancy_weight=float(values.get("occupancy_weight", 0.1)),
+        pred_rank_weight=float(values.get("pred_rank_weight", 0.0)),
+        pred_rank_tau=float(values.get("pred_rank_tau", 0.25)),
+        pred_rank_pair_margin=float(values.get("pred_rank_pair_margin", 0.0)),
+        pred_rank_pair_weight_clip=float(values.get("pred_rank_pair_weight_clip", 2.0)),
+        b_loss_anneal_epochs=int(values.get("b_loss_anneal_epochs", 0)),
+        b_loss_anneal_final_fraction=float(
+            values.get("b_loss_anneal_final_fraction", 1.0)
+        ),
     )
 
 
@@ -1729,6 +1744,7 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         float32_matmul_precision=_str_or_none(
             values.get("float32_matmul_precision", "high")
         ),
+        freeze_state=_bool_value(values.get("freeze_state", False)),
     )
 
 
