@@ -1,0 +1,39 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+# Project-local Codex configuration for VCC multiagent workflows.
+# Keep this focused on agents that help with experiment design, scoped edits,
+# review, and documentation consistency for this repository.
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+approvals_reviewer = "auto_review"
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp@latest"]
+startup_timeout_sec = 30
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+[agents.domain_mapper]
+description = "Read-only mapper for code, data, config, and documentation paths in the VCC dependency-prediction workflow."
+config_file = "agents/domain-mapper.toml"
+
+[agents.experiment_planner]
+description = "Read-only planner for experiment, config, and verification designs around VCC matched-key and no-leakage constraints."
+config_file = "agents/experiment-planner.toml"
+
+[agents.implementation_worker]
+description = "Scoped implementation worker for assigned code or config changes after the parent agent defines ownership."
+config_file = "agents/implementation-worker.toml"
+
+[agents.reviewer]
+description = "Reviewer focused on correctness, leakage, data contracts, security, and missing tests."
+config_file = "agents/reviewer.toml"
+
+[agents.docs_guard]
+description = "Read-only documentation guard for README, experiment docs, model cards, and CONTEXT terminology alignment."
+config_file = "agents/docs-guard.toml"
