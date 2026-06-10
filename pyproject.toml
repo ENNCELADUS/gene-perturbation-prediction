@@ -78,10 +78,14 @@ include = [
 target-version = "py311"
 line-length = 88
 src = ["src", "tests"]
+force-exclude = true
 extend-exclude = [
     "scGPT",
     "data/",
     "docs/",
+    "**/*.sh",
+    "**/*.yaml",
+    "**/*.yml",
 ]
 
 [tool.ruff.lint]
