@@ -25,6 +25,10 @@ class LossWeights:
     pred_c: float
     obs_c: float
     occupancy: float
+    pred_rank: float = 0.0
+    pred_rank_tau: float = 0.25
+    pred_rank_pair_margin: float = 0.0
+    pred_rank_pair_weight_clip: float = 2.0
 
 
 class LinearMockStateModel(nn.Module):
@@ -290,6 +294,7 @@ class AivcModel(nn.Module):
         c_head: MLPHead,
         control_expression_mean: np.ndarray,
         control_latent_mean: np.ndarray,
+        freeze_state: bool = False,
     ) -> None:
         super().__init__()
         self.state_adapter = state_adapter
@@ -305,6 +310,18 @@ class AivcModel(nn.Module):
             "control_latent_mean",
             torch.as_tensor(control_latent_mean, dtype=torch.float32),
         )
+        self.freeze_state = bool(freeze_state)
+        if self.freeze_state:
+            for parameter in self.state_adapter.parameters():
+                parameter.requires_grad = False
+            self.state_adapter.eval()
+
+    def train(self, mode: bool = True) -> AivcModel:
+        """Set training mode while keeping a frozen STATE adapter in eval mode."""
+        super().train(mode)
+        if self.freeze_state:
+            self.state_adapter.eval()
+        return self
 
     def predict_bag(
         self,
@@ -313,12 +330,18 @@ class AivcModel(nn.Module):
         batch_indices: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         pert = self.perturbations(gene)
-        predicted_expression = self.state_adapter(
-            control_cells,
-            pert,
-            gene,
-            batch_indices,
+        context = (
+            torch.no_grad()
+            if self.freeze_state and not pert.requires_grad
+            else nullcontext()
         )
+        with context:
+            predicted_expression = self.state_adapter(
+                control_cells,
+                pert,
+                gene,
+                batch_indices,
+            )
         predicted_latent = self.projector(predicted_expression)
         return predicted_expression, predicted_latent
 
@@ -448,8 +471,17 @@ class AivcModel(nn.Module):
                 "obs_y",
             )
         }
+        pred_rank = _pairwise_ranknet_loss(
+            stacked["pred_y"],
+            y_values,
+            tau=float(weights.pred_rank_tau),
+            pair_margin=float(weights.pred_rank_pair_margin),
+            pair_weight_clip=float(weights.pred_rank_pair_weight_clip),
+        )
+        weighted_rank = float(weights.pred_rank) * pred_rank
+        per_gene_total = stacked["total"] + weighted_rank / max(len(gene), 1)
         return {
-            "total": stacked["total"].sum(),
+            "total": per_gene_total.sum(),
             "hvg_mean_delta": stacked["hvg_mean_delta"].mean(),
             "hvg_energy": stacked["hvg_energy"].mean(),
             "latent_mean_delta": stacked["latent_mean_delta"].mean(),
@@ -457,9 +489,10 @@ class AivcModel(nn.Module):
             "pred_c": stacked["pred_c"].mean(),
             "obs_c": stacked["obs_c"].mean(),
             "occupancy": stacked["occupancy"].mean(),
+            "pred_rank": pred_rank,
             "pred_y": stacked["pred_y"],
             "obs_y": stacked["obs_y"],
-            "per_gene_total_loss": stacked["total"],
+            "per_gene_total_loss": per_gene_total,
             "per_gene_hvg_mean_delta": stacked["hvg_mean_delta"],
             "per_gene_hvg_energy": stacked["hvg_energy"],
             "per_gene_latent_mean_delta": stacked["latent_mean_delta"],
@@ -467,6 +500,7 @@ class AivcModel(nn.Module):
             "per_gene_pred_c": stacked["pred_c"],
             "per_gene_obs_c": stacked["obs_c"],
             "per_gene_occupancy": stacked["occupancy"],
+            "per_gene_pred_rank": pred_rank.expand(len(gene)),
         }
 
     def _forward_one_gene(
@@ -555,6 +589,7 @@ class AivcModel(nn.Module):
         pred_occ = self.featureizer._occupancy(predicted_latent)
         obs_occ = self.featureizer._occupancy(target_latent)
         occupancy = F.mse_loss(pred_occ, obs_occ)
+        pred_rank = pred_y.sum() * 0.0
         total = (
             float(weights.hvg_mean_delta) * hvg_mean_delta
             + float(weights.hvg_energy) * hvg_energy
@@ -573,6 +608,7 @@ class AivcModel(nn.Module):
             "pred_c": pred_c,
             "obs_c": obs_c,
             "occupancy": occupancy,
+            "pred_rank": pred_rank,
             "pred_y": pred_y.view(()),
             "obs_y": obs_y.view(()),
         }
@@ -593,6 +629,39 @@ def _energy_distance(predicted: torch.Tensor, target: torch.Tensor) -> torch.Ten
     pred_self = torch.cdist(predicted, predicted).mean()
     target_self = torch.cdist(target, target).mean()
     return (2.0 * cross - pred_self - target_self).clamp_min(0.0)
+
+
+def _pairwise_ranknet_loss(
+    pred_y: torch.Tensor,
+    y: torch.Tensor,
+    *,
+    tau: float,
+    pair_margin: float,
+    pair_weight_clip: float,
+) -> torch.Tensor:
+    """Compute a margin-filtered pairwise logistic ranking loss."""
+    if tau <= 0.0:
+        msg = "pred_rank_tau must be positive"
+        raise ValueError(msg)
+    if pair_weight_clip <= 0.0:
+        msg = "pred_rank_pair_weight_clip must be positive"
+        raise ValueError(msg)
+    scores = pred_y.reshape(-1)
+    labels = y.reshape(-1).to(device=scores.device, dtype=scores.dtype)
+    if scores.shape[0] < 2:
+        return scores.sum() * 0.0
+    label_delta = labels.unsqueeze(1) - labels.unsqueeze(0)
+    score_delta = scores.unsqueeze(1) - scores.unsqueeze(0)
+    valid = torch.triu(
+        label_delta.abs() >= float(pair_margin),
+        diagonal=1,
+    )
+    if not bool(valid.any().item()):
+        return scores.sum() * 0.0
+    target = label_delta[valid].sign()
+    weighted_loss = F.softplus(-target * score_delta[valid] / float(tau))
+    weights = label_delta[valid].abs().clamp_max(float(pair_weight_clip))
+    return (weighted_loss * weights).sum() / weights.sum().clamp_min(1e-8)
 
 
 def _concat_optional_batch_indices(

@@ -77,16 +77,22 @@ model:
   dropout: 0.1
 
 loss:
-  latent_mean_delta_weight: 1.0
-  latent_energy_weight: 1.0
-  hvg_mean_delta_weight: 0.1
-  hvg_energy_weight: 0.1
-  pred_c_weight: 1.0
+  latent_mean_delta_weight: 0.1
+  latent_energy_weight: 0.1
+  hvg_mean_delta_weight: 0.01
+  hvg_energy_weight: 0.0
+  pred_c_weight: 2.0
   obs_c_weight: 0.25
-  occupancy_weight: 0.1
+  occupancy_weight: 0.01
+  pred_rank_weight: 5.0
+  pred_rank_tau: 0.25
+  pred_rank_pair_margin: 0.25
+  pred_rank_pair_weight_clip: 2.0
+  b_loss_anneal_epochs: 5
+  b_loss_anneal_final_fraction: 0.1
 
 train:
-  run_id: state_hvg_replogle_k562_speed
+  run_id: state_hvg_replogle_k562_ranknet_freeze_state_gb16_bf16
   seed: 42
   max_epochs: 50
   learning_rate: 0.000025
@@ -95,3 +101,4 @@ train:
   gene_batch_size: 16
   device: auto
   float32_matmul_precision: high
+  freeze_state: true

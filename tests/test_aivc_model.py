@@ -25,6 +25,7 @@ from aivc_model.model import (
     StateForwardAdapter,
     fit_fixed_gmm,
     load_state_model,
+    _pairwise_ranknet_loss,
 )
 from aivc_model.prepare import (
     GeneBags,
@@ -544,17 +545,38 @@ def test_accelerator_enables_ddp_unused_parameter_detection(tmp_path: Path) -> N
 def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> None:
     default_config = load_config(_write_scvi_cache_config(tmp_path))
     config_path = tmp_path / "gene_batch.yaml"
-    config_path.write_text(
-        _write_scvi_cache_config(tmp_path)
-        .read_text(encoding="utf-8")
-        .replace("  device: cpu\n", "  device: cpu\n  gene_batch_size: 4\n"),
-        encoding="utf-8",
+    raw = _write_scvi_cache_config(tmp_path).read_text(encoding="utf-8")
+    raw = raw.replace(
+        "train:\n",
+        "loss:\n"
+        "  pred_rank_weight: 5.0\n"
+        "  pred_rank_tau: 0.25\n"
+        "  pred_rank_pair_margin: 0.25\n"
+        "  pred_rank_pair_weight_clip: 2.0\n"
+        "  b_loss_anneal_epochs: 5\n"
+        "  b_loss_anneal_final_fraction: 0.1\n"
+        "train:\n",
     )
+    raw = raw.replace(
+        "  device: cpu\n",
+        "  device: cpu\n  gene_batch_size: 4\n  freeze_state: true\n",
+    )
+    config_path.write_text(raw, encoding="utf-8")
 
     parsed = load_config(config_path)
 
     assert default_config.train.gene_batch_size == 1
+    assert default_config.train.freeze_state is False
+    assert default_config.loss.pred_rank_weight == 0.0
+    assert default_config.loss.b_loss_anneal_epochs == 0
     assert parsed.train.gene_batch_size == 4
+    assert parsed.train.freeze_state is True
+    assert parsed.loss.pred_rank_weight == 5.0
+    assert parsed.loss.pred_rank_tau == 0.25
+    assert parsed.loss.pred_rank_pair_margin == 0.25
+    assert parsed.loss.pred_rank_pair_weight_clip == 2.0
+    assert parsed.loss.b_loss_anneal_epochs == 5
+    assert parsed.loss.b_loss_anneal_final_fraction == 0.1
 
 
 def test_padded_gene_loader_marks_padding_for_even_ddp_steps() -> None:
@@ -629,6 +651,7 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
                 "pred_c": total_losses.mean(),
                 "obs_c": total_losses.mean(),
                 "occupancy": total_losses.mean(),
+                "pred_rank": total_losses.mean(),
                 "pred_y": values,
                 "obs_y": values,
                 "per_gene_total_loss": total_losses,
@@ -639,6 +662,7 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
                 "per_gene_pred_c": values,
                 "per_gene_obs_c": values,
                 "per_gene_occupancy": values,
+                "per_gene_pred_rank": values,
             }
 
     class CountingOptimizer(torch.optim.SGD):
@@ -728,6 +752,7 @@ def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
                 "pred_c": total_losses.mean(),
                 "obs_c": total_losses.mean(),
                 "occupancy": total_losses.mean(),
+                "pred_rank": total_losses.mean(),
                 "pred_y": values,
                 "obs_y": values,
                 "per_gene_total_loss": total_losses,
@@ -738,6 +763,7 @@ def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
                 "per_gene_pred_c": values,
                 "per_gene_obs_c": values,
                 "per_gene_occupancy": values,
+                "per_gene_pred_rank": values,
             }
 
     class CountingOptimizer(torch.optim.SGD):
@@ -873,6 +899,12 @@ def test_gpu_peak_memory_uses_tensor_gather(monkeypatch) -> None:
     value = train_module._global_peak_gpu_memory_allocated_mb(accelerator)
 
     assert math.isnan(value)
+
+
+def test_metric_selection_maximizes_spearman() -> None:
+    assert train_module._is_better_metric(0.2, 0.1, mode="max")
+    assert not train_module._is_better_metric(0.1, 0.2, mode="max")
+    assert not train_module._is_better_metric(math.nan, 0.2, mode="max")
 
 
 def test_train_val_chunks_cover_cells_and_pad_short_chunk() -> None:
@@ -1107,6 +1139,69 @@ def test_aivc_batched_forward_backprops_each_gene_vector() -> None:
     assert model.perturbations.missing_vectors["g1"].grad is not None
 
 
+def test_pairwise_ranknet_filters_small_label_margins() -> None:
+    pred_y = torch.tensor([0.0, 0.5, 1.0])
+    y = torch.tensor([0.0, 0.1, 1.0])
+
+    filtered = _pairwise_ranknet_loss(
+        pred_y,
+        y,
+        tau=0.25,
+        pair_margin=0.25,
+        pair_weight_clip=2.0,
+    )
+    manual_deltas = torch.tensor([0.0 - 1.0, 0.5 - 1.0])
+    manual_targets = torch.tensor([0.0 - 1.0, 0.1 - 1.0]).sign()
+    manual_weights = torch.tensor([1.0, 0.9])
+    expected = (
+        F.softplus(-manual_targets * manual_deltas / 0.25) * manual_weights
+    ).sum() / manual_weights.sum()
+
+    assert torch.allclose(filtered, expected)
+    no_pairs = _pairwise_ranknet_loss(
+        pred_y,
+        y,
+        tau=0.25,
+        pair_margin=2.0,
+        pair_weight_clip=2.0,
+    )
+    assert no_pairs.item() == 0.0
+
+
+def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None:
+    model, state_model = _build_two_gene_aivc_model(freeze_state=True)
+    model.train()
+
+    losses = model(
+        gene=("GENE1", "GENE2"),
+        control_chunks=((torch.randn(2, 3),), (torch.randn(2, 3),)),
+        target_expression_chunks=((torch.randn(2, 3),), (torch.randn(2, 3),)),
+        target_latent_chunks=((torch.randn(2, 2),), (torch.randn(2, 2),)),
+        batch_index_chunks=((None,), (None,)),
+        y=torch.tensor([-1.0, -0.5]),
+        weights=LossWeights(
+            latent_mean_delta=0.0,
+            latent_energy=0.0,
+            hvg_mean_delta=0.0,
+            hvg_energy=0.0,
+            pred_c=1.0,
+            obs_c=0.25,
+            occupancy=0.0,
+            pred_rank=5.0,
+            pred_rank_tau=0.25,
+            pred_rank_pair_margin=0.25,
+            pred_rank_pair_weight_clip=2.0,
+        ),
+    )
+    losses["total"].backward()
+
+    assert not model.state_adapter.training
+    assert all(parameter.grad is None for parameter in state_model.parameters())
+    assert model.projector.linear.weight.grad is not None
+    assert model.c_head.net[-1].weight.grad is not None
+    assert model.perturbations.missing_vectors["g0"].grad is not None
+
+
 def test_a_to_b_set_loss_is_target_order_invariant() -> None:
     model, _state_model = _build_tiny_aivc_model()
     control = torch.zeros(4, 3)
@@ -1266,10 +1361,12 @@ train:
         "occupancy",
         "pred_c",
         "obs_c",
+        "pred_rank",
         "total_loss",
     }
     assert expected_loss_cols.issubset(test_metrics.columns)
     assert {"rmse", "spearman"}.issubset(test_metrics.columns)
+    assert {"obs_rmse", "obs_spearman"}.issubset(test_metrics.columns)
 
 
 def test_csv_writer_is_main_process_only(tmp_path: Path) -> None:
@@ -1394,7 +1491,10 @@ def _loss_weights() -> LossWeights:
     )
 
 
-def _build_tiny_aivc_model() -> tuple[AivcModel, torch.nn.Module]:
+def _build_tiny_aivc_model(
+    *,
+    freeze_state: bool = False,
+) -> tuple[AivcModel, torch.nn.Module]:
     state_model = load_state_model(
         backend="linear_mock",
         checkpoint_path=None,
@@ -1429,12 +1529,16 @@ def _build_tiny_aivc_model() -> tuple[AivcModel, torch.nn.Module]:
         c_head=MLPHead(featureizer.output_dim, (8,), 0.0),
         control_expression_mean=np.zeros(3, dtype=np.float32),
         control_latent_mean=np.zeros(2, dtype=np.float32),
+        freeze_state=freeze_state,
     )
     return model, state_model
 
 
-def _build_two_gene_aivc_model() -> tuple[AivcModel, torch.nn.Module]:
-    model, state_model = _build_tiny_aivc_model()
+def _build_two_gene_aivc_model(
+    *,
+    freeze_state: bool = False,
+) -> tuple[AivcModel, torch.nn.Module]:
+    model, state_model = _build_tiny_aivc_model(freeze_state=freeze_state)
     model.perturbations = PerturbationVectorAdapter(["GENE1", "GENE2"], {}, pert_dim=2)
     return model, state_model
 
@@ -1549,6 +1653,7 @@ def _legacy_chunk_loop_losses(
     pred_occ = model.featureizer._occupancy(predicted_latent)
     obs_occ = model.featureizer._occupancy(target_latent)
     occupancy = F.mse_loss(pred_occ, obs_occ)
+    pred_rank = pred_y.sum() * 0.0
     total = (
         float(weights.hvg_mean_delta) * hvg_mean_delta
         + float(weights.hvg_energy) * hvg_energy
@@ -1567,6 +1672,7 @@ def _legacy_chunk_loop_losses(
         "pred_c": pred_c,
         "obs_c": obs_c,
         "occupancy": occupancy,
+        "pred_rank": pred_rank,
         "pred_y": pred_y.view(()),
         "obs_y": obs_y.view(()),
     }

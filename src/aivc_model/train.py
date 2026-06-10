@@ -72,6 +72,7 @@ _METRIC_KEYS = (
     "pred_c",
     "obs_c",
     "occupancy",
+    "pred_rank",
     "control_fallback_count",
     "n_chunks",
 )
@@ -84,6 +85,7 @@ _MODEL_PER_GENE_KEYS = {
     "pred_c": "per_gene_pred_c",
     "obs_c": "per_gene_obs_c",
     "occupancy": "per_gene_occupancy",
+    "pred_rank": "per_gene_pred_rank",
 }
 _PREDICTION_COLUMNS = [
     "perturbation_gene",
@@ -192,9 +194,8 @@ def run_training(
         emit_checkpoint_output=accelerator.is_main_process,
     )
     batch_lookup = load_state_batch_lookup(config.state.model_dir)
-    weights = _loss_weights(config)
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        _trainable_parameters(model),
         lr=config.train.learning_rate,
         weight_decay=config.train.weight_decay,
     )
@@ -235,9 +236,11 @@ def run_training(
     rng = np.random.default_rng(config.train.seed + accelerator.process_index)
 
     logs: list[dict[str, float]] = []
-    best_val_loss = math.inf
-    last_val_loss = math.nan
+    best_val_spearman = -math.inf
+    last_val_spearman = math.nan
+    best_checkpoint_written = False
     for epoch in range(1, config.train.max_epochs + 1):
+        weights = _loss_weights(config, epoch=epoch)
         _reset_peak_gpu_memory(accelerator.device)
         train_row = _run_epoch(
             model,
@@ -265,7 +268,7 @@ def run_training(
         )
         gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(accelerator)
         if accelerator.is_main_process:
-            last_val_loss = float(val_row.get("total_loss", math.nan))
+            last_val_spearman = float(val_row.get("spearman", math.nan))
             row = {
                 "epoch": epoch,
                 "gpu_peak_memory_allocated_mb": gpu_peak_memory_allocated_mb,
@@ -278,8 +281,17 @@ def run_training(
                 run_dir / "train_log.csv",
                 accelerator,
             )
-            if _is_better_loss(last_val_loss, best_val_loss):
-                best_val_loss = last_val_loss
+            should_save_best = (
+                _is_better_metric(
+                    last_val_spearman,
+                    best_val_spearman,
+                    mode="max",
+                )
+                or not best_checkpoint_written
+            )
+            if should_save_best:
+                best_val_spearman = last_val_spearman
+                best_checkpoint_written = True
                 _save_model_checkpoint(
                     accelerator,
                     model,
@@ -287,9 +299,9 @@ def run_training(
                     {
                         "checkpoint_kind": "best",
                         "epoch": epoch,
-                        "selection_metric": "val_total_loss",
-                        "selection_mode": "min",
-                        "metric_value": best_val_loss,
+                        "selection_metric": "val_spearman",
+                        "selection_mode": "max",
+                        "metric_value": best_val_spearman,
                         "run_id": run_id,
                         "train_log": str(run_dir / "train_log.csv"),
                     },
@@ -305,7 +317,7 @@ def run_training(
         model,
         eval_data,
         test_loader,
-        weights,
+        _loss_weights(config, epoch=config.train.max_epochs),
         rng,
         config.train.cell_set_len,
         accelerator,
@@ -348,10 +360,10 @@ def run_training(
             {
                 "checkpoint_kind": "final",
                 "epoch": config.train.max_epochs,
-                "selection_metric": "val_total_loss",
-                "selection_mode": "min",
-                "metric_value": last_val_loss,
-                "best_metric_value": best_val_loss,
+                "selection_metric": "val_spearman",
+                "selection_mode": "max",
+                "metric_value": last_val_spearman,
+                "best_metric_value": best_val_spearman,
                 "run_id": run_id,
                 "train_log": str(run_dir / "train_log.csv"),
                 "test_metrics": str(run_dir / "test_metrics.csv"),
@@ -656,16 +668,35 @@ def _pad_gene_indices(
     )
 
 
-def _loss_weights(config: AivcConfig) -> LossWeights:
+def _loss_weights(config: AivcConfig, epoch: int | None = None) -> LossWeights:
+    b_loss_scale = _b_loss_anneal_scale(config, epoch)
     return LossWeights(
-        latent_mean_delta=config.loss.latent_mean_delta_weight,
-        latent_energy=config.loss.latent_energy_weight,
-        hvg_mean_delta=config.loss.hvg_mean_delta_weight,
-        hvg_energy=config.loss.hvg_energy_weight,
+        latent_mean_delta=config.loss.latent_mean_delta_weight * b_loss_scale,
+        latent_energy=config.loss.latent_energy_weight * b_loss_scale,
+        hvg_mean_delta=config.loss.hvg_mean_delta_weight * b_loss_scale,
+        hvg_energy=config.loss.hvg_energy_weight * b_loss_scale,
         pred_c=config.loss.pred_c_weight,
         obs_c=config.loss.obs_c_weight,
-        occupancy=config.loss.occupancy_weight,
+        occupancy=config.loss.occupancy_weight * b_loss_scale,
+        pred_rank=config.loss.pred_rank_weight,
+        pred_rank_tau=config.loss.pred_rank_tau,
+        pred_rank_pair_margin=config.loss.pred_rank_pair_margin,
+        pred_rank_pair_weight_clip=config.loss.pred_rank_pair_weight_clip,
     )
+
+
+def _b_loss_anneal_scale(config: AivcConfig, epoch: int | None) -> float:
+    epochs = int(config.loss.b_loss_anneal_epochs)
+    final_fraction = float(config.loss.b_loss_anneal_final_fraction)
+    if epoch is None or epochs <= 0:
+        return 1.0
+    if not 0.0 <= final_fraction <= 1.0:
+        msg = "loss.b_loss_anneal_final_fraction must be between 0 and 1"
+        raise ValueError(msg)
+    if epochs <= 1:
+        return final_fraction
+    progress = min(max(int(epoch), 1), epochs) - 1
+    return 1.0 - (1.0 - final_fraction) * (progress / float(epochs - 1))
 
 
 def _build_model(
@@ -713,7 +744,18 @@ def _build_model(
         c_head=c_head,
         control_expression_mean=data.control_input.mean(axis=0).astype(np.float32),
         control_latent_mean=data.control_latent.mean(axis=0).astype(np.float32),
+        freeze_state=config.train.freeze_state,
     )
+
+
+def _trainable_parameters(model: torch.nn.Module) -> list[torch.nn.Parameter]:
+    parameters = [
+        parameter for parameter in model.parameters() if parameter.requires_grad
+    ]
+    if not parameters:
+        msg = "AIVC model has no trainable parameters"
+        raise ValueError(msg)
+    return parameters
 
 
 def _run_epoch(
@@ -835,6 +877,9 @@ def _evaluate(
         y_pred = predictions["y_pred"].to_numpy(dtype=np.float64)
         summary.update(regression_metrics(y_true, y_pred))
         summary.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
+        y_obs = predictions["y_obs_anchor"].to_numpy(dtype=np.float64)
+        summary.update(_prefix(regression_metrics(y_true, y_obs), "obs"))
+        summary.update(_prefix(ranking_metrics(y_true, y_obs, (-0.5, -1.0)), "obs"))
     return summary, predictions
 
 
@@ -1092,6 +1137,7 @@ def _loss_for_index(
         "pred_c": float(losses["pred_c"].detach().cpu()),
         "obs_c": float(losses["obs_c"].detach().cpu()),
         "occupancy": float(losses["occupancy"].detach().cpu()),
+        "pred_rank": float(losses["pred_rank"].detach().cpu()),
         "control_fallback_count": float(fallback_count),
         "n_chunks": float(len(chunks)),
     }
@@ -1140,8 +1186,17 @@ def _prefix(row: dict[str, float], prefix: str) -> dict[str, float]:
     return {f"{prefix}_{key}": value for key, value in row.items()}
 
 
-def _is_better_loss(value: float, best_value: float) -> bool:
-    return math.isfinite(value) and value < best_value
+def _is_better_metric(value: float, best_value: float, *, mode: str) -> bool:
+    if not math.isfinite(value):
+        return False
+    if not math.isfinite(best_value):
+        return True
+    if mode == "min":
+        return value < best_value
+    if mode == "max":
+        return value > best_value
+    msg = f"Unknown selection mode: {mode}"
+    raise ValueError(msg)
 
 
 def _reset_peak_gpu_memory(device: torch.device) -> None:
