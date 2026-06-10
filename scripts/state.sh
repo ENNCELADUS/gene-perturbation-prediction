@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH -J STATE
-#SBATCH -p hexm
+#SBATCH -p hexm_l40
 #SBATCH -A hexm
 #SBATCH -N 1
 #SBATCH -t 4-00:00:00
 #SBATCH --mem=300G
 #SBATCH --cpus-per-task=32
-#SBATCH --gres=gpu:NVIDIAA40:4
+#SBATCH --gres=gpu:NVIDIAL40:4
 #SBATCH --output=results/state/slurm_%j.out
 #SBATCH --error=results/state/slurm_%j.err
 #SBATCH --mail-type=ALL
