@@ -13,6 +13,9 @@ from aivc_model.state_feature_ablation import (
     PRIMARY_EXTERNAL_SCOPE,
     FeatureArmData,
     _control_panel,
+    _append_train_log_row,
+    _fold_train_log_row,
+    _initialize_train_log,
     adamson_heldout_ensemble_predictions,
     fit_fold_ridge,
     load_state_feature_ablation_config,
@@ -282,6 +285,78 @@ def test_state_feature_ablation_config_records_primary_contract() -> None:
     assert config.ridge_alphas == (30.0, 300.0)
     assert config.primary_scope == PRIMARY_EXTERNAL_SCOPE
     assert config.interpretation == "adamson_guided_validation_sweep"
+
+
+def test_fold_train_log_initializes_and_appends_summary(tmp_path: Path) -> None:
+    config = load_state_feature_ablation_config(
+        Path(
+            "configs/experiments/05_aivc_a_to_b_to_c/state_frozen_feature_ablation.yaml"
+        )
+    )
+    path = tmp_path / "train_log.csv"
+    _initialize_train_log(path)
+
+    internal_metrics = pd.DataFrame(
+        {
+            "rmse": [0.4, 0.6],
+            "spearman": [0.25, 0.75],
+            "spearman_defined": [True, False],
+        }
+    )
+    external_predictions = pd.DataFrame(
+        {
+            "evaluation_scope": ["external:adamson_k562"] * 4,
+            "fold": [0, 0, 0, 0],
+            "feature_set": ["state_token_hidden"] * 4,
+            "arm": ["state_token_hidden_gmm_ridge"] * 4,
+            "model": ["ridge_alpha30"] * 4,
+            "weighting": ["unweighted"] * 4,
+            "perturbation_gene": ["A", "B", "C", "D"],
+            "y_true": [-1.0, -0.8, -0.2, 0.2],
+            "y_pred": [-0.9, -0.7, -0.1, 0.1],
+            "primary_scope": [PRIMARY_EXTERNAL_SCOPE] * 4,
+            "secondary_scope": [EXTERNAL_ENSEMBLE_SCOPE] * 4,
+        }
+    )
+    fold_splits = pd.DataFrame(
+        {
+            "evaluation_scope": ["internal_cv_all"] * 4,
+            "fold": [0, 0, 0, 0],
+            "split": ["train", "train", "test", "test"],
+            "perturbation_gene": ["A", "B", "C", "D"],
+        }
+    )
+
+    row = _fold_train_log_row(
+        config,
+        epoch=1,
+        fold=0,
+        elapsed_seconds=12.5,
+        fold_elapsed_seconds=3.25,
+        train_idx=np.asarray([0, 1], dtype=np.int64),
+        test_idx=np.asarray([2, 3], dtype=np.int64),
+        internal_metrics=internal_metrics,
+        external_predictions=external_predictions,
+        fold_splits=fold_splits,
+        n_arms_completed=2,
+        n_fits_completed=4,
+        n_external_fits_completed=4,
+    )
+    _append_train_log_row(path, row)
+
+    log = pd.read_csv(path)
+    assert len(log) == 1
+    logged = log.iloc[0]
+    assert logged["epoch"] == 1
+    assert logged["fold"] == 0
+    assert logged["n_arms_completed"] == 2
+    assert logged["n_fits_completed"] == 4
+    assert logged["n_external_fits_completed"] == 4
+    assert logged["internal_rmse_mean"] == pytest.approx(0.5)
+    assert logged["internal_spearman_mean"] == pytest.approx(0.5)
+    assert logged["internal_spearman_defined_rate"] == pytest.approx(0.5)
+    assert logged["external_ensemble_spearman_defined_rate"] == pytest.approx(1.0)
+    assert logged["external_heldout_spearman_defined_rate"] == pytest.approx(1.0)
 
 
 def _synthetic_arm_data() -> FeatureArmData:

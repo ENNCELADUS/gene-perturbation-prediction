@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from dataclasses import dataclass
 from dataclasses import replace
+import math
+import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +17,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import Ridge
 from sklearn.mixture import GaussianMixture
 import torch
+from tqdm import tqdm
 import yaml
 
 from dependency_baseline.distribution import _feature_from_occupancy
@@ -53,6 +58,28 @@ DEFAULT_ABLATION_ARMS = (
     "state_output_scvi128_gmm_ridge",
     "state_output_hvg_gmm_ridge",
     "state_token_hidden_gmm_ridge",
+)
+TRAIN_LOG_COLUMNS = (
+    "epoch",
+    "fold",
+    "elapsed_seconds",
+    "fold_elapsed_seconds",
+    "n_train_genes",
+    "n_test_genes",
+    "n_arms_completed",
+    "n_fits_completed",
+    "n_external_fits_completed",
+    "n_views",
+    "n_alphas",
+    "internal_rmse_mean",
+    "internal_spearman_mean",
+    "internal_spearman_defined_rate",
+    "external_ensemble_rmse_mean",
+    "external_ensemble_spearman_mean",
+    "external_ensemble_spearman_defined_rate",
+    "external_heldout_rmse_mean",
+    "external_heldout_spearman_mean",
+    "external_heldout_spearman_defined_rate",
 )
 __all__ = (
     "EXTERNAL_ENSEMBLE_SCOPE",
@@ -478,6 +505,8 @@ def run_ablation_from_config(path: Path) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     (config.output_dir / "latest_run.txt").write_text(str(run_dir), encoding="utf-8")
+    train_log_path = run_dir / "train_log.csv"
+    _initialize_train_log(train_log_path)
     write_run_manifest(
         run_dir,
         run_id=config.run_id,
@@ -522,13 +551,26 @@ def run_ablation_from_config(path: Path) -> Path:
         qa_rows = []
         gmm_rows = []
         folds = _stratified_folds(data.y, config.n_splits, config.seed)
-        for fold, (train_idx, test_idx) in enumerate(folds):
+        run_start = time.monotonic()
+        fold_iterator = tqdm(
+            enumerate(folds, start=1),
+            desc="folds",
+            total=len(folds),
+            miniters=1,
+            dynamic_ncols=True,
+            file=sys.stdout,
+        )
+        for epoch, (train_idx, test_idx) in fold_iterator:
+            fold = epoch - 1
+            fold_start = time.monotonic()
+            fold_iterator.set_postfix_str(f"fold={fold}", refresh=False)
             split = GeneSplit(
                 train=np.sort(train_idx),
                 val=np.sort(test_idx),
                 test=np.asarray([], dtype=np.int64),
             )
-            split_rows.extend(_split_rows(data, fold, train_idx, test_idx))
+            fold_split_rows = _split_rows(data, fold, train_idx, test_idx)
+            split_rows.extend(fold_split_rows)
             primary_panel = _control_panel(data, config, fold, device, batch_lookup)
             external_panel = (
                 _control_panel(
@@ -554,33 +596,79 @@ def run_ablation_from_config(path: Path) -> Path:
                 primary_panel=primary_panel,
                 external_panel=external_panel,
             )
-            for arm_name, arm_data in primary_arms.items():
-                for view in (config.gmm_view, *config.sensitivity_views):
-                    for alpha in config.ridge_alphas:
-                        fit = fit_fold_ridge(
-                            arm_data,
-                            train_idx,
-                            test_idx,
-                            fold=fold,
-                            alpha=alpha,
-                            n_components=config.gmm_components,
-                            view=view,
-                            random_state=config.seed,
-                            sensitivity_views=config.sensitivity_views,
-                        )
-                        fold_rows.append(fit.metric_row)
-                        prediction_frames.append(fit.predictions)
-                        qa_rows.append(fit.qa_row)
-                        gmm_rows.append(fit.gmm_row)
-                        external_arm = external_arms.get(arm_name)
-                        if external_arm is not None:
-                            external_prediction_frames.append(
-                                _external_predictions_for_fit(
-                                    fit,
-                                    external_arm,
-                                    external_name=config.external_name,
-                                )
-                            )
+            fit_tasks = [
+                (arm_name, arm_data, view, alpha)
+                for arm_name, arm_data in primary_arms.items()
+                for view in (config.gmm_view, *config.sensitivity_views)
+                for alpha in config.ridge_alphas
+            ]
+            fold_metric_rows = []
+            fold_external_prediction_frames = []
+            fit_iterator = tqdm(
+                fit_tasks,
+                desc=f"fold {epoch}/{len(folds)} fits",
+                total=len(fit_tasks),
+                miniters=1,
+                dynamic_ncols=True,
+                file=sys.stdout,
+            )
+            for arm_name, arm_data, view, alpha in fit_iterator:
+                fit_iterator.set_postfix(
+                    {
+                        "arm": arm_name,
+                        "view": view,
+                        "alpha": alpha,
+                    },
+                    refresh=False,
+                )
+                fit = fit_fold_ridge(
+                    arm_data,
+                    train_idx,
+                    test_idx,
+                    fold=fold,
+                    alpha=alpha,
+                    n_components=config.gmm_components,
+                    view=view,
+                    random_state=config.seed,
+                    sensitivity_views=config.sensitivity_views,
+                )
+                fold_rows.append(fit.metric_row)
+                fold_metric_rows.append(fit.metric_row)
+                prediction_frames.append(fit.predictions)
+                qa_rows.append(fit.qa_row)
+                gmm_rows.append(fit.gmm_row)
+                external_arm = external_arms.get(arm_name)
+                if external_arm is not None:
+                    external_predictions_for_fit = _external_predictions_for_fit(
+                        fit,
+                        external_arm,
+                        external_name=config.external_name,
+                    )
+                    external_prediction_frames.append(external_predictions_for_fit)
+                    fold_external_prediction_frames.append(external_predictions_for_fit)
+            fold_external_predictions = (
+                pd.concat(fold_external_prediction_frames, ignore_index=True)
+                if fold_external_prediction_frames
+                else pd.DataFrame()
+            )
+            _append_train_log_row(
+                train_log_path,
+                _fold_train_log_row(
+                    config,
+                    epoch=epoch,
+                    fold=fold,
+                    elapsed_seconds=time.monotonic() - run_start,
+                    fold_elapsed_seconds=time.monotonic() - fold_start,
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    internal_metrics=pd.DataFrame(fold_metric_rows),
+                    external_predictions=fold_external_predictions,
+                    fold_splits=pd.DataFrame(fold_split_rows),
+                    n_arms_completed=len(primary_arms),
+                    n_fits_completed=len(fold_metric_rows),
+                    n_external_fits_completed=len(fold_external_prediction_frames),
+                ),
+            )
         fold_metrics = pd.DataFrame(fold_rows)
         predictions = pd.concat(prediction_frames, ignore_index=True)
         splits = pd.DataFrame(split_rows)
@@ -657,6 +745,89 @@ def run_ablation_from_config(path: Path) -> Path:
     return run_dir
 
 
+def _initialize_train_log(path: Path) -> None:
+    """Create an empty fold-level train log before heavy ablation work starts."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(columns=TRAIN_LOG_COLUMNS).to_csv(path, index=False)
+
+
+def _append_train_log_row(path: Path, row: dict[str, object]) -> None:
+    """Append one fold-level train-log row and flush it for partial run inspection."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=TRAIN_LOG_COLUMNS)
+        writer.writerow({column: row.get(column, "") for column in TRAIN_LOG_COLUMNS})
+        handle.flush()
+
+
+def _fold_train_log_row(
+    config: StateFeatureAblationConfig,
+    *,
+    epoch: int,
+    fold: int,
+    elapsed_seconds: float,
+    fold_elapsed_seconds: float,
+    train_idx: np.ndarray,
+    test_idx: np.ndarray,
+    internal_metrics: pd.DataFrame,
+    external_predictions: pd.DataFrame,
+    fold_splits: pd.DataFrame,
+    n_arms_completed: int,
+    n_fits_completed: int,
+    n_external_fits_completed: int,
+) -> dict[str, object]:
+    external_metrics = pd.DataFrame()
+    if not external_predictions.empty:
+        fold_external_ensembles = adamson_heldout_ensemble_predictions(
+            external_predictions,
+            fold_splits,
+            external_name=config.external_name,
+        )
+        external_metrics = metric_rows_for_predictions(fold_external_ensembles)
+    external_ensemble = _metrics_for_scope(external_metrics, EXTERNAL_ENSEMBLE_SCOPE)
+    external_heldout = _metrics_for_scope(external_metrics, config.primary_scope)
+    return {
+        "epoch": int(epoch),
+        "fold": int(fold),
+        "elapsed_seconds": float(elapsed_seconds),
+        "fold_elapsed_seconds": float(fold_elapsed_seconds),
+        "n_train_genes": int(len(train_idx)),
+        "n_test_genes": int(len(test_idx)),
+        "n_arms_completed": int(n_arms_completed),
+        "n_fits_completed": int(n_fits_completed),
+        "n_external_fits_completed": int(n_external_fits_completed),
+        "n_views": int(1 + len(config.sensitivity_views)),
+        "n_alphas": int(len(config.ridge_alphas)),
+        **_metric_summary(internal_metrics, "internal"),
+        **_metric_summary(external_ensemble, "external_ensemble"),
+        **_metric_summary(external_heldout, "external_heldout"),
+    }
+
+
+def _metrics_for_scope(metrics: pd.DataFrame, scope: str) -> pd.DataFrame:
+    if metrics.empty or "evaluation_scope" not in metrics.columns:
+        return pd.DataFrame()
+    return metrics.loc[metrics["evaluation_scope"] == scope]
+
+
+def _metric_summary(metrics: pd.DataFrame, prefix: str) -> dict[str, float]:
+    return {
+        f"{prefix}_rmse_mean": _finite_mean(metrics, "rmse"),
+        f"{prefix}_spearman_mean": _finite_mean(metrics, "spearman"),
+        f"{prefix}_spearman_defined_rate": _finite_mean(metrics, "spearman_defined"),
+    }
+
+
+def _finite_mean(frame: pd.DataFrame, column: str) -> float:
+    if frame.empty or column not in frame.columns:
+        return math.nan
+    values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype=np.float64)
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return math.nan
+    return float(finite.mean())
+
+
 def _load_frozen_state_runtime(
     aivc_config: object,
     data: GeneBags,
@@ -719,6 +890,7 @@ def _build_fold_arms(
         adapter,
         perturbations,
         primary_panel,
+        progress_desc=f"fold {fold} primary STATE",
     )
     external_expr = (
         _state_expression_arms(
@@ -726,6 +898,7 @@ def _build_fold_arms(
             adapter,
             perturbations,
             external_panel,
+            progress_desc=f"fold {fold} external STATE",
         )
         if external_data is not None and external_panel is not None
         else None
@@ -832,6 +1005,8 @@ def _state_expression_arms(
     adapter: StateForwardAdapter,
     perturbations: PerturbationVectorAdapter,
     panel: tuple[torch.Tensor, torch.Tensor | None],
+    *,
+    progress_desc: str,
 ) -> dict[str, object]:
     control_cells, batch_indices = panel
     non_targeting = perturbations("non-targeting")
@@ -852,7 +1027,14 @@ def _state_expression_arms(
     output_bags = []
     hidden_bags = []
     with torch.no_grad():
-        for gene in data.genes.astype(str):
+        for gene in tqdm(
+            data.genes.astype(str),
+            desc=progress_desc,
+            total=len(data.genes),
+            miniters=max(1, len(data.genes) // 10),
+            dynamic_ncols=True,
+            file=sys.stdout,
+        ):
             vector = perturbations(str(gene))
             output_bags.append(
                 state_output_bag(
