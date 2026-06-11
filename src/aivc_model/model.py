@@ -56,12 +56,31 @@ class LinearMockStateModel(nn.Module):
         return self.net(torch.cat([basal, pert], dim=1))
 
 
+def _flatten_state_output(output: object) -> torch.Tensor | None:
+    if not isinstance(output, torch.Tensor):
+        return None
+    if output.dim() == 3 and output.shape[0] == 1:
+        output = output.squeeze(0)
+    elif output.dim() == 3:
+        msg = "STATE token features must have batch dimension 1 when using padded=False"
+        raise ValueError(msg)
+    if output.dim() > 2:
+        output = output.reshape(-1, output.shape[-1])
+    return output
+
+
 class StateForwardAdapter(nn.Module):
     """Thin wrapper around an ArcInstitute STATE transition model."""
 
     def __init__(self, state_model: nn.Module) -> None:
         super().__init__()
         self.state_model = state_model
+        self._last_token_features: torch.Tensor | None = None
+
+    @property
+    def last_token_features(self) -> torch.Tensor | None:
+        """Return token hidden features captured from the most recent forward."""
+        return self._last_token_features
 
     def forward(
         self,
@@ -70,6 +89,12 @@ class StateForwardAdapter(nn.Module):
         gene: str,
         batch_indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        self._last_token_features = None
+        if hasattr(self.state_model, "_token_features"):
+            try:
+                setattr(self.state_model, "_token_features", None)
+            except AttributeError:
+                pass
         pert = perturbation.unsqueeze(0).expand(control_cells.shape[0], -1)
         batch: dict[str, Any] = {
             "ctrl_cell_emb": control_cells,
@@ -98,6 +123,8 @@ class StateForwardAdapter(nn.Module):
             output = output["preds"]
         if isinstance(output, tuple):
             output = output[0]
+        token_features = getattr(self.state_model, "_token_features", None)
+        self._last_token_features = _flatten_state_output(token_features)
         if output.dim() == 3 and output.shape[0] == 1:
             output = output.squeeze(0)
         if output.dim() > 2:

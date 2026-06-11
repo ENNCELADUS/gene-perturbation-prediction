@@ -70,3 +70,17 @@ prototype fitting, or C-head fitting.
 A linear A->B baseline that starts from control-cell expression, masks the target
 gene coordinate when present, and predicts a post-perturbation expression delta
 without an additional train-gene identity indicator.
+
+### STATE Output Space
+
+The expression or HVG-dimensional prediction returned by the frozen STATE
+forward model. In predicted-B->C ablations, this space can be consumed directly
+by fold-local GMM+Ridge heads or re-encoded through a fold-local scVI128 encoder
+before fitting the C head.
+
+### STATE Token Hidden Space
+
+The transformer token hidden representation exposed by STATE during the same
+forward path that produces `B_hat`. For target-gene ablations, the perturbed bag
+uses control cells plus the target perturbation vector, while the control bag
+uses the same control cells plus the non-targeting vector.
