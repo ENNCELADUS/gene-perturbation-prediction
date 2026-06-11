@@ -563,7 +563,10 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     )
     raw = raw.replace(
         "  device: cpu\n",
-        "  device: cpu\n  gene_batch_size: 4\n  freeze_state: true\n",
+        "  device: cpu\n"
+        "  gene_batch_size: 4\n"
+        "  freeze_state: true\n"
+        "  input_tensor_cache_max_gib: 12.5\n",
     )
     config_path.write_text(raw, encoding="utf-8")
 
@@ -571,16 +574,52 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
 
     assert default_config.train.gene_batch_size == 1
     assert default_config.train.freeze_state is False
+    assert default_config.train.input_tensor_cache_max_gib == 24.0
     assert default_config.loss.pred_rank_weight == 0.0
     assert default_config.loss.b_loss_anneal_epochs == 0
     assert parsed.train.gene_batch_size == 4
     assert parsed.train.freeze_state is True
+    assert parsed.train.input_tensor_cache_max_gib == 12.5
     assert parsed.loss.pred_rank_weight == 5.0
     assert parsed.loss.pred_rank_tau == 0.25
     assert parsed.loss.pred_rank_pair_margin == 0.25
     assert parsed.loss.pred_rank_pair_weight_clip == 2.0
     assert parsed.loss.b_loss_anneal_epochs == 5
     assert parsed.loss.b_loss_anneal_final_fraction == 0.1
+
+
+def test_state_config_ignores_legacy_noop_fields(tmp_path: Path) -> None:
+    config_path = tmp_path / "legacy_state_fields.yaml"
+    config_path.write_text(
+        f"""
+data:
+  h5ad_path: {tmp_path / "unused.h5ad"}
+  overlap_csv: {tmp_path / "unused.csv"}
+  output_dir: {tmp_path / "outputs"}
+  state_embed_key: X_hvg
+state:
+  backend: state_checkpoint
+  model_dir: {tmp_path / "state_model"}
+  checkpoint_path: {tmp_path / "state.ckpt"}
+  embed_key: ignored
+  input_dim: 3
+  output_dim: 3
+  pert_dim: 2
+  hidden_dim: 768
+  cell_set_len: 256
+  allow_mock: true
+train:
+  cell_set_len: 32
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.data.state_embed_key == "X_hvg"
+    assert config.train.cell_set_len == 32
+    for field in ("embed_key", "hidden_dim", "cell_set_len", "allow_mock"):
+        assert not hasattr(config.state, field)
 
 
 def test_padded_gene_loader_marks_padding_for_even_ddp_steps() -> None:
@@ -610,6 +649,78 @@ def test_padded_gene_loader_marks_padding_for_even_ddp_steps() -> None:
         [False, False, False, False],
         [False, True, True, True],
     ]
+
+
+def test_model_inputs_tensor_cache_matches_uncached_tensors_and_losses() -> None:
+    data = _toy_gene_bags_with_batches()
+    batch_lookup = {"batch_a": 3, "batch_b": 4}
+    device = torch.device("cpu")
+    uncached_inputs, uncached_fallbacks, uncached_chunks = (
+        train_module._model_inputs_for_indices(
+            data,
+            [0, 1],
+            np.random.default_rng(17),
+            cell_set_len=3,
+            device=device,
+            batch_lookup=batch_lookup,
+            pad_short=True,
+        )
+    )
+    cache = train_module._InputTensorCache.build(
+        data,
+        batch_lookup,
+        device,
+    )
+    assert cache.control_batch is not None
+    torch.testing.assert_close(
+        cache.control_batch,
+        torch.as_tensor([3, 3, 4], dtype=torch.long),
+    )
+    cached_inputs, cached_fallbacks, cached_chunks = (
+        train_module._model_inputs_for_indices(
+            data,
+            [0, 1],
+            np.random.default_rng(17),
+            cell_set_len=3,
+            device=device,
+            batch_lookup=batch_lookup,
+            pad_short=True,
+            tensor_cache=cache,
+        )
+    )
+
+    _assert_nested_tensors_close(cached_inputs, uncached_inputs)
+    torch.testing.assert_close(cached_fallbacks, uncached_fallbacks)
+    torch.testing.assert_close(cached_chunks, uncached_chunks)
+
+    model, _state_model = _build_two_gene_aivc_model()
+    with torch.no_grad():
+        uncached_losses = model(weights=_loss_weights(), **uncached_inputs)
+        cached_losses = model(weights=_loss_weights(), **cached_inputs)
+
+    for key in uncached_losses:
+        torch.testing.assert_close(cached_losses[key], uncached_losses[key])
+
+
+def test_model_inputs_tensor_cache_respects_estimated_size_cap() -> None:
+    data = _toy_gene_bags_with_batches()
+    batch_lookup = {"batch_a": 3, "batch_b": 4}
+    estimated_bytes = train_module._InputTensorCache.estimate_bytes(
+        data,
+        batch_lookup,
+    )
+
+    assert estimated_bytes > 1
+    assert (
+        train_module._InputTensorCache.maybe_build(
+            data,
+            batch_lookup,
+            torch.device("cpu"),
+            max_bytes=estimated_bytes - 1,
+            allow_cpu=True,
+        )
+        is None
+    )
 
 
 def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> None:
@@ -1001,6 +1112,7 @@ def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
             self.weight = torch.nn.Parameter(torch.eye(3))
             self.chunk_sizes: list[int] = []
             self.batch_values: list[list[int]] = []
+            self.pert_names: list[list[str]] = []
 
         def forward(
             self,
@@ -1011,13 +1123,14 @@ def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
             control = batch["ctrl_cell_emb"]
             self.chunk_sizes.append(int(control.shape[0]))
             self.batch_values.append(batch["batch"].detach().cpu().tolist())
+            self.pert_names.append(list(batch["pert_name"]))
             return control @ self.weight
 
     def fail_target_chunking(*args: object, **kwargs: object) -> None:
         del args, kwargs
         raise AssertionError("final prediction must not inspect target B chunks")
 
-    model, _state_model = _build_tiny_aivc_model()
+    model, _state_model = _build_two_gene_aivc_model()
     recording_state = RecordingState()
     model.state_adapter = StateForwardAdapter(recording_state)
     data = replace(
@@ -1030,10 +1143,10 @@ def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
     )
     accelerator = train_module.Accelerator(cpu=True)
     loader = train_module._gene_loader(
-        np.asarray([0], dtype=np.int64),
+        np.asarray([0, 1], dtype=np.int64),
         shuffle=False,
         seed=1,
-        gene_batch_size=1,
+        gene_batch_size=2,
         world_size=1,
     )
     monkeypatch.setattr(train_module, "make_cell_set_chunks", fail_target_chunking)
@@ -1047,12 +1160,69 @@ def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
         batch_lookup={"batch_a": 3, "batch_b": 4, "batch_c": 5},
     )
 
-    assert recording_state.chunk_sizes == [2, 2, 1]
-    assert recording_state.batch_values == [[3, 4], [3, 4], [5]]
-    assert predictions["perturbation_gene"].tolist() == ["GENE1"]
-    assert predictions["n_chunks"].tolist() == [3.0]
+    assert recording_state.chunk_sizes == [5, 5]
+    assert recording_state.batch_values == [[3, 4, 3, 4, 5], [3, 4, 3, 4, 5]]
+    assert recording_state.pert_names == [["GENE1"] * 5, ["GENE2"] * 5]
+    assert predictions["perturbation_gene"].tolist() == ["GENE1", "GENE2"]
+    assert predictions["n_chunks"].tolist() == [1.0, 1.0]
     assert "y_obs_anchor" not in predictions.columns
     assert set(summary) >= {"rmse", "spearman"}
+
+
+def test_final_prediction_only_matches_legacy_chunks_for_rowwise_predict_bag() -> None:
+    model, _state_model = _build_counting_aivc_model()
+    data = replace(
+        _toy_gene_bags_with_batches(),
+        control_input=np.arange(15, dtype=np.float32).reshape(5, 3),
+        control_batch=np.asarray(
+            ["batch_a", "batch_b", "batch_a", "batch_b", "batch_c"],
+            dtype=object,
+        ),
+    )
+    batch_lookup = {"batch_a": 3, "batch_b": 4, "batch_c": 5}
+    accelerator = train_module.Accelerator(cpu=True)
+    loader = train_module._gene_loader(
+        np.asarray([0], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=1,
+        world_size=1,
+    )
+    legacy_latent_chunks = []
+    with torch.no_grad():
+        for start in range(0, data.control_input.shape[0], 2):
+            end = min(start + 2, data.control_input.shape[0])
+            control_chunk = torch.as_tensor(
+                data.control_input[start:end],
+                dtype=torch.float32,
+            )
+            batch_indices = train_module._batch_tensor(
+                data.control_batch[start:end],
+                batch_lookup,
+                torch.device("cpu"),
+            )
+            _pred_expression, predicted_latent = model.predict_bag(
+                control_chunk,
+                "GENE1",
+                batch_indices,
+            )
+            legacy_latent_chunks.append(predicted_latent)
+        expected = model.predict_c_from_latent(torch.cat(legacy_latent_chunks, dim=0))
+
+        _summary, predictions = train_module._evaluate_prediction_only_final(
+            model,
+            data,
+            loader,
+            cell_set_len=2,
+            accelerator=accelerator,
+            batch_lookup=batch_lookup,
+        )
+
+    assert predictions["n_chunks"].tolist() == [1.0]
+    np.testing.assert_allclose(
+        predictions["y_pred"].to_numpy(dtype=np.float32),
+        np.asarray([float(expected.detach().cpu().item())], dtype=np.float32),
+    )
 
 
 def test_final_prediction_only_unwraps_prepared_model() -> None:
@@ -1249,6 +1419,121 @@ def test_fixed_gmm_featureizer_matches_sklearn_weighted_responsibilities() -> No
     expected = gmm.predict_proba(test_bag).mean(axis=0)
 
     np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_projector_and_gmm_fit_caches_reuse_and_recompute_on_metadata_mismatch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    artifacts_dir = tmp_path / "artifacts"
+    projector_calls: list[tuple[tuple[int, ...], tuple[int, ...], float]] = []
+    gmm_calls: list[int] = []
+
+    def fake_fit_linear_projector(
+        train_expr: np.ndarray,
+        train_latent: np.ndarray,
+        alpha: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        projector_calls.append((train_expr.shape, train_latent.shape, float(alpha)))
+        value = float(len(projector_calls))
+        return (
+            np.full(
+                (train_expr.shape[1], train_latent.shape[1]),
+                value,
+                dtype=np.float32,
+            ),
+            np.full(train_latent.shape[1], value, dtype=np.float32),
+        )
+
+    def fake_fit_fixed_gmm(
+        bags: tuple[np.ndarray, ...],
+        control_bag: np.ndarray,
+        *,
+        n_components: int,
+        covariance_floor: float,
+        random_state: int,
+        max_fit_cells: int | None,
+    ) -> model_module.FixedGMMFeatureizer:
+        del bags, n_components, covariance_floor, random_state, max_fit_cells
+        gmm_calls.append(1)
+        value = float(len(gmm_calls))
+        latent_dim = int(control_bag.shape[1])
+        return model_module.FixedGMMFeatureizer(
+            means=np.full((1, latent_dim), value, dtype=np.float32),
+            variances=np.full((1, latent_dim), value + 1.0, dtype=np.float32),
+            weights=np.asarray([1.0], dtype=np.float32),
+            control_bag=control_bag,
+        )
+
+    monkeypatch.setattr(
+        train_module,
+        "fit_linear_projector",
+        fake_fit_linear_projector,
+    )
+    monkeypatch.setattr(train_module, "fit_fixed_gmm", fake_fit_fixed_gmm)
+
+    first_weight, first_bias = train_module._fit_or_load_projector_cache(
+        config,
+        data,
+        split,
+        artifacts_dir,
+    )
+    first_gmm = train_module._fit_or_load_fixed_gmm_cache(
+        config,
+        data,
+        split,
+        artifacts_dir,
+    )
+    second_weight, second_bias = train_module._fit_or_load_projector_cache(
+        config,
+        data,
+        split,
+        artifacts_dir,
+    )
+    second_gmm = train_module._fit_or_load_fixed_gmm_cache(
+        config,
+        data,
+        split,
+        artifacts_dir,
+    )
+
+    assert len(projector_calls) == 1
+    assert len(gmm_calls) == 1
+    np.testing.assert_allclose(second_weight, first_weight)
+    np.testing.assert_allclose(second_bias, first_bias)
+    torch.testing.assert_close(second_gmm.means, first_gmm.means)
+    torch.testing.assert_close(second_gmm.variances, first_gmm.variances)
+
+    changed_data = replace(
+        data,
+        latent_bags=(data.latent_bags[0] + 0.5, data.latent_bags[1]),
+    )
+    changed_weight, _changed_bias = train_module._fit_or_load_projector_cache(
+        config,
+        changed_data,
+        split,
+        artifacts_dir,
+    )
+    changed_gmm = train_module._fit_or_load_fixed_gmm_cache(
+        config,
+        changed_data,
+        split,
+        artifacts_dir,
+    )
+
+    assert len(projector_calls) == 2
+    assert len(gmm_calls) == 2
+    assert not np.array_equal(changed_weight, first_weight)
+    assert not torch.equal(changed_gmm.means, first_gmm.means)
+    assert (artifacts_dir / "ridge_projector_fit" / "COMPLETE").exists()
+    assert (artifacts_dir / "fixed_gmm_fit" / "COMPLETE").exists()
 
 
 def test_pred_c_loss_backprops_into_mock_state() -> None:
@@ -1678,7 +1963,10 @@ def test_state_forward_adapter_uses_predict_step_batch_schema() -> None:
     assert torch.isfinite(output).all()
 
 
-def test_train_smoke_writes_minimal_csv_outputs(tmp_path: Path) -> None:
+def test_train_smoke_writes_minimal_csv_outputs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     h5ad_path, overlap_path = _write_toy_inputs(tmp_path)
     config_path = tmp_path / "state_smoke.yaml"
     config_path.write_text(
@@ -1734,8 +2022,32 @@ train:
   device: cpu
 """,
     )
+    config = load_config(config_path)
+    split = make_gene_split(
+        np.asarray(["GENE1", "GENE2", "GENE3", "GENE4"], dtype=object),
+        np.asarray([-1.2, -0.7, 0.1, 0.4], dtype=np.float32),
+        config.split,
+    )
+    train_indices = {int(index) for index in split.train}
+    chunked_indices: list[int] = []
+    original_make_cell_set_chunks = train_module.make_cell_set_chunks
 
-    paths = run_training(load_config(config_path))
+    def fail_non_train_target_chunking(*args: object, **kwargs: object) -> object:
+        index = int(args[1])
+        chunked_indices.append(index)
+        if index not in train_indices:
+            raise AssertionError(
+                "validation/final prediction must not inspect target chunks"
+            )
+        return original_make_cell_set_chunks(*args, **kwargs)
+
+    monkeypatch.setattr(
+        train_module,
+        "make_cell_set_chunks",
+        fail_non_train_target_chunking,
+    )
+
+    paths = run_training(config)
 
     assert paths["train_log"].exists()
     assert paths["test_metrics"].exists()
@@ -1751,8 +2063,9 @@ train:
         "epoch",
         "gpu_peak_memory_allocated_mb",
         "train_total_loss",
-        "val_total_loss",
+        "val_spearman",
     }.issubset(train_log.columns)
+    assert set(chunked_indices).issubset(train_indices)
     expected_loss_cols = {
         "hvg_mean_delta",
         "hvg_energy",
@@ -1764,6 +2077,23 @@ train:
         "pred_rank",
         "total_loss",
     }
+    assert {f"val_{column}" for column in expected_loss_cols}.isdisjoint(
+        train_log.columns
+    )
+    best_metadata = json.loads(
+        (paths["run_dir"] / "models" / "best" / "metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    selected_epoch = int(best_metadata["epoch"])
+    selected_val_spearman = float(
+        train_log.loc[train_log["epoch"] == selected_epoch, "val_spearman"].iloc[0]
+    )
+    assert best_metadata["selection_metric"] == "val_spearman"
+    if math.isnan(selected_val_spearman):
+        assert math.isnan(float(best_metadata["metric_value"]))
+    else:
+        assert float(best_metadata["metric_value"]) == selected_val_spearman
     assert expected_loss_cols.isdisjoint(test_metrics.columns)
     assert {"rmse", "spearman"}.issubset(test_metrics.columns)
     assert {"obs_rmse", "obs_spearman"}.isdisjoint(test_metrics.columns)
@@ -2334,6 +2664,26 @@ def _write_toy_external_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     overlap_path = tmp_path / "external_overlap.csv"
     overlap.to_csv(overlap_path, index=False)
     return source_a, source_b, overlap_path
+
+
+def _assert_nested_tensors_close(actual: object, expected: object) -> None:
+    if isinstance(actual, torch.Tensor) and isinstance(expected, torch.Tensor):
+        torch.testing.assert_close(actual, expected)
+        return
+    if actual is None or expected is None:
+        assert actual is expected
+        return
+    if isinstance(actual, dict) and isinstance(expected, dict):
+        assert actual.keys() == expected.keys()
+        for key in actual:
+            _assert_nested_tensors_close(actual[key], expected[key])
+        return
+    if isinstance(actual, tuple) and isinstance(expected, tuple):
+        assert len(actual) == len(expected)
+        for actual_value, expected_value in zip(actual, expected, strict=True):
+            _assert_nested_tensors_close(actual_value, expected_value)
+        return
+    assert actual == expected
 
 
 def _write_external_source(path: Path, labels: list[str], offset: float) -> Path:

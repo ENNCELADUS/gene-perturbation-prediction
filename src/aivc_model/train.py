@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import json
 import logging
 import math
@@ -36,6 +38,7 @@ from tqdm import tqdm
 from aivc_model.model import (
     AivcModel,
     ExpressionToLatentProjector,
+    FixedGMMFeatureizer,
     LossWeights,
     MLPHead,
     PerturbationVectorAdapter,
@@ -101,6 +104,128 @@ _FINAL_PREDICTION_COLUMNS = [
     "y_pred",
     "n_chunks",
 ]
+_BYTES_PER_GIB = 1024**3
+
+
+@dataclass(frozen=True)
+class _InputTensorCache:
+    control_input: torch.Tensor
+    input_bags: tuple[torch.Tensor, ...]
+    latent_bags: tuple[torch.Tensor, ...]
+    batch_bags: tuple[torch.Tensor | None, ...]
+    control_batch: torch.Tensor | None
+    estimated_bytes: int
+
+    @classmethod
+    def estimate_bytes(cls, data: GeneBags, batch_lookup: dict[str, int]) -> int:
+        del batch_lookup
+        total = _float32_array_bytes(data.control_input)
+        total += sum(_float32_array_bytes(bag) for bag in data.input_bags)
+        total += sum(_float32_array_bytes(bag) for bag in data.latent_bags)
+        total += _label_array_bytes(data.control_batch)
+        if data.batch_bags is not None:
+            total += sum(_label_array_bytes(labels) for labels in data.batch_bags)
+        return int(total)
+
+    @classmethod
+    def build(
+        cls,
+        data: GeneBags,
+        batch_lookup: dict[str, int],
+        device: torch.device,
+    ) -> _InputTensorCache:
+        batch_bags: tuple[torch.Tensor | None, ...]
+        if data.batch_bags is None:
+            batch_bags = tuple(None for _ in data.input_bags)
+        else:
+            batch_bags = tuple(
+                _batch_tensor(labels, batch_lookup, device)
+                for labels in data.batch_bags
+            )
+        return cls(
+            control_input=torch.as_tensor(
+                np.asarray(data.control_input, dtype=np.float32),
+                dtype=torch.float32,
+                device=device,
+            ),
+            input_bags=tuple(
+                torch.as_tensor(
+                    np.asarray(bag, dtype=np.float32),
+                    dtype=torch.float32,
+                    device=device,
+                )
+                for bag in data.input_bags
+            ),
+            latent_bags=tuple(
+                torch.as_tensor(
+                    np.asarray(bag, dtype=np.float32),
+                    dtype=torch.float32,
+                    device=device,
+                )
+                for bag in data.latent_bags
+            ),
+            batch_bags=batch_bags,
+            control_batch=_batch_tensor(data.control_batch, batch_lookup, device),
+            estimated_bytes=cls.estimate_bytes(data, batch_lookup),
+        )
+
+    @classmethod
+    def maybe_build(
+        cls,
+        data: GeneBags,
+        batch_lookup: dict[str, int],
+        device: torch.device,
+        max_bytes: int,
+        *,
+        allow_cpu: bool = False,
+    ) -> _InputTensorCache | None:
+        if max_bytes <= 0 or (device.type != "cuda" and not allow_cpu):
+            return None
+        estimated_bytes = cls.estimate_bytes(data, batch_lookup)
+        if estimated_bytes > max_bytes:
+            return None
+        return cls.build(data, batch_lookup, device)
+
+
+def _float32_array_bytes(array: np.ndarray) -> int:
+    return int(np.size(array)) * int(np.dtype(np.float32).itemsize)
+
+
+def _label_array_bytes(labels: np.ndarray | None) -> int:
+    if labels is None:
+        return 0
+    return int(np.size(labels)) * int(np.dtype(np.int64).itemsize)
+
+
+def _gib_to_bytes(value: float) -> int:
+    return int(float(value) * _BYTES_PER_GIB)
+
+
+def _log_input_tensor_cache_state(
+    cache: _InputTensorCache | None,
+    estimated_bytes: int,
+    max_bytes: int,
+    device: torch.device,
+) -> None:
+    estimated_gib = estimated_bytes / _BYTES_PER_GIB
+    max_gib = max_bytes / _BYTES_PER_GIB
+    if cache is None:
+        reason = "device is not cuda" if device.type != "cuda" else "cap exceeded"
+        if max_bytes <= 0:
+            reason = "cap is non-positive"
+        _LOGGER.info(
+            "AIVC input tensor cache disabled (%s; estimated %.2f GiB, cap %.2f GiB)",
+            reason,
+            estimated_gib,
+            max_gib,
+        )
+        return
+    _LOGGER.info(
+        "AIVC input tensor cache enabled on %s (estimated %.2f GiB, cap %.2f GiB)",
+        device,
+        estimated_gib,
+        max_gib,
+    )
 
 
 def main() -> None:
@@ -168,25 +293,37 @@ def run_training(
         config_path=config_path,
     )
 
-    train_expr = np.vstack(
-        [data.control_input, *[data.input_bags[i] for i in split.train]]
-    )
-    train_latent = np.vstack(
-        [data.control_latent, *[data.latent_bags[i] for i in split.train]]
-    )
-    projector_weight, projector_bias = fit_linear_projector(
-        train_expr,
-        train_latent,
-        config.projector.ridge_alpha,
-    )
-    featureizer = fit_fixed_gmm(
-        tuple(data.latent_bags[i] for i in split.train),
-        data.control_latent,
-        n_components=config.gmm.n_components,
-        covariance_floor=config.gmm.covariance_floor,
-        random_state=config.train.seed,
-        max_fit_cells=config.gmm.max_fit_cells,
-    )
+    projector_fit: tuple[np.ndarray, np.ndarray] | None = None
+    featureizer: FixedGMMFeatureizer | None = None
+    if accelerator.is_main_process:
+        projector_fit = _fit_or_load_projector_cache(
+            config,
+            data,
+            split,
+            artifacts_dir,
+        )
+        featureizer = _fit_or_load_fixed_gmm_cache(
+            config,
+            data,
+            split,
+            artifacts_dir,
+        )
+    accelerator.wait_for_everyone()
+    if projector_fit is None:
+        projector_fit = _fit_or_load_projector_cache(
+            config,
+            data,
+            split,
+            artifacts_dir,
+        )
+    if featureizer is None:
+        featureizer = _fit_or_load_fixed_gmm_cache(
+            config,
+            data,
+            split,
+            artifacts_dir,
+        )
+    projector_weight, projector_bias = projector_fit
     extra_genes = (
         tuple(str(gene) for gene in external.data.genes) if external is not None else ()
     )
@@ -239,6 +376,19 @@ def run_training(
         val_loader,
         test_loader,
     )
+    input_tensor_cache = _InputTensorCache.maybe_build(
+        data,
+        batch_lookup,
+        accelerator.device,
+        _gib_to_bytes(config.train.input_tensor_cache_max_gib),
+    )
+    if accelerator.is_main_process:
+        _log_input_tensor_cache_state(
+            input_tensor_cache,
+            _InputTensorCache.estimate_bytes(data, batch_lookup),
+            _gib_to_bytes(config.train.input_tensor_cache_max_gib),
+            accelerator.device,
+        )
     rng = np.random.default_rng(config.train.seed + accelerator.process_index)
 
     logs: list[dict[str, float]] = []
@@ -260,17 +410,15 @@ def run_training(
             batch_lookup,
             epoch=epoch,
             max_epochs=config.train.max_epochs,
+            tensor_cache=input_tensor_cache,
         )
-        val_row, _val_predictions = _evaluate(
+        val_row, _val_predictions = _evaluate_prediction_only_final(
             model,
             data,
             val_loader,
-            weights,
-            rng,
             config.train.cell_set_len,
             accelerator,
             batch_lookup,
-            pad_short=True,
         )
         gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(accelerator)
         if accelerator.is_main_process:
@@ -616,6 +764,243 @@ def _wait_for_scvi_latent_cache(
         sleep_fn(min(poll_seconds, timeout_seconds - elapsed))
 
 
+def _fit_or_load_projector_cache(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    artifacts_dir: Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit or load the run-local ridge projector cache."""
+    cache_dir = artifacts_dir / "ridge_projector_fit"
+    metadata = _projector_cache_metadata(config, data, split)
+    cached = _load_projector_cache(cache_dir, metadata)
+    if cached is not None:
+        return cached
+    train_expr = np.vstack(
+        [data.control_input, *[data.input_bags[i] for i in split.train]]
+    )
+    train_latent = np.vstack(
+        [data.control_latent, *[data.latent_bags[i] for i in split.train]]
+    )
+    weight, bias = fit_linear_projector(
+        train_expr,
+        train_latent,
+        config.projector.ridge_alpha,
+    )
+    _write_projector_cache(cache_dir, metadata, weight, bias)
+    return weight, bias
+
+
+def _fit_or_load_fixed_gmm_cache(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+    artifacts_dir: Path,
+) -> FixedGMMFeatureizer:
+    """Fit or load the run-local fixed GMM featureizer cache."""
+    cache_dir = artifacts_dir / "fixed_gmm_fit"
+    metadata = _fixed_gmm_cache_metadata(config, data, split)
+    cached = _load_fixed_gmm_cache(cache_dir, metadata)
+    if cached is not None:
+        return cached
+    featureizer = fit_fixed_gmm(
+        tuple(data.latent_bags[i] for i in split.train),
+        data.control_latent,
+        n_components=config.gmm.n_components,
+        covariance_floor=config.gmm.covariance_floor,
+        random_state=config.train.seed,
+        max_fit_cells=config.gmm.max_fit_cells,
+    )
+    _write_fixed_gmm_cache(cache_dir, metadata, featureizer, data.control_latent)
+    return featureizer
+
+
+def _load_projector_cache(
+    cache_dir: Path,
+    expected_metadata: dict[str, object],
+) -> tuple[np.ndarray, np.ndarray] | None:
+    if not _cache_metadata_matches(cache_dir, expected_metadata):
+        return None
+    payload_path = cache_dir / "projector.npz"
+    if not payload_path.exists():
+        return None
+    try:
+        with np.load(payload_path) as payload:
+            weight = np.asarray(payload["weight"], dtype=np.float32)
+            bias = np.asarray(payload["bias"], dtype=np.float32)
+    except (KeyError, OSError, ValueError):
+        return None
+    return weight, bias
+
+
+def _load_fixed_gmm_cache(
+    cache_dir: Path,
+    expected_metadata: dict[str, object],
+) -> FixedGMMFeatureizer | None:
+    if not _cache_metadata_matches(cache_dir, expected_metadata):
+        return None
+    payload_path = cache_dir / "gmm.npz"
+    if not payload_path.exists():
+        return None
+    try:
+        with np.load(payload_path) as payload:
+            means = np.asarray(payload["means"], dtype=np.float32)
+            variances = np.asarray(payload["variances"], dtype=np.float32)
+            weights = np.asarray(payload["weights"], dtype=np.float32)
+            control_bag = np.asarray(payload["control_bag"], dtype=np.float32)
+    except (KeyError, OSError, ValueError):
+        return None
+    return FixedGMMFeatureizer(means, variances, weights, control_bag)
+
+
+def _cache_metadata_matches(
+    cache_dir: Path,
+    expected_metadata: dict[str, object],
+) -> bool:
+    if not (cache_dir / "COMPLETE").exists():
+        return False
+    metadata_path = cache_dir / "metadata.json"
+    if not metadata_path.exists():
+        return False
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return metadata == expected_metadata
+
+
+def _write_projector_cache(
+    cache_dir: Path,
+    metadata: dict[str, object],
+    weight: np.ndarray,
+    bias: np.ndarray,
+) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    complete_path = cache_dir / "COMPLETE"
+    complete_path.unlink(missing_ok=True)
+    _write_npz_atomic(
+        cache_dir / "projector.npz",
+        {
+            "weight": np.asarray(weight, dtype=np.float32),
+            "bias": np.asarray(bias, dtype=np.float32),
+        },
+    )
+    _write_json_atomic(cache_dir / "metadata.json", metadata)
+    _write_text_atomic(complete_path, "ok\n")
+
+
+def _write_fixed_gmm_cache(
+    cache_dir: Path,
+    metadata: dict[str, object],
+    featureizer: FixedGMMFeatureizer,
+    control_bag: np.ndarray,
+) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    complete_path = cache_dir / "COMPLETE"
+    complete_path.unlink(missing_ok=True)
+    _write_npz_atomic(
+        cache_dir / "gmm.npz",
+        {
+            "means": featureizer.means.detach().cpu().numpy(),
+            "variances": featureizer.variances.detach().cpu().numpy(),
+            "weights": featureizer.log_weights.detach().cpu().exp().numpy(),
+            "control_bag": np.asarray(control_bag, dtype=np.float32),
+        },
+    )
+    _write_json_atomic(cache_dir / "metadata.json", metadata)
+    _write_text_atomic(complete_path, "ok\n")
+
+
+def _projector_cache_metadata(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+) -> dict[str, object]:
+    return {
+        "version": 1,
+        "kind": "ridge_projector_fit",
+        "seed": int(config.train.seed),
+        "projector_config": {
+            "teacher": str(config.projector.teacher),
+            "latent_dim": int(config.projector.latent_dim),
+            "ridge_alpha": float(config.projector.ridge_alpha),
+            "trainable": bool(config.projector.trainable),
+        },
+        "train_indices": [int(index) for index in split.train],
+        "train_genes": [str(data.genes[index]) for index in split.train],
+        "primary": {
+            "control_input": _array_cache_identity(data.control_input),
+            "control_latent": _array_cache_identity(data.control_latent),
+            "train_input_bags": [
+                _array_cache_identity(data.input_bags[index]) for index in split.train
+            ],
+            "train_latent_bags": [
+                _array_cache_identity(data.latent_bags[index]) for index in split.train
+            ],
+        },
+    }
+
+
+def _fixed_gmm_cache_metadata(
+    config: AivcConfig,
+    data: GeneBags,
+    split: GeneSplit,
+) -> dict[str, object]:
+    return {
+        "version": 1,
+        "kind": "fixed_gmm_fit",
+        "seed": int(config.train.seed),
+        "gmm_config": {
+            "n_components": int(config.gmm.n_components),
+            "covariance_floor": float(config.gmm.covariance_floor),
+            "max_fit_cells": (
+                None
+                if config.gmm.max_fit_cells is None
+                else int(config.gmm.max_fit_cells)
+            ),
+        },
+        "train_indices": [int(index) for index in split.train],
+        "train_genes": [str(data.genes[index]) for index in split.train],
+        "primary": {
+            "control_latent": _array_cache_identity(data.control_latent),
+            "train_latent_bags": [
+                _array_cache_identity(data.latent_bags[index]) for index in split.train
+            ],
+        },
+    }
+
+
+def _array_cache_identity(array: np.ndarray) -> dict[str, object]:
+    value = np.ascontiguousarray(np.asarray(array, dtype=np.float32))
+    return {
+        "shape": [int(item) for item in value.shape],
+        "dtype": str(value.dtype),
+        "sha256": hashlib.sha256(value.tobytes()).hexdigest(),
+    }
+
+
+def _write_npz_atomic(path: Path, arrays: dict[str, np.ndarray]) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    with tmp_path.open("wb") as handle:
+        np.savez_compressed(handle, **arrays)
+    tmp_path.replace(path)
+
+
+def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
+
+
+def _write_text_atomic(path: Path, value: str) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(value, encoding="utf-8")
+    tmp_path.replace(path)
+
+
 def _gene_loader(
     indices: np.ndarray,
     *,
@@ -774,6 +1159,7 @@ def _run_epoch(
     *,
     epoch: int,
     max_epochs: int,
+    tensor_cache: _InputTensorCache | None = None,
 ) -> dict[str, float]:
     model.train()
     metric_sum = _empty_metric_sum(accelerator.device)
@@ -807,6 +1193,7 @@ def _run_epoch(
             accelerator.device,
             batch_lookup,
             pad_short=True,
+            tensor_cache=tensor_cache,
         )
         model_inputs["gene_mask"] = valid_mask
         losses = model(weights=weights, **model_inputs)
@@ -837,6 +1224,7 @@ def _evaluate(
     accelerator: Accelerator,
     batch_lookup: dict[str, int],
     pad_short: bool,
+    tensor_cache: _InputTensorCache | None = None,
 ) -> tuple[dict[str, float], pd.DataFrame]:
     model.eval()
     metric_sum = _empty_metric_sum(accelerator.device)
@@ -861,6 +1249,7 @@ def _evaluate(
                 accelerator.device,
                 batch_lookup,
                 pad_short=pad_short,
+                tensor_cache=tensor_cache,
             )
             model_inputs["gene_mask"] = valid_mask
             losses = model(weights=weights, **model_inputs)
@@ -908,6 +1297,12 @@ def _evaluate_prediction_only_final(
     model.eval()
     inference_model = accelerator.unwrap_model(model)
     inference_model.eval()
+    control_cells, control_batch_indices = _final_prediction_control_tensors(
+        data,
+        cell_set_len,
+        accelerator.device,
+        batch_lookup,
+    )
     pred_tensors = []
     with torch.no_grad():
         for batch in indices:
@@ -921,9 +1316,9 @@ def _evaluate_prediction_only_final(
                     data,
                     gene_indices,
                     padding_flags,
-                    cell_set_len,
                     accelerator.device,
-                    batch_lookup,
+                    control_cells,
+                    control_batch_indices,
                 )
             )
     predictions = _gather_final_predictions(pred_tensors, data, accelerator)
@@ -936,43 +1331,47 @@ def _evaluate_prediction_only_final(
     return summary, predictions
 
 
+def _final_prediction_control_tensors(
+    data: GeneBags,
+    cell_set_len: int,
+    device: torch.device,
+    batch_lookup: dict[str, int],
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    if cell_set_len < 1:
+        msg = "cell_set_len must be at least 1"
+        raise ValueError(msg)
+    if data.control_input.shape[0] < 1:
+        msg = "prediction-only final evaluation requires at least one control cell"
+        raise ValueError(msg)
+    control_cells = torch.as_tensor(
+        np.asarray(data.control_input, dtype=np.float32),
+        dtype=torch.float32,
+        device=device,
+    )
+    control_batch_indices = _batch_tensor(data.control_batch, batch_lookup, device)
+    return control_cells, control_batch_indices
+
+
 def _final_prediction_tensor(
     model: torch.nn.Module,
     data: GeneBags,
     gene_indices: list[int],
     padding_flags: list[bool],
-    cell_set_len: int,
     device: torch.device,
-    batch_lookup: dict[str, int],
+    control_cells: torch.Tensor,
+    control_batch_indices: torch.Tensor | None,
 ) -> torch.Tensor:
-    if cell_set_len < 1:
-        msg = "cell_set_len must be at least 1"
-        raise ValueError(msg)
     y_pred: list[torch.Tensor] = []
     n_chunks: list[float] = []
     for index in gene_indices:
         gene = str(data.genes[index])
-        latent_chunks = []
-        chunk_count = 0
-        for start in range(0, data.control_input.shape[0], int(cell_set_len)):
-            end = min(start + int(cell_set_len), data.control_input.shape[0])
-            control_chunk = torch.as_tensor(
-                data.control_input[start:end].astype(np.float32),
-                dtype=torch.float32,
-                device=device,
-            )
-            batch_indices = _control_batch_tensor(
-                data, start, end, batch_lookup, device
-            )
-            _pred_expression, predicted_latent = model.predict_bag(
-                control_chunk,
-                gene,
-                batch_indices,
-            )
-            latent_chunks.append(predicted_latent)
-            chunk_count += 1
-        y_pred.append(model.predict_c_from_latent(torch.cat(latent_chunks, dim=0)))
-        n_chunks.append(float(chunk_count))
+        _pred_expression, predicted_latent = model.predict_bag(
+            control_cells,
+            gene,
+            control_batch_indices,
+        )
+        y_pred.append(model.predict_c_from_latent(predicted_latent))
+        n_chunks.append(1.0)
     return torch.stack(
         [
             torch.as_tensor(gene_indices, dtype=torch.float32, device=device),
@@ -987,17 +1386,6 @@ def _final_prediction_tensor(
         ],
         dim=1,
     )
-
-
-def _control_batch_tensor(
-    data: GeneBags,
-    start: int,
-    end: int,
-    batch_lookup: dict[str, int],
-    device: torch.device,
-) -> torch.Tensor | None:
-    labels = data.control_batch[start:end] if data.control_batch is not None else None
-    return _batch_tensor(labels, batch_lookup, device)
 
 
 def _gather_final_predictions(
@@ -1041,6 +1429,7 @@ def _model_inputs_for_indices(
     batch_lookup: dict[str, int],
     *,
     pad_short: bool,
+    tensor_cache: _InputTensorCache | None = None,
 ) -> tuple[dict[str, Any], torch.Tensor, torch.Tensor]:
     genes: list[str] = []
     control_chunk_groups: list[tuple[torch.Tensor, ...]] = []
@@ -1063,37 +1452,58 @@ def _model_inputs_for_indices(
         genes.append(gene)
         control_chunk_groups.append(
             tuple(
-                torch.as_tensor(
-                    data.control_input[chunk.control_indices].astype(np.float32),
-                    dtype=torch.float32,
-                    device=device,
+                _cached_or_numpy_rows(
+                    tensor_cache.control_input if tensor_cache is not None else None,
+                    data.control_input,
+                    chunk.control_indices,
+                    device,
                 )
                 for chunk in chunks
             )
         )
         target_expression_groups.append(
             tuple(
-                torch.as_tensor(
-                    data.input_bags[index][chunk.target_indices].astype(np.float32),
-                    dtype=torch.float32,
-                    device=device,
+                _cached_or_numpy_rows(
+                    (
+                        tensor_cache.input_bags[index]
+                        if tensor_cache is not None
+                        else None
+                    ),
+                    data.input_bags[index],
+                    chunk.target_indices,
+                    device,
                 )
                 for chunk in chunks
             )
         )
         target_latent_groups.append(
             tuple(
-                torch.as_tensor(
-                    data.latent_bags[index][chunk.target_indices].astype(np.float32),
-                    dtype=torch.float32,
-                    device=device,
+                _cached_or_numpy_rows(
+                    (
+                        tensor_cache.latent_bags[index]
+                        if tensor_cache is not None
+                        else None
+                    ),
+                    data.latent_bags[index],
+                    chunk.target_indices,
+                    device,
                 )
                 for chunk in chunks
             )
         )
         batch_index_groups.append(
             tuple(
-                _batch_tensor(chunk.target_batch, batch_lookup, device)
+                _cached_or_encoded_labels(
+                    (
+                        tensor_cache.batch_bags[index]
+                        if tensor_cache is not None
+                        else None
+                    ),
+                    chunk.target_batch,
+                    chunk.target_indices,
+                    batch_lookup,
+                    device,
+                )
                 for chunk in chunks
             )
         )
@@ -1114,6 +1524,42 @@ def _model_inputs_for_indices(
         torch.as_tensor(fallback_counts, dtype=torch.float32, device=device),
         torch.as_tensor(n_chunks, dtype=torch.float32, device=device),
     )
+
+
+def _cached_or_numpy_rows(
+    cached: torch.Tensor | None,
+    array: np.ndarray,
+    indices: np.ndarray,
+    device: torch.device,
+) -> torch.Tensor:
+    if cached is not None:
+        return _take_cached_rows(cached, indices)
+    return torch.as_tensor(
+        array[indices].astype(np.float32),
+        dtype=torch.float32,
+        device=device,
+    )
+
+
+def _cached_or_encoded_labels(
+    cached: torch.Tensor | None,
+    labels: np.ndarray | None,
+    indices: np.ndarray,
+    batch_lookup: dict[str, int],
+    device: torch.device,
+) -> torch.Tensor | None:
+    if cached is not None:
+        return _take_cached_rows(cached, indices)
+    return _batch_tensor(labels, batch_lookup, device)
+
+
+def _take_cached_rows(cached: torch.Tensor, indices: np.ndarray) -> torch.Tensor:
+    index_tensor = torch.as_tensor(
+        indices,
+        dtype=torch.long,
+        device=cached.device,
+    )
+    return cached.index_select(0, index_tensor)
 
 
 def _metric_tensor_from_losses(
@@ -1216,85 +1662,6 @@ def _gather_predictions(
         for row in gathered
     ]
     return pd.DataFrame(rows, columns=_PREDICTION_COLUMNS)
-
-
-def _loss_for_index(
-    model: torch.nn.Module,
-    data: GeneBags,
-    index: int,
-    weights: LossWeights,
-    rng: np.random.Generator,
-    cell_set_len: int,
-    device: torch.device,
-    batch_lookup: dict[str, int],
-    pad_short: bool,
-) -> tuple[dict[str, float | torch.Tensor], float, float]:
-    gene = str(data.genes[index])
-    chunks = make_cell_set_chunks(
-        data,
-        index,
-        cell_set_len=cell_set_len,
-        rng=rng,
-        pad_short=pad_short,
-        shuffle=True,
-    )
-    control_chunks = tuple(
-        torch.as_tensor(
-            data.control_input[chunk.control_indices].astype(np.float32),
-            dtype=torch.float32,
-            device=device,
-        )
-        for chunk in chunks
-    )
-    target_expression_chunks = tuple(
-        torch.as_tensor(
-            data.input_bags[index][chunk.target_indices].astype(np.float32),
-            dtype=torch.float32,
-            device=device,
-        )
-        for chunk in chunks
-    )
-    target_latent_chunks = tuple(
-        torch.as_tensor(
-            data.latent_bags[index][chunk.target_indices].astype(np.float32),
-            dtype=torch.float32,
-            device=device,
-        )
-        for chunk in chunks
-    )
-    batch_index_chunks = tuple(
-        _batch_tensor(chunk.target_batch, batch_lookup, device) for chunk in chunks
-    )
-    y = torch.tensor(float(data.y[index]), dtype=torch.float32, device=device)
-    losses = model(
-        gene=gene,
-        control_chunks=control_chunks,
-        target_expression_chunks=target_expression_chunks,
-        target_latent_chunks=target_latent_chunks,
-        batch_index_chunks=batch_index_chunks,
-        y=y,
-        weights=weights,
-    )
-    fallback_count = sum(chunk.control_fallback_count for chunk in chunks)
-    row: dict[str, float | torch.Tensor] = {
-        "total_tensor": losses["total"],
-        "total_loss": float(losses["total"].detach().cpu()),
-        "hvg_mean_delta": float(losses["hvg_mean_delta"].detach().cpu()),
-        "hvg_energy": float(losses["hvg_energy"].detach().cpu()),
-        "latent_mean_delta": float(losses["latent_mean_delta"].detach().cpu()),
-        "latent_energy": float(losses["latent_energy"].detach().cpu()),
-        "pred_c": float(losses["pred_c"].detach().cpu()),
-        "obs_c": float(losses["obs_c"].detach().cpu()),
-        "occupancy": float(losses["occupancy"].detach().cpu()),
-        "pred_rank": float(losses["pred_rank"].detach().cpu()),
-        "control_fallback_count": float(fallback_count),
-        "n_chunks": float(len(chunks)),
-    }
-    return (
-        row,
-        float(losses["pred_y"].detach().cpu()),
-        float(losses["obs_y"].detach().cpu()),
-    )
 
 
 def _batch_indices(batch: Any) -> list[int]:

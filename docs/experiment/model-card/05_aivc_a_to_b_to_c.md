@@ -56,6 +56,13 @@ $$
 B_g = \{x^1_{g1}, x^1_{g2}, \ldots, x^1_{gn_g}\}
 $$
 
+During A->B training, the sampled control chunk is intentionally matched to the
+target response chunk's optional batch labels. `make_cell_set_chunks` records
+those target batch labels, samples matching control cells when control batch
+annotations exist, and passes the corresponding batch labels through the
+STATE/ST adapter. The target response chunk is used here as set-level A->B
+supervision.
+
 The STATE/ST adapter predicts an expression/HVG response:
 
 $$
@@ -78,11 +85,12 @@ $$
 where $y_g$ is the DepMap K562 GeneEffect label, $\phi_B$ is the fixed GMM
 distribution featureizer, and $h_\omega$ is the MLP dependency head.
 
-Final internal/external test evaluation is prediction-only. It computes
-`y_pred` from all available control cells plus perturbation identity, using
-`train.cell_set_len` control chunks with a variable final chunk. It does not use
-the evaluated gene's observed response bag, target cell count, or target batch
-labels.
+Epoch validation and final internal/external test evaluation are
+prediction-only. They compute `y_pred` from all available control cells plus
+perturbation identity, using one same-gene STATE call per evaluated perturbation
+gene. They do not use the evaluated gene's observed response bag, target cell
+count, or target batch labels. `models/best/` is selected by `val_spearman` from
+this prediction-only validation path.
 
 ## Implemented Model Components
 
@@ -172,13 +180,14 @@ $$
 h_\omega(\phi_B(B^z_g))
 $$
 
-This observed-B anchor is a supervised train/validation diagnostic for measuring
-the gap between observed-B->C and predicted-B->C during development. It is not a
-deployable test-time predictor and is omitted from final test artifacts.
+This observed-B anchor is a supervised training diagnostic for measuring the gap
+between observed-B->C and predicted-B->C during development. It is not used for
+validation checkpoint selection, is not a deployable test-time predictor, and is
+omitted from validation and final test artifacts.
 
 ## Objective
 
-For each perturbation gene, the implemented loss combines set-level A->B
+For each training perturbation gene, the implemented loss combines set-level A->B
 supervision with C-side dependency supervision:
 
 $$
@@ -264,11 +273,12 @@ Current outputs include:
 
 | Readout | Current artifact |
 | --- | --- |
-| Train and validation loss components | `train_log.csv` |
+| Train diagnostics and prediction-only validation metrics | `train_log.csv` |
 | Final predicted-B->C regression/ranking metrics | `test_metrics.csv` |
 | Per-gene prediction-only outputs | `artifacts/test_predictions.csv` |
 | Split membership | `artifacts/gene_splits.csv` |
 | External source QA | `artifacts/external_test_qa.json` |
+| Run-local projector/GMM fit caches | `artifacts/ridge_projector_fit/`, `artifacts/fixed_gmm_fit/` |
 | Checkpoints | `models/best/`, `models/final/` |
 
 The intended final readout should also separate forward-model quality from

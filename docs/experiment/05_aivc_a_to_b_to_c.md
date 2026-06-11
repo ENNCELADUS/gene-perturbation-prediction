@@ -67,6 +67,20 @@ ranks wait for that cache before entering the main AIVC training loop. The
 linear projector maps STATE expression/HVG outputs into the scVI latent space
 used by the GMM featureizer.
 
+During A->B training, `make_cell_set_chunks` intentionally builds target
+response chunks first, records their optional target batch labels, samples
+batch-matched control chunks when control batch annotations are available, and
+passes the corresponding batch labels into STATE. This is the supervised
+training contract for reducing batch confounding in set-level A->B losses; it is
+not a validation or final-inference dependency on the target response bag.
+
+Epoch validation is prediction-only and aligned to the final evaluation path:
+all available control cells are cached on device, combined with the perturbation
+identity in one same-gene STATE call, converted to predicted `B_hat`, and scored
+through the C head as `y_pred`. Validation does not build observed target
+response chunks, does not use target batch labels or target cell counts, and
+selects `models/best/` by `val_spearman` from those prediction-only metrics.
+
 The ranknet/freeze-state config freezes the STATE adapter, trains the projector,
 perturbation vectors for missing genes, and C head, adds pairwise RankNet loss on
 predicted GeneEffect within each local gene batch, and anneals the A->B losses.
@@ -77,23 +91,26 @@ Main-rank outputs are:
 
 | Artifact | Path under run directory |
 | --- | --- |
-| Per-epoch train/validation log | `train_log.csv` |
+| Per-epoch train diagnostics and prediction-only validation metrics | `train_log.csv` |
 | Final evaluation metrics | `test_metrics.csv` |
 | Final predictions | `artifacts/test_predictions.csv` |
 | Gene split record | `artifacts/gene_splits.csv` |
 | External-test QA, when configured | `artifacts/external_test_qa.json` |
+| Run-local ridge projector cache | `artifacts/ridge_projector_fit/` |
+| Run-local fixed GMM cache | `artifacts/fixed_gmm_fit/` |
 | Best checkpoint | `models/best/` |
 | Final checkpoint | `models/final/` |
 
 For external Adamson runs, `test_metrics.csv` and `test_predictions.csv` use
 `evaluation_scope=external:adamson_k562`.
 
-Final internal/external test evaluation is prediction-only: `y_pred` is computed
-from all available control cells plus perturbation identity, split into
-`train.cell_set_len` control chunks with a variable final chunk. The final path
+Final internal/external test evaluation uses the same prediction-only contract:
+`y_pred` is computed from all available control cells plus perturbation identity,
+using one same-gene STATE call per evaluated perturbation gene. The final path
 does not use the evaluated gene's observed response bag, target cell count, or
-target batch labels, and final artifacts omit observed-B anchor metrics and
-A->B reconstruction losses.
+target batch labels. Validation and final artifacts omit observed-B anchor
+metrics and A->B reconstruction losses; those remain training diagnostics under
+`train_*` columns.
 
 ## Known Limitations
 

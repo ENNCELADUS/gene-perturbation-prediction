@@ -76,13 +76,9 @@ class StateConfig:
     backend: str = "state_checkpoint"
     checkpoint_path: Path | None = None
     model_dir: Path | None = None
-    embed_key: str = "X_hvg"
     input_dim: int | None = None
     output_dim: int | None = None
     pert_dim: int | None = None
-    hidden_dim: int = 128
-    cell_set_len: int = 128
-    allow_mock: bool = False
     known_perturbation_vectors: Path | None = None
 
 
@@ -144,6 +140,7 @@ class TrainConfig:
     device: str = "auto"
     float32_matmul_precision: str | None = "high"
     freeze_state: bool = False
+    input_tensor_cache_max_gib: float = 24.0
 
 
 @dataclass(frozen=True)
@@ -1726,13 +1723,9 @@ def _state_config(values: dict[str, Any]) -> StateConfig:
         backend=str(values.get("backend", "state_checkpoint")),
         checkpoint_path=_path_or_none(values.get("checkpoint_path")),
         model_dir=_path_or_none(values.get("model_dir")),
-        embed_key=str(values.get("embed_key", "X_hvg")),
         input_dim=_int_or_none(values.get("input_dim")),
         output_dim=_int_or_none(values.get("output_dim")),
         pert_dim=_int_or_none(values.get("pert_dim")),
-        hidden_dim=int(values.get("hidden_dim", 128)),
-        cell_set_len=int(values.get("cell_set_len", 128)),
-        allow_mock=bool(values.get("allow_mock", False)),
         known_perturbation_vectors=_path_or_none(
             values.get("known_perturbation_vectors")
         ),
@@ -1814,6 +1807,9 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
             values.get("float32_matmul_precision", "high")
         ),
         freeze_state=_bool_value(values.get("freeze_state", False)),
+        input_tensor_cache_max_gib=float(
+            values.get("input_tensor_cache_max_gib", 24.0)
+        ),
     )
 
 
