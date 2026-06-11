@@ -71,10 +71,24 @@ prediction collection uses fixed-shape tensor collectives, not Python object
 gather. Accelerate DDP is configured with unused-parameter detection for sparse
 per-gene perturbation-vector parameters.
 
-The current Replogle K562 STATE experiment uses `train.cell_set_len: 256`,
-`state.cell_set_len: 256`, `train.gene_batch_size: 4`, and a scaled
+Training is the only epoch path that builds observed target response chunks for
+A->B losses and observed-B anchor diagnostics. Validation and final evaluation
+are prediction-only: they use all available control cells plus perturbation
+identity in one same-gene STATE call per evaluated perturbation gene, emit
+regression/ranking metrics, and select `models/best/` by `val_spearman`.
+
+The current Replogle K562 STATE experiment uses `data.state_embed_key: X_hvg`,
+`train.cell_set_len: 256`, `train.gene_batch_size: 4`, and a scaled
 `train.learning_rate: 0.000025` because the four local gene losses are summed
-before backward.
+before backward. The `state` block only selects and locates the forward model
+and perturbation vectors; embedding selection and cell-set length are controlled
+by `data.state_embed_key` and `train.cell_set_len`.
+
+Training can cache source expression tensors and encoded batch labels on CUDA
+to reduce repeated NumPy slice-to-tensor conversion in the observed target
+chunk path. The cache is guarded by `train.input_tensor_cache_max_gib`, defaults
+to `24.0`, and falls back to the uncached path on CPU, non-positive caps, or
+estimated cache sizes above the cap.
 
 When `projector.teacher: scvi`, the rank0 teacher fit configures Lightning
 quietly for this internal preprocessing step: set `scvi_num_workers` explicitly
@@ -97,6 +111,11 @@ cache is reused only when its metadata matches the current primary genes,
 external-test identity, feature names, latent dimension, seed, and teacher
 settings. During a cache miss, rank0 loads the saved teacher once and logs
 projection progress every 50 genes.
+
+The ridge expression-to-latent projector and fixed GMM featureizer also use
+run-local metadata caches under `artifacts/ridge_projector_fit/` and
+`artifacts/fixed_gmm_fit/`. These caches are reused only when train genes,
+config, seed, input shapes, and input digests match the current run.
 
 After dependency or lockfile changes, run:
 

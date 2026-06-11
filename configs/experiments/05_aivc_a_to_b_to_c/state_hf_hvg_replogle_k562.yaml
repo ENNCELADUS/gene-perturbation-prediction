@@ -44,13 +44,9 @@ state:
   backend: state_checkpoint
   model_dir: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562
   checkpoint_path: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
-  embed_key: X_hvg
   input_dim: null
   output_dim: null
   pert_dim: null
-  hidden_dim: 768
-  cell_set_len: 256
-  allow_mock: false
   known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
 
 projector:

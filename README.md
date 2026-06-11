@@ -227,14 +227,19 @@ Project assets:
   `docs/experiment/`; Adamson held-out test settings live inside the experiment
   configs that use Adamson.
 - `src/dependency_baseline/`: feature building and CV baseline package.
+- `src/aivc_model/`: current experiment 05 AIVC STATE implementation, launched
+  by `src/aivc_model/train.py` rather than the baseline CLI.
+- `scripts/state.sh`: Slurm wrapper for the current experiment 05 AIVC STATE
+  run.
 - `tests/`: synthetic-data tests for the baseline package.
 - `data/norman/splits/`: retained Norman split metadata.
 - `scGPT/`: local scGPT reference code.
 - `pyproject.toml` / `uv.lock`: Python environment metadata.
 
-The old `src_tahoe/`, `scripts/`, and historical result folders were removed
-from `main`. Do not document or rely on old `uv run vcc` or `uv run vcc-tahoe`
-pipeline commands.
+The normal implemented pipeline entrypoint is `uv run vcc-dep-baseline`. The
+current experiment 05 AIVC STATE path is the exception: use
+`src/aivc_model/train.py`, with `scripts/state.sh` as the Slurm launcher. Do not
+document or rely on old `uv run vcc` or `uv run vcc-tahoe` pipeline commands.
 
 ## Environment
 
@@ -253,6 +258,7 @@ uv run ruff check .
 uv run ruff format .
 uv run python -m pytest
 uv run vcc-dep-baseline build-features --config configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
+uv run python src/aivc_model/train.py --config configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml
 ```
 
 Tests are present under `tests/`. If a future branch removes tests during a

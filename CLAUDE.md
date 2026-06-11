@@ -38,6 +38,10 @@ uv run vcc-dep-baseline run-cv --config configs/experiments/01_replogle_k562_pse
 uv run vcc-dep-baseline build-cell-bags --config configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
 uv run vcc-dep-baseline run-single-cell-cv --config configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
 uv run vcc-dep-baseline summarize --results-dir <run_dir>
+
+# Experiment 05 AIVC STATE exception
+uv run python src/aivc_model/train.py --config configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml
+bash scripts/state.sh  # Slurm wrapper for the same AIVC STATE entrypoint
 ```
 
 ## Pipeline Architecture
@@ -175,7 +179,9 @@ context evidence before using SL language.
 - Uses `uv` with project-local `.venv`.
 - Prefix all Python/pytest/ruff invocations with `uv run`.
 - Run `uv sync` if dependencies are missing or lockfile changed.
-- The only valid CLI entry point is `uv run vcc-dep-baseline`.
+- The normal implemented pipeline entrypoint is `uv run vcc-dep-baseline`.
+- Experiment 05 AIVC STATE is the current exception: run
+  `src/aivc_model/train.py` directly, or use `scripts/state.sh` on Slurm.
 
 ## Commit Guidelines
 
