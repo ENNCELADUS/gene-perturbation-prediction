@@ -35,6 +35,9 @@ Default STATE config:
 Current Slurm config:
 `configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml`.
 
+Frozen STATE feature ablation config:
+`configs/experiments/05_aivc_a_to_b_to_c/state_frozen_feature_ablation.yaml`.
+
 Direct command:
 
 ```bash
@@ -52,6 +55,29 @@ The current configs use Replogle K562 CRISPRi data with a perturbation-gene
 split of `train_fraction: 0.9`, `val_fraction: 0.1`, and
 `test_fraction: 0.0`. Adamson K562 pilot, UPR epistasis, and UPR Perturb-seq
 sources are configured as `external:adamson_k562`.
+
+## Frozen STATE Feature Ablation
+
+The next 05 ablation is designed as a two-stage validation sweep rather than
+another end-to-end AIVC training run. STATE is frozen, predicted/control bags are
+exported into several representation spaces, and fold-local K64 diagonal GMM
+features plus Ridge C heads are fit with Replogle 5-fold gene CV.
+
+The configured arms are:
+
+| Arm | Role |
+| --- | --- |
+| Observed scVI128 GMM+Ridge | Diagnostic observed-B anchor only |
+| STATE output -> fold-local scVI128 -> GMM+Ridge | Predicted output re-encoded through the experiment 03/04 scVI pattern |
+| STATE output/HVG -> GMM+Ridge | Direct STATE output-space C head |
+| STATE token hidden -> GMM+Ridge | Transformer hidden-space C head using same-path non-targeting control embeddings |
+
+Primary model selection should read
+`external_ensemble_target_heldout:adamson_k562` Spearman as an Adamson-guided
+validation sweep. It is not an untouched final external-generalization claim.
+The ablation writes fold metrics, per-gene predictions, fold membership, feature
+QA, GMM convergence metadata, and `run_manifest.json` under
+`results/experiments/05_aivc_a_to_b_to_c`.
 
 ## Training and DDP Pipeline
 
