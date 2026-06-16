@@ -1,0 +1,290 @@
+# SL_benchmark 2024 Synthetic-Lethality Benchmark
+
+## Role
+
+External synthetic-lethality pair benchmark for Stage 3. Use it to evaluate
+gene-pair SL scoring or ranking after K562 response features have been adapted
+to pair-level records.
+
+This is not a DepMap GeneEffect regression dataset and not a single-cell
+perturbation dataset. The supervised object is an undirected gene pair:
+
+```text
+(gene_a, gene_b) -> binary SL interaction label or pair score
+```
+
+For this project, K562 perturbation-response features can be joined as evidence
+for one or both genes in a pair, but the benchmark label remains a gene-pair SL
+label.
+
+## Sources
+
+- Paper: Feng et al., "Benchmarking machine learning methods for synthetic
+  lethality prediction in cancer", Nature Communications 15, 9058, published
+  2024-10-20.
+- Local paper PDF:
+  `docs/literature/literature/02_data/benchmarks/2024_nature_communications_benchmarking_machine_learning_methods_for_synthetic_lethality_prediction_in_cancer.pdf`
+- Official GitHub:
+  `https://github.com/JieZheng-ShanghaiTech/SL_benchmark.git`
+- Local checkout: `data/SL_benchmark`
+- Local checkout commit: `04274e801b820a81f8dd92eb362d154086b80d9a`
+- Dataset DOI in the official README:
+  `https://doi.org/10.5281/zenodo.14025191`
+
+## Local Files Checked on 2026-06-16
+
+Local root: `data/SL_benchmark`
+
+| Path | Role |
+| --- | --- |
+| `README.md` | Official benchmark usage, environment, data download, and model list. |
+| `src/main.py` | Official entrypoint; exposes `-m`, `-ns`, `-ds`, `-pn`, and `--save_mat`. |
+| `src/preprocess.py` | Split construction, negative sampling, independent-test loading, and metrics. |
+| `src/summary_all_matrics.csv` | Published-style aggregate result table, 12 models x 3 negative sampling methods. |
+| `data/fin_entities.csv` | Unified entity table; columns are `unified_id`, `entity_type`, `entity_type_name`, `entity_name`. |
+| `data/predicted_by_model.csv` | Model-ranked pair predictions; columns are `id_a`, `id_b`, `model`, `rank`. |
+| `data/data_split/*.npy` | Cached 5-fold positive and negative train/test pair matrices for CV1/CV2/CV3. |
+| `data/data_split/*_indep_test.pkl` | Cached independent-test variants, not cell-line-specific by filename. |
+| `data/data_small.tar.gz.partaa` ... `partae` | Downloaded small archive parts. |
+| `data/data_small.tar.gz.md5`, `data/data_small.tar.gz.part.md5` | Official checksums for the small archive and parts. |
+
+The current local tree does not contain `data/preprocessed_data/`, so raw
+tables such as `human_sl_9845.csv`, `human_sl_6460.csv`,
+`sorted_neg_ids_scores_exp.npy`, and `sorted_neg_ids_scores_dep.npy` are not
+available at the checked path. Use the existing `data_split` caches for
+benchmark-split inspection, or reassemble/extract the archive if raw
+preprocessed tables are needed.
+
+No local file matching `*k562*`, `*a549*`, `*293t*`, or `*hela*` was present
+under `data/SL_benchmark` on 2026-06-16. The official code supports
+cell-line-specific independent-test suffixes such as `_cell_k562`, but this
+local checkout does not currently include those files.
+
+## Benchmark Definition
+
+The paper constructs a benchmark dataset from SynLethDB 2.0 and related
+biological resources. After filtering, it reports:
+
+- 9845 unique genes.
+- 35913 positive SL gene pairs.
+- Positive labels come from SynLethDB-derived known SL pairs; a subset is
+  experimentally identified by CRISPR, RNAi, or text mining, while another
+  subset is computationally predicted.
+- The official benchmark also uses GO, PPI, pathway, protein-complex,
+  protein-sequence, knowledge-graph, gene-expression, and dependency-score data
+  depending on the model.
+
+The local `data_split` files encode pair matrices over a fixed `9845 x 9845`
+gene universe. Pairs should be treated as undirected unless a downstream task
+explicitly creates an ordered anchor-target view.
+
+## Splits
+
+The official benchmark uses 5-fold cross-validation with three data splitting
+methods:
+
+| Split | Meaning | Use in this project |
+| --- | --- | --- |
+| `CV1` | Pair-level holdout. Both genes in a test pair may appear in other training pairs. | Easiest sanity check for the adapter, but not evidence of held-out-gene generalization. |
+| `CV2` | Gene split where only one gene in a tested pair is present in the training set. | Better approximation of ranking partners for a partly known gene. |
+| `CV3` | Gene split where neither gene in a tested pair is present in the training set. | Cold-start setting; hardest and most relevant for unseen-gene generalization claims. |
+
+Local cache structure for `*.npy` split files:
+
+```text
+array shape: (2, 4, 5)
+axis 0: positive samples, negative samples
+axis 1: graph_train, graph_test, train_pair, test_pair
+axis 2: 5 folds
+```
+
+For example, `data/data_split/CV1_1.npy` has approximately 28730 training
+positive pairs and 7183 test positive pairs per fold, with the same number of
+negative pairs for the `1:1` setting.
+
+## Negative Sampling
+
+The paper evaluates four positive-negative ratios:
+
+```text
+1:1, 1:5, 1:20, 1:50
+```
+
+The official CLI names these ratios with `-pn 1`, `-pn 5`, `-pn 20`, or
+`-pn 50`.
+
+It also evaluates three negative sampling methods:
+
+| Method | Official CLI value | Meaning |
+| --- | --- | --- |
+| Random | `Rand` | Randomly sample unknown/non-SL pairs as negatives. |
+| Expression-informed | `Exp` | Use DepMap cross-cell-line gene-expression correlation to select harder or more biologically controlled negatives. |
+| Dependency-informed | `Dep` | Use DepMap CRISPR dependency-score correlation to select negatives. |
+
+For this project, `Exp` and `Dep` need leakage warnings because they use DepMap
+expression or dependency information, and this repo's primary K562 task also
+uses DepMap GeneEffect labels.
+
+## Metrics
+
+The benchmark evaluates both pair classification and gene ranking:
+
+- Classification: AUROC, AUPR, F1.
+- Ranking: NDCG@10/20/50, Recall@10/20/50, Precision@10/20/50.
+- The official code also computes MAP@10/20/50 in `src/preprocess.py`.
+
+Every model emits a floating-point pair score so the same output can be used
+for thresholded classification and ranked candidate-partner retrieval.
+
+## How to Use in This Project
+
+Use this benchmark as a pair-label adapter target, not as a replacement for the
+existing K562 GeneEffect task.
+
+Recommended minimum route:
+
+```text
+SL_benchmark data_split pair cache
+    -> convert unified_id pairs to gene symbols with fin_entities.csv
+    -> build sl_pairs table with split, fold, label, negative sampling method
+    -> join K562 features by gene symbol
+    -> train/evaluate pair-level classifier or ranker
+```
+
+Suggested canonical adapter schema:
+
+```text
+pair_id
+gene_a_symbol
+gene_b_symbol
+gene_a_unified_id
+gene_b_unified_id
+pair_is_ordered = false
+sl_label
+negative_sampling_method
+positive_negative_ratio
+split_type
+fold_id
+split_role
+source_file
+```
+
+Then build pair features by joining K562 response/dependency features:
+
+```text
+pair_id
+gene_a_symbol
+gene_b_symbol
+sl_label
+candidate_has_k562_response
+candidate_gene_effect_true
+candidate_gene_effect_pred
+candidate_observed_response_features
+candidate_frozen_state_features
+anchor_has_k562_response
+anchor_gene_effect_true
+anchor_observed_response_features
+```
+
+For the first benchmark pass, include a `dependency_only` baseline using only
+K562 DepMap or predicted dependency scores. This checks whether broad
+essentiality explains the SL labels before attributing gains to transcriptomic
+or AIVC features.
+
+## K562 DepMap-Filtered Rand 1:1 CV1 Subset
+
+The helper script `scripts/build_k562_sl_benchmark.py` filters the official
+`CV1_1.npy` Rand 1:1 split cache to pairs whose two genes both have numeric
+K562 DepMap GeneEffect values for `ACH-000551`, then writes the canonical
+minimal CV1 table for first-pass training and evaluation.
+
+Canonical K562 subset:
+
+```text
+data/k562_SL_benchmark_minimal.csv
+```
+
+Run:
+
+```bash
+uv run python scripts/build_k562_sl_benchmark.py
+```
+
+The script also writes provenance and fuller intermediate tables under
+`data/SL_benchmark/derived/k562_depmap_rand_1to1/`, but the default data API
+should consume the canonical root-level CSV above.
+
+Canonical columns:
+
+```text
+pair_id
+fold_id
+split_role
+sl_label
+gene_a_unified_id
+gene_b_unified_id
+gene_a_symbol
+gene_b_symbol
+gene_a_k562_gene_effect
+gene_b_k562_gene_effect
+```
+
+On 2026-06-16, the generated metadata was:
+
+```text
+model_id: ACH-000551
+n_k562_depmap_genes: 17787
+n_sl_gene_entities: 25260
+n_sl_genes_with_k562_depmap: 17538
+```
+
+Canonical CV1 row counts:
+
+```text
+rows: 331730
+positive: 165865
+negative: 165865
+```
+
+This filtered dataset is K562-mappable by DepMap gene coverage. It is still not
+a cell-line-specific K562 SL assay unless a real `*_cell_k562.pkl` split is
+available and verified.
+
+## Official Reproduction Notes
+
+The official repo is a standalone Python 3.7 / Conda / CUDA-era project. Do not
+install its pinned PyTorch Geometric wheels into this repo's `.venv`.
+
+Official-style reproduction should be isolated:
+
+```bash
+cd data/SL_benchmark
+conda env create -f SL-Benchmark.yml
+conda activate SLBench
+pip install ./torch_spline_conv-latest+cu102-cp37-cp37m-linux_x86_64.whl
+pip install ./torch_sparse-latest+cu102-cp37-cp37m-linux_x86_64.whl
+pip install ./torch_scatter-latest+cu102-cp37-cp37m-linux_x86_64.whl
+pip install ./torch_cluster-latest+cu102-cp37-cp37m-linux_x86_64.whl
+cd src
+python main.py -m SLMGAE -ns Rand -ds CV1 -pn 1
+```
+
+For this repo's own adapter code, use the project environment convention:
+
+```bash
+uv run python <adapter_or_inspection_script>.py
+```
+
+## Cautions
+
+- Do not call `DepMap GeneEffect(K562, g)` an SL label.
+- Do not call a K562 essential gene an SL target without pair/context evidence.
+- Treat randomly sampled unknown pairs as noisy negatives, not experimentally
+  confirmed non-SL pairs.
+- Treat `CV1` as a pair split, not a held-out-gene split.
+- Prefer `CV2` or `CV3` for any claim about generalization to unseen genes.
+- Verify actual `*_cell_k562.pkl` files before claiming K562-specific SL
+  benchmark execution. The local checkout checked on 2026-06-16 does not
+  contain those files.
+- Track whether each result uses `Rand`, `Exp`, or `Dep`, because the negative
+  sampling method changes the biological and leakage interpretation.

@@ -174,6 +174,7 @@ add one or more context filters:
 | --- | --- | --- |
 | Perturb-seq / CROP-seq / CRISPRi-seq | Mechanistic response input | Provides post-perturbation scRNA-seq, pseudobulk signatures, or delta expression. |
 | DepMap / Achilles / CCLE | Supervision and context | Provides CRISPR gene-effect scores, dependency labels, omics, lineage, and mutation context. |
+| SL_benchmark 2024 | External SL pair benchmark | Provides SynLethDB-derived gene-pair SL labels, CV1/CV2/CV3 splits, negative sampling strategies, and pair-ranking metrics. Use through a pair-level adapter; it is not a K562 GeneEffect label source. |
 | CancerSCEM / SCAR / CancerSEA | State annotation | Used for apoptosis, stress, cell-cycle, EMT, DNA-damage, or other cancer-state interpretation. |
 | TCGA / patient omics | Disease context | Useful for biomarker-specific framing and translational interpretation after cell-line proof-of-concept. |
 | LINCS L1000 / Tahoe-100M | Later extensions | Useful for bulk or drug perturbation expansion after the gene-perturbation task is stable. |

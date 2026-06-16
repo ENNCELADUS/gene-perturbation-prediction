@@ -13,6 +13,7 @@ class SLBaselineConfig:
     Attributes:
         input_csv: Canonical minimal CV1 benchmark CSV.
         output_dir: Run directory for metrics and manifest.
+        split_types: CV split types to evaluate; ``None`` auto-discovers input.
         folds: CV1 fold ids to evaluate.
         ranking_k: Cutoffs for NDCG/Recall/Precision@k.
         seed: Global seed for deterministic model fits.
@@ -25,6 +26,7 @@ class SLBaselineConfig:
 
     input_csv: Path = Path("data/k562_SL_benchmark_minimal.csv")
     output_dir: Path = Path("experiments/06_k562_sl_pair_dependency_only_mvp/run")
+    split_types: tuple[str, ...] | None = None
     folds: tuple[int, ...] = (0, 1, 2, 3, 4)
     ranking_k: tuple[int, ...] = (10, 20, 50)
     seed: int = 17

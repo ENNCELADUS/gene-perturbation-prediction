@@ -19,9 +19,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     defaults = SLBaselineConfig()
     parser.add_argument("--input-csv", type=Path, default=defaults.input_csv)
     parser.add_argument("--output-dir", type=Path, default=defaults.output_dir)
-    parser.add_argument(
-        "--folds", type=int, nargs="+", default=list(defaults.folds)
-    )
+    parser.add_argument("--split-types", nargs="+", default=None)
+    parser.add_argument("--folds", type=int, nargs="+", default=list(defaults.folds))
     parser.add_argument(
         "--ranking-k", type=int, nargs="+", default=list(defaults.ranking_k)
     )
@@ -36,14 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     config = SLBaselineConfig(
         input_csv=args.input_csv,
         output_dir=args.output_dir,
+        split_types=None if args.split_types is None else tuple(args.split_types),
         folds=tuple(args.folds),
         ranking_k=tuple(args.ranking_k),
         seed=args.seed,
     )
     summary = run_cv(config)
-    logger.info(
-        "Wrote summary with %d rows to %s", len(summary), config.output_dir
-    )
+    logger.info("Wrote summary with %d rows to %s", len(summary), config.output_dir)
     return 0
 
 

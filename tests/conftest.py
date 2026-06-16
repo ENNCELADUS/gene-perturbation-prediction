@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+# macOS OpenMP load-order guard. xgboost and torch each bundle their own libomp;
+# loading torch's runtime first and then fitting xgboost segfaults the process.
+# conftest is imported before any test module, so importing xgboost here pins the
+# safe (xgboost-then-torch) load order for the whole suite. Guarded so the suite
+# still collects if xgboost is absent.
+try:  # noqa: SIM105
+    import xgboost  # noqa: F401
+except ImportError:
+    pass
+
 from pathlib import Path
 
 import numpy as np
@@ -54,3 +64,41 @@ def _write_synthetic_benchmark(path: Path) -> Path:
 def synthetic_benchmark_csv(tmp_path: Path) -> Path:
     """Provide a path to a freshly written synthetic benchmark CSV."""
     return _write_synthetic_benchmark(tmp_path)
+
+
+def _write_synthetic_all_cv_benchmark(path: Path) -> Path:
+    """Write a tiny benchmark CSV with CV1/CV2 sharing fold ids."""
+    rows = []
+    pair_counter = 0
+    for split_type, offset in (("CV1", 0.0), ("CV2", 0.5)):
+        for role, n_each in (("train", 3), ("test", 2)):
+            for label in (1, 0):
+                for index in range(n_each):
+                    rows.append(
+                        {
+                            "pair_id": f"{split_type}_P{pair_counter}",
+                            "split_type": split_type,
+                            "fold_id": 0,
+                            "split_role": role,
+                            "sl_label": label,
+                            "gene_a_symbol": f"{split_type}_GA{index}",
+                            "gene_b_symbol": f"{split_type}_GB{index}",
+                            "gene_a_k562_gene_effect": -1.0 + offset
+                            if label == 1
+                            else 0.2 + offset,
+                            "gene_b_k562_gene_effect": -0.8 + offset
+                            if label == 1
+                            else 0.3 + offset,
+                        }
+                    )
+                    pair_counter += 1
+    frame = pd.DataFrame(rows)
+    csv_path = path / "synthetic_all_cv_sl.csv"
+    frame.to_csv(csv_path, index=False)
+    return csv_path
+
+
+@pytest.fixture
+def synthetic_all_cv_benchmark_csv(tmp_path: Path) -> Path:
+    """Provide a synthetic benchmark CSV with multiple split types."""
+    return _write_synthetic_all_cv_benchmark(tmp_path)

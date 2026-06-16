@@ -16,6 +16,7 @@ REQUIRED_COLUMNS: tuple[str, ...] = (
     "gene_a_k562_gene_effect",
     "gene_b_k562_gene_effect",
 )
+VALID_SPLIT_TYPES: tuple[str, ...] = ("CV1", "CV2", "CV3")
 
 
 def load_benchmark(path: Path) -> pd.DataFrame:
@@ -35,6 +36,16 @@ def load_benchmark(path: Path) -> pd.DataFrame:
     missing = [c for c in REQUIRED_COLUMNS if c not in frame.columns]
     if missing:
         raise ValueError(f"benchmark CSV missing columns: {missing}")
+    if "split_type" not in frame.columns:
+        frame = frame.copy()
+        frame["split_type"] = "CV1"
+    split_types = set(frame["split_type"].unique())
+    invalid_split_types = split_types.difference(VALID_SPLIT_TYPES)
+    if invalid_split_types:
+        raise ValueError(
+            "split_type must be one of "
+            f"{VALID_SPLIT_TYPES}, got {sorted(invalid_split_types)}"
+        )
     labels = set(frame["sl_label"].unique())
     if not labels.issubset({0, 1}):
         raise ValueError(f"sl_label must be in {{0, 1}}, got {sorted(labels)}")
@@ -48,18 +59,19 @@ def load_benchmark(path: Path) -> pd.DataFrame:
 
 
 def fold_split(
-    frame: pd.DataFrame, fold_id: int
+    frame: pd.DataFrame, split_type: str, fold_id: int
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Slice train and test rows for one CV1 fold.
+    """Slice train and test rows for one split/fold evaluation unit.
 
     Args:
         frame: Validated benchmark DataFrame.
-        fold_id: CV1 fold id to extract.
+        split_type: CV split type to extract.
+        fold_id: Fold id to extract.
 
     Returns:
         A ``(train_df, test_df)`` tuple, each reset-indexed.
     """
-    fold = frame[frame["fold_id"] == fold_id]
+    fold = frame[(frame["split_type"] == split_type) & (frame["fold_id"] == fold_id)]
     train_df = fold[fold["split_role"] == "train"].reset_index(drop=True)
     test_df = fold[fold["split_role"] == "test"].reset_index(drop=True)
     return train_df, test_df
