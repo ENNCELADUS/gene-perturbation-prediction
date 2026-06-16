@@ -39,6 +39,25 @@ The population-level DepMap/Achilles CRISPR GeneEffect label for the same
 cell-line and perturbation-gene key. It is a dependency score, not a single-cell
 death label and not a true synthetic-lethality label.
 
+### D: SL Pair Benchmark Label
+
+The downstream gene-pair synthetic-lethality benchmark target used after the
+single-gene K562 dependency bridge. `D` is keyed by a pair of genes and carries a
+binary SL label plus a fold-level train/test role. It is not interchangeable with
+`C`: `C` is `GeneEffect(K562, g)`, while `D` is an SL benchmark label for
+`(gene_a, gene_b)`.
+
+The current canonical K562-mappable CV1 subset is:
+
+```text
+data/k562_SL_benchmark_minimal.csv
+```
+
+This file keeps only SL_benchmark CV1 Rand 1:1 pairs whose two genes both have
+numeric K562 DepMap GeneEffect values for `ACH-000551`. Treat it as a
+pair-level benchmark adapter target with K562 dependency coverage, not as a
+validated K562-specific SL assay.
+
 ### Observed-B -> C
 
 A downstream predictor trained and evaluated on measured post-perturbation

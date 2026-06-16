@@ -39,14 +39,32 @@ uv run vcc-dep-baseline build-cell-bags --config configs/experiments/03_replogle
 uv run vcc-dep-baseline run-single-cell-cv --config configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
 uv run vcc-dep-baseline summarize --results-dir <run_dir>
 
-# Experiment 05 AIVC STATE exception
+# Experiment 05 AIVC STATE exception (run module directly, not via the CLI)
 uv run python src/aivc_model/train.py --config configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml
-bash scripts/state.sh  # Slurm wrapper for the same AIVC STATE entrypoint
+bash scripts/state.sh  # Slurm wrapper (accelerate launch, 4 GPUs) for AIVC STATE training
+
+# Frozen-STATE feature ablation (also a direct-module entrypoint, not the CLI)
+uv run python src/aivc_model/state_feature_ablation.py --config configs/experiments/05_aivc_a_to_b_to_c/state_frozen_feature_ablation.yaml
+bash scripts/state_feature_ablation.sh  # Slurm wrapper for the ablation
+
+# Stage 3 SL benchmark adapter (builds K562-mappable SL pairs)
+uv run python scripts/build_k562_sl_benchmark.py --help
 ```
+
+`vcc-dep-baseline` exposes more subcommands than shown above. Full list:
+`build-features`, `build-cell-bags`, `build-external-cell-bags`,
+`build-external-features`, `run-cv`, `run-single-cell-cv`,
+`evaluate-single-cell-external`, `run-distribution-cv`,
+`evaluate-distribution-external`, `run-predicted-b-cv`, `fit-final`,
+`summarize`, `organize-artifacts`, `viability-axis-report`. Most
+runner subcommands accept `--resume` and repeatable selection flags (`--scope`,
+`--feature-set`, `--model`, `--fold`, `--weighting`) plus `--log-file`.
 
 ## Pipeline Architecture
 
-The `src/dependency_baseline/` package implements a two-track prediction pipeline:
+The `src/dependency_baseline/` package implements a multi-track prediction
+pipeline. Tracks 1-2 are the primary baselines; the distribution and predicted-B
+tracks extend the single-cell track.
 
 ### Track 1: Pseudobulk Delta Baseline
 
@@ -102,6 +120,32 @@ that generate predicted post-perturbation bags, then train scVI/GMM Ridge B_hat
 cell, mean-pooling aggregates the bag, rho network predicts GeneEffect. Handles
 ragged bags via padding + mask. Inner early-stopping validation split.
 
+### Track 3: Distribution / Prototype Regressors
+
+```
+bags.npz → run-distribution-cv (FrozenGMM / CloudPred-style)
+                              ↓
+              evaluate-distribution-external (Adamson transfer)
+```
+
+**Distribution regressors** (`distribution.py`): Treat each perturbation bag as
+a distribution over PC space rather than a permutation-invariant set. Fits a
+frozen GMM on control cells, derives per-bag occupancy/soft-assignment features
+(`_occupancy_feature`, `_feature_from_occupancy`), then a Ridge/forest head to
+GeneEffect. `CloudPredDistributionRegressor` is a learned cloud-pooling variant.
+Run via `run-distribution-cv` / `evaluate-distribution-external`.
+
+### AIVC STATE Forward Model (Experiment 05)
+
+The `src/aivc_model/` package is the A->B->C forward-perturbation track and is
+**not** part of the `vcc-dep-baseline` CLI. `model.py` wraps Arc Institute's
+STATE model (`load_state_model`, `StateForwardAdapter`,
+`PerturbationVectorAdapter`); `prepare.py` builds gene bags, batch encodings,
+linear projectors, and cached scVI teacher latents; `train.py` is the
+accelerate/DDP training entrypoint. `state_feature_ablation.py` runs frozen-STATE
+feature ablations for predicted-B->C validation, with result tables in
+`state_feature_ablation_tables.py`.
+
 ### Shared Infrastructure
 
 - **Config** (`config.py`): Frozen dataclasses loaded from YAML. `BaselineConfig`
@@ -156,6 +200,14 @@ pseudobulk baselines, predicted-transcriptome experiments are high risk.
 Synthetic lethality requires context specificity. A DepMap essential gene is not
 automatically an SL target. Require mutation, copy-number, lineage, or pathway
 context evidence before using SL language.
+
+The external SL pair benchmark (Feng et al. 2024, SynLethDB-derived) lives in
+`data/SL_benchmark/`; `scripts/build_k562_sl_benchmark.py` filters its CV1 Rand
+1:1 splits to pairs whose two genes both carry numeric K562 DepMap GeneEffect
+values, writing `data/k562_SL_benchmark_minimal.csv`. This is the `D` label
+(a gene-pair SL label), distinct from `C` = `GeneEffect(K562, g)`; see
+`docs/data/sl-benchmark-2024.md` and `CONTEXT.md`. It is a pair-level benchmark
+adapter target, not a validated K562-specific SL assay.
 
 ## Data Rules
 
