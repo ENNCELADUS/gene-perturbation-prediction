@@ -54,3 +54,23 @@ def test_cli_main_runs_requested_split_type_only(
     assert exit_code == 0
     summary = pd.read_csv(output_dir / "summary.csv")
     assert set(summary["split_type"].unique()) == {"CV2"}
+
+
+def test_cli_augmented_run_writes_transcript_models(
+    synthetic_augmented_benchmark_csv, synthetic_augmented_bags_npz, tmp_path
+):
+    import pandas as pd
+    from sl_benchmark_baseline.__main__ import main
+
+    output_dir = tmp_path / "cli_aug"
+    code = main([
+        "--input-csv", str(synthetic_augmented_benchmark_csv),
+        "--output-dir", str(output_dir),
+        "--bags-npz", str(synthetic_augmented_bags_npz),
+        "--folds", "0",
+        "--ranking-k", "2", "5",
+        "--fallback-strategy", "zero",
+    ])
+    assert code == 0
+    fold_metrics = pd.read_csv(output_dir / "fold_metrics.csv")
+    assert "A_transcript" in set(fold_metrics["model"].unique())
