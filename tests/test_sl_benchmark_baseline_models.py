@@ -2,6 +2,51 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from sl_benchmark_baseline.config import SLBaselineConfig
+from sl_benchmark_baseline.models import (
+    FoldData,
+    LogRegTranscriptModel,
+    XGBTranscriptModel,
+    build_augmented_models,
+)
+
+
+def _augmented_fold(n_features: int, n: int = 12) -> FoldData:
+    rng = np.random.default_rng(0)
+    features = rng.normal(size=(n, n_features))
+    labels = np.array([1, 0] * (n // 2))
+    df = pd.DataFrame(
+        {
+            "gene_a_symbol": [f"G{i}" for i in range(n)],
+            "gene_b_symbol": [f"H{i}" for i in range(n)],
+            "sl_label": labels,
+        }
+    )
+    return FoldData(df=df, features=features, labels=labels)
+
+
+def test_transcript_models_emit_unit_interval_proba():
+    config = SLBaselineConfig()
+    train = _augmented_fold(n_features=11)
+    for model_cls in (LogRegTranscriptModel, XGBTranscriptModel):
+        model = model_cls(config)
+        model.fit(train)
+        proba = model.predict_proba(train)
+        assert proba.shape == (12,)
+        assert float(proba.min()) >= 0.0
+        assert float(proba.max()) <= 1.0
+
+
+def test_transcript_model_names():
+    assert LogRegTranscriptModel(SLBaselineConfig()).name == "A_transcript"
+    assert XGBTranscriptModel(SLBaselineConfig()).name == "B_transcript"
+
+
+def test_build_augmented_models_excludes_degree_probe():
+    models = build_augmented_models(SLBaselineConfig())
+    names = [m.name for m in models]
+    assert names == ["A", "B", "A_transcript", "B_transcript"]
+    assert "C" not in names
 
 
 def _make_fold_data(labels: np.ndarray, features: np.ndarray, df: pd.DataFrame):
