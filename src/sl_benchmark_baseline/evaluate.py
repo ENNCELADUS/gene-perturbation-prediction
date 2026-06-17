@@ -12,12 +12,22 @@ import pandas as pd
 
 from sl_benchmark_baseline.config import SLBaselineConfig
 from sl_benchmark_baseline.data import VALID_SPLIT_TYPES, fold_split, load_benchmark
-from sl_benchmark_baseline.features import Standardizer, build_pair_features
+from sl_benchmark_baseline.embeddings import GeneEmbeddingTable, align_to_universe
+from sl_benchmark_baseline.features import (
+    Standardizer,
+    build_augmented_pair_features,
+    build_pair_features,
+)
 from sl_benchmark_baseline.metrics import (
     official_classification_metrics,
     official_ranking_metrics,
 )
-from sl_benchmark_baseline.models import FoldData, FrequencyProbeModel, build_models
+from sl_benchmark_baseline.models import (
+    FoldData,
+    FrequencyProbeModel,
+    build_augmented_models,
+    build_models,
+)
 
 LEAKAGE_NOTES = (
     "GeneEffect(K562, g) as a feature against Rand negatives is low leakage "
@@ -41,6 +51,8 @@ class GeneUniverse:
     symbols: np.ndarray
     gene_effects: np.ndarray
     index_by_key: dict[object, int]
+    embeddings: np.ndarray | None = None
+    coverage_mask: np.ndarray | None = None
 
 
 def _file_sha256(path: Path) -> str:
@@ -67,7 +79,11 @@ def _gene_key_columns(frame: pd.DataFrame) -> tuple[str, str]:
     return "gene_a_symbol", "gene_b_symbol"
 
 
-def _build_gene_universe(frame: pd.DataFrame) -> GeneUniverse:
+def _build_gene_universe(
+    frame: pd.DataFrame,
+    embedding_table: GeneEmbeddingTable | None = None,
+    fallback_strategy: str = "zero",
+) -> GeneUniverse:
     gene_a_key, gene_b_key = _gene_key_columns(frame)
     gene_a = pd.DataFrame(
         {
@@ -90,11 +106,20 @@ def _build_gene_universe(frame: pd.DataFrame) -> GeneUniverse:
         .reset_index(drop=True)
     )
     keys = tuple(genes["key"].tolist())
+    symbols = genes["symbol"].astype(str).to_numpy()
+    embeddings = None
+    coverage_mask = None
+    if embedding_table is not None:
+        embeddings, coverage_mask = align_to_universe(
+            embedding_table, symbols, fallback_strategy
+        )
     return GeneUniverse(
         keys=keys,
-        symbols=genes["symbol"].astype(str).to_numpy(),
+        symbols=symbols,
         gene_effects=genes["gene_effect"].to_numpy(dtype=float),
         index_by_key={key: index for index, key in enumerate(keys)},
+        embeddings=embeddings,
+        coverage_mask=coverage_mask,
     )
 
 
@@ -149,6 +174,189 @@ def _build_score_matrix(
     return score_matrix
 
 
+def _build_augmented_score_matrix(
+    model: object,
+    universe: GeneUniverse,
+    standardizer: Standardizer,
+    include_coverage_flag: bool,
+) -> np.ndarray:
+    """Score all candidate pairs using augmented GeneEffect+transcript features."""
+    if universe.embeddings is None or universe.coverage_mask is None:
+        raise ValueError("augmented score matrix requires universe embeddings")
+    n_gene = len(universe.symbols)
+    score_matrix = np.zeros((n_gene, n_gene), dtype=float)
+    all_idx = np.arange(n_gene)
+    for start in range(0, n_gene, SCORE_MATRIX_CHUNK_ROWS):
+        stop = min(start + SCORE_MATRIX_CHUNK_ROWS, n_gene)
+        rows = np.arange(start, stop)
+        a_idx = np.repeat(rows, n_gene)
+        b_idx = np.tile(all_idx, len(rows))
+        raw = build_augmented_pair_features(
+            universe.gene_effects[a_idx],
+            universe.gene_effects[b_idx],
+            universe.embeddings[a_idx],
+            universe.embeddings[b_idx],
+            universe.coverage_mask[a_idx],
+            universe.coverage_mask[b_idx],
+            include_coverage_flag=include_coverage_flag,
+        )
+        features = standardizer.transform(raw)
+        pair_df = pd.DataFrame(
+            {
+                "gene_a_symbol": universe.symbols[a_idx],
+                "gene_b_symbol": universe.symbols[b_idx],
+            }
+        )
+        fold_data = FoldData(
+            df=pair_df, features=features, labels=np.zeros(len(features), dtype=int)
+        )
+        score_matrix[start:stop, :] = model.predict_proba(fold_data).reshape(
+            len(rows), n_gene
+        )
+    np.fill_diagonal(score_matrix, 0.0)
+    return score_matrix
+
+
+def _metric_rows(
+    split_type: str,
+    model_name: str,
+    fold_id: int,
+    slice_name: str,
+    score_matrix: np.ndarray,
+    pos_index: np.ndarray,
+    neg_index: np.ndarray,
+    seen_index: np.ndarray,
+    ks: tuple[int, ...],
+) -> list[dict[str, object]]:
+    """Assemble long-form metric rows for one model/slice on one fold."""
+    metrics = official_classification_metrics(score_matrix, pos_index, neg_index)
+    metrics.update(
+        official_ranking_metrics(score_matrix, pos_index, seen_index=seen_index, ks=ks)
+    )
+    return [
+        {
+            "split_type": split_type,
+            "model": model_name,
+            "fold_id": fold_id,
+            "slice": slice_name,
+            "metric": metric,
+            "value": float(value),
+        }
+        for metric, value in metrics.items()
+    ]
+
+
+def _augmented_raw(
+    frame: pd.DataFrame, universe: GeneUniverse, config: SLBaselineConfig
+) -> np.ndarray:
+    """Unstandardized augmented features for a frame (used to fit a standardizer)."""
+    pair_idx = _pair_indices(frame, universe)
+    a_idx, b_idx = pair_idx[:, 0], pair_idx[:, 1]
+    return build_augmented_pair_features(
+        frame["gene_a_k562_gene_effect"].to_numpy(),
+        frame["gene_b_k562_gene_effect"].to_numpy(),
+        universe.embeddings[a_idx],
+        universe.embeddings[b_idx],
+        universe.coverage_mask[a_idx],
+        universe.coverage_mask[b_idx],
+        include_coverage_flag=config.include_coverage_flag,
+    )
+
+
+def _augmented_fold_data(
+    frame: pd.DataFrame,
+    universe: GeneUniverse,
+    standardizer: Standardizer,
+    config: SLBaselineConfig,
+) -> FoldData:
+    """Build standardized augmented FoldData for a frame."""
+    raw = _augmented_raw(frame, universe, config)
+    return FoldData(
+        df=frame,
+        features=standardizer.transform(raw),
+        labels=frame["sl_label"].to_numpy(dtype=int),
+    )
+
+
+def _covered_pair_mask(index: np.ndarray, universe: GeneUniverse) -> np.ndarray:
+    """Boolean mask of pairs whose two genes are both gwps-covered."""
+    if len(index) == 0:
+        return np.zeros(0, dtype=bool)
+    return (universe.coverage_mask[index[:, 0]] == 1) & (
+        universe.coverage_mask[index[:, 1]] == 1
+    )
+
+
+def _run_fold_augmented(
+    train_df: pd.DataFrame,
+    train_base: FoldData,
+    base_std: Standardizer,
+    pos_index: np.ndarray,
+    neg_index: np.ndarray,
+    seen_index: np.ndarray,
+    split_type: str,
+    fold_id: int,
+    config: SLBaselineConfig,
+    universe: GeneUniverse,
+) -> list[dict[str, object]]:
+    """Fit baseline + transcript models, emitting full and covered slices."""
+    aug_std = Standardizer.fit(_augmented_raw(train_df, universe, config))
+    train_aug = _augmented_fold_data(train_df, universe, aug_std, config)
+    pos_cov = pos_index[_covered_pair_mask(pos_index, universe)]
+    neg_cov = neg_index[_covered_pair_mask(neg_index, universe)]
+    rows: list[dict[str, object]] = []
+    for model in build_augmented_models(config):
+        if model.name.endswith("_transcript"):
+            model.fit(train_aug)
+            sm = _build_augmented_score_matrix(
+                model, universe, aug_std, config.include_coverage_flag
+            )
+            rows.extend(
+                _metric_rows(
+                    split_type,
+                    model.name,
+                    fold_id,
+                    "full_universe",
+                    sm,
+                    pos_index,
+                    neg_index,
+                    seen_index,
+                    config.ranking_k,
+                )
+            )
+            if len(pos_cov) > 0:
+                rows.extend(
+                    _metric_rows(
+                        split_type,
+                        model.name,
+                        fold_id,
+                        "covered_pairs",
+                        sm,
+                        pos_cov,
+                        neg_cov,
+                        seen_index,
+                        config.ranking_k,
+                    )
+                )
+        else:
+            model.fit(train_base)
+            sm = _build_score_matrix(model, universe, base_std)
+            rows.extend(
+                _metric_rows(
+                    split_type,
+                    model.name,
+                    fold_id,
+                    "full_universe",
+                    sm,
+                    pos_index,
+                    neg_index,
+                    seen_index,
+                    config.ranking_k,
+                )
+            )
+    return rows
+
+
 def run_fold(
     frame: pd.DataFrame,
     split_type: str,
@@ -158,12 +366,13 @@ def run_fold(
 ) -> list[dict[str, object]]:
     """Fit all models on one fold and return long-form metric rows."""
     train_df, test_df = fold_split(frame, split_type, fold_id)
-    train_raw = build_pair_features(
-        train_df["gene_a_k562_gene_effect"].to_numpy(),
-        train_df["gene_b_k562_gene_effect"].to_numpy(),
+    base_std = Standardizer.fit(
+        build_pair_features(
+            train_df["gene_a_k562_gene_effect"].to_numpy(),
+            train_df["gene_b_k562_gene_effect"].to_numpy(),
+        )
     )
-    standardizer = Standardizer.fit(train_raw)
-    train = _build_fold_data(train_df, standardizer)
+    train_base = _build_fold_data(train_df, base_std)
     test_pos = test_df[test_df["sl_label"] == 1]
     test_neg = test_df[test_df["sl_label"] == 0]
     train_pos = train_df[train_df["sl_label"] == 1]
@@ -171,39 +380,48 @@ def run_fold(
     neg_index = _pair_indices(test_neg, universe)
     seen_index = _pair_indices(train_pos, universe)
 
-    rows: list[dict[str, object]] = []
-    for model in build_models(config):
-        model.fit(train)
-        score_matrix = _build_score_matrix(model, universe, standardizer)
-        metrics = official_classification_metrics(score_matrix, pos_index, neg_index)
-        metrics.update(
-            official_ranking_metrics(
-                score_matrix,
-                pos_index,
-                seen_index=seen_index,
-                ks=config.ranking_k,
+    if not config.augmented:
+        rows: list[dict[str, object]] = []
+        for model in build_models(config):
+            model.fit(train_base)
+            score_matrix = _build_score_matrix(model, universe, base_std)
+            rows.extend(
+                _metric_rows(
+                    split_type,
+                    model.name,
+                    fold_id,
+                    "full_universe",
+                    score_matrix,
+                    pos_index,
+                    neg_index,
+                    seen_index,
+                    config.ranking_k,
+                )
             )
-        )
-        for metric, value in metrics.items():
-            rows.append(
-                {
-                    "split_type": split_type,
-                    "model": model.name,
-                    "fold_id": fold_id,
-                    "metric": metric,
-                    "value": float(value),
-                }
-            )
-    return rows
+        return rows
+    return _run_fold_augmented(
+        train_df,
+        train_base,
+        base_std,
+        pos_index,
+        neg_index,
+        seen_index,
+        split_type,
+        fold_id,
+        config,
+        universe,
+    )
 
 
 def _summarize(fold_metrics: pd.DataFrame) -> pd.DataFrame:
     summary = (
-        fold_metrics.groupby(["split_type", "model", "metric"])["value"]
+        fold_metrics.groupby(["split_type", "model", "slice", "metric"])["value"]
         .agg(["mean", "std"])
         .reset_index()
     )
-    return summary.sort_values(["split_type", "model", "metric"]).reset_index(drop=True)
+    return summary.sort_values(["split_type", "model", "slice", "metric"]).reset_index(
+        drop=True
+    )
 
 
 def _resolve_split_types(
@@ -228,7 +446,16 @@ def _resolve_split_types(
 def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
     """Run the full CV1 loop, write outputs, and return the summary table."""
     frame = load_benchmark(config.input_csv)
-    universe = _build_gene_universe(frame)
+    embedding_table = None
+    if config.augmented:
+        from sl_benchmark_baseline.embeddings import load_gene_embeddings
+
+        embedding_table = load_gene_embeddings(config.bags_npz)
+    universe = _build_gene_universe(
+        frame,
+        embedding_table=embedding_table,
+        fallback_strategy=config.fallback_strategy,
+    )
     split_types = _resolve_split_types(frame, config.split_types)
     all_rows: list[dict[str, object]] = []
     for split_type in split_types:
@@ -250,10 +477,27 @@ def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
         "ranking_k": list(config.ranking_k),
         "candidate_gene_count": len(universe.symbols),
         "seed": config.seed,
-        "models": ["A", "B", "C"],
         "leakage_notes": LEAKAGE_NOTES,
         "ranking_semantics": RANKING_SEMANTICS,
         "official_metric_source": OFFICIAL_METRIC_SOURCE,
     }
+    coverage_count = (
+        int(universe.coverage_mask.sum()) if universe.coverage_mask is not None else 0
+    )
+    model_names = (
+        ["A", "B", "A_transcript", "B_transcript"]
+        if config.augmented
+        else ["A", "B", "C"]
+    )
+    manifest["models"] = model_names
+    manifest["augmented"] = config.augmented
+    manifest["bags_npz"] = None if config.bags_npz is None else str(config.bags_npz)
+    manifest["embedding_method"] = config.embedding_method
+    manifest["fallback_strategy"] = config.fallback_strategy
+    manifest["include_coverage_flag"] = config.include_coverage_flag
+    manifest["gwps_coverage_gene_count"] = coverage_count
+    manifest["gwps_coverage_fraction"] = (
+        coverage_count / len(universe.symbols) if len(universe.symbols) else 0.0
+    )
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return summary
