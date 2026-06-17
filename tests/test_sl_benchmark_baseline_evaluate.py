@@ -96,3 +96,155 @@ def test_run_cv_rejects_missing_requested_split_type(
         assert "split_types" in str(error)
     else:  # pragma: no cover
         raise AssertionError("expected ValueError for missing split_type")
+
+
+def test_build_gene_universe_populates_embeddings_and_coverage(
+    synthetic_benchmark_csv: Path, synthetic_bags_npz: Path
+) -> None:
+    from sl_benchmark_baseline.data import load_benchmark
+    from sl_benchmark_baseline.embeddings import load_gene_embeddings
+    from sl_benchmark_baseline.evaluate import _build_gene_universe
+
+    frame = load_benchmark(synthetic_benchmark_csv)
+    table = load_gene_embeddings(synthetic_bags_npz)  # covers G0,G1,G2
+    universe = _build_gene_universe(frame, embedding_table=table,
+                                    fallback_strategy="zero")
+    assert universe.embeddings is not None
+    assert universe.embeddings.shape == (len(universe.symbols), table.dim)
+    assert universe.coverage_mask.shape == (len(universe.symbols),)
+    # G0/G1/G2 are in the synthetic benchmark gene pool G0..G11
+    covered = {s for s, m in zip(universe.symbols, universe.coverage_mask) if m == 1.0}
+    assert covered.issubset(set(universe.symbols))
+    assert {"G0", "G1", "G2"}.issubset(covered)
+
+
+def test_build_gene_universe_without_embeddings_is_none(
+    synthetic_benchmark_csv: Path,
+) -> None:
+    from sl_benchmark_baseline.data import load_benchmark
+    from sl_benchmark_baseline.evaluate import _build_gene_universe
+
+    frame = load_benchmark(synthetic_benchmark_csv)
+    universe = _build_gene_universe(frame)
+    assert universe.embeddings is None
+    assert universe.coverage_mask is None
+
+
+def test_augmented_score_matrix_is_square_with_zero_diagonal(
+    synthetic_benchmark_csv: Path, synthetic_bags_npz: Path
+) -> None:
+    import numpy as np
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.data import load_benchmark
+    from sl_benchmark_baseline.embeddings import load_gene_embeddings
+    from sl_benchmark_baseline.evaluate import (
+        _build_augmented_score_matrix,
+        _build_gene_universe,
+    )
+    from sl_benchmark_baseline.features import (
+        Standardizer,
+        build_augmented_pair_features,
+    )
+    from sl_benchmark_baseline.models import LogRegTranscriptModel
+
+    frame = load_benchmark(synthetic_benchmark_csv)
+    table = load_gene_embeddings(synthetic_bags_npz)
+    universe = _build_gene_universe(frame, embedding_table=table,
+                                    fallback_strategy="zero")
+    # build a tiny train feature set to fit the standardizer and a model
+    ea = frame["gene_a_k562_gene_effect"].to_numpy()
+    eb = frame["gene_b_k562_gene_effect"].to_numpy()
+    dim = table.dim
+    emb_a = np.zeros((len(frame), dim))
+    emb_b = np.zeros((len(frame), dim))
+    flag = np.ones(len(frame))
+    raw = build_augmented_pair_features(ea, eb, emb_a, emb_b, flag, flag, True)
+    standardizer = Standardizer.fit(raw)
+    model = LogRegTranscriptModel(SLBaselineConfig())
+    from sl_benchmark_baseline.models import FoldData
+    model.fit(FoldData(df=frame, features=standardizer.transform(raw),
+                       labels=frame["sl_label"].to_numpy(dtype=int)))
+    matrix = _build_augmented_score_matrix(model, universe, standardizer, True)
+    n = len(universe.symbols)
+    assert matrix.shape == (n, n)
+    assert np.allclose(np.diag(matrix), 0.0)
+
+
+def test_augmented_run_cv_emits_transcript_models_and_covered_slice(
+    synthetic_augmented_benchmark_csv: Path,
+    synthetic_augmented_bags_npz: Path,
+    tmp_path: Path,
+) -> None:
+    import json
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.evaluate import run_cv
+
+    output_dir = tmp_path / "aug_run"
+    config = SLBaselineConfig(
+        input_csv=synthetic_augmented_benchmark_csv,
+        output_dir=output_dir,
+        bags_npz=synthetic_augmented_bags_npz,
+        folds=(0, 1),
+        ranking_k=(2, 5),
+    )
+    summary = run_cv(config)
+
+    fold_metrics = pd.read_csv(output_dir / "fold_metrics.csv")
+    # baseline A/B + transcript variants; degree probe C excluded in augmented mode
+    assert set(fold_metrics["model"].unique()) == {
+        "A", "B", "A_transcript", "B_transcript"
+    }
+    assert "slice" in fold_metrics.columns
+    slices = set(fold_metrics["slice"].unique())
+    assert "full_universe" in slices
+    assert "covered_pairs" in slices
+    # covered_pairs slice only emitted for transcript models
+    covered = fold_metrics[fold_metrics["slice"] == "covered_pairs"]
+    assert set(covered["model"].unique()).issubset({"A_transcript", "B_transcript"})
+    assert {"split_type", "model", "slice", "metric"}.issubset(summary.columns)
+
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    assert manifest["augmented"] is True
+    assert manifest["embedding_method"] == config.embedding_method
+
+
+def test_nonaugmented_run_cv_unchanged_models(
+    synthetic_benchmark_csv: Path, tmp_path: Path
+) -> None:
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.evaluate import run_cv
+
+    output_dir = tmp_path / "base_run"
+    config = SLBaselineConfig(
+        input_csv=synthetic_benchmark_csv, output_dir=output_dir,
+        folds=(0, 1), ranking_k=(2, 5),
+    )
+    run_cv(config)
+    fold_metrics = pd.read_csv(output_dir / "fold_metrics.csv")
+    assert set(fold_metrics["model"].unique()) == {"A", "B", "C"}
+    assert set(fold_metrics["slice"].unique()) == {"full_universe"}
+
+
+def test_augmented_manifest_records_coverage_fields(
+    synthetic_augmented_benchmark_csv: Path,
+    synthetic_augmented_bags_npz: Path,
+    tmp_path: Path,
+) -> None:
+    import json
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.evaluate import run_cv
+
+    output_dir = tmp_path / "aug_manifest_run"
+    config = SLBaselineConfig(
+        input_csv=synthetic_augmented_benchmark_csv, output_dir=output_dir,
+        bags_npz=synthetic_augmented_bags_npz, folds=(0,), ranking_k=(2, 5),
+        fallback_strategy="global_mean", include_coverage_flag=False,
+    )
+    run_cv(config)
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    assert manifest["augmented"] is True
+    assert manifest["bags_npz"].endswith("synthetic_augmented_bags.npz")
+    assert manifest["fallback_strategy"] == "global_mean"
+    assert manifest["include_coverage_flag"] is False
+    assert "gwps_coverage_gene_count" in manifest
+    assert manifest["models"] == ["A", "B", "A_transcript", "B_transcript"]
