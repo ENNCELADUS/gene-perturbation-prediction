@@ -32,3 +32,31 @@ Remote overlap table:
 
 The pertpy processed file has 99722 cells, not the Single Cell Portal display
 count of 57120 cells.
+
+## SL Benchmark Coverage
+
+Coverage was recomputed on 2026-06-17 against the local K562-filtered
+SL_benchmark candidate universe from the balanced CV1/CV2/CV3 CSV files:
+9471 unique genes.
+
+| Statistic | Value |
+| --- | ---: |
+| Raw unique conditions | 641 |
+| Parsed target conditions | 305 |
+| Single-gene conditions | 23 |
+| Multi-gene conditions | 282 |
+| Conditions with a gene in SL universe | 295 |
+| Conditions with all parsed genes in SL universe | 139 |
+| Unique target genes | 11 |
+| Unique target genes in SL universe | 8 |
+| SL gene coverage | 0.08% |
+| Cells in parsed target conditions | 68923 |
+| Cells in SL-covered conditions | 54628 |
+
+Generated coverage tables:
+
+- `data/sl_dependency_v0/interim/k562_perturbseq_sl_condition_coverage_summary.csv`
+- `data/sl_dependency_v0/interim/k562_perturbseq_sl_condition_coverage_conditions.csv`
+
+Dixit is useful as a K562 CRISPR-KO transcription-factor sanity check, but it
+does not materially expand the broad SL candidate-gene coverage.
