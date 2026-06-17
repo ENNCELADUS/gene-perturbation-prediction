@@ -1,0 +1,184 @@
+"""Fetch UniProt sequences for SL-universe genes and embed with ESM2.
+
+Run once on a network node:
+    uv run python scripts/precompute_esm2_embeddings.py \
+        --benchmark-csv \
+        data/SL_benchmark/derived/k562_depmap_rand_1to1/\
+all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv \
+        --out data/esm2/k562_sl_universe_esm2_650M.npz \
+        --seq-cache data/esm2/symbol_to_sequence.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+from transformers import EsmModel, EsmTokenizer
+
+logger = logging.getLogger("precompute_esm2")
+UNIPROT_URL = "https://rest.uniprot.org/uniprotkb/search"
+
+
+def universe_symbols(benchmark_csv: Path) -> list[str]:
+    """Return sorted upper-case gene symbols from both columns of the benchmark CSV.
+
+    Args:
+        benchmark_csv: Path to the SL benchmark CSV with ``gene_a_symbol``
+            and ``gene_b_symbol`` columns.
+
+    Returns:
+        Sorted list of unique upper-case gene symbols.
+    """
+    frame = pd.read_csv(benchmark_csv, usecols=["gene_a_symbol", "gene_b_symbol"])
+    symbols = set(frame["gene_a_symbol"].str.upper()) | set(
+        frame["gene_b_symbol"].str.upper()
+    )
+    return sorted(symbols)
+
+
+def fetch_sequence(symbol: str) -> str | None:
+    """Return the canonical human protein sequence for a gene symbol, or None.
+
+    Queries UniProt REST for the top reviewed human hit. On any network
+    error, logs a warning and returns ``None``.
+
+    Args:
+        symbol: Upper-case HGNC gene symbol.
+
+    Returns:
+        Amino-acid sequence string, or ``None`` if not found or on error.
+    """
+    query = f"(gene:{symbol}) AND (organism_id:9606) AND (reviewed:true)"
+    params = urllib.parse.urlencode({"query": query, "format": "fasta", "size": 1})
+    url = f"{UNIPROT_URL}?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            text = resp.read().decode("utf-8")
+    except Exception as exc:  # noqa: BLE001 - network best-effort, logged
+        logger.warning("fetch failed for %s: %s", symbol, exc)
+        return None
+    lines = [ln for ln in text.splitlines() if ln and not ln.startswith(">")]
+    return "".join(lines) or None
+
+
+def load_or_fetch_sequences(symbols: list[str], cache: Path) -> dict[str, str]:
+    """Load cached symbol→sequence map; fetch missing symbols from UniProt.
+
+    Writes incrementally to ``cache`` every 100 new symbols.
+
+    Args:
+        symbols: Upper-case gene symbols to resolve.
+        cache: Path to the JSON cache file (created if absent).
+
+    Returns:
+        Mapping from upper-case symbol to amino-acid sequence.
+    """
+    seqs: dict[str, str] = {}
+    if cache.exists():
+        seqs = json.loads(cache.read_text())
+    for i, symbol in enumerate(symbols):
+        if symbol in seqs:
+            continue
+        seq = fetch_sequence(symbol)
+        if seq:
+            seqs[symbol] = seq
+        if i % 100 == 0:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(seqs))
+            logger.info("resolved %d/%d sequences", len(seqs), len(symbols))
+        time.sleep(0.1)  # be polite to UniProt
+    cache.write_text(json.dumps(seqs))
+    return seqs
+
+
+def embed_sequences(
+    symbols: list[str], seqs: dict[str, str], model_name: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Embed resolved sequences with ESM2; unresolved rows stay zero.
+
+    Args:
+        symbols: Upper-case gene symbols in universe order.
+        seqs: Mapping from symbol to amino-acid sequence.
+        model_name: HuggingFace model ID, e.g. ``"facebook/esm2_t33_650M_UR50D"``.
+
+    Returns:
+        A tuple ``(vectors, resolved)`` where ``vectors`` has shape
+        ``(n_gene, hidden_size)`` and ``resolved`` is a boolean array.
+    """
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    tokenizer = EsmTokenizer.from_pretrained(model_name)
+    model = EsmModel.from_pretrained(model_name).to(device).eval()
+    dim = model.config.hidden_size
+    vectors = np.zeros((len(symbols), dim), dtype=np.float32)
+    resolved = np.zeros(len(symbols), dtype=bool)
+    with torch.no_grad():
+        for row, symbol in enumerate(symbols):
+            seq = seqs.get(symbol)
+            if not seq:
+                continue
+            toks = tokenizer(seq[:1022], return_tensors="pt").to(device)
+            out = model(**toks).last_hidden_state[0]  # (L, dim)
+            vectors[row] = out.mean(dim=0).cpu().numpy()
+            resolved[row] = True
+            if row % 200 == 0:
+                logger.info("embedded %d/%d", row, len(symbols))
+    return vectors, resolved
+
+
+def main() -> None:
+    """CLI entry point: fetch sequences and embed with ESM2."""
+    parser = argparse.ArgumentParser(
+        description="Fetch UniProt sequences and embed with ESM2."
+    )
+    parser.add_argument(
+        "--benchmark-csv",
+        type=Path,
+        required=True,
+        help="SL benchmark CSV with gene_a_symbol and gene_b_symbol columns.",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="Output .npz path.",
+    )
+    parser.add_argument(
+        "--seq-cache",
+        type=Path,
+        required=True,
+        help="JSON cache for symbol→sequence (incremental, reuse across runs).",
+    )
+    parser.add_argument(
+        "--model",
+        default="facebook/esm2_t33_650M_UR50D",
+        help="HuggingFace ESM2 model ID.",
+    )
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO)
+    symbols = universe_symbols(args.benchmark_csv)
+    logger.info("universe size: %d genes", len(symbols))
+    seqs = load_or_fetch_sequences(symbols, args.seq_cache)
+    vectors, resolved = embed_sequences(symbols, seqs, args.model)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(
+        args.out,
+        symbols=np.array(symbols, dtype=object),
+        vectors=vectors,
+        resolved=resolved,
+    )
+    logger.info(
+        "wrote %s (%d resolved / %d)", args.out, int(resolved.sum()), len(symbols)
+    )
+
+
+if __name__ == "__main__":
+    main()
