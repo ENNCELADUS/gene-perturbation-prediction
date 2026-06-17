@@ -105,6 +105,10 @@ def run_cv(
     Returns:
         Summary :class:`pandas.DataFrame` with columns
         ``split_type, model, slice, metric, mean, std``.
+
+    Raises:
+        RuntimeError: If no metric rows were produced (e.g. split_types filter
+            yields no matching folds in the loaded benchmark frame).
     """
     from sl_dl_model.scoring import make_fold_producer, run_fold_with_producer
 
@@ -113,7 +117,7 @@ def run_cv(
     available = set(frame["split_type"].unique())
     split_types = tuple(s for s in split_types if s in available)
 
-    shared = None
+    shared: StateDlCaches | None = None
     if producer == "state_dl":
         shared = _load_state_dl_caches(config)
 
@@ -131,6 +135,18 @@ def run_cv(
                 )
             )
 
+    # FIX 2: guard empty metric rows — indicates a config/data mismatch
+    if not all_rows:
+        logger.error(
+            "no metric rows produced — split_types=%s not found in frame "
+            "(available: %s); check split_types and training data",
+            list(config.split_types or ("CV1", "CV2", "CV3")),
+            sorted(available),
+        )
+        raise RuntimeError(
+            "no metric rows produced; check split_types and training data"
+        )
+
     fold_metrics = pd.DataFrame(all_rows)
     summary = _summarize(fold_metrics)
 
@@ -138,6 +154,20 @@ def run_cv(
     output_dir.mkdir(parents=True, exist_ok=True)
     fold_metrics.to_csv(output_dir / "fold_metrics.csv", index=False)
     summary.to_csv(output_dir / "summary.csv", index=False)
+
+    # FIX 1: compute candidate_gene_count from the loaded frame
+    candidate_gene_count = len(
+        set(frame["gene_a_symbol"]) | set(frame["gene_b_symbol"])
+    )
+
+    # FIX 1: gwps_coverage_gene_count — available only on state_dl path
+    gwps_coverage_gene_count: int | None = None
+    if shared is not None:
+        bags_obj = getattr(shared, "bags", None)
+        if bags_obj is not None:
+            bags_by_symbol = getattr(bags_obj, "bags_by_symbol", None)
+            if bags_by_symbol is not None:
+                gwps_coverage_gene_count = len(bags_by_symbol)
 
     manifest: dict[str, object] = {
         "input_csv": str(config.input_csv),
@@ -150,6 +180,18 @@ def run_cv(
         "include_coverage_flag": config.include_coverage_flag,
         "esm2_model": config.esm2_model,
         "state_checkpoint": str(config.state_checkpoint),
+        # FIX 1: new required manifest fields
+        "candidate_gene_count": candidate_gene_count,
+        "pooling": config.pooling,
+        "loss_weights": {
+            "lambda_sl": config.lambda_sl,
+            "lambda_distill": config.lambda_distill,
+            "lambda_distill_after_warmup": config.lambda_distill_after_warmup,
+            "lambda_bag": config.lambda_bag,
+            "lambda_rank": config.lambda_rank,
+        },
+        "coverage_flag_included": config.include_coverage_flag,
+        "gwps_coverage_gene_count": gwps_coverage_gene_count,
     }
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return summary
@@ -192,6 +234,12 @@ def _load_state_dl_caches(config: SLDLConfig) -> StateDlCaches:
     if config.bags_npz is not None and Path(config.bags_npz).exists():
         bags = load_bags_npz(config.bags_npz)
     else:
+        # FIX 3: warn when bags_npz is not set — full h5ad will be loaded
+        logger.warning(
+            "bags_npz is not set; the full gwps h5ad will be loaded into memory "
+            "(%s). Pre-build the bags NPZ with `save_bags_npz` to avoid this.",
+            config.gwps_h5ad,
+        )
         bags = build_gwps_bags(config, rng_seed=config.seed)
 
     return StateDlCaches(
