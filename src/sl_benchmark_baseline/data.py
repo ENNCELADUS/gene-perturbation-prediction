@@ -20,10 +20,12 @@ VALID_SPLIT_TYPES: tuple[str, ...] = ("CV1", "CV2", "CV3")
 
 
 def load_benchmark(path: Path) -> pd.DataFrame:
-    """Load the minimal benchmark CSV and validate its schema.
+    """Load the SL-pair benchmark CSV and validate its schema.
 
     Args:
-        path: Path to ``k562_SL_benchmark_minimal.csv`` or a compatible CSV.
+        path: Path to an all-CV (CV1/CV2/CV3) balanced benchmark CSV, a
+            per-split balanced CSV, or any compatible CSV. CSVs without a
+            ``split_type`` column are treated as CV1.
 
     Returns:
         The validated benchmark DataFrame.

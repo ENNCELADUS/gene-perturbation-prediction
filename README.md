@@ -1,278 +1,330 @@
-# Cancer Dependency Prediction from Perturbation-Induced Transcriptomes
+<div align="center">
 
-This project connects virtual-cell perturbation modeling with cancer dependency and
-synthetic-lethality target prioritization. The core question is:
+  <h1 style="margin-top: 10px;">Cancer Dependency Prediction from Perturbation-Induced Transcriptomes</h1>
 
-> Given a cancer cell line and a gene perturbation, can the post-perturbation
-> transcriptomic response predict whether that perturbation creates a meaningful
-> fitness, vulnerability, or dependency phenotype?
+  <h2>Predict DepMap-style CRISPR gene-effect scores from observed or predicted post-perturbation transcriptomes — and prioritize synthetic-lethality candidates with context evidence.</h2>
 
-The current framing is deliberately narrower than "predict synthetic lethality"
-end-to-end. DepMap/Achilles CRISPR gene-effect scores provide population-level
-dependency labels, not single-cell death labels and not strict SL labels. The
-project first learns the link from perturbation-induced transcriptomic response
-to cancer dependency, then uses context specificity to prioritize SL-like
-candidates.
+  <div align="center">
+    <a href="https://github.com/ENNCELADUS/gene-perturbation-prediction/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/ENNCELADUS/gene-perturbation-prediction"/></a>
+    <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11%E2%80%933.12-blue.svg"/></a>
+    <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/managed%20with-uv-261230.svg"/></a>
+    <a href="https://docs.astral.sh/ruff/"><img alt="Ruff" src="https://img.shields.io/badge/lint-ruff-orange.svg"/></a>
+  </div>
 
-## Project Definition
+  <p>
+    <a href="#why-this-project">Why This Project?</a>
+    ◆ <a href="#quick-start">Quick Start</a>
+    ◆ <a href="#research-framing">Research Framing</a>
+    ◆ <a href="#installation">Installation</a>
+    ◆ <a href="#architecture">Architecture</a>
+    ◆ <a href="#results">Results</a>
+  </p>
 
-The project is organized around a three-node chain:
+</div>
 
-1. **Perturbation**: cell line plus perturbation target gene, usually CRISPRi or
-   CRISPR knockout for the first supervised setting.
-2. **Post-perturbation transcriptome**: observed or predicted scRNA-seq response,
-   represented as pseudobulk delta expression, top-DE signatures, pathway
-   activity, or learned embeddings.
-3. **Dependency / essentiality phenotype**: DepMap-style gene-effect score,
-   vulnerability score, or target ranking for the same cell line and gene.
+The central question:
 
-The current supervised task is:
+> Given a cancer cell line and a gene perturbation, can the post-perturbation transcriptomic response predict whether that perturbation creates a meaningful fitness, vulnerability, or dependency phenotype?
 
-```text
-(cell line, perturbation gene, post-perturbation transcriptomic response)
-    -> DepMap CRISPR gene-effect / dependency score
-```
+This framing is deliberately narrower than "predict synthetic lethality end-to-end." DepMap/Achilles CRISPR gene-effect scores are population-level dependency labels — not single-cell death labels and not strict SL labels. The project first learns the link from perturbation-induced transcriptomic response to cancer dependency, then layers context specificity on top to prioritize SL-like candidates.
 
-The matched key is **(cell line, perturbation gene)**. All data integration should
-preserve that key explicitly.
+## *Latest News* 🔥
 
-## Technical Roadmap
+- **[2026/06]** Stage 3 SL pair benchmark adapter and dependency-only baseline shipped (`src/sl_benchmark_baseline/`); official-metric CV1/CV2/CV3 rerun completed.
+- **[2026/06]** Experiment 05 AIVC STATE A→B→C forward-model pipeline reviewed, including a frozen-STATE feature ablation track.
+- **[2026/05]** Single-cell Deep Sets, attention-MIL, and distribution/prototype regressors landed with Adamson K562 external transfer.
+- **[2026/05]** Pseudobulk delta baseline ladder established as the Stage 1 dependency-prediction floor.
 
-### Stage 1: Observed Response to Dependency
+## Why This Project?
 
-Use real post-perturbation transcriptomes from Perturb-seq / CROP-seq /
-CRISPRi-seq and align them to DepMap/Achilles labels. This stage avoids relying
-on an imperfect forward perturbation model.
+Most virtual-cell work stops at predicting the transcriptome. This project asks the next question — does that response actually predict whether a gene is a dependency — and builds an honest, leakage-controlled evaluation chain to answer it.
 
-Primary proof-of-concept:
+- **🔗 Closes the loop** — Connects perturbation → transcriptomic response → DepMap dependency, instead of treating forward prediction as the end goal.
+- **🧪 Observed-first methodology** — Validates that *observed* response carries dependency signal before trusting any *predicted* transcriptome, so forward-model error never silently inflates results.
+- **🪜 Honest baseline ladder** — Dummy → ridge → PCA → tabular nonlinear → MIL/foundation models, so every gain is measured against a simpler control.
+- **🚪 Fold-local, no-leakage CV** — A→B models, featurizers, GMM prototypes, and C-heads are all fit on train genes only, inside each fold.
+- **📏 Terminology guardrails** — Dependency prediction, essentiality ranking, and SL candidate prioritization are kept strictly distinct (see [Terminology](#terminology-guardrails)).
 
-- start with K562 where CRISPRi Perturb-seq resources are strongest;
-- extend to HCT116, A549, or other cancer cell lines only when cell-line and
-  perturbation-gene identifiers can be aligned cleanly;
-- prioritize CRISPRi or knockout data for DepMap CRISPR gene-effect alignment;
-- treat Norman CRISPRa as a useful perturbation-response reference, not as the
-  primary label-aligned dataset for knockout dependency prediction.
-
-Current implemented pseudobulk baseline:
+## Quick Start
 
 ```bash
-PSEUDOBULK_CONFIG=configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
-PSEUDOBULK_FEATURES=results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/features/replogle_k562_delta_features.npz
+# 1. Clone and sync the environment (uv-managed, project-local .venv)
+git clone git@github.com:ENNCELADUS/gene-perturbation-prediction.git
+cd gene-perturbation-prediction
+uv sync
 
+# 2. Verify the environment
+uv run python -c "import anndata, scanpy, torch, scvi; print('environment ok')"
+
+# 3. Run the test suite (uses synthetic fixtures, no external data needed)
+uv run python -m pytest
+```
+
+> **Prerequisites**: Python 3.11–3.12 and [`uv`](https://docs.astral.sh/uv/). Running the full pipeline additionally requires Perturb-seq `*.h5ad` files and DepMap labels, which are **not** committed to git (see [Data Sources](#data-sources-and-roles)).
+>
+> **Need more options?** See [Installation](#installation) below for detailed setup, optional dependency groups, and the AIVC STATE exception.
+
+## Research Framing
+
+```text
+cell line + perturbation gene
+    → observed or predicted post-perturbation transcriptome
+    → dependency / essentiality score
+    → context-specific target ranking
+```
+
+The matched training key is **(cell line, perturbation gene)** and is preserved across every intermediate table, filename, and model input. K562 is the proof-of-concept cell line; HCT116 and A549 are extensions.
+
+<div align="center">
+  <img src="./docs/images/roadmap.png" alt="Staged project roadmap" width="820">
+</div>
+
+The work is organized into three stages, each with an implemented baseline.
+
+### Stage 1 — Observed Response → Dependency
+
+Align real post-perturbation transcriptomes (Perturb-seq / CROP-seq / CRISPRi-seq) to DepMap CRISPR gene-effect labels, avoiding reliance on an imperfect forward model. K562 CRISPRi is the strongest starting point; CRISPRa (Norman) is treated as auxiliary reference, not primary label alignment.
+
+```bash
+# Pseudobulk delta baseline (Track 1)
+PSEUDOBULK_CONFIG=configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
 uv run vcc-dep-baseline build-features --config "$PSEUDOBULK_CONFIG"
-uv run vcc-dep-baseline build-external-features \
-  --config "$PSEUDOBULK_CONFIG" \
-  --reference-features "$PSEUDOBULK_FEATURES" \
-  --external-name adamson_k562
 uv run vcc-dep-baseline run-cv --config "$PSEUDOBULK_CONFIG"
 RUN_DIR=$(cat results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/latest_run.txt)
 uv run vcc-dep-baseline fit-final --config "$PSEUDOBULK_CONFIG" --run-id "$(basename "$RUN_DIR")"
 uv run vcc-dep-baseline summarize --results-dir "$RUN_DIR"
 ```
 
-This baseline builds gene-level Replogle K562 delta-expression features from
-`obs["gene"]`, excludes matched rows whose DepMap GeneEffect is missing, and
-evaluates repeated stratified cross-validation against continuous K562
-CRISPRGeneEffect labels. It reports simple controls, ridge / elastic-net, PCA
-ridge, and tabular nonlinear baselines before any MIL or foundation-model
-embeddings, with both unweighted and square-root-`n_cells`-weighted fits where
-the estimator supports sample weights. Each CV run writes to
-`output_dir/runs/{run_id}/` with human-facing summaries under `results/`,
-machine-readable analysis tables under `artifacts/`, run logs under `logs/`,
-and `joblib` checkpoints under `models/`. Reusable feature-building artifacts
-live in `output_dir/features/`.
+### Stage 2 — Virtual-Cell Extension
 
-`run-cv` now emits explicit evaluation scopes:
-
-- `internal_cv_all`: the full Replogle internal repeated stratified CV.
-- `internal_cv_target_index_valid`: a separate repeated stratified CV restricted
-  to rows with `target_gene_index >= 0`, comparing only `delta_all` and
-  `delta_mask_target`.
-- `external:<name>`: optional external holdout reports produced from configured
-  aligned feature packs, evaluated with the exact model instances trained on
-  each `internal_cv_all` fold.
-
-Current implemented single-cell bag baseline:
+Before connecting a forward perturbation model, an observed single-cell MIL / set-learning gate tests whether single-cell heterogeneity beats pseudobulk delta. If it does not, predicted-transcriptome experiments are high risk.
 
 ```bash
+# Single-cell Deep Sets baseline (Track 2)
 SINGLE_CELL_CONFIG=configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
-
 uv run vcc-dep-baseline build-cell-bags --config "$SINGLE_CELL_CONFIG"
 uv run vcc-dep-baseline run-single-cell-cv --config "$SINGLE_CELL_CONFIG"
-uv run vcc-dep-baseline build-external-cell-bags \
-  --config "$SINGLE_CELL_CONFIG" \
-  --reference-bags results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/single_cell_bags/replogle_k562_single_cell_bags.npz \
-  --external-name adamson_k562
-uv run vcc-dep-baseline evaluate-single-cell-external \
-  --config "$SINGLE_CELL_CONFIG" \
-  --run-dir results/experiments/03_replogle_k562_single_cell_deepsets_adamson/runs/<run_id> \
-  --external-bags results/experiments/03_replogle_k562_single_cell_deepsets_adamson/features/external/adamson_k562_single_cell_bags/adamson_k562_single_cell_bags.npz \
-  --external-name adamson_k562
-```
 
-The first Deep Sets run treats each perturbation gene as one bag of observed
-single cells and predicts the single DepMap GeneEffect label for that gene. The
-2026-05-26 result is documented in
-`docs/experiment/03_replogle_k562_single_cell_deepsets_adamson.md`.
-
-### Stage 2: Virtual-Cell Extension
-
-After Stage 1 establishes that observed transcriptomic response contains
-dependency signal, first add an observed single-cell MIL / Set-learning gate
-before connecting a forward perturbation model:
-
-```text
-Replogle single-cell bag under perturbation g
-    -> DepMap GeneEffect(g)
-```
-
-This gate should test whether single-cell heterogeneity improves dependency
-prediction beyond pseudobulk delta, response-burden, and target-masked
-baselines. If it does not, predicted-transcriptome experiments are high risk
-because forward-model error will further amplify downstream uncertainty.
-
-Only after that observed single-cell gate is informative, connect a forward
-perturbation model:
-
-```text
-basal cancer cell state + candidate perturbation
-    -> predicted post-perturbation transcriptome
-    -> dependency / essentiality predictor
-    -> target ranking
-```
-
-Candidate forward models may include scGPT, GEARS, STATE, or simple additive /
-linear baselines. The point is to quantify whether predicted transcriptomes are
-good enough for downstream dependency ranking, not to assume that forward
-prediction is solved.
-
-Current implemented predicted-B pilot:
-
-```bash
+# Fold-local linear predicted-B pilot (Track 2b)
 uv run vcc-dep-baseline run-predicted-b-cv \
   --config configs/experiments/04_k562_linear_predicted_b_to_c/linear_predicted_b_cv.yaml
 ```
 
-This runs fold-local linear A->B baselines before AIVC: A->B, scVI/GMM
-featureization, and the B_hat->C Ridge head are trained inside each CV fold.
+Forward-model candidates include the AIVC **STATE** A→B→C pipeline (`src/aivc_model/`, Experiment 05). STATE training is run as a direct module, not through the CLI — see [Installation](#the-aivc-state-exception).
 
-### Stage 3: SL Candidate Prioritization
+### Stage 3 — SL Candidate Prioritization
 
-Synthetic lethality requires context specificity. A gene that is essential in a
-cell line is not automatically synthetic lethal. SL-like prioritization should
-add one or more context filters:
+Synthetic lethality requires context specificity: a gene essential in one line is not automatically an SL target. The dependency-only SL baseline establishes the floor that later observed-B / predicted-B / frozen-AIVC pair features must beat. It predicts a gene-pair label `D = sl_label(gene_a, gene_b)` from only the two genes' K562 DepMap GeneEffect scalars.
 
-- mutation or copy-number background;
-- lineage or cancer-type specificity;
-- normal-cell or less-vulnerable cancer-cell contrast;
-- pathway-specific dependency evidence;
-- TCGA/CCLE/DepMap context metadata.
+```bash
+# Dependency-only SL pair baseline (official-metric protocol)
+uv run python -m sl_benchmark_baseline \
+  --input-csv data/SL_benchmark/derived/k562_depmap_rand_1to1/CV1_Rand_1to1_k562_depmap_pairs_balanced.csv \
+  --output-dir results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv1 \
+  --split-types CV1 --folds 0 1 2 3 4 --ranking-k 10 20 50
+```
+
+> CV1 (pair-level) is the easiest split; CV2 (one gene unseen) and CV3 (both genes unseen, cold-start) are the real generalization surfaces. CV1 numbers are **not** evidence of held-out-gene generalization.
+
+## Installation
+
+For a quick setup, see [Quick Start](#quick-start) above. This section covers detailed setup and optional dependencies.
+
+### Environment Setup
+
+```bash
+git clone git@github.com:ENNCELADUS/gene-perturbation-prediction.git
+cd gene-perturbation-prediction
+
+uv python install 3.11      # if 3.11 is not already available
+uv sync                     # creates project-local .venv, installs all dependencies
+uv run python -c "import anndata, scanpy, torch, scvi; print('environment ok')"
+```
+
+`uv sync` installs the core stack (anndata, scanpy, scvi-tools, torch, scikit-learn, arc-state) plus the `dev` group (pytest, ruff, xgboost). Optional extras are declared in `pyproject.toml`:
+
+- **`baseline`** — `xgboost` for the tabular nonlinear model ladder.
+- **`research`** — `datasets`, `scib` for additional analysis.
+- **`viz`** — `matplotlib`, `seaborn`, `networkx`, `tabulate` for plotting.
+
+### Day-to-Day Commands
+
+```bash
+uv run ruff check .          # lint
+uv run ruff format .         # format
+uv run python -m pytest      # full test suite (synthetic fixtures)
+```
+
+### Running the Pipeline
+
+The normal entrypoint is the `vcc-dep-baseline` CLI:
+
+```bash
+uv run vcc-dep-baseline --help
+```
+
+Subcommands: `build-features`, `build-cell-bags`, `build-external-cell-bags`, `build-external-features`, `run-cv`, `run-single-cell-cv`, `evaluate-single-cell-external`, `run-distribution-cv`, `evaluate-distribution-external`, `run-predicted-b-cv`, `fit-final`, `summarize`, `organize-artifacts`, `viability-axis-report`. Most runner subcommands accept `--resume` and repeatable selection flags (`--scope`, `--feature-set`, `--model`, `--fold`, `--weighting`).
+
+### The AIVC STATE Exception
+
+Experiment 05 (AIVC STATE forward model) is **not** part of the CLI. Run it as a direct module:
+
+```bash
+# Direct training
+uv run python src/aivc_model/train.py \
+  --config configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml
+
+# Slurm wrapper (accelerate launch, 4 GPUs)
+bash scripts/state.sh
+
+# Frozen-STATE feature ablation
+uv run python src/aivc_model/state_feature_ablation.py \
+  --config configs/experiments/05_aivc_a_to_b_to_c/state_frozen_feature_ablation.yaml
+```
+
+> Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored. The pipeline requires Perturb-seq and DepMap data you supply locally.
+
+## Architecture
+
+### Conceptual Framing
+
+The project closes a triangle: two edges (data → response, response → dependency) are provided by existing data, and the model focuses on the **transcriptome → death / essentiality** edge.
+
+<div align="center">
+  <img src="./docs/images/core.png" alt="Triangular technical framing" width="820">
+</div>
+
+### Pipeline Tracks
+
+```
+                       h5ad + DepMap labels
+                                │
+         ┌──────────────────────┼──────────────────────────┐
+         ▼                      ▼                            ▼
+┌──────────────────┐  ┌──────────────────────┐  ┌────────────────────────┐
+│ TRACK 1          │  │ TRACK 2              │  │ TRACK 3                │
+│ Pseudobulk Delta │  │ Single-Cell Deep Sets│  │ Distribution / Proto   │
+│                  │  │                      │  │                        │
+│ build-features   │  │ build-cell-bags      │  │ run-distribution-cv    │
+│   → features.npz │  │   → bags.npz (PCA)   │  │   (FrozenGMM /         │
+│ run-cv           │  │ run-single-cell-cv   │  │    CloudPred-style)    │
+│   (Repeated      │  │   (DeepSetsRegressor)│  │ GMM occupancy features │
+│    Stratified    │  │ evaluate-single-cell │  │   → Ridge / forest head│
+│    KFold)        │  │   -external (Adamson)│  │ evaluate-distribution  │
+│ fit-final        │  │                      │  │   -external (Adamson)  │
+└────────┬─────────┘  └──────────┬───────────┘  └───────────┬────────────┘
+         │                       │                          │
+         └───────────────────────┴──────────────────────────┘
+                                 │
+                                 ▼
+                  ArtifactStore (fold metrics, predictions,
+                   model manifests, top-k candidates, resume state)
+
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ FORWARD MODEL (Exp 05, src/aivc_model/ — direct module, not CLI) │
+   │  basal state + perturbation → STATE A→B→C → B_hat → C predictor  │
+   └─────────────────────────────────────────────────────────────────┘
+
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ STAGE 3 SL ADAPTER (src/sl_benchmark_baseline/)                  │
+   │  (gene_a, gene_b) → swap-invariant GeneEffect features → P(SL)   │
+   └─────────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+| Module | Role |
+| --- | --- |
+| `src/dependency_baseline/` | Multi-track CV pipeline: `features.py`, `datasets.py`, `models.py`, `cell_bags.py`, `single_cell.py`, `distribution.py`, `predicted_b.py`, `evaluation.py`. |
+| `src/aivc_model/` | AIVC STATE A→B→C forward model (`model.py`, `prepare.py`, `train.py`) plus frozen-STATE feature ablation. |
+| `src/sl_benchmark_baseline/` | Dependency-only SL pair baseline with official-metric evaluator. |
+| `config.py` | Frozen dataclasses loaded from YAML; `SelectionConfig` narrows scopes/features/models/folds at runtime. |
+| `artifacts.py` | `ArtifactStore` — incremental parquet writes, checkpoints, run manifests, resume state. |
+| `metrics.py` | Spearman, Pearson, RMSE, MAE, R² for regression; AUROC, AUPRC, top-k enrichment for ranking. |
+
+### Design Decisions
+
+- **Observed-before-predicted** — Stage 1/2 validate observed response signal before any forward-model dependence, so predicted-transcriptome error is isolated.
+- **Fold-local everything** — In predicted-B and distribution tracks, A→B fitting, featurization, GMM prototypes, and the C head all train on train genes only.
+- **Config-driven runs** — Model ladders, selection filters, predicted-B settings, and viability-axis residualization live in YAML under `configs/experiments/`, grouped to match `docs/experiment/`.
+
+## Results
+
+Headline numbers from the implemented baselines. These are research checkpoints, not production claims.
+
+### Stage 2 — Single-Cell Bag → Dependency (Adamson K562 external transfer)
+
+The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson **Spearman ≈ 0.67**, **AUROC ≈ 0.91**, **AUPRC ≈ 0.80**, with held-out-gene Spearman ≈ 0.64 — clearing the original distribution-regression gate and beating the earlier scVI128 single-head gated-attention row. Full tables: [`docs/experiment/03_replogle_k562_single_cell_deepsets_adamson.md`](docs/experiment/03_replogle_k562_single_cell_deepsets_adamson.md).
+
+### Stage 3 — Dependency-Only SL Floor (official-metric CV, 2026-06-17)
+
+Models: **A** = symmetric logistic regression (honest floor), **B** = XGBoost (nonlinear interactions), **C** = preferential-attachment degree probe (CV-gameability control).
+
+| Split | Holdout | Model B AUPR | Model B AUROC |
+| --- | --- | ---: | ---: |
+| CV1 | pair-level (easiest) | 0.812 | 0.795 |
+| CV2 | one gene unseen | 0.732 | 0.704 |
+| CV3 | both genes unseen (hardest) | 0.609 | 0.596 |
+
+The degree-probe control (Model C) scores highest on CV1 — a reminder that pair-level splits are gameable from graph degree alone, which is exactly why CV2/CV3 are the generalization surfaces. Combined summary: `results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_summary.csv`.
 
 ## Data Sources and Roles
 
 | Source | Role | Notes |
 | --- | --- | --- |
-| Perturb-seq / CROP-seq / CRISPRi-seq | Mechanistic response input | Provides post-perturbation scRNA-seq, pseudobulk signatures, or delta expression. |
-| DepMap / Achilles / CCLE | Supervision and context | Provides CRISPR gene-effect scores, dependency labels, omics, lineage, and mutation context. |
-| SL_benchmark 2024 | External SL pair benchmark | Provides SynLethDB-derived gene-pair SL labels, CV1/CV2/CV3 splits, negative sampling strategies, and pair-ranking metrics. Use through a pair-level adapter; it is not a K562 GeneEffect label source. |
-| CancerSCEM / SCAR / CancerSEA | State annotation | Used for apoptosis, stress, cell-cycle, EMT, DNA-damage, or other cancer-state interpretation. |
-| TCGA / patient omics | Disease context | Useful for biomarker-specific framing and translational interpretation after cell-line proof-of-concept. |
-| LINCS L1000 / Tahoe-100M | Later extensions | Useful for bulk or drug perturbation expansion after the gene-perturbation task is stable. |
+| Perturb-seq / CROP-seq / CRISPRi-seq | Mechanistic response input | Post-perturbation scRNA-seq, pseudobulk signatures, delta expression. |
+| DepMap / Achilles / CCLE | Supervision and context | CRISPR gene-effect scores, dependency labels, omics, lineage, mutation context. |
+| SL_benchmark 2024 (SynLethDB-derived) | External SL pair benchmark | Gene-pair SL labels, CV1/CV2/CV3 splits, pair-ranking metrics. Used via a pair-level adapter; not a K562 GeneEffect label source. |
+| CancerSCEM / SCAR / CancerSEA | State annotation | Apoptosis, stress, cell-cycle, EMT, DNA-damage interpretation. |
+| TCGA / patient omics | Disease context | Biomarker framing and translational interpretation after cell-line proof-of-concept. |
+| LINCS L1000 / Tahoe-100M | Later extensions | Bulk or drug perturbation expansion once the gene-perturbation task is stable. |
 
-Minimum useful aligned training record:
+> **Data rules**: Prioritize CRISPRi or knockout Perturb-seq for DepMap alignment. K562 is the proof-of-concept line. Norman CRISPRa is auxiliary, not primary label alignment. DepMap labels are population-level fitness readouts, not single-cell death.
 
-```text
-cell_line_id
-perturbation_gene_id
-perturbation_modality
-control_expression
-post_perturbation_expression
-delta_expression_or_embedding
-depmap_gene_effect_score
-cell_line_context_metadata
-```
+## Documentation
 
-## Evaluation
+- [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D and evaluation semantics.
+- [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents.
+- [`docs/experiment/`](docs/experiment/) — numbered experiment summaries (01–06) with model cards.
+- [`docs/data/`](docs/data/) — dataset cards for downloaded Stage 1 data.
+- [`docs/discussion/`](docs/discussion/) — project discussion notes.
 
-Use continuous dependency prediction as the default target. Binary essential /
-non-essential labels can be derived later, but threshold choices should be
-reported explicitly.
+## Contributing
 
-Recommended metrics:
-
-- Spearman or Pearson correlation for gene-effect regression;
-- mean squared error or mean absolute error for calibrated score prediction;
-- AUROC / AUPRC if using binary essentiality labels;
-- ranking metrics for top-k target prioritization;
-- within-cell-line and cross-cell-line generalization splits;
-- biological interpretation of high-scoring targets and response programs.
-
-## Current Repository State
-
-This `main` branch has been cleaned of legacy VCC training code and old reports.
-It now contains the rebuilt `dependency_baseline` package for Replogle K562
-pseudobulk and observed single-cell bag baselines.
-
-Project assets:
-
-- `README.md`: human-facing project overview and roadmap.
-- `AGENTS.md` / `CLAUDE.md`: instructions for AI coding agents.
-- `docs/discussion/0408.md`: 2026-04-08 project discussion notes.
-- `docs/discussion/0429.md`: 2026-04-29 project discussion notes.
-- `docs/data/`: concise dataset cards for downloaded Stage 1 data.
-- `docs/experiment/`: numbered experiment summaries, one markdown file per
-  experiment sequence.
-- `docs/images/core.png`: triangular technical framing diagram.
-- `docs/images/roadmap.png`: staged project roadmap diagram.
-- `configs/experiments/`: experiment-grouped YAML configs aligned with
-  `docs/experiment/`; Adamson held-out test settings live inside the experiment
-  configs that use Adamson.
-- `src/dependency_baseline/`: feature building and CV baseline package.
-- `src/aivc_model/`: current experiment 05 AIVC STATE implementation, launched
-  by `src/aivc_model/train.py` rather than the baseline CLI.
-- `scripts/state.sh`: Slurm wrapper for the current experiment 05 AIVC STATE
-  run.
-- `tests/`: synthetic-data tests for the baseline package.
-- `data/norman/splits/`: retained Norman split metadata.
-- `scGPT/`: local scGPT reference code.
-- `pyproject.toml` / `uv.lock`: Python environment metadata.
-
-The normal implemented pipeline entrypoint is `uv run vcc-dep-baseline`. The
-current experiment 05 AIVC STATE path is the exception: use
-`src/aivc_model/train.py`, with `scripts/state.sh` as the Slurm launcher. Do not
-document or rely on old `uv run vcc` or `uv run vcc-tahoe` pipeline commands.
-
-## Environment
-
-This repository uses `uv` with a project-local `.venv`.
+This is a research repository. When contributing:
 
 ```bash
-uv python install 3.11
+# Fork, then clone your fork
+git clone git@github.com:YOUR_USERNAME/gene-perturbation-prediction.git
+cd gene-perturbation-prediction
 uv sync
-uv run python -c "import anndata, scanpy, torch, scvi; print('environment ok')"
-```
 
-Use `uv run` for Python tooling:
+# Create a feature branch
+git checkout -b feature/your-feature-name
 
-```bash
+# Verify before committing
 uv run ruff check .
-uv run ruff format .
 uv run python -m pytest
-uv run vcc-dep-baseline build-features --config configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
-uv run python src/aivc_model/train.py --config configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml
+
+git commit -m "feat: description"   # Conventional Commits
+git push -u origin feature/your-feature-name
 ```
 
-Tests are present under `tests/`. If a future branch removes tests during a
-rebuild, document that explicitly in the change summary instead of treating the
-test command as a successful verification step.
+Follow the **Plan → Confirm → Code** workflow for non-trivial research or implementation changes, use Conventional Commits (`feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`, `ci`), and respect the terminology guardrails below.
 
 ## Terminology Guardrails
 
-- Say **dependency prediction** or **essentiality ranking** for the supervised
-  DepMap task.
-- Say **SL candidate prioritization** only after adding context-specificity
-  evidence.
+- Say **dependency prediction** or **essentiality ranking** for the supervised DepMap task.
+- Say **SL candidate prioritization** only after adding context-specificity evidence.
 - Do not call DepMap gene-effect scores single-cell death labels.
 - Do not equate gene essentiality with synthetic lethality.
-- Do not directly align CRISPRa activation perturbations with CRISPR knockout
-  dependency labels without an explicit modality caveat.
+- Do not align CRISPRa activation perturbations with CRISPR knockout dependency labels without an explicit modality caveat.
+
+---
+
+<div align="center">
+  <p>
+    <strong>Connecting virtual-cell perturbation modeling to cancer dependency and synthetic-lethality target prioritization.</strong><br>
+    <sub>Observed response first, predicted transcriptomes second, context-specific SL claims last.</sub>
+  </p>
+</div>

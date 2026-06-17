@@ -133,8 +133,19 @@ The benchmark evaluates both pair classification and gene ranking:
 - Ranking: NDCG@10/20/50, Recall@10/20/50, Precision@10/20/50.
 - The official code also computes MAP@10/20/50 in `src/preprocess.py`.
 
-Every model emits a floating-point pair score so the same output can be used
-for thresholded classification and ranked candidate-partner retrieval.
+Official `src/preprocess.py:cal_metrics` expects a floating-point score matrix.
+Classification is computed on sampled positive and negative test pairs from
+that matrix. AUPR is trapezoidal PR-curve AUC, and F1 is the maximum F1 over
+the PR curve, not fixed-threshold F1.
+
+Ranking is per-anchor candidate-partner retrieval. For each anchor gene that
+appears in test positives, the evaluator ranks candidate partner genes from the
+full score matrix. Training positive pairs are masked to a very negative score
+before ranking. NDCG@k uses `sklearn.metrics.ndcg_score`; Recall@k is
+`hits / n_positive_partners_for_anchor`; official-code Precision@k is
+`hits / min(k, n_positive_partners_for_anchor)`, which differs from conventional
+`hits / k` when anchors have fewer than `k` positives. MAP@k averages per-anchor
+average precision over hits found in the top `k`.
 
 ## How to Use in This Project
 
@@ -191,17 +202,21 @@ K562 DepMap or predicted dependency scores. This checks whether broad
 essentiality explains the SL labels before attributing gains to transcriptomic
 or AIVC features.
 
-## K562 DepMap-Filtered Rand 1:1 CV1 Subset
+## K562 DepMap-Filtered Rand 1:1 CV1/CV2/CV3 Subset
 
 The helper script `scripts/build_k562_sl_benchmark.py` filters the official
-`CV1_1.npy` Rand 1:1 split cache to pairs whose two genes both have numeric
-K562 DepMap GeneEffect values for `ACH-000551`, then writes the canonical
-minimal CV1 table for first-pass training and evaluation.
+CV1/CV2/CV3 Rand 1:1 split caches to pairs whose two genes both have numeric
+K562 DepMap GeneEffect values for `ACH-000551`, then writes per-split balanced
+tables and an all-CV concatenation for training and evaluation.
 
-Canonical K562 subset:
+Canonical K562 benchmark datasets (all under
+`data/SL_benchmark/derived/k562_depmap_rand_1to1/`):
 
 ```text
-data/k562_SL_benchmark_minimal.csv
+CV1_Rand_1to1_k562_depmap_pairs_balanced.csv
+CV2_Rand_1to1_k562_depmap_pairs_balanced.csv
+CV3_Rand_1to1_k562_depmap_pairs_balanced.csv
+all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv   # default benchmark input
 ```
 
 Run:
@@ -210,9 +225,34 @@ Run:
 uv run python scripts/build_k562_sl_benchmark.py
 ```
 
-The script also writes provenance and fuller intermediate tables under
-`data/SL_benchmark/derived/k562_depmap_rand_1to1/`, but the default data API
-should consume the canonical root-level CSV above.
+The default data API consumes the all-CV concatenation (which carries a
+`split_type` column for CV1/CV2/CV3); the per-split balanced CSVs are available
+for single-split runs. The script also writes unbalanced variants, summaries,
+and metadata in the same directory.
+
+The dependency-only adapter is run with:
+
+```bash
+uv run python -m sl_benchmark_baseline \
+  --input-csv data/SL_benchmark/derived/k562_depmap_rand_1to1/CV1_Rand_1to1_k562_depmap_pairs_balanced.csv \
+  --output-dir results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv1 \
+  --split-types CV1 --folds 0 1 2 3 4 --ranking-k 10 20 50
+```
+
+Repeat with `CV2` and `CV3` input/output paths for the other split types. The
+2026-06-17 official-metric outputs are:
+
+```text
+results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv1/
+results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv2/
+results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv3/
+results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_summary.csv
+```
+
+These outputs use a 9471-gene K562-filtered candidate universe and official
+`src/preprocess.py:cal_metrics` semantics. The older
+`results/experiments/06_k562_sl_pair_dependency_only_mvp/all_cv_run/` ranking metrics
+used flat pair-level ranking and are obsolete for paper comparison.
 
 Canonical columns:
 

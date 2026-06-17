@@ -7,7 +7,10 @@ def test_config_defaults_and_override() -> None:
     from sl_benchmark_baseline.config import SLBaselineConfig
 
     config = SLBaselineConfig()
-    assert config.input_csv == Path("data/k562_SL_benchmark_minimal.csv")
+    assert config.input_csv == Path(
+        "data/SL_benchmark/derived/k562_depmap_rand_1to1/"
+        "all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv"
+    )
     assert config.split_types is None
     assert config.folds == (0, 1, 2, 3, 4)
     assert config.ranking_k == (10, 20, 50)

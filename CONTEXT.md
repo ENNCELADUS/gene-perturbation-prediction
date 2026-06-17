@@ -47,16 +47,23 @@ binary SL label plus a fold-level train/test role. It is not interchangeable wit
 `C`: `C` is `GeneEffect(K562, g)`, while `D` is an SL benchmark label for
 `(gene_a, gene_b)`.
 
-The current canonical K562-mappable CV1 subset is:
+The canonical K562-mappable benchmark datasets are the three per-split
+Rand 1:1 balanced tables (and their all-CV concatenation):
 
-```text
-data/k562_SL_benchmark_minimal.csv
-```
+These keep only SL_benchmark Rand 1:1 pairs whose two genes both have numeric
+K562 DepMap GeneEffect values for `ACH-000551`, across all three CV splits
+(CV1 pair-level, CV2 one-gene held out, CV3 both-genes held out). The all-CV
+file is the default benchmark input (it contains all three splits, so the
+baseline runs CV1/CV2/CV3 by default). Treat them as pair-level benchmark
+adapter targets with K562 dependency coverage, not as a validated K562-specific
+SL assay.
 
-This file keeps only SL_benchmark CV1 Rand 1:1 pairs whose two genes both have
-numeric K562 DepMap GeneEffect values for `ACH-000551`. Treat it as a
-pair-level benchmark adapter target with K562 dependency coverage, not as a
-validated K562-specific SL assay.
+The dependency-only SL baseline uses official `SL_benchmark` metric semantics
+from `data/SL_benchmark/src/preprocess.py:cal_metrics`: classification metrics
+are computed on sampled test pairs from a full candidate score matrix; AUPR is
+trapezoidal PR-curve AUC; F1 is the maximum F1 over the PR curve; ranking is
+per-anchor candidate-partner retrieval over the K562-filtered candidate-gene
+universe with train-positive pairs masked. 
 
 ### Observed-B -> C
 

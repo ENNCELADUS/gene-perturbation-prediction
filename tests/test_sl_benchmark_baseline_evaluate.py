@@ -33,8 +33,10 @@ def test_run_cv_writes_outputs_and_aggregates(
         fold_metrics.columns
     )
     metric_names = set(fold_metrics["metric"].unique())
-    assert {"auroc", "aupr", "f1@0.5"}.issubset(metric_names)
+    assert "f1@0.5" not in metric_names
+    assert {"auroc", "aupr", "f1"}.issubset(metric_names)
     assert {"ndcg@2", "recall@2", "precision@2"}.issubset(metric_names)
+    assert {"map@2", "map@5"}.issubset(metric_names)
 
     assert {"split_type", "model", "metric", "mean", "std"}.issubset(summary.columns)
     assert len(summary) == len(fold_metrics["metric"].unique()) * 3
@@ -43,7 +45,8 @@ def test_run_cv_writes_outputs_and_aggregates(
     assert "input_csv_sha256" in manifest
     assert "leakage_notes" in manifest
     assert "ranking_semantics" in manifest
-    assert "model_c_f1_note" in manifest
+    assert "official_metric_source" in manifest
+    assert "candidate_gene_count" in manifest
     assert manifest["split_types"] == ["CV1"]
     assert manifest["seed"] == config.seed
 

@@ -83,3 +83,30 @@ def test_frequency_probe_uses_train_positive_degree() -> None:
     probe.fit(train)
     scores = probe.predict_proba(test)
     assert scores[0] > scores[1]
+
+
+def test_frequency_probe_score_matrix_is_symmetric() -> None:
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.models import FoldData, build_models
+
+    train_df = pd.DataFrame(
+        {
+            "pair_id": ["T0", "T1"],
+            "sl_label": [1, 1],
+            "gene_a_symbol": ["A", "A"],
+            "gene_b_symbol": ["B", "C"],
+        }
+    )
+    train = FoldData(
+        df=train_df,
+        features=np.zeros((2, 5)),
+        labels=np.array([1, 1]),
+    )
+
+    probe = next(m for m in build_models(SLBaselineConfig()) if m.name == "C")
+    probe.fit(train)
+    score_matrix = probe.predict_score_matrix(np.array(["A", "B", "C"]))
+
+    np.testing.assert_allclose(score_matrix, score_matrix.T)
+    assert score_matrix[0, 1] == 2.0
+    assert score_matrix[1, 2] == 1.0

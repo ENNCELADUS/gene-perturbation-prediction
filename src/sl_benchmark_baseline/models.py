@@ -73,9 +73,9 @@ class FrequencyProbeModel:
     """Model C: preferential-attachment probe from train-positive degree.
 
     Scores a test pair by ``pos_degree[a] * pos_degree[b]`` using only training
-    positives, then min-max normalizes the fold's scores into ``[0, 1]`` so the
-    output is comparable with probability outputs of A and B. AUROC/AUPR and
-    ranking are invariant to this monotonic rescaling; F1@0.5 uses it directly.
+    positives. ``predict_proba`` preserves the old bounded-score interface for
+    labeled pair scoring, while official matrix evaluation uses raw degree
+    products via ``predict_score_matrix``.
     """
 
     name = "C"
@@ -107,6 +107,14 @@ class FrequencyProbeModel:
         if span == 0.0:
             return np.zeros_like(raw)
         return (raw - raw.min()) / span
+
+    def predict_score_matrix(self, gene_symbols: np.ndarray) -> np.ndarray:
+        """Score all candidate gene pairs by train-positive degree product."""
+        degrees = np.array(
+            [self._pos_degree[str(symbol)] for symbol in gene_symbols],
+            dtype=float,
+        )
+        return np.outer(degrees, degrees)
 
 
 def build_models(config: SLBaselineConfig) -> list:

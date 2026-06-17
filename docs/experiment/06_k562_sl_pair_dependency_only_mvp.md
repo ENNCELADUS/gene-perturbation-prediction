@@ -1,216 +1,145 @@
 # K562 SL Pair Dependency-Only MVP
 
-Run status: design spec only on 2026-06-16; not implemented.
+Run status: official-metric implementation and CV1/CV2/CV3 rerun completed on
+2026-06-17. Module `src/sl_benchmark_baseline/`; the previous
+`results/experiments/06_k562_sl_pair_dependency_only_mvp/all_cv_run/` used obsolete
+flat pair-level ranking metrics and should not be compared with the paper.
 
-## Scope
+## Goal
 
-This experiment establishes the first baseline for **gene-pair synthetic-lethality
-(SL) link prediction** on the K562-mappable benchmark. It is the floor that all
-later observed-B and frozen-AIVC pair features must beat.
-
-The supervised object is an **undirected gene pair**, not a single gene:
+First baseline for **gene-pair synthetic-lethality (SL) link prediction** on the
+K562-mappable benchmark. Predicts the per-pair label `D = sl_label(gene_a, gene_b)`
+using **only** the two genes' K562 DepMap GeneEffect scalars (`C`-style evidence) as
+input. This is the floor that later observed-B / predicted-B / frozen-AIVC pair
+features must beat. It is **not** DepMap GeneEffect regression (experiments 01-05).
+See `CONTEXT.md` glossary entries `C` and `D`.
 
 ```text
 (gene_a, gene_b) -> P(SL) in [0, 1]
 ```
 
-This is **not** DepMap GeneEffect regression. The existing pipeline (experiments
-01-05, Tracks 1 and 2) predicts the per-gene scalar `C = GeneEffect(K562, g)`.
-This experiment predicts the per-pair label `D = sl_label(gene_a, gene_b)`, and
-*consumes* `C`-style evidence as input features. See [`CONTEXT.md`](../../CONTEXT.md)
-glossary entries `C` and `D`.
+## Data
 
-The MVP uses **only** the two genes' K562 DepMap GeneEffect scalars as input.
-Observed-B, predicted-B, and frozen-AIVC features are explicitly out of scope and
-are added in later experiments against this same benchmark and metrics.
+Run input: `data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv`
+(877,418 rows; 1:1 balanced; CV1/CV2/CV3). Its CV1 partition (331,730 rows) is
+content-identical on key columns to the canonical CV1-only
+`data/k562_SL_benchmark_minimal.csv`. Built by
+`scripts/build_k562_sl_benchmark.py`; both genes carry a numeric K562 DepMap
+GeneEffect value for `ACH-000551`. Negatives are `Rand` (random unknown pairs;
+noisy non-SL, not confirmed).
 
-## Data Contract
+CV split difficulty (standard SynLethDB / Feng 2024 convention):
 
-Canonical input: [`data/k562_SL_benchmark_minimal.csv`](../../data/k562_SL_benchmark_minimal.csv)
-(verified 2026-06-16). Built by
-[`scripts/build_k562_sl_benchmark.py`](../../scripts/build_k562_sl_benchmark.py)
-from the official `CV1_1.npy` Rand 1:1 split cache, filtered to pairs whose two
-genes both have a numeric K562 DepMap GeneEffect value for `ACH-000551`.
+| Split | Holdout | Difficulty |
+| --- | --- | --- |
+| CV1 | pair-level; both genes may recur in train | easiest |
+| CV2 | one gene unseen in train | intermediate |
+| CV3 | both genes unseen in train (cold-start) | hardest |
 
-| Property | Value |
-| --- | --- |
-| Rows | 331,730 |
-| Split | `CV1` only (pair-level holdout) |
-| Folds | 5 (`fold_id` 0-4), each with its own `split_role` train/test |
-| Balance | 1:1 (165,865 positive / 165,865 negative) |
-| Negatives | `Rand` (random unknown pairs; noisy non-SL, not confirmed) |
-| Union genes | 9,471 |
-| Pair ordering | Stored one way only; treat as undirected |
+CV1 results are **not** evidence of held-out-gene generalization; CV2/CV3 are the
+generalization surfaces.
 
-Required columns consumed by the MVP:
+## Method
 
-```text
-pair_id, fold_id, split_role, sl_label,
-gene_a_symbol, gene_b_symbol,
-gene_a_k562_gene_effect, gene_b_k562_gene_effect
-```
+**Features** (`features.py`): five swap-invariant functions of the two GeneEffect
+scalars `ea, eb` — `min, max, sum, product, |diff|` — standardized on train-fold
+statistics only. No raw `ea`/`eb` and no pair ordering is exposed.
 
-**CV1 honesty constraint:** in CV1 a test pair's two genes may appear in other
-training pairs. Results are pair-level only and are **not** evidence of
-held-out-gene generalization. No SL biological claim is made; this is a
-benchmark-adapter floor.
-
-## Model Task Definition
-
-- **Input (MVP):** the two scalars `ea = gene_a_k562_gene_effect`,
-  `eb = gene_b_k562_gene_effect`.
-- **Output:** `P(SL | pair)`, a single float used for both thresholded
-  classification and ranking.
-- **Symmetry requirement:** the pair is undirected and stored in one ordering,
-  so the model must be swap-invariant **by feature construction**, never by
-  relying on the stored order.
-- **Evaluation unit:** one fold. Fit on `split_role == "train"`, score
-  `split_role == "test"`, aggregate mean +/- std across the 5 folds.
-
-## Feature Construction
-
-All features are symmetric functions of `(ea, eb)` so that swapping the two genes
-leaves the input unchanged:
-
-```text
-f_min     = min(ea, eb)
-f_max     = max(ea, eb)
-f_sum     = ea + eb
-f_product = ea * eb
-f_absdiff = |ea - eb|
-```
-
-Five features. Standardized (zero mean, unit variance) using **train-fold
-statistics only**; the same transform is applied to the test fold. No raw `ea`,
-`eb`, or pair ordering is exposed as a feature.
-
-## Models
-
-Three models in one results table. A is the MVP; C is a mandatory leakage/degree
-control shipped alongside it; B is a nonlinear second row.
+**Models** (`models.py`):
 
 | Id | Model | Inputs | Role |
 | --- | --- | --- | --- |
-| `A` | Symmetric logistic regression | 5 symmetric features (standardized) | Minimal honest floor: "two GeneEffect values -> probability". |
-| `B` | XGBoost gradient-boosted trees | same 5 symmetric features | Captures nonlinear "both-essential" interactions. |
-| `C` | Preferential-attachment frequency probe | per-gene positive-degree from train fold | Control: how gameable is CV1 from pair-degree alone? |
+| `A` | Symmetric logistic regression | 5 standardized features | Honest dependency-only floor |
+| `B` | XGBoost (200 trees, depth 4) | same 5 features | Nonlinear "both-essential" interactions |
+| `C` | Preferential-attachment degree probe | per-gene train-positive degree | Control: CV gameability from pair-degree alone |
 
-**Model A / B** see no gene identity, so they cannot exploit CV1 pair-degree
-structure. That is intentional: it keeps the floor clean.
+`C` scores a test pair by `pos_degree[a] * pos_degree[b]` from training positives
+only (min-max normalized per fold). It sees gene identity; A and B do not.
 
-**Model C** is not a real predictor. For each fold it counts, using **training
-positives only**, how often each gene appears (`pos_degree[g]`). It scores a test
-pair by the preferential-attachment product:
+**Protocol** (`evaluate.py`): per `(split_type, fold_id)`, fit on `train` rows,
+build a full score matrix over the K562-filtered candidate-gene universe, mask
+train-positive pairs for ranking, then compute metrics aligned to
+`data/SL_benchmark/src/preprocess.py:cal_metrics`. Seed 17.
 
-```text
-score(a, b) = pos_degree[a] * pos_degree[b]
-```
+Classification metrics are computed on sampled positive and negative test pairs:
+AUROC, PR-curve AUC (`auc(recall, precision)`), and maximum F1 over the PR
+curve. Ranking metrics are official per-anchor candidate-partner metrics, not a
+flat test-pair list: NDCG@{10,20,50}, Recall@{10,20,50}, Precision@{10,20,50},
+and MAP@{10,20,50}. Official-code Precision@k uses
+`hits / min(k, n_positive_partners_for_anchor)`.
 
-Genes unseen in the train fold get degree 0. If `C` approaches `A`, CV1 results
-are dominated by pair-frequency structure rather than dependency biology, and any
-later feature-based gain must be read against that.
+## Results
 
-## Metrics
+Official-protocol artifacts from the 2026-06-17 rerun:
 
-Every model emits a float per pair, so the same scores feed classification and
-ranking.
+| Split | Input CSV | Output directory |
+| --- | --- | --- |
+| CV1 | `data/SL_benchmark/derived/k562_depmap_rand_1to1/CV1_Rand_1to1_k562_depmap_pairs_balanced.csv` | `results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv1/` |
+| CV2 | `data/SL_benchmark/derived/k562_depmap_rand_1to1/CV2_Rand_1to1_k562_depmap_pairs_balanced.csv` | `results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv2/` |
+| CV3 | `data/SL_benchmark/derived/k562_depmap_rand_1to1/CV3_Rand_1to1_k562_depmap_pairs_balanced.csv` | `results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv3/` |
 
-**Classification (per fold):**
+Each output directory contains `fold_metrics.csv`, `summary.csv`, and
+`manifest.json`. The combined table is
+`results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_summary.csv`.
+All three manifests record `candidate_gene_count = 9471`, `seed = 17`,
+`ranking_k = [10, 20, 50]`, and
+`official_metric_source = data/SL_benchmark/src/preprocess.py:cal_metrics`.
 
-- AUROC
-- AUPR (average precision)
-- F1 at threshold 0.5
+Paper-comparable result table:
+`(NSM_Rand, CV_i, 1:1), i = 1, 2, 3`. Values are five-fold means rounded to
+three decimals, matching the paper table format. Full mean/std values for all
+metrics are in `official_metrics_summary.csv`.
 
-**Ranking (per fold, pair-level):** rank all test pairs in the fold by score and
-treat positives as relevant:
+| Models | F1 score CV1 | F1 score CV2 | F1 score CV3 | NDCG@10 CV1 | NDCG@10 CV2 | NDCG@10 CV3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A: Symmetric logistic regression | 0.667 | 0.668 | 0.669 | 0.004 | 0.005 | 0.004 |
+| B: XGBoost dependency-only | 0.730 | 0.676 | 0.670 | 0.050 | 0.042 | 0.002 |
+| C: Degree probe | 0.823 | 0.667 | 0.667 | 0.197 | 0.001 | 0.001 |
 
-- NDCG@{10, 20, 50}
-- Recall@{10, 20, 50}
-- Precision@{10, 20, 50}
+## Interpretation
 
-These are **pair-level** ranking metrics over the flat test-pair list. This
-differs from the official benchmark's per-gene-anchor candidate-partner ranking;
-the divergence is recorded in the run manifest and is not claimed equivalent.
-The frequency probe `C` has many tied scores (e.g. all degree-0 pairs); ties are
-broken deterministically by `pair_id` so ranking metrics are reproducible.
+CV1 is dominated by topology and broad dependency signal. The identity-based
+degree probe (`C`) is strongest on CV1 classification and ranking, confirming
+that pair-level splits can be gamed by train-positive degree. This is a
+diagnostic control, not a deployable biological model.
 
-All metrics are reported as mean +/- std across the 5 folds.
+CV2 is the useful dependency-only floor for partly held-out genes. Nonlinear
+GeneEffect features (`B`) beat logistic features (`A`) on classification
+(AUROC 0.704 vs 0.620; AUPR 0.732 vs 0.648), but official ranking remains low
+(NDCG@10 0.042). The degree probe collapses to AUROC 0.5 and near-zero ranking,
+as expected when held-out genes have no train-positive degree signal.
 
-## Evaluation Protocol
+CV3 is close to cold-start failure for dependency-only features. `B` falls to
+AUROC 0.596 and NDCG@10 0.002; `A` remains weakly above chance in classification
+but does not rank useful partners. Future observed-B / predicted-B / frozen-AIVC
+pair features should be judged primarily by whether they improve CV2/CV3 under
+this official protocol.
 
-For each `fold_id` in 0..4:
+## Caveats
 
-1. Slice `train` and `test` rows for the fold from the minimal CSV.
-2. Build the 5 symmetric features; fit the standardizer on train only.
-3. Fit `A` and `B` on train features and `sl_label`.
-4. Build `C` positive-degree map from train positives only.
-5. Score `test` rows with each model.
-6. Compute classification and ranking metrics per model.
+- The old flat-ranking output is obsolete. Paper comparison requires the
+  official per-anchor ranking metrics implemented on 2026-06-17.
+- The candidate universe for this K562 MVP is the K562-filtered gene universe
+  present in the input table, not the full official 9845-gene universe with
+  genes lacking K562 GeneEffect features.
+- `Rand` negatives are unconfirmed non-SL. No SL biological claim is made; this is a
+  benchmark-adapter floor.
+- Using `GeneEffect(K562, g)` against `Rand` negatives is low leakage risk;
+  switching to `Exp`/`Dep` negatives would leak against this feature and requires a
+  separate leakage review.
 
-Aggregate to mean +/- std across folds. Determinism via fixed seeds for `A`
-(solver), `B` (tree construction), and any sampling.
+## Next
 
-## Module Layout
+1. Add observed-B / Deep Sets pair features and evaluate on **CV2/CV3**; beating
+   A (0.620) and B (0.704) on CV2 is the first evidence transcriptomic signal adds
+   information beyond essentiality.
+2. Calibration / reliability check for A on CV2/CV3.
+3. Compare future pair-feature models to the paper's Rand 1:1 table only with
+   the official per-anchor ranking protocol and the same CV split boundary.
 
-A lean standalone module under `src/`, separate from the `dependency_baseline`
-pipeline (this predicts `D`, not `C`):
+## Scope guard
 
-```text
-src/sl_benchmark_baseline/
-  __init__.py
-  config.py     # SLBaselineConfig frozen dataclass; defaults centralized, no magic numbers
-  data.py       # load minimal CSV, per-fold train/test slicing, schema validation
-  features.py   # symmetric pair features + train-fit standardizer
-  models.py     # A logreg, B xgboost, C frequency-probe specs
-  metrics.py    # classification + pair-level ranking metrics
-  evaluate.py   # per-fold CV loop, aggregation, manifest
-  __main__.py   # thin entrypoint: uv run python -m sl_benchmark_baseline
-```
-
-Config is a small frozen dataclass with defaults (input CSV path, model
-hyperparameters, ranking `k` values, seed, output dir); CLI flags override. A
-YAML loader is trivial to add later but is not required for v0.
-
-## Outputs
-
-Written under a run directory (gitignored, alongside other experiment artifacts):
-
-- `fold_metrics.csv` - one row per (model, fold, metric).
-- `summary.csv` - mean +/- std per (model, metric) across folds.
-- `manifest.json` - config, seed, input CSV checksum, leakage-scope notes,
-  ranking-semantics caveat.
-
-## Non-Goals (scope-creep guard)
-
-- No CV2 / CV3 -> **no held-out-gene generalization claims** (minimal CSV is CV1
-  only).
-- No observed-B, predicted-B, or frozen-AIVC (State / Tahoe-X1) features yet.
-- No `Exp` / `Dep` negative sampling (both use DepMap and would leak against the
-  DepMap GeneEffect feature). `Rand` only.
-- No graph / knowledge-graph / SynLethDB-graph models (the official heavy track).
-- No new `vcc-dep-baseline` subcommand; standalone module only.
-- No new cell lines and no SL biological claims (pair-level adapter only).
-- No reproduction of the official conda / PyTorch-Geometric environment.
-
-## Leakage Notes
-
-- Using `GeneEffect(K562, g)` as the input feature against `Rand` negatives is
-  **low** leakage risk: random negatives are not selected via DepMap signal.
-- This becomes **high** risk if/when `Exp` or `Dep` negative sampling is used,
-  because those negatives are chosen using DepMap expression or dependency
-  correlation. The manifest flags this explicitly; do not switch negative
-  sampling without re-evaluating leakage.
-- The `C` frequency probe is the explicit check on CV1 pair-degree gameability.
-
-## Success Criteria
-
-v0 success is **not** a high AUROC. It is:
-
-1. A no-leakage, reproducible per-fold loop over the canonical benchmark.
-2. A clean three-model floor (`A`, `B`, `C`) with classification and ranking
-   metrics in one table.
-3. An interpretable read of how much of CV1 is explained by dependency-only
-   signal (`A`/`B`) versus pair-degree structure (`C`).
-
-Any later observed-B or frozen-AIVC pair model must beat this floor on the same
-folds and metrics before a transcriptomic or virtual-cell gain is claimed.
+CV1/CV2/CV3 only (no further splits); `Rand` negatives only; dependency-only
+inputs (no observed-B/predicted-B/AIVC features yet); standalone module, no new
+`vcc-dep-baseline` subcommand; pair-level adapter, no new cell lines and no SL
+biological claims.
