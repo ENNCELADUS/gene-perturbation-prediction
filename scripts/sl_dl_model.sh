@@ -34,13 +34,13 @@ fi
 export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
-# NOTE: StateDlProducer trains per fold on the unwrapped model (gene-at-a-time
-# forwards through the frozen STATE backbone), so DDP gradient sync is not yet
-# engaged. With --num_processes 4 every rank re-runs the full CV loop; run_cv
-# guards artifact writes to the main process (no file races), but the compute is
-# redundant across ranks. To make all four L40s productive, batch the per-gene
-# forwards and wrap the train step in DDP, then this launch becomes a true
-# data-parallel run.
+# NOTE: Fold-level task parallelism (no gradient all-reduce). run_cv shards the
+# (split_type, fold_id) jobs round-robin across the 4 ranks; each rank trains +
+# embeds + scores its own folds on one GPU, then gather_object collects every
+# rank's metric rows onto the main process, which writes the cvN/ + combined
+# artifacts. Each fold is computed exactly once by exactly one rank, so the
+# 4-process output is byte-identical to a 1-process run. If a fold crashes, the
+# gather is a collective and the whole run aborts non-zero (fail-fast).
 echo "Running exp08 SL DL with config: $CONFIG_PATH (producer: $PRODUCER)"
 srun uv run --locked --no-sync --offline accelerate launch \
   --num_processes 4 \
