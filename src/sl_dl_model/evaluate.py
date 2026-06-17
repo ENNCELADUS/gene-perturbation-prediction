@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -154,7 +155,22 @@ def run_cv(
     return summary
 
 
-def _load_state_dl_caches(config: SLDLConfig) -> object:
+@dataclass(frozen=True)
+class StateDlCaches:
+    """Shared, fold-independent caches for the state_dl producer.
+
+    Loaded once by :func:`_load_state_dl_caches` and passed to every
+    per-fold :class:`~sl_dl_model.train.StateDlProducer` via
+    :func:`~sl_dl_model.scoring.make_fold_producer`.
+    """
+
+    esm: object  # Esm2EmbeddingTable
+    bags: object  # GwpsBags
+    input_dim: int
+    output_dim: int
+
+
+def _load_state_dl_caches(config: SLDLConfig) -> StateDlCaches:
     """Load ESM2 + gwps-bags caches once; shared across all folds (Task 2.4).
 
     Args:
@@ -166,8 +182,6 @@ def _load_state_dl_caches(config: SLDLConfig) -> object:
     Raises:
         ValueError: If ``config.esm2_npz`` is not set.
     """
-    from dataclasses import dataclass
-
     from sl_dl_model.bags import build_gwps_bags, load_bags_npz
     from sl_dl_model.gene_embeddings import load_esm2_embeddings
 
@@ -179,13 +193,6 @@ def _load_state_dl_caches(config: SLDLConfig) -> object:
         bags = load_bags_npz(config.bags_npz)
     else:
         bags = build_gwps_bags(config, rng_seed=config.seed)
-
-    @dataclass(frozen=True)
-    class StateDlCaches:
-        esm: object
-        bags: object
-        input_dim: int
-        output_dim: int
 
     return StateDlCaches(
         esm=esm,

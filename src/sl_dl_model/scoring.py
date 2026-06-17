@@ -157,6 +157,39 @@ def run_fold_with_producer(
     neg_cov = neg_index[_covered_pair_mask(neg_index, universe)]
 
     rows: list[dict[str, object]] = []
+
+    # DL path: use the trained pair head's score matrix directly.
+    if hasattr(producer, "score_matrix"):
+        sm = producer.score_matrix(universe.symbols, universe.gene_effects)
+        rows.extend(
+            _metric_rows(
+                split_type,
+                "state_dl",
+                fold_id,
+                "full_universe",
+                sm,
+                pos_index,
+                neg_index,
+                seen_index,
+                config.ranking_k,
+            )
+        )
+        if len(pos_cov) > 0 and len(neg_cov) > 0:
+            rows.extend(
+                _metric_rows(
+                    split_type,
+                    "state_dl",
+                    fold_id,
+                    "covered_pairs",
+                    sm,
+                    pos_cov,
+                    neg_cov,
+                    seen_index,
+                    config.ranking_k,
+                )
+            )
+        return rows
+
     for model in build_augmented_models(proxy_config):
         if not model.name.endswith("_transcript"):
             continue
