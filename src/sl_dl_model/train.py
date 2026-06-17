@@ -4,12 +4,13 @@ StateDlProducer trains the model on one fold's pairs and then embeds every
 gene in the universe through the frozen STATE backbone to produce a per-gene
 embedding table.
 
-Training uses Accelerate for device placement and backward, but runs
-single-process: each gene is forwarded one at a time through the frozen STATE
-backbone on the unwrapped model, so DDP gradient sync is not engaged. The Slurm
-wrapper launches a single process accordingly. Artifact writes in
-:func:`sl_dl_model.evaluate.run_cv` are still guarded to the main process so a
-multi-process launch cannot race on output files.
+Training runs on a single device per fold: each gene is forwarded one at a
+time through the frozen STATE backbone, and gradients update only the trainable
+adapter/pooling/pair-head. There is no DDP gradient all-reduce — fold-level
+parallelism (one fold per rank) is orchestrated in
+:func:`sl_dl_model.evaluate.run_cv`, which assigns disjoint folds to each rank
+and gathers metric rows on the main process. ``PartialState`` supplies the
+device and rank info; it does not wrap the model.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from accelerate import Accelerator
+from accelerate import PartialState
 from torch import optim
 from tqdm.auto import tqdm
 
@@ -354,17 +355,17 @@ class StateDlProducer:
         # Fit the train-fold GeneEffect standardizer before training so it is
         # applied consistently in training and full-matrix scoring (spec §5).
         self._fit_ge_standardizer()
-        accelerator = Accelerator()
+        state = PartialState()
         model = self._build_model()
         optimizer = optim.Adam(
             (p for p in model.parameters() if p.requires_grad),
             lr=self.config.lr,
         )
-        model, optimizer = accelerator.prepare(model, optimizer)
-        self._train(model, optimizer, accelerator, train_symbols)
-        self._model = accelerator.unwrap_model(model)
+        model = model.to(state.device)
+        self._train(model, optimizer, state, train_symbols)
+        self._model = model
 
-        device = accelerator.device
+        device = state.device
         control = torch.tensor(self.bags.control_template, device=device)
         pooled_dim = self._model.emb_dim
         n = len(symbols)
@@ -379,7 +380,7 @@ class StateDlProducer:
                 tqdm(
                     symbols,
                     desc="embed-universe",
-                    disable=not accelerator.is_main_process,
+                    disable=not state.is_main_process,
                 )
             ):
                 key = str(symbol).upper()
@@ -491,7 +492,7 @@ class StateDlProducer:
         self,
         model: SlDlModel,
         optimizer: optim.Optimizer,
-        accelerator: Accelerator,
+        state: PartialState,
         train_symbols: set[str],
     ) -> None:
         """Run the training loop over all epochs.
@@ -501,22 +502,21 @@ class StateDlProducer:
         is applied when weights["distill"] > 0 and pert_vocab is available.
 
         Args:
-            model: Model prepared by Accelerate (possibly wrapped).
-            optimizer: Optimizer prepared by Accelerate.
-            accelerator: The Accelerator instance for backward + device.
+            model: Model on the target device (no DDP wrap).
+            optimizer: Optimizer for the trainable parameters.
+            state: PartialState for device and rank info.
             train_symbols: Upper-case gene symbols present in train pairs.
 
         Raises:
             RuntimeError: If all pairs in an epoch are skipped due to missing
                 ESM2 vectors.
         """
-        device = accelerator.device
+        device = state.device
         control = torch.tensor(self.bags.control_template, device=device)
         covered_train = {
             s.upper() for s in train_symbols if s.upper() in self.bags.bags_by_symbol
         }
-        inner = accelerator.unwrap_model(model)
-        self._model = inner  # Expose unwrapped model for _distill_part
+        self._model = model  # Expose model for _distill_part
 
         for epoch in range(self.config.max_epochs):
             weights = _epoch_weights(epoch, self.config)
@@ -524,7 +524,7 @@ class StateDlProducer:
             pbar = tqdm(
                 self.train_pairs,
                 desc=f"epoch {epoch}",
-                disable=not accelerator.is_main_process,
+                disable=not state.is_main_process,
             )
             skipped = 0
             trained = 0
@@ -539,8 +539,8 @@ class StateDlProducer:
 
                 esm_a = torch.tensor(vec_a, device=device)
                 esm_b = torch.tensor(vec_b, device=device)
-                e_a = inner.embed_gene(esm_a, control)
-                e_b = inner.embed_gene(esm_b, control)
+                e_a = model.embed_gene(esm_a, control)
+                e_b = model.embed_gene(esm_b, control)
 
                 ge = torch.tensor(
                     self._ge_features(np.array([ea]), np.array([eb])),
@@ -561,7 +561,7 @@ class StateDlProducer:
                         device=device,
                     )
 
-                logit = inner.score_pairs(
+                logit = model.score_pairs(
                     e_a.unsqueeze(0),
                     e_b.unsqueeze(0),
                     ge,
@@ -578,7 +578,7 @@ class StateDlProducer:
                 # Bag supervision: only for covered train genes (leakage rule).
                 if weights["bag"] > 0:
                     bag_part = _bag_part(
-                        inner,
+                        model,
                         covered_train,
                         control,
                         device,
@@ -599,7 +599,7 @@ class StateDlProducer:
 
                 total = combine(parts, weights)
                 optimizer.zero_grad()
-                accelerator.backward(total)
+                total.backward()
                 optimizer.step()
                 trained += 1
 
