@@ -439,6 +439,52 @@ def test_all_pairs_skipped_raises_error() -> None:
         assert "no trainable pairs" in str(e).lower(), f"unexpected error: {e}"
 
 
+def test_produce_uses_partialstate_not_accelerator(tmp_path, monkeypatch) -> None:
+    """produce() must not instantiate Accelerator (DDP wrap removed)."""
+    import sl_dl_model.train as train_mod
+
+    # Fail loudly if any code path constructs an Accelerator.
+    def _boom(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("Accelerator must not be constructed in produce()")
+
+    monkeypatch.setattr(train_mod, "Accelerator", _boom, raising=False)
+
+    rng = np.random.default_rng(1)
+    symbols = np.array(["A", "B", "C", "D"], dtype=object)
+    esm = train_mod.Esm2EmbeddingTable(
+        dim=8,
+        vectors_by_symbol={
+            s: rng.standard_normal(8).astype("float32") for s in ["A", "B", "C", "D"]
+        },
+    )
+    bags = train_mod.GwpsBags(
+        control_template=rng.standard_normal((8, 6)).astype("float32"),
+        bags_by_symbol={"A": rng.standard_normal((8, 6)).astype("float32")},
+        input_dim=6,
+    )
+    cfg = SLDLConfig(
+        esm2_model="x",
+        max_epochs=1,
+        warmup_epochs=1,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=False,
+        state_backend="linear_mock",
+    )
+    producer = train_mod.StateDlProducer(
+        cfg,
+        esm=esm,
+        bags=bags,
+        train_pairs=[("A", "B", 1, -1.0, -0.5), ("C", "D", 0, 0.1, 0.2)],
+        input_dim=6,
+        output_dim=6,
+    )
+    emb, mask = producer.produce(symbols, {"A", "B", "C", "D"})
+    assert emb.shape == (4, producer._model.emb_dim)
+    assert mask.shape == (4,)
+
+
 def test_score_matrix_caches_embeddings() -> None:
     """FIX 5: score_matrix reuses embeddings from produce, giving same results."""
     producer = _make_producer()
