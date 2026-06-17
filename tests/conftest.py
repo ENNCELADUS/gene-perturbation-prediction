@@ -102,3 +102,104 @@ def _write_synthetic_all_cv_benchmark(path: Path) -> Path:
 def synthetic_all_cv_benchmark_csv(tmp_path: Path) -> Path:
     """Provide a synthetic benchmark CSV with multiple split types."""
     return _write_synthetic_all_cv_benchmark(tmp_path)
+
+
+def _write_synthetic_bags_npz(path: Path) -> Path:
+    """Write a tiny cell-bags NPZ: 3 covered genes, 2-dim embeddings."""
+    # gene G0: 2 cells, gene G1: 1 cell, gene G2: 3 cells
+    cell_delta_pcs = np.array(
+        [
+            [1.0, 0.0], [3.0, 2.0],      # G0 -> mean [2, 1]
+            [5.0, 5.0],                  # G1 -> mean [5, 5]
+            [0.0, 0.0], [2.0, 0.0], [4.0, 6.0],  # G2 -> mean [2, 2]
+        ],
+        dtype=np.float32,
+    )
+    bag_offsets = np.array([0, 2, 3, 6], dtype=np.int64)
+    perturbation_gene = np.asarray(["G0", "G1", "G2"], dtype=object)
+    npz_path = path / "synthetic_bags.npz"
+    np.savez_compressed(
+        npz_path,
+        cell_delta_pcs=cell_delta_pcs,
+        bag_offsets=bag_offsets,
+        perturbation_gene=perturbation_gene,
+    )
+    return npz_path
+
+
+@pytest.fixture
+def synthetic_bags_npz(tmp_path: Path) -> Path:
+    """Provide a path to a freshly written synthetic cell-bags NPZ."""
+    return _write_synthetic_bags_npz(tmp_path)
+
+
+def _write_augmented_benchmark_csv(path: Path) -> Path:
+    """Deterministic benchmark guaranteeing both-covered and mixed test pairs.
+
+    Covered genes C0-C3 (present in the augmented bags NPZ); uncovered U0-U1.
+    Per fold (0, 1), each role/label includes at least one both-covered pair and
+    one mixed pair, so the covered_pairs slice is always non-empty.
+    """
+    effects = {"C0": -1.2, "C1": -1.0, "C2": -0.9, "C3": -1.1, "U0": 0.2, "U1": 0.3}
+    # (role, label, gene_a, gene_b)
+    spec = [
+        ("train", 1, "C0", "C1"), ("train", 1, "C2", "C3"),
+        ("train", 0, "C0", "U0"), ("train", 0, "C1", "U1"),
+        ("test", 1, "C0", "C2"), ("test", 1, "C1", "U0"),
+        ("test", 0, "C1", "C3"), ("test", 0, "C2", "U1"),
+    ]
+    rows = []
+    pair_counter = 0
+    for fold_id in (0, 1):
+        for role, label, a, b in spec:
+            rows.append(
+                {
+                    "pair_id": f"P{pair_counter}",
+                    "fold_id": fold_id,
+                    "split_role": role,
+                    "sl_label": label,
+                    "gene_a_symbol": a,
+                    "gene_b_symbol": b,
+                    "gene_a_k562_gene_effect": effects[a],
+                    "gene_b_k562_gene_effect": effects[b],
+                }
+            )
+            pair_counter += 1
+    csv_path = path / "synthetic_augmented_sl.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    return csv_path
+
+
+def _write_augmented_bags_npz(path: Path) -> Path:
+    """Bags NPZ covering only C0-C3 (matches _write_augmented_benchmark_csv)."""
+    cell_delta_pcs = np.array(
+        [
+            [1.0, 0.0], [3.0, 2.0],   # C0 -> [2, 1]
+            [5.0, 5.0],               # C1 -> [5, 5]
+            [0.0, 0.0], [4.0, 4.0],   # C2 -> [2, 2]
+            [1.0, 3.0],               # C3 -> [1, 3]
+        ],
+        dtype=np.float32,
+    )
+    bag_offsets = np.array([0, 2, 3, 5, 6], dtype=np.int64)
+    perturbation_gene = np.asarray(["C0", "C1", "C2", "C3"], dtype=object)
+    npz_path = path / "synthetic_augmented_bags.npz"
+    np.savez_compressed(
+        npz_path,
+        cell_delta_pcs=cell_delta_pcs,
+        bag_offsets=bag_offsets,
+        perturbation_gene=perturbation_gene,
+    )
+    return npz_path
+
+
+@pytest.fixture
+def synthetic_augmented_benchmark_csv(tmp_path: Path) -> Path:
+    """Deterministic benchmark CSV with guaranteed covered/mixed test pairs."""
+    return _write_augmented_benchmark_csv(tmp_path)
+
+
+@pytest.fixture
+def synthetic_augmented_bags_npz(tmp_path: Path) -> Path:
+    """Bags NPZ covering exactly the covered genes of the augmented benchmark."""
+    return _write_augmented_bags_npz(tmp_path)
