@@ -43,6 +43,14 @@ from dependency_baseline.single_cell import (
 )
 
 
+def test_dense_float32_sanitizes_non_finite_values() -> None:
+    values = np.array([[1.0, np.nan], [np.inf, -np.inf]], dtype=np.float32)
+
+    dense = cell_bag_module._dense_float32(values)
+
+    np.testing.assert_allclose(dense, [[1.0, 0.0], [0.0, 0.0]])
+
+
 def test_build_cell_bags_creates_aligned_single_cell_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -79,8 +87,7 @@ def test_build_cell_bags_creates_aligned_single_cell_artifacts(
     assert payload["bag_offsets"].tolist() == [0, 3, 6, 9, 12, 15, 18]
     assert payload["control_cell_delta_pcs"].shape[0] == 4
     assert (
-        payload["control_cell_delta_pcs"].shape[1]
-        == payload["cell_delta_pcs"].shape[1]
+        payload["control_cell_delta_pcs"].shape[1] == payload["cell_delta_pcs"].shape[1]
     )
     np.testing.assert_allclose(payload["y"], metadata["depmap_gene_effect"].to_numpy())
     assert (
@@ -323,9 +330,7 @@ def test_run_single_cell_cv_writes_comparable_artifacts(tmp_path: Path) -> None:
         "deepsets_pca3_meanpool",
         "attnmil_pca3_gated",
         "mhattnmil_pca3_gated4_ortho001",
-    }.issubset(
-        set(fold_metrics["model"])
-    )
+    }.issubset(set(fold_metrics["model"]))
     assert {"unweighted", "sqrt_n_cells"}.issubset(set(fold_metrics["weighting"]))
     assert predictions["perturbation_gene"].nunique() == 6
     assert (
@@ -339,9 +344,14 @@ def test_run_single_cell_cv_writes_comparable_artifacts(tmp_path: Path) -> None:
         "mhattnmil_pca3_gated4_ortho001",
     }.issubset(set(attention["model"]))
     assert "attention_head" in attention.columns
-    assert attention.groupby(["job_key", "perturbation_gene", "attention_head"])[
-        "attention_weight"
-    ].sum().between(0.999, 1.001).all()
+    assert (
+        attention.groupby(["job_key", "perturbation_gene", "attention_head"])[
+            "attention_weight"
+        ]
+        .sum()
+        .between(0.999, 1.001)
+        .all()
+    )
     diagnostics = pd.read_parquet(
         cv_paths.run_dir
         / "artifacts"
@@ -611,7 +621,7 @@ def test_distribution_sweep_model_names_follow_feature_rules() -> None:
             sensitivity_component_counts=(4,),
             ridge_alphas=(1.0,),
             views=("centered",),
-        )
+        ),
     )
     pca_data = DistributionBagData(
         bags=(np.zeros((2, 3), dtype=np.float32),),
@@ -812,9 +822,9 @@ def test_run_predicted_b_cv_writes_fold_local_artifacts(tmp_path: Path) -> None:
     assert np.isfinite(fold_metrics[list(expected_reconstruction_cols)]).all().all()
     assert (fold_metrics["predicted_cells_per_gene"] == 3).all()
     assert predictions["perturbation_gene"].nunique() == 3
-    assert manifest["featureizer_scope"].eq(
-        "fold_local_train_genes_plus_controls"
-    ).all()
+    assert (
+        manifest["featureizer_scope"].eq("fold_local_train_genes_plus_controls").all()
+    )
     for model in ("mean_delta_ridge", "pseudo_pair_ridge"):
         metadata = pd.read_parquet(
             paths.run_dir
