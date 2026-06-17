@@ -186,6 +186,34 @@ def test_truncate_sequence_custom_max_len(
 
 
 # ---------------------------------------------------------------------------
+# FIX 5 — residue mean pooling excludes special tokens (BOS/EOS/pad)
+# ---------------------------------------------------------------------------
+
+
+def test_mean_pool_residues_excludes_special_tokens() -> None:
+    """mean_pool_residues averages only residue rows (special_tokens_mask == 0)."""
+    # 4 token positions, dim 2. Rows 0 and 3 are special (BOS/EOS); 1,2 residues.
+    hidden = np.array(
+        [[100.0, 100.0], [1.0, 2.0], [3.0, 4.0], [-100.0, -100.0]],
+        dtype=np.float32,
+    )
+    special = np.array([1, 0, 0, 1])  # 1 = special token, excluded from the mean
+    pooled = MOD.mean_pool_residues(hidden, special)
+    # Mean of rows 1 and 2 only: ([1,2] + [3,4]) / 2 = [2, 3].
+    assert pooled.shape == (2,)
+    np.testing.assert_allclose(pooled, np.array([2.0, 3.0]), rtol=1e-6)
+
+
+def test_mean_pool_residues_all_special_falls_back_to_all_tokens() -> None:
+    """If every token is special (degenerate), fall back to a full mean (no NaN)."""
+    hidden = np.array([[2.0, 4.0], [6.0, 8.0]], dtype=np.float32)
+    special = np.array([1, 1])
+    pooled = MOD.mean_pool_residues(hidden, special)
+    assert np.isfinite(pooled).all()
+    np.testing.assert_allclose(pooled, np.array([4.0, 6.0]), rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
 # Existing smoke: universe_symbols
 # ---------------------------------------------------------------------------
 

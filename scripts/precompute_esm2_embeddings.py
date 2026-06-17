@@ -150,6 +150,32 @@ def check_resolution(resolved: np.ndarray, n_symbols: int) -> None:
         )
 
 
+def mean_pool_residues(
+    hidden: np.ndarray, special_tokens_mask: np.ndarray
+) -> np.ndarray:
+    """Mean-pool token embeddings over residues, excluding special tokens.
+
+    ESM2 prepends a BOS (``<cls>``) and appends an EOS (``<eos>``) token; padding
+    tokens may also be present. The spec calls for a residue mean, so special
+    tokens (``special_tokens_mask == 1``) are excluded from the average.
+
+    Args:
+        hidden: Token embeddings, shape ``(n_tokens, dim)``.
+        special_tokens_mask: Per-token mask, shape ``(n_tokens,)``; ``1`` marks a
+            special (non-residue) token to exclude.
+
+    Returns:
+        Residue-mean embedding, shape ``(dim,)``. If every token is special
+        (degenerate input), falls back to a full mean over all tokens to avoid
+        a NaN.
+    """
+    hidden = np.asarray(hidden, dtype=np.float32)
+    keep = np.asarray(special_tokens_mask) == 0
+    if not keep.any():
+        return hidden.mean(axis=0)
+    return hidden[keep].mean(axis=0)
+
+
 def embed_sequences(
     symbols: list[str], seqs: dict[str, str], model_name: str
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -175,11 +201,15 @@ def embed_sequences(
             seq = seqs.get(symbol)
             if not seq:
                 continue
-            toks = tokenizer(truncate_sequence(seq, symbol), return_tensors="pt").to(
-                device
+            toks = tokenizer(
+                truncate_sequence(seq, symbol),
+                return_tensors="pt",
+                return_special_tokens_mask=True,
             )
+            special = toks.pop("special_tokens_mask")[0].cpu().numpy()
+            toks = toks.to(device)
             out = model(**toks).last_hidden_state[0]  # (L, dim)
-            vectors[row] = out.mean(dim=0).cpu().numpy()
+            vectors[row] = mean_pool_residues(out.cpu().numpy(), special)
             resolved[row] = True
             if row % 200 == 0:
                 logger.info("embedded %d/%d", row, len(symbols))
