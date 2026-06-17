@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sl_benchmark_baseline.config import SLBaselineConfig
+
 
 def test_config_defaults_and_override() -> None:
-    from sl_benchmark_baseline.config import SLBaselineConfig
-
     config = SLBaselineConfig()
     assert config.input_csv == Path(
         "data/SL_benchmark/derived/k562_depmap_rand_1to1/"
@@ -26,3 +26,17 @@ def test_config_defaults_and_override() -> None:
         pass
     else:  # pragma: no cover
         raise AssertionError("SLBaselineConfig must be frozen")
+
+
+def test_config_augmentation_defaults_preserve_exp06():
+    config = SLBaselineConfig()
+    assert config.bags_npz is None
+    assert config.augmented is False
+    assert config.embedding_method == "pca_delta_meanpool"
+    assert config.fallback_strategy == "zero"
+    assert config.include_coverage_flag is True
+
+
+def test_config_augmented_property_true_when_bags_set(tmp_path):
+    config = SLBaselineConfig(bags_npz=tmp_path / "bags.npz")
+    assert config.augmented is True
