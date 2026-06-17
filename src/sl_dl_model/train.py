@@ -1,8 +1,15 @@
-"""Per-fold training loop (Accelerate/DDP, tqdm) and the StateDlProducer.
+"""Per-fold training loop and the StateDlProducer.
 
 StateDlProducer trains the model on one fold's pairs and then embeds every
 gene in the universe through the frozen STATE backbone to produce a per-gene
 embedding table.
+
+Training uses Accelerate for device placement and backward, but runs
+single-process: each gene is forwarded one at a time through the frozen STATE
+backbone on the unwrapped model, so DDP gradient sync is not engaged. The Slurm
+wrapper launches a single process accordingly. Artifact writes in
+:func:`sl_dl_model.evaluate.run_cv` are still guarded to the main process so a
+multi-process launch cannot race on output files.
 """
 
 from __future__ import annotations

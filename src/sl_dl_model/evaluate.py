@@ -19,6 +19,7 @@ from typing import Protocol
 
 import numpy as np
 import pandas as pd
+from accelerate import PartialState
 
 from sl_benchmark_baseline.data import load_benchmark
 from sl_benchmark_baseline.evaluate import _summarize
@@ -150,10 +151,12 @@ def run_cv(
     fold_metrics = pd.DataFrame(all_rows)
     summary = _summarize(fold_metrics)
 
+    # FIX 1: only the main process writes artifacts (multi-process safe).
+    if not PartialState().is_main_process:
+        return summary
+
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    fold_metrics.to_csv(output_dir / "fold_metrics.csv", index=False)
-    summary.to_csv(output_dir / "summary.csv", index=False)
 
     # FIX 1: compute candidate_gene_count from the loaded frame
     candidate_gene_count = len(
@@ -161,15 +164,75 @@ def run_cv(
     )
 
     # FIX 1: gwps_coverage_gene_count — available only on state_dl path
-    gwps_coverage_gene_count: int | None = None
-    if shared is not None:
-        bags_obj = getattr(shared, "bags", None)
-        if bags_obj is not None:
-            bags_by_symbol = getattr(bags_obj, "bags_by_symbol", None)
-            if bags_by_symbol is not None:
-                gwps_coverage_gene_count = len(bags_by_symbol)
+    gwps_coverage_gene_count = _gwps_coverage_count(shared)
 
-    manifest: dict[str, object] = {
+    manifest = _build_manifest(
+        config,
+        split_types=split_types,
+        candidate_gene_count=candidate_gene_count,
+        gwps_coverage_gene_count=gwps_coverage_gene_count,
+    )
+
+    # Top-level (flat) artifacts — retained for backward compatibility.
+    fold_metrics.to_csv(output_dir / "fold_metrics.csv", index=False)
+    summary.to_csv(output_dir / "summary.csv", index=False)
+    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+    # FIX 7: per-split subdirs (spec §7 "mirror exp06 layout") + combined summary.
+    for split_type in split_types:
+        split_rows = fold_metrics[fold_metrics["split_type"] == split_type]
+        if split_rows.empty:
+            continue
+        split_dir = output_dir / split_type
+        split_dir.mkdir(parents=True, exist_ok=True)
+        split_rows.to_csv(split_dir / "fold_metrics.csv", index=False)
+        _summarize(split_rows).to_csv(split_dir / "summary.csv", index=False)
+        split_manifest = _build_manifest(
+            config,
+            split_types=(split_type,),
+            candidate_gene_count=candidate_gene_count,
+            gwps_coverage_gene_count=gwps_coverage_gene_count,
+        )
+        (split_dir / "manifest.json").write_text(json.dumps(split_manifest, indent=2))
+
+    # Combined official summary across all splits.
+    summary.to_csv(output_dir / "official_metrics_summary.csv", index=False)
+    return summary
+
+
+def _gwps_coverage_count(shared: "StateDlCaches | None") -> int | None:
+    """Return the number of gwps-covered genes, or None off the state_dl path."""
+    if shared is None:
+        return None
+    bags_obj = getattr(shared, "bags", None)
+    if bags_obj is None:
+        return None
+    bags_by_symbol = getattr(bags_obj, "bags_by_symbol", None)
+    if bags_by_symbol is None:
+        return None
+    return len(bags_by_symbol)
+
+
+def _build_manifest(
+    config: SLDLConfig,
+    *,
+    split_types: tuple[str, ...],
+    candidate_gene_count: int,
+    gwps_coverage_gene_count: int | None,
+) -> dict[str, object]:
+    """Assemble the run manifest dict (spec §7 fields).
+
+    Args:
+        config: Run configuration.
+        split_types: CV split types covered by this manifest.
+        candidate_gene_count: Unique-gene count of the benchmark universe.
+        gwps_coverage_gene_count: Number of gwps-covered genes, or ``None`` when
+            not running the state_dl path.
+
+    Returns:
+        JSON-serializable manifest dict.
+    """
+    return {
         "input_csv": str(config.input_csv),
         "split_types": list(split_types),
         "folds": list(config.folds),
@@ -180,7 +243,6 @@ def run_cv(
         "include_coverage_flag": config.include_coverage_flag,
         "esm2_model": config.esm2_model,
         "state_checkpoint": str(config.state_checkpoint),
-        # FIX 1: new required manifest fields
         "candidate_gene_count": candidate_gene_count,
         "pooling": config.pooling,
         "loss_weights": {
@@ -193,8 +255,6 @@ def run_cv(
         "coverage_flag_included": config.include_coverage_flag,
         "gwps_coverage_gene_count": gwps_coverage_gene_count,
     }
-    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
-    return summary
 
 
 @dataclass(frozen=True)

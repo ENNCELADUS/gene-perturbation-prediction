@@ -50,7 +50,19 @@ covered-pair slice. This is the pass/fail for exp08.
 - Coverage-flag: `ablation_coverage_flag.yaml` (report both; no-flag is the honest one).
 - Pooling swap: duplicate `phase3_bag_supervision.yaml`, set `pooling: gmm` (not yet
   implemented; mean_std is the default).
-- RankNet: set `lambda_rank: 1.0` in a duplicate config if BCE underperformed on NDCG.
+- RankNet: `lambda_rank` is **recorded in the manifest but not yet consumed by the
+  training loop** (V1 is BCE-only per the spec). Wiring a pairwise RankNet term into
+  `_train` is future work; setting `lambda_rank` in a config has no effect today.
+
+## Output layout
+
+`run_cv` writes, under `output_dir`:
+- `CV1/`, `CV2/`, `CV3/` subdirs (per split present), each with `fold_metrics.csv`,
+  `summary.csv`, `manifest.json`;
+- top-level `fold_metrics.csv` / `summary.csv` / `manifest.json` (all splits combined);
+- `official_metrics_summary.csv` (combined official summary across splits).
+
+Artifacts are written only by the main process when launched under Accelerate.
 
 ## Interpreting Results
 
