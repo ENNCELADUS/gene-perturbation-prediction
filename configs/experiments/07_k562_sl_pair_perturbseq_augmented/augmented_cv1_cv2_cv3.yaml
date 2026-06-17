@@ -1,0 +1,26 @@
+# Exp07 Perturb-seq-augmented SL-pair baseline (MVP).
+# This module reads CLI flags (see commands below), not this YAML directly;
+# the file records the canonical production invocation for reproducibility.
+input_csv: data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv
+bags_npz: results/experiments/03_replogle_k562_single_cell_deepsets_adamson/cell_bags/single_cell_pc_delta/bags.npz
+embedding_method: pca_delta_meanpool   # tier 1; tier 2 swaps in an scvi_delta bags.npz
+fallback_strategy: zero
+include_coverage_flag: true
+split_types: [CV1, CV2, CV3]
+folds: [0, 1, 2, 3, 4]
+ranking_k: [10, 20, 50]
+seed: 17
+output_dir: results/experiments/07_k562_sl_pair_perturbseq_augmented/augmented_with_flag
+
+# Canonical invocation (Tier 1, with coverage flag):
+# uv run python -m sl_benchmark_baseline \
+#   --input-csv  <input_csv> \
+#   --bags-npz   <bags_npz> \
+#   --embedding-method pca_delta_meanpool \
+#   --fallback-strategy zero \
+#   --include-coverage-flag \
+#   --split-types CV1 CV2 CV3 --folds 0 1 2 3 4 --ranking-k 10 20 50 \
+#   --output-dir results/experiments/07_k562_sl_pair_perturbseq_augmented/augmented_with_flag
+#
+# Ablation (no coverage flag): rerun with --no-coverage-flag and a _no_flag output dir.
+# Tier 2: rerun with the scvi_delta bags.npz and --embedding-method scvi_delta_meanpool.
