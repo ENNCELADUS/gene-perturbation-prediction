@@ -105,3 +105,4 @@ docs/literature/
 
 # Large data files
 /data/
+*.npz

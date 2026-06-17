@@ -197,19 +197,19 @@ def _build_replogle_pca_bags(
     )
     bag_arrays, observed_counts, control_centroid, control_embeddings = (
         _collect_projected_bags(
-        matrix=adata.X,
-        obs_labels=obs_labels,
-        genes=genes,
-        selected_gene_indices=selected_gene_indices,
-        reference_mean=selected_mean,
-        reference_std=selected_std,
-        projector=_PcaProjector(
-            pca.components_.astype(np.float32),
-            pca.mean_.astype(np.float32),
-        ),
-        control_label=config.data.control_label,
-        chunk_size=config.features.chunk_size,
-    )
+            matrix=adata.X,
+            obs_labels=obs_labels,
+            genes=genes,
+            selected_gene_indices=selected_gene_indices,
+            reference_mean=selected_mean,
+            reference_std=selected_std,
+            projector=_PcaProjector(
+                pca.components_.astype(np.float32),
+                pca.mean_.astype(np.float32),
+            ),
+            control_label=config.data.control_label,
+            chunk_size=config.features.chunk_size,
+        )
     )
     payload = {
         "pca_components": pca.components_.astype(np.float32),
@@ -233,16 +233,16 @@ def _build_replogle_hvg_bags(
 ) -> tuple[list[np.ndarray], list[int], np.ndarray, np.ndarray, dict[str, object]]:
     bag_arrays, observed_counts, control_centroid, control_embeddings = (
         _collect_projected_bags(
-        matrix=adata.X,
-        obs_labels=obs_labels,
-        genes=genes,
-        selected_gene_indices=selected_gene_indices,
-        reference_mean=selected_mean,
-        reference_std=selected_std,
-        projector=_IdentityProjector(),
-        control_label=config.data.control_label,
-        chunk_size=config.features.chunk_size,
-    )
+            matrix=adata.X,
+            obs_labels=obs_labels,
+            genes=genes,
+            selected_gene_indices=selected_gene_indices,
+            reference_mean=selected_mean,
+            reference_std=selected_std,
+            projector=_IdentityProjector(),
+            control_label=config.data.control_label,
+            chunk_size=config.features.chunk_size,
+        )
     )
     return bag_arrays, observed_counts, control_centroid, control_embeddings, {}
 
@@ -374,9 +374,7 @@ def build_external_cell_bags(
             continue
         source_rows.append(rows)
         source_bags.extend(bags)
-        source_control_bags.extend(
-            [control_bag.astype(np.float32) for _bag in bags]
-        )
+        source_control_bags.extend([control_bag.astype(np.float32) for _bag in bags])
 
     if not source_rows:
         msg = "No configured external source produced numeric single-cell bags"
@@ -448,8 +446,10 @@ def build_external_cell_bags(
 
 def _dense_float32(matrix: object) -> np.ndarray:
     if sparse.issparse(matrix):
-        return matrix.toarray().astype(np.float32)
-    return np.asarray(matrix, dtype=np.float32)
+        values = matrix.toarray().astype(np.float32)
+    else:
+        values = np.asarray(matrix, dtype=np.float32)
+    return np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def _var_symbols(adata: ad.AnnData, column: str) -> list[str]:
@@ -686,7 +686,10 @@ def _collect_projected_bags(
             control_chunks.append(control_values)
             control_sum += control_values.sum(axis=0, dtype=np.float64)
             control_count += int(control_mask.sum())
-        for gene, group_index in group_to_index.items():
+        for gene in np.unique(labels):
+            group_index = group_to_index.get(str(gene))
+            if group_index is None:
+                continue
             mask = labels == gene
             if np.any(mask):
                 grouped_embeddings[group_index].append(embeddings[mask])
@@ -797,7 +800,7 @@ def _scaled_selected_block(
     mean: np.ndarray,
     std: np.ndarray,
 ) -> np.ndarray:
-    block = _dense_float32(matrix[start:stop, selected_gene_indices])
+    block = _dense_float32(matrix[start:stop])[:, selected_gene_indices]
     return ((block - mean[None, :]) / std[None, :]).astype(np.float32)
 
 
@@ -1044,12 +1047,12 @@ def _external_rows_from_embeddings(
         values = embeddings[mask].astype(np.float32)
         bags.append((values - control_centroid[None, :]).astype(np.float32))
         rows.append(
-                {
-                    "source_dataset": source_name,
-                    "source_perturbation_label": label,
-                    "perturbation_gene": str(
-                        label_metadata.loc[label, "perturbation_gene"]
-                    ),
+            {
+                "source_dataset": source_name,
+                "source_perturbation_label": label,
+                "perturbation_gene": str(
+                    label_metadata.loc[label, "perturbation_gene"]
+                ),
                 "observed_n_cells": int(values.shape[0]),
                 depmap_label_col: float(label_metadata.loc[label, depmap_label_col]),
             }

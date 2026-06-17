@@ -2,7 +2,7 @@
 # This module reads CLI flags (see commands below), not this YAML directly;
 # the file records the canonical production invocation for reproducibility.
 input_csv: data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv
-bags_npz: results/experiments/03_replogle_k562_single_cell_deepsets_adamson/cell_bags/single_cell_pc_delta/bags.npz
+bags_npz: results/experiments/07_k562_sl_pair_perturbseq_augmented/gwps_pca_mean_bags/bags.npz
 embedding_method: pca_delta_meanpool   # tier 1; tier 2 swaps in an scvi_delta bags.npz
 fallback_strategy: zero
 include_coverage_flag: true
