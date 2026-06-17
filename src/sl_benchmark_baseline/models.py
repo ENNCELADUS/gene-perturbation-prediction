@@ -69,6 +69,18 @@ class XGBModel:
         return self._model.predict_proba(test.features)[:, 1]
 
 
+class LogRegTranscriptModel(LogRegModel):
+    """Model A_transcript: logistic regression on augmented features."""
+
+    name = "A_transcript"
+
+
+class XGBTranscriptModel(XGBModel):
+    """Model B_transcript: XGBoost on augmented features."""
+
+    name = "B_transcript"
+
+
 class FrequencyProbeModel:
     """Model C: preferential-attachment probe from train-positive degree.
 
@@ -123,4 +135,14 @@ def build_models(config: SLBaselineConfig) -> list:
         LogRegModel(config),
         XGBModel(config),
         FrequencyProbeModel(config),
+    ]
+
+
+def build_augmented_models(config: SLBaselineConfig) -> list:
+    """Construct exp07 augmented-mode models: baseline A/B + transcript A/B."""
+    return [
+        LogRegModel(config),
+        XGBModel(config),
+        LogRegTranscriptModel(config),
+        XGBTranscriptModel(config),
     ]
