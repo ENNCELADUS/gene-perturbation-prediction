@@ -110,6 +110,125 @@ def test_producer_emits_universe_table(tmp_path) -> None:
     assert mask[2] == 0 and mask[3] == 0, "C and D have no bags → not covered"
 
 
+def test_distill_required_but_missing_vocab_raises() -> None:
+    """FIX 2: real backend + lambda_distill>0 + missing vocab must fail loudly."""
+    from pathlib import Path
+
+    producer = _make_producer(
+        esm_symbols=["A", "B"], bag_symbols=["A"], lambda_distill=0.5
+    )
+    # Switch to a real backend with a checkpoint whose sibling vocab does not exist.
+    producer.config = SLDLConfig(
+        esm2_model="x",
+        state_backend="state_checkpoint",
+        state_checkpoint=Path("/nonexistent/checkpoints/final.ckpt"),
+        max_epochs=1,
+        warmup_epochs=0,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=False,
+        lambda_distill=0.5,
+        lambda_distill_after_warmup=0.5,
+    )
+    producer._pert_vocab_loaded = False
+    try:
+        producer._ensure_pert_vocab()
+        raise AssertionError("expected RuntimeError for missing required distill vocab")
+    except RuntimeError as exc:
+        assert "distill" in str(exc).lower()
+
+
+def test_distill_not_required_when_weight_zero_does_not_raise() -> None:
+    """FIX 2: lambda_distill=0 with missing vocab is fine (distill not requested)."""
+    from pathlib import Path
+
+    producer = _make_producer(esm_symbols=["A", "B"], lambda_distill=0.0)
+    producer.config = SLDLConfig(
+        esm2_model="x",
+        state_backend="state_checkpoint",
+        state_checkpoint=Path("/nonexistent/checkpoints/final.ckpt"),
+        max_epochs=1,
+        warmup_epochs=0,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=False,
+        lambda_distill=0.0,
+        lambda_distill_after_warmup=0.0,
+    )
+    producer._pert_vocab_loaded = False
+    producer._ensure_pert_vocab()  # must not raise
+    assert producer._pert_vocab is None
+
+
+def test_global_mean_fallback_used_for_missing_esm() -> None:
+    """FIX 4: with fallback_strategy=global_mean, a missing-ESM gene is embedded
+    (not skipped) and counts via a nonzero embedding rather than silent zero."""
+    producer = _make_producer(esm_symbols=["A", "B"], bag_symbols=["A", "B"])
+    # C has a bag but no ESM2 vector; with global_mean fallback it still embeds.
+    producer.bags.bags_by_symbol["C"] = np.zeros((8, 6), dtype="float32")
+    producer.config = SLDLConfig(
+        esm2_model="x",
+        state_backend="linear_mock",
+        max_epochs=1,
+        warmup_epochs=0,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=False,
+        fallback_strategy="global_mean",
+    )
+    symbols = np.array(["A", "B", "C"], dtype=object)
+    emb, mask = producer.produce(symbols, {"A", "B"})
+    # C is bag-covered → mask=1; embedding is nonzero because global_mean ESM2
+    # fallback gives it a real ESM input rather than being skipped.
+    assert mask[2] == 1
+    assert np.linalg.norm(emb[2]) > 0, "global_mean fallback should embed gene C"
+
+
+def test_zero_fallback_leaves_missing_esm_zero() -> None:
+    """FIX 4: with fallback_strategy=zero, a missing-ESM gene embeds from a zero
+    ESM input (deterministic) and is not silently dropped from the universe."""
+    producer = _make_producer(esm_symbols=["A", "B"], bag_symbols=["A"])
+    producer.config = SLDLConfig(
+        esm2_model="x",
+        state_backend="linear_mock",
+        max_epochs=1,
+        warmup_epochs=0,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=False,
+        fallback_strategy="zero",
+    )
+    symbols = np.array(["A", "B", "Z"], dtype=object)  # Z missing from ESM + bags
+    emb, mask = producer.produce(symbols, {"A", "B"})
+    assert emb.shape[0] == 3
+    assert mask[2] == 0  # Z not bag-covered
+
+
+def test_score_matrix_applies_geneeffect_standardizer() -> None:
+    """FIX 3: the DL score_matrix standardizes GeneEffect features (train-fold fit).
+
+    The producer must expose a fitted standardizer after produce(); raw vs
+    standardized features should differ when GeneEffect values are not already
+    zero-mean/unit-variance.
+    """
+    producer = _make_producer(
+        esm_symbols=["A", "B"],
+        bag_symbols=["A"],
+        pairs=[("A", "B", 1, 10.0, 12.0), ("A", "B", 0, 11.0, 9.0)],
+    )
+    symbols = np.array(["A", "B"], dtype=object)
+    producer.produce(symbols, {"A", "B"})
+    assert producer._ge_standardizer is not None, (
+        "producer should fit a GeneEffect standardizer during produce()"
+    )
+    # The fitted mean should reflect the train pairs' GeneEffect scale (~9-12).
+    assert float(np.abs(producer._ge_standardizer.mean_).max()) > 1.0
+
+
 def _make_producer(
     include_coverage_flag: bool = False,
     esm_symbols: list[str] | None = None,

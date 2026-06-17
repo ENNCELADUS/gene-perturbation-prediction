@@ -16,7 +16,7 @@ from accelerate import Accelerator
 from torch import optim
 from tqdm.auto import tqdm
 
-from sl_benchmark_baseline.features import build_pair_features
+from sl_benchmark_baseline.features import Standardizer, build_pair_features
 from sl_dl_model.bags import GwpsBags
 from sl_dl_model.config import SLDLConfig
 from sl_dl_model.encoder import state_original_token
@@ -119,6 +119,10 @@ class StateDlProducer:
         # Perturbation vocab (one-hots) for distill supervision.
         self._pert_vocab: dict[str, np.ndarray] | None = None
         self._pert_vocab_loaded: bool = False
+        # Train-fold GeneEffect standardizer (fit in produce, applied everywhere).
+        self._ge_standardizer: Standardizer | None = None
+        # Cached ESM2 fallback vector (zero or global_mean per fallback_strategy).
+        self._esm_fallback_cache: np.ndarray | None = None
 
     def _build_model(self) -> SlDlModel:
         """Construct a fresh :class:`SlDlModel` from config + ESM dim."""
@@ -146,6 +150,13 @@ class StateDlProducer:
         Sets ``self._pert_vocab`` to a dict or ``None`` if unavailable.
         Skips loading when using the linear_mock backend or when no
         ``state_checkpoint`` is configured.
+
+        Raises:
+            RuntimeError: If distill is requested (``lambda_distill`` or
+                ``lambda_distill_after_warmup`` > 0) on a real STATE backend but
+                the sibling ``pert_onehot_map.pt`` is missing or unreadable. A
+                config that claims a 3-part loss must not silently drop the
+                distill anchor (spec §6.2).
         """
         if self._pert_vocab_loaded:
             return
@@ -154,11 +165,112 @@ class StateDlProducer:
         if self.config.state_backend == "linear_mock":
             logger.debug("linear_mock backend: skipping distill vocab load")
             return
+
+        distill_requested = (
+            self.config.lambda_distill > 0
+            or self.config.lambda_distill_after_warmup > 0
+        )
         try:
             self._pert_vocab = _load_pert_vocab(self.config.state_checkpoint)
-        except Exception:
+        except Exception as exc:
+            if distill_requested:
+                logger.error(
+                    "distill requested (lambda_distill=%s) but pert_onehot_map.pt "
+                    "could not be loaded for %s: %s",
+                    self.config.lambda_distill,
+                    self.config.state_checkpoint,
+                    exc,
+                )
+                raise RuntimeError(
+                    "distill loss is configured (lambda_distill>0) but the STATE "
+                    "pert_onehot_map.pt could not be loaded; refusing to train "
+                    "silently without the distill anchor"
+                ) from exc
             logger.debug("failed to load pert_vocab; distill loss will be skipped")
             self._pert_vocab = None
+            return
+
+        if self._pert_vocab is None and distill_requested:
+            logger.error(
+                "distill requested (lambda_distill=%s) but pert_onehot_map.pt is "
+                "missing next to %s",
+                self.config.lambda_distill,
+                self.config.state_checkpoint,
+            )
+            raise RuntimeError(
+                "distill loss is configured (lambda_distill>0) but the STATE "
+                "pert_onehot_map.pt is missing; refusing to train silently "
+                "without the distill anchor (expected at "
+                "<checkpoint>.parent.parent/pert_onehot_map.pt)"
+            )
+
+    def _esm_fallback_vector(self) -> np.ndarray:
+        """Compute the ESM2 fallback vector for genes lacking a real embedding.
+
+        ``"zero"`` returns a zero vector; ``"global_mean"`` returns the mean of
+        all resolved ESM2 vectors (matching
+        :func:`sl_dl_model.gene_embeddings.align_esm2_to_universe`). The result
+        is cached on the instance.
+
+        Returns:
+            Fallback embedding of shape ``(esm_dim,)``, float32.
+        """
+        if self._esm_fallback_cache is not None:
+            return self._esm_fallback_cache
+        vectors = list(self.esm.vectors_by_symbol.values())
+        if self.config.fallback_strategy == "global_mean" and vectors:
+            fallback = np.mean(np.vstack(vectors), axis=0).astype(np.float32)
+        else:
+            fallback = np.zeros(self.esm.dim, dtype=np.float32)
+        self._esm_fallback_cache = fallback
+        return fallback
+
+    def _resolve_esm(self, symbol: str) -> tuple[np.ndarray, bool]:
+        """Resolve a gene's ESM2 vector, applying the configured fallback.
+
+        Args:
+            symbol: Upper-case gene symbol.
+
+        Returns:
+            Tuple ``(vector, is_real)`` where ``vector`` is the gene's ESM2
+            embedding (or the fallback) and ``is_real`` is ``True`` only when a
+            genuine precomputed vector was found.
+        """
+        vec = self.esm.vectors_by_symbol.get(symbol.upper())
+        if vec is not None:
+            return np.asarray(vec, dtype=np.float32), True
+        return self._esm_fallback_vector(), False
+
+    def _fit_ge_standardizer(self) -> None:
+        """Fit the GeneEffect-feature standardizer on this fold's train pairs.
+
+        Mirrors the sklearn path's train-fold standardization (spec §5): the
+        5-dim swap-invariant GeneEffect block is standardized using statistics
+        from training pairs only, then applied during training and scoring.
+        """
+        if not self.train_pairs:
+            self._ge_standardizer = None
+            return
+        ea = np.array([ea for *_, ea, _eb in self.train_pairs], dtype=float)
+        eb = np.array([eb for *_, _ea, eb in self.train_pairs], dtype=float)
+        raw = build_pair_features(ea, eb)
+        self._ge_standardizer = Standardizer.fit(raw)
+
+    def _ge_features(self, ea: np.ndarray, eb: np.ndarray) -> np.ndarray:
+        """Build standardized GeneEffect pair features.
+
+        Args:
+            ea: GeneEffect values for gene A, shape ``(n,)``.
+            eb: GeneEffect values for gene B, shape ``(n,)``.
+
+        Returns:
+            Standardized feature matrix, shape ``(n, 5)``; raw features if no
+            standardizer has been fit (e.g. empty train set).
+        """
+        raw = build_pair_features(ea, eb)
+        if self._ge_standardizer is None:
+            return raw
+        return self._ge_standardizer.transform(raw)
 
     def _distill_part(
         self,
@@ -232,6 +344,9 @@ class StateDlProducer:
             and ``0`` otherwise.
         """
         torch.manual_seed(self.config.seed)
+        # Fit the train-fold GeneEffect standardizer before training so it is
+        # applied consistently in training and full-matrix scoring (spec §5).
+        self._fit_ge_standardizer()
         accelerator = Accelerator()
         model = self._build_model()
         optimizer = optim.Adam(
@@ -261,9 +376,9 @@ class StateDlProducer:
                 )
             ):
                 key = str(symbol).upper()
-                vec = self.esm.vectors_by_symbol.get(key)
-                if vec is None:
-                    continue
+                # FIX 4: resolve through the configured ESM2 fallback so missing
+                # genes are embedded (deterministically), not silently zeroed.
+                vec, _is_real = self._resolve_esm(key)
                 esm_vec = torch.tensor(vec, device=device)
                 e_g = self._model.embed_gene(esm_vec, control)
                 e_table[row] = e_g
@@ -326,13 +441,13 @@ class StateDlProducer:
             with torch.no_grad():
                 for i, symbol in enumerate(symbols):
                     key = str(symbol).upper()
-                    vec = self.esm.vectors_by_symbol.get(key)
                     cov = 1 if key in self.bags.bags_by_symbol else 0
                     coverage_mask_list.append(cov)
-                    if vec is not None:
-                        e_table[i] = model.embed_gene(
-                            torch.tensor(vec, device=device), control
-                        )
+                    # FIX 4: resolve through fallback so missing-ESM genes embed.
+                    vec, _is_real = self._resolve_esm(key)
+                    e_table[i] = model.embed_gene(
+                        torch.tensor(vec, device=device), control
+                    )
             coverage_mask = np.array(coverage_mask_list, dtype=int)
 
         n = len(symbols)
@@ -349,7 +464,7 @@ class StateDlProducer:
                 ea = np.full(n, gene_effects[i])
                 eb = gene_effects
                 ge = torch.tensor(
-                    build_pair_features(ea, eb),
+                    self._ge_features(ea, eb),
                     device=device,
                     dtype=torch.float32,
                 )
@@ -421,7 +536,7 @@ class StateDlProducer:
                 e_b = inner.embed_gene(esm_b, control)
 
                 ge = torch.tensor(
-                    build_pair_features(np.array([ea]), np.array([eb])),
+                    self._ge_features(np.array([ea]), np.array([eb])),
                     device=device,
                     dtype=torch.float32,
                 )
