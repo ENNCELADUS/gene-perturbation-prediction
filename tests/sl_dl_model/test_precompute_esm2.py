@@ -27,6 +27,14 @@ import pytest
 
 def _import_module() -> types.ModuleType:
     """Import precompute_esm2_embeddings with torch/transformers stubbed."""
+    stubbed_modules = (
+        "torch",
+        "transformers",
+        "transformers.EsmModel",
+        "transformers.EsmTokenizer",
+    )
+    original_modules = {name: sys.modules.get(name) for name in stubbed_modules}
+
     # Build minimal stubs so the module-level imports don't explode.
     if "torch" not in sys.modules:
         torch_stub = types.ModuleType("torch")
@@ -49,7 +57,14 @@ def _import_module() -> types.ModuleType:
     )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    try:
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    finally:
+        for name, original in original_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
     return mod
 
 
