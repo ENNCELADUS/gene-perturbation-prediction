@@ -84,20 +84,70 @@ def load_or_fetch_sequences(symbols: list[str], cache: Path) -> dict[str, str]:
     """
     seqs: dict[str, str] = {}
     if cache.exists():
-        seqs = json.loads(cache.read_text())
+        try:
+            seqs = json.loads(cache.read_text())
+        except json.JSONDecodeError:
+            logger.warning("corrupt JSON cache at %s; starting fresh", cache)
+            seqs = {}
     for i, symbol in enumerate(symbols):
         if symbol in seqs:
             continue
         seq = fetch_sequence(symbol)
         if seq:
             seqs[symbol] = seq
-        if i % 100 == 0:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(json.dumps(seqs))
-            logger.info("resolved %d/%d sequences", len(seqs), len(symbols))
+            if len(seqs) % 100 == 0:
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_text(json.dumps(seqs))
+                logger.info("resolved %d/%d sequences", len(seqs), len(symbols))
         time.sleep(0.1)  # be polite to UniProt
     cache.write_text(json.dumps(seqs))
     return seqs
+
+
+def truncate_sequence(seq: str, symbol: str, max_len: int = 1022) -> str:
+    """Truncate a protein sequence to ``max_len`` tokens; warns when truncation occurs.
+
+    Args:
+        seq: Amino-acid sequence string.
+        symbol: Gene symbol for log messages.
+        max_len: Maximum allowed sequence length (default: 1022, ESM2 limit).
+
+    Returns:
+        The original sequence if within ``max_len``, otherwise the first
+        ``max_len`` characters.
+    """
+    if len(seq) > max_len:
+        logger.warning(
+            "truncating %s from %d to %d residues for ESM2 input",
+            symbol,
+            len(seq),
+            max_len,
+        )
+        return seq[:max_len]
+    return seq
+
+
+def check_resolution(resolved: np.ndarray, n_symbols: int) -> None:
+    """Validate that a sufficient fraction of symbols were resolved to sequences.
+
+    Args:
+        resolved: Boolean array indicating which symbols have embeddings.
+        n_symbols: Total number of symbols in the universe.
+
+    Raises:
+        RuntimeError: If no symbols resolved (all-zero ``resolved`` array).
+    """
+    n_resolved = int(resolved.sum())
+    if n_resolved == 0:
+        raise RuntimeError("no sequences resolved; aborting embedding write")
+    frac = n_resolved / n_symbols if n_symbols > 0 else 0.0
+    if frac < 0.5:
+        logger.warning(
+            "low resolution: only %d/%d symbols resolved (%.1f%%)",
+            n_resolved,
+            n_symbols,
+            frac * 100,
+        )
 
 
 def embed_sequences(
@@ -125,7 +175,9 @@ def embed_sequences(
             seq = seqs.get(symbol)
             if not seq:
                 continue
-            toks = tokenizer(seq[:1022], return_tensors="pt").to(device)
+            toks = tokenizer(truncate_sequence(seq, symbol), return_tensors="pt").to(
+                device
+            )
             out = model(**toks).last_hidden_state[0]  # (L, dim)
             vectors[row] = out.mean(dim=0).cpu().numpy()
             resolved[row] = True
@@ -168,6 +220,7 @@ def main() -> None:
     logger.info("universe size: %d genes", len(symbols))
     seqs = load_or_fetch_sequences(symbols, args.seq_cache)
     vectors, resolved = embed_sequences(symbols, seqs, args.model)
+    check_resolution(resolved, n_symbols=len(symbols))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         args.out,
