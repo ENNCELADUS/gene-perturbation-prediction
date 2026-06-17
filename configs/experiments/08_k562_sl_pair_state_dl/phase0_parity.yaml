@@ -1,0 +1,11 @@
+# configs/experiments/08_k562_sl_pair_state_dl/phase0_parity.yaml
+# exp06/07 in-harness parity baseline (GeneEffect-only via zero producer).
+# Run: uv run python -m sl_dl_model run-cv --config <this file> --producer zero
+# Gate: CV2 NDCG@10 ~= 0.042, CV3 ~= 0.002 (match exp06 XGB).
+input_csv: data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv
+output_dir: results/experiments/08_k562_sl_pair_state_dl/phase0_parity
+split_types: [CV1, CV2, CV3]
+folds: [0, 1, 2, 3, 4]
+ranking_k: [10, 20, 50]
+seed: 17
+include_coverage_flag: false
