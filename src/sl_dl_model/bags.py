@@ -12,6 +12,7 @@ matrix.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,6 +20,8 @@ import anndata as ad
 import numpy as np
 
 from sl_dl_model.config import SLDLConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,11 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
 
     # --- control template ---
     control_rows = np.where(genes == control_label)[0]
+    if len(control_rows) == 0:
+        raise ValueError(
+            f"No '{control_label}' control cells found in h5ad "
+            f"({config.gwps_h5ad}). Cannot build control template."
+        )
     if len(control_rows) > config.control_template_size:
         control_rows = rng.choice(
             control_rows, size=config.control_template_size, replace=False
@@ -104,6 +112,16 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
         if len(rows) > config.cells_per_bag:
             rows = rng.choice(rows, size=config.cells_per_bag, replace=False)
         bags[str(symbol).upper()] = matrix[np.sort(rows)]
+
+    # Warn about genes whose bags have fewer than 2 cells — std pooling will be
+    # all-zeros for those genes, which is a silent quality issue.
+    single_cell_count = sum(1 for arr in bags.values() if arr.shape[0] < 2)
+    if single_cell_count > 0:
+        logger.warning(
+            "%d gene bag(s) have fewer than 2 cells; std-based pooling will "
+            "produce all-zeros for those genes.",
+            single_cell_count,
+        )
 
     return GwpsBags(
         control_template=control_template,
@@ -158,6 +176,12 @@ def load_bags_npz(path: Path) -> GwpsBags:
         flat = np.asarray(payload["flat"], dtype=np.float32)
         offsets = np.asarray(payload["offsets"], dtype=np.int64)
         input_dim = int(payload["input_dim"])
+
+    if control.shape[0] == 0:
+        raise ValueError(
+            f"Loaded NPZ at '{path}' has an empty control template (0 rows). "
+            "The cache was likely built without 'non-targeting' control cells."
+        )
 
     bags = {
         str(symbols[i]): flat[offsets[i] : offsets[i + 1]] for i in range(len(symbols))
