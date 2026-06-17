@@ -84,9 +84,7 @@ def test_pair_features_are_swap_invariant() -> None:
     swapped = build_pair_features(eb, ea)
     assert forward.shape == (2, len(FEATURE_NAMES))
     np.testing.assert_allclose(forward, swapped)
-    np.testing.assert_allclose(
-        forward[0], [-1.0, 0.2, -0.8, -0.2, 1.2], rtol=1e-6
-    )
+    np.testing.assert_allclose(forward[0], [-1.0, 0.2, -0.8, -0.2, 1.2], rtol=1e-6)
 
 
 def test_standardizer_fits_on_train_only() -> None:

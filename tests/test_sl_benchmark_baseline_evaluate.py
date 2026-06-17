@@ -107,8 +107,9 @@ def test_build_gene_universe_populates_embeddings_and_coverage(
 
     frame = load_benchmark(synthetic_benchmark_csv)
     table = load_gene_embeddings(synthetic_bags_npz)  # covers G0,G1,G2
-    universe = _build_gene_universe(frame, embedding_table=table,
-                                    fallback_strategy="zero")
+    universe = _build_gene_universe(
+        frame, embedding_table=table, fallback_strategy="zero"
+    )
     assert universe.embeddings is not None
     assert universe.embeddings.shape == (len(universe.symbols), table.dim)
     assert universe.coverage_mask.shape == (len(universe.symbols),)
@@ -149,8 +150,9 @@ def test_augmented_score_matrix_is_square_with_zero_diagonal(
 
     frame = load_benchmark(synthetic_benchmark_csv)
     table = load_gene_embeddings(synthetic_bags_npz)
-    universe = _build_gene_universe(frame, embedding_table=table,
-                                    fallback_strategy="zero")
+    universe = _build_gene_universe(
+        frame, embedding_table=table, fallback_strategy="zero"
+    )
     # build a tiny train feature set to fit the standardizer and a model
     ea = frame["gene_a_k562_gene_effect"].to_numpy()
     eb = frame["gene_b_k562_gene_effect"].to_numpy()
@@ -162,8 +164,14 @@ def test_augmented_score_matrix_is_square_with_zero_diagonal(
     standardizer = Standardizer.fit(raw)
     model = LogRegTranscriptModel(SLBaselineConfig())
     from sl_benchmark_baseline.models import FoldData
-    model.fit(FoldData(df=frame, features=standardizer.transform(raw),
-                       labels=frame["sl_label"].to_numpy(dtype=int)))
+
+    model.fit(
+        FoldData(
+            df=frame,
+            features=standardizer.transform(raw),
+            labels=frame["sl_label"].to_numpy(dtype=int),
+        )
+    )
     matrix = _build_augmented_score_matrix(model, universe, standardizer, True)
     n = len(universe.symbols)
     assert matrix.shape == (n, n)
@@ -192,7 +200,10 @@ def test_augmented_run_cv_emits_transcript_models_and_covered_slice(
     fold_metrics = pd.read_csv(output_dir / "fold_metrics.csv")
     # baseline A/B + transcript variants; degree probe C excluded in augmented mode
     assert set(fold_metrics["model"].unique()) == {
-        "A", "B", "A_transcript", "B_transcript"
+        "A",
+        "B",
+        "A_transcript",
+        "B_transcript",
     }
     assert "slice" in fold_metrics.columns
     slices = set(fold_metrics["slice"].unique())
@@ -216,8 +227,10 @@ def test_nonaugmented_run_cv_unchanged_models(
 
     output_dir = tmp_path / "base_run"
     config = SLBaselineConfig(
-        input_csv=synthetic_benchmark_csv, output_dir=output_dir,
-        folds=(0, 1), ranking_k=(2, 5),
+        input_csv=synthetic_benchmark_csv,
+        output_dir=output_dir,
+        folds=(0, 1),
+        ranking_k=(2, 5),
     )
     run_cv(config)
     fold_metrics = pd.read_csv(output_dir / "fold_metrics.csv")
@@ -236,9 +249,13 @@ def test_augmented_manifest_records_coverage_fields(
 
     output_dir = tmp_path / "aug_manifest_run"
     config = SLBaselineConfig(
-        input_csv=synthetic_augmented_benchmark_csv, output_dir=output_dir,
-        bags_npz=synthetic_augmented_bags_npz, folds=(0,), ranking_k=(2, 5),
-        fallback_strategy="global_mean", include_coverage_flag=False,
+        input_csv=synthetic_augmented_benchmark_csv,
+        output_dir=output_dir,
+        bags_npz=synthetic_augmented_bags_npz,
+        folds=(0,),
+        ranking_k=(2, 5),
+        fallback_strategy="global_mean",
+        include_coverage_flag=False,
     )
     run_cv(config)
     manifest = json.loads((output_dir / "manifest.json").read_text())
@@ -248,6 +265,34 @@ def test_augmented_manifest_records_coverage_fields(
     assert manifest["include_coverage_flag"] is False
     assert "gwps_coverage_gene_count" in manifest
     assert manifest["models"] == ["A", "B", "A_transcript", "B_transcript"]
+
+
+def test_augmented_manifest_records_observed_embedding_metadata(
+    synthetic_augmented_benchmark_csv: Path,
+    synthetic_augmented_bags_npz: Path,
+    tmp_path: Path,
+) -> None:
+    import json
+
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.evaluate import run_cv
+
+    output_dir = tmp_path / "aug_obs_meta_run"
+    config = SLBaselineConfig(
+        input_csv=synthetic_augmented_benchmark_csv,
+        output_dir=output_dir,
+        bags_npz=synthetic_augmented_bags_npz,
+        folds=(0,),
+        ranking_k=(2, 5),
+    )
+    run_cv(config)
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    # --embedding-method is a user label, not a validated contract.
+    assert manifest["embedding_method_is_user_label"] is True
+    # The deterministic fixture writes no feature_set key -> None observed.
+    assert manifest["observed_npz_feature_set"] is None
+    # Observed dim is read from the NPZ (2-dim synthetic embeddings).
+    assert manifest["observed_embedding_dim"] == 2
 
 
 def test_augmented_manifest_records_pair_coverage_fraction(
@@ -286,8 +331,10 @@ def test_nonaugmented_manifest_pair_fraction_is_none(
 
     output_dir = tmp_path / "base_pair_cov_run"
     config = SLBaselineConfig(
-        input_csv=synthetic_benchmark_csv, output_dir=output_dir,
-        folds=(0,), ranking_k=(2, 5),
+        input_csv=synthetic_benchmark_csv,
+        output_dir=output_dir,
+        folds=(0,),
+        ranking_k=(2, 5),
     )
     run_cv(config)
     manifest = json.loads((output_dir / "manifest.json").read_text())
