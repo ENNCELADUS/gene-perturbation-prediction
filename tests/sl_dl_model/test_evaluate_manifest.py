@@ -179,6 +179,8 @@ def test_non_main_process_does_not_write_artifacts(tmp_path: Path, monkeypatch) 
 
     class _NonMainState:
         is_main_process = False
+        process_index = 1
+        num_processes = 2
 
     monkeypatch.setattr(ev, "PartialState", lambda: _NonMainState())
 

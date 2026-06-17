@@ -20,6 +20,7 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 from accelerate import PartialState
+from accelerate.utils import gather_object
 
 from sl_benchmark_baseline.data import load_benchmark
 from sl_benchmark_baseline.evaluate import _summarize
@@ -87,6 +88,45 @@ class ZeroEmbeddingProducer:
         )
 
 
+def _run_local_jobs(
+    config: SLDLConfig,
+    shared: "StateDlCaches | None",
+    frame: pd.DataFrame,
+    jobs: list[tuple[str, int]],
+    producer: "EmbeddingProducer | str",
+) -> list[dict[str, object]]:
+    """Run this rank's assigned ``(split_type, fold_id)`` jobs; return metric rows.
+
+    Each job is run through the unchanged per-fold path
+    (:func:`~sl_dl_model.scoring.run_fold_with_producer`), so the rows are
+    identical to a serial run of the same jobs. A failure in any job propagates
+    (fail-fast); callers must not swallow it.
+
+    Args:
+        config: Run configuration.
+        shared: Shared caches for the ``state_dl`` path, else ``None``.
+        frame: Full benchmark DataFrame.
+        jobs: This rank's ``(split_type, fold_id)`` slice from :func:`_shard_jobs`.
+        producer: ``"state_dl"`` or a reusable :class:`EmbeddingProducer`.
+
+    Returns:
+        Metric row dicts for this rank's jobs (possibly empty if no jobs).
+    """
+    from sl_dl_model.scoring import make_fold_producer, run_fold_with_producer
+
+    rows: list[dict[str, object]] = []
+    for split_type, fold_id in jobs:
+        fold_producer = (
+            make_fold_producer(config, shared, frame, split_type, fold_id)
+            if producer == "state_dl"
+            else producer
+        )
+        rows.extend(
+            run_fold_with_producer(frame, split_type, fold_id, config, fold_producer)
+        )
+    return rows
+
+
 def run_cv(
     config: SLDLConfig,
     producer: "EmbeddingProducer | str",
@@ -111,8 +151,6 @@ def run_cv(
         RuntimeError: If no metric rows were produced (e.g. split_types filter
             yields no matching folds in the loaded benchmark frame).
     """
-    from sl_dl_model.scoring import make_fold_producer, run_fold_with_producer
-
     frame = load_benchmark(config.input_csv)
     split_types = config.split_types or ("CV1", "CV2", "CV3")
     available = set(frame["split_type"].unique())
@@ -122,19 +160,16 @@ def run_cv(
     if producer == "state_dl":
         shared = _load_state_dl_caches(config)
 
-    all_rows: list[dict[str, object]] = []
-    for split_type in split_types:
-        for fold_id in config.folds:
-            fold_producer = (
-                make_fold_producer(config, shared, frame, split_type, fold_id)
-                if producer == "state_dl"
-                else producer
-            )
-            all_rows.extend(
-                run_fold_with_producer(
-                    frame, split_type, fold_id, config, fold_producer
-                )
-            )
+    # Build the full ordered job list, shard it across ranks, run only ours.
+    state = PartialState()
+    jobs = [(s, f) for s in split_types for f in config.folds]
+    local_jobs = _shard_jobs(jobs, state.process_index, state.num_processes)
+    local_rows = _run_local_jobs(config, shared, frame, local_jobs, producer)
+
+    # Collective: every rank contributes its rows; all ranks receive the union.
+    # gather_object preserves rank order, so rank r's rows land contiguously.
+    gathered: list[list[dict[str, object]]] = gather_object([local_rows])
+    all_rows = [row for rank_rows in gathered for row in rank_rows]
 
     # FIX 2: guard empty metric rows — indicates a config/data mismatch
     if not all_rows:
@@ -149,6 +184,9 @@ def run_cv(
         )
 
     fold_metrics = pd.DataFrame(all_rows)
+    # Canonical ordering so 1-process and N-process runs are byte-identical.
+    sort_cols = ["split_type", "fold_id", "model", "slice", "metric"]
+    fold_metrics = fold_metrics.sort_values(sort_cols).reset_index(drop=True)
     summary = _summarize(fold_metrics)
 
     # FIX 1: only the main process writes artifacts (multi-process safe).
