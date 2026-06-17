@@ -103,13 +103,16 @@ cell, TCGA, CCLE, or DepMap context evidence before using SL language.
 - `src/dependency_baseline/`: implemented feature-building and
   cross-validation baseline package, including observed-B and predicted-B
   dependency baselines.
+- `src/sl_benchmark_baseline/`: dependency-only K562 SL pair benchmark adapter
+  for official CV1/CV2/CV3 Rand 1:1 evaluation.
 - `tests/`: synthetic-data tests for the baseline package.
 - `data/norman/splits/`: retained Norman split metadata.
 - `scGPT/`: local scGPT reference code.
 - `pyproject.toml` and `uv.lock`: Python dependency metadata.
 
-Do not rely on old `vcc` or `vcc-tahoe` commands. The active implemented entry
-point is `uv run vcc-dep-baseline`.
+Do not rely on old `vcc` or `vcc-tahoe` commands. The active implemented
+dependency-prediction entry point is `uv run vcc-dep-baseline`; the Stage 3 SL
+benchmark adapter is run directly with `uv run python -m sl_benchmark_baseline`.
 
 ## Environment Requirement
 

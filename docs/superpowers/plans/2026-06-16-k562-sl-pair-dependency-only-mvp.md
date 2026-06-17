@@ -186,7 +186,7 @@ class SLBaselineConfig:
 
     input_csv: Path = Path("data/k562_SL_benchmark_minimal.csv")
     output_dir: Path = Path(
-        "experiments/06_k562_sl_pair_dependency_only_mvp/run"
+        "results/experiments/06_k562_sl_pair_dependency_only_mvp/run"
     )
     folds: tuple[int, ...] = (0, 1, 2, 3, 4)
     ranking_k: tuple[int, ...] = (10, 20, 50)
@@ -1310,7 +1310,7 @@ Expected: no errors. Then `uv run ruff format src/sl_benchmark_baseline tests/te
 Run:
 ```bash
 uv run python -m sl_benchmark_baseline \
-  --output-dir experiments/06_k562_sl_pair_dependency_only_mvp/run
+  --output-dir results/experiments/06_k562_sl_pair_dependency_only_mvp/run
 ```
 Expected: writes `fold_metrics.csv`, `summary.csv`, `manifest.json` under that dir. Inspect `summary.csv`: chance AUROC ≈ 0.5 baseline, with A/B above chance and C reported as the degree control. (The `experiments/` tree is gitignored per repo convention; do not commit artifacts.)
 

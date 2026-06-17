@@ -49,6 +49,7 @@ bash scripts/state_feature_ablation.sh  # Slurm wrapper for the ablation
 
 # Stage 3 SL benchmark adapter (builds K562-mappable SL pairs)
 uv run python scripts/build_k562_sl_benchmark.py --help
+uv run python -m sl_benchmark_baseline --help
 ```
 
 `vcc-dep-baseline` exposes more subcommands than shown above. Full list:
@@ -202,12 +203,22 @@ automatically an SL target. Require mutation, copy-number, lineage, or pathway
 context evidence before using SL language.
 
 The external SL pair benchmark (Feng et al. 2024, SynLethDB-derived) lives in
-`data/SL_benchmark/`; `scripts/build_k562_sl_benchmark.py` filters its CV1 Rand
-1:1 splits to pairs whose two genes both carry numeric K562 DepMap GeneEffect
-values, writing `data/k562_SL_benchmark_minimal.csv`. This is the `D` label
-(a gene-pair SL label), distinct from `C` = `GeneEffect(K562, g)`; see
-`docs/data/sl-benchmark-2024.md` and `CONTEXT.md`. It is a pair-level benchmark
-adapter target, not a validated K562-specific SL assay.
+`data/SL_benchmark/`; `scripts/build_k562_sl_benchmark.py` filters its CV1/CV2/CV3
+Rand 1:1 splits to pairs whose two genes both carry numeric K562 DepMap GeneEffect
+values, writing per-split balanced tables under
+`data/SL_benchmark/derived/k562_depmap_rand_1to1/` (`CV1`/`CV2`/`CV3`
+`_Rand_1to1_k562_depmap_pairs_balanced.csv`) plus the all-CV concatenation
+`all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv` (the default benchmark input).
+This is the `D` label (a gene-pair SL label), distinct from `C` =
+`GeneEffect(K562, g)`; see `docs/data/sl-benchmark-2024.md` and `CONTEXT.md`. It is
+a pair-level benchmark adapter target, not a validated K562-specific SL assay.
+The dependency-only SL baseline lives in `src/sl_benchmark_baseline/` and runs
+with `uv run python -m sl_benchmark_baseline`. Its 2026-06-17 official-metric
+artifacts are under
+`results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv*/`, with a
+combined `official_metrics_summary.csv`. Do not use the older `all_cv_run`
+ranking metrics; they used flat pair-level ranking instead of official
+per-anchor candidate-partner ranking.
 
 ## Data Rules
 

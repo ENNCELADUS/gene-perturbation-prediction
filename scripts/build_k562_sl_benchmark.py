@@ -13,18 +13,6 @@ from scipy import sparse
 
 
 GENE_COLUMN_RE = re.compile(r"^(?P<symbol>.+?) \((?P<entrez>\d+)\)$")
-MINIMAL_CV1_COLUMNS = [
-    "pair_id",
-    "fold_id",
-    "split_role",
-    "sl_label",
-    "gene_a_unified_id",
-    "gene_b_unified_id",
-    "gene_a_symbol",
-    "gene_b_symbol",
-    "gene_a_k562_gene_effect",
-    "gene_b_k562_gene_effect",
-]
 
 
 @dataclass(frozen=True)
@@ -67,12 +55,6 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=42,
         help="Deterministic seed for post-filter 1:1 balancing.",
-    )
-    parser.add_argument(
-        "--minimal-cv1-output",
-        type=Path,
-        default=Path("data/k562_SL_benchmark_minimal.csv"),
-        help="Canonical minimal CV1 CSV for first-pass train/evaluate APIs.",
     )
     return parser.parse_args()
 
@@ -279,12 +261,6 @@ def main() -> None:
             output_dir / f"{split_type}_Rand_1to1_k562_depmap_pairs_balanced.csv",
             index=False,
         )
-        if split_type == "CV1":
-            args.minimal_cv1_output.parent.mkdir(parents=True, exist_ok=True)
-            split_table[MINIMAL_CV1_COLUMNS].to_csv(
-                args.minimal_cv1_output,
-                index=False,
-            )
     _summarize(balanced).to_csv(output_dir / "summary_balanced.csv", index=False)
 
     metadata = pd.DataFrame(
