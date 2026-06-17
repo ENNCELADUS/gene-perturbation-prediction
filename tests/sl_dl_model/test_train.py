@@ -18,6 +18,7 @@ import torch
 
 from sl_dl_model.config import SLDLConfig
 from sl_dl_model.model import SlDlModel
+from sl_dl_model.train import StateDlProducer  # noqa: F401 — used in _make_producer type hint
 
 
 def _model(esm_dim: int = 8, input_dim: int = 6) -> SlDlModel:
@@ -103,5 +104,231 @@ def test_producer_emits_universe_table(tmp_path) -> None:
     emb, mask = producer.produce(symbols, {"A", "B", "C", "D"})
     assert emb.shape[0] == 4, f"expected 4 rows, got {emb.shape[0]}"
     assert mask.shape == (4,), f"expected mask shape (4,), got {mask.shape}"
-    # All 4 genes have ESM2 vectors so mask should be all-ones
-    assert mask.sum() == 4, f"expected all 4 covered, got mask={mask}"
+    # mask reflects bag coverage (A,B have bags); C,D have ESM2 but no bags → 0.
+    assert mask.sum() == 2, f"expected 2 bag-covered genes, got mask={mask}"
+    assert mask[0] == 1 and mask[1] == 1, "A and B should be bag-covered"
+    assert mask[2] == 0 and mask[3] == 0, "C and D have no bags → not covered"
+
+
+def _make_producer(
+    include_coverage_flag: bool = False,
+    esm_symbols: list[str] | None = None,
+    bag_symbols: list[str] | None = None,
+    pairs: list[tuple[str, str, int, float, float]] | None = None,
+    max_epochs: int = 1,
+    warmup_epochs: int = 0,
+    lambda_distill: float = 0.0,
+    lambda_bag: float = 0.0,
+) -> "StateDlProducer":
+    """Shared factory for StateDlProducer in tests."""
+    from sl_dl_model.bags import GwpsBags
+    from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
+    from sl_dl_model.train import StateDlProducer
+
+    rng = np.random.default_rng(1)
+    if esm_symbols is None:
+        esm_symbols = ["A", "B"]
+    if bag_symbols is None:
+        bag_symbols = ["A"]
+    if pairs is None:
+        pairs = [("A", "B", 1, -1.0, -0.5)]
+
+    esm = Esm2EmbeddingTable(
+        dim=8,
+        vectors_by_symbol={
+            s: rng.standard_normal(8).astype("float32") for s in esm_symbols
+        },
+    )
+    bags = GwpsBags(
+        control_template=rng.standard_normal((8, 6)).astype("float32"),
+        bags_by_symbol={
+            s: rng.standard_normal((8, 6)).astype("float32") for s in bag_symbols
+        },
+        input_dim=6,
+    )
+    cfg = SLDLConfig(
+        esm2_model="x",
+        max_epochs=max_epochs,
+        warmup_epochs=warmup_epochs,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=include_coverage_flag,
+        state_backend="linear_mock",
+        lambda_distill=lambda_distill,
+        lambda_distill_after_warmup=lambda_distill,
+        lambda_bag=lambda_bag,
+    )
+    return StateDlProducer(
+        cfg, esm=esm, bags=bags, train_pairs=pairs, input_dim=6, output_dim=6
+    )
+
+
+def test_coverage_flag_produce_and_score_matrix() -> None:
+    """With include_coverage_flag=True, produce + score_matrix run without crash."""
+    from sl_dl_model.bags import GwpsBags
+    from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
+    from sl_dl_model.train import StateDlProducer
+
+    rng = np.random.default_rng(0)
+    symbols = np.array(["A", "B"], dtype=object)
+    esm = Esm2EmbeddingTable(
+        dim=8,
+        vectors_by_symbol={
+            "A": rng.standard_normal(8).astype("float32"),
+            "B": rng.standard_normal(8).astype("float32"),
+        },
+    )
+    bags = GwpsBags(
+        control_template=rng.standard_normal((8, 6)).astype("float32"),
+        bags_by_symbol={
+            "A": rng.standard_normal((8, 6)).astype("float32"),
+        },
+        input_dim=6,
+    )
+    cfg = SLDLConfig(
+        esm2_model="x",
+        max_epochs=1,
+        warmup_epochs=0,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=True,  # Enable coverage flags
+        state_backend="linear_mock",
+    )
+    pairs: list[tuple[str, str, int, float, float]] = [("A", "B", 1, -1.0, -0.5)]
+    producer = StateDlProducer(
+        cfg, esm=esm, bags=bags, train_pairs=pairs, input_dim=6, output_dim=6
+    )
+    emb, mask = producer.produce(symbols, {"A", "B"})
+    assert emb.shape[0] == 2
+    # Now score_matrix should not crash
+    ge = np.array([-1.0, -0.5])
+    scores = producer.score_matrix(symbols, ge)
+    assert scores.shape == (2, 2), f"expected (2,2), got {scores.shape}"
+    assert scores[0, 0] == 0.0 and scores[1, 1] == 0.0, "diagonal should be zero"
+
+
+def test_coverage_mask_reflects_bag_membership() -> None:
+    """FIX 3: coverage_mask=1 iff gene in bags_by_symbol, not just ESM2 coverage."""
+    producer = _make_producer(esm_symbols=["A", "B"], bag_symbols=["A"])
+    symbols = np.array(["A", "B"], dtype=object)
+    emb, mask = producer.produce(symbols, {"A", "B"})
+    # A has bag → mask=1; B has ESM2 but no bag → mask=0
+    assert mask[0] == 1, "A has bag, should be covered"
+    assert mask[1] == 0, "B has ESM2 but no bag, should NOT be covered"
+    # Both should have nonzero embeddings (ESM2 coverage)
+    assert np.linalg.norm(emb[0]) > 0, "A should have nonzero embedding"
+    assert np.linalg.norm(emb[1]) > 0, "B should have nonzero embedding (ESM2 fallback)"
+
+
+def test_distill_loss_wired_with_monkeypatch(monkeypatch) -> None:
+    """FIX 2: distill loss flows gradients when pert_vocab is present."""
+    from torch import nn
+
+    # Monkeypatch _load_pert_vocab to return a small fake vocab
+    def _mock_load_pert_vocab(path):
+        return {"A": np.eye(10, dtype=np.float32)[0]}  # one-hot for "A"
+
+    from sl_dl_model import train as train_mod
+
+    monkeypatch.setattr(train_mod, "_load_pert_vocab", _mock_load_pert_vocab)
+
+    # Build producer with distill enabled
+    producer = _make_producer(
+        esm_symbols=["A", "B"],
+        bag_symbols=["A"],
+        pairs=[("A", "B", 1, -1.0, -0.5)],
+        max_epochs=1,
+        warmup_epochs=0,
+        lambda_distill=0.5,
+    )
+
+    # Materialize the model and attach a fake pert_encoder
+    model = producer._build_model()
+    producer._model = model
+    model.encoder.state.state_model.pert_encoder = nn.Linear(10, 5, bias=False)
+
+    # Force pert_vocab load via our monkeypatched function
+    # (use a dummy checkpoint path — it won't be read because we monkeypatched)
+    from pathlib import Path
+
+    producer.config = SLDLConfig(
+        esm2_model="x",
+        state_backend="state_checkpoint",  # not linear_mock so vocab loads
+        state_checkpoint=Path("/fake/path/checkpoints/final.ckpt"),
+        max_epochs=1,
+        warmup_epochs=0,
+        pert_dim=5,
+        adapter_hidden=16,
+        pair_hidden=(16,),
+        include_coverage_flag=False,
+        lambda_distill=0.5,
+        lambda_distill_after_warmup=0.5,
+    )
+    producer._pert_vocab_loaded = False  # reset so _ensure_pert_vocab runs again
+
+    result = producer._distill_part({"A"})
+    assert result is not None, "_distill_part should return a tensor for in-vocab genes"
+    assert torch.isfinite(result).all(), "distill loss should be finite"
+
+    # Verify gradients flow back to adapter params
+    result.backward()
+    adapter_params = list(producer._model.encoder.adapter.parameters())
+    assert any(p.grad is not None for p in adapter_params), (
+        "adapter should receive gradient"
+    )
+
+
+def test_distill_part_returns_none_when_no_vocab() -> None:
+    """FIX 2: _distill_part returns None when pert_vocab is None."""
+    producer = _make_producer(lambda_distill=0.5)
+    symbols = np.array(["A", "B"], dtype=object)
+    producer.produce(symbols, {"A", "B"})
+    # No pert_vocab loaded (linear_mock) → should return None
+    result = producer._distill_part({"A"})
+    assert result is None, "distill_part should return None when pert_vocab is None"
+
+
+def test_skipped_pairs_warning(caplog) -> None:
+    """FIX 4a: log warning when pairs are skipped due to missing ESM2."""
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    # "A" has ESM2, "B" does not → pair (A,B) skipped; pair (A,A) is trainable.
+    producer = _make_producer(
+        esm_symbols=["A"],
+        bag_symbols=["A"],
+        pairs=[("A", "B", 1, -1.0, -0.5), ("A", "A", 0, -1.0, -1.0)],
+    )
+    symbols = np.array(["A", "B"], dtype=object)
+    producer.produce(symbols, {"A", "B"})
+    # B has no ESM2 vector → pair (A,B) skipped
+    assert any("skipped" in rec.message.lower() for rec in caplog.records), (
+        "should warn about skipped pairs"
+    )
+
+
+def test_all_pairs_skipped_raises_error() -> None:
+    """FIX 4b: raise RuntimeError when ALL pairs are skipped (empty ESM2 table)."""
+    producer = _make_producer(esm_symbols=[], pairs=[("A", "B", 1, -1.0, -0.5)])
+    symbols = np.array(["A", "B"], dtype=object)
+    try:
+        producer.produce(symbols, {"A", "B"})
+        assert False, "should have raised RuntimeError for all skipped pairs"
+    except RuntimeError as e:
+        assert "no trainable pairs" in str(e).lower(), f"unexpected error: {e}"
+
+
+def test_score_matrix_caches_embeddings() -> None:
+    """FIX 5: score_matrix reuses embeddings from produce, giving same results."""
+    producer = _make_producer()
+    symbols = np.array(["A", "B"], dtype=object)
+    ge = np.array([-1.0, -0.5])
+    # First call to score_matrix triggers produce internally
+    scores1 = producer.score_matrix(symbols, ge)
+    # Second call should reuse cached embeddings
+    scores2 = producer.score_matrix(symbols, ge)
+    assert np.allclose(scores1, scores2), "cached embeddings should give same results"
+    assert scores1.shape == (2, 2)
+    assert scores1[0, 0] == 0.0 and scores1[1, 1] == 0.0, "diagonal zeroed"
