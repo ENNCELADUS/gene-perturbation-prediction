@@ -109,9 +109,12 @@ def _write_synthetic_bags_npz(path: Path) -> Path:
     # gene G0: 2 cells, gene G1: 1 cell, gene G2: 3 cells
     cell_delta_pcs = np.array(
         [
-            [1.0, 0.0], [3.0, 2.0],      # G0 -> mean [2, 1]
-            [5.0, 5.0],                  # G1 -> mean [5, 5]
-            [0.0, 0.0], [2.0, 0.0], [4.0, 6.0],  # G2 -> mean [2, 2]
+            [1.0, 0.0],
+            [3.0, 2.0],  # G0 -> mean [2, 1]
+            [5.0, 5.0],  # G1 -> mean [5, 5]
+            [0.0, 0.0],
+            [2.0, 0.0],
+            [4.0, 6.0],  # G2 -> mean [2, 2]
         ],
         dtype=np.float32,
     )
@@ -143,10 +146,14 @@ def _write_augmented_benchmark_csv(path: Path) -> Path:
     effects = {"C0": -1.2, "C1": -1.0, "C2": -0.9, "C3": -1.1, "U0": 0.2, "U1": 0.3}
     # (role, label, gene_a, gene_b)
     spec = [
-        ("train", 1, "C0", "C1"), ("train", 1, "C2", "C3"),
-        ("train", 0, "C0", "U0"), ("train", 0, "C1", "U1"),
-        ("test", 1, "C0", "C2"), ("test", 1, "C1", "U0"),
-        ("test", 0, "C1", "C3"), ("test", 0, "C2", "U1"),
+        ("train", 1, "C0", "C1"),
+        ("train", 1, "C2", "C3"),
+        ("train", 0, "C0", "U0"),
+        ("train", 0, "C1", "U1"),
+        ("test", 1, "C0", "C2"),
+        ("test", 1, "C1", "U0"),
+        ("test", 0, "C1", "C3"),
+        ("test", 0, "C2", "U1"),
     ]
     rows = []
     pair_counter = 0
@@ -174,10 +181,12 @@ def _write_augmented_bags_npz(path: Path) -> Path:
     """Bags NPZ covering only C0-C3 (matches _write_augmented_benchmark_csv)."""
     cell_delta_pcs = np.array(
         [
-            [1.0, 0.0], [3.0, 2.0],   # C0 -> [2, 1]
-            [5.0, 5.0],               # C1 -> [5, 5]
-            [0.0, 0.0], [4.0, 4.0],   # C2 -> [2, 2]
-            [1.0, 3.0],               # C3 -> [1, 3]
+            [1.0, 0.0],
+            [3.0, 2.0],  # C0 -> [2, 1]
+            [5.0, 5.0],  # C1 -> [5, 5]
+            [0.0, 0.0],
+            [4.0, 4.0],  # C2 -> [2, 2]
+            [1.0, 3.0],  # C3 -> [1, 3]
         ],
         dtype=np.float32,
     )
