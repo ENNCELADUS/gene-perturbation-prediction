@@ -2,12 +2,13 @@
 
 StateDlProducer trains the model on one fold's pairs and then embeds every
 gene in the universe through the frozen STATE backbone to produce a per-gene
-embedding table.  Wave 4 will add score_matrix.
+embedding table.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -18,8 +19,9 @@ from tqdm.auto import tqdm
 from sl_benchmark_baseline.features import build_pair_features
 from sl_dl_model.bags import GwpsBags
 from sl_dl_model.config import SLDLConfig
+from sl_dl_model.encoder import state_original_token
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
-from sl_dl_model.losses import bag_loss, combine, sl_bce_loss
+from sl_dl_model.losses import bag_loss, combine, distill_loss, sl_bce_loss
 from sl_dl_model.model import SlDlModel
 
 logger = logging.getLogger(__name__)
@@ -51,12 +53,35 @@ def _epoch_weights(epoch: int, config: SLDLConfig) -> dict[str, float]:
     }
 
 
+def _load_pert_vocab(checkpoint: Path) -> dict[str, np.ndarray] | None:
+    """Load the sibling ``pert_onehot_map.pt`` for a STATE checkpoint.
+
+    The file is expected at ``checkpoint.parent.parent / "pert_onehot_map.pt"``.
+    Returns ``None`` if the file does not exist.
+
+    Args:
+        checkpoint: Path to the STATE checkpoint file.
+
+    Returns:
+        Dict mapping upper-case gene symbol to float32 one-hot ndarray, or
+        ``None`` if the sibling file is missing.
+    """
+    vocab_path = checkpoint.parent.parent / "pert_onehot_map.pt"
+    if not vocab_path.exists():
+        logger.debug("pert_onehot_map.pt not found at %s; skipping distill", vocab_path)
+        return None
+    raw: dict[str, object] = torch.load(
+        vocab_path, map_location="cpu", weights_only=True
+    )
+    return {str(k).upper(): np.asarray(v, dtype=np.float32) for k, v in raw.items()}
+
+
 class StateDlProducer:
     """Train the DL model on a fold's train pairs; emit per-gene embeddings.
 
     Implements the :class:`~sl_dl_model.evaluate.EmbeddingProducer` protocol.
-    After :meth:`produce` completes, the trained model is cached on the
-    instance for use by Wave 4's ``score_matrix`` method.
+    After :meth:`produce` completes, the trained model and per-gene embedding
+    table are cached on the instance for reuse by ``score_matrix``.
 
     Args:
         config: Training configuration.
@@ -86,6 +111,14 @@ class StateDlProducer:
         self.input_dim = input_dim
         self.output_dim = output_dim
         self._model: SlDlModel | None = None
+        # Cached per-gene embedding table (shape n_gene × emb_dim) and symbol order.
+        self._e_table_cache: torch.Tensor | None = None
+        self._e_table_symbols: np.ndarray | None = None
+        # Bag-coverage mask aligned to the last produce() call.
+        self._coverage_mask: np.ndarray | None = None
+        # Perturbation vocab (one-hots) for distill supervision.
+        self._pert_vocab: dict[str, np.ndarray] | None = None
+        self._pert_vocab_loaded: bool = False
 
     def _build_model(self) -> SlDlModel:
         """Construct a fresh :class:`SlDlModel` from config + ESM dim."""
@@ -107,6 +140,72 @@ class StateDlProducer:
             include_coverage_flag=self.config.include_coverage_flag,
         )
 
+    def _ensure_pert_vocab(self) -> None:
+        """Lazily load the distill pert-vocab once per instance.
+
+        Sets ``self._pert_vocab`` to a dict or ``None`` if unavailable.
+        Skips loading when using the linear_mock backend or when no
+        ``state_checkpoint`` is configured.
+        """
+        if self._pert_vocab_loaded:
+            return
+        self._pert_vocab_loaded = True
+
+        if self.config.state_backend == "linear_mock":
+            logger.debug("linear_mock backend: skipping distill vocab load")
+            return
+        try:
+            self._pert_vocab = _load_pert_vocab(self.config.state_checkpoint)
+        except Exception:
+            logger.debug("failed to load pert_vocab; distill loss will be skipped")
+            self._pert_vocab = None
+
+    def _distill_part(
+        self,
+        train_symbols_in_step: set[str],
+    ) -> torch.Tensor | None:
+        """Compute MSE between adapter tokens and STATE's original one-hot tokens.
+
+        Only genes that are both in ``train_symbols_in_step`` and the loaded
+        pert-vocab contribute. Returns ``None`` if no in-vocab genes are found
+        or if ``_pert_vocab`` is ``None``.
+
+        Args:
+            train_symbols_in_step: Upper-case gene symbols present in this step.
+
+        Returns:
+            Scalar mean MSE tensor, or ``None`` if nothing to compute.
+        """
+        self._ensure_pert_vocab()
+        if self._pert_vocab is None or self._model is None:
+            return None
+
+        inner = self._model
+        state_model = inner.encoder.state.state_model
+        if not hasattr(state_model, "pert_encoder"):
+            return None
+
+        device = next(inner.parameters()).device
+        losses: list[torch.Tensor] = []
+        for sym in train_symbols_in_step:
+            onehot_arr = self._pert_vocab.get(sym.upper())
+            if onehot_arr is None:
+                continue
+            esm_vec = self.esm.vectors_by_symbol.get(sym.upper())
+            if esm_vec is None:
+                continue
+            onehot = torch.tensor(onehot_arr, device=device)
+            esm_t = torch.tensor(esm_vec, device=device)
+            adapter_tok = inner.encoder.adapter(esm_t.unsqueeze(0)).squeeze(0)
+            target_tok = state_original_token(state_model, onehot)
+            losses.append(
+                distill_loss(adapter_tok.unsqueeze(0), target_tok.unsqueeze(0))
+            )
+
+        if not losses:
+            return None
+        return torch.stack(losses).mean()
+
     def produce(
         self,
         symbols: np.ndarray,
@@ -114,9 +213,11 @@ class StateDlProducer:
     ) -> tuple[np.ndarray, np.ndarray]:
         """Train on this fold then embed all universe genes.
 
-        Genes without an ESM2 vector stay as zero embeddings (mask=0).
-        Held-out genes are embedded purely via ``adapter(ESM2)`` + frozen
-        STATE; they receive no bag or distill supervision (leakage rule).
+        Genes without an ESM2 vector are zero-filled (ESM2 fallback) but still
+        embedded with a zero vector for downstream consumers. The coverage mask
+        reflects **gwps-bag coverage**: ``mask[i]=1`` iff ``symbols[i]`` is
+        present in ``self.bags.bags_by_symbol``; ``0`` otherwise. This aligns
+        with spec §7 honesty-check-1 (bag-coverage ~41%, not ESM2 ~100%).
 
         Args:
             symbols: Universe gene symbols in canonical order, shape
@@ -125,9 +226,10 @@ class StateDlProducer:
                 training pairs for this fold.
 
         Returns:
-            Tuple ``(embeddings, mask)`` where ``embeddings`` has shape
-            ``(n_gene, emb_dim)`` and ``mask`` is an int array of shape
-            ``(n_gene,)`` with 1 for ESM2-covered genes and 0 otherwise.
+            Tuple ``(embeddings, coverage_mask)`` where ``embeddings`` has
+            shape ``(n_gene, emb_dim)`` (float32) and ``coverage_mask`` is an
+            int array of shape ``(n_gene,)`` with ``1`` for bag-covered genes
+            and ``0`` otherwise.
         """
         torch.manual_seed(self.config.seed)
         accelerator = Accelerator()
@@ -143,10 +245,13 @@ class StateDlProducer:
         device = accelerator.device
         control = torch.tensor(self.bags.control_template, device=device)
         pooled_dim = self._model.emb_dim
-        embeddings = np.zeros((len(symbols), pooled_dim), dtype=float)
-        mask = np.zeros(len(symbols), dtype=int)
+        n = len(symbols)
+        embeddings = np.zeros((n, pooled_dim), dtype=np.float32)
+        # Coverage mask: 1 iff gene has a gwps bag (bag coverage, not ESM2 coverage).
+        coverage_mask = np.zeros(n, dtype=int)
 
         self._model.eval()
+        e_table = torch.zeros((n, pooled_dim), device=device)
         with torch.no_grad():
             for row, symbol in enumerate(
                 tqdm(
@@ -161,20 +266,29 @@ class StateDlProducer:
                     continue
                 esm_vec = torch.tensor(vec, device=device)
                 e_g = self._model.embed_gene(esm_vec, control)
+                e_table[row] = e_g
                 embeddings[row] = e_g.cpu().numpy()
-                mask[row] = 1
+                # Bag coverage (not ESM2 coverage) — spec §7 honesty-check-1.
+                if key in self.bags.bags_by_symbol:
+                    coverage_mask[row] = 1
 
-        return embeddings, mask
+        # Cache the embedding table and symbol order for score_matrix reuse.
+        self._e_table_cache = e_table
+        self._e_table_symbols = symbols
+        self._coverage_mask = coverage_mask
+
+        return embeddings, coverage_mask
 
     def score_matrix(
         self,
         symbols: np.ndarray,
         gene_effects: np.ndarray,
     ) -> np.ndarray:
-        """Score all candidate pairs with the trained pair head over cached e_g.
+        """Score all candidate pairs with the trained pair head.
 
-        If the model has not been trained yet (``self._model is None``), calls
-        :meth:`produce` first using the train-pair symbols as training symbols.
+        Reuses the per-gene embedding table built during :meth:`produce` when
+        ``symbols`` matches the cached order; otherwise recomputes it. If
+        :meth:`produce` has never been called, triggers it first.
 
         Args:
             symbols: Universe gene symbols in canonical order, shape ``(n,)``.
@@ -191,21 +305,46 @@ class StateDlProducer:
             self.produce(symbols, train_syms)
 
         model = self._model
-        device = next(model.parameters()).device  # type: ignore[union-attr]
-        control = torch.tensor(self.bags.control_template, device=device)
+        assert model is not None
+        device = next(model.parameters()).device
+
+        # Reuse cached embedding table when symbols match, else recompute.
+        if (
+            self._e_table_cache is not None
+            and self._e_table_symbols is not None
+            and len(self._e_table_symbols) == len(symbols)
+            and np.array_equal(self._e_table_symbols, symbols)
+        ):
+            e_table = self._e_table_cache.to(device)
+            coverage_mask = self._coverage_mask
+        else:
+            control = torch.tensor(self.bags.control_template, device=device)
+            n = len(symbols)
+            e_table = torch.zeros((n, model.emb_dim), device=device)
+            coverage_mask_list = []
+            model.eval()
+            with torch.no_grad():
+                for i, symbol in enumerate(symbols):
+                    key = str(symbol).upper()
+                    vec = self.esm.vectors_by_symbol.get(key)
+                    cov = 1 if key in self.bags.bags_by_symbol else 0
+                    coverage_mask_list.append(cov)
+                    if vec is not None:
+                        e_table[i] = model.embed_gene(
+                            torch.tensor(vec, device=device), control
+                        )
+            coverage_mask = np.array(coverage_mask_list, dtype=int)
+
         n = len(symbols)
-        e_table = torch.zeros((n, model.emb_dim), device=device)  # type: ignore[union-attr]
+        cov_tensor = torch.tensor(
+            coverage_mask if coverage_mask is not None else np.zeros(n, dtype=int),
+            device=device,
+            dtype=torch.float32,
+        )
 
-        model.eval()  # type: ignore[union-attr]
+        score = np.zeros((n, n), dtype=float)
+        model.eval()
         with torch.no_grad():
-            for i, symbol in enumerate(symbols):
-                vec = self.esm.vectors_by_symbol.get(str(symbol).upper())
-                if vec is not None:
-                    e_table[i] = model.embed_gene(  # type: ignore[union-attr]
-                        torch.tensor(vec, device=device), control
-                    )
-
-            score = np.zeros((n, n), dtype=float)
             for i in range(n):
                 ea = np.full(n, gene_effects[i])
                 eb = gene_effects
@@ -215,7 +354,12 @@ class StateDlProducer:
                     dtype=torch.float32,
                 )
                 e_a = e_table[i].unsqueeze(0).expand(n, -1)
-                logits = model.score_pairs(e_a, e_table, ge)  # type: ignore[union-attr]
+                cov_a: torch.Tensor | None = None
+                cov_b: torch.Tensor | None = None
+                if self.config.include_coverage_flag:
+                    cov_a = cov_tensor[i].expand(n)
+                    cov_b = cov_tensor
+                logits = model.score_pairs(e_a, e_table, ge, cov_a, cov_b)
                 score[i] = torch.sigmoid(logits).cpu().numpy()
 
         np.fill_diagonal(score, 0.0)
@@ -231,34 +375,44 @@ class StateDlProducer:
         """Run the training loop over all epochs.
 
         Bag supervision is applied only for genes in
-        ``train_symbols ∩ bags.bags_by_symbol`` (leakage rule).
+        ``train_symbols ∩ bags.bags_by_symbol`` (leakage rule). Distill loss
+        is applied when weights["distill"] > 0 and pert_vocab is available.
 
         Args:
             model: Model prepared by Accelerate (possibly wrapped).
             optimizer: Optimizer prepared by Accelerate.
             accelerator: The Accelerator instance for backward + device.
             train_symbols: Upper-case gene symbols present in train pairs.
+
+        Raises:
+            RuntimeError: If all pairs in an epoch are skipped due to missing
+                ESM2 vectors.
         """
         device = accelerator.device
         control = torch.tensor(self.bags.control_template, device=device)
         covered_train = {
             s.upper() for s in train_symbols if s.upper() in self.bags.bags_by_symbol
         }
+        inner = accelerator.unwrap_model(model)
+        self._model = inner  # Expose unwrapped model for _distill_part
 
         for epoch in range(self.config.max_epochs):
             weights = _epoch_weights(epoch, self.config)
             model.train()
-            inner = accelerator.unwrap_model(model)
             pbar = tqdm(
                 self.train_pairs,
                 desc=f"epoch {epoch}",
                 disable=not accelerator.is_main_process,
             )
+            skipped = 0
+            trained = 0
+
             for a, b, label, ea, eb in pbar:
                 key_a, key_b = a.upper(), b.upper()
                 vec_a = self.esm.vectors_by_symbol.get(key_a)
                 vec_b = self.esm.vectors_by_symbol.get(key_b)
                 if vec_a is None or vec_b is None:
+                    skipped += 1
                     continue
 
                 esm_a = torch.tensor(vec_a, device=device)
@@ -271,10 +425,26 @@ class StateDlProducer:
                     device=device,
                     dtype=torch.float32,
                 )
+
+                # Coverage flags for the pair head.
+                cov_a: torch.Tensor | None = None
+                cov_b: torch.Tensor | None = None
+                if self.config.include_coverage_flag:
+                    cov_a = torch.tensor(
+                        [1.0 if key_a in self.bags.bags_by_symbol else 0.0],
+                        device=device,
+                    )
+                    cov_b = torch.tensor(
+                        [1.0 if key_b in self.bags.bags_by_symbol else 0.0],
+                        device=device,
+                    )
+
                 logit = inner.score_pairs(
                     e_a.unsqueeze(0),
                     e_b.unsqueeze(0),
                     ge,
+                    cov_a,
+                    cov_b,
                 )
                 parts: dict[str, torch.Tensor] = {
                     "sl": sl_bce_loss(
@@ -299,10 +469,29 @@ class StateDlProducer:
                     if bag_part is not None:
                         parts["bag"] = bag_part
 
+                # Distill supervision: adapter vs STATE original token.
+                if weights["distill"] > 0:
+                    distill_part = self._distill_part({key_a, key_b})
+                    if distill_part is not None:
+                        parts["distill"] = distill_part
+
                 total = combine(parts, weights)
                 optimizer.zero_grad()
                 accelerator.backward(total)
                 optimizer.step()
+                trained += 1
+
+            if skipped > 0:
+                logger.warning(
+                    "epoch %d: skipped %d pair(s) with missing ESM2 vector(s)",
+                    epoch,
+                    skipped,
+                )
+            if trained == 0:
+                logger.error(
+                    "epoch %d: no trainable pairs found; check ESM2 coverage", epoch
+                )
+                raise RuntimeError("no trainable pairs: check ESM2 coverage")
 
 
 def _bag_part(
