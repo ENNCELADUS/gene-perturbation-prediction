@@ -525,6 +525,26 @@ def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
     manifest["augmented"] = config.augmented
     manifest["bags_npz"] = None if config.bags_npz is None else str(config.bags_npz)
     manifest["embedding_method"] = config.embedding_method
+    observed_feature_set = (
+        embedding_table.feature_set if embedding_table is not None else None
+    )
+    observed_embedding_dim = (
+        embedding_table.dim if embedding_table is not None else None
+    )
+    manifest["embedding_method_is_user_label"] = True
+    manifest["observed_npz_feature_set"] = observed_feature_set
+    manifest["observed_embedding_dim"] = observed_embedding_dim
+    if (
+        observed_feature_set is not None
+        and observed_feature_set not in config.embedding_method
+    ):
+        logger.warning(
+            "embedding_method=%r does not mention the NPZ's actual feature_set "
+            "%r; the --embedding-method flag is a label only and is not "
+            "validated against the bags NPZ contents.",
+            config.embedding_method,
+            observed_feature_set,
+        )
     manifest["fallback_strategy"] = config.fallback_strategy
     manifest["include_coverage_flag"] = config.include_coverage_flag
     manifest["gwps_coverage_gene_count"] = coverage_count
