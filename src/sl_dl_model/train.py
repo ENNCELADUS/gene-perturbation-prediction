@@ -166,6 +166,61 @@ class StateDlProducer:
 
         return embeddings, mask
 
+    def score_matrix(
+        self,
+        symbols: np.ndarray,
+        gene_effects: np.ndarray,
+    ) -> np.ndarray:
+        """Score all candidate pairs with the trained pair head over cached e_g.
+
+        If the model has not been trained yet (``self._model is None``), calls
+        :meth:`produce` first using the train-pair symbols as training symbols.
+
+        Args:
+            symbols: Universe gene symbols in canonical order, shape ``(n,)``.
+            gene_effects: Per-gene GeneEffect scalar, shape ``(n,)``.
+
+        Returns:
+            Score matrix of shape ``(n, n)`` with values in [0, 1] (sigmoid
+            output) and a zeroed diagonal.
+        """
+        if self._model is None:
+            train_syms = {a.upper() for a, *_ in self.train_pairs} | {
+                b.upper() for _, b, *_ in self.train_pairs
+            }
+            self.produce(symbols, train_syms)
+
+        model = self._model
+        device = next(model.parameters()).device  # type: ignore[union-attr]
+        control = torch.tensor(self.bags.control_template, device=device)
+        n = len(symbols)
+        e_table = torch.zeros((n, model.emb_dim), device=device)  # type: ignore[union-attr]
+
+        model.eval()  # type: ignore[union-attr]
+        with torch.no_grad():
+            for i, symbol in enumerate(symbols):
+                vec = self.esm.vectors_by_symbol.get(str(symbol).upper())
+                if vec is not None:
+                    e_table[i] = model.embed_gene(  # type: ignore[union-attr]
+                        torch.tensor(vec, device=device), control
+                    )
+
+            score = np.zeros((n, n), dtype=float)
+            for i in range(n):
+                ea = np.full(n, gene_effects[i])
+                eb = gene_effects
+                ge = torch.tensor(
+                    build_pair_features(ea, eb),
+                    device=device,
+                    dtype=torch.float32,
+                )
+                e_a = e_table[i].unsqueeze(0).expand(n, -1)
+                logits = model.score_pairs(e_a, e_table, ge)  # type: ignore[union-attr]
+                score[i] = torch.sigmoid(logits).cpu().numpy()
+
+        np.fill_diagonal(score, 0.0)
+        return score
+
     def _train(
         self,
         model: SlDlModel,
