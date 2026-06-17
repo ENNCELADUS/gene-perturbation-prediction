@@ -248,3 +248,79 @@ def test_augmented_manifest_records_coverage_fields(
     assert manifest["include_coverage_flag"] is False
     assert "gwps_coverage_gene_count" in manifest
     assert manifest["models"] == ["A", "B", "A_transcript", "B_transcript"]
+
+
+def test_augmented_manifest_records_pair_coverage_fraction(
+    synthetic_augmented_benchmark_csv: Path,
+    synthetic_augmented_bags_npz: Path,
+    tmp_path: Path,
+) -> None:
+    import json
+
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.evaluate import run_cv
+
+    output_dir = tmp_path / "aug_pair_cov_run"
+    config = SLBaselineConfig(
+        input_csv=synthetic_augmented_benchmark_csv,
+        output_dir=output_dir,
+        bags_npz=synthetic_augmented_bags_npz,
+        folds=(0,),
+        ranking_k=(2, 5),
+    )
+    run_cv(config)
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    # The augmented fixture has both both-covered pairs (C*,C*) and mixed pairs
+    # (C*,U*), so the pair-level fraction is strictly between 0 and 1.
+    assert manifest["gwps_coverage_pair_fraction"] is not None
+    assert 0.0 < manifest["gwps_coverage_pair_fraction"] < 1.0
+
+
+def test_nonaugmented_manifest_pair_fraction_is_none(
+    synthetic_benchmark_csv: Path, tmp_path: Path
+) -> None:
+    import json
+
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.evaluate import run_cv
+
+    output_dir = tmp_path / "base_pair_cov_run"
+    config = SLBaselineConfig(
+        input_csv=synthetic_benchmark_csv, output_dir=output_dir,
+        folds=(0,), ranking_k=(2, 5),
+    )
+    run_cv(config)
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    assert manifest["gwps_coverage_pair_fraction"] is None
+
+
+def test_augmented_run_warns_on_zero_coverage_bags(
+    synthetic_augmented_benchmark_csv: Path, tmp_path: Path, caplog
+) -> None:
+    """A bags NPZ disjoint from the benchmark universe must warn, not silently
+    produce all-fallback transcript features."""
+    import logging
+
+    import numpy as np
+
+    from sl_benchmark_baseline.config import SLBaselineConfig
+    from sl_benchmark_baseline.evaluate import run_cv
+
+    # Bags whose gene symbols do not intersect the benchmark (C*/U* genes).
+    disjoint_npz = tmp_path / "disjoint_bags.npz"
+    np.savez_compressed(
+        disjoint_npz,
+        cell_delta_pcs=np.array([[1.0, 0.0], [2.0, 1.0]], dtype=np.float32),
+        bag_offsets=np.array([0, 2], dtype=np.int64),
+        perturbation_gene=np.asarray(["ZZZ_NOTREAL"], dtype=object),
+    )
+    config = SLBaselineConfig(
+        input_csv=synthetic_augmented_benchmark_csv,
+        output_dir=tmp_path / "zero_cov_run",
+        bags_npz=disjoint_npz,
+        folds=(0,),
+        ranking_k=(2, 5),
+    )
+    with caplog.at_level(logging.WARNING):
+        run_cv(config)
+    assert any("Low gwps gene coverage" in rec.message for rec in caplog.records)
