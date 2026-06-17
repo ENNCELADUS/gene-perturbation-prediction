@@ -65,6 +65,17 @@ trapezoidal PR-curve AUC; F1 is the maximum F1 over the PR curve; ranking is
 per-anchor candidate-partner retrieval over the K562-filtered candidate-gene
 universe with train-positive pairs masked. 
 
+### exp08 STATE-Adapter DL
+
+The deep-learning extension of the SL-pair benchmark (`src/sl_dl_model/`,
+`docs/experiment/08_k562_sl_pair_perturbseq_state_dl.md`). A frozen Arc STATE
+backbone is fed by a trainable adapter mapping ESM2 gene embeddings to STATE's
+328-d perturbation token, producing a per-gene response embedding for all 9,471
+genes in one coordinate system. Trained with a 3-part loss (SL BCE + adapter
+token-distill + real-bag supervision on covered train genes) under
+Accelerate/DDP. Reuses the exp06 official metric harness verbatim; targets
+CV2/CV3 NDCG/MAP lift over exp06. Benchmark-adapter only; no biological SL claim.
+
 ### Observed-B -> C
 
 A downstream predictor trained and evaluated on measured post-perturbation
