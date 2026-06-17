@@ -6,7 +6,35 @@ Configs for the 5-phase exp08 implementation (see
 
 ## Prerequisites
 
-1. Run the ESM2 precompute script once (network node):
+0. Check what is already present:
+   ```bash
+   uv run python scripts/setup_exp08_assets.py check
+   ```
+
+   Required raw inputs are the SL pair CSV, the K562 gwps h5ad, the STATE
+   checkpoint, and `pert_onehot_map.pt`. Generated caches are:
+   `data/esm2/k562_sl_universe_esm2_650M.npz` and
+   `data/exp08_cache/k562_gwps_bags.npz`.
+
+1. Build the ESM2 cache through Hugging Face once (network/GPU node):
+   ```bash
+   uv run python scripts/setup_exp08_assets.py esm2
+   ```
+
+   This uses the public HF model `facebook/esm2_t33_650M_UR50D`; no HF token is
+   required unless your environment blocks anonymous downloads. To use a specific
+   Hugging Face cache:
+   ```bash
+   uv run python scripts/setup_exp08_assets.py esm2 \
+       --hf-cache-dir /path/to/hf-cache
+   ```
+
+   To verify an already-cached HF model without network:
+   ```bash
+   uv run python scripts/setup_exp08_assets.py esm2 --local-files-only
+   ```
+
+   The lower-level equivalent is:
    ```bash
    uv run python scripts/precompute_esm2_embeddings.py \
        --benchmark-csv data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv \
@@ -14,7 +42,13 @@ Configs for the 5-phase exp08 implementation (see
        --seq-cache data/esm2/symbol_to_sequence.json
    ```
 
-2. Build and cache gwps bags (local or interactive node):
+2. Build and cache gwps bags (interactive node with enough RAM for the 62.8 GiB
+   gwps h5ad):
+   ```bash
+   uv run python scripts/setup_exp08_assets.py bags
+   ```
+
+   Lower-level equivalent:
    ```bash
    uv run python -c "
    from pathlib import Path
@@ -24,6 +58,11 @@ Configs for the 5-phase exp08 implementation (see
    bags = build_gwps_bags(cfg)
    save_bags_npz(bags, Path('data/exp08_cache/k562_gwps_bags.npz'))
    "
+   ```
+
+3. Re-run the preflight check:
+   ```bash
+   uv run python scripts/setup_exp08_assets.py check
    ```
 
 ## Phase 0 — Harness parity (exp06 in-harness baseline)

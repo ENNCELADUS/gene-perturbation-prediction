@@ -177,7 +177,11 @@ def mean_pool_residues(
 
 
 def embed_sequences(
-    symbols: list[str], seqs: dict[str, str], model_name: str
+    symbols: list[str],
+    seqs: dict[str, str],
+    model_name: str,
+    cache_dir: Path | None = None,
+    local_files_only: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Embed resolved sequences with ESM2; unresolved rows stay zero.
 
@@ -185,14 +189,26 @@ def embed_sequences(
         symbols: Upper-case gene symbols in universe order.
         seqs: Mapping from symbol to amino-acid sequence.
         model_name: HuggingFace model ID, e.g. ``"facebook/esm2_t33_650M_UR50D"``.
+        cache_dir: Optional Hugging Face cache directory for model/tokenizer files.
+        local_files_only: If True, require the model/tokenizer to already be in
+            the local Hugging Face cache.
 
     Returns:
         A tuple ``(vectors, resolved)`` where ``vectors`` has shape
         ``(n_gene, hidden_size)`` and ``resolved`` is a boolean array.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    tokenizer = EsmTokenizer.from_pretrained(model_name)
-    model = EsmModel.from_pretrained(model_name).to(device).eval()
+    from_pretrained_kwargs = {
+        "cache_dir": str(cache_dir) if cache_dir is not None else None,
+        "local_files_only": local_files_only,
+    }
+    from_pretrained_kwargs = {
+        key: value for key, value in from_pretrained_kwargs.items() if value is not None
+    }
+    tokenizer = EsmTokenizer.from_pretrained(model_name, **from_pretrained_kwargs)
+    model = (
+        EsmModel.from_pretrained(model_name, **from_pretrained_kwargs).to(device).eval()
+    )
     dim = model.config.hidden_size
     vectors = np.zeros((len(symbols), dim), dtype=np.float32)
     resolved = np.zeros(len(symbols), dtype=bool)
@@ -244,12 +260,29 @@ def main() -> None:
         default="facebook/esm2_t33_650M_UR50D",
         help="HuggingFace ESM2 model ID.",
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=None,
+        help="Optional Hugging Face cache directory for model/tokenizer downloads.",
+    )
+    parser.add_argument(
+        "--local-files-only",
+        action="store_true",
+        help="Use only already-cached Hugging Face files; do not download.",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     symbols = universe_symbols(args.benchmark_csv)
     logger.info("universe size: %d genes", len(symbols))
     seqs = load_or_fetch_sequences(symbols, args.seq_cache)
-    vectors, resolved = embed_sequences(symbols, seqs, args.model)
+    vectors, resolved = embed_sequences(
+        symbols,
+        seqs,
+        args.model,
+        cache_dir=args.cache_dir,
+        local_files_only=args.local_files_only,
+    )
     check_resolution(resolved, n_symbols=len(symbols))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
