@@ -109,3 +109,16 @@ Read `summary.csv` → filter `metric=="ndcg@10"` and `slice=="full_universe"` �
 mean ± std against exp06 (0.042 ± 0.008 for CV2 XGB). Lift within fold noise is null;
 lift concentrated on the covered-pair slice validates the premise but documents the
 uncovered-gene dilution.
+
+## Parallelism
+
+`scripts/sl_dl_model.sh` launches `accelerate launch --num_processes 4`. The 4
+ranks split the `(split_type, fold_id)` CV jobs round-robin — each rank trains,
+embeds, and scores its own folds on one L40, with no DDP gradient all-reduce
+(the per-fold trainable head is tiny and folds are independent). Metric rows are
+gathered onto the main process, which writes the per-split `cvN/` directories
+and the combined `official_metrics_summary.csv`. Each fold runs on exactly one
+rank, so an N-process run is byte-identical to a 1-process run; a crash in any
+fold aborts the whole run (fail-fast). For a config with F folds across S
+splits, useful rank counts are any divisor up to `S * F` (10 for the default
+CV2+CV3 × 5; 15 with CV1 added).
