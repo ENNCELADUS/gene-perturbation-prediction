@@ -102,3 +102,6 @@ docs/literature/
 *.dvi
 *.bbl
 *.blg
+
+# Large data files
+/data/
