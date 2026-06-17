@@ -308,3 +308,25 @@ def _load_state_dl_caches(config: SLDLConfig) -> StateDlCaches:
         input_dim=bags.input_dim,
         output_dim=bags.input_dim,
     )
+
+
+def _shard_jobs(
+    jobs: list[tuple[str, int]],
+    rank: int,
+    num_processes: int,
+) -> list[tuple[str, int]]:
+    """Return the round-robin slice of CV jobs owned by ``rank``.
+
+    Round-robin (``jobs[rank::num_processes]``) keeps load balanced across
+    ranks when per-fold cost varies. Every job is owned by exactly one rank and
+    the union across all ranks reconstructs ``jobs`` in order.
+
+    Args:
+        jobs: Ordered ``(split_type, fold_id)`` pairs to distribute.
+        rank: Zero-based process index of the calling rank.
+        num_processes: Total number of ranks.
+
+    Returns:
+        The sublist of ``jobs`` this rank should run (possibly empty).
+    """
+    return jobs[rank::num_processes]
