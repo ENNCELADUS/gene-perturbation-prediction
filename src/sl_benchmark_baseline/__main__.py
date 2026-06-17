@@ -25,6 +25,26 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--ranking-k", type=int, nargs="+", default=list(defaults.ranking_k)
     )
     parser.add_argument("--seed", type=int, default=defaults.seed)
+    parser.add_argument("--bags-npz", type=Path, default=defaults.bags_npz)
+    parser.add_argument(
+        "--embedding-method", type=str, default=defaults.embedding_method
+    )
+    parser.add_argument(
+        "--fallback-strategy",
+        choices=("zero", "global_mean"),
+        default=defaults.fallback_strategy,
+    )
+    parser.add_argument(
+        "--include-coverage-flag",
+        dest="include_coverage_flag",
+        action="store_true",
+        default=defaults.include_coverage_flag,
+    )
+    parser.add_argument(
+        "--no-coverage-flag",
+        dest="include_coverage_flag",
+        action="store_false",
+    )
     return parser.parse_args(argv)
 
 
@@ -39,6 +59,10 @@ def main(argv: list[str] | None = None) -> int:
         folds=tuple(args.folds),
         ranking_k=tuple(args.ranking_k),
         seed=args.seed,
+        bags_npz=args.bags_npz,
+        embedding_method=args.embedding_method,
+        fallback_strategy=args.fallback_strategy,
+        include_coverage_flag=args.include_coverage_flag,
     )
     summary = run_cv(config)
     logger.info("Wrote summary with %d rows to %s", len(summary), config.output_dir)
