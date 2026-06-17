@@ -80,8 +80,15 @@ generalization surfaces.
 Per gene `g`, construct a **transcript embedding** `e_g`:
 - **Covered gene** (g ∈ gwps, 6,070 genes): real pooled embedding from the gwps
   response bag, plus `coverage_flag = 1`.
-- **Uncovered gene** (g ∉ gwps, 3,401 genes): fallback embedding (zero vector or
-  training-set mean), plus `coverage_flag = 0`.
+- **Uncovered gene** (g ∉ gwps, 3,401 genes): fallback embedding, plus
+  `coverage_flag = 0`. Two fallback strategies are supported:
+  - `zero`: a zero vector.
+  - `global_mean`: the mean of all covered genes' pooled embeddings across the
+    full candidate universe (NOT a per-fold train-set mean). This is stable
+    across folds because gwps coverage is fixed and label-free — no SL `D` label
+    touches the embedding or the mean — so it is treated as a fixed preprocessing
+    step (equivalent to an unsupervised feature extractor), not a fold-local
+    statistic. See `align_to_universe` in `embeddings.py`.
 
 **Swap-invariant pair features** (exp06 is order-invariant, so new features must
 preserve symmetry):
