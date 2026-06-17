@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,6 +42,8 @@ RANKING_SEMANTICS = (
 )
 OFFICIAL_METRIC_SOURCE = "data/SL_benchmark/src/preprocess.py:cal_metrics"
 SCORE_MATRIX_CHUNK_ROWS = 64
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -324,7 +327,7 @@ def _run_fold_augmented(
                     config.ranking_k,
                 )
             )
-            if len(pos_cov) > 0:
+            if len(pos_cov) > 0 and len(neg_cov) > 0:
                 rows.extend(
                     _metric_rows(
                         split_type,
@@ -337,6 +340,17 @@ def _run_fold_augmented(
                         seen_index,
                         config.ranking_k,
                     )
+                )
+            else:
+                logger.warning(
+                    "split %s fold %s: covered_pairs slice skipped for %s "
+                    "(covered test positives=%d, negatives=%d); "
+                    "check embedding coverage of this fold's test genes.",
+                    split_type,
+                    fold_id,
+                    model.name,
+                    len(pos_cov),
+                    len(neg_cov),
                 )
         else:
             model.fit(train_base)
@@ -484,6 +498,24 @@ def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
     coverage_count = (
         int(universe.coverage_mask.sum()) if universe.coverage_mask is not None else 0
     )
+    pair_coverage_fraction = None
+    if config.augmented and universe.coverage_mask is not None:
+        pair_idx = _pair_indices(frame, universe)
+        both_covered = (universe.coverage_mask[pair_idx[:, 0]] == 1) & (
+            universe.coverage_mask[pair_idx[:, 1]] == 1
+        )
+        pair_coverage_fraction = float(both_covered.mean()) if len(pair_idx) else 0.0
+        gene_fraction = (
+            coverage_count / len(universe.symbols) if len(universe.symbols) else 0.0
+        )
+        if gene_fraction < 0.5:
+            logger.warning(
+                "Low gwps gene coverage: %.1f%% (%d/%d). Check that bags_npz "
+                "matches the benchmark universe (symbol casing/aliases).",
+                gene_fraction * 100,
+                coverage_count,
+                len(universe.symbols),
+            )
     model_names = (
         ["A", "B", "A_transcript", "B_transcript"]
         if config.augmented
@@ -499,5 +531,6 @@ def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
     manifest["gwps_coverage_fraction"] = (
         coverage_count / len(universe.symbols) if len(universe.symbols) else 0.0
     )
+    manifest["gwps_coverage_pair_fraction"] = pair_coverage_fraction
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return summary
