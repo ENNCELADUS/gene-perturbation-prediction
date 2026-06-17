@@ -166,3 +166,66 @@ def test_missing_bags_npz_warns(tmp_path: Path, caplog, monkeypatch) -> None:
         and "full gwps h5ad will be loaded" in rec.message
         for rec in caplog.records
     )
+
+
+# FIX 1 RED — multi-process write guard
+def test_non_main_process_does_not_write_artifacts(tmp_path: Path, monkeypatch) -> None:
+    """Only the main process writes artifacts; non-main ranks must not.
+
+    Simulates a non-main rank by patching PartialState to report
+    ``is_main_process == False`` and asserting no output files are written.
+    """
+    import sl_dl_model.evaluate as ev
+
+    class _NonMainState:
+        is_main_process = False
+
+    monkeypatch.setattr(ev, "PartialState", lambda: _NonMainState())
+
+    csv = tmp_path / "toy.csv"
+    _toy_frame().to_csv(csv, index=False)
+    out = tmp_path / "run"
+    cfg = SLDLConfig(
+        input_csv=csv,
+        output_dir=out,
+        split_types=("CV2",),
+        folds=(0, 1),
+        include_coverage_flag=False,
+    )
+    run_cv(cfg, ZeroEmbeddingProducer())
+
+    # Non-main rank must not have written any artifact files.
+    assert not (out / "fold_metrics.csv").exists()
+    assert not (out / "manifest.json").exists()
+
+
+# FIX 7 RED — per-split output layout + combined official summary
+def test_per_split_output_layout_and_combined_summary(tmp_path: Path) -> None:
+    """run_cv writes per-split subdirs plus a combined official summary CSV.
+
+    Spec §7: ``fold_metrics.csv``/``summary.csv``/``manifest.json`` per split
+    under ``<out>/<cvN>/`` plus a combined ``official_metrics_summary.csv``.
+    """
+    csv = tmp_path / "toy.csv"
+    _toy_frame().to_csv(csv, index=False)
+    out = tmp_path / "run"
+    cfg = SLDLConfig(
+        input_csv=csv,
+        output_dir=out,
+        split_types=("CV2",),
+        folds=(0, 1),
+        include_coverage_flag=False,
+    )
+    run_cv(cfg, ZeroEmbeddingProducer())
+
+    # Per-split subdir for CV2.
+    assert (out / "CV2" / "fold_metrics.csv").exists()
+    assert (out / "CV2" / "summary.csv").exists()
+    assert (out / "CV2" / "manifest.json").exists()
+
+    # Combined official summary across splits.
+    combined = out / "official_metrics_summary.csv"
+    assert combined.exists()
+    df = pd.read_csv(combined)
+    assert "split_type" in df.columns
+    assert set(df["split_type"]) == {"CV2"}
