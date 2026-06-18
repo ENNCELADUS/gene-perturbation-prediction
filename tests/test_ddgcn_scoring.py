@@ -11,15 +11,19 @@ from ddgcn.config import DdgcnConfig
 
 def _fast_config() -> DdgcnConfig:
     return dataclasses.replace(
-        DdgcnConfig(), hidden1=8, hidden2=4, max_epochs=15,
-        tolerance_epoch=2, eval_interval=5,
+        DdgcnConfig(),
+        hidden1=8,
+        hidden2=4,
+        max_epochs=15,
+        tolerance_epoch=2,
+        eval_interval=5,
     )
 
 
 def _toy_frame() -> pd.DataFrame:
     # 6 genes, one CV1 fold, train+test pos/neg rows.
     rows = [
-        # split_type, fold_id, split_role, sl_label, a_id, b_id, a_sym, b_sym, a_eff, b_eff
+        # split_type, fold_id, role, label, a_id, b_id, a_sym, b_sym, a_eff, b_eff
         ("CV1", 0, "train", 1, 0, 1, "G0", "G1", -0.5, -0.4),
         ("CV1", 0, "train", 1, 2, 3, "G2", "G3", -0.6, -0.3),
         ("CV1", 0, "train", 0, 0, 4, "G0", "G4", -0.5, 0.1),
@@ -28,10 +32,16 @@ def _toy_frame() -> pd.DataFrame:
         ("CV1", 0, "test", 0, 3, 5, "G3", "G5", -0.3, 0.2),
     ]
     cols = [
-        "split_type", "fold_id", "split_role", "sl_label",
-        "gene_a_unified_id", "gene_b_unified_id",
-        "gene_a_symbol", "gene_b_symbol",
-        "gene_a_k562_gene_effect", "gene_b_k562_gene_effect",
+        "split_type",
+        "fold_id",
+        "split_role",
+        "sl_label",
+        "gene_a_unified_id",
+        "gene_b_unified_id",
+        "gene_a_symbol",
+        "gene_b_symbol",
+        "gene_a_k562_gene_effect",
+        "gene_b_k562_gene_effect",
     ]
     return pd.DataFrame(rows, columns=cols)
 
