@@ -81,6 +81,18 @@ class XGBTranscriptModel(XGBModel):
     name = "B_transcript"
 
 
+class LogRegSelectivityModel(LogRegModel):
+    """Model A_xcl: logistic regression on GeneEffect + selectivity features."""
+
+    name = "A_xcl"
+
+
+class XGBSelectivityModel(XGBModel):
+    """Model B_xcl: XGBoost on GeneEffect + selectivity features."""
+
+    name = "B_xcl"
+
+
 class FrequencyProbeModel:
     """Model C: preferential-attachment probe from train-positive degree.
 
@@ -145,4 +157,15 @@ def build_augmented_models(config: SLBaselineConfig) -> list:
         XGBModel(config),
         LogRegTranscriptModel(config),
         XGBTranscriptModel(config),
+    ]
+
+
+def build_selectivity_models(config: SLBaselineConfig) -> list:
+    """exp09 models: baseline A/B/C + cross-cell-line A_xcl/B_xcl."""
+    return [
+        LogRegModel(config),
+        XGBModel(config),
+        FrequencyProbeModel(config),
+        LogRegSelectivityModel(config),
+        XGBSelectivityModel(config),
     ]
