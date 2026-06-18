@@ -68,7 +68,7 @@ gene-generalizable embedding (ESM2), keeping the rest of STATE frozen.
                          ESM2(gene)  [1280-d, all 9,471 genes]
                               |
                     +---------v----------+
-                    |  Pert-Adapter (NEW)|  trainable: 1280 -> 328
+                    |  Pert-Adapter|  trainable: 1280 -> 328
                     |  replaces STATE     |
                     |  pert_encoder       |
                     +---------v----------+
@@ -83,11 +83,11 @@ gene-generalizable embedding (ESM2), keeping the rest of STATE frozen.
                        [n_cells, output_dim]
                               |
                     +---------v----------+
-                    | Pooling head (NEW) |  trainable: bag -> e_g
+                    | Pooling head |  trainable: bag -> e_g
                     +---------v----------+
                      per-gene embedding e_g
                               |
-         e_a, e_b --> symmetric pair head (NEW) --> P(SL)
+         e_a, e_b --> symmetric pair head --> P(SL)
 ```
 
 The 8-layer Llama backbone and decoder stay frozen, preserving STATE's learned

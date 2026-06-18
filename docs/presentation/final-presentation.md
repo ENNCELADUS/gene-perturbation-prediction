@@ -3,6 +3,67 @@ marp: true
 theme: default
 paginate: true
 title: From SL Promise to an Honest Ranking Model
+style: |
+  section {
+    font-size: 23px;
+    line-height: 1.24;
+    padding: 42px 56px;
+  }
+  section h1 {
+    font-size: 46px;
+  }
+  section h2 {
+    font-size: 31px;
+    margin-bottom: 0.45em;
+  }
+  section h3 {
+    font-size: 24px;
+  }
+  section p,
+  section li {
+    line-height: 1.24;
+  }
+  section ul,
+  section ol {
+    margin-top: 0.35em;
+    margin-bottom: 0.35em;
+  }
+  section table {
+    font-size: 17px;
+    line-height: 1.12;
+  }
+  section th,
+  section td {
+    padding: 0.22em 0.42em;
+  }
+  section::after {
+    font-size: 13px;
+  }
+  section.dense {
+    font-size: 20px;
+  }
+  section.dense h2 {
+    font-size: 29px;
+  }
+  section.dense table {
+    font-size: 16px;
+  }
+  section.scoreboard {
+    font-size: 17px;
+    padding: 30px 38px;
+  }
+  section.scoreboard h2 {
+    font-size: 29px;
+    margin-bottom: 0.35em;
+  }
+  section.scoreboard table {
+    font-size: 13.8px;
+    line-height: 1.16;
+  }
+  section.scoreboard th,
+  section.scoreboard td {
+    padding: 0.22em 0.28em;
+  }
 ---
 
 # From SL Promise to an Honest Ranking Model
@@ -137,7 +198,7 @@ exp05：接上 Arc Institute 的 STATE 前向模型，做 A→B→C。
 
 | Model | CV1 NDCG@10 | CV2 AUROC | CV2 NDCG@10 | CV3 AUROC | CV3 NDCG@10 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| B (XGBoost) | 0.0505 | **0.704** | **0.042** | **0.596** | 0.002 |
+| B (XGBoost) | 0.0505 | **0.704** | **0.042** | **0.596** | **0.002** |
 | C (degree probe) | **0.197** | 0.500 | 0.001 | — | — |
 
 - Degree probe **wins CV1** → CV1 is gameable by train-positive degree
@@ -155,29 +216,33 @@ exp06 是最朴素的 floor：只用两个基因的 DepMap GeneEffect 标量，�
 
 ---
 
+<!-- _class: dense -->
+
 ## Does observed Perturb-seq add lift over dependency-only? (exp07)
 
 **Method:** augment exp06 (GeneEffect features) with **observed gwps response embeddings** per gene
 
 **Coverage crux:**
 - Replogle K562 gwps: **64% per-gene coverage** (6,070 / 9,471 genes)
-- But for *pairs*: **~41% both-covered** under independence → 59% hit a fallback
+- But for *pairs*: **~41% both-covered** under independence; **51.17%** in the actual benchmark rows
 
-**Two tiers:**
-- Tier 1: PCA/HVG mean-pool
-- Tier 2: frozen exp03 scVI representation
+**Completed Tier 1:** PCA-delta mean-pool · zero fallback · **no coverage flag**
 
-**Honest design:** covered-pair diagnostic slice + with/without coverage flag
+| Model | CV2 AUROC | CV2 NDCG@10 | CV3 AUROC | CV3 NDCG@10 |
+| --- | ---: | ---: | ---: | ---: |
+| B (exp06 XGB) | 0.704 | 0.042 | 0.596 | **0.002** |
+| B_transcript | **0.751** | **0.094** | **0.630** | 0.001 |
 
-**Status:** *results pending* — negative result is publishable and informative.
+**Read:** observed Perturb-seq gives clear **CV2 lift**; CV3 top-k ranking remains unresolved.
 
 <!-- _notes (中文):
 exp07 问：观测到的 Perturb-seq 响应能不能在 exp06 基础上带来提升？
 方法：给 exp06 的 GeneEffect 特征加上每个基因的观测 gwps 响应 embedding。
-覆盖率的坑：Replogle gwps 单基因覆盖是 64%（6070/9471），但这是「基因对」任务——如果两个基因独立，双覆盖只有大约 41%，剩下 59% 的对会碰到 fallback。
-两层实现：Tier 1 是 PCA/HVG 均值池化；Tier 2 复用 exp03 的冻结 scVI 表示。
-诚实设计：报告双覆盖对的 diagnostic slice，以及有/无覆盖标志的 ablation，确保提升不是 coverage indicator 带来的 shortcut。
-状态：结果 pending。如果是负结果（没提升），也是可发表的、有信息量的——说明在 41% 覆盖率下，转录组信号不足以超越依赖性标量。
+覆盖率的坑：Replogle gwps 单基因覆盖是 64%（6070/9471），但这是「基因对」任务——随机估计双覆盖只有大约 41%；真实 benchmark rows 里 both-covered 是 51.17%，所以仍然有接近一半的 pair 至少一个基因要 fallback。
+已经完成的 Tier 1 是 PCA-delta mean-pool，zero fallback，而且不加 coverage flag；这个设计避免显式用 coverage indicator 学 well-studied gene 或 degree shortcut。
+表里看最重要的 B_transcript：CV2 AUROC 从 0.704 到 0.751，NDCG@10 从 0.042 到 0.094，说明观测 Perturb-seq 在 one-gene-held-out ranking 上确实有 lift。
+CV3 仍然难：B_transcript 的 AUROC 从 0.596 到 0.630，但 NDCG@10 没有改善；logistic head 的 CV3 NDCG 有小幅提升，但还不是 clean solution。
+结论：exp07 是正结果，但边界很清楚——observed transcriptome helps CV2, does not solve both-gene cold-start top-k ranking。
 计时：约 1 分钟。
 -->
 
@@ -208,6 +273,8 @@ exp08 是这次报告的中心，两页幻灯片。第一页讲问题和架构�
 -->
 
 ---
+
+<!-- _class: dense -->
 
 ## e2e DL centerpiece pt.2 — leakage-safe training & the bar
 
@@ -269,8 +336,8 @@ exp09 是一条平行路线，不用转录组，纯粹用 DepMap 的跨细胞系
 **The recurring discipline:**
 - Simple floors first (exp06 dependency-only)
 - CV2 / CV3 as the real bar (CV1 is degree-gameable)
-- Negative results count (if exp07/08 don't beat exp06, that's a *finding*)
-- Pending is marked pending (no fabricated metrics)
+- Partial results count (exp07 lifts CV2, not CV3 top-k ranking)
+- Pending is marked pending (exp08 has no fabricated metrics)
 
 **Path to true context-specific SL discovery:**
 - exp08 cluster results → does frozen-STATE+ESM2 adapter generalize to held-out genes?
@@ -283,8 +350,8 @@ exp09 是一条平行路线，不用转录组，纯粹用 DepMap 的跨细胞系
 反复的纪律（recurring discipline）：
 - 先做简单 floor（exp06 纯依赖性）；
 - CV2/CV3 才是真正的 bar（CV1 可以被度数钻空子）；
-- 负结果也算数（如果 exp07/08 没超过 exp06，那也是一个发现）；
-- pending 就标 pending，不编数据。
+- 部分正结果也算数：exp07 明确提升 CV2，但没有解决 CV3 top-k ranking；
+- pending 就标 pending：exp08 还没有最终 metric，不编数据。
 通往真正的 context-specific SL 发现的路径：
 - exp08 集群结果出来后，冻结 STATE+ESM2 adapter 能不能泛化到没见过的基因？
 - exp09 selectivity 能不能带来鲁棒性？
@@ -295,28 +362,32 @@ exp09 是一条平行路线，不用转录组，纯粹用 DepMap 的跨细胞系
 
 ---
 
+<!-- _class: scoreboard -->
+
 ## Appendix — Results Scoreboard with SOTA Comparison
 
 | Model | Source | CV1 F1 | CV1 NDCG | CV2 F1 | CV2 NDCG | CV3 F1 | CV3 NDCG |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| DDGCN | literature | 0.9104 | 0.2159 | 0.9113 | 0.2494 | 0.9104 | 0.2470 |
-| GRSMF | literature | 0.8757 | 0.5178 | 0.8905 | 0.5075 | 0.8905 | 0.5075 |
+| DDGCN | literature | **0.9104** | 0.2159 | **0.9113** | 0.2494 | **0.9104** | 0.2470 |
+| GRSMF | literature | 0.8757 | **0.5178** | 0.8905 | **0.5075** | 0.8905 | **0.5075** |
 | SL2MF | literature | 0.8611 | 0.2745 | 0.4332 | 0.0052 | 0.4160 | 0.0001 |
 | A (logreg) | exp06 | 0.6675 | 0.0040 | 0.6677 | 0.0048 | 0.6686 | 0.0035 |
 | B (XGBoost) | exp06 | 0.7304 | 0.0505 | 0.6756 | 0.0421 | 0.6701 | 0.0024 |
 | C (degree probe) | exp06 | 0.8227 | 0.1970 | 0.6667 | 0.0006 | 0.6667 | 0.0008 |
+| A_transcript (logreg + Perturb-seq) | exp07 | 0.6919 | 0.0268 | 0.6687 | 0.0199 | 0.6674 | 0.0078 |
+| B_transcript (XGB + Perturb-seq) | exp07 | 0.7695 | 0.1738 | 0.7017 | 0.0942 | 0.6762 | 0.0011 |
 | A_xcl (logreg + selectivity) | exp09 | 0.6675 | 0.0096 | 0.6676 | 0.0118 | 0.6699 | 0.0081 |
 | B_xcl (XGB + selectivity) | exp09 | 0.7436 | 0.1601 | 0.6942 | 0.0864 | 0.6727 | 0.0011 |
-| exp07 (observed Perturb-seq) | exp07 | pending | pending | pending | pending | pending | pending |
 | exp08 (frozen-STATE + ESM2 e2e DL) | exp08 | pending | pending | pending | pending | pending | pending |
 
-**Caveat:** Literature rows use different universe/splits/negatives — **context, not head-to-head**. Our NDCG = NDCG@10 (official per-anchor protocol). Within-harness comparison: B_xcl (exp09) lifts over B (exp06) on CV2 NDCG (0.0864 vs 0.0421).
+**Caveat:** Literature rows are K562-filtered benchmark references, not a single implementation-harness ablation. Our NDCG = NDCG@10 (official per-anchor protocol). Within-harness lifts: B_transcript (exp07) vs B on CV2 NDCG (0.0942 vs 0.0421); B_xcl (exp09) vs B (0.0864 vs 0.0421).
 
 <!-- _notes (中文):
 附录页，完整的结果记分板。
-文献方法（DDGCN/GRSMF/SL2MF）的 F1 很高（0.86-0.91），但它们用的是完整 SynLethDB 宇宙和它们自己的切分/负样本——不能直接比，只是提供上下文定位，不是 head-to-head leaderboard。
+文献方法（DDGCN/GRSMF/SL2MF）的 F1 很高（0.86-0.91）。这里要澄清：这些 SOTA rows 是同一个 K562-filtered Rand 1:1 benchmark 上的参考结果，不是泛泛引用别的数据集。
+但这仍然不是一个单一实现 harness 下的严格 ablation leaderboard；它们的特征、训练策略和报告实现来自不同 pipeline。
 我们的 NDCG 是 NDCG@10（官方 per-anchor 协议）。
-真正 apples-to-apples 的对比是 within-harness：B_xcl（exp09）在 CV2 NDCG 上超过 B（exp06）（0.0864 vs 0.0421）——这是同一个 harness、同一个随机状态、同一个 benchmark 的真正 ablation。
-exp07/exp08 行明确标 pending。
+真正 apples-to-apples 的对比是 within-harness：B_transcript（exp07）在 CV2 NDCG 上超过 B（exp06）（0.0942 vs 0.0421）；B_xcl（exp09）也超过 B（0.0864 vs 0.0421）。
+exp08 行明确标 pending。
 这页不在主报告计时里，备用。
 -->
