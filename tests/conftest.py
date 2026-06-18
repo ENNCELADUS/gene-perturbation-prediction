@@ -221,3 +221,85 @@ def synthetic_augmented_benchmark_csv(tmp_path: Path) -> Path:
 def synthetic_augmented_bags_npz(tmp_path: Path) -> Path:
     """Bags NPZ covering exactly the covered genes of the augmented benchmark."""
     return _write_augmented_bags_npz(tmp_path)
+
+
+@pytest.fixture
+def synthetic_selectivity_fixture(tmp_path: Path) -> dict:
+    """Tiny benchmark CSV with entrez ids + matching tiny DepMap CSVs.
+
+    6 genes (entrez 10..60), 30 cell lines, CV1 with 2 folds. Returns a dict
+    with ``benchmark_csv`` and ``depmap_dir`` paths.
+    """
+    rng = np.random.default_rng(3)
+    entrez = [10, 20, 30, 40, 50, 60]
+    symbols = [f"G{e}" for e in entrez]
+    lines = [f"ACH-{i:04d}" for i in range(30)]
+
+    # DepMap dir with the 5 standard files
+    depmap_dir = tmp_path / "depmap"
+    depmap_dir.mkdir()
+    ge = pd.DataFrame(
+        rng.normal(-0.3, 0.6, size=(len(lines), len(entrez))),
+        index=lines,
+        columns=[f"{s} ({e})" for s, e in zip(symbols, entrez, strict=True)],
+    )
+    ge.to_csv(depmap_dir / "CRISPRGeneEffect.csv")
+    cn = pd.DataFrame(
+        rng.uniform(0.6, 1.4, size=(len(lines), len(entrez))),
+        index=lines,
+        columns=[f"{s} ({e})" for s, e in zip(symbols, entrez, strict=True)],
+    )
+    cn.to_csv(depmap_dir / "PortalOmicsCNGeneLog2.csv")
+    for fname, density in (
+        ("OmicsSomaticMutationsMatrixDamaging.csv", 0.3),
+        ("OmicsSomaticMutationsMatrixHotspot.csv", 0.1),
+    ):
+        mat = (rng.uniform(0, 1, size=(len(lines), len(entrez))) < density).astype(int)
+        frame = pd.DataFrame(
+            mat, columns=[f"{s} ({e})" for s, e in zip(symbols, entrez, strict=True)]
+        )
+        frame.insert(0, "ModelID", lines)
+        frame.insert(0, "SequencingID", [f"s{i}" for i in range(len(lines))])
+        frame.to_csv(depmap_dir / fname, index=False)
+    expr = pd.DataFrame(
+        rng.uniform(0, 7, size=(len(lines), len(entrez))),
+        columns=[f"{s} ({e})" for s, e in zip(symbols, entrez, strict=True)],
+    )
+    expr.insert(0, "ModelID", lines)
+    expr.to_csv(
+        depmap_dir / "OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv",
+        index=False,
+    )
+
+    # Benchmark CSV: 2 folds, both classes, entrez + negative_sampling_method
+    rows = []
+    counter = 0
+    for fold_id in (0, 1):
+        for role, n_each in (("train", 4), ("test", 3)):
+            for label in (1, 0):
+                for _ in range(n_each):
+                    ia, ib = rng.integers(0, len(entrez), size=2)
+                    while ib == ia:
+                        ib = rng.integers(0, len(entrez))
+                    base = -1.0 if label == 1 else 0.2
+                    rows.append(
+                        {
+                            "pair_id": f"P{counter}",
+                            "negative_sampling_method": "Rand",
+                            "fold_id": fold_id,
+                            "split_role": role,
+                            "sl_label": label,
+                            "gene_a_symbol": symbols[ia],
+                            "gene_b_symbol": symbols[ib],
+                            "gene_a_unified_id": int(entrez[ia]),
+                            "gene_b_unified_id": int(entrez[ib]),
+                            "gene_a_entrez_id": int(entrez[ia]),
+                            "gene_b_entrez_id": int(entrez[ib]),
+                            "gene_a_k562_gene_effect": base + rng.normal(0, 0.1),
+                            "gene_b_k562_gene_effect": base + rng.normal(0, 0.1),
+                        }
+                    )
+                    counter += 1
+    csv_path = tmp_path / "bench_sel.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    return {"benchmark_csv": csv_path, "depmap_dir": depmap_dir}
