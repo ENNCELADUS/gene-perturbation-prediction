@@ -342,12 +342,19 @@ def test_coverage_mask_reflects_bag_membership() -> None:
 
 
 def test_distill_loss_wired_with_monkeypatch(monkeypatch) -> None:
-    """FIX 2: distill loss flows gradients when pert_vocab is present."""
+    """FIX 2: distill flows grad via the encoded-token path (adapter -> pert_encoder).
+
+    Discriminating setup: the checkpoint's pert_encoder maps pert_dim(5) ->
+    hidden(3), so hidden != pert_dim. The encoded-token contract compares
+    ``pert_encoder(adapter_raw)`` (width 3) against ``pert_encoder(onehot)``
+    (width 3). A raw-vs-encoded comparison would instead pit the 5-wide adapter
+    output against the 3-wide target and fail the MSE on shape.
+    """
     from torch import nn
 
-    # Monkeypatch _load_pert_vocab to return a small fake vocab
+    # Monkeypatch _load_pert_vocab to return a small fake vocab (width = pert_dim).
     def _mock_load_pert_vocab(path):
-        return {"A": np.eye(10, dtype=np.float32)[0]}  # one-hot for "A"
+        return {"A": np.eye(5, dtype=np.float32)[0]}  # one-hot for "A", width 5
 
     from sl_dl_model import train as train_mod
 
@@ -363,10 +370,10 @@ def test_distill_loss_wired_with_monkeypatch(monkeypatch) -> None:
         lambda_distill=0.5,
     )
 
-    # Materialize the model and attach a fake pert_encoder
+    # Materialize the model and attach a fake pert_encoder mapping pert_dim->hidden.
     model = producer._build_model()
     producer._model = model
-    model.encoder.state.state_model.pert_encoder = nn.Linear(10, 5, bias=False)
+    model.encoder.state.state_model.pert_encoder = nn.Linear(5, 3, bias=False)
 
     # Force pert_vocab load via our monkeypatched function
     # (use a dummy checkpoint path — it won't be read because we monkeypatched)
@@ -391,7 +398,7 @@ def test_distill_loss_wired_with_monkeypatch(monkeypatch) -> None:
     assert result is not None, "_distill_part should return a tensor for in-vocab genes"
     assert torch.isfinite(result).all(), "distill loss should be finite"
 
-    # Verify gradients flow back to adapter params
+    # Verify gradients flow back to adapter params through the frozen pert_encoder.
     result.backward()
     adapter_params = list(producer._model.encoder.adapter.parameters())
     assert any(p.grad is not None for p in adapter_params), (
