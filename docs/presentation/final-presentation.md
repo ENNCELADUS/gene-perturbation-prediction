@@ -206,3 +206,29 @@ exp08 是这次报告的中心，两页幻灯片。第一页讲问题和架构�
 右边的图展示整个流程。
 计时：约 1.5 分钟（exp08 两页共 3 分钟）。
 -->
+
+---
+
+## e2e DL centerpiece pt.2 — leakage-safe training & the bar
+
+**3-part loss:**
+1. **SL BCE** (pair classification)
+2. **Adapter token-distill** (align adapter output to STATE's in-vocab tokens where available)
+3. **Real-bag supervision** (covered *train* genes only)
+
+**Leakage rule** that makes CV2/CV3 valid:
+- Held-out genes reached **purely** via `adapter(ESM2)` + frozen STATE
+- Never supervised by their own observed response bag → genuinely unseen
+
+**The bar to beat:** exp06 CV2 AUROC **0.704** / CV3 **0.596**, with lift concentrated on covered-pair slice
+
+**Status:** code + unit tests complete; **CV2/CV3 cluster gates pending**
+
+<!-- _notes (中文):
+第二页讲训练和评估。
+三部分 loss：SL BCE 做基因对分类；adapter token-distill 让 adapter 输出对齐 STATE 词表内的 token（在有的地方）；real-bag supervision 只用覆盖的训练基因的真实响应包。
+泄漏规则（让 CV2/CV3 有效）：held-out 基因纯粹通过 adapter(ESM2) + 冻结 STATE 到达，从来不用它自己的观测响应包做监督——所以是真的没见过。
+必须超越的 bar：exp06 的 CV2 AUROC 0.704 / CV3 0.596，而且提升要集中在双覆盖对的 slice 上。
+状态：代码和单元测试都完成了，CV2/CV3 的集群 gate 还在 pending（诚实）。
+计时：约 1.5 分钟。
+-->
