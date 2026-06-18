@@ -152,3 +152,31 @@ exp06 是最朴素的 floor：只用两个基因的 DepMap GeneEffect 标量，�
 核心信息：exp06 就是后面所有模型必须超越的「门槛」，而且必须在 CV2/CV3 上超越。
 计时：约 1 分钟。
 -->
+
+---
+
+## Does observed Perturb-seq add lift over dependency-only? (exp07)
+
+**Method:** augment exp06 (GeneEffect features) with **observed gwps response embeddings** per gene
+
+**Coverage crux:**
+- Replogle K562 gwps: **64% per-gene coverage** (6,070 / 9,471 genes)
+- But for *pairs*: **~41% both-covered** under independence → 59% hit a fallback
+
+**Two tiers:**
+- Tier 1: PCA/HVG mean-pool
+- Tier 2: frozen exp03 scVI representation
+
+**Honest design:** covered-pair diagnostic slice + with/without coverage flag
+
+**Status:** *results pending* — negative result is publishable and informative.
+
+<!-- _notes (中文):
+exp07 问：观测到的 Perturb-seq 响应能不能在 exp06 基础上带来提升？
+方法：给 exp06 的 GeneEffect 特征加上每个基因的观测 gwps 响应 embedding。
+覆盖率的坑：Replogle gwps 单基因覆盖是 64%（6070/9471），但这是「基因对」任务——如果两个基因独立，双覆盖只有大约 41%，剩下 59% 的对会碰到 fallback。
+两层实现：Tier 1 是 PCA/HVG 均值池化；Tier 2 复用 exp03 的冻结 scVI 表示。
+诚实设计：报告双覆盖对的 diagnostic slice，以及有/无覆盖标志的 ablation，确保提升不是 coverage indicator 带来的 shortcut。
+状态：结果 pending。如果是负结果（没提升），也是可发表的、有信息量的——说明在 41% 覆盖率下，转录组信号不足以超越依赖性标量。
+计时：约 1 分钟。
+-->
