@@ -121,3 +121,41 @@ def build_augmented_pair_features(
             ),
         ]
     )
+
+
+SELECTIVITY_FEATURE_NAMES: tuple[str, ...] = (
+    "sel_mean",
+    "sel_absdiff",
+    "pan_essential_min",
+)
+
+
+def build_selectivity_pair_features(
+    sel_ab: np.ndarray,
+    sel_ba: np.ndarray,
+    pan_a: np.ndarray,
+    pan_b: np.ndarray,
+) -> np.ndarray:
+    """Build swap-invariant selectivity features from directional contrasts.
+
+    Args:
+        sel_ab: Directional selectivity ``sel(a -> b)``, shape ``(n,)``.
+        sel_ba: Directional selectivity ``sel(b -> a)``, shape ``(n,)``.
+        pan_a: Pan-essentiality of gene a (mean GeneEffect), shape ``(n,)``.
+        pan_b: Pan-essentiality of gene b (mean GeneEffect), shape ``(n,)``.
+
+    Returns:
+        Feature matrix of shape ``(n, 3)`` ordered by
+        ``SELECTIVITY_FEATURE_NAMES``.
+    """
+    sel_ab = np.asarray(sel_ab, dtype=float)
+    sel_ba = np.asarray(sel_ba, dtype=float)
+    pan_a = np.asarray(pan_a, dtype=float)
+    pan_b = np.asarray(pan_b, dtype=float)
+    return np.column_stack(
+        [
+            (sel_ab + sel_ba) / 2.0,
+            np.abs(sel_ab - sel_ba),
+            np.minimum(pan_a, pan_b),
+        ]
+    )
