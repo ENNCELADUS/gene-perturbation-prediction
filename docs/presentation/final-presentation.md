@@ -292,3 +292,31 @@ exp09 是一条平行路线，不用转录组，纯粹用 DepMap 的跨细胞系
 结束在诚实的 scope 上。
 计时：约 1 分钟。
 -->
+
+---
+
+## Appendix — Results Scoreboard with SOTA Comparison
+
+| Model | Source | CV1 F1 | CV1 NDCG | CV2 F1 | CV2 NDCG | CV3 F1 | CV3 NDCG |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| DDGCN | literature | 0.9104 | 0.2159 | 0.9113 | 0.2494 | 0.9104 | 0.2470 |
+| GRSMF | literature | 0.8757 | 0.5178 | 0.8905 | 0.5075 | 0.8905 | 0.5075 |
+| SL2MF | literature | 0.8611 | 0.2745 | 0.4332 | 0.0052 | 0.4160 | 0.0001 |
+| A (logreg) | exp06 | 0.6675 | 0.0040 | 0.6677 | 0.0048 | 0.6686 | 0.0035 |
+| B (XGBoost) | exp06 | 0.7304 | 0.0505 | 0.6756 | 0.0421 | 0.6701 | 0.0024 |
+| C (degree probe) | exp06 | 0.8227 | 0.1970 | 0.6667 | 0.0006 | 0.6667 | 0.0008 |
+| A_xcl (logreg + selectivity) | exp09 | 0.6675 | 0.0096 | 0.6676 | 0.0118 | 0.6699 | 0.0081 |
+| B_xcl (XGB + selectivity) | exp09 | 0.7436 | 0.1601 | 0.6942 | 0.0864 | 0.6727 | 0.0011 |
+| exp07 (observed Perturb-seq) | exp07 | pending | pending | pending | pending | pending | pending |
+| exp08 (frozen-STATE + ESM2 e2e DL) | exp08 | pending | pending | pending | pending | pending | pending |
+
+**Caveat:** Literature rows use different universe/splits/negatives — **context, not head-to-head**. Our NDCG = NDCG@10 (official per-anchor protocol). Within-harness comparison: B_xcl (exp09) lifts over B (exp06) on CV2 NDCG (0.0864 vs 0.0421).
+
+<!-- _notes (中文):
+附录页，完整的结果记分板。
+文献方法（DDGCN/GRSMF/SL2MF）的 F1 很高（0.86-0.91），但它们用的是完整 SynLethDB 宇宙和它们自己的切分/负样本——不能直接比，只是提供上下文定位，不是 head-to-head leaderboard。
+我们的 NDCG 是 NDCG@10（官方 per-anchor 协议）。
+真正 apples-to-apples 的对比是 within-harness：B_xcl（exp09）在 CV2 NDCG 上超过 B（exp06）（0.0864 vs 0.0421）——这是同一个 harness、同一个随机状态、同一个 benchmark 的真正 ablation。
+exp07/exp08 行明确标 pending。
+这页不在主报告计时里，备用。
+-->
