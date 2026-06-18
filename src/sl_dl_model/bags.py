@@ -1,7 +1,8 @@
 """Build per-gene gwps response bags and a shared K562 control template.
 
-Reads a gwps h5ad file backed (not fully in memory); uses the ``X_hvg`` obsm
-embedding if present, otherwise falls back to ``X``. Subsamples control cells
+Reads a gwps h5ad file backed (not fully in memory); aligns raw expression to
+the STATE checkpoint's ``var_dims.pkl`` gene order when available, then falls
+back to the ``X_hvg`` obsm embedding or full ``X``. Subsamples control cells
 to ``config.control_template_size`` and each perturbation gene to
 ``config.cells_per_bag``, both with a seeded RNG. Symbol keys are upper-cased.
 
@@ -14,10 +15,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+import pickle
 from pathlib import Path
 
 import anndata as ad
 import numpy as np
+from scipy import sparse
 
 from sl_dl_model.config import SLDLConfig
 
@@ -42,18 +45,107 @@ class GwpsBags:
     input_dim: int
 
 
-def _embed_matrix(adata: ad.AnnData, embed_key: str | None) -> np.ndarray:
+def state_checkpoint_input_dim(config: SLDLConfig) -> int | None:
+    """Return the STATE checkpoint input dimension when metadata is available."""
+    if config.state_backend == "linear_mock":
+        return None
+    payload = _state_var_dims(config)
+    if payload is None:
+        return None
+    input_dim = payload.get("input_dim")
+    return int(input_dim) if input_dim is not None else None
+
+
+def _state_var_dims(config: SLDLConfig) -> dict[str, object] | None:
+    if config.state_backend == "linear_mock":
+        return None
+    path = config.state_checkpoint.parent.parent / "var_dims.pkl"
+    if not path.exists():
+        return None
+    with path.open("rb") as handle:
+        payload = pickle.load(handle)
+    return payload if isinstance(payload, dict) else None
+
+
+def _var_symbols(adata: ad.AnnData) -> list[str]:
+    if "gene_name" in adata.var.columns:
+        return adata.var["gene_name"].astype(str).tolist()
+    return adata.var_names.astype(str).tolist()
+
+
+def _checkpoint_gene_indices(
+    adata: ad.AnnData,
+    config: SLDLConfig,
+) -> np.ndarray | None:
+    payload = _state_var_dims(config)
+    names = payload.get("gene_names") if payload is not None else None
+    if names is None:
+        return None
+
+    symbol_to_index: dict[str, int] = {}
+    duplicates: set[str] = set()
+    for index, symbol in enumerate(_var_symbols(adata)):
+        key = str(symbol)
+        if key in symbol_to_index:
+            duplicates.add(key)
+        else:
+            symbol_to_index[key] = index
+
+    selected: list[int] = []
+    missing: list[str] = []
+    duplicate_matches: list[str] = []
+    for name in names:
+        key = str(name)
+        index = symbol_to_index.get(key)
+        if index is None:
+            missing.append(key)
+            continue
+        if key in duplicates:
+            duplicate_matches.append(key)
+            continue
+        selected.append(index)
+
+    if missing or duplicate_matches:
+        logger.warning(
+            "Cannot align GWPS bags to STATE checkpoint gene order: %d missing, "
+            "%d duplicate gene symbol(s). Falling back to the configured matrix view.",
+            len(missing),
+            len(duplicate_matches),
+        )
+        return None
+    return np.asarray(selected, dtype=np.int64)
+
+
+def _dense_slice(matrix: object, indices: np.ndarray) -> np.ndarray:
+    subset = matrix[:, indices]  # type: ignore[index]
+    if sparse.issparse(subset):
+        subset = subset.toarray()
+    return np.asarray(subset, dtype=np.float32)
+
+
+def _embed_matrix(
+    adata: ad.AnnData,
+    embed_key: str | None,
+    config: SLDLConfig,
+) -> np.ndarray:
     """Return the embedding matrix from obsm or fall back to X.
 
     Args:
         adata: AnnData object to extract from.
         embed_key: Key in ``adata.obsm``; if None or absent, use ``adata.X``.
+        config: Experiment config, used to align raw expression to the STATE
+            checkpoint's gene order when checkpoint metadata is available.
 
     Returns:
         Float32 array of shape ``(n_obs, D)``.
     """
+    checkpoint_indices = _checkpoint_gene_indices(adata, config)
+    if checkpoint_indices is not None:
+        return _dense_slice(adata.X, checkpoint_indices)
     if embed_key and embed_key in adata.obsm:
         return np.asarray(adata.obsm[embed_key], dtype=np.float32)
+    if sparse.issparse(adata.X):
+        return np.asarray(adata.X.toarray(), dtype=np.float32)
     return np.asarray(adata.X, dtype=np.float32)
 
 
@@ -62,9 +154,10 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
 
     Reads the h5ad from ``config.gwps_h5ad`` (backed=False for compatibility
     with synthetic test AnnData; large files should be pre-cached via
-    ``save_bags_npz``). Uses the ``X_hvg`` obsm embedding when available.
-    Control cells are identified by the ``non-targeting`` label in
-    ``obs["gene"]``.
+    ``save_bags_npz``). For real STATE checkpoints, raw expression is first
+    projected into checkpoint ``var_dims.pkl`` gene order when possible.
+    Otherwise, this uses the ``X_hvg`` obsm embedding when available. Control
+    cells are identified by the ``non-targeting`` label in ``obs["gene"]``.
 
     Args:
         config: SLDLConfig with ``gwps_h5ad``, ``control_template_size``, and
@@ -84,7 +177,7 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
     if "gene" not in adata.obs.columns:
         raise ValueError("h5ad obs must have a 'gene' column")
 
-    matrix = _embed_matrix(adata, "X_hvg")
+    matrix = _embed_matrix(adata, "X_hvg", config)
     genes = adata.obs["gene"].astype(str).to_numpy()
     control_label = "non-targeting"
 

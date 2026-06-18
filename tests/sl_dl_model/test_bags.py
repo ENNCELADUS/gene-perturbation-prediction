@@ -1,4 +1,6 @@
 import logging
+import pickle
+from pathlib import Path
 
 import anndata as ad
 import numpy as np
@@ -17,6 +19,26 @@ def _toy_h5ad(path):
     adata = ad.AnnData(X=rng.normal(size=(n, d)).astype("float32"), obs=obs)
     adata.obsm["X_hvg"] = rng.normal(size=(n, d)).astype("float32")
     adata.write_h5ad(path)
+
+
+def _toy_h5ad_for_state_alignment(path: Path) -> np.ndarray:
+    genes = ["non-targeting"] * 3 + ["AAAS"] * 2
+    obs = pd.DataFrame({"gene": genes})
+    var = pd.DataFrame(
+        {"gene_name": ["G_B", "G_A", "G_D", "G_C"]},
+        index=["ens_b", "ens_a", "ens_d", "ens_c"],
+    )
+    x = np.arange(20, dtype=np.float32).reshape(5, 4)
+    adata = ad.AnnData(X=x, obs=obs, var=var)
+    adata.write_h5ad(path)
+    return x
+
+
+def _write_state_var_dims(checkpoint: Path, gene_names: list[str]) -> None:
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint.touch()
+    with (checkpoint.parent.parent / "var_dims.pkl").open("wb") as handle:
+        pickle.dump({"input_dim": len(gene_names), "gene_names": gene_names}, handle)
 
 
 def _toy_h5ad_no_control(path):
@@ -55,6 +77,26 @@ def test_build_and_cache_bags(tmp_path):
     loaded = load_bags_npz(npz)
     assert set(loaded.bags_by_symbol) == {"AAAS", "KRAS"}
     assert np.allclose(loaded.control_template, bags.control_template)
+
+
+def test_build_gwps_bags_aligns_to_state_checkpoint_genes(tmp_path: Path) -> None:
+    """Raw h5ad expression is projected into checkpoint gene order."""
+    h5ad = tmp_path / "toy_state.h5ad"
+    x = _toy_h5ad_for_state_alignment(h5ad)
+    checkpoint = tmp_path / "state" / "checkpoints" / "final.ckpt"
+    _write_state_var_dims(checkpoint, ["G_C", "G_A"])
+
+    cfg = SLDLConfig(
+        gwps_h5ad=h5ad,
+        state_checkpoint=checkpoint,
+        control_template_size=8,
+        cells_per_bag=8,
+    )
+    bags = build_gwps_bags(cfg, rng_seed=17)
+
+    assert bags.input_dim == 2
+    assert np.allclose(bags.control_template, x[:3][:, [3, 1]])
+    assert np.allclose(bags.bags_by_symbol["AAAS"], x[3:][:, [3, 1]])
 
 
 # ---------------------------------------------------------------------------
