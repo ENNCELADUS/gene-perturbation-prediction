@@ -47,7 +47,9 @@ class SlDlModel(nn.Module):
         checkpoint: Path to the STATE checkpoint (required unless mock backend).
         esm_dim: Dimensionality of the input ESM2 embedding.
         adapter_hidden: Hidden width of the PertAdapter MLP.
-        pert_dim: Pert token dimensionality (must match STATE's expectation).
+        pert_dim: Requested pert vector dimensionality. For ``state_checkpoint``
+            this is a hint only — the loaded checkpoint's ``pert_dim`` overrides
+            it; authoritative for ``linear_mock``.
         input_dim: Control cell feature dimension fed to STATE.
         output_dim: STATE encoder output dimension (= input_dim for the HVG
             checkpoint).
