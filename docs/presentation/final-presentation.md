@@ -180,3 +180,29 @@ exp07 问：观测到的 Perturb-seq 响应能不能在 exp06 基础上带来提
 状态：结果 pending。如果是负结果（没提升），也是可发表的、有信息量的——说明在 41% 覆盖率下，转录组信号不足以超越依赖性标量。
 计时：约 1 分钟。
 -->
+
+---
+
+## e2e DL centerpiece pt.1 — the problem & architecture (exp08)
+
+![bg right:35% fit](e2e_SL_DL.png)
+
+**Why exp08:** local STATE checkpoint is **closed-vocab one-hot**
+- Only **16.3% of the SL universe in-vocab** (1,542 / 9,471 genes)
+- 84% out-of-vocab → held-out genes get no gradient
+
+**Fix:** freeze STATE's 8-layer Llama backbone, **replace** its one-hot `pert_encoder` with a trainable **adapter fed by ESM2** (1280 → 328)
+
+→ all 9,471 genes land in **one coordinate system**
+
+**Arch:** ESM2 → PertAdapter → frozen STATE → predicted bag → pooling → symmetric pair head
+
+<!-- _notes (中文):
+exp08 是这次报告的中心，两页幻灯片。第一页讲问题和架构。
+为什么要做 exp08：我们本地的 STATE checkpoint 是封闭词表的 one-hot 模型——只有 16.3% 的 SL 宇宙（1542/9471 基因）在词表里，84% 是 out-of-vocab。对于 CV2/CV3 那些没见过的基因，one-hot 没法给梯度。
+修复方案：冻结 STATE 的 8 层 Llama backbone，只替换它的 one-hot pert_encoder，换成一个可训练的 adapter，输入是 ESM2 蛋白质 embedding（1280 维到 328 维）。
+这样所有 9471 个基因——包括没见过的——都能落在同一个坐标系里。
+架构流：ESM2 → PertAdapter → 冻结 STATE → 预测响应包 → pooling → 对称基因对 head。
+右边的图展示整个流程。
+计时：约 1.5 分钟（exp08 两页共 3 分钟）。
+-->
