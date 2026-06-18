@@ -30,7 +30,5 @@ def test_parser_accepts_split_type_override() -> None:
     from ddgcn.__main__ import _build_parser
 
     parser = _build_parser()
-    args = parser.parse_args(
-        ["run-cv", "--config", "x.yaml", "--split-type", "CV2"]
-    )
+    args = parser.parse_args(["run-cv", "--config", "x.yaml", "--split-type", "CV2"])
     assert args.split_type == "CV2"
