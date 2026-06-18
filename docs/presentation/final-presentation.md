@@ -232,3 +232,30 @@ exp08 是这次报告的中心，两页幻灯片。第一页讲问题和架构�
 状态：代码和单元测试都完成了，CV2/CV3 的集群 gate 还在 pending（诚实）。
 计时：约 1.5 分钟。
 -->
+
+---
+
+## A parallel route — cross-cell-line selectivity (exp09)
+
+**No transcriptome:** use DepMap across **1,208 lines** — is KO(b) more lethal where gene_a is defective?
+
+**Composite-OR defective call:** mutation / CN loss / low expression
+
+**Results:**
+- CV2 B_xcl: AUROC **0.742** (+0.039 over B), NDCG@10 **0.086** (+0.044)
+- CV3 B_xcl: AUROC **0.645** (+0.050), but NDCG@10 **flat** (0.001 vs 0.002)
+
+**Read:** cross-cell-line selectivity improves cold-start **classification** but does not fix cold-start **ranking**
+
+**Non-pan-essential slice:** lift shrinks but doesn't vanish on CV1/CV2; CV3 mostly essentiality-linked
+
+<!-- _notes (中文):
+exp09 是一条平行路线，不用转录组，纯粹用 DepMap 的跨细胞系对比。
+方法：在 1208 条 GeneEffect 细胞系上，看某个基因 a 缺陷的细胞系里，敲除基因 b 是不是更致命？
+用复合 OR 判断「缺陷」：突变/拷贝数缺失/低表达，只要有一个满足就算。
+结果：CV2 的 B_xcl AUROC 0.742（比 B 高 0.039），NDCG@10 0.086（高 0.044）；CV3 AUROC 0.645（高 0.050），但 NDCG@10 是平的（0.001 vs 0.002）。
+解读：跨细胞系 selectivity 能改善冷启动的分类，但修不好冷启动的排序。
+非泛必需 slice：提升在 CV1/CV2 缩小但不消失；CV3 的提升大部分是必需性结构，不是基因对特异的 co-dependency。
+这展示了面向同一个 bar 的多种方法的广度。
+计时：约 0.75 分钟。
+-->
