@@ -108,3 +108,23 @@ exp02 是一个审计：会不会模型只是学到了一个「细胞快死了 /
 结论：信号是真实的、转录组特异的，不是单纯的「泛死亡」效应。这给后面用转录组特征做铺垫。
 计时：约 1 分钟。
 -->
+
+---
+
+## Stage 2 — learning a dependency-aware representation  ⟵ *the bridge*
+
+- **exp03** single-cell set learning: scVI128 + **frozen-GMM distribution regression** wins
+  - Adamson Spearman **0.666**, AUROC **0.911** — beats attention MIL; HVG hurts
+- **exp04** leakage-free *predicted-B* loop (forward A→B→C, no observed test bag)
+- **exp05** frozen-**STATE** forward model (Arc Institute), A→B→C pipeline
+
+**Takeaway:** we now have a **STATE-based way to turn any perturbation into a dependency-aware embedding** → carry this into the SL-pair task.
+
+<!-- _notes (中文):
+这一页是承上启下的「桥」，很关键。
+exp03：从 pseudobulk 升级到单细胞集合学习（set learning / MIL）。结论是 scVI128 加上冻结 GMM 的分布回归效果最好，Adamson Spearman 0.666，AUROC 0.911，比 attention MIL 还好；用 HVG 反而更差。
+exp04：一个无泄漏的 predicted-B 流程，前向 A→B→C，不用测试基因的观测响应包。
+exp05：接上 Arc Institute 的 STATE 前向模型，做 A→B→C。
+最关键的 takeaway：我们现在有了一种基于 STATE 的方法，可以把任意扰动变成一个「依赖性感知」的 embedding。这个能力会被带到后面的 SL 基因对任务里——这就是 representation-as-bridge 的核心。
+计时：约 1 分钟。
+-->
