@@ -203,3 +203,21 @@ def test_align_selectivity_lambda_penalty():
     j = 1
     delta = uni1.sel_matrix[:, j] - uni0.sel_matrix[:, j]
     np.testing.assert_allclose(delta, -0.9333333, atol=1e-5)
+
+
+def test_load_modelid_column_matrix_dedups_nondefault_rows(tmp_path):
+    """Duplicate ModelIDs (multi-profile) collapse to the Yes default entry."""
+    path = tmp_path / "mut_dups.csv"
+    pd.DataFrame(
+        {
+            "SequencingID": ["s1", "s2", "s3"],
+            "ModelID": ["ACH-2", "ACH-2", "ACH-9"],
+            "IsDefaultEntryForModel": ["Yes", "No", "Yes"],
+            "GENEA (10)": [1, 0, 1],
+        }
+    ).to_csv(path, index=False)
+    lines = pd.Index(["ACH-1", "ACH-2"])
+    vecs = load_modelid_column_matrix(path, lines)
+    # ACH-1 absent -> NaN; ACH-2 uses the "Yes" row (value 1), not the "No" row
+    assert np.isnan(vecs[10][0])
+    np.testing.assert_allclose(vecs[10][1], 1.0)

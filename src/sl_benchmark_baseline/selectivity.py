@@ -60,14 +60,30 @@ def load_ach_indexed_matrix(
 def load_modelid_column_matrix(
     path: Path, cell_line_index: pd.Index
 ) -> dict[int, np.ndarray]:
-    """Load an omics matrix whose ``ModelID`` is a column, reindexed onto lines."""
+    """Load an omics matrix whose ``ModelID`` is a column, reindexed onto lines.
+
+    DepMap mutation/expression matrices can carry multiple sequencing profiles per
+    model (e.g. 3,044 rows for 1,968 models). Rows flagged ``IsDefaultEntryForModel``
+    are kept when that column is present; any remaining duplicate ``ModelID`` rows are
+    collapsed to the first occurrence so the index is unique before ``reindex``.
+    """
     frame = pd.read_csv(path)
     if "ModelID" not in frame.columns:
         raise ValueError(f"{path} has no ModelID column")
+    if "IsDefaultEntryForModel" in frame.columns:
+        flag = frame["IsDefaultEntryForModel"]
+        is_default = flag.map(
+            lambda v: str(v).strip().lower() in {"yes", "true", "1"}
+        )
+        default = frame[is_default]
+        if not default.empty:
+            frame = default
+    frame = frame.drop_duplicates(subset="ModelID", keep="first")
+    model_ids = frame["ModelID"]
     frame = frame.drop(
         columns=[c for c in _OMICS_META_COLUMNS if c in frame.columns],
         errors="ignore",
-    ).set_index(frame["ModelID"])
+    ).set_index(model_ids)
     frame = frame.reindex(cell_line_index)
     entrez_map = parse_entrez_columns(list(frame.columns))
     return {
