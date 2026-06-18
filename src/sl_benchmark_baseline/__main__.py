@@ -45,6 +45,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         dest="include_coverage_flag",
         action="store_false",
     )
+    parser.add_argument("--depmap-dir", type=Path, default=defaults.depmap_dir)
+    parser.add_argument("--cn-loss-thr", type=float, default=defaults.cn_loss_thr)
+    parser.add_argument(
+        "--expr-low-quantile", type=float, default=defaults.expr_low_quantile
+    )
+    parser.add_argument("--sel-n-min", type=int, default=defaults.sel_n_min)
+    parser.add_argument("--sel-lambda", type=float, default=defaults.sel_lambda)
     return parser.parse_args(argv)
 
 
@@ -63,6 +70,11 @@ def main(argv: list[str] | None = None) -> int:
         embedding_method=args.embedding_method,
         fallback_strategy=args.fallback_strategy,
         include_coverage_flag=args.include_coverage_flag,
+        depmap_dir=args.depmap_dir,
+        cn_loss_thr=args.cn_loss_thr,
+        expr_low_quantile=args.expr_low_quantile,
+        sel_n_min=args.sel_n_min,
+        sel_lambda=args.sel_lambda,
     )
     summary = run_cv(config)
     logger.info("Wrote summary with %d rows to %s", len(summary), config.output_dir)
