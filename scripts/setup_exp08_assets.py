@@ -22,7 +22,12 @@ from precompute_esm2_embeddings import (
     load_or_fetch_sequences,
     universe_symbols,
 )
-from sl_dl_model.bags import build_gwps_bags, load_bags_npz, save_bags_npz
+from sl_dl_model.bags import (
+    build_gwps_bags,
+    load_bags_npz,
+    save_bags_npz,
+    state_checkpoint_input_dim,
+)
 from sl_dl_model.config import SLDLConfig, load_config
 
 logger = logging.getLogger("setup_exp08_assets")
@@ -103,12 +108,21 @@ def check_assets(config: SLDLConfig, esm2_npz: Path, bags_npz: Path) -> bool:
     _check_npz(esm2_npz)
     if bags_npz.exists():
         bags = load_bags_npz(bags_npz)
+        expected_input_dim = state_checkpoint_input_dim(config)
         logger.info(
             "gwps bags cache: genes=%d control_cells=%d dim=%d",
             len(bags.bags_by_symbol),
             int(bags.control_template.shape[0]),
             bags.input_dim,
         )
+        if expected_input_dim is not None and bags.input_dim != expected_input_dim:
+            logger.error(
+                "gwps bags cache dim=%d does not match STATE checkpoint input_dim=%d; "
+                "rebuild with `uv run python scripts/setup_exp08_assets.py bags`",
+                bags.input_dim,
+                expected_input_dim,
+            )
+            ok = False
     return ok
 
 

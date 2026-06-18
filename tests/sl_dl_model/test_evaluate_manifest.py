@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -156,6 +157,7 @@ def test_missing_bags_npz_warns(tmp_path: Path, caplog, monkeypatch) -> None:
     cfg = SLDLConfig(
         esm2_npz=tmp_path / "esm2.npz",  # Set this to avoid ValueError
         bags_npz=None,  # This is the trigger
+        state_backend="linear_mock",
     )
 
     with caplog.at_level(logging.WARNING):
@@ -166,6 +168,47 @@ def test_missing_bags_npz_warns(tmp_path: Path, caplog, monkeypatch) -> None:
         and "full gwps h5ad will be loaded" in rec.message
         for rec in caplog.records
     )
+
+
+def test_stale_bags_npz_raises_when_checkpoint_dim_differs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A stale cache with the wrong feature width cannot reach STATE."""
+    from sl_dl_model.bags import GwpsBags
+
+    stale_bags = GwpsBags(
+        control_template=np.zeros((5, 4), dtype=np.float32),
+        bags_by_symbol={"G0": np.zeros((10, 4), dtype=np.float32)},
+        input_dim=4,
+    )
+
+    import sl_dl_model.bags as bags_mod
+
+    monkeypatch.setattr(bags_mod, "load_bags_npz", lambda path: stale_bags)
+
+    import sl_dl_model.gene_embeddings as ge_mod
+
+    class StubEsm:
+        pass
+
+    monkeypatch.setattr(ge_mod, "load_esm2_embeddings", lambda path: StubEsm())
+
+    checkpoint = tmp_path / "state" / "checkpoints" / "final.ckpt"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.touch()
+    with (checkpoint.parent.parent / "var_dims.pkl").open("wb") as handle:
+        pickle.dump({"input_dim": 2, "gene_names": ["G0", "G1"]}, handle)
+    bags_npz = tmp_path / "stale_bags.npz"
+    bags_npz.touch()
+    cfg = SLDLConfig(
+        esm2_npz=tmp_path / "esm2.npz",
+        bags_npz=bags_npz,
+        state_checkpoint=checkpoint,
+    )
+
+    with pytest.raises(ValueError, match="setup_exp08_assets.py bags"):
+        _load_state_dl_caches(cfg)
 
 
 # FIX 1 RED — multi-process write guard
