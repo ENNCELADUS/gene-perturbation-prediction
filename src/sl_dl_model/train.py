@@ -27,7 +27,7 @@ from tqdm.auto import tqdm
 from sl_benchmark_baseline.features import Standardizer, build_pair_features
 from sl_dl_model.bags import GwpsBags
 from sl_dl_model.config import SLDLConfig
-from sl_dl_model.encoder import state_original_token
+from sl_dl_model.encoder import state_encoded_token, state_original_token
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 from sl_dl_model.losses import bag_loss, combine, distill_loss, sl_bce_loss
 from sl_dl_model.model import SlDlModel
@@ -284,11 +284,13 @@ class StateDlProducer:
         self,
         train_symbols_in_step: set[str],
     ) -> torch.Tensor | None:
-        """Compute MSE between adapter tokens and STATE's original one-hot tokens.
+        """Compute MSE between encoded adapter tokens and STATE's one-hot tokens.
 
-        Only genes that are both in ``train_symbols_in_step`` and the loaded
-        pert-vocab contribute. Returns ``None`` if no in-vocab genes are found
-        or if ``_pert_vocab`` is ``None``.
+        Both sides pass through the checkpoint's frozen ``pert_encoder``: the
+        adapter's raw pert vector is encoded (grad-carrying) and compared to the
+        encoded in-vocab one-hot (detached teacher). Only genes that are both in
+        ``train_symbols_in_step`` and the loaded pert-vocab contribute. Returns
+        ``None`` if no in-vocab genes are found or if ``_pert_vocab`` is ``None``.
 
         Args:
             train_symbols_in_step: Upper-case gene symbols present in this step.
@@ -316,7 +318,8 @@ class StateDlProducer:
                 continue
             onehot = torch.tensor(onehot_arr, device=device)
             esm_t = torch.tensor(esm_vec, device=device)
-            adapter_tok = inner.encoder.adapter(esm_t.unsqueeze(0)).squeeze(0)
+            adapter_raw = inner.encoder.adapter(esm_t.unsqueeze(0)).squeeze(0)
+            adapter_tok = state_encoded_token(state_model, adapter_raw)
             target_tok = state_original_token(state_model, onehot)
             losses.append(
                 distill_loss(adapter_tok.unsqueeze(0), target_tok.unsqueeze(0))

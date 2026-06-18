@@ -44,6 +44,9 @@ class SLDLConfig:
     cells_per_bag: int = 256
 
     # Adapter / pooling / pair head
+    # pert_dim: for state_checkpoint this is a hint only — the adapter output
+    # width is inferred from the loaded checkpoint's pert_dim. It is
+    # authoritative only for the linear_mock backend.
     pert_dim: int = 328
     adapter_hidden: int = 512
     pooling: str = "mean_std"
