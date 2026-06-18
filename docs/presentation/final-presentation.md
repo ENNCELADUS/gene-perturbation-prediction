@@ -259,3 +259,36 @@ exp09 是一条平行路线，不用转录组，纯粹用 DepMap 的跨细胞系
 这展示了面向同一个 bar 的多种方法的广度。
 计时：约 0.75 分钟。
 -->
+
+---
+
+## Closing the loop — what we built, what we didn't claim
+
+**Built:** an **honest, leakage-controlled SL-pair ranking adapter** (classification + ranking), not validated SL target discovery
+
+**The recurring discipline:**
+- Simple floors first (exp06 dependency-only)
+- CV2 / CV3 as the real bar (CV1 is degree-gameable)
+- Negative results count (if exp07/08 don't beat exp06, that's a *finding*)
+- Pending is marked pending (no fabricated metrics)
+
+**Path to true context-specific SL discovery:**
+- exp08 cluster results → does frozen-STATE+ESM2 adapter generalize to held-out genes?
+- exp09 selectivity → does cross-cell-line evidence add robustness?
+- TCGA patient-context transfer → cell line → tumor dependency mapping
+
+<!-- _notes (中文):
+最后一页，回到开头的诚实声明。
+我们建了什么：一个诚实的、泄漏可控的 SL 基因对排序适配器（分类+排序），不是真正的 SL 靶点发现验证。
+反复的纪律（recurring discipline）：
+- 先做简单 floor（exp06 纯依赖性）；
+- CV2/CV3 才是真正的 bar（CV1 可以被度数钻空子）；
+- 负结果也算数（如果 exp07/08 没超过 exp06，那也是一个发现）；
+- pending 就标 pending，不编数据。
+通往真正的 context-specific SL 发现的路径：
+- exp08 集群结果出来后，冻结 STATE+ESM2 adapter 能不能泛化到没见过的基因？
+- exp09 selectivity 能不能带来鲁棒性？
+- TCGA 患者上下文迁移——从细胞系到肿瘤的依赖性映射。
+结束在诚实的 scope 上。
+计时：约 1 分钟。
+-->
