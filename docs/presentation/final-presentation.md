@@ -38,3 +38,28 @@ Combining DepMap dependency, Perturb-seq response, and a frozen perturbation fou
 所以需要计算方法来做候选搭档的排序。这一页为后面所有实验立motivation。
 计时：约 1 分钟。
 -->
+
+---
+
+## The task we actually solve (and what we don't claim)
+
+**Benchmark:** Feng et al. 2024, SynLethDB-derived · `Rand` 1:1 balanced · 9,471-gene K562 universe
+
+| Split | Held out | Difficulty |
+| --- | --- | --- |
+| CV1 | pair-level (genes may recur) | easiest, **degree-gameable** |
+| CV2 | one gene unseen | intermediate |
+| CV3 | both genes unseen | cold-start, hardest |
+
+- This is **SL-pair classification / ranking**, *not* validated SL target discovery
+- `Rand` negatives are **unconfirmed** non-SL → benchmark adapter, not a K562 SL assay
+- **CV2 / CV3 are the only honest generalization surfaces**
+
+<!-- _notes (中文):
+这一页是整个报告的「诚实声明」，非常重要。
+我们用的是 Feng 2024 的 benchmark，来自 SynLethDB，Rand 1:1 平衡负样本，K562 过滤后是 9471 个基因的候选空间。
+三种切分：CV1 是基因对层面切分，基因还会在训练集出现，最简单，而且可以被「度数」shortcut 钻空子；CV2 一个基因没见过；CV3 两个基因都没见过，是冷启动、最难。
+必须反复强调：我们做的是基因对的分类/排序，不是真正的 SL 靶点发现。Rand 负样本是「未确认」的非 SL，所以这是一个 benchmark 适配器，不是 K562 的 SL 实验验证。
+结论：只有 CV2/CV3 才是诚实的泛化评估面。后面所有模型都用这个标准来judge。
+计时：约 1 分钟。
+-->
