@@ -128,3 +128,27 @@ exp05：接上 Arc Institute 的 STATE 前向模型，做 A→B→C。
 最关键的 takeaway：我们现在有了一种基于 STATE 的方法，可以把任意扰动变成一个「依赖性感知」的 embedding。这个能力会被带到后面的 SL 基因对任务里——这就是 representation-as-bridge 的核心。
 计时：约 1 分钟。
 -->
+
+---
+
+## Stage 3 — the dependency-only floor (exp06)
+
+**Input:** only the two genes' DepMap GeneEffect scalars → 5 swap-invariant features → P(SL)
+
+| Model | CV1 NDCG@10 | CV2 AUROC | CV2 NDCG@10 | CV3 AUROC | CV3 NDCG@10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| B (XGBoost) | 0.0505 | **0.704** | **0.042** | **0.596** | 0.002 |
+| C (degree probe) | **0.197** | 0.500 | 0.001 | — | — |
+
+- Degree probe **wins CV1** → CV1 is gameable by train-positive degree
+- CV3 ≈ cold-start failure for dependency-only features
+- **This is the bar every later model must beat — on CV2/CV3**
+
+<!-- _notes (中文):
+进入 Stage 3，正式切换到「基因对」任务。
+exp06 是最朴素的 floor：只用两个基因的 DepMap GeneEffect 标量，构造 5 个对称特征（min/max/sum/product/|diff|），预测 P(SL)。
+看表：XGBoost（模型 B）在 CV2 AUROC 0.704、NDCG@10 0.042；到 CV3 掉到 AUROC 0.596、NDCG@10 0.002，基本是冷启动失败。
+模型 C 是「度数 degree probe」对照：它在 CV1 的 NDCG@10 高达 0.197，说明 CV1 可以靠训练正样本的度数被钻空子——所以 CV1 不算数。
+核心信息：exp06 就是后面所有模型必须超越的「门槛」，而且必须在 CV2/CV3 上超越。
+计时：约 1 分钟。
+-->
