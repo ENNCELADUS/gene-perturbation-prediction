@@ -86,3 +86,25 @@ Feng 2024/SynLethDB 提供基因对标签 D。
 为什么选 K562：它是唯一同时有深度 Perturb-seq 和 DepMap 依赖性数据的细胞系。
 计时：约 1 分钟。
 -->
+
+---
+
+## Stage 1 — observed transcriptome predicts dependency
+
+**exp01:** pseudobulk Δ-expression → PCA + Ridge
+
+- Replogle 5-fold CV ≈ **0.49** Spearman · Adamson transfer **0.50** (AUROC 0.886)
+
+**exp02 audit:** is it just a generic cell-death / viability axis?
+
+- NAR viability score alone **0.244** vs best pseudobulk **0.494**
+- NAR-residualized transcriptome still **0.503** → signal is **real and transcriptomic**, not just "everything dies"
+
+<!-- _notes (中文):
+Stage 1 回答一个前提问题：观测到的扰动转录组到底能不能预测 DepMap 依赖性分数？
+exp01：用 pseudobulk 的 delta 表达，做 PCA + Ridge，Replogle 五折交叉验证大约 0.49 Spearman，迁移到 Adamson 数据是 0.50，AUROC 0.886。说明这个桥是通的。
+exp02 是一个审计：会不会模型只是学到了一个「细胞快死了 / 增殖快慢」的通用轴？
+我们用 NAR 死亡signature 分数单独做，只有 0.244；而最好的 pseudobulk 是 0.494。把 NAR 轴残差掉之后，转录组仍然有 0.503。
+结论：信号是真实的、转录组特异的，不是单纯的「泛死亡」效应。这给后面用转录组特征做铺垫。
+计时：约 1 分钟。
+-->
