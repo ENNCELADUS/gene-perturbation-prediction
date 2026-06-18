@@ -20,10 +20,17 @@ slides, Chinese (中文) in speaker notes (bilingual).
 - **Close:** *Honest-framing callback* — return to the opening SL framing and
   restate that this is SL-pair classification/ranking on a benchmark adapter, not
   validated SL target discovery.
-- **Framing of exp08:** Methods-forward capstone. exp08 (and the full exp09 run)
-  have **no empirical results yet** — code + unit tests are complete, CV2/CV3
-  cluster gates are pending. The talk presents exp08 as the designed centerpiece
-  and is honest about the pending status rather than inventing numbers.
+- **Framing of exp08:** Methods-forward capstone. exp08 has **no empirical results
+  yet** — code + unit tests are complete, CV2/CV3 cluster gates are pending. The
+  talk presents exp08 as the designed centerpiece and is honest about the pending
+  status (marked "pending" everywhere) rather than inventing numbers.
+- **exp09 has full results.** The CV1/CV2/CV3 × 5-fold official-metric run is
+  complete (`results/experiments/09_k562_sl_pair_cross_cell_line_selectivity/run/summary.csv`,
+  405 rows). It is presented with real numbers.
+- **SOTA comparison.** The results scoreboard (Section 8) places our models
+  alongside published SL-prediction methods (DDGCN, GRSMF, SL2MF) on the same
+  Rand 1:1 CV1/CV2/CV3 F1 + NDCG@10 axes. All scoreboard values are reported to
+  **4 decimal places**.
 
 ## 2. Narrative Structure (Approach A — chronological funnel)
 
@@ -55,13 +62,16 @@ concrete content slots. Pending experiments are flagged as pending, not fabricat
 | 8 | Does observed Perturb-seq add lift? (exp07) | 1:00 | — | Augment exp06 with observed gwps response embeddings. Coverage crux: 64% per-gene but ~41% per-pair (59% hit fallback). Two tiers (mean-pool / frozen-scVI). Honest design: covered-pair diagnostic slice + with/without coverage flag. Negative result is publishable. |
 | 9 | e2e DL centerpiece pt.1: problem & architecture (exp08) | 1:30 | `e2e_SL_DL.png` | Why exp08: local STATE is closed-vocab one-hot, only 16.3% of universe in-vocab (84% OOV). Fix: freeze 8-layer STATE Llama backbone, replace one-hot pert_encoder with trainable adapter fed by ESM2 (1280→328) → all 9,471 genes in one coordinate system. Arch: ESM2 → PertAdapter → frozen STATE → predicted bag → pooling → symmetric pair head. |
 | 10 | e2e DL centerpiece pt.2: leakage-safe training & the bar | 1:30 | — | 3-part loss (SL BCE + adapter token-distill + real-bag supervision on covered-train genes only). Leakage rule: held-out genes reached purely via `adapter(ESM2)` + frozen STATE, never supervised → CV2/CV3 valid. Bar: beat exp06 (CV2 0.704 / CV3 0.596) with lift on covered-pair slice. **Status: code + unit tests complete; CV2/CV3 cluster gates pending.** |
-| 11 | Parallel route: cross-cell-line selectivity (exp09) | 0:45 | — | No transcriptome: use DepMap across 1,208 lines — is KO(b) more lethal where gene_a is defective? Composite-OR defective call (mutation/CN/expression). Stays in GeneEffect family; non-pan-essential diagnostic slice guards against re-encoding essentiality. Breadth of approaches to the same bar. |
+| 11 | Parallel route: cross-cell-line selectivity (exp09) | 0:45 | — | No transcriptome: use DepMap across 1,208 lines — is KO(b) more lethal where gene_a is defective? Composite-OR defective call (mutation/CN/expression). Results: CV2 B_xcl AUROC 0.742 (+0.039 over B), NDCG@10 0.086 (+0.044); CV3 AUROC 0.645 (+0.050), NDCG@10 flat. Improves cold-start *classification* but not cold-start *ranking*. Non-pan-essential slice: lift shrinks but doesn't vanish on CV1/CV2; CV3 mostly essentiality-linked. |
 | 12 | Closing the loop | 1:00 | — | Callback to slides 2–3. Built: an honest, leakage-controlled SL-pair ranking adapter, not target discovery. Recurring discipline: simple floors first, CV2/CV3 as the real bar, negative results count. Path to true context-specific SL: exp08 cluster results → exp09 selectivity → TCGA patient-context transfer. End on honest scope. |
 
 ## 4. Asset Inventory
 
 - `docs/presentation/SL_concept.png` — slide 2 (SL concept figure).
 - `docs/presentation/e2e_SL_DL.png` — slide 9 (exp08 architecture figure).
+- **Results scoreboard table (Section 8)** — rendered as a **backup/appendix slide**
+  after slide 12 (keeps the main deck at 12). The within-harness B_xcl-vs-B lift is
+  also surfaced inline on slide 11; the SOTA-context caveat is mentioned on slide 12.
 - No new figures required for the MVP deck. Optional later: a funnel/arc diagram
   for slide 6, and a CV1/CV2/CV3 results bar chart for slide 7.
 
@@ -79,8 +89,11 @@ concrete content slots. Pending experiments are flagged as pending, not fabricat
   (1,542 genes), 83.7% OOV. ESM2-650M = 1280-d → 328-d STATE token. **No results
   yet.**
 - exp09: DepMap Public 26Q1, 1,208 GeneEffect lines, K562=ACH-000551; composite-OR
-  clears n≥20 bar for 9,459/9,471 genes. **Only a sanity run exists, not the full
-  official-metric run.**
+  clears n≥20 bar for 9,459/9,471 genes. **Full CV1/CV2/CV3 × 5-fold results
+  complete.** B_xcl vs B: CV2 AUROC +0.039 (0.742 vs 0.704), NDCG@10 +0.044 (0.086
+  vs 0.042); CV3 AUROC +0.050 (0.645 vs 0.596), but NDCG@10 flat (0.001 vs 0.002).
+  Cross-cell-line selectivity improves classification on cold-start but does not fix
+  cold-start ranking.
 
 ## 6. Honesty Guardrails (carried onto slides)
 
@@ -89,10 +102,41 @@ concrete content slots. Pending experiments are flagged as pending, not fabricat
 - `Rand` negatives are unconfirmed non-SL; the benchmark is an adapter, not a
   validated K562 SL assay.
 - CV1 is degree-gameable; all model claims judged on CV2/CV3.
-- exp08 and the full exp09 run are pending; present design + status honestly, do
-  not present fabricated metrics.
+- exp08 is pending; present design + status honestly, do not present fabricated
+  metrics.
 
-## 7. Out of Scope
+## 8. Results Scoreboard with SOTA Comparison
+
+A scoreboard slide/appendix places our benchmark-adapter models alongside published
+SL-prediction methods on the same Rand 1:1 CV1/CV2/CV3 axes. All values to 4 decimals.
+F1 = max-F1 over the PR curve; NDCG = NDCG@10 (our models, official per-anchor
+protocol). Literature rows (DDGCN, GRSMF, SL2MF) are paper-reported Rand 1:1 values.
+
+| Model | Source | CV1 F1 | CV1 NDCG | CV2 F1 | CV2 NDCG | CV3 F1 | CV3 NDCG |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| DDGCN | literature | 0.9104 | 0.2159 | 0.9113 | 0.2494 | 0.9104 | 0.2470 |
+| GRSMF | literature | 0.8757 | 0.5178 | 0.8905 | 0.5075 | 0.8905 | 0.5075 |
+| SL2MF | literature | 0.8611 | 0.2745 | 0.4332 | 0.0052 | 0.4160 | 0.0001 |
+| A (logreg) | exp06 | 0.6675 | 0.0040 | 0.6677 | 0.0048 | 0.6686 | 0.0035 |
+| B (XGBoost) | exp06 | 0.7304 | 0.0505 | 0.6756 | 0.0421 | 0.6701 | 0.0024 |
+| C (degree probe) | exp06 | 0.8227 | 0.1970 | 0.6667 | 0.0006 | 0.6667 | 0.0008 |
+| A_xcl (logreg + selectivity) | exp09 | 0.6675 | 0.0096 | 0.6676 | 0.0118 | 0.6699 | 0.0081 |
+| B_xcl (XGB + selectivity) | exp09 | 0.7436 | 0.1601 | 0.6942 | 0.0864 | 0.6727 | 0.0011 |
+| exp07 (observed Perturb-seq) | exp07 | pending | pending | pending | pending | pending | pending |
+| exp08 (frozen-STATE + ESM2 e2e DL) | exp08 | pending | pending | pending | pending | pending | pending |
+
+**Honest read of the scoreboard (for speaker notes):**
+- The literature methods report much higher CV1 F1 (0.86–0.91), but those use the
+  full SynLethDB universe and their own splits/negatives — **not directly comparable**
+  to our K562-filtered 9,471-gene universe and official per-anchor ranking. Present
+  as context/orientation, not a head-to-head leaderboard.
+- The honest takeaway is the **within-harness** comparison: B_xcl (exp09) lifts over
+  the exp06 B floor on CV2 (NDCG 0.0864 vs 0.0421) — that is the apples-to-apples
+  result. exp07/exp08 rows are explicitly pending.
+- NDCG@k convention for the literature rows is paper-reported; our rows are NDCG@10.
+  Flag this caveat on the slide so the comparison is not over-claimed.
+
+## 9. Out of Scope
 
 - Building actual slide media (PPTX/Keynote/PDF). Deliverable is the markdown
   outline + speaker notes; the user renders slides from it.
