@@ -63,3 +63,26 @@ Combining DepMap dependency, Perturb-seq response, and a frozen perturbation fou
 结论：只有 CV2/CV3 才是诚实的泛化评估面。后面所有模型都用这个标准来judge。
 计时：约 1 分钟。
 -->
+
+---
+
+## Data sources — and why each one
+
+| Source | Role | Why |
+| --- | --- | --- |
+| **DepMap** CRISPRGeneEffect (Chronos) | dependency label `C` | population fitness; K562 = `ACH-000551` |
+| **Replogle K562 gwps** Perturb-seq | transcriptomic response | **CRISPRi = loss-of-function**, modality-aligned with DepMap KO; 1.99M cells, 6,070 genes |
+| **ESM2-650M** protein embeddings | gene identity | continuous → generalizes to **held-out** genes (1280-d) |
+| **Feng 2024 / SynLethDB** | pair label `D` | the SL-pair benchmark |
+
+**Why K562:** the only cell line with both deep Perturb-seq *and* DepMap dependency.
+
+<!-- _notes (中文):
+四个数据源，逐个讲为什么选它。
+DepMap 的 CRISPRGeneEffect（Chronos 分数）是我们的依赖性标签 C，群体层面的适应度读出，K562 对应 ACH-000551。
+Replogle K562 gwps 是全基因组 Perturb-seq，关键是它是 CRISPRi，也就是功能缺失，和 DepMap 的基因敲除模态一致；约 199 万个细胞，覆盖 6070 个基因。
+ESM2-650M 蛋白质 embedding 提供基因身份的连续表示，这点对后面 exp08 处理没见过的基因至关重要，是 1280 维。
+Feng 2024/SynLethDB 提供基因对标签 D。
+为什么选 K562：它是唯一同时有深度 Perturb-seq 和 DepMap 依赖性数据的细胞系。
+计时：约 1 分钟。
+-->
