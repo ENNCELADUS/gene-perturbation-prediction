@@ -28,6 +28,11 @@ class SLBaselineConfig:
         fallback_strategy: Uncovered-gene fallback (``"zero"`` or
             ``"global_mean"``).
         include_coverage_flag: Whether to append swap-invariant coverage columns.
+        depmap_dir: DepMap CSV directory enabling exp09 selectivity mode.
+        cn_loss_thr: Copy-number threshold below which a gene is loss-flagged.
+        expr_low_quantile: Quantile defining low-expression flagging.
+        sel_n_min: Minimum cell-line count for a usable selectivity statistic.
+        sel_lambda: Selectivity-feature regularization/blend weight.
     """
 
     input_csv: Path = Path(
@@ -50,8 +55,18 @@ class SLBaselineConfig:
     embedding_method: str = "pca_delta_meanpool"
     fallback_strategy: str = "zero"
     include_coverage_flag: bool = True
+    depmap_dir: Path | None = None
+    cn_loss_thr: float = 0.8
+    expr_low_quantile: float = 0.10
+    sel_n_min: int = 20
+    sel_lambda: float = 0.0
 
     @property
     def augmented(self) -> bool:
         """True when a cell-bags NPZ is supplied (exp07 augmented mode)."""
         return self.bags_npz is not None
+
+    @property
+    def selectivity(self) -> bool:
+        """True when a DepMap dir is supplied (exp09 selectivity mode)."""
+        return self.depmap_dir is not None

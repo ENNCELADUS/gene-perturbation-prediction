@@ -77,3 +77,23 @@ def fold_split(
     train_df = fold[fold["split_role"] == "train"].reset_index(drop=True)
     test_df = fold[fold["split_role"] == "test"].reset_index(drop=True)
     return train_df, test_df
+
+
+def assert_rand_only(frame: pd.DataFrame) -> None:
+    """Reject non-``Rand`` negative sampling (leakage guard for selectivity).
+
+    Args:
+        frame: Benchmark DataFrame.
+
+    Raises:
+        ValueError: If a ``negative_sampling_method`` column is present and any
+            value is not ``"Rand"``.
+    """
+    if "negative_sampling_method" not in frame.columns:
+        return
+    methods = set(frame["negative_sampling_method"].unique())
+    if methods != {"Rand"}:
+        raise ValueError(
+            "selectivity mode requires Rand negatives only; found "
+            f"negative_sampling_method values: {sorted(methods)}"
+        )
