@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +18,7 @@ from sl_benchmark_baseline.features import (
     Standardizer,
     build_augmented_pair_features,
     build_pair_features,
+    build_selectivity_pair_features,
 )
 from sl_benchmark_baseline.metrics import (
     official_classification_metrics,
@@ -28,6 +29,12 @@ from sl_benchmark_baseline.models import (
     FrequencyProbeModel,
     build_augmented_models,
     build_models,
+    build_selectivity_models,
+)
+from sl_benchmark_baseline.selectivity import (
+    UniverseSelectivity,
+    align_selectivity_to_universe,
+    build_selectivity_table_from_depmap,
 )
 
 LEAKAGE_NOTES = (
@@ -56,6 +63,8 @@ class GeneUniverse:
     index_by_key: dict[object, int]
     embeddings: np.ndarray | None = None
     coverage_mask: np.ndarray | None = None
+    entrez: np.ndarray | None = None
+    selectivity: UniverseSelectivity | None = None
 
 
 def _file_sha256(path: Path) -> str:
@@ -88,20 +97,22 @@ def _build_gene_universe(
     fallback_strategy: str = "zero",
 ) -> GeneUniverse:
     gene_a_key, gene_b_key = _gene_key_columns(frame)
-    gene_a = pd.DataFrame(
-        {
-            "key": frame[gene_a_key],
-            "symbol": frame["gene_a_symbol"],
-            "gene_effect": frame["gene_a_k562_gene_effect"],
-        }
-    )
-    gene_b = pd.DataFrame(
-        {
-            "key": frame[gene_b_key],
-            "symbol": frame["gene_b_symbol"],
-            "gene_effect": frame["gene_b_k562_gene_effect"],
-        }
-    )
+    has_entrez = {"gene_a_entrez_id", "gene_b_entrez_id"}.issubset(frame.columns)
+    gene_a_cols = {
+        "key": frame[gene_a_key],
+        "symbol": frame["gene_a_symbol"],
+        "gene_effect": frame["gene_a_k562_gene_effect"],
+    }
+    gene_b_cols = {
+        "key": frame[gene_b_key],
+        "symbol": frame["gene_b_symbol"],
+        "gene_effect": frame["gene_b_k562_gene_effect"],
+    }
+    if has_entrez:
+        gene_a_cols["entrez"] = frame["gene_a_entrez_id"]
+        gene_b_cols["entrez"] = frame["gene_b_entrez_id"]
+    gene_a = pd.DataFrame(gene_a_cols)
+    gene_b = pd.DataFrame(gene_b_cols)
     genes = (
         pd.concat([gene_a, gene_b], ignore_index=True)
         .drop_duplicates("key")
@@ -110,6 +121,7 @@ def _build_gene_universe(
     )
     keys = tuple(genes["key"].tolist())
     symbols = genes["symbol"].astype(str).to_numpy()
+    entrez = genes["entrez"].to_numpy() if has_entrez else None
     embeddings = None
     coverage_mask = None
     if embedding_table is not None:
@@ -123,6 +135,7 @@ def _build_gene_universe(
         index_by_key={key: index for index, key in enumerate(keys)},
         embeddings=embeddings,
         coverage_mask=coverage_mask,
+        entrez=entrez,
     )
 
 
@@ -220,6 +233,53 @@ def _build_augmented_score_matrix(
     return score_matrix
 
 
+def _build_selectivity_score_matrix(
+    model: object,
+    universe: GeneUniverse,
+    standardizer: Standardizer,
+) -> np.ndarray:
+    """Score all candidate pairs using GeneEffect+selectivity features."""
+    if universe.selectivity is None:
+        raise ValueError("selectivity score matrix requires universe.selectivity")
+    sel = universe.selectivity
+    n_gene = len(universe.symbols)
+    score_matrix = np.zeros((n_gene, n_gene), dtype=float)
+    all_idx = np.arange(n_gene)
+    for start in range(0, n_gene, SCORE_MATRIX_CHUNK_ROWS):
+        stop = min(start + SCORE_MATRIX_CHUNK_ROWS, n_gene)
+        rows = np.arange(start, stop)
+        a_idx = np.repeat(rows, n_gene)
+        b_idx = np.tile(all_idx, len(rows))
+        raw = np.column_stack(
+            [
+                build_pair_features(
+                    universe.gene_effects[a_idx], universe.gene_effects[b_idx]
+                ),
+                build_selectivity_pair_features(
+                    sel.sel_matrix[a_idx, b_idx],
+                    sel.sel_matrix[b_idx, a_idx],
+                    sel.pan_essential[a_idx],
+                    sel.pan_essential[b_idx],
+                ),
+            ]
+        )
+        features = standardizer.transform(raw)
+        pair_df = pd.DataFrame(
+            {
+                "gene_a_symbol": universe.symbols[a_idx],
+                "gene_b_symbol": universe.symbols[b_idx],
+            }
+        )
+        fold_data = FoldData(
+            df=pair_df, features=features, labels=np.zeros(len(features), dtype=int)
+        )
+        score_matrix[start:stop, :] = model.predict_proba(fold_data).reshape(
+            len(rows), n_gene
+        )
+    np.fill_diagonal(score_matrix, 0.0)
+    return score_matrix
+
+
 def _metric_rows(
     split_type: str,
     model_name: str,
@@ -247,6 +307,30 @@ def _metric_rows(
         }
         for metric, value in metrics.items()
     ]
+
+
+def _selectivity_raw(
+    frame: pd.DataFrame, universe: GeneUniverse, config: SLBaselineConfig
+) -> np.ndarray:
+    """Unstandardized GeneEffect(5) + selectivity(3) block for a frame."""
+    if universe.selectivity is None:
+        raise ValueError("selectivity score requires universe.selectivity")
+    pair_idx = _pair_indices(frame, universe)
+    a_idx, b_idx = pair_idx[:, 0], pair_idx[:, 1]
+    sel = universe.selectivity
+    sel_ab = sel.sel_matrix[a_idx, b_idx]
+    sel_ba = sel.sel_matrix[b_idx, a_idx]
+    pan_a = sel.pan_essential[a_idx]
+    pan_b = sel.pan_essential[b_idx]
+    return np.column_stack(
+        [
+            build_pair_features(
+                frame["gene_a_k562_gene_effect"].to_numpy(),
+                frame["gene_b_k562_gene_effect"].to_numpy(),
+            ),
+            build_selectivity_pair_features(sel_ab, sel_ba, pan_a, pan_b),
+        ]
+    )
 
 
 def _augmented_raw(
@@ -288,6 +372,26 @@ def _covered_pair_mask(index: np.ndarray, universe: GeneUniverse) -> np.ndarray:
     return (universe.coverage_mask[index[:, 0]] == 1) & (
         universe.coverage_mask[index[:, 1]] == 1
     )
+
+
+def _non_pan_essential_mask(
+    index: np.ndarray, universe: GeneUniverse, max_essential_fraction: float = 0.5
+) -> np.ndarray:
+    """Pairs where neither gene is broadly essential (essential_fraction <= thr)."""
+    if len(index) == 0 or universe.selectivity is None:
+        return np.zeros(len(index), dtype=bool)
+    ess = universe.selectivity.essential_fraction
+    return (ess[index[:, 0]] <= max_essential_fraction) & (
+        ess[index[:, 1]] <= max_essential_fraction
+    )
+
+
+def _selectivity_covered_mask(index: np.ndarray, universe: GeneUniverse) -> np.ndarray:
+    """Pairs whose two genes both cleared the selectivity n_min coverage bar."""
+    if len(index) == 0 or universe.selectivity is None:
+        return np.zeros(len(index), dtype=bool)
+    cov = universe.selectivity.coverage_flag
+    return (cov[index[:, 0]] == 1) & (cov[index[:, 1]] == 1)
 
 
 def _run_fold_augmented(
@@ -371,6 +475,92 @@ def _run_fold_augmented(
     return rows
 
 
+def _run_fold_selectivity(
+    train_df: pd.DataFrame,
+    train_base: FoldData,
+    base_std: Standardizer,
+    pos_index: np.ndarray,
+    neg_index: np.ndarray,
+    seen_index: np.ndarray,
+    split_type: str,
+    fold_id: int,
+    config: SLBaselineConfig,
+    universe: GeneUniverse,
+) -> list[dict[str, object]]:
+    """Fit baseline A/B/C + A_xcl/B_xcl, emitting full + diagnostic slices."""
+    sel_std = Standardizer.fit(_selectivity_raw(train_df, universe, config))
+    train_sel = FoldData(
+        df=train_df,
+        features=sel_std.transform(_selectivity_raw(train_df, universe, config)),
+        labels=train_df["sl_label"].to_numpy(dtype=int),
+    )
+    rows: list[dict[str, object]] = []
+    for model in build_selectivity_models(config):
+        if model.name.endswith("_xcl"):
+            model.fit(train_sel)
+            sm = _build_selectivity_score_matrix(model, universe, sel_std)
+            rows.extend(
+                _metric_rows(
+                    split_type,
+                    model.name,
+                    fold_id,
+                    "full_universe",
+                    sm,
+                    pos_index,
+                    neg_index,
+                    seen_index,
+                    config.ranking_k,
+                )
+            )
+            for slice_name, mask_fn in (
+                ("non_pan_essential", _non_pan_essential_mask),
+                ("covered_pairs", _selectivity_covered_mask),
+            ):
+                pos_s = pos_index[mask_fn(pos_index, universe)]
+                neg_s = neg_index[mask_fn(neg_index, universe)]
+                if len(pos_s) > 0 and len(neg_s) > 0:
+                    rows.extend(
+                        _metric_rows(
+                            split_type,
+                            model.name,
+                            fold_id,
+                            slice_name,
+                            sm,
+                            pos_s,
+                            neg_s,
+                            seen_index,
+                            config.ranking_k,
+                        )
+                    )
+                else:
+                    logger.warning(
+                        "split %s fold %s: %s slice skipped for %s (pos=%d, neg=%d)",
+                        split_type,
+                        fold_id,
+                        slice_name,
+                        model.name,
+                        len(pos_s),
+                        len(neg_s),
+                    )
+        else:
+            model.fit(train_base)
+            sm = _build_score_matrix(model, universe, base_std)
+            rows.extend(
+                _metric_rows(
+                    split_type,
+                    model.name,
+                    fold_id,
+                    "full_universe",
+                    sm,
+                    pos_index,
+                    neg_index,
+                    seen_index,
+                    config.ranking_k,
+                )
+            )
+    return rows
+
+
 def run_fold(
     frame: pd.DataFrame,
     split_type: str,
@@ -394,6 +584,19 @@ def run_fold(
     neg_index = _pair_indices(test_neg, universe)
     seen_index = _pair_indices(train_pos, universe)
 
+    if config.selectivity:
+        return _run_fold_selectivity(
+            train_df,
+            train_base,
+            base_std,
+            pos_index,
+            neg_index,
+            seen_index,
+            split_type,
+            fold_id,
+            config,
+            universe,
+        )
     if not config.augmented:
         rows: list[dict[str, object]] = []
         for model in build_models(config):
@@ -460,6 +663,10 @@ def _resolve_split_types(
 def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
     """Run the full CV1 loop, write outputs, and return the summary table."""
     frame = load_benchmark(config.input_csv)
+    if config.selectivity:
+        from sl_benchmark_baseline.data import assert_rand_only
+
+        assert_rand_only(frame)
     embedding_table = None
     if config.augmented:
         from sl_benchmark_baseline.embeddings import load_gene_embeddings
@@ -470,6 +677,20 @@ def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
         embedding_table=embedding_table,
         fallback_strategy=config.fallback_strategy,
     )
+    selectivity = None
+    if config.selectivity:
+        if universe.entrez is None:
+            raise ValueError(
+                "selectivity mode requires gene_a_entrez_id/gene_b_entrez_id "
+                "columns in the benchmark CSV"
+            )
+        table = build_selectivity_table_from_depmap(
+            config.depmap_dir, tuple(int(e) for e in universe.entrez), config
+        )
+        selectivity = align_selectivity_to_universe(
+            table, [int(e) for e in universe.entrez], config.sel_lambda
+        )
+        universe = replace(universe, selectivity=selectivity)
     split_types = _resolve_split_types(frame, config.split_types)
     all_rows: list[dict[str, object]] = []
     for split_type in split_types:
@@ -516,11 +737,12 @@ def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
                 coverage_count,
                 len(universe.symbols),
             )
-    model_names = (
-        ["A", "B", "A_transcript", "B_transcript"]
-        if config.augmented
-        else ["A", "B", "C"]
-    )
+    if config.selectivity:
+        model_names = ["A", "B", "C", "A_xcl", "B_xcl"]
+    elif config.augmented:
+        model_names = ["A", "B", "A_transcript", "B_transcript"]
+    else:
+        model_names = ["A", "B", "C"]
     manifest["models"] = model_names
     manifest["augmented"] = config.augmented
     manifest["bags_npz"] = None if config.bags_npz is None else str(config.bags_npz)
@@ -552,5 +774,15 @@ def run_cv(config: SLBaselineConfig) -> pd.DataFrame:
         coverage_count / len(universe.symbols) if len(universe.symbols) else 0.0
     )
     manifest["gwps_coverage_pair_fraction"] = pair_coverage_fraction
+    manifest["selectivity"] = config.selectivity
+    if config.selectivity:
+        manifest["depmap_dir"] = str(config.depmap_dir)
+        manifest["cn_loss_thr"] = config.cn_loss_thr
+        manifest["expr_low_quantile"] = config.expr_low_quantile
+        manifest["sel_n_min"] = config.sel_n_min
+        manifest["sel_lambda"] = config.sel_lambda
+        manifest["selectivity_coverage_gene_count"] = (
+            int(selectivity.coverage_flag.sum()) if selectivity is not None else 0
+        )
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return summary
