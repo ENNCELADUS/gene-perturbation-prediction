@@ -79,7 +79,7 @@ def _load_pert_vocab(checkpoint: Path) -> dict[str, np.ndarray] | None:
         logger.debug("pert_onehot_map.pt not found at %s; skipping distill", vocab_path)
         return None
     raw: dict[str, object] = torch.load(
-        vocab_path, map_location="cpu", weights_only=True
+        vocab_path, map_location="cpu", weights_only=False
     )
     return {str(k).upper(): np.asarray(v, dtype=np.float32) for k, v in raw.items()}
 
