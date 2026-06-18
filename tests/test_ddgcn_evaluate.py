@@ -12,18 +12,25 @@ from ddgcn.config import DdgcnConfig
 
 def _toy_csv(path: Path) -> None:
     rows = [
-        ("CV1", 0, "train", 1, 0, 1, "G0", "G1", -0.5, -0.4),
-        ("CV1", 0, "train", 1, 2, 3, "G2", "G3", -0.6, -0.3),
-        ("CV1", 0, "train", 0, 0, 4, "G0", "G4", -0.5, 0.1),
-        ("CV1", 0, "train", 0, 1, 5, "G1", "G5", -0.4, 0.2),
-        ("CV1", 0, "test", 1, 0, 2, "G0", "G2", -0.5, -0.6),
-        ("CV1", 0, "test", 0, 3, 5, "G3", "G5", -0.3, 0.2),
+        (0, "CV1", 0, "train", 1, 0, 1, "G0", "G1", -0.5, -0.4),
+        (1, "CV1", 0, "train", 1, 2, 3, "G2", "G3", -0.6, -0.3),
+        (2, "CV1", 0, "train", 0, 0, 4, "G0", "G4", -0.5, 0.1),
+        (3, "CV1", 0, "train", 0, 1, 5, "G1", "G5", -0.4, 0.2),
+        (4, "CV1", 0, "test", 1, 0, 2, "G0", "G2", -0.5, -0.6),
+        (5, "CV1", 0, "test", 0, 3, 5, "G3", "G5", -0.3, 0.2),
     ]
     cols = [
-        "split_type", "fold_id", "split_role", "sl_label",
-        "gene_a_unified_id", "gene_b_unified_id",
-        "gene_a_symbol", "gene_b_symbol",
-        "gene_a_k562_gene_effect", "gene_b_k562_gene_effect",
+        "pair_id",
+        "split_type",
+        "fold_id",
+        "split_role",
+        "sl_label",
+        "gene_a_unified_id",
+        "gene_b_unified_id",
+        "gene_a_symbol",
+        "gene_b_symbol",
+        "gene_a_k562_gene_effect",
+        "gene_b_k562_gene_effect",
     ]
     pd.DataFrame(rows, columns=cols).to_csv(path, index=False)
 
@@ -64,6 +71,11 @@ def test_run_cv_writes_artifacts(tmp_path: Path) -> None:
     assert "train_edge_counts" in manifest
 
     assert set(summary.columns) == {
-        "split_type", "model", "slice", "metric", "mean", "std"
+        "split_type",
+        "model",
+        "slice",
+        "metric",
+        "mean",
+        "std",
     }
     assert (summary["model"] == "ddgcn").all()
