@@ -11,15 +11,29 @@ from sl_dl_model.scoring import write_epoch_metrics
 
 def test_write_epoch_metrics_csv(tmp_path: Path):
     rows = [
-        {"epoch": 0.0, "mean_train_loss": 0.7, "val_pair_auroc": 0.5, "peak_gpu_mem_mb": 0.0},
-        {"epoch": 1.0, "mean_train_loss": 0.6, "val_pair_auroc": 0.55, "peak_gpu_mem_mb": 0.0},
+        {
+            "epoch": 0.0,
+            "mean_train_loss": 0.7,
+            "val_pair_auroc": 0.5,
+            "peak_gpu_mem_mb": 0.0,
+        },
+        {
+            "epoch": 1.0,
+            "mean_train_loss": 0.6,
+            "val_pair_auroc": 0.55,
+            "peak_gpu_mem_mb": 0.0,
+        },
     ]
     out = write_epoch_metrics(tmp_path, "CV2", 3, rows)
     assert out == tmp_path / "CV2" / "epoch_metrics_fold3.csv"
     df = pd.read_csv(out)
     assert list(df.columns) == [
-        "split_type", "fold_id", "epoch",
-        "mean_train_loss", "val_pair_auroc", "peak_gpu_mem_mb",
+        "split_type",
+        "fold_id",
+        "epoch",
+        "mean_train_loss",
+        "val_pair_auroc",
+        "peak_gpu_mem_mb",
     ]
     assert len(df) == 2
     assert (df["split_type"] == "CV2").all()
@@ -33,9 +47,7 @@ def test_default_log_file_path(tmp_path: Path, monkeypatch):
 
     cfg_path = tmp_path / "cfg.yaml"
     out_dir = tmp_path / "run"
-    cfg_path.write_text(
-        f"output_dir: {out_dir}\nsplit_types: [CV2]\nfolds: [0]\n"
-    )
+    cfg_path.write_text(f"output_dir: {out_dir}\nsplit_types: [CV2]\nfolds: [0]\n")
 
     captured = {}
 
@@ -50,7 +62,18 @@ def test_default_log_file_path(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cli, "_resolve_run_cv", lambda: fake_run_cv, raising=False)
     # Patch the lazy import target used in main().
     import sl_dl_model.evaluate as ev
+
     monkeypatch.setattr(ev, "run_cv", fake_run_cv)
 
-    cli.main(["run-cv", "--config", str(cfg_path), "--producer", "zero"])
+    # logging.basicConfig is a no-op when the root logger already has handlers
+    # (pytest's logging plugin attaches some). Clear them so main()'s handler
+    # setup takes effect in-process; a real CLI run starts with no handlers.
+    root = logging.getLogger()
+    saved = root.handlers[:]
+    root.handlers.clear()
+    try:
+        cli.main(["run-cv", "--config", str(cfg_path), "--producer", "zero"])
+    finally:
+        root.handlers.clear()
+        root.handlers.extend(saved)
     assert any(str(out_dir / "train.log") == p for p in captured["log_files"])

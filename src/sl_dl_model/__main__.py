@@ -65,27 +65,41 @@ def main(argv: list[str] | None = None) -> None:
     """
     args = _build_parser().parse_args(argv)
 
+    # Lazy imports so that --help works without loading torch/accelerate.
+    from sl_dl_model.config import load_config
+
+    config = load_config(args.config)
+
+    from accelerate import PartialState
+
+    is_main = PartialState().is_main_process
+    log_file = args.log_file
+    if log_file is None:
+        log_file = Path(config.output_dir) / "train.log"
+
     handlers: list[logging.Handler] = [logging.StreamHandler()]
-    if args.log_file is not None:
-        args.log_file.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(args.log_file, mode="a"))
+    # Per-rank metric log captures this rank's folds' curves.
+    rank = PartialState().process_index
+    Path(config.output_dir).mkdir(parents=True, exist_ok=True)
+    handlers.append(
+        logging.FileHandler(Path(config.output_dir) / f"train_rank{rank}.log", mode="a")
+    )
+    # The shared train.log is written by the main process only.
+    if is_main:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file, mode="a"))
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=handlers,
     )
 
-    # Lazy imports so that --help works without loading torch/accelerate.
-    from sl_dl_model.config import load_config
     from sl_dl_model.evaluate import run_cv
-
-    config = load_config(args.config)
 
     if args.producer == "zero":
         from sl_dl_model.evaluate import ZeroEmbeddingProducer
 
-        producer = ZeroEmbeddingProducer()
-        run_cv(config, producer)
+        run_cv(config, ZeroEmbeddingProducer())
     else:
         # state_dl: run_cv handles per-fold producer construction internally.
         run_cv(config, producer="state_dl")

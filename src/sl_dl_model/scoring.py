@@ -8,9 +8,11 @@ Reuses the exp06/07 baseline scoring harness verbatim. Phase 0 fits the exp07
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from accelerate import PartialState
 
 from sl_benchmark_baseline.data import fold_split
 from sl_benchmark_baseline.evaluate import (
@@ -25,6 +27,34 @@ from sl_benchmark_baseline.features import Standardizer, build_augmented_pair_fe
 from sl_dl_model.config import SLDLConfig
 
 logger = logging.getLogger(__name__)
+
+
+def write_epoch_metrics(
+    output_dir: Path,
+    split_type: str,
+    fold_id: int,
+    epoch_metrics: list[dict[str, float]],
+) -> Path:
+    """Write per-epoch training-curve metrics for one fold to CSV.
+
+    Args:
+        output_dir: Run output directory.
+        split_type: CV split type (e.g. ``"CV2"``).
+        fold_id: Fold id.
+        epoch_metrics: One dict per trained epoch with keys ``epoch``,
+            ``mean_train_loss``, ``val_pair_auroc``, ``peak_gpu_mem_mb``.
+
+    Returns:
+        Path to the written CSV.
+    """
+    split_dir = output_dir / split_type
+    split_dir.mkdir(parents=True, exist_ok=True)
+    out = split_dir / f"epoch_metrics_fold{fold_id}.csv"
+    df = pd.DataFrame(epoch_metrics)
+    df.insert(0, "fold_id", fold_id)
+    df.insert(0, "split_type", split_type)
+    df.to_csv(out, index=False)
+    return out
 
 
 def train_symbols_for_fold(train_df: pd.DataFrame) -> set[str]:
@@ -161,6 +191,31 @@ def run_fold_with_producer(
     # DL path: use the trained pair head's score matrix directly.
     if hasattr(producer, "score_matrix"):
         sm = producer.score_matrix(universe.symbols, universe.gene_effects)
+        epoch_metrics = getattr(producer, "epoch_metrics", None)
+        if epoch_metrics:
+            write_epoch_metrics(
+                Path(config.output_dir), split_type, fold_id, epoch_metrics
+            )
+            rank = PartialState().process_index
+            for m in epoch_metrics:
+                logger.info(
+                    "[rank %d][%s/fold%d] epoch %d: loss=%.4f val_auroc=%.4f "
+                    "peak_gpu_mb=%.1f",
+                    rank,
+                    split_type,
+                    fold_id,
+                    int(m["epoch"]),
+                    m["mean_train_loss"],
+                    m["val_pair_auroc"],
+                    m["peak_gpu_mem_mb"],
+                )
+            logger.info(
+                "[rank %d][%s/fold%d] stopped_epoch=%s",
+                rank,
+                split_type,
+                fold_id,
+                getattr(producer, "stopped_epoch", None),
+            )
         rows.extend(
             _metric_rows(
                 split_type,
