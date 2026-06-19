@@ -42,3 +42,17 @@ def test_load_config_rejects_unknown_keys(tmp_path: Path):
         assert "unknown config keys" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_early_stop_patience_default():
+    cfg = SLDLConfig()
+    assert cfg.early_stop_patience == 5
+    assert cfg.batch_pairs == 1024
+
+
+def test_load_config_accepts_early_stop_patience(tmp_path: Path):
+    path = tmp_path / "cfg.yaml"
+    path.write_text(yaml.safe_dump({"early_stop_patience": 3, "batch_pairs": 256}))
+    cfg = load_config(path)
+    assert cfg.early_stop_patience == 3
+    assert cfg.batch_pairs == 256
