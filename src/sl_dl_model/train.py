@@ -596,8 +596,13 @@ class StateDlProducer:
         for epoch in range(self.config.max_epochs):
             weights = _epoch_weights(epoch, self.config)
             model.train()
+            n_batches = max(
+                1,
+                (len(self.train_pairs) + self.config.batch_pairs - 1)
+                // self.config.batch_pairs,
+            )
             pbar = tqdm(
-                self.train_pairs,
+                total=n_batches,
                 desc=f"epoch {epoch}",
                 disable=not state.is_main_process,
             )
@@ -619,8 +624,9 @@ class StateDlProducer:
                 batch_loss_sum += float(batch_total.detach().cpu()) * batch_size
                 batch_loss_count += batch_size
                 batch_losses = []
+                pbar.update(1)
 
-            for a, b, label, ea, eb in pbar:
+            for a, b, label, ea, eb in self.train_pairs:
                 key_a, key_b = a.upper(), b.upper()
                 vec_a = self.esm.vectors_by_symbol.get(key_a)
                 vec_b = self.esm.vectors_by_symbol.get(key_b)
@@ -695,6 +701,7 @@ class StateDlProducer:
                     _flush()
 
             _flush()
+            pbar.close()
 
             if skipped > 0:
                 logger.warning(
