@@ -511,13 +511,35 @@ class StateDlProducer:
         device: torch.device | str,
         control: torch.Tensor,
     ) -> float | None:
-        """Pair-AUROC over ``self.val_pairs`` (the fold's test split).
+        """Pair-AUROC over ``self.val_pairs`` (back-compat scalar wrapper).
 
-        Returns ``None`` when validation is impossible: no val pairs, fewer
-        than two scorable pairs, or only one label class present.
+        Returns ``None`` when validation yields no usable signal for any
+        reason. Callers that must distinguish *why* (e.g. a broken model with
+        non-finite scores vs. a fold with too few labels) should use
+        :meth:`_validate_auroc_with_status` instead.
+        """
+        value, _status = self._validate_auroc_with_status(model, device, control)
+        return value
+
+    def _validate_auroc_with_status(
+        self,
+        model: SlDlModel,
+        device: torch.device | str,
+        control: torch.Tensor,
+    ) -> tuple[float | None, str]:
+        """Pair-AUROC over ``self.val_pairs`` with an explicit status.
+
+        Returns:
+            Tuple ``(value, status)`` where ``status`` is one of:
+            ``"ok"`` (value is a finite AUROC), ``"no_val_pairs"`` (no
+            validation split configured), ``"insufficient_labels"`` (fewer than
+            two scorable pairs or a single label class), or ``"non_finite"``
+            (at least one score was NaN/Inf — the model is broken, distinct
+            from an ordinarily unscorable fold). ``value`` is ``None`` for every
+            status other than ``"ok"``.
         """
         if not self.val_pairs:
-            return None
+            return None, "no_val_pairs"
         model.eval()
         scores: list[float] = []
         labels: list[int] = []
@@ -549,17 +571,17 @@ class StateDlProducer:
                 scores.append(float(torch.sigmoid(logit).item()))
                 labels.append(int(label))
         model.train()
-        if len(scores) < 2 or len(set(labels)) < 2:
-            return None
         if not np.isfinite(scores).all():
             logger.warning(
-                "non-finite validation score(s); returning no val signal for "
-                "this epoch (%d/%d non-finite)",
+                "non-finite validation score(s); model may be broken "
+                "(%d/%d non-finite)",
                 int((~np.isfinite(scores)).sum()),
                 len(scores),
             )
-            return None
-        return float(roc_auc_score(labels, scores))
+            return None, "non_finite"
+        if len(scores) < 2 or len(set(labels)) < 2:
+            return None, "insufficient_labels"
+        return float(roc_auc_score(labels, scores)), "ok"
 
     def _train(
         self,
@@ -595,6 +617,11 @@ class StateDlProducer:
         best_state: dict[str, torch.Tensor] | None = None
         best_epoch: int | None = None
         epochs_since_improve = 0
+        # Track post-warmup validation health: a fold that is scorable but
+        # always produces non-finite scores is a broken model, not a fold that
+        # simply lacks labels — it must fail rather than emit final metrics.
+        post_warmup_val_seen = False
+        post_warmup_val_nonfinite = False
 
         def _snapshot_trainable() -> dict[str, torch.Tensor]:
             return {
@@ -627,9 +654,12 @@ class StateDlProducer:
             batch_losses: list[torch.Tensor] = []
             batch_loss_sum = 0.0
             batch_loss_count = 0
+            steps_applied = 0
+            steps_skipped = 0
 
             def _flush() -> None:
                 nonlocal batch_loss_count, batch_loss_sum, batch_losses
+                nonlocal steps_applied, steps_skipped
                 if not batch_losses:
                     return
                 batch_total = torch.stack(batch_losses).mean()
@@ -638,8 +668,11 @@ class StateDlProducer:
                     model, optimizer, batch_total, self.config.max_grad_norm
                 )
                 if applied:
+                    steps_applied += 1
                     batch_loss_sum += float(batch_total.detach().cpu()) * batch_size
                     batch_loss_count += batch_size
+                else:
+                    steps_skipped += 1
                 batch_losses = []
                 pbar.update(1)
 
@@ -731,13 +764,26 @@ class StateDlProducer:
                     "epoch %d: no trainable pairs found; check ESM2 coverage", epoch
                 )
                 raise RuntimeError("no trainable pairs: check ESM2 coverage")
+            if steps_applied == 0:
+                logger.error(
+                    "epoch %d: no optimizer step applied (%d skipped); every batch "
+                    "was non-finite — weights are untrained, failing the fold",
+                    epoch,
+                    steps_skipped,
+                )
+                raise RuntimeError(
+                    f"no optimizer step applied in epoch {epoch} "
+                    f"({steps_skipped} skipped); training is diverging"
+                )
 
             mean_loss = (
                 batch_loss_sum / batch_loss_count
                 if batch_loss_count > 0
                 else float("nan")
             )
-            val_auroc = self._validate_auroc(model, device, control)
+            val_auroc, val_status = self._validate_auroc_with_status(
+                model, device, control
+            )
             peak_mb = (
                 torch.cuda.max_memory_allocated() / 1e6
                 if torch.cuda.is_available()
@@ -747,6 +793,9 @@ class StateDlProducer:
                 "epoch": float(epoch),
                 "mean_train_loss": mean_loss,
                 "val_pair_auroc": float("nan") if val_auroc is None else val_auroc,
+                "val_status": val_status,
+                "optimizer_steps_applied": float(steps_applied),
+                "optimizer_steps_skipped": float(steps_skipped),
                 "peak_gpu_mem_mb": peak_mb,
             }
             self.epoch_metrics.append(row)
@@ -757,19 +806,28 @@ class StateDlProducer:
                 append_epoch_metric_row(out_dir, split_type, fold_id, row)
                 logger.info(
                     "[rank %d][%s/fold%d] epoch %d: loss=%.4f val_auroc=%.4f "
-                    "peak_gpu_mb=%.1f",
+                    "val_status=%s steps=%d/%d(applied/skipped) peak_gpu_mb=%.1f",
                     state.process_index,
                     split_type,
                     fold_id,
                     epoch,
                     row["mean_train_loss"],
                     row["val_pair_auroc"],
+                    row["val_status"],
+                    int(row["optimizer_steps_applied"]),
+                    int(row["optimizer_steps_skipped"]),
                     row["peak_gpu_mem_mb"],
                 )
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats()
 
             # Best-epoch selection only after warmup (val signal meaningful).
+            if epoch >= self.config.warmup_epochs and val_status != "no_val_pairs":
+                post_warmup_val_seen = True
+                if val_status == "non_finite":
+                    post_warmup_val_nonfinite = True
+                elif val_status == "ok":
+                    post_warmup_val_nonfinite = False
             if val_auroc is not None and epoch >= self.config.warmup_epochs:
                 if best_auroc is None or val_auroc > best_auroc:
                     best_auroc = val_auroc
@@ -791,7 +849,20 @@ class StateDlProducer:
             _restore_trainable(best_state)
             self.stopped_epoch = best_epoch
         else:
-            # No val signal (val_pairs None/unusable): keep final-epoch weights.
+            # A fold that was validatable post-warmup but only ever produced
+            # non-finite scores is a broken model — fail rather than silently
+            # keeping (and later emitting metrics for) untrained weights.
+            if post_warmup_val_seen and post_warmup_val_nonfinite:
+                logger.error(
+                    "fold failed: post-warmup validation was non-finite every "
+                    "epoch; refusing to emit metrics for a broken model"
+                )
+                raise RuntimeError(
+                    "validation produced non-finite scores after warmup; the "
+                    "model is diverging — failing the fold"
+                )
+            # No usable val signal (val_pairs None/insufficient labels): keep
+            # final-epoch weights, as before.
             self.stopped_epoch = self.config.max_epochs - 1
 
 
