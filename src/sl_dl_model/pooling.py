@@ -5,6 +5,10 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+# Floor added to the variance before sqrt so the std gradient is finite when a
+# feature is constant across the bag (sqrt'(0) is infinite otherwise, H3).
+_STD_EPS = 1e-8
+
 
 class MeanStdPool(nn.Module):
     """Concatenate per-feature mean and std over the cell dimension.
@@ -27,7 +31,8 @@ class MeanStdPool(nn.Module):
             Shape ``(2D,)``.
         """
         mean = bag.mean(dim=0)
-        std = bag.std(dim=0, unbiased=False)
+        var = bag.var(dim=0, unbiased=False)
+        std = torch.sqrt(var + _STD_EPS)
         return torch.cat([mean, std], dim=0)
 
 
