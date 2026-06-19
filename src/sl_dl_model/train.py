@@ -551,6 +551,14 @@ class StateDlProducer:
         model.train()
         if len(scores) < 2 or len(set(labels)) < 2:
             return None
+        if not np.isfinite(scores).all():
+            logger.warning(
+                "non-finite validation score(s); returning no val signal for "
+                "this epoch (%d/%d non-finite)",
+                int((~np.isfinite(scores)).sum()),
+                len(scores),
+            )
+            return None
         return float(roc_auc_score(labels, scores))
 
     def _train(
