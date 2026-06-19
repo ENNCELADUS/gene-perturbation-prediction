@@ -274,3 +274,19 @@ def test_per_split_output_layout_and_combined_summary(tmp_path: Path) -> None:
     df = pd.read_csv(combined)
     assert "split_type" in df.columns
     assert set(df["split_type"]) == {"CV2"}
+
+
+def test_manifest_includes_training_fields() -> None:
+    from sl_dl_model.evaluate import _build_manifest
+
+    cfg = SLDLConfig(esm2_model="x", batch_pairs=512, early_stop_patience=4)
+    manifest = _build_manifest(
+        cfg,
+        split_types=("CV2",),
+        candidate_gene_count=10,
+        gwps_coverage_gene_count=None,
+    )
+    assert manifest["batch_pairs"] == 512
+    assert manifest["early_stop_patience"] == 4
+    assert manifest["early_stop_metric"] == "val_pair_auroc"
+    assert manifest["val_source"] == "test_fold"
