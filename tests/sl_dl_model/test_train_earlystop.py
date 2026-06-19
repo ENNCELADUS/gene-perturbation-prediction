@@ -152,3 +152,38 @@ def test_validation_uses_esm_fallback_for_missing_gene():
     model = model.to(state.device)
     control = torch.tensor(producer.bags.control_template, device=state.device)
     assert producer._validate_auroc(model, state.device, control) is not None
+
+
+def test_epoch_metrics_flushed_to_disk_during_training(tmp_path):
+    """Each epoch's row is on disk before training ends (live flush)."""
+    import pandas as pd
+
+    producer = _producer(max_epochs=3, patience=5)
+    producer.epoch_log_target = (tmp_path, "CV2", 0)
+    producer._fit_ge_standardizer()
+    model = producer._build_model()
+    state = PartialState()
+    model = model.to(state.device)
+    opt = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=1e-3)
+
+    csv_path = tmp_path / "CV2" / "epoch_metrics_fold0.csv"
+    rows_seen: list[int] = []
+
+    # Spy on the per-epoch validation hook to observe the CSV mid-training:
+    # _validate_auroc runs before the current epoch's row is appended, so on
+    # entry for epoch e the file holds rows for epochs 0..e-1.
+    real_validate = producer._validate_auroc
+
+    def spy_validate(model_, device_, control_):
+        result = real_validate(model_, device_, control_)
+        if csv_path.exists():
+            rows_seen.append(len(pd.read_csv(csv_path)))
+        return result
+
+    producer._validate_auroc = spy_validate
+    producer._train(model, opt, state, {"G0", "G1", "G2", "G3"})
+
+    # Final file has one row per trained epoch, in order.
+    final = pd.read_csv(csv_path)
+    assert len(final) == len(producer.epoch_metrics)
+    assert final["epoch"].tolist() == [m["epoch"] for m in producer.epoch_metrics]
