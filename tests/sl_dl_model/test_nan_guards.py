@@ -89,3 +89,41 @@ def test_train_with_bag_supervision_keeps_params_finite():
     assert all(
         np.isfinite(row["mean_train_loss"]) for row in producer.epoch_metrics
     ), "recorded train losses must be finite"
+
+
+def test_validate_auroc_returns_none_on_nonfinite_scores(monkeypatch):
+    import numpy as np
+
+    from sl_dl_model.bags import GwpsBags
+    from sl_dl_model.config import SLDLConfig
+    from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
+    from sl_dl_model.train import StateDlProducer
+
+    rng = np.random.default_rng(0)
+    esm = Esm2EmbeddingTable(
+        dim=8,
+        vectors_by_symbol={s: rng.standard_normal(8).astype("float32")
+                           for s in ["A", "B"]},
+    )
+    bags = GwpsBags(
+        control_template=rng.standard_normal((8, 6)).astype("float32"),
+        bags_by_symbol={"A": rng.standard_normal((8, 6)).astype("float32")},
+        input_dim=6,
+    )
+    cfg = SLDLConfig(
+        esm2_model="x", state_backend="linear_mock", pert_dim=5,
+        adapter_hidden=16, pair_hidden=(16,), include_coverage_flag=False,
+    )
+    val = [("A", "B", 1, -1.0, -0.5), ("B", "A", 0, 0.1, 0.2)]
+    producer = StateDlProducer(
+        cfg, esm=esm, bags=bags, train_pairs=val, input_dim=6, output_dim=6,
+        val_pairs=val,
+    )
+    model = producer._build_model()
+    control = torch.zeros(8, 6)
+    # Force the pair head to emit a NaN logit so sigmoid -> NaN score.
+    monkeypatch.setattr(
+        model, "score_pairs",
+        lambda *a, **k: torch.tensor([float("nan")]),
+    )
+    assert producer._validate_auroc(model, "cpu", control) is None
