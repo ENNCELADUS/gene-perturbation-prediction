@@ -283,6 +283,10 @@ def _build_manifest(
         "state_checkpoint": str(config.state_checkpoint),
         "candidate_gene_count": candidate_gene_count,
         "pooling": config.pooling,
+        "batch_pairs": config.batch_pairs,
+        "early_stop_patience": config.early_stop_patience,
+        "early_stop_metric": "val_pair_auroc",
+        "val_source": "test_fold",
         "loss_weights": {
             "lambda_sl": config.lambda_sl,
             "lambda_distill": config.lambda_distill,
