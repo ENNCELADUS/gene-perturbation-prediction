@@ -1,7 +1,10 @@
 # Experiment 08 — STATE-Adapter DL Model for K562 SL-Pair Ranking
 
-**Status:** Implementation complete (Phase 0–4 code + unit tests). Real-data gates
-(Phase 2/3) pending ESM2 cache + STATE checkpoint + gwps bags.
+**Status:** Implementation complete (Phase 0–4 code + unit tests). Phase 0 parity +
+Phase 2 BCE pending re-run. **Phase 3 (bag supervision) is BLOCKED on a NaN crash**
+(2026-06-20): the first cluster run died at epoch-0 validation
+(`_validate_auroc` → `roc_auc_score` "Input contains NaN"). Root cause is under a TDD
+fix — see "Phase 3 NaN Blocker" below.
 **Design spec:** `docs/superpowers/specs/2026-06-17-exp08-state-dl-sl-ranking-design.md`.
 **Implementation plan:** `docs/superpowers/plans/2026-06-17-exp08-state-dl-sl-ranking.md`.
 **Orchestration plan:** `docs/superpowers/plans/2026-06-18-exp08-fold-parallel-orchestration.md`.
@@ -89,6 +92,39 @@ See `configs/experiments/08_k562_sl_pair_state_dl/README.md` for per-phase comma
 and gates. Code and unit tests landed under `src/sl_dl_model/` and
 `tests/sl_dl_model/`; the Phase 2/3 gates run on the cluster against the gitignored
 ESM2 cache, STATE checkpoint, and gwps bags.
+
+## Phase 3 NaN Blocker (2026-06-20)
+
+The first cluster Phase 3 run (`phase3_bag_supervision.yaml`, `lambda_bag=1.0`,
+`lr=1e-3`) crashed at the end of epoch 0 in `_validate_auroc` →
+`roc_auc_score(... )` with `ValueError: Input contains NaN`. `sigmoid(logit)` is NaN
+only when `logit` is NaN, so the model parameters were already non-finite **before**
+validation ran. Validation is only the *first detector*: `src/sl_dl_model/` has no
+grad-clipping, `isfinite`, or `nan_to_num` guards anywhere, so a NaN injected early in
+epoch 0 propagates silently to the epoch-end check.
+
+Ranked root-cause hypotheses:
+
+- **H1 — `_energy_distance` `torch.cdist` (phase3-only term via `bag_loss`).** Most
+  likely. H1a: matmul-mode cdist computes `d² = |x|²+|y|²−2xy`, float error yields a
+  small negative under the `sqrt` → NaN in the loss *value*. H1b: `cdist(x, x)`
+  self-distance has a `0/0` gradient on the zero diagonal → NaN in the *gradient* only
+  (forward value looks fine; `clamp_min(0)` guards the value, not the grad). Phase 2
+  has no `bag_loss` and never reaches `_energy_distance`, which is why phase 2 did not
+  crash.
+- **H2 — bag-path gradient magnitude × `lr=1e-3` → adapter blow-up.** The bag term
+  backprops the full predicted bag into the adapter (larger-magnitude path than the
+  pooled `embed_gene`), energy distance is unnormalized, and `λ_bag=1.0` adds it
+  directly; weights can diverge to inf→NaN over steps even without a cdist NaN.
+- **H3 — `MeanStdPool.std(unbiased=False)` `sqrt(0)` gradient** when a bag feature is
+  constant. Latent risk; present in phase 2 too, so not the phase-3 differentiator.
+- **H4 — frozen STATE forward overflow** once the adapter output is pushed out of
+  range (downstream symptom of H2).
+
+Fix is TDD-driven defense-in-depth (grad-clip + `isfinite`/`nan_to_num` guards +
+NaN-safe energy distance), tracked in
+`docs/superpowers/plans/2026-06-20-exp08-phase3-nan-fix.md`. Phase 3 is the primary
+gate; if the fixed run trains cleanly through CV2/CV3 the pipeline is unblocked.
 
 ## Terminology Guardrail
 
