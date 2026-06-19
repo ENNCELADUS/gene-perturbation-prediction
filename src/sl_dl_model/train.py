@@ -626,11 +626,12 @@ class StateDlProducer:
                     return
                 batch_total = torch.stack(batch_losses).mean()
                 batch_size = len(batch_losses)
-                optimizer.zero_grad()
-                batch_total.backward()
-                optimizer.step()
-                batch_loss_sum += float(batch_total.detach().cpu()) * batch_size
-                batch_loss_count += batch_size
+                applied = safe_optimizer_step(
+                    model, optimizer, batch_total, self.config.max_grad_norm
+                )
+                if applied:
+                    batch_loss_sum += float(batch_total.detach().cpu()) * batch_size
+                    batch_loss_count += batch_size
                 batch_losses = []
                 pbar.update(1)
 
@@ -784,6 +785,54 @@ class StateDlProducer:
         else:
             # No val signal (val_pairs None/unusable): keep final-epoch weights.
             self.stopped_epoch = self.config.max_epochs - 1
+
+
+def safe_optimizer_step(
+    model: SlDlModel,
+    optimizer: optim.Optimizer,
+    loss: torch.Tensor,
+    max_grad_norm: float,
+    *,
+    logger_: logging.Logger = logger,
+) -> bool:
+    """Backward + clip + step, skipping the step if anything is non-finite.
+
+    Guards exp08 Phase 3 training against NaN/Inf corruption (H2/H4): a
+    non-finite loss or gradient must never reach ``optimizer.step()``, because
+    one bad step poisons the weights for the rest of the epoch and only
+    surfaces later at validation. ``optimizer.zero_grad()`` always runs so a
+    skipped step leaves no stale gradients behind.
+
+    Args:
+        model: The model whose trainable parameters are being optimized.
+        optimizer: The optimizer to step.
+        loss: Scalar loss tensor (already reduced).
+        max_grad_norm: Max gradient L2 norm for clipping; ``<= 0`` disables
+            clipping (the finite check still runs).
+        logger_: Logger for the skip warning.
+
+    Returns:
+        ``True`` if the optimizer step was applied; ``False`` if it was skipped
+        because the loss or the post-clip gradient norm was non-finite.
+    """
+    optimizer.zero_grad()
+    if not torch.isfinite(loss).all():
+        logger_.warning("non-finite loss (%s); skipping optimizer step", loss)
+        return False
+    loss.backward()
+    params = [p for p in model.parameters() if p.requires_grad]
+    if max_grad_norm > 0:
+        grad_norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm)
+    else:
+        grad_norm = torch.nn.utils.clip_grad_norm_(params, float("inf"))
+    if not torch.isfinite(grad_norm):
+        logger_.warning(
+            "non-finite gradient norm (%s); skipping optimizer step", grad_norm
+        )
+        optimizer.zero_grad()
+        return False
+    optimizer.step()
+    return True
 
 
 def _bag_part(
