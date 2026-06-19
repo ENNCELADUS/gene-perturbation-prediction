@@ -73,16 +73,34 @@ Run: `uv run python -m sl_dl_model run-cv --config phase0_parity.yaml --producer
 
 ## Phase 2 — SL classifier (BCE)
 
-Run: `sbatch ../../../scripts/sl_dl_model.sh phase2_bce.yaml state_dl`
+Run: `sbatch scripts/sl_dl_model.sh configs/experiments/08_k562_sl_pair_state_dl/phase2_bce.yaml state_dl`
 
 **Gate:** CV2 AUROC > 0.704, AUPR > 0.732. If not, debug encoder/pair head before Phase 3.
 
 ## Phase 3 — Bag supervision (primary)
 
-Run: `sbatch ../../../scripts/sl_dl_model.sh phase3_bag_supervision.yaml state_dl`
+Run: `sbatch scripts/sl_dl_model.sh configs/experiments/08_k562_sl_pair_state_dl/phase3_bag_supervision.yaml state_dl`
 
 **Gate (primary):** CV2/CV3 NDCG@k and MAP@k beat exp06; lift concentrated on the
 covered-pair slice. This is the pass/fail for exp08.
+
+## Training paradigm
+
+- `batch_pairs` (default 1024) is effective: training uses gradient accumulation,
+  one optimizer step per `batch_pairs` pairs, with the batch loss reduced as the
+  mean of per-pair losses. `lr` (1e-3) is unchanged.
+- Early stopping: each epoch the model is validated by pair-AUROC over the fold's
+  **own test split** (SynLethDB `valid_rat=0` style; leakage accepted by design),
+  best-epoch weights are restored, and `early_stop_patience` (default 5) epochs
+  without improvement stops training. Best-epoch selection begins after
+  `warmup_epochs`. The reported official metric is best-epoch only.
+- **Honesty note:** best-epoch selection reads the test fold, so exp08-vs-exp06 is
+  selection-matched to the SynLethDB benchmark protocol, not a strict
+  embedding-only ablation against exp06.
+- Per-epoch `train/val` metrics + peak GPU memory are logged per rank
+  (`train_rank{N}.log`) and written per fold to
+  `<split>/epoch_metrics_fold{N}.csv` for curve plotting. The default log file is
+  `<output_dir>/train.log` (main process only); `--log-file` overrides it.
 
 ## Phase 4 — Ablations
 
@@ -99,7 +117,9 @@ covered-pair slice. This is the pass/fail for exp08.
 - `CV1/`, `CV2/`, `CV3/` subdirs (per split present), each with `fold_metrics.csv`,
   `summary.csv`, `manifest.json`;
 - top-level `fold_metrics.csv` / `summary.csv` / `manifest.json` (all splits combined);
-- `official_metrics_summary.csv` (combined official summary across splits).
+- `official_metrics_summary.csv` (combined official summary across splits);
+- per-fold `<split>/epoch_metrics_fold{N}.csv` (training curves) and per-rank
+  `train_rank{N}.log` (+ main-process `train.log`).
 
 Artifacts are written only by the main process when launched under Accelerate.
 

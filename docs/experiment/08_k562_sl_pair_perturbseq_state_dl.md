@@ -3,7 +3,8 @@
 **Status:** Implementation complete (Phase 0–4 code + unit tests). Real-data gates
 (Phase 2/3) pending ESM2 cache + STATE checkpoint + gwps bags.
 **Design spec:** `docs/superpowers/specs/2026-06-17-exp08-state-dl-sl-ranking-design.md`.
-**Plan:** `docs/superpowers/plans/2026-06-17-exp08-state-dl-sl-ranking.md`.
+**Implementation plan:** `docs/superpowers/plans/2026-06-17-exp08-state-dl-sl-ranking.md`.
+**Orchestration plan:** `docs/superpowers/plans/2026-06-18-exp08-fold-parallel-orchestration.md`.
 **Configs:** `configs/experiments/08_k562_sl_pair_state_dl/`.
 **Package:** `src/sl_dl_model/`.
 
@@ -46,8 +47,25 @@ backbone (8-layer Llama) → predicted response bag → `MeanStdPool` (bag → e
 `SymmetricPairHead` (`[e_a+e_b, |e_a−e_b|, e_a⊙e_b]` + GeneEffect block → logit).
 
 **Training:** 3-part loss (SL BCE + adapter token-distill + real-bag supervision),
-warm-up schedule, HuggingFace Accelerate/DDP + tqdm. Bag supervision for covered
-train genes only (leakage-free held-out gene eval). Seed 17, max 20 epochs, lr 1e-3.
+warm-up schedule, Adam on trainable parameters only, and no RankNet term
+(`lambda_rank=0.0`, recorded-but-unconsumed). Pairs are batched by gradient
+accumulation (`batch_pairs`, default 1024): one optimizer step per batch, batch
+loss reduced as the mean of per-pair losses. Accelerate launches use fold-level
+task parallelism via `PartialState`/`gather_object`: each rank owns distinct
+`(split_type, fold_id)` jobs, with no DDP gradient all-reduce. Bag supervision
+uses covered train genes only (leakage-free held-out gene eval). Seed 17, max 20
+epochs, lr 1e-3.
+
+**Early stopping:** each epoch the model is validated by pair-AUROC over the
+fold's **own test split** (SynLethDB `valid_rat=0` style), best-epoch weights are
+restored, and `early_stop_patience` (default 5) epochs without improvement stops
+training. Best-epoch selection begins after `warmup_epochs`; the reported
+official metric is best-epoch only. **Honesty note:** because best-epoch
+selection reads the test fold, exp08-vs-exp06 is **selection-matched to the
+SynLethDB benchmark protocol, not a strict embedding-only ablation** against
+exp06 (which fits to convergence with no epoch selection). Per-epoch
+train/val curves and peak GPU memory are written per fold to
+`<output_dir>/<split>/epoch_metrics_fold{N}.csv` and to per-rank `train_rank{N}.log`.
 
 ## Evaluation
 
