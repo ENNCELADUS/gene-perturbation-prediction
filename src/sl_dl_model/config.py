@@ -67,6 +67,10 @@ class SLDLConfig:
     # fold's own test split (SynLethDB valid_rat=0 style).
     early_stop_patience: int = 5
 
+    # Gradient clipping max-norm applied before every optimizer step (H2/H4
+    # NaN defense). <= 0 disables clipping.
+    max_grad_norm: float = 1.0
+
     embedding_method: str = "state_adapter_esm2_meanstd"
 
     @property

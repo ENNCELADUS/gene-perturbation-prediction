@@ -56,3 +56,12 @@ def test_load_config_accepts_early_stop_patience(tmp_path: Path):
     cfg = load_config(path)
     assert cfg.early_stop_patience == 3
     assert cfg.batch_pairs == 256
+
+
+def test_max_grad_norm_default_and_yaml_override(tmp_path):
+    from sl_dl_model.config import SLDLConfig, load_config
+
+    assert SLDLConfig().max_grad_norm == 1.0
+    cfg_path = tmp_path / "c.yaml"
+    cfg_path.write_text("max_grad_norm: 0.5\n")
+    assert load_config(cfg_path).max_grad_norm == 0.5
