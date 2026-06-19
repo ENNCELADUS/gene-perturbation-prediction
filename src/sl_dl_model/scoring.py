@@ -57,6 +57,38 @@ def write_epoch_metrics(
     return out
 
 
+def append_epoch_metric_row(
+    output_dir: Path,
+    split_type: str,
+    fold_id: int,
+    row: dict[str, float],
+) -> Path:
+    """Append one epoch's metrics row to the per-fold CSV, header written once.
+
+    Designed for live flushing during training: the file is created with a
+    header on the first call and appended to (no repeated header) on every
+    subsequent call, so the CSV is readable mid-run.
+
+    Args:
+        output_dir: Run output directory.
+        split_type: CV split type (e.g. ``"CV2"``).
+        fold_id: Fold id.
+        row: One epoch's metrics with keys ``epoch``, ``mean_train_loss``,
+            ``val_pair_auroc``, ``peak_gpu_mem_mb``.
+
+    Returns:
+        Path to the per-fold CSV.
+    """
+    split_dir = output_dir / split_type
+    split_dir.mkdir(parents=True, exist_ok=True)
+    out = split_dir / f"epoch_metrics_fold{fold_id}.csv"
+    record = {"split_type": split_type, "fold_id": fold_id, **row}
+    frame = pd.DataFrame([record])
+    write_header = not out.exists()
+    frame.to_csv(out, mode="a", header=write_header, index=False)
+    return out
+
+
 def train_symbols_for_fold(train_df: pd.DataFrame) -> set[str]:
     """Return upper-cased gene symbols appearing in this fold's train pairs.
 
@@ -191,29 +223,15 @@ def run_fold_with_producer(
     # DL path: use the trained pair head's score matrix directly.
     if hasattr(producer, "score_matrix"):
         sm = producer.score_matrix(universe.symbols, universe.gene_effects)
-        epoch_metrics = getattr(producer, "epoch_metrics", None)
-        if epoch_metrics:
-            write_epoch_metrics(
-                Path(config.output_dir), split_type, fold_id, epoch_metrics
-            )
-            rank = PartialState().process_index
-            for m in epoch_metrics:
-                logger.info(
-                    "[rank %d][%s/fold%d] epoch %d: loss=%.4f val_auroc=%.4f "
-                    "peak_gpu_mb=%.1f",
-                    rank,
-                    split_type,
-                    fold_id,
-                    int(m["epoch"]),
-                    m["mean_train_loss"],
-                    m["val_pair_auroc"],
-                    m["peak_gpu_mem_mb"],
-                )
+        # Per-epoch rows were flushed live to the per-fold CSV during _train;
+        # emit only a fold-completion summary here.
+        if getattr(producer, "epoch_metrics", None):
             logger.info(
-                "[rank %d][%s/fold%d] stopped_epoch=%s",
-                rank,
+                "[rank %d][%s/fold%d] training complete: %d epochs, stopped_epoch=%s",
+                PartialState().process_index,
                 split_type,
                 fold_id,
+                len(producer.epoch_metrics),
                 getattr(producer, "stopped_epoch", None),
             )
         rows.extend(
@@ -346,4 +364,5 @@ def make_fold_producer(
         input_dim=caches.input_dim,
         output_dim=caches.output_dim,
         val_pairs=val_pairs,
+        epoch_log_target=(Path(config.output_dir), split_type, fold_id),
     )
