@@ -54,8 +54,13 @@ def _producer(max_epochs: int, patience: int, warmup: int = 0) -> StateDlProduce
         ("G4", "G0", 0, -1.0, -1.0),
     ]
     return StateDlProducer(
-        cfg, esm=esm, bags=bags, train_pairs=train_pairs,
-        input_dim=6, output_dim=6, val_pairs=val_pairs,
+        cfg,
+        esm=esm,
+        bags=bags,
+        train_pairs=train_pairs,
+        input_dim=6,
+        output_dim=6,
+        val_pairs=val_pairs,
     )
 
 

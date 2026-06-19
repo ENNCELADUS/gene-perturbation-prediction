@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from accelerate import PartialState
+from sklearn.metrics import roc_auc_score
 from torch import optim
 from tqdm.auto import tqdm
 
@@ -111,13 +112,18 @@ class StateDlProducer:
         train_pairs: list[tuple[str, str, int, float, float]],
         input_dim: int,
         output_dim: int,
+        val_pairs: list[tuple[str, str, int, float, float]] | None = None,
     ) -> None:
         self.config = config
         self.esm = esm
         self.bags = bags
         self.train_pairs = train_pairs
+        self.val_pairs = val_pairs
         self.input_dim = input_dim
         self.output_dim = output_dim
+        # Best-epoch tracking (set by _train).
+        self.stopped_epoch: int | None = None
+        self.epoch_metrics: list[dict[str, float]] = []
         self._model: SlDlModel | None = None
         # Cached per-gene embedding table (shape n_gene × emb_dim) and symbol order.
         self._e_table_cache: torch.Tensor | None = None
@@ -491,6 +497,56 @@ class StateDlProducer:
         np.fill_diagonal(score, 0.0)
         return score
 
+    def _validate_auroc(
+        self,
+        model: SlDlModel,
+        device: torch.device | str,
+        control: torch.Tensor,
+    ) -> float | None:
+        """Pair-AUROC over ``self.val_pairs`` (the fold's test split).
+
+        Returns ``None`` when validation is impossible: no val pairs, fewer
+        than two scorable pairs, or only one label class present.
+        """
+        if not self.val_pairs:
+            return None
+        model.eval()
+        scores: list[float] = []
+        labels: list[int] = []
+        with torch.no_grad():
+            for a, b, label, ea, eb in self.val_pairs:
+                vec_a = self.esm.vectors_by_symbol.get(a.upper())
+                vec_b = self.esm.vectors_by_symbol.get(b.upper())
+                if vec_a is None or vec_b is None:
+                    continue
+                e_a = model.embed_gene(torch.tensor(vec_a, device=device), control)
+                e_b = model.embed_gene(torch.tensor(vec_b, device=device), control)
+                ge = torch.tensor(
+                    self._ge_features(np.array([ea]), np.array([eb])),
+                    device=device,
+                    dtype=torch.float32,
+                )
+                cov_a: torch.Tensor | None = None
+                cov_b: torch.Tensor | None = None
+                if self.config.include_coverage_flag:
+                    cov_a = torch.tensor(
+                        [1.0 if a.upper() in self.bags.bags_by_symbol else 0.0],
+                        device=device,
+                    )
+                    cov_b = torch.tensor(
+                        [1.0 if b.upper() in self.bags.bags_by_symbol else 0.0],
+                        device=device,
+                    )
+                logit = model.score_pairs(
+                    e_a.unsqueeze(0), e_b.unsqueeze(0), ge, cov_a, cov_b
+                )
+                scores.append(float(torch.sigmoid(logit).item()))
+                labels.append(int(label))
+        model.train()
+        if len(scores) < 2 or len(set(labels)) < 2:
+            return None
+        return float(roc_auc_score(labels, scores))
+
     def _train(
         self,
         model: SlDlModel,
@@ -521,6 +577,13 @@ class StateDlProducer:
         }
         self._model = model  # Expose model for _distill_part
 
+        import copy
+
+        best_auroc: float | None = None
+        best_state: dict[str, torch.Tensor] | None = None
+        best_epoch: int | None = None
+        epochs_since_improve = 0
+
         for epoch in range(self.config.max_epochs):
             weights = _epoch_weights(epoch, self.config)
             model.train()
@@ -532,6 +595,7 @@ class StateDlProducer:
             skipped = 0
             trained = 0
             batch_losses: list[torch.Tensor] = []
+            batch_losses_history: list[torch.Tensor] = []
 
             def _flush() -> None:
                 nonlocal batch_losses
@@ -541,6 +605,7 @@ class StateDlProducer:
                 optimizer.zero_grad()
                 batch_total.backward()
                 optimizer.step()
+                batch_losses_history.append(batch_total.detach())
                 batch_losses = []
 
             for a, b, label, ea, eb in pbar:
@@ -630,6 +695,53 @@ class StateDlProducer:
                     "epoch %d: no trainable pairs found; check ESM2 coverage", epoch
                 )
                 raise RuntimeError("no trainable pairs: check ESM2 coverage")
+
+            mean_loss = (
+                float(torch.stack(batch_losses_history).mean())
+                if batch_losses_history
+                else float("nan")
+            )
+            val_auroc = self._validate_auroc(model, device, control)
+            peak_mb = (
+                torch.cuda.max_memory_allocated() / 1e6
+                if torch.cuda.is_available()
+                else 0.0
+            )
+            self.epoch_metrics.append(
+                {
+                    "epoch": float(epoch),
+                    "mean_train_loss": mean_loss,
+                    "val_pair_auroc": float("nan") if val_auroc is None else val_auroc,
+                    "peak_gpu_mem_mb": peak_mb,
+                }
+            )
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+
+            # Best-epoch selection only after warmup (val signal meaningful).
+            if val_auroc is not None and epoch >= self.config.warmup_epochs:
+                if best_auroc is None or val_auroc > best_auroc:
+                    best_auroc = val_auroc
+                    best_state = copy.deepcopy(model.state_dict())
+                    best_epoch = epoch
+                    epochs_since_improve = 0
+                else:
+                    epochs_since_improve += 1
+                    if epochs_since_improve >= self.config.early_stop_patience:
+                        logger.info(
+                            "early stop at epoch %d (best epoch %d, val_auroc=%.4f)",
+                            epoch,
+                            best_epoch,
+                            best_auroc,
+                        )
+                        break
+
+        if best_state is not None:
+            model.load_state_dict(best_state)
+            self.stopped_epoch = best_epoch
+        else:
+            # No val signal (val_pairs None/unusable): keep final-epoch weights.
+            self.stopped_epoch = self.config.max_epochs - 1
 
 
 def _bag_part(
