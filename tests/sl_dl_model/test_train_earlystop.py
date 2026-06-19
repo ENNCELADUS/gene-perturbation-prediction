@@ -100,9 +100,9 @@ def test_patience_triggers_early_stop_and_restores_best(monkeypatch):
                 with torch.no_grad():
                     param.add_(10.0)
             break
-        return score
+        return score, "ok"
 
-    monkeypatch.setattr(producer, "_validate_auroc", fake_validate)
+    monkeypatch.setattr(producer, "_validate_auroc_with_status", fake_validate)
     producer._train(model, opt, state, {"G0", "G1", "G2", "G3"})
     assert len(producer.epoch_metrics) == 2
     assert producer.stopped_epoch == 0
@@ -123,7 +123,11 @@ def test_warmup_epochs_do_not_select_best_epoch(monkeypatch):
     opt = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=1e-3)
     val_scores = iter([0.99, 0.1, 0.2, 0.1])
 
-    monkeypatch.setattr(producer, "_validate_auroc", lambda *_args: next(val_scores))
+    monkeypatch.setattr(
+        producer,
+        "_validate_auroc_with_status",
+        lambda *_args: (next(val_scores), "ok"),
+    )
     producer._train(model, opt, state, {"G0", "G1", "G2", "G3"})
     assert len(producer.epoch_metrics) == 4
     assert producer.stopped_epoch == 2
@@ -170,9 +174,9 @@ def test_epoch_metrics_flushed_to_disk_during_training(tmp_path):
     rows_seen: list[int] = []
 
     # Spy on the per-epoch validation hook to observe the CSV mid-training:
-    # _validate_auroc runs before the current epoch's row is appended, so on
+    # validation runs before the current epoch's row is appended, so on
     # entry for epoch e the file holds rows for epochs 0..e-1.
-    real_validate = producer._validate_auroc
+    real_validate = producer._validate_auroc_with_status
 
     def spy_validate(model_, device_, control_):
         result = real_validate(model_, device_, control_)
@@ -180,7 +184,7 @@ def test_epoch_metrics_flushed_to_disk_during_training(tmp_path):
             rows_seen.append(len(pd.read_csv(csv_path)))
         return result
 
-    producer._validate_auroc = spy_validate
+    producer._validate_auroc_with_status = spy_validate
     producer._train(model, opt, state, {"G0", "G1", "G2", "G3"})
 
     # Final file has one row per trained epoch, in order.

@@ -182,7 +182,12 @@ def _bag_producer(max_epochs=1, warmup_epochs=0, **cfg_overrides):
     )
     pairs = [("A", "B", 1, -1.0, -0.5), ("C", "D", 0, 0.1, 0.2)]
     return StateDlProducer(
-        cfg, esm=esm, bags=bags, train_pairs=pairs, input_dim=6, output_dim=6,
+        cfg,
+        esm=esm,
+        bags=bags,
+        train_pairs=pairs,
+        input_dim=6,
+        output_dim=6,
         val_pairs=pairs,
     )
 
@@ -256,4 +261,3 @@ def test_train_raises_on_persistent_nonfinite_validation(monkeypatch):
         assert "non-finite" in str(exc).lower() or "non_finite" in str(exc).lower()
     else:
         raise AssertionError("expected RuntimeError on persistent non-finite val")
-
