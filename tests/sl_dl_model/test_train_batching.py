@@ -100,14 +100,14 @@ def test_tqdm_advances_once_per_batch(monkeypatch):
     model = producer._build_model()
     state = PartialState()
     model = model.to(state.device)
-    opt = torch.optim.Adam(
-        (p for p in model.parameters() if p.requires_grad), lr=1e-3
-    )
+    opt = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=1e-3)
     producer._train(model, opt, state, {"G0", "G1"})
 
     # Exactly one bar constructed for the single training epoch.
     assert len(constructed) == 1, f"expected 1 bar, got {len(constructed)}"
-    assert constructed[0]["total"] == 3, f"expected total=3, got {constructed[0]['total']}"
+    assert constructed[0]["total"] == 3, (
+        f"expected total=3, got {constructed[0]['total']}"
+    )
     assert constructed[0]["bar"].updates == 3, (
         f"expected 3 per-batch updates, got {constructed[0]['bar'].updates}"
     )
