@@ -62,6 +62,10 @@ class SLDLConfig:
     max_epochs: int = 20
     batch_pairs: int = 1024
     lr: float = 1e-3
+    # Early stopping: select the epoch with the best validation pair-AUROC,
+    # stop after this many epochs without improvement. Validation uses the
+    # fold's own test split (SynLethDB valid_rat=0 style).
+    early_stop_patience: int = 5
 
     embedding_method: str = "state_adapter_esm2_meanstd"
 
