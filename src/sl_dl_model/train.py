@@ -515,10 +515,8 @@ class StateDlProducer:
         labels: list[int] = []
         with torch.no_grad():
             for a, b, label, ea, eb in self.val_pairs:
-                vec_a = self.esm.vectors_by_symbol.get(a.upper())
-                vec_b = self.esm.vectors_by_symbol.get(b.upper())
-                if vec_a is None or vec_b is None:
-                    continue
+                vec_a, _real_a = self._resolve_esm(a)
+                vec_b, _real_b = self._resolve_esm(b)
                 e_a = model.embed_gene(torch.tensor(vec_a, device=device), control)
                 e_b = model.embed_gene(torch.tensor(vec_b, device=device), control)
                 ge = torch.tensor(
@@ -577,12 +575,23 @@ class StateDlProducer:
         }
         self._model = model  # Expose model for _distill_part
 
-        import copy
-
         best_auroc: float | None = None
         best_state: dict[str, torch.Tensor] | None = None
         best_epoch: int | None = None
         epochs_since_improve = 0
+
+        def _snapshot_trainable() -> dict[str, torch.Tensor]:
+            return {
+                name: param.detach().cpu().clone()
+                for name, param in model.named_parameters()
+                if param.requires_grad
+            }
+
+        def _restore_trainable(state_dict: dict[str, torch.Tensor]) -> None:
+            params = dict(model.named_parameters())
+            with torch.no_grad():
+                for name, saved in state_dict.items():
+                    params[name].copy_(saved.to(device=params[name].device))
 
         for epoch in range(self.config.max_epochs):
             weights = _epoch_weights(epoch, self.config)
@@ -595,17 +604,20 @@ class StateDlProducer:
             skipped = 0
             trained = 0
             batch_losses: list[torch.Tensor] = []
-            batch_losses_history: list[torch.Tensor] = []
+            batch_loss_sum = 0.0
+            batch_loss_count = 0
 
             def _flush() -> None:
-                nonlocal batch_losses
+                nonlocal batch_loss_count, batch_loss_sum, batch_losses
                 if not batch_losses:
                     return
                 batch_total = torch.stack(batch_losses).mean()
+                batch_size = len(batch_losses)
                 optimizer.zero_grad()
                 batch_total.backward()
                 optimizer.step()
-                batch_losses_history.append(batch_total.detach())
+                batch_loss_sum += float(batch_total.detach().cpu()) * batch_size
+                batch_loss_count += batch_size
                 batch_losses = []
 
             for a, b, label, ea, eb in pbar:
@@ -697,8 +709,8 @@ class StateDlProducer:
                 raise RuntimeError("no trainable pairs: check ESM2 coverage")
 
             mean_loss = (
-                float(torch.stack(batch_losses_history).mean())
-                if batch_losses_history
+                batch_loss_sum / batch_loss_count
+                if batch_loss_count > 0
                 else float("nan")
             )
             val_auroc = self._validate_auroc(model, device, control)
@@ -722,7 +734,7 @@ class StateDlProducer:
             if val_auroc is not None and epoch >= self.config.warmup_epochs:
                 if best_auroc is None or val_auroc > best_auroc:
                     best_auroc = val_auroc
-                    best_state = copy.deepcopy(model.state_dict())
+                    best_state = _snapshot_trainable()
                     best_epoch = epoch
                     epochs_since_improve = 0
                 else:
@@ -737,7 +749,7 @@ class StateDlProducer:
                         break
 
         if best_state is not None:
-            model.load_state_dict(best_state)
+            _restore_trainable(best_state)
             self.stopped_epoch = best_epoch
         else:
             # No val signal (val_pairs None/unusable): keep final-epoch weights.

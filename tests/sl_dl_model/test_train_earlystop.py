@@ -78,7 +78,7 @@ def test_stopped_epoch_recorded_and_within_bounds():
     assert "val_pair_auroc" in producer.epoch_metrics[0]
 
 
-def test_patience_triggers_early_stop():
+def test_patience_triggers_early_stop_and_restores_best(monkeypatch):
     """If patience=1 and val never improves after epoch 0, stop early."""
     producer = _producer(max_epochs=10, patience=1)
     producer._fit_ge_standardizer()
@@ -86,9 +86,47 @@ def test_patience_triggers_early_stop():
     state = PartialState()
     model = model.to(state.device)
     opt = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=1e-3)
+    val_scores = iter([0.9, 0.8])
+    best_param: dict[str, torch.Tensor] = {}
+
+    def fake_validate(*_args):
+        score = next(val_scores)
+        for name, param in model.named_parameters():
+            if not param.requires_grad:
+                continue
+            if score == 0.9:
+                best_param[name] = param.detach().cpu().clone()
+            else:
+                with torch.no_grad():
+                    param.add_(10.0)
+            break
+        return score
+
+    monkeypatch.setattr(producer, "_validate_auroc", fake_validate)
     producer._train(model, opt, state, {"G0", "G1", "G2", "G3"})
-    # Fewer than max_epochs metric rows recorded means we stopped early.
-    assert len(producer.epoch_metrics) <= 10
+    assert len(producer.epoch_metrics) == 2
+    assert producer.stopped_epoch == 0
+    name, expected = next(iter(best_param.items()))
+    torch.testing.assert_close(
+        dict(model.named_parameters())[name].detach().cpu(),
+        expected,
+    )
+
+
+def test_warmup_epochs_do_not_select_best_epoch(monkeypatch):
+    """Validation before warmup does not drive patience or best-epoch restore."""
+    producer = _producer(max_epochs=5, patience=1, warmup=2)
+    producer._fit_ge_standardizer()
+    model = producer._build_model()
+    state = PartialState()
+    model = model.to(state.device)
+    opt = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=1e-3)
+    val_scores = iter([0.99, 0.1, 0.2, 0.1])
+
+    monkeypatch.setattr(producer, "_validate_auroc", lambda *_args: next(val_scores))
+    producer._train(model, opt, state, {"G0", "G1", "G2", "G3"})
+    assert len(producer.epoch_metrics) == 4
+    assert producer.stopped_epoch == 2
 
 
 def test_no_val_pairs_uses_final_epoch():
@@ -102,3 +140,15 @@ def test_no_val_pairs_uses_final_epoch():
     opt = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=1e-3)
     producer._train(model, opt, state, {"G0", "G1", "G2", "G3"})
     assert producer.stopped_epoch == 2
+
+
+def test_validation_uses_esm_fallback_for_missing_gene():
+    """Validation should score fallback-covered genes like final scoring does."""
+    producer = _producer(max_epochs=1, patience=1)
+    del producer.esm.vectors_by_symbol["G5"]
+    producer._fit_ge_standardizer()
+    model = producer._build_model()
+    state = PartialState()
+    model = model.to(state.device)
+    control = torch.tensor(producer.bags.control_template, device=state.device)
+    assert producer._validate_auroc(model, state.device, control) is not None
