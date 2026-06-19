@@ -262,7 +262,7 @@ def make_fold_producer(
     """
     from sl_dl_model.train import StateDlProducer
 
-    train_df, _ = fold_split(frame, split_type, fold_id)
+    train_df, test_df = fold_split(frame, split_type, fold_id)
     train_pairs = [
         (
             str(r["gene_a_symbol"]).upper(),
@@ -273,6 +273,16 @@ def make_fold_producer(
         )
         for _, r in train_df.iterrows()
     ]
+    val_pairs = [
+        (
+            str(r["gene_a_symbol"]).upper(),
+            str(r["gene_b_symbol"]).upper(),
+            int(r["sl_label"]),
+            float(r["gene_a_k562_gene_effect"]),
+            float(r["gene_b_k562_gene_effect"]),
+        )
+        for _, r in test_df.iterrows()
+    ]
     return StateDlProducer(
         config,
         esm=caches.esm,
@@ -280,4 +290,5 @@ def make_fold_producer(
         train_pairs=train_pairs,
         input_dim=caches.input_dim,
         output_dim=caches.output_dim,
+        val_pairs=val_pairs,
     )
