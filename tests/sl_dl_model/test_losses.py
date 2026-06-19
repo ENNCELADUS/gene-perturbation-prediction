@@ -22,6 +22,28 @@ def test_bag_loss_nonnegative_and_zero_for_identical():
     assert bag_loss(bag, bag.clone()).item() < 1e-4
 
 
+def test_bag_loss_grad_finite_on_identical_bags():
+    # H1b: cdist(x, x) self-distance has a 0/0 backward; identical pred/real
+    # makes every cross- and self-distance zero, the exact NaN-grad trigger.
+    pred = torch.randn(8, 6, requires_grad=True)
+    real = pred.detach().clone()
+    loss = bag_loss(pred, real)
+    assert torch.isfinite(loss).all(), "bag_loss value must be finite"
+    loss.backward()
+    assert pred.grad is not None and torch.isfinite(pred.grad).all(), (
+        "bag_loss gradient must be finite on identical bags"
+    )
+
+
+def test_bag_loss_grad_finite_with_duplicate_rows():
+    # Duplicate rows create zero pairwise distances inside a single bag.
+    pred = torch.zeros(5, 4, requires_grad=True)
+    real = torch.randn(7, 4)
+    loss = bag_loss(pred, real)
+    loss.backward()
+    assert torch.isfinite(pred.grad).all()
+
+
 def test_combine_weights():
     parts = {"sl": torch.tensor(2.0), "distill": torch.tensor(4.0)}
     weights = {"sl": 1.0, "distill": 0.5}

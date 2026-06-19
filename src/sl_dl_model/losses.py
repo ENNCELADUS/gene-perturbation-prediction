@@ -1,8 +1,10 @@
 """Three-part loss for exp08: SL BCE + adapter distill + bag supervision.
 
-The bag loss reuses :func:`aivc_model.model._energy_distance` so both the
-AIVC forward model and the SL-pair DL share the same distribution-level
-supervision signal.
+The bag loss uses a local NaN-safe energy distance (see
+:func:`_safe_energy_distance`) rather than ``aivc_model.model._energy_distance``
+so the distribution-level supervision has a finite forward and backward even
+when pred/real bags contain coincident cells (the ``torch.cdist`` 0/0
+self-distance NaN trap).
 """
 
 from __future__ import annotations
@@ -10,7 +12,50 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from aivc_model.model import _energy_distance
+# Epsilon added under the sqrt so the Euclidean-distance gradient stays finite
+# at zero pairwise distance (the cdist self-distance 0/0 NaN trap, H1b).
+_ENERGY_EPS = 1e-8
+
+
+def _safe_energy_distance(
+    predicted: torch.Tensor, target: torch.Tensor
+) -> torch.Tensor:
+    """NaN-safe energy distance between two cell bags.
+
+    Equivalent to ``2*E||X-Y|| - E||X-X'|| - E||Y-Y'||`` but computed without
+    ``torch.cdist``: pairwise squared distances are formed via the quadratic
+    form, clamped to be non-negative (kills the float ``sqrt(negative)`` NaN,
+    H1a), and an epsilon is added under the ``sqrt`` so the gradient is finite
+    at zero distance (kills the self-distance ``0/0`` NaN, H1b).
+
+    Args:
+        predicted: Predicted bag, shape ``(n, D)``.
+        target: Real bag, shape ``(m, D)``.
+
+    Returns:
+        Non-negative scalar energy distance.
+    """
+    cross = _safe_pairwise_dist(predicted, target).mean()
+    pred_self = _safe_pairwise_dist(predicted, predicted).mean()
+    target_self = _safe_pairwise_dist(target, target).mean()
+    return (2.0 * cross - pred_self - target_self).clamp_min(0.0)
+
+
+def _safe_pairwise_dist(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Euclidean pairwise distances with a finite gradient at zero distance.
+
+    Args:
+        a: Tensor of shape ``(n, D)``.
+        b: Tensor of shape ``(m, D)``.
+
+    Returns:
+        Distance matrix of shape ``(n, m)``.
+    """
+    a2 = (a * a).sum(dim=-1, keepdim=True)  # (n, 1)
+    b2 = (b * b).sum(dim=-1, keepdim=True)  # (m, 1)
+    d2 = a2 - 2.0 * (a @ b.transpose(-2, -1)) + b2.transpose(-2, -1)
+    d2 = d2.clamp_min(0.0)
+    return torch.sqrt(d2 + _ENERGY_EPS)
 
 
 def sl_bce_loss(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -68,7 +113,7 @@ def bag_loss(pred_bag: torch.Tensor, real_bag: torch.Tensor) -> torch.Tensor:
         Non-negative scalar bag supervision loss.
     """
     mean_delta = F.mse_loss(pred_bag.mean(dim=0), real_bag.mean(dim=0))
-    energy = _energy_distance(pred_bag, real_bag)
+    energy = _safe_energy_distance(pred_bag, real_bag)
     return mean_delta + energy
 
 
