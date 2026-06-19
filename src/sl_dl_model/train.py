@@ -101,6 +101,12 @@ class StateDlProducer:
         input_dim: Feature dimension of the control cells / STATE input.
         output_dim: Feature dimension of the STATE output (= input_dim for the
             HVG checkpoint).
+        val_pairs: Optional validation pairs (the fold's test split) used for
+            per-epoch pair-AUROC early stopping.
+        epoch_log_target: Optional ``(output_dir, split_type, fold_id)`` bundle.
+            When set, each epoch's metrics row is flushed to the per-fold CSV
+            and logged as the epoch completes (live monitoring). When ``None``,
+            metrics are only accumulated in :attr:`epoch_metrics`.
     """
 
     def __init__(
@@ -113,12 +119,14 @@ class StateDlProducer:
         input_dim: int,
         output_dim: int,
         val_pairs: list[tuple[str, str, int, float, float]] | None = None,
+        epoch_log_target: tuple[Path, str, int] | None = None,
     ) -> None:
         self.config = config
         self.esm = esm
         self.bags = bags
         self.train_pairs = train_pairs
         self.val_pairs = val_pairs
+        self.epoch_log_target = epoch_log_target
         self.input_dim = input_dim
         self.output_dim = output_dim
         # Best-epoch tracking (set by _train).
@@ -726,14 +734,29 @@ class StateDlProducer:
                 if torch.cuda.is_available()
                 else 0.0
             )
-            self.epoch_metrics.append(
-                {
-                    "epoch": float(epoch),
-                    "mean_train_loss": mean_loss,
-                    "val_pair_auroc": float("nan") if val_auroc is None else val_auroc,
-                    "peak_gpu_mem_mb": peak_mb,
-                }
-            )
+            row = {
+                "epoch": float(epoch),
+                "mean_train_loss": mean_loss,
+                "val_pair_auroc": float("nan") if val_auroc is None else val_auroc,
+                "peak_gpu_mem_mb": peak_mb,
+            }
+            self.epoch_metrics.append(row)
+            if self.epoch_log_target is not None:
+                from sl_dl_model.scoring import append_epoch_metric_row
+
+                out_dir, split_type, fold_id = self.epoch_log_target
+                append_epoch_metric_row(out_dir, split_type, fold_id, row)
+                logger.info(
+                    "[rank %d][%s/fold%d] epoch %d: loss=%.4f val_auroc=%.4f "
+                    "peak_gpu_mb=%.1f",
+                    state.process_index,
+                    split_type,
+                    fold_id,
+                    epoch,
+                    row["mean_train_loss"],
+                    row["val_pair_auroc"],
+                    row["peak_gpu_mem_mb"],
+                )
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats()
 
