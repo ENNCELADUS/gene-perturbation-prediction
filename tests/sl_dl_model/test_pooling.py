@@ -22,3 +22,11 @@ def test_unknown_pool_raises():
         pass
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_mean_std_pool_grad_finite_on_constant_feature():
+    # std = sqrt(var); var=0 on a constant feature gives sqrt'(0)=inf grad (H3).
+    bag = torch.zeros(10, 6, requires_grad=True)  # every feature constant
+    out = MeanStdPool()(bag)
+    out.sum().backward()
+    assert torch.isfinite(bag.grad).all(), "pooling grad must be finite at var=0"
