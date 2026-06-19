@@ -40,6 +40,45 @@ def test_write_epoch_metrics_csv(tmp_path: Path):
     assert (df["fold_id"] == 3).all()
 
 
+def test_append_epoch_metric_row_writes_header_once(tmp_path: Path):
+    from sl_dl_model.scoring import append_epoch_metric_row
+
+    r0 = {
+        "epoch": 0.0,
+        "mean_train_loss": 0.7,
+        "val_pair_auroc": 0.5,
+        "peak_gpu_mem_mb": 0.0,
+    }
+    r1 = {
+        "epoch": 1.0,
+        "mean_train_loss": 0.6,
+        "val_pair_auroc": 0.55,
+        "peak_gpu_mem_mb": 0.0,
+    }
+
+    out = append_epoch_metric_row(tmp_path, "CV2", 3, r0)
+    assert out == tmp_path / "CV2" / "epoch_metrics_fold3.csv"
+    # After the first row the file is readable with exactly one data row.
+    df0 = pd.read_csv(out)
+    assert list(df0.columns) == [
+        "split_type",
+        "fold_id",
+        "epoch",
+        "mean_train_loss",
+        "val_pair_auroc",
+        "peak_gpu_mem_mb",
+    ]
+    assert len(df0) == 1
+
+    append_epoch_metric_row(tmp_path, "CV2", 3, r1)
+    df1 = pd.read_csv(out)
+    # Second call appends (not overwrites) and does NOT add a second header.
+    assert len(df1) == 2
+    assert df1["epoch"].tolist() == [0.0, 1.0]
+    assert (df1["split_type"] == "CV2").all()
+    assert (df1["fold_id"] == 3).all()
+
+
 def test_default_log_file_path(tmp_path: Path, monkeypatch):
     """main() with no --log-file targets output_dir/train.log on main process."""
     import logging
