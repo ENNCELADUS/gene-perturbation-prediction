@@ -121,7 +121,9 @@ covered-pair slice. This is the pass/fail for exp08.
 - per-fold `<split>/epoch_metrics_fold{N}.csv` (training curves) and per-rank
   `train_rank{N}.log` (+ main-process `train.log`).
 
-Artifacts are written only by the main process when launched under Accelerate.
+Official metric artifacts are written only by the main process when launched
+under Accelerate. Per-fold epoch-metric CSVs and per-rank logs are written by
+the rank that owns each fold.
 
 ## Interpreting Results
 
