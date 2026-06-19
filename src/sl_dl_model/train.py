@@ -531,6 +531,17 @@ class StateDlProducer:
             )
             skipped = 0
             trained = 0
+            batch_losses: list[torch.Tensor] = []
+
+            def _flush() -> None:
+                nonlocal batch_losses
+                if not batch_losses:
+                    return
+                batch_total = torch.stack(batch_losses).mean()
+                optimizer.zero_grad()
+                batch_total.backward()
+                optimizer.step()
+                batch_losses = []
 
             for a, b, label, ea, eb in pbar:
                 key_a, key_b = a.upper(), b.upper()
@@ -601,10 +612,12 @@ class StateDlProducer:
                         parts["distill"] = distill_part
 
                 total = combine(parts, weights)
-                optimizer.zero_grad()
-                total.backward()
-                optimizer.step()
+                batch_losses.append(total)
                 trained += 1
+                if len(batch_losses) >= self.config.batch_pairs:
+                    _flush()
+
+            _flush()
 
             if skipped > 0:
                 logger.warning(
