@@ -93,3 +93,46 @@ def test_stale_claim_from_prior_run_does_not_block_resume(tmp_path: Path):
     assert not fq.is_done(d, "CV2", 0)
     # Run B, fresh token, must NOT be blocked by run A's orphan claim.
     assert fq.try_claim(d, "CV2", 0, run_token="jobB") is True
+
+
+def test_fingerprint_changes_with_input_and_config(tmp_path: Path):
+    csv_a = tmp_path / "a.csv"
+    csv_a.write_text("gene_a_symbol,gene_b_symbol\nAAA,BBB\n")
+    csv_b = tmp_path / "b.csv"
+    csv_b.write_text("gene_a_symbol,gene_b_symbol\nCCC,DDD\n")
+
+    cfg1 = SLDLConfig(input_csv=csv_a, output_dir=tmp_path / "o", seed=17)
+    cfg1_same = SLDLConfig(input_csv=csv_a, output_dir=tmp_path / "other", seed=17)
+    cfg2_seed = SLDLConfig(input_csv=csv_a, output_dir=tmp_path / "o", seed=18)
+    cfg3_input = SLDLConfig(input_csv=csv_b, output_dir=tmp_path / "o", seed=17)
+
+    # output_dir does not affect the fingerprint; input + result-affecting config do.
+    assert fq.fingerprint(cfg1) == fq.fingerprint(cfg1_same)
+    assert fq.fingerprint(cfg1) != fq.fingerprint(cfg2_seed)
+    assert fq.fingerprint(cfg1) != fq.fingerprint(cfg3_input)
+
+
+def test_is_done_requires_matching_fingerprint(tmp_path: Path):
+    d = _results_dir(tmp_path)
+    fq.write_result(d, "CV1", 0, [{"metric": "x", "value": 1.0}], fingerprint="fp1")
+    assert fq.is_done(d, "CV1", 0, fingerprint="fp1") is True
+    # A result written under a different fingerprint is treated as not-done.
+    assert fq.is_done(d, "CV1", 0, fingerprint="fp2") is False
+
+
+def test_read_result_rows_only_on_match(tmp_path: Path):
+    d = _results_dir(tmp_path)
+    rows = [{"metric": "ndcg", "value": 0.5}]
+    fq.write_result(d, "CV1", 0, rows, fingerprint="fp1")
+    assert fq.read_result_rows(d, "CV1", 0, fingerprint="fp1") == rows
+    assert fq.read_result_rows(d, "CV1", 0, fingerprint="fp2") is None
+    assert fq.read_result_rows(d, "CV9", 9, fingerprint="fp1") is None
+
+
+def test_is_failed_requires_matching_fingerprint(tmp_path: Path):
+    d = _results_dir(tmp_path)
+    fq.write_failed(d, "CV1", 0, {"traceback": "boom"}, fingerprint="fp1")
+    assert fq.is_failed(d, "CV1", 0, fingerprint="fp1") is True
+    # A failure recorded under an old fingerprint must not block a new config.
+    assert fq.is_failed(d, "CV1", 0, fingerprint="fp2") is False
+
