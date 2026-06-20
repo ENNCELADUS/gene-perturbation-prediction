@@ -49,6 +49,18 @@ def _frame_two_jobs() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _row(split: str, fold: int = 0, value: float = 0.5) -> dict:
+    """One canonical metric row for seeding result files in assembly tests."""
+    return {
+        "split_type": split,
+        "fold_id": fold,
+        "model": "state_dl",
+        "slice": "full_universe",
+        "metric": "ndcg@10",
+        "value": value,
+    }
+
+
 def test_worker_runs_unclaimed_jobs(tmp_path: Path, monkeypatch):
     cfg = SLDLConfig(output_dir=tmp_path / "run")
     d = fq.fold_results_dir(cfg)
@@ -91,7 +103,8 @@ def test_worker_skips_already_done(tmp_path: Path, monkeypatch):
     cfg = SLDLConfig(output_dir=tmp_path / "run")
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
-    fq.atomic_write_json(fq.result_path(d, "CV1", 0), [{"pre": "existing"}])
+    fp = fq.fingerprint(cfg)
+    fq.write_result(d, "CV1", 0, [{"pre": "existing"}], fingerprint=fp)
     calls: list[tuple[str, int]] = []
 
     def fake_run(frame, split, fold, config, producer):
@@ -120,7 +133,7 @@ def test_worker_skips_already_done(tmp_path: Path, monkeypatch):
     # The done fold was not re-run.
     assert calls == []
     # Existing result preserved.
-    assert fq.read_json(fq.result_path(d, "CV1", 0)) == [{"pre": "existing"}]
+    assert fq.read_result_rows(d, "CV1", 0, fingerprint=fp) == [{"pre": "existing"}]
 
 
 def test_worker_quarantines_failed_fold(tmp_path: Path, monkeypatch):
@@ -201,20 +214,9 @@ def test_assemble_collects_results_and_writes(tmp_path: Path):
     )
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
+    fp = fq.fingerprint(cfg)
     for split in ("CV1", "CV2"):
-        fq.atomic_write_json(
-            fq.result_path(d, split, 0),
-            [
-                {
-                    "split_type": split,
-                    "fold_id": 0,
-                    "model": "state_dl",
-                    "slice": "full_universe",
-                    "metric": "ndcg@10",
-                    "value": 0.5,
-                }
-            ],
-        )
+        fq.write_result(d, split, 0, [_row(split)], fingerprint=fp)
     jobs = [("CV1", 0), ("CV2", 0)]
     summary = evaluate._assemble(cfg, jobs, ("CV1", "CV2"), _frame_two_jobs(), None)
     assert (cfg.output_dir / "fold_metrics.csv").exists()
@@ -236,19 +238,7 @@ def test_assemble_deadline_with_partial_results(tmp_path: Path):
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
     # Only CV1 finished; CV2 never produces a terminal marker.
-    fq.atomic_write_json(
-        fq.result_path(d, "CV1", 0),
-        [
-            {
-                "split_type": "CV1",
-                "fold_id": 0,
-                "model": "state_dl",
-                "slice": "full_universe",
-                "metric": "ndcg@10",
-                "value": 0.5,
-            }
-        ],
-    )
+    fq.write_result(d, "CV1", 0, [_row("CV1")], fingerprint=fq.fingerprint(cfg))
     jobs = [("CV1", 0), ("CV2", 0)]
     import pytest
 
@@ -270,20 +260,9 @@ def test_assemble_failed_fold_raises_after_writing(tmp_path: Path):
     )
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
-    fq.atomic_write_json(
-        fq.result_path(d, "CV1", 0),
-        [
-            {
-                "split_type": "CV1",
-                "fold_id": 0,
-                "model": "state_dl",
-                "slice": "full_universe",
-                "metric": "ndcg@10",
-                "value": 0.5,
-            }
-        ],
-    )
-    fq.atomic_write_json(fq.failed_path(d, "CV2", 0), {"traceback": "boom"})
+    fp = fq.fingerprint(cfg)
+    fq.write_result(d, "CV1", 0, [_row("CV1")], fingerprint=fp)
+    fq.write_failed(d, "CV2", 0, {"traceback": "boom"}, fingerprint=fp)
     import pytest
 
     with pytest.raises(RuntimeError):
@@ -304,7 +283,7 @@ def test_assemble_empty_raises(tmp_path: Path):
     )
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
-    fq.atomic_write_json(fq.failed_path(d, "CV1", 0), {"traceback": "boom"})
+    fq.write_failed(d, "CV1", 0, {"traceback": "boom"}, fingerprint=fq.fingerprint(cfg))
     import pytest
 
     with pytest.raises(RuntimeError):

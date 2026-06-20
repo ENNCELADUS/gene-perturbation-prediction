@@ -135,4 +135,3 @@ def test_is_failed_requires_matching_fingerprint(tmp_path: Path):
     assert fq.is_failed(d, "CV1", 0, fingerprint="fp1") is True
     # A failure recorded under an old fingerprint must not block a new config.
     assert fq.is_failed(d, "CV1", 0, fingerprint="fp2") is False
-

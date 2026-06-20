@@ -117,18 +117,19 @@ def _run_worker_queue(
     """
     results_dir = fq.fold_results_dir(config)
     token = fq.run_token()
+    fp = fq.fingerprint(config)
     (results_dir / ".claims" / token).mkdir(parents=True, exist_ok=True)
 
     for split_type, fold_id in jobs:
-        if fq.is_done(results_dir, split_type, fold_id):
+        if fq.is_done(results_dir, split_type, fold_id, fingerprint=fp):
             continue
-        if fq.failed_path(results_dir, split_type, fold_id).exists():
+        if fq.is_failed(results_dir, split_type, fold_id, fingerprint=fp):
             continue
         if not fq.try_claim(results_dir, split_type, fold_id, run_token=token):
             continue
         # Re-check after winning the claim: a prior run may have produced a
         # result between our is_done check and the claim.
-        if fq.is_done(results_dir, split_type, fold_id):
+        if fq.is_done(results_dir, split_type, fold_id, fingerprint=fp):
             continue
         try:
             fold_producer = (
@@ -139,7 +140,7 @@ def _run_worker_queue(
             rows = run_fold_with_producer(
                 frame, split_type, fold_id, config, fold_producer
             )
-            fq.atomic_write_json(fq.result_path(results_dir, split_type, fold_id), rows)
+            fq.write_result(results_dir, split_type, fold_id, rows, fingerprint=fp)
             logger.info(
                 "[rank %d] fold %s/%d done (%d rows)",
                 state.process_index,
@@ -148,8 +149,10 @@ def _run_worker_queue(
                 len(rows),
             )
         except Exception:  # noqa: BLE001 — deliberate quarantine (decision B)
-            fq.atomic_write_json(
-                fq.failed_path(results_dir, split_type, fold_id),
+            fq.write_failed(
+                results_dir,
+                split_type,
+                fold_id,
                 {
                     "split_type": split_type,
                     "fold_id": fold_id,
@@ -157,6 +160,7 @@ def _run_worker_queue(
                     "timestamp": time.time(),
                     "traceback": _tb.format_exc(),
                 },
+                fingerprint=fp,
             )
             logger.error(
                 "[rank %d] fold %s/%d FAILED; quarantined and continuing",
@@ -249,11 +253,12 @@ def _assemble(
             succeeded folds' artifacts have been written (decision B).
     """
     results_dir = fq.fold_results_dir(config)
+    fp = fq.fingerprint(config)
     deadline = time.monotonic() + float(config.assembly_timeout_seconds)
     while time.monotonic() < deadline:
         terminal = all(
-            fq.result_path(results_dir, s, f).exists()
-            or fq.failed_path(results_dir, s, f).exists()
+            fq.is_done(results_dir, s, f, fingerprint=fp)
+            or fq.is_failed(results_dir, s, f, fingerprint=fp)
             for s, f in jobs
         )
         if terminal:
@@ -263,9 +268,9 @@ def _assemble(
     all_rows: list[dict[str, object]] = []
     produced: set[tuple[str, int]] = set()
     for split_type, fold_id in jobs:
-        rpath = fq.result_path(results_dir, split_type, fold_id)
-        if rpath.exists():
-            all_rows.extend(fq.read_json(rpath))
+        rows = fq.read_result_rows(results_dir, split_type, fold_id, fingerprint=fp)
+        if rows is not None:
+            all_rows.extend(rows)
             produced.add((split_type, fold_id))
 
     if not all_rows:

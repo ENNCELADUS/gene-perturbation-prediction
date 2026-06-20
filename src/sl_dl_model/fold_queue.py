@@ -8,11 +8,66 @@ walks the same job list and uses these primitives to claim, run, and record
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
 
 from sl_dl_model.config import SLDLConfig
+
+# Config fields that change a fold's computed metrics. output_dir, the queue
+# knobs, and infra-only fields are deliberately excluded so they don't bust
+# the fingerprint.
+_FINGERPRINT_FIELDS = (
+    "split_types",
+    "folds",
+    "ranking_k",
+    "seed",
+    "fallback_strategy",
+    "include_coverage_flag",
+    "esm2_model",
+    "state_checkpoint",
+    "pooling",
+    "pair_hidden",
+    "adapter_hidden",
+    "lambda_sl",
+    "lambda_distill",
+    "lambda_distill_after_warmup",
+    "lambda_bag",
+    "lambda_rank",
+    "warmup_epochs",
+    "max_epochs",
+    "batch_pairs",
+    "lr",
+    "early_stop_patience",
+    "max_grad_norm",
+    "embedding_method",
+)
+
+
+def fingerprint(config: SLDLConfig) -> str:
+    """Return a short hash of the input data + result-affecting config fields.
+
+    Reused result/failed files are trusted only when their stored fingerprint
+    matches the current run's. This prevents mixing incompatible fold results
+    when the same ``output_dir`` is reused after the input CSV, config, or
+    model parameters change.
+
+    Args:
+        config: The run configuration.
+
+    Returns:
+        A 16-hex-char fingerprint string.
+    """
+    h = hashlib.sha256()
+    input_path = Path(config.input_csv)
+    if input_path.exists():
+        h.update(input_path.read_bytes())
+    else:
+        h.update(str(input_path).encode())
+    for name in _FINGERPRINT_FIELDS:
+        h.update(f"{name}={getattr(config, name, None)!r}".encode())
+    return h.hexdigest()[:16]
 
 
 def run_token() -> str:
@@ -112,6 +167,102 @@ def try_claim(
         return False
 
 
-def is_done(results_dir: Path, split: str, fold: int) -> bool:
-    """Return ``True`` if this job already has a success-result file."""
-    return result_path(results_dir, split, fold).exists()
+def is_done(
+    results_dir: Path, split: str, fold: int, fingerprint: str | None = None
+) -> bool:
+    """Return ``True`` if this job has a success-result file for this run.
+
+    When ``fingerprint`` is given, a result file whose stored fingerprint does
+    not match is treated as *not* done (stale results from a different config /
+    input are recomputed rather than reused).
+
+    Args:
+        results_dir: The fold-results directory.
+        split: CV split type.
+        fold: Fold id.
+        fingerprint: Current run fingerprint (see :func:`fingerprint`); when
+            ``None``, only file existence is checked (back-compat).
+    """
+    path = result_path(results_dir, split, fold)
+    if not path.exists():
+        return False
+    if fingerprint is None:
+        return True
+    return _stored_fingerprint(path) == fingerprint
+
+
+def is_failed(
+    results_dir: Path, split: str, fold: int, fingerprint: str | None = None
+) -> bool:
+    """Return ``True`` if this job has a quarantine marker for this run.
+
+    A ``.failed`` marker from a different fingerprint is treated as *not*
+    failed, so a config/input change re-runs the fold instead of inheriting an
+    old failure.
+    """
+    path = failed_path(results_dir, split, fold)
+    if not path.exists():
+        return False
+    if fingerprint is None:
+        return True
+    return _stored_fingerprint(path) == fingerprint
+
+
+def write_result(
+    results_dir: Path,
+    split: str,
+    fold: int,
+    rows: object,
+    fingerprint: str,
+) -> None:
+    """Atomically write a fold's success result with its run fingerprint."""
+    atomic_write_json(
+        result_path(results_dir, split, fold),
+        {"fingerprint": fingerprint, "rows": rows},
+    )
+
+
+def read_result_rows(
+    results_dir: Path, split: str, fold: int, fingerprint: str
+) -> list | None:
+    """Return the stored rows iff the result exists and the fingerprint matches.
+
+    Args:
+        results_dir: The fold-results directory.
+        split: CV split type.
+        fold: Fold id.
+        fingerprint: Current run fingerprint; a mismatch (or missing file)
+            returns ``None`` so the caller recomputes.
+
+    Returns:
+        The stored row list, or ``None`` on missing file / fingerprint mismatch.
+    """
+    path = result_path(results_dir, split, fold)
+    if not path.exists():
+        return None
+    payload = read_json(path)
+    if not isinstance(payload, dict) or payload.get("fingerprint") != fingerprint:
+        return None
+    return payload.get("rows")
+
+
+def write_failed(
+    results_dir: Path,
+    split: str,
+    fold: int,
+    marker: dict,
+    fingerprint: str,
+) -> None:
+    """Atomically write a fold's quarantine marker with its run fingerprint."""
+    atomic_write_json(
+        failed_path(results_dir, split, fold),
+        {"fingerprint": fingerprint, **marker},
+    )
+
+
+def _stored_fingerprint(path: Path) -> str | None:
+    """Return the ``fingerprint`` field of a result/failed file, or ``None``."""
+    payload = read_json(path)
+    if isinstance(payload, dict):
+        return payload.get("fingerprint")
+    return None
