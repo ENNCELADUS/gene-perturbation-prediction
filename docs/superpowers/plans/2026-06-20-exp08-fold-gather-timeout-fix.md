@@ -4,7 +4,7 @@
 
 **Goal:** Replace the single end-of-run NCCL `gather_object` collective in `run_cv` with a filesystem work-queue + per-fold result files, so the 4-GPU exp08 run completes all CV1/CV2/CV3 × 5 folds without a collective timeout, stays GPU-busy, and resumes after a crash.
 
-**Architecture:** Every rank (still launched by `accelerate launch --num_processes 4` + `PartialState`) walks the same ordered job list, atomically claims each unfinished `(split, fold)` job via `os.mkdir`, runs the unchanged `run_fold_with_producer`, and writes its metric rows to a per-fold `.result.json` (or a `.failed` marker on exception). Rank 0 then polls the filesystem until every job is terminal (or a deadline), collects all result files, and writes the combined artifacts with the existing writer code. No `gather_object`, `broadcast`, `barrier`, or any `torch.distributed` collective remains.
+**Architecture:** Every rank (still launched by `accelerate launch --num_processes 4` + `PartialState`) walks the same ordered job list, atomically claims each unfinished `(split, fold)` job via `os.mkdir` under a per-run `.claims/<run_token>/` directory, runs the unchanged `run_fold_with_producer`, and writes fingerprinted metric rows to a per-fold `.result.json` (or a fingerprinted `.failed` marker on exception). Rank 0 then polls the filesystem until every job is terminal (or a deadline), collects same-fingerprint result files, and writes the combined artifacts with the existing writer code. No `gather_object`, `broadcast`, `barrier`, `wait_for_everyone`, or any `torch.distributed` collective remains.
 
 **Tech Stack:** Python 3.11, accelerate 1.13.0 (`PartialState` only), pandas, pytest. `uv run` for all invocations.
 
@@ -25,11 +25,11 @@
 ## File Structure
 
 - `src/sl_dl_model/config.py` — add 3 config fields (`fold_results_subdir`, `assembly_poll_seconds`, `assembly_timeout_seconds`). Modify.
-- `src/sl_dl_model/fold_queue.py` — **new** module: path helpers, atomic JSON write, atomic claim, done-check. One responsibility: filesystem coordination primitives. Keeps `evaluate.py` small.
+- `src/sl_dl_model/fold_queue.py` — **new** module: path helpers, result fingerprinting, atomic JSON write, run-scoped atomic claim, done/failed checks. One responsibility: filesystem coordination primitives. Keeps `evaluate.py` small.
 - `src/sl_dl_model/evaluate.py` — rewrite `run_cv` body; add `_run_worker_queue` and `_assemble`; remove `_shard_jobs`, `_run_local_jobs`, and the `gather_object` import. Modify.
-- `tests/test_fold_queue.py` — **new**: unit tests for the coordination primitives (claim exclusivity, atomic write, done-check).
+- `tests/test_fold_queue.py` — **new**: unit tests for the coordination primitives (claim exclusivity, per-run claim scoping, atomic write, fingerprinted done/failed checks, sidecar/cache fingerprint coverage).
 - `tests/test_run_cv_queue.py` — **new**: worker-loop + assembly behavior (resume skip, quarantine, output-equivalence, empty guard, deadline).
-- `tests/test_no_collectives.py` — **new**: static guard that `evaluate.py` references no collective symbols (encodes Guard G1).
+- `tests/test_no_collectives.py` — **new**: AST static guard that the recursive `sl_dl_model` package imports/calls no collective APIs, including the old `accelerate.utils.gather_object` shape (encodes Guard G1).
 - `scripts/smoke_accelerate_no_collective.py` — **new**: cluster smoke test for Guard G2 (manual, documented).
 - `scripts/sl_dl_model.sh` — update the orchestration comment block (no behavior change to the launch line). Modify.
 
@@ -124,10 +124,16 @@ git commit -m "feat: add fold-queue + assembly config fields (exp08)"
   - `fold_results_dir(config: SLDLConfig) -> Path`
   - `result_path(results_dir: Path, split: str, fold: int) -> Path` → `<dir>/<split>_fold<fold>.result.json`
   - `failed_path(results_dir: Path, split: str, fold: int) -> Path` → `<dir>/<split>_fold<fold>.failed`
-  - `claim_path(results_dir: Path, split: str, fold: int) -> Path` → `<dir>/.claims/<split>_fold<fold>`
+  - `fingerprint(config: SLDLConfig) -> str` → short run fingerprint over input, result-affecting config, caches, and STATE sidecars (`var_dims.pkl`, `pert_onehot_map.pt`)
+  - `run_token() -> str` → `SLURM_JOB_ID` | `SL_DL_RUN_ID` | `local-<ppid>`
+  - `claim_path(results_dir: Path, split: str, fold: int, run_token: str | None = None) -> Path` → `<dir>/.claims/<run_token>/<split>_fold<fold>`
   - `atomic_write_json(path: Path, obj: object) -> None` (temp file + `os.replace`)
-  - `try_claim(results_dir: Path, split: str, fold: int) -> bool` (atomic `os.mkdir`; `False` on `FileExistsError`)
-  - `is_done(results_dir: Path, split: str, fold: int) -> bool` (`result_path(...).exists()`)
+  - `try_claim(results_dir: Path, split: str, fold: int, run_token: str | None = None) -> bool` (atomic `os.mkdir`; `False` on `FileExistsError`)
+  - `is_done(results_dir: Path, split: str, fold: int, fingerprint: str | None = None) -> bool`
+  - `is_failed(results_dir: Path, split: str, fold: int, fingerprint: str | None = None) -> bool`
+  - `write_result(results_dir: Path, split: str, fold: int, rows: object, fingerprint: str) -> None`
+  - `read_result_rows(results_dir: Path, split: str, fold: int, fingerprint: str) -> list | None`
+  - `write_failed(results_dir: Path, split: str, fold: int, marker: dict, fingerprint: str) -> None`
   - `read_json(path: Path) -> object`
 
 - [ ] **Step 1: Write the failing tests**
@@ -157,7 +163,10 @@ def test_path_shapes(tmp_path: Path):
     d = _results_dir(tmp_path)
     assert fq.result_path(d, "CV2", 4).name == "CV2_fold4.result.json"
     assert fq.failed_path(d, "CV2", 4).name == "CV2_fold4.failed"
-    assert fq.claim_path(d, "CV2", 4).parent.name == ".claims"
+    claim = fq.claim_path(d, "CV2", 4, run_token="tok")
+    assert claim.name == "CV2_fold4"
+    assert claim.parent.name == "tok"
+    assert claim.parent.parent.name == ".claims"
 
 
 def test_atomic_write_and_read_json(tmp_path: Path):
@@ -176,11 +185,19 @@ def test_try_claim_is_exclusive(tmp_path: Path):
     assert fq.try_claim(d, "CV3", 3) is True
 
 
+def test_claim_is_scoped_by_run_token(tmp_path: Path):
+    d = _results_dir(tmp_path)
+    assert fq.try_claim(d, "CV2", 0, run_token="runA") is True
+    assert fq.try_claim(d, "CV2", 0, run_token="runB") is True
+    assert fq.try_claim(d, "CV2", 0, run_token="runA") is False
+
+
 def test_is_done_tracks_result_file(tmp_path: Path):
     d = _results_dir(tmp_path)
-    assert fq.is_done(d, "CV1", 1) is False
-    fq.atomic_write_json(fq.result_path(d, "CV1", 1), [])
-    assert fq.is_done(d, "CV1", 1) is True
+    assert fq.is_done(d, "CV1", 1, fingerprint="fp1") is False
+    fq.write_result(d, "CV1", 1, [], fingerprint="fp1")
+    assert fq.is_done(d, "CV1", 1, fingerprint="fp1") is True
+    assert fq.is_done(d, "CV1", 1, fingerprint="fp2") is False
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -202,11 +219,94 @@ walks the same job list and uses these primitives to claim, run, and record
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
 
 from sl_dl_model.config import SLDLConfig
+
+
+_FINGERPRINT_FIELDS = (
+    "split_types",
+    "folds",
+    "ranking_k",
+    "seed",
+    "fallback_strategy",
+    "include_coverage_flag",
+    "esm2_model",
+    "state_backend",
+    "pooling",
+    "pair_hidden",
+    "adapter_hidden",
+    "pert_dim",
+    "control_template_size",
+    "cells_per_bag",
+    "lambda_sl",
+    "lambda_distill",
+    "lambda_distill_after_warmup",
+    "lambda_bag",
+    "lambda_rank",
+    "warmup_epochs",
+    "max_epochs",
+    "batch_pairs",
+    "lr",
+    "early_stop_patience",
+    "max_grad_norm",
+    "embedding_method",
+)
+_FINGERPRINT_PATH_FIELDS = (
+    "esm2_npz",
+    "bags_npz",
+    "gwps_h5ad",
+    "gwps_overlap_csv",
+    "state_checkpoint",
+)
+_STATE_SIDECAR_NAMES = ("var_dims.pkl", "pert_onehot_map.pt")
+
+
+def _path_signature(value: object) -> str:
+    if value is None:
+        return "<none>"
+    path = Path(value)
+    try:
+        st = path.stat()
+    except OSError:
+        return f"{path}:<absent>"
+    return f"{path}:{st.st_size}:{st.st_mtime_ns}"
+
+
+def fingerprint(config: SLDLConfig) -> str:
+    """Return a short hash of result-affecting config fields + cache signatures."""
+    h = hashlib.sha256()
+    input_path = Path(config.input_csv)
+    if input_path.exists():
+        h.update(b"input_csv=")
+        h.update(input_path.read_bytes())
+    else:
+        h.update(f"input_csv=<absent:{input_path}>".encode())
+    for name in _FINGERPRINT_FIELDS:
+        h.update(f"{name}={getattr(config, name, None)!r}".encode())
+    for name in _FINGERPRINT_PATH_FIELDS:
+        h.update(f"{name}={_path_signature(getattr(config, name, None))}".encode())
+    if getattr(config, "state_backend", None) != "linear_mock":
+        ckpt = getattr(config, "state_checkpoint", None)
+        sidecar_root = Path(ckpt).parent.parent if ckpt is not None else None
+        for sidecar in _STATE_SIDECAR_NAMES:
+            value = sidecar_root / sidecar if sidecar_root is not None else None
+            h.update(f"{sidecar}={_path_signature(value)}".encode())
+    return h.hexdigest()[:16]
+
+
+def run_token() -> str:
+    """Return a per-run token for intra-run claim markers."""
+    slurm = os.environ.get("SLURM_JOB_ID")
+    if slurm:
+        return slurm
+    explicit = os.environ.get("SL_DL_RUN_ID")
+    if explicit:
+        return explicit
+    return f"local-{os.getppid()}"
 
 
 def fold_results_dir(config: SLDLConfig) -> Path:
@@ -224,9 +324,17 @@ def failed_path(results_dir: Path, split: str, fold: int) -> Path:
     return results_dir / f"{split}_fold{fold}.failed"
 
 
-def claim_path(results_dir: Path, split: str, fold: int) -> Path:
-    """Return the atomic-claim directory path for one job."""
-    return results_dir / ".claims" / f"{split}_fold{fold}"
+def claim_path(
+    results_dir: Path,
+    split: str,
+    fold: int,
+    run_token: str | None = None,
+    *,
+    _default_token=run_token,
+) -> Path:
+    """Return the atomic-claim path for one job, scoped by run token."""
+    token = run_token if run_token is not None else _default_token()
+    return results_dir / ".claims" / token / f"{split}_fold{fold}"
 
 
 def atomic_write_json(path: Path, obj: object) -> None:
@@ -242,13 +350,16 @@ def read_json(path: Path) -> object:
     return json.loads(Path(path).read_text())
 
 
-def try_claim(results_dir: Path, split: str, fold: int) -> bool:
+def try_claim(
+    results_dir: Path, split: str, fold: int, run_token: str | None = None
+) -> bool:
     """Atomically claim one job. Return ``True`` if this caller won the claim.
 
     Uses ``os.mkdir`` (POSIX/Lustre-atomic). A returned ``False`` means another
-    rank already owns the job in this run.
+    rank already owns the job in this run. Claims are scoped by run token, so
+    a prior Slurm run's orphan claim never blocks a resume.
     """
-    claim = claim_path(results_dir, split, fold)
+    claim = claim_path(results_dir, split, fold, run_token)
     claim.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.mkdir(claim)
@@ -257,9 +368,50 @@ def try_claim(results_dir: Path, split: str, fold: int) -> bool:
         return False
 
 
-def is_done(results_dir: Path, split: str, fold: int) -> bool:
-    """Return ``True`` if this job already has a success-result file."""
-    return result_path(results_dir, split, fold).exists()
+def is_done(
+    results_dir: Path, split: str, fold: int, fingerprint: str | None = None
+) -> bool:
+    """Return ``True`` if this job has a same-fingerprint success result."""
+    path = result_path(results_dir, split, fold)
+    if not path.exists():
+        return False
+    if fingerprint is None:
+        return True
+    payload = read_json(path)
+    return isinstance(payload, dict) and payload.get("fingerprint") == fingerprint
+
+
+def is_failed(
+    results_dir: Path, split: str, fold: int, fingerprint: str | None = None
+) -> bool:
+    """Return ``True`` if this job has a same-fingerprint failure marker."""
+    path = failed_path(results_dir, split, fold)
+    if not path.exists():
+        return False
+    if fingerprint is None:
+        return True
+    payload = read_json(path)
+    return isinstance(payload, dict) and payload.get("fingerprint") == fingerprint
+
+
+def write_result(
+    results_dir: Path, split: str, fold: int, rows: object, fingerprint: str
+) -> None:
+    """Atomically write a fold's success result with its fingerprint."""
+    atomic_write_json(
+        result_path(results_dir, split, fold),
+        {"fingerprint": fingerprint, "rows": rows},
+    )
+
+
+def write_failed(
+    results_dir: Path, split: str, fold: int, marker: dict, fingerprint: str
+) -> None:
+    """Atomically write a fold's quarantine marker with its fingerprint."""
+    atomic_write_json(
+        failed_path(results_dir, split, fold),
+        {"fingerprint": fingerprint, **marker},
+    )
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -348,6 +500,7 @@ def test_worker_runs_unclaimed_jobs(tmp_path: Path, monkeypatch):
     cfg = SLDLConfig(output_dir=tmp_path / "run")
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
+    fp = fq.fingerprint(cfg)
     calls: list[tuple[str, int]] = []
     stub = _StubProducer(calls)
 
@@ -366,8 +519,8 @@ def test_worker_runs_unclaimed_jobs(tmp_path: Path, monkeypatch):
         cfg, None, _frame_two_jobs(), jobs,
         lambda s, f: stub.for_fold(s, f), state,
     )
-    assert fq.is_done(d, "CV1", 0)
-    assert fq.is_done(d, "CV2", 0)
+    assert fq.is_done(d, "CV1", 0, fingerprint=fp)
+    assert fq.is_done(d, "CV2", 0, fingerprint=fp)
     assert set(calls) == {("CV1", 0), ("CV2", 0)}
 
 
@@ -375,7 +528,8 @@ def test_worker_skips_already_done(tmp_path: Path, monkeypatch):
     cfg = SLDLConfig(output_dir=tmp_path / "run")
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
-    fq.atomic_write_json(fq.result_path(d, "CV1", 0), [{"pre": "existing"}])
+    fp = fq.fingerprint(cfg)
+    fq.write_result(d, "CV1", 0, [{"pre": "existing"}], fingerprint=fp)
     calls: list[tuple[str, int]] = []
 
     def fake_run(frame, split, fold, config, producer):
@@ -391,7 +545,7 @@ def test_worker_skips_already_done(tmp_path: Path, monkeypatch):
     # The done fold was not re-run.
     assert calls == []
     # Existing result preserved.
-    assert fq.read_json(fq.result_path(d, "CV1", 0)) == [{"pre": "existing"}]
+    assert fq.read_result_rows(d, "CV1", 0, fingerprint=fp) == [{"pre": "existing"}]
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -439,18 +593,20 @@ def _run_worker_queue(
     from sl_dl_model.scoring import make_fold_producer, run_fold_with_producer
 
     results_dir = fq.fold_results_dir(config)
-    (results_dir / ".claims").mkdir(parents=True, exist_ok=True)
+    token = fq.run_token()
+    fp = fq.fingerprint(config)
+    (results_dir / ".claims" / token).mkdir(parents=True, exist_ok=True)
 
     for split_type, fold_id in jobs:
-        if fq.is_done(results_dir, split_type, fold_id):
+        if fq.is_done(results_dir, split_type, fold_id, fingerprint=fp):
             continue
-        if fq.failed_path(results_dir, split_type, fold_id).exists():
+        if fq.is_failed(results_dir, split_type, fold_id, fingerprint=fp):
             continue
-        if not fq.try_claim(results_dir, split_type, fold_id):
+        if not fq.try_claim(results_dir, split_type, fold_id, run_token=token):
             continue
         # Re-check after winning the claim: a prior run may have produced a
         # result between our is_done check and the claim.
-        if fq.is_done(results_dir, split_type, fold_id):
+        if fq.is_done(results_dir, split_type, fold_id, fingerprint=fp):
             continue
         try:
             fold_producer = (
@@ -461,16 +617,16 @@ def _run_worker_queue(
             rows = run_fold_with_producer(
                 frame, split_type, fold_id, config, fold_producer
             )
-            fq.atomic_write_json(
-                fq.result_path(results_dir, split_type, fold_id), rows
-            )
+            fq.write_result(results_dir, split_type, fold_id, rows, fingerprint=fp)
             logger.info(
                 "[rank %d] fold %s/%d done (%d rows)",
                 state.process_index, split_type, fold_id, len(rows),
             )
         except Exception:  # noqa: BLE001 — deliberate quarantine (decision B)
-            fq.atomic_write_json(
-                fq.failed_path(results_dir, split_type, fold_id),
+            fq.write_failed(
+                results_dir,
+                split_type,
+                fold_id,
                 {
                     "split_type": split_type,
                     "fold_id": fold_id,
@@ -478,6 +634,7 @@ def _run_worker_queue(
                     "timestamp": time.time(),
                     "traceback": _tb.format_exc(),
                 },
+                fingerprint=fp,
             )
             logger.error(
                 "[rank %d] fold %s/%d FAILED; quarantined and continuing",
@@ -524,11 +681,15 @@ def test_assemble_collects_results_and_writes(tmp_path: Path):
                      assembly_timeout_seconds=2.0)
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
+    fp = fq.fingerprint(cfg)
     for split in ("CV1", "CV2"):
-        fq.atomic_write_json(
-            fq.result_path(d, split, 0),
+        fq.write_result(
+            d,
+            split,
+            0,
             [{"split_type": split, "fold_id": 0, "model": "state_dl",
               "slice": "full_universe", "metric": "ndcg@10", "value": 0.5}],
+            fingerprint=fp,
         )
     jobs = [("CV1", 0), ("CV2", 0)]
     summary = evaluate._assemble(cfg, jobs, ("CV1", "CV2"), _frame_two_jobs(), None)
@@ -546,11 +707,15 @@ def test_assemble_deadline_with_partial_results(tmp_path: Path):
                      assembly_timeout_seconds=0.05)
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
+    fp = fq.fingerprint(cfg)
     # Only CV1 finished; CV2 never produces a terminal marker.
-    fq.atomic_write_json(
-        fq.result_path(d, "CV1", 0),
+    fq.write_result(
+        d,
+        "CV1",
+        0,
         [{"split_type": "CV1", "fold_id": 0, "model": "state_dl",
           "slice": "full_universe", "metric": "ndcg@10", "value": 0.5}],
+        fingerprint=fp,
     )
     jobs = [("CV1", 0), ("CV2", 0)]
     import pytest
@@ -568,12 +733,16 @@ def test_assemble_failed_fold_raises_after_writing(tmp_path: Path):
                      assembly_timeout_seconds=2.0)
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
-    fq.atomic_write_json(
-        fq.result_path(d, "CV1", 0),
+    fp = fq.fingerprint(cfg)
+    fq.write_result(
+        d,
+        "CV1",
+        0,
         [{"split_type": "CV1", "fold_id": 0, "model": "state_dl",
           "slice": "full_universe", "metric": "ndcg@10", "value": 0.5}],
+        fingerprint=fp,
     )
-    fq.atomic_write_json(fq.failed_path(d, "CV2", 0), {"traceback": "boom"})
+    fq.write_failed(d, "CV2", 0, {"traceback": "boom"}, fingerprint=fp)
     import pytest
     with pytest.raises(RuntimeError):
         evaluate._assemble(cfg, [("CV1", 0), ("CV2", 0)], ("CV1", "CV2"),
@@ -588,7 +757,9 @@ def test_assemble_empty_raises(tmp_path: Path):
                      assembly_timeout_seconds=0.05)
     d = fq.fold_results_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
-    fq.atomic_write_json(fq.failed_path(d, "CV1", 0), {"traceback": "boom"})
+    fq.write_failed(
+        d, "CV1", 0, {"traceback": "boom"}, fingerprint=fq.fingerprint(cfg)
+    )
     import pytest
     with pytest.raises(RuntimeError):
         evaluate._assemble(cfg, [("CV1", 0)], ("CV1",), _frame_two_jobs(), None)
@@ -632,11 +803,12 @@ def _assemble(
             succeeded folds' artifacts have been written (decision B).
     """
     results_dir = fq.fold_results_dir(config)
+    fp = fq.fingerprint(config)
     deadline = time.monotonic() + float(config.assembly_timeout_seconds)
     while time.monotonic() < deadline:
         terminal = all(
-            fq.result_path(results_dir, s, f).exists()
-            or fq.failed_path(results_dir, s, f).exists()
+            fq.is_done(results_dir, s, f, fingerprint=fp)
+            or fq.is_failed(results_dir, s, f, fingerprint=fp)
             for s, f in jobs
         )
         if terminal:
@@ -646,9 +818,9 @@ def _assemble(
     all_rows: list[dict[str, object]] = []
     produced: set[tuple[str, int]] = set()
     for split_type, fold_id in jobs:
-        rpath = fq.result_path(results_dir, split_type, fold_id)
-        if rpath.exists():
-            all_rows.extend(fq.read_json(rpath))
+        rows = fq.read_result_rows(results_dir, split_type, fold_id, fingerprint=fp)
+        if rows is not None:
+            all_rows.extend(rows)
             produced.add((split_type, fold_id))
 
     if not all_rows:
@@ -701,15 +873,35 @@ def _assemble(
 
     summary.to_csv(output_dir / "official_metrics_summary.csv", index=False)
 
-    # Decision B: artifacts for succeeded folds are now safely on disk; fail
-    # the run (non-zero exit) if any fold did not produce a result.
-    failed = [job for job in jobs if job not in produced]
-    if failed:
-        logger.error("assembly: %d fold(s) missing results: %s", len(failed), failed)
-        raise RuntimeError(
-            f"{len(failed)} fold(s) did not produce results: {failed}; "
-            "succeeded folds' artifacts were written — resubmit to re-run the rest"
-        )
+    # Decision B: artifacts for succeeded folds are now safely on disk; fail the
+    # run if any fold did not produce a result. Same-fingerprint .failed markers
+    # are quarantined and will NOT re-run on resubmit unless the marker is
+    # removed or the fingerprint changes; merely missing folds resume.
+    missing = [job for job in jobs if job not in produced]
+    if missing:
+        quarantined = [
+            (s, f) for s, f in missing if fq.is_failed(results_dir, s, f, fingerprint=fp)
+        ]
+        incomplete = [job for job in missing if job not in quarantined]
+        lines = [f"{len(missing)} fold(s) did not produce results."]
+        if quarantined:
+            lines.append(
+                "  Quarantined (failed; will NOT re-run on resubmit unless you act): "
+                f"{quarantined}"
+            )
+            lines.append(
+                "  To retry a quarantined fold: delete its .failed marker above, "
+                "or change the config/input (which bumps the fingerprint)."
+            )
+        if incomplete:
+            lines.append(
+                f"  Incomplete (crashed/deadline; will resume automatically on "
+                f"resubmit): {incomplete}"
+            )
+        lines.append("  Succeeded folds' artifacts were written.")
+        message = "\n".join(lines)
+        logger.error("assembly: %s", message)
+        raise RuntimeError(message)
     return summary
 ```
 
@@ -814,45 +1006,119 @@ git commit -m "refactor: rewire exp08 run_cv to filesystem queue; drop gather_ob
 - Create: `tests/test_no_collectives.py`
 
 **Interfaces:**
-- Consumes: source text of `src/sl_dl_model/evaluate.py` and the package.
-- Produces: a regression guard that fails if any forbidden collective symbol reappears.
+- Consumes: AST-parsed source of the recursive `src/sl_dl_model/**/*.py` package.
+- Produces: a regression guard that fails if any forbidden collective import or call reappears, including the exact old `from accelerate.utils import gather_object; gather_object(...)` shape.
 
 - [ ] **Step 1: Write the failing-then-passing test**
 
 ```python
 # tests/test_no_collectives.py
-"""Guard G1: the sl_dl_model package uses no torch.distributed collective."""
+"""Guard G1: the sl_dl_model package uses no distributed collective."""
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
-FORBIDDEN = (
-    "gather_object",
-    "all_gather",
-    "all_reduce",
-    ".broadcast(",
-    "dist.broadcast",
-    ".barrier(",
-    "wait_for_everyone",
+import pytest
+
+UNAMBIGUOUS_COLLECTIVES = frozenset(
+    {
+        "all_gather",
+        "all_gather_object",
+        "gather_object",
+        "scatter_object_list",
+        "all_gather_into_tensor",
+        "all_reduce",
+        "reduce_scatter",
+        "reduce_scatter_tensor",
+        "all_to_all",
+        "all_to_all_single",
+    }
 )
+AMBIGUOUS_COLLECTIVES = frozenset(
+    {"gather", "scatter", "reduce", "broadcast", "barrier"}
+)
+ACCELERATE_COLLECTIVES = frozenset({"gather_object", "wait_for_everyone"})
+_DIST_RECEIVERS = frozenset({"dist", "distributed", "torch_dist"})
 
 
-def test_evaluate_has_no_collective_symbols():
+class _CollectiveVisitor(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.offenders: list[str] = []
+        self.direct_collective_names: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            if alias.name == "torch.distributed" or alias.name.startswith(
+                "torch.distributed."
+            ):
+                self.offenders.append(f"import {alias.name}")
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        module = node.module or ""
+        if module == "torch.distributed" or module.startswith("torch.distributed."):
+            self.offenders.append(f"from {module} import ...")
+            for alias in node.names:
+                self.direct_collective_names.add(alias.asname or alias.name)
+        if module == "accelerate.utils":
+            for alias in node.names:
+                if alias.name in ACCELERATE_COLLECTIVES:
+                    self.offenders.append(f"from {module} import {alias.name}")
+                    self.direct_collective_names.add(alias.asname or alias.name)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in self.direct_collective_names:
+            self.offenders.append(f"call {func.id}(")
+        elif isinstance(func, ast.Attribute):
+            attr = func.attr
+            receiver = (
+                func.value.attr
+                if isinstance(func.value, ast.Attribute)
+                else getattr(func.value, "id", None)
+            )
+            if attr in UNAMBIGUOUS_COLLECTIVES or attr in ACCELERATE_COLLECTIVES:
+                self.offenders.append(f"call .{attr}(")
+            elif attr in AMBIGUOUS_COLLECTIVES and receiver in _DIST_RECEIVERS:
+                self.offenders.append(f"call {receiver}.{attr}(")
+        self.generic_visit(node)
+
+
+def _scan(source: str) -> list[str]:
+    visitor = _CollectiveVisitor()
+    visitor.visit(ast.parse(source))
+    return visitor.offenders
+
+
+def test_sl_dl_model_uses_no_distributed_collective():
     src_dir = Path(__file__).resolve().parents[1] / "src" / "sl_dl_model"
     offenders: list[str] = []
-    for py in src_dir.glob("*.py"):
-        text = py.read_text()
-        for token in FORBIDDEN:
-            if token in text:
-                offenders.append(f"{py.name}: {token}")
+    for py in sorted(src_dir.rglob("*.py")):
+        for hit in _scan(py.read_text()):
+            offenders.append(f"{py.name}: {hit}")
     assert offenders == [], f"forbidden collective(s) found: {offenders}"
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "from accelerate.utils import gather_object\ngather_object([rows])\n",
+        "import torch.distributed as dist\ndist.all_reduce(x)\n",
+        "torch.distributed.reduce_scatter(out, ins)\n",
+        "accelerator.wait_for_everyone()\n",
+    ],
+)
+def test_guard_rejects_distributed_constructs(snippet: str):
+    assert _scan(snippet), f"guard failed to flag: {snippet!r}"
 ```
 
 - [ ] **Step 2: Run test**
 
 Run: `uv run python -m pytest tests/test_no_collectives.py -v`
-Expected: PASS (after Task 5 removed `gather_object`). If it FAILS, Task 5's deletions are incomplete — remove the named symbol.
+Expected: PASS (after Task 5 removed `gather_object`). If it FAILS, Task 5's deletions are incomplete — remove the named import/call. The parametrized guard must fail on `from accelerate.utils import gather_object; gather_object(...)`.
 
 - [ ] **Step 3: Commit**
 
@@ -953,14 +1219,17 @@ Replace lines 37–43 (the `# NOTE: Fold-level task parallelism ...` block) with
 ```bash
 # NOTE: Fold-level task parallelism via a FILESYSTEM WORK-QUEUE (no collective,
 # no gradient all-reduce). run_cv builds the full (split_type, fold_id) job list;
-# every rank walks it and atomically claims (os.mkdir) each unfinished job, trains
-# + embeds + scores it on its GPU, and writes <split>_fold<k>.result.json under
-# <output_dir>/_fold_results/. A fold that raises is quarantined (.failed marker)
-# and the run continues. Rank 0 then polls the filesystem until every job is
-# terminal (or assembly_timeout_seconds) and writes the cvN/ + combined artifacts;
-# output is byte-identical to a 1-process run. Resume: re-submitting skips folds
-# whose .result.json already exists. There is NO torch.distributed collective, so
-# uneven fold runtimes can no longer cause a gather/NCCL timeout.
+# every rank walks it and atomically claims (os.mkdir) each unfinished job under
+# <output_dir>/_fold_results/.claims/<run_token>/, trains + embeds + scores it on
+# its GPU, and writes a same-fingerprint <split>_fold<k>.result.json. A fold that
+# raises is quarantined with a same-fingerprint .failed marker and the run
+# continues. Rank 0 then polls the filesystem until every job is terminal (or
+# assembly_timeout_seconds) and writes the cvN/ + combined artifacts; output is
+# byte-identical to a 1-process run. Resume: re-submitting skips same-fingerprint
+# .result.json files; missing folds resume automatically; quarantined folds need
+# their .failed marker removed or a fingerprint-changing input/config update.
+# There is NO torch.distributed collective, so uneven fold runtimes can no longer
+# cause a gather/NCCL timeout.
 ```
 
 - [ ] **Step 2: Verify the launch line is unchanged**
@@ -1003,14 +1272,14 @@ git commit -m "style: ruff format exp08 fold-queue changes"
 
 **Spec coverage:**
 - §1 root cause / non-causes / stale caveat → diagnosis is fixed by Tasks 3–5 (queue replaces gather); stale-runtime is an operational note carried in Task 7/§7 of spec (no code).
-- §2 goals: complete 15 folds (Tasks 3–5), use 4 GPUs well (queue claim, Task 3), robust+resume (`.result.json` skip, Task 3 + Task 4 partial-deadline), surgical (kept `accelerate launch`/`PartialState`, Task 5).
-- §3 decisions: scope C (Tasks 2–5), policy B quarantine (Task 3 + Task 4 failed-count + non-zero handled by §7 op note / assembly logging), claim model C per-run `.claims/` (Task 2), launch A (Task 5 keeps `PartialState`).
-- §3 Guard G1 → Task 6; Guard G2 → Task 7.
+- §2 goals: complete 15 folds (Tasks 3–5), use 4 GPUs well (queue claim, Task 3), robust+resume (same-fingerprint `.result.json` skip, run-token claims, Task 3 + Task 4 partial-deadline), surgical (kept `accelerate launch`/`PartialState`, Task 5).
+- §3 decisions: scope C (Tasks 2–5), policy B quarantine (Task 3 + Task 4 quarantined/incomplete reporting + non-zero handled by §7 op note / assembly logging), claim model C per-run `.claims/<run_token>/` (Task 2), launch A (Task 5 keeps `PartialState`).
+- §3 Guard G1 → Task 6, including direct `accelerate.utils.gather_object`; Guard G2 → Task 7.
 - §4 architecture → Tasks 2/3/4; §4.3 output equivalence → Task 4 canonical sort + Task 5 e2e test.
 - §5 interfaces → match Tasks 2–4 signatures. §6 tests → Tasks 2,3,4,6,7. §7 operational → Task 7 note + Task 8 comment.
 
 **Placeholder scan:** No TBD/TODO; every code step shows full code; commands have expected output. The one "if it happens to pass" note in Task 5 Step 2 is an honest acknowledgment that the old path may not error in-process; the deletion in Step 3 is unconditional, so coverage holds.
 
-**Type consistency:** `fold_queue` function names (`fold_results_dir`, `result_path`, `failed_path`, `claim_path`, `atomic_write_json`, `read_json`, `try_claim`, `is_done`) are used identically in Tasks 2–4. `_run_worker_queue(config, shared, frame, jobs, producer, state)` and `_assemble(config, jobs, split_types, frame, shared)` signatures match between definition (Tasks 3/4) and call site (Task 5). Config fields `fold_results_subdir` / `assembly_poll_seconds` / `assembly_timeout_seconds` consistent across Tasks 1/2/4.
+**Type consistency:** `fold_queue` function names (`fold_results_dir`, `fingerprint`, `run_token`, `result_path`, `failed_path`, `claim_path`, `atomic_write_json`, `read_json`, `try_claim`, `is_done`, `is_failed`, `write_result`, `read_result_rows`, `write_failed`) are used identically in Tasks 2–4. `_run_worker_queue(config, shared, frame, jobs, producer, state)` and `_assemble(config, jobs, split_types, frame, shared)` signatures match between definition (Tasks 3/4) and call site (Task 5). Config fields `fold_results_subdir` / `assembly_poll_seconds` / `assembly_timeout_seconds` consistent across Tasks 1/2/4.
 
-**Exit-code (decision B):** `_assemble` writes all succeeded folds' artifacts first, then raises `RuntimeError` if any job lacks a result (quarantined or deadline-missed). `run_cv` propagates the exception and `__main__.main` lets it surface, so the process exits non-zero — no CLI change needed. Good results persist for resume; the failure is loud. Verified by `test_assemble_failed_fold_raises_after_writing` and `test_assemble_deadline_with_partial_results` (Task 4).
+**Exit-code (decision B):** `_assemble` writes all succeeded folds' artifacts first, then raises `RuntimeError` if any job lacks a same-fingerprint result. It distinguishes quarantined folds (same-fingerprint `.failed`, not retried unless marker is removed or fingerprint changes) from incomplete folds (missing/deadline, resumes automatically). `run_cv` propagates the exception and `__main__.main` lets it surface, so the process exits non-zero — no CLI change needed. Good results persist for resume; the failure is loud. Verified by `test_assemble_failed_fold_raises_after_writing` and `test_assemble_deadline_with_partial_results` (Task 4).
