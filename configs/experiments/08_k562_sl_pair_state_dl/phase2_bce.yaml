@@ -1,4 +1,7 @@
-# exp08 Phase 2 -- SL BCE only (lambda_bag=0): classification gate before bag-sup.
+# exp08 Phase 2 -- SL classification + distillation gate before bag-supervision.
+# Bag loss is off (lambda_bag=0); SL BCE (lambda_sl=1.0) drives ranking while
+# STATE distillation (lambda_distill 0.5 -> 0.1 after warmup) regularizes the
+# adapter. Phase 3 turns on lambda_bag.
 input_csv: data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv
 output_dir: results/experiments/08_k562_sl_pair_state_dl/phase2_bce
 split_types: [CV1, CV2, CV3]
