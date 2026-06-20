@@ -15,9 +15,9 @@ from pathlib import Path
 
 from sl_dl_model.config import SLDLConfig
 
-# Config fields that change a fold's computed metrics. output_dir, the queue
-# knobs, and infra-only fields are deliberately excluded so they don't bust
-# the fingerprint.
+# Scalar config fields that change a fold's computed metrics. output_dir, the
+# queue knobs, and path fields (handled separately, below) are excluded so they
+# don't bust the fingerprint for the wrong reason.
 _FINGERPRINT_FIELDS = (
     "split_types",
     "folds",
@@ -26,10 +26,13 @@ _FINGERPRINT_FIELDS = (
     "fallback_strategy",
     "include_coverage_flag",
     "esm2_model",
-    "state_checkpoint",
+    "state_backend",
     "pooling",
     "pair_hidden",
     "adapter_hidden",
+    "pert_dim",
+    "control_template_size",
+    "cells_per_bag",
     "lambda_sl",
     "lambda_distill",
     "lambda_distill_after_warmup",
@@ -44,14 +47,45 @@ _FINGERPRINT_FIELDS = (
     "embedding_method",
 )
 
+# Path fields whose *contents* change a fold's metrics. Folded into the
+# fingerprint as a (path, size, mtime_ns) stat signature so a cache rebuilt at
+# the same path (new size/mtime) busts stale reuse without reading multi-GB
+# files. ``None``-valued fields contribute a sentinel so toggling them matters.
+# ``input_csv`` is handled separately (content-hashed) because it is small and
+# an in-place edit keeping size+mtime should still bust reuse.
+_FINGERPRINT_PATH_FIELDS = (
+    "esm2_npz",
+    "bags_npz",
+    "gwps_h5ad",
+    "gwps_overlap_csv",
+    "state_checkpoint",
+)
+
+
+def _path_signature(value: object) -> str:
+    """Return a ``(path, size, mtime_ns)`` signature for a path-valued field.
+
+    Uses ``os.stat`` (no read) so multi-GB caches cost O(1). A missing or
+    ``None`` path returns a sentinel that still distinguishes set-vs-unset.
+    """
+    if value is None:
+        return "<none>"
+    path = Path(value)
+    try:
+        st = path.stat()
+    except OSError:
+        return f"{path}:<absent>"
+    return f"{path}:{st.st_size}:{st.st_mtime_ns}"
+
 
 def fingerprint(config: SLDLConfig) -> str:
-    """Return a short hash of the input data + result-affecting config fields.
+    """Return a short hash of result-affecting config fields + cache signatures.
 
     Reused result/failed files are trusted only when their stored fingerprint
     matches the current run's. This prevents mixing incompatible fold results
-    when the same ``output_dir`` is reused after the input CSV, config, or
-    model parameters change.
+    when the same ``output_dir`` is reused after the input CSV, config, model
+    parameters, or a cache file (ESM2/bags/gwps) changes — including a cache
+    regenerated at the same path (detected via size + mtime).
 
     Args:
         config: The run configuration.
@@ -60,13 +94,17 @@ def fingerprint(config: SLDLConfig) -> str:
         A 16-hex-char fingerprint string.
     """
     h = hashlib.sha256()
+    # input_csv: content-hashed (small) so even an in-place same-size edit busts.
     input_path = Path(config.input_csv)
     if input_path.exists():
+        h.update(b"input_csv=")
         h.update(input_path.read_bytes())
     else:
-        h.update(str(input_path).encode())
+        h.update(f"input_csv=<absent:{input_path}>".encode())
     for name in _FINGERPRINT_FIELDS:
         h.update(f"{name}={getattr(config, name, None)!r}".encode())
+    for name in _FINGERPRINT_PATH_FIELDS:
+        h.update(f"{name}={_path_signature(getattr(config, name, None))}".encode())
     return h.hexdigest()[:16]
 
 
