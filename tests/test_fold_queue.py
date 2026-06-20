@@ -112,6 +112,62 @@ def test_fingerprint_changes_with_input_and_config(tmp_path: Path):
     assert fq.fingerprint(cfg1) != fq.fingerprint(cfg3_input)
 
 
+def test_fingerprint_changes_with_each_result_affecting_scalar(tmp_path: Path):
+    csv = tmp_path / "a.csv"
+    csv.write_text("gene_a_symbol,gene_b_symbol\nAAA,BBB\n")
+    base = SLDLConfig(input_csv=csv, output_dir=tmp_path / "o")
+    base_fp = fq.fingerprint(base)
+    # Each of these changes the computed metrics and must bust the fingerprint.
+    variants = {
+        "state_backend": "linear_mock",
+        "pert_dim": base.pert_dim + 1,
+        "control_template_size": base.control_template_size + 1,
+        "cells_per_bag": base.cells_per_bag + 1,
+    }
+    from dataclasses import replace
+
+    for field, value in variants.items():
+        changed = replace(base, **{field: value})
+        assert fq.fingerprint(changed) != base_fp, f"{field} did not bust fingerprint"
+
+
+def test_fingerprint_changes_when_cache_file_rebuilt_at_same_path(tmp_path: Path):
+    """A cache regenerated at the SAME path (new size/mtime) must bust reuse."""
+    csv = tmp_path / "a.csv"
+    csv.write_text("gene_a_symbol,gene_b_symbol\nAAA,BBB\n")
+    esm = tmp_path / "esm2.npz"
+    esm.write_bytes(b"v1-contents")
+    cfg = SLDLConfig(input_csv=csv, output_dir=tmp_path / "o", esm2_npz=esm)
+    fp_v1 = fq.fingerprint(cfg)
+
+    # Rebuild the cache at the same path with different contents/size + bump mtime.
+    esm.write_bytes(b"v2-different-and-longer-contents")
+    import os
+
+    st = esm.stat()
+    os.utime(esm, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+    fp_v2 = fq.fingerprint(cfg)
+    assert fp_v1 != fp_v2
+
+
+def test_fingerprint_covers_all_path_caches(tmp_path: Path):
+    """gwps_h5ad / bags_npz / gwps_overlap_csv / state_checkpoint each matter."""
+    from dataclasses import replace
+
+    csv = tmp_path / "a.csv"
+    csv.write_text("g\n")
+    cache_a = tmp_path / "cache_a.bin"
+    cache_a.write_bytes(b"a")
+    cache_b = tmp_path / "cache_b.bin"
+    cache_b.write_bytes(b"bb")
+    base = SLDLConfig(input_csv=csv, output_dir=tmp_path / "o", bags_npz=cache_a)
+    base_fp = fq.fingerprint(base)
+    for field in ("bags_npz", "gwps_h5ad", "gwps_overlap_csv", "state_checkpoint"):
+        changed = replace(base, **{field: cache_b})
+        assert fq.fingerprint(changed) != base_fp, f"{field} ignored by fingerprint"
+
+
+
 def test_is_done_requires_matching_fingerprint(tmp_path: Path):
     d = _results_dir(tmp_path)
     fq.write_result(d, "CV1", 0, [{"metric": "x", "value": 1.0}], fingerprint="fp1")
