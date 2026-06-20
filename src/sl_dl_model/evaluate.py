@@ -316,6 +316,141 @@ def run_cv(
     return summary
 
 
+def _assemble(
+    config: SLDLConfig,
+    jobs: list[tuple[str, int]],
+    split_types: tuple[str, ...],
+    frame: pd.DataFrame,
+    shared: "StateDlCaches | None",
+) -> pd.DataFrame:
+    """Poll for terminal markers, collect results, write combined artifacts.
+
+    Rank-0 only. Replaces the ``gather_object`` barrier with a bounded
+    filesystem poll (no collective). Stops when every job is terminal (result
+    or failed) or ``assembly_timeout_seconds`` elapses, then assembles whatever
+    results exist. Writes the succeeded folds' artifacts first, then — per
+    decision B — raises if any fold lacks a result so the run exits non-zero.
+
+    Args:
+        config: Run configuration.
+        jobs: Full ordered ``(split_type, fold_id)`` list.
+        split_types: Split types covered by this run.
+        frame: Full benchmark DataFrame (for candidate-gene count).
+        shared: Shared caches (for gwps coverage count) or ``None``.
+
+    Returns:
+        Summary :class:`pandas.DataFrame` (only when every fold succeeded).
+
+    Raises:
+        RuntimeError: If no result rows were produced by any fold, or if any
+            job lacks a result (quarantined or deadline-missed) — after the
+            succeeded folds' artifacts have been written (decision B).
+    """
+    results_dir = fq.fold_results_dir(config)
+    deadline = time.monotonic() + float(config.assembly_timeout_seconds)
+    while time.monotonic() < deadline:
+        terminal = all(
+            fq.result_path(results_dir, s, f).exists()
+            or fq.failed_path(results_dir, s, f).exists()
+            for s, f in jobs
+        )
+        if terminal:
+            break
+        time.sleep(float(config.assembly_poll_seconds))
+
+    all_rows: list[dict[str, object]] = []
+    produced: set[tuple[str, int]] = set()
+    for split_type, fold_id in jobs:
+        rpath = fq.result_path(results_dir, split_type, fold_id)
+        if rpath.exists():
+            all_rows.extend(fq.read_json(rpath))
+            produced.add((split_type, fold_id))
+
+    if not all_rows:
+        logger.error(
+            "no metric rows produced — split_types=%s; check splits and data",
+            list(split_types),
+        )
+        raise RuntimeError(
+            "no metric rows produced; check split_types and training data"
+        )
+
+    fold_metrics = pd.DataFrame(all_rows)
+    sort_cols = ["split_type", "fold_id", "model", "slice", "metric"]
+    fold_metrics = fold_metrics.sort_values(sort_cols).reset_index(drop=True)
+    summary = _summarize(fold_metrics)
+
+    _write_assembly_artifacts(config, fold_metrics, summary, split_types, frame, shared)
+
+    # Decision B: artifacts for succeeded folds are now safely on disk; fail
+    # the run (non-zero exit) if any fold did not produce a result.
+    failed = [job for job in jobs if job not in produced]
+    if failed:
+        logger.error("assembly: %d fold(s) missing results: %s", len(failed), failed)
+        raise RuntimeError(
+            f"{len(failed)} fold(s) did not produce results: {failed}; "
+            "succeeded folds' artifacts were written — resubmit to re-run the rest"
+        )
+    return summary
+
+
+def _write_assembly_artifacts(
+    config: SLDLConfig,
+    fold_metrics: pd.DataFrame,
+    summary: pd.DataFrame,
+    split_types: tuple[str, ...],
+    frame: pd.DataFrame,
+    shared: "StateDlCaches | None",
+) -> None:
+    """Write top-level + per-split metric/summary/manifest artifacts.
+
+    Identical layout to the pre-work-queue writer: a flat
+    ``fold_metrics.csv`` / ``summary.csv`` / ``manifest.json``, per-split
+    subdirectories, and a combined ``official_metrics_summary.csv``.
+
+    Args:
+        config: Run configuration.
+        fold_metrics: Canonically-sorted long-form metric rows.
+        summary: Summary frame from :func:`_summarize`.
+        split_types: Split types covered by this run.
+        frame: Full benchmark DataFrame (for candidate-gene count).
+        shared: Shared caches (for gwps coverage count) or ``None``.
+    """
+    output_dir = Path(config.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidate_gene_count = len(
+        set(frame["gene_a_symbol"]) | set(frame["gene_b_symbol"])
+    )
+    gwps_coverage_gene_count = _gwps_coverage_count(shared)
+    manifest = _build_manifest(
+        config,
+        split_types=split_types,
+        candidate_gene_count=candidate_gene_count,
+        gwps_coverage_gene_count=gwps_coverage_gene_count,
+    )
+    fold_metrics.to_csv(output_dir / "fold_metrics.csv", index=False)
+    summary.to_csv(output_dir / "summary.csv", index=False)
+    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+    for split_type in split_types:
+        split_rows = fold_metrics[fold_metrics["split_type"] == split_type]
+        if split_rows.empty:
+            continue
+        split_dir = output_dir / split_type
+        split_dir.mkdir(parents=True, exist_ok=True)
+        split_rows.to_csv(split_dir / "fold_metrics.csv", index=False)
+        _summarize(split_rows).to_csv(split_dir / "summary.csv", index=False)
+        split_manifest = _build_manifest(
+            config,
+            split_types=(split_type,),
+            candidate_gene_count=candidate_gene_count,
+            gwps_coverage_gene_count=gwps_coverage_gene_count,
+        )
+        (split_dir / "manifest.json").write_text(json.dumps(split_manifest, indent=2))
+
+    summary.to_csv(output_dir / "official_metrics_summary.csv", index=False)
+
+
 def _gwps_coverage_count(shared: "StateDlCaches | None") -> int | None:
     """Return the number of gwps-covered genes, or None off the state_dl path."""
     if shared is None:
