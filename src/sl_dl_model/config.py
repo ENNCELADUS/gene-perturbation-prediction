@@ -71,6 +71,15 @@ class SLDLConfig:
     # NaN defense). <= 0 disables clipping.
     max_grad_norm: float = 1.0
 
+    # Fold-orchestration (filesystem work-queue; replaces the NCCL gather).
+    # Per-fold results + claims live under output_dir / fold_results_subdir.
+    fold_results_subdir: str = "_fold_results"
+    # Rank-0 assembly polls the filesystem this often (seconds) for terminal
+    # markers, and gives up after assembly_timeout_seconds (seconds) — a bound
+    # so a hard-crashed worker that left a claim but no result cannot hang it.
+    assembly_poll_seconds: float = 5.0
+    assembly_timeout_seconds: float = 21600.0
+
     embedding_method: str = "state_adapter_esm2_meanstd"
 
     @property
