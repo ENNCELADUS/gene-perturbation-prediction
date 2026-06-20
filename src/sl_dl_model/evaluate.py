@@ -116,14 +116,15 @@ def _run_worker_queue(
         state: Active :class:`PartialState` (for ``process_index`` in logs).
     """
     results_dir = fq.fold_results_dir(config)
-    (results_dir / ".claims").mkdir(parents=True, exist_ok=True)
+    token = fq.run_token()
+    (results_dir / ".claims" / token).mkdir(parents=True, exist_ok=True)
 
     for split_type, fold_id in jobs:
         if fq.is_done(results_dir, split_type, fold_id):
             continue
         if fq.failed_path(results_dir, split_type, fold_id).exists():
             continue
-        if not fq.try_claim(results_dir, split_type, fold_id):
+        if not fq.try_claim(results_dir, split_type, fold_id, run_token=token):
             continue
         # Re-check after winning the claim: a prior run may have produced a
         # result between our is_done check and the claim.
