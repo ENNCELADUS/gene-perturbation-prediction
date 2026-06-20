@@ -8,9 +8,11 @@ Training runs on a single device per fold: each gene is forwarded one at a
 time through the frozen STATE backbone, and gradients update only the trainable
 adapter/pooling/pair-head. There is no DDP gradient all-reduce — fold-level
 parallelism (one fold per rank) is orchestrated in
-:func:`sl_dl_model.evaluate.run_cv`, which assigns disjoint folds to each rank
-and gathers metric rows on the main process. ``PartialState`` supplies the
-device and rank info; it does not wrap the model.
+:func:`sl_dl_model.evaluate.run_cv`, where every rank pulls unfinished folds
+from a filesystem work-queue (atomic claims) and writes each fold's metrics to
+its own result file; rank 0 then assembles them. No ``torch.distributed``
+collective is used. ``PartialState`` supplies the device and rank info; it does
+not wrap the model.
 """
 
 from __future__ import annotations
