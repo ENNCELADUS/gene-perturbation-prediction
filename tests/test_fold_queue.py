@@ -20,7 +20,12 @@ def test_path_shapes(tmp_path: Path):
     d = _results_dir(tmp_path)
     assert fq.result_path(d, "CV2", 4).name == "CV2_fold4.result.json"
     assert fq.failed_path(d, "CV2", 4).name == "CV2_fold4.failed"
-    assert fq.claim_path(d, "CV2", 4).parent.name == ".claims"
+    # Claims are scoped under .claims/<run_token>/, so the leaf's grandparent
+    # is the .claims dir.
+    claim = fq.claim_path(d, "CV2", 4, run_token="tok")
+    assert claim.name == "CV2_fold4"
+    assert claim.parent.name == "tok"
+    assert claim.parent.parent.name == ".claims"
 
 
 def test_atomic_write_and_read_json(tmp_path: Path):
@@ -88,4 +93,3 @@ def test_stale_claim_from_prior_run_does_not_block_resume(tmp_path: Path):
     assert not fq.is_done(d, "CV2", 0)
     # Run B, fresh token, must NOT be blocked by run A's orphan claim.
     assert fq.try_claim(d, "CV2", 0, run_token="jobB") is True
-

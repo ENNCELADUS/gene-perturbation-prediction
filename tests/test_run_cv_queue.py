@@ -149,6 +149,48 @@ def test_worker_quarantines_failed_fold(tmp_path: Path, monkeypatch):
     assert "diverged" in marker["traceback"]
 
 
+def test_worker_resumes_past_stale_claim_from_crashed_run(tmp_path: Path, monkeypatch):
+    """Integration crash-resume: an orphan claim from a crashed run is ignored.
+
+    Simulates run A claiming CV1/0 then dying (claim dir present, no result),
+    then run B (new SLURM_JOB_ID) running the worker loop — it must compute
+    CV1/0 rather than skip it forever.
+    """
+    cfg = SLDLConfig(output_dir=tmp_path / "run")
+    d = fq.fold_results_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+
+    # Run A claims CV1/0 then "crashes": orphan claim, no result/failed marker.
+    monkeypatch.setenv("SLURM_JOB_ID", "jobA")
+    assert fq.try_claim(d, "CV1", 0) is True
+    assert not fq.is_done(d, "CV1", 0)
+
+    calls: list[tuple[str, int]] = []
+
+    def fake_run(frame, split, fold, config, producer):
+        calls.append((split, fold))
+        return [
+            {
+                "split_type": split,
+                "fold_id": fold,
+                "model": "state_dl",
+                "slice": "full_universe",
+                "metric": "ndcg",
+                "value": 1.0,
+            }
+        ]
+
+    monkeypatch.setattr(evaluate, "run_fold_with_producer", fake_run)
+    # Run B: fresh job id. The orphan claim from jobA must not block CV1/0.
+    monkeypatch.setenv("SLURM_JOB_ID", "jobB")
+    state = evaluate.PartialState()
+    evaluate._run_worker_queue(
+        cfg, None, _frame_two_jobs(), [("CV1", 0)], lambda s, f: object(), state
+    )
+    assert calls == [("CV1", 0)]
+    assert fq.is_done(d, "CV1", 0)
+
+
 def test_assemble_collects_results_and_writes(tmp_path: Path):
     cfg = SLDLConfig(
         output_dir=tmp_path / "run",
