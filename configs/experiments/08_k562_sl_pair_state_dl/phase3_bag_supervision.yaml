@@ -1,7 +1,7 @@
 # exp08 Phase 3 — full 3-part loss with bag supervision (primary gate).
 input_csv: data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv
 output_dir: results/experiments/08_k562_sl_pair_state_dl/phase3_bag_sup
-split_types: [CV2, CV3]
+split_types: [CV1, CV2, CV3]
 folds: [0, 1, 2, 3, 4]
 ranking_k: [10, 20, 50]
 seed: 17
