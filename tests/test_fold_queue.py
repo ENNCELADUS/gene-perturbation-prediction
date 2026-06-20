@@ -167,6 +167,19 @@ def test_fingerprint_covers_all_path_caches(tmp_path: Path):
         assert fq.fingerprint(changed) != base_fp, f"{field} ignored by fingerprint"
 
 
+def test_fingerprint_input_csv_content_hashed_even_at_same_size(tmp_path: Path):
+    """input_csv is content-hashed, so a same-size in-place edit still busts it."""
+    import os
+
+    csv = tmp_path / "a.csv"
+    csv.write_text("AAAA")
+    cfg = SLDLConfig(input_csv=csv, output_dir=tmp_path / "o")
+    fp1 = fq.fingerprint(cfg)
+    st = csv.stat()
+    csv.write_text("BBBB")  # identical size
+    os.utime(csv, ns=(st.st_atime_ns, st.st_mtime_ns))  # identical mtime
+    assert fq.fingerprint(cfg) != fp1
+
 
 def test_is_done_requires_matching_fingerprint(tmp_path: Path):
     d = _results_dir(tmp_path)
