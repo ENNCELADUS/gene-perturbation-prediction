@@ -167,6 +167,48 @@ def test_fingerprint_covers_all_path_caches(tmp_path: Path):
         assert fq.fingerprint(changed) != base_fp, f"{field} ignored by fingerprint"
 
 
+def test_fingerprint_changes_when_state_sidecar_rebuilt(tmp_path: Path):
+    """STATE sidecars (var_dims.pkl, pert_onehot_map.pt) affect results.
+
+    They live at ``state_checkpoint.parent.parent`` and can change while the
+    checkpoint file itself does not (e.g. a cache rebuild touches the sidecar).
+    A rebuilt sidecar must bust stale fold reuse.
+    """
+    import os
+
+    csv = tmp_path / "a.csv"
+    csv.write_text("gene_a_symbol,gene_b_symbol\nAAA,BBB\n")
+    ckpt_root = tmp_path / "state"
+    ckpt = ckpt_root / "checkpoints" / "final.ckpt"
+    ckpt.parent.mkdir(parents=True)
+    ckpt.write_bytes(b"ckpt")
+    var_dims = ckpt_root / "var_dims.pkl"
+    var_dims.write_bytes(b"v1")
+    pert_map = ckpt_root / "pert_onehot_map.pt"
+    pert_map.write_bytes(b"p1")
+    cfg = SLDLConfig(
+        input_csv=csv,
+        output_dir=tmp_path / "o",
+        state_checkpoint=ckpt,
+        state_backend="state_checkpoint",
+    )
+    fp_v1 = fq.fingerprint(cfg)
+
+    # Rebuild var_dims.pkl at the same path with new contents + bumped mtime.
+    var_dims.write_bytes(b"v2-longer")
+    st = var_dims.stat()
+    os.utime(var_dims, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+    fp_v2 = fq.fingerprint(cfg)
+    assert fp_v1 != fp_v2, "var_dims.pkl rebuild ignored by fingerprint"
+
+    # Likewise for pert_onehot_map.pt.
+    pert_map.write_bytes(b"p2-longer")
+    st = pert_map.stat()
+    os.utime(pert_map, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+    fp_v3 = fq.fingerprint(cfg)
+    assert fp_v2 != fp_v3, "pert_onehot_map.pt rebuild ignored by fingerprint"
+
+
 def test_fingerprint_input_csv_content_hashed_even_at_same_size(tmp_path: Path):
     """input_csv is content-hashed, so a same-size in-place edit still busts it."""
     import os

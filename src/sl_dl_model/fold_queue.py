@@ -62,6 +62,14 @@ _FINGERPRINT_PATH_FIELDS = (
 )
 
 
+# STATE sidecar files derived from ``state_checkpoint.parent.parent``. They are
+# not config fields but their contents change a fold's metrics: ``var_dims.pkl``
+# is read by bags.py and ``pert_onehot_map.pt`` by train.py. They can change
+# while ``state_checkpoint`` itself does not (e.g. a cache rebuild touches the
+# sidecar but not the .ckpt), so they fold in as their own stat signatures.
+_STATE_SIDECAR_NAMES = ("var_dims.pkl", "pert_onehot_map.pt")
+
+
 def _path_signature(value: object) -> str:
     """Return a ``(path, size, mtime_ns)`` signature for a path-valued field.
 
@@ -105,6 +113,15 @@ def fingerprint(config: SLDLConfig) -> str:
         h.update(f"{name}={getattr(config, name, None)!r}".encode())
     for name in _FINGERPRINT_PATH_FIELDS:
         h.update(f"{name}={_path_signature(getattr(config, name, None))}".encode())
+    # STATE sidecars (var_dims.pkl, pert_onehot_map.pt) live next to the
+    # checkpoint and affect results; skip for the linear_mock backend, which
+    # ignores the checkpoint entirely.
+    if getattr(config, "state_backend", None) != "linear_mock":
+        ckpt = getattr(config, "state_checkpoint", None)
+        sidecar_root = Path(ckpt).parent.parent if ckpt is not None else None
+        for sidecar in _STATE_SIDECAR_NAMES:
+            value = sidecar_root / sidecar if sidecar_root is not None else None
+            h.update(f"{sidecar}={_path_signature(value)}".encode())
     return h.hexdigest()[:16]
 
 
