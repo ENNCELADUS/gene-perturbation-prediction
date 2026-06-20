@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+import traceback as _tb
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -24,7 +26,9 @@ from accelerate.utils import gather_object
 
 from sl_benchmark_baseline.data import load_benchmark
 from sl_benchmark_baseline.evaluate import _summarize
+from sl_dl_model import fold_queue as fq
 from sl_dl_model.config import SLDLConfig
+from sl_dl_model.scoring import make_fold_producer, run_fold_with_producer
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +129,80 @@ def _run_local_jobs(
             run_fold_with_producer(frame, split_type, fold_id, config, fold_producer)
         )
     return rows
+
+
+def _run_worker_queue(
+    config: SLDLConfig,
+    shared: "StateDlCaches | None",
+    frame: pd.DataFrame,
+    jobs: list[tuple[str, int]],
+    producer: "EmbeddingProducer | str",
+    state: PartialState,
+) -> None:
+    """Walk ``jobs`` in order, atomically claiming and running each unfinished one.
+
+    Every rank runs the identical loop. Atomic ``mkdir`` claims guarantee each
+    job runs on exactly one rank; a lost claim or an already-done job is skipped
+    immediately, so a rank never idles while work remains (decision C). A fold
+    that raises is quarantined: a ``.failed`` marker with the traceback is
+    written and the loop continues (decision B). No collective is used.
+
+    Args:
+        config: Run configuration.
+        shared: Shared caches for the ``state_dl`` path, else ``None``.
+        frame: Full benchmark DataFrame.
+        jobs: Ordered ``(split_type, fold_id)`` pairs (the full job list).
+        producer: ``"state_dl"`` or a reusable :class:`EmbeddingProducer`.
+        state: Active :class:`PartialState` (for ``process_index`` in logs).
+    """
+    results_dir = fq.fold_results_dir(config)
+    (results_dir / ".claims").mkdir(parents=True, exist_ok=True)
+
+    for split_type, fold_id in jobs:
+        if fq.is_done(results_dir, split_type, fold_id):
+            continue
+        if fq.failed_path(results_dir, split_type, fold_id).exists():
+            continue
+        if not fq.try_claim(results_dir, split_type, fold_id):
+            continue
+        # Re-check after winning the claim: a prior run may have produced a
+        # result between our is_done check and the claim.
+        if fq.is_done(results_dir, split_type, fold_id):
+            continue
+        try:
+            fold_producer = (
+                make_fold_producer(config, shared, frame, split_type, fold_id)
+                if producer == "state_dl"
+                else producer
+            )
+            rows = run_fold_with_producer(
+                frame, split_type, fold_id, config, fold_producer
+            )
+            fq.atomic_write_json(fq.result_path(results_dir, split_type, fold_id), rows)
+            logger.info(
+                "[rank %d] fold %s/%d done (%d rows)",
+                state.process_index,
+                split_type,
+                fold_id,
+                len(rows),
+            )
+        except Exception:  # noqa: BLE001 — deliberate quarantine (decision B)
+            fq.atomic_write_json(
+                fq.failed_path(results_dir, split_type, fold_id),
+                {
+                    "split_type": split_type,
+                    "fold_id": fold_id,
+                    "rank": state.process_index,
+                    "timestamp": time.time(),
+                    "traceback": _tb.format_exc(),
+                },
+            )
+            logger.error(
+                "[rank %d] fold %s/%d FAILED; quarantined and continuing",
+                state.process_index,
+                split_type,
+                fold_id,
+            )
 
 
 def run_cv(
