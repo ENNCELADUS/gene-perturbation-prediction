@@ -147,3 +147,123 @@ def test_worker_quarantines_failed_fold(tmp_path: Path, monkeypatch):
     assert fq.failed_path(d, "CV2", 0).exists()
     marker = fq.read_json(fq.failed_path(d, "CV1", 0))
     assert "diverged" in marker["traceback"]
+
+
+def test_assemble_collects_results_and_writes(tmp_path: Path):
+    cfg = SLDLConfig(
+        output_dir=tmp_path / "run",
+        split_types=("CV1", "CV2"),
+        folds=(0,),
+        assembly_poll_seconds=0.01,
+        assembly_timeout_seconds=2.0,
+    )
+    d = fq.fold_results_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+    for split in ("CV1", "CV2"):
+        fq.atomic_write_json(
+            fq.result_path(d, split, 0),
+            [
+                {
+                    "split_type": split,
+                    "fold_id": 0,
+                    "model": "state_dl",
+                    "slice": "full_universe",
+                    "metric": "ndcg@10",
+                    "value": 0.5,
+                }
+            ],
+        )
+    jobs = [("CV1", 0), ("CV2", 0)]
+    summary = evaluate._assemble(cfg, jobs, ("CV1", "CV2"), _frame_two_jobs(), None)
+    assert (cfg.output_dir / "fold_metrics.csv").exists()
+    assert (cfg.output_dir / "official_metrics_summary.csv").exists()
+    fm = pd.read_csv(cfg.output_dir / "fold_metrics.csv")
+    # Canonical sort: CV1 before CV2.
+    assert list(fm["split_type"]) == ["CV1", "CV2"]
+    assert not summary.empty
+
+
+def test_assemble_deadline_with_partial_results(tmp_path: Path):
+    cfg = SLDLConfig(
+        output_dir=tmp_path / "run",
+        split_types=("CV1", "CV2"),
+        folds=(0,),
+        assembly_poll_seconds=0.01,
+        assembly_timeout_seconds=0.05,
+    )
+    d = fq.fold_results_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+    # Only CV1 finished; CV2 never produces a terminal marker.
+    fq.atomic_write_json(
+        fq.result_path(d, "CV1", 0),
+        [
+            {
+                "split_type": "CV1",
+                "fold_id": 0,
+                "model": "state_dl",
+                "slice": "full_universe",
+                "metric": "ndcg@10",
+                "value": 0.5,
+            }
+        ],
+    )
+    jobs = [("CV1", 0), ("CV2", 0)]
+    import pytest
+
+    # Decision B: artifacts for the succeeded fold are still written, but the
+    # run raises (-> non-zero exit) because CV2 has no result.
+    with pytest.raises(RuntimeError):
+        evaluate._assemble(cfg, jobs, ("CV1", "CV2"), _frame_two_jobs(), None)
+    fm = pd.read_csv(cfg.output_dir / "fold_metrics.csv")
+    assert set(fm["split_type"]) == {"CV1"}  # partial results persisted
+
+
+def test_assemble_failed_fold_raises_after_writing(tmp_path: Path):
+    cfg = SLDLConfig(
+        output_dir=tmp_path / "run",
+        split_types=("CV1", "CV2"),
+        folds=(0,),
+        assembly_poll_seconds=0.01,
+        assembly_timeout_seconds=2.0,
+    )
+    d = fq.fold_results_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+    fq.atomic_write_json(
+        fq.result_path(d, "CV1", 0),
+        [
+            {
+                "split_type": "CV1",
+                "fold_id": 0,
+                "model": "state_dl",
+                "slice": "full_universe",
+                "metric": "ndcg@10",
+                "value": 0.5,
+            }
+        ],
+    )
+    fq.atomic_write_json(fq.failed_path(d, "CV2", 0), {"traceback": "boom"})
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        evaluate._assemble(
+            cfg, [("CV1", 0), ("CV2", 0)], ("CV1", "CV2"), _frame_two_jobs(), None
+        )
+    # Succeeded fold's artifacts were written before raising.
+    assert (cfg.output_dir / "official_metrics_summary.csv").exists()
+
+
+def test_assemble_empty_raises(tmp_path: Path):
+    cfg = SLDLConfig(
+        output_dir=tmp_path / "run",
+        split_types=("CV1",),
+        folds=(0,),
+        assembly_poll_seconds=0.01,
+        assembly_timeout_seconds=0.05,
+    )
+    d = fq.fold_results_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+    fq.atomic_write_json(fq.failed_path(d, "CV1", 0), {"traceback": "boom"})
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        evaluate._assemble(cfg, [("CV1", 0)], ("CV1",), _frame_two_jobs(), None)
