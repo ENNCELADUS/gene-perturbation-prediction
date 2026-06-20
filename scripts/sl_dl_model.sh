@@ -36,14 +36,21 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # NOTE: Fold-level task parallelism via a FILESYSTEM WORK-QUEUE (no collective,
 # no gradient all-reduce). run_cv builds the full (split_type, fold_id) job list;
-# every rank walks it and atomically claims (os.mkdir) each unfinished job, trains
-# + embeds + scores it on its GPU, and writes <split>_fold<k>.result.json under
-# <output_dir>/_fold_results/. A fold that raises is quarantined (.failed marker)
-# and the run continues. Rank 0 then polls the filesystem until every job is
-# terminal (or assembly_timeout_seconds) and writes the cvN/ + combined artifacts;
-# output is byte-identical to a 1-process run. Resume: re-submitting skips folds
-# whose .result.json already exists. There is NO torch.distributed collective, so
-# uneven fold runtimes can no longer cause a gather/NCCL timeout.
+# every rank walks it and atomically claims (os.mkdir, scoped by run token) each
+# unfinished job, trains + embeds + scores it on its GPU, and writes
+# <split>_fold<k>.result.json under <output_dir>/_fold_results/. A fold that
+# raises is quarantined (.failed marker) and the run continues. Rank 0 then polls
+# the filesystem until every job is terminal (or assembly_timeout_seconds) and
+# writes the cvN/ + combined artifacts; output is byte-identical to a 1-process
+# run. There is NO torch.distributed collective, so uneven fold runtimes can no
+# longer cause a gather/NCCL timeout.
+#
+# RESUME: re-submitting skips folds whose .result.json already exists AND matches
+# the current run fingerprint (input CSV + result-affecting config + ESM2/bags/
+# gwps cache size+mtime). A crashed/incomplete fold (claim but no result) resumes
+# automatically. A QUARANTINED fold (.failed marker) will NOT re-run on resubmit
+# unless you delete its <split>_fold<k>.failed marker or change the config/input
+# (which bumps the fingerprint) — the assembly error names the exact markers.
 echo "Running exp08 SL DL with config: $CONFIG_PATH (producer: $PRODUCER)"
 srun uv run --locked --no-sync --offline accelerate launch \
   --num_processes 4 \
