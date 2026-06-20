@@ -22,7 +22,6 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 from accelerate import PartialState
-from accelerate.utils import gather_object
 
 from sl_benchmark_baseline.data import load_benchmark
 from sl_benchmark_baseline.evaluate import _summarize
@@ -90,45 +89,6 @@ class ZeroEmbeddingProducer:
             np.zeros((n, self.dim), dtype=float),
             np.zeros(n, dtype=int),
         )
-
-
-def _run_local_jobs(
-    config: SLDLConfig,
-    shared: "StateDlCaches | None",
-    frame: pd.DataFrame,
-    jobs: list[tuple[str, int]],
-    producer: "EmbeddingProducer | str",
-) -> list[dict[str, object]]:
-    """Run this rank's assigned ``(split_type, fold_id)`` jobs; return metric rows.
-
-    Each job is run through the unchanged per-fold path
-    (:func:`~sl_dl_model.scoring.run_fold_with_producer`), so the rows are
-    identical to a serial run of the same jobs. A failure in any job propagates
-    (fail-fast); callers must not swallow it.
-
-    Args:
-        config: Run configuration.
-        shared: Shared caches for the ``state_dl`` path, else ``None``.
-        frame: Full benchmark DataFrame.
-        jobs: This rank's ``(split_type, fold_id)`` slice from :func:`_shard_jobs`.
-        producer: ``"state_dl"`` or a reusable :class:`EmbeddingProducer`.
-
-    Returns:
-        Metric row dicts for this rank's jobs (possibly empty if no jobs).
-    """
-    from sl_dl_model.scoring import make_fold_producer, run_fold_with_producer
-
-    rows: list[dict[str, object]] = []
-    for split_type, fold_id in jobs:
-        fold_producer = (
-            make_fold_producer(config, shared, frame, split_type, fold_id)
-            if producer == "state_dl"
-            else producer
-        )
-        rows.extend(
-            run_fold_with_producer(frame, split_type, fold_id, config, fold_producer)
-        )
-    return rows
 
 
 def _run_worker_queue(
@@ -211,23 +171,29 @@ def run_cv(
 ) -> pd.DataFrame:
     """Run CV across split_types x folds, write metrics, return summary.
 
-    Phase-0 version: loops folds and calls
-    :func:`~sl_dl_model.scoring.run_fold_with_producer` for each.
+    Every rank walks the full ``(split_type, fold_id)`` job list and claims
+    each unfinished job atomically via the filesystem work-queue
+    (:func:`_run_worker_queue`); rank 0 then assembles the per-fold result
+    files into the combined artifacts (:func:`_assemble`). No
+    ``torch.distributed`` collective is used (Guard G1), so uneven fold
+    runtimes can no longer cause a gather/NCCL timeout.
 
     Args:
         config: :class:`SLDLConfig` controlling splits, folds, output dir, etc.
         producer: Either a reusable :class:`EmbeddingProducer` instance (e.g.
             :class:`ZeroEmbeddingProducer`) or the string ``"state_dl"``. The
             string path loads shared caches once and builds a per-fold
-            ``StateDlProducer`` (Task 2.4).
+            ``StateDlProducer``.
 
     Returns:
         Summary :class:`pandas.DataFrame` with columns
-        ``split_type, model, slice, metric, mean, std``.
+        ``split_type, model, slice, metric, mean, std`` on rank 0; an empty
+        frame on non-main ranks.
 
     Raises:
-        RuntimeError: If no metric rows were produced (e.g. split_types filter
-            yields no matching folds in the loaded benchmark frame).
+        RuntimeError: If no metric rows were produced, or if any fold did not
+            produce a result (quarantined or deadline-missed); see
+            :func:`_assemble`.
     """
     frame = load_benchmark(config.input_csv)
     split_types = config.split_types or ("CV1", "CV2", "CV3")
@@ -238,82 +204,16 @@ def run_cv(
     if producer == "state_dl":
         shared = _load_state_dl_caches(config)
 
-    # Build the full ordered job list, shard it across ranks, run only ours.
+    # Build the full ordered job list; every rank walks the same list and
+    # claims jobs atomically through the filesystem (no collective).
     state = PartialState()
     jobs = [(s, f) for s in split_types for f in config.folds]
-    local_jobs = _shard_jobs(jobs, state.process_index, state.num_processes)
-    local_rows = _run_local_jobs(config, shared, frame, local_jobs, producer)
+    _run_worker_queue(config, shared, frame, jobs, producer, state)
 
-    # Collective: every rank contributes its rows; all ranks receive the union.
-    # gather_object preserves rank order, so rank r's rows land contiguously.
-    gathered: list[list[dict[str, object]]] = gather_object([local_rows])
-    all_rows = [row for rank_rows in gathered for row in rank_rows]
-
-    # FIX 2: guard empty metric rows — indicates a config/data mismatch
-    if not all_rows:
-        logger.error(
-            "no metric rows produced — split_types=%s not found in frame "
-            "(available: %s); check split_types and training data",
-            list(config.split_types or ("CV1", "CV2", "CV3")),
-            sorted(available),
-        )
-        raise RuntimeError(
-            "no metric rows produced; check split_types and training data"
-        )
-
-    fold_metrics = pd.DataFrame(all_rows)
-    # Canonical ordering so 1-process and N-process runs are byte-identical.
-    sort_cols = ["split_type", "fold_id", "model", "slice", "metric"]
-    fold_metrics = fold_metrics.sort_values(sort_cols).reset_index(drop=True)
-    summary = _summarize(fold_metrics)
-
-    # FIX 1: only the main process writes artifacts (multi-process safe).
-    if not PartialState().is_main_process:
-        return summary
-
-    output_dir = Path(config.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # FIX 1: compute candidate_gene_count from the loaded frame
-    candidate_gene_count = len(
-        set(frame["gene_a_symbol"]) | set(frame["gene_b_symbol"])
-    )
-
-    # FIX 1: gwps_coverage_gene_count — available only on state_dl path
-    gwps_coverage_gene_count = _gwps_coverage_count(shared)
-
-    manifest = _build_manifest(
-        config,
-        split_types=split_types,
-        candidate_gene_count=candidate_gene_count,
-        gwps_coverage_gene_count=gwps_coverage_gene_count,
-    )
-
-    # Top-level (flat) artifacts — retained for backward compatibility.
-    fold_metrics.to_csv(output_dir / "fold_metrics.csv", index=False)
-    summary.to_csv(output_dir / "summary.csv", index=False)
-    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
-
-    # FIX 7: per-split subdirs (spec §7 "mirror exp06 layout") + combined summary.
-    for split_type in split_types:
-        split_rows = fold_metrics[fold_metrics["split_type"] == split_type]
-        if split_rows.empty:
-            continue
-        split_dir = output_dir / split_type
-        split_dir.mkdir(parents=True, exist_ok=True)
-        split_rows.to_csv(split_dir / "fold_metrics.csv", index=False)
-        _summarize(split_rows).to_csv(split_dir / "summary.csv", index=False)
-        split_manifest = _build_manifest(
-            config,
-            split_types=(split_type,),
-            candidate_gene_count=candidate_gene_count,
-            gwps_coverage_gene_count=gwps_coverage_gene_count,
-        )
-        (split_dir / "manifest.json").write_text(json.dumps(split_manifest, indent=2))
-
-    # Combined official summary across all splits.
-    summary.to_csv(output_dir / "official_metrics_summary.csv", index=False)
-    return summary
+    # Rank-0 assembles from the per-fold result files. Non-main ranks are done.
+    if not state.is_main_process:
+        return pd.DataFrame()
+    return _assemble(config, jobs, split_types, frame, shared)
 
 
 def _assemble(
@@ -585,25 +485,3 @@ def _load_state_dl_caches(config: SLDLConfig) -> StateDlCaches:
         input_dim=bags.input_dim,
         output_dim=bags.input_dim,
     )
-
-
-def _shard_jobs(
-    jobs: list[tuple[str, int]],
-    rank: int,
-    num_processes: int,
-) -> list[tuple[str, int]]:
-    """Return the round-robin slice of CV jobs owned by ``rank``.
-
-    Round-robin (``jobs[rank::num_processes]``) keeps load balanced across
-    ranks when per-fold cost varies. Every job is owned by exactly one rank and
-    the union across all ranks reconstructs ``jobs`` in order.
-
-    Args:
-        jobs: Ordered ``(split_type, fold_id)`` pairs to distribute.
-        rank: Zero-based process index of the calling rank.
-        num_processes: Total number of ranks.
-
-    Returns:
-        The sublist of ``jobs`` this rank should run (possibly empty).
-    """
-    return jobs[rank::num_processes]
