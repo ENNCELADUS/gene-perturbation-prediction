@@ -267,3 +267,34 @@ def test_assemble_empty_raises(tmp_path: Path):
 
     with pytest.raises(RuntimeError):
         evaluate._assemble(cfg, [("CV1", 0)], ("CV1",), _frame_two_jobs(), None)
+
+
+def test_run_cv_end_to_end_single_process(tmp_path: Path, monkeypatch):
+    cfg = SLDLConfig(
+        output_dir=tmp_path / "run",
+        split_types=("CV1", "CV2"),
+        folds=(0,),
+        assembly_poll_seconds=0.01,
+        assembly_timeout_seconds=2.0,
+    )
+
+    def fake_run(frame, split, fold, config, producer):
+        return [
+            {
+                "split_type": split,
+                "fold_id": fold,
+                "model": "state_dl",
+                "slice": "full_universe",
+                "metric": "ndcg@10",
+                "value": 0.7,
+            }
+        ]
+
+    monkeypatch.setattr(evaluate, "run_fold_with_producer", fake_run)
+    monkeypatch.setattr(evaluate, "load_benchmark", lambda _p: _frame_two_jobs())
+
+    summary = evaluate.run_cv(cfg, evaluate.ZeroEmbeddingProducer())
+    assert (cfg.output_dir / "official_metrics_summary.csv").exists()
+    fm = pd.read_csv(cfg.output_dir / "fold_metrics.csv")
+    assert set(fm["split_type"]) == {"CV1", "CV2"}
+    assert not summary.empty
