@@ -225,7 +225,8 @@ def _assemble(
 ) -> pd.DataFrame:
     """Poll for terminal markers, collect results, write combined artifacts.
 
-    Rank-0 only. Replaces the ``gather_object`` barrier with a bounded
+    Rank-0 only. Replaces the old end-of-run NCCL all-gather barrier with a
+    bounded
     filesystem poll (no collective). Stops when every job is terminal (result
     or failed) or ``assembly_timeout_seconds`` elapses, then assembles whatever
     results exist. Writes the succeeded folds' artifacts first, then — per

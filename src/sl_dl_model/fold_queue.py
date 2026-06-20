@@ -1,6 +1,6 @@
 """Filesystem coordination primitives for the exp08 fold work-queue.
 
-Replaces the single end-of-run NCCL ``gather_object`` collective. Every rank
+Replaces the single end-of-run NCCL all-gather collective. Every rank
 walks the same job list and uses these primitives to claim, run, and record
 ``(split_type, fold_id)`` jobs through the filesystem only — no
 ``torch.distributed`` collective is involved (Guard G1).
