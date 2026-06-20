@@ -102,8 +102,10 @@ All coordination state lives under a new `<output_dir>/_fold_results/` directory
   write (temp file + `os.replace`). **Only cross-run state** → resume.
 - **Failure marker:** `<output_dir>/_fold_results/<split>_fold<k>.failed` — JSON
   `{traceback, rank, timestamp}`. Written when a fold raises (quarantine).
-- **Claim marker:** `<output_dir>/_fold_results/.claims/<split>_fold<k>` directory,
-  created with atomic `os.mkdir`. Intra-run only.
+- **Claim marker:** `<output_dir>/_fold_results/.claims/<run_token>/<split>_fold<k>`
+  directory, created with atomic `os.mkdir`. Intra-run only; scoped by
+  `run_token` (`SLURM_JOB_ID` | `SL_DL_RUN_ID` | `local-<ppid>`) so a prior run's
+  orphan claim never blocks a resume.
 
 ### 4.1 Worker loop (every rank runs the identical loop)
 
