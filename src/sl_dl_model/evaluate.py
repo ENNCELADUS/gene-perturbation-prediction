@@ -289,15 +289,40 @@ def _assemble(
 
     _write_assembly_artifacts(config, fold_metrics, summary, split_types, frame, shared)
 
-    # Decision B: artifacts for succeeded folds are now safely on disk; fail
-    # the run (non-zero exit) if any fold did not produce a result.
-    failed = [job for job in jobs if job not in produced]
-    if failed:
-        logger.error("assembly: %d fold(s) missing results: %s", len(failed), failed)
-        raise RuntimeError(
-            f"{len(failed)} fold(s) did not produce results: {failed}; "
-            "succeeded folds' artifacts were written — resubmit to re-run the rest"
-        )
+    # Decision B: artifacts for succeeded folds are now safely on disk; fail the
+    # run (non-zero exit) if any fold did not produce a result. Distinguish
+    # quarantined folds (a same-fingerprint .failed marker exists — these will
+    # NOT re-run on resubmit) from merely-missing folds (crashed / deadline —
+    # these resume automatically).
+    missing = [job for job in jobs if job not in produced]
+    if missing:
+        quarantined = [
+            (s, f)
+            for s, f in missing
+            if fq.is_failed(results_dir, s, f, fingerprint=fp)
+        ]
+        incomplete = [job for job in missing if job not in quarantined]
+        lines = [f"{len(missing)} fold(s) did not produce results."]
+        if quarantined:
+            lines.append(
+                f"  Quarantined (failed; will NOT re-run on resubmit unless you act): "
+                f"{quarantined}"
+            )
+            for s, f in quarantined:
+                lines.append(f"    - {fq.failed_path(results_dir, s, f)}")
+            lines.append(
+                "  To retry a quarantined fold: delete its .failed marker above, "
+                "or change the config/input (which bumps the fingerprint)."
+            )
+        if incomplete:
+            lines.append(
+                f"  Incomplete (crashed/deadline; will resume automatically on "
+                f"resubmit): {incomplete}"
+            )
+        lines.append("  Succeeded folds' artifacts were written.")
+        message = "\n".join(lines)
+        logger.error("assembly: %s", message)
+        raise RuntimeError(message)
     return summary
 
 

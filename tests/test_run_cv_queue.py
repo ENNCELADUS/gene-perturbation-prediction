@@ -265,12 +265,40 @@ def test_assemble_failed_fold_raises_after_writing(tmp_path: Path):
     fq.write_failed(d, "CV2", 0, {"traceback": "boom"}, fingerprint=fp)
     import pytest
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="Quarantined") as exc:
         evaluate._assemble(
             cfg, [("CV1", 0), ("CV2", 0)], ("CV1", "CV2"), _frame_two_jobs(), None
         )
+    # The message names the quarantined fold, its .failed marker path, and how
+    # to retry it (delete the marker / change config).
+    msg = str(exc.value)
+    assert "CV2" in msg
+    assert str(fq.failed_path(d, "CV2", 0)) in msg
+    assert "delete" in msg.lower()
     # Succeeded fold's artifacts were written before raising.
     assert (cfg.output_dir / "official_metrics_summary.csv").exists()
+
+
+def test_assemble_incomplete_fold_message_says_resumes(tmp_path: Path):
+    """A merely-missing (not quarantined) fold is reported as auto-resuming."""
+    cfg = SLDLConfig(
+        output_dir=tmp_path / "run",
+        split_types=("CV1", "CV2"),
+        folds=(0,),
+        assembly_poll_seconds=0.01,
+        assembly_timeout_seconds=0.05,
+    )
+    d = fq.fold_results_dir(cfg)
+    d.mkdir(parents=True, exist_ok=True)
+    fq.write_result(d, "CV1", 0, [_row("CV1")], fingerprint=fq.fingerprint(cfg))
+    # CV2 has neither result nor failed marker -> incomplete.
+    import pytest
+
+    with pytest.raises(RuntimeError, match="Incomplete") as exc:
+        evaluate._assemble(
+            cfg, [("CV1", 0), ("CV2", 0)], ("CV1", "CV2"), _frame_two_jobs(), None
+        )
+    assert "resume" in str(exc.value).lower()
 
 
 def test_assemble_empty_raises(tmp_path: Path):
