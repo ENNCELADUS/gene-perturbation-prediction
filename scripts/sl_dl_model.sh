@@ -34,13 +34,16 @@ fi
 export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
-# NOTE: Fold-level task parallelism (no gradient all-reduce). run_cv shards the
-# (split_type, fold_id) jobs round-robin across the 4 ranks; each rank trains +
-# embeds + scores its own folds on one GPU, then gather_object collects every
-# rank's metric rows onto the main process, which writes the cvN/ + combined
-# artifacts. Each fold is computed exactly once by exactly one rank, so the
-# 4-process output is byte-identical to a 1-process run. If a fold crashes, the
-# gather is a collective and the whole run aborts non-zero (fail-fast).
+# NOTE: Fold-level task parallelism via a FILESYSTEM WORK-QUEUE (no collective,
+# no gradient all-reduce). run_cv builds the full (split_type, fold_id) job list;
+# every rank walks it and atomically claims (os.mkdir) each unfinished job, trains
+# + embeds + scores it on its GPU, and writes <split>_fold<k>.result.json under
+# <output_dir>/_fold_results/. A fold that raises is quarantined (.failed marker)
+# and the run continues. Rank 0 then polls the filesystem until every job is
+# terminal (or assembly_timeout_seconds) and writes the cvN/ + combined artifacts;
+# output is byte-identical to a 1-process run. Resume: re-submitting skips folds
+# whose .result.json already exists. There is NO torch.distributed collective, so
+# uneven fold runtimes can no longer cause a gather/NCCL timeout.
 echo "Running exp08 SL DL with config: $CONFIG_PATH (producer: $PRODUCER)"
 srun uv run --locked --no-sync --offline accelerate launch \
   --num_processes 4 \
