@@ -44,3 +44,48 @@ def test_is_done_tracks_result_file(tmp_path: Path):
     assert fq.is_done(d, "CV1", 1) is False
     fq.atomic_write_json(fq.result_path(d, "CV1", 1), [])
     assert fq.is_done(d, "CV1", 1) is True
+
+
+def test_run_token_changes_with_slurm_job_id(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("SLURM_JOB_ID", "111111")
+    t1 = fq.run_token()
+    monkeypatch.setenv("SLURM_JOB_ID", "222222")
+    t2 = fq.run_token()
+    assert t1 == "111111"
+    assert t2 == "222222"
+    assert t1 != t2
+
+
+def test_run_token_prefers_explicit_env_then_falls_back(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.setenv("SL_DL_RUN_ID", "abc123")
+    assert fq.run_token() == "abc123"
+    monkeypatch.delenv("SL_DL_RUN_ID", raising=False)
+    # No env at all: a stable, non-empty fallback (process-tree scoped).
+    fallback = fq.run_token()
+    assert isinstance(fallback, str) and fallback != ""
+
+
+def test_claim_is_scoped_by_run_token(tmp_path: Path):
+    d = _results_dir(tmp_path)
+    # Same job claimed under two different run tokens => both win (independent).
+    assert fq.try_claim(d, "CV2", 0, run_token="runA") is True
+    assert fq.try_claim(d, "CV2", 0, run_token="runB") is True
+    # Same token claiming twice still loses the second time.
+    assert fq.try_claim(d, "CV2", 0, run_token="runA") is False
+
+
+def test_stale_claim_from_prior_run_does_not_block_resume(tmp_path: Path):
+    """Crash-resume: a claim left by a crashed prior run must not block a new run.
+
+    Reproduces the reviewer's Critical finding. Run A claims CV2/fold0 then
+    "crashes" (claim dir exists, no result). Run B (new token) must still be
+    able to claim and run that fold.
+    """
+    d = _results_dir(tmp_path)
+    # Run A claims, then crashes before writing a result.
+    assert fq.try_claim(d, "CV2", 0, run_token="jobA") is True
+    assert not fq.is_done(d, "CV2", 0)
+    # Run B, fresh token, must NOT be blocked by run A's orphan claim.
+    assert fq.try_claim(d, "CV2", 0, run_token="jobB") is True
+
