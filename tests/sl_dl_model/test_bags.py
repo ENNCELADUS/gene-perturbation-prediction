@@ -163,3 +163,71 @@ def test_single_cell_bag_triggers_warning(tmp_path, caplog):
     # Gene must still be present (we warn, not drop)
     assert "BRCA1" in bags.bags_by_symbol
     assert bags.bags_by_symbol["BRCA1"].shape == (1, 6)
+
+
+# ---------------------------------------------------------------------------
+# GWPS bag NaN fix — build cleans, load verifies, train asserts
+# ---------------------------------------------------------------------------
+
+
+def _toy_h5ad_with_nonfinite(path):
+    """80 control + AAAS bag; plant NaN/inf into one control and one AAAS cell."""
+    n, d = 120, 6
+    rng = np.random.default_rng(3)
+    genes = ["non-targeting"] * 80 + ["AAAS"] * 40
+    obs = pd.DataFrame({"gene": genes})
+    x = rng.normal(size=(n, d)).astype("float32")
+    x[0, 1] = np.nan  # control cell, one entry
+    x[0, 4] = np.inf
+    x[80, 2] = np.nan  # AAAS cell, one entry
+    x[81, 5] = -np.inf
+    adata = ad.AnnData(X=x, obs=obs)
+    adata.write_h5ad(path)
+
+
+def test_build_zero_fills_nonfinite_entries(tmp_path, caplog):
+    h5ad = tmp_path / "nonfinite.h5ad"
+    _toy_h5ad_with_nonfinite(h5ad)
+    cfg = SLDLConfig(gwps_h5ad=h5ad, control_template_size=80, cells_per_bag=40)
+    with caplog.at_level(logging.WARNING, logger="sl_dl_model.bags"):
+        bags = build_gwps_bags(cfg, rng_seed=17)
+    assert np.isfinite(bags.control_template).all()
+    assert np.isfinite(bags.bags_by_symbol["AAAS"]).all()
+    # imputation, not drop: row counts preserved
+    assert bags.control_template.shape == (80, 6)
+    assert bags.bags_by_symbol["AAAS"].shape == (40, 6)
+    msgs = [r.message.lower() for r in caplog.records]
+    assert any("non-finite" in m for m in msgs)
+
+
+def test_load_raises_on_nonfinite_cache(tmp_path):
+    """A stale pre-fix cache with NaN must fail-fast at load, not silently load."""
+    d = 6
+    symbols = np.array(["AAAS", "KRAS"], dtype=object)
+    flat = np.ones((10, d), dtype=np.float32)
+    flat[7, 2] = np.nan  # poison a KRAS cell
+    offsets = np.array([0, 5, 10], dtype=np.int64)
+    control = np.ones((4, d), dtype=np.float32)
+    npz_path = tmp_path / "stale_bags.npz"
+    np.savez(
+        npz_path,
+        control_template=control,
+        symbols=symbols,
+        flat=flat,
+        offsets=offsets,
+        input_dim=np.int64(d),
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        load_bags_npz(npz_path)
+
+
+def test_load_passes_on_clean_cache(tmp_path):
+    """Round-tripping a cleanly built cache loads without error."""
+    h5ad = tmp_path / "toy.h5ad"
+    _toy_h5ad(h5ad)
+    cfg = SLDLConfig(gwps_h5ad=h5ad, control_template_size=16, cells_per_bag=16)
+    bags = build_gwps_bags(cfg, rng_seed=17)
+    npz = tmp_path / "clean.npz"
+    save_bags_npz(bags, npz)
+    loaded = load_bags_npz(npz)  # must not raise
+    assert np.isfinite(loaded.control_template).all()

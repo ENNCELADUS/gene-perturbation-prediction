@@ -123,6 +123,29 @@ def _dense_slice(matrix: object, indices: np.ndarray) -> np.ndarray:
     return np.asarray(subset, dtype=np.float32)
 
 
+def _zero_fill_nonfinite(array: np.ndarray, label: str) -> tuple[np.ndarray, int]:
+    """Replace non-finite entries with 0.0, returning the count touched.
+
+    STATE HVG input is normalized expression where 0 is the natural
+    "no signal" baseline, so zero-fill keeps imputed entries from skewing the
+    energy-distance / mean-delta bag losses.
+
+    Args:
+        array: Float array, possibly containing NaN/+-inf.
+        label: Identifier used by the caller for logging context.
+
+    Returns:
+        Tuple of the cleaned float32 array and the number of non-finite entries.
+    """
+    del label  # Reserved for future per-array logging; counts are aggregated.
+    mask = ~np.isfinite(array)
+    n_nonfinite = int(mask.sum())
+    if n_nonfinite == 0:
+        return np.asarray(array, dtype=np.float32), 0
+    cleaned = np.nan_to_num(array, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.asarray(cleaned, dtype=np.float32), n_nonfinite
+
+
 def _embed_matrix(
     adata: ad.AnnData,
     embed_key: str | None,
@@ -192,10 +215,14 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
         control_rows = rng.choice(
             control_rows, size=config.control_template_size, replace=False
         )
-    control_template = matrix[np.sort(control_rows)]
+    control_template, control_nonfinite = _zero_fill_nonfinite(
+        matrix[np.sort(control_rows)], "control_template"
+    )
 
     # --- per-gene bags (upper-cased, excluding control) ---
     bags: dict[str, np.ndarray] = {}
+    affected_genes = 0
+    total_nonfinite = control_nonfinite
     for symbol in np.unique(genes):
         if symbol == control_label:
             continue
@@ -204,7 +231,12 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
             continue
         if len(rows) > config.cells_per_bag:
             rows = rng.choice(rows, size=config.cells_per_bag, replace=False)
-        bags[str(symbol).upper()] = matrix[np.sort(rows)]
+        key = str(symbol).upper()
+        bag, bag_nonfinite = _zero_fill_nonfinite(matrix[np.sort(rows)], key)
+        bags[key] = bag
+        if bag_nonfinite > 0:
+            affected_genes += 1
+            total_nonfinite += bag_nonfinite
 
     # Warn about genes whose bags have fewer than 2 cells — std pooling will be
     # all-zeros for those genes, which is a silent quality issue.
@@ -214,6 +246,15 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
             "%d gene bag(s) have fewer than 2 cells; std-based pooling will "
             "produce all-zeros for those genes.",
             single_cell_count,
+        )
+
+    if total_nonfinite > 0:
+        logger.warning(
+            "Zero-filled %d non-finite GWPS expression entries across %d gene "
+            "bag(s) plus the control template; upstream h5ad %s contained NaN/inf.",
+            total_nonfinite,
+            affected_genes,
+            config.gwps_h5ad,
         )
 
     return GwpsBags(
@@ -254,6 +295,37 @@ def save_bags_npz(bags: GwpsBags, path: Path) -> None:
     )
 
 
+def _assert_finite_bags(
+    control: np.ndarray, bags_by_symbol: dict[str, np.ndarray]
+) -> None:
+    """Raise if any cached bag or the control template is non-finite.
+
+    The build path is the single cleaning site; this verifies the invariant on
+    load so a stale pre-fix cache fails loudly instead of poisoning training.
+
+    Args:
+        control: Control template array.
+        bags_by_symbol: Per-gene response bags.
+
+    Raises:
+        ValueError: If any array contains NaN/inf, naming up to 10 symbols.
+    """
+    offenders: list[str] = []
+    if not np.isfinite(control).all():
+        offenders.append("control_template")
+    for symbol, bag in bags_by_symbol.items():
+        if not np.isfinite(bag).all():
+            offenders.append(symbol)
+    if offenders:
+        shown = ", ".join(sorted(offenders)[:10])
+        raise ValueError(
+            f"GWPS bag cache contains non-finite values in: {shown}"
+            f"{' ...' if len(offenders) > 10 else ''}. This is a stale pre-fix "
+            "cache; rebuild it with "
+            "`uv run python scripts/setup_exp08_assets.py bags`."
+        )
+
+
 def load_bags_npz(path: Path) -> GwpsBags:
     """Load bags cached by :func:`save_bags_npz`.
 
@@ -279,6 +351,7 @@ def load_bags_npz(path: Path) -> GwpsBags:
     bags = {
         str(symbols[i]): flat[offsets[i] : offsets[i + 1]] for i in range(len(symbols))
     }
+    _assert_finite_bags(control, bags)
     return GwpsBags(
         control_template=control,
         bags_by_symbol=bags,

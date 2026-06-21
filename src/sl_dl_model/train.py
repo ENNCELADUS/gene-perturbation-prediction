@@ -952,6 +952,7 @@ def _bag_part(
             continue
         pred = model.encoder(torch.tensor(vec, device=device), control)
         real = torch.tensor(bags.bags_by_symbol[key], device=device)
+        assert torch.isfinite(real).all(), f"non-finite real bag for {key}"
         term = bag_loss(pred, real)
         total = term if total is None else total + term
     return total
