@@ -163,3 +163,38 @@ def test_single_cell_bag_triggers_warning(tmp_path, caplog):
     # Gene must still be present (we warn, not drop)
     assert "BRCA1" in bags.bags_by_symbol
     assert bags.bags_by_symbol["BRCA1"].shape == (1, 6)
+
+
+# ---------------------------------------------------------------------------
+# GWPS bag NaN fix — build cleans, load verifies, train asserts
+# ---------------------------------------------------------------------------
+
+
+def _toy_h5ad_with_nonfinite(path):
+    """80 control + AAAS bag; plant NaN/inf into one control and one AAAS cell."""
+    n, d = 120, 6
+    rng = np.random.default_rng(3)
+    genes = ["non-targeting"] * 80 + ["AAAS"] * 40
+    obs = pd.DataFrame({"gene": genes})
+    x = rng.normal(size=(n, d)).astype("float32")
+    x[0, 1] = np.nan  # control cell, one entry
+    x[0, 4] = np.inf
+    x[80, 2] = np.nan  # AAAS cell, one entry
+    x[81, 5] = -np.inf
+    adata = ad.AnnData(X=x, obs=obs)
+    adata.write_h5ad(path)
+
+
+def test_build_zero_fills_nonfinite_entries(tmp_path, caplog):
+    h5ad = tmp_path / "nonfinite.h5ad"
+    _toy_h5ad_with_nonfinite(h5ad)
+    cfg = SLDLConfig(gwps_h5ad=h5ad, control_template_size=80, cells_per_bag=40)
+    with caplog.at_level(logging.WARNING, logger="sl_dl_model.bags"):
+        bags = build_gwps_bags(cfg, rng_seed=17)
+    assert np.isfinite(bags.control_template).all()
+    assert np.isfinite(bags.bags_by_symbol["AAAS"]).all()
+    # imputation, not drop: row counts preserved
+    assert bags.control_template.shape == (80, 6)
+    assert bags.bags_by_symbol["AAAS"].shape == (40, 6)
+    msgs = [r.message.lower() for r in caplog.records]
+    assert any("non-finite" in m for m in msgs)

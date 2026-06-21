@@ -123,6 +123,29 @@ def _dense_slice(matrix: object, indices: np.ndarray) -> np.ndarray:
     return np.asarray(subset, dtype=np.float32)
 
 
+def _zero_fill_nonfinite(array: np.ndarray, label: str) -> tuple[np.ndarray, int]:
+    """Replace non-finite entries with 0.0, returning the count touched.
+
+    STATE HVG input is normalized expression where 0 is the natural
+    "no signal" baseline, so zero-fill keeps imputed entries from skewing the
+    energy-distance / mean-delta bag losses.
+
+    Args:
+        array: Float array, possibly containing NaN/+-inf.
+        label: Identifier used by the caller for logging context.
+
+    Returns:
+        Tuple of the cleaned float32 array and the number of non-finite entries.
+    """
+    del label  # Reserved for future per-array logging; counts are aggregated.
+    mask = ~np.isfinite(array)
+    n_nonfinite = int(mask.sum())
+    if n_nonfinite == 0:
+        return np.asarray(array, dtype=np.float32), 0
+    cleaned = np.nan_to_num(array, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.asarray(cleaned, dtype=np.float32), n_nonfinite
+
+
 def _embed_matrix(
     adata: ad.AnnData,
     embed_key: str | None,
@@ -192,10 +215,14 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
         control_rows = rng.choice(
             control_rows, size=config.control_template_size, replace=False
         )
-    control_template = matrix[np.sort(control_rows)]
+    control_template, control_nonfinite = _zero_fill_nonfinite(
+        matrix[np.sort(control_rows)], "control_template"
+    )
 
     # --- per-gene bags (upper-cased, excluding control) ---
     bags: dict[str, np.ndarray] = {}
+    affected_genes = 0
+    total_nonfinite = control_nonfinite
     for symbol in np.unique(genes):
         if symbol == control_label:
             continue
@@ -204,7 +231,12 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
             continue
         if len(rows) > config.cells_per_bag:
             rows = rng.choice(rows, size=config.cells_per_bag, replace=False)
-        bags[str(symbol).upper()] = matrix[np.sort(rows)]
+        key = str(symbol).upper()
+        bag, bag_nonfinite = _zero_fill_nonfinite(matrix[np.sort(rows)], key)
+        bags[key] = bag
+        if bag_nonfinite > 0:
+            affected_genes += 1
+            total_nonfinite += bag_nonfinite
 
     # Warn about genes whose bags have fewer than 2 cells — std pooling will be
     # all-zeros for those genes, which is a silent quality issue.
@@ -214,6 +246,15 @@ def build_gwps_bags(config: SLDLConfig, rng_seed: int = 17) -> GwpsBags:
             "%d gene bag(s) have fewer than 2 cells; std-based pooling will "
             "produce all-zeros for those genes.",
             single_cell_count,
+        )
+
+    if total_nonfinite > 0:
+        logger.warning(
+            "Zero-filled %d non-finite GWPS expression entries across %d gene "
+            "bag(s) plus the control template; upstream h5ad %s contained NaN/inf.",
+            total_nonfinite,
+            affected_genes,
+            config.gwps_h5ad,
         )
 
     return GwpsBags(
