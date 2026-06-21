@@ -198,3 +198,36 @@ def test_build_zero_fills_nonfinite_entries(tmp_path, caplog):
     assert bags.bags_by_symbol["AAAS"].shape == (40, 6)
     msgs = [r.message.lower() for r in caplog.records]
     assert any("non-finite" in m for m in msgs)
+
+
+def test_load_raises_on_nonfinite_cache(tmp_path):
+    """A stale pre-fix cache with NaN must fail-fast at load, not silently load."""
+    d = 6
+    symbols = np.array(["AAAS", "KRAS"], dtype=object)
+    flat = np.ones((10, d), dtype=np.float32)
+    flat[7, 2] = np.nan  # poison a KRAS cell
+    offsets = np.array([0, 5, 10], dtype=np.int64)
+    control = np.ones((4, d), dtype=np.float32)
+    npz_path = tmp_path / "stale_bags.npz"
+    np.savez(
+        npz_path,
+        control_template=control,
+        symbols=symbols,
+        flat=flat,
+        offsets=offsets,
+        input_dim=np.int64(d),
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        load_bags_npz(npz_path)
+
+
+def test_load_passes_on_clean_cache(tmp_path):
+    """Round-tripping a cleanly built cache loads without error."""
+    h5ad = tmp_path / "toy.h5ad"
+    _toy_h5ad(h5ad)
+    cfg = SLDLConfig(gwps_h5ad=h5ad, control_template_size=16, cells_per_bag=16)
+    bags = build_gwps_bags(cfg, rng_seed=17)
+    npz = tmp_path / "clean.npz"
+    save_bags_npz(bags, npz)
+    loaded = load_bags_npz(npz)  # must not raise
+    assert np.isfinite(loaded.control_template).all()
