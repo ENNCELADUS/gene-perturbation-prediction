@@ -261,3 +261,31 @@ def test_train_raises_on_persistent_nonfinite_validation(monkeypatch):
         assert "non-finite" in str(exc).lower() or "non_finite" in str(exc).lower()
     else:
         raise AssertionError("expected RuntimeError on persistent non-finite val")
+
+
+def test_bag_part_asserts_on_nonfinite_real():
+    import numpy as np
+    import pytest
+    import torch
+
+    from sl_dl_model.train import _bag_part
+
+    producer = _bag_producer(max_epochs=1, warmup_epochs=0)
+    model = producer._build_model()
+    # Poison gene A's real bag directly (a path that bypasses load_bags_npz).
+    producer.bags.bags_by_symbol["A"][0, 0] = np.nan
+    control = torch.tensor(producer.bags.control_template)
+    vec_a = producer.esm.vectors_by_symbol["A"]
+    vec_b = producer.esm.vectors_by_symbol["B"]
+    with pytest.raises(AssertionError, match="A"):
+        _bag_part(
+            model,
+            covered_train={"A"},
+            control=control,
+            device="cpu",
+            key_a="A",
+            vec_a=vec_a,
+            key_b="B",
+            vec_b=vec_b,
+            bags=producer.bags,
+        )
