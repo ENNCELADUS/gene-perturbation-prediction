@@ -34,6 +34,8 @@ fi
 export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
+uv run python scripts/setup_exp08_assets.py bags
+
 # NOTE: Fold-level task parallelism (no gradient all-reduce). run_cv shards the
 # (split_type, fold_id) jobs round-robin across the 4 ranks; each rank trains +
 # embeds + scores its own folds on one GPU, then gather_object collects every
