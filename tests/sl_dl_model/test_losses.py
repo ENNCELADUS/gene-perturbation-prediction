@@ -49,3 +49,12 @@ def test_combine_weights():
     weights = {"sl": 1.0, "distill": 0.5}
     total = combine(parts, weights)
     assert abs(total.item() - 4.0) < 1e-6
+
+
+def test_combine_zero_weight_ignores_nonfinite():
+    # Warmup: SL weight 0 while a (hypothetically) non-finite SL term exists.
+    parts = {"sl": torch.tensor(float("nan")), "bag": torch.tensor(2.0)}
+    weights = {"sl": 0.0, "bag": 1.0}
+    total = combine(parts, weights)
+    assert torch.isfinite(total).all()
+    assert abs(total.item() - 2.0) < 1e-6

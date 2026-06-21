@@ -136,8 +136,20 @@ def combine(parts: dict[str, torch.Tensor], weights: dict[str, float]) -> torch.
     total: torch.Tensor | None = None
     for name, value in parts.items():
         weight = float(weights.get(name, 0.0))
-        term = weight * value
+        if weight == 0.0:
+            if not torch.isfinite(value).all():
+                # Drop a zero-weighted non-finite term so it cannot poison the
+                # total via 0.0 * NaN (e.g. an unused SL term during warmup).
+                continue
+            # Keep finite zero-weighted parts in the graph (zero contribution
+            # but a live grad path to the trainable params during warmup).
+            term = 0.0 * value
+        else:
+            term = weight * value
         total = term if total is None else total + term
-    # total cannot be None here because parts is non-empty
-    assert total is not None
+    if total is None:
+        # Every part was zero-weighted and non-finite; return a finite scalar
+        # zero on the right device/dtype derived from an arbitrary part.
+        any_value = next(iter(parts.values()))
+        return torch.zeros((), dtype=any_value.dtype, device=any_value.device)
     return total
