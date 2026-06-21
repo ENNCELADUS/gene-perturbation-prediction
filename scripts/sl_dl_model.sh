@@ -34,6 +34,8 @@ fi
 export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
+uv run python scripts/setup_exp08_assets.py bags
+
 # NOTE: Fold-level task parallelism via a FILESYSTEM WORK-QUEUE (no collective,
 # no gradient all-reduce). run_cv builds the full (split_type, fold_id) job list;
 # every rank walks it and atomically claims (os.mkdir, scoped by run token) each
