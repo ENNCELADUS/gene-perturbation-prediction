@@ -15,7 +15,7 @@ lambda_distill_after_warmup: 0.1
 lambda_bag: 1.0
 warmup_epochs: 3
 max_epochs: 20
-batch_pairs: 1024
+batch_pairs: 64
 lr: 0.001
 include_coverage_flag: false
 fallback_strategy: zero
