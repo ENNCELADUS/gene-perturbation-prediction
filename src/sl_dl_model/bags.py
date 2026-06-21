@@ -295,6 +295,37 @@ def save_bags_npz(bags: GwpsBags, path: Path) -> None:
     )
 
 
+def _assert_finite_bags(
+    control: np.ndarray, bags_by_symbol: dict[str, np.ndarray]
+) -> None:
+    """Raise if any cached bag or the control template is non-finite.
+
+    The build path is the single cleaning site; this verifies the invariant on
+    load so a stale pre-fix cache fails loudly instead of poisoning training.
+
+    Args:
+        control: Control template array.
+        bags_by_symbol: Per-gene response bags.
+
+    Raises:
+        ValueError: If any array contains NaN/inf, naming up to 10 symbols.
+    """
+    offenders: list[str] = []
+    if not np.isfinite(control).all():
+        offenders.append("control_template")
+    for symbol, bag in bags_by_symbol.items():
+        if not np.isfinite(bag).all():
+            offenders.append(symbol)
+    if offenders:
+        shown = ", ".join(sorted(offenders)[:10])
+        raise ValueError(
+            f"GWPS bag cache contains non-finite values in: {shown}"
+            f"{' ...' if len(offenders) > 10 else ''}. This is a stale pre-fix "
+            "cache; rebuild it with "
+            "`uv run python scripts/setup_exp08_assets.py bags`."
+        )
+
+
 def load_bags_npz(path: Path) -> GwpsBags:
     """Load bags cached by :func:`save_bags_npz`.
 
@@ -320,6 +351,7 @@ def load_bags_npz(path: Path) -> GwpsBags:
     bags = {
         str(symbols[i]): flat[offsets[i] : offsets[i + 1]] for i in range(len(symbols))
     }
+    _assert_finite_bags(control, bags)
     return GwpsBags(
         control_template=control,
         bags_by_symbol=bags,
