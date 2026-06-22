@@ -47,11 +47,19 @@ def build_difficulty_ladder() -> None:
         ],
     }
 
+    import pandas as pd  # noqa: E402
+    _pub = pd.read_csv(_HERE.parent / "tables" / "benchmark_published.csv")
+    _grsmf = _pub.loc[_pub["model"] == "GRSMF"].iloc[0]
+    grsmf_ndcg = [float(_grsmf["cv1_ndcg10"]), float(_grsmf["cv2_ndcg10"]),
+                  float(_grsmf["cv3_ndcg10"])]
+
     fig, ax = plt.subplots(figsize=(5.2, 3.2))
     x = range(len(splits))
     markers = ["o", "s", "^"]
     for (label, ys), marker in zip(series.items(), markers):
         ax.plot(list(x), ys, marker=marker, linewidth=1.8, markersize=6, label=label)
+    ax.plot(list(x), grsmf_ndcg, linestyle="--", color="0.4", linewidth=1.5,
+            marker="x", markersize=6, label="GRSMF (best published ranker)")
 
     # shade CV1 as the degree-gameable diagnostic region
     ax.axvspan(-0.4, 0.4, color="0.92", zorder=0)
