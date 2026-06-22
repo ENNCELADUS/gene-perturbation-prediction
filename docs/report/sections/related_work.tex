@@ -1,2 +1,57 @@
 \section{Related Work}
-% filled in writing task
+\label{sec:related}
+
+% Mini-outline (one message per paragraph):
+% - SL prediction methods: graph/MF link prediction on the SL graph; degree/topology reliance; weak cold-start. (F7: DDGCN/etc. are literature, not our results)
+% - Virtual-cell / perturbation models: model the response; closed vocabulary; DL not yet beating linear.
+% - Co-dependency & essentiality: DepMap population fitness; essentiality != SL (F4); transcriptome reflects SL.
+
+\paragraph{Computational synthetic-lethality prediction.}
+Most SL predictors treat the problem as link prediction over a known SL
+interaction graph curated in databases such as SynLethDB
+\citep{wang2022synlethdb} and SLKB \citep{gokbag2023slkb}. Matrix-factorization
+and graph-neural-network methods (for example the GRSMF, SL2MF, and DDGCN
+families surveyed by \citet{wang2022slreview}) propagate observed SL labels
+through gene--gene similarity or interaction topology, and the unified benchmark
+of \citet{feng2024benchmarking} shows they perform strongly when test pairs share
+genes with the training graph. Their common weakness is the same as their
+strength: because the signal lives in graph topology and node degree, accuracy
+degrades sharply when one or both genes are unseen, and a degree-only probe can
+top the easiest split (our Table~\ref{tab:floor}). We use that benchmark and its
+difficulty splits as our evaluation harness, but our features come from a gene's
+\emph{perturbation response} rather than its position in the SL graph, which is
+what gives the approach a path to genes with no curated interactions.
+
+\paragraph{Virtual-cell and perturbation-response models.}
+A second line of work models the cell's response to perturbation directly. The
+virtual-cell program \citep{bunne2024virtualcell} and the associated challenge
+\citep{roohani2025virtualcellchallenge} frame this as learning to predict how a
+cell-state distribution shifts under genetic perturbation; STATE
+\citep{adduri2025state} is a transformer that predicts such set-level responses,
+and single-cell foundation models such as scGPT \citep{cui2024scgpt} and
+Tahoe-x1 \citep{gandhi2025tahoex1} pretrain transferable embeddings at scale.
+Two limitations matter for our setting. First, these models identify a
+perturbation through a fixed gene vocabulary, so out-of-vocabulary genes cannot
+be queried without an adapter --- the bottleneck our ESM2-conditioned adapter
+\citep{lin2023esm2} targets. Second, careful benchmarking finds that deep
+perturbation predictors do not yet consistently beat simple linear baselines
+\citep{ahlmanneltze2025linear, vinastorne2025systema}, which is why we frame our
+generative framework as a preliminary method and compare it candidly against a
+strong dependency-only floor rather than claiming superiority.
+
+\paragraph{Cancer dependency maps and the essentiality--SL distinction.}
+A third line characterizes single-gene dependencies from genome-scale CRISPR
+screens. The DepMap effort, using CERES/Chronos correction
+\citep{meyers2017ceres}, quantifies how much each gene's loss impairs fitness,
+and downstream work builds clinically informed and translational dependency maps
+and target-prioritization frameworks \citep{pacini2024depmap, shi2024translational},
+including deep-learning prediction of dependency from tumor omics
+\citep{chiu2021deepdep}. We rely on these dependency scores as features and as a
+prediction target for a gene's own essentiality, but we are careful not to
+conflate essentiality with synthetic lethality: a broadly essential gene is not
+an SL partner, and our decomposition shows that genome-wide co-dependency signal
+is dominated by pan-essentiality rather than pair-specific interaction. The
+observation closest to our hypothesis is that tumor transcriptomic architecture
+reflects SL interactions \citep{haider2025transcriptomic}; we make the predictive
+direction explicit and, crucially, generate the transcriptome rather than
+requiring it to have been measured.
