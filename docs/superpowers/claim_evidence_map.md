@@ -15,6 +15,7 @@ appear here with a supporting artifact and a status. Spec of record:
 | C4 | Leakage-controlled dependency-only floor exists; CV1 is degree-gameable. | Tab. floor (exp06 CV2 B AUROC 0.704; degree probe CV1 NDCG@10 0.197, collapses to 0.001) | supported |
 | C5 | Most genome-wide co-dependency signal is pan-essentiality; pair-specific SL is the hard residual. | Tab. decomposition (exp09 CV3 non-pan-ess. AUROC 0.583, AUPR 0.490) | supported |
 | C6 | Cold-start (both genes unseen, CV3) is the open frontier and the method's target. | Fig. ladder; Tab. transcriptome CV3; Tab. method CV3 | supported as open problem |
+| C7 | Under one shared K562 protocol, label-free functional methods are classification-competitive with published label-graph SL methods but trail them on ranking. | Tab. benchmark (DDGCN/GRSMF/SL2MF/SLGNN from teammate reproduction, `benchmark_published.csv`; vs exp06/exp07 functional rows); `personal_report_sl_gene_perturbation.md` §6 | supported (no win claimed) |
 
 ## Abstract claim alignment
 

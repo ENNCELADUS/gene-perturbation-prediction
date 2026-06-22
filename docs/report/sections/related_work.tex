@@ -10,8 +10,10 @@
 Most SL predictors treat the problem as link prediction over a known SL
 interaction graph curated in databases such as SynLethDB
 \citep{wang2022synlethdb} and SLKB \citep{gokbag2023slkb}. Matrix-factorization
-and graph-neural-network methods (for example the GRSMF, SL2MF, and DDGCN
-families surveyed by \citet{wang2022slreview}) propagate observed SL labels
+and graph-neural-network methods (GRSMF, SL2MF, DDGCN, and SLGNN;
+\citealp{huang2019grsmf,liu2020sl2mf,cai2020ddgcn,zhu2023slgnn}), which we
+reproduce under our shared K562 protocol (Table~\ref{tab:benchmark}), propagate
+observed SL labels
 through gene--gene similarity or interaction topology, and the unified benchmark
 of \citet{feng2024benchmarking} shows they perform strongly when test pairs share
 genes with the training graph. Their common weakness is the same as their

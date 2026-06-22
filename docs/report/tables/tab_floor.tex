@@ -2,6 +2,7 @@
   \centering
   \caption{Dependency-only floor on the K562 SL benchmark (exp06), per-anchor \texttt{cal\_metrics} ranking. CV1 (pair-level) is degree-gameable: a degree-only probe (shaded) wins it, so CV1 ranking is reported as a diagnostic, not as generalization. CV2 (one gene held out) and CV3 (both genes cold) are the honest surfaces.}
   \label{tab:floor}
+  \resizebox{\linewidth}{!}{%
   \begin{tabular}{lccccccccc}
     \toprule
     & \multicolumn{3}{c}{CV1 (diagnostic)} & \multicolumn{3}{c}{CV2 (one held out)} & \multicolumn{3}{c}{CV3 (both cold)} \\
@@ -13,5 +14,5 @@
     \rowcolor{hl}
     Degree probe (Model C) & 0.849 & 0.902 & 0.197 & 0.500 & 0.750 & 0.001 & 0.500 & 0.750 & 0.001 \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}

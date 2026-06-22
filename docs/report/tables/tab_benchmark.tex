@@ -1,7 +1,8 @@
 \begin{table}[t]
   \centering
-  \caption{Synthetic-lethality prediction on the K562 SL benchmark: published label-graph methods (which consume the SL association matrix as input; \citealp{ddgcn2020,grsmf2019,sl2mf2018,slgnn2023}) versus our label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits and identical per-anchor \texttt{cal\_metrics} ranking on both sides. Label-graph methods lead on ranking (GRSMF NDCG@10, bold); our functional methods use no SL labels yet stay classification-competitive, leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}
+  \caption{Synthetic-lethality prediction on the K562 SL benchmark: published label-graph methods (which consume the SL association matrix as input; \citealp{cai2020ddgcn,huang2019grsmf,liu2020sl2mf,zhu2023slgnn}) versus our label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits and identical per-anchor \texttt{cal\_metrics} ranking on both sides. Label-graph methods lead on ranking (GRSMF NDCG@10, bold); our functional methods use no SL labels yet stay classification-competitive, leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}
   \label{tab:benchmark}
+  \resizebox{\linewidth}{!}{%
   \begin{tabular}{lcccccccccc}
     \toprule
     & \multicolumn{2}{c}{CV1 (diag.)} & \multicolumn{2}{c}{CV2} & \multicolumn{2}{c}{CV3} & \multicolumn{4}{c}{Cross-CV mean} \\
@@ -18,5 +19,5 @@
     Dependency-only (exp06) & 0.730 & 0.050 & 0.676 & 0.042 & 0.670 & 0.002 & 0.698 & 0.718 & 0.692 & 0.032 \\
     \quad + transcriptome (exp07) & 0.769 & 0.174 & 0.702 & 0.094 & 0.676 & 0.001 & 0.744 & 0.772 & 0.716 & 0.090 \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}

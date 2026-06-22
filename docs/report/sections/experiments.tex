@@ -65,6 +65,31 @@ subsequent result on CV2 and CV3.
 
 \input{tables/tab_floor}
 
+\subsection{Comparison with published SL-prediction methods}
+\label{sec:benchmark}
+We place our label-free functional-signal methods next to four published
+synthetic-lethality predictors reproduced under the identical K562 protocol
+(same Rand 1:1 splits, same per-anchor \texttt{cal\_metrics};
+Table~\ref{tab:benchmark}). DDGCN and SLGNN are graph-neural-network link
+predictors; GRSMF and SL2MF are matrix-factorization models. All four
+\emph{consume the SL association matrix as input}; our methods use only
+GeneEffect and perturbation-response features and see no SL labels at
+feature-construction time.
+
+Two patterns are honest to report. First, on ranking the label-graph methods
+lead: GRSMF reaches a cross-CV NDCG@10 of $0.317$ and DDGCN $0.257$, against
+$0.032$ for our dependency-only floor and $0.090$ once the observed
+transcriptome is added. The gap persists at cold-start CV3, so we make no claim
+of a cold-start advantage. Second, on classification the picture is closer: our
+dependency-only floor sits at a cross-CV AUROC near $0.70$, within range of
+DDGCN and GRSMF ($0.752$) and SLGNN ($0.721$). The best classifier (SLGNN, mean
+F1 $0.741$) is not the best ranker (GRSMF), which is why we report both F1 and
+NDCG@10 throughout. These published methods set the ranking bar that our
+generative direction (Section~\ref{sec:exp-method}) is intended to close,
+without yet doing so.
+
+\input{tables/tab_benchmark}
+
 \subsection{Proof-of-concept: the observed transcriptome encodes SL partners}
 \label{sec:exp-poc}
 
