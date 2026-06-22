@@ -1,2 +1,144 @@
 \section{Method}
-% filled in writing task
+\label{sec:method}
+
+% Mini-outline (one message per paragraph):
+% - Overview: rank SL pairs from *generated* perturbation responses; map of 3.1-3.5.
+% - 3.1 Problem setup: per-anchor pair ranking on the K562 benchmark; what C and D are.
+% - 3.2 PertAdapter: motivation = STATE closed vocab; design = ESM2->MLP->pert token; advantage = open-vocab reach.
+% - 3.3 Frozen-STATE response generation: control template -> predicted bag; only adapter trainable.
+% - 3.4 Symmetric pair head: swap-invariant pooling -> SL logit.
+% - 3.5 Three-part loss + evaluation protocol with honest selection caveat (L2).
+
+We cast synthetic-lethal (SL) candidate prioritization as ranking gene pairs by
+a predicted SL probability, where the features of each gene are derived from its
+\emph{generated} perturbation response rather than from a pre-existing screen.
+Our central design choice is to obtain that response from a frozen virtual-cell
+foundation model driven by a protein-language-model gene identity, so that the
+pipeline can in principle score a gene that was never perturbed in the
+laboratory. Figure~\ref{fig:pipeline} shows the forward path.
+Section~\ref{sec:setup} fixes the prediction target and ranking protocol;
+Section~\ref{sec:adapter} introduces the perturbation adapter that breaks the
+foundation model's closed vocabulary; Section~\ref{sec:generate} describes how a
+frozen backbone turns an adapted identity into a predicted response bag;
+Section~\ref{sec:pairhead} defines the swap-invariant pair head; and
+Section~\ref{sec:loss} gives the three-part training objective and the
+evaluation protocol, including an honest statement of how model selection
+interacts with the benchmark.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.62\linewidth]{e2e_SL_DL.png}
+  \caption{The end-to-end framework. A gene's ESM2 identity embedding is mapped
+  by a trainable perturbation adapter into the perturbation space of a frozen
+  STATE backbone, which generates a predicted response bag on a control-cell
+  template. Mean--std pooling yields a gene embedding; a swap-invariant pair head
+  produces the SL probability. Only the adapter and pair head are trainable
+  (blue); the backbone is frozen (snowflake). Training combines an SL
+  cross-entropy loss with a token-distillation loss and real-bag supervision.}
+  \label{fig:pipeline}
+\end{figure}
+
+\subsection{Problem setup and prediction target}
+\label{sec:setup}
+
+We work on the K562-filtered, SynLethDB-derived benchmark of
+\citet{feng2024benchmarking}, whose gene universe contains $9{,}471$ genes that
+carry numeric K562 DepMap GeneEffect values. A training example is an unordered
+gene pair $(a,b)$ with a binary benchmark label $D_{ab}\in\{0,1\}$ from a
+balanced Rand $1{:}1$ split. For each gene $g$ we also have its DepMap
+dependency scalar $C_g=\mathrm{GeneEffect}(\text{K562},g)$, a population-level
+fitness readout. The model outputs a probability $P(\mathrm{SL}\mid a,b)$, and we
+evaluate it with the benchmark's per-anchor protocol: for each anchor gene we
+rank its candidate partners and average ranking quality (NDCG@$k$, MAP@$k$)
+across anchors, alongside threshold-free classification (AUROC, AUPR). We report
+three splits of increasing cold-start severity: CV1 (random pair-level holdout),
+CV2 (one gene of each test pair held out of training), and CV3 (both genes held
+out). Because $D$ is a benchmark-adapter label rather than a validated K562 SL
+assay, and its negatives are unconfirmed non-SL pairs, we treat all outputs as
+candidate prioritization, not target validation.
+
+\subsection{Perturbation adapter: breaking the closed vocabulary}
+\label{sec:adapter}
+
+The obstacle to scoring unscreened genes is that our virtual-cell backbone,
+Arc Institute's STATE model~\citep{adduri2025state}, identifies a perturbation
+through a one-hot lookup over the fixed set of genes it was trained on. In our
+checkpoint that vocabulary covers only $1{,}542$ of the $9{,}471$ benchmark
+genes ($16.3\%$), so a one-hot interface alone can never produce a response for
+the remaining $83.7\%$ of the universe. We therefore replace the one-hot
+perturbation input with a learned adapter that maps a continuous, open-vocabulary
+gene identity into the backbone's perturbation space.
+
+We represent every gene by its ESM2 protein-language-model embedding
+\citep{lin2023esm2}, a $1280$-dimensional vector available for any protein-coding
+gene regardless of whether it was ever screened. The \emph{perturbation adapter}
+is a two-layer multilayer perceptron, $\mathrm{Linear}(1280\!\to\!512)\to
+\mathrm{GELU}\to\mathrm{Linear}(512\!\to\!d_p)$, whose output width $d_p$ matches
+STATE's native perturbation-token dimension. Given a gene's ESM2 vector, the
+adapter emits a perturbation vector that is then consumed by STATE's own (frozen)
+perturbation encoder, exactly where the one-hot token would have entered. The
+advantage is reach: because the adapter's input is a smooth function of protein
+identity rather than a discrete index, the same trained module yields a
+perturbation token for genes the backbone never saw, which is the prerequisite
+for cold-start (CV3) scoring.
+
+\subsection{Generating the perturbation response with a frozen backbone}
+\label{sec:generate}
+
+Given the adapted perturbation token, we generate the gene's response on a fixed
+template of $256$ K562 control cells: STATE maps (control cells, perturbation
+token) to a predicted post-perturbation expression bag of the same shape, our
+in-silico analogue of a Perturb-seq readout. The entire STATE backbone is frozen
+(all parameters held at \texttt{requires\_grad}\,$=$\,\texttt{False} and kept in
+evaluation mode); only the adapter and the downstream pair head are trained.
+Gradients still flow into the adapter through the frozen perturbation encoder, so
+the adapter learns to drive the backbone toward useful responses without
+disturbing the pretrained dynamics. Freezing is a deliberate data-efficiency
+choice: the benchmark provides only tens of thousands of labeled pairs, far too
+few to fine-tune a foundation model, whereas a small adapter and head are
+learnable from this signal while inheriting the backbone's pretrained
+perturbation biology.
+
+\subsection{Symmetric pair head}
+\label{sec:pairhead}
+
+Synthetic lethality is an unordered relation, so the scorer must satisfy
+$f(a,b)=f(b,a)$; a head that treats $(a,b)$ and $(b,a)$ differently would learn
+spurious order artifacts. We first pool each predicted response bag into a gene
+embedding $e_g$ by concatenating the per-feature mean and standard deviation
+across the $256$ cells, which summarizes both the average shift and the
+dispersion of the generated response. We then combine the two gene embeddings
+through three element-wise swap-invariant blocks --- the sum $e_a+e_b$, the
+absolute difference $|e_a-e_b|$, and the product $e_a\odot e_b$ --- and append a
+small block of swap-invariant DepMap GeneEffect features (symmetric functions of
+$C_a$ and $C_b$) together with a coverage indicator. A multilayer perceptron maps
+this representation to the pair logit, whose sigmoid is $P(\mathrm{SL}\mid a,b)$.
+Every operation upstream of the logit is symmetric in $a$ and $b$, so the head is
+exactly swap-invariant by construction rather than by augmentation.
+
+\subsection{Training objective and evaluation protocol}
+\label{sec:loss}
+
+The adapter and head are trained with a three-part objective that supervises the
+pipeline at the levels where signal is available. The primary term is a binary
+cross-entropy loss on the pair logit against the benchmark label $D_{ab}$. A
+\emph{distillation} term keeps the adapter compatible with the pretrained
+backbone: for the in-vocabulary genes it minimizes the squared error between the
+adapter-produced perturbation token and STATE's own one-hot token, anchoring the
+open-vocabulary embedding to the space the backbone expects. A \emph{bag
+supervision} term aligns the generated response with reality for genes that do
+have a real profile, minimizing the discrepancy (mean shift plus an energy
+distance) between the predicted and observed genome-wide Perturb-seq bags. To
+avoid leakage, bag supervision is applied only to training genes with a real
+profile; held-out genes are never shown a real bag. A short warmup emphasizes the
+distillation and bag terms before the SL term is activated, and the combiner
+drops any zero-weighted non-finite term so that an inactive loss cannot
+destabilize the gradient.
+
+We deliberately state one limitation of the current evaluation. Because the
+benchmark protocol selects the best training epoch using the test-fold metric,
+our reported numbers are selection-matched to that protocol and are therefore not
+a strict embedding-only ablation against the dependency-only baseline. We report
+this openly and, in the experiments, treat the resulting numbers as preliminary
+single-fold status rather than as a completed cross-validated comparison.
+
