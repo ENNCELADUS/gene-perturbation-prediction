@@ -96,6 +96,14 @@ def fmt(x: float, dp: int = 3) -> str:
     return f"{x:.{dp}f}"
 
 
+def fmt_best(x: float, best: float, dp: int = 3) -> str:
+    """Format a value and bold it when it ties the column maximum."""
+    cell = fmt(x, dp=dp)
+    if abs(x - best) < 5e-13:
+        return r"\textbf{" + cell + "}"
+    return cell
+
+
 def mean_over_cvs(values: list[float]) -> float:
     """Simple average of per-CV means (matches the published 'Mean' column)."""
     return sum(values) / len(values)
@@ -322,20 +330,31 @@ def build_benchmark() -> None:
                  "cv3_f1", "cv3_ndcg10", "mean_auroc", "mean_aupr",
                  "mean_f1", "mean_ndcg10"]
 
-    def functional_row(csv: str, model: str, sl: str | None) -> list[str]:
-        cells: list[str] = []
+    def functional_row(csv: str, model: str, sl: str | None) -> list[float]:
+        cells: list[float] = []
         per_metric: dict[str, list[float]] = {
             m: [] for m in ("auroc", "aupr", "f1", "ndcg@10")
         }
         for split in ("CV1", "CV2", "CV3"):
             f1 = read_metric(csv, split, model, "f1", slice=sl)
             nd = read_metric(csv, split, model, "ndcg@10", slice=sl)
-            cells += [fmt(f1), fmt(nd)]
+            cells += [f1, nd]
             for m in per_metric:
                 per_metric[m].append(read_metric(csv, split, model, m, slice=sl))
-        cells += [fmt(mean_over_cvs(per_metric[m]))
+        cells += [mean_over_cvs(per_metric[m])
                   for m in ("auroc", "aupr", "f1", "ndcg@10")]
         return cells
+
+    rows = [
+        (str(r["model"]), [float(r[c]) for c in col_order])
+        for _, r in published.iterrows()
+    ]
+    rows += [
+        ("Dependency-only (exp06)", functional_row(EXP06, "B", None)),
+        (r"\quad + transcriptome (exp07)",
+         functional_row(EXP07, "B_transcript", "full_universe")),
+    ]
+    best_by_col = [max(row[1][i] for row in rows) for i in range(len(col_order))]
 
     lines = [
         r"\begin{table}[t]",
@@ -345,7 +364,7 @@ def build_benchmark() -> None:
         r"as input; \citealp{cai2020ddgcn,huang2019grsmf,liu2020sl2mf,zhu2023slgnn}) versus our "
         r"label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits "
         r"and identical per-anchor \texttt{cal\_metrics} ranking on both sides. "
-        r"Label-graph methods lead on ranking (GRSMF NDCG@10, bold); our "
+        r"Bold marks the best value in each metric column, including ties. Label-graph methods lead on ranking; our "
         r"functional methods use no SL labels yet stay classification-competitive, "
         r"leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}",
         r"  \label{tab:benchmark}",
@@ -361,20 +380,14 @@ def build_benchmark() -> None:
         r"    \midrule",
         r"    \multicolumn{11}{l}{\emph{Label-graph methods (consume the SL matrix as input)}} \\",
     ]
-    for _, r in published.iterrows():
-        cells = []
-        for c in col_order:
-            cell = fmt(float(r[c]))
-            if r["model"] == "GRSMF" and c == "mean_ndcg10":
-                cell = r"\textbf{" + cell + "}"
-            cells.append(cell)
-        lines.append(f"    {r['model']} & " + " & ".join(cells) + r" \\")
+    for model, values in rows[: len(published)]:
+        cells = [fmt_best(value, best_by_col[i]) for i, value in enumerate(values)]
+        lines.append(f"    {model} & " + " & ".join(cells) + r" \\")
     lines.append(r"    \cmidrule(lr){1-11}")
     lines.append(r"    \multicolumn{11}{l}{\emph{Functional-signal methods (label-free)}} \\")
-    lines.append(r"    Dependency-only (exp06) & "
-                 + " & ".join(functional_row(EXP06, "B", None)) + r" \\")
-    lines.append(r"    \quad + transcriptome (exp07) & "
-                 + " & ".join(functional_row(EXP07, "B_transcript", "full_universe")) + r" \\")
+    for model, values in rows[len(published):]:
+        cells = [fmt_best(value, best_by_col[i]) for i, value in enumerate(values)]
+        lines.append(f"    {model} & " + " & ".join(cells) + r" \\")
     lines += [r"    \bottomrule", r"  \end{tabular}}", r"\end{table}", ""]
     _write("benchmark", "\n".join(lines))
 

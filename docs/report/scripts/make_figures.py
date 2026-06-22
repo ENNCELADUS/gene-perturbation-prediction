@@ -53,7 +53,7 @@ def build_difficulty_ladder() -> None:
     grsmf_ndcg = [float(_grsmf["cv1_ndcg10"]), float(_grsmf["cv2_ndcg10"]),
                   float(_grsmf["cv3_ndcg10"])]
 
-    fig, ax = plt.subplots(figsize=(5.2, 3.2))
+    fig, ax = plt.subplots(figsize=(5.4, 2.8))
     x = range(len(splits))
     markers = ["o", "s", "^"]
     for (label, ys), marker in zip(series.items(), markers):
@@ -63,10 +63,11 @@ def build_difficulty_ladder() -> None:
 
     # shade CV1 as the degree-gameable diagnostic region
     ax.axvspan(-0.4, 0.4, color="0.92", zorder=0)
+    ax.set_ylim(0.0, 0.35)
     ax.annotate(
         "degree-gameable\n(diagnostic)",
-        xy=(0, ax.get_ylim()[1]),
-        xytext=(0, 0.92),
+        xy=(0, 0.31),
+        xytext=(0, 0.88),
         textcoords=("data", "axes fraction"),
         ha="center",
         va="top",
@@ -79,11 +80,18 @@ def build_difficulty_ladder() -> None:
         ["CV1\n(pair-level)", "CV2\n(one held out)", "CV3\n(both cold)"], fontsize=9
     )
     ax.set_ylabel("NDCG@10 (per-anchor)")
-    ax.set_title("Ranking quality down the cold-start difficulty ladder", fontsize=10)
-    ax.legend(fontsize=7.5, loc="upper right", frameon=False)
+    ax.legend(
+        fontsize=7.5,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.17),
+        ncol=2,
+        frameon=False,
+        columnspacing=1.1,
+        handlelength=2.2,
+    )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    fig.tight_layout()
+    fig.tight_layout(pad=0.4)
 
     FIGURES.mkdir(parents=True, exist_ok=True)
     out = FIGURES / "fig_difficulty_ladder.pdf"

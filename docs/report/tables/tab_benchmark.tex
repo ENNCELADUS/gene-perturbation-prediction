@@ -1,6 +1,6 @@
 \begin{table}[t]
   \centering
-  \caption{Synthetic-lethality prediction on the K562 SL benchmark: published label-graph methods (which consume the SL association matrix as input; \citealp{cai2020ddgcn,huang2019grsmf,liu2020sl2mf,zhu2023slgnn}) versus our label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits and identical per-anchor \texttt{cal\_metrics} ranking on both sides. Label-graph methods lead on ranking (GRSMF NDCG@10, bold); our functional methods use no SL labels yet stay classification-competitive, leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}
+  \caption{Synthetic-lethality prediction on the K562 SL benchmark: published label-graph methods (which consume the SL association matrix as input; \citealp{cai2020ddgcn,huang2019grsmf,liu2020sl2mf,zhu2023slgnn}) versus our label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits and identical per-anchor \texttt{cal\_metrics} ranking on both sides. Bold marks the best value in each metric column, including ties. Label-graph methods lead on ranking; our functional methods use no SL labels yet stay classification-competitive, leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}
   \label{tab:benchmark}
   \resizebox{\linewidth}{!}{%
   \begin{tabular}{lcccccccccc}
@@ -10,14 +10,14 @@
     Method & F1$\uparrow$ & N@10$\uparrow$ & F1$\uparrow$ & N@10$\uparrow$ & F1$\uparrow$ & N@10$\uparrow$ & AUROC$\uparrow$ & AUPR$\uparrow$ & F1$\uparrow$ & N@10$\uparrow$ \\
     \midrule
     \multicolumn{11}{l}{\emph{Label-graph methods (consume the SL matrix as input)}} \\
-    DDGCN & 0.822 & 0.286 & 0.685 & 0.241 & 0.606 & 0.243 & 0.752 & 0.743 & 0.704 & 0.257 \\
-    GRSMF & 0.774 & 0.322 & 0.658 & 0.315 & 0.625 & 0.313 & 0.752 & 0.771 & 0.686 & \textbf{0.317} \\
+    DDGCN & 0.822 & 0.286 & 0.685 & 0.241 & 0.606 & 0.243 & \textbf{0.752} & 0.743 & 0.704 & 0.257 \\
+    GRSMF & 0.774 & \textbf{0.322} & 0.658 & \textbf{0.315} & 0.625 & \textbf{0.313} & \textbf{0.752} & 0.771 & 0.686 & \textbf{0.317} \\
     SL2MF & 0.666 & 0.278 & 0.422 & 0.127 & 0.288 & 0.074 & 0.456 & 0.448 & 0.459 & 0.160 \\
-    SLGNN & 0.870 & 0.150 & 0.685 & 0.050 & 0.667 & 0.000 & 0.721 & 0.746 & 0.741 & 0.066 \\
+    SLGNN & \textbf{0.870} & 0.150 & 0.685 & 0.050 & 0.667 & 0.000 & 0.721 & 0.746 & \textbf{0.741} & 0.066 \\
     \cmidrule(lr){1-11}
     \multicolumn{11}{l}{\emph{Functional-signal methods (label-free)}} \\
     Dependency-only (exp06) & 0.730 & 0.050 & 0.676 & 0.042 & 0.670 & 0.002 & 0.698 & 0.718 & 0.692 & 0.032 \\
-    \quad + transcriptome (exp07) & 0.769 & 0.174 & 0.702 & 0.094 & 0.676 & 0.001 & 0.744 & 0.772 & 0.716 & 0.090 \\
+    \quad + transcriptome (exp07) & 0.769 & 0.174 & \textbf{0.702} & 0.094 & \textbf{0.676} & 0.001 & 0.744 & \textbf{0.772} & 0.716 & 0.090 \\
     \bottomrule
   \end{tabular}}
 \end{table}

@@ -25,9 +25,9 @@ Section~\ref{sec:loss} gives the three-part training objective and the
 evaluation protocol, including an honest statement of how model selection
 interacts with the benchmark.
 
-\begin{figure}[t]
+\begin{figure}[!t]
   \centering
-  \includegraphics[width=0.62\linewidth]{e2e_SL_DL.png}
+  \includegraphics[width=0.58\linewidth]{e2e_SL_DL.png}
   \caption{The end-to-end framework. A gene's ESM2 identity embedding is mapped
   by a trainable perturbation adapter into the perturbation space of a frozen
   STATE backbone, which generates a predicted response bag on a control-cell
@@ -141,4 +141,3 @@ our reported numbers are selection-matched to that protocol and are therefore no
 a strict embedding-only ablation against the dependency-only baseline. We report
 this openly and, in the experiments, treat the resulting numbers as preliminary
 single-fold status rather than as a completed cross-validated comparison.
-
