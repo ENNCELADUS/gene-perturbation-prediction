@@ -15,3 +15,15 @@ appear here with a supporting artifact and a status. Spec of record:
 | C4 | Leakage-controlled dependency-only floor exists; CV1 is degree-gameable. | Tab. floor (exp06 CV2 B AUROC 0.704; degree probe CV1 NDCG@10 0.197, collapses to 0.001) | supported |
 | C5 | Most genome-wide co-dependency signal is pan-essentiality; pair-specific SL is the hard residual. | Tab. decomposition (exp09 CV3 non-pan-ess. AUROC 0.583, AUPR 0.490) | supported |
 | C6 | Cold-start (both genes unseen, CV3) is the open frontier and the method's target. | Fig. ladder; Tab. transcriptome CV3; Tab. method CV3 | supported as open problem |
+
+## Abstract claim alignment
+
+Every claim sentence in the abstract maps to a supported row above:
+- "more than doubles partner-ranking quality (NDCG@10 0.042->0.094)" → C3.
+- "lift vanishes when both genes are unseen" → C6.
+- "frozen STATE + ESM2 adapter ... 83.7% out-of-vocabulary" → CNEW / L3 (83.7% = 100% − 16.3% in-vocab).
+- "preliminary ... does not yet clear a strong dependency-only floor" → CNEW (L1).
+- "most genome-wide co-dependency signal is pan-essentiality" → C5.
+- "benchmark-adapter label, not a validated SL assay" → L8 (scope guard).
+
+No abstract or conclusion sentence introduces a claim absent from this table.
