@@ -135,6 +135,7 @@ def build_floor() -> None:
         r"diagnostic, not as generalization. CV2 (one gene held out) and CV3 "
         r"(both genes cold) are the honest surfaces.}",
         r"  \label{tab:floor}",
+        r"  \resizebox{\linewidth}{!}{%",
         r"  \begin{tabular}{l" + "ccc" * 3 + "}",
         r"    \toprule",
         r"    & \multicolumn{3}{c}{CV1 (diagnostic)} & \multicolumn{3}{c}{CV2 (one held out)} "
@@ -152,7 +153,7 @@ def build_floor() -> None:
         if key == "C":
             row = r"    \rowcolor{hl}" + "\n" + row
         lines.append(row)
-    lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
+    lines += [r"    \bottomrule", r"  \end{tabular}}", r"\end{table}", ""]
     _write("floor", "\n".join(lines))
 
 
@@ -341,13 +342,14 @@ def build_benchmark() -> None:
         r"  \centering",
         r"  \caption{Synthetic-lethality prediction on the K562 SL benchmark: "
         r"published label-graph methods (which consume the SL association matrix "
-        r"as input; \citealp{ddgcn2020,grsmf2019,sl2mf2018,slgnn2023}) versus our "
+        r"as input; \citealp{cai2020ddgcn,huang2019grsmf,liu2020sl2mf,zhu2023slgnn}) versus our "
         r"label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits "
         r"and identical per-anchor \texttt{cal\_metrics} ranking on both sides. "
         r"Label-graph methods lead on ranking (GRSMF NDCG@10, bold); our "
         r"functional methods use no SL labels yet stay classification-competitive, "
         r"leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}",
         r"  \label{tab:benchmark}",
+        r"  \resizebox{\linewidth}{!}{%",
         r"  \begin{tabular}{l" + "cc" * 3 + "cccc}",
         r"    \toprule",
         r"    & \multicolumn{2}{c}{CV1 (diag.)} & \multicolumn{2}{c}{CV2} "
@@ -373,7 +375,7 @@ def build_benchmark() -> None:
                  + " & ".join(functional_row(EXP06, "B", None)) + r" \\")
     lines.append(r"    \quad + transcriptome (exp07) & "
                  + " & ".join(functional_row(EXP07, "B_transcript", "full_universe")) + r" \\")
-    lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
+    lines += [r"    \bottomrule", r"  \end{tabular}}", r"\end{table}", ""]
     _write("benchmark", "\n".join(lines))
 
 
