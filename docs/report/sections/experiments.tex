@@ -1,2 +1,130 @@
 \section{Experiments}
-% filled in writing task
+\label{sec:experiments}
+
+% Mini-outline (one message per paragraph):
+% - Setup: benchmark, splits, per-anchor protocol, what is honest vs diagnostic.
+% - Foundation (C1/C2): transcriptome -> own dependency; signal is real, not death axis.
+% - Floor (C4): dependency-only floor + CV1 degree-gameable.
+% - Proof-of-concept (C3): observed transcriptome encodes SL partners on CV2; collapses on CV3.
+% - Method (CNEW): exp08 preliminary, below floor, single folds; no superiority claim.
+% - Decomposition (C5): most cold-start lift is pan-essentiality; pair-specific SL is the residual.
+
+We organize the evidence around the paper's logic: first that a perturbation
+transcriptome predicts a gene's own dependency at all (the foundation), then that
+the observed transcriptome encodes a gene's SL partners when one partner is
+anchored (the proof-of-concept that licenses the method), then the current status
+of the generative framework, and finally a decomposition that explains why the
+cold-start residual is hard.
+
+\subsection{Setup}
+\label{sec:exp-setup}
+
+All SL experiments use the K562-filtered, SynLethDB-derived benchmark of
+\citet{feng2024benchmarking} (a $9{,}471$-gene universe, balanced Rand $1{:}1$
+pairs) under its per-anchor \texttt{cal\_metrics} ranking protocol, reporting
+AUROC, AUPR, and NDCG@$k$/MAP@$k$. We use three splits of increasing cold-start
+severity: CV1 (random pair-level holdout), CV2 (one gene of each test pair held
+out), and CV3 (both genes held out). CV1 is reported only as a diagnostic:
+because positives and negatives differ in node degree, a probe using gene degree
+alone tops it (Table~\ref{tab:floor}), so CV1 cannot demonstrate generalization
+to unseen genes. Generalization claims therefore come only from CV2 and CV3. The
+label $D$ is a benchmark-adapter target whose negatives are unconfirmed non-SL
+pairs; we never interpret a high-ranked pair as a validated K562 SL target.
+
+\subsection{Foundation: the perturbation transcriptome predicts a gene's own dependency}
+\label{sec:exp-foundation}
+
+Before asking whether a perturbation response names a gene's partners, we
+establish that it predicts the gene's \emph{own} dependency
+(Table~\ref{tab:foundation}). Pseudobulk $\Delta$-expression regressed onto DepMap
+GeneEffect reaches a 5-fold cross-validated Spearman of $0.485$ on Replogle K562,
+and a same-cell-line transfer to the Adamson screen reaches AUROC $0.886$ for
+strong dependencies; we treat the Adamson transfer as a same-line gate, not broad
+validation. An audit rules out the trivial explanation that the model only reads
+a generic cell-death axis: the death signature alone reaches Spearman $0.244$,
+far below the transcriptome's $0.494$, and residualizing the death signature out
+of the transcriptome leaves the signal essentially intact at $0.503$. Single-cell
+distribution embeddings carry the same signal across datasets (exp03), though we
+flag that the strongest Adamson number there came from an Adamson-guided sweep and
+is exploratory, not a held-out result. Together these establish that the
+perturbation response encodes real, dependency-relevant transcriptional structure.
+
+\input{tables/tab_foundation}
+
+\subsection{A dependency-only floor, and a degree-gameable diagnostic}
+\label{sec:exp-floor}
+
+We next fix the bar that any transcriptome-aware model must clear:
+a dependency-only classifier built from swap-invariant DepMap GeneEffect features
+(Table~\ref{tab:floor}). On the honest splits this floor is already strong ---
+CV2 AUROC $0.704$ --- which sets a demanding reference. The table also makes the
+CV1 caveat concrete: a degree-only probe wins CV1 ranking (NDCG@10 $0.197$) yet
+collapses to $0.001$ on CV2 and CV3, confirming that CV1 rewards topology rather
+than biology. We therefore read CV1 as a sanity diagnostic and judge every
+subsequent result on CV2 and CV3.
+
+\input{tables/tab_floor}
+
+\subsection{Proof-of-concept: the observed transcriptome encodes SL partners}
+\label{sec:exp-poc}
+
+The pivotal question is whether the observed perturbation transcriptome carries
+partner information beyond what dependency scores already provide. Holding the
+harness, seeds, and splits fixed and changing only the feature matrix, adding the
+observed transcriptome more than doubles CV2 ranking quality (NDCG@10
+$0.042\!\to\!0.094$; AUROC $0.704\!\to\!0.751$; Table~\ref{tab:transcriptome}),
+and the lift concentrates on the covered-pair slice where real profiles exist.
+This is the empirical license for the whole approach: when one partner is
+anchored by a real response, that response encodes its synthetic-lethal partners.
+The same table delivers the matching bad news. On CV3, where neither gene has an
+observed profile, the transcriptome lift vanishes (Figure~\ref{fig:teaser} and
+the difficulty ladder, Figure~\ref{fig:ladder}). Cold-start ranking is the open
+frontier, and it is exactly the regime an observed-only method cannot reach,
+because there is no shockwave to read.
+
+\input{tables/tab_transcriptome}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.62\linewidth]{figures/fig_difficulty_ladder.pdf}
+  \caption{Ranking quality down the cold-start difficulty ladder. The observed
+  transcriptome lifts CV2 (one gene anchored) but every signal --- dependency,
+  transcriptome, and cross-line selectivity --- collapses on CV3 (both genes
+  cold). CV1 is shaded as the degree-gameable diagnostic.}
+  \label{fig:ladder}
+\end{figure}
+
+\subsection{The generative framework: preliminary status}
+\label{sec:exp-method}
+
+We now report the current status of the framework that targets the CV3 frontier
+by \emph{generating} responses for unscreened genes (Table~\ref{tab:method}).
+These results are preliminary. The runs are incomplete (single selected folds,
+not a 5-fold mean), the best-epoch selection reads the test fold
+(Section~\ref{sec:loss}), and the best folds do not yet clear the
+dependency-only floor (CV2 AUROC $0.667$ versus the floor's $0.704$). We make no
+claim that the framework beats any baseline; we report it as the present state of
+a newly proposed method whose tuning is ongoing. What the experiment does
+establish is that the pipeline runs end to end and produces calibrated SL
+probabilities for genes outside STATE's $16.3\%$ in-vocabulary set, which an
+observed-transcriptome method structurally cannot do.
+
+\input{tables/tab_method}
+
+\subsection{Decomposition: most cold-start signal is pan-essentiality}
+\label{sec:exp-decomp}
+
+Finally we explain why the cold-start residual is so hard
+(Table~\ref{tab:decomposition}). Cross-cell-line selectivity features lift
+classification on both honest splits (CV2 AUROC $0.704\!\to\!0.742$, CV3
+$0.596\!\to\!0.645$), which might suggest progress on co-dependency. But when the
+benchmark is restricted to non-pan-essential pairs on CV3, performance falls back
+toward chance (AUROC $0.583$, AUPR $0.490$). The lift was therefore carried mostly
+by pan-essentiality structure --- genes that are broadly essential are easy to
+flag --- while pair-specific synthetic lethality, the biologically interesting
+relation, remains the thin and unsolved residual. This reframes the cold-start
+gap as a precise target: a generative virtual-cell model must learn the
+pair-specific signal that genome-wide essentiality gravity hides, which is exactly
+what the framework in Section~\ref{sec:method} is designed to pursue.
+
+\input{tables/tab_decomposition}
