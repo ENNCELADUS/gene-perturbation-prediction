@@ -3,7 +3,7 @@
 
 We studied whether a gene's perturbation transcriptome encodes its
 synthetic-lethal partners, and how to extend that signal to genes that were never
-screened. On a SynLethDB-derived K562 benchmark with a leakage-controlled
+screened. On a SynLethDB-derived K562 benchmark with a split-controlled
 difficulty ladder, we showed that the observed perturbation transcriptome more
 than doubles partner-ranking quality when one partner is anchored by a real
 Perturb-seq profile, establishing that the same shockwave which reads a gene's own
@@ -22,16 +22,24 @@ rows lack real GWPS profiles for both genes. This makes the observed-transcripto
 result best understood as an anchored-regime finding: it shows that a measured
 shockwave carries partner signal when coverage exists, but it also explains why
 observed Perturb-seq alone cannot solve both-gene-cold ranking. The generative
-framework is therefore motivated by a real data bottleneck, although its current
-runs are preliminary, incomplete, and do not yet clear the dependency-only floor,
-so we make no superiority claim.
+framework is therefore motivated by a real data bottleneck, but the current
+pipeline has not yet solved it. The available exp08 artifacts are incomplete and
+test-selected, and the completed folds remain below the dependency-only floor;
+adding GWPS bag supervision did not improve CV2/CV3 top-$k$ ranking. This failure
+mode is important to report directly. It does not contradict the observed-bag
+result, because direct real Perturb-seq features do help when an anchor is
+covered. Rather, it shows that the present frozen STATE${+}$ESM2-adapter path has
+not yet converted that measured response signal into a representation that is
+useful for synthetic-lethal partner ranking.
 
 Several broader limitations also bound these claims. All results are for a single
 cellular context (K562) and a benchmark-adapter label whose negatives are
 unconfirmed non-SL pairs, not a validated K562 SL assay, so high-ranked pairs are
 candidates for follow-up rather than confirmed targets. Cold-start ranking (both
 genes unseen) remains unsolved by every signal we tested. The natural next steps
-are to complete cross-validated tuning of the generative framework with an
-evaluation that does not select on the test fold, to extend beyond K562 to
-cross-lineage and patient-context transfer, and to supervise the model directly
-on the pair-specific residual that pan-essentiality otherwise hides.
+are to complete a clean 5-fold exp08 evaluation with a validation split that does
+not select on the test fold, align training with per-anchor ranking rather than
+only pair-level BCE, rebalance the bag and SL losses, diagnose generated-response
+fidelity before using it for SL prediction, and then test whether a less
+constrained adapter or partially trainable forward model can recover the
+pair-specific residual that pan-essentiality otherwise hides.

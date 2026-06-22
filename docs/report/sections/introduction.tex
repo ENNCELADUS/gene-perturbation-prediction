@@ -3,7 +3,7 @@
 
 % Backward-reasoning notes (introduction.md):
 % - Problem: prioritize context-specific SL partners in a ~200M-pair space; screens can't cover it.
-% - No established solution: predictors lean on SL-graph degree/topology; fail true cold-start (CV3).
+% - No established solution: predictors lean on SL-graph topology; no-graph/no-measurement cold start remains open.
 % - Contribution: (1) proof-of-concept that the observed perturbation transcriptome encodes SL partners;
 %   (2) a virtual-cell framework that *generates* the response to reach unseen genes (preliminary).
 % - Insight: the same shockwave that reads a gene's own dependency reaches its partners.
@@ -28,11 +28,12 @@ interaction graph, and they are strong when a test pair shares genes with the
 training graph \citep{feng2024benchmarking, wang2022slreview}. Their signal,
 however, lives in graph topology: because positive pairs are enriched among
 high-degree hub genes, a probe using gene degree alone can win the easiest
-evaluation split, while accuracy collapses once one or both genes are absent from
-the training graph. This exposes the real challenge --- true cold-start
-prediction for genes with no curated interactions and, in the hardest regime, no
-prior measurement at all. It is precisely the regime where undiscovered biology
-lives, and the regime where graph-topology methods have no signal to stand on.
+evaluation split, and published label-graph methods remain a strong ranking bar
+when the SL association matrix is available. This exposes the real challenge
+rather than solving it --- true cold-start prediction for genes with no curated
+interactions and, in the hardest regime, no prior measurement at all. It is
+precisely the regime where undiscovered biology lives, and the regime where a
+method must bring signal from outside the SL graph.
 
 Our starting observation is that a different signal source sidesteps the graph
 entirely. When a gene is silenced, the cell's genome-wide transcriptional
@@ -69,8 +70,8 @@ report this framework as a preliminary method: it runs end to end and produces
 predictions for out-of-vocabulary genes, but its current results do not yet clear
 a strong dependency-only baseline, and we are explicit about this throughout.
 
-Our contributions are: (i) a leakage-controlled evaluation on a SynLethDB-derived
-K562 benchmark that separates an honest cold-start surface from a degree-gameable
+Our contributions are: (i) a split-controlled evaluation on a SynLethDB-derived
+K562 benchmark that separates the honest cold-start surfaces from a degree-gameable
 diagnostic, together with a dependency-only floor on it; (ii) the proof-of-concept
 that the observed perturbation transcriptome encodes a gene's SL partners when one
 partner is anchored, but is structurally limited by GWPS coverage; (iii) a

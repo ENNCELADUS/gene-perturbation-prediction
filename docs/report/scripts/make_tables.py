@@ -30,7 +30,13 @@ TABLES = pathlib.Path(__file__).resolve().parent.parent / "tables"
 EXP06 = "results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_summary.csv"
 EXP07 = "results/experiments/07_k562_sl_pair_perturbseq_augmented/augmented_no_flag/summary.csv"
 EXP09 = "results/experiments/09_k562_sl_pair_cross_cell_line_selectivity/run/summary.csv"
-EXP08_DIRS = "results/experiments/08_k562_sl_pair_state_dl/phase2_bce*"
+EXP08_PHASE2_CV2 = "results/experiments/08_k562_sl_pair_state_dl/phase2_bce"
+EXP08_PHASE2_CV3 = (
+    "results/experiments/08_k562_sl_pair_state_dl/phase2_bce_cv2_cv3_lr3e4_ep30"
+)
+EXP08_PHASE3 = (
+    "results/experiments/08_k562_sl_pair_state_dl/phase3_bag_sup_cv2_cv3_lr3e4_ep30"
+)
 FOUNDATION_CSV = "docs/report/tables/foundation_values.csv"
 
 
@@ -97,16 +103,52 @@ def fmt(x: float, dp: int = 3) -> str:
 
 
 def fmt_best(x: float, best: float, dp: int = 3) -> str:
-    """Format a value and bold it when it ties the column maximum."""
+    """Format a value and shade/bold it when it ties the column maximum."""
     cell = fmt(x, dp=dp)
     if abs(x - best) < 5e-13:
-        return r"\textbf{" + cell + "}"
+        return r"\cellcolor{hl}\textbf{" + cell + "}"
     return cell
+
+
+def fmt_optional(x: float | None, dp: int = 3) -> str:
+    """Format a nullable table cell."""
+    if x is None:
+        return "--"
+    return fmt(x, dp=dp)
 
 
 def mean_over_cvs(values: list[float]) -> float:
     """Simple average of per-CV means (matches the published 'Mean' column)."""
     return sum(values) / len(values)
+
+
+def read_result_metrics(result_json: str) -> dict[str, float]:
+    """Return full-universe metrics from one exp08 fold result JSON."""
+    with open(REPO / result_json) as handle:
+        payload = json.load(handle)
+    out: dict[str, float] = {}
+    for row in payload.get("rows", []):
+        if row.get("slice") == "full_universe":
+            out[str(row["metric"])] = float(row["value"])
+    return out
+
+
+def count_result_jsons(run_dir: str, split_type: str) -> str:
+    """Return N/5 completed exp08 fold JSON count for one run/split."""
+    pattern = REPO / run_dir / "_fold_results" / f"{split_type}_fold*.result.json"
+    return f"{len(glob.glob(str(pattern)))}/5"
+
+
+def mean_result_metric(run_dir: str, split_type: str, metric: str) -> float:
+    """Return the mean of completed exp08 full-universe fold-result JSON metrics."""
+    pattern = REPO / run_dir / "_fold_results" / f"{split_type}_fold*.result.json"
+    values = [
+        read_result_metrics(str(pathlib.Path(path).relative_to(REPO)))[metric]
+        for path in sorted(glob.glob(str(pattern)))
+    ]
+    if not values:
+        raise ValueError(f"no exp08 fold values for {run_dir}/{split_type}/{metric}")
+    return mean_over_cvs(values)
 
 
 # --- table writers ---
@@ -127,58 +169,70 @@ def _write(name: str, body: str) -> None:
 
 
 def build_floor() -> None:
-    """exp06 dependency-only floor (spec C4). CV1 degree-probe row highlighted."""
-    models = [("A", "Logistic reg.\\ (Model A)"), ("B", "XGBoost (Model B)"),
-              ("C", "Degree probe (Model C)")]
-    metrics = ["auroc", "aupr", "ndcg@10"]
-    head = " & ".join([r"\textbf{Model}"]
-                       + [f"\\multicolumn{{1}}{{c}}{{{_ARROW[m]}}}" for m in metrics
-                          for _ in [0]])
+    """exp06 dependency-only floor (spec C4). Highlight comparable column maxima."""
+    models = [("A", "Logistic reg."), ("B", "XGBoost"), ("C", "Degree probe")]
+    metrics = ["aupr", "ndcg@10"]
+    best = {
+        (split, metric): max(read_metric(EXP06, split, key, metric) for key, _ in models)
+        for split in ("CV1", "CV2", "CV3")
+        for metric in metrics
+    }
     lines = [
-        r"\begin{table}[t]",
+        r"\begin{table}[!htbp]",
         r"  \centering",
         r"  \caption{Dependency-only floor on the K562 SL benchmark (exp06), per-anchor "
         r"\texttt{cal\_metrics} ranking. CV1 (pair-level) is degree-gameable: a "
-        r"degree-only probe (shaded) wins it, so CV1 ranking is reported as a "
+        r"degree-only probe wins it, so CV1 ranking is reported as a "
         r"diagnostic, not as generalization. CV2 (one gene held out) and CV3 "
-        r"(both genes cold) are the honest surfaces.}",
+        r"(both genes cold) are the honest surfaces. Shaded bold cells mark the "
+        r"best value in each comparable metric column.}",
         r"  \label{tab:floor}",
-        r"  \resizebox{\linewidth}{!}{%",
-        r"  \begin{tabular}{l" + "ccc" * 3 + "}",
+        r"  \setlength{\tabcolsep}{4pt}",
+        r"  \begin{tabular}{lcccccc}",
         r"    \toprule",
-        r"    & \multicolumn{3}{c}{CV1 (diagnostic)} & \multicolumn{3}{c}{CV2 (one held out)} "
-        r"& \multicolumn{3}{c}{CV3 (both cold)} \\",
-        r"    \cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}",
-        r"    Model & " + " & ".join([_ARROW[m] for _ in range(3) for m in metrics]) + r" \\",
+        r"    & \multicolumn{2}{c}{CV1 (diagnostic)} & \multicolumn{2}{c}{CV2 (one held out)} "
+        r"& \multicolumn{2}{c}{CV3 (both cold)} \\",
+        r"    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}",
+        r"    Model & AUPRC$\uparrow$ & NDCG@10$\uparrow$ & AUPRC$\uparrow$ "
+        r"& NDCG@10$\uparrow$ & AUPRC$\uparrow$ & NDCG@10$\uparrow$ \\",
         r"    \midrule",
     ]
     for key, label in models:
         cells = []
         for split in ("CV1", "CV2", "CV3"):
             for m in metrics:
-                cells.append(fmt(read_metric(EXP06, split, key, m)))
+                value = read_metric(EXP06, split, key, m)
+                cells.append(fmt_best(value, best[(split, m)]))
         row = f"    {label} & " + " & ".join(cells) + r" \\"
-        if key == "C":
-            row = r"    \rowcolor{hl}" + "\n" + row
         lines.append(row)
-    lines += [r"    \bottomrule", r"  \end{tabular}}", r"\end{table}", ""]
+    lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
     _write("floor", "\n".join(lines))
 
 
 def build_transcriptome() -> None:
     """exp07 proof-of-concept: observed transcriptome encodes SL partners (C3)."""
     metrics = ["auroc", "ndcg@10", "map@10"]
+    models = [("B", "dependency-only"), ("B_transcript", "+ transcriptome")]
+    best = {
+        (split, metric): max(
+            read_metric(EXP07, split, model, metric, slice="full_universe")
+            for model, _ in models
+        )
+        for split in ("CV2", "CV3")
+        for metric in metrics
+    }
     lines = [
-        r"\begin{table}[t]",
+        r"\begin{table}[!htbp]",
         r"  \centering",
         r"  \caption{Adding the observed perturbation transcriptome to the "
         r"dependency-only features (exp07; identical harness, seeds, and splits, "
         r"only the feature matrix changes). On CV2, where one partner is anchored "
         r"by a real Perturb-seq profile, transcriptome features more than double "
-        r"ranking quality (NDCG@10 row, shaded). On CV3 (both genes cold, no "
+        r"ranking quality. On CV3 (both genes cold, no "
         r"observed profile) the lift vanishes. \texttt{full\_universe} = all "
         r"benchmark pairs; \texttt{covered\_pairs} = pairs whose anchored gene has "
-        r"a real profile.}",
+        r"a real profile. Shaded bold cells mark the best value within each "
+        r"split and metric.}",
         r"  \label{tab:transcriptome}",
         r"  \begin{tabular}{ll" + "ccc" + "}",
         r"    \toprule",
@@ -186,12 +240,15 @@ def build_transcriptome() -> None:
         r"    \midrule",
     ]
     for split in ("CV2", "CV3"):
-        for model, label in (("B", "dependency-only"), ("B_transcript", "+ transcriptome")):
-            cells = [fmt(read_metric(EXP07, split, model, m, slice="full_universe"))
-                     for m in metrics]
+        for model, label in models:
+            cells = [
+                fmt_best(
+                    read_metric(EXP07, split, model, m, slice="full_universe"),
+                    best[(split, m)],
+                )
+                for m in metrics
+            ]
             row = f"    {split} & {label} & " + " & ".join(cells) + r" \\"
-            if split == "CV2" and model == "B_transcript":
-                row = r"    \rowcolor{hl}" + "\n" + row
             lines.append(row)
         if split == "CV2":
             lines.append(r"    \cmidrule(lr){1-5}")
@@ -202,37 +259,97 @@ def build_transcriptome() -> None:
 def build_method() -> None:
     """exp08 preliminary single-fold rows (CNEW). F1/F2 guard: never a 5-fold mean,
     never framed as beating the floor; the floor is shown alongside for reference."""
-    metrics = ["auroc", "ndcg@10"]
+    metrics = ["auroc", "aupr", "ndcg@10", "map@10"]
+    selected = {
+        ("CV2", "Phase 2 BCE (selected)"): (
+            EXP08_PHASE2_CV2,
+            "CV2_fold2.result.json",
+        ),
+        ("CV2", "Phase 3 bag (selected)"): (
+            EXP08_PHASE3,
+            "CV2_fold1.result.json",
+        ),
+        ("CV3", "Phase 2 BCE (selected)"): (
+            EXP08_PHASE2_CV3,
+            "CV3_fold1.result.json",
+        ),
+        ("CV3", "Phase 3 bag (selected)"): (
+            EXP08_PHASE3,
+            "CV3_fold0.result.json",
+        ),
+    }
     lines = [
-        r"\begin{table}[t]",
+        r"\begin{table}[!htbp]",
         r"  \centering",
-        r"  \caption{\textbf{Preliminary} results for the virtual-cell framework "
-        r"(exp08, AIVC/STATE${+}$ESM2 adapter). Values are the \emph{best selected "
-        r"fold}, \emph{not} a 5-fold mean, and best-epoch selection reads the test "
-        r"fold; full 5-fold tuning is ongoing (see Limitations). The dependency-only "
-        r"floor (exp06) is shown only for reference. We make no claim that the "
-        r"framework beats the floor; these numbers report the current status of a "
-        r"newly proposed method.}",
+        r"  \caption{\textbf{Preliminary} results for the virtual-cell framework (exp08,",
+        r"  AIVC/STATE${+}$ESM2 adapter). Exp08 rows are selected completed folds, not",
+        r"  official 5-fold means, and best-epoch selection reads the fold's test split.",
+        r"  Completion counts show available result JSONs. The dependency-only floor",
+        r"  (exp06 XGBoost, 5-fold mean) is the gate. No exp08 row clears the floor, and",
+        r"  Phase 3 bag supervision does not improve the selected CV2/CV3 ranking metrics.}",
         r"  \label{tab:method}",
-        r"  \begin{tabular}{ll" + "cc" + "}",
+        r"  \setlength{\tabcolsep}{4pt}",
+        r"  \begin{tabular}{lllcccc}",
         r"    \toprule",
-        r"    Split & Method & " + " & ".join(_ARROW[m] for m in metrics) + r" \\",
+        r"    Split & Method & Done & " + " & ".join(_ARROW[m] for m in metrics) + r" \\",
         r"    \midrule",
     ]
-    for split in ("CV2", "CV3"):
-        floor_cells = [fmt(read_metric(EXP06, split, "B", m)) for m in metrics]
+    floor_cv2 = [
+        read_metric(EXP06, "CV2", "B", "auroc"),
+        read_metric(EXP06, "CV2", "B", "aupr"),
+        read_metric(EXP06, "CV2", "B", "ndcg@10"),
+        read_metric(EXP06, "CV2", "B", "map@10"),
+    ]
+    lines.append(
+        "    CV2 & dependency-only floor (ref.) & 5/5 & "
+        + " & ".join(fmt_optional(value) for value in floor_cv2)
+        + r" \\"
+    )
+    for split, label in [
+        ("CV2", "Phase 2 BCE (selected)"),
+        ("CV2", "Phase 3 bag (selected)"),
+    ]:
+        run_dir, file_name = selected[(split, label)]
+        values = read_result_metrics(f"{run_dir}/_fold_results/{file_name}")
+        cells = [fmt_optional(values[m]) for m in metrics]
         lines.append(
-            f"    {split} & dependency-only floor (ref.) & "
-            + " & ".join(floor_cells) + r" \\"
+            f"    {split} & {label} & {count_result_jsons(run_dir, split)} & "
+            + " & ".join(cells)
+            + r" \\"
         )
-        dl_cells = [fmt(read_best_fold_metric(EXP08_DIRS, split, m, slice="full_universe"))
-                    for m in metrics]
+    mean_values = [
+        mean_result_metric(EXP08_PHASE3, "CV2", "auroc"),
+        None,
+        mean_result_metric(EXP08_PHASE3, "CV2", "ndcg@10"),
+        mean_result_metric(EXP08_PHASE3, "CV2", "map@10"),
+    ]
+    lines.append(
+        "    CV2 & Phase 3 bag (5-fold mean) & "
+        + count_result_jsons(EXP08_PHASE3, "CV2")
+        + " & "
+        + " & ".join(fmt_optional(value) for value in mean_values)
+        + r" \\"
+    )
+    lines.append(r"    \cmidrule(lr){1-7}")
+    floor_cv3 = [read_metric(EXP06, "CV3", "B", "auroc"), None,
+                 read_metric(EXP06, "CV3", "B", "ndcg@10"), None]
+    lines.append(
+        "    CV3 & dependency-only floor (ref.) & 5/5 & "
+        + " & ".join(fmt_optional(value) for value in floor_cv3)
+        + r" \\"
+    )
+    for split, label in [
+        ("CV3", "Phase 2 BCE (selected)"),
+        ("CV3", "Phase 3 bag (selected)"),
+    ]:
+        run_dir, file_name = selected[(split, label)]
+        values = read_result_metrics(f"{run_dir}/_fold_results/{file_name}")
+        cells = [fmt_optional(values[m]) for m in metrics]
         lines.append(
-            f"    {split} & AIVC/STATE${{+}}$ESM2 (best fold, prelim.) & "
-            + " & ".join(dl_cells) + r" \\"
+            f"    {split} & {label} & {count_result_jsons(run_dir, split)} & "
+            + " & ".join(cells)
+            + r" \\"
         )
-        if split == "CV2":
-            lines.append(r"    \cmidrule(lr){1-4}")
     lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
     _write("method", "\n".join(lines))
 
@@ -242,17 +359,27 @@ def build_method() -> None:
 
 def build_decomposition() -> None:
     """exp09 selectivity: most cold-start lift is pan-essentiality, not pair-specific
-    co-dependency. The non-pan-essential CV3 slice (shaded) reveals the confound (C5)."""
+    co-dependency. Highlight only comparable full-universe rows within each split."""
     metrics = ["auroc", "aupr", "ndcg@10"]
+    models = [("B", "dependency-only"), ("B_xcl", "+ selectivity")]
+    best = {
+        (split, metric): max(
+            read_metric(EXP09, split, model, metric, slice="full_universe")
+            for model, _ in models
+        )
+        for split in ("CV2", "CV3")
+        for metric in metrics
+    }
     lines = [
-        r"\begin{table}[t]",
+        r"\begin{table}[!htbp]",
         r"  \centering",
         r"  \caption{Cross-cell-line selectivity features (exp09). They lift "
         r"classification on both honest splits, but when the benchmark is "
-        r"restricted to non-pan-essential pairs on CV3 (shaded), AUROC and AUPR "
+        r"restricted to non-pan-essential pairs on CV3, AUROC and AUPR "
         r"collapse toward chance. Most of the genome-wide co-dependency signal is "
         r"pan-essentiality structure; pair-specific synthetic lethality is the thin, "
-        r"hard residual.}",
+        r"hard residual. Shaded bold cells mark the best value within each "
+        r"comparable full-universe split and metric.}",
         r"  \label{tab:decomposition}",
         r"  \begin{tabular}{ll" + "ccc" + "}",
         r"    \toprule",
@@ -260,9 +387,14 @@ def build_decomposition() -> None:
         r"    \midrule",
     ]
     for split in ("CV2", "CV3"):
-        for model, label in (("B", "dependency-only"), ("B_xcl", "+ selectivity")):
-            cells = [fmt(read_metric(EXP09, split, model, m, slice="full_universe"))
-                     for m in metrics]
+        for model, label in models:
+            cells = [
+                fmt_best(
+                    read_metric(EXP09, split, model, m, slice="full_universe"),
+                    best[(split, m)],
+                )
+                for m in metrics
+            ]
             lines.append(f"    {split} & {label} & " + " & ".join(cells) + r" \\")
         if split == "CV2":
             lines.append(r"    \cmidrule(lr){1-5}")
@@ -270,7 +402,6 @@ def build_decomposition() -> None:
     lines.append(r"    \cmidrule(lr){1-5}")
     cells = [fmt(read_metric(EXP09, "CV3", "B_xcl", m, slice="non_pan_essential"))
              for m in metrics]
-    lines.append(r"    \rowcolor{hl}")
     lines.append(r"    CV3 & + selectivity, non-pan-ess. & " + " & ".join(cells) + r" \\")
     lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
     _write("decomposition", "\n".join(lines))
@@ -288,7 +419,7 @@ def build_foundation() -> None:
         return fmt(float(rows.iloc[0]))
 
     lines = [
-        r"\begin{table}[t]",
+        r"\begin{table}[!htbp]",
         r"  \centering",
         r"  \caption{Foundation: a gene's perturbation transcriptome predicts its "
         r"\emph{own} DepMap dependency, and the signal is real transcriptomic "
@@ -364,7 +495,7 @@ def build_benchmark() -> None:
         r"as input; \citealp{cai2020ddgcn,huang2019grsmf,liu2020sl2mf,zhu2023slgnn}) versus our "
         r"label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits "
         r"and identical per-anchor \texttt{cal\_metrics} ranking on both sides. "
-        r"Bold marks the best value in each metric column, including ties. Label-graph methods lead on ranking; our "
+        r"Shaded bold cells mark the best value in each metric column, including ties. Label-graph methods lead on ranking; our "
         r"functional methods use no SL labels yet stay classification-competitive, "
         r"leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}",
         r"  \label{tab:benchmark}",

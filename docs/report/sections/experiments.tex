@@ -137,15 +137,38 @@ many candidate genes have no real shockwave to read.
 
 We now report the current status of the framework that targets the CV3 frontier
 by \emph{generating} responses for unscreened genes (Table~\ref{tab:method}).
-These results are preliminary. The runs are incomplete (single selected folds,
-not a 5-fold mean), the best-epoch selection reads the test fold
-(Section~\ref{sec:loss}), and the best folds do not yet clear the
-dependency-only floor (CV2 AUROC $0.667$ versus the floor's $0.704$). We make no
-claim that the framework beats any baseline; we report it as the present state of
-a newly proposed method whose tuning is ongoing. What the experiment does
-establish is that the pipeline runs end to end and produces calibrated SL
-probabilities for genes outside STATE's $16.3\%$ in-vocabulary set, which an
-observed-transcriptome method structurally cannot do.
+These artifacts should be read as a feasibility and failure-analysis snapshot,
+not as a completed official result. Several runs have epoch traces but no final
+fold-result JSON, there is no top-level official summary, and best-epoch
+selection reads the test fold (Section~\ref{sec:loss}). Within the completed
+artifacts, however, the pattern is already clear. Phase 2, which trains the
+adapter and pair head without real-bag supervision, does not pass the exp06 gate:
+the selected CV2 fold reaches AUROC/AUPR $0.667/0.675$ and NDCG@10/MAP@10
+$0.005/0.004$, well below the dependency-only floor's $0.704/0.732$ and
+$0.042/0.034$. Phase 3, which adds GWPS bag supervision on covered train genes,
+does not rescue the ranking signal. Its selected CV2 row is worse than Phase 2
+(AUROC $0.574$, NDCG@10 $0.004$), and the completed five CV2 folds average only
+AUROC $0.532\pm0.029$ and NDCG@10 $0.0069\pm0.0090$. CV3 remains especially
+weak: selected Phase 3 CV3 has NDCG@10 and MAP@10 equal to $0.000$.
+
+The negative result is informative because it separates the value of real
+perturbation data from the current failure of the frozen-STATE adapter route.
+The Phase 3 logs indicate that training is numerically stable rather than
+crashing: completed runs report applied optimizer steps without skipped updates.
+Yet validation AUROC often falls back toward $0.5$ after an early peak, suggesting
+that the model runs but does not learn a stable per-anchor ordering signal. One
+likely reason is objective mismatch: the model is trained mainly with pair-level
+BCE while the main metric is top-$k$ partner ranking, and the RankNet term is not
+active. A second reason is loss-scale mismatch. In Phase 3, the bag-supervision
+loss dominates the total loss scale (roughly $11$--$12$ in the inspected logs),
+but matching GWPS bags does not translate into better SL AUROC or NDCG. A third
+reason is representational: only the ESM2-to-perturbation adapter, pooling, and
+pair head are trainable, while STATE is frozen and only $16.3\%$ of the SL
+universe is in its native perturbation vocabulary. The evidence therefore does
+not say that measured perturbation responses are useless---exp07 shows that
+direct real-bag features help in CV2. It says that the present frozen
+STATE${+}$adapter pipeline has not preserved that transcriptomic signal in a form
+useful for SL top-$k$ ranking, especially when both genes are held out.
 
 \input{tables/tab_method}
 

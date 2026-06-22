@@ -2,7 +2,7 @@
 \label{sec:related}
 
 % Mini-outline (one message per paragraph):
-% - SL prediction methods: graph/MF link prediction on the SL graph; degree/topology reliance; weak cold-start. (F7: DDGCN/etc. are literature, not our results)
+% - SL prediction methods: graph/MF link prediction on the SL graph; degree/topology reliance; strong ranking bar but not a no-graph path.
 % - Virtual-cell / perturbation models: model the response; closed vocabulary; DL not yet beating linear.
 % - Co-dependency & essentiality: DepMap population fitness; essentiality != SL (F4); transcriptome reflects SL.
 
@@ -13,16 +13,16 @@ interaction graph curated in databases such as SynLethDB
 and graph-neural-network methods (GRSMF, SL2MF, DDGCN, and SLGNN;
 \citealp{huang2019grsmf,liu2020sl2mf,cai2020ddgcn,zhu2023slgnn}), which we
 reproduce under our shared K562 protocol (Table~\ref{tab:benchmark}), propagate
-observed SL labels
-through gene--gene similarity or interaction topology, and the unified benchmark
-of \citet{feng2024benchmarking} shows they perform strongly when test pairs share
-genes with the training graph. Their common weakness is the same as their
-strength: because the signal lives in graph topology and node degree, accuracy
-degrades sharply when one or both genes are unseen, and a degree-only probe can
-top the easiest split (our Table~\ref{tab:floor}). We use that benchmark and its
+observed SL labels through gene--gene similarity or interaction topology, and the
+unified benchmark of \citet{feng2024benchmarking} shows they perform strongly
+when graph signal is available. Their common weakness is the same as their
+strength: the signal is tied to graph topology and node degree. A degree-only
+probe can top the easiest split (our Table~\ref{tab:floor}), while the stronger
+label-graph methods in Table~\ref{tab:benchmark} set the ranking bar that any
+functional method must eventually approach. We use that benchmark and its
 difficulty splits as our evaluation harness, but our features come from a gene's
 \emph{perturbation response} rather than its position in the SL graph, which is
-what gives the approach a path to genes with no curated interactions.
+what gives the approach a path toward genes with no curated interactions.
 
 \paragraph{Virtual-cell and perturbation-response models.}
 A second line of work models the cell's response to perturbation directly. The

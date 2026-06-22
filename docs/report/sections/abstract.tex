@@ -3,16 +3,16 @@ Synthetic lethality (SL) is a powerful route to selective cancer therapy, but th
 space of candidate gene pairs is far too large to screen exhaustively, so
 computational prioritization is essential. Existing predictors largely perform
 link prediction over a curated SL interaction graph; their signal lives in graph
-topology, so a degree-only probe can win the easiest evaluation split while
-accuracy collapses for genes absent from the training graph --- exactly the
-cold-start regime where new biology lies. Our insight is that a gene's
+topology, so a degree-only probe can win the easiest evaluation split, and even
+stronger label-graph methods remain tied to an SL association matrix that is
+unavailable for truly uncharted genes. Our insight is that a gene's
 perturbation transcriptome, the genome-wide ``shockwave'' that already predicts
 its own dependency, should also encode its synthetic-lethal partners. We first
 confirm this on a SynLethDB-derived K562 benchmark: with the evaluation harness
 held fixed, adding the observed perturbation transcriptome more than doubles
 partner-ranking quality (NDCG@10 $0.042\!\to\!0.094$) when one partner is anchored
-by a real Perturb-seq profile, though the lift vanishes when both genes are
-unseen. Because an observed response exists only for screened genes, data
+by a real Perturb-seq profile, though the top-$k$ ranking lift vanishes when both
+genes are cold. Because an observed response exists only for screened genes, data
 coverage becomes the central bottleneck: even broad K562 GWPS data leave many
 candidate genes and pairs without measured response profiles. We then propose
 generating the missing response: an end-to-end framework that drives a frozen

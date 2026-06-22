@@ -1,0 +1,32 @@
+body {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.45;
+  max-width: 760px;
+  margin: 48px auto;
+  color: #111;
+}
+
+h1 {
+  font-size: 20pt;
+  margin-bottom: 1.2em;
+}
+
+h2 {
+  font-size: 15pt;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+
+p {
+  margin: 0 0 0.75em;
+}
+
+li {
+  margin-bottom: 0.45em;
+}
+
+code {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10.5pt;
+}
