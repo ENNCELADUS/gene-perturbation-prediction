@@ -45,6 +45,8 @@ wheels/
 *.zip
 *.parquet
 *.pkl
+# Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
+!docs/report/tables/*.csv
 data/**/features
 data/**/interim
 data/**/manifests

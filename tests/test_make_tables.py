@@ -59,8 +59,52 @@ def test_all_tables_generated_and_clean():
     subprocess.run(
         ["python", "docs/report/scripts/make_tables.py", "--all"], check=True
     )
-    for name in ["floor", "transcriptome", "method", "decomposition", "foundation"]:
+    for name in ["floor", "transcriptome", "method", "decomposition", "foundation", "benchmark"]:
         txt = pathlib.Path(f"docs/report/tables/tab_{name}.tex").read_text()
         assert "\\toprule" in txt and "|" not in txt  # booktabs, no vertical rules
     method_txt = pathlib.Path("docs/report/tables/tab_method.tex").read_text().lower()
     assert "5-fold" in method_txt  # F2 preliminary flag present
+
+
+def test_benchmark_published_grsmf_mean_ndcg():
+    import pandas as pd
+    df = pd.read_csv("docs/report/tables/benchmark_published.csv")
+    val = df.loc[df["model"] == "GRSMF", "mean_ndcg10"].iloc[0]
+    assert abs(float(val) - 0.317) < 1e-9
+
+
+def test_benchmark_published_slgnn_cv3_ndcg_collapse():
+    import pandas as pd
+    df = pd.read_csv("docs/report/tables/benchmark_published.csv")
+    val = df.loc[df["model"] == "SLGNN", "cv3_ndcg10"].iloc[0]
+    assert abs(float(val) - 0.000) < 1e-9
+
+
+def test_mean_over_cvs_matches_simple_average():
+    assert abs(mt.mean_over_cvs([0.7947, 0.7035, 0.5956]) - 0.6979333333) < 1e-6
+
+
+def test_benchmark_functional_floor_mean_auroc():
+    # exp06 Model B mean-over-CV AUROC, recomputed from artifacts (~0.698).
+    vals = [mt.read_metric(mt.EXP06, s, "B", "auroc") for s in ("CV1", "CV2", "CV3")]
+    assert abs(mt.mean_over_cvs(vals) - 0.698) < 0.005
+
+
+def test_benchmark_table_has_both_rowgroups():
+    subprocess.run(
+        ["python", "docs/report/scripts/make_tables.py", "--table", "benchmark"],
+        check=True,
+    )
+    text = pathlib.Path("docs/report/tables/tab_benchmark.tex").read_text()
+    assert "\\toprule" in text and "|" not in text
+    assert "Label-graph" in text and "Functional" in text
+    assert "GRSMF" in text and "DDGCN" in text
+
+
+def test_difficulty_ladder_figure_builds():
+    r = subprocess.run(
+        ["python", "docs/report/scripts/make_figures.py"],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, r.stderr
+    assert pathlib.Path("docs/report/figures/fig_difficulty_ladder.pdf").exists()

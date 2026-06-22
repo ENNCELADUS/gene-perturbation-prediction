@@ -96,6 +96,11 @@ def fmt(x: float, dp: int = 3) -> str:
     return f"{x:.{dp}f}"
 
 
+def mean_over_cvs(values: list[float]) -> float:
+    """Simple average of per-CV means (matches the published 'Mean' column)."""
+    return sum(values) / len(values)
+
+
 # --- table writers ---
 
 _ARROW = {  # metric display name with direction
@@ -307,12 +312,78 @@ def build_foundation() -> None:
     _write("foundation", "\n".join(lines))
 
 
+def build_benchmark() -> None:
+    """Cross-method comparison: published label-graph methods (teammate
+    reproduction CSV) vs our label-free functional-signal methods (exp06/exp07),
+    same K562-DepMap splits and per-anchor cal_metrics (spec: tab_benchmark)."""
+    published = pd.read_csv(REPO / "docs/report/tables/benchmark_published.csv")
+    col_order = ["cv1_f1", "cv1_ndcg10", "cv2_f1", "cv2_ndcg10",
+                 "cv3_f1", "cv3_ndcg10", "mean_auroc", "mean_aupr",
+                 "mean_f1", "mean_ndcg10"]
+
+    def functional_row(csv: str, model: str, sl: str | None) -> list[str]:
+        cells: list[str] = []
+        per_metric: dict[str, list[float]] = {
+            m: [] for m in ("auroc", "aupr", "f1", "ndcg@10")
+        }
+        for split in ("CV1", "CV2", "CV3"):
+            f1 = read_metric(csv, split, model, "f1", slice=sl)
+            nd = read_metric(csv, split, model, "ndcg@10", slice=sl)
+            cells += [fmt(f1), fmt(nd)]
+            for m in per_metric:
+                per_metric[m].append(read_metric(csv, split, model, m, slice=sl))
+        cells += [fmt(mean_over_cvs(per_metric[m]))
+                  for m in ("auroc", "aupr", "f1", "ndcg@10")]
+        return cells
+
+    lines = [
+        r"\begin{table}[t]",
+        r"  \centering",
+        r"  \caption{Synthetic-lethality prediction on the K562 SL benchmark: "
+        r"published label-graph methods (which consume the SL association matrix "
+        r"as input; \citealp{ddgcn2020,grsmf2019,sl2mf2018,slgnn2023}) versus our "
+        r"label-free functional-signal methods. Same K562-DepMap Rand 1:1 splits "
+        r"and identical per-anchor \texttt{cal\_metrics} ranking on both sides. "
+        r"Label-graph methods lead on ranking (GRSMF NDCG@10, bold); our "
+        r"functional methods use no SL labels yet stay classification-competitive, "
+        r"leaving ranking as the open gap. CV1 is the degree-gameable diagnostic.}",
+        r"  \label{tab:benchmark}",
+        r"  \begin{tabular}{l" + "cc" * 3 + "cccc}",
+        r"    \toprule",
+        r"    & \multicolumn{2}{c}{CV1 (diag.)} & \multicolumn{2}{c}{CV2} "
+        r"& \multicolumn{2}{c}{CV3} & \multicolumn{4}{c}{Cross-CV mean} \\",
+        r"    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-11}",
+        r"    Method & F1$\uparrow$ & N@10$\uparrow$ & F1$\uparrow$ & N@10$\uparrow$ "
+        r"& F1$\uparrow$ & N@10$\uparrow$ & AUROC$\uparrow$ & AUPR$\uparrow$ "
+        r"& F1$\uparrow$ & N@10$\uparrow$ \\",
+        r"    \midrule",
+        r"    \multicolumn{11}{l}{\emph{Label-graph methods (consume the SL matrix as input)}} \\",
+    ]
+    for _, r in published.iterrows():
+        cells = []
+        for c in col_order:
+            cell = fmt(float(r[c]))
+            if r["model"] == "GRSMF" and c == "mean_ndcg10":
+                cell = r"\textbf{" + cell + "}"
+            cells.append(cell)
+        lines.append(f"    {r['model']} & " + " & ".join(cells) + r" \\")
+    lines.append(r"    \cmidrule(lr){1-11}")
+    lines.append(r"    \multicolumn{11}{l}{\emph{Functional-signal methods (label-free)}} \\")
+    lines.append(r"    Dependency-only (exp06) & "
+                 + " & ".join(functional_row(EXP06, "B", None)) + r" \\")
+    lines.append(r"    \quad + transcriptome (exp07) & "
+                 + " & ".join(functional_row(EXP07, "B_transcript", "full_universe")) + r" \\")
+    lines += [r"    \bottomrule", r"  \end{tabular}", r"\end{table}", ""]
+    _write("benchmark", "\n".join(lines))
+
+
 _BUILDERS = {
     "floor": build_floor,
     "transcriptome": build_transcriptome,
     "method": build_method,
     "decomposition": build_decomposition,
     "foundation": build_foundation,
+    "benchmark": build_benchmark,
 }
 
 
