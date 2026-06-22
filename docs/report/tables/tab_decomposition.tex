@@ -1,0 +1,19 @@
+\begin{table}[t]
+  \centering
+  \caption{Cross-cell-line selectivity features (exp09). They lift classification on both honest splits, but when the benchmark is restricted to non-pan-essential pairs on CV3 (shaded), AUROC and AUPR collapse toward chance. Most of the genome-wide co-dependency signal is pan-essentiality structure; pair-specific synthetic lethality is the thin, hard residual.}
+  \label{tab:decomposition}
+  \begin{tabular}{llccc}
+    \toprule
+    Split & Features & AUROC$\uparrow$ & AUPR$\uparrow$ & NDCG@10$\uparrow$ \\
+    \midrule
+    CV2 & dependency-only & 0.704 & 0.732 & 0.042 \\
+    CV2 & + selectivity & 0.742 & 0.769 & 0.086 \\
+    \cmidrule(lr){1-5}
+    CV3 & dependency-only & 0.596 & 0.609 & 0.002 \\
+    CV3 & + selectivity & 0.645 & 0.651 & 0.001 \\
+    \cmidrule(lr){1-5}
+    \rowcolor{hl}
+    CV3 & + selectivity, non-pan-ess. & 0.583 & 0.490 & 0.001 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
