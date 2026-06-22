@@ -47,6 +47,15 @@ empirical license for our approach, but it also reveals its limit --- an observe
 response exists only for genes that were actually screened, so it cannot reach
 the cold-start frontier.
 
+The observed-response limit is a data-coverage problem rather than a modeling
+detail. Even genome-scale Perturb-seq libraries measure only a subset of the SL
+candidate universe, and a pairwise task amplifies this missingness because both
+genes would ideally have response profiles. Thus an observed-transcriptome model
+can test the anchored CV2 regime, where at least one partner is measured, but it
+cannot be a complete answer to both-gene-cold CV3. We quantify this coverage gap
+in the experiments and treat it as the central reason to move from measured to
+generated responses.
+
 We therefore propose generating the response instead of measuring it. Our second
 contribution is an end-to-end framework that drives a frozen virtual-cell
 foundation model (STATE; \citealp{adduri2025state}) with a protein-language-model
@@ -55,18 +64,19 @@ perturbation response --- and hence an SL prediction --- can be produced for any
 gene, including the $83.7\%$ of our benchmark universe that lies outside the
 backbone's fixed vocabulary. The insight is that if the \emph{observed} shockwave
 encodes a gene's partners, a faithfully \emph{generated} shockwave should carry
-the same signal while extending it past the set of screened genes. We report this
-framework as a preliminary method: it runs end to end and produces predictions
-for out-of-vocabulary genes, but its current results do not yet clear a strong
-dependency-only baseline, and we are explicit about this throughout.
+the same signal while extending it past the measured Perturb-seq library. We
+report this framework as a preliminary method: it runs end to end and produces
+predictions for out-of-vocabulary genes, but its current results do not yet clear
+a strong dependency-only baseline, and we are explicit about this throughout.
 
 Our contributions are: (i) a leakage-controlled evaluation on a SynLethDB-derived
 K562 benchmark that separates an honest cold-start surface from a degree-gameable
 diagnostic, together with a dependency-only floor on it; (ii) the proof-of-concept
 that the observed perturbation transcriptome encodes a gene's SL partners when one
-partner is anchored; (iii) a virtual-cell framework that generates responses for
-unscreened genes via an ESM2-conditioned adapter to a frozen backbone, reported
-with preliminary results; and (iv) a decomposition showing that most genome-wide
-co-dependency signal is pan-essentiality, isolating pair-specific SL as the hard
-residual the generative approach must learn. All claims are scoped to K562 and to
-a benchmark-adapter label, not a validated SL assay.
+partner is anchored, but is structurally limited by GWPS coverage; (iii) a
+virtual-cell framework that generates responses for unscreened genes via an
+ESM2-conditioned adapter to a frozen backbone, reported with preliminary results;
+and (iv) a decomposition showing that most genome-wide co-dependency signal is
+pan-essentiality, isolating pair-specific SL as the hard residual the generative
+approach must learn. All claims are scoped to K562 and to a benchmark-adapter
+label, not a validated SL assay.

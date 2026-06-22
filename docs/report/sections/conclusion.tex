@@ -15,14 +15,23 @@ clarified why the cold-start residual is hard: most genome-wide co-dependency
 signal is pan-essentiality, leaving pair-specific synthetic lethality as a thin
 residual that a generative model must isolate.
 
-Several limitations bound these claims. The generative framework is preliminary:
-its current runs are incomplete and do not yet clear the dependency-only floor, so
-we make no superiority claim. All results are for a single cellular context
-(K562) and a benchmark-adapter label whose negatives are unconfirmed non-SL pairs,
-not a validated K562 SL assay, so high-ranked pairs are candidates for follow-up
-rather than confirmed targets. Cold-start ranking (both genes unseen) remains
-unsolved by every signal we tested. The natural next steps are to complete
-cross-validated tuning of the generative framework with an evaluation that does
-not select on the test fold, to extend beyond K562 to cross-lineage and
-patient-context transfer, and to supervise the model directly on the
-pair-specific residual that pan-essentiality otherwise hides.
+The main limitation is not only model maturity but data coverage. Replogle K562
+GWPS substantially expands the measured response library, yet it still covers
+only $6{,}070/9{,}471$ benchmark genes, and roughly half of the evaluated pair
+rows lack real GWPS profiles for both genes. This makes the observed-transcriptome
+result best understood as an anchored-regime finding: it shows that a measured
+shockwave carries partner signal when coverage exists, but it also explains why
+observed Perturb-seq alone cannot solve both-gene-cold ranking. The generative
+framework is therefore motivated by a real data bottleneck, although its current
+runs are preliminary, incomplete, and do not yet clear the dependency-only floor,
+so we make no superiority claim.
+
+Several broader limitations also bound these claims. All results are for a single
+cellular context (K562) and a benchmark-adapter label whose negatives are
+unconfirmed non-SL pairs, not a validated K562 SL assay, so high-ranked pairs are
+candidates for follow-up rather than confirmed targets. Cold-start ranking (both
+genes unseen) remains unsolved by every signal we tested. The natural next steps
+are to complete cross-validated tuning of the generative framework with an
+evaluation that does not select on the test fold, to extend beyond K562 to
+cross-lineage and patient-context transfer, and to supervise the model directly
+on the pair-specific residual that pan-essentiality otherwise hides.

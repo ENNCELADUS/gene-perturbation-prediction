@@ -31,6 +31,16 @@ to unseen genes. Generalization claims therefore come only from CV2 and CV3. The
 label $D$ is a benchmark-adapter target whose negatives are unconfirmed non-SL
 pairs; we never interpret a high-ranked pair as a validated K562 SL target.
 
+The observed-response experiments also face a concrete coverage bottleneck. The
+GWPS source used for transcriptome features provides real K562 CRISPRi response
+bags for $6{,}070/9{,}471$ benchmark genes ($64.09\%$), while all other readable
+local CRISPRi/KO supplements increase the union to only $6{,}074$ genes
+($64.13\%$). At the pair level, the completed Rand $1{:}1$ benchmark rows contain
+two GWPS-covered genes in only $51.17\%$ of cases; the remaining rows require a
+fallback embedding for at least one gene. We therefore interpret transcriptome
+features as a test of the measured-data regime, not as evidence that observed
+Perturb-seq alone can solve the full cold-start task.
+
 \subsection{Foundation: the perturbation transcriptome predicts a gene's own dependency}
 \label{sec:exp-foundation}
 
@@ -65,6 +75,8 @@ subsequent result on CV2 and CV3.
 
 \input{tables/tab_floor}
 
+\FloatBarrier
+
 \subsection{Comparison with published SL-prediction methods}
 \label{sec:benchmark}
 We place our label-free functional-signal methods next to four published
@@ -98,20 +110,21 @@ partner information beyond what dependency scores already provide. Holding the
 harness, seeds, and splits fixed and changing only the feature matrix, adding the
 observed transcriptome more than doubles CV2 ranking quality (NDCG@10
 $0.042\!\to\!0.094$; AUROC $0.704\!\to\!0.751$; Table~\ref{tab:transcriptome}),
-and the lift concentrates on the covered-pair slice where real profiles exist.
-This is the empirical license for the whole approach: when one partner is
-anchored by a real response, that response encodes its synthetic-lethal partners.
-The same table delivers the matching bad news. On CV3, where neither gene has an
-observed profile, the transcriptome lift vanishes (Figure~\ref{fig:teaser} and
-the difficulty ladder, Figure~\ref{fig:ladder}). Cold-start ranking is the open
-frontier, and it is exactly the regime an observed-only method cannot reach,
-because there is no shockwave to read.
+and the lift concentrates on rows where a real profile can anchor the pair. This
+is the empirical license for the whole approach: when one partner is measured,
+its response encodes information about its synthetic-lethal partners. The same
+table delivers the matching bad news. Coverage-limited observed features do not
+rescue CV3, where both genes are cold to the SL training graph and the top-k
+ranking lift vanishes (Figure~\ref{fig:teaser} and the difficulty ladder,
+Figure~\ref{fig:ladder}). Cold-start ranking is therefore the open frontier, and
+it is exactly the regime an observed-only method cannot reach reliably, because
+many candidate genes have no real shockwave to read.
 
 \input{tables/tab_transcriptome}
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
   \centering
-  \includegraphics[width=0.62\linewidth]{figures/fig_difficulty_ladder.pdf}
+  \includegraphics[width=0.70\linewidth]{figures/fig_difficulty_ladder.pdf}
   \caption{Ranking quality down the cold-start difficulty ladder. The observed
   transcriptome lifts CV2 (one gene anchored) but every signal --- dependency,
   transcriptome, and cross-line selectivity --- collapses on CV3 (both genes
@@ -153,3 +166,5 @@ pair-specific signal that genome-wide essentiality gravity hides, which is exact
 what the framework in Section~\ref{sec:method} is designed to pursue.
 
 \input{tables/tab_decomposition}
+
+\FloatBarrier

@@ -12,15 +12,17 @@ confirm this on a SynLethDB-derived K562 benchmark: with the evaluation harness
 held fixed, adding the observed perturbation transcriptome more than doubles
 partner-ranking quality (NDCG@10 $0.042\!\to\!0.094$) when one partner is anchored
 by a real Perturb-seq profile, though the lift vanishes when both genes are
-unseen. Because an observed response exists only for screened genes, we then
-propose generating it: an end-to-end framework that drives a frozen virtual-cell
-foundation model (STATE) with a protein-language-model gene identity (ESM2)
-through a trainable adapter, so a perturbation response --- and an SL prediction
---- can be produced for genes outside the backbone's fixed vocabulary
+unseen. Because an observed response exists only for screened genes, data
+coverage becomes the central bottleneck: even broad K562 GWPS data leave many
+candidate genes and pairs without measured response profiles. We then propose
+generating the missing response: an end-to-end framework that drives a frozen
+virtual-cell foundation model (STATE) with a protein-language-model gene identity
+(ESM2) through a trainable adapter, so a perturbation response --- and an SL
+prediction --- can be produced for genes outside the backbone's fixed vocabulary
 ($83.7\%$ of our universe). We report this framework as a preliminary method: it
 runs end to end and scores out-of-vocabulary genes, but does not yet clear a
-strong dependency-only floor. Finally, a decomposition shows that most genome-wide
-co-dependency signal is pan-essentiality, isolating pair-specific SL as the hard
-residual that a generative virtual-cell model must learn. All results are scoped
-to K562 and to a benchmark-adapter label, not a validated SL assay.
+strong dependency-only floor. Finally, a decomposition shows that most
+genome-wide co-dependency signal is pan-essentiality, isolating pair-specific SL
+as the hard residual that a generative virtual-cell model must learn. All results
+are scoped to K562 and to a benchmark-adapter label, not a validated SL assay.
 \end{abstract}
