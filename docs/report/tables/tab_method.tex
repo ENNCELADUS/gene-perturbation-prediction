@@ -1,0 +1,16 @@
+\begin{table}[t]
+  \centering
+  \caption{\textbf{Preliminary} results for the virtual-cell framework (exp08, AIVC/STATE${+}$ESM2 adapter). Values are the \emph{best selected fold}, \emph{not} a 5-fold mean, and best-epoch selection reads the test fold; full 5-fold tuning is ongoing (see Limitations). The dependency-only floor (exp06) is shown only for reference. We make no claim that the framework beats the floor; these numbers report the current status of a newly proposed method.}
+  \label{tab:method}
+  \begin{tabular}{llcc}
+    \toprule
+    Split & Method & AUROC$\uparrow$ & NDCG@10$\uparrow$ \\
+    \midrule
+    CV2 & dependency-only floor (ref.) & 0.704 & 0.042 \\
+    CV2 & AIVC/STATE${+}$ESM2 (best fold, prelim.) & 0.667 & 0.005 \\
+    \cmidrule(lr){1-4}
+    CV3 & dependency-only floor (ref.) & 0.596 & 0.002 \\
+    CV3 & AIVC/STATE${+}$ESM2 (best fold, prelim.) & 0.587 & 0.003 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
