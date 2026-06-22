@@ -1,10 +1,10 @@
 # Experiment 08 — STATE-Adapter DL Model for K562 SL-Pair Ranking
 
-**Status:** Implementation complete (Phase 0–4 code + unit tests). Phase 0 parity +
-Phase 2 BCE pending re-run. **Phase 3 (bag supervision) is BLOCKED on a NaN crash**
-(2026-06-20): the first cluster run died at epoch-0 validation
-(`_validate_auroc` → `roc_auc_score` "Input contains NaN"). Root cause is under a TDD
-fix — see "Phase 3 NaN Blocker" below.
+**Status:** Implementation complete (Phase 0–4 code + unit tests). Phase 2/3
+cluster artifacts are now available through 2026-06-22; the table below records
+the selected best split-validation fold for each CV1/CV2/CV3 phase. These rows
+are **single selected folds, not 5-fold means**, and several rerun directories
+still have missing final `_fold_results/*.result.json` files.
 **Design spec:** `docs/superpowers/specs/2026-06-17-exp08-state-dl-sl-ranking-design.md`.
 **Implementation plan:** `docs/superpowers/plans/2026-06-17-exp08-state-dl-sl-ranking.md`.
 **Orchestration plan:** `docs/superpowers/plans/2026-06-18-exp08-fold-parallel-orchestration.md`.
@@ -86,45 +86,47 @@ coverage-flag ablation, effect-size ± std reporting.
 exp08 must beat these on the full-universe slice with lift concentrated on the
 covered-pair slice. Within-noise lift is null. A negative result is publishable.
 
+## Phase 2/3 Selected Best-Fold Results (2026-06-22)
+
+Selection rule: for each phase and split, select the completed fold-result JSON
+whose fold has the best split-validation `val_pair_auroc` in
+`<output_dir>/<split>/epoch_metrics_fold{N}.csv`. Folds with epoch CSVs but no
+final `_fold_results/<split>_foldN.result.json` are treated as incomplete and are
+not used for the selected row.
+
+Full-universe slice:
+
+| Phase | Split | Source directory | Result JSONs | Selected fold / epoch | AUROC | AUPR | F1 | NDCG@10 | MAP@10 | NDCG@50 | MAP@50 |
+| --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Phase 2 BCE | CV1 | `phase2_bce` | 5/5 | fold 2 / epoch 18 | 0.6483 | 0.6498 | 0.6708 | 0.0008 | 0.0006 | 0.0105 | 0.0022 |
+| Phase 2 BCE | CV2 | `phase2_bce` | 2/5 | fold 2 / epoch 6 | 0.6667 | 0.6754 | 0.6723 | 0.0050 | 0.0035 | 0.0286 | 0.0072 |
+| Phase 2 BCE | CV3 | `phase2_bce_cv2_cv3_lr3e4_ep30` | 3/5 | fold 1 / epoch 6 | 0.5866 | 0.5406 | 0.6777 | 0.0015 | 0.0010 | 0.0049 | 0.0015 |
+| Phase 3 bag supervision | CV1 | `phase3_bag_sup` | 1/5 | fold 2 / epoch 3 | 0.5000 | 0.7500 | 0.6667 | 0.0017 | 0.0004 | 0.0048 | 0.0013 |
+| Phase 3 bag supervision | CV2 | `phase3_bag_sup_cv2_cv3_lr3e4_ep30` | 5/5 | fold 1 / epoch 3 | 0.5744 | 0.5756 | 0.6667 | 0.0040 | 0.0027 | 0.0121 | 0.0039 |
+| Phase 3 bag supervision | CV3 | `phase3_bag_sup_cv2_cv3_lr3e4_ep30` | 1/5 | fold 0 / epoch 0 | 0.5654 | 0.5498 | 0.6677 | 0.0000 | 0.0000 | 0.0035 | 0.0007 |
+
+Covered-pair diagnostic slice:
+
+| Phase | Split | AUROC | AUPR | NDCG@10 | MAP@10 | NDCG@50 | MAP@50 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Phase 2 BCE | CV1 | 0.6483 | 0.7320 | 0.0010 | 0.0007 | 0.0099 | 0.0022 |
+| Phase 2 BCE | CV2 | 0.6504 | 0.7444 | 0.0072 | 0.0050 | 0.0252 | 0.0075 |
+| Phase 2 BCE | CV3 | 0.5396 | 0.5851 | 0.0021 | 0.0014 | 0.0061 | 0.0020 |
+| Phase 3 bag supervision | CV1 | 0.5000 | 0.8000 | 0.0017 | 0.0003 | 0.0049 | 0.0013 |
+| Phase 3 bag supervision | CV2 | 0.5824 | 0.6670 | 0.0061 | 0.0042 | 0.0133 | 0.0051 |
+| Phase 3 bag supervision | CV3 | 0.5638 | 0.6408 | 0.0000 | 0.0000 | 0.0050 | 0.0009 |
+
+Readout: no selected Phase 2/3 row clears the exp06 CV2/CV3 gate. Phase 2 CV2
+is the strongest completed selected row, but it remains below exp06 XGB on
+full-universe AUROC/AUPR and top-k ranking. Phase 3 bag supervision did not
+improve the selected CV2/CV3 full-universe ranking metrics in this artifact set.
+
 ## Implementation Phases
 
 See `configs/experiments/08_k562_sl_pair_state_dl/README.md` for per-phase commands
 and gates. Code and unit tests landed under `src/sl_dl_model/` and
 `tests/sl_dl_model/`; the Phase 2/3 gates run on the cluster against the gitignored
 ESM2 cache, STATE checkpoint, and gwps bags.
-
-## Phase 3 NaN Blocker (2026-06-20)
-
-The first cluster Phase 3 run (`phase3_bag_supervision.yaml`, `lambda_bag=1.0`,
-`lr=1e-3`) crashed at the end of epoch 0 in `_validate_auroc` →
-`roc_auc_score(... )` with `ValueError: Input contains NaN`. `sigmoid(logit)` is NaN
-only when `logit` is NaN, so the model parameters were already non-finite **before**
-validation ran. Validation is only the *first detector*: `src/sl_dl_model/` has no
-grad-clipping, `isfinite`, or `nan_to_num` guards anywhere, so a NaN injected early in
-epoch 0 propagates silently to the epoch-end check.
-
-Ranked root-cause hypotheses:
-
-- **H1 — `_energy_distance` `torch.cdist` (phase3-only term via `bag_loss`).** Most
-  likely. H1a: matmul-mode cdist computes `d² = |x|²+|y|²−2xy`, float error yields a
-  small negative under the `sqrt` → NaN in the loss *value*. H1b: `cdist(x, x)`
-  self-distance has a `0/0` gradient on the zero diagonal → NaN in the *gradient* only
-  (forward value looks fine; `clamp_min(0)` guards the value, not the grad). Phase 2
-  has no `bag_loss` and never reaches `_energy_distance`, which is why phase 2 did not
-  crash.
-- **H2 — bag-path gradient magnitude × `lr=1e-3` → adapter blow-up.** The bag term
-  backprops the full predicted bag into the adapter (larger-magnitude path than the
-  pooled `embed_gene`), energy distance is unnormalized, and `λ_bag=1.0` adds it
-  directly; weights can diverge to inf→NaN over steps even without a cdist NaN.
-- **H3 — `MeanStdPool.std(unbiased=False)` `sqrt(0)` gradient** when a bag feature is
-  constant. Latent risk; present in phase 2 too, so not the phase-3 differentiator.
-- **H4 — frozen STATE forward overflow** once the adapter output is pushed out of
-  range (downstream symptom of H2).
-
-Fix is TDD-driven defense-in-depth (grad-clip + `isfinite`/`nan_to_num` guards +
-NaN-safe energy distance), tracked in
-`docs/superpowers/plans/2026-06-20-exp08-phase3-nan-fix.md`. Phase 3 is the primary
-gate; if the fixed run trains cleanly through CV2/CV3 the pipeline is unblocked.
 
 ## Terminology Guardrail
 
