@@ -377,6 +377,10 @@ class Step1GeneratorTrainer:
         if self.config.generator_kind != "state_adapter":
             raise NotImplementedError("Task 3 supports only state_adapter generators")
 
+        monitor_path = generator_monitor_path(self.config, split_type, fold_id)
+        if monitor_path.exists():
+            monitor_path.unlink()
+
         fold_train = {str(symbol).upper() for symbol in train_symbols}
         train_bag, val_bag = select_generator_bag_sets(
             train_symbols=fold_train,
