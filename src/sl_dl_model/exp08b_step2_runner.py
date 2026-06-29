@@ -16,13 +16,13 @@ from sl_dl_model.evaluate import _assemble
 from sl_dl_model.exp08b_artifacts import embedding_cache_path
 from sl_dl_model.exp08b_config import Exp08bConfig, SlHeadConfig
 from sl_dl_model.exp08b_queue import (
-    read_step2_failed_cache_fp,
-    read_step2_result_cache_fp,
+    step2_failed_matches_cache,
     step2_fold_fingerprint,
     step2_metric_config,
     step2_metric_model_name,
+    step2_result_matches_cache,
 )
-from sl_dl_model.exp08b_runner import jobs, raise_if_step_incomplete
+from sl_dl_model.exp08b_runner import jobs
 from sl_dl_model.exp08b_sl_head import CachedEmbeddingPairHeadProducer
 from sl_dl_model.scoring import run_fold_with_producer
 
@@ -48,19 +48,83 @@ def _train_pairs(train_df: pd.DataFrame) -> list[tuple[str, str, int, float, flo
 def _same_cache_result(
     results_dir, split_type: str, fold_id: int, fp: str, cache_fp: str
 ) -> bool:
-    return (
-        fq.is_done(results_dir, split_type, fold_id, fingerprint=fp)
-        and read_step2_result_cache_fp(results_dir, split_type, fold_id) == cache_fp
+    return step2_result_matches_cache(
+        results_dir,
+        split_type,
+        fold_id,
+        fingerprint=fp,
+        cache_fp=cache_fp,
     )
 
 
 def _same_cache_failure(
     results_dir, split_type: str, fold_id: int, fp: str, cache_fp: str
 ) -> bool:
-    return (
-        fq.is_failed(results_dir, split_type, fold_id, fingerprint=fp)
-        and read_step2_failed_cache_fp(results_dir, split_type, fold_id) == cache_fp
+    return step2_failed_matches_cache(
+        results_dir,
+        split_type,
+        fold_id,
+        fingerprint=fp,
+        cache_fp=cache_fp,
     )
+
+
+def _step2_completion_details(
+    config: Exp08bConfig,
+    results_dir: Path,
+    job_list: list[tuple[str, int]],
+    fp: str,
+) -> tuple[
+    list[tuple[str, int, str | None]], list[tuple[str, int, str]], list[tuple[str, int]]
+]:
+    """Return current failed, stale, and missing Step 2 jobs."""
+    current_failed: list[tuple[str, int, str | None]] = []
+    stale: list[tuple[str, int, str]] = []
+    missing: list[tuple[str, int]] = []
+
+    for split_type, fold_id in job_list:
+        cache_fp = step2_fold_fingerprint(config, split_type, fold_id)
+        result_path = fq.result_path(results_dir, split_type, fold_id)
+        failed_path = fq.failed_path(results_dir, split_type, fold_id)
+        if _same_cache_result(results_dir, split_type, fold_id, fp, cache_fp):
+            continue
+        if _same_cache_failure(results_dir, split_type, fold_id, fp, cache_fp):
+            failed_payload = fq.read_json(failed_path)
+            trace = (
+                failed_payload.get("traceback")
+                if isinstance(failed_payload, dict)
+                else None
+            )
+            current_failed.append((split_type, fold_id, trace))
+            continue
+        has_stale_marker = False
+        if result_path.exists():
+            stale.append((split_type, fold_id, "result"))
+            has_stale_marker = True
+        if failed_path.exists():
+            stale.append((split_type, fold_id, "failed"))
+            has_stale_marker = True
+        if has_stale_marker:
+            continue
+        missing.append((split_type, fold_id))
+
+    return current_failed, stale, missing
+
+
+def _step2_all_terminal(
+    config: Exp08bConfig,
+    results_dir: Path,
+    job_list: list[tuple[str, int]],
+    fp: str,
+) -> bool:
+    for split_type, fold_id in job_list:
+        cache_fp = step2_fold_fingerprint(config, split_type, fold_id)
+        if _same_cache_result(results_dir, split_type, fold_id, fp, cache_fp):
+            continue
+        if _same_cache_failure(results_dir, split_type, fold_id, fp, cache_fp):
+            continue
+        return False
+    return True
 
 
 def _raise_if_step2_incomplete(
@@ -72,41 +136,17 @@ def _raise_if_step2_incomplete(
 ) -> None:
     """Require Step 2 terminal markers to match the current fold cache."""
     _ = metric_config
-    current_failed: list[tuple[str, int, str | None]] = []
-    stale: list[tuple[str, int, str]] = []
-    missing: list[tuple[str, int]] = []
+    deadline = time.monotonic() + float(config.assembly_timeout_seconds)
+    while True:
+        if _step2_all_terminal(config, results_dir, job_list, fp):
+            break
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(float(config.assembly_poll_seconds))
 
-    for split_type, fold_id in job_list:
-        cache_fp = step2_fold_fingerprint(config, split_type, fold_id)
-        done = fq.is_done(results_dir, split_type, fold_id, fingerprint=fp)
-        failed = fq.is_failed(results_dir, split_type, fold_id, fingerprint=fp)
-        if done:
-            result_cache_fp = read_step2_result_cache_fp(
-                results_dir, split_type, fold_id
-            )
-            if result_cache_fp == cache_fp:
-                continue
-            stale.append((split_type, fold_id, "result"))
-            continue
-        if failed:
-            failed_cache_fp = read_step2_failed_cache_fp(
-                results_dir, split_type, fold_id
-            )
-            if failed_cache_fp == cache_fp:
-                failed_payload = fq.read_json(
-                    fq.failed_path(results_dir, split_type, fold_id)
-                )
-                trace = (
-                    failed_payload.get("traceback")
-                    if isinstance(failed_payload, dict)
-                    else None
-                )
-                current_failed.append((split_type, fold_id, trace))
-            else:
-                stale.append((split_type, fold_id, "failed"))
-            continue
-        missing.append((split_type, fold_id))
-
+    current_failed, stale, missing = _step2_completion_details(
+        config, results_dir, job_list, fp
+    )
     if not current_failed and not stale and not missing:
         return
 
@@ -208,5 +248,4 @@ def run_train_sl_head(config: Exp08bConfig):
         return _assemble(metric_config, job_list, split_types, frame, shared=None)
     except RuntimeError:
         _raise_if_step2_incomplete(config, metric_config, results_dir, job_list, fp)
-        raise_if_step_incomplete(results_dir, job_list, fp, "sl_head")
         raise

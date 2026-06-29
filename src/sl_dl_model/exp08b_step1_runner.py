@@ -15,7 +15,7 @@ from sl_dl_model import fold_queue as fq
 from sl_dl_model.exp08b_config import Exp08bConfig
 from sl_dl_model.exp08b_generator import Step1GeneratorTrainer
 from sl_dl_model.exp08b_queue import step_results_dir
-from sl_dl_model.exp08b_runner import jobs, raise_if_step_incomplete
+from sl_dl_model.exp08b_runner import jobs, wait_for_step_complete
 from sl_dl_model.state_dl_caches import load_state_dl_caches
 
 logger = logging.getLogger(__name__)
@@ -153,4 +153,11 @@ def run_train_generator(config: Exp08bConfig) -> None:
             )
 
     if runtime.is_main_process:
-        raise_if_step_incomplete(results_dir, job_list, fp, "generator")
+        wait_for_step_complete(
+            results_dir,
+            job_list,
+            fp,
+            "generator",
+            poll_seconds=config.assembly_poll_seconds,
+            timeout_seconds=config.assembly_timeout_seconds,
+        )
