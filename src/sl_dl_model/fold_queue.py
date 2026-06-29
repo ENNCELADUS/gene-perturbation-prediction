@@ -45,6 +45,19 @@ _FINGERPRINT_FIELDS = (
     "early_stop_patience",
     "max_grad_norm",
     "embedding_method",
+    "generator_kind",
+    "generator_val_fraction",
+    "generator_val_seed",
+    "direct_mlp_hidden",
+    "bag_scale_mode",
+    "bag_scale_min",
+    "bag_scale_ema_decay",
+    "step1_artifacts_subdir",
+    "step2_results_subdir",
+    "generator_embedding_filename",
+    "generator_manifest_filename",
+    "generator_weights_filename",
+    "generator_monitor_filename",
 )
 
 # Path fields whose *contents* change a fold's metrics. Folded into the
@@ -269,11 +282,14 @@ def write_result(
     fold: int,
     rows: object,
     fingerprint: str,
+    extra: dict | None = None,
 ) -> None:
     """Atomically write a fold's success result with its run fingerprint."""
+    payload = {} if extra is None else dict(extra)
+    payload.update({"fingerprint": fingerprint, "rows": rows})
     atomic_write_json(
         result_path(results_dir, split, fold),
-        {"fingerprint": fingerprint, "rows": rows},
+        payload,
     )
 
 
