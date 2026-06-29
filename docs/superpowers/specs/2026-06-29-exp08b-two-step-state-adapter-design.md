@@ -40,12 +40,22 @@ CV2 ranking (0.094 / 0.0050).
 
 ### 1.2 The exp07 ceiling
 
-exp07 fed the **real** mean-pooled gwps embedding `e_g^real` (128-d
+exp07 fed the **real** mean-pooled gwps embedding `e_g^pca` (128-d
 `pca_delta_meanpool`) directly to XGBoost and beat the dependency-only floor on
 CV2: NDCG@10 0.042 → **0.094**, AUROC 0.704 → 0.751. This proves the *target*
 embedding carries SL signal and that **mean pooling is sufficient** to preserve
 it. The bottleneck in exp08 is therefore not the pooling layer; it is the
 quality of the *predicted* embedding for genes the model never saw perturbed.
+
+**Notation (two distinct objects — do not conflate):**
+- `e_g^pca` — exp07's 128-d `pca_delta_meanpool` of the real bag. Used **only**
+  as the metric-level *ceiling* (its NDCG numbers); it is never a step-1 target.
+- `e_g^real` — the **STATE-output-space** real gwps bag
+  (`data/exp08_cache/k562_gwps_bags.npz`), and its `MeanStdPool` (2·D) where a
+  pooled vector is needed. This is the step-1 `bag_loss` target and the object
+  all step-1 monitor metrics (§4.3) compare against.
+- `ê_g = MeanStdPool(pred_bag_g)` — the generator's predicted pooled embedding
+  (2·D, same space as `MeanStdPool(e_g^real)`), cached for the step-2 SL head.
 
 ### 1.3 Claim under test
 
@@ -57,8 +67,9 @@ quality of the *predicted* embedding for genes the model never saw perturbed.
 
 **Falsifiable prediction.** For held-out *covered* genes (genes with a real
 gwps bag that are withheld from the fold's generator supervision),
-`cosine(ê_g, e_g^real)` rises meaningfully above an ESM2-nearest-neighbor
-real-bag-copy baseline; and the step-2 SL head on those predicted embeddings
+`cosine(ê_g, MeanStdPool(e_g^real))` rises meaningfully above an
+ESM2-nearest-neighbor real-bag-copy baseline; and the step-2 SL head on those
+predicted embeddings
 beats the exp06 floor on CV2 (NDCG@10 > 0.042). exp07's 0.094 is the aspirational
 ceiling; exp06's 0.042 is the floor.
 
@@ -76,11 +87,14 @@ STEP 1 — Response generator   (trainable: PertAdapter only; STATE frozen)
                   ├─ distill loss:  encode(token) ≈ encode(onehot_g)
                   │                 [genes in STATE pert-vocab ∩ fold-train, ≤1,542]
                   │
-                  └─ STATE(token, control) → predicted bag → MeanStdPool → ê_g
-                                                  │
-                                  scale-normalized bag loss: ê_g ≈ e_g^real
-                                  [fold-train-covered genes only]
-  → freeze generator; cache ê_g for all 9,471 universe genes
+                  └─ STATE(token, control) → predicted cell bag  (STATE output space, n_cells × D)
+                                  │
+                                  ├─ scale-normalized bag loss: pred_bag ≈ real_bag
+                                  │   [fold-train-covered genes; target = real gwps
+                                  │    cell bag in STATE output space, NOT exp07 PCA]
+                                  │
+                                  └─ MeanStdPool(pred_bag) → ê_g  (2·D, the cached embedding)
+  → freeze generator; cache ê_g = MeanStdPool(pred_bag) for all 9,471 universe genes
 
 STEP 2 — SL head              (trainable: SymmetricPairHead only; generator frozen)
   (ê_a, ê_b, GeneEffect 5-block) → SymmetricPairHead → SL logit → BCE
@@ -104,11 +118,18 @@ A null result is attributable to one step rather than confounded across both.
 
 ```
 L_step1 = lambda_distill · MSE( encode(adapter(esm_g)), encode(onehot_g) )
-        + lambda_bag      · BagLoss_normalized( ê_g, e_g^real )
+        + lambda_bag      · BagLoss_normalized( pred_bag_g, real_bag_g )
 ```
 
 where `BagLoss` reuses exp08's `sl_dl_model.losses.bag_loss` (mean-delta MSE +
-NaN-safe energy distance).
+NaN-safe energy distance) on **cell bags** `(n_cells, D)` in STATE's output
+space. The real target is the gwps cell bag from
+`data/exp08_cache/k562_gwps_bags.npz`. The cached step-2 embedding is
+`ê_g = MeanStdPool(pred_bag_g)` (2·D); exp07's 128-d `pca_delta_meanpool`
+`e_g^pca` lives in a different (PCA) space and is **not** a step-1 target — it
+is used only as a metric-level ceiling (§5.2). Pooling the predicted bag to a
+PCA-space target would require a trainable projection head, which would confound
+the "can the adapter coerce STATE tokens?" question and is therefore excluded.
 
 ### 3.1 Scale normalization (default: fold-local fixed warmup scale)
 
@@ -163,16 +184,25 @@ from CV test genes:
 ### 4.3 Step-1 monitor metrics (per epoch, on generator-validation set)
 
 Logged as numbers alongside the loss curves — a **monitor, not a hard stop**
-(the run proceeds to step 2 regardless; the numbers tell us how to read step 2):
+(the run proceeds to step 2 regardless; the numbers tell us how to read step 2).
+All comparisons use the **STATE-space** real bag of each held-out covered gene
+(the same `data/exp08_cache/k562_gwps_bags.npz` object the loss targets), pooled
+the same way — **not** exp07's PCA `e_g^pca`. Two metric families at two stages:
 
-1. `cosine(ê_g, e_g^real)` — direction agreement.
-2. `MSE` and `energy` on the pooled embedding — catches magnitude / dispersion
-   that cosine discards (the SL head may depend on magnitude).
-3. **ESM2-nearest-neighbor real-bag-copy baseline** for each of the above: for a
-   held-out covered gene, take the `e_g^real` of its ESM2-nearest *train-covered*
-   gene as the prediction, and report the same cosine/MSE/energy. If the trained
-   generator cannot beat nearest-neighbor copying, the STATE machinery adds
-   nothing — and we learn this in step 1, cheaply.
+1. **Pooled-vector metrics** between `ê_g = MeanStdPool(pred_bag)` and
+   `MeanStdPool(real_bag)` (both 2·D, same space): `cosine` (direction) and
+   `MSE` / `L2` (magnitude / dispersion that cosine discards — the SL head may
+   depend on magnitude). *Energy distance is NOT used here — it is a
+   bag/distribution metric, undefined on a single pooled vector.*
+2. **Bag-level metric** between `pred_bag` and `real_bag` *before* pooling: the
+   `bag_loss` energy-distance term (`sl_dl_model.losses` `_safe_energy_distance`),
+   the distribution-level analogue of (1).
+3. **ESM2-nearest-neighbor copy baseline** for both families: for a held-out
+   covered gene, take the *train-covered* gene nearest in ESM2 space and use its
+   real bag (and its `MeanStdPool`) as the prediction, then report the same
+   pooled cosine/MSE/L2 and bag energy. If the trained generator cannot beat
+   nearest-neighbor copying, the STATE machinery adds nothing — learned in step
+   1, cheaply.
 
 ### 4.4 Orchestration contract (named constraint, not just "reuse exp08")
 
@@ -214,11 +244,24 @@ diagnostic slice.
 | NN-copy | `e_g^real` of ESM2-nearest train-covered gene | trivial-generalization control |
 | direct-ESM2-MLP | `MLP(ESM2(gene))` → `ê_g`, **STATE bypassed entirely** | "does STATE add anything?" control |
 | **exp08b** | frozen STATE + ESM2 adapter, two-step (this design) | experiment |
-| exp07 | `e_g^real` (real mean-pooled gwps bag) | ceiling |
+| exp07 | `e_g^pca` (real mean-pooled gwps bag) | ceiling |
 
 The **direct-ESM2-MLP** rung is the critical control: if it matches exp08b, the
 frozen STATE forward is laundering ESM2 rather than contributing perturbation
-structure, and the STATE machinery is unjustified.
+structure, and the STATE machinery is unjustified. To make that comparison fair,
+it is specified to match exp08b on everything **except** the STATE forward:
+
+- **Trained fold-locally** on the same step-1 split as exp08b — supervised on
+  `fold_train_genes ∩ gwps_covered`, with the same 20% generator-validation
+  held-out set (§4.2), so neither baseline sees a CV test gene's bag.
+- **Same target space and loss:** predicts a STATE-output-space bag (or its
+  `MeanStdPool`) against the same `data/exp08_cache/k562_gwps_bags.npz` real bag
+  under the same `bag_loss` + scale normalization. The only architectural
+  difference is `MLP(ESM2)` replacing `adapter → frozen STATE forward`.
+- **No `sl_label`** enters this baseline's training — it is a step-1 generator
+  exactly like exp08b, evaluated by the §4.3 monitor and then by a step-2 SL head
+  trained on its cached `ê_g`. This prevents it from becoming accidentally
+  SL-supervised (too strong) or under-trained (too weak).
 
 ### 5.3 Scientific readout (publishable in all four outcomes)
 
@@ -250,10 +293,14 @@ ones) by the §5.1 step-2 metric.
 ### 7.1 Reuse (do not rebuild)
 
 - ESM2 embeddings (`data/esm2/k562_sl_universe_esm2_650M.npz`), gwps bags
-  (`data/exp08_cache/k562_gwps_bags.npz`), STATE checkpoint, and the real
-  mean-pooled `e_g^real` from exp07
-  (`results/experiments/07_k562_sl_pair_perturbseq_augmented/gwps_pca_mean_bags/bags.npz`)
-  — all reused verbatim as the step-1 bag-loss target.
+  (`data/exp08_cache/k562_gwps_bags.npz`) — the latter is the **step-1 bag-loss
+  target** (real cell bags in STATE output space), and the STATE checkpoint —
+  all reused verbatim.
+- exp07's real mean-pooled `e_g^pca`
+  (`results/experiments/07_k562_sl_pair_perturbseq_augmented/gwps_pca_mean_bags/bags.npz`,
+  128-d `pca_delta_meanpool`) is **not** a step-1 target — it lives in a
+  different (PCA) space. It is reused only as the **metric-level ceiling** (its
+  CV2/CV3 NDCG/MAP numbers) in the §5.2 baseline ladder.
 - `sl_dl_model` components: `PertAdapter`, `StateEncoder`, `MeanStdPool`,
   `SymmetricPairHead`, `bag_loss`, fold-queue orchestration, official metric.
 - exp08b forks `src/sl_dl_model/` with **two new entrypoints** whose code
