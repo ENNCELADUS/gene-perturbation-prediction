@@ -315,6 +315,48 @@ def test_step1_generator_source_does_not_read_sl_labels() -> None:
     assert "SymmetricPairHead" not in source
 
 
+def test_step1_required_distill_term_missing_raises_despite_bag_loss(
+    tmp_path: Path,
+) -> None:
+    """Positive distill must not silently degrade to bag-only training."""
+    esm, bags, symbols = _tiny_esm_and_bags()
+    cfg = Exp08bConfig(
+        output_dir=tmp_path / "run",
+        state_backend="linear_mock",
+        pert_dim=3,
+        adapter_hidden=8,
+        max_epochs=1,
+        warmup_epochs=1,
+        lambda_bag=1.0,
+        lambda_distill=1.0,
+        lambda_distill_after_warmup=1.0,
+    )
+    trainer = Step1GeneratorTrainer(
+        cfg,
+        esm=esm,
+        bags=bags,
+        input_dim=3,
+        output_dim=3,
+    )
+    trainer._pert_vocab = {
+        "A": np.eye(3, dtype=np.float32)[0],
+        "B": np.eye(3, dtype=np.float32)[1],
+    }
+
+    try:
+        trainer.train_fold(
+            split_type="CV2",
+            fold_id=0,
+            symbols=symbols,
+            train_symbols={"A", "B", "C"},
+        )
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        assert "distill" in message or "pert_encoder" in message
+    else:
+        raise AssertionError("expected RuntimeError for missing required distill term")
+
+
 def test_step1_distill_only_does_not_crash_at_warmup_boundary(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -323,8 +323,12 @@ class Step1GeneratorTrainer:
 
                 if distill_weight > 0 and symbol in distill_symbols:
                     term = self._distill_term(generator, symbol, device)
-                    if term is not None:
-                        parts.append(distill_weight * term)
+                    if term is None:
+                        raise RuntimeError(
+                            "distill loss is configured but no distill term "
+                            f"could be constructed for {symbol}"
+                        )
+                    parts.append(distill_weight * term)
 
                 if not parts:
                     continue
@@ -438,14 +442,16 @@ class Step1GeneratorTrainer:
     ) -> torch.Tensor | None:
         vocab = self._load_distill_vocab()
         onehot_arr = vocab.get(symbol.upper())
-        esm_arr = self.esm.vectors_by_symbol.get(symbol.upper())
-        if onehot_arr is None or esm_arr is None:
+        if onehot_arr is None:
             return None
         state_model = generator.encoder.state.state_model
         if not hasattr(state_model, "pert_encoder"):
-            return None
+            raise RuntimeError(
+                "distill loss is configured but the STATE model has no "
+                "pert_encoder"
+            )
         onehot = torch.tensor(onehot_arr, dtype=torch.float32, device=device)
-        esm_vec = torch.tensor(esm_arr, dtype=torch.float32, device=device)
+        esm_vec = self._esm_tensor(symbol, device)
         adapter_raw = generator.encoder.adapter(esm_vec.unsqueeze(0)).squeeze(0)
         adapter_tok = state_encoded_token(state_model, adapter_raw)
         target_tok = state_original_token(state_model, onehot)
