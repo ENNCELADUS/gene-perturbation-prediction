@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+import pytest
+
 from sl_dl_model.exp08b_artifacts import (
     embedding_cache_path,
     fold_artifact_dir,
@@ -16,7 +18,7 @@ from sl_dl_model.exp08b_artifacts import (
     save_embedding_cache,
     write_generator_manifest,
 )
-from sl_dl_model.exp08b_config import Exp08bConfig, load_exp08b_config
+from sl_dl_model.exp08b_config import Exp08bConfig, SlHeadConfig, load_exp08b_config
 
 
 def test_exp08b_defaults_keep_distill_full_weight() -> None:
@@ -63,12 +65,26 @@ def test_load_exp08b_config_rejects_unknown_keys(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text(yaml.safe_dump({"unknown_field": 1}))
 
-    try:
+    with pytest.raises(ValueError, match="unknown config keys"):
         load_exp08b_config(path)
-    except ValueError as exc:
-        assert "unknown config keys" in str(exc)
-    else:
-        raise AssertionError("expected ValueError for unknown_field")
+
+
+def test_sl_head_config_from_exp08b_projects_correct_fields() -> None:
+    src = Exp08bConfig()
+    head = SlHeadConfig.from_exp08b(src)
+
+    # Projected fields carry over from the source config.
+    assert head.pair_hidden == tuple(src.pair_hidden)
+    assert head.include_coverage_flag == bool(src.include_coverage_flag)
+    assert head.lr == float(src.lr)
+    assert head.max_epochs == int(src.max_epochs)
+    assert head.batch_pairs == int(src.batch_pairs)
+    assert head.max_grad_norm == float(src.max_grad_norm)
+
+    # Spec §7.1: Step-2 config must NOT hold generator / data-path fields.
+    assert not hasattr(head, "state_checkpoint")
+    assert not hasattr(head, "esm2_npz")
+    assert not hasattr(head, "gwps_h5ad")
 
 
 def test_artifact_paths_are_fold_local(tmp_path: Path) -> None:
