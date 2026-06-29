@@ -345,6 +345,73 @@ def test_step2_result_cache_fp_round_trips_inside_result_json(tmp_path: Path) ->
     assert read_step2_result_cache_fp(results_dir, "CV2", 1) is None
 
 
+def test_step2_completion_rejects_stale_result_cache_fp(tmp_path: Path) -> None:
+    cfg = _config(tmp_path)
+    _write_step1_artifacts(cfg, payload=b"old-cache")
+    metric_cfg = step2_metric_config(cfg)
+    fp = fq.fingerprint(metric_cfg)
+    results_dir = fq.fold_results_dir(metric_cfg)
+    old_cache_fp = step2_fold_fingerprint(cfg, "CV2", 0)
+    fq.write_result(
+        results_dir,
+        "CV2",
+        0,
+        [{"metric": "stale"}],
+        fingerprint=fp,
+        extra={"cache_fp": old_cache_fp},
+    )
+
+    cache = embedding_cache_path(cfg, "CV2", 0)
+    cache.write_bytes(b"new-cache-longer")
+    stat = cache.stat()
+    os.utime(cache, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    assert step2_fold_fingerprint(cfg, "CV2", 0) != old_cache_fp
+
+    from sl_dl_model.exp08b_step2_runner import _raise_if_step2_incomplete
+
+    with pytest.raises(RuntimeError, match="stale"):
+        _raise_if_step2_incomplete(
+            cfg,
+            metric_cfg,
+            results_dir,
+            [("CV2", 0)],
+            fp,
+        )
+
+
+def test_step2_completion_rejects_stale_failed_cache_fp(tmp_path: Path) -> None:
+    cfg = _config(tmp_path)
+    _write_step1_artifacts(cfg, payload=b"old-cache")
+    metric_cfg = step2_metric_config(cfg)
+    fp = fq.fingerprint(metric_cfg)
+    results_dir = fq.fold_results_dir(metric_cfg)
+    old_cache_fp = step2_fold_fingerprint(cfg, "CV2", 0)
+    fq.write_failed(
+        results_dir,
+        "CV2",
+        0,
+        {"traceback": "old failure", "cache_fp": old_cache_fp},
+        fingerprint=fp,
+    )
+
+    cache = embedding_cache_path(cfg, "CV2", 0)
+    cache.write_bytes(b"new-cache-longer")
+    stat = cache.stat()
+    os.utime(cache, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    assert step2_fold_fingerprint(cfg, "CV2", 0) != old_cache_fp
+
+    from sl_dl_model.exp08b_step2_runner import _raise_if_step2_incomplete
+
+    with pytest.raises(RuntimeError, match="stale"):
+        _raise_if_step2_incomplete(
+            cfg,
+            metric_cfg,
+            results_dir,
+            [("CV2", 0)],
+            fp,
+        )
+
+
 def test_step2_metric_model_name_reads_generator_kind_from_manifest(
     tmp_path: Path,
 ) -> None:
