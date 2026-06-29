@@ -135,3 +135,20 @@ def test_generator_manifest_roundtrip(tmp_path: Path) -> None:
     loaded = load_generator_manifest(path)
 
     assert json.dumps(loaded, sort_keys=True) == json.dumps(payload, sort_keys=True)
+
+
+def test_exp08b_repo_configs_load() -> None:
+    root = Path("configs/experiments/08b_k562_sl_pair_two_step_state_adapter")
+    paths = sorted(root.glob("*.yaml"))
+    assert {path.name for path in paths} == {
+        "ablation_bag_only.yaml",
+        "ablation_distill_only.yaml",
+        "ablation_ema_scale.yaml",
+        "default.yaml",
+        "direct_mlp.yaml",
+        "nn_copy.yaml",
+    }
+    for path in paths:
+        cfg = load_exp08b_config(path)
+        assert cfg.input_csv.name.endswith(".csv")
+        assert cfg.output_dir.parts[-2] == "08b_k562_sl_pair_two_step_state_adapter"

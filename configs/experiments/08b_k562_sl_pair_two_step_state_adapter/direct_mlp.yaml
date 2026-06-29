@@ -1,0 +1,31 @@
+# exp08b direct-ESM2-MLP control: STATE forward bypassed.
+input_csv: data/SL_benchmark/derived/k562_depmap_rand_1to1/all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv
+output_dir: results/experiments/08b_k562_sl_pair_two_step_state_adapter/direct_mlp_cv2_cv3
+split_types: [CV2, CV3]
+folds: [0, 1, 2, 3, 4]
+ranking_k: [10, 20, 50]
+seed: 17
+esm2_npz: data/esm2/k562_sl_universe_esm2_650M.npz
+state_backend: state_checkpoint
+state_checkpoint: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
+gwps_h5ad: data/sl_dependency_v0/raw/replogle/K562_gwps_normalized_singlecell_01.h5ad
+bags_npz: data/exp08_cache/k562_gwps_bags.npz
+generator_kind: direct_mlp
+direct_mlp_hidden: 512
+generator_val_fraction: 0.2
+generator_val_seed: 17
+bag_scale_mode: fixed_warmup
+bag_scale_min: 0.001
+lambda_sl: 0.0
+lambda_distill: 0.0
+lambda_distill_after_warmup: 0.0
+lambda_bag: 1.0
+warmup_epochs: 1
+max_epochs: 20
+early_stop_patience: 5
+batch_pairs: 64
+lr: 0.0003
+max_grad_norm: 1.0
+include_coverage_flag: false
+fallback_strategy: zero
+embedding_method: exp08b_direct_mlp_meanstd
