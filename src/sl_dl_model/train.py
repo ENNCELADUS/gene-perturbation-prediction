@@ -34,6 +34,7 @@ from sl_dl_model.encoder import state_encoded_token, state_original_token
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 from sl_dl_model.losses import bag_loss, combine, distill_loss, sl_bce_loss
 from sl_dl_model.model import SlDlModel
+from sl_dl_model.pert_vocab import load_pert_vocab as _load_pert_vocab
 
 logger = logging.getLogger(__name__)
 
@@ -62,29 +63,6 @@ def _epoch_weights(epoch: int, config: SLDLConfig) -> dict[str, float]:
         "distill": config.lambda_distill_after_warmup,
         "bag": config.lambda_bag,
     }
-
-
-def _load_pert_vocab(checkpoint: Path) -> dict[str, np.ndarray] | None:
-    """Load the sibling ``pert_onehot_map.pt`` for a STATE checkpoint.
-
-    The file is expected at ``checkpoint.parent.parent / "pert_onehot_map.pt"``.
-    Returns ``None`` if the file does not exist.
-
-    Args:
-        checkpoint: Path to the STATE checkpoint file.
-
-    Returns:
-        Dict mapping upper-case gene symbol to float32 one-hot ndarray, or
-        ``None`` if the sibling file is missing.
-    """
-    vocab_path = checkpoint.parent.parent / "pert_onehot_map.pt"
-    if not vocab_path.exists():
-        logger.debug("pert_onehot_map.pt not found at %s; skipping distill", vocab_path)
-        return None
-    raw: dict[str, object] = torch.load(
-        vocab_path, map_location="cpu", weights_only=False
-    )
-    return {str(k).upper(): np.asarray(v, dtype=np.float32) for k, v in raw.items()}
 
 
 class StateDlProducer:
