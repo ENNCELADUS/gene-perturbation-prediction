@@ -54,7 +54,44 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to write log output (appended).",
     )
+    for name, help_text in (
+        ("train-generator", "Run exp08b Step 1 generator training."),
+        ("train-sl-head", "Run exp08b Step 2 SL-head training."),
+    ):
+        cmd = sub.add_parser(name, help=help_text)
+        cmd.add_argument(
+            "--config",
+            type=Path,
+            required=True,
+            help="Path to an Exp08bConfig YAML file.",
+        )
+        cmd.add_argument(
+            "--log-file",
+            type=Path,
+            default=None,
+            help="Optional path to write log output (appended).",
+        )
     return parser
+
+
+def _configure_logging(output_dir: Path, command: str, log_file: Path | None) -> None:
+    from accelerate import PartialState
+
+    state = PartialState()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    rank_log = output_dir / f"{command}_rank{state.process_index}.log"
+    handlers.append(logging.FileHandler(rank_log, mode="a"))
+    if state.is_main_process:
+        target = log_file or output_dir / f"{command}.log"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(target, mode="a"))
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
+        force=True,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -64,6 +101,21 @@ def main(argv: list[str] | None = None) -> None:
         argv: Argument list (defaults to ``sys.argv[1:]`` when ``None``).
     """
     args = _build_parser().parse_args(argv)
+
+    if args.command in {"train-generator", "train-sl-head"}:
+        from sl_dl_model.exp08b_config import load_exp08b_config
+
+        config = load_exp08b_config(args.config)
+        _configure_logging(Path(config.output_dir), args.command, args.log_file)
+        if args.command == "train-generator":
+            from sl_dl_model.exp08b_step1_runner import run_train_generator
+
+            run_train_generator(config)
+        else:
+            from sl_dl_model.exp08b_step2_runner import run_train_sl_head
+
+            run_train_sl_head(config)
+        return
 
     # Lazy imports so that --help works without loading torch/accelerate.
     from sl_dl_model.config import load_config
