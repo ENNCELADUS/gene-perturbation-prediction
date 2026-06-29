@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 from sl_dl_model.bags import GwpsBags
@@ -228,6 +229,47 @@ def test_step1_trainer_writes_fold_local_cache_and_manifest(tmp_path: Path) -> N
     monitor_text = monitor.read_text()
     assert "pooled_cosine" in monitor_text
     assert "esm2_nn_copy" in monitor_text
+
+
+def test_step1_trainer_resets_monitor_on_same_fold_rerun(tmp_path: Path) -> None:
+    esm, bags, symbols = _tiny_esm_and_bags()
+    cfg = Exp08bConfig(
+        output_dir=tmp_path / "run",
+        state_backend="linear_mock",
+        pert_dim=3,
+        adapter_hidden=8,
+        max_epochs=1,
+        warmup_epochs=1,
+        lambda_bag=1.0,
+        lambda_distill=0.0,
+        lambda_distill_after_warmup=0.0,
+    )
+    trainer = Step1GeneratorTrainer(
+        cfg,
+        esm=esm,
+        bags=bags,
+        input_dim=3,
+        output_dim=3,
+    )
+
+    first = trainer.train_fold(
+        split_type="CV2",
+        fold_id=0,
+        symbols=symbols,
+        train_symbols={"A", "B", "C"},
+    )
+    second = trainer.train_fold(
+        split_type="CV2",
+        fold_id=0,
+        symbols=symbols,
+        train_symbols={"A", "B", "C"},
+    )
+
+    assert second.manifest_path.parent == first.manifest_path.parent
+    monitor = second.manifest_path.parent / "generator_monitor.csv"
+    rows = pd.read_csv(monitor)
+    assert len(rows) == 2
+    assert set(rows["predictor"]) == {"generator", "esm2_nn_copy"}
 
 
 def test_step1_trainer_uses_partialstate_device_not_cuda_default() -> None:
