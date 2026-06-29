@@ -223,6 +223,7 @@ def run_fold_with_producer(
     # DL path: use the trained pair head's score matrix directly.
     if hasattr(producer, "score_matrix"):
         sm = producer.score_matrix(universe.symbols, universe.gene_effects)
+        metric_model = getattr(producer, "metric_model_name", "state_dl")
         # Per-epoch rows were flushed live to the per-fold CSV during _train;
         # emit only a fold-completion summary here.
         if getattr(producer, "epoch_metrics", None):
@@ -237,7 +238,7 @@ def run_fold_with_producer(
         rows.extend(
             _metric_rows(
                 split_type,
-                "state_dl",
+                metric_model,
                 fold_id,
                 "full_universe",
                 sm,
@@ -251,7 +252,7 @@ def run_fold_with_producer(
             rows.extend(
                 _metric_rows(
                     split_type,
-                    "state_dl",
+                    metric_model,
                     fold_id,
                     "covered_pairs",
                     sm,
