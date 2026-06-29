@@ -95,24 +95,24 @@ def read_step2_result_cache_fp(
     results_dir: Path, split_type: str, fold_id: int
 ) -> str | None:
     """Return a Step 2 result's cached-input fingerprint, if present."""
-    path = fq.result_path(results_dir, split_type, fold_id)
-    if not path.exists():
-        return None
-    payload = fq.read_json(path)
-    if isinstance(payload, dict):
-        value = payload.get("cache_fp")
-        return str(value) if value is not None else None
-    return None
+    return _read_cache_fp(fq.result_path(results_dir, split_type, fold_id))
 
 
 def read_step2_failed_cache_fp(
     results_dir: Path, split_type: str, fold_id: int
 ) -> str | None:
     """Return a Step 2 failure marker's cached-input fingerprint, if present."""
-    path = fq.failed_path(results_dir, split_type, fold_id)
+    return _read_cache_fp(fq.failed_path(results_dir, split_type, fold_id))
+
+
+def _read_cache_fp(path: Path) -> str | None:
+    """Read ``cache_fp`` from a marker, treating malformed markers as stale."""
     if not path.exists():
         return None
-    payload = fq.read_json(path)
+    try:
+        payload = fq.read_json(path)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
     if isinstance(payload, dict):
         value = payload.get("cache_fp")
         return str(value) if value is not None else None

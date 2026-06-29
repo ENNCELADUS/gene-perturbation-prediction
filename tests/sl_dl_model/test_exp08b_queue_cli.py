@@ -345,6 +345,30 @@ def test_step2_result_cache_fp_round_trips_inside_result_json(tmp_path: Path) ->
     assert read_step2_result_cache_fp(results_dir, "CV2", 1) is None
 
 
+def test_step2_result_cache_fp_ignores_malformed_result_json(
+    tmp_path: Path,
+) -> None:
+    cfg = _config(tmp_path)
+    results_dir = fq.fold_results_dir(step2_metric_config(cfg))
+    path = fq.result_path(results_dir, "CV2", 0)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not-json")
+
+    assert read_step2_result_cache_fp(results_dir, "CV2", 0) is None
+
+
+def test_step2_failed_cache_fp_ignores_malformed_failed_marker(
+    tmp_path: Path,
+) -> None:
+    cfg = _config(tmp_path)
+    results_dir = fq.fold_results_dir(step2_metric_config(cfg))
+    path = fq.failed_path(results_dir, "CV2", 0)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not-json")
+
+    assert read_step2_failed_cache_fp(results_dir, "CV2", 0) is None
+
+
 def test_step2_completion_rejects_stale_result_cache_fp(tmp_path: Path) -> None:
     cfg = _config(tmp_path)
     _write_step1_artifacts(cfg, payload=b"old-cache")
