@@ -33,9 +33,10 @@ in the artifacts under `results/experiments/08_k562_sl_pair_state_dl/`:
    bags, so the transcriptome channel was dead two ways: never learned, never
    read.
 
-Net result: exp08 best-fold CV2 NDCG@10 = 0.050, below exp07's 0.094 and barely
-above exp06's 0.042; CV2 AUROC 0.667 < exp06 0.704. The sophisticated DL path
-underperformed XGBoost on a real mean-pooled bag by ~19× on CV2 ranking.
+Net result: exp08 best-fold CV2 NDCG@10 = 0.0050, an order of magnitude below
+exp07's 0.094 and barely above exp06's 0.042; CV2 AUROC 0.667 < exp06 0.704. The
+sophisticated DL path underperformed XGBoost on a real mean-pooled bag by ~19× on
+CV2 ranking (0.094 / 0.0050).
 
 ### 1.2 The exp07 ceiling
 
@@ -146,7 +147,7 @@ breaking the cold-start claim.
 - The CV2/CV3 **test** genes are reached purely by the frozen fold-local
   generator at step-2 scoring time. No test-gene bag ever touches step 1.
 - Cost: one generator per fold (CV1/CV2/CV3 × 5 = 15 generators). Acceptable;
-  reuses exp08's fold-queue orchestration.
+  reuses exp08's fold-queue orchestration under the contract in §4.4.
 
 ### 4.2 Generator-validation split (held-out covered genes)
 
@@ -172,6 +173,25 @@ Logged as numbers alongside the loss curves — a **monitor, not a hard stop**
    gene as the prediction, and report the same cosine/MSE/energy. If the trained
    generator cannot beat nearest-neighbor copying, the STATE machinery adds
    nothing — and we learn this in step 1, cheaply.
+
+### 4.4 Orchestration contract (named constraint, not just "reuse exp08")
+
+exp08's first multi-rank run died with an NCCL `gather_object` timeout; the fix
+was to drop all collectives in favor of a filesystem work-queue. exp08b inherits
+that contract **as a hard design constraint**, both steps:
+
+- `accelerate launch` starts the ranks; code uses `PartialState` only for
+  device/rank/`is_main_process` — never `Accelerator()`.
+- Models are **not** wrapped with `Accelerator.prepare` or `DDP`. There is no
+  gradient all-reduce; each rank owns whole folds and trains them locally.
+- Each rank claims `(step, split_type, fold_id)` jobs from the filesystem queue
+  (atomic `os.mkdir` claim under a per-run token; `.result.json` is the sole
+  cross-run resume state), exactly as in `src/sl_dl_model/fold_queue.py`.
+- **No collective calls anywhere** in the package — enforced by reusing exp08's
+  `tests/test_no_collectives.py` AST guard. Rank-0 assembles results by polling
+  the queue, not by `gather`.
+- Step 1 and step 2 are **separate queue passes**: step 2 jobs do not start until
+  the step-1 generator + cached `ê_g` table for that fold exist on disk.
 
 ## 5. Evaluation, baselines, and success criteria
 
@@ -236,10 +256,31 @@ ones) by the §5.1 step-2 metric.
   — all reused verbatim as the step-1 bag-loss target.
 - `sl_dl_model` components: `PertAdapter`, `StateEncoder`, `MeanStdPool`,
   `SymmetricPairHead`, `bag_loss`, fold-queue orchestration, official metric.
-- exp08b forks `src/sl_dl_model/` with **two new entrypoints** — a step-1
-  `train-generator` command (writes a frozen per-fold generator + cached ê_g
-  table) and a step-2 `train-sl-head` command (consumes the cached table). The
-  package split vs new sibling package is settled in the implementation plan.
+- exp08b forks `src/sl_dl_model/` with **two new entrypoints** whose code
+  ownership is fixed here to prevent the end-to-end re-coupling that sank exp08
+  Phase 3 (the package split vs new sibling package is settled in the plan, but
+  the boundary below is binding):
+
+  **Step 1 — `train-generator`** (owns the generator + its artifacts; knows
+  nothing about SL labels or the pair head):
+  - Trains the fold-local generator (`PertAdapter` + frozen `StateEncoder` +
+    `MeanStdPool`) under the §3 step-1 objective only (distill + normalized bag).
+  - Reads: fold-train-covered genes' real bags, ESM2 table, STATE checkpoint.
+  - Writes per fold: frozen generator weights, the cached `ê_g` table for **all
+    9,471** universe genes, the chosen bag-loss `scale` (in the manifest), and
+    the §4.3 step-1 monitor CSV. **No `sl_label` is read in this entrypoint.**
+
+  **Step 2 — `train-sl-head`** (owns the pair head; treats `ê_g` as a frozen,
+  opaque input — never instantiates or calls the generator/STATE):
+  - Loads the step-1 cached `ê_g` table for the fold and trains only
+    `SymmetricPairHead` on `(ê_a, ê_b, GeneEffect-5)` under SL BCE.
+  - Reads: the step-1 `ê_g` table + the SL benchmark pairs. **It must not import
+    `StateEncoder`/`PertAdapter` or hold a STATE checkpoint** — this import-level
+    separation is the structural guarantee that the bag and SL objectives can
+    never again share a backward pass.
+
+  The two steps communicate **only** through the on-disk `ê_g` table + manifest,
+  never through a shared in-memory model object.
 
 ### 7.2 Non-goals
 
