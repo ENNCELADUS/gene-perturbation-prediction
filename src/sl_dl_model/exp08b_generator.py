@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 from accelerate import PartialState
 from torch import nn, optim
@@ -21,6 +22,7 @@ from sl_dl_model.bags import GwpsBags
 from sl_dl_model.encoder import StateEncoder, state_encoded_token, state_original_token
 from sl_dl_model.exp08b_artifacts import (
     embedding_cache_path,
+    generator_monitor_path,
     generator_manifest_path,
     generator_weights_path,
     save_embedding_cache,
@@ -28,7 +30,7 @@ from sl_dl_model.exp08b_artifacts import (
 )
 from sl_dl_model.exp08b_config import Exp08bConfig
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
-from sl_dl_model.losses import bag_loss, distill_loss
+from sl_dl_model.losses import _safe_energy_distance, bag_loss, distill_loss
 from sl_dl_model.pert_vocab import load_pert_vocab
 from sl_dl_model.pooling import MeanStdPool
 
@@ -184,6 +186,115 @@ def build_bag_scale(config: Exp08bConfig) -> FixedWarmupBagScale | EmaBagScale:
     raise ValueError(f"unknown bag_scale_mode: {config.bag_scale_mode!r}")
 
 
+def _mean_std_pool_np(bag: np.ndarray) -> np.ndarray:
+    """Mean/std-pool a bag into the Step 1 embedding shape."""
+    arr = np.asarray(bag, dtype=np.float32)
+    return np.concatenate([arr.mean(axis=0), arr.std(axis=0)]).astype(np.float32)
+
+
+def pooled_vector_metrics(pred: np.ndarray, real: np.ndarray) -> dict[str, float]:
+    """Return direction and magnitude metrics for two pooled vectors."""
+    pred_arr = np.asarray(pred, dtype=np.float32)
+    real_arr = np.asarray(real, dtype=np.float32)
+    denom = float(np.linalg.norm(pred_arr) * np.linalg.norm(real_arr))
+    cosine = float(np.dot(pred_arr, real_arr) / denom) if denom > 0 else 0.0
+    delta = pred_arr - real_arr
+    return {
+        "pooled_cosine": cosine,
+        "pooled_mse": float(np.mean(delta * delta)),
+        "pooled_l2": float(np.linalg.norm(delta)),
+    }
+
+
+def bag_energy_metric(pred_bag: np.ndarray, real_bag: np.ndarray) -> float:
+    """Return the NaN-safe energy distance between two bags."""
+    pred = torch.tensor(np.asarray(pred_bag, dtype=np.float32), dtype=torch.float32)
+    real = torch.tensor(np.asarray(real_bag, dtype=np.float32), dtype=torch.float32)
+    return float(_safe_energy_distance(pred, real).detach().cpu())
+
+
+def nearest_neighbor_copy_predictions(
+    *,
+    val_symbols: set[str],
+    train_covered_symbols: set[str],
+    esm_vectors: dict[str, np.ndarray],
+    real_bags: dict[str, np.ndarray],
+) -> dict[str, np.ndarray]:
+    """Copy each validation gene's nearest train-covered real bag in ESM2 space."""
+    candidates = [
+        symbol
+        for symbol in sorted({s.upper() for s in train_covered_symbols})
+        if symbol in esm_vectors and symbol in real_bags
+    ]
+    if not candidates:
+        return {}
+
+    copied: dict[str, np.ndarray] = {}
+    for symbol in sorted({s.upper() for s in val_symbols}):
+        val_vec = esm_vectors.get(symbol)
+        if val_vec is None:
+            continue
+        val_arr = np.asarray(val_vec, dtype=np.float32)
+        best = min(
+            candidates,
+            key=lambda candidate: float(
+                np.sum(
+                    (val_arr - np.asarray(esm_vectors[candidate], dtype=np.float32))
+                    ** 2
+                )
+            ),
+        )
+        copied[symbol] = np.asarray(real_bags[best], dtype=np.float32).copy()
+    return copied
+
+
+def compute_monitor_rows(
+    *,
+    epoch: int,
+    split_type: str,
+    fold_id: int,
+    pred_bags: dict[str, np.ndarray],
+    real_bags: dict[str, np.ndarray],
+    nn_copy_bags: dict[str, np.ndarray],
+) -> list[dict[str, object]]:
+    """Compute per-epoch generator and ESM2 NN-copy monitor rows."""
+
+    def summarize(predictor: str, bags: dict[str, np.ndarray]) -> dict[str, object]:
+        symbols = sorted(set(bags) & set(real_bags))
+        pooled = [
+            pooled_vector_metrics(
+                _mean_std_pool_np(bags[symbol]),
+                _mean_std_pool_np(real_bags[symbol]),
+            )
+            for symbol in symbols
+        ]
+        energy = [
+            bag_energy_metric(bags[symbol], real_bags[symbol]) for symbol in symbols
+        ]
+        return {
+            "split_type": split_type,
+            "fold_id": int(fold_id),
+            "epoch": int(epoch),
+            "predictor": predictor,
+            "n_genes": len(symbols),
+            "pooled_cosine": float(np.mean([row["pooled_cosine"] for row in pooled]))
+            if pooled
+            else np.nan,
+            "pooled_mse": float(np.mean([row["pooled_mse"] for row in pooled]))
+            if pooled
+            else np.nan,
+            "pooled_l2": float(np.mean([row["pooled_l2"] for row in pooled]))
+            if pooled
+            else np.nan,
+            "bag_energy": float(np.mean(energy)) if energy else np.nan,
+        }
+
+    return [
+        summarize("generator", pred_bags),
+        summarize("esm2_nn_copy", nn_copy_bags),
+    ]
+
+
 @dataclass(frozen=True)
 class Step1TrainResult:
     """Paths and summary counts emitted by one Step 1 generator fold."""
@@ -209,9 +320,7 @@ class StateAdapterBagGenerator(nn.Module):
     ) -> None:
         super().__init__()
         checkpoint = (
-            None
-            if config.state_backend == "linear_mock"
-            else config.state_checkpoint
+            None if config.state_backend == "linear_mock" else config.state_checkpoint
         )
         self.encoder = StateEncoder(
             backend=config.state_backend,
@@ -341,6 +450,36 @@ class Step1GeneratorTrainer:
                 optimizer.step()
                 produced_loss = True
 
+            if val_bag:
+                pred_bags = self._predict_bags(generator, control, val_bag, device)
+                real_bags = {
+                    symbol: np.asarray(
+                        self.bags.bags_by_symbol[symbol],
+                        dtype=np.float32,
+                    )
+                    for symbol in sorted(val_bag)
+                }
+                esm_vectors = self._esm_vectors_for(train_bag | val_bag)
+                nn_copy_bags = nearest_neighbor_copy_predictions(
+                    val_symbols=val_bag,
+                    train_covered_symbols=train_bag,
+                    esm_vectors=esm_vectors,
+                    real_bags=self.bags.bags_by_symbol,
+                )
+                rows = compute_monitor_rows(
+                    epoch=epoch,
+                    split_type=split_type,
+                    fold_id=fold_id,
+                    pred_bags=pred_bags,
+                    real_bags=real_bags,
+                    nn_copy_bags=nn_copy_bags,
+                )
+                self._append_monitor_rows(
+                    split_type=split_type,
+                    fold_id=fold_id,
+                    rows=rows,
+                )
+
             if (
                 isinstance(scale, FixedWarmupBagScale)
                 and scale_observed
@@ -447,8 +586,7 @@ class Step1GeneratorTrainer:
         state_model = generator.encoder.state.state_model
         if not hasattr(state_model, "pert_encoder"):
             raise RuntimeError(
-                "distill loss is configured but the STATE model has no "
-                "pert_encoder"
+                "distill loss is configured but the STATE model has no pert_encoder"
             )
         onehot = torch.tensor(onehot_arr, dtype=torch.float32, device=device)
         esm_vec = self._esm_tensor(symbol, device)
@@ -480,6 +618,50 @@ class Step1GeneratorTrainer:
                 if key in self.bags.bags_by_symbol:
                     coverage[row] = 1
         return embeddings, coverage
+
+    def _esm_vectors_for(self, symbols: set[str]) -> dict[str, np.ndarray]:
+        """Resolve ESM2 vectors for a set of symbols."""
+        return {
+            str(symbol).upper(): self._resolve_esm(str(symbol).upper())
+            for symbol in symbols
+        }
+
+    def _predict_bags(
+        self,
+        generator: nn.Module,
+        control: torch.Tensor,
+        symbols: set[str],
+        device: torch.device,
+    ) -> dict[str, np.ndarray]:
+        """Predict response bags for a set of symbols."""
+        generator.eval()
+        pred_bags: dict[str, np.ndarray] = {}
+        with torch.no_grad():
+            for symbol in sorted(symbols):
+                key = str(symbol).upper()
+                pred_bags[key] = (
+                    generator(self._esm_tensor(key, device), control)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float32)
+                )
+        return pred_bags
+
+    def _append_monitor_rows(
+        self,
+        *,
+        split_type: str,
+        fold_id: int,
+        rows: list[dict[str, object]],
+    ) -> None:
+        """Append monitor rows to the fold-local Step 1 CSV."""
+        if not rows:
+            return
+        path = generator_monitor_path(self.config, split_type, fold_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame = pd.DataFrame(rows)
+        frame.to_csv(path, mode="a", header=not path.exists(), index=False)
 
     def _esm_tensor(self, symbol: str, device: torch.device | str) -> torch.Tensor:
         return torch.tensor(
