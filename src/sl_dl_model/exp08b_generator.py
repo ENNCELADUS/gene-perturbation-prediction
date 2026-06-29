@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Protocol
 
 import numpy as np
 import torch
@@ -53,7 +52,9 @@ def select_generator_bag_sets(
         ``(train_bag, val_bag)`` — disjoint sets that together equal
         ``train_symbols & covered_symbols``.
     """
-    eligible = sorted(train_symbols & covered_symbols)
+    eligible = sorted(
+        {s.upper() for s in train_symbols} & {s.upper() for s in covered_symbols}
+    )
     if not eligible:
         return set(), set()
     # Reserve at least 1 for train_bag: compute n_val from (n-1) eligible slots.
@@ -78,146 +79,77 @@ def select_generator_bag_sets(
 # ---------------------------------------------------------------------------
 
 
-class BagScale(Protocol):
-    """Protocol for bag-loss normalizers."""
-
-    @property
-    def value(self) -> float:
-        """Current scale value."""
-        ...
-
-    def observe(self, loss: torch.Tensor) -> None:
-        """Record a raw bag loss for scale estimation."""
-        ...
-
-    def normalize(self, loss: torch.Tensor) -> torch.Tensor:
-        """Divide *loss* by the current scale."""
-        ...
-
-
 class FixedWarmupBagScale:
-    """Accumulate bag losses during warmup, then fix the median as the scale.
+    """Median bag-loss scale chosen from detached warmup observations."""
 
-    The scale is fixed to the median of all observed values, clamped to
-    ``min_scale`` from below.  Call :meth:`finalize` once at the end of the
-    warmup phase; after that :meth:`normalize` is valid.
-
-    Args:
-        min_scale: Lower bound for the scale to avoid division by near-zero.
-    """
-
-    def __init__(self, min_scale: float = 1e-3) -> None:
-        self._min_scale = min_scale
-        self._observations: list[float] = []
-        self._value: float | None = None
+    def __init__(self, *, min_scale: float) -> None:
+        self.min_scale = float(min_scale)
+        self._observed: list[float] = []
+        self.value: float | None = None
 
     @property
-    def value(self) -> float:
-        """Fixed scale value (only valid after :meth:`finalize`)."""
-        if self._value is None:
-            raise RuntimeError("bag scale has not been finalized")
-        return self._value
+    def ready(self) -> bool:
+        """Return whether a fixed scale has been selected."""
+        return self.value is not None
 
     def observe(self, loss: torch.Tensor) -> None:
-        """Record a raw bag loss value.
-
-        Args:
-            loss: Scalar tensor with the raw (un-normalized) bag loss.
-        """
-        self._observations.append(float(loss.detach()))
+        """Record one detached bag-loss value."""
+        self._observed.append(float(loss.detach().cpu()))
 
     def finalize(self) -> float:
-        """Fix the scale to the median of observed values.
-
-        Clamps to :attr:`min_scale` from below.
-
-        Returns:
-            The finalized scale value.
-
-        Raises:
-            ValueError: If no observations have been recorded.
-        """
-        if not self._observations:
-            raise ValueError("no bag losses observed; cannot finalize scale")
-        median = float(np.median(self._observations))
-        self._value = max(self._min_scale, median)
-        logger.debug("FixedWarmupBagScale finalized to %.4g", self._value)
-        return self._value
+        """Select median observed scale, clamped to ``min_scale``."""
+        if not self._observed:
+            raise ValueError("no bag losses observed during warmup")
+        finite = [x for x in self._observed if np.isfinite(x)]
+        if not finite:
+            raise ValueError("no finite bag losses observed during warmup")
+        median = float(np.median(np.asarray(finite, dtype=float)))
+        self.value = max(median, self.min_scale)
+        logger.debug("FixedWarmupBagScale finalized to %.4g", self.value)
+        return self.value
 
     def normalize(self, loss: torch.Tensor) -> torch.Tensor:
-        """Divide *loss* by the fixed scale.
-
-        Args:
-            loss: Raw bag loss tensor.
-
-        Returns:
-            Normalized loss tensor.
-
-        Raises:
-            RuntimeError: If :meth:`finalize` has not been called.
-        """
-        if self._value is None:
-            raise RuntimeError("bag scale has not been initialized")
-        return loss / float(self._value)
+        """Normalize a bag loss by the selected fixed scale."""
+        if self.value is None:
+            raise RuntimeError("bag scale has not been finalized")
+        return loss / float(self.value)
 
 
 class EmaBagScale:
-    """Exponential moving average bag-loss normalizer.
+    """EMA-normalized bag-loss scale for the normalization ablation."""
 
-    Updates the scale online with each :meth:`observe` call.  The first
-    observation seeds the EMA exactly (no warmup cold-start issue).
-
-    Args:
-        min_scale: Lower bound for the scale to avoid division by near-zero.
-        decay: EMA smoothing factor in ``[0, 1)``. Higher = slower adaptation.
-    """
-
-    def __init__(self, min_scale: float = 1e-3, decay: float = 0.95) -> None:
-        if not (0.0 <= decay < 1.0):
-            raise ValueError(f"decay must be in [0, 1), got {decay}")
-        self._min_scale = min_scale
-        self._decay = decay
-        self._value: float | None = None
+    def __init__(self, *, min_scale: float, decay: float) -> None:
+        self.min_scale = float(min_scale)
+        self.decay = float(decay)
+        self.value: float | None = None
 
     @property
-    def value(self) -> float:
-        """Current EMA scale value.
-
-        Raises:
-            RuntimeError: If no observation has been received yet.
-        """
-        if self._value is None:
-            raise RuntimeError("bag scale has not been initialized")
-        return self._value
+    def ready(self) -> bool:
+        """Return whether at least one finite scale has been observed."""
+        return self.value is not None
 
     def observe(self, loss: torch.Tensor) -> None:
-        """Update the EMA with a new raw bag loss.
-
-        Args:
-            loss: Scalar tensor with the raw (un-normalized) bag loss.
-        """
-        x = float(loss.detach())
-        if self._value is None:
-            self._value = max(self._min_scale, x)
+        """Update the EMA scale from one detached bag-loss value."""
+        current = max(float(loss.detach().cpu()), self.min_scale)
+        if not np.isfinite(current):
+            return
+        if self.value is None:
+            self.value = current
         else:
-            self._value = self._decay * self._value + (1.0 - self._decay) * x
-            self._value = max(self._min_scale, self._value)
+            self.value = self.decay * self.value + (1.0 - self.decay) * current
+        self.value = max(float(self.value), self.min_scale)
+
+    def finalize(self) -> float:
+        """Return the current EMA scale."""
+        if self.value is None:
+            raise ValueError("no finite bag losses observed for EMA scale")
+        return self.value
 
     def normalize(self, loss: torch.Tensor) -> torch.Tensor:
-        """Divide *loss* by the current EMA scale.
-
-        Args:
-            loss: Raw bag loss tensor.
-
-        Returns:
-            Normalized loss tensor.
-
-        Raises:
-            RuntimeError: If :meth:`observe` has not been called.
-        """
-        if self._value is None:
+        """Normalize a bag loss by the current EMA scale."""
+        if self.value is None:
             raise RuntimeError("bag scale has not been initialized")
-        return loss / float(self._value)
+        return loss / float(self.value)
 
 
 def build_bag_scale(config: Exp08bConfig) -> FixedWarmupBagScale | EmaBagScale:
@@ -229,4 +161,5 @@ def build_bag_scale(config: Exp08bConfig) -> FixedWarmupBagScale | EmaBagScale:
             min_scale=config.bag_scale_min,
             decay=config.bag_scale_ema_decay,
         )
+
     raise ValueError(f"unknown bag_scale_mode: {config.bag_scale_mode!r}")
