@@ -254,10 +254,20 @@ it is specified to match exp08b on everything **except** the STATE forward:
 - **Trained fold-locally** on the same step-1 split as exp08b — supervised on
   `fold_train_genes ∩ gwps_covered`, with the same 20% generator-validation
   held-out set (§4.2), so neither baseline sees a CV test gene's bag.
-- **Same target space and loss:** predicts a STATE-output-space bag (or its
-  `MeanStdPool`) against the same `data/exp08_cache/k562_gwps_bags.npz` real bag
-  under the same `bag_loss` + scale normalization. The only architectural
-  difference is `MLP(ESM2)` replacing `adapter → frozen STATE forward`.
+- **Same target space and loss — MLP emits a cell bag, not a pooled vector.**
+  To keep `bag_loss` (and the §4.3 bag-level energy metric) well-defined and
+  directly comparable, the MLP produces a `(T, D)` STATE-output-space bag over
+  the **same control template** exp08b feeds STATE (`T = control_template_size`,
+  default 256): `pred_bag = control_template + MLP(ESM2(gene))`, where
+  `MLP(ESM2(gene))` is a single `D`-dim delta broadcast-added to all `T` control
+  rows. Trained against the same `data/exp08_cache/k562_gwps_bags.npz` real bag
+  under the same `bag_loss` + scale normalization; `ê_g = MeanStdPool(pred_bag)`
+  is cached identically. The only architectural difference from exp08b is
+  `control_template + MLP(ESM2)` replacing `adapter → frozen STATE forward` —
+  so the control measures precisely whether the STATE forward adds response
+  structure beyond a learned per-gene mean shift on the same control cells.
+  *(A pooled-vector MLP head is explicitly rejected: it cannot use `bag_loss`
+  or the bag-level energy metric, breaking target-space parity with exp08b.)*
 - **No `sl_label`** enters this baseline's training — it is a step-1 generator
   exactly like exp08b, evaluated by the §4.3 monitor and then by a step-2 SL head
   trained on its cached `ê_g`. This prevents it from becoming accidentally
