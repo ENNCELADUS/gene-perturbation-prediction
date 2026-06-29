@@ -222,6 +222,39 @@ def test_step1_trainer_supports_direct_mlp_control(tmp_path: Path) -> None:
     assert manifest["generator_kind"] == "direct_mlp"
 
 
+def test_step1_trainer_direct_mlp_bypasses_default_distill_vocab(
+    tmp_path: Path,
+) -> None:
+    esm, bags, symbols = _tiny_esm_and_bags()
+    cfg = Exp08bConfig(
+        output_dir=tmp_path / "run",
+        generator_kind="direct_mlp",
+        state_backend="state_checkpoint",
+        state_checkpoint=tmp_path / "state" / "checkpoints" / "final.ckpt",
+        direct_mlp_hidden=8,
+        max_epochs=1,
+        warmup_epochs=1,
+    )
+    trainer = Step1GeneratorTrainer(
+        cfg,
+        esm=esm,
+        bags=bags,
+        input_dim=3,
+        output_dim=3,
+    )
+
+    result = trainer.train_fold(
+        split_type="CV2",
+        fold_id=0,
+        symbols=symbols,
+        train_symbols={"A", "B", "C"},
+    )
+
+    manifest = load_generator_manifest(result.manifest_path)
+    assert manifest["generator_kind"] == "direct_mlp"
+    assert manifest["distill_gene_count"] == 0
+
+
 def test_step1_trainer_nn_copy_caches_nearest_train_covered_pool(
     tmp_path: Path,
 ) -> None:

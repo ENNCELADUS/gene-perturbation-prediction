@@ -415,7 +415,11 @@ class Step1GeneratorTrainer:
                 val_bag=val_bag,
             )
 
-        distill_symbols = self.distill_symbols_for_fold(fold_train)
+        distill_symbols = (
+            set()
+            if self.config.generator_kind == "direct_mlp"
+            else self.distill_symbols_for_fold(fold_train)
+        )
 
         torch.manual_seed(int(self.config.seed) + int(fold_id))
         device = self._device if self._device is not None else PartialState().device
