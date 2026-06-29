@@ -211,6 +211,8 @@ def test_step1_runner_does_not_import_pair_head_or_sl_label() -> None:
         "sl_label",
         "sl_dl_model.scoring",
         "train_symbols_for_fold",
+        "load_benchmark",
+        "fold_split",
     }
 
     for value in forbidden:
@@ -232,6 +234,63 @@ def test_step1_runner_import_does_not_load_scoring() -> None:
     )
 
     assert "loaded=False" in result.stdout
+
+
+def test_step1_generator_input_loader_accepts_symbol_only_csv(tmp_path: Path) -> None:
+    csv_path = tmp_path / "generator_pairs.csv"
+    pd.DataFrame(
+        [
+            {
+                "pair_id": "p0",
+                "fold_id": 0,
+                "split_role": "train",
+                "gene_a_symbol": "a",
+                "gene_b_symbol": "b",
+            },
+            {
+                "pair_id": "p1",
+                "fold_id": 0,
+                "split_role": "test",
+                "gene_a_symbol": "c",
+                "gene_b_symbol": "d",
+            },
+        ]
+    ).to_csv(csv_path, index=False)
+
+    from sl_dl_model.exp08b_runner import jobs
+    from sl_dl_model.exp08b_step1_runner import (
+        _fold_rows,
+        _load_pairs_for_generator,
+        _train_symbols,
+    )
+
+    frame = _load_pairs_for_generator(csv_path)
+    cfg = Exp08bConfig(
+        input_csv=csv_path,
+        output_dir=tmp_path / "run",
+        split_types=("CV1",),
+        folds=(0,),
+    )
+
+    assert frame["split_type"].tolist() == ["CV1", "CV1"]
+    train_df, test_df = _fold_rows(frame, "CV1", 0)
+    assert _train_symbols(train_df) == {"A", "B"}
+    assert test_df["gene_a_symbol"].tolist() == ["c"]
+    assert jobs(frame, cfg) == [("CV1", 0)]
+
+    cv2_path = tmp_path / "generator_pairs_cv2.csv"
+    pd.DataFrame(
+        [
+            {
+                "fold_id": 0,
+                "split_type": "CV2",
+                "split_role": "train",
+                "gene_a_symbol": "x",
+                "gene_b_symbol": "y",
+            }
+        ]
+    ).to_csv(cv2_path, index=False)
+    assert _load_pairs_for_generator(cv2_path)["split_type"].tolist() == ["CV2"]
 
 
 def test_step2_runner_does_not_import_generator_or_state() -> None:

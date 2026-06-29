@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 import time
 import traceback as _tb
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from accelerate import PartialState
 
-from sl_benchmark_baseline.data import fold_split, load_benchmark
 from sl_dl_model import fold_queue as fq
 from sl_dl_model.exp08b_config import Exp08bConfig
 from sl_dl_model.exp08b_generator import Step1GeneratorTrainer
@@ -19,6 +19,47 @@ from sl_dl_model.exp08b_runner import jobs, raise_if_step_incomplete
 from sl_dl_model.state_dl_caches import load_state_dl_caches
 
 logger = logging.getLogger(__name__)
+
+_REQUIRED_GENERATOR_COLUMNS = {
+    "fold_id",
+    "split_role",
+    "gene_a_symbol",
+    "gene_b_symbol",
+}
+_VALID_SPLIT_TYPES = {"CV1", "CV2", "CV3"}
+_VALID_SPLIT_ROLES = {"train", "test"}
+
+
+def _load_pairs_for_generator(path: Path) -> pd.DataFrame:
+    """Read the generator pass CSV using only fold, role, and symbol fields."""
+    frame = pd.read_csv(path)
+    missing = sorted(_REQUIRED_GENERATOR_COLUMNS.difference(frame.columns))
+    if missing:
+        raise ValueError(f"generator CSV missing columns: {missing}")
+    if "split_type" not in frame.columns:
+        frame = frame.copy()
+        frame["split_type"] = "CV1"
+
+    split_types = set(frame["split_type"].unique())
+    invalid_split_types = sorted(split_types.difference(_VALID_SPLIT_TYPES))
+    if invalid_split_types:
+        raise ValueError(f"split_type must be CV1/CV2/CV3, got {invalid_split_types}")
+
+    roles = set(frame["split_role"].unique())
+    invalid_roles = sorted(roles.difference(_VALID_SPLIT_ROLES))
+    if invalid_roles:
+        raise ValueError(f"split_role must be train/test, got {invalid_roles}")
+    return frame
+
+
+def _fold_rows(
+    frame: pd.DataFrame, split_type: str, fold_id: int
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return train/test rows for one generator pass unit."""
+    fold = frame[(frame["split_type"] == split_type) & (frame["fold_id"] == fold_id)]
+    train_df = fold[fold["split_role"] == "train"].reset_index(drop=True)
+    test_df = fold[fold["split_role"] == "test"].reset_index(drop=True)
+    return train_df, test_df
 
 
 def _train_symbols(train_df: pd.DataFrame) -> set[str]:
@@ -36,7 +77,7 @@ def _universe_symbols(frame: pd.DataFrame) -> np.ndarray:
 
 def run_train_generator(config: Exp08bConfig) -> None:
     """Run the generator pass over the filesystem queue."""
-    frame = load_benchmark(config.input_csv)
+    frame = _load_pairs_for_generator(config.input_csv)
     shared = load_state_dl_caches(config)
     runtime = PartialState()
     token = fq.run_token()
@@ -65,7 +106,7 @@ def run_train_generator(config: Exp08bConfig) -> None:
         if fq.is_done(results_dir, split_type, fold_id, fingerprint=fp):
             continue
         try:
-            train_df, _test_df = fold_split(frame, split_type, fold_id)
+            train_df, _test_df = _fold_rows(frame, split_type, fold_id)
             result = trainer.train_fold(
                 split_type=split_type,
                 fold_id=fold_id,
