@@ -223,6 +223,12 @@ def test_step1_trainer_writes_fold_local_cache_and_manifest(tmp_path: Path) -> N
     assert manifest["bag_scale"] >= 1e-3
     assert manifest["generator_weights_path"] == str(result.weights_path)
 
+    monitor = result.manifest_path.parent / "generator_monitor.csv"
+    assert monitor.exists()
+    monitor_text = monitor.read_text()
+    assert "pooled_cosine" in monitor_text
+    assert "esm2_nn_copy" in monitor_text
+
 
 def test_step1_trainer_uses_partialstate_device_not_cuda_default() -> None:
     source = Path("src/sl_dl_model/exp08b_generator.py").read_text()
