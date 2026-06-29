@@ -16,6 +16,7 @@ from sl_dl_model.exp08b_artifacts import (
 )
 from sl_dl_model.exp08b_config import Exp08bConfig
 from sl_dl_model.exp08b_generator import (
+    DirectMlpBagGenerator,
     EmaBagScale,
     FixedWarmupBagScale,
     Step1GeneratorTrainer,
@@ -173,6 +174,109 @@ def _tiny_esm_and_bags() -> tuple[Esm2EmbeddingTable, GwpsBags, np.ndarray]:
         input_dim=3,
     )
     return esm, bags, symbols
+
+
+def test_direct_mlp_generator_broadcasts_delta_over_control_template() -> None:
+    model = DirectMlpBagGenerator(esm_dim=4, hidden=8, output_dim=3)
+    esm_vec = torch.randn(4)
+    control = torch.randn(5, 3)
+
+    pred = model(esm_vec, control)
+
+    assert pred.shape == (5, 3)
+    delta_rows = pred - control
+    assert torch.allclose(delta_rows[0], delta_rows[1])
+
+
+def test_step1_trainer_supports_direct_mlp_control(tmp_path: Path) -> None:
+    esm, bags, symbols = _tiny_esm_and_bags()
+    cfg = Exp08bConfig(
+        output_dir=tmp_path / "run",
+        generator_kind="direct_mlp",
+        state_backend="linear_mock",
+        direct_mlp_hidden=8,
+        max_epochs=1,
+        warmup_epochs=1,
+        lambda_bag=1.0,
+        lambda_distill=0.0,
+        lambda_distill_after_warmup=0.0,
+    )
+    trainer = Step1GeneratorTrainer(
+        cfg,
+        esm=esm,
+        bags=bags,
+        input_dim=3,
+        output_dim=3,
+    )
+
+    result = trainer.train_fold(
+        split_type="CV2",
+        fold_id=0,
+        symbols=symbols,
+        train_symbols={"A", "B", "C"},
+    )
+
+    cache = load_embedding_cache(result.embedding_path)
+    assert cache["embeddings"].shape == (3, 6)
+    manifest = load_generator_manifest(result.manifest_path)
+    assert manifest["generator_kind"] == "direct_mlp"
+
+
+def test_step1_trainer_nn_copy_caches_nearest_train_covered_pool(
+    tmp_path: Path,
+) -> None:
+    rng = np.random.default_rng(11)
+    symbols = np.array(["A", "B", "TEST"], dtype=object)
+    esm = Esm2EmbeddingTable(
+        dim=2,
+        vectors_by_symbol={
+            "A": np.array([1.0, 0.0], dtype=np.float32),
+            "B": np.array([0.0, 1.0], dtype=np.float32),
+            "TEST": np.array([0.9, 0.1], dtype=np.float32),
+        },
+    )
+    bags = GwpsBags(
+        control_template=rng.standard_normal((4, 3)).astype(np.float32),
+        bags_by_symbol={
+            "A": np.full((4, 3), 1.0, dtype=np.float32),
+            "B": np.full((4, 3), 2.0, dtype=np.float32),
+        },
+        input_dim=3,
+    )
+    cfg = Exp08bConfig(
+        output_dir=tmp_path / "run",
+        generator_kind="nn_copy",
+        state_backend="linear_mock",
+        embedding_method="exp08b_nn_copy_meanstd",
+    )
+    trainer = Step1GeneratorTrainer(
+        cfg,
+        esm=esm,
+        bags=bags,
+        input_dim=3,
+        output_dim=3,
+    )
+
+    result = trainer.train_fold(
+        split_type="CV2",
+        fold_id=0,
+        symbols=symbols,
+        train_symbols={"A", "B", "TEST"},
+    )
+
+    cache = load_embedding_cache(result.embedding_path)
+    assert cache["symbols"].tolist() == ["A", "B", "TEST"]
+    assert cache["embeddings"].shape == (3, 6)
+    pool_a = np.concatenate(
+        [np.full(3, 1.0, dtype=np.float32), np.zeros(3, dtype=np.float32)]
+    )
+    np.testing.assert_allclose(cache["embeddings"][2], pool_a, atol=1e-5)
+    assert cache["coverage_mask"].tolist() == [1, 1, 0]
+    assert result.weights_path.exists()
+
+    manifest = load_generator_manifest(result.manifest_path)
+    assert manifest["generator_kind"] == "nn_copy"
+    assert manifest["bag_scale"] == 1.0
 
 
 def test_step1_trainer_writes_fold_local_cache_and_manifest(tmp_path: Path) -> None:

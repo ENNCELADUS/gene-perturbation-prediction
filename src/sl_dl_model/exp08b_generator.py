@@ -342,6 +342,27 @@ class StateAdapterBagGenerator(nn.Module):
         return self.pool(self.forward(esm_vec, control))
 
 
+class DirectMlpBagGenerator(nn.Module):
+    """Step 1 control generator: direct ESM2 MLP delta over control cells."""
+
+    def __init__(self, *, esm_dim: int, hidden: int, output_dim: int) -> None:
+        super().__init__()
+        self.delta = nn.Sequential(
+            nn.Linear(esm_dim, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, output_dim),
+        )
+        self.pool = MeanStdPool()
+
+    def forward(self, esm_vec: torch.Tensor, control: torch.Tensor) -> torch.Tensor:
+        """Predict a response bag by broadcasting one ESM2-conditioned delta."""
+        return control + self.delta(esm_vec)
+
+    def pooled(self, esm_vec: torch.Tensor, control: torch.Tensor) -> torch.Tensor:
+        """Predict and mean/std-pool one perturbation gene."""
+        return self.pool(self.forward(esm_vec, control))
+
+
 class Step1GeneratorTrainer:
     """Train and cache fold-local exp08b Step 1 generator embeddings."""
 
@@ -374,9 +395,6 @@ class Step1GeneratorTrainer:
         train_symbols: set[str],
     ) -> Step1TrainResult:
         """Train the Step 1 generator and write fold-local artifacts."""
-        if self.config.generator_kind != "state_adapter":
-            raise NotImplementedError("Task 3 supports only state_adapter generators")
-
         monitor_path = generator_monitor_path(self.config, split_type, fold_id)
         if monitor_path.exists():
             monitor_path.unlink()
@@ -388,16 +406,20 @@ class Step1GeneratorTrainer:
             val_fraction=self.config.generator_val_fraction,
             seed=self.config.generator_val_seed + int(fold_id),
         )
+        if self.config.generator_kind == "nn_copy":
+            return self._produce_nn_copy_fold(
+                split_type=split_type,
+                fold_id=fold_id,
+                symbols=symbols,
+                train_covered=train_bag | val_bag,
+                val_bag=val_bag,
+            )
+
         distill_symbols = self.distill_symbols_for_fold(fold_train)
 
         torch.manual_seed(int(self.config.seed) + int(fold_id))
         device = self._device if self._device is not None else PartialState().device
-        generator = StateAdapterBagGenerator(
-            self.config,
-            esm_dim=self.esm.dim,
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-        ).to(device)
+        generator = self._build_generator().to(device)
         params = [p for p in generator.parameters() if p.requires_grad]
         optimizer = optim.Adam(params, lr=float(self.config.lr))
         control = torch.tensor(
@@ -577,6 +599,89 @@ class Step1GeneratorTrainer:
         self._pert_vocab = vocab
         return self._pert_vocab
 
+    def _build_generator(self) -> nn.Module:
+        if self.config.generator_kind == "state_adapter":
+            return StateAdapterBagGenerator(
+                self.config,
+                esm_dim=self.esm.dim,
+                input_dim=self.input_dim,
+                output_dim=self.output_dim,
+            )
+        if self.config.generator_kind == "direct_mlp":
+            return DirectMlpBagGenerator(
+                esm_dim=self.esm.dim,
+                hidden=int(self.config.direct_mlp_hidden),
+                output_dim=self.output_dim,
+            )
+
+        raise ValueError(f"unknown generator_kind: {self.config.generator_kind!r}")
+
+    def _produce_nn_copy_fold(
+        self,
+        *,
+        split_type: str,
+        fold_id: int,
+        symbols: np.ndarray,
+        train_covered: set[str],
+        val_bag: set[str],
+    ) -> Step1TrainResult:
+        embedding_path = embedding_cache_path(self.config, split_type, fold_id)
+        manifest_path = generator_manifest_path(self.config, split_type, fold_id)
+        weights_path = generator_weights_path(self.config, split_type, fold_id)
+        universe = [str(symbol).upper() for symbol in symbols]
+        esm_vectors = self._esm_vectors_for(set(universe) | train_covered)
+        copied = nearest_neighbor_copy_predictions(
+            val_symbols=set(universe),
+            train_covered_symbols=train_covered,
+            esm_vectors=esm_vectors,
+            real_bags=self.bags.bags_by_symbol,
+        )
+
+        embeddings = np.zeros((len(symbols), 2 * self.output_dim), dtype=np.float32)
+        coverage = np.zeros(len(symbols), dtype=np.int64)
+        for row, symbol in enumerate(universe):
+            copied_bag = copied.get(symbol)
+            if copied_bag is not None:
+                embeddings[row] = _mean_std_pool_np(copied_bag)
+            if symbol in self.bags.bags_by_symbol:
+                coverage[row] = 1
+
+        save_embedding_cache(
+            embedding_path,
+            symbols=np.asarray(symbols, dtype=object),
+            embeddings=embeddings,
+            coverage_mask=coverage,
+            embedding_method=self.config.embedding_method,
+        )
+        weights_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = weights_path.with_suffix(weights_path.suffix + f".tmp.{os.getpid()}")
+        torch.save({"generator_kind": "nn_copy", "state_dict": {}}, tmp)
+        os.replace(tmp, weights_path)
+        write_generator_manifest(
+            manifest_path,
+            {
+                "split_type": split_type,
+                "fold_id": int(fold_id),
+                "generator_kind": self.config.generator_kind,
+                "embedding_method": self.config.embedding_method,
+                "bag_scale": 1.0,
+                "bag_scale_mode": self.config.bag_scale_mode,
+                "generator_weights_path": str(weights_path),
+                "train_bag_gene_count": len(train_covered),
+                "val_bag_gene_count": len(val_bag),
+                "distill_gene_count": 0,
+                "universe_gene_count": int(len(symbols)),
+            },
+        )
+        return Step1TrainResult(
+            embedding_path=embedding_path,
+            manifest_path=manifest_path,
+            weights_path=weights_path,
+            bag_scale=1.0,
+            train_bag_gene_count=len(train_covered),
+            val_bag_gene_count=len(val_bag),
+        )
+
     def _distill_term(
         self,
         generator: StateAdapterBagGenerator,
@@ -601,7 +706,7 @@ class Step1GeneratorTrainer:
 
     def _embed_universe(
         self,
-        generator: StateAdapterBagGenerator,
+        generator: nn.Module,
         symbols: np.ndarray,
         control: torch.Tensor,
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -691,7 +796,7 @@ class Step1GeneratorTrainer:
 
     def _save_weights(
         self,
-        generator: StateAdapterBagGenerator,
+        generator: nn.Module,
         path: Path,
     ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
