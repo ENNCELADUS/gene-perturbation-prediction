@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 import traceback as _tb
+from pathlib import Path
 
 import pandas as pd
 from accelerate import PartialState
@@ -60,6 +61,68 @@ def _same_cache_failure(
         fq.is_failed(results_dir, split_type, fold_id, fingerprint=fp)
         and read_step2_failed_cache_fp(results_dir, split_type, fold_id) == cache_fp
     )
+
+
+def _raise_if_step2_incomplete(
+    config: Exp08bConfig,
+    metric_config: Exp08bConfig,
+    results_dir: Path,
+    job_list: list[tuple[str, int]],
+    fp: str,
+) -> None:
+    """Require Step 2 terminal markers to match the current fold cache."""
+    _ = metric_config
+    current_failed: list[tuple[str, int, str | None]] = []
+    stale: list[tuple[str, int, str]] = []
+    missing: list[tuple[str, int]] = []
+
+    for split_type, fold_id in job_list:
+        cache_fp = step2_fold_fingerprint(config, split_type, fold_id)
+        done = fq.is_done(results_dir, split_type, fold_id, fingerprint=fp)
+        failed = fq.is_failed(results_dir, split_type, fold_id, fingerprint=fp)
+        if done:
+            result_cache_fp = read_step2_result_cache_fp(
+                results_dir, split_type, fold_id
+            )
+            if result_cache_fp == cache_fp:
+                continue
+            stale.append((split_type, fold_id, "result"))
+            continue
+        if failed:
+            failed_cache_fp = read_step2_failed_cache_fp(
+                results_dir, split_type, fold_id
+            )
+            if failed_cache_fp == cache_fp:
+                failed_payload = fq.read_json(
+                    fq.failed_path(results_dir, split_type, fold_id)
+                )
+                trace = (
+                    failed_payload.get("traceback")
+                    if isinstance(failed_payload, dict)
+                    else None
+                )
+                current_failed.append((split_type, fold_id, trace))
+            else:
+                stale.append((split_type, fold_id, "failed"))
+            continue
+        missing.append((split_type, fold_id))
+
+    if not current_failed and not stale and not missing:
+        return
+
+    lines = ["sl_head incomplete for current Step 1 cache."]
+    if current_failed:
+        lines.append(
+            f"failed jobs: {[(s, f) for s, f, _trace in current_failed]}"
+        )
+        for split_type, fold_id, trace in current_failed:
+            if trace:
+                lines.append(f"{split_type}/fold{fold_id}: {trace}")
+    if stale:
+        lines.append(f"stale jobs: {stale}")
+    if missing:
+        lines.append(f"missing jobs: {missing}")
+    raise RuntimeError("\n".join(lines))
 
 
 def run_train_sl_head(config: Exp08bConfig):
@@ -140,8 +203,10 @@ def run_train_sl_head(config: Exp08bConfig):
 
     if not runtime.is_main_process:
         return pd.DataFrame()
+    _raise_if_step2_incomplete(config, metric_config, results_dir, job_list, fp)
     try:
         return _assemble(metric_config, job_list, split_types, frame, shared=None)
     except RuntimeError:
+        _raise_if_step2_incomplete(config, metric_config, results_dir, job_list, fp)
         raise_if_step_incomplete(results_dir, job_list, fp, "sl_head")
         raise
