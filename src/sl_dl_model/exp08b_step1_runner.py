@@ -12,11 +12,11 @@ from accelerate import PartialState
 
 from sl_benchmark_baseline.data import fold_split, load_benchmark
 from sl_dl_model import fold_queue as fq
-from sl_dl_model.evaluate import _load_state_dl_caches
 from sl_dl_model.exp08b_config import Exp08bConfig
 from sl_dl_model.exp08b_generator import Step1GeneratorTrainer
 from sl_dl_model.exp08b_queue import step_results_dir
 from sl_dl_model.exp08b_runner import jobs, raise_if_step_incomplete
+from sl_dl_model.state_dl_caches import load_state_dl_caches
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def _universe_symbols(frame: pd.DataFrame) -> np.ndarray:
 def run_train_generator(config: Exp08bConfig) -> None:
     """Run the generator pass over the filesystem queue."""
     frame = load_benchmark(config.input_csv)
-    shared = _load_state_dl_caches(config)
+    shared = load_state_dl_caches(config)
     runtime = PartialState()
     token = fq.run_token()
     fp = fq.fingerprint(config)

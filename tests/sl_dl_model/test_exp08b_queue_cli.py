@@ -217,6 +217,23 @@ def test_step1_runner_does_not_import_pair_head_or_sl_label() -> None:
         assert value not in source
 
 
+def test_step1_runner_import_does_not_load_scoring() -> None:
+    snippet = (
+        "import sys\n"
+        "import sl_dl_model.exp08b_step1_runner\n"
+        "print('loaded=' + str('sl_dl_model.scoring' in sys.modules))\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", snippet],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "loaded=False" in result.stdout
+
+
 def test_step2_runner_does_not_import_generator_or_state() -> None:
     source = Path("src/sl_dl_model/exp08b_step2_runner.py").read_text()
     forbidden = {
