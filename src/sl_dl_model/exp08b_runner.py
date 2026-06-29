@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -51,3 +52,29 @@ def raise_if_step_incomplete(
     if missing:
         lines.append(f"missing jobs: {missing}")
     raise RuntimeError("\n".join(lines))
+
+
+def wait_for_step_complete(
+    results_dir: Path,
+    job_list: list[tuple[str, int]],
+    fingerprint: str,
+    step: str,
+    *,
+    poll_seconds: float,
+    timeout_seconds: float,
+) -> None:
+    """Poll until every generic queue job is terminal, then report failures."""
+    deadline = time.monotonic() + float(timeout_seconds)
+    while True:
+        terminal = all(
+            fq.is_done(results_dir, split_type, fold_id, fingerprint=fingerprint)
+            or fq.is_failed(results_dir, split_type, fold_id, fingerprint=fingerprint)
+            for split_type, fold_id in job_list
+        )
+        if terminal:
+            break
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(float(poll_seconds))
+
+    raise_if_step_incomplete(results_dir, job_list, fingerprint, step)

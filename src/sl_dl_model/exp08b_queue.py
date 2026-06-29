@@ -105,8 +105,60 @@ def read_step2_failed_cache_fp(
     return _read_cache_fp(fq.failed_path(results_dir, split_type, fold_id))
 
 
+def step2_result_matches_cache(
+    results_dir: Path,
+    split_type: str,
+    fold_id: int,
+    *,
+    fingerprint: str,
+    cache_fp: str,
+) -> bool:
+    """Return whether a Step 2 result marker matches this run and cache."""
+    return (
+        _read_marker_cache_fp(
+            fq.result_path(results_dir, split_type, fold_id), fingerprint
+        )
+        == cache_fp
+    )
+
+
+def step2_failed_matches_cache(
+    results_dir: Path,
+    split_type: str,
+    fold_id: int,
+    *,
+    fingerprint: str,
+    cache_fp: str,
+) -> bool:
+    """Return whether a Step 2 failure marker matches this run and cache."""
+    return (
+        _read_marker_cache_fp(
+            fq.failed_path(results_dir, split_type, fold_id), fingerprint
+        )
+        == cache_fp
+    )
+
+
 def _read_cache_fp(path: Path) -> str | None:
     """Read ``cache_fp`` from a marker, treating malformed markers as stale."""
+    payload = _read_marker(path)
+    if payload is None:
+        return None
+    value = payload.get("cache_fp")
+    return str(value) if value is not None else None
+
+
+def _read_marker_cache_fp(path: Path, fingerprint: str) -> str | None:
+    """Read a marker cache fingerprint only when the run fingerprint matches."""
+    payload = _read_marker(path)
+    if payload is None or payload.get("fingerprint") != fingerprint:
+        return None
+    value = payload.get("cache_fp")
+    return str(value) if value is not None else None
+
+
+def _read_marker(path: Path) -> dict | None:
+    """Read a marker payload, treating malformed markers as stale."""
     if not path.exists():
         return None
     try:
@@ -114,6 +166,5 @@ def _read_cache_fp(path: Path) -> str | None:
     except (OSError, UnicodeDecodeError, ValueError):
         return None
     if isinstance(payload, dict):
-        value = payload.get("cache_fp")
-        return str(value) if value is not None else None
+        return payload
     return None

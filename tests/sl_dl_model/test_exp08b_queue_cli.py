@@ -27,6 +27,7 @@ from sl_dl_model.exp08b_queue import (
     step2_metric_model_name,
     step_failed_path,
     step_result_path,
+    step_results_dir,
 )
 
 
@@ -367,6 +368,128 @@ def test_step2_failed_cache_fp_ignores_malformed_failed_marker(
     path.write_text("{not-json")
 
     assert read_step2_failed_cache_fp(results_dir, "CV2", 0) is None
+
+
+@pytest.mark.parametrize("marker_kind", ["result", "failed"])
+def test_step2_runner_ignores_malformed_marker_before_recompute(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    marker_kind: str,
+) -> None:
+    cfg = _config(tmp_path)
+    _write_step1_artifacts(cfg)
+    results_dir = fq.fold_results_dir(step2_metric_config(cfg))
+    marker_path = (
+        fq.result_path(results_dir, "CV2", 0)
+        if marker_kind == "result"
+        else fq.failed_path(results_dir, "CV2", 0)
+    )
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text("{not-json")
+
+    import sl_dl_model.exp08b_step2_runner as runner
+
+    calls: list[tuple[str, int]] = []
+
+    def fake_run_fold(frame, split_type, fold_id, config, producer):
+        calls.append((split_type, fold_id))
+        return [
+            {
+                "split_type": split_type,
+                "fold_id": fold_id,
+                "model": "exp08b",
+                "slice": "full_universe",
+                "metric": "ndcg@10",
+                "value": 1.0,
+            }
+        ]
+
+    class DummyProducer:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    monkeypatch.setattr(runner, "run_fold_with_producer", fake_run_fold)
+    monkeypatch.setattr(runner, "CachedEmbeddingPairHeadProducer", DummyProducer)
+
+    runner.run_train_sl_head(cfg)
+
+    assert calls == [("CV2", 0)]
+
+
+def test_wait_for_step_complete_polls_until_missing_job_appears(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sl_dl_model.exp08b_runner import wait_for_step_complete
+
+    cfg = _config(tmp_path, assembly_timeout_seconds=1.0)
+    results_dir = step_results_dir(cfg, "generator")
+    fp = fq.fingerprint(cfg)
+    jobs = [("CV2", 0), ("CV2", 1)]
+    fq.write_result(results_dir, "CV2", 0, [{"fold_id": 0}], fingerprint=fp)
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        fq.write_result(results_dir, "CV2", 1, [{"fold_id": 1}], fingerprint=fp)
+
+    monkeypatch.setattr("sl_dl_model.exp08b_runner.time.sleep", fake_sleep)
+
+    wait_for_step_complete(
+        results_dir,
+        jobs,
+        fp,
+        "generator",
+        poll_seconds=0.01,
+        timeout_seconds=1.0,
+    )
+
+    assert sleeps == [0.01]
+
+
+def test_step2_completion_waits_for_current_result_after_stale_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _config(tmp_path, assembly_timeout_seconds=1.0)
+    _write_step1_artifacts(cfg)
+    metric_cfg = step2_metric_config(cfg)
+    fp = fq.fingerprint(metric_cfg)
+    results_dir = fq.fold_results_dir(metric_cfg)
+    fq.write_failed(
+        results_dir,
+        "CV2",
+        0,
+        {"traceback": "old failure", "cache_fp": "stale-cache"},
+        fingerprint=fp,
+    )
+    cache_fp = step2_fold_fingerprint(cfg, "CV2", 0)
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        fq.write_result(
+            results_dir,
+            "CV2",
+            0,
+            [{"metric": "current"}],
+            fingerprint=fp,
+            extra={"cache_fp": cache_fp},
+        )
+
+    monkeypatch.setattr("sl_dl_model.exp08b_step2_runner.time.sleep", fake_sleep)
+
+    from sl_dl_model.exp08b_step2_runner import _raise_if_step2_incomplete
+
+    _raise_if_step2_incomplete(
+        cfg,
+        metric_cfg,
+        results_dir,
+        [("CV2", 0)],
+        fp,
+    )
+
+    assert sleeps == [0.01]
 
 
 def test_step2_completion_rejects_stale_result_cache_fp(tmp_path: Path) -> None:
