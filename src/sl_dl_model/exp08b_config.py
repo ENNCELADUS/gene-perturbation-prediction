@@ -78,6 +78,7 @@ class SlHeadConfig:
 
     pair_hidden: tuple[int, ...] = (256, 64)
     include_coverage_flag: bool = True
+    seed: int = 17
     lr: float = 1e-3
     max_epochs: int = 20
     batch_pairs: int = 1024
@@ -89,6 +90,7 @@ class SlHeadConfig:
         return cls(
             pair_hidden=tuple(config.pair_hidden),
             include_coverage_flag=bool(config.include_coverage_flag),
+            seed=int(config.seed),
             lr=float(config.lr),
             max_epochs=int(config.max_epochs),
             batch_pairs=int(config.batch_pairs),

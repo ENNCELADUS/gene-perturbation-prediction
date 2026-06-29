@@ -85,6 +85,48 @@ def test_cached_pair_head_scores_full_matrix(tmp_path: Path) -> None:
     assert np.isfinite(scores).all()
 
 
+def test_cached_pair_head_same_seed_is_deterministic(tmp_path: Path) -> None:
+    cache_path = tmp_path / "cache.npz"
+    _write_cache(cache_path)
+    config = SlHeadConfig(
+        seed=123,
+        max_epochs=3,
+        batch_pairs=2,
+        pair_hidden=(8,),
+        include_coverage_flag=False,
+    )
+    train_pairs = [
+        ("A", "B", 1, -1.0, -0.5),
+        ("A", "C", 0, -1.0, 0.2),
+        ("B", "C", 0, -0.5, 0.2),
+    ]
+    symbols = np.array(["A", "B", "C"], dtype=object)
+    gene_effects = np.array([-1.0, -0.5, 0.2], dtype=float)
+
+    first = CachedEmbeddingPairHeadProducer(
+        config,
+        cache_path=cache_path,
+        train_pairs=train_pairs,
+        metric_model_name="exp08b",
+        device="cpu",
+    )
+    second = CachedEmbeddingPairHeadProducer(
+        config,
+        cache_path=cache_path,
+        train_pairs=train_pairs,
+        metric_model_name="exp08b",
+        device="cpu",
+    )
+
+    first.produce(symbols, {"A", "B"})
+    second.produce(symbols, {"A", "B"})
+
+    np.testing.assert_allclose(
+        first.score_matrix(symbols, gene_effects),
+        second.score_matrix(symbols, gene_effects),
+    )
+
+
 def test_exp08b_sl_head_import_separation_guard() -> None:
     path = Path("src/sl_dl_model/exp08b_sl_head.py")
     source = path.read_text()

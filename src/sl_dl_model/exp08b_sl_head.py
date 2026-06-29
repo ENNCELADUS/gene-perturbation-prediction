@@ -114,11 +114,16 @@ class CachedEmbeddingPairHeadProducer:
             raise RuntimeError("cached embeddings are not loaded")
         device = self._model_device()
         emb_dim = int(self._embeddings.shape[1])
-        self._head = SymmetricPairHead(
-            emb_dim=emb_dim,
-            hidden=tuple(self.config.pair_hidden),
-            include_coverage_flag=self.config.include_coverage_flag,
-        ).to(device)
+        rng_state = torch.random.get_rng_state()
+        try:
+            torch.manual_seed(int(self.config.seed))
+            self._head = SymmetricPairHead(
+                emb_dim=emb_dim,
+                hidden=tuple(self.config.pair_hidden),
+                include_coverage_flag=self.config.include_coverage_flag,
+            ).to(device)
+        finally:
+            torch.random.set_rng_state(rng_state)
         self._fit_ge_standardizer()
         optimizer = optim.AdamW(self._head.parameters(), lr=float(self.config.lr))
         labels = torch.tensor(
