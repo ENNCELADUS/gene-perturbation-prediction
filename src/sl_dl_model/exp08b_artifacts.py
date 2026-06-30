@@ -23,24 +23,36 @@ def fold_artifact_dir(config: Exp08bConfig, split_type: str, fold_id: int) -> Pa
 
 def embedding_cache_path(config: Exp08bConfig, split_type: str, fold_id: int) -> Path:
     """Return the cached e_hat NPZ path for one fold."""
-    return fold_artifact_dir(config, split_type, fold_id) / config.generator_embedding_filename
+    return (
+        fold_artifact_dir(config, split_type, fold_id)
+        / config.generator_embedding_filename
+    )
 
 
 def generator_manifest_path(
     config: Exp08bConfig, split_type: str, fold_id: int
 ) -> Path:
     """Return the Step 1 generator manifest path for one fold."""
-    return fold_artifact_dir(config, split_type, fold_id) / config.generator_manifest_filename
+    return (
+        fold_artifact_dir(config, split_type, fold_id)
+        / config.generator_manifest_filename
+    )
 
 
 def generator_weights_path(config: Exp08bConfig, split_type: str, fold_id: int) -> Path:
     """Return the frozen generator weights path for one fold."""
-    return fold_artifact_dir(config, split_type, fold_id) / config.generator_weights_filename
+    return (
+        fold_artifact_dir(config, split_type, fold_id)
+        / config.generator_weights_filename
+    )
 
 
 def generator_monitor_path(config: Exp08bConfig, split_type: str, fold_id: int) -> Path:
     """Return the Step 1 monitor CSV path for one fold."""
-    return fold_artifact_dir(config, split_type, fold_id) / config.generator_monitor_filename
+    return (
+        fold_artifact_dir(config, split_type, fold_id)
+        / config.generator_monitor_filename
+    )
 
 
 def step2_output_dir(config: Exp08bConfig) -> Path:
