@@ -32,7 +32,8 @@ _VALID_SPLIT_ROLES = {"train", "test"}
 
 def _load_pairs_for_generator(path: Path) -> pd.DataFrame:
     """Read the generator pass CSV using only fold, role, and symbol fields."""
-    frame = pd.read_csv(path)
+    allowed_columns = _REQUIRED_GENERATOR_COLUMNS | {"split_type"}
+    frame = pd.read_csv(path, usecols=lambda name: name in allowed_columns)
     missing = sorted(_REQUIRED_GENERATOR_COLUMNS.difference(frame.columns))
     if missing:
         raise ValueError(f"generator CSV missing columns: {missing}")

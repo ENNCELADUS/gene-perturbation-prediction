@@ -294,6 +294,20 @@ def test_step1_generator_input_loader_accepts_symbol_only_csv(tmp_path: Path) ->
     assert _load_pairs_for_generator(cv2_path)["split_type"].tolist() == ["CV2"]
 
 
+def test_step1_generator_loader_reads_only_generator_columns(tmp_path: Path) -> None:
+    from sl_dl_model.exp08b_step1_runner import _load_pairs_for_generator
+
+    frame = _load_pairs_for_generator(_benchmark_csv(tmp_path))
+
+    assert set(frame.columns) == {
+        "fold_id",
+        "split_type",
+        "split_role",
+        "gene_a_symbol",
+        "gene_b_symbol",
+    }
+
+
 def test_step2_runner_does_not_import_generator_or_state() -> None:
     source = Path("src/sl_dl_model/exp08b_step2_runner.py").read_text()
     forbidden = {
