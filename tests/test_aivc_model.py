@@ -128,6 +128,7 @@ def _toy_gwps_cache_config(
     *,
     response_genes: list[str] | None = None,
 ) -> object:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     genes = response_genes or ["G1", "G2"]
     model_dir = tmp_path / "state"
     model_dir.mkdir(exist_ok=True)
@@ -142,18 +143,20 @@ def _toy_gwps_cache_config(
     checkpoint.parent.mkdir()
     checkpoint.write_bytes(b"checkpoint")
 
-    adata = ad.AnnData(
-        np.asarray(
-            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0], [4.0, 40.0]],
-            dtype=np.float32,
-        )
-    )
+    rows = [
+        [float(index + 1), float((index + 1) * 10)] for index in range(len(genes) + 2)
+    ]
+    adata = ad.AnnData(np.asarray(rows, dtype=np.float32))
     adata.var_names = ["ENSG1", "ENSG2"]
     adata.var["gene_name"] = ["B", "A"]
     adata.var["alternate_gene_name"] = ["B", "A"]
-    adata.obs["gene"] = [genes[0], genes[1], "non-targeting", "non-targeting"]
+    adata.obs["gene"] = [*genes, "non-targeting", "non-targeting"]
     adata.obs["alternate_gene"] = adata.obs["gene"].astype(str)
-    adata.obs["gem_group"] = ["25", "31", "25", "31"]
+    adata.obs["gem_group"] = [
+        *("25" if index % 2 == 0 else "31" for index in range(len(genes))),
+        "25",
+        "31",
+    ]
     adata.obs["alternate_batch"] = adata.obs["gem_group"].astype(str)
     h5ad_path = tmp_path / "gwps.h5ad"
     adata.write_h5ad(h5ad_path)
@@ -161,7 +164,7 @@ def _toy_gwps_cache_config(
     overlap_csv = tmp_path / "overlap.csv"
     pd.DataFrame(
         {
-            "perturbation_gene": genes,
+            "perturbation_gene": ["G1", "G2"],
             "depmap_gene_effect": [-1.0, -0.5],
             "has_depmap_label": [True, True],
         }
@@ -219,13 +222,55 @@ def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> No
     np.testing.assert_array_equal(bags.input_bags[0], np.asarray([[10.0, 1.0]]))
 
 
-def test_gwps_cache_rejects_response_gene_outside_canonical_manifest(
+def test_gwps_cache_accepts_extra_source_gene_but_rejects_missing_canonical_gene(
     tmp_path: Path,
 ) -> None:
-    config = _toy_gwps_cache_config(tmp_path, response_genes=["G1", "EXTRA"])
     contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
-    with pytest.raises(ValueError, match="canonical manifest"):
-        gwps_cache_module._build_gwps_cache(config, tmp_path / "cache", contract)
+    superset = _toy_gwps_cache_config(
+        tmp_path / "superset", response_genes=["G1", "G2", "EXTRA"]
+    )
+    gwps_cache_module._build_gwps_cache(
+        superset, tmp_path / "superset" / "cache", contract
+    )
+    bags = gwps_cache_module._load_gwps_cache(
+        superset, tmp_path / "superset" / "cache", contract
+    )
+    assert bags.genes.tolist() == ["G1", "G2"]
+
+    missing = _toy_gwps_cache_config(
+        tmp_path / "missing", response_genes=["G1", "EXTRA"]
+    )
+    with pytest.raises(ValueError, match="missing canonical"):
+        gwps_cache_module._build_gwps_cache(
+            missing, tmp_path / "missing" / "cache", contract
+        )
+
+
+def test_gwps_cache_reads_backed_and_streams_only_selected_chunks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _toy_gwps_cache_config(
+        tmp_path, response_genes=["G1", "G1", "G2", "EXTRA"]
+    )
+    config.data.cache_cells_per_gene = 1
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    real_read_h5ad = ad.read_h5ad
+
+    def guarded_read_h5ad(path: Path, *, backed: str | None = None) -> ad.AnnData:
+        assert backed == "r"
+        return real_read_h5ad(path, backed=backed)
+
+    monkeypatch.setattr(gwps_cache_module.ad, "read_h5ad", guarded_read_h5ad)
+    assert not hasattr(gwps_cache_module, "_dense_slice")
+
+    cache_dir = tmp_path / "cache"
+    gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    bags = gwps_cache_module._load_gwps_cache(config, cache_dir, contract)
+
+    assert [bag.shape for bag in bags.input_bags] == [(1, 2), (1, 2)]
+    assert bags.control_input.shape == (2, 2)
+    assert bags.feature_names.tolist() == ["A", "B"]
 
 
 def _sha256(path: Path) -> str:
@@ -2209,7 +2254,7 @@ def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None
     assert model.perturbations.missing_vectors["g0"].grad is not None
 
 
-def test_esm2_build_uses_checkpoint_width_and_freezes_state(
+def test_esm2_build_requires_configured_checkpoint_width_and_freezes_state(
     tmp_path: Path, monkeypatch
 ) -> None:
     data = _toy_gene_bags_with_batches()
@@ -2240,6 +2285,7 @@ def test_esm2_build_uses_checkpoint_width_and_freezes_state(
             esm2_npz=esm2_npz,
             esm2_adapter_hidden=4,
             require_resolved_esm2=True,
+            pert_dim=5,
         ),
     )
     monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 2)

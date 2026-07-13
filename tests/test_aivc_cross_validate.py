@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import replace
 import hashlib
 import json
 import logging
+import multiprocessing
+import os
 from pathlib import Path
 import pickle
+import socket
 import types
 
 import anndata as ad
@@ -15,6 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from accelerate.state import AcceleratorState
 
 from aivc_model import cross_validate as cv
 from aivc_model import gene_splits as gene_splits_module
@@ -28,6 +33,67 @@ from aivc_model.prepare import (
     SealedGeneBags,
     load_config,
 )
+
+
+class _SingleProcessAccelerator:
+    is_main_process = True
+    num_processes = 1
+    device = torch.device("cpu")
+
+    @staticmethod
+    def wait_for_everyone() -> None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_accelerator_state() -> Iterator[None]:
+    AcceleratorState._reset_state(reset_partial_state=True)
+    yield
+    AcceleratorState._reset_state(reset_partial_state=True)
+
+
+def _distributed_rank_safety_worker(
+    rank: int,
+    world_size: int,
+    port: int,
+    run_dir: str,
+) -> None:
+    os.environ.update(
+        {
+            "MASTER_ADDR": "127.0.0.1",
+            "MASTER_PORT": str(port),
+            "RANK": str(rank),
+            "WORLD_SIZE": str(world_size),
+            "LOCAL_RANK": str(rank),
+            "ACCELERATE_USE_CPU": "true",
+            "ACCELERATE_TORCH_DEVICE": "cpu",
+        }
+    )
+    accelerator = cv.Accelerator(cpu=True)
+    path = Path(run_dir)
+    cv._prepare_fresh_run_dir(path, accelerator)
+
+    def aggregate_once() -> None:
+        marker = path / "aggregate_calls.txt"
+        with marker.open("a", encoding="utf-8") as handle:
+            handle.write(f"{rank}\n")
+
+    cv._run_main_process(accelerator, aggregate_once)
+    cv._wait_for_everyone(accelerator)
+    try:
+        cv._prepare_fresh_run_dir(path, accelerator)
+    except FileExistsError:
+        marker = path / f"freshness_error_rank_{rank}.txt"
+        marker.write_text("rejected\n", encoding="utf-8")
+    cv.run_preflight = lambda _path: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        ValueError("preflight sentinel")
+    )
+    try:
+        cv._run_distributed_preflight(path / "config.yaml", accelerator)
+    except RuntimeError as error:
+        assert "preflight sentinel" in str(error)
+        marker = path / f"preflight_error_rank_{rank}.txt"
+        marker.write_text("propagated\n", encoding="utf-8")
 
 
 def test_exp05_repaired_config_has_locked_contract() -> None:
@@ -478,7 +544,88 @@ def test_aggregation_rejects_unauthorized_emitted_event() -> None:
     )
 
     with pytest.raises(ValueError, match="authorized role"):
-        cv._assert_access_audit(audit, [fold])
+        cv._assert_access_audit(
+            audit,
+            [fold],
+            types.SimpleNamespace(projector=types.SimpleNamespace(teacher="obsm")),
+        )
+
+
+def test_aggregation_rejects_missing_mandatory_stage(tmp_path: Path) -> None:
+    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    config = _audited_config(tmp_path)
+    audit = pd.DataFrame(
+        [
+            {
+                "stage": "fine_tuning",
+                "outer_fold": 0,
+                "gene_count": len(fold.train_genes),
+                "gene_set_sha256": cv._gene_set_sha256(fold.train_genes),
+                "checkpoint_frozen": False,
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="missing mandatory audit stages"):
+        cv._assert_access_audit(audit, [fold], config)
+
+
+def test_two_process_rank_safety_creates_once_and_aggregates_once(
+    tmp_path: Path,
+) -> None:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = int(sock.getsockname()[1])
+    run_dir = tmp_path / "distributed_run"
+    context = multiprocessing.get_context("spawn")
+    processes = [
+        context.Process(
+            target=_distributed_rank_safety_worker,
+            args=(rank, 2, port, str(run_dir)),
+        )
+        for rank in range(2)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=30)
+        assert process.exitcode == 0
+
+    assert run_dir.is_dir()
+    assert (run_dir / "aggregate_calls.txt").read_text().splitlines() == ["0"]
+    assert sorted(path.name for path in run_dir.glob("freshness_error_rank_*.txt")) == [
+        "freshness_error_rank_0.txt",
+        "freshness_error_rank_1.txt",
+    ]
+    assert sorted(path.name for path in run_dir.glob("preflight_error_rank_*.txt")) == [
+        "preflight_error_rank_0.txt",
+        "preflight_error_rank_1.txt",
+    ]
+
+
+def test_cross_validation_runs_preflight_before_creating_run_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _audited_config(tmp_path)
+    monkeypatch.setattr(cv, "load_config", lambda _path: config)
+    monkeypatch.setattr(
+        cv,
+        "run_preflight",
+        lambda _path: (_ for _ in ()).throw(ValueError("locked preflight failed")),
+    )
+
+    with pytest.raises(ValueError, match="locked preflight failed"):
+        cv.run_cross_validation(tmp_path / "config.yaml")
+
+    assert not (config.data.output_dir / "runs").exists()
+
+
+def test_esm2_state_pert_dim_mismatch_fails_closed() -> None:
+    state = types.SimpleNamespace(pert_dim=512)
+
+    with pytest.raises(ValueError, match="2024"):
+        train_module._effective_state_pert_dim(state, 2024)
 
 
 def test_sealed_outer_test_supports_exactly_two_post_freeze_routes() -> None:
@@ -535,6 +682,7 @@ def test_run_training_fold_never_passes_outer_test_responses_to_fit(
         "external": None,
         "fold_spec": fold,
         "source_fingerprint": "source",
+        "accelerator": _SingleProcessAccelerator(),
     }
     cv.run_training_fold(data=data, run_dir=tmp_path / "first", **common)
     changed_bags = list(data.input_bags)
@@ -985,7 +1133,8 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
     sha_path.write_text(f"{digest}\n", encoding="utf-8")
     config = types.SimpleNamespace(
         data=types.SimpleNamespace(output_dir=tmp_path),
-        train=types.SimpleNamespace(run_id="toy", seed=42),
+        train=types.SimpleNamespace(run_id="toy", seed=42, device="cpu"),
+        projector=types.SimpleNamespace(teacher="obsm"),
         cv=types.SimpleNamespace(
             outer_split_manifest=manifest_path,
             outer_split_sha256_file=sha_path,
@@ -994,6 +1143,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         ),
     )
     monkeypatch.setattr(cv, "load_config", lambda _path: config)
+    monkeypatch.setattr(cv, "run_preflight", lambda _path: {})
     monkeypatch.setattr(
         cv,
         "load_gene_bags",
@@ -1055,12 +1205,20 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         pd.DataFrame(
             [
                 {
-                    "stage": "fine_tuning",
+                    "stage": stage,
                     "outer_fold": fold.outer_fold,
-                    "gene_count": len(fold.train_genes),
-                    "gene_set_sha256": cv._gene_set_sha256(fold.train_genes),
-                    "checkpoint_frozen": False,
+                    "gene_count": len(cv._stage_genes(stage, fold)),
+                    "gene_set_sha256": cv._gene_set_sha256(
+                        cv._stage_genes(stage, fold)
+                    ),
+                    "checkpoint_frozen": stage
+                    in {
+                        "internal_outer_test",
+                        "generation_quality_outer_test",
+                        "observed_b_oracle_outer_test",
+                    },
                 }
+                for stage in sorted(cv._mandatory_audit_stages(config))
             ]
         ).to_csv(audit, index=False)
         qa = artifacts / "external_alignment_qa.csv"
@@ -1078,7 +1236,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
                     ).hexdigest(),
                     "state_input_dim": 2000,
                     "state_output_dim": 2000,
-                    "state_pert_dim": 512,
+                    "state_pert_dim": 2024,
                     "state_feature_match_count": 2000,
                 }
             ),
@@ -1094,7 +1252,10 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         }
 
     monkeypatch.setattr(cv, "run_training_fold", fake_fold_runner)
-    run_dir = cv.run_cross_validation(tmp_path / "config.yaml")
+    run_dir = cv.run_cross_validation(
+        tmp_path / "config.yaml",
+        accelerator=_SingleProcessAccelerator(),  # type: ignore[arg-type]
+    )
     predictions = pd.read_csv(run_dir / "artifacts" / "predictions.csv")
     for scope in (
         "internal_outer_test",
@@ -1114,4 +1275,4 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
     assert run_manifest["esm_resolved_count"] == 9338
     assert run_manifest["esm_total_count"] == 9338
     assert run_manifest["state_feature_match_count"] == 2000
-    assert run_manifest["checkpoint_dimensions"]["pert_dim"] == 512
+    assert run_manifest["checkpoint_dimensions"]["pert_dim"] == 2024
