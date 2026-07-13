@@ -20,6 +20,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from sl_dl_model.gene_embeddings import (
+    Esm2EmbeddingTable,
+    require_complete_esm_coverage,
+)
+
 # ---------------------------------------------------------------------------
 # Lazy import: stub out heavy optional imports before loading the script
 # ---------------------------------------------------------------------------
@@ -248,3 +253,37 @@ def test_universe_symbols_returns_sorted_unique_upper(tmp_path: Path) -> None:
 
     assert result == sorted({"BRCA1", "TP53", "PTEN", "KRAS"})
     assert result == sorted(set(result))  # sorted
+
+
+def test_symbols_from_csv_supports_single_gene_column(tmp_path: Path) -> None:
+    csv = tmp_path / "genes.csv"
+    pd.DataFrame({"perturbation_gene": ["tp53", "KRAS", "TP53"]}).to_csv(
+        csv, index=False
+    )
+    assert MOD.symbols_from_csv(csv, ("perturbation_gene",)) == ["KRAS", "TP53"]
+
+
+def test_exp05_esm_asset_must_resolve_all_canonical_genes() -> None:
+    canonical = ["A", "B", "C"]
+    table = Esm2EmbeddingTable(
+        dim=4,
+        vectors_by_symbol={
+            "A": np.ones(4, dtype=np.float32),
+            "B": np.ones(4, dtype=np.float32),
+        },
+    )
+    with pytest.raises(ValueError, match="2/3"):
+        require_complete_esm_coverage(canonical, table)
+
+
+def test_complete_esm_coverage_requires_exact_uppercase_order() -> None:
+    canonical = ["B", "A"]
+    table = Esm2EmbeddingTable(
+        dim=2,
+        vectors_by_symbol={
+            "A": np.ones(2, dtype=np.float32),
+            "B": np.ones(2, dtype=np.float32),
+        },
+    )
+    with pytest.raises(ValueError, match="order"):
+        require_complete_esm_coverage(canonical, table)
