@@ -49,12 +49,15 @@ from aivc_model.model import (
 )
 from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
+    FoldSpec,
     load_canonical_outer_manifest,
 )
 from aivc_model.prepare import (
     AivcConfig,
+    ExternalGeneBags,
     GeneBags,
     GeneSplit,
+    SealedGeneBags,
     encode_batch_labels,
     fit_linear_projector,
     load_config,
@@ -64,6 +67,7 @@ from aivc_model.prepare import (
     load_state_batch_lookup,
     make_cell_set_chunks,
     make_gene_split,
+    project_gene_bags_with_frozen_scvi,
     with_cached_scvi_teacher_latents,
 )
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
@@ -277,8 +281,38 @@ def run_training(
     config: AivcConfig,
     accelerator: Accelerator | None = None,
     config_path: Path | None = None,
+    *,
+    train_data: GeneBags | None = None,
+    val_data: GeneBags | None = None,
+    sealed_test: SealedGeneBags | None = None,
+    external_override: ExternalGeneBags | None = None,
+    fold_spec: FoldSpec | None = None,
+    run_dir_override: Path | None = None,
+    source_fingerprint: str | None = None,
 ) -> dict[str, Path]:
     """Run one train/val/test STATE-ready AIVC experiment."""
+    audited_values = (
+        train_data,
+        val_data,
+        sealed_test,
+        fold_spec,
+        run_dir_override,
+        source_fingerprint,
+    )
+    if any(value is not None for value in audited_values):
+        if any(value is None for value in audited_values):
+            raise ValueError("audited training requires every fold-scoped input")
+        return _run_audited_training(
+            config=config,
+            train_data=train_data,
+            val_data=val_data,
+            sealed_test=sealed_test,
+            external=external_override,
+            fold_spec=fold_spec,
+            run_dir=run_dir_override,
+            source_fingerprint=source_fingerprint,
+            accelerator=accelerator,
+        )
     accelerator = accelerator or _make_accelerator(config)
     _configure_logging(accelerator)
     set_seed(config.train.seed)
@@ -555,6 +589,617 @@ def run_training(
         "train_log": run_dir / "train_log.csv",
         "test_metrics": run_dir / "test_metrics.csv",
     }
+
+
+def _run_audited_training(
+    config: AivcConfig,
+    train_data: GeneBags,
+    val_data: GeneBags,
+    sealed_test: SealedGeneBags,
+    external: ExternalGeneBags | None,
+    fold_spec: FoldSpec,
+    run_dir: Path,
+    source_fingerprint: str,
+    accelerator: Accelerator | None,
+) -> dict[str, Path]:
+    """Train one fold without exposing outer-test responses to fit code."""
+    accelerator = accelerator or _make_accelerator(config)
+    _configure_logging(accelerator)
+    set_seed(config.train.seed + fold_spec.outer_fold)
+    _configure_float32_matmul_precision(config)
+    artifacts_dir = run_dir / "artifacts"
+    models_dir = run_dir / "models"
+    if accelerator.is_main_process:
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        models_dir.mkdir(parents=True, exist_ok=True)
+    accelerator.wait_for_everyone()
+
+    train_split = GeneSplit(
+        train=np.arange(len(train_data.genes), dtype=np.int64),
+        val=np.asarray([], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    if config.projector.teacher == "scvi":
+        train_data, val_data = _fit_audited_scvi_latents(
+            config,
+            train_data,
+            val_data,
+            train_split,
+            artifacts_dir,
+            accelerator,
+        )
+    projector_weight, projector_bias = _fit_or_load_projector_cache(
+        config,
+        train_data,
+        train_split,
+        artifacts_dir,
+    )
+    featureizer = _fit_or_load_fixed_gmm_cache(
+        config,
+        train_data,
+        train_split,
+        artifacts_dir,
+    )
+    external_genes = (
+        tuple(str(gene) for gene in external.data.genes) if external is not None else ()
+    )
+    internal_genes = (
+        *fold_spec.train_genes,
+        *fold_spec.val_genes,
+        *fold_spec.test_genes,
+    )
+    model = _build_model(
+        config,
+        train_data,
+        featureizer,
+        projector_weight,
+        projector_bias,
+        extra_genes=(*fold_spec.val_genes, *fold_spec.test_genes, *external_genes),
+        emit_checkpoint_output=accelerator.is_main_process,
+        canonical_gene_override=tuple(internal_genes),
+    )
+    if any(parameter.requires_grad for parameter in model.state_adapter.parameters()):
+        raise ValueError("STATE parameters must remain frozen in audited training")
+    batch_lookup = load_state_batch_lookup(config.state.model_dir)
+    optimizer = torch.optim.AdamW(
+        _trainable_parameters(model),
+        lr=config.train.learning_rate,
+        weight_decay=config.train.weight_decay,
+    )
+    train_loader = _gene_loader(
+        np.arange(len(train_data.genes), dtype=np.int64),
+        shuffle=True,
+        seed=config.train.seed + fold_spec.outer_fold,
+        gene_batch_size=config.train.gene_batch_size,
+        world_size=accelerator.num_processes,
+    )
+    val_loader = _gene_loader(
+        np.arange(len(val_data.genes), dtype=np.int64),
+        shuffle=False,
+        seed=config.train.seed + fold_spec.outer_fold,
+        gene_batch_size=config.train.gene_batch_size,
+        world_size=accelerator.num_processes,
+    )
+    model, optimizer, train_loader, val_loader = accelerator.prepare(
+        model,
+        optimizer,
+        train_loader,
+        val_loader,
+    )
+    rng = np.random.default_rng(
+        config.train.seed + fold_spec.outer_fold + accelerator.process_index
+    )
+    best_value = -math.inf
+    best_epoch = 0
+    logs = []
+    for epoch in range(1, config.train.max_epochs + 1):
+        train_row = _run_epoch(
+            model,
+            train_data,
+            train_loader,
+            _loss_weights(config, epoch),
+            optimizer,
+            rng,
+            config.train.cell_set_len,
+            accelerator,
+            batch_lookup,
+            epoch=epoch,
+            max_epochs=config.train.max_epochs,
+        )
+        val_row, _ = _evaluate_prediction_only_final(
+            model,
+            val_data,
+            val_loader,
+            config.train.cell_set_len,
+            accelerator,
+            batch_lookup,
+        )
+        if accelerator.is_main_process:
+            value = float(val_row.get("spearman", math.nan))
+            logs.append(
+                {
+                    "epoch": epoch,
+                    **_prefix(train_row, "train"),
+                    **_prefix(val_row, "val"),
+                }
+            )
+            pd.DataFrame(logs).to_csv(run_dir / "train_log.csv", index=False)
+            if _is_better_metric(value, best_value, mode="max") or best_epoch == 0:
+                best_value = value
+                best_epoch = epoch
+                _save_model_checkpoint(
+                    accelerator,
+                    model,
+                    models_dir / "best",
+                    {
+                        "checkpoint_kind": "best",
+                        "epoch": epoch,
+                        "selection_metric": "val_spearman",
+                        "metric_value": value,
+                        "outer_fold": fold_spec.outer_fold,
+                    },
+                )
+        accelerator.wait_for_everyone()
+
+    checkpoint_path = models_dir / "best" / "pytorch_model.bin"
+    state_dict = torch.load(
+        checkpoint_path,
+        map_location=accelerator.device,
+        weights_only=True,
+    )
+    selected_model = accelerator.unwrap_model(model)
+    selected_model.load_state_dict(state_dict)
+    selected_model.eval()
+    selected_model.requires_grad_(False)
+    checkpoint_frozen = True
+
+    label_test = sealed_test.label_view(checkpoint_frozen=True)
+    label_loader = accelerator.prepare(
+        _gene_loader(
+            np.arange(len(label_test.genes), dtype=np.int64),
+            shuffle=False,
+            seed=config.train.seed,
+            gene_batch_size=config.train.gene_batch_size,
+            world_size=accelerator.num_processes,
+        )
+    )
+    internal_metrics, internal_predictions = _evaluate_prediction_only_final(
+        model,
+        label_test,
+        label_loader,
+        config.train.cell_set_len,
+        accelerator,
+        batch_lookup,
+    )
+    generation_data = sealed_test.open(
+        "generation_quality_outer_test",
+        checkpoint_frozen=checkpoint_frozen,
+    )
+    if config.projector.teacher == "scvi":
+        generation_data = _project_audited_scvi_data(
+            config,
+            generation_data,
+            artifacts_dir,
+        )
+    generation_loader = accelerator.prepare(
+        _gene_loader(
+            np.arange(len(generation_data.genes), dtype=np.int64),
+            shuffle=False,
+            seed=config.train.seed,
+            gene_batch_size=config.train.gene_batch_size,
+            world_size=accelerator.num_processes,
+        )
+    )
+    response_metrics, response_predictions = _evaluate(
+        model,
+        generation_data,
+        generation_loader,
+        _loss_weights(config),
+        rng,
+        config.train.cell_set_len,
+        accelerator,
+        batch_lookup,
+        pad_short=False,
+    )
+    oracle_data = sealed_test.open(
+        "observed_b_oracle_outer_test",
+        checkpoint_frozen=checkpoint_frozen,
+    )
+    if config.projector.teacher == "scvi":
+        oracle_data = _project_audited_scvi_data(config, oracle_data, artifacts_dir)
+    oracle_loader = accelerator.prepare(
+        _gene_loader(
+            np.arange(len(oracle_data.genes), dtype=np.int64),
+            shuffle=False,
+            seed=config.train.seed,
+            gene_batch_size=config.train.gene_batch_size,
+            world_size=accelerator.num_processes,
+        )
+    )
+    oracle_metrics, oracle_predictions = _evaluate(
+        model,
+        oracle_data,
+        oracle_loader,
+        _loss_weights(config),
+        rng,
+        config.train.cell_set_len,
+        accelerator,
+        batch_lookup,
+        pad_short=False,
+    )
+    return _write_audited_fold_outputs(
+        config=config,
+        run_dir=run_dir,
+        artifacts_dir=artifacts_dir,
+        models_dir=models_dir,
+        model=selected_model,
+        featureizer=featureizer,
+        projector_weight=projector_weight,
+        projector_bias=projector_bias,
+        fold_spec=fold_spec,
+        train_data=train_data,
+        val_data=val_data,
+        generation_data=generation_data,
+        internal_metrics=internal_metrics,
+        internal_predictions=internal_predictions,
+        response_metrics=response_metrics,
+        response_predictions=response_predictions,
+        oracle_metrics=oracle_metrics,
+        oracle_predictions=oracle_predictions,
+        external=external,
+        batch_lookup=batch_lookup,
+        accelerator=accelerator,
+        best_epoch=best_epoch,
+        checkpoint_path=checkpoint_path,
+        source_fingerprint=source_fingerprint,
+    )
+
+
+def _fit_audited_scvi_latents(
+    config: AivcConfig,
+    train_data: GeneBags,
+    val_data: GeneBags,
+    train_split: GeneSplit,
+    artifacts_dir: Path,
+    accelerator: Accelerator,
+) -> tuple[GeneBags, GeneBags]:
+    if accelerator.is_main_process:
+        train_data, _ = with_cached_scvi_teacher_latents(
+            config,
+            train_data,
+            train_split,
+            artifacts_dir,
+            external=None,
+            fit_teacher=True,
+            log_fn=_LOGGER.info,
+        )
+    accelerator.wait_for_everyone()
+    if not accelerator.is_main_process:
+        train_data, _ = with_cached_scvi_teacher_latents(
+            config,
+            train_data,
+            train_split,
+            artifacts_dir,
+            external=None,
+            fit_teacher=False,
+            log_fn=_LOGGER.info,
+        )
+    val_data = _project_audited_scvi_data(config, val_data, artifacts_dir)
+    return train_data, val_data
+
+
+def _project_audited_scvi_data(
+    config: AivcConfig,
+    data: GeneBags,
+    artifacts_dir: Path,
+) -> GeneBags:
+    return project_gene_bags_with_frozen_scvi(
+        config,
+        data,
+        artifacts_dir / "scvi_teacher_model",
+    )
+
+
+def _write_audited_fold_outputs(
+    *,
+    config: AivcConfig,
+    run_dir: Path,
+    artifacts_dir: Path,
+    models_dir: Path,
+    model: torch.nn.Module,
+    featureizer: torch.nn.Module,
+    projector_weight: np.ndarray,
+    projector_bias: np.ndarray,
+    fold_spec: FoldSpec,
+    train_data: GeneBags,
+    val_data: GeneBags,
+    generation_data: GeneBags,
+    internal_metrics: dict[str, float],
+    internal_predictions: pd.DataFrame,
+    response_metrics: dict[str, float],
+    response_predictions: pd.DataFrame,
+    oracle_metrics: dict[str, float],
+    oracle_predictions: pd.DataFrame,
+    external: ExternalGeneBags | None,
+    batch_lookup: dict[str, int],
+    accelerator: Accelerator,
+    best_epoch: int,
+    checkpoint_path: Path,
+    source_fingerprint: str,
+) -> dict[str, Path]:
+    paths = _audited_output_paths(run_dir)
+    external_metrics: dict[str, float] = {}
+    external_predictions = pd.DataFrame()
+    if external is not None:
+        external_data = external.data
+        if config.projector.teacher == "scvi":
+            external_data = _project_audited_scvi_data(
+                config,
+                external_data,
+                artifacts_dir,
+            )
+        external_loader = accelerator.prepare(
+            _gene_loader(
+                np.arange(len(external_data.genes), dtype=np.int64),
+                shuffle=False,
+                seed=config.train.seed,
+                gene_batch_size=config.train.gene_batch_size,
+                world_size=accelerator.num_processes,
+            )
+        )
+        external_metrics, external_predictions = _evaluate_prediction_only_final(
+            model,
+            external_data,
+            external_loader,
+            config.train.cell_set_len,
+            accelerator,
+            batch_lookup,
+        )
+    if accelerator.is_main_process:
+        metrics = _audited_metric_rows(
+            fold_spec.outer_fold,
+            internal_metrics,
+            response_metrics,
+            oracle_metrics,
+            external_metrics,
+            config.external_test.name if config.external_test is not None else None,
+        )
+        predictions = _audited_prediction_rows(
+            fold_spec,
+            internal_predictions,
+            response_predictions,
+            oracle_predictions,
+            external_predictions,
+            config.external_test.name if config.external_test is not None else None,
+        )
+        access_audit = _audited_access_rows(config, fold_spec)
+        external_qa = _external_qa_rows(external, fold_spec.outer_fold)
+        metrics.to_csv(paths["fold_metrics"], index=False)
+        predictions.to_csv(paths["predictions"], index=False)
+        access_audit.to_csv(paths["fit_access_audit"], index=False)
+        external_qa.to_csv(paths["external_alignment_qa"], index=False)
+        fit_summary = {
+            "adapter_sha256": _module_sha256(model.perturbations),
+            "state_sha256": _module_sha256(model.state_adapter),
+            "scvi_sha256": _scvi_model_sha256(artifacts_dir),
+            "gmm_sha256": _module_sha256(featureizer),
+            "normalizer_sha256": _arrays_sha256(
+                train_data.control_input,
+                train_data.control_latent,
+            ),
+            "projector_sha256": _arrays_sha256(
+                projector_weight,
+                projector_bias,
+            ),
+            "selected_layer": None,
+            "best_epoch": int(best_epoch),
+            "checkpoint_sha256": _path_sha256(checkpoint_path),
+            "source_fingerprint": source_fingerprint,
+        }
+        paths["fit_audit_summary"].write_text(
+            json.dumps(fit_summary, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        _save_model_checkpoint(
+            accelerator,
+            model,
+            models_dir / "final",
+            {
+                "checkpoint_kind": "frozen_selected",
+                "epoch": best_epoch,
+                "outer_fold": fold_spec.outer_fold,
+                "source_fingerprint": source_fingerprint,
+            },
+        )
+    accelerator.wait_for_everyone()
+    return paths
+
+
+def _audited_output_paths(run_dir: Path) -> dict[str, Path]:
+    artifacts = run_dir / "artifacts"
+    return {
+        "run_dir": run_dir,
+        "train_log": run_dir / "train_log.csv",
+        "fold_metrics": artifacts / "fold_metrics.csv",
+        "predictions": artifacts / "predictions.csv",
+        "fit_access_audit": artifacts / "fit_access_audit.csv",
+        "external_alignment_qa": artifacts / "external_alignment_qa.csv",
+        "fit_audit_summary": run_dir / "fit_audit_summary.json",
+    }
+
+
+def _audited_metric_rows(
+    outer_fold: int,
+    internal: dict[str, float],
+    response: dict[str, float],
+    oracle_response: dict[str, float],
+    external: dict[str, float],
+    external_name: str | None,
+) -> pd.DataFrame:
+    generation_keys = {
+        key: value
+        for key, value in response.items()
+        if key
+        in {
+            "hvg_mean_delta",
+            "hvg_energy",
+            "latent_mean_delta",
+            "latent_energy",
+            "occupancy",
+        }
+    }
+    oracle = {
+        key.removeprefix("obs_"): value
+        for key, value in oracle_response.items()
+        if key.startswith("obs_")
+    }
+    rows = [
+        {
+            "outer_fold": outer_fold,
+            "evaluation_scope": "internal_outer_test",
+            **internal,
+        },
+        {
+            "outer_fold": outer_fold,
+            "evaluation_scope": "generation_quality_outer_test",
+            **generation_keys,
+        },
+        {
+            "outer_fold": outer_fold,
+            "evaluation_scope": "observed_b_oracle_outer_test",
+            **oracle,
+        },
+    ]
+    if external_name is not None:
+        rows.append(
+            {
+                "outer_fold": outer_fold,
+                "evaluation_scope": f"external:{external_name}",
+                **external,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _audited_prediction_rows(
+    fold: FoldSpec,
+    internal: pd.DataFrame,
+    response: pd.DataFrame,
+    oracle_response: pd.DataFrame,
+    external: pd.DataFrame,
+    external_name: str | None,
+) -> pd.DataFrame:
+    frames = []
+    for scope, frame in (
+        ("internal_outer_test", internal),
+        ("generation_quality_outer_test", response),
+    ):
+        scoped = frame.copy()
+        scoped.insert(0, "evaluation_scope", scope)
+        scoped.insert(0, "inner_role", "outer_test")
+        scoped.insert(0, "outer_fold", fold.outer_fold)
+        frames.append(scoped)
+    oracle = oracle_response.copy()
+    if "y_obs_anchor" in oracle:
+        oracle["y_pred"] = oracle["y_obs_anchor"]
+    oracle.insert(0, "evaluation_scope", "observed_b_oracle_outer_test")
+    oracle.insert(0, "inner_role", "outer_test")
+    oracle.insert(0, "outer_fold", fold.outer_fold)
+    frames.append(oracle)
+    if external_name is not None and not external.empty:
+        scoped_external = external.copy()
+        scoped_external.insert(0, "evaluation_scope", f"external:{external_name}")
+        scoped_external.insert(0, "inner_role", "external_test")
+        scoped_external.insert(0, "outer_fold", fold.outer_fold)
+        frames.append(scoped_external)
+    return pd.concat(frames, ignore_index=True)
+
+
+def _audited_access_rows(config: AivcConfig, fold: FoldSpec) -> pd.DataFrame:
+    events = [
+        ("projector_fit", fold.train_genes, False),
+        ("gmm_fit", fold.train_genes, False),
+        ("adapter_fit", fold.train_genes, False),
+        ("transition_supervision", fold.train_genes, False),
+        ("gene_prompt_fit", fold.train_genes, False),
+        ("fine_tuning", fold.train_genes, False),
+        ("early_stopping", fold.val_genes, False),
+        ("generation_quality_outer_test", fold.test_genes, True),
+        ("observed_b_oracle_outer_test", fold.test_genes, True),
+    ]
+    if config.projector.teacher == "scvi":
+        events.insert(0, ("scvi_fit", fold.train_genes, False))
+    return pd.DataFrame(
+        [
+            {
+                "stage": stage,
+                "outer_fold": fold.outer_fold,
+                "gene_count": len(genes),
+                "gene_set_sha256": _gene_set_sha256(genes),
+                "checkpoint_frozen": checkpoint_frozen,
+            }
+            for stage, genes, checkpoint_frozen in events
+        ]
+    )
+
+
+def _external_qa_rows(
+    external: ExternalGeneBags | None,
+    outer_fold: int,
+) -> pd.DataFrame:
+    if external is None:
+        return pd.DataFrame(columns=["outer_fold", "source_name"])
+    rows = []
+    for source in external.qa.get("sources", []):
+        rows.append({"outer_fold": outer_fold, **dict(source)})
+    if len(rows) != 3:
+        raise ValueError("Adamson alignment QA must contain exactly three source rows")
+    return pd.DataFrame(rows)
+
+
+def _gene_set_sha256(genes: tuple[str, ...]) -> str:
+    value = "\n".join(sorted(str(gene).upper() for gene in genes))
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _arrays_sha256(*arrays: np.ndarray) -> str:
+    digest = hashlib.sha256()
+    for array in arrays:
+        value = np.ascontiguousarray(array)
+        digest.update(str(value.dtype).encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(value.tobytes())
+    return digest.hexdigest()
+
+
+def _module_sha256(module: torch.nn.Module) -> str:
+    digest = hashlib.sha256()
+    for name, tensor in sorted(module.state_dict().items()):
+        digest.update(name.encode("utf-8"))
+        value = tensor.detach().cpu().contiguous().numpy()
+        digest.update(value.tobytes())
+    return digest.hexdigest()
+
+
+def _scvi_model_sha256(artifacts_dir: Path) -> str:
+    model_dir = artifacts_dir / "scvi_teacher_model"
+    model_payload = model_dir / "model.pt"
+    return _path_sha256(model_payload if model_payload.exists() else model_dir)
+
+
+def _path_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    if not path.exists():
+        return digest.hexdigest()
+    paths = (
+        [path]
+        if path.is_file()
+        else sorted(item for item in path.rglob("*") if item.is_file())
+    )
+    for item in paths:
+        digest.update(str(item.relative_to(path.parent)).encode("utf-8"))
+        digest.update(item.read_bytes())
+    return digest.hexdigest()
 
 
 class _GeneIndexDataset(Dataset[dict[str, int | bool]]):
@@ -1139,6 +1784,7 @@ def _build_model(
     projector_bias: np.ndarray,
     extra_genes: tuple[str, ...] = (),
     emit_checkpoint_output: bool = True,
+    canonical_gene_override: tuple[str, ...] | None = None,
 ) -> AivcModel:
     pert_dim = config.state.pert_dim
     tokenizer = config.state.gene_tokenizer
@@ -1154,7 +1800,11 @@ def _build_model(
     elif tokenizer == "esm2":
         if pert_dim is None:
             raise ValueError("state.pert_dim is required for gene_tokenizer=esm2")
-        canonical_genes = _canonical_esm2_genes(config, data)
+        canonical_genes = _canonical_esm2_genes(
+            config,
+            data,
+            canonical_gene_override=canonical_gene_override,
+        )
         if config.state.esm2_npz is None:
             raise ValueError("state.esm2_npz is required for gene_tokenizer=esm2")
         esm = load_esm2_embeddings(config.state.esm2_npz)
@@ -1229,7 +1879,12 @@ def _effective_state_pert_dim(state_model: torch.nn.Module, fallback: int) -> in
     return effective_dim
 
 
-def _canonical_esm2_genes(config: AivcConfig, data: GeneBags) -> list[str]:
+def _canonical_esm2_genes(
+    config: AivcConfig,
+    data: GeneBags,
+    *,
+    canonical_gene_override: tuple[str, ...] | None = None,
+) -> list[str]:
     manifest_path = config.cv.outer_split_manifest
     sha256_path = config.cv.outer_split_sha256_file
     if manifest_path is None or sha256_path is None:
@@ -1240,8 +1895,9 @@ def _canonical_esm2_genes(config: AivcConfig, data: GeneBags) -> list[str]:
     if len(sha256_text) != 65 or not sha256_text.endswith("\n"):
         raise ValueError("outer split SHA-256 file must contain one digest and newline")
     expected_sha256 = sha256_text[:-1]
+    requested_genes = canonical_gene_override or tuple(str(gene) for gene in data.genes)
     labels = pd.DataFrame(
-        {"perturbation_gene": [str(gene).upper() for gene in data.genes]}
+        {"perturbation_gene": [str(gene).upper() for gene in requested_genes]}
     )
     manifest = load_canonical_outer_manifest(
         manifest_path,
@@ -1249,7 +1905,7 @@ def _canonical_esm2_genes(config: AivcConfig, data: GeneBags) -> list[str]:
         expected_sha256,
     )
     canonical_genes = manifest["perturbation_gene"].tolist()
-    data_genes = [str(gene).upper() for gene in data.genes]
+    data_genes = [str(gene).upper() for gene in requested_genes]
     if len(canonical_genes) != CANONICAL_GENE_COUNT or data_genes != canonical_genes:
         raise ValueError(
             "ESM-2 internal gene universe must remain exactly 9338 canonical rows"

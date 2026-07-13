@@ -194,6 +194,120 @@ class GeneBags:
     latent_dim: int
     gene_outer_folds: np.ndarray | None = None
 
+    def for_genes(self, genes: tuple[str, ...], stage: str) -> GeneBags:
+        """Return an ordered gene-only view for an already authorized stage."""
+        del stage
+        requested = tuple(str(gene).upper() for gene in genes)
+        if len(set(requested)) != len(requested):
+            raise ValueError("gene view contains duplicate requested genes")
+        index_by_gene = {
+            str(gene).upper(): index for index, gene in enumerate(self.genes)
+        }
+        missing = [gene for gene in requested if gene not in index_by_gene]
+        if missing:
+            raise ValueError(f"gene view contains unknown genes: {missing[:5]}")
+        indices = [index_by_gene[gene] for gene in requested]
+        return GeneBags(
+            genes=np.asarray([self.genes[index] for index in indices], dtype=object),
+            y=np.asarray([self.y[index] for index in indices], dtype=np.float32),
+            input_bags=tuple(self.input_bags[index] for index in indices),
+            latent_bags=tuple(self.latent_bags[index] for index in indices),
+            control_input=self.control_input,
+            control_latent=self.control_latent,
+            cell_type_bags=(
+                tuple(self.cell_type_bags[index] for index in indices)
+                if self.cell_type_bags is not None
+                else None
+            ),
+            control_cell_type=self.control_cell_type,
+            batch_bags=(
+                tuple(self.batch_bags[index] for index in indices)
+                if self.batch_bags is not None
+                else None
+            ),
+            control_batch=self.control_batch,
+            feature_names=self.feature_names,
+            metadata=self.metadata.iloc[indices].reset_index(drop=True),
+            input_dim=self.input_dim,
+            latent_dim=self.latent_dim,
+            gene_outer_folds=(
+                np.asarray([self.gene_outer_folds[index] for index in indices])
+                if self.gene_outer_folds is not None
+                else None
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class SealedGeneBags:
+    """Outer-test response bags that cannot be opened before checkpoint freeze."""
+
+    _data: GeneBags
+    _genes: tuple[str, ...]
+
+    def label_view(self, checkpoint_frozen: bool) -> GeneBags:
+        """Return final-metric labels and gene IDs without observed responses."""
+        if not checkpoint_frozen:
+            raise ValueError(
+                "selected checkpoint is frozen before outer-test label access"
+            )
+        selected = self._data.for_genes(self._genes, stage="internal_outer_test")
+        return replace(
+            selected,
+            input_bags=tuple(
+                np.empty((0, selected.input_dim), dtype=np.float32)
+                for _ in selected.input_bags
+            ),
+            latent_bags=tuple(
+                np.empty((0, selected.latent_dim), dtype=np.float32)
+                for _ in selected.latent_bags
+            ),
+            cell_type_bags=(
+                tuple(np.empty(0, dtype=object) for _ in selected.cell_type_bags)
+                if selected.cell_type_bags is not None
+                else None
+            ),
+            batch_bags=(
+                tuple(np.empty(0, dtype=object) for _ in selected.batch_bags)
+                if selected.batch_bags is not None
+                else None
+            ),
+        )
+
+    def open(self, stage: str, checkpoint_frozen: bool) -> GeneBags:
+        """Open the sealed response for one of the two authorized final routes."""
+        allowed = {
+            "generation_quality_outer_test",
+            "observed_b_oracle_outer_test",
+        }
+        if stage not in allowed:
+            raise ValueError("outer-test response can only be opened by final routes")
+        if not checkpoint_frozen:
+            raise ValueError(
+                "selected checkpoint is frozen before outer-test response access"
+            )
+        return self._data.for_genes(self._genes, stage=stage)
+
+
+@dataclass(frozen=True)
+class ControlPromptPool:
+    """Fold-neutral non-targeting controls, separate from perturbed responses."""
+
+    rows: pd.DataFrame
+
+    def __post_init__(self) -> None:
+        required = {"source_kind", "perturbation_gene", "outer_fold"}
+        if not required <= set(self.rows.columns):
+            raise ValueError(f"control prompt pool requires columns {sorted(required)}")
+        if set(self.rows["source_kind"].dropna()) != {"non_targeting_control"}:
+            raise ValueError("control prompt pool accepts non-targeting controls only")
+        if self.rows["perturbation_gene"].notna().any():
+            raise ValueError(
+                "perturbed response cells cannot enter the control prompt pool"
+            )
+        if self.rows["outer_fold"].notna().any():
+            raise ValueError("non-targeting controls must remain fold-neutral")
+
 
 @dataclass(frozen=True)
 class GeneSplit:
@@ -709,6 +823,31 @@ def with_cached_scvi_teacher_latents(
     _write_scvi_latent_cache(config, data, split, artifacts_dir, external)
     _log(log_fn, "Wrote scVI teacher latent cache")
     return data, external
+
+
+def project_gene_bags_with_frozen_scvi(
+    config: AivcConfig,
+    data: GeneBags,
+    model_dir: Path,
+) -> GeneBags:
+    """Project a role-limited bag view through an already fitted scVI teacher."""
+    if config.projector.teacher != "scvi":
+        return data
+    scvi = _import_scvi()
+    control_latent, latent_bags = _project_scvi_latent_groups(
+        scvi,
+        model_dir,
+        data.control_input,
+        data.input_bags,
+        data.feature_names,
+        progress_label="audited-fold-view",
+    )
+    return replace(
+        data,
+        control_latent=control_latent,
+        latent_bags=latent_bags,
+        latent_dim=int(control_latent.shape[1]),
+    )
 
 
 def _materialize_scvi_latents(
