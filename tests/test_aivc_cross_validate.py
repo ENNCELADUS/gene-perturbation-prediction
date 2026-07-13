@@ -82,9 +82,22 @@ def _distributed_rank_safety_worker(
     cv._wait_for_everyone(accelerator)
     try:
         cv._prepare_fresh_run_dir(path, accelerator)
-    except FileExistsError:
+    except FileExistsError as error:
+        assert str(error) == f"fresh run directory required: {path}"
         marker = path / f"freshness_error_rank_{rank}.txt"
         marker.write_text("rejected\n", encoding="utf-8")
+    original_freshness_check = cv._require_fresh_run_dir
+    cv._require_fresh_run_dir = lambda _path: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        PermissionError("permission sentinel")
+    )
+    try:
+        cv._prepare_fresh_run_dir(path / "permission", accelerator)
+    except PermissionError as error:
+        assert str(error) == "permission sentinel"
+        marker = path / f"permission_error_rank_{rank}.txt"
+        marker.write_text("propagated\n", encoding="utf-8")
+    finally:
+        cv._require_fresh_run_dir = original_freshness_check
     cv.run_preflight = lambda _path: (_ for _ in ()).throw(  # type: ignore[method-assign]
         ValueError("preflight sentinel")
     )
@@ -601,6 +614,31 @@ def test_two_process_rank_safety_creates_once_and_aggregates_once(
         "preflight_error_rank_0.txt",
         "preflight_error_rank_1.txt",
     ]
+    assert sorted(
+        path.name for path in run_dir.glob("permission_error_rank_*.txt")
+    ) == [
+        "permission_error_rank_0.txt",
+        "permission_error_rank_1.txt",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("backend", "accelerator_device", "expected"),
+    [
+        ("gloo", torch.device("mps"), torch.device("cpu")),
+        ("nccl", torch.device("cuda", 2), torch.device("cuda", 2)),
+    ],
+)
+def test_object_broadcast_selects_backend_compatible_device(
+    backend: str,
+    accelerator_device: torch.device,
+    expected: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: backend)
+    accelerator = types.SimpleNamespace(device=accelerator_device)
+
+    assert cv._object_broadcast_device(accelerator) == expected
 
 
 def test_cross_validation_runs_preflight_before_creating_run_directory(

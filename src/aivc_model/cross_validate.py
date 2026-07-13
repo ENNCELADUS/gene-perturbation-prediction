@@ -477,7 +477,7 @@ def _prepare_fresh_run_dir(run_dir: Path, accelerator: Accelerator) -> None:
         ),
     )
     if error is not None:
-        raise FileExistsError(error)
+        raise error
     _wait_for_everyone(accelerator)
 
 
@@ -501,7 +501,7 @@ def _run_main_process(
     """Execute a shared-filesystem mutation exactly once."""
     error = _main_process_error(accelerator, action)
     if error is not None:
-        raise RuntimeError(f"rank-zero shared operation failed: {error}")
+        raise RuntimeError(f"rank-zero shared operation failed: {error}") from error
 
 
 def _run_distributed_preflight(
@@ -514,29 +514,37 @@ def _run_distributed_preflight(
         return
     error = _main_process_error(accelerator, lambda: run_preflight(config_path))
     if error is not None:
-        raise RuntimeError(f"locked preflight failed: {error}")
+        raise RuntimeError(f"locked preflight failed: {error}") from error
 
 
 def _main_process_error(
     accelerator: Accelerator,
     action: Callable[[], object],
-) -> str | None:
-    """Run an action on rank zero and broadcast its error text."""
-    error: str | None = None
+) -> Exception | None:
+    """Run an action on rank zero and broadcast its original exception."""
+    error: Exception | None = None
     if accelerator.is_main_process:
         try:
             action()
         except Exception as caught:
-            error = f"{type(caught).__name__}: {caught}"
+            error = caught
     if accelerator.num_processes > 1:
         values = [error]
         torch.distributed.broadcast_object_list(
             values,
             src=0,
-            device=torch.device("cpu"),
+            device=_object_broadcast_device(accelerator),
         )
         error = values[0]
     return error
+
+
+def _object_broadcast_device(accelerator: Accelerator) -> torch.device:
+    """Select a tensor device compatible with the active process-group backend."""
+    backend = str(torch.distributed.get_backend()).lower()
+    if "nccl" in backend:
+        return accelerator.device
+    return torch.device("cpu")
 
 
 def _manifest_authority(config: AivcConfig) -> tuple[Path, str]:
