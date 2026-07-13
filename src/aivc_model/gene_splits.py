@@ -31,6 +31,9 @@ SELECTION_STAGES = frozenset({"early_stopping", "layer_selection"})
 FINAL_RESPONSE_STAGES = frozenset(
     {"generation_quality_outer_test", "observed_b_oracle_outer_test"}
 )
+ORACLE_FIT_STAGES = frozenset({"observed_b_oracle_fit"})
+ORACLE_SELECTION_STAGES = frozenset({"observed_b_oracle_selection"})
+FINAL_LABEL_STAGES = frozenset({"internal_outer_test"})
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,73 @@ class FoldSpec:
     train_genes: tuple[str, ...]
     val_genes: tuple[str, ...]
     test_genes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GeneAccessEvent:
+    """One authorized, actually executed gene access."""
+
+    stage: str
+    outer_fold: int
+    gene_count: int
+    gene_set_sha256: str
+    checkpoint_frozen: bool
+
+
+class GeneAccessRecorder:
+    """Capability that authorizes and records actual fold-scoped accesses."""
+
+    def __init__(self, fold: FoldSpec) -> None:
+        self.fold = fold
+        self._events: list[GeneAccessEvent] = []
+
+    def record(
+        self,
+        stage: str,
+        genes: Collection[str],
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> None:
+        """Authorize the request, then append evidence only on success."""
+        normalized = tuple(sorted({str(gene).upper() for gene in genes}))
+        self.authorize(
+            stage,
+            normalized,
+            checkpoint_frozen=checkpoint_frozen,
+        )
+        self._events.append(
+            GeneAccessEvent(
+                stage=stage,
+                outer_fold=self.fold.outer_fold,
+                gene_count=len(normalized),
+                gene_set_sha256=_gene_set_sha256(normalized),
+                checkpoint_frozen=checkpoint_frozen,
+            )
+        )
+
+    def authorize(
+        self,
+        stage: str,
+        genes: Collection[str],
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> None:
+        """Reject an unauthorized operation before it touches data or fits."""
+        assert_gene_access(stage, genes, self.fold, checkpoint_frozen)
+
+    def to_frame(self) -> pd.DataFrame:
+        """Return immutable audit evidence for emitted accesses."""
+        columns = [
+            "stage",
+            "outer_fold",
+            "gene_count",
+            "gene_set_sha256",
+            "checkpoint_frozen",
+        ]
+        return pd.DataFrame(
+            [event.__dict__ for event in self._events],
+            columns=columns,
+        )
 
 
 def sha256_file(path: Path) -> str:
@@ -167,11 +237,11 @@ def assert_gene_access(
     train = {gene.upper() for gene in fold.train_genes}
     validation = {gene.upper() for gene in fold.val_genes}
     test = {gene.upper() for gene in fold.test_genes}
-    if stage in FIT_STAGES:
+    if stage in FIT_STAGES | ORACLE_FIT_STAGES:
         if not requested <= train:
             raise ValueError(f"{stage} attempted outer-test or validation gene access")
         return
-    if stage in SELECTION_STAGES:
+    if stage in SELECTION_STAGES | ORACLE_SELECTION_STAGES:
         if not requested <= validation:
             raise ValueError(f"{stage} must use inner-validation genes only")
         return
@@ -183,7 +253,20 @@ def assert_gene_access(
         if not requested <= test:
             raise ValueError(f"{stage} accepts outer-test genes only")
         return
+    if stage in FINAL_LABEL_STAGES:
+        if not checkpoint_frozen:
+            raise ValueError(
+                "selected checkpoint is frozen before outer-test label access"
+            )
+        if not requested <= test:
+            raise ValueError(f"{stage} accepts outer-test genes only")
+        return
     raise ValueError(f"unknown gene-access stage {stage!r}")
+
+
+def _gene_set_sha256(genes: Collection[str]) -> str:
+    value = "\n".join(sorted(str(gene).upper() for gene in genes))
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _canonical_gene_fold_view(manifest: pd.DataFrame) -> pd.DataFrame:

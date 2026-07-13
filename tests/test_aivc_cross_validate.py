@@ -13,7 +13,9 @@ import pandas as pd
 import pytest
 
 from aivc_model import cross_validate as cv
-from aivc_model.gene_splits import FoldSpec
+from aivc_model import gene_splits as gene_splits_module
+from aivc_model import train as train_module
+from aivc_model.gene_splits import FoldSpec, GeneAccessRecorder
 from aivc_model.prepare import AivcConfig, GeneBags, SealedGeneBags, load_config
 
 
@@ -84,14 +86,62 @@ train:
 
 def test_gene_bag_views_preserve_only_requested_genes() -> None:
     bags = _toy_bags()
+    with pytest.raises(ValueError, match="GeneAccessRecorder"):
+        bags.for_genes(("C", "A"), stage="fine_tuning")
+    bags = replace(
+        bags,
+        access_recorder=GeneAccessRecorder(FoldSpec(0, ("A", "C"), ("B",), ("D",))),
+    )
     selected = bags.for_genes(("C", "A"), stage="fine_tuning")
     assert selected.genes.tolist() == ["C", "A"]
     assert selected.metadata["perturbation_gene"].tolist() == ["C", "A"]
     np.testing.assert_array_equal(selected.input_bags[0], bags.input_bags[2])
 
 
+def test_actual_gene_view_rejects_unauthorized_access_without_recording() -> None:
+    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    recorder = GeneAccessRecorder(fold)
+    bags = replace(_toy_bags(), access_recorder=recorder)
+
+    with pytest.raises(ValueError, match="outer-test"):
+        bags.for_genes(("D",), stage="projector_fit")
+
+    assert recorder.to_frame().empty
+    selected = bags.for_genes(fold.train_genes, stage="fine_tuning")
+    assert selected.genes.tolist() == ["A", "B"]
+    assert recorder.to_frame()["stage"].tolist() == ["fine_tuning"]
+
+
+def test_aggregation_rejects_unauthorized_emitted_event() -> None:
+    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    audit = pd.DataFrame(
+        [
+            {
+                "stage": "fine_tuning",
+                "outer_fold": 0,
+                "gene_count": 2,
+                "gene_set_sha256": cv._gene_set_sha256(fold.train_genes),
+                "checkpoint_frozen": False,
+            },
+            {
+                "stage": "projector_fit",
+                "outer_fold": 0,
+                "gene_count": 1,
+                "gene_set_sha256": cv._gene_set_sha256(fold.test_genes),
+                "checkpoint_frozen": False,
+            },
+        ]
+    )
+
+    with pytest.raises(ValueError, match="authorized role"):
+        cv._assert_access_audit(audit, [fold])
+
+
 def test_sealed_outer_test_supports_exactly_two_post_freeze_routes() -> None:
-    bags = _toy_bags()
+    bags = replace(
+        _toy_bags(),
+        access_recorder=GeneAccessRecorder(FoldSpec(0, ("A",), ("C",), ("B", "D"))),
+    )
     sealed = SealedGeneBags(bags, ("B", "D"))
     with pytest.raises(ValueError, match="selected checkpoint is frozen"):
         sealed.open("generation_quality_outer_test", checkpoint_frozen=False)
@@ -178,11 +228,15 @@ def test_audited_training_writes_three_final_scopes_and_fit_audit(
     assert set(audit["stage"]) >= {
         "projector_fit",
         "gmm_fit",
+        "normalizer_fit",
         "fine_tuning",
         "early_stopping",
+        "observed_b_oracle_fit",
+        "observed_b_oracle_selection",
         "generation_quality_outer_test",
         "observed_b_oracle_outer_test",
     }
+    assert set(audit["stage"]).isdisjoint({"state_fit", "scvi_fit", "layer_selection"})
     assert not audit.loc[audit["stage"].str.endswith("fit"), "checkpoint_frozen"].any()
     fit_summary = json.loads(paths["fit_audit_summary"].read_text())
     assert fit_summary["checkpoint_sha256"]
@@ -232,8 +286,170 @@ def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
         "selected_layer",
         "best_epoch",
         "checkpoint_sha256",
+        "oracle_best_epoch",
+        "oracle_checkpoint_sha256",
     ):
         assert first_audit[key] == second_audit[key]
+
+
+def test_observed_b_oracle_selection_depends_on_validation_response_only(
+    tmp_path: Path,
+) -> None:
+    data = _toy_bags()
+    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    config = replace(
+        _audited_config(tmp_path),
+        train=replace(
+            _audited_config(tmp_path).train,
+            max_epochs=20,
+            learning_rate=0.1,
+        ),
+    )
+    first = cv.run_training_fold(
+        config=config,
+        data=data,
+        external=None,
+        fold_spec=fold,
+        run_dir=tmp_path / "oracle_first",
+        source_fingerprint="source",
+    )
+    changed_input = list(data.input_bags)
+    changed_latent = list(data.latent_bags)
+    changed_input[2] = np.full_like(changed_input[2], -100.0)
+    changed_latent[2] = np.full_like(changed_latent[2], -100.0)
+    changed = replace(
+        data,
+        input_bags=tuple(changed_input),
+        latent_bags=tuple(changed_latent),
+    )
+    second = cv.run_training_fold(
+        config=config,
+        data=changed,
+        external=None,
+        fold_spec=fold,
+        run_dir=tmp_path / "oracle_changed_val",
+        source_fingerprint="source",
+    )
+    first_audit = json.loads(first["fit_audit_summary"].read_text())
+    second_audit = json.loads(second["fit_audit_summary"].read_text())
+    assert first_audit["checkpoint_sha256"] == second_audit["checkpoint_sha256"]
+    assert (
+        first_audit["oracle_checkpoint_sha256"]
+        != second_audit["oracle_checkpoint_sha256"]
+    )
+
+
+def test_run_training_fold_rejects_nonempty_run_directory(tmp_path: Path) -> None:
+    run_dir = tmp_path / "fold_0"
+    run_dir.mkdir()
+    (run_dir / "stale.txt").write_text("stale", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="fresh run directory"):
+        cv.run_training_fold(
+            config=_audited_config(tmp_path),
+            data=_toy_bags(),
+            external=None,
+            fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+            run_dir=run_dir,
+            source_fingerprint="source",
+        )
+
+
+def test_audited_esm_uses_exact_canonical_manifest_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    canonical_order = ("D", "B", "A", "C")
+    manifest = pd.DataFrame(
+        {
+            "perturbation_gene": canonical_order,
+            "outer_fold": [0, 1, 1, 1],
+        }
+    )
+    manifest_path = tmp_path / "outer.csv"
+    manifest.to_csv(manifest_path, index=False)
+    sha_path = tmp_path / "outer.csv.sha256"
+    sha_path.write_text(
+        f"{hashlib.sha256(manifest_path.read_bytes()).hexdigest()}\n",
+        encoding="utf-8",
+    )
+    esm_path = tmp_path / "esm2.npz"
+    np.savez(
+        esm_path,
+        symbols=np.asarray(canonical_order, dtype=object),
+        vectors=np.arange(12, dtype=np.float32).reshape(4, 3),
+        resolved=np.ones(4, dtype=bool),
+    )
+    base = _audited_config(tmp_path)
+    config = replace(
+        base,
+        cv=replace(
+            base.cv,
+            outer_split_manifest=manifest_path,
+            outer_split_sha256_file=sha_path,
+        ),
+        state=replace(
+            base.state,
+            gene_tokenizer="esm2",
+            esm2_npz=esm_path,
+            esm2_adapter_hidden=4,
+            require_resolved_esm2=True,
+        ),
+    )
+    monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 4)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 4)
+    monkeypatch.setattr(
+        gene_splits_module,
+        "CANONICAL_OUTER_FOLDS",
+        frozenset({0, 1}),
+    )
+
+    paths = cv.run_training_fold(
+        config=config,
+        data=_toy_bags(),
+        external=None,
+        fold_spec=FoldSpec(0, ("A", "C"), ("B",), ("D",)),
+        run_dir=tmp_path / "esm_fold",
+        source_fingerprint="source",
+        canonical_gene_order=canonical_order,
+    )
+
+    evidence = json.loads(paths["runtime_evidence"].read_text())
+    assert evidence["esm_resolved_count"] == 4
+    assert (
+        evidence["esm_gene_order_sha256"]
+        == hashlib.sha256("\n".join(canonical_order).encode("utf-8")).hexdigest()
+    )
+
+
+def test_scvi_fit_event_is_emitted_only_when_fit_boundary_executes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = _audited_config(tmp_path)
+    config = replace(base, projector=replace(base.projector, teacher="scvi"))
+    monkeypatch.setattr(
+        train_module,
+        "_fit_audited_scvi_latents",
+        lambda _config, train, val, _split, _artifacts, _accelerator: (train, val),
+    )
+    monkeypatch.setattr(
+        train_module,
+        "_project_audited_scvi_data",
+        lambda _config, data, _artifacts: data,
+    )
+
+    paths = cv.run_training_fold(
+        config=config,
+        data=_toy_bags(),
+        external=None,
+        fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        run_dir=tmp_path / "scvi_fold",
+        source_fingerprint="source",
+    )
+
+    audit = pd.read_csv(paths["fit_access_audit"])
+    assert audit["stage"].tolist().count("scvi_fit") == 1
 
 
 def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
@@ -328,7 +544,8 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
                 {
                     "stage": "fine_tuning",
                     "outer_fold": fold.outer_fold,
-                    "genes": ";".join(fold.train_genes),
+                    "gene_count": len(fold.train_genes),
+                    "gene_set_sha256": cv._gene_set_sha256(fold.train_genes),
                     "checkpoint_frozen": False,
                 }
             ]
@@ -337,12 +554,30 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         pd.DataFrame(columns=["outer_fold", "source_name"]).to_csv(qa, index=False)
         summary = fold_dir / "fit_audit_summary.json"
         summary.write_text(json.dumps({"checkpoint_sha256": str(fold.outer_fold)}))
+        runtime_evidence = fold_dir / "runtime_evidence.json"
+        runtime_evidence.write_text(
+            json.dumps(
+                {
+                    "esm_resolved_count": 9338,
+                    "esm_total_count": 9338,
+                    "esm_gene_order_sha256": hashlib.sha256(
+                        "\n".join(genes).encode("utf-8")
+                    ).hexdigest(),
+                    "state_input_dim": 2000,
+                    "state_output_dim": 2000,
+                    "state_pert_dim": 512,
+                    "state_feature_match_count": 2000,
+                }
+            ),
+            encoding="utf-8",
+        )
         return {
             "predictions": predictions,
             "fold_metrics": metrics,
             "fit_access_audit": audit,
             "external_alignment_qa": qa,
             "fit_audit_summary": summary,
+            "runtime_evidence": runtime_evidence,
         }
 
     monkeypatch.setattr(cv, "run_training_fold", fake_fold_runner)
@@ -356,8 +591,14 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         rows = predictions.query("evaluation_scope == @scope")
         assert rows["perturbation_gene"].nunique() == 9338
         assert not rows.duplicated(["perturbation_gene", "evaluation_scope"]).any()
-    assert (run_dir / "artifacts" / "gene_splits.csv").exists()
+    canonical_output = run_dir / "artifacts" / "gene_splits.csv"
+    assert len(pd.read_csv(canonical_output)) == 9338
+    assert hashlib.sha256(canonical_output.read_bytes()).hexdigest() == digest
+    assert len(pd.read_csv(run_dir / "artifacts" / "fold_roles.csv")) == 5 * 9338
     assert (run_dir / "summary.csv").exists()
     run_manifest = json.loads((run_dir / "run_manifest.json").read_text())
     assert run_manifest["canonical_split_sha256"] == digest
-    assert run_manifest["esm_coverage"] == "9338/9338"
+    assert run_manifest["esm_resolved_count"] == 9338
+    assert run_manifest["esm_total_count"] == 9338
+    assert run_manifest["state_feature_match_count"] == 2000
+    assert run_manifest["checkpoint_dimensions"]["pert_dim"] == 512
