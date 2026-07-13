@@ -2147,7 +2147,7 @@ def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None
     assert model.perturbations.missing_vectors["g0"].grad is not None
 
 
-def test_esm2_build_freezes_state_and_trains_shared_adapter(
+def test_esm2_build_uses_checkpoint_width_and_freezes_state(
     tmp_path: Path, monkeypatch
 ) -> None:
     data = _toy_gene_bags_with_batches()
@@ -2183,6 +2183,14 @@ def test_esm2_build_freezes_state_and_trains_shared_adapter(
     monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
+    state_model = model_module.LinearMockStateModel(
+        input_dim=3, output_dim=3, pert_dim=5
+    )
+    monkeypatch.setattr(
+        train_module,
+        "load_state_model",
+        lambda **_kwargs: state_model,
+    )
     featureizer = _build_tiny_aivc_model()[0].featureizer
 
     model = train_module._build_model(
@@ -2193,6 +2201,7 @@ def test_esm2_build_freezes_state_and_trains_shared_adapter(
         np.zeros(2, dtype=np.float32),
         emit_checkpoint_output=False,
     )
+    assert model.perturbations("GENE1").shape == (5,)
     predicted, _latent = model.predict_bag(torch.as_tensor(data.control_input), "GENE1")
     predicted.square().sum().backward()
 
