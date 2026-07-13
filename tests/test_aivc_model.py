@@ -90,6 +90,10 @@ def _toy_cache_inputs(tmp_path: Path) -> dict[str, object]:
         "cache_cells_per_gene": 1,
         "depmap_label_col": "depmap_gene_effect",
         "matched_label_col": "has_depmap_label",
+        "var_gene_symbol_col": "gene_name",
+        "obs_perturbation_col": "gene",
+        "control_label": "non-targeting",
+        "obs_batch_col": "gem_group",
     }
 
 
@@ -120,8 +124,11 @@ def _toy_gwps_cache_config(
     )
     adata.var_names = ["ENSG1", "ENSG2"]
     adata.var["gene_name"] = ["B", "A"]
+    adata.var["alternate_gene_name"] = ["B", "A"]
     adata.obs["gene"] = [genes[0], genes[1], "non-targeting", "non-targeting"]
+    adata.obs["alternate_gene"] = adata.obs["gene"].astype(str)
     adata.obs["gem_group"] = ["25", "31", "25", "31"]
+    adata.obs["alternate_batch"] = adata.obs["gem_group"].astype(str)
     h5ad_path = tmp_path / "gwps.h5ad"
     adata.write_h5ad(h5ad_path)
 
@@ -279,6 +286,30 @@ def test_gwps_cache_label_change_invalidates_existing_cache(tmp_path: Path) -> N
     labels = pd.read_csv(config.data.overlap_csv)
     labels.loc[0, "depmap_gene_effect"] = -9.0
     labels.to_csv(config.data.overlap_csv, index=False)
+
+    with pytest.raises(ValueError, match="GWPS cache fingerprint mismatch"):
+        gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+
+
+@pytest.mark.parametrize(
+    ("setting", "replacement"),
+    [
+        ("var_gene_symbol_col", "alternate_gene_name"),
+        ("obs_perturbation_col", "alternate_gene"),
+        ("control_label", "control"),
+        ("obs_batch_col", "alternate_batch"),
+    ],
+)
+def test_gwps_cache_setting_change_invalidates_existing_cache(
+    tmp_path: Path,
+    setting: str,
+    replacement: str,
+) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    setattr(config.data, setting, replacement)
 
     with pytest.raises(ValueError, match="GWPS cache fingerprint mismatch"):
         gwps_cache_module._build_gwps_cache(config, cache_dir, contract)

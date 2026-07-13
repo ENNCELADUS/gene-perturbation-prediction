@@ -101,6 +101,10 @@ def source_fingerprint(
     cache_cells_per_gene: int,
     depmap_label_col: str,
     matched_label_col: str,
+    var_gene_symbol_col: str,
+    obs_perturbation_col: str,
+    control_label: str,
+    obs_batch_col: str | None,
 ) -> str:
     """Hash every source that can affect the deterministic raw cache."""
     payload = {
@@ -120,6 +124,10 @@ def source_fingerprint(
         "cache_cells_per_gene": int(cache_cells_per_gene),
         "depmap_label_col": depmap_label_col,
         "matched_label_col": matched_label_col,
+        "var_gene_symbol_col": var_gene_symbol_col,
+        "obs_perturbation_col": obs_perturbation_col,
+        "control_label": control_label,
+        "obs_batch_col": obs_batch_col,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -329,6 +337,10 @@ def _config_fingerprint(
         cache_cells_per_gene=config.data.cache_cells_per_gene,
         depmap_label_col=config.data.depmap_label_col,
         matched_label_col=config.data.matched_label_col,
+        var_gene_symbol_col=config.data.var_gene_symbol_col,
+        obs_perturbation_col=config.data.obs_perturbation_col,
+        control_label=config.data.control_label,
+        obs_batch_col=config.data.obs_batch_col,
     )
 
 
