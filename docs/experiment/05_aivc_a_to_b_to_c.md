@@ -1,8 +1,9 @@
 # AIVC A->B->C STATE Pipeline for K562 Dependency Ranking
 
-Run status: implementation reviewed on 2026-06-10; no local 05 result artifacts
-are currently present. This document records the runnable pipeline contract and
-known evaluation limitations, not completed performance metrics.
+Run status: the repaired five-fold protocol was locked on 2026-07-13; no repaired
+result artifacts are reported here. Older exp05 negative results are invalid as
+model evidence because the primary and external expression coordinates were
+misaligned.
 
 Model card:
 [`docs/experiment/model-card/05_aivc_a_to_b_to_c.md`](model-card/05_aivc_a_to_b_to_c.md)
@@ -29,11 +30,11 @@ implemented model families in this pipeline.
 
 ## Configuration and Entry Points
 
-Default STATE config:
-`configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562.yaml`.
+Authoritative repaired production config:
+`configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml`.
 
-Current Slurm config:
-`configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml`.
+The older configs remain historical inputs and must not be used to represent the
+repaired experiment.
 
 Frozen STATE feature ablation config:
 `configs/experiments/05_aivc_a_to_b_to_c/state_frozen_feature_ablation.yaml`.
@@ -41,8 +42,8 @@ Frozen STATE feature ablation config:
 Direct command:
 
 ```bash
-uv run python src/aivc_model/train.py \
-  --config configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562.yaml
+uv run python -m aivc_model.cross_validate \
+  --config configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml
 ```
 
 Slurm entry point:
@@ -51,10 +52,45 @@ Slurm entry point:
 sbatch scripts/state.sh
 ```
 
-The current configs use Replogle K562 CRISPRi data with a perturbation-gene
-split of `train_fraction: 0.9`, `val_fraction: 0.1`, and
-`test_fraction: 0.0`. Adamson K562 pilot, UPR epistasis, and UPR Perturb-seq
-sources are configured as `external:adamson_k562`.
+Before training, build the strict ESM-2 asset and run the read-only preflight:
+
+```bash
+uv run python scripts/precompute_esm2_embeddings.py \
+  --benchmark-csv data/sl_dependency_v0/interim/k562_gwps_depmap_overlap.csv \
+  --symbol-column perturbation_gene \
+  --out data/esm2/k562_gwps_depmap_esm2_650M.npz \
+  --seq-cache data/esm2/symbol_to_sequence.json \
+  --local-files-only \
+  --require-complete-coverage
+uv run python -m aivc_model.cross_validate \
+  --config configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml \
+  --preflight-only
+```
+
+## Repaired Five-Fold Claim Contract
+
+The repaired experiment predicts population-level K562 DepMap/Achilles
+GeneEffect. GeneEffect is a fitness/proliferation dependency score; it is not a
+single-cell death probability and does not establish a death mechanism.
+
+The universe is exactly the pre-frozen 9,338-gene GWPS-DepMap overlap. Its
+canonical five-fold manifest and lowercase SHA-256 authority are reported with
+every run. GeneEffect labels, GWPS responses, transitions, gene-derived prompts,
+and fine-tuning samples inherit the same gene-level outer fold. No failed ESM or
+expression match can create a smaller post-filter universe: ESM-2 must resolve
+`9338/9338`, and STATE expression remains fixed at `2000/2000` checkpoint genes.
+
+The primary result is the mean and standard deviation across the five
+`internal_outer_test` folds. Adamson pilot, UPR epistasis, and UPR Perturb-seq
+are secondary assay-transfer evaluations; Adamson never participates in epoch,
+checkpoint, or layer selection.
+
+For each fold, outer-test observed response has exactly two permitted routes,
+both after the selected checkpoint is frozen: generation-quality evaluation and
+the train-fitted observed-B oracle. It is never used for ESM adapter, STATE,
+scVI, GMM, normalizer, or projector fitting; fine-tuning; early stopping; or
+layer selection. The repaired config fixes the representation to the STATE
+output layer rather than searching layers on outer-test data.
 
 ## Frozen STATE Feature Ablation
 
