@@ -2598,8 +2598,7 @@ def test_external_adamson_sources_merge_and_mean_impute_missing_genes(
     config = load_config(config_path)
     assert config.external_test is not None
     assert all(
-        source.var_gene_symbol_col is None
-        for source in config.external_test.sources
+        source.var_gene_symbol_col is None for source in config.external_test.sources
     )
     reference = load_gene_bags(config)
 
@@ -2801,6 +2800,34 @@ def test_train_smoke_writes_external_adamson_outputs(tmp_path: Path) -> None:
     assert (run_dir / "artifacts" / "external_test_qa.json").exists()
     assert (run_dir / "models" / "best" / "pytorch_model.bin").exists()
     assert (run_dir / "models" / "final" / "pytorch_model.bin").exists()
+
+
+def test_external_metadata_does_not_contaminate_shared_internal_gene(
+    tmp_path: Path,
+) -> None:
+    h5ad_path, overlap_path = _write_toy_inputs(tmp_path)
+    source_a, source_b, external_overlap = _write_toy_external_inputs(tmp_path)
+    config_path = _write_external_smoke_config(
+        tmp_path,
+        h5ad_path,
+        overlap_path,
+        source_a,
+        source_b,
+        external_overlap,
+        run_id="external_metadata_scope",
+        max_epochs=1,
+    )
+
+    paths = run_training(load_config(config_path))
+
+    predictions = pd.read_csv(paths["run_dir"] / "artifacts" / "test_predictions.csv")
+    shared = predictions.loc[predictions["perturbation_gene"] == "GENE1"]
+    internal = shared.loc[shared["evaluation_scope"] == "internal_outer_test"].iloc[0]
+    adamson = shared.loc[shared["evaluation_scope"] == "external:adamson_k562"].iloc[0]
+    assert pd.isna(internal["source_dataset"])
+    assert pd.isna(internal["external_row_count"])
+    assert pd.notna(adamson["source_dataset"])
+    assert int(adamson["external_row_count"]) == 2
 
 
 def test_load_state_model_can_suppress_checkpoint_stdout(
@@ -3251,6 +3278,9 @@ split:
   train_fraction: 0.5
   val_fraction: 0.25
   test_fraction: 0.25
+  train_genes: [GENE2, GENE3]
+  val_genes: [GENE4]
+  test_genes: [GENE1]
   random_state: 11
   stratify_bins: 2
 state:

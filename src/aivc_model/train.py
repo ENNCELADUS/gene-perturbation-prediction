@@ -503,6 +503,13 @@ def run_training(
         if accelerator.is_main_process:
             test_rows.append({"evaluation_scope": evaluation_scope, **test_row})
             scoped_predictions.insert(0, "evaluation_scope", evaluation_scope)
+            if request.observed_response is not None:
+                scoped_predictions = scoped_predictions.merge(
+                    request.observed_response.metadata,
+                    on="perturbation_gene",
+                    how="left",
+                    suffixes=("", "_metadata"),
+                )
             prediction_frames.append(scoped_predictions)
     if accelerator.is_main_process:
         test_predictions = pd.concat(prediction_frames, ignore_index=True)
@@ -511,12 +518,6 @@ def run_training(
             "perturbation_gene"
         ].map(unwrapped.perturbations.has_known_vector)
         if external is not None:
-            test_predictions = test_predictions.merge(
-                external.data.metadata,
-                on="perturbation_gene",
-                how="left",
-                suffixes=("", "_metadata"),
-            )
             (artifacts_dir / "external_test_qa.json").write_text(
                 json.dumps(external.qa, indent=2),
                 encoding="utf-8",
