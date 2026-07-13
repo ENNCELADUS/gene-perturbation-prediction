@@ -4,6 +4,7 @@ from dataclasses import replace
 import json
 import math
 from pathlib import Path
+import pickle
 import sys
 import types
 import warnings
@@ -11,12 +12,18 @@ import warnings
 import anndata as ad
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.mixture import GaussianMixture
 import torch
 import torch.nn.functional as F
 
 import aivc_model.model as model_module
 import aivc_model.train as train_module
+from aivc_model.gwps_cache import (
+    build_gwps_cache,
+    load_gwps_cache,
+    source_fingerprint,
+)
 from aivc_model.model import (
     AivcModel,
     ExpressionToLatentProjector,
@@ -53,9 +60,154 @@ from aivc_model.prepare import (
     load_state_batch_lookup,
     make_cell_set_chunks,
     make_gene_split,
+    resolve_state_gene_order,
     with_cached_scvi_teacher_latents,
 )
 from aivc_model.train import _write_csv_if_main, run_training
+
+
+def _toy_cache_inputs(tmp_path: Path) -> dict[str, object]:
+    paths = {
+        "h5ad": tmp_path / "source.h5ad",
+        "checkpoint": tmp_path / "final.ckpt",
+        "var_dims": tmp_path / "var_dims.pkl",
+        "pert_onehot_map": tmp_path / "pert_onehot_map.pt",
+        "batch_sidecar": tmp_path / "batch_onehot_map.pt",
+        "cell_type_sidecar": None,
+        "canonical_split": tmp_path / "outer.csv",
+    }
+    for key, path in paths.items():
+        if path is not None:
+            path.write_bytes(str(key).encode())
+    return {
+        **paths,
+        "feature_names": np.asarray(["A", "B"], dtype=object),
+        "canonical_gene_count": 2,
+        "cache_seed": 7,
+        "cache_cells_per_gene": 1,
+    }
+
+
+def _toy_gwps_cache_config(
+    tmp_path: Path,
+    *,
+    response_genes: list[str] | None = None,
+) -> object:
+    genes = response_genes or ["G1", "G2"]
+    model_dir = tmp_path / "state"
+    model_dir.mkdir(exist_ok=True)
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump({"gene_names": ["A", "B"]}, handle)
+    (model_dir / "pert_onehot_map.pt").write_bytes(b"perturbations")
+    (model_dir / "batch_onehot_map.pt").write_bytes(b"batches")
+    checkpoint = model_dir / "checkpoints" / "final.ckpt"
+    checkpoint.parent.mkdir()
+    checkpoint.write_bytes(b"checkpoint")
+
+    adata = ad.AnnData(
+        np.asarray(
+            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0], [4.0, 40.0]],
+            dtype=np.float32,
+        )
+    )
+    adata.var_names = ["ENSG1", "ENSG2"]
+    adata.var["gene_name"] = ["B", "A"]
+    adata.obs["gene"] = [genes[0], genes[1], "non-targeting", "non-targeting"]
+    adata.obs["gem_group"] = ["25", "31", "25", "31"]
+    h5ad_path = tmp_path / "gwps.h5ad"
+    adata.write_h5ad(h5ad_path)
+
+    overlap_csv = tmp_path / "overlap.csv"
+    pd.DataFrame(
+        {
+            "perturbation_gene": genes,
+            "depmap_gene_effect": [-1.0, -0.5],
+            "has_depmap_label": [True, True],
+        }
+    ).to_csv(overlap_csv, index=False)
+    outer_manifest = tmp_path / "outer.csv"
+    pd.DataFrame({"perturbation_gene": ["G1", "G2"], "outer_fold": [0, 1]}).to_csv(
+        outer_manifest, index=False
+    )
+    return types.SimpleNamespace(
+        data=types.SimpleNamespace(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_csv,
+            obs_perturbation_col="gene",
+            control_label="non-targeting",
+            obs_batch_col="gem_group",
+            var_gene_symbol_col="gene_name",
+            depmap_label_col="depmap_gene_effect",
+            matched_label_col="has_depmap_label",
+            cache_seed=42,
+            cache_cells_per_gene=1,
+        ),
+        state=types.SimpleNamespace(
+            model_dir=model_dir,
+            checkpoint_path=checkpoint,
+        ),
+        cv=types.SimpleNamespace(
+            outer_split_manifest=outer_manifest,
+            expected_gene_count=2,
+        ),
+    )
+
+
+def test_gwps_cache_manifest_changes_with_state_sidecar(tmp_path: Path) -> None:
+    inputs = _toy_cache_inputs(tmp_path)
+    first = source_fingerprint(**inputs)
+    inputs["var_dims"].write_bytes(b"changed")
+    second = source_fingerprint(**inputs)
+    assert first != second
+
+
+def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    build_gwps_cache(config, cache_dir)
+    bags = load_gwps_cache(config, cache_dir)
+    assert bags.feature_names.tolist() == ["A", "B"]
+    assert bags.genes.tolist() == ["G1", "G2"]
+    np.testing.assert_array_equal(bags.gene_outer_folds, np.asarray([0, 1]))
+    np.testing.assert_array_equal(bags.control_batch, np.asarray(["25", "31"]))
+    np.testing.assert_array_equal(bags.input_bags[0], np.asarray([[10.0, 1.0]]))
+
+
+def test_gwps_cache_rejects_response_gene_outside_canonical_manifest(
+    tmp_path: Path,
+) -> None:
+    config = _toy_gwps_cache_config(tmp_path, response_genes=["G1", "EXTRA"])
+    with pytest.raises(ValueError, match="canonical manifest"):
+        build_gwps_cache(config, tmp_path / "cache")
+
+
+def test_state_alignment_uses_gene_name_in_checkpoint_order(tmp_path: Path) -> None:
+    adata = ad.AnnData(np.asarray([[1.0, 2.0, 3.0]], dtype=np.float32))
+    adata.var_names = ["ENSG1", "ENSG2", "ENSG3"]
+    adata.var["gene_name"] = ["B", "A", "C"]
+    model_dir = tmp_path / "state"
+    model_dir.mkdir()
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump({"gene_names": ["A", "B"]}, handle)
+
+    indices, names = resolve_state_gene_order(adata, model_dir, "gene_name")
+
+    np.testing.assert_array_equal(indices, np.asarray([1, 0]))
+    np.testing.assert_array_equal(names, np.asarray(["A", "B"], dtype=object))
+
+
+def test_state_alignment_never_falls_back_when_checkpoint_gene_is_missing(
+    tmp_path: Path,
+) -> None:
+    adata = ad.AnnData(np.ones((1, 1), dtype=np.float32))
+    adata.var["gene_name"] = ["A"]
+    model_dir = tmp_path / "state"
+    model_dir.mkdir()
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump({"gene_names": ["A", "B"]}, handle)
+
+    with pytest.raises(ValueError, match="1/2"):
+        resolve_state_gene_order(adata, model_dir, "gene_name")
 
 
 def test_make_gene_split_is_disjoint() -> None:
