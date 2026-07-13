@@ -95,6 +95,10 @@ class StateConfig:
     output_dim: int | None = None
     pert_dim: int | None = None
     known_perturbation_vectors: Path | None = None
+    gene_tokenizer: str = "state_onehot"
+    esm2_npz: Path | None = None
+    esm2_adapter_hidden: int = 512
+    require_resolved_esm2: bool = False
 
 
 @dataclass(frozen=True)
@@ -1807,6 +1811,10 @@ def _state_config(values: dict[str, Any]) -> StateConfig:
         known_perturbation_vectors=_path_or_none(
             values.get("known_perturbation_vectors")
         ),
+        gene_tokenizer=str(values.get("gene_tokenizer", "state_onehot")),
+        esm2_npz=_path_or_none(values.get("esm2_npz")),
+        esm2_adapter_hidden=int(values.get("esm2_adapter_hidden", 512)),
+        require_resolved_esm2=_bool_value(values.get("require_resolved_esm2", False)),
     )
 
 
