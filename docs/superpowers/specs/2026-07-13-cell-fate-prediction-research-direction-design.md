@@ -1,267 +1,299 @@
-# Research Direction: Perturbation-Induced Cell Fate Prediction
+# Research Direction: Perturbation Outcome Dynamics Behind Net Fitness
 
-Status date: 2026-07-13
+Status date: 2026-07-13 (revised after reviewer major-revision)
 Type: research direction + literature review plan (not an implementation spec)
 Origin: PI meeting notes on transcriptomics -> cellular phenotype / cell death
-prediction, plus a brainstorming session over the current repository state.
+prediction; brainstorming session over repository state; reviewer major-revision
+pass.
 
-## 1. Position Relative to Existing Work
+Revision note: this document replaces an earlier draft that asserted (a) population
+screens cannot separate death from arrest, (b) per-cell death probability is
+counterfactual, (c) unobserved `B` must therefore be generated, and (d) one fate
+model unifies dependency, conditional essentiality, and SL. All four were
+overstated. They are corrected or downgraded to hypotheses below. See Section 8.
 
-This is a **new research program**, separate from the existing NeurIPS draft in
-`docs/report/` (the "transcriptional shockwave carries the partner" SL-benchmark
-story). That draft is treated as a finished or parallel artifact. Experiments
-01-10 remain valid as evidence and as baselines; they are not re-told under a new
-frame.
+## 1. The Preserved Wedge
 
-The new program's center of gravity is **cell fate prediction as the scientific
-problem in its own right**. Conditional essentiality and synthetic lethality are
-downstream applications of it, not competitors to it.
-
-## 2. The Structural Fact That Motivates the Program
-
-| Object | Coverage | Location |
-| --- | --- | --- |
-| Label: `GeneEffect(cell line, gene)` | Dense: 1,208 x 18,531 | `data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv` |
-| Basal transcriptome per cell line | Dense: all DepMap lines | `OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv` |
-| Perturbation response `B(c, g)` | ~1 cell line (K562), ~6,070 genes | Replogle K562 GWPS (cluster) |
-
-Verified on 2026-07-13: the GeneEffect matrix is 1,208 rows x 18,531 columns.
-Perturb-seq `.h5ad` files are not on the local disk; coverage figures are taken
-from `docs/data/` and `docs/experiment/07_*.md`, not re-verified here.
-
-The consequence: the dependency/conditional-essentiality label matrix is **not
-label-limited**. It is limited on exactly one axis - the perturbation response
-transcriptome exists for one cell line out of 1,208. This is the honest reason a
-forward / virtual-cell model is needed at all: `B` is unobservable for ~99.9% of
-the contexts of interest, so it must be generated. That is a
-problem-formulation argument, not an architecture preference.
-
-## 3. Problem Statement
-
-Population fitness screens (DepMap CRISPR GeneEffect, PRISM drug viability)
-measure **depletion**. Depletion is the sum of two biologically distinct
-processes - cells dying, and cells ceasing to divide. No population screen can
-separate them. Single-cell transcriptomes can, in principle, because a dying cell
-and an arrested cell are transcriptomically dissimilar.
-
-The task:
+One claim survives the revision intact, and it is the reason to continue:
 
 ```text
-f(cell state, perturbation)
-    -> resolved fate distribution over the perturbed population
-       { P(proliferating), P(arrested), P(dying | mechanism m), timing }
+The same net fitness loss can arise from completely different cellular dynamics.
 ```
 
-subject to a **consistency constraint**:
+Strong division suppression with little death, normal division with substantial
+death, early death followed by survivor regrowth, and transient arrest followed by
+recovery can all produce the same aggregate readout. Everything below is an attempt
+to state precisely what follows from that, and what does not.
 
-```text
-aggregate(fate distribution) == observed population fitness
-```
+## 2. Corrected Premise
 
-Depletion is the model's derived quantity, not its target.
+The previous premise ("population screens measure depletion; no population screen
+can separate death from arrest") is wrong as stated.
 
-The aggregation function itself is an open modeling choice, not a given. A
-depletion score is a function of both the dying fraction and the growth-rate
-reduction of the surviving fraction, so `aggregate` is at minimum two-term. Its
-exact form is deferred until L2 reports how existing fitness-scoring models
-(e.g. DepMap's own) treat growth dynamics.
+- **Chronos** already fits an explicit population-dynamics model, converting sgRNA
+  abundance changes into relative growth-rate effects of gene knockout. It does not
+  uniquely decompose reduced division from increased death, but it is materially
+  more precise than "measures depletion."
+  (https://pmc.ncbi.nlm.nih.gov/articles/PMC8686573/)
+- **GR / DIP-style metrics** with time-course information and initial cell counts
+  can, under stated assumptions, distinguish fully cytostatic from net cytotoxic
+  responses. (Hafner et al. 2016, https://pmc.ncbi.nlm.nih.gov/articles/4887336/)
 
-### 3.1 Corollary Structure
+The accurate premise:
 
-Every existing task in the repository becomes a readout of the same model:
+> A single endpoint-abundance or net-fitness readout is generally insufficient to
+> uniquely determine the underlying division, recovery, persistent-arrest, and
+> cell-loss dynamics.
 
-| Downstream task | Expression in the fate model |
+And the accurate gap statement:
+
+> Existing pooled fitness readouts do not provide perturbation-specific,
+> single-cell-resolved, prospective decomposition of cellular outcomes.
+
+Not: "prior work failed to distinguish cytostatic from cytotoxic responses."
+
+## 3. Ontology and Estimands (L0)
+
+The previous draft's output — `proliferating / arrested / dying / mechanism /
+timing` — mixes levels and cannot form a mutually exclusive distribution.
+`proliferating` is a rate, `arrested` is a state (possibly reversible), `dying` is a
+process, `death` is an event, the mechanisms may overlap, and `timing` is not an
+extra label but part of the fate definition. A cell can arrest and recover, or
+arrest and later die.
+
+Any usable estimand must therefore fix:
+
+| Element | Requirement |
 | --- | --- |
-| Dependency prediction (`C`) | Aggregate of the fate composition for `(c, g)` |
-| Conditional essentiality | The same aggregate evaluated in an unseen context `c` |
-| Synthetic lethality | Interaction residual of the aggregate over two perturbations, relative to an explicit single-perturbation null |
+| Time horizon `T` | All outcomes are defined over `[t0, t0 + T]` from perturbation onset. No horizon, no estimand. |
+| Unit | The founder cell / lineage / clone, **not** the observed cell. Division means one founder maps to many observed cells. |
+| Division | Division history or division rate over the horizon. |
+| Arrest | Reversible vs. persistent arrest, distinguished; recovery is an explicit outcome, not the absence of one. |
+| Cell loss | Cumulative loss over the horizon, distinct from instantaneous dying state. |
+| Censoring | Right censoring at `T` is explicit. |
+| Mechanism | Overlapping multi-label attributes, not a forced single-label simplex. |
+| Denominator | Fractions are of **what**? Cells observed at `T` are survivors of a branching-plus-death process; fraction-of-observed is not fraction-of-founders. |
 
-This ordering is the design commitment: one model, several readouts.
+The denominator row is not pedantry. It is where identifiability and observation
+bias meet, and it is the reason Section 4 is the first gate.
 
-### 3.2 Novelty Claim (to be checked, not assumed)
+### 3.1 Three Distinct Prediction Tasks
 
-The claim under test is that (a) the arrest-vs-death split has been treated as a
-confound rather than a modeling target, and (b) no prior model constrains a
-single-cell fate decomposition to reproduce population fitness as its aggregate.
-Dependency prediction and cell-death classification plausibly exist as separate
-literatures, and the **bridge** is the gap. This is a prior, not a finding.
-Literature question L2 (Section 5) exists to falsify it, and it should run first.
+These must never be conflated again:
 
-## 4. Falsifiability Requirements
-
-Three failure modes must be designed against from the start. Two have already
-occurred once, in exp09.
-
-### 4.1 Null Model 1: The Two-Way Additive Baseline
-
-Before any fate model, measure how much of `GeneEffect(c, g)` is explained by:
-
-```text
-GeneEffect(c, g) ~ gene_mean(g) + line_mean(c)
-```
-
-using **no transcriptome at all**. If this explains most held-out-*line* variance,
-then every downstream model is relearning pan-essentiality. This is precisely the
-PI's stated fear that "the model may only learn cell line identity," and it is
-the same structure that exp09's non-pan-essential diagnostic already exposed:
-CV3 AUROC fell from 0.645 to 0.583 and AUPR from 0.651 to 0.490 once
-broadly-essential genes were removed.
-
-All fate-model results are reported as **lift over this null**. It is built
-first.
-
-### 4.2 Null Model 2: Response Burden
-
-Experiment 02 established that a generic response-magnitude scalar recovers
-Spearman 0.426 against a 0.494 full-feature baseline. A fate model that beats
-only response burden has discovered that perturbed cells look perturbed.
-Response burden, cell count, and cell-cycle composition are **reported
-covariates in every fate result**, not hidden shortcuts.
-
-### 4.3 Failure Mode: Survivorship Bias in QC
-
-Standard scRNA-seq QC discards high-mitochondrial-fraction, low-UMI, low-gene
-cells. That is the definitional transcriptomic signature of a dying cell, and it
-matches the biological priors in the meeting notes (decreased transcript
-abundance, RNA degradation, stress response). Every public Perturb-seq dataset in
-use here has already been filtered this way.
-
-Consequences:
-
-1. A fate model trained on QC-filtered data estimates **fate among survivors**,
-   which is a different quantity and must be named as such in all claims.
-2. The QC threshold is an **experimental variable to ablate**, not a fixed
-   preprocessing step.
-
-### 4.4 Identifiability Caveat
-
-Per-cell death probability is counterfactual: one observes a cell's state, never
-the fate that state would have had. Therefore:
-
-- Per-**bag** death fraction is estimable against a viability anchor.
-- Per-**cell** death probability may be unidentifiable without a fate reporter,
-  lineage barcode, or live-imaging pairing.
-
-Until literature question L1 settles this, the model's honest output is a
-**fraction**, and any per-cell probability is an unvalidated latent. This
-constrains the output type of the entire program and is not a presentation
-detail.
-
-## 5. Literature Review Plan
-
-Eight questions, ordered by the cost of a bad answer. The survey's purpose is to
-resolve program-deciding uncertainties, not to build general background.
-
-| Id | Question | Why it matters |
+| Task | Statement | Type |
 | --- | --- | --- |
-| L1 | Is per-cell fate identifiable? What technologies pair a fate readout (reporter, lineage barcode, live imaging) with a transcriptome? | Decides whether the model's output is a per-cell probability or a per-bag fraction. Changes the output type. |
-| L2 | Has anyone separated cytostatic from cytotoxic depletion? Does DepMap's own scoring model already account for growth-rate dynamics? Does prior work decompose a fitness score into arrest vs. death? | **The make-or-break novelty check. Run first.** If this is solved, the headline changes. |
-| L3 | Has the QC-driven loss of dying cells been quantified? Do methods exist that *model* the dying population instead of filtering it? | A positive finding supplies both a method and a critique. Gates whether the death signal survives the pipeline. |
-| L4 | What signatures/classifiers distinguish apoptosis, ferroptosis, and necroptosis from transcriptome? Which datasets carry known-mechanism perturbagens usable as mechanism labels? | Mechanism is supervisable via known-mechanism agents; this finds the label source. |
-| L5 | Which resources pair single-cell transcriptomes with dose, time, viability, and multiple cell lines? | Makes the "acquire dose-response data with real viability" decision concrete. Output: a dataset table with the four axes marked present/absent. |
-| L6 | Who already predicts dependency / conditional essentiality from omics, and how well? | Establishes the real external bar, not our internal baselines. |
-| L7 | What is the adversarial case against virtual-cell forward models? There is a live critique that deep perturbation models barely beat trivial baselines. | **The entire A->B->C chain rests on `B` being worth generating.** If the critique holds, generating `B` is a liability. Better found in survey than in review. |
-| L8 | SL from DepMap: co-essentiality/co-dependency correlation, mutation-stratified differential dependency, published statistical SL-inference pipelines. Which double-perturbation genetic-interaction screens exist and at what scale? | Arms the next PI meeting. Determines whether the multi-gene AIVC idea is testable or aspirational. |
+| T1 | Is this cell **currently** in a dying state? | Terminal-state classification. A state readout, not fate. |
+| T2 | What is the probability this cell divides / arrests / recovers / is lost within `[t, t+D]`? | **Prospective prediction.** Estimable, but requires longitudinal or lineage pairing. Not a counterfactual. |
+| T3 | What would this same initial cell have done under a *different* perturbation? | Strict intervention counterfactual. |
 
-## 6. Staging
+The earlier claim that "per-cell death probability is counterfactual" collapsed T2
+into T3 and is withdrawn. T2 is the task of interest and it is a prediction problem,
+not an identification-from-nothing problem — provided the longitudinal design exists.
+Lineage/barcoding work (e.g. Rewind, https://www.nature.com/articles/s41587-021-00837-3)
+shows state and future behavior can be linked through such designs, which is
+simultaneously evidence that a **snapshot alone does not equal fate**.
 
-Two workstreams can begin immediately because they do not depend on survey
-outcomes:
+## 4. First Gate: Identifiability
 
-1. **Two-way additive null on DepMap.** All data is on local disk. Calibrates
-   every claim the program will make. If the null is strong, the framing must
-   change - better known now.
-2. **QC ablation on one K562 Perturb-seq dataset.** Re-process with relaxed
-   mito/UMI thresholds. Test whether a distinct low-count, high-mito,
-   stress-marker-high population appears under strong perturbations and is absent
-   under controls. Cheap, and it directly tests whether the death signal survives
-   the pipeline.
+This is the largest logical hole in the previous draft and is now the first gate.
 
-Everything else - the mechanism head, dose-response data acquisition, timing, and
-the drug/genetic modality bridge - waits on L1, L3, and L5.
-
-### 6.1 Deferred Decision: The Modality Bridge
-
-Viability data at scale is drug-based; essentiality and SL are genetic. How the
-two relate (shared fate head trained on drug and applied to genetic; drug-centric;
-genetic-centric with drug as auxiliary; or multi-task) is **explicitly deferred
-until L5 returns the dataset table.** It is not decided in this document.
-
-## 7. Position for the Next PI Meeting (SL from DepMap)
-
-The PI's question - "how can we derive synthetic lethal relationships from DepMap
-data?" - has already been partially answered in this repository by experiment 09
-(`docs/experiment/09_k562_sl_pair_cross_cell_line_selectivity.md`).
-
-The statistical device used was a cross-cell-line selectivity contrast: DepMap is
-a single-gene screen, so pair evidence must come from comparing cell lines in
-which the anchor gene is defective (composite OR over damaging mutation, hotspot
-mutation, copy-number loss, low expression) against lines in which it is intact.
+A single aggregate fitness scalar is consistent with infinitely many
+division/death histories:
 
 ```text
-sel(a -> b) = mean[ d_{c,b} | a-intact ] - mean[ d_{c,b} | a-defective ]
+same net fitness  <-  strong arrest, little death
+                  <-  normal division, substantial death
+                  <-  early death followed by survivor regrowth
+                  <-  transient arrest followed by recovery
 ```
 
-Result: a consistent classification lift over the dependency-only floor on all
-three splits, largest on CV3 (+0.050 AUROC). But on the non-pan-essential slice
-the CV3 lift largely disappears (AUROC 0.583, AUPR 0.490). The recorded verdict
-is that most of the cold-start lift is attributable to essentiality structure,
-not pair-specific co-dependency.
+Therefore:
 
-Therefore the question to bring to the PI is **not** "what statistic should we
-use." It is:
+- Aggregate consistency (`aggregate(outcome composition) == observed fitness`) is
+  **necessary calibration**. It is **not** identification.
+- Retreating from a per-cell probability to a **bag-level fraction does not make the
+  problem identifiable**. The previous draft implied it did. It does not.
+- Any decomposition requires **independent anchors** on at least division, loss, and
+  time — not a fitness scalar alone.
 
-> How do we construct a null model that removes pan-essentiality, so that what
-> remains is genuinely interaction?
+The literature review must therefore first produce a **measurement -> identifiable
+quantity map**: which combinations of readouts (endpoint abundance; time course;
+initial counts; division tracking via dye dilution or lineage-barcode counts; direct
+death readout via live imaging, dead-cell stain, or caspase reporter) identify which
+quantities, under which assumptions. Any modeling proposal that is not anchored in
+that map is unfalsifiable.
 
-This is the same null-model problem the double-perturbation AIVC idea faces.
-Synthetic lethality is *defined* as a deviation from the expected combined
-effect. Predicting `P(death | KO a + KO b)` is not sufficient on its own; it
-requires an explicit single-perturbation null `psi(f(a), f(b))` to subtract:
+## 5. Central Research Question (first-stage candidate)
 
-```text
-interaction(a, b) = fate(a, b) - psi(fate(a), fate(b))
-```
+> **Among genetic perturbations with comparable net fitness effects, do early
+> single-cell molecular states prospectively distinguish later division suppression,
+> persistent arrest, recovery, and cell loss?**
 
-The null `psi` (additive, multiplicative, or learned) is a modeling decision that
-must be made explicitly, and it is the crux of both the DepMap-statistics route
-and the multi-gene AIVC route.
+Main hypothesis:
 
-## 8. Open Questions
+> After controlling for aggregate effect severity and generic stress, early cellular
+> state distributions still contain reproducible information about later outcome
+> composition.
 
-Flagged as genuinely uncertain rather than assumed:
+Null hypothesis:
 
-1. **Is arrest vs. death cleanly separable in practice from CRISPRi Perturb-seq?**
-   Cell-cycle scoring is standard, so the arrested fraction is plausibly
-   measurable. A clean *death* signature in QC-filtered data may not be. This is
-   the central empirical risk of the program.
-2. **Does usable double-perturbation data exist?** The local `GSE205310` archive
-   (`docs/data/jost-replogle-dual-sgrna-k562-crispri.md`) parses every condition
-   to a *single* target gene in the repository's own coverage table, which
-   suggests dual-guide-per-gene (efficacy) rather than gene-pair genetic
-   interaction. This must be checked, not assumed. Norman 2019 is CRISPRa and
-   modality-mismatched to knockout dependency per existing data rules.
-3. **Does the perturbation-response transcriptome transfer across cell lines at
-   all?** All current evidence is K562-only. The generalization ladder the PI
-   proposed (within cancer type -> cross cancer type -> cross tissue) has not been
-   tested, and failure at the cross-tissue level may reflect biological
-   distribution shift rather than model failure - which must be distinguished, not
-   conflated.
-4. **The "~0.67 Spearman" figure quoted in the meeting needs a caveat.** In this
-   repository 0.664 / 0.668 is the scVI128-GMM+Ridge **Adamson external
-   transfer**, computed on 85 UPR-biased gene-level rows. Internal Replogle K562
-   5-fold CV is approximately 0.49. Any external presentation should lead with
-   0.49 and present 0.67 as a small-n transfer result.
+> All apparent fate information is explained by effect magnitude, timing, generic
+> stress, and observation bias.
 
-## 9. Claim Boundaries
+Properties that make this the right first question: it assumes neither that the
+transcriptome is useful, nor that virtual cells are needed, nor that the
+decomposition is identifiable; it exploits the preserved wedge directly (same net
+fitness, different dynamics); and a **negative result is scientifically meaningful**.
 
-Extending the existing terminology guardrails in `CLAUDE.md`:
+The literature review is expected to return 2-3 candidate questions of this
+character, of which exactly one is selected as primary. The above is the leading
+candidate entering the survey, not a settled choice.
 
-- Do not call a predicted fate fraction a measured death rate.
-- Do not call DepMap GeneEffect a cell-death label; it is a depletion score that
-  conflates death and arrest.
-- Say **fate among survivors** whenever the model is trained on QC-filtered data.
-- Say **death fraction** (bag-level) unless a per-cell fate readout has been
-  secured; do not say **death probability** (cell-level) before then.
-- Do not claim synthetic lethality without an explicit single-perturbation null
-  and interaction residual.
+## 6. Rival Explanations to Control
+
+Any positive result must be shown not to reduce to these.
+
+| Rival | Source | Status |
+| --- | --- | --- |
+| Effect magnitude / response burden | exp02: a generic response-magnitude scalar reaches Spearman 0.426 against a 0.494 full-feature baseline | Mandatory reported covariate |
+| Generic stress program | Meeting notes; exp02 program scores | Mandatory reported covariate |
+| Observation / selection bias | Section 7 | Mandatory reported covariate |
+| Two-way additive structure: `GeneEffect(c,g) ~ gene_mean(g) + line_mean(c)` | Reviewer; PI's "model may only learn cell line identity" concern; exp09's non-pan-essential collapse (CV3 AUROC 0.645 -> 0.583, AUPR 0.651 -> 0.490) | **Scoped**: this null gates claims about *context-specific residual* effects. It does **not** adjudicate whether outcome decomposition is scientifically valuable. It is run when, and only when, a context-specificity claim is made. |
+
+The scoping of the additive null is a correction: the previous draft made it the
+universal first gate, which conflated a context-specificity control with an
+identifiability question.
+
+## 7. Observation-Process Selection (downgraded from "QC survivorship bias")
+
+The previous draft asserted that high mitochondrial fraction and low UMI count are
+"the definitional signature of a dying cell." That is wrong. They also arise from
+dissociation stress, genuinely low-RNA biological states, ambient RNA, and technical
+failure; mitochondria-rich clusters may reflect sample preparation rather than
+biology (https://www.nature.com/articles/s41467-022-29212-9). Worse, cells that died
+before collection, dissociation, or droplet capture are **never observed at all**, and
+no computational QC relaxation can recover them.
+
+The correct formulation:
+
+> State-dependent acquisition, dissociation, capture, and QC may induce
+> **missing-not-at-random** observation of perturbation outcomes.
+
+Two consequences:
+
+1. "A cluster appears after relaxing QC" **cannot** be interpreted as "the dying
+   population has been recovered." That inference is invalid and the previous draft
+   proposed it as an experiment.
+2. The honest immediate probe is a **loss-accounting** analysis, not a QC-relaxation
+   analysis: quantify what fraction of cells is removed at each stage per
+   perturbation, and test whether the *removal rate* covaries with perturbation
+   strength or with GeneEffect. A dependence there is direct evidence of
+   state-dependent observation loss; independence bounds it.
+
+Existing datapoint worth carrying in: exp01 found `n_cells_only` gives Spearman 0.000
+and AUROC 0.498 against GeneEffect. So the *surviving* cell count carries no
+dependency signal in that setup. That is a different quantity from the **QC-failure
+fraction**, and the distinction is exactly what the loss-accounting analysis tests.
+
+## 8. Downgraded Assumptions (now hypotheses, not premises)
+
+| Previously asserted | Now |
+| --- | --- |
+| The transcriptome can decompose division / arrest / death dynamics | **Central hypothesis under test** (Section 5). Not an assumption. A snapshot measures state; it may reflect early fate commitment, generic stress severity, the consequence of already-executing death, or a residual state after survivorship selection. |
+| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference; withdrawn.** Generating `B` is warranted only if `B` carries independently verifiable fate-relevant information. Virtual-cell response generation is a **tool hypothesis**, not a structural justification for the research direction. |
+| One fate model unifies dependency, conditional essentiality, and SL as corollaries | **Long-term hypothesis, not a corollary.** Dependency / conditional fitness is retained as potential downstream relevance. Death mechanism is a second-stage question. |
+| Bag-level output solves the identifiability problem | **Withdrawn.** More honest than an uninterpreted per-cell latent, but not identifiable without independent anchors (Section 4). |
+
+## 9. Synthetic Lethality: Separate Memo
+
+SL is a **joint-intervention effect relative to a combination null model**. It is not
+the same scientific question as single-perturbation outcome decomposition, and it must
+stop driving the definition of this project. It moves to its own research memo.
+
+Substance to carry into that memo (needed for the next PI discussion regardless):
+
+- The PI's question "how do we derive SL from DepMap" was already partially answered
+  here by experiment 09's cross-cell-line selectivity contrast
+  (`sel(a->b) = mean[d_{c,b} | a-intact] - mean[d_{c,b} | a-defective]`, with defect
+  called by a composite OR over damaging mutation, hotspot, CN loss, low expression).
+- It produced a consistent classification lift, largest on CV3 (+0.050 AUROC), but on
+  the non-pan-essential slice the CV3 lift largely vanished (AUROC 0.583, AUPR 0.490).
+  The recorded verdict: most cold-start lift is essentiality structure, not
+  pair-specific co-dependency.
+- So the live question is **not** "which statistic," it is: *how do we construct a
+  null that removes pan-essentiality so the residual is genuinely interaction?*
+- The same null problem governs any multi-gene AIVC route. SL is defined as a
+  deviation from an expected combined effect, so `P(loss | perturb a + b)` is
+  meaningless without an explicit single-perturbation null to subtract:
+  `interaction(a,b) = outcome(a,b) - psi(outcome(a), outcome(b))`. The choice of
+  `psi` (additive, multiplicative, or learned) is the crux.
+
+## 10. Literature Review: Go/No-Go Funnel
+
+The previous L1-L8 list is replaced. Gates run in order; a failed gate stops the
+funnel rather than being routed around.
+
+### L0 — Ontology and Estimands
+
+Define, with citations: state; fate; death; cell loss; quiescence; senescence;
+recovery; time horizon; denominator. Output is the vocabulary every later gate uses.
+
+### Gate 1 — What Can Existing Readouts Identify?
+
+Chronos and CRISPR fitness scoring; GR / DIP metrics; birth-death decomposition; and
+which **combinations** of measurements separate division from loss, under which
+assumptions. Output: the measurement -> identifiable-quantity map (Section 4).
+
+**No-go condition:** if existing readouts already deliver perturbation-specific,
+prospective outcome decomposition, the wedge is closed and the program stops.
+
+### Gate 2 — Does State Predict Future Outcome?
+
+Search same-cell, lineage, clone, and matched-population designs pairing transcriptome
+with **future** fate. Strictly separate **prospective prediction** (T2) from
+**terminal-state classification** (T1); much of the apparent literature will be T1.
+
+**No-go condition:** if no design links state to future outcome, T2 is not estimable
+with available data and the program must either acquire such data or stop.
+
+### Gate 3 — Observation-Process Bias
+
+Acquisition, dissociation, capture, QC, and pre-capture dead-cell disappearance —
+as one selection process, not a mito/UMI threshold question. Output: what is knowable
+about the missing-not-at-random structure, and what bounds exist.
+
+### Gate 4 — Expand Only After Novelty Is Confirmed
+
+Only if Gates 1-3 support the problem: virtual-cell forward models (including the
+live critique that deep perturbation models barely beat trivial baselines — this
+directly threatens any generate-`B` route); dependency and conditional essentiality
+prior art; death mechanism signatures; cross-context generalization. SL is handled
+in the separate memo, not here.
+
+## 11. Literature Review Deliverables
+
+1. Ontology / estimand memo.
+2. Measurement -> identifiable-quantity map.
+3. Nearest-prior-work matrix.
+4. Evidence table **supporting and challenging** the core premise.
+5. 2-3 candidate research questions.
+6. For each: falsifier, claim boundary, explicit out-of-scope definition.
+7. Selection of **one** primary research question.
+
+## 12. Claim Boundaries
+
+Extending `CLAUDE.md`'s terminology guardrails:
+
+- Do not say population screens cannot separate death from arrest. Say a single
+  endpoint net-fitness readout does not uniquely determine the underlying dynamics.
+- Do not call DepMap GeneEffect a cell-death label. It is a relative growth-rate
+  effect under an explicit population-dynamics model.
+- Do not equate high-mito / low-UMI cells with dying cells.
+- Do not describe a QC-relaxation-induced cluster as a recovered dying population.
+- Do not call a prospective outcome prediction (T2) a counterfactual; reserve that
+  for T3.
+- Do not claim an outcome decomposition is identified when only aggregate
+  consistency has been shown.
+- Do not claim synthetic lethality without an explicit combination null and
+  interaction residual.
