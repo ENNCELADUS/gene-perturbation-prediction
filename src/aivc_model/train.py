@@ -1138,6 +1138,7 @@ def _build_model(
     if tokenizer == "esm2":
         if esm is None:
             raise AssertionError("ESM-2 table was not loaded")
+        effective_pert_dim = _effective_state_pert_dim(state_model, pert_dim)
         all_genes = canonical_genes + sorted(
             set(str(gene).upper() for gene in extra_genes).difference(canonical_genes)
         )
@@ -1145,7 +1146,7 @@ def _build_model(
             all_genes,
             esm,
             adapter_hidden=config.state.esm2_adapter_hidden,
-            pert_dim=pert_dim,
+            pert_dim=effective_pert_dim,
         )
     else:
         perturbations = PerturbationVectorAdapter(
@@ -1173,6 +1174,24 @@ def _build_model(
         control_latent_mean=data.control_latent.mean(axis=0).astype(np.float32),
         freeze_state=(tokenizer == "esm2" or config.train.freeze_state),
     )
+
+
+def _effective_state_pert_dim(state_model: torch.nn.Module, fallback: int) -> int:
+    raw_dim = getattr(state_model, "pert_dim", None)
+    try:
+        effective_dim = int(fallback if raw_dim is None else raw_dim)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Loaded STATE model has an invalid pert_dim") from error
+    if effective_dim <= 0:
+        raise ValueError("Loaded STATE model pert_dim must be positive")
+    if raw_dim is not None and effective_dim != int(fallback):
+        _LOGGER.warning(
+            "configured pert_dim=%d does not match checkpoint pert_dim=%d; "
+            "using the checkpoint width for the ESM-2 adapter",
+            int(fallback),
+            effective_dim,
+        )
+    return effective_dim
 
 
 def _canonical_esm2_genes(config: AivcConfig, data: GeneBags) -> list[str]:
