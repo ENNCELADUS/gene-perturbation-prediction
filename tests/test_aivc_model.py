@@ -40,10 +40,12 @@ from aivc_model.model import (
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 from aivc_model.prepare import (
     DataConfig,
+    ExternalSourceConfig,
     GeneBags,
     GeneSplit,
     ProjectorConfig,
     SplitConfig,
+    _external_state_input_view,
     _load_metadata,
     _load_scvi_latent_cache,
     _merge_external_gene_rows,
@@ -54,6 +56,7 @@ from aivc_model.prepare import (
     _suppress_scvi_lightning_warnings,
     _scvi_trainer_kwargs,
     _state_input_view,
+    _var_symbols,
     _write_scvi_latent_cache,
     encode_batch_labels,
     fit_linear_projector,
@@ -2593,6 +2596,11 @@ def test_external_adamson_sources_merge_and_mean_impute_missing_genes(
         max_epochs=1,
     )
     config = load_config(config_path)
+    assert config.external_test is not None
+    assert all(
+        source.var_gene_symbol_col is None
+        for source in config.external_test.sources
+    )
     reference = load_gene_bags(config)
 
     external = load_external_gene_bags(config, reference, tmp_path / "artifacts")
@@ -2608,6 +2616,40 @@ def test_external_adamson_sources_merge_and_mean_impute_missing_genes(
     assert source_qa[0]["missing_input_features"] == 1
     reference_fill = reference.control_input.mean(axis=0)
     np.testing.assert_allclose(external.data.input_bags[0][:, 1], reference_fill[1])
+
+
+def test_external_var_names_align_to_state_symbols() -> None:
+    adata = ad.AnnData(np.asarray([[1.0, 2.0]], dtype=np.float32))
+    adata.var_names = ["A", "B"]
+
+    assert _var_symbols(adata, None) == ["A", "B"]
+
+
+def test_external_alignment_rejects_zero_matches(tmp_path: Path) -> None:
+    h5ad_path, overlap_path = _write_toy_inputs(tmp_path)
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    config = replace(
+        config,
+        data=replace(
+            config.data,
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+        ),
+    )
+    reference = replace(
+        load_gene_bags(config),
+        feature_names=np.asarray(["A", "B", "C"], dtype=object),
+    )
+    adata = ad.AnnData(np.ones((2, 2), dtype=np.float32))
+    adata.var_names = ["X", "Y"]
+    source = ExternalSourceConfig(
+        "adamson",
+        Path("unused"),
+        var_gene_symbol_col=None,
+    )
+
+    with pytest.raises(ValueError, match="matched 0"):
+        _external_state_input_view(adata, source, config, reference)
 
 
 def test_primary_metadata_duplicate_labels_aggregate_when_consistent(
@@ -2738,15 +2780,24 @@ def test_train_smoke_writes_external_adamson_outputs(tmp_path: Path) -> None:
     run_dir = paths["run_dir"]
     test_metrics = pd.read_csv(paths["test_metrics"])
     predictions = pd.read_csv(run_dir / "artifacts" / "test_predictions.csv")
-    assert test_metrics["evaluation_scope"].tolist() == ["external:adamson_k562"]
-    assert set(predictions["perturbation_gene"]) == {"GENE1", "GENE5"}
-    assert set(predictions["evaluation_scope"]) == {"external:adamson_k562"}
+    assert set(test_metrics["evaluation_scope"]) == {
+        "internal_outer_test",
+        "external:adamson_k562",
+    }
+    assert set(predictions["evaluation_scope"]) == {
+        "internal_outer_test",
+        "external:adamson_k562",
+    }
+    external_predictions = predictions.loc[
+        predictions["evaluation_scope"] == "external:adamson_k562"
+    ]
+    assert set(external_predictions["perturbation_gene"]) == {"GENE1", "GENE5"}
     assert "source_dataset" in predictions.columns
     assert "y_obs_anchor" not in predictions.columns
     assert not any(column.startswith("obs_") for column in test_metrics.columns)
     assert "hvg_mean_delta" not in test_metrics.columns
     assert "perturbation_has_known_vector" in predictions.columns
-    assert not predictions["perturbation_has_known_vector"].any()
+    assert not external_predictions["perturbation_has_known_vector"].any()
     assert (run_dir / "artifacts" / "external_test_qa.json").exists()
     assert (run_dir / "models" / "best" / "pytorch_model.bin").exists()
     assert (run_dir / "models" / "final" / "pytorch_model.bin").exists()
@@ -3190,16 +3241,16 @@ external_test:
       h5ad_path: {source_a}
       obs_perturbation_col: perturbation
       control_label: control
-      var_gene_symbol_col: gene_name
+      var_gene_symbol_col: null
     - name: source_b
       h5ad_path: {source_b}
       obs_perturbation_col: perturbation
       control_label: control
-      var_gene_symbol_col: gene_name
+      var_gene_symbol_col: null
 split:
-  train_fraction: 0.75
+  train_fraction: 0.5
   val_fraction: 0.25
-  test_fraction: 0.0
+  test_fraction: 0.25
   random_state: 11
   stratify_bins: 2
 state:

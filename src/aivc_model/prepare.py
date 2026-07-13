@@ -50,7 +50,7 @@ class ExternalSourceConfig:
     h5ad_path: Path
     obs_perturbation_col: str = "perturbation"
     control_label: str | None = None
-    var_gene_symbol_col: str = "gene_name"
+    var_gene_symbol_col: str | None = "gene_name"
     obs_batch_col: str | None = None
 
 
@@ -1367,6 +1367,7 @@ def _external_state_input_view(
             "matched_input_features": int(matrix.shape[1]),
             "missing_input_features": 0,
             "reference_input_features": int(reference.input_dim),
+            "matched_fraction": 1.0,
         }
     if reference.feature_names is None:
         msg = "Cannot align external expression without reference feature names"
@@ -1390,12 +1391,17 @@ def _external_state_input_view(
             np.asarray(matched_source_indices, dtype=np.int64),
         )
     matched = int(len(matched_reference_indices))
+    if matched == 0:
+        raise ValueError(
+            f"External source {source.name!r} matched 0 reference input features"
+        )
     return matrix, {
         "input_source": "X_aligned_to_reference_features",
         "source_expression_features": int(len(source_names)),
         "reference_input_features": int(len(reference_names)),
         "matched_input_features": matched,
         "missing_input_features": int(len(reference_names) - matched),
+        "matched_fraction": float(matched / len(reference_names)),
     }
 
 
@@ -1507,10 +1513,12 @@ def _optional_obs_labels(adata: ad.AnnData, column: str | None) -> np.ndarray | 
     return adata.obs[column].astype(str).to_numpy()
 
 
-def _var_symbols(adata: ad.AnnData, column: str) -> list[str]:
-    if column in adata.var.columns:
-        return adata.var[column].astype(str).tolist()
-    return adata.var_names.astype(str).tolist()
+def _var_symbols(adata: ad.AnnData, column: str | None) -> list[str]:
+    if column is None:
+        return adata.var_names.astype(str).tolist()
+    if column not in adata.var.columns:
+        raise ValueError(f"AnnData var is missing configured symbol column {column!r}")
+    return adata.var[column].astype(str).tolist()
 
 
 def _matrix_view(adata: ad.AnnData, key: str | None) -> np.ndarray:
@@ -1761,7 +1769,9 @@ def _external_test_config(values: Any) -> ExternalTestConfig | None:
                     if source.get("control_label") is not None
                     else None
                 ),
-                var_gene_symbol_col=str(source.get("var_gene_symbol_col", "gene_name")),
+                var_gene_symbol_col=_str_or_none(
+                    source.get("var_gene_symbol_col", "gene_name")
+                ),
                 obs_batch_col=(
                     str(source["obs_batch_col"])
                     if source.get("obs_batch_col") is not None
