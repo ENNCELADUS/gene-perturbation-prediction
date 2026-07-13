@@ -5,9 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 import hashlib
 import json
+import logging
 from pathlib import Path
+import pickle
 import types
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
@@ -17,7 +20,44 @@ from aivc_model import cross_validate as cv
 from aivc_model import gene_splits as gene_splits_module
 from aivc_model import train as train_module
 from aivc_model.gene_splits import FoldSpec, GeneAccessRecorder
-from aivc_model.prepare import AivcConfig, GeneBags, SealedGeneBags, load_config
+from aivc_model.prepare import (
+    AivcConfig,
+    ExternalSourceConfig,
+    ExternalTestConfig,
+    GeneBags,
+    SealedGeneBags,
+    load_config,
+)
+
+
+def test_exp05_repaired_config_has_locked_contract() -> None:
+    path = Path("configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml")
+    config = load_config(path)
+    assert config.data.h5ad_path.name == "K562_gwps_normalized_singlecell_01.h5ad"
+    assert config.data.var_gene_symbol_col == "gene_name"
+    assert config.data.state_hvg_n_top_genes is None
+    assert config.state.gene_tokenizer == "esm2"
+    assert config.state.esm2_npz is not None
+    assert config.state.esm2_npz.name == "k562_gwps_depmap_esm2_650M.npz"
+    assert config.state.require_resolved_esm2 is True
+    assert config.state.representation_layer == "output"
+    assert config.state.input_dim == 2000
+    assert config.state.output_dim == 2000
+    assert config.state.pert_dim == 2024
+    assert config.train.freeze_state is True
+    assert config.cv.n_splits == 5
+    assert config.cv.expected_gene_count == 9338
+    assert config.cv.outer_split_manifest is not None
+    assert config.cv.outer_split_manifest.name == "k562_gwps_depmap_outer5_seed42.csv"
+    assert config.cv.outer_split_sha256_file is not None
+    assert config.cv.outer_split_sha256_file.name == (
+        "k562_gwps_depmap_outer5_seed42.csv.sha256"
+    )
+    assert config.cv.inner_val_fraction == 0.1
+    assert config.external_test is not None
+    assert all(
+        source.var_gene_symbol_col is None for source in config.external_test.sources
+    )
 
 
 def _toy_bags(genes: tuple[str, ...] = ("A", "B", "C", "D")) -> GeneBags:
@@ -137,6 +177,231 @@ def _fingerprinted_config(tmp_path: Path) -> AivcConfig:
             model_dir=model_dir,
         ),
     )
+
+
+def _preflight_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> AivcConfig:
+    genes = tuple(f"G{index:02d}" for index in range(10))
+    state_genes = ("A", "B", "C")
+    labels = tmp_path / "labels.csv"
+    pd.DataFrame(
+        {
+            "perturbation_gene": genes,
+            "depmap_gene_effect": np.linspace(-1.0, 0.0, len(genes)),
+            "has_depmap_label": True,
+        }
+    ).to_csv(labels, index=False)
+    split = tmp_path / "outer.csv"
+    pd.DataFrame(
+        {
+            "perturbation_gene": genes,
+            "outer_fold": np.arange(len(genes)) % 5,
+        }
+    ).to_csv(split, index=False)
+    split_sha = tmp_path / "outer.csv.sha256"
+    split_sha.write_text(
+        hashlib.sha256(split.read_bytes()).hexdigest() + "\n",
+        encoding="utf-8",
+    )
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    np.save(cache_dir / "genes.npy", np.asarray(genes, dtype=object))
+    np.save(cache_dir / "gene_outer_folds.npy", np.arange(len(genes)) % 5)
+    np.save(cache_dir / "feature_names.npy", np.asarray(state_genes, dtype=object))
+    (cache_dir / "manifest.json").write_text(
+        '{"schema_version":1,"source_fingerprint":"toy"}\n', encoding="utf-8"
+    )
+
+    esm_path = tmp_path / "esm2.npz"
+    np.savez(
+        esm_path,
+        symbols=np.asarray(genes, dtype=object),
+        vectors=np.ones((len(genes), 4), dtype=np.float32),
+        resolved=np.ones(len(genes), dtype=bool),
+    )
+
+    response_labels = [*genes, "EXTRA1", "EXTRA2", "non-targeting", "non-targeting"]
+    gwps = ad.AnnData(np.zeros((len(response_labels), 4), dtype=np.float32))
+    gwps.obs["gene"] = response_labels
+    gwps.var["gene_name"] = ["A", "B", "C", "D"]
+    gwps_path = tmp_path / "gwps.h5ad"
+    gwps.write_h5ad(gwps_path)
+
+    model_dir = tmp_path / "state"
+    model_dir.mkdir()
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump(
+            {"gene_names": list(state_genes), "input_dim": 3, "output_dim": 3},
+            handle,
+        )
+    checkpoint = model_dir / "final.ckpt"
+    checkpoint.write_bytes(b"checkpoint")
+
+    source_paths = []
+    for index, source_genes in enumerate((("A", "B"), ("B",), ("C",))):
+        source = ad.AnnData(np.zeros((1, len(source_genes)), dtype=np.float32))
+        source.var_names = list(source_genes)
+        path = tmp_path / f"adamson_{index}.h5ad"
+        source.write_h5ad(path)
+        source_paths.append(path)
+
+    base = _audited_config(tmp_path)
+    config = replace(
+        base,
+        data=replace(
+            base.data,
+            h5ad_path=gwps_path,
+            overlap_csv=labels,
+            prepared_cache_dir=cache_dir,
+            obs_perturbation_col="gene",
+            var_gene_symbol_col="gene_name",
+        ),
+        cv=replace(
+            base.cv,
+            n_splits=5,
+            expected_gene_count=10,
+            outer_split_manifest=split,
+            outer_split_sha256_file=split_sha,
+        ),
+        state=replace(
+            base.state,
+            backend="state_checkpoint",
+            model_dir=model_dir,
+            checkpoint_path=checkpoint,
+            input_dim=3,
+            output_dim=3,
+            pert_dim=5,
+            gene_tokenizer="esm2",
+            esm2_npz=esm_path,
+            require_resolved_esm2=True,
+        ),
+        external_test=ExternalTestConfig(
+            name="adamson_k562",
+            overlap_csv=labels,
+            sources=tuple(
+                ExternalSourceConfig(
+                    name=name,
+                    h5ad_path=path,
+                    var_gene_symbol_col=None,
+                )
+                for name, path in zip(
+                    (
+                        "adamson_pilot",
+                        "adamson_upr_epistasis",
+                        "adamson_upr_perturb_seq",
+                    ),
+                    source_paths,
+                    strict=True,
+                )
+            ),
+        ),
+    )
+    monkeypatch.setattr(cv, "CANONICAL_GENE_COUNT", 10)
+    monkeypatch.setattr(cv, "STATE_FEATURE_COUNT", 3)
+    monkeypatch.setattr(cv, "EXPECTED_GWPS_SHAPE", (14, 4))
+    monkeypatch.setattr(cv, "EXPECTED_GWPS_NONCONTROL_GENES", 12)
+    monkeypatch.setattr(
+        cv,
+        "EXPECTED_ADAMSON_MATCHES",
+        {
+            "adamson_pilot": 2,
+            "adamson_upr_epistasis": 1,
+            "adamson_upr_perturb_seq": 1,
+        },
+    )
+    monkeypatch.setattr(cv, "EXPECTED_STATE_PERT_DIM", 5)
+    monkeypatch.setattr(cv, "load_config", lambda _path: config)
+    monkeypatch.setattr(cv, "_checkpoint_pert_dim", lambda _config: 5)
+    return config
+
+
+def test_preflight_verifies_all_frozen_assets_and_reports_counts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _preflight_config(tmp_path, monkeypatch)
+
+    report = cv.run_preflight(tmp_path / "config.yaml")
+
+    assert report == {
+        "gwps_shape": "14x4",
+        "gwps_noncontrol_genes": 12,
+        "gwps_depmap_overlap": 10,
+        "canonical_split_genes": 10,
+        "canonical_split_folds": 5,
+        "canonical_split_sha256_length": 64,
+        "esm2_resolved": "10/10",
+        "state_expression_matches": "3/3",
+        "state_input_dim": 3,
+        "state_output_dim": 3,
+        "state_pert_dim": 5,
+        "adamson_pilot_matches": "2/3",
+        "adamson_upr_epistasis_matches": "1/3",
+        "adamson_upr_perturb_seq_matches": "1/3",
+    }
+
+
+def test_preflight_rejects_any_esm_gene_set_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    assert config.state.esm2_npz is not None
+    np.savez(
+        config.state.esm2_npz,
+        symbols=np.asarray([*(f"G{index:02d}" for index in range(9)), "EXTRA"]),
+        vectors=np.ones((10, 4), dtype=np.float32),
+        resolved=np.ones(10, dtype=bool),
+    )
+
+    with pytest.raises(ValueError, match="ESM-2 gene set"):
+        cv.run_preflight(tmp_path / "config.yaml")
+
+
+def test_preflight_cli_does_not_start_cross_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(cv, "run_preflight", lambda _path: {"esm2_resolved": "10/10"})
+    monkeypatch.setattr(
+        cv,
+        "run_cross_validation",
+        lambda *_args, **_kwargs: pytest.fail("cross-validation started"),
+    )
+
+    cv.main(["--config", str(tmp_path / "config.yaml"), "--preflight-only"])
+
+    assert "esm2_resolved=10/10" in caplog.text
+
+
+def test_cross_validation_uses_configured_prepared_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _fingerprinted_config(tmp_path)
+    sentinel = object()
+    monkeypatch.setattr(
+        cv,
+        "load_gwps_cache",
+        lambda _config, cache_dir: (
+            sentinel
+            if cache_dir == config.data.prepared_cache_dir
+            else pytest.fail("wrong cache directory")
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cv,
+        "load_gene_bags",
+        lambda _config: pytest.fail("raw GWPS loader used"),
+    )
+
+    assert cv._load_primary_bags(config) is sentinel
 
 
 def test_experiment_source_fingerprint_changes_with_esm_cache(tmp_path: Path) -> None:

@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
+import logging
+import pickle
 from dataclasses import replace
 from pathlib import Path
+import re
 from typing import Any
 
 from accelerate import Accelerator
+import anndata as ad
 import numpy as np
 import pandas as pd
 
@@ -27,6 +32,7 @@ from aivc_model.gene_splits import (
     load_canonical_outer_manifest,
     make_inner_fold_spec,
 )
+from aivc_model.gwps_cache import load_gwps_cache
 from aivc_model.prepare import (
     AivcConfig,
     ExternalGeneBags,
@@ -36,7 +42,267 @@ from aivc_model.prepare import (
     load_external_gene_bags,
     load_gene_bags,
 )
+from aivc_model.model import load_state_model
 from aivc_model.train import run_training
+
+STATE_FEATURE_COUNT = 2000
+EXPECTED_STATE_PERT_DIM = 2024
+EXPECTED_GWPS_SHAPE = (1_989_578, 8_248)
+EXPECTED_GWPS_NONCONTROL_GENES = 9_866
+EXPECTED_ADAMSON_MATCHES = {
+    "adamson_pilot": 1_876,
+    "adamson_upr_epistasis": 1_874,
+    "adamson_upr_perturb_seq": 1_874,
+}
+_LOGGER = logging.getLogger(__name__)
+
+
+def run_preflight(config_path: Path) -> dict[str, object]:
+    """Validate every frozen exp05 asset without fitting or writing artifacts."""
+    config = load_config(config_path)
+    _assert_locked_preflight_config(config)
+    labels = _load_preflight_labels(config)
+    manifest, split_sha256 = _load_preflight_manifest(config, labels)
+    canonical_genes = manifest["perturbation_gene"].to_numpy(dtype=str)
+    cache_features = _validate_prepared_cache(config, manifest)
+    esm_resolved = _validate_esm2_asset(config, canonical_genes)
+    gwps_shape, noncontrol_count = _validate_gwps_source(config, canonical_genes)
+    state_dims = _validate_state_assets(config, cache_features)
+    adamson_matches = _validate_adamson_sources(config, cache_features)
+    report: dict[str, object] = {
+        "gwps_shape": f"{gwps_shape[0]}x{gwps_shape[1]}",
+        "gwps_noncontrol_genes": noncontrol_count,
+        "gwps_depmap_overlap": len(canonical_genes),
+        "canonical_split_genes": len(canonical_genes),
+        "canonical_split_folds": int(manifest["outer_fold"].nunique()),
+        "canonical_split_sha256_length": len(split_sha256),
+        "esm2_resolved": f"{esm_resolved}/{len(canonical_genes)}",
+        "state_expression_matches": (f"{len(cache_features)}/{STATE_FEATURE_COUNT}"),
+        "state_input_dim": state_dims[0],
+        "state_output_dim": state_dims[1],
+        "state_pert_dim": state_dims[2],
+    }
+    report.update(
+        {
+            f"{name}_matches": f"{count}/{STATE_FEATURE_COUNT}"
+            for name, count in adamson_matches.items()
+        }
+    )
+    return report
+
+
+def _assert_locked_preflight_config(config: AivcConfig) -> None:
+    if config.cv.expected_gene_count != CANONICAL_GENE_COUNT:
+        raise ValueError(
+            f"expected_gene_count must be {CANONICAL_GENE_COUNT} for exp05"
+        )
+    if config.cv.n_splits != 5:
+        raise ValueError("exp05 preflight requires exactly five outer folds")
+    if config.data.state_hvg_n_top_genes is not None:
+        raise ValueError("variance-HVG fallback is forbidden in repaired exp05")
+    if not config.train.freeze_state:
+        raise ValueError("repaired exp05 requires frozen STATE")
+    if config.state.gene_tokenizer != "esm2" or not config.state.require_resolved_esm2:
+        raise ValueError("repaired exp05 requires strict ESM-2 coverage")
+    if config.state.representation_layer != "output":
+        raise ValueError("repaired exp05 fixes the STATE representation to output")
+
+
+def _load_preflight_labels(config: AivcConfig) -> pd.DataFrame:
+    labels = pd.read_csv(config.data.overlap_csv)
+    required = {
+        "perturbation_gene",
+        config.data.depmap_label_col,
+        config.data.matched_label_col,
+    }
+    if not required <= set(labels):
+        missing = sorted(required - set(labels))
+        raise ValueError(f"label table is missing columns {missing}")
+    labels = labels.copy()
+    labels["perturbation_gene"] = labels["perturbation_gene"].astype(str).str.upper()
+    values = labels[config.data.depmap_label_col].to_numpy(dtype=float)
+    exact = (
+        len(labels) == CANONICAL_GENE_COUNT
+        and labels["perturbation_gene"].nunique() == CANONICAL_GENE_COUNT
+        and np.isfinite(values).all()
+        and labels[config.data.matched_label_col].eq(True).all()
+    )
+    if not exact:
+        raise ValueError("label table must contain exactly 9338 finite matched genes")
+    return labels
+
+
+def _load_preflight_manifest(
+    config: AivcConfig,
+    labels: pd.DataFrame,
+) -> tuple[pd.DataFrame, str]:
+    manifest_path, expected_sha256 = _manifest_authority(config)
+    observed_sha256 = _file_sha256(manifest_path)
+    if observed_sha256 != expected_sha256:
+        raise ValueError("canonical manifest SHA-256 mismatch")
+    manifest = pd.read_csv(manifest_path)
+    if manifest.columns.tolist() != ["perturbation_gene", "outer_fold"]:
+        raise ValueError("canonical manifest columns are invalid")
+    manifest["perturbation_gene"] = (
+        manifest["perturbation_gene"].astype(str).str.upper()
+    )
+    expected_folds = set(range(config.cv.n_splits))
+    if (
+        len(manifest) != CANONICAL_GENE_COUNT
+        or manifest["perturbation_gene"].nunique() != CANONICAL_GENE_COUNT
+        or set(manifest["perturbation_gene"]) != set(labels["perturbation_gene"])
+        or set(manifest["outer_fold"]) != expected_folds
+    ):
+        raise ValueError("canonical manifest does not match labels and five folds")
+    return manifest, expected_sha256
+
+
+def _validate_prepared_cache(
+    config: AivcConfig,
+    manifest: pd.DataFrame,
+) -> np.ndarray:
+    cache_dir = config.data.prepared_cache_dir
+    if cache_dir is None or not (cache_dir / "manifest.json").is_file():
+        raise ValueError("prepared GWPS cache manifest is missing")
+    genes = np.load(cache_dir / "genes.npy", allow_pickle=True).astype(str)
+    folds = np.load(cache_dir / "gene_outer_folds.npy").astype(np.int64)
+    features = np.load(cache_dir / "feature_names.npy", allow_pickle=True).astype(str)
+    expected_genes = manifest["perturbation_gene"].to_numpy(dtype=str)
+    expected_folds = manifest["outer_fold"].to_numpy(dtype=np.int64)
+    if not np.array_equal(genes, expected_genes):
+        raise ValueError("GWPS cache gene set/order differs from canonical manifest")
+    if not np.array_equal(folds, expected_folds):
+        raise ValueError("GWPS cache fold assignments differ from canonical manifest")
+    if len(features) != STATE_FEATURE_COUNT or len(set(features)) != len(features):
+        raise ValueError("GWPS cache must contain exactly 2000 unique STATE features")
+    return features
+
+
+def _validate_esm2_asset(config: AivcConfig, canonical_genes: np.ndarray) -> int:
+    path = config.state.esm2_npz
+    if path is None:
+        raise ValueError("state.esm2_npz is required")
+    with np.load(path, allow_pickle=True) as payload:
+        symbols = payload["symbols"].astype(str)
+        resolved = payload["resolved"].astype(bool)
+        vectors = payload["vectors"]
+    if (
+        len(symbols) != len(canonical_genes)
+        or len(set(symbols)) != len(symbols)
+        or set(symbols) != set(canonical_genes)
+    ):
+        raise ValueError("ESM-2 gene set must exactly match the canonical manifest")
+    if resolved.shape != (len(symbols),) or vectors.shape[0] != len(symbols):
+        raise ValueError("ESM-2 asset arrays have inconsistent row counts")
+    resolved_count = int(resolved.sum())
+    if resolved_count != CANONICAL_GENE_COUNT:
+        raise ValueError("ESM-2 coverage must be complete over all canonical genes")
+    return resolved_count
+
+
+def _validate_gwps_source(
+    config: AivcConfig,
+    canonical_genes: np.ndarray,
+) -> tuple[tuple[int, int], int]:
+    adata = ad.read_h5ad(config.data.h5ad_path, backed="r")
+    try:
+        shape = (int(adata.n_obs), int(adata.n_vars))
+        labels = adata.obs[config.data.obs_perturbation_col].astype(str).str.upper()
+    finally:
+        adata.file.close()
+    noncontrol = set(labels[labels != config.data.control_label.upper()])
+    if shape != EXPECTED_GWPS_SHAPE:
+        raise ValueError(f"unexpected frozen GWPS shape: {shape}")
+    if len(noncontrol) != EXPECTED_GWPS_NONCONTROL_GENES:
+        raise ValueError("unexpected GWPS non-control gene count")
+    if not set(canonical_genes) <= noncontrol:
+        raise ValueError("GWPS response genes are missing canonical label genes")
+    return shape, len(noncontrol)
+
+
+def _validate_state_assets(
+    config: AivcConfig,
+    cache_features: np.ndarray,
+) -> tuple[int, int, int]:
+    model_dir = config.state.model_dir
+    if model_dir is None:
+        raise ValueError("state.model_dir is required")
+    with (model_dir / "var_dims.pkl").open("rb") as handle:
+        payload = pickle.load(handle)
+    if not isinstance(payload, dict) or "gene_names" not in payload:
+        raise ValueError("STATE var_dims.pkl is missing gene_names")
+    checkpoint_features = np.asarray(payload["gene_names"]).astype(str)
+    if not np.array_equal(cache_features, checkpoint_features):
+        raise ValueError("STATE checkpoint and GWPS cache feature orders differ")
+    input_dim = int(payload.get("input_dim", len(checkpoint_features)))
+    output_dim = int(payload.get("output_dim", len(checkpoint_features)))
+    pert_dim = _checkpoint_pert_dim(config)
+    expected = (STATE_FEATURE_COUNT, STATE_FEATURE_COUNT, EXPECTED_STATE_PERT_DIM)
+    if (input_dim, output_dim, pert_dim) != expected:
+        raise ValueError("STATE checkpoint dimensions do not match 2000/2000/2024")
+    configured = (
+        config.state.input_dim,
+        config.state.output_dim,
+        config.state.pert_dim,
+    )
+    if configured != expected:
+        raise ValueError("configured STATE dimensions do not match the checkpoint")
+    return input_dim, output_dim, pert_dim
+
+
+def _checkpoint_pert_dim(config: AivcConfig) -> int:
+    state = load_state_model(
+        backend=config.state.backend,
+        checkpoint_path=config.state.checkpoint_path,
+        input_dim=STATE_FEATURE_COUNT,
+        output_dim=STATE_FEATURE_COUNT,
+        pert_dim=EXPECTED_STATE_PERT_DIM,
+        emit_checkpoint_output=False,
+    )
+    raw_dim = getattr(state, "pert_dim", None)
+    if raw_dim is None:
+        raise ValueError("loaded STATE checkpoint does not expose pert_dim")
+    return int(raw_dim)
+
+
+def _validate_adamson_sources(
+    config: AivcConfig,
+    state_features: np.ndarray,
+) -> dict[str, int]:
+    if config.external_test is None:
+        raise ValueError("three Adamson sources are required")
+    reference = set(state_features.astype(str))
+    observed: dict[str, int] = {}
+    for source in config.external_test.sources:
+        if source.var_gene_symbol_col is not None:
+            raise ValueError("Adamson var_gene_symbol_col must be null")
+        adata = ad.read_h5ad(source.h5ad_path, backed="r")
+        try:
+            symbols = set(adata.var_names.astype(str))
+        finally:
+            adata.file.close()
+        count = len(reference.intersection(symbols))
+        expected = EXPECTED_ADAMSON_MATCHES.get(source.name)
+        if expected is None or count != expected:
+            raise ValueError(f"unexpected STATE feature matches for {source.name}")
+        observed[source.name] = count
+    if set(observed) != set(EXPECTED_ADAMSON_MATCHES):
+        raise ValueError("Adamson source set is incomplete")
+    return observed
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Run the repaired exp05 preflight or frozen five-fold CV."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--preflight-only", action="store_true")
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if args.preflight_only:
+        for key, value in run_preflight(args.config).items():
+            _LOGGER.info("%s=%s", key, value)
+        return
+    run_cross_validation(args.config)
 
 
 def run_training_fold(
@@ -102,14 +368,16 @@ def run_cross_validation(
 ) -> Path:
     """Execute all frozen outer folds and aggregate audited final artifacts."""
     config = load_config(config_path)
-    data = load_gene_bags(config)
+    manifest_path, expected_sha256 = _manifest_authority(config)
+    if _file_sha256(manifest_path) != expected_sha256:
+        raise ValueError("canonical manifest SHA-256 mismatch")
+    data = _load_primary_bags(config)
     labels = pd.DataFrame(
         {
             "perturbation_gene": [str(gene).upper() for gene in data.genes],
             "depmap_gene_effect": np.asarray(data.y, dtype=float),
         }
     )
-    manifest_path, expected_sha256 = _manifest_authority(config)
     manifest = load_canonical_outer_manifest(
         manifest_path,
         labels,
@@ -176,6 +444,13 @@ def run_cross_validation(
     return run_dir
 
 
+def _load_primary_bags(config: AivcConfig) -> GeneBags:
+    cache_dir = getattr(config.data, "prepared_cache_dir", None)
+    if cache_dir is not None:
+        return load_gwps_cache(config, cache_dir)
+    return load_gene_bags(config)
+
+
 def _require_fresh_run_dir(run_dir: Path) -> None:
     if run_dir.exists() and any(run_dir.iterdir()):
         raise FileExistsError(f"fresh run directory required: {run_dir}")
@@ -187,7 +462,7 @@ def _manifest_authority(config: AivcConfig) -> tuple[Path, str]:
     if manifest_path is None or sha_path is None:
         raise ValueError("canonical outer manifest and SHA-256 file are required")
     text = sha_path.read_text(encoding="utf-8")
-    if len(text) != 65 or not text.endswith("\n"):
+    if re.fullmatch(r"[0-9a-f]{64}\n", text) is None:
         raise ValueError("outer split SHA-256 file must contain one digest and newline")
     return manifest_path, text[:-1]
 
@@ -513,3 +788,7 @@ def _summarize_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
 def _write_frame(frame: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(path, index=False)
+
+
+if __name__ == "__main__":
+    main()
