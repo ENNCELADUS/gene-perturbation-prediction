@@ -7,6 +7,15 @@ Run once on a network node:
 all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv \
         --out data/esm2/k562_sl_universe_esm2_650M.npz \
         --seq-cache data/esm2/symbol_to_sequence.json
+
+For exp05, require all canonical genes before writing the asset:
+    uv run python scripts/precompute_esm2_embeddings.py \
+        --benchmark-csv \
+        data/sl_dependency_v0/interim/k562_gwps_depmap_overlap.csv \
+        --symbol-column perturbation_gene \
+        --require-complete-coverage \
+        --out data/esm2/k562_gwps_depmap_esm2_650M.npz \
+        --seq-cache data/esm2/symbol_to_sequence.json
 """
 
 from __future__ import annotations
@@ -23,6 +32,11 @@ import numpy as np
 import pandas as pd
 import torch
 from transformers import EsmModel, EsmTokenizer
+
+from sl_dl_model.gene_embeddings import (
+    Esm2EmbeddingTable,
+    require_complete_esm_coverage,
+)
 
 logger = logging.getLogger("precompute_esm2")
 UNIPROT_URL = "https://rest.uniprot.org/uniprotkb/search"
@@ -155,6 +169,23 @@ def check_resolution(resolved: np.ndarray, n_symbols: int) -> None:
         )
 
 
+def require_complete_asset_coverage(
+    symbols: list[str], vectors: np.ndarray, resolved: np.ndarray
+) -> None:
+    """Require complete canonical coverage before an ESM-2 asset is written."""
+    table = Esm2EmbeddingTable(
+        dim=int(vectors.shape[1]),
+        vectors_by_symbol={
+            symbol: vector
+            for symbol, vector, is_resolved in zip(
+                symbols, vectors, resolved, strict=True
+            )
+            if bool(is_resolved)
+        },
+    )
+    require_complete_esm_coverage(symbols, table)
+
+
 def mean_pool_residues(
     hidden: np.ndarray, special_tokens_mask: np.ndarray
 ) -> np.ndarray:
@@ -285,6 +316,14 @@ def main() -> None:
         action="store_true",
         help="Use only already-cached Hugging Face files; do not download.",
     )
+    parser.add_argument(
+        "--require-complete-coverage",
+        action="store_true",
+        help=(
+            "Fail before writing unless every requested symbol has an embedding. "
+            "Required for exp05; absent by default for exp08 compatibility."
+        ),
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     symbol_columns = (
@@ -302,7 +341,10 @@ def main() -> None:
         cache_dir=args.cache_dir,
         local_files_only=args.local_files_only,
     )
-    check_resolution(resolved, n_symbols=len(symbols))
+    if args.require_complete_coverage:
+        require_complete_asset_coverage(symbols, vectors, resolved)
+    else:
+        check_resolution(resolved, n_symbols=len(symbols))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         args.out,

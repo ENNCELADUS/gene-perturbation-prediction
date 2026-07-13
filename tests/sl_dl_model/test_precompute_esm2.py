@@ -287,3 +287,97 @@ def test_complete_esm_coverage_requires_exact_uppercase_order() -> None:
     )
     with pytest.raises(ValueError, match="order"):
         require_complete_esm_coverage(canonical, table)
+
+
+def _run_asset_cli(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resolved: np.ndarray,
+    *,
+    strict: bool,
+) -> Path:
+    csv = tmp_path / "genes.csv"
+    pd.DataFrame({"perturbation_gene": ["A", "B", "C"]}).to_csv(csv, index=False)
+    output = tmp_path / "esm2.npz"
+    argv = [
+        "precompute_esm2_embeddings.py",
+        "--benchmark-csv",
+        str(csv),
+        "--symbol-column",
+        "perturbation_gene",
+        "--out",
+        str(output),
+        "--seq-cache",
+        str(tmp_path / "sequences.json"),
+    ]
+    if strict:
+        argv.append("--require-complete-coverage")
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(
+        MOD,
+        "load_or_fetch_sequences",
+        lambda symbols, cache: {symbol: "M" for symbol in symbols},
+    )
+    monkeypatch.setattr(
+        MOD,
+        "embed_sequences",
+        lambda *args, **kwargs: (
+            np.ones((3, 4), dtype=np.float32),
+            resolved,
+        ),
+    )
+    MOD.main()
+    return output
+
+
+@pytest.mark.parametrize("existing_output", [False, True])
+def test_strict_asset_rejects_incomplete_coverage_before_output_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing_output: bool,
+) -> None:
+    output = tmp_path / "esm2.npz"
+    if existing_output:
+        output.write_bytes(b"existing-asset")
+
+    with pytest.raises(ValueError, match="2/3"):
+        _run_asset_cli(
+            monkeypatch,
+            tmp_path,
+            np.asarray([True, True, False]),
+            strict=True,
+        )
+
+    if existing_output:
+        assert output.read_bytes() == b"existing-asset"
+    else:
+        assert not output.exists()
+
+
+def test_strict_asset_writes_when_coverage_is_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = _run_asset_cli(
+        monkeypatch,
+        tmp_path,
+        np.asarray([True, True, True]),
+        strict=True,
+    )
+
+    with np.load(output, allow_pickle=True) as payload:
+        assert payload["symbols"].tolist() == ["A", "B", "C"]
+        assert int(payload["resolved"].sum()) == 3
+
+
+def test_default_asset_path_remains_permissive_for_exp08(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = _run_asset_cli(
+        monkeypatch,
+        tmp_path,
+        np.asarray([True, True, False]),
+        strict=False,
+    )
+
+    with np.load(output, allow_pickle=True) as payload:
+        assert int(payload["resolved"].sum()) == 2
