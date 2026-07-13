@@ -21,11 +21,13 @@ import torch.nn.functional as F
 import aivc_model.model as model_module
 import aivc_model.train as train_module
 import aivc_model.gwps_cache as gwps_cache_module
+import aivc_model.gene_splits as gene_splits_module
 from aivc_model.gwps_cache import (
     source_fingerprint,
 )
 from aivc_model.model import (
     AivcModel,
+    Esm2PerturbationAdapter,
     ExpressionToLatentProjector,
     LossWeights,
     MLPHead,
@@ -35,6 +37,7 @@ from aivc_model.model import (
     load_state_model,
     _pairwise_ranknet_loss,
 )
+from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 from aivc_model.prepare import (
     DataConfig,
     GeneBags,
@@ -399,6 +402,31 @@ def test_missing_perturbation_vector_uses_trainable_mean_initialization() -> Non
 
     assert missing.requires_grad
     np.testing.assert_allclose(missing.detach().numpy(), np.asarray([1.0, 3.0]))
+
+
+def test_esm2_perturbation_adapter_maps_all_genes_through_one_network() -> None:
+    table = Esm2EmbeddingTable(
+        dim=3,
+        vectors_by_symbol={
+            "KNOWN": np.asarray([1.0, 0.0, 0.0], dtype=np.float32),
+            "HELDOUT": np.asarray([0.0, 1.0, 0.0], dtype=np.float32),
+        },
+    )
+    adapter = Esm2PerturbationAdapter(
+        ["KNOWN", "HELDOUT"], table, adapter_hidden=4, pert_dim=2
+    )
+
+    assert adapter("KNOWN").shape == (2,)
+    assert adapter("HELDOUT").shape == (2,)
+    assert adapter("HELDOUT").requires_grad
+    assert not hasattr(adapter, "missing_vectors")
+
+
+def test_esm2_perturbation_adapter_rejects_unresolved_gene() -> None:
+    table = Esm2EmbeddingTable(dim=3, vectors_by_symbol={})
+
+    with pytest.raises(ValueError, match="UNRESOLVED"):
+        Esm2PerturbationAdapter(["UNRESOLVED"], table, adapter_hidden=4, pert_dim=2)
 
 
 def test_external_only_perturbation_vector_uses_mean_initialization() -> None:
@@ -872,6 +900,32 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert parsed.loss.pred_rank_pair_weight_clip == 2.0
     assert parsed.loss.b_loss_anneal_epochs == 5
     assert parsed.loss.b_loss_anneal_final_fraction == 0.1
+
+
+def test_state_config_parses_strict_esm2_fields(tmp_path: Path) -> None:
+    default_config = load_config(_write_scvi_cache_config(tmp_path))
+    config_path = tmp_path / "esm2.yaml"
+    raw = _write_scvi_cache_config(tmp_path).read_text(encoding="utf-8")
+    raw = raw.replace(
+        "  pert_dim: 2\n",
+        "  pert_dim: 2\n"
+        "  gene_tokenizer: esm2\n"
+        f"  esm2_npz: {tmp_path / 'esm2.npz'}\n"
+        "  esm2_adapter_hidden: 16\n"
+        "  require_resolved_esm2: true\n",
+    )
+    config_path.write_text(raw, encoding="utf-8")
+
+    parsed = load_config(config_path)
+
+    assert default_config.state.gene_tokenizer == "state_onehot"
+    assert default_config.state.esm2_npz is None
+    assert default_config.state.esm2_adapter_hidden == 512
+    assert default_config.state.require_resolved_esm2 is False
+    assert parsed.state.gene_tokenizer == "esm2"
+    assert parsed.state.esm2_npz == tmp_path / "esm2.npz"
+    assert parsed.state.esm2_adapter_hidden == 16
+    assert parsed.state.require_resolved_esm2 is True
 
 
 def test_state_config_ignores_legacy_noop_fields(tmp_path: Path) -> None:
@@ -2091,6 +2145,115 @@ def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None
     assert model.projector.linear.weight.grad is not None
     assert model.c_head.net[-1].weight.grad is not None
     assert model.perturbations.missing_vectors["g0"].grad is not None
+
+
+def test_esm2_build_freezes_state_and_trains_shared_adapter(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data = _toy_gene_bags_with_batches()
+    manifest = tmp_path / "outer.csv"
+    pd.DataFrame(
+        {"perturbation_gene": ["GENE1", "GENE2"], "outer_fold": [0, 1]}
+    ).to_csv(manifest, index=False)
+    sha256_file = tmp_path / "outer.csv.sha256"
+    sha256_file.write_text(f"{_sha256(manifest)}\n", encoding="utf-8")
+    esm2_npz = tmp_path / "esm2.npz"
+    np.savez(
+        esm2_npz,
+        symbols=np.asarray(["GENE1", "GENE2"], dtype=object),
+        vectors=np.asarray([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32),
+        resolved=np.asarray([True, True]),
+    )
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    config = replace(
+        config,
+        cv=replace(
+            config.cv,
+            outer_split_manifest=manifest,
+            outer_split_sha256_file=sha256_file,
+        ),
+        state=replace(
+            config.state,
+            gene_tokenizer="esm2",
+            esm2_npz=esm2_npz,
+            esm2_adapter_hidden=4,
+            require_resolved_esm2=True,
+        ),
+    )
+    monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 2)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
+    featureizer = _build_tiny_aivc_model()[0].featureizer
+
+    model = train_module._build_model(
+        config,
+        data,
+        featureizer,
+        np.asarray([[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]], dtype=np.float32),
+        np.zeros(2, dtype=np.float32),
+        emit_checkpoint_output=False,
+    )
+    predicted, _latent = model.predict_bag(torch.as_tensor(data.control_input), "GENE1")
+    predicted.square().sum().backward()
+
+    assert isinstance(model.perturbations, Esm2PerturbationAdapter)
+    assert model.freeze_state
+    assert all(parameter.grad is None for parameter in model.state_adapter.parameters())
+    assert any(
+        parameter.grad is not None and torch.count_nonzero(parameter.grad).item() > 0
+        for parameter in model.perturbations.adapter.parameters()
+    )
+    assert all(parameter.requires_grad for parameter in model.projector.parameters())
+    assert all(parameter.requires_grad for parameter in model.c_head.parameters())
+
+
+def test_esm2_build_rejects_missing_external_gene_without_filtering(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data = _toy_gene_bags_with_batches()
+    manifest = tmp_path / "outer.csv"
+    pd.DataFrame(
+        {"perturbation_gene": ["GENE1", "GENE2"], "outer_fold": [0, 1]}
+    ).to_csv(manifest, index=False)
+    sha256_file = tmp_path / "outer.csv.sha256"
+    sha256_file.write_text(f"{_sha256(manifest)}\n", encoding="utf-8")
+    esm2_npz = tmp_path / "esm2.npz"
+    np.savez(
+        esm2_npz,
+        symbols=np.asarray(["GENE1", "GENE2"], dtype=object),
+        vectors=np.ones((2, 3), dtype=np.float32),
+        resolved=np.asarray([True, True]),
+    )
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    config = replace(
+        config,
+        cv=replace(
+            config.cv,
+            outer_split_manifest=manifest,
+            outer_split_sha256_file=sha256_file,
+        ),
+        state=replace(
+            config.state,
+            gene_tokenizer="esm2",
+            esm2_npz=esm2_npz,
+            require_resolved_esm2=True,
+        ),
+    )
+    monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 2)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
+    featureizer = _build_tiny_aivc_model()[0].featureizer
+
+    with pytest.raises(ValueError, match="ADAMSON_ONLY"):
+        train_module._build_model(
+            config,
+            data,
+            featureizer,
+            np.asarray([[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]], dtype=np.float32),
+            np.zeros(2, dtype=np.float32),
+            extra_genes=("ADAMSON_ONLY",),
+            emit_checkpoint_output=False,
+        )
 
 
 def test_zero_weight_expensive_losses_skip_extra_compute(monkeypatch) -> None:

@@ -37,6 +37,7 @@ from tqdm import tqdm
 
 from aivc_model.model import (
     AivcModel,
+    Esm2PerturbationAdapter,
     ExpressionToLatentProjector,
     FixedGMMFeatureizer,
     LossWeights,
@@ -45,6 +46,10 @@ from aivc_model.model import (
     StateForwardAdapter,
     fit_fixed_gmm,
     load_state_model,
+)
+from aivc_model.gene_splits import (
+    CANONICAL_GENE_COUNT,
+    load_canonical_outer_manifest,
 )
 from aivc_model.prepare import (
     AivcConfig,
@@ -62,6 +67,10 @@ from aivc_model.prepare import (
     with_cached_scvi_teacher_latents,
 )
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
+from sl_dl_model.gene_embeddings import (
+    load_esm2_embeddings,
+    require_complete_esm_coverage,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _SCVI_CACHE_WAIT_TIMEOUT_SECONDS = 24 * 60 * 60
@@ -1097,9 +1106,26 @@ def _build_model(
     emit_checkpoint_output: bool = True,
 ) -> AivcModel:
     pert_dim = config.state.pert_dim
-    known_vectors = load_perturbation_vectors(config.state.known_perturbation_vectors)
-    if pert_dim is None:
-        pert_dim = _infer_pert_dim(known_vectors)
+    tokenizer = config.state.gene_tokenizer
+    known_vectors: dict[str, np.ndarray] = {}
+    canonical_genes: list[str] = []
+    esm = None
+    if tokenizer == "state_onehot":
+        known_vectors = load_perturbation_vectors(
+            config.state.known_perturbation_vectors
+        )
+        if pert_dim is None:
+            pert_dim = _infer_pert_dim(known_vectors)
+    elif tokenizer == "esm2":
+        if pert_dim is None:
+            raise ValueError("state.pert_dim is required for gene_tokenizer=esm2")
+        canonical_genes = _canonical_esm2_genes(config, data)
+        if config.state.esm2_npz is None:
+            raise ValueError("state.esm2_npz is required for gene_tokenizer=esm2")
+        esm = load_esm2_embeddings(config.state.esm2_npz)
+        require_complete_esm_coverage(canonical_genes, esm)
+    else:
+        raise ValueError(f"Unknown state.gene_tokenizer: {tokenizer}")
     output_dim = config.state.output_dim or data.input_dim
     state_model = load_state_model(
         backend=config.state.backend,
@@ -1109,15 +1135,28 @@ def _build_model(
         pert_dim=pert_dim,
         emit_checkpoint_output=emit_checkpoint_output,
     )
-    perturbations = PerturbationVectorAdapter(
-        sorted({*(str(gene) for gene in data.genes), *extra_genes}),
-        known_vectors,
-        pert_dim,
-    )
+    if tokenizer == "esm2":
+        if esm is None:
+            raise AssertionError("ESM-2 table was not loaded")
+        all_genes = canonical_genes + sorted(
+            set(str(gene).upper() for gene in extra_genes).difference(canonical_genes)
+        )
+        perturbations = Esm2PerturbationAdapter(
+            all_genes,
+            esm,
+            adapter_hidden=config.state.esm2_adapter_hidden,
+            pert_dim=pert_dim,
+        )
+    else:
+        perturbations = PerturbationVectorAdapter(
+            sorted({*(str(gene) for gene in data.genes), *extra_genes}),
+            known_vectors,
+            pert_dim,
+        )
     projector = ExpressionToLatentProjector(
         projector_weight,
         projector_bias,
-        trainable=config.projector.trainable,
+        trainable=(tokenizer == "esm2" or config.projector.trainable),
     )
     c_head = MLPHead(
         input_dim=featureizer.output_dim,
@@ -1132,8 +1171,36 @@ def _build_model(
         c_head=c_head,
         control_expression_mean=data.control_input.mean(axis=0).astype(np.float32),
         control_latent_mean=data.control_latent.mean(axis=0).astype(np.float32),
-        freeze_state=config.train.freeze_state,
+        freeze_state=(tokenizer == "esm2" or config.train.freeze_state),
     )
+
+
+def _canonical_esm2_genes(config: AivcConfig, data: GeneBags) -> list[str]:
+    manifest_path = config.cv.outer_split_manifest
+    sha256_path = config.cv.outer_split_sha256_file
+    if manifest_path is None or sha256_path is None:
+        raise ValueError(
+            "ESM-2 tokenization requires the canonical outer manifest and SHA-256"
+        )
+    sha256_text = sha256_path.read_text(encoding="utf-8")
+    if len(sha256_text) != 65 or not sha256_text.endswith("\n"):
+        raise ValueError("outer split SHA-256 file must contain one digest and newline")
+    expected_sha256 = sha256_text[:-1]
+    labels = pd.DataFrame(
+        {"perturbation_gene": [str(gene).upper() for gene in data.genes]}
+    )
+    manifest = load_canonical_outer_manifest(
+        manifest_path,
+        labels,
+        expected_sha256,
+    )
+    canonical_genes = manifest["perturbation_gene"].tolist()
+    data_genes = [str(gene).upper() for gene in data.genes]
+    if len(canonical_genes) != CANONICAL_GENE_COUNT or data_genes != canonical_genes:
+        raise ValueError(
+            "ESM-2 internal gene universe must remain exactly 9338 canonical rows"
+        )
+    return canonical_genes
 
 
 def _trainable_parameters(model: torch.nn.Module) -> list[torch.nn.Parameter]:

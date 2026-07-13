@@ -15,6 +15,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
+
 
 @dataclass(frozen=True)
 class LossWeights:
@@ -193,6 +195,41 @@ class PerturbationVectorAdapter(nn.Module):
         return gene in self._known_genes and gene not in self._missing_param_keys
 
 
+class Esm2PerturbationAdapter(nn.Module):
+    """Map fixed per-gene ESM-2 vectors through one trainable exp08 adapter."""
+
+    def __init__(
+        self,
+        genes: list[str],
+        table: Esm2EmbeddingTable,
+        adapter_hidden: int,
+        pert_dim: int,
+    ) -> None:
+        super().__init__()
+        from sl_dl_model.encoder import PertAdapter
+
+        self.genes = [str(gene).upper() for gene in genes]
+        missing = [gene for gene in self.genes if gene not in table.vectors_by_symbol]
+        if missing:
+            raise ValueError(f"Unresolved ESM-2 genes: {missing[:10]}")
+        matrix = np.vstack([table.vectors_by_symbol[gene] for gene in self.genes])
+        self._gene_to_index = {gene: index for index, gene in enumerate(self.genes)}
+        self.register_buffer("esm_matrix", torch.as_tensor(matrix, dtype=torch.float32))
+        self.adapter = PertAdapter(table.dim, int(adapter_hidden), int(pert_dim))
+
+    def forward(self, gene: str) -> torch.Tensor:
+        index = self._gene_to_index[str(gene).upper()]
+        return self.adapter(self.esm_matrix[index].unsqueeze(0)).squeeze(0)
+
+    def has_embedding(self, gene: str) -> bool:
+        """Return whether the adapter contains an ESM-2 vector for ``gene``."""
+        return str(gene).upper() in self._gene_to_index
+
+    def has_known_vector(self, gene: str) -> bool:
+        """Compatibility alias for prediction artifact metadata."""
+        return self.has_embedding(gene)
+
+
 class ExpressionToLatentProjector(nn.Module):
     """Differentiable expression/HVG to scVI-latent adapter."""
 
@@ -315,7 +352,7 @@ class AivcModel(nn.Module):
         self,
         *,
         state_adapter: StateForwardAdapter,
-        perturbations: PerturbationVectorAdapter,
+        perturbations: PerturbationVectorAdapter | Esm2PerturbationAdapter,
         projector: ExpressionToLatentProjector,
         featureizer: FixedGMMFeatureizer,
         c_head: MLPHead,
