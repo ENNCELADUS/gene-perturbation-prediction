@@ -1525,10 +1525,15 @@ def _state_input_view(
     adata: ad.AnnData,
     config: AivcConfig,
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    if (
-        config.state.backend == "state_checkpoint"
-        and config.state.model_dir is not None
-    ):
+    if config.state.backend == "state_checkpoint":
+        if config.state.model_dir is None:
+            raise ValueError("state_checkpoint requires state.model_dir")
+        if config.state.checkpoint_path is None:
+            raise ValueError("state_checkpoint requires state.checkpoint_path")
+        if not config.state.checkpoint_path.is_file():
+            raise ValueError(
+                f"STATE checkpoint_path does not exist: {config.state.checkpoint_path}"
+            )
         indices, feature_names = resolve_state_gene_order(
             adata,
             config.state.model_dir,

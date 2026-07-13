@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pickle
+from dataclasses import dataclass
 from pathlib import Path
 
 import anndata as ad
 import numpy as np
 import pandas as pd
 
-from aivc_model.gene_splits import CANONICAL_GENE_COUNT, sha256_file
+from aivc_model.gene_splits import (
+    CANONICAL_GENE_COUNT,
+    load_canonical_outer_manifest,
+    sha256_file,
+)
 from aivc_model.prepare import (
     AivcConfig,
     GeneBags,
@@ -20,6 +26,7 @@ from aivc_model.prepare import (
 )
 
 _SCHEMA_VERSION = 1
+_STATE_FEATURE_COUNT = 2000
 _ARRAY_FILENAMES = (
     "cells.npy",
     "offsets.npy",
@@ -29,6 +36,18 @@ _ARRAY_FILENAMES = (
     "control_cells.npy",
     "control_batch.npy",
     "feature_names.npy",
+)
+
+
+@dataclass(frozen=True)
+class _CacheContract:
+    gene_count: int
+    state_dim: int
+
+
+_PRODUCTION_CONTRACT = _CacheContract(
+    gene_count=CANONICAL_GENE_COUNT,
+    state_dim=_STATE_FEATURE_COUNT,
 )
 
 
@@ -75,9 +94,13 @@ def source_fingerprint(
     cell_type_sidecar: Path | None,
     feature_names: np.ndarray,
     canonical_split: Path,
+    canonical_split_sha256_file: Path,
+    overlap_csv: Path,
     canonical_gene_count: int,
     cache_seed: int,
     cache_cells_per_gene: int,
+    depmap_label_col: str,
+    matched_label_col: str,
 ) -> str:
     """Hash every source that can affect the deterministic raw cache."""
     payload = {
@@ -90,9 +113,13 @@ def source_fingerprint(
         "cell_type_sidecar": _optional_sha256(cell_type_sidecar),
         "feature_names_sha256": sha256_strings(feature_names),
         "canonical_split_sha256": sha256_file(canonical_split),
+        "canonical_split_sha256_authority": sha256_file(canonical_split_sha256_file),
+        "overlap_csv_sha256": sha256_file(overlap_csv),
         "canonical_gene_count": int(canonical_gene_count),
         "cache_seed": int(cache_seed),
         "cache_cells_per_gene": int(cache_cells_per_gene),
+        "depmap_label_col": depmap_label_col,
+        "matched_label_col": matched_label_col,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -100,19 +127,31 @@ def source_fingerprint(
 
 def build_gwps_cache(config: AivcConfig, cache_dir: Path) -> Path:
     """Build deterministic raw STATE-aligned GWPS arrays and their manifest."""
-    model_dir, checkpoint, canonical_path = _required_paths(config)
+    return _build_gwps_cache(config, cache_dir, _PRODUCTION_CONTRACT)
+
+
+def _build_gwps_cache(
+    config: AivcConfig,
+    cache_dir: Path,
+    contract: _CacheContract,
+) -> Path:
+    model_dir, checkpoint, canonical_path, canonical_sha_path = _required_paths(config)
     adata = ad.read_h5ad(config.data.h5ad_path)
     indices, feature_names = resolve_state_gene_order(
         adata,
         model_dir,
         config.data.var_gene_symbol_col,
     )
+    _validate_state_contract(model_dir, feature_names, contract)
+    canonical = _load_canonical_manifest(config, canonical_path, contract)
     fingerprint = _config_fingerprint(
         config,
         feature_names,
         model_dir=model_dir,
         checkpoint=checkpoint,
         canonical_path=canonical_path,
+        canonical_sha_path=canonical_sha_path,
+        contract=contract,
     )
     manifest_path = cache_dir / "manifest.json"
     if manifest_path.exists():
@@ -121,7 +160,6 @@ def build_gwps_cache(config: AivcConfig, cache_dir: Path) -> Path:
             raise ValueError("GWPS cache fingerprint mismatch")
         return manifest_path
 
-    canonical = _load_canonical_manifest(config, canonical_path)
     expression = _dense_slice(adata.X, indices)
     labels = (
         adata.obs[config.data.obs_perturbation_col].astype(str).str.upper().to_numpy()
@@ -176,23 +214,34 @@ def build_gwps_cache(config: AivcConfig, cache_dir: Path) -> Path:
 
 def load_gwps_cache(config: AivcConfig, cache_dir: Path) -> GeneBags:
     """Load and validate the memory-mappable raw GWPS cache."""
-    model_dir, checkpoint, canonical_path = _required_paths(config)
+    return _load_gwps_cache(config, cache_dir, _PRODUCTION_CONTRACT)
+
+
+def _load_gwps_cache(
+    config: AivcConfig,
+    cache_dir: Path,
+    contract: _CacheContract,
+) -> GeneBags:
+    model_dir, checkpoint, canonical_path, canonical_sha_path = _required_paths(config)
     manifest_path = cache_dir / "manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(manifest_path)
     manifest = json.loads(manifest_path.read_text())
     feature_names = _load_array(cache_dir / "feature_names.npy")
+    _validate_state_contract(model_dir, feature_names, contract)
+    canonical = _load_canonical_manifest(config, canonical_path, contract)
     fingerprint = _config_fingerprint(
         config,
         feature_names,
         model_dir=model_dir,
         checkpoint=checkpoint,
         canonical_path=canonical_path,
+        canonical_sha_path=canonical_sha_path,
+        contract=contract,
     )
     if manifest.get("source_fingerprint") != fingerprint:
         raise ValueError("GWPS cache fingerprint mismatch")
 
-    canonical = _load_canonical_manifest(config, canonical_path)
     genes = _load_array(cache_dir / "genes.npy")
     outer_folds = _load_array(cache_dir / "gene_outer_folds.npy")
     expected_genes = canonical["perturbation_gene"].to_numpy(dtype=str)
@@ -237,13 +286,21 @@ def load_gwps_cache(config: AivcConfig, cache_dir: Path) -> GeneBags:
     )
 
 
-def _required_paths(config: AivcConfig) -> tuple[Path, Path, Path]:
+def _required_paths(config: AivcConfig) -> tuple[Path, Path, Path, Path]:
     model_dir = config.state.model_dir
     checkpoint = config.state.checkpoint_path
     canonical_path = config.cv.outer_split_manifest
-    if model_dir is None or checkpoint is None or canonical_path is None:
-        raise ValueError("GWPS cache requires STATE and canonical manifest paths")
-    return model_dir, checkpoint, canonical_path
+    canonical_sha_path = config.cv.outer_split_sha256_file
+    if (
+        model_dir is None
+        or checkpoint is None
+        or canonical_path is None
+        or canonical_sha_path is None
+    ):
+        raise ValueError(
+            "GWPS cache requires STATE, canonical manifest, and SHA-256 paths"
+        )
+    return model_dir, checkpoint, canonical_path, canonical_sha_path
 
 
 def _config_fingerprint(
@@ -253,6 +310,8 @@ def _config_fingerprint(
     model_dir: Path,
     checkpoint: Path,
     canonical_path: Path,
+    canonical_sha_path: Path,
+    contract: _CacheContract,
 ) -> str:
     return source_fingerprint(
         h5ad=config.data.h5ad_path,
@@ -263,9 +322,13 @@ def _config_fingerprint(
         cell_type_sidecar=_find_sidecar(model_dir, "cell_type_onehot_map"),
         feature_names=feature_names,
         canonical_split=canonical_path,
-        canonical_gene_count=config.cv.expected_gene_count,
+        canonical_split_sha256_file=canonical_sha_path,
+        overlap_csv=config.data.overlap_csv,
+        canonical_gene_count=contract.gene_count,
         cache_seed=config.data.cache_seed,
         cache_cells_per_gene=config.data.cache_cells_per_gene,
+        depmap_label_col=config.data.depmap_label_col,
+        matched_label_col=config.data.matched_label_col,
     )
 
 
@@ -283,28 +346,92 @@ def _optional_sha256(path: Path | None) -> dict[str, str] | None:
     return {"resolved_path": str(path.resolve()), "sha256": sha256_file(path)}
 
 
-def _load_canonical_manifest(config: AivcConfig, path: Path) -> pd.DataFrame:
+def _load_canonical_manifest(
+    config: AivcConfig,
+    path: Path,
+    contract: _CacheContract,
+) -> pd.DataFrame:
+    expected_sha256 = _read_expected_sha256(config.cv.outer_split_sha256_file)
+    labels = _load_metadata(config.data)
+    labels["perturbation_gene"] = labels["perturbation_gene"].astype(str).str.upper()
+    if contract == _PRODUCTION_CONTRACT:
+        if (
+            len(labels) != contract.gene_count
+            or labels["perturbation_gene"].nunique() != contract.gene_count
+        ):
+            raise ValueError(
+                "canonical label authority must contain exactly 9338 unique genes"
+            )
+        return load_canonical_outer_manifest(path, labels, expected_sha256)
+    observed_sha256 = sha256_file(path)
+    if observed_sha256 != expected_sha256:
+        raise ValueError(f"canonical manifest SHA-256 mismatch: {observed_sha256}")
     manifest = pd.read_csv(path)
     if manifest.columns.tolist() != ["perturbation_gene", "outer_fold"]:
         raise ValueError("canonical manifest has invalid columns")
     manifest["perturbation_gene"] = (
         manifest["perturbation_gene"].astype(str).str.upper()
     )
-    expected_count = int(config.cv.expected_gene_count)
     if (
-        len(manifest) != expected_count
-        or manifest["perturbation_gene"].nunique() != expected_count
+        len(manifest) != contract.gene_count
+        or manifest["perturbation_gene"].nunique() != contract.gene_count
+        or len(labels) != contract.gene_count
+        or labels["perturbation_gene"].nunique() != contract.gene_count
+        or set(manifest["perturbation_gene"]) != set(labels["perturbation_gene"])
     ):
         raise ValueError(
-            f"canonical manifest must contain {expected_count} unique genes"
+            f"canonical manifest must contain exactly {contract.gene_count} genes"
         )
     folds = pd.to_numeric(manifest["outer_fold"], errors="raise")
     if not np.equal(folds, np.floor(folds)).all():
         raise ValueError("canonical manifest outer_fold must contain integers")
     manifest["outer_fold"] = folds.astype(np.int64)
-    if expected_count == CANONICAL_GENE_COUNT and set(folds) != set(range(5)):
-        raise ValueError("canonical manifest outer folds must be exactly 0..4")
     return manifest
+
+
+def _read_expected_sha256(path: Path | None) -> str:
+    if path is None:
+        raise ValueError("cv.outer_split_sha256_file is required")
+    text = path.read_text()
+    digest = text[:-1] if text.endswith("\n") else ""
+    if (
+        len(text) != 65
+        or len(digest) != 64
+        or digest != digest.lower()
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise ValueError(
+            "outer split SHA-256 file must contain one lowercase digest and newline"
+        )
+    return digest
+
+
+def _validate_state_contract(
+    model_dir: Path,
+    feature_names: np.ndarray,
+    contract: _CacheContract,
+) -> None:
+    path = model_dir / "var_dims.pkl"
+    with path.open("rb") as handle:
+        payload = pickle.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("STATE var_dims.pkl must contain checkpoint metadata")
+    input_dim = payload.get("input_dim")
+    output_dim = payload.get("output_dim")
+    feature_count = int(len(feature_names))
+    expected_dim = contract.state_dim
+    if input_dim != expected_dim:
+        raise ValueError(
+            f"STATE checkpoint input_dim={input_dim}; expected {expected_dim}"
+        )
+    if output_dim != expected_dim:
+        raise ValueError(
+            f"STATE checkpoint output_dim={output_dim}; expected {expected_dim}"
+        )
+    if feature_count != expected_dim:
+        raise ValueError(
+            f"STATE aligned feature count={feature_count}; expected {expected_dim}"
+        )
 
 
 def _source_batches(adata: ad.AnnData, config: AivcConfig) -> np.ndarray:
