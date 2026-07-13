@@ -11,6 +11,7 @@ import types
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from aivc_model import cross_validate as cv
 from aivc_model import gene_splits as gene_splits_module
@@ -439,7 +440,100 @@ def test_projector_cache_rejects_source_change_and_test_gene_contamination(
     }
 
     assert train_module._load_projector_cache(tmp_path, changed) is None
-    assert not train_module._cache_metadata_matches(tmp_path, contaminated)
+    (tmp_path / "metadata.json").write_text(json.dumps(contaminated), encoding="utf-8")
+    assert train_module._load_projector_cache(tmp_path, contaminated) is None
+
+
+def test_projector_cache_rejects_persisted_non_validation_selection_gene(
+    tmp_path: Path,
+) -> None:
+    config = _audited_config(tmp_path)
+    data = _toy_bags(("A", "B"))
+    split = train_module.GeneSplit(
+        train=np.asarray([0, 1], dtype=np.int64),
+        val=np.asarray([], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    authority = train_module._fold_artifact_authority(
+        config,
+        FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        source_fingerprint="source",
+        canonical_split_sha256="split",
+    )
+    metadata = train_module._projector_cache_metadata(
+        config, data, split, authority=authority
+    )
+    contaminated = {**metadata, "selection_genes": ["C", "D"]}
+    train_module._write_projector_cache(tmp_path, contaminated, np.eye(2), np.zeros(2))
+
+    assert train_module._load_projector_cache(tmp_path, contaminated) is None
+
+
+def test_audited_checkpoint_loader_requires_exact_persisted_authority(
+    tmp_path: Path,
+) -> None:
+    config = _audited_config(tmp_path)
+    authority = train_module._fold_artifact_authority(
+        config,
+        FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        source_fingerprint="source",
+        canonical_split_sha256="split",
+    )
+    checkpoint_dir = tmp_path / "best"
+    checkpoint_dir.mkdir()
+    torch.save({"weight": torch.ones(1)}, checkpoint_dir / "pytorch_model.bin")
+    metadata = {**authority.metadata(), "checkpoint_kind": "best"}
+    (checkpoint_dir / "metadata.json").write_text(
+        json.dumps(metadata), encoding="utf-8"
+    )
+
+    loaded = train_module._load_authorized_model_checkpoint(
+        checkpoint_dir,
+        authority,
+        map_location="cpu",
+    )
+    torch.testing.assert_close(loaded["weight"], torch.ones(1))
+
+    for contaminated in (
+        {
+            **metadata,
+            "train_genes": ["A", "B", "D"],
+            "fit_genes_sha256": train_module._sha256_strings(("A", "B", "D")),
+        },
+        {**metadata, "selection_genes": ["C", "D"]},
+        {**metadata, "source_fingerprint": "changed"},
+    ):
+        (checkpoint_dir / "metadata.json").write_text(
+            json.dumps(contaminated), encoding="utf-8"
+        )
+        with pytest.raises(ValueError, match="checkpoint authority"):
+            train_module._load_authorized_model_checkpoint(
+                checkpoint_dir,
+                authority,
+                map_location="cpu",
+            )
+
+
+def test_audited_checkpoint_loader_rejects_missing_schema_v2_metadata(
+    tmp_path: Path,
+) -> None:
+    config = _audited_config(tmp_path)
+    authority = train_module._fold_artifact_authority(
+        config,
+        FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        source_fingerprint="source",
+        canonical_split_sha256="split",
+    )
+    checkpoint_dir = tmp_path / "final"
+    checkpoint_dir.mkdir()
+    torch.save({"weight": torch.ones(1)}, checkpoint_dir / "pytorch_model.bin")
+
+    with pytest.raises(ValueError, match="schema-v2 metadata"):
+        train_module._load_authorized_model_checkpoint(
+            checkpoint_dir,
+            authority,
+            map_location="cpu",
+        )
 
 
 def test_observed_b_oracle_selection_depends_on_validation_response_only(

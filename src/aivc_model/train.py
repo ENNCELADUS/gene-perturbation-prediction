@@ -785,11 +785,12 @@ def _run_audited_training(
                 )
         accelerator.wait_for_everyone()
 
-    checkpoint_path = models_dir / "best" / "pytorch_model.bin"
-    state_dict = torch.load(
-        checkpoint_path,
+    checkpoint_dir = models_dir / "best"
+    checkpoint_path = checkpoint_dir / "pytorch_model.bin"
+    state_dict = _load_authorized_model_checkpoint(
+        checkpoint_dir,
+        authority,
         map_location=accelerator.device,
-        weights_only=True,
     )
     selected_model = accelerator.unwrap_model(model)
     selected_model.load_state_dict(state_dict)
@@ -2835,6 +2836,43 @@ def _save_model_checkpoint(
         json.dumps(metadata, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+
+
+def _load_authorized_model_checkpoint(
+    path: Path,
+    authority: ArtifactAuthority,
+    *,
+    map_location: torch.device | str,
+) -> dict[str, torch.Tensor]:
+    """Load audited best/final weights only after exact authority validation."""
+    metadata_path = path / "metadata.json"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(
+            "audited checkpoint requires valid schema-v2 metadata"
+        ) from error
+    if not isinstance(metadata, dict) or metadata.get("schema_version") != 2:
+        raise ValueError("audited checkpoint requires valid schema-v2 metadata")
+    expected = authority.metadata()
+    if not _artifact_metadata_is_authorized(metadata) or any(
+        metadata.get(key) != value for key, value in expected.items()
+    ):
+        raise ValueError("checkpoint authority does not match the current fold")
+    checkpoint_kind = metadata.get("checkpoint_kind")
+    if checkpoint_kind not in {"best", "frozen_selected"}:
+        raise ValueError("checkpoint authority has an invalid checkpoint kind")
+    weights = torch.load(
+        path / "pytorch_model.bin",
+        map_location=map_location,
+        weights_only=True,
+    )
+    if not isinstance(weights, dict) or not all(
+        isinstance(name, str) and isinstance(value, torch.Tensor)
+        for name, value in weights.items()
+    ):
+        raise ValueError("audited checkpoint weights are not a state dictionary")
+    return weights
 
 
 def _write_split_artifact(data: GeneBags, split: GeneSplit, path: Path) -> None:
