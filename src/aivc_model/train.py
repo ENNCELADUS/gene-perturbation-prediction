@@ -2157,18 +2157,17 @@ def _build_model(
 
 def _effective_state_pert_dim(state_model: torch.nn.Module, fallback: int) -> int:
     raw_dim = getattr(state_model, "pert_dim", None)
+    if raw_dim is None:
+        raise ValueError("Loaded STATE model must expose pert_dim")
     try:
-        effective_dim = int(fallback if raw_dim is None else raw_dim)
+        effective_dim = int(raw_dim)
     except (TypeError, ValueError) as error:
         raise ValueError("Loaded STATE model has an invalid pert_dim") from error
-    if effective_dim <= 0:
-        raise ValueError("Loaded STATE model pert_dim must be positive")
-    if raw_dim is not None and effective_dim != int(fallback):
-        _LOGGER.warning(
-            "configured pert_dim=%d does not match checkpoint pert_dim=%d; "
-            "using the checkpoint width for the ESM-2 adapter",
-            int(fallback),
-            effective_dim,
+    if effective_dim != int(fallback):
+        raise ValueError(
+            "Loaded STATE model pert_dim "
+            f"must equal configured repaired-path width {int(fallback)}; "
+            f"got {effective_dim}"
         )
     return effective_dim
 

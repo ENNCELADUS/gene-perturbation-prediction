@@ -10,12 +10,13 @@ import pickle
 from dataclasses import replace
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Callable
 
 from accelerate import Accelerator
 import anndata as ad
 import numpy as np
 import pandas as pd
+import torch
 
 from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
@@ -43,7 +44,7 @@ from aivc_model.prepare import (
     load_gene_bags,
 )
 from aivc_model.model import load_state_model
-from aivc_model.train import run_training
+from aivc_model.train import _make_accelerator, run_training
 
 STATE_FEATURE_COUNT = 2000
 EXPECTED_STATE_PERT_DIM = 2024
@@ -316,7 +317,8 @@ def run_training_fold(
     canonical_gene_order: tuple[str, ...] | None = None,
 ) -> dict[str, Path]:
     """Run one outer fold through role-limited GeneBags views."""
-    _require_fresh_run_dir(run_dir)
+    accelerator = accelerator or _make_accelerator(config)
+    _prepare_fresh_run_dir(run_dir, accelerator)
     tokenizer = getattr(getattr(config, "state", None), "gene_tokenizer", None)
     if tokenizer == "esm2" and canonical_gene_order is None:
         raise ValueError("audited ESM-2 training requires canonical manifest order")
@@ -368,6 +370,9 @@ def run_cross_validation(
 ) -> Path:
     """Execute all frozen outer folds and aggregate audited final artifacts."""
     config = load_config(config_path)
+    accelerator = accelerator or _make_accelerator(config)
+    _run_distributed_preflight(config_path, accelerator)
+    _wait_for_everyone(accelerator)
     manifest_path, expected_sha256 = _manifest_authority(config)
     if _file_sha256(manifest_path) != expected_sha256:
         raise ValueError("canonical manifest SHA-256 mismatch")
@@ -396,9 +401,11 @@ def run_cross_validation(
         )
     run_id = config.train.run_id or "state_aivc_cv"
     run_dir = config.data.output_dir / "runs" / run_id
-    _require_fresh_run_dir(run_dir)
+    _prepare_fresh_run_dir(run_dir, accelerator)
     artifacts_dir = run_dir / "artifacts"
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    if accelerator.is_main_process:
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+    _wait_for_everyone(accelerator)
     external = load_external_gene_bags(
         config,
         data,
@@ -431,16 +438,20 @@ def run_cross_validation(
                 canonical_gene_order=tuple(manifest["perturbation_gene"]),
             )
         )
-    _aggregate_outputs(
-        run_dir,
-        manifest,
-        folds,
-        outputs,
-        manifest_path,
-        expected_sha256,
-        fingerprint,
-        config,
+    _run_main_process(
+        accelerator,
+        lambda: _aggregate_outputs(
+            run_dir,
+            manifest,
+            folds,
+            outputs,
+            manifest_path,
+            expected_sha256,
+            fingerprint,
+            config,
+        ),
     )
+    _wait_for_everyone(accelerator)
     return run_dir
 
 
@@ -454,6 +465,78 @@ def _load_primary_bags(config: AivcConfig) -> GeneBags:
 def _require_fresh_run_dir(run_dir: Path) -> None:
     if run_dir.exists() and any(run_dir.iterdir()):
         raise FileExistsError(f"fresh run directory required: {run_dir}")
+
+
+def _prepare_fresh_run_dir(run_dir: Path, accelerator: Accelerator) -> None:
+    """Let rank zero validate/create one shared directory, then synchronize."""
+    error = _main_process_error(
+        accelerator,
+        lambda: (
+            _require_fresh_run_dir(run_dir),
+            run_dir.mkdir(parents=True, exist_ok=True),
+        ),
+    )
+    if error is not None:
+        raise FileExistsError(error)
+    _wait_for_everyone(accelerator)
+
+
+def _wait_for_everyone(accelerator: Accelerator) -> None:
+    """Synchronize ranks without passing unsupported MPS device ids to Gloo."""
+    if (
+        accelerator.num_processes > 1
+        and torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+        and accelerator.device.type in {"cpu", "mps"}
+    ):
+        torch.distributed.barrier()
+        return
+    accelerator.wait_for_everyone()
+
+
+def _run_main_process(
+    accelerator: Accelerator,
+    action: Callable[[], None],
+) -> None:
+    """Execute a shared-filesystem mutation exactly once."""
+    error = _main_process_error(accelerator, action)
+    if error is not None:
+        raise RuntimeError(f"rank-zero shared operation failed: {error}")
+
+
+def _run_distributed_preflight(
+    config_path: Path,
+    accelerator: Accelerator,
+) -> None:
+    """Run locked preflight once and propagate any failure to every rank."""
+    if accelerator.num_processes == 1:
+        run_preflight(config_path)
+        return
+    error = _main_process_error(accelerator, lambda: run_preflight(config_path))
+    if error is not None:
+        raise RuntimeError(f"locked preflight failed: {error}")
+
+
+def _main_process_error(
+    accelerator: Accelerator,
+    action: Callable[[], object],
+) -> str | None:
+    """Run an action on rank zero and broadcast its error text."""
+    error: str | None = None
+    if accelerator.is_main_process:
+        try:
+            action()
+        except Exception as caught:
+            error = f"{type(caught).__name__}: {caught}"
+    if accelerator.num_processes > 1:
+        values = [error]
+        torch.distributed.broadcast_object_list(
+            values,
+            src=0,
+            device=torch.device("cpu"),
+        )
+        error = values[0]
+    return error
 
 
 def _manifest_authority(config: AivcConfig) -> tuple[Path, str]:
@@ -588,7 +671,7 @@ def _aggregate_outputs(
     access_audit = _concat_output(outputs, "fit_access_audit")
     external_qa = _concat_output(outputs, "external_alignment_qa")
     _assert_predictions(predictions, manifest)
-    _assert_access_audit(access_audit, folds)
+    _assert_access_audit(access_audit, folds, config)
     _write_frame(metrics, artifacts_dir / "fold_metrics.csv")
     _write_frame(predictions, artifacts_dir / "predictions.csv")
     _write_frame(access_audit, artifacts_dir / "fit_access_audit.csv")
@@ -703,10 +786,15 @@ def _assert_predictions(predictions: pd.DataFrame, manifest: pd.DataFrame) -> No
             raise ValueError(f"each canonical gene must appear once in {scope}")
 
 
-def _assert_access_audit(audit: pd.DataFrame, folds: list[FoldSpec]) -> None:
+def _assert_access_audit(
+    audit: pd.DataFrame,
+    folds: list[FoldSpec],
+    config: AivcConfig,
+) -> None:
     if audit.empty:
         raise ValueError("fit access audit is empty")
     fold_by_id = {fold.outer_fold: fold for fold in folds}
+    mandatory = _mandatory_audit_stages(config)
     for row in audit.to_dict("records"):
         stage = str(row["stage"])
         fold = fold_by_id[int(row["outer_fold"])]
@@ -721,6 +809,42 @@ def _assert_access_audit(audit: pd.DataFrame, folds: list[FoldSpec]) -> None:
                 f"{stage} audit gene set does not match its authorized role"
             )
         assert_gene_access(stage, expected_genes, fold, checkpoint_frozen)
+    for fold in folds:
+        observed = set(
+            audit.loc[audit["outer_fold"] == fold.outer_fold, "stage"].astype(str)
+        )
+        missing = sorted(mandatory - observed)
+        if missing:
+            raise ValueError(
+                f"fold {fold.outer_fold} missing mandatory audit stages: {missing}"
+            )
+        unexpected = sorted(observed - mandatory)
+        if unexpected:
+            raise ValueError(
+                f"fold {fold.outer_fold} emitted disabled audit stages: {unexpected}"
+            )
+
+
+def _mandatory_audit_stages(config: AivcConfig) -> frozenset[str]:
+    """Derive the exact executed stage contract from the repaired config."""
+    stages = {
+        "adapter_fit",
+        "gmm_fit",
+        "normalizer_fit",
+        "projector_fit",
+        "transition_supervision",
+        "gene_prompt_fit",
+        "fine_tuning",
+        "early_stopping",
+        "observed_b_oracle_fit",
+        "observed_b_oracle_selection",
+        "internal_outer_test",
+        "generation_quality_outer_test",
+        "observed_b_oracle_outer_test",
+    }
+    if config.projector.teacher == "scvi":
+        stages.add("scvi_fit")
+    return frozenset(stages)
 
 
 def _stage_genes(stage: str, fold: FoldSpec) -> tuple[str, ...]:

@@ -20,13 +20,13 @@ from aivc_model.gene_splits import (
 from aivc_model.prepare import (
     AivcConfig,
     GeneBags,
-    _dense_slice,
     _load_metadata,
     resolve_state_gene_order,
 )
 
 _SCHEMA_VERSION = 1
 _STATE_FEATURE_COUNT = 2000
+_ROW_CHUNK_SIZE = 1024
 _ARRAY_FILENAMES = (
     "cells.npy",
     "offsets.npy",
@@ -144,66 +144,73 @@ def _build_gwps_cache(
     contract: _CacheContract,
 ) -> Path:
     model_dir, checkpoint, canonical_path, canonical_sha_path = _required_paths(config)
-    adata = ad.read_h5ad(config.data.h5ad_path)
-    indices, feature_names = resolve_state_gene_order(
-        adata,
-        model_dir,
-        config.data.var_gene_symbol_col,
-    )
-    _validate_state_contract(model_dir, feature_names, contract)
-    canonical = _load_canonical_manifest(config, canonical_path, contract)
-    fingerprint = _config_fingerprint(
-        config,
-        feature_names,
-        model_dir=model_dir,
-        checkpoint=checkpoint,
-        canonical_path=canonical_path,
-        canonical_sha_path=canonical_sha_path,
-        contract=contract,
-    )
-    manifest_path = cache_dir / "manifest.json"
-    if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text())
-        if manifest.get("source_fingerprint") != fingerprint:
-            raise ValueError("GWPS cache fingerprint mismatch")
-        return manifest_path
-
-    expression = _dense_slice(adata.X, indices)
-    labels = (
-        adata.obs[config.data.obs_perturbation_col].astype(str).str.upper().to_numpy()
-    )
-    batches = _source_batches(adata, config)
-    control_label = config.data.control_label.upper()
-    response_labels = set(labels[labels != control_label])
-    canonical_genes = canonical["perturbation_gene"].to_numpy(dtype=str)
-    outside = sorted(response_labels.difference(canonical_genes))
-    if outside:
-        raise ValueError(
-            f"response genes are outside canonical manifest: {outside[:10]}"
+    adata = ad.read_h5ad(config.data.h5ad_path, backed="r")
+    try:
+        indices, feature_names = resolve_state_gene_order(
+            adata,
+            model_dir,
+            config.data.var_gene_symbol_col,
         )
+        _validate_state_contract(model_dir, feature_names, contract)
+        canonical = _load_canonical_manifest(config, canonical_path, contract)
+        fingerprint = _config_fingerprint(
+            config,
+            feature_names,
+            model_dir=model_dir,
+            checkpoint=checkpoint,
+            canonical_path=canonical_path,
+            canonical_sha_path=canonical_sha_path,
+            contract=contract,
+        )
+        manifest_path = cache_dir / "manifest.json"
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text())
+            if manifest.get("source_fingerprint") != fingerprint:
+                raise ValueError("GWPS cache fingerprint mismatch")
+            return manifest_path
 
-    control_mask = labels == control_label
-    if not np.any(control_mask):
-        raise ValueError(f"No control cells found for {config.data.control_label!r}")
-    cells, offsets, batch_labels = _sample_response_cells(
-        expression,
-        labels,
-        batches,
-        canonical_genes,
-        seed=config.data.cache_seed,
-        cells_per_gene=config.data.cache_cells_per_gene,
-    )
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    _write_array(cache_dir / "cells.npy", cells)
+        labels = (
+            adata.obs[config.data.obs_perturbation_col]
+            .astype(str)
+            .str.upper()
+            .to_numpy()
+        )
+        batches = _source_batches(adata, config)
+        control_label = config.data.control_label.upper()
+        canonical_genes = canonical["perturbation_gene"].to_numpy(dtype=str)
+        missing = sorted(set(canonical_genes).difference(labels))
+        if missing:
+            raise ValueError(
+                f"source is missing canonical response genes: {missing[:10]}"
+            )
+        selected_rows, offsets = _sample_response_rows(
+            labels,
+            canonical_genes,
+            seed=config.data.cache_seed,
+            cells_per_gene=config.data.cache_cells_per_gene,
+        )
+        control_rows = np.flatnonzero(labels == control_label)
+        if not len(control_rows):
+            raise ValueError(
+                f"No control cells found for {config.data.control_label!r}"
+            )
+
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        _write_matrix_rows(cache_dir / "cells.npy", adata.X, selected_rows, indices)
+        _write_matrix_rows(
+            cache_dir / "control_cells.npy", adata.X, control_rows, indices
+        )
+    finally:
+        adata.file.close()
+
     _write_array(cache_dir / "offsets.npy", offsets)
     _write_array(cache_dir / "genes.npy", canonical_genes)
     _write_array(
         cache_dir / "gene_outer_folds.npy",
         canonical["outer_fold"].to_numpy(dtype=np.int64),
     )
-    _write_array(cache_dir / "batch_labels.npy", batch_labels)
-    _write_array(cache_dir / "control_cells.npy", expression[control_mask])
-    _write_array(cache_dir / "control_batch.npy", batches[control_mask])
+    _write_array(cache_dir / "batch_labels.npy", batches[selected_rows])
+    _write_array(cache_dir / "control_batch.npy", batches[control_rows])
     _write_array(cache_dir / "feature_names.npy", feature_names.astype(str))
     manifest_path.write_text(
         json.dumps(
@@ -453,15 +460,13 @@ def _source_batches(adata: ad.AnnData, config: AivcConfig) -> np.ndarray:
     return adata.obs[column].astype(str).to_numpy()
 
 
-def _sample_response_cells(
-    expression: np.ndarray,
+def _sample_response_rows(
     labels: np.ndarray,
-    batches: np.ndarray,
     genes: np.ndarray,
     *,
     seed: int,
     cells_per_gene: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     if cells_per_gene < 1:
         raise ValueError("cache_cells_per_gene must be positive")
     rng = np.random.default_rng(seed)
@@ -474,11 +479,31 @@ def _sample_response_cells(
         selected.append(indices)
         offsets.append(offsets[-1] + len(indices))
     flat = np.concatenate(selected) if selected else np.empty(0, dtype=np.int64)
-    return (
-        expression[flat].astype(np.float32, copy=False),
-        np.asarray(offsets, dtype=np.int64),
-        batches[flat],
+    return flat, np.asarray(offsets, dtype=np.int64)
+
+
+def _write_matrix_rows(
+    path: Path,
+    matrix: object,
+    row_indices: np.ndarray,
+    column_indices: np.ndarray,
+) -> None:
+    """Stream selected backed rows and columns into a float32 NPY memmap."""
+    target = np.lib.format.open_memmap(
+        path,
+        mode="w+",
+        dtype=np.float32,
+        shape=(len(row_indices), len(column_indices)),
     )
+    for start in range(0, len(row_indices), _ROW_CHUNK_SIZE):
+        stop = min(start + _ROW_CHUNK_SIZE, len(row_indices))
+        rows = row_indices[start:stop]
+        order = np.argsort(rows)
+        chunk = matrix[rows[order], :]
+        if hasattr(chunk, "toarray"):
+            chunk = chunk.toarray()
+        target[start:stop] = np.asarray(chunk)[np.argsort(order)][:, column_indices]
+    target.flush()
 
 
 def _write_array(path: Path, values: np.ndarray) -> None:
