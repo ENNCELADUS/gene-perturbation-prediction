@@ -129,6 +129,16 @@ class PredictionRequest:
 
 
 @dataclass(frozen=True)
+class ObservedBOracleFit:
+    """Frozen observed-response-to-label oracle selected on inner validation."""
+
+    model: torch.nn.Linear
+    best_epoch: int
+    checkpoint_sha256: str
+    val_mse: float
+
+
+@dataclass(frozen=True)
 class _InputTensorCache:
     control_input: torch.Tensor
     input_bags: tuple[torch.Tensor, ...]
@@ -289,6 +299,7 @@ def run_training(
     fold_spec: FoldSpec | None = None,
     run_dir_override: Path | None = None,
     source_fingerprint: str | None = None,
+    canonical_gene_order: tuple[str, ...] | None = None,
 ) -> dict[str, Path]:
     """Run one train/val/test STATE-ready AIVC experiment."""
     audited_values = (
@@ -298,6 +309,7 @@ def run_training(
         fold_spec,
         run_dir_override,
         source_fingerprint,
+        canonical_gene_order,
     )
     if any(value is not None for value in audited_values):
         if any(value is None for value in audited_values):
@@ -311,6 +323,7 @@ def run_training(
             fold_spec=fold_spec,
             run_dir=run_dir_override,
             source_fingerprint=source_fingerprint,
+            canonical_gene_order=canonical_gene_order,
             accelerator=accelerator,
         )
     accelerator = accelerator or _make_accelerator(config)
@@ -600,6 +613,7 @@ def _run_audited_training(
     fold_spec: FoldSpec,
     run_dir: Path,
     source_fingerprint: str,
+    canonical_gene_order: tuple[str, ...],
     accelerator: Accelerator | None,
 ) -> dict[str, Path]:
     """Train one fold without exposing outer-test responses to fit code."""
@@ -620,6 +634,7 @@ def _run_audited_training(
         test=np.asarray([], dtype=np.int64),
     )
     if config.projector.teacher == "scvi":
+        _authorize_data_access(train_data, "scvi_fit")
         train_data, val_data = _fit_audited_scvi_latents(
             config,
             train_data,
@@ -628,26 +643,29 @@ def _run_audited_training(
             artifacts_dir,
             accelerator,
         )
+        train_data.record_access("scvi_fit")
+    _authorize_data_access(train_data, "projector_fit")
     projector_weight, projector_bias = _fit_or_load_projector_cache(
         config,
         train_data,
         train_split,
         artifacts_dir,
     )
+    train_data.record_access("projector_fit")
+    _authorize_data_access(train_data, "gmm_fit")
     featureizer = _fit_or_load_fixed_gmm_cache(
         config,
         train_data,
         train_split,
         artifacts_dir,
     )
+    train_data.record_access("gmm_fit")
     external_genes = (
         tuple(str(gene) for gene in external.data.genes) if external is not None else ()
     )
-    internal_genes = (
-        *fold_spec.train_genes,
-        *fold_spec.val_genes,
-        *fold_spec.test_genes,
-    )
+    if train_data.access_recorder is None:
+        raise ValueError("audited training lost its gene access recorder")
+    train_data.access_recorder.authorize("normalizer_fit", ())
     model = _build_model(
         config,
         train_data,
@@ -656,7 +674,13 @@ def _run_audited_training(
         projector_bias,
         extra_genes=(*fold_spec.val_genes, *fold_spec.test_genes, *external_genes),
         emit_checkpoint_output=accelerator.is_main_process,
-        canonical_gene_override=tuple(internal_genes),
+        canonical_gene_override=canonical_gene_order,
+    )
+    train_data.access_recorder.record("normalizer_fit", ())
+    runtime_evidence = _runtime_evidence(
+        model,
+        train_data,
+        canonical_gene_order,
     )
     if any(parameter.requires_grad for parameter in model.state_adapter.parameters()):
         raise ValueError("STATE parameters must remain frozen in audited training")
@@ -693,6 +717,8 @@ def _run_audited_training(
     best_epoch = 0
     logs = []
     for epoch in range(1, config.train.max_epochs + 1):
+        for stage in ("adapter_fit", "gene_prompt_fit", "transition_supervision"):
+            _authorize_data_access(train_data, stage)
         train_row = _run_epoch(
             model,
             train_data,
@@ -706,6 +732,8 @@ def _run_audited_training(
             epoch=epoch,
             max_epochs=config.train.max_epochs,
         )
+        for stage in ("adapter_fit", "gene_prompt_fit", "transition_supervision"):
+            train_data.record_access(stage)
         val_row, _ = _evaluate_prediction_only_final(
             model,
             val_data,
@@ -752,6 +780,13 @@ def _run_audited_training(
     selected_model.eval()
     selected_model.requires_grad_(False)
     checkpoint_frozen = True
+
+    oracle_fit = _fit_observed_b_oracle(
+        config,
+        train_data,
+        val_data,
+        fold_spec,
+    )
 
     label_test = sealed_test.label_view(checkpoint_frozen=True)
     label_loader = accelerator.prepare(
@@ -807,25 +842,9 @@ def _run_audited_training(
     )
     if config.projector.teacher == "scvi":
         oracle_data = _project_audited_scvi_data(config, oracle_data, artifacts_dir)
-    oracle_loader = accelerator.prepare(
-        _gene_loader(
-            np.arange(len(oracle_data.genes), dtype=np.int64),
-            shuffle=False,
-            seed=config.train.seed,
-            gene_batch_size=config.train.gene_batch_size,
-            world_size=accelerator.num_processes,
-        )
-    )
-    oracle_metrics, oracle_predictions = _evaluate(
-        model,
+    oracle_metrics, oracle_predictions = _evaluate_observed_b_oracle(
+        oracle_fit,
         oracle_data,
-        oracle_loader,
-        _loss_weights(config),
-        rng,
-        config.train.cell_set_len,
-        accelerator,
-        batch_lookup,
-        pad_short=False,
     )
     return _write_audited_fold_outputs(
         config=config,
@@ -846,13 +865,158 @@ def _run_audited_training(
         response_predictions=response_predictions,
         oracle_metrics=oracle_metrics,
         oracle_predictions=oracle_predictions,
+        oracle_fit=oracle_fit,
         external=external,
         batch_lookup=batch_lookup,
         accelerator=accelerator,
         best_epoch=best_epoch,
         checkpoint_path=checkpoint_path,
         source_fingerprint=source_fingerprint,
+        runtime_evidence=runtime_evidence,
     )
+
+
+def _fit_observed_b_oracle(
+    config: AivcConfig,
+    train_data: GeneBags,
+    val_data: GeneBags,
+    fold_spec: FoldSpec,
+) -> ObservedBOracleFit:
+    """Fit on train observed B and select one frozen epoch on validation B."""
+    _authorize_data_access(train_data, "observed_b_oracle_fit")
+    _authorize_data_access(val_data, "observed_b_oracle_selection")
+    train_x = torch.as_tensor(
+        _observed_b_features(train_data),
+        dtype=torch.float32,
+    )
+    train_y = torch.as_tensor(train_data.y, dtype=torch.float32).reshape(-1, 1)
+    val_x = torch.as_tensor(_observed_b_features(val_data), dtype=torch.float32)
+    val_y = torch.as_tensor(val_data.y, dtype=torch.float32).reshape(-1, 1)
+    torch.manual_seed(config.train.seed + fold_spec.outer_fold + 10_000)
+    model = torch.nn.Linear(train_data.latent_dim, 1)
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=config.train.learning_rate,
+        weight_decay=config.train.weight_decay,
+    )
+    best_epoch = 0
+    best_mse = math.inf
+    best_state: dict[str, torch.Tensor] | None = None
+    for epoch in range(1, config.train.max_epochs + 1):
+        model.train()
+        optimizer.zero_grad(set_to_none=True)
+        torch.nn.functional.mse_loss(model(train_x), train_y).backward()
+        optimizer.step()
+        model.eval()
+        with torch.no_grad():
+            val_mse = float(torch.nn.functional.mse_loss(model(val_x), val_y))
+        if val_mse < best_mse:
+            best_epoch = epoch
+            best_mse = val_mse
+            best_state = {
+                name: tensor.detach().clone()
+                for name, tensor in model.state_dict().items()
+            }
+    if best_state is None:
+        raise ValueError("observed-B oracle requires at least one training epoch")
+    model.load_state_dict(best_state)
+    model.eval()
+    model.requires_grad_(False)
+    train_data.record_access("observed_b_oracle_fit")
+    val_data.record_access("observed_b_oracle_selection")
+    return ObservedBOracleFit(
+        model=model,
+        best_epoch=best_epoch,
+        checkpoint_sha256=_module_sha256(model),
+        val_mse=best_mse,
+    )
+
+
+def _authorize_data_access(data: GeneBags, stage: str) -> None:
+    if data.access_recorder is None:
+        raise ValueError("audited operation requires a GeneAccessRecorder")
+    data.access_recorder.authorize(stage, tuple(str(gene) for gene in data.genes))
+
+
+def _observed_b_features(data: GeneBags) -> np.ndarray:
+    return np.vstack(
+        [np.asarray(bag, dtype=np.float32).mean(axis=0) for bag in data.latent_bags]
+    ).astype(np.float32)
+
+
+def _evaluate_observed_b_oracle(
+    oracle: ObservedBOracleFit,
+    data: GeneBags,
+) -> tuple[dict[str, float], pd.DataFrame]:
+    with torch.no_grad():
+        predictions = (
+            oracle.model(torch.as_tensor(_observed_b_features(data)))
+            .reshape(-1)
+            .numpy()
+        )
+    y_true = np.asarray(data.y, dtype=np.float64)
+    y_pred = np.asarray(predictions, dtype=np.float64)
+    metrics = regression_metrics(y_true, y_pred)
+    metrics.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
+    frame = pd.DataFrame(
+        {
+            "perturbation_gene": [str(gene) for gene in data.genes],
+            "y_true": y_true,
+            "y_pred": y_pred,
+            "n_chunks": np.ones(len(data.genes), dtype=float),
+        }
+    )
+    return metrics, frame
+
+
+def _runtime_evidence(
+    model: AivcModel,
+    train_data: GeneBags,
+    canonical_gene_order: tuple[str, ...],
+) -> dict[str, object]:
+    state_model = model.state_adapter.state_model
+    state_input_dim = int(getattr(state_model, "input_dim", train_data.input_dim))
+    state_output_dim = int(getattr(state_model, "output_dim", train_data.input_dim))
+    state_pert_dim = int(getattr(state_model, "pert_dim", 0))
+    feature_match_count = (
+        int(len(train_data.feature_names))
+        if train_data.feature_names is not None
+        else int(train_data.input_dim)
+    )
+    if (
+        state_input_dim != train_data.input_dim
+        or feature_match_count != state_input_dim
+    ):
+        raise ValueError("STATE runtime input features do not match verified GeneBags")
+    canonical = tuple(str(gene).upper() for gene in canonical_gene_order)
+    evidence: dict[str, object] = {
+        "state_input_dim": state_input_dim,
+        "state_output_dim": state_output_dim,
+        "state_pert_dim": state_pert_dim,
+        "state_feature_match_count": feature_match_count,
+        "esm_resolved_count": None,
+        "esm_total_count": None,
+        "esm_gene_order_sha256": None,
+    }
+    if isinstance(model.perturbations, Esm2PerturbationAdapter):
+        resolved_order = tuple(model.perturbations.genes)
+        canonical_resolved = resolved_order[: len(canonical)]
+        if canonical_resolved != canonical:
+            raise ValueError(
+                "ESM-2 adapter order differs from canonical manifest order"
+            )
+        evidence.update(
+            {
+                "esm_resolved_count": len(canonical_resolved),
+                "esm_total_count": len(canonical),
+                "esm_gene_order_sha256": _ordered_gene_sha256(canonical_resolved),
+            }
+        )
+    return evidence
+
+
+def _ordered_gene_sha256(genes: tuple[str, ...]) -> str:
+    return hashlib.sha256("\n".join(genes).encode("utf-8")).hexdigest()
 
 
 def _fit_audited_scvi_latents(
@@ -920,12 +1084,14 @@ def _write_audited_fold_outputs(
     response_predictions: pd.DataFrame,
     oracle_metrics: dict[str, float],
     oracle_predictions: pd.DataFrame,
+    oracle_fit: ObservedBOracleFit,
     external: ExternalGeneBags | None,
     batch_lookup: dict[str, int],
     accelerator: Accelerator,
     best_epoch: int,
     checkpoint_path: Path,
     source_fingerprint: str,
+    runtime_evidence: dict[str, object],
 ) -> dict[str, Path]:
     paths = _audited_output_paths(run_dir)
     external_metrics: dict[str, float] = {}
@@ -972,12 +1138,18 @@ def _write_audited_fold_outputs(
             external_predictions,
             config.external_test.name if config.external_test is not None else None,
         )
-        access_audit = _audited_access_rows(config, fold_spec)
+        if train_data.access_recorder is None:
+            raise ValueError("audited training lost its gene access recorder")
+        access_audit = train_data.access_recorder.to_frame()
         external_qa = _external_qa_rows(external, fold_spec.outer_fold)
         metrics.to_csv(paths["fold_metrics"], index=False)
         predictions.to_csv(paths["predictions"], index=False)
         access_audit.to_csv(paths["fit_access_audit"], index=False)
         external_qa.to_csv(paths["external_alignment_qa"], index=False)
+        paths["runtime_evidence"].write_text(
+            json.dumps(runtime_evidence, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         fit_summary = {
             "adapter_sha256": _module_sha256(model.perturbations),
             "state_sha256": _module_sha256(model.state_adapter),
@@ -994,6 +1166,9 @@ def _write_audited_fold_outputs(
             "selected_layer": None,
             "best_epoch": int(best_epoch),
             "checkpoint_sha256": _path_sha256(checkpoint_path),
+            "oracle_best_epoch": oracle_fit.best_epoch,
+            "oracle_checkpoint_sha256": oracle_fit.checkpoint_sha256,
+            "oracle_val_mse": oracle_fit.val_mse,
             "source_fingerprint": source_fingerprint,
         }
         paths["fit_audit_summary"].write_text(
@@ -1025,6 +1200,7 @@ def _audited_output_paths(run_dir: Path) -> dict[str, Path]:
         "fit_access_audit": artifacts / "fit_access_audit.csv",
         "external_alignment_qa": artifacts / "external_alignment_qa.csv",
         "fit_audit_summary": run_dir / "fit_audit_summary.json",
+        "runtime_evidence": run_dir / "runtime_evidence.json",
     }
 
 
@@ -1048,11 +1224,7 @@ def _audited_metric_rows(
             "occupancy",
         }
     }
-    oracle = {
-        key.removeprefix("obs_"): value
-        for key, value in oracle_response.items()
-        if key.startswith("obs_")
-    }
+    oracle = dict(oracle_response)
     rows = [
         {
             "outer_fold": outer_fold,
@@ -1115,34 +1287,6 @@ def _audited_prediction_rows(
     return pd.concat(frames, ignore_index=True)
 
 
-def _audited_access_rows(config: AivcConfig, fold: FoldSpec) -> pd.DataFrame:
-    events = [
-        ("projector_fit", fold.train_genes, False),
-        ("gmm_fit", fold.train_genes, False),
-        ("adapter_fit", fold.train_genes, False),
-        ("transition_supervision", fold.train_genes, False),
-        ("gene_prompt_fit", fold.train_genes, False),
-        ("fine_tuning", fold.train_genes, False),
-        ("early_stopping", fold.val_genes, False),
-        ("generation_quality_outer_test", fold.test_genes, True),
-        ("observed_b_oracle_outer_test", fold.test_genes, True),
-    ]
-    if config.projector.teacher == "scvi":
-        events.insert(0, ("scvi_fit", fold.train_genes, False))
-    return pd.DataFrame(
-        [
-            {
-                "stage": stage,
-                "outer_fold": fold.outer_fold,
-                "gene_count": len(genes),
-                "gene_set_sha256": _gene_set_sha256(genes),
-                "checkpoint_frozen": checkpoint_frozen,
-            }
-            for stage, genes, checkpoint_frozen in events
-        ]
-    )
-
-
 def _external_qa_rows(
     external: ExternalGeneBags | None,
     outer_fold: int,
@@ -1155,11 +1299,6 @@ def _external_qa_rows(
     if len(rows) != 3:
         raise ValueError("Adamson alignment QA must contain exactly three source rows")
     return pd.DataFrame(rows)
-
-
-def _gene_set_sha256(genes: tuple[str, ...]) -> str:
-    value = "\n".join(sorted(str(gene).upper() for gene in genes))
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _arrays_sha256(*arrays: np.ndarray) -> str:

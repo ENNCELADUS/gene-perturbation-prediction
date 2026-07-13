@@ -19,6 +19,8 @@ from scipy import sparse
 from sklearn.model_selection import train_test_split
 import yaml
 
+from aivc_model.gene_splits import GeneAccessRecorder
+
 _LABEL_RTOL = 1e-6
 _LABEL_ATOL = 1e-8
 
@@ -193,11 +195,19 @@ class GeneBags:
     input_dim: int
     latent_dim: int
     gene_outer_folds: np.ndarray | None = None
+    access_recorder: GeneAccessRecorder | None = None
 
-    def for_genes(self, genes: tuple[str, ...], stage: str) -> GeneBags:
-        """Return an ordered gene-only view for an already authorized stage."""
-        del stage
+    def for_genes(
+        self,
+        genes: tuple[str, ...],
+        stage: str,
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> GeneBags:
+        """Authorize, record, and return an ordered gene-only view."""
         requested = tuple(str(gene).upper() for gene in genes)
+        if self.access_recorder is None:
+            raise ValueError("GeneBags.for_genes requires a GeneAccessRecorder")
         if len(set(requested)) != len(requested):
             raise ValueError("gene view contains duplicate requested genes")
         index_by_gene = {
@@ -206,6 +216,11 @@ class GeneBags:
         missing = [gene for gene in requested if gene not in index_by_gene]
         if missing:
             raise ValueError(f"gene view contains unknown genes: {missing[:5]}")
+        self.access_recorder.record(
+            stage,
+            requested,
+            checkpoint_frozen=checkpoint_frozen,
+        )
         indices = [index_by_gene[gene] for gene in requested]
         return GeneBags(
             genes=np.asarray([self.genes[index] for index in indices], dtype=object),
@@ -235,6 +250,22 @@ class GeneBags:
                 if self.gene_outer_folds is not None
                 else None
             ),
+            access_recorder=self.access_recorder,
+        )
+
+    def record_access(
+        self,
+        stage: str,
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> None:
+        """Authorize and record an operation over every gene in this view."""
+        if self.access_recorder is None:
+            raise ValueError("audited gene access requires a GeneAccessRecorder")
+        self.access_recorder.record(
+            stage,
+            tuple(str(gene) for gene in self.genes),
+            checkpoint_frozen=checkpoint_frozen,
         )
 
 
@@ -251,7 +282,11 @@ class SealedGeneBags:
             raise ValueError(
                 "selected checkpoint is frozen before outer-test label access"
             )
-        selected = self._data.for_genes(self._genes, stage="internal_outer_test")
+        selected = self._data.for_genes(
+            self._genes,
+            stage="internal_outer_test",
+            checkpoint_frozen=True,
+        )
         return replace(
             selected,
             input_bags=tuple(
@@ -286,7 +321,11 @@ class SealedGeneBags:
             raise ValueError(
                 "selected checkpoint is frozen before outer-test response access"
             )
-        return self._data.for_genes(self._genes, stage=stage)
+        return self._data.for_genes(
+            self._genes,
+            stage=stage,
+            checkpoint_frozen=True,
+        )
 
 
 @dataclass(frozen=True)

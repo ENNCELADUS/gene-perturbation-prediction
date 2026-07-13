@@ -16,8 +16,12 @@ from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
     FINAL_RESPONSE_STAGES,
     FIT_STAGES,
+    FINAL_LABEL_STAGES,
+    ORACLE_FIT_STAGES,
+    ORACLE_SELECTION_STAGES,
     SELECTION_STAGES,
     FoldSpec,
+    GeneAccessRecorder,
     assert_gene_access,
     attach_gene_provenance,
     load_canonical_outer_manifest,
@@ -43,20 +47,15 @@ def run_training_fold(
     run_dir: Path,
     source_fingerprint: str,
     accelerator: Accelerator | None = None,
+    canonical_gene_order: tuple[str, ...] | None = None,
 ) -> dict[str, Path]:
     """Run one outer fold through role-limited GeneBags views."""
-    assert_gene_access(
-        "fine_tuning",
-        fold_spec.train_genes,
-        fold_spec,
-        checkpoint_frozen=False,
-    )
-    assert_gene_access(
-        "early_stopping",
-        fold_spec.val_genes,
-        fold_spec,
-        checkpoint_frozen=False,
-    )
+    _require_fresh_run_dir(run_dir)
+    tokenizer = getattr(getattr(config, "state", None), "gene_tokenizer", None)
+    if tokenizer == "esm2" and canonical_gene_order is None:
+        raise ValueError("audited ESM-2 training requires canonical manifest order")
+    recorder = GeneAccessRecorder(fold_spec)
+    data = replace(data, access_recorder=recorder)
     train_data = data.for_genes(fold_spec.train_genes, stage="fine_tuning")
     val_data = data.for_genes(fold_spec.val_genes, stage="early_stopping")
     manifest = _manifest_from_bags(data)
@@ -89,6 +88,11 @@ def run_training_fold(
         fold_spec=fold_spec,
         run_dir_override=run_dir,
         source_fingerprint=source_fingerprint,
+        canonical_gene_order=(
+            canonical_gene_order
+            if canonical_gene_order is not None
+            else tuple(str(gene).upper() for gene in data.genes)
+        ),
     )
 
 
@@ -124,6 +128,7 @@ def run_cross_validation(
         )
     run_id = config.train.run_id or "state_aivc_cv"
     run_dir = config.data.output_dir / "runs" / run_id
+    _require_fresh_run_dir(run_dir)
     artifacts_dir = run_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     external = load_external_gene_bags(
@@ -155,6 +160,7 @@ def run_cross_validation(
                 run_dir=fold_dir,
                 source_fingerprint=fingerprint,
                 accelerator=accelerator,
+                canonical_gene_order=tuple(manifest["perturbation_gene"]),
             )
         )
     _aggregate_outputs(
@@ -166,9 +172,13 @@ def run_cross_validation(
         expected_sha256,
         fingerprint,
         config,
-        exact_feature_matches=getattr(data, "input_dim", None),
     )
     return run_dir
+
+
+def _require_fresh_run_dir(run_dir: Path) -> None:
+    if run_dir.exists() and any(run_dir.iterdir()):
+        raise FileExistsError(f"fresh run directory required: {run_dir}")
 
 
 def _manifest_authority(config: AivcConfig) -> tuple[Path, str]:
@@ -229,7 +239,6 @@ def _aggregate_outputs(
     split_sha256: str,
     source_fingerprint: str,
     config: AivcConfig,
-    exact_feature_matches: int | None,
 ) -> None:
     artifacts_dir = run_dir / "artifacts"
     predictions = _concat_output(outputs, "predictions")
@@ -242,8 +251,14 @@ def _aggregate_outputs(
     _write_frame(predictions, artifacts_dir / "predictions.csv")
     _write_frame(access_audit, artifacts_dir / "fit_access_audit.csv")
     _write_frame(external_qa, artifacts_dir / "external_alignment_qa.csv")
-    _write_frame(_gene_split_rows(manifest, folds), artifacts_dir / "gene_splits.csv")
+    canonical_output = artifacts_dir / "gene_splits.csv"
+    canonical_output.write_bytes(manifest_path.read_bytes())
+    observed_canonical_sha = hashlib.sha256(canonical_output.read_bytes()).hexdigest()
+    if observed_canonical_sha != split_sha256:
+        raise ValueError("emitted canonical gene split SHA-256 mismatch")
+    _write_frame(_fold_role_rows(manifest, folds), artifacts_dir / "fold_roles.csv")
     _write_frame(_summarize_metrics(metrics), run_dir / "summary.csv")
+    runtime_evidence = _verified_runtime_evidence(outputs)
     fold_seeds = {
         str(fold.outer_fold): int(config.cv.random_state + fold.outer_fold + 1)
         for fold in folds
@@ -252,11 +267,21 @@ def _aggregate_outputs(
         "canonical_split_path": str(manifest_path),
         "canonical_split_sha256": split_sha256,
         "canonical_gene_count": CANONICAL_GENE_COUNT,
-        "esm_coverage": "9338/9338",
+        "esm_resolved_count": runtime_evidence["esm_resolved_count"],
+        "esm_total_count": runtime_evidence["esm_total_count"],
+        "esm_gene_order_sha256": runtime_evidence["esm_gene_order_sha256"],
+        "state_input_dim": runtime_evidence["state_input_dim"],
+        "state_output_dim": runtime_evidence["state_output_dim"],
+        "state_pert_dim": runtime_evidence["state_pert_dim"],
+        "state_feature_match_count": runtime_evidence["state_feature_match_count"],
         "source_fingerprint": source_fingerprint,
         "fold_seeds": fold_seeds,
-        "checkpoint_dimensions": _checkpoint_dimensions(config),
-        "exact_feature_matches": exact_feature_matches,
+        "checkpoint_dimensions": {
+            "input_dim": runtime_evidence["state_input_dim"],
+            "output_dim": runtime_evidence["state_output_dim"],
+            "pert_dim": runtime_evidence["state_pert_dim"],
+        },
+        "exact_feature_matches": runtime_evidence["state_feature_match_count"],
         "fold_fit_audit_summaries": [
             str(paths["fit_audit_summary"]) for paths in outputs
         ],
@@ -264,6 +289,7 @@ def _aggregate_outputs(
             "fold_metrics": str(artifacts_dir / "fold_metrics.csv"),
             "predictions": str(artifacts_dir / "predictions.csv"),
             "gene_splits": str(artifacts_dir / "gene_splits.csv"),
+            "fold_roles": str(artifacts_dir / "fold_roles.csv"),
             "fit_access_audit": str(artifacts_dir / "fit_access_audit.csv"),
             "external_alignment_qa": str(artifacts_dir / "external_alignment_qa.csv"),
         },
@@ -274,20 +300,35 @@ def _aggregate_outputs(
     )
 
 
-def _checkpoint_dimensions(config: AivcConfig) -> dict[str, int | None]:
-    state = getattr(config, "state", None)
-    return {
-        "input_dim": getattr(state, "input_dim", None),
-        "output_dim": getattr(state, "output_dim", None),
-        "pert_dim": getattr(state, "pert_dim", None),
-    }
-
-
 def _concat_output(outputs: list[dict[str, Path]], key: str) -> pd.DataFrame:
     frames = [pd.read_csv(paths[key]) for paths in outputs]
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+
+def _verified_runtime_evidence(outputs: list[dict[str, Path]]) -> dict[str, object]:
+    evidence = [
+        json.loads(paths["runtime_evidence"].read_text(encoding="utf-8"))
+        for paths in outputs
+    ]
+    if not evidence:
+        raise ValueError("runtime evidence is missing")
+    first = evidence[0]
+    if any(item != first for item in evidence[1:]):
+        raise ValueError("runtime evidence differs across outer folds")
+    required = {
+        "esm_resolved_count",
+        "esm_total_count",
+        "esm_gene_order_sha256",
+        "state_input_dim",
+        "state_output_dim",
+        "state_pert_dim",
+        "state_feature_match_count",
+    }
+    if not required <= set(first):
+        raise ValueError("runtime evidence is incomplete")
+    return first
 
 
 def _assert_predictions(predictions: pd.DataFrame, manifest: pd.DataFrame) -> None:
@@ -328,14 +369,12 @@ def _assert_access_audit(audit: pd.DataFrame, folds: list[FoldSpec]) -> None:
         stage = str(row["stage"])
         fold = fold_by_id[int(row["outer_fold"])]
         checkpoint_frozen = bool(row.get("checkpoint_frozen", False))
-        genes_text = row.get("genes")
-        if isinstance(genes_text, str):
-            genes = tuple(gene for gene in genes_text.split(";") if gene)
-            assert_gene_access(stage, genes, fold, checkpoint_frozen)
-            continue
         expected_genes = _stage_genes(stage, fold)
         expected_hash = _gene_set_sha256(expected_genes)
-        if str(row.get("gene_set_sha256")) != expected_hash:
+        if (
+            int(row.get("gene_count", -1)) != len(expected_genes)
+            or str(row.get("gene_set_sha256")) != expected_hash
+        ):
             raise ValueError(
                 f"{stage} audit gene set does not match its authorized role"
             )
@@ -343,11 +382,13 @@ def _assert_access_audit(audit: pd.DataFrame, folds: list[FoldSpec]) -> None:
 
 
 def _stage_genes(stage: str, fold: FoldSpec) -> tuple[str, ...]:
-    if stage in FIT_STAGES:
+    if stage == "normalizer_fit":
+        return ()
+    if stage in FIT_STAGES | ORACLE_FIT_STAGES:
         return fold.train_genes
-    if stage in SELECTION_STAGES:
+    if stage in SELECTION_STAGES | ORACLE_SELECTION_STAGES:
         return fold.val_genes
-    if stage in FINAL_RESPONSE_STAGES:
+    if stage in FINAL_RESPONSE_STAGES | FINAL_LABEL_STAGES:
         return fold.test_genes
     raise ValueError(f"unknown gene-access stage {stage!r}")
 
@@ -357,7 +398,7 @@ def _gene_set_sha256(genes: tuple[str, ...]) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _gene_split_rows(manifest: pd.DataFrame, folds: list[FoldSpec]) -> pd.DataFrame:
+def _fold_role_rows(manifest: pd.DataFrame, folds: list[FoldSpec]) -> pd.DataFrame:
     rows = []
     for fold in folds:
         roles = {
