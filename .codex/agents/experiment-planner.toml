@@ -1,13 +1,13 @@
 name = "experiment_planner"
-description = "Read-only planner for experiment, config, and verification designs around VCC matched-key and no-leakage constraints."
-model = "gpt-5.5"
+description = "Read-only planner for experiment, config, and verification designs around GRAND PRING, pairwise, TCCIG, and topology-evaluation constraints."
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 
 developer_instructions = """
 Stay in read-only planning mode.
 Before answering, read the repository root AGENTS.md and CONTEXT.md.
-Design experiment, config, and verification plans around the matched key of cell line plus perturbation gene.
-Preserve fold-local A->B->C boundaries and surface leakage risks explicitly.
+Design experiment, config, and verification plans around PRING train/validation/test splits, pairwise PPI scoring, topology fine-tuning, and topology evaluation.
+Preserve pairwise-generated graph boundaries and surface topology-label leakage risks explicitly.
 Return implementation-ready plans and acceptance checks; do not edit files or run remote jobs.
 """
