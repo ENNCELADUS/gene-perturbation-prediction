@@ -28,16 +28,20 @@ class DataConfig:
     h5ad_path: Path
     overlap_csv: Path
     output_dir: Path
+    prepared_cache_dir: Path | None = None
     obs_perturbation_col: str = "gene"
     control_label: str = "non-targeting"
     obs_cell_type_col: str | None = None
     obs_batch_col: str | None = None
+    var_gene_symbol_col: str = "gene_name"
     state_embed_key: str | None = None
     state_hvg_n_top_genes: int | None = None
     scvi_obsm_key: str | None = "X_scVI"
     depmap_label_col: str = "depmap_gene_effect"
     matched_label_col: str = "has_depmap_label"
     min_cells_per_gene: int = 2
+    cache_seed: int = 42
+    cache_cells_per_gene: int = 256
 
 
 @dataclass(frozen=True)
@@ -69,6 +73,17 @@ class SplitConfig:
     train_genes: tuple[str, ...] | None = None
     val_genes: tuple[str, ...] | None = None
     test_genes: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class CVConfig:
+    n_splits: int = 5
+    expected_gene_count: int = 9338
+    outer_split_manifest: Path | None = None
+    outer_split_sha256_file: Path | None = None
+    inner_val_fraction: float = 0.1
+    random_state: int = 42
+    stratify_bins: int = 10
 
 
 @dataclass(frozen=True)
@@ -148,6 +163,7 @@ class AivcConfig:
     data: DataConfig
     external_test: ExternalTestConfig | None
     split: SplitConfig
+    cv: CVConfig
     state: StateConfig
     projector: ProjectorConfig
     gmm: GmmConfig
@@ -172,6 +188,7 @@ class GeneBags:
     metadata: pd.DataFrame
     input_dim: int
     latent_dim: int
+    gene_outer_folds: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -202,6 +219,7 @@ def load_config(path: Path) -> AivcConfig:
         data=_data_config(raw.get("data", {})),
         external_test=_external_test_config(raw.get("external_test")),
         split=_split_config(raw.get("split", {})),
+        cv=_cv_config(raw.get("cv", {})),
         state=_state_config(raw.get("state", {})),
         projector=_projector_config(raw.get("projector", {})),
         gmm=_gmm_config(raw.get("gmm", {})),
@@ -1507,6 +1525,16 @@ def _state_input_view(
     adata: ad.AnnData,
     config: AivcConfig,
 ) -> tuple[np.ndarray, np.ndarray | None]:
+    if (
+        config.state.backend == "state_checkpoint"
+        and config.state.model_dir is not None
+    ):
+        indices, feature_names = resolve_state_gene_order(
+            adata,
+            config.state.model_dir,
+            config.data.var_gene_symbol_col,
+        )
+        return _dense_slice(adata.X, indices), feature_names
     key = config.data.state_embed_key
     if key:
         if key in adata.obsm:
@@ -1520,6 +1548,35 @@ def _state_input_view(
         raise ValueError(msg)
     matrix = _matrix_view(adata, None)
     return matrix, np.asarray(adata.var_names.astype(str))
+
+
+def resolve_state_gene_order(
+    adata: ad.AnnData,
+    model_dir: Path,
+    symbol_col: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resolve expression columns to the exact STATE checkpoint gene order."""
+    with (model_dir / "var_dims.pkl").open("rb") as handle:
+        payload = pickle.load(handle)
+    checkpoint_names = np.asarray(payload["gene_names"], dtype=object).astype(str)
+    source_names = adata.var[symbol_col].astype(str).to_numpy()
+    positions: dict[str, int] = {}
+    duplicates: set[str] = set()
+    for index, symbol in enumerate(source_names):
+        if symbol in positions:
+            duplicates.add(symbol)
+        else:
+            positions[symbol] = index
+    duplicate_matches = sorted(set(checkpoint_names).intersection(duplicates))
+    missing = [name for name in checkpoint_names if name not in positions]
+    if missing or duplicate_matches:
+        matched = len(checkpoint_names) - len(missing) - len(duplicate_matches)
+        raise ValueError(
+            f"STATE expression alignment matched {matched}/{len(checkpoint_names)}; "
+            f"missing={missing[:10]}, duplicate_matches={duplicate_matches[:10]}"
+        )
+    indices = np.asarray([positions[name] for name in checkpoint_names], dtype=np.int64)
+    return indices, checkpoint_names.astype(object)
 
 
 def _batch_labels(adata: ad.AnnData, config: DataConfig) -> np.ndarray | None:
@@ -1660,16 +1717,20 @@ def _data_config(values: dict[str, Any]) -> DataConfig:
         h5ad_path=Path(values["h5ad_path"]),
         overlap_csv=Path(values["overlap_csv"]),
         output_dir=Path(values["output_dir"]),
+        prepared_cache_dir=_path_or_none(values.get("prepared_cache_dir")),
         obs_perturbation_col=str(values.get("obs_perturbation_col", "gene")),
         control_label=str(values.get("control_label", "non-targeting")),
         obs_cell_type_col=values.get("obs_cell_type_col"),
         obs_batch_col=values.get("obs_batch_col"),
+        var_gene_symbol_col=str(values.get("var_gene_symbol_col", "gene_name")),
         state_embed_key=values.get("state_embed_key"),
         state_hvg_n_top_genes=_int_or_none(values.get("state_hvg_n_top_genes")),
         scvi_obsm_key=values.get("scvi_obsm_key", "X_scVI"),
         depmap_label_col=str(values.get("depmap_label_col", "depmap_gene_effect")),
         matched_label_col=str(values.get("matched_label_col", "has_depmap_label")),
         min_cells_per_gene=int(values.get("min_cells_per_gene", 2)),
+        cache_seed=int(values.get("cache_seed", 42)),
+        cache_cells_per_gene=int(values.get("cache_cells_per_gene", 256)),
     )
 
 
@@ -1715,6 +1776,18 @@ def _split_config(values: dict[str, Any]) -> SplitConfig:
         train_genes=_tuple_or_none(values.get("train_genes")),
         val_genes=_tuple_or_none(values.get("val_genes")),
         test_genes=_tuple_or_none(values.get("test_genes")),
+    )
+
+
+def _cv_config(values: dict[str, Any]) -> CVConfig:
+    return CVConfig(
+        n_splits=int(values.get("n_splits", 5)),
+        expected_gene_count=int(values.get("expected_gene_count", 9338)),
+        outer_split_manifest=_path_or_none(values.get("outer_split_manifest")),
+        outer_split_sha256_file=_path_or_none(values.get("outer_split_sha256_file")),
+        inner_val_fraction=float(values.get("inner_val_fraction", 0.1)),
+        random_state=int(values.get("random_state", 42)),
+        stratify_bins=int(values.get("stratify_bins", 10)),
     )
 
 

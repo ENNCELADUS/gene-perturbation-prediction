@@ -1,0 +1,374 @@
+"""Fold-neutral, fingerprinted GWPS expression cache."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+from aivc_model.gene_splits import CANONICAL_GENE_COUNT, sha256_file
+from aivc_model.prepare import (
+    AivcConfig,
+    GeneBags,
+    _dense_slice,
+    _load_metadata,
+    resolve_state_gene_order,
+)
+
+_SCHEMA_VERSION = 1
+_ARRAY_FILENAMES = (
+    "cells.npy",
+    "offsets.npy",
+    "genes.npy",
+    "gene_outer_folds.npy",
+    "batch_labels.npy",
+    "control_cells.npy",
+    "control_batch.npy",
+    "feature_names.npy",
+)
+
+
+def file_signature(path: Path) -> dict[str, object]:
+    """Return a cheap identity signature suitable for a large source file."""
+    resolved = path.resolve()
+    stat = resolved.stat()
+    return {
+        "resolved_path": str(resolved),
+        "size": int(stat.st_size),
+        "mtime_ns": int(stat.st_mtime_ns),
+    }
+
+
+def sha256_strings(values: np.ndarray) -> str:
+    """Hash an ordered string array without ambiguous concatenation."""
+    digest = hashlib.sha256()
+    for value in np.asarray(values).astype(str):
+        encoded = value.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
+
+
+def sidecar_signature(model_dir: Path, basename: str) -> dict[str, str] | None:
+    """Hash the first supported checkpoint sidecar for a basename."""
+    for suffix in (".torch", ".pt", ".pkl"):
+        path = model_dir / f"{basename}{suffix}"
+        if path.exists():
+            return {
+                "resolved_path": str(path.resolve()),
+                "sha256": sha256_file(path),
+            }
+    return None
+
+
+def source_fingerprint(
+    *,
+    h5ad: Path,
+    checkpoint: Path,
+    var_dims: Path,
+    pert_onehot_map: Path,
+    batch_sidecar: Path | None,
+    cell_type_sidecar: Path | None,
+    feature_names: np.ndarray,
+    canonical_split: Path,
+    canonical_gene_count: int,
+    cache_seed: int,
+    cache_cells_per_gene: int,
+) -> str:
+    """Hash every source that can affect the deterministic raw cache."""
+    payload = {
+        "schema_version": _SCHEMA_VERSION,
+        "h5ad": file_signature(h5ad),
+        "checkpoint": file_signature(checkpoint),
+        "var_dims": sha256_file(var_dims),
+        "pert_onehot_map": sha256_file(pert_onehot_map),
+        "batch_sidecar": _optional_sha256(batch_sidecar),
+        "cell_type_sidecar": _optional_sha256(cell_type_sidecar),
+        "feature_names_sha256": sha256_strings(feature_names),
+        "canonical_split_sha256": sha256_file(canonical_split),
+        "canonical_gene_count": int(canonical_gene_count),
+        "cache_seed": int(cache_seed),
+        "cache_cells_per_gene": int(cache_cells_per_gene),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_gwps_cache(config: AivcConfig, cache_dir: Path) -> Path:
+    """Build deterministic raw STATE-aligned GWPS arrays and their manifest."""
+    model_dir, checkpoint, canonical_path = _required_paths(config)
+    adata = ad.read_h5ad(config.data.h5ad_path)
+    indices, feature_names = resolve_state_gene_order(
+        adata,
+        model_dir,
+        config.data.var_gene_symbol_col,
+    )
+    fingerprint = _config_fingerprint(
+        config,
+        feature_names,
+        model_dir=model_dir,
+        checkpoint=checkpoint,
+        canonical_path=canonical_path,
+    )
+    manifest_path = cache_dir / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        if manifest.get("source_fingerprint") != fingerprint:
+            raise ValueError("GWPS cache fingerprint mismatch")
+        return manifest_path
+
+    canonical = _load_canonical_manifest(config, canonical_path)
+    expression = _dense_slice(adata.X, indices)
+    labels = (
+        adata.obs[config.data.obs_perturbation_col].astype(str).str.upper().to_numpy()
+    )
+    batches = _source_batches(adata, config)
+    control_label = config.data.control_label.upper()
+    response_labels = set(labels[labels != control_label])
+    canonical_genes = canonical["perturbation_gene"].to_numpy(dtype=str)
+    outside = sorted(response_labels.difference(canonical_genes))
+    if outside:
+        raise ValueError(
+            f"response genes are outside canonical manifest: {outside[:10]}"
+        )
+
+    control_mask = labels == control_label
+    if not np.any(control_mask):
+        raise ValueError(f"No control cells found for {config.data.control_label!r}")
+    cells, offsets, batch_labels = _sample_response_cells(
+        expression,
+        labels,
+        batches,
+        canonical_genes,
+        seed=config.data.cache_seed,
+        cells_per_gene=config.data.cache_cells_per_gene,
+    )
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    _write_array(cache_dir / "cells.npy", cells)
+    _write_array(cache_dir / "offsets.npy", offsets)
+    _write_array(cache_dir / "genes.npy", canonical_genes)
+    _write_array(
+        cache_dir / "gene_outer_folds.npy",
+        canonical["outer_fold"].to_numpy(dtype=np.int64),
+    )
+    _write_array(cache_dir / "batch_labels.npy", batch_labels)
+    _write_array(cache_dir / "control_cells.npy", expression[control_mask])
+    _write_array(cache_dir / "control_batch.npy", batches[control_mask])
+    _write_array(cache_dir / "feature_names.npy", feature_names.astype(str))
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": _SCHEMA_VERSION,
+                "source_fingerprint": fingerprint,
+                "arrays": list(_ARRAY_FILENAMES),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    return manifest_path
+
+
+def load_gwps_cache(config: AivcConfig, cache_dir: Path) -> GeneBags:
+    """Load and validate the memory-mappable raw GWPS cache."""
+    model_dir, checkpoint, canonical_path = _required_paths(config)
+    manifest_path = cache_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(manifest_path)
+    manifest = json.loads(manifest_path.read_text())
+    feature_names = _load_array(cache_dir / "feature_names.npy")
+    fingerprint = _config_fingerprint(
+        config,
+        feature_names,
+        model_dir=model_dir,
+        checkpoint=checkpoint,
+        canonical_path=canonical_path,
+    )
+    if manifest.get("source_fingerprint") != fingerprint:
+        raise ValueError("GWPS cache fingerprint mismatch")
+
+    canonical = _load_canonical_manifest(config, canonical_path)
+    genes = _load_array(cache_dir / "genes.npy")
+    outer_folds = _load_array(cache_dir / "gene_outer_folds.npy")
+    expected_genes = canonical["perturbation_gene"].to_numpy(dtype=str)
+    expected_folds = canonical["outer_fold"].to_numpy(dtype=np.int64)
+    if not np.array_equal(genes.astype(str), expected_genes) or not np.array_equal(
+        outer_folds,
+        expected_folds,
+    ):
+        raise ValueError("GWPS cache genes/folds do not match canonical manifest")
+
+    cells = _load_array(cache_dir / "cells.npy")
+    offsets = _load_array(cache_dir / "offsets.npy")
+    batch_labels = _load_array(cache_dir / "batch_labels.npy")
+    control_cells = _load_array(cache_dir / "control_cells.npy")
+    control_batch = _load_array(cache_dir / "control_batch.npy")
+    input_bags = tuple(
+        cells[int(offsets[index]) : int(offsets[index + 1])]
+        for index in range(len(genes))
+    )
+    batch_bags = tuple(
+        batch_labels[int(offsets[index]) : int(offsets[index + 1])]
+        for index in range(len(genes))
+    )
+    metadata = _ordered_metadata(config, expected_genes)
+    y = metadata[config.data.depmap_label_col].to_numpy(dtype=np.float32)
+    return GeneBags(
+        genes=genes.astype(object),
+        y=y,
+        input_bags=input_bags,
+        latent_bags=input_bags,
+        control_input=control_cells,
+        control_latent=control_cells,
+        cell_type_bags=None,
+        control_cell_type=None,
+        batch_bags=batch_bags,
+        control_batch=control_batch,
+        feature_names=feature_names.astype(object),
+        metadata=metadata,
+        input_dim=int(feature_names.shape[0]),
+        latent_dim=int(feature_names.shape[0]),
+        gene_outer_folds=outer_folds,
+    )
+
+
+def _required_paths(config: AivcConfig) -> tuple[Path, Path, Path]:
+    model_dir = config.state.model_dir
+    checkpoint = config.state.checkpoint_path
+    canonical_path = config.cv.outer_split_manifest
+    if model_dir is None or checkpoint is None or canonical_path is None:
+        raise ValueError("GWPS cache requires STATE and canonical manifest paths")
+    return model_dir, checkpoint, canonical_path
+
+
+def _config_fingerprint(
+    config: AivcConfig,
+    feature_names: np.ndarray,
+    *,
+    model_dir: Path,
+    checkpoint: Path,
+    canonical_path: Path,
+) -> str:
+    return source_fingerprint(
+        h5ad=config.data.h5ad_path,
+        checkpoint=checkpoint,
+        var_dims=model_dir / "var_dims.pkl",
+        pert_onehot_map=model_dir / "pert_onehot_map.pt",
+        batch_sidecar=_find_sidecar(model_dir, "batch_onehot_map"),
+        cell_type_sidecar=_find_sidecar(model_dir, "cell_type_onehot_map"),
+        feature_names=feature_names,
+        canonical_split=canonical_path,
+        canonical_gene_count=config.cv.expected_gene_count,
+        cache_seed=config.data.cache_seed,
+        cache_cells_per_gene=config.data.cache_cells_per_gene,
+    )
+
+
+def _find_sidecar(model_dir: Path, basename: str) -> Path | None:
+    for suffix in (".torch", ".pt", ".pkl"):
+        path = model_dir / f"{basename}{suffix}"
+        if path.exists():
+            return path
+    return None
+
+
+def _optional_sha256(path: Path | None) -> dict[str, str] | None:
+    if path is None:
+        return None
+    return {"resolved_path": str(path.resolve()), "sha256": sha256_file(path)}
+
+
+def _load_canonical_manifest(config: AivcConfig, path: Path) -> pd.DataFrame:
+    manifest = pd.read_csv(path)
+    if manifest.columns.tolist() != ["perturbation_gene", "outer_fold"]:
+        raise ValueError("canonical manifest has invalid columns")
+    manifest["perturbation_gene"] = (
+        manifest["perturbation_gene"].astype(str).str.upper()
+    )
+    expected_count = int(config.cv.expected_gene_count)
+    if (
+        len(manifest) != expected_count
+        or manifest["perturbation_gene"].nunique() != expected_count
+    ):
+        raise ValueError(
+            f"canonical manifest must contain {expected_count} unique genes"
+        )
+    folds = pd.to_numeric(manifest["outer_fold"], errors="raise")
+    if not np.equal(folds, np.floor(folds)).all():
+        raise ValueError("canonical manifest outer_fold must contain integers")
+    manifest["outer_fold"] = folds.astype(np.int64)
+    if expected_count == CANONICAL_GENE_COUNT and set(folds) != set(range(5)):
+        raise ValueError("canonical manifest outer folds must be exactly 0..4")
+    return manifest
+
+
+def _source_batches(adata: ad.AnnData, config: AivcConfig) -> np.ndarray:
+    column = config.data.obs_batch_col
+    if column is None or column not in adata.obs:
+        raise ValueError("GWPS cache requires a configured source batch column")
+    return adata.obs[column].astype(str).to_numpy()
+
+
+def _sample_response_cells(
+    expression: np.ndarray,
+    labels: np.ndarray,
+    batches: np.ndarray,
+    genes: np.ndarray,
+    *,
+    seed: int,
+    cells_per_gene: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if cells_per_gene < 1:
+        raise ValueError("cache_cells_per_gene must be positive")
+    rng = np.random.default_rng(seed)
+    selected: list[np.ndarray] = []
+    offsets = [0]
+    for gene in genes:
+        indices = np.flatnonzero(labels == gene)
+        if len(indices) > cells_per_gene:
+            indices = np.sort(rng.choice(indices, size=cells_per_gene, replace=False))
+        selected.append(indices)
+        offsets.append(offsets[-1] + len(indices))
+    flat = np.concatenate(selected) if selected else np.empty(0, dtype=np.int64)
+    return (
+        expression[flat].astype(np.float32, copy=False),
+        np.asarray(offsets, dtype=np.int64),
+        batches[flat],
+    )
+
+
+def _write_array(path: Path, values: np.ndarray) -> None:
+    array = np.asarray(values)
+    if array.dtype.kind in {"O", "U", "S"}:
+        strings = array.astype(str)
+        width = max((len(value) for value in strings.flat), default=1)
+        array = strings.astype(f"<U{width}")
+    target = np.lib.format.open_memmap(
+        path,
+        mode="w+",
+        dtype=array.dtype,
+        shape=array.shape,
+    )
+    target[...] = array
+    target.flush()
+
+
+def _load_array(path: Path) -> np.ndarray:
+    return np.load(path, mmap_mode="r", allow_pickle=False)
+
+
+def _ordered_metadata(config: AivcConfig, genes: np.ndarray) -> pd.DataFrame:
+    metadata = _load_metadata(config.data).copy()
+    metadata["perturbation_gene"] = (
+        metadata["perturbation_gene"].astype(str).str.upper()
+    )
+    indexed = metadata.set_index("perturbation_gene", drop=False)
+    missing = [gene for gene in genes if gene not in indexed.index]
+    if missing:
+        raise ValueError(f"canonical genes missing DepMap labels: {missing[:10]}")
+    return indexed.loc[genes].reset_index(drop=True)
