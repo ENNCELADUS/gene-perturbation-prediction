@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+import hashlib
 import math
 from pathlib import Path
 import pickle
@@ -19,9 +20,8 @@ import torch.nn.functional as F
 
 import aivc_model.model as model_module
 import aivc_model.train as train_module
+import aivc_model.gwps_cache as gwps_cache_module
 from aivc_model.gwps_cache import (
-    build_gwps_cache,
-    load_gwps_cache,
     source_fingerprint,
 )
 from aivc_model.model import (
@@ -50,6 +50,7 @@ from aivc_model.prepare import (
     _scvi_latent_cache_dir,
     _suppress_scvi_lightning_warnings,
     _scvi_trainer_kwargs,
+    _state_input_view,
     _write_scvi_latent_cache,
     encode_batch_labels,
     fit_linear_projector,
@@ -75,6 +76,8 @@ def _toy_cache_inputs(tmp_path: Path) -> dict[str, object]:
         "batch_sidecar": tmp_path / "batch_onehot_map.pt",
         "cell_type_sidecar": None,
         "canonical_split": tmp_path / "outer.csv",
+        "canonical_split_sha256_file": tmp_path / "outer.csv.sha256",
+        "overlap_csv": tmp_path / "overlap.csv",
     }
     for key, path in paths.items():
         if path is not None:
@@ -85,6 +88,8 @@ def _toy_cache_inputs(tmp_path: Path) -> dict[str, object]:
         "canonical_gene_count": 2,
         "cache_seed": 7,
         "cache_cells_per_gene": 1,
+        "depmap_label_col": "depmap_gene_effect",
+        "matched_label_col": "has_depmap_label",
     }
 
 
@@ -97,7 +102,10 @@ def _toy_gwps_cache_config(
     model_dir = tmp_path / "state"
     model_dir.mkdir(exist_ok=True)
     with (model_dir / "var_dims.pkl").open("wb") as handle:
-        pickle.dump({"gene_names": ["A", "B"]}, handle)
+        pickle.dump(
+            {"gene_names": ["A", "B"], "input_dim": 2, "output_dim": 2},
+            handle,
+        )
     (model_dir / "pert_onehot_map.pt").write_bytes(b"perturbations")
     (model_dir / "batch_onehot_map.pt").write_bytes(b"batches")
     checkpoint = model_dir / "checkpoints" / "final.ckpt"
@@ -129,6 +137,8 @@ def _toy_gwps_cache_config(
     pd.DataFrame({"perturbation_gene": ["G1", "G2"], "outer_fold": [0, 1]}).to_csv(
         outer_manifest, index=False
     )
+    outer_sha256 = tmp_path / "outer.csv.sha256"
+    outer_sha256.write_text(f"{_sha256(outer_manifest)}\n")
     return types.SimpleNamespace(
         data=types.SimpleNamespace(
             h5ad_path=h5ad_path,
@@ -143,11 +153,13 @@ def _toy_gwps_cache_config(
             cache_cells_per_gene=1,
         ),
         state=types.SimpleNamespace(
+            backend="state_checkpoint",
             model_dir=model_dir,
             checkpoint_path=checkpoint,
         ),
         cv=types.SimpleNamespace(
             outer_split_manifest=outer_manifest,
+            outer_split_sha256_file=outer_sha256,
             expected_gene_count=2,
         ),
     )
@@ -164,8 +176,9 @@ def test_gwps_cache_manifest_changes_with_state_sidecar(tmp_path: Path) -> None:
 def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> None:
     config = _toy_gwps_cache_config(tmp_path)
     cache_dir = tmp_path / "cache"
-    build_gwps_cache(config, cache_dir)
-    bags = load_gwps_cache(config, cache_dir)
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    bags = gwps_cache_module._load_gwps_cache(config, cache_dir, contract)
     assert bags.feature_names.tolist() == ["A", "B"]
     assert bags.genes.tolist() == ["G1", "G2"]
     np.testing.assert_array_equal(bags.gene_outer_folds, np.asarray([0, 1]))
@@ -177,8 +190,98 @@ def test_gwps_cache_rejects_response_gene_outside_canonical_manifest(
     tmp_path: Path,
 ) -> None:
     config = _toy_gwps_cache_config(tmp_path, response_genes=["G1", "EXTRA"])
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
     with pytest.raises(ValueError, match="canonical manifest"):
-        build_gwps_cache(config, tmp_path / "cache")
+        gwps_cache_module._build_gwps_cache(config, tmp_path / "cache", contract)
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_state_checkpoint_input_requires_model_dir(tmp_path: Path) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    config.state.model_dir = None
+    adata = ad.read_h5ad(config.data.h5ad_path)
+    with pytest.raises(ValueError, match="model_dir"):
+        _state_input_view(adata, config)
+
+
+def test_state_checkpoint_input_requires_checkpoint_path(tmp_path: Path) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    config.state.checkpoint_path = None
+    adata = ad.read_h5ad(config.data.h5ad_path)
+    with pytest.raises(ValueError, match="checkpoint_path"):
+        _state_input_view(adata, config)
+
+
+@pytest.mark.parametrize(
+    ("input_dim", "output_dim", "feature_count", "message"),
+    [
+        (1999, 2000, 1999, "input_dim=1999"),
+        (2000, 1999, 2000, "output_dim=1999"),
+        (2000, 2000, 1999, "feature count=1999"),
+    ],
+)
+def test_production_state_contract_rejects_wrong_checkpoint_dimensions(
+    tmp_path: Path,
+    input_dim: int,
+    output_dim: int,
+    feature_count: int,
+    message: str,
+) -> None:
+    model_dir = tmp_path / "state"
+    model_dir.mkdir()
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump(
+            {
+                "gene_names": [f"G{i}" for i in range(feature_count)],
+                "input_dim": input_dim,
+                "output_dim": output_dim,
+            },
+            handle,
+        )
+    with pytest.raises(ValueError, match=message):
+        gwps_cache_module._validate_state_contract(
+            model_dir,
+            np.asarray([f"G{i}" for i in range(feature_count)], dtype=object),
+            gwps_cache_module._PRODUCTION_CONTRACT,
+        )
+
+
+def test_production_canonical_count_cannot_be_redefined_by_config(
+    tmp_path: Path,
+) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    with pytest.raises(ValueError, match="9338"):
+        gwps_cache_module._load_canonical_manifest(
+            config,
+            config.cv.outer_split_manifest,
+            gwps_cache_module._PRODUCTION_CONTRACT,
+        )
+
+
+def test_gwps_cache_rejects_invalid_canonical_sha256_authority(
+    tmp_path: Path,
+) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    config.cv.outer_split_sha256_file.write_text(f"{'0' * 64}\n")
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        gwps_cache_module._build_gwps_cache(config, tmp_path / "cache", contract)
+
+
+def test_gwps_cache_label_change_invalidates_existing_cache(tmp_path: Path) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    labels = pd.read_csv(config.data.overlap_csv)
+    labels.loc[0, "depmap_gene_effect"] = -9.0
+    labels.to_csv(config.data.overlap_csv, index=False)
+
+    with pytest.raises(ValueError, match="GWPS cache fingerprint mismatch"):
+        gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
 
 
 def test_state_alignment_uses_gene_name_in_checkpoint_order(tmp_path: Path) -> None:
