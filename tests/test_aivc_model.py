@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 
 import aivc_model.model as model_module
+import aivc_model.prepare as prepare_module
 import aivc_model.train as train_module
 import aivc_model.gwps_cache as gwps_cache_module
 import aivc_model.gene_splits as gene_splits_module
@@ -48,6 +49,7 @@ from aivc_model.prepare import (
     _external_state_input_view,
     _load_metadata,
     _load_scvi_latent_cache,
+    _scvi_cache_metadata,
     _merge_external_gene_rows,
     _project_scvi_latent_collections,
     _project_scvi_latent_groups,
@@ -71,6 +73,24 @@ from aivc_model.prepare import (
     with_cached_scvi_teacher_latents,
 )
 from aivc_model.train import _write_csv_if_main, run_training
+
+
+def _toy_artifact_authority(
+    *,
+    source_fingerprint: str = "source",
+    canonical_split_sha256: str = "split",
+    fit_genes: tuple[str, ...] = ("GENE1",),
+) -> object:
+    return prepare_module.ArtifactAuthority(
+        source_fingerprint=source_fingerprint,
+        canonical_split_sha256=canonical_split_sha256,
+        outer_fold=0,
+        fit_stage="inner_train",
+        fit_genes=fit_genes,
+        train_genes=fit_genes,
+        val_genes=("GENE2",),
+        test_genes=("GENE3",),
+    )
 
 
 def _toy_cache_inputs(tmp_path: Path) -> dict[str, object]:
@@ -680,6 +700,45 @@ def test_scvi_latent_cache_rejects_incomplete_or_mismatched_metadata(
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     assert _load_scvi_latent_cache(config, data, split, artifacts_dir, None) is None
+
+
+def test_scvi_cache_metadata_binds_split_and_exact_fit_gene_authority(
+    tmp_path: Path,
+) -> None:
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    data = _toy_gene_bags_with_batches()
+    split = GeneSplit(
+        train=np.asarray([0], dtype=np.int64),
+        val=np.asarray([1], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+
+    first = _scvi_cache_metadata(
+        config,
+        data,
+        split,
+        None,
+        authority=_toy_artifact_authority(),
+    )
+    changed_split = _scvi_cache_metadata(
+        config,
+        data,
+        split,
+        None,
+        authority=_toy_artifact_authority(canonical_split_sha256="changed"),
+    )
+    changed_fit = _scvi_cache_metadata(
+        config,
+        data,
+        split,
+        None,
+        authority=_toy_artifact_authority(fit_genes=("GENE1", "GENE4")),
+    )
+
+    assert first != changed_split
+    assert first != changed_fit
+    assert first["schema_version"] == 2
+    assert first["fit_genes_sha256"]
 
 
 def test_non_rank_scvi_path_requires_valid_latent_cache(tmp_path: Path) -> None:

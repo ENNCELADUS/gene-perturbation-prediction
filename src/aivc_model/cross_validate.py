@@ -137,7 +137,7 @@ def run_cross_validation(
         artifacts_dir,
         project_scvi=False,
     )
-    fingerprint = _source_fingerprint(config_path, expected_sha256, labels)
+    fingerprint = experiment_source_fingerprint(config)
 
     folds: list[FoldSpec] = []
     outputs: list[dict[str, Path]] = []
@@ -215,19 +215,86 @@ def _assert_canonical_universe(manifest: pd.DataFrame) -> None:
         raise ValueError("canonical universe must contain exactly 9338 unique genes")
 
 
-def _source_fingerprint(
-    config_path: Path,
-    split_sha256: str,
-    labels: pd.DataFrame,
-) -> str:
-    digest = hashlib.sha256()
-    if config_path.exists():
-        digest.update(config_path.read_bytes())
-    digest.update(split_sha256.encode("ascii"))
-    digest.update(
-        labels.sort_values("perturbation_gene").to_csv(index=False).encode("utf-8")
+def experiment_source_fingerprint(config: AivcConfig) -> str:
+    """Fingerprint every source that can alter an exp05 fold fit."""
+    cache_manifest = (
+        config.data.prepared_cache_dir / "manifest.json"
+        if config.data.prepared_cache_dir is not None
+        else None
     )
-    return digest.hexdigest()
+    payload = {
+        "schema_version": 2,
+        "gwps_cache_manifest_sha256": _file_sha256_or_none(cache_manifest),
+        "label_csv_sha256": _file_sha256(config.data.overlap_csv),
+        "canonical_outer_manifest_sha256": _file_sha256(
+            _required_path(config.cv.outer_split_manifest, "outer split manifest")
+        ),
+        "canonical_sha256_file_sha256": _file_sha256(
+            _required_path(
+                config.cv.outer_split_sha256_file,
+                "outer split SHA-256 file",
+            )
+        ),
+        "esm2_npz": _file_stat_signature(config.state.esm2_npz),
+        "checkpoint": _file_stat_signature(config.state.checkpoint_path),
+        "state_sidecars": _small_state_sidecars(
+            config.state.model_dir,
+            excluded=(config.state.checkpoint_path, config.state.esm2_npz),
+        ),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _required_path(path: Path | None, description: str) -> Path:
+    if path is None:
+        raise ValueError(f"{description} is required for source fingerprint")
+    return path
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _file_sha256_or_none(path: Path | None) -> str | None:
+    if path is None or not path.exists():
+        return None
+    return _file_sha256(path)
+
+
+def _file_stat_signature(path: Path | None) -> dict[str, object] | None:
+    if path is None:
+        return None
+    resolved = path.resolve()
+    stat = resolved.stat()
+    return {
+        "path": str(resolved),
+        "size": int(stat.st_size),
+        "mtime_ns": int(stat.st_mtime_ns),
+    }
+
+
+def _small_state_sidecars(
+    model_dir: Path | None,
+    *,
+    excluded: tuple[Path | None, ...],
+) -> list[dict[str, str]]:
+    if model_dir is None or not model_dir.exists():
+        return []
+    excluded_paths = {
+        path.resolve() for path in excluded if path is not None and path.exists()
+    }
+    sidecars = []
+    for path in sorted(item for item in model_dir.rglob("*") if item.is_file()):
+        if path.resolve() in excluded_paths or path.stat().st_size > 16 * 1024 * 1024:
+            continue
+        sidecars.append(
+            {
+                "path": str(path.relative_to(model_dir)),
+                "sha256": _file_sha256(path),
+            }
+        )
+    return sidecars
 
 
 def _aggregate_outputs(
