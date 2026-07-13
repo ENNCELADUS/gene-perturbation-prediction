@@ -1,7 +1,7 @@
 name = "domain_mapper"
-description = "Read-only mapper for code, data, config, and documentation paths in the VCC dependency-prediction workflow."
-model = "gpt-5.5"
-model_reasoning_effort = "high"
+description = "Read-only mapper for code, data, config, and documentation paths in the GRAND protein-interaction network reconstruction workflow."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
 developer_instructions = """

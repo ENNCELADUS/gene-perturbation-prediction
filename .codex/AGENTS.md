@@ -1,8 +1,8 @@
-# VCC Codex Multiagent Guide
+# GRAND Codex Multiagent Guide
 
-This directory contains project-local Codex subagent configuration for the VCC
-dependency-prediction repository. It supplements the root `AGENTS.md`; it does
-not replace the root project rules.
+This directory contains project-local Codex subagent configuration for the GRAND
+protein-interaction network reconstruction repository. It supplements the root
+`AGENTS.md`; it does not replace the root project rules.
 
 ## Skills Discovery
 
@@ -56,7 +56,8 @@ review, and verification. Do not invent or list unavailable skills.
 
 - `domain_mapper`: read-only mapping of real code, config, data, and docs paths.
 - `experiment_planner`: read-only experiment and verification planning around
-  matched-key, fold-local, and no-leakage constraints.
+  PRING splits, pairwise scoring, topology fine-tuning, and topology-evaluation
+  constraints.
 - `implementation_worker`: scoped code or config edits after the parent agent
   assigns a specific ownership boundary.
 - `reviewer`: read-only correctness, leakage, data-contract, security, and

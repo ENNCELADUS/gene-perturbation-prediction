@@ -1,6 +1,6 @@
 #:schema https://developers.openai.com/codex/config-schema.json
 
-# Project-local Codex configuration for VCC multiagent workflows.
+# Project-local Codex configuration for multiagent workflows.
 # Keep this focused on agents that help with experiment design, scoped edits,
 # review, and documentation consistency for this repository.
 
@@ -19,11 +19,11 @@ max_threads = 6
 max_depth = 1
 
 [agents.domain_mapper]
-description = "Read-only mapper for code, data, config, and documentation paths in the VCC dependency-prediction workflow."
+description = "Read-only mapper for code, data, config, and documentation paths in the GRAND protein-interaction network reconstruction workflow."
 config_file = "agents/domain-mapper.toml"
 
 [agents.experiment_planner]
-description = "Read-only planner for experiment, config, and verification designs around VCC matched-key and no-leakage constraints."
+description = "Read-only planner for experiment, config, and verification designs around GRAND PRING, pairwise, TCCIG, and topology-evaluation constraints."
 config_file = "agents/experiment-planner.toml"
 
 [agents.implementation_worker]
@@ -35,5 +35,5 @@ description = "Reviewer focused on correctness, leakage, data contracts, securit
 config_file = "agents/reviewer.toml"
 
 [agents.docs_guard]
-description = "Read-only documentation guard for README, experiment docs, model cards, and CONTEXT terminology alignment."
+description = "Read-only documentation guard for README, design docs, experiment docs, topology docs, and CONTEXT terminology alignment."
 config_file = "agents/docs-guard.toml"
