@@ -117,6 +117,14 @@ _BYTES_PER_GIB = 1024**3
 
 
 @dataclass(frozen=True)
+class PredictionRequest:
+    """A final label-prediction scope and its optional observed response source."""
+
+    genes: tuple[str, ...]
+    observed_response: GeneBags | None
+
+
+@dataclass(frozen=True)
 class _InputTensorCache:
     control_input: torch.Tensor
     input_bags: tuple[torch.Tensor, ...]
@@ -351,12 +359,17 @@ def run_training(
         lr=config.train.learning_rate,
         weight_decay=config.train.weight_decay,
     )
-    eval_data = external.data if external is not None else data
-    eval_indices = (
-        np.arange(len(eval_data.genes), dtype=np.int64)
-        if external is not None
-        else split.test
-    )
+    evaluation_sets = {
+        "internal_outer_test": PredictionRequest(
+            genes=tuple(str(data.genes[index]) for index in split.test),
+            observed_response=None,
+        ),
+    }
+    if external is not None and config.external_test is not None:
+        evaluation_sets[f"external:{config.external_test.name}"] = PredictionRequest(
+            genes=tuple(str(gene) for gene in external.data.genes),
+            observed_response=external.data,
+        )
     train_loader = _gene_loader(
         split.train,
         shuffle=True,
@@ -371,20 +384,24 @@ def run_training(
         gene_batch_size=config.train.gene_batch_size,
         world_size=accelerator.num_processes,
     )
-    test_loader = _gene_loader(
-        eval_indices,
-        shuffle=False,
-        seed=config.train.seed,
-        gene_batch_size=config.train.gene_batch_size,
-        world_size=accelerator.num_processes,
-    )
-    model, optimizer, train_loader, val_loader, test_loader = accelerator.prepare(
+    model, optimizer, train_loader, val_loader = accelerator.prepare(
         model,
         optimizer,
         train_loader,
         val_loader,
-        test_loader,
     )
+    evaluation_loaders = {
+        scope: accelerator.prepare(
+            _gene_loader(
+                _prediction_indices(data, request),
+                shuffle=False,
+                seed=config.train.seed,
+                gene_batch_size=config.train.gene_batch_size,
+                world_size=accelerator.num_processes,
+            )
+        )
+        for scope, request in evaluation_sets.items()
+    }
     input_tensor_cache = _InputTensorCache.maybe_build(
         data,
         batch_lookup,
@@ -471,22 +488,24 @@ def run_training(
                 )
         accelerator.wait_for_everyone()
 
-    evaluation_scope = (
-        f"external:{config.external_test.name}"
-        if external is not None and config.external_test is not None
-        else "internal_test"
-    )
-    test_row, test_predictions = _evaluate_prediction_only_final(
-        model,
-        eval_data,
-        test_loader,
-        config.train.cell_set_len,
-        accelerator,
-        batch_lookup,
-    )
+    test_rows = []
+    prediction_frames = []
+    for evaluation_scope, request in evaluation_sets.items():
+        evaluation_data = request.observed_response or data
+        test_row, scoped_predictions = _evaluate_prediction_only_final(
+            model,
+            evaluation_data,
+            evaluation_loaders[evaluation_scope],
+            config.train.cell_set_len,
+            accelerator,
+            batch_lookup,
+        )
+        if accelerator.is_main_process:
+            test_rows.append({"evaluation_scope": evaluation_scope, **test_row})
+            scoped_predictions.insert(0, "evaluation_scope", evaluation_scope)
+            prediction_frames.append(scoped_predictions)
     if accelerator.is_main_process:
-        test_row = {"evaluation_scope": evaluation_scope, **test_row}
-        test_predictions.insert(0, "evaluation_scope", evaluation_scope)
+        test_predictions = pd.concat(prediction_frames, ignore_index=True)
         unwrapped = accelerator.unwrap_model(model)
         test_predictions["perturbation_has_known_vector"] = test_predictions[
             "perturbation_gene"
@@ -503,7 +522,7 @@ def run_training(
                 encoding="utf-8",
             )
         _write_csv_if_main(
-            pd.DataFrame([test_row]),
+            pd.DataFrame(test_rows),
             run_dir / "test_metrics.csv",
             accelerator,
         )
@@ -1033,6 +1052,21 @@ def _gene_loader(
         batch_size=gene_batch_size,
         shuffle=shuffle,
         generator=generator,
+    )
+
+
+def _prediction_indices(
+    internal_data: GeneBags,
+    request: PredictionRequest,
+) -> np.ndarray:
+    data = request.observed_response or internal_data
+    index_by_gene = {str(gene): index for index, gene in enumerate(data.genes)}
+    missing = [gene for gene in request.genes if gene not in index_by_gene]
+    if missing:
+        raise ValueError(f"Prediction request contains unknown genes: {missing}")
+    return np.asarray(
+        [index_by_gene[gene] for gene in request.genes],
+        dtype=np.int64,
     )
 
 
