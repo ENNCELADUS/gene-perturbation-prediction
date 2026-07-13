@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+import hashlib
 import json
 import os
 import pickle
@@ -101,6 +102,56 @@ class StateConfig:
     esm2_npz: Path | None = None
     esm2_adapter_hidden: int = 512
     require_resolved_esm2: bool = False
+
+
+@dataclass(frozen=True)
+class ArtifactAuthority:
+    """Exact data authority used to fit one fold-local artifact."""
+
+    source_fingerprint: str
+    canonical_split_sha256: str
+    outer_fold: int
+    fit_stage: str
+    fit_genes: tuple[str, ...]
+    train_genes: tuple[str, ...]
+    val_genes: tuple[str, ...]
+    test_genes: tuple[str, ...]
+    selection_genes: tuple[str, ...] = ()
+
+    def metadata(self) -> dict[str, object]:
+        """Return validated, JSON-serializable artifact authority metadata."""
+        train = tuple(str(gene) for gene in self.train_genes)
+        fit = tuple(str(gene) for gene in self.fit_genes)
+        val = tuple(str(gene) for gene in self.val_genes)
+        test = tuple(str(gene) for gene in self.test_genes)
+        selection = tuple(str(gene) for gene in self.selection_genes)
+        if fit != train:
+            raise ValueError("fit genes must exactly match inner-train genes")
+        if set(train).intersection(test):
+            raise ValueError("fit metadata contains an outer-test gene")
+        if not set(selection).issubset(val):
+            raise ValueError("selection metadata contains a non-validation gene")
+        return {
+            "schema_version": 2,
+            "source_fingerprint": self.source_fingerprint,
+            "canonical_split_sha256": self.canonical_split_sha256,
+            "outer_fold": int(self.outer_fold),
+            "fit_stage": self.fit_stage,
+            "fit_genes_sha256": _sha256_strings(fit),
+            "train_genes": list(train),
+            "val_genes": list(val),
+            "test_genes": list(test),
+            "selection_genes": list(selection),
+        }
+
+
+def _sha256_strings(values: tuple[str, ...]) -> str:
+    digest = hashlib.sha256()
+    for value in values:
+        encoded = str(value).encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -801,6 +852,7 @@ def with_cached_scvi_teacher_latents(
     fit_teacher: bool = True,
     progress_interval: int = 50,
     log_fn: Callable[[str], None] | None = None,
+    authority: ArtifactAuthority | None = None,
 ) -> tuple[GeneBags, ExternalGeneBags | None]:
     """Fit or reuse train-only scVI teacher latents from a run-local cache."""
     if config.projector.teacher != "scvi":
@@ -811,6 +863,7 @@ def with_cached_scvi_teacher_latents(
         split,
         artifacts_dir,
         external,
+        authority,
     )
     if cached is not None:
         _log(log_fn, "Reusing cached scVI teacher latents")
@@ -859,7 +912,9 @@ def with_cached_scvi_teacher_latents(
         progress_interval=progress_interval,
         log_fn=log_fn,
     )
-    _write_scvi_latent_cache(config, data, split, artifacts_dir, external)
+    _write_scvi_latent_cache(
+        config, data, split, artifacts_dir, external, authority=authority
+    )
     _log(log_fn, "Wrote scVI teacher latent cache")
     return data, external
 
@@ -946,6 +1001,7 @@ def _load_scvi_latent_cache(
     split: GeneSplit,
     artifacts_dir: Path,
     external: ExternalGeneBags | None,
+    authority: ArtifactAuthority | None = None,
 ) -> tuple[GeneBags, ExternalGeneBags | None] | None:
     cached, _reason = _load_scvi_latent_cache_with_reason(
         config,
@@ -953,6 +1009,7 @@ def _load_scvi_latent_cache(
         split,
         artifacts_dir,
         external,
+        authority,
     )
     return cached
 
@@ -963,6 +1020,7 @@ def _load_scvi_latent_cache_with_reason(
     split: GeneSplit,
     artifacts_dir: Path,
     external: ExternalGeneBags | None,
+    authority: ArtifactAuthority | None = None,
 ) -> tuple[tuple[GeneBags, ExternalGeneBags | None] | None, str | None]:
     cache_dir = _scvi_latent_cache_dir(artifacts_dir)
     if not (cache_dir / "COMPLETE").exists():
@@ -977,7 +1035,7 @@ def _load_scvi_latent_cache_with_reason(
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         return None, f"{metadata_path} is not valid JSON: {exc}"
-    expected = _scvi_cache_metadata(config, data, split, external)
+    expected = _scvi_cache_metadata(config, data, split, external, authority=authority)
     if metadata != expected:
         return None, f"{metadata_path} does not match current config/data"
     try:
@@ -1033,6 +1091,8 @@ def _write_scvi_latent_cache(
     split: GeneSplit,
     artifacts_dir: Path,
     external: ExternalGeneBags | None,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> None:
     cache_dir = _scvi_latent_cache_dir(artifacts_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -1052,7 +1112,7 @@ def _write_scvi_latent_cache(
         )
     _write_json_atomic(
         cache_dir / "metadata.json",
-        _scvi_cache_metadata(config, data, split, external),
+        _scvi_cache_metadata(config, data, split, external, authority=authority),
     )
     _write_text_atomic(complete_path, "ok\n")
 
@@ -1170,9 +1230,11 @@ def _scvi_cache_metadata(
     data: GeneBags,
     split: GeneSplit,
     external: ExternalGeneBags | None,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> dict[str, object]:
-    return {
-        "version": 1,
+    metadata: dict[str, object] = {
+        "version": 2,
         "teacher": "scvi",
         "latent_dim": int(config.projector.latent_dim),
         "seed": int(config.train.seed),
@@ -1194,6 +1256,9 @@ def _scvi_cache_metadata(
             else None
         ),
     }
+    if authority is not None:
+        metadata.update(authority.metadata())
+    return metadata
 
 
 def _cache_dataset_metadata(data: GeneBags) -> dict[str, object]:

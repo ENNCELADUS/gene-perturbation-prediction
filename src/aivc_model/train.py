@@ -54,6 +54,7 @@ from aivc_model.gene_splits import (
 )
 from aivc_model.prepare import (
     AivcConfig,
+    ArtifactAuthority,
     ExternalGeneBags,
     GeneBags,
     GeneSplit,
@@ -69,6 +70,7 @@ from aivc_model.prepare import (
     make_gene_split,
     project_gene_bags_with_frozen_scvi,
     with_cached_scvi_teacher_latents,
+    _sha256_strings,
 )
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
 from sl_dl_model.gene_embeddings import (
@@ -627,6 +629,12 @@ def _run_audited_training(
         artifacts_dir.mkdir(parents=True, exist_ok=True)
         models_dir.mkdir(parents=True, exist_ok=True)
     accelerator.wait_for_everyone()
+    authority = _fold_artifact_authority(
+        config,
+        fold_spec,
+        source_fingerprint=source_fingerprint,
+        canonical_split_sha256=_canonical_split_sha256(config),
+    )
 
     train_split = GeneSplit(
         train=np.arange(len(train_data.genes), dtype=np.int64),
@@ -642,6 +650,7 @@ def _run_audited_training(
             train_split,
             artifacts_dir,
             accelerator,
+            authority,
         )
         train_data.record_access("scvi_fit")
     _authorize_data_access(train_data, "projector_fit")
@@ -650,6 +659,7 @@ def _run_audited_training(
         train_data,
         train_split,
         artifacts_dir,
+        authority=authority,
     )
     train_data.record_access("projector_fit")
     _authorize_data_access(train_data, "gmm_fit")
@@ -658,6 +668,7 @@ def _run_audited_training(
         train_data,
         train_split,
         artifacts_dir,
+        authority=authority,
     )
     train_data.record_access("gmm_fit")
     external_genes = (
@@ -760,11 +771,16 @@ def _run_audited_training(
                     model,
                     models_dir / "best",
                     {
+                        **authority.metadata(),
                         "checkpoint_kind": "best",
                         "epoch": epoch,
                         "selection_metric": "val_spearman",
                         "metric_value": value,
                         "outer_fold": fold_spec.outer_fold,
+                        "selected_layer": None,
+                        "best_epoch": epoch,
+                        "state_checkpoint": str(config.state.checkpoint_path),
+                        "esm2_npz": str(config.state.esm2_npz),
                     },
                 )
         accelerator.wait_for_everyone()
@@ -873,6 +889,7 @@ def _run_audited_training(
         checkpoint_path=checkpoint_path,
         source_fingerprint=source_fingerprint,
         runtime_evidence=runtime_evidence,
+        authority=authority,
     )
 
 
@@ -1019,6 +1036,47 @@ def _ordered_gene_sha256(genes: tuple[str, ...]) -> str:
     return hashlib.sha256("\n".join(genes).encode("utf-8")).hexdigest()
 
 
+def _canonical_split_sha256(config: AivcConfig) -> str:
+    path = config.cv.outer_split_sha256_file
+    if path is None:
+        raise ValueError("audited training requires canonical split SHA-256 authority")
+    text = path.read_text(encoding="utf-8")
+    digest = text[:-1] if text.endswith("\n") else ""
+    if (
+        len(text) != 65
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise ValueError(
+            "canonical split SHA-256 file must contain one lowercase digest and newline"
+        )
+    return digest
+
+
+def _fold_artifact_authority(
+    config: AivcConfig,
+    fold_spec: FoldSpec,
+    *,
+    source_fingerprint: str,
+    canonical_split_sha256: str | None = None,
+) -> ArtifactAuthority:
+    return ArtifactAuthority(
+        source_fingerprint=source_fingerprint,
+        canonical_split_sha256=(
+            canonical_split_sha256
+            if canonical_split_sha256 is not None
+            else _canonical_split_sha256(config)
+        ),
+        outer_fold=fold_spec.outer_fold,
+        fit_stage="inner_train",
+        fit_genes=tuple(fold_spec.train_genes),
+        train_genes=tuple(fold_spec.train_genes),
+        val_genes=tuple(fold_spec.val_genes),
+        test_genes=tuple(fold_spec.test_genes),
+        selection_genes=tuple(fold_spec.val_genes),
+    )
+
+
 def _fit_audited_scvi_latents(
     config: AivcConfig,
     train_data: GeneBags,
@@ -1026,6 +1084,7 @@ def _fit_audited_scvi_latents(
     train_split: GeneSplit,
     artifacts_dir: Path,
     accelerator: Accelerator,
+    authority: ArtifactAuthority,
 ) -> tuple[GeneBags, GeneBags]:
     if accelerator.is_main_process:
         train_data, _ = with_cached_scvi_teacher_latents(
@@ -1036,6 +1095,7 @@ def _fit_audited_scvi_latents(
             external=None,
             fit_teacher=True,
             log_fn=_LOGGER.info,
+            authority=authority,
         )
     accelerator.wait_for_everyone()
     if not accelerator.is_main_process:
@@ -1047,6 +1107,7 @@ def _fit_audited_scvi_latents(
             external=None,
             fit_teacher=False,
             log_fn=_LOGGER.info,
+            authority=authority,
         )
     val_data = _project_audited_scvi_data(config, val_data, artifacts_dir)
     return train_data, val_data
@@ -1092,6 +1153,7 @@ def _write_audited_fold_outputs(
     checkpoint_path: Path,
     source_fingerprint: str,
     runtime_evidence: dict[str, object],
+    authority: ArtifactAuthority,
 ) -> dict[str, Path]:
     paths = _audited_output_paths(run_dir)
     external_metrics: dict[str, float] = {}
@@ -1170,24 +1232,71 @@ def _write_audited_fold_outputs(
             "oracle_checkpoint_sha256": oracle_fit.checkpoint_sha256,
             "oracle_val_mse": oracle_fit.val_mse,
             "source_fingerprint": source_fingerprint,
+            **authority.metadata(),
         }
         paths["fit_audit_summary"].write_text(
             json.dumps(fit_summary, indent=2, sort_keys=True),
             encoding="utf-8",
+        )
+        _write_fitted_artifact_metadata(
+            artifacts_dir,
+            authority,
+            model,
+            oracle_fit,
         )
         _save_model_checkpoint(
             accelerator,
             model,
             models_dir / "final",
             {
+                **authority.metadata(),
                 "checkpoint_kind": "frozen_selected",
                 "epoch": best_epoch,
                 "outer_fold": fold_spec.outer_fold,
                 "source_fingerprint": source_fingerprint,
+                "selected_layer": None,
+                "best_epoch": best_epoch,
+                "state_checkpoint": str(config.state.checkpoint_path),
+                "esm2_npz": str(config.state.esm2_npz),
             },
         )
     accelerator.wait_for_everyone()
     return paths
+
+
+def _write_fitted_artifact_metadata(
+    artifacts_dir: Path,
+    authority: ArtifactAuthority,
+    model: AivcModel,
+    oracle_fit: ObservedBOracleFit,
+) -> None:
+    common = authority.metadata()
+    payloads = {
+        "normalizer_fit": {
+            **common,
+            "kind": "normalizer",
+        },
+        "esm_adapter_fit": {
+            **common,
+            "kind": "esm_adapter",
+            "artifact_sha256": _module_sha256(model.perturbations),
+        },
+        "c_head_fit": {
+            **common,
+            "kind": "c_head",
+            "artifact_sha256": _module_sha256(model.c_head),
+        },
+        "observed_b_oracle_fit": {
+            **common,
+            "kind": "observed_b_oracle",
+            "artifact_sha256": oracle_fit.checkpoint_sha256,
+            "best_epoch": oracle_fit.best_epoch,
+        },
+    }
+    for directory, payload in payloads.items():
+        metadata_path = artifacts_dir / directory / "metadata.json"
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json_atomic(metadata_path, payload)
 
 
 def _audited_output_paths(run_dir: Path) -> dict[str, Path]:
@@ -1582,10 +1691,12 @@ def _fit_or_load_projector_cache(
     data: GeneBags,
     split: GeneSplit,
     artifacts_dir: Path,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fit or load the run-local ridge projector cache."""
     cache_dir = artifacts_dir / "ridge_projector_fit"
-    metadata = _projector_cache_metadata(config, data, split)
+    metadata = _projector_cache_metadata(config, data, split, authority=authority)
     cached = _load_projector_cache(cache_dir, metadata)
     if cached is not None:
         return cached
@@ -1609,10 +1720,12 @@ def _fit_or_load_fixed_gmm_cache(
     data: GeneBags,
     split: GeneSplit,
     artifacts_dir: Path,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> FixedGMMFeatureizer:
     """Fit or load the run-local fixed GMM featureizer cache."""
     cache_dir = artifacts_dir / "fixed_gmm_fit"
-    metadata = _fixed_gmm_cache_metadata(config, data, split)
+    metadata = _fixed_gmm_cache_metadata(config, data, split, authority=authority)
     cached = _load_fixed_gmm_cache(cache_dir, metadata)
     if cached is not None:
         return cached
@@ -1679,7 +1792,11 @@ def _cache_metadata_matches(
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return metadata == expected_metadata
+    return (
+        metadata == expected_metadata
+        and _artifact_metadata_is_authorized(metadata)
+        and _artifact_metadata_is_authorized(expected_metadata)
+    )
 
 
 def _write_projector_cache(
@@ -1728,9 +1845,11 @@ def _projector_cache_metadata(
     config: AivcConfig,
     data: GeneBags,
     split: GeneSplit,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> dict[str, object]:
-    return {
-        "version": 1,
+    metadata: dict[str, object] = {
+        "version": 2,
         "kind": "ridge_projector_fit",
         "seed": int(config.train.seed),
         "projector_config": {
@@ -1752,15 +1871,20 @@ def _projector_cache_metadata(
             ],
         },
     }
+    if authority is not None:
+        metadata.update(authority.metadata())
+    return metadata
 
 
 def _fixed_gmm_cache_metadata(
     config: AivcConfig,
     data: GeneBags,
     split: GeneSplit,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> dict[str, object]:
-    return {
-        "version": 1,
+    metadata: dict[str, object] = {
+        "version": 2,
         "kind": "fixed_gmm_fit",
         "seed": int(config.train.seed),
         "gmm_config": {
@@ -1781,6 +1905,36 @@ def _fixed_gmm_cache_metadata(
             ],
         },
     }
+    if authority is not None:
+        metadata.update(authority.metadata())
+    return metadata
+
+
+def _artifact_metadata_is_authorized(metadata: dict[str, object]) -> bool:
+    authority_keys = {
+        "source_fingerprint",
+        "canonical_split_sha256",
+        "outer_fold",
+        "fit_stage",
+        "fit_genes_sha256",
+        "train_genes",
+        "val_genes",
+        "test_genes",
+        "selection_genes",
+    }
+    if "schema_version" not in metadata:
+        return True
+    if not authority_keys <= set(metadata):
+        return False
+    train = tuple(str(gene) for gene in metadata["train_genes"])
+    val = {str(gene) for gene in metadata["val_genes"]}
+    test = {str(gene) for gene in metadata["test_genes"]}
+    selection = {str(gene) for gene in metadata["selection_genes"]}
+    return (
+        not set(train).intersection(test)
+        and selection.issubset(val)
+        and metadata["fit_genes_sha256"] == _sha256_strings(train)
+    )
 
 
 def _array_cache_identity(array: np.ndarray) -> dict[str, object]:

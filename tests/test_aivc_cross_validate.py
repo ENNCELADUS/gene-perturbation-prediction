@@ -53,6 +53,16 @@ def _toy_bags(genes: tuple[str, ...] = ("A", "B", "C", "D")) -> GeneBags:
 def _audited_config(tmp_path: Path) -> AivcConfig:
     config_path = tmp_path / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    split_path = tmp_path / "toy_outer.csv"
+    split_path.write_text(
+        "perturbation_gene,outer_fold\nA,1\nB,1\nC,1\nD,0\n",
+        encoding="utf-8",
+    )
+    split_sha_path = tmp_path / "toy_outer.csv.sha256"
+    split_sha_path.write_text(
+        hashlib.sha256(split_path.read_bytes()).hexdigest() + "\n",
+        encoding="utf-8",
+    )
     config_path.write_text(
         f"""
 data:
@@ -71,6 +81,9 @@ projector:
 gmm:
   n_components: 2
   max_fit_cells: 8
+cv:
+  outer_split_manifest: {split_path}
+  outer_split_sha256_file: {split_sha_path}
 train:
   run_id: audited
   seed: 13
@@ -82,6 +95,71 @@ train:
         encoding="utf-8",
     )
     return load_config(config_path)
+
+
+def _fingerprinted_config(tmp_path: Path) -> AivcConfig:
+    config = _audited_config(tmp_path)
+    cache_dir = tmp_path / "gwps_cache"
+    cache_dir.mkdir()
+    (cache_dir / "manifest.json").write_text(
+        '{"source_fingerprint":"gwps"}\n', encoding="utf-8"
+    )
+    labels = tmp_path / "labels.csv"
+    labels.write_text("perturbation_gene,label\nA,-1\n", encoding="utf-8")
+    split = tmp_path / "outer.csv"
+    split.write_text("perturbation_gene,outer_fold\nA,0\n", encoding="utf-8")
+    split_sha = tmp_path / "outer.csv.sha256"
+    split_sha.write_text(hashlib.sha256(split.read_bytes()).hexdigest() + "\n")
+    esm = tmp_path / "esm2.npz"
+    esm.write_bytes(b"esm")
+    checkpoint = tmp_path / "state.ckpt"
+    checkpoint.write_bytes(b"checkpoint")
+    model_dir = tmp_path / "state"
+    model_dir.mkdir()
+    (model_dir / "var_dims.pkl").write_bytes(b"sidecar")
+    return replace(
+        config,
+        data=replace(
+            config.data,
+            prepared_cache_dir=cache_dir,
+            overlap_csv=labels,
+        ),
+        cv=replace(
+            config.cv,
+            outer_split_manifest=split,
+            outer_split_sha256_file=split_sha,
+        ),
+        state=replace(
+            config.state,
+            esm2_npz=esm,
+            checkpoint_path=checkpoint,
+            model_dir=model_dir,
+        ),
+    )
+
+
+def test_experiment_source_fingerprint_changes_with_esm_cache(tmp_path: Path) -> None:
+    config = _fingerprinted_config(tmp_path)
+
+    first = cv.experiment_source_fingerprint(config)
+    assert config.state.esm2_npz is not None
+    config.state.esm2_npz.write_bytes(b"new-cache")
+    second = cv.experiment_source_fingerprint(config)
+
+    assert first != second
+
+
+def test_experiment_source_fingerprint_hashes_small_state_sidecar_bytes(
+    tmp_path: Path,
+) -> None:
+    config = _fingerprinted_config(tmp_path)
+
+    first = cv.experiment_source_fingerprint(config)
+    assert config.state.model_dir is not None
+    (config.state.model_dir / "var_dims.pkl").write_bytes(b"changed-sidecar")
+    second = cv.experiment_source_fingerprint(config)
+
+    assert first != second
 
 
 def test_gene_bag_views_preserve_only_requested_genes() -> None:
@@ -292,6 +370,78 @@ def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
         assert first_audit[key] == second_audit[key]
 
 
+def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> None:
+    run_dir = tmp_path / "authority"
+    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    config = _fingerprinted_config(tmp_path)
+
+    cv.run_training_fold(
+        config=config,
+        data=_toy_bags(),
+        external=None,
+        fold_spec=fold,
+        run_dir=run_dir,
+        source_fingerprint="source",
+    )
+
+    expected_hash = train_module._sha256_strings(fold.train_genes)
+    metadata_paths = [
+        run_dir / "artifacts" / "ridge_projector_fit" / "metadata.json",
+        run_dir / "artifacts" / "fixed_gmm_fit" / "metadata.json",
+        run_dir / "artifacts" / "normalizer_fit" / "metadata.json",
+        run_dir / "artifacts" / "esm_adapter_fit" / "metadata.json",
+        run_dir / "artifacts" / "c_head_fit" / "metadata.json",
+        run_dir / "artifacts" / "observed_b_oracle_fit" / "metadata.json",
+        run_dir / "models" / "best" / "metadata.json",
+        run_dir / "models" / "final" / "metadata.json",
+    ]
+    for path in metadata_paths:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+        assert metadata["source_fingerprint"] == "source"
+        assert metadata["canonical_split_sha256"]
+        assert metadata["outer_fold"] == 0
+        assert metadata["fit_stage"] == "inner_train"
+        assert metadata["fit_genes_sha256"] == expected_hash
+        assert metadata["train_genes"] == ["A", "B"]
+        assert metadata["val_genes"] == ["C"]
+        assert metadata["test_genes"] == ["D"]
+
+
+def test_projector_cache_rejects_source_change_and_test_gene_contamination(
+    tmp_path: Path,
+) -> None:
+    config = _audited_config(tmp_path)
+    data = _toy_bags(("A", "B"))
+    split = train_module.GeneSplit(
+        train=np.asarray([0, 1], dtype=np.int64),
+        val=np.asarray([], dtype=np.int64),
+        test=np.asarray([], dtype=np.int64),
+    )
+    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    first_authority = train_module._fold_artifact_authority(
+        config,
+        fold,
+        source_fingerprint="aaa",
+        canonical_split_sha256="split",
+    )
+    metadata = train_module._projector_cache_metadata(
+        config, data, split, authority=first_authority
+    )
+    train_module._write_projector_cache(tmp_path, metadata, np.eye(2), np.zeros(2))
+    changed_authority = replace(first_authority, source_fingerprint="bbb")
+    changed = train_module._projector_cache_metadata(
+        config, data, split, authority=changed_authority
+    )
+    contaminated = {
+        **metadata,
+        "train_genes": ["A", "B", "D"],
+        "fit_genes_sha256": train_module._sha256_strings(("A", "B", "D")),
+    }
+
+    assert train_module._load_projector_cache(tmp_path, changed) is None
+    assert not train_module._cache_metadata_matches(tmp_path, contaminated)
+
+
 def test_observed_b_oracle_selection_depends_on_validation_response_only(
     tmp_path: Path,
 ) -> None:
@@ -431,7 +581,10 @@ def test_scvi_fit_event_is_emitted_only_when_fit_boundary_executes(
     monkeypatch.setattr(
         train_module,
         "_fit_audited_scvi_latents",
-        lambda _config, train, val, _split, _artifacts, _accelerator: (train, val),
+        lambda _config, train, val, _split, _artifacts, _accelerator, _authority: (
+            train,
+            val,
+        ),
     )
     monkeypatch.setattr(
         train_module,
@@ -491,6 +644,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         ),
     )
     monkeypatch.setattr(cv, "load_external_gene_bags", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cv, "experiment_source_fingerprint", lambda _config: "source")
 
     def fake_fold_runner(**kwargs: object) -> dict[str, Path]:
         fold = kwargs["fold_spec"]
