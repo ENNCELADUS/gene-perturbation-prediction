@@ -1,299 +1,380 @@
-# Research Direction: Perturbation Outcome Dynamics Behind Net Fitness
+# Research Direction: Outcome Dynamics Behind Net Fitness
 
-Status date: 2026-07-13 (revised after reviewer major-revision)
-Type: research direction + literature review plan (not an implementation spec)
-Origin: PI meeting notes on transcriptomics -> cellular phenotype / cell death
-prediction; brainstorming session over repository state; reviewer major-revision
-pass.
+Status date: 2026-07-13 (revision 2, after focused-revision review)
+Type: research direction + literature review plan. **Not** an implementation spec.
+No modeling work begins before the decision point in Section 9.
 
-Revision note: this document replaces an earlier draft that asserted (a) population
-screens cannot separate death from arrest, (b) per-cell death probability is
-counterfactual, (c) unobserved `B` must therefore be generated, and (d) one fate
-model unifies dependency, conditional essentiality, and SL. All four were
-overstated. They are corrected or downgraded to hypotheses below. See Section 8.
+Origin: PI meeting notes on transcriptomics -> cellular phenotype / cell death;
+brainstorming over repository state; two reviewer passes (major revision, then
+focused revision).
+
+## 0. Revision History and Withdrawn Claims
+
+Revision 1 corrected: Chronos/GeneEffect is not raw depletion; aggregate consistency
+is not identification; bag-level output is not automatically identifiable; T1/T2/T3
+separated; transcriptome-decomposes-dynamics, generate-`B`, and one-model-unifies-all
+downgraded to hypotheses; QC reformulated as observation-process selection; SL moved
+out of the core question.
+
+Revision 2 (this document) fixes six further defects:
+
+| # | Defect in revision 1 | Fix |
+| --- | --- | --- |
+| 1 | Primary unit inconsistent: Section 3 said lineage, T2 said cell, Section 5 said perturbation-level distribution. Three different research questions sharing one "fate prediction" conclusion. | **Two candidate questions, explicitly separated** (Section 4). The survey selects one. |
+| 2 | "Outcome composition" is not a valid simplex. Division suppression is continuous; persistent arrest is window-defined; recovery is a transition; a lineage can simultaneously produce dividing and dying descendants. | Replaced by **trajectory / multi-state process estimands** (Section 3). The word "composition" is retired. |
+| 3 | The gap statement was technical ("pooled readouts do not provide single-cell-resolved prospective decomposition"), not biological. "Same net fitness, different dynamics" is mathematically true but not yet a finding. | **New Gate 2: phenomenon prevalence and value** (Section 8). The gap is restated biologically. |
+| 4 | All rivals treated as covariates. But net fitness is a summary of the outcome, not a confounder; generic stress may be a true fate precursor, not a nuisance; MNAR cannot be fixed by adding a covariate. | **Utility and specificity hypotheses split** (Section 5); MNAR removed from the composite null and made an identifiability boundary (Section 6). |
+| 5 | Gate 1's no-go ("if existing readouts can decompose, the program stops") was wrong — an independent decomposition is the *ground truth* the prospective question needs. Gate 2 conflated "no published design" with "not estimable." | **Funnel reordered and no-go criteria rewritten** (Section 8). |
+| 6 | Observation-bias claims too strong: independence of removal rate does not bound pre-capture loss. | **Claims weakened; specific probes moved out** of this spec into a measurement memo (Section 6). |
 
 ## 1. The Preserved Wedge
-
-One claim survives the revision intact, and it is the reason to continue:
 
 ```text
 The same net fitness loss can arise from completely different cellular dynamics.
 ```
 
-Strong division suppression with little death, normal division with substantial
-death, early death followed by survivor regrowth, and transient arrest followed by
-recovery can all produce the same aggregate readout. Everything below is an attempt
-to state precisely what follows from that, and what does not.
+Strong division suppression with little loss, normal division with substantial loss,
+early loss followed by survivor regrowth, and transient arrest followed by recovery
+can all yield the same aggregate readout.
 
-## 2. Corrected Premise
+This is **mathematically true and biologically unproven**. Whether such divergence is
+common, reproducible, large, and consequential in real genetic perturbations is an
+empirical question, and it is Gate 2. Until Gate 2 passes, this program has a
+motivating observation, not a finding.
 
-The previous premise ("population screens measure depletion; no population screen
-can separate death from arrest") is wrong as stated.
+## 2. Premise and Gap
 
-- **Chronos** already fits an explicit population-dynamics model, converting sgRNA
-  abundance changes into relative growth-rate effects of gene knockout. It does not
-  uniquely decompose reduced division from increased death, but it is materially
-  more precise than "measures depletion."
+What existing readouts already do (**to verify by reading, not from summary** — these
+are reviewer-supplied and have not yet been read in full):
+
+- **Chronos** fits an explicit population-dynamics model, converting sgRNA abundance
+  change into a relative growth-rate effect of knockout. It does not uniquely
+  decompose reduced division from increased loss.
   (https://pmc.ncbi.nlm.nih.gov/articles/PMC8686573/)
-- **GR / DIP-style metrics** with time-course information and initial cell counts
-  can, under stated assumptions, distinguish fully cytostatic from net cytotoxic
-  responses. (Hafner et al. 2016, https://pmc.ncbi.nlm.nih.gov/articles/4887336/)
+- **GR / DIP-style metrics**, given time course and initial counts, can distinguish
+  fully cytostatic from net cytotoxic responses under stated assumptions.
+  (Hafner et al. 2016, https://pmc.ncbi.nlm.nih.gov/articles/4887336/)
 
-The accurate premise:
+Accurate premise:
 
 > A single endpoint-abundance or net-fitness readout is generally insufficient to
 > uniquely determine the underlying division, recovery, persistent-arrest, and
 > cell-loss dynamics.
 
-And the accurate gap statement:
+Accurate **biological** gap (this replaces the technical gap statement):
 
-> Existing pooled fitness readouts do not provide perturbation-specific,
-> single-cell-resolved, prospective decomposition of cellular outcomes.
+> It is unknown whether genetic perturbations with similar net fitness effects induce
+> distinct, reproducible outcome trajectories, and whether early molecular states
+> prospectively distinguish those trajectories.
 
-Not: "prior work failed to distinguish cytostatic from cytotoxic responses."
+Accompanying **value** question, which the program must answer to matter:
+
+> Does such a decomposition explain consequences that net fitness cannot — recovery,
+> persistence, lineage extinction?
+
+Without the value question, a successful program is a technically correct measurement
+decomposition of limited interest.
 
 ## 3. Ontology and Estimands (L0)
 
-The previous draft's output — `proliferating / arrested / dying / mechanism /
-timing` — mixes levels and cannot form a mutually exclusive distribution.
-`proliferating` is a rate, `arrested` is a state (possibly reversible), `dying` is a
-process, `death` is an event, the mechanisms may overlap, and `timing` is not an
-extra label but part of the fate definition. A cell can arrest and recover, or
-arrest and later die.
+### 3.1 Retired Vocabulary
 
-Any usable estimand must therefore fix:
+`proliferating / arrested / dying / mechanism / timing` mixes levels and is not a
+simplex. `proliferating` is a rate; `arrested` is a window-defined state, possibly
+reversible; `dying` is a process; death is an event; mechanisms overlap; timing is
+part of the fate definition, not an extra label. **The term "outcome composition" is
+retired** — a lineage can simultaneously produce descendants that keep dividing and
+descendants that are lost.
+
+### 3.2 Required Structure
+
+Any usable estimand fixes:
 
 | Element | Requirement |
 | --- | --- |
-| Time horizon `T` | All outcomes are defined over `[t0, t0 + T]` from perturbation onset. No horizon, no estimand. |
-| Unit | The founder cell / lineage / clone, **not** the observed cell. Division means one founder maps to many observed cells. |
-| Division | Division history or division rate over the horizon. |
-| Arrest | Reversible vs. persistent arrest, distinguished; recovery is an explicit outcome, not the absence of one. |
-| Cell loss | Cumulative loss over the horizon, distinct from instantaneous dying state. |
+| Time horizon `T` | All outcomes defined over `[t0, t0+T]` from perturbation onset. No horizon, no estimand. |
+| "Early" | Defined **relative to `T` and to fate commitment**, not to sample collection. Must be stated numerically per dataset. |
+| Unit | See Section 4 — the open decision. |
 | Censoring | Right censoring at `T` is explicit. |
-| Mechanism | Overlapping multi-label attributes, not a forced single-label simplex. |
-| Denominator | Fractions are of **what**? Cells observed at `T` are survivors of a branching-plus-death process; fraction-of-observed is not fraction-of-founders. |
+| Denominator | Fractions are of *what*? Observed cells at `T` are survivors of a branching-plus-loss process; fraction-of-observed is not fraction-of-founders. |
 
-The denominator row is not pedantry. It is where identifiability and observation
-bias meet, and it is the reason Section 4 is the first gate.
+### 3.3 Estimands as Trajectories, Not Categories
 
-### 3.1 Three Distinct Prediction Tasks
+**Lineage/founder unit** — natural endpoints over `[t0, t0+T]`:
 
-These must never be conflated again:
+- division history (number/rate of divisions);
+- alive-but-non-dividing through `T`;
+- recovery transition (arrest -> resumed division);
+- **lineage extinction**;
+- descendant abundance at `T`.
+
+**Population unit** — the object is a **multi-state transition process** or an
+explicitly enumerated set of trajectory summaries, not a categorical mixture.
+
+### 3.4 Two Kinds of "Loss" — Never Conflate
+
+| Term | Meaning |
+| --- | --- |
+| **Biological loss / lineage extinction** | The lineage genuinely ends. A biological outcome. |
+| **Assay attrition** | The cell or lineage is not observed: died pre-collection, lost in dissociation, failed capture, or removed by QC. A measurement process. |
+
+Revision 1 used "cell loss" for both. Every future use must be disambiguated.
+
+### 3.5 Three Distinct Prediction Tasks
 
 | Task | Statement | Type |
 | --- | --- | --- |
-| T1 | Is this cell **currently** in a dying state? | Terminal-state classification. A state readout, not fate. |
-| T2 | What is the probability this cell divides / arrests / recovers / is lost within `[t, t+D]`? | **Prospective prediction.** Estimable, but requires longitudinal or lineage pairing. Not a counterfactual. |
-| T3 | What would this same initial cell have done under a *different* perturbation? | Strict intervention counterfactual. |
+| T1 | Is this cell **currently** in a dying/arrested state? | Terminal-state classification. A state readout, **not fate**. |
+| T2 | What is the probability of division / persistence / recovery / extinction within `[t, t+D]`? | **Prospective prediction.** Requires longitudinal or lineage pairing. Not a counterfactual. |
+| T3 | What would this same initial unit have done under a **different** perturbation? | Strict intervention counterfactual. |
 
-The earlier claim that "per-cell death probability is counterfactual" collapsed T2
-into T3 and is withdrawn. T2 is the task of interest and it is a prediction problem,
-not an identification-from-nothing problem — provided the longitudinal design exists.
-Lineage/barcoding work (e.g. Rewind, https://www.nature.com/articles/s41587-021-00837-3)
-shows state and future behavior can be linked through such designs, which is
-simultaneously evidence that a **snapshot alone does not equal fate**.
+Much of the apparent literature will be T1 presented as if it were T2. Gate 4 exists
+to enforce the distinction.
 
-## 4. First Gate: Identifiability
+## 4. The Two Candidate Research Questions
 
-This is the largest logical hole in the previous draft and is now the first gate.
+The primary unit is **not yet selected**. Both are carried, with separate estimands,
+evidence requirements, and falsifiers. The survey selects one at the Section 9
+decision point.
 
-A single aggregate fitness scalar is consistent with infinitely many
-division/death histories:
+### Candidate A — Lineage level (cell-fate science)
+
+> Within a fixed biological context and time horizon, does an early post-perturbation
+> molecular state predict the subsequent division, persistence/recovery, and
+> extinction trajectory of **its linked lineage**, beyond perturbation-average net
+> fitness?
+
+- Unit: founder cell / lineage / clone.
+- Estimand: Section 3.3, lineage endpoints.
+- Evidence requirement: a design **linking a state measurement to that same
+  lineage's future** — lineage barcoding with longitudinal sampling, or
+  imaging-paired sequencing.
+- Supports: a genuine per-lineage prospective fate claim.
+- Known risk: no such data for genetic perturbation in K562 is present in this
+  repository, and its existence at usable scale is unverified. Candidate A may
+  require data generation or collaboration.
+
+### Candidate B — Population level
+
+> Under comparable aggregate net fitness, does the early single-cell state
+> **distribution** provide incremental information about **independently measured**
+> future population dynamics?
+
+- Unit: the perturbation condition.
+- Estimand: multi-state population trajectory summaries (Section 3.3).
+- Evidence requirement: an **independently measured** future-dynamics anchor.
+  Endpoint viability alone does **not** qualify — it is an aggregate, not a
+  trajectory.
+- Supports: a population-level informational claim only.
+- **Explicitly forfeits any per-cell or per-lineage fate-prediction claim.**
+- Known risk: matched-population evidence can only support population-level
+  association. It can never be upgraded into prospective per-cell fate prediction.
+
+### 4.1 Terms Requiring Operational Definition Before Either Runs
+
+- **"Comparable net fitness"**: the matching tolerance, and whether matching is on the
+  point estimate or its uncertainty.
+- **"Reproducible"**: across replicates, across datasets, or across contexts. These are
+  different claims of different strength.
+- **"Early"**: numerically, per dataset, relative to `T`. Note as a live constraint
+  that Replogle Perturb-seq is a **single, late** timepoint several days
+  post-transduction; whether any existing genetic-perturbation dataset provides a
+  genuinely early state is a Gate 1 question, not an assumption.
+
+## 5. Hypotheses
+
+Revision 1 lumped every rival into one composite null. That was wrong: net fitness is
+a **summary of the outcome**, not an ordinary confounder; generic stress may be a
+**true fate precursor**, not a nuisance to residualize away; and timing may itself be
+perturbation biology. Two hypotheses, tested separately:
+
+### Utility hypothesis
+
+> The early state provides **incremental prospective information beyond aggregate net
+> fitness**.
+
+Predictive null:
 
 ```text
-same net fitness  <-  strong arrest, little death
-                  <-  normal division, substantial death
-                  <-  early death followed by survivor regrowth
-                  <-  transient arrest followed by recovery
+Y_future  ⟂  S_early  |  F_net, X
 ```
 
-Therefore:
+where `Y_future` is an **independently measured** future outcome (never derived from
+`S_early`), `F_net` is the aggregate net-fitness summary, and `X` contains predefined
+context, timing, and measurement variables.
 
-- Aggregate consistency (`aggregate(outcome composition) == observed fitness`) is
-  **necessary calibration**. It is **not** identification.
-- Retreating from a per-cell probability to a **bag-level fraction does not make the
-  problem identifiable**. The previous draft implied it did. It does not.
-- Any decomposition requires **independent anchors** on at least division, loss, and
-  time — not a fitness scalar alone.
+### Specificity hypothesis
 
-The literature review must therefore first produce a **measurement -> identifiable
-quantity map**: which combinations of readouts (endpoint abundance; time course;
-initial counts; division tracking via dye dilution or lineage-barcode counts; direct
-death readout via live imaging, dead-cell stain, or caspase reporter) identify which
-quantities, under which assumptions. Any modeling proposal that is not anchored in
-that map is unfalsifiable.
+> That information **cannot be reduced to a scalar response-burden or generic-injury
+> score**.
 
-## 5. Central Research Question (first-stage candidate)
+Tested by residualizing on burden/stress scalars, not by discarding them. This keeps
+generic stress biologically meaningful rather than declaring it noise. Grounding: exp02
+found a generic response-magnitude scalar reaches Spearman 0.426 against a 0.494
+full-feature baseline — burden is a large, real component, not an artifact.
 
-> **Among genetic perturbations with comparable net fitness effects, do early
-> single-cell molecular states prospectively distinguish later division suppression,
-> persistent arrest, recovery, and cell loss?**
+### Scoped separately, not in the null
 
-Main hypothesis:
+- **Two-way additive structure** (`GeneEffect(c,g) ~ gene_mean(g) + line_mean(c)`):
+  gates claims of **context-specific residual** effects only. It does not adjudicate
+  whether outcome decomposition is valuable. Run it when, and only when, a
+  context-specificity claim is made. Grounding: exp09's non-pan-essential slice
+  (CV3 AUROC 0.645 -> 0.583, AUPR 0.651 -> 0.490).
+- **MNAR observation bias**: an **identifiability boundary**, not a covariate.
+  Section 6.
 
-> After controlling for aggregate effect severity and generic stress, early cellular
-> state distributions still contain reproducible information about later outcome
-> composition.
+## 6. Observation Process as an Identifiability Boundary
 
-Null hypothesis:
+State-dependent acquisition, dissociation, capture, and QC may induce
+**missing-not-at-random** observation of perturbation outcomes. Cells that die before
+collection are **never observed**, and no computational QC relaxation recovers them.
 
-> All apparent fate information is explained by effect magnitude, timing, generic
-> stress, and observation bias.
+Claims that must not be made:
 
-Properties that make this the right first question: it assumes neither that the
-transcriptome is useful, nor that virtual cells are needed, nor that the
-decomposition is identifiable; it exploits the preserved wedge directly (same net
-fitness, different dynamics); and a **negative result is scientifically meaningful**.
+- High mitochondrial fraction / low UMI is **not** a definitional signature of a dying
+  cell. It also arises from dissociation stress, genuinely low-RNA states, ambient RNA,
+  and technical failure; mito-rich clusters may reflect sample preparation
+  (https://www.nature.com/articles/s41467-022-29212-9).
+- "A cluster appears after relaxing QC" **cannot** be read as "the dying population was
+  recovered."
+- Independence between removal rate and perturbation strength **does not bound**
+  pre-capture loss. Every perturbation could lose the same *fraction* of cells while
+  losing biologically *different* cells, and truly dead cells may vanish before any
+  logged stage. Revision 1 asserted this bound; it is withdrawn.
+- A correlation between removal rate and GeneEffect is at most **evidence compatible
+  with perturbation-dependent attrition**. It is not direct evidence of
+  state-dependent biological loss.
 
-The literature review is expected to return 2-3 candidate questions of this
-character, of which exactly one is selected as primary. The above is the leading
-candidate entering the survey, not a settled choice.
+MNAR is therefore an **identifiability boundary on what any estimand can claim**, not a
+term in the predictive null. Concrete loss-accounting probes, QC ablations, and the
+relevant exp01 datapoints belong in a **separate measurement memo**, not in this
+science spec.
 
-## 6. Rival Explanations to Control
-
-Any positive result must be shown not to reduce to these.
-
-| Rival | Source | Status |
-| --- | --- | --- |
-| Effect magnitude / response burden | exp02: a generic response-magnitude scalar reaches Spearman 0.426 against a 0.494 full-feature baseline | Mandatory reported covariate |
-| Generic stress program | Meeting notes; exp02 program scores | Mandatory reported covariate |
-| Observation / selection bias | Section 7 | Mandatory reported covariate |
-| Two-way additive structure: `GeneEffect(c,g) ~ gene_mean(g) + line_mean(c)` | Reviewer; PI's "model may only learn cell line identity" concern; exp09's non-pan-essential collapse (CV3 AUROC 0.645 -> 0.583, AUPR 0.651 -> 0.490) | **Scoped**: this null gates claims about *context-specific residual* effects. It does **not** adjudicate whether outcome decomposition is scientifically valuable. It is run when, and only when, a context-specificity claim is made. |
-
-The scoping of the additive null is a correction: the previous draft made it the
-universal first gate, which conflated a context-specificity control with an
-identifiability question.
-
-## 7. Observation-Process Selection (downgraded from "QC survivorship bias")
-
-The previous draft asserted that high mitochondrial fraction and low UMI count are
-"the definitional signature of a dying cell." That is wrong. They also arise from
-dissociation stress, genuinely low-RNA biological states, ambient RNA, and technical
-failure; mitochondria-rich clusters may reflect sample preparation rather than
-biology (https://www.nature.com/articles/s41467-022-29212-9). Worse, cells that died
-before collection, dissociation, or droplet capture are **never observed at all**, and
-no computational QC relaxation can recover them.
-
-The correct formulation:
-
-> State-dependent acquisition, dissociation, capture, and QC may induce
-> **missing-not-at-random** observation of perturbation outcomes.
-
-Two consequences:
-
-1. "A cluster appears after relaxing QC" **cannot** be interpreted as "the dying
-   population has been recovered." That inference is invalid and the previous draft
-   proposed it as an experiment.
-2. The honest immediate probe is a **loss-accounting** analysis, not a QC-relaxation
-   analysis: quantify what fraction of cells is removed at each stage per
-   perturbation, and test whether the *removal rate* covaries with perturbation
-   strength or with GeneEffect. A dependence there is direct evidence of
-   state-dependent observation loss; independence bounds it.
-
-Existing datapoint worth carrying in: exp01 found `n_cells_only` gives Spearman 0.000
-and AUROC 0.498 against GeneEffect. So the *surviving* cell count carries no
-dependency signal in that setup. That is a different quantity from the **QC-failure
-fraction**, and the distinction is exactly what the loss-accounting analysis tests.
-
-## 8. Downgraded Assumptions (now hypotheses, not premises)
+## 7. Downgraded Assumptions (hypotheses, not premises)
 
 | Previously asserted | Now |
 | --- | --- |
-| The transcriptome can decompose division / arrest / death dynamics | **Central hypothesis under test** (Section 5). Not an assumption. A snapshot measures state; it may reflect early fate commitment, generic stress severity, the consequence of already-executing death, or a residual state after survivorship selection. |
-| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference; withdrawn.** Generating `B` is warranted only if `B` carries independently verifiable fate-relevant information. Virtual-cell response generation is a **tool hypothesis**, not a structural justification for the research direction. |
-| One fate model unifies dependency, conditional essentiality, and SL as corollaries | **Long-term hypothesis, not a corollary.** Dependency / conditional fitness is retained as potential downstream relevance. Death mechanism is a second-stage question. |
-| Bag-level output solves the identifiability problem | **Withdrawn.** More honest than an uninterpreted per-cell latent, but not identifiable without independent anchors (Section 4). |
+| The transcriptome can decompose division / arrest / loss dynamics | **The central hypothesis under test.** A snapshot measures state; it may reflect early fate commitment, generic stress severity, the consequence of already-executing death, or a residual after survivorship selection. |
+| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference; withdrawn.** Generating `B` is warranted only if `B` carries independently verifiable outcome-relevant information. Virtual-cell response generation is a **tool hypothesis**, not a justification for the direction. |
+| One model unifies dependency, conditional essentiality, and SL | **Long-term hypothesis.** Dependency / conditional fitness is retained as potential downstream relevance only. |
+| Bag-level output solves identifiability | **Withdrawn.** More honest than an uninterpreted per-cell latent, but not identifiable without independent anchors. |
+| Death mechanism (apoptosis / ferroptosis / necroptosis) | **Second-stage question, out of scope here.** The plausible supervision route — perturbagens of known death mechanism — is recorded for later, not pursued now. |
 
-## 9. Synthetic Lethality: Separate Memo
+## 8. Literature Review: Go/No-Go Funnel
 
-SL is a **joint-intervention effect relative to a combination null model**. It is not
-the same scientific question as single-perturbation outcome decomposition, and it must
-stop driving the definition of this project. It moves to its own research memo.
+### Evidence Hierarchy (predefined, applied at every gate)
 
-Substance to carry into that memo (needed for the next PI discussion regardless):
+```text
+same-cell / lineage prospective anchor
+  >  condition-level paired anchor
+  >  terminal-state classifier
+  >  signature-only inference
+```
 
-- The PI's question "how do we derive SL from DepMap" was already partially answered
-  here by experiment 09's cross-cell-line selectivity contrast
-  (`sel(a->b) = mean[d_{c,b} | a-intact] - mean[d_{c,b} | a-defective]`, with defect
-  called by a composite OR over damaging mutation, hotspot, CN loss, low expression).
-- It produced a consistent classification lift, largest on CV3 (+0.050 AUROC), but on
-  the non-pan-essential slice the CV3 lift largely vanished (AUROC 0.583, AUPR 0.490).
-  The recorded verdict: most cold-start lift is essentiality structure, not
-  pair-specific co-dependency.
-- So the live question is **not** "which statistic," it is: *how do we construct a
-  null that removes pan-essentiality so the residual is genuinely interaction?*
-- The same null problem governs any multi-gene AIVC route. SL is defined as a
-  deviation from an expected combined effect, so `P(loss | perturb a + b)` is
-  meaningless without an explicit single-perturbation null to subtract:
-  `interaction(a,b) = outcome(a,b) - psi(outcome(a), outcome(b))`. The choice of
-  `psi` (additive, multiplicative, or learned) is the crux.
+A finding's weight is capped by its tier. A terminal-state classifier can never
+establish a prospective claim, however strong its metrics.
 
-## 10. Literature Review: Go/No-Go Funnel
+### L0 — Ontology, Primary Unit, Latent-to-Observable Map
 
-The previous L1-L8 list is replaced. Gates run in order; a failed gate stops the
-funnel rather than being routed around.
+Define with citations: state; fate; death; biological loss vs. assay attrition;
+quiescence; senescence; recovery; time horizon; denominator. Enumerate, for each
+candidate unit, which latent quantities map to which observables.
 
-### L0 — Ontology and Estimands
+### Gate 1 — Measurement and Observation Validity
 
-Define, with citations: state; fate; death; cell loss; quiescence; senescence;
-recovery; time horizon; denominator. Output is the vocabulary every later gate uses.
+Chronos and CRISPR fitness scoring; GR / DIP metrics; birth-death decomposition; which
+**combinations** of readouts separate division from loss, under which assumptions;
+what is knowable about the MNAR structure and what bounds exist. Also: does any
+existing genetic-perturbation dataset supply a genuinely **early** state?
 
-### Gate 1 — What Can Existing Readouts Identify?
+Output: the **measurement -> identifiable-quantity map**.
 
-Chronos and CRISPR fitness scoring; GR / DIP metrics; birth-death decomposition; and
-which **combinations** of measurements separate division from loss, under which
-assumptions. Output: the measurement -> identifiable-quantity map (Section 4).
+**No-go:** if the target outcome cannot be defined and identified through **any**
+credible independent anchor, **narrow the estimand or stop.**
 
-**No-go condition:** if existing readouts already deliver perturbation-specific,
-prospective outcome decomposition, the wedge is closed and the program stops.
+*Not* a no-go: existing readouts already decomposing dynamics. An independent
+decomposition is the **ground truth the prospective question requires** — it removes
+measurement novelty, not the biological question. Revision 1 had this backwards.
 
-### Gate 2 — Does State Predict Future Outcome?
+### Gate 2 — Phenomenon Prevalence and Biological Importance
 
-Search same-cell, lineage, clone, and matched-population designs pairing transcriptome
-with **future** fate. Strictly separate **prospective prediction** (T2) from
-**terminal-state classification** (T1); much of the apparent literature will be T1.
+Are dynamic differences under **matched net fitness** common, reproducible, large
+enough to matter, and consequential beyond what net fitness already captures
+(recovery, persistence, extinction)?
 
-**No-go condition:** if no design links state to future outcome, T2 is not estimable
-with available data and the program must either acquire such data or stop.
+**No-go:** if divergence under matched net fitness is rare, small, or
+inconsequential, the wedge is not a research program.
 
-### Gate 3 — Observation-Process Bias
+### Gate 3 — Nearest Prior Art and Exact Novelty
 
-Acquisition, dissociation, capture, QC, and pre-capture dead-cell disappearance —
-as one selection process, not a mito/UMI threshold question. Output: what is knowable
-about the missing-not-at-random structure, and what bounds exist.
+Who has come closest, on which unit, with which anchor, at which evidence tier. Output
+is a nearest-prior-work matrix, not a reading list.
 
-### Gate 4 — Expand Only After Novelty Is Confirmed
+### Gate 4 — Prospective Incremental Information
 
-Only if Gates 1-3 support the problem: virtual-cell forward models (including the
-live critique that deep perturbation models barely beat trivial baselines — this
-directly threatens any generate-`B` route); dependency and conditional essentiality
-prior art; death mechanism signatures; cross-context generalization. SL is handled
-in the separate memo, not here.
+Do same-cell / lineage / clone / matched-population designs exist that link state to
+**future** outcome? Enforce T1-vs-T2 strictly.
 
-## 11. Literature Review Deliverables
+**Separate three distinct findings** — revision 1 collapsed them:
 
-1. Ontology / estimand memo.
+1. no published linkage design exists because it is **technically infeasible**;
+2. none exists because the **data is unavailable** to us;
+3. none exists and this is a genuine **methodological opportunity**.
+
+Only (1) is a stop. (2) is a resourcing question. (3) is the best possible outcome.
+
+Also here: the live critique that deep perturbation forward models barely beat trivial
+baselines — it directly threatens any generate-`B` route.
+
+### Decision
+
+`proceed` | `narrow-or-pivot` | `stop`.
+
+## 9. Deliverables and Decision Point
+
+1. Ontology / estimand memo (L0), including the **selected primary unit**.
 2. Measurement -> identifiable-quantity map.
-3. Nearest-prior-work matrix.
-4. Evidence table **supporting and challenging** the core premise.
-5. 2-3 candidate research questions.
-6. For each: falsifier, claim boundary, explicit out-of-scope definition.
-7. Selection of **one** primary research question.
+3. Evidence table **supporting and challenging** the core premise.
+4. Nearest-prior-work matrix.
+5. 2-3 candidate research questions, each with falsifier, claim boundary, and explicit
+   out-of-scope definition.
+6. Selection of **one** primary research question.
+7. Decision: `proceed` | `narrow-or-pivot` | `stop`.
 
-## 12. Claim Boundaries
+**No modeling, feature engineering, or data acquisition begins before item 7.** The
+earlier decision to "acquire dose-response data with real viability" is **suspended**:
+endpoint viability is an aggregate and supplies no prospective anchor under either
+candidate unit. The data target is re-decided at the decision point.
+
+## 10. Separate Memos (out of scope here)
+
+- **Synthetic lethality.** SL is a joint-intervention effect relative to a combination
+  null. It is not the same question as single-perturbation outcome decomposition and
+  must stop driving this project's definition. The memo carries: exp09's cross-cell-line
+  selectivity result and its collapse on the non-pan-essential slice; the resulting
+  question ("how do we build a null that removes pan-essentiality so the residual is
+  genuinely interaction?"); and the combination-null problem governing any multi-gene
+  route, `interaction(a,b) = outcome(a,b) - psi(outcome(a), outcome(b))`, where the
+  choice of `psi` is the crux.
+- **Measurement memo.** Loss accounting, QC ablation design, attrition probes, and the
+  exp01 cell-count datapoint.
+
+## 11. Claim Boundaries
 
 Extending `CLAUDE.md`'s terminology guardrails:
 
 - Do not say population screens cannot separate death from arrest. Say a single
   endpoint net-fitness readout does not uniquely determine the underlying dynamics.
-- Do not call DepMap GeneEffect a cell-death label. It is a relative growth-rate
-  effect under an explicit population-dynamics model.
+- Do not call DepMap GeneEffect a cell-death label. It is a relative growth-rate effect
+  under an explicit population-dynamics model.
+- Do not use "outcome composition"; state a trajectory or multi-state process estimand.
+- Do not write "loss" without disambiguating biological extinction from assay attrition.
 - Do not equate high-mito / low-UMI cells with dying cells.
 - Do not describe a QC-relaxation-induced cluster as a recovered dying population.
-- Do not call a prospective outcome prediction (T2) a counterfactual; reserve that
-  for T3.
-- Do not claim an outcome decomposition is identified when only aggregate
-  consistency has been shown.
-- Do not claim synthetic lethality without an explicit combination null and
-  interaction residual.
+- Do not claim observation bias is bounded by an independence check.
+- Do not call a prospective outcome prediction (T2) a counterfactual; reserve that for T3.
+- Do not upgrade a population-level (Candidate B) result into a per-cell fate claim.
+- Do not claim an outcome decomposition is identified when only aggregate consistency
+  has been shown.
+- Do not claim synthetic lethality without an explicit combination null and interaction
+  residual.
