@@ -28,6 +28,15 @@ logger = logging.getLogger("precompute_esm2")
 UNIPROT_URL = "https://rest.uniprot.org/uniprotkb/search"
 
 
+def symbols_from_csv(csv_path: Path, symbol_columns: tuple[str, ...]) -> list[str]:
+    """Return sorted unique upper-case symbols from selected CSV columns."""
+    frame = pd.read_csv(csv_path, usecols=list(symbol_columns))
+    symbols: set[str] = set()
+    for column in symbol_columns:
+        symbols.update(frame[column].dropna().astype(str).str.upper())
+    return sorted(symbols)
+
+
 def universe_symbols(benchmark_csv: Path) -> list[str]:
     """Return sorted upper-case gene symbols from both columns of the benchmark CSV.
 
@@ -38,11 +47,7 @@ def universe_symbols(benchmark_csv: Path) -> list[str]:
     Returns:
         Sorted list of unique upper-case gene symbols.
     """
-    frame = pd.read_csv(benchmark_csv, usecols=["gene_a_symbol", "gene_b_symbol"])
-    symbols = set(frame["gene_a_symbol"].str.upper()) | set(
-        frame["gene_b_symbol"].str.upper()
-    )
-    return sorted(symbols)
+    return symbols_from_csv(benchmark_csv, ("gene_a_symbol", "gene_b_symbol"))
 
 
 def fetch_sequence(symbol: str) -> str | None:
@@ -244,6 +249,15 @@ def main() -> None:
         help="SL benchmark CSV with gene_a_symbol and gene_b_symbol columns.",
     )
     parser.add_argument(
+        "--symbol-column",
+        action="append",
+        default=None,
+        help=(
+            "CSV symbol column; repeat for multiple columns. Defaults to the "
+            "exp08 gene_a_symbol and gene_b_symbol columns."
+        ),
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         required=True,
@@ -273,7 +287,12 @@ def main() -> None:
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    symbols = universe_symbols(args.benchmark_csv)
+    symbol_columns = (
+        tuple(args.symbol_column)
+        if args.symbol_column
+        else ("gene_a_symbol", "gene_b_symbol")
+    )
+    symbols = symbols_from_csv(args.benchmark_csv, symbol_columns)
     logger.info("universe size: %d genes", len(symbols))
     seqs = load_or_fetch_sequences(symbols, args.seq_cache)
     vectors, resolved = embed_sequences(

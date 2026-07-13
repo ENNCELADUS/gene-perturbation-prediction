@@ -16,6 +16,20 @@ class Esm2EmbeddingTable:
     vectors_by_symbol: dict[str, np.ndarray]
 
 
+def require_complete_esm_coverage(
+    canonical_genes: list[str], table: Esm2EmbeddingTable
+) -> None:
+    """Require exact ESM-2 coverage in canonical uppercase manifest order."""
+    canonical = [str(gene).upper() for gene in canonical_genes]
+    available = [str(gene).upper() for gene in table.vectors_by_symbol]
+    matched = sum(gene in set(available) for gene in canonical)
+    if available != canonical:
+        raise ValueError(
+            "ESM-2 canonical coverage/order mismatch: "
+            f"{matched}/{len(canonical)} genes resolved in exact order"
+        )
+
+
 def load_esm2_embeddings(npz: Path) -> Esm2EmbeddingTable:
     """Load a precomputed ESM2 ``.npz``; drop unresolved genes.
 
