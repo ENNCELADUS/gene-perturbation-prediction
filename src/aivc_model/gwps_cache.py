@@ -173,6 +173,7 @@ def _build_gwps_cache(
             manifest = json.loads(manifest_path.read_text())
             if manifest.get("source_fingerprint") != fingerprint:
                 raise ValueError("GWPS cache fingerprint mismatch")
+            _validate_manifest_arrays(cache_dir, manifest, contract)
             return manifest_path
 
         labels = (
@@ -240,7 +241,7 @@ def _build_gwps_cache(
             {
                 "schema_version": _SCHEMA_VERSION,
                 "source_fingerprint": fingerprint,
-                "arrays": list(_ARRAY_FILENAMES),
+                "arrays": _array_manifest(cache_dir),
             },
             indent=2,
             sort_keys=True,
@@ -265,11 +266,8 @@ def _load_gwps_cache(
     if not manifest_path.exists():
         raise FileNotFoundError(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    if manifest.get("schema_version") != _SCHEMA_VERSION:
-        raise ValueError(f"GWPS cache schema must be version {_SCHEMA_VERSION}")
-    if manifest.get("arrays") != list(_ARRAY_FILENAMES):
-        raise ValueError("GWPS cache manifest array contract is invalid")
-    feature_names = _load_array(cache_dir / "feature_names.npy")
+    arrays = _validate_manifest_arrays(cache_dir, manifest, contract)
+    feature_names = arrays["feature_names.npy"]
     _validate_state_contract(model_dir, feature_names, contract)
     canonical = _load_canonical_manifest(config, canonical_path, contract)
     fingerprint = _config_fingerprint(
@@ -284,8 +282,8 @@ def _load_gwps_cache(
     if manifest.get("source_fingerprint") != fingerprint:
         raise ValueError("GWPS cache fingerprint mismatch")
 
-    genes = _load_array(cache_dir / "genes.npy")
-    outer_folds = _load_array(cache_dir / "gene_outer_folds.npy")
+    genes = arrays["genes.npy"]
+    outer_folds = arrays["gene_outer_folds.npy"]
     expected_genes = canonical["perturbation_gene"].to_numpy(dtype=str)
     expected_folds = canonical["outer_fold"].to_numpy(dtype=np.int64)
     if not np.array_equal(genes.astype(str), expected_genes) or not np.array_equal(
@@ -294,20 +292,12 @@ def _load_gwps_cache(
     ):
         raise ValueError("GWPS cache genes/folds do not match canonical manifest")
 
-    cells = _load_array(cache_dir / "cells.npy")
-    offsets = _load_array(cache_dir / "offsets.npy")
-    batch_labels = _load_array(cache_dir / "batch_labels.npy")
-    control_cells = _load_array(cache_dir / "control_cells.npy")
-    control_batch = _load_array(cache_dir / "control_batch.npy")
-    feature_fill_values = _load_array(cache_dir / "feature_fill_values.npy")
-    if feature_fill_values.shape != (contract.state_dim,) or not np.isfinite(
-        feature_fill_values
-    ).all():
-        raise ValueError(
-            "GWPS cache feature fill values must match the finite STATE dimension"
-        )
-    assert_finite_npy(cache_dir / "cells.npy")
-    assert_finite_npy(cache_dir / "control_cells.npy")
+    cells = arrays["cells.npy"]
+    offsets = arrays["offsets.npy"]
+    batch_labels = arrays["batch_labels.npy"]
+    control_cells = arrays["control_cells.npy"]
+    control_batch = arrays["control_batch.npy"]
+    feature_fill_values = arrays["feature_fill_values.npy"]
     input_bags = tuple(
         cells[int(offsets[index]) : int(offsets[index + 1])]
         for index in range(len(genes))
@@ -563,6 +553,149 @@ def _write_array(path: Path, values: np.ndarray) -> None:
 
 def _load_array(path: Path) -> np.ndarray:
     return np.load(path, mmap_mode="r", allow_pickle=False)
+
+
+def _array_manifest(cache_dir: Path) -> dict[str, dict[str, object]]:
+    """Bind every completed array without materializing memory-mapped payloads."""
+    return {
+        filename: _array_metadata(cache_dir / filename)
+        for filename in _ARRAY_FILENAMES
+    }
+
+
+def _array_metadata(path: Path) -> dict[str, object]:
+    array = _load_array(path)
+    return {
+        "sha256": sha256_file(path),
+        "shape": list(array.shape),
+        "dtype": array.dtype.str,
+    }
+
+
+def validate_cache_arrays(
+    cache_dir: Path,
+    *,
+    gene_count: int,
+    state_dim: int,
+) -> dict[str, np.ndarray]:
+    """Validate schema-v2 array authority for strict preflight."""
+    manifest_path = cache_dir / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError("prepared GWPS cache manifest is missing")
+    manifest = json.loads(manifest_path.read_text())
+    return _validate_manifest_arrays(
+        cache_dir,
+        manifest,
+        _CacheContract(gene_count=gene_count, state_dim=state_dim),
+    )
+
+
+def _validate_manifest_arrays(
+    cache_dir: Path,
+    manifest: object,
+    contract: _CacheContract,
+) -> dict[str, np.ndarray]:
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema_version") != _SCHEMA_VERSION
+    ):
+        raise ValueError(f"GWPS cache schema must be version {_SCHEMA_VERSION}")
+    fingerprint = manifest.get("source_fingerprint")
+    if (
+        set(manifest) != {"schema_version", "source_fingerprint", "arrays"}
+        or not isinstance(fingerprint, str)
+        or len(fingerprint) != 64
+        or any(character not in "0123456789abcdef" for character in fingerprint)
+    ):
+        raise ValueError("GWPS cache manifest contract is invalid")
+    metadata = manifest.get("arrays")
+    if not isinstance(metadata, dict) or set(metadata) != set(_ARRAY_FILENAMES):
+        raise ValueError("GWPS cache manifest array contract is invalid")
+
+    arrays: dict[str, np.ndarray] = {}
+    for filename in _ARRAY_FILENAMES:
+        expected = metadata[filename]
+        if not isinstance(expected, dict) or set(expected) != {
+            "sha256",
+            "shape",
+            "dtype",
+        }:
+            raise ValueError("GWPS cache manifest array contract is invalid")
+        path = cache_dir / filename
+        if not path.is_file():
+            raise ValueError(f"GWPS cache array is missing: {filename}")
+        array = _load_array(path)
+        if expected["shape"] != list(array.shape):
+            raise ValueError(f"{filename} shape differs from manifest")
+        if expected["dtype"] != array.dtype.str:
+            raise ValueError(f"{filename} dtype differs from manifest")
+        if expected["sha256"] != sha256_file(path):
+            raise ValueError(f"{filename} SHA-256 mismatch")
+        arrays[filename] = array
+
+    _validate_array_structure(cache_dir, arrays, contract)
+    return arrays
+
+
+def _validate_array_structure(
+    cache_dir: Path,
+    arrays: dict[str, np.ndarray],
+    contract: _CacheContract,
+) -> None:
+    cells = arrays["cells.npy"]
+    offsets = arrays["offsets.npy"]
+    genes = arrays["genes.npy"]
+    folds = arrays["gene_outer_folds.npy"]
+    batches = arrays["batch_labels.npy"]
+    controls = arrays["control_cells.npy"]
+    control_batch = arrays["control_batch.npy"]
+    features = arrays["feature_names.npy"]
+    fills = arrays["feature_fill_values.npy"]
+
+    if cells.ndim != 2 or cells.shape[1] != contract.state_dim:
+        raise ValueError("GWPS cache cells must be 2-D with the STATE width")
+    if cells.dtype.kind not in {"b", "i", "u", "f", "c"}:
+        raise ValueError("GWPS cache cells must be numeric")
+    if offsets.dtype.kind not in {"i", "u"} or offsets.shape != (
+        contract.gene_count + 1,
+    ):
+        raise ValueError("GWPS cache offsets must be one integer boundary per gene")
+    if int(offsets[0]) != 0:
+        raise ValueError("GWPS cache offsets must start at zero")
+    if np.any(np.diff(np.asarray(offsets, dtype=np.int64)) <= 0):
+        raise ValueError("GWPS cache every gene bag must be non-empty")
+    if int(offsets[-1]) != len(cells):
+        raise ValueError("GWPS cache offsets must end at the response row count")
+    if genes.shape != (contract.gene_count,):
+        raise ValueError("GWPS cache genes must match the canonical gene count")
+    if folds.shape != (contract.gene_count,):
+        raise ValueError("GWPS cache folds must match the canonical gene count")
+    if batches.shape != (len(cells),):
+        raise ValueError("GWPS cache response batches must match response cells")
+    if (
+        controls.ndim != 2
+        or not len(controls)
+        or controls.shape[1] != contract.state_dim
+    ):
+        raise ValueError("GWPS cache controls must be non-empty with the STATE width")
+    if controls.dtype.kind not in {"b", "i", "u", "f", "c"}:
+        raise ValueError("GWPS cache controls must be numeric")
+    if control_batch.shape != (len(controls),):
+        raise ValueError("GWPS cache control batches must match control cells")
+    if features.shape != (contract.state_dim,):
+        raise ValueError("GWPS cache features must match the STATE dimension")
+    if fills.shape != (contract.state_dim,) or fills.dtype.kind not in {
+        "b",
+        "i",
+        "u",
+        "f",
+        "c",
+    } or not np.isfinite(fills).all():
+        raise ValueError(
+            "GWPS cache feature fill values must match the finite STATE dimension"
+        )
+    assert_finite_npy(cache_dir / "cells.npy")
+    assert_finite_npy(cache_dir / "control_cells.npy")
 
 
 def _ordered_metadata(config: AivcConfig, genes: np.ndarray) -> pd.DataFrame:

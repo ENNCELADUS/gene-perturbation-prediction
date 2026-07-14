@@ -2255,10 +2255,10 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         raise ValueError("state_learning_rate must not exceed learning_rate")
     if max_grad_norm <= 0:
         raise ValueError("max_grad_norm must be positive")
-    if required_world_size != 4:
-        raise ValueError("required_world_size must be 4")
-    if gene_batch_size != 1:
-        raise ValueError("gene_batch_size must be 1 for authoritative exp05 training")
+    if required_world_size <= 0:
+        raise ValueError("required_world_size must be positive")
+    if gene_batch_size <= 0:
+        raise ValueError("gene_batch_size must be positive")
     return TrainConfig(
         run_id=values.get("run_id"),
         seed=int(values.get("seed", 42)),
