@@ -314,6 +314,20 @@ def test_complete_esm_coverage_requires_exact_uppercase_order() -> None:
         require_complete_esm_coverage(canonical, table)
 
 
+def test_complete_esm_coverage_allows_resolved_extra_tokens() -> None:
+    canonical = ["B", "A"]
+    table = Esm2EmbeddingTable(
+        dim=2,
+        vectors_by_symbol={
+            "B": np.ones(2, dtype=np.float32),
+            "EXTERNAL": np.ones(2, dtype=np.float32),
+            "A": np.ones(2, dtype=np.float32),
+        },
+    )
+
+    require_complete_esm_coverage(canonical, table)
+
+
 def _run_asset_cli(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

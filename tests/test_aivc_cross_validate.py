@@ -554,6 +554,8 @@ def _preflight_config(
             "has_depmap_label": True,
         }
     ).to_csv(labels, index=False)
+    external_labels = tmp_path / "external_labels.csv"
+    pd.read_csv(labels).to_csv(external_labels, index=False)
     split = tmp_path / "outer.csv"
     pd.DataFrame(
         {
@@ -645,7 +647,7 @@ def _preflight_config(
         train=replace(base.train, freeze_state=False),
         external_test=ExternalTestConfig(
             name="adamson_k562",
-            overlap_csv=labels,
+            overlap_csv=external_labels,
             sources=tuple(
                 ExternalSourceConfig(
                     name=name,
@@ -699,6 +701,7 @@ def test_preflight_verifies_all_frozen_assets_and_reports_counts(
         "canonical_split_folds": 5,
         "canonical_split_sha256_length": 64,
         "esm2_resolved": "10/10",
+        "esm2_external_resolved": "0/0",
         "state_expression_matches": "3/3",
         "state_input_dim": 3,
         "state_output_dim": 3,
@@ -707,6 +710,82 @@ def test_preflight_verifies_all_frozen_assets_and_reports_counts(
         "adamson_upr_epistasis_matches": "1/3",
         "adamson_upr_perturb_seq_matches": "1/3",
     }
+
+
+def _add_external_esm_gene(
+    config: AivcConfig,
+    gene: str,
+    *,
+    include_embedding: bool,
+) -> None:
+    assert config.external_test is not None
+    overlap = pd.read_csv(config.external_test.overlap_csv)
+    overlap = pd.concat(
+        [
+            overlap,
+            pd.DataFrame(
+                {
+                    "perturbation_gene": [gene],
+                    "depmap_gene_effect": [-0.5],
+                    "has_depmap_label": [True],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    overlap.to_csv(config.external_test.overlap_csv, index=False)
+    if not include_embedding:
+        return
+    assert config.state.esm2_npz is not None
+    with np.load(config.state.esm2_npz, allow_pickle=True) as payload:
+        symbols = payload["symbols"].astype(object)
+        vectors = payload["vectors"].astype(np.float32)
+        resolved = payload["resolved"].astype(bool)
+    np.savez(
+        config.state.esm2_npz,
+        symbols=np.append(symbols, gene),
+        vectors=np.vstack([vectors, np.ones((1, vectors.shape[1]), dtype=np.float32)]),
+        resolved=np.append(resolved, True),
+    )
+
+
+def test_preflight_rejects_missing_required_external_esm_gene(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    _add_external_esm_gene(config, "ADAMSON_ONLY", include_embedding=False)
+
+    with pytest.raises(ValueError, match="ADAMSON_ONLY"):
+        cv.run_preflight(tmp_path / "config.yaml")
+
+
+def test_preflight_reports_resolved_external_esm_gene(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    _add_external_esm_gene(config, "ADAMSON_ONLY", include_embedding=True)
+    assert config.external_test is not None
+    overlap = pd.read_csv(config.external_test.overlap_csv)
+    pd.concat(
+        [
+            overlap,
+            pd.DataFrame(
+                {
+                    "perturbation_gene": ["UNMATCHED", "NONFINITE"],
+                    "depmap_gene_effect": [-0.5, np.inf],
+                    "has_depmap_label": [False, True],
+                }
+            ),
+        ],
+        ignore_index=True,
+    ).to_csv(config.external_test.overlap_csv, index=False)
+
+    report = cv.run_preflight(tmp_path / "config.yaml")
+
+    assert report["esm2_resolved"] == "10/10"
+    assert report["esm2_external_resolved"] == "1/1"
 
 
 def test_distributed_preflight_accepts_trainable_state(

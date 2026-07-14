@@ -19,11 +19,14 @@ class Esm2EmbeddingTable:
 def require_complete_esm_coverage(
     canonical_genes: list[str], table: Esm2EmbeddingTable
 ) -> None:
-    """Require exact ESM-2 coverage in canonical uppercase manifest order."""
+    """Require complete canonical coverage in exact relative manifest order."""
     canonical = [str(gene).upper() for gene in canonical_genes]
     available = [str(gene).upper() for gene in table.vectors_by_symbol]
-    matched = sum(gene in set(available) for gene in canonical)
-    if available != canonical:
+    canonical_set = set(canonical)
+    available_set = set(available)
+    matched = sum(gene in available_set for gene in canonical)
+    available_canonical = [gene for gene in available if gene in canonical_set]
+    if available_canonical != canonical:
         raise ValueError(
             "ESM-2 canonical coverage/order mismatch: "
             f"{matched}/{len(canonical)} genes resolved in exact order"

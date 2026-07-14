@@ -2791,6 +2791,54 @@ def test_esm2_build_rejects_missing_external_gene_without_filtering(
         )
 
 
+def test_esm2_build_accepts_resolved_external_gene(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data = _toy_gene_bags_with_batches()
+    manifest = tmp_path / "outer.csv"
+    pd.DataFrame(
+        {"perturbation_gene": ["GENE1", "GENE2"], "outer_fold": [0, 1]}
+    ).to_csv(manifest, index=False)
+    sha256_file = tmp_path / "outer.csv.sha256"
+    sha256_file.write_text(f"{_sha256(manifest)}\n", encoding="utf-8")
+    esm2_npz = tmp_path / "esm2.npz"
+    np.savez(
+        esm2_npz,
+        symbols=np.asarray(["GENE1", "ADAMSON_ONLY", "GENE2"], dtype=object),
+        vectors=np.ones((3, 3), dtype=np.float32),
+        resolved=np.asarray([True, True, True]),
+    )
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    config = replace(
+        config,
+        response_encoder=ResponseEncoderConfig(input_dim=2000, latent_dim=128),
+        cv=replace(
+            config.cv,
+            outer_split_manifest=manifest,
+            outer_split_sha256_file=sha256_file,
+        ),
+        state=replace(
+            config.state,
+            gene_tokenizer="esm2",
+            esm2_npz=esm2_npz,
+            require_resolved_esm2=True,
+        ),
+    )
+    monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 2)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
+
+    model = train_module._build_e2e_model(
+        config,
+        data,
+        extra_genes=("ADAMSON_ONLY",),
+        canonical_gene_order=("GENE1", "GENE2"),
+        emit_checkpoint_output=False,
+    )
+
+    assert model.perturbations("ADAMSON_ONLY").shape == (2,)
+
+
 def test_zero_weight_energy_losses_skip_extra_compute(monkeypatch) -> None:
     model, _state_model = _build_tiny_aivc_model()
 

@@ -42,6 +42,7 @@ from aivc_model.prepare import (
     GeneBags,
     ResponseEncoderConfig,
     SealedGeneBags,
+    _load_external_metadata,
     load_config,
     load_external_gene_bags,
     load_gene_bags,
@@ -73,7 +74,12 @@ def run_preflight(config_path: Path) -> dict[str, object]:
     manifest, split_sha256 = _load_preflight_manifest(config, labels)
     canonical_genes = manifest["perturbation_gene"].to_numpy(dtype=str)
     cache_features = _validate_prepared_cache(config, manifest)
-    esm_resolved = _validate_esm2_asset(config, canonical_genes)
+    external_genes = _required_external_esm_genes(config, canonical_genes)
+    esm_resolved, external_esm_resolved = _validate_esm2_asset(
+        config,
+        canonical_genes,
+        external_genes,
+    )
     gwps_shape, noncontrol_count = _validate_gwps_source(config, canonical_genes)
     state_dims = _validate_state_assets(config, cache_features)
     adamson_matches = _validate_adamson_sources(config, cache_features)
@@ -85,6 +91,9 @@ def run_preflight(config_path: Path) -> dict[str, object]:
         "canonical_split_folds": int(manifest["outer_fold"].nunique()),
         "canonical_split_sha256_length": len(split_sha256),
         "esm2_resolved": f"{esm_resolved}/{len(canonical_genes)}",
+        "esm2_external_resolved": (
+            f"{external_esm_resolved}/{len(external_genes)}"
+        ),
         "state_expression_matches": (f"{len(cache_features)}/{STATE_FEATURE_COUNT}"),
         "state_input_dim": state_dims[0],
         "state_output_dim": state_dims[1],
@@ -195,26 +204,52 @@ def _validate_prepared_cache(
     return features
 
 
-def _validate_esm2_asset(config: AivcConfig, canonical_genes: np.ndarray) -> int:
+def _required_external_esm_genes(
+    config: AivcConfig,
+    canonical_genes: np.ndarray,
+) -> np.ndarray:
+    metadata = _load_external_metadata(config)
+    external = {
+        str(gene).upper() for gene in metadata["perturbation_gene"].astype(str)
+    }
+    return np.asarray(sorted(external.difference(canonical_genes)), dtype=str)
+
+
+def _validate_esm2_asset(
+    config: AivcConfig,
+    canonical_genes: np.ndarray,
+    external_genes: np.ndarray,
+) -> tuple[int, int]:
     path = config.state.esm2_npz
     if path is None:
         raise ValueError("state.esm2_npz is required")
     with np.load(path, allow_pickle=True) as payload:
-        symbols = payload["symbols"].astype(str)
+        symbols = np.char.upper(payload["symbols"].astype(str))
         resolved = payload["resolved"].astype(bool)
         vectors = payload["vectors"]
-    if (
-        len(symbols) != len(canonical_genes)
-        or len(set(symbols)) != len(symbols)
-        or set(symbols) != set(canonical_genes)
-    ):
-        raise ValueError("ESM-2 gene set must exactly match the canonical manifest")
+    canonical = tuple(str(gene).upper() for gene in canonical_genes)
+    external = tuple(str(gene).upper() for gene in external_genes)
+    canonical_set = set(canonical)
+    required = canonical_set.union(external)
+    observed = set(symbols)
+    if len(observed) != len(symbols) or observed != required:
+        missing = sorted(required.difference(observed))
+        unexpected = sorted(observed.difference(required))
+        raise ValueError(
+            "ESM-2 gene set must exactly match canonical plus required external "
+            f"genes; missing={missing}, unexpected={unexpected}"
+        )
+    canonical_order = tuple(gene for gene in symbols if gene in canonical_set)
+    if canonical_order != canonical:
+        raise ValueError("ESM-2 canonical genes differ from manifest relative order")
     if resolved.shape != (len(symbols),) or vectors.shape[0] != len(symbols):
         raise ValueError("ESM-2 asset arrays have inconsistent row counts")
-    resolved_count = int(resolved.sum())
-    if resolved_count != CANONICAL_GENE_COUNT:
-        raise ValueError("ESM-2 coverage must be complete over all canonical genes")
-    return resolved_count
+    if not resolved.all():
+        unresolved = symbols[~resolved].tolist()
+        raise ValueError(
+            f"ESM-2 coverage must resolve every required gene: {unresolved}"
+        )
+    return len(canonical), len(external)
 
 
 def _validate_gwps_source(
