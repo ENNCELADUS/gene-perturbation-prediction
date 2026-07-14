@@ -2,7 +2,7 @@
 
 Status date: 2026-07-13 (revision 3 — frozen for L0 -> Gate 1)
 Type: research direction + literature review plan. **Not** an implementation spec.
-**Superseded by:** [`docs/01-research-direction.md`](../../01-research-direction.md) (revision 4). This revision-3 document is frozen and retained because the eleven review memos under `ideaspark_run/` cite it by path.
+**Superseded by:** [`docs/01-blueprint.md`](../../01-blueprint.md), which is the live contract. This document is retained only because the review memos under `ideaspark_run/` cite it by path; do not read it as current.
 
 Origin: PI meeting notes on transcriptomics -> cellular phenotype / cell death;
 brainstorming over repository state; three reviewer passes (major revision, focused
