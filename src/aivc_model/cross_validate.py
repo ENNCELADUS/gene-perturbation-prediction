@@ -10,15 +10,18 @@ import pickle
 from dataclasses import replace
 from pathlib import Path
 import re
-from typing import Any, Callable
+from typing import Any
 
 from accelerate import Accelerator
 import anndata as ad
 import numpy as np
 import pandas as pd
-import torch
 
 from aivc_model.expression import assert_finite_npy
+from aivc_model.distributed import (
+    require_exact_world_size,
+    run_rank_zero_or_raise,
+)
 from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
     FINAL_RESPONSE_STAGES,
@@ -380,8 +383,8 @@ def run_cross_validation(
     """Execute all frozen outer folds and aggregate audited final artifacts."""
     config = load_config(config_path)
     accelerator = accelerator or _make_accelerator(config)
+    require_exact_world_size(accelerator, config.train.required_world_size)
     _run_distributed_preflight(config_path, accelerator)
-    _wait_for_everyone(accelerator)
     manifest_path, expected_sha256 = _manifest_authority(config)
     if _file_sha256(manifest_path) != expected_sha256:
         raise ValueError("canonical manifest SHA-256 mismatch")
@@ -412,9 +415,11 @@ def run_cross_validation(
     run_dir = config.data.output_dir / "runs" / run_id
     _prepare_fresh_run_dir(run_dir, accelerator)
     artifacts_dir = run_dir / "artifacts"
-    if accelerator.is_main_process:
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-    _wait_for_everyone(accelerator)
+    run_rank_zero_or_raise(
+        accelerator,
+        "run artifacts directory creation",
+        lambda: artifacts_dir.mkdir(parents=True, exist_ok=True),
+    )
     external = load_external_gene_bags(
         config,
         data,
@@ -447,8 +452,9 @@ def run_cross_validation(
                 canonical_gene_order=tuple(manifest["perturbation_gene"]),
             )
         )
-    _run_main_process(
+    run_rank_zero_or_raise(
         accelerator,
+        "final cross-validation aggregation",
         lambda: _aggregate_outputs(
             run_dir,
             manifest,
@@ -460,7 +466,6 @@ def run_cross_validation(
             config,
         ),
     )
-    _wait_for_everyone(accelerator)
     return run_dir
 
 
@@ -477,40 +482,15 @@ def _require_fresh_run_dir(run_dir: Path) -> None:
 
 
 def _prepare_fresh_run_dir(run_dir: Path, accelerator: Accelerator) -> None:
-    """Let rank zero validate/create one shared directory, then synchronize."""
-    error = _main_process_error(
+    """Let rank zero validate/create one shared directory symmetrically."""
+    run_rank_zero_or_raise(
         accelerator,
+        "fresh run directory creation",
         lambda: (
             _require_fresh_run_dir(run_dir),
             run_dir.mkdir(parents=True, exist_ok=True),
         ),
     )
-    if error is not None:
-        raise error
-    _wait_for_everyone(accelerator)
-
-
-def _wait_for_everyone(accelerator: Accelerator) -> None:
-    """Synchronize ranks without passing unsupported MPS device ids to Gloo."""
-    if (
-        accelerator.num_processes > 1
-        and torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and accelerator.device.type in {"cpu", "mps"}
-    ):
-        torch.distributed.barrier()
-        return
-    accelerator.wait_for_everyone()
-
-
-def _run_main_process(
-    accelerator: Accelerator,
-    action: Callable[[], None],
-) -> None:
-    """Execute a shared-filesystem mutation exactly once."""
-    error = _main_process_error(accelerator, action)
-    if error is not None:
-        raise RuntimeError(f"rank-zero shared operation failed: {error}") from error
 
 
 def _run_distributed_preflight(
@@ -518,42 +498,11 @@ def _run_distributed_preflight(
     accelerator: Accelerator,
 ) -> None:
     """Run locked preflight once and propagate any failure to every rank."""
-    if accelerator.num_processes == 1:
-        run_preflight(config_path)
-        return
-    error = _main_process_error(accelerator, lambda: run_preflight(config_path))
-    if error is not None:
-        raise RuntimeError(f"locked preflight failed: {error}") from error
-
-
-def _main_process_error(
-    accelerator: Accelerator,
-    action: Callable[[], object],
-) -> Exception | None:
-    """Run an action on rank zero and broadcast its original exception."""
-    error: Exception | None = None
-    if accelerator.is_main_process:
-        try:
-            action()
-        except Exception as caught:
-            error = caught
-    if accelerator.num_processes > 1:
-        values = [error]
-        torch.distributed.broadcast_object_list(
-            values,
-            src=0,
-            device=_object_broadcast_device(accelerator),
-        )
-        error = values[0]
-    return error
-
-
-def _object_broadcast_device(accelerator: Accelerator) -> torch.device:
-    """Select a tensor device compatible with the active process-group backend."""
-    backend = str(torch.distributed.get_backend()).lower()
-    if "nccl" in backend:
-        return accelerator.device
-    return torch.device("cpu")
+    run_rank_zero_or_raise(
+        accelerator,
+        "locked preflight",
+        lambda: run_preflight(config_path),
+    )
 
 
 def _manifest_authority(config: AivcConfig) -> tuple[Path, str]:

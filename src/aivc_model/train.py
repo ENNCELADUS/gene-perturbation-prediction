@@ -46,6 +46,10 @@ from aivc_model.model import (
     fit_fixed_gmm,
     load_state_model,
 )
+from aivc_model.distributed import (
+    assert_all_ranks_stepped,
+    run_rank_zero_or_raise,
+)
 from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
     FoldSpec,
@@ -489,6 +493,7 @@ def run_training(
             max_grad_norm=config.train.max_grad_norm,
             tensor_cache=input_tensor_cache,
         )
+        train_row.pop("local_optimizer_steps")
         val_row, _val_predictions = _evaluate_prediction_only_final(
             model,
             data,
@@ -627,10 +632,14 @@ def _run_audited_training(
     _configure_float32_matmul_precision(config)
     artifacts_dir = run_dir / "artifacts"
     models_dir = run_dir / "models"
-    if accelerator.is_main_process:
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-        models_dir.mkdir(parents=True, exist_ok=True)
-    accelerator.wait_for_everyone()
+    run_rank_zero_or_raise(
+        accelerator,
+        f"fold {fold_spec.outer_fold} directory creation",
+        lambda: (
+            artifacts_dir.mkdir(parents=True, exist_ok=True),
+            models_dir.mkdir(parents=True, exist_ok=True),
+        ),
+    )
     authority = _fold_artifact_authority(
         config,
         fold_spec,
@@ -713,11 +722,19 @@ def _run_audited_training(
             accelerator,
             batch_lookup,
         )
-        if accelerator.is_main_process:
+        local_optimizer_steps = int(train_row.pop("local_optimizer_steps"))
+        rank_optimizer_steps = assert_all_ranks_stepped(
+            accelerator,
+            local_optimizer_steps,
+        )
+
+        def write_epoch_outputs() -> None:
+            nonlocal best_epoch, best_value
             value = float(val_row.get("spearman", math.nan))
             logs.append(
                 {
                     "epoch": epoch,
+                    "rank_optimizer_steps": rank_optimizer_steps,
                     **_prefix(train_row, "train"),
                     **_prefix(val_row, "val"),
                 }
@@ -743,7 +760,12 @@ def _run_audited_training(
                         "esm2_npz": str(config.state.esm2_npz),
                     },
                 )
-        accelerator.wait_for_everyone()
+
+        run_rank_zero_or_raise(
+            accelerator,
+            f"fold {fold_spec.outer_fold} epoch {epoch} output write",
+            write_epoch_outputs,
+        )
 
     checkpoint_dir = models_dir / "best"
     checkpoint_path = checkpoint_dir / "pytorch_model.bin"
@@ -1153,7 +1175,8 @@ def _write_audited_fold_outputs(
             accelerator,
             batch_lookup,
         )
-    if accelerator.is_main_process:
+
+    def write_fold_outputs() -> None:
         metrics = _audited_metric_rows(
             fold_spec.outer_fold,
             internal_metrics,
@@ -1218,7 +1241,12 @@ def _write_audited_fold_outputs(
                 "esm2_npz": str(config.state.esm2_npz),
             },
         )
-    accelerator.wait_for_everyone()
+
+    run_rank_zero_or_raise(
+        accelerator,
+        f"fold {fold_spec.outer_fold} final output write",
+        write_fold_outputs,
+    )
     return paths
 
 
@@ -1431,7 +1459,10 @@ def _make_accelerator(config: AivcConfig) -> Accelerator:
         use_seedable_sampler=True,
         data_seed=config.train.seed,
     )
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    ddp_kwargs = DistributedDataParallelKwargs(
+        find_unused_parameters=True,
+        static_graph=True,
+    )
     return Accelerator(
         cpu=config.train.device == "cpu",
         dataloader_config=dataloader_config,
@@ -2329,6 +2360,7 @@ def _run_epoch(
     model.train()
     metric_sum = _empty_metric_sum(accelerator.device)
     metric_count = 0
+    local_optimizer_steps = 0
     total = len(indices)
     iterator = tqdm(
         indices,
@@ -2369,6 +2401,7 @@ def _run_epoch(
         accelerator.backward(total_loss)
         accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
         optimizer.step()
+        local_optimizer_steps += 1
         metric_tensor = _metric_tensor_from_losses(
             losses,
             fallback_counts,
@@ -2377,7 +2410,9 @@ def _run_epoch(
         if valid_mask.any():
             metric_sum = metric_sum + metric_tensor[valid_mask].sum(dim=0)
             metric_count += int(valid_mask.sum().item())
-    return _reduce_metric_mean(metric_sum, metric_count, accelerator)
+    metrics = _reduce_metric_mean(metric_sum, metric_count, accelerator)
+    metrics["local_optimizer_steps"] = float(local_optimizer_steps)
+    return metrics
 
 
 def _evaluate(
