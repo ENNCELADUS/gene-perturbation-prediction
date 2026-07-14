@@ -2135,6 +2135,59 @@ def test_aivc_forward_batches_chunks_without_changing_losses() -> None:
         assert torch.allclose(actual[key], expected[key], atol=1e-6)
 
 
+def test_hvg_mean_delta_is_invariant_to_unequal_chunk_partitioning() -> None:
+    model, _state_model = _build_counting_aivc_model()
+    control = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0],
+        ]
+    )
+    target = torch.zeros_like(control)
+    weights = LossWeights(
+        latent_mean_delta=0.0,
+        latent_energy=0.0,
+        hvg_mean_delta=1.0,
+        hvg_energy=0.0,
+        pred_c=0.0,
+        obs_c=0.0,
+        occupancy=0.0,
+        gmm_nll=0.0,
+    )
+    common = {
+        "gene": "GENE1",
+        "y": torch.tensor(-1.0),
+        "weights": weights,
+    }
+
+    complete_bag = model.losses_for_gene(
+        **common,
+        control_chunks=(control,),
+        target_expression_chunks=(target,),
+        target_latent_chunks=(torch.zeros(5, 2),),
+        batch_index_chunks=(None,),
+    )
+    unequal_chunks = model.losses_for_gene(
+        **common,
+        control_chunks=(control[:2], control[2:4], control[4:]),
+        target_expression_chunks=(target[:2], target[2:4], target[4:]),
+        target_latent_chunks=(
+            torch.zeros(2, 2),
+            torch.zeros(2, 2),
+            torch.zeros(1, 2),
+        ),
+        batch_index_chunks=(None, None, None),
+    )
+
+    assert torch.allclose(
+        unequal_chunks["hvg_mean_delta"],
+        complete_bag["hvg_mean_delta"],
+    )
+
+
 def test_aivc_batched_forward_backprops_each_gene_vector() -> None:
     model, _state_model = _build_two_gene_aivc_model()
 
@@ -3244,8 +3297,8 @@ def _legacy_chunk_loop_losses(
     weights: LossWeights,
 ) -> dict[str, torch.Tensor]:
     del target_latent_chunks
+    predicted_expression_chunks: list[torch.Tensor] = []
     predicted_latent_chunks: list[torch.Tensor] = []
-    hvg_mean_delta_terms: list[torch.Tensor] = []
     hvg_energy_terms: list[torch.Tensor] = []
     for control, target_expression, batch_indices in zip(
         control_chunks,
@@ -3258,23 +3311,22 @@ def _legacy_chunk_loop_losses(
             gene,
             batch_indices,
         )
+        predicted_expression_chunks.append(predicted_expression)
         predicted_latent_chunks.append(predicted_latent)
-        hvg_mean_delta_terms.append(
-            _test_mean_delta_loss(
-                predicted_expression,
-                target_expression,
-                model.control_expression_mean,
-            )
-        )
         hvg_energy_terms.append(
             _test_energy_distance(predicted_expression, target_expression)
         )
     control_expression = torch.cat(control_chunks, dim=0)
     target_expression = torch.cat(target_expression_chunks, dim=0)
+    predicted_expression = torch.cat(predicted_expression_chunks, dim=0)
     predicted_latent = torch.cat(predicted_latent_chunks, dim=0)
     observed_latent = model.response_encoder(target_expression)
     control_latent = model.response_encoder(control_expression)
-    hvg_mean_delta = torch.stack(hvg_mean_delta_terms).mean()
+    hvg_mean_delta = _test_mean_delta_loss(
+        predicted_expression,
+        target_expression,
+        model.control_expression_mean,
+    )
     hvg_energy = torch.stack(hvg_energy_terms).mean()
     latent_mean_delta = F.mse_loss(
         predicted_latent.mean(dim=0),
