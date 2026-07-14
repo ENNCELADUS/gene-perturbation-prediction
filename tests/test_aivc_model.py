@@ -1014,6 +1014,10 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
         "  device: cpu\n",
         "  device: cpu\n"
         "  gene_batch_size: 4\n"
+        "  learning_rate: 0.000025\n"
+        "  state_learning_rate: 0.0000025\n"
+        "  max_grad_norm: 0.5\n"
+        "  required_world_size: 4\n"
         "  freeze_state: true\n"
         "  input_tensor_cache_max_gib: 12.5\n",
     )
@@ -1022,11 +1026,19 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     parsed = load_config(config_path)
 
     assert default_config.train.gene_batch_size == 1
+    assert default_config.train.learning_rate == 2.5e-5
+    assert default_config.train.state_learning_rate == 2.5e-6
+    assert default_config.train.max_grad_norm == 1.0
+    assert default_config.train.required_world_size == 4
     assert default_config.train.freeze_state is False
     assert default_config.train.input_tensor_cache_max_gib == 24.0
     assert default_config.loss.pred_rank_weight == 0.0
     assert default_config.loss.b_loss_anneal_epochs == 0
     assert parsed.train.gene_batch_size == 4
+    assert parsed.train.learning_rate == 2.5e-5
+    assert parsed.train.state_learning_rate == 2.5e-6
+    assert parsed.train.max_grad_norm == 0.5
+    assert parsed.train.required_world_size == 4
     assert parsed.train.freeze_state is True
     assert parsed.train.input_tensor_cache_max_gib == 12.5
     assert parsed.loss.pred_rank_weight == 5.0
@@ -1035,6 +1047,37 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert parsed.loss.pred_rank_pair_weight_clip == 2.0
     assert parsed.loss.b_loss_anneal_epochs == 5
     assert parsed.loss.b_loss_anneal_final_fraction == 0.1
+
+
+@pytest.mark.parametrize(
+    ("settings", "message"),
+    [
+        ({"state_learning_rate": 0.0}, "state_learning_rate must be positive"),
+        (
+            {"learning_rate": 2.5e-5, "state_learning_rate": 2.5e-4},
+            "state_learning_rate must not exceed learning_rate",
+        ),
+        ({"max_grad_norm": 0.0}, "max_grad_norm must be positive"),
+        ({"required_world_size": 1}, "required_world_size must be 4"),
+    ],
+)
+def test_train_config_rejects_invalid_e2e_settings(
+    tmp_path: Path,
+    settings: dict[str, float | int],
+    message: str,
+) -> None:
+    config_path = _write_scvi_cache_config(tmp_path)
+    lines = "".join(f"  {key}: {value}\n" for key, value in settings.items())
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "  device: cpu\n",
+            f"  device: cpu\n{lines}",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        load_config(config_path)
 
 
 def test_response_encoder_config_is_optional_for_legacy_configs(tmp_path: Path) -> None:
@@ -1341,11 +1384,62 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
         {},
         epoch=1,
         max_epochs=1,
+        max_grad_norm=10.0,
     )
 
     assert optimizer.step_count == 1
     assert optimizer.last_grad == 3.0
     assert row["total_loss"] == 1.5
+
+
+def test_gradient_clipping_is_called_before_optimizer_step(monkeypatch) -> None:
+    events: list[str] = []
+    clipped_norms: list[float] = []
+
+    class RecordingOptimizer(torch.optim.SGD):
+        def step(self, closure=None):  # type: ignore[override]
+            events.append("step")
+            return super().step(closure)
+
+    model, _state_model = _build_tiny_aivc_model()
+    accelerator = train_module.Accelerator(cpu=True)
+    original_clip = accelerator.clip_grad_norm_
+
+    def record_clip(
+        parameters: object,
+        max_norm: float,
+    ) -> torch.Tensor:
+        events.append("clip")
+        clipped_norms.append(max_norm)
+        return original_clip(parameters, max_norm)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(accelerator, "clip_grad_norm_", record_clip)
+    optimizer = RecordingOptimizer(model.parameters(), lr=0.1)
+    loader = train_module._gene_loader(
+        np.asarray([0], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=1,
+        world_size=1,
+    )
+
+    train_module._run_epoch(
+        model,
+        _toy_gene_bags_with_batches(),
+        loader,
+        _loss_weights(),
+        optimizer,
+        np.random.default_rng(1),
+        2,
+        accelerator,
+        {},
+        epoch=1,
+        max_epochs=1,
+        max_grad_norm=0.25,
+    )
+
+    assert events.index("clip") < events.index("step")
+    assert clipped_norms == [0.25]
 
 
 def test_run_epoch_zero_weights_padding_for_loss_metrics_and_count() -> None:
@@ -1441,6 +1535,7 @@ def test_run_epoch_zero_weights_padding_for_loss_metrics_and_count() -> None:
         {},
         epoch=1,
         max_epochs=1,
+        max_grad_norm=10.0,
     )
 
     assert model.seen_masks == [[True, False]]
@@ -2272,6 +2367,26 @@ def test_aivc_batched_forward_backprops_each_gene_vector() -> None:
     assert model.perturbations.missing_vectors["g1"].grad is not None
 
 
+def test_optimizer_uses_lower_state_learning_rate(tmp_path: Path) -> None:
+    model, _state_model = _build_tiny_aivc_model()
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    config = replace(
+        config,
+        train=replace(
+            config.train,
+            state_learning_rate=2.5e-6,
+            learning_rate=2.5e-5,
+        ),
+    )
+
+    groups = train_module._optimizer_parameter_groups(model, config)
+
+    assert [group["lr"] for group in groups] == [2.5e-6, 2.5e-5]
+    state_ids = {id(parameter) for parameter in model.state_adapter.parameters()}
+    assert {id(parameter) for parameter in groups[0]["params"]} == state_ids
+    assert state_ids.isdisjoint(id(parameter) for parameter in groups[1]["params"])
+
+
 def test_aivc_batched_forward_gene_mask_excludes_padding_from_ranknet_and_loss() -> (
     None
 ):
@@ -2446,7 +2561,7 @@ def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None
     assert model.perturbations.missing_vectors["g0"].grad is not None
 
 
-def test_esm2_build_requires_configured_checkpoint_width_and_freezes_state(
+def test_esm2_state_is_trainable_before_ddp_prepare(
     tmp_path: Path, monkeypatch
 ) -> None:
     data = _toy_gene_bags_with_batches()
@@ -2500,16 +2615,23 @@ def test_esm2_build_requires_configured_checkpoint_width_and_freezes_state(
         emit_checkpoint_output=False,
     )
     assert model.perturbations("GENE1").shape == (5,)
-    predicted, _latent = model.predict_response(
+    _predicted, latent = model.predict_response(
         torch.as_tensor(data.control_input), "GENE1"
     )
-    predicted.square().sum().backward()
+    pred_y = model.c_head(model.response_pooler(latent, latent.detach()))
+    pred_c = F.mse_loss(pred_y, torch.tensor(-1.0))
+    pred_c.backward()
 
     assert isinstance(model.perturbations, Esm2PerturbationAdapter)
-    assert not any(
+    assert all(
         parameter.requires_grad for parameter in model.state_adapter.parameters()
     )
-    assert all(parameter.grad is None for parameter in model.state_adapter.parameters())
+    assert any(
+        parameter.grad is not None
+        and torch.isfinite(parameter.grad).all()
+        and torch.count_nonzero(parameter.grad).item() > 0
+        for parameter in model.state_adapter.parameters()
+    )
     assert any(
         parameter.grad is not None and torch.count_nonzero(parameter.grad).item() > 0
         for parameter in model.perturbations.adapter.parameters()

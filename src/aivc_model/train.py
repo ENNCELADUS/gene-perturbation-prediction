@@ -486,6 +486,7 @@ def run_training(
             batch_lookup,
             epoch=epoch,
             max_epochs=config.train.max_epochs,
+            max_grad_norm=config.train.max_grad_norm,
             tensor_cache=input_tensor_cache,
         )
         val_row, _val_predictions = _evaluate_prediction_only_final(
@@ -654,12 +655,9 @@ def _run_audited_training(
         train_data,
         canonical_gene_order,
     )
-    if any(parameter.requires_grad for parameter in model.state_adapter.parameters()):
-        raise ValueError("STATE parameters must remain frozen in audited training")
     batch_lookup = load_state_batch_lookup(config.state.model_dir)
     optimizer = torch.optim.AdamW(
-        _trainable_parameters(model),
-        lr=config.train.learning_rate,
+        _optimizer_parameter_groups(model, config),
         weight_decay=config.train.weight_decay,
     )
     train_loader = _gene_loader(
@@ -703,6 +701,7 @@ def _run_audited_training(
             batch_lookup,
             epoch=epoch,
             max_epochs=config.train.max_epochs,
+            max_grad_norm=config.train.max_grad_norm,
         )
         for stage in ("adapter_fit", "gene_prompt_fit", "transition_supervision"):
             train_data.record_access(stage)
@@ -756,7 +755,6 @@ def _run_audited_training(
     selected_model = accelerator.unwrap_model(model)
     selected_model.load_state_dict(state_dict)
     selected_model.eval()
-    selected_model.requires_grad_(False)
     checkpoint_frozen = True
 
     label_test = sealed_test.label_view(checkpoint_frozen=True)
@@ -2095,8 +2093,7 @@ def _build_e2e_model(
             pert_dim,
         )
     state_adapter = StateForwardAdapter(state_model)
-    if tokenizer == "esm2" or config.train.freeze_state:
-        state_adapter.requires_grad_(False)
+    state_adapter.requires_grad_(True)
     response_encoder = ResponseEncoder(
         config.response_encoder.input_dim,
         config.response_encoder.latent_dim,
@@ -2290,6 +2287,29 @@ def _trainable_parameters(model: torch.nn.Module) -> list[torch.nn.Parameter]:
     return parameters
 
 
+def _optimizer_parameter_groups(
+    model: AivcModel,
+    config: AivcConfig,
+) -> list[dict[str, object]]:
+    state_parameters = [
+        parameter
+        for parameter in model.state_adapter.parameters()
+        if parameter.requires_grad
+    ]
+    state_ids = {id(parameter) for parameter in state_parameters}
+    other_parameters = [
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) not in state_ids
+    ]
+    if not state_parameters or not other_parameters:
+        raise ValueError("e2e exp05 requires trainable STATE and downstream parameters")
+    return [
+        {"params": state_parameters, "lr": config.train.state_learning_rate},
+        {"params": other_parameters, "lr": config.train.learning_rate},
+    ]
+
+
 def _run_epoch(
     model: torch.nn.Module,
     data: GeneBags,
@@ -2303,6 +2323,7 @@ def _run_epoch(
     *,
     epoch: int,
     max_epochs: int,
+    max_grad_norm: float = 1.0,
     tensor_cache: _InputTensorCache | None = None,
 ) -> dict[str, float]:
     model.train()
@@ -2346,6 +2367,7 @@ def _run_epoch(
             msg = "Expected tensor loss for backward"
             raise TypeError(msg)
         accelerator.backward(total_loss)
+        accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
         optimizer.step()
         metric_tensor = _metric_tensor_from_losses(
             losses,

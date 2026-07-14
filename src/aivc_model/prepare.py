@@ -214,7 +214,10 @@ class TrainConfig:
     run_id: str | None = None
     seed: int = 42
     max_epochs: int = 50
-    learning_rate: float = 1e-4
+    learning_rate: float = 2.5e-5
+    state_learning_rate: float = 2.5e-6
+    max_grad_norm: float = 1.0
+    required_world_size: int = 4
     weight_decay: float = 1e-4
     cell_set_len: int = 128
     gene_batch_size: int = 1
@@ -2197,11 +2200,26 @@ def _loss_config(values: dict[str, Any]) -> LossConfig:
 
 def _train_config(values: dict[str, Any]) -> TrainConfig:
     cell_set_len = values.get("cell_set_len", values.get("cells_per_gene", 128))
+    learning_rate = float(values.get("learning_rate", 2.5e-5))
+    state_learning_rate = float(values.get("state_learning_rate", 2.5e-6))
+    max_grad_norm = float(values.get("max_grad_norm", 1.0))
+    required_world_size = int(values.get("required_world_size", 4))
+    if state_learning_rate <= 0:
+        raise ValueError("state_learning_rate must be positive")
+    if state_learning_rate > learning_rate:
+        raise ValueError("state_learning_rate must not exceed learning_rate")
+    if max_grad_norm <= 0:
+        raise ValueError("max_grad_norm must be positive")
+    if required_world_size != 4:
+        raise ValueError("required_world_size must be 4")
     return TrainConfig(
         run_id=values.get("run_id"),
         seed=int(values.get("seed", 42)),
         max_epochs=int(values.get("max_epochs", 50)),
-        learning_rate=float(values.get("learning_rate", 1e-4)),
+        learning_rate=learning_rate,
+        state_learning_rate=state_learning_rate,
+        max_grad_norm=max_grad_norm,
+        required_world_size=required_world_size,
         weight_decay=float(values.get("weight_decay", 1e-4)),
         cell_set_len=int(cell_set_len),
         gene_batch_size=int(values.get("gene_batch_size", 1)),
