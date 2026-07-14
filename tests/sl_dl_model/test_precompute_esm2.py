@@ -119,6 +119,31 @@ def test_corrupt_cache_logs_warning_and_recovers(
     ), f"Expected a warning about corrupt JSON; got: {warning_messages}"
 
 
+def test_load_or_fetch_sequences_uses_identifier_for_missing_symbol(
+    tmp_path: Path,
+) -> None:
+    cache = tmp_path / "cache.json"
+    with patch.object(MOD, "fetch_sequence", return_value="MSEQ") as mock_fetch:
+        result = MOD.load_or_fetch_sequences(
+            ["PTEN"], cache, identifiers={"PTEN": "5728"}
+        )
+
+    assert result == {"PTEN": "MSEQ"}
+    mock_fetch.assert_called_once_with("PTEN", "5728")
+
+
+def test_identifiers_from_csv_normalizes_integer_ids(tmp_path: Path) -> None:
+    csv = tmp_path / "genes.csv"
+    pd.DataFrame(
+        {"perturbation_gene": ["tp53", "KRAS"], "entrez": [7157, 3845]}
+    ).to_csv(csv, index=False)
+
+    assert MOD.identifiers_from_csv(csv, "perturbation_gene", "entrez") == {
+        "TP53": "7157",
+        "KRAS": "3845",
+    }
+
+
 # ---------------------------------------------------------------------------
 # FIX 2 — check_resolution helper
 # ---------------------------------------------------------------------------
