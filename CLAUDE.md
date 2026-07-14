@@ -34,29 +34,32 @@ selected:
   fitness, does the early single-cell state *distribution* carry incremental
   information about independently measured future population dynamics?
 
-The contract, frozen thresholds, gate verdicts, and decision record live in the
+The contract, acceptance criteria, gate verdicts, and decision record live in the
 vault. Do not restate them here — link to them.
 
 ## Research Vault (`docs/`)
 
-1. **Authority ordering.** [`01-research-direction.md`](docs/01-research-direction.md)
-   (contract) > [`02-significance-criteria.md`](docs/02-significance-criteria.md)
-   (frozen thresholds) > [`03-review-findings.md`](docs/03-review-findings.md)
-   (gate verdicts) > [`04-decision-and-roadmap.md`](docs/04-decision-and-roadmap.md)
+1. **Authority ordering.** [`01-blueprint.md`](docs/01-blueprint.md)
+   (contract) > [`02-acceptance-criteria.md`](docs/02-acceptance-criteria.md)
+   (acceptance criteria) > [`03-literature-review.md`](docs/03-literature-review.md)
+   (gate verdicts) > [`04-roadmap.md`](docs/04-roadmap.md)
    (decision) > `docs/results/`. **When two documents conflict, flag it — do not
    resolve it unilaterally.**
-2. **Freeze rule.** `01` and `02` are frozen. Change them by editing **in place**,
-   appending an `**Updated YYYY-MM-DD:**` line, and bumping the revision —
-   **never** by writing a new file.
-3. **Results enter the docs only after the analysis actually runs.** A planned
+2. **Freeze rule.** `01` and `02` are frozen. Change them by editing **in place** —
+   **never** by writing a new file. `01` §13 Locked Decisions are settled; changing
+   one is a change of research program, not a refinement.
+3. **The vault is a snapshot, not a changelog.** It states what is true now. Do not
+   add revision histories, "what we got wrong" sections, or superseded-claim logs —
+   git already holds that. Correct a wrong statement by replacing it.
+4. **Results enter the docs only after the analysis actually runs.** A planned
    number is not a number.
-4. **Status board must agree** across `docs/README.md`,
-   `docs/04-decision-and-roadmap.md`, and root `README.md`.
-5. **New analysis -> a new `docs/results/<slug>.md`.** New gate or re-run -> a
+5. **Status must agree** across `docs/README.md`, `docs/04-roadmap.md`, and root
+   `README.md`.
+6. **New analysis -> a new `docs/results/<slug>.md`.** New gate or re-run -> a
    new section in `03`.
-6. **Style**: plain GitHub markdown, relative links, no YAML frontmatter, no
+7. **Style**: plain GitHub markdown, relative links, no YAML frontmatter, no
    wikilinks, status as `**Status:**` bold-key lines.
-7. **The eleven review memos under `ideaspark_run/cell-fate-outcome-dynamics/`
+8. **The eleven review memos under `ideaspark_run/cell-fate-outcome-dynamics/`
    are the evidence record and are not edited.** They hold the full evidence
    tables and the `UNVERIFIED` registers.
 
@@ -119,7 +122,7 @@ program are under `docs/archive/` (untracked, gitignored).
 ## Terminology Guardrails
 
 Binding on all writing, per the contract's claim boundaries
-([`docs/01-research-direction.md`](docs/01-research-direction.md) §12).
+([`docs/01-blueprint.md`](docs/01-blueprint.md) §12).
 
 - **DepMap GeneEffect is a relative growth-rate effect** under an explicit
   population-dynamics model. It is not a cell-death label and not a single-cell

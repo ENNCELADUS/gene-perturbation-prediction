@@ -1,56 +1,8 @@
-# Research Direction: Outcome Dynamics Behind Net Fitness
+# Research Blueprint: Outcome Dynamics Behind Net Fitness
 
-**Status:** revision 4 (2026-07-14) — the active research contract for this project.
-**Type:** research direction + literature-review contract. **Not** an implementation spec.
-**Supersedes:** [`docs/superpowers/specs/2026-07-13-cell-fate-prediction-research-direction-design.md`](superpowers/specs/2026-07-13-cell-fate-prediction-research-direction-design.md) (revision 3, frozen).
-**Provenance:** revision 4 applies the eight amendments required by [`ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md`](../ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md) §9, which were never applied to revision 3.
-
-Origin: PI meeting notes on transcriptomics -> cellular phenotype / cell death; brainstorming over
-repository state; three reviewer passes; the L0 -> Gate 4 literature review and its decision memo.
-
-## 0. Revision History and Withdrawn Claims
-
-**Revision 1** corrected: Chronos/GeneEffect is not raw depletion; aggregate
-consistency is not identification; bag-level output is not automatically identifiable;
-T1/T2/T3 separated; transcriptome-decomposes-dynamics, generate-`B`, and
-one-model-unifies-all downgraded to hypotheses; QC reformulated as observation-process
-selection; SL moved out of the core question.
-
-**Revision 2** fixed: the primary unit was inconsistent across sections (now two
-explicit candidates); "outcome composition" was not a valid simplex (now trajectory /
-multi-state estimands); the gap was technical, not biological (added a phenomenon-and-
-value gate); all rivals were lumped into one null (split into utility and specificity
-hypotheses, MNAR moved to an identifiability boundary); Gate 1's no-go was backwards
-(an existing independent decomposition is ground truth, not a stop); the claim that
-removal-rate independence bounds pre-capture loss was withdrawn.
-
-**Revision 3** fixes:
-
-| # | Defect in revision 2 | Fix |
-| --- | --- | --- |
-| 1 | Candidate A grouped "founder / lineage / clone" as one unit. Destructive sequencing plus lineage barcoding does **not** give same-founder longitudinal observation. | **Three evidence tiers within A**, each with its own claim ceiling (§4.1). |
-| 2 | The single evidence hierarchy ranked condition-level anchors below lineage anchors — unfair to B, for which condition-level *is* the matching unit. Falsifiers were referenced but never written. | **Per-candidate evidence hierarchies** on a unit-matching principle, **per-candidate phenomena**, and **explicit falsifiers** (§4, §8). |
-| 3 | The value gate justified decomposition by recovery / persistence / extinction — all of which are *inside* the trajectory estimand. Circular. | **Value tested on downstream endpoints outside the trajectory definition**, with predefined significance criteria (§2.1). |
-| 4 | "Beyond net fitness" left the temporal relation of `F_net` to `Y_future` unspecified. If both come from the same window, the result is a retrospective conditional decomposition, not prospective prediction. | **Temporal contract stated and chosen** (§5.1); causal claim boundary added (§5.3). |
-| 5 | A literature-only funnel plus a total ban on empirical work deadlocks: literature cannot establish that divergence is common/large/consequential in the target setting. Absence of evidence was being read as evidence of absence. | **Gate 2 trichotomy** (positive / powered-absence / insufficient), where insufficient -> **bounded pilot**, not stop (§8). §9 ban narrowed to production work. |
-| 6 | §9 item 1 required L0 to contain the selected primary unit, but item 6 was where selection happened. Circular. | **L0 builds parallel maps for A and B; selection happens only at the decision point** (§8, §9). |
-| 7 | Gate 4 carried the virtual-cell-baseline critique before generate-`B` was ever selected as a strategy. | Moved to a **post-selection tool-strategy review** (§10). |
-
-**Revision 4** (this document, provenance: [`ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md`](../ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md) §9) applies eight amendments required by the L0 -> Gate 4 literature review's decision memo but never applied to revision 3:
-
-| # | Section | Change |
-| --- | --- | --- |
-| 1 | §1 | The wedge is demonstrated for selected drug perturbations (Gross 2023); prevalence and importance remain unresolved for genetic loss-of-function — replacing the "mathematically true and biologically unproven" framing. |
-| 2 | §2 | Chronos is structurally incapable of separating division from death because that decomposition lies outside its estimand — a readout limitation, not a tool defect. Retracts the earlier "unflagged identifiability hole" framing. |
-| 3 | §4.1 | A1 exists (Live-seq) but is an existence proof, throughput-bound, not a deployable platform (~4-5 extractions/hour, ~300 high-quality transcriptomes in the entire study, 85-89% post-biopsy viability, small cell-cycle delays not excluded). A2 remains the ceiling for anything pooled. |
-| 4 | §4 (Candidate B) | Adds an explicit falsifier: genetic LOF may act predominantly through division suppression, making the wedge substantially drug-specific. Enters as a hypothesis to test, not a finding. |
-| 5 | §5.1 | DepMap (Cas9 knockout, Chronos-scored) is a different intervention from a CRISPRi experiment. DepMap supports "incremental beyond an external DepMap reference," not "matched on the true net fitness of the same intervention." Any study matching on an external `F_net` must measure its own achieved net effect. |
-| 6 | §5.2 | Adds a context-dependence boundary condition (Nano 2023: Tjur R² 0.00-0.16 at baseline, rising to 0.70 under added stress). Corrects the exp02 grounding sentence: exp02 is evidence for the specificity hypothesis, not a headwind — with corrected Spearman figures (0.244 / 0.443 / 0.494 / 0.503). |
-| 7 | §7 | Strengthens the generate-`B` row: Ahlmann-Eltze 2025 shows no deep perturbation model beats a simple linear baseline at generating `B` in the first place. |
-| 8 | §12 | Appends four claim boundaries: the Live-seq viability caveat, the drug-vs-gene wedge transfer restriction, `|ΔF_net| ≤ 1 SD` is not equivalence, and Norman/Replogle are not prospective fate comparisons. |
-
-Each amendment is applied in the section named. Revision 3 is frozen and retained as a
-historical record.
+**Status:** established. This is the research contract — locked.
+**Type:** research direction and claim boundaries. **Not** an implementation spec.
+**Companions:** [`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md) (what counts as passing) · [`docs/03-literature-review.md`](03-literature-review.md) (what the literature showed) · [`docs/04-roadmap.md`](04-roadmap.md) (what happens next).
 
 ## 1. The Preserved Wedge
 
@@ -98,9 +50,9 @@ Accurate **biological** gap:
 
 ### 2.1 The Value Question — Tested Outside the Trajectory Definition
 
-Revision 2 justified the decomposition by its ability to explain recovery,
-persistence, and extinction. Those are **components of the trajectory estimand
-itself**; using them to prove the estimand is worth having is circular.
+The decomposition cannot be justified by its ability to explain recovery, persistence,
+and extinction. Those are **components of the trajectory estimand itself**; using them
+to prove the estimand is worth having is circular.
 
 The value question must therefore be answered on **downstream endpoints that are not
 part of trajectory construction**:
@@ -115,9 +67,10 @@ part of trajectory construction**:
 > are not already contained in net fitness, and not already contained in the trajectory
 > definition itself?
 
-**Predefined significance criteria.** The words *common*, *large*, and *consequential*
-must be assigned **minimum biological significance thresholds in the review memo before
-evidence is collected**. They are not left to post-hoc judgement.
+**Predefined acceptance criteria.** The words *common*, *large*, and *consequential* carry
+**minimum biological thresholds, fixed before evidence is collected**, in
+[`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md). They are not left to
+post-hoc judgement, and they are not revisable to fit a result.
 
 ## 3. Ontology and Estimands (L0)
 
@@ -321,12 +274,11 @@ at baseline (Tjur R² 0.00-0.16), rising to R² = 0.70 only under added stress. 
 not speak directly to transcriptome-wide early state in K562 CRISPRi, but it warns
 against assuming any single proximate readout is sufficient across regimes.
 
-**Grounding (corrected).** exp02 is **evidence for** the specificity hypothesis, not a
-headwind against it — the earlier "thin residual" reading was a misreading of our own
-data. A generic response-magnitude (NAR) scalar alone reaches Spearman 0.244; NAR +
-burden reaches 0.443; the best full-feature pseudobulk baseline (`delta_all`) reaches
-0.494; the NAR-residualized transcriptome reaches **0.503** — higher than the
-unresidualized baseline. See
+**Grounding.** exp02 is **evidence for** the specificity hypothesis. A generic
+response-magnitude (NAR) scalar alone reaches Spearman 0.244; NAR + burden reaches 0.443;
+the best full-feature pseudobulk baseline (`delta_all`) reaches 0.494; the NAR-residualized
+transcriptome reaches **0.503** — higher than the unresidualized baseline. Generic
+viability is not what carries the signal. See
 [`docs/results/prior-internal-evidence.md`](results/prior-internal-evidence.md) for the
 full table.
 
@@ -370,14 +322,17 @@ Claims that must not be made:
 Concrete loss-accounting probes, QC ablation designs, and the relevant exp01 datapoints
 belong in a **separate measurement memo**, not in this science spec.
 
-## 7. Downgraded Assumptions (hypotheses, not premises)
+## 7. What Is a Hypothesis, Not a Premise
 
-| Previously asserted | Now |
+None of the following may be assumed. Each is either under test, out of scope, or invalid
+as an inference.
+
+| Proposition | Status |
 | --- | --- |
 | The transcriptome can decompose division / arrest / loss dynamics | **The central hypothesis under test.** A snapshot measures state; it may reflect early fate commitment, generic stress severity, the consequence of already-executing death, or a residual after survivorship selection. |
-| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference; withdrawn — and materially weaker than previously stated.** Generating `B` is warranted only if `B` carries independently verifiable outcome-relevant information. Ahlmann-Eltze 2025 (https://pmc.ncbi.nlm.nih.gov/articles/PMC12328236/) shows **no deep perturbation model beats a simple linear baseline at generating `B` in the first place**, undercutting the case for a generate-`B` strategy before outcome-relevance is even assessed. A **tool hypothesis**, reviewed only post-selection (§10). |
+| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference.** Generating `B` is warranted only if `B` carries independently verifiable outcome-relevant information. Ahlmann-Eltze 2025 (https://pmc.ncbi.nlm.nih.gov/articles/PMC12328236/) shows **no deep perturbation model beats a simple linear baseline at generating `B` in the first place**, undercutting the case for a generate-`B` strategy before outcome-relevance is even assessed. A **tool hypothesis**, reviewed only post-selection (§10). |
 | One model unifies dependency, conditional essentiality, and SL | **Long-term hypothesis.** Dependency / conditional fitness retained as potential downstream relevance only. |
-| Bag-level output solves identifiability | **Withdrawn.** More honest than an uninterpreted per-cell latent, but not identifiable without independent anchors. |
+| Bag-level output solves identifiability | **False.** More honest than an uninterpreted per-cell latent, but not identifiable without independent anchors. |
 | Death mechanism (apoptosis / ferroptosis / necroptosis) | **Second-stage question, out of scope.** The plausible supervision route — perturbagens of known death mechanism — is recorded for later, not pursued now. |
 
 ## 8. Literature Review: Go/No-Go Funnel
@@ -428,7 +383,8 @@ measurement novelty, not the biological question.
 Per candidate: Gate 2A (reproducible lineage-level trajectory heterogeneity within a
 perturbation, associated with early lineage state) and Gate 2B (reproducible,
 consequential divergence in population dynamics under matched net fitness). Judged
-against the **predefined significance criteria** of §2.1, plus the value question on
+against the **predefined acceptance criteria**
+([`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md)), plus the value question on
 downstream endpoints outside the trajectory definition.
 
 **Literature alone usually cannot settle this.** Therefore Gate 2 returns a
@@ -549,3 +505,30 @@ Extending `CLAUDE.md`'s terminology guardrails:
   requires a TOST against a predefined margin.
 - Do not describe Norman or Replogle as prospective fate comparisons; both supply only
   late survivor transcriptomes and aggregate growth.
+
+## 13. Locked Decisions
+
+Settled. Changing any of these is a change of research program, not a refinement.
+
+1. **The question.** In genetic loss-of-function, is net fitness close to a sufficient
+   statistic — or does it frequently conceal reproducible and consequential
+   division / death / recovery dynamics?
+2. **Two candidates carried in parallel.** Candidate A (lineage/clone) and Candidate B
+   (population). **No unit is selected**, and selection does not happen implicitly.
+3. **Estimands are trajectories or multi-state processes**, never a categorical mixture.
+   "Outcome composition" is retired vocabulary.
+4. **A2 (sibling/clone proxy) is the evidence ceiling** for anything pooled. A1 exists
+   (Live-seq) but is throughput-bound and not a platform.
+5. **Analysis P vs Analysis R is declared on every result.** A same-window `F_net`
+   (Analysis R) is a retrospective conditional decomposition and is never reported as
+   prospective prediction.
+6. **DepMap is an external reference, not a matched anchor.** It is Cas9 knockout scored
+   by Chronos; a CRISPRi study is a different intervention and must measure its own
+   achieved net effect.
+7. **Acceptance criteria are frozen before evidence**
+   ([`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md)) and are not
+   revisable to fit a result.
+8. **Absence of data is not falsification.** Insufficient evidence routes to a bounded
+   pilot, never to a stop.
+9. **No production modeling before unit selection** (§9).
+10. **Synthetic lethality is out of scope** (§11).

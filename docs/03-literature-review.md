@@ -1,8 +1,8 @@
-# Review Findings: L0 and Gates 1-4
+# Literature Review: Results
 
-**Status:** complete 2026-07-13. All six stages closed. Decision recorded in [`docs/04-decision-and-roadmap.md`](04-decision-and-roadmap.md).
-**Graded against:** [`docs/02-significance-criteria.md`](02-significance-criteria.md), frozen before evidence collection.
-**Full evidence tables and the UNVERIFIED registers stay in the source memos** under [`ideaspark_run/cell-fate-outcome-dynamics/`](../ideaspark_run/cell-fate-outcome-dynamics/). This document carries the verdicts and the decision-relevant evidence only.
+**Status:** complete. All six stages closed; the novelty statement is frozen (§7).
+**Graded against:** [`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md), frozen before evidence collection. **Contract:** [`docs/01-blueprint.md`](01-blueprint.md). **What happens next:** [`docs/04-roadmap.md`](04-roadmap.md).
+**Full evidence tables and the UNVERIFIED registers** stay in the source memos under [`ideaspark_run/cell-fate-outcome-dynamics/`](../ideaspark_run/cell-fate-outcome-dynamics/). This document carries the verdicts and the decision-relevant evidence.
 
 ## Verdict summary
 
@@ -19,7 +19,7 @@
 
 ## 1. L0 — Ontology and Latent-to-Observable Maps
 
-**Verdict:** complete. Per spec §8, this stage does **not** select between Candidate A
+**Verdict:** complete. Per the blueprint §8, this stage does **not** select between Candidate A
 (lineage/clone) and Candidate B (population) — both latent-to-observable maps are
 presented with equal weight, and that discipline is preserved here.
 
@@ -38,7 +38,7 @@ presented with equal weight, and that discipline is preserved here.
   death's point of no return, biological loss vs. assay attrition, quiescence vs.
   senescence — has at least one genuinely unresolved definitional or measurement
   disagreement in the current literature, evidenced on both sides.
-- **Implication.** Any "early" cutoff this program adopts (spec §4.4's `t <= 0.25*T` +
+- **Implication.** Any "early" cutoff this program adopts (blueprint §4.4's `t <= 0.25*T` +
   one full cell cycle fallback) is an **operational choice made in the absence of a
   ready-made biological cutoff**, not a citation of settled science — and the mito-QC
   disagreement means a standard QC pipeline cannot be trusted uncritically in K562
@@ -108,7 +108,7 @@ presented with equal weight, and that discipline is preserved here.
 - **Implication.** This is not a null result and must not be reported as one: the gap is
   that the necessary studies (genetic perturbation, matched-net-fitness pairs, a
   founder-referenced denominator) do not exist yet, which is explicitly *not*
-  falsification (spec §4.3).
+  falsification (blueprint §4.3).
 - **Decision.** Route to a bounded validation pilot: K562 continuous pedigree imaging or
   a sister-split barcode design, 5-10 CRISPR knockouts matched in pairs at `tau`,
   `0.5*tau`, `2*tau`, power-calculated for >=100 founder lineages per gene. Full pilot
@@ -231,3 +231,39 @@ problem.
   pre-existing `F_net` for Candidate B), or (ii) explicitly label all output as Analysis R
   and scope claims accordingly. Full design table and per-candidate finding:
   [`gate4/gate4_prospective_designs.md`](../ideaspark_run/cell-fate-outcome-dynamics/gate4/gate4_prospective_designs.md#4-the-three-way-finding-per-candidate).
+
+---
+
+## 7. The Surviving Novelty Statement
+
+### Closed — five claims that no longer hold
+
+Each was protecting a weaker version of the program. All five are now answered by the
+literature or by our own prior work:
+
+| # | Claim | Closed by |
+|---|---|---|
+| 1 | "No paper combines graded genetic perturbation strength + Perturb-seq + growth phenotype in K562." | **Jost 2020 does exactly this.** Attribute-stacking is dead as a novelty claim. |
+| 2 | "No quantitative burden-vs-fitness correlation exists for K562 genetic perturbation." | **Replogle 2022**: Spearman ρ = −0.51 genome-wide, with **771 of 9,608** perturbations showing a significant transcriptional response but negligible growth effect. |
+| 3 | "Distinct transcriptional profiles at matched fitness have never been shown for genetic perturbation." | **Dixit 2016** (CABP7 vs. CIT — both increase fitness via materially different cell-cycle programs). |
+| 4 | "Population state *distribution* (variance, not mean) has never been linked to fitness in a genetic system." | **Nadal-Ribelles 2025** — yeast, **325 mutants**. |
+| 5 | "Whether the transcriptome beats a burden scalar against an independent fitness anchor is untested." | **exp02 answers it affirmatively** — see [`docs/results/prior-internal-evidence.md`](results/prior-internal-evidence.md). |
+
+### What survives
+
+> Every fitness readout in this entire literature — Jost's `γ`, Dixit's sgRNA fold-change,
+> Replogle's `γ`, Nadal-Ribelles's competition fitness, DepMap's Chronos GeneEffect — **is a
+> single net rate.** Every dataset is one or two snapshots of a **survivor** population.
+>
+> **No one has asked whether transcriptomic state predicts *how* a given net fitness was
+> reached** — division suppressed, cells lost, or both partially and recovered — **because
+> no existing dataset, public or internal, captures that decomposition at all.**
+
+### Where the program's centre of gravity now sits
+
+The **specificity** half (does state beat a burden scalar?) is **substantially answered —
+affirmatively, modestly** — by four independent sources: exp02, Jost 2020, Dixit 2016, and
+Replogle 2022. It is no longer the open question.
+
+The **trajectory-decomposition** half is untouched by every paper and every reanalysis
+found. That is where the program lives.

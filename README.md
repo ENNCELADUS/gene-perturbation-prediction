@@ -82,13 +82,13 @@ A single endpoint net-fitness readout — DepMap Chronos GeneEffect is one insta
 - **Candidate A — lineage/clone level.** Within a fixed context and time horizon, does an early post-perturbation molecular state predict the subsequent division, persistence/recovery, and extinction trajectory of its linked lineage, beyond an independently measured net fitness?
 - **Candidate B — population level.** Under comparable, independently measured net fitness, does the early single-cell state distribution carry incremental information about independently measured future population dynamics?
 
-The full contract — estimands, frozen significance thresholds, gate verdicts, and the decision record — lives in the research vault, not here:
+The full contract — estimands, acceptance criteria, gate verdicts, and the decision record — lives in the research vault, not here:
 
 - [`docs/README.md`](docs/README.md) — vault index and status board.
-- [`docs/01-research-direction.md`](docs/01-research-direction.md) — the frozen research contract.
-- [`docs/02-significance-criteria.md`](docs/02-significance-criteria.md) — frozen significance thresholds.
-- [`docs/03-review-findings.md`](docs/03-review-findings.md) — gate-by-gate verdicts.
-- [`docs/04-decision-and-roadmap.md`](docs/04-decision-and-roadmap.md) — the decision and what runs next.
+- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the frozen research contract.
+- [`docs/02-acceptance-criteria.md`](docs/02-acceptance-criteria.md) — the bar a result must clear to count as an answer. Frozen before evidence.
+- [`docs/03-literature-review.md`](docs/03-literature-review.md) — gate-by-gate verdicts.
+- [`docs/04-roadmap.md`](docs/04-roadmap.md) — the decision and what runs next.
 
 ### Prior Program (Retired as Roadmap, Kept as Evidence)
 
@@ -258,7 +258,7 @@ The degree-probe control (Model C) scores highest on CV1 — a reminder that pai
 
 - [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D evaluation semantics, plus the cell-fate direction's load-bearing terms (`F_net`, T1/T2/T3, Candidate A/B, evidence tiers).
 - [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents.
-- [`docs/README.md`](docs/README.md) — research vault index: contract, significance criteria, gate verdicts, decision and roadmap, results.
+- [`docs/README.md`](docs/README.md) — research vault index: contract, acceptance criteria, gate verdicts, decision and roadmap, results.
 - [`docs/data/`](docs/data/) — dataset cards for downloaded data.
 - [`docs/discussion/`](docs/discussion/) — project discussion notes.
 

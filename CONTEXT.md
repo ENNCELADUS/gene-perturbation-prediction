@@ -126,7 +126,7 @@ uses the same control cells plus the non-targeting vector.
 ## Glossary: Cell-Fate Outcome Dynamics
 
 Terms for the active research direction (see
-[`docs/01-research-direction.md`](docs/01-research-direction.md)), distinct
+[`docs/01-blueprint.md`](docs/01-blueprint.md)), distinct
 from the dependency-pipeline symbols (A/B/B_hat/C/D) above.
 
 ### F_net: Net Fitness
