@@ -29,7 +29,6 @@ from aivc_model.gwps_cache import (
 from aivc_model.model import (
     AivcModel,
     Esm2PerturbationAdapter,
-    ExpressionToLatentProjector,
     LossWeights,
     MLPHead,
     PerturbationVectorAdapter,
@@ -38,6 +37,7 @@ from aivc_model.model import (
     load_state_model,
     _pairwise_ranknet_loss,
 )
+from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 from aivc_model.prepare import (
     DataConfig,
@@ -61,7 +61,6 @@ from aivc_model.prepare import (
     _var_symbols,
     _write_scvi_latent_cache,
     encode_batch_labels,
-    fit_linear_projector,
     load_external_gene_bags,
     load_config,
     load_perturbation_vectors,
@@ -2034,6 +2033,57 @@ def test_pred_c_loss_backprops_into_mock_state() -> None:
     assert any(torch.any(grad != 0) for grad in grads)
 
 
+def test_observed_c_supervision_updates_shared_response_stack_not_state() -> None:
+    model, _state_model = _build_shared_response_aivc_model()
+    losses = model.losses_for_gene(
+        **_shared_response_gene_inputs(),
+        weights=LossWeights(
+            latent_mean_delta=0.0,
+            latent_energy=0.0,
+            hvg_mean_delta=0.0,
+            hvg_energy=0.0,
+            pred_c=0.0,
+            obs_c=1.0,
+            occupancy=0.0,
+            gmm_nll=0.0,
+        ),
+    )
+
+    losses["total"].backward()
+
+    assert all(parameter.grad is None for parameter in model.state_adapter.parameters())
+    assert any(
+        parameter.grad is not None for parameter in model.response_encoder.parameters()
+    )
+    assert any(
+        parameter.grad is not None for parameter in model.response_pooler.parameters()
+    )
+    assert any(parameter.grad is not None for parameter in model.c_head.parameters())
+
+
+def test_predicted_c_supervision_reaches_unfrozen_state() -> None:
+    model, _state_model = _build_shared_response_aivc_model()
+    losses = model.losses_for_gene(
+        **_shared_response_gene_inputs(),
+        weights=LossWeights(
+            latent_mean_delta=0.0,
+            latent_energy=0.0,
+            hvg_mean_delta=0.0,
+            hvg_energy=0.0,
+            pred_c=1.0,
+            obs_c=0.0,
+            occupancy=0.0,
+            gmm_nll=0.0,
+        ),
+    )
+
+    losses["total"].backward()
+
+    assert any(
+        parameter.grad is not None for parameter in model.state_adapter.parameters()
+    )
+
+
 def test_aivc_forward_matches_loss_helper() -> None:
     model, _state_model = _build_tiny_aivc_model()
     kwargs = {
@@ -2250,7 +2300,6 @@ def test_pairwise_ranknet_filters_small_label_margins() -> None:
 
 def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None:
     model, state_model = _build_two_gene_aivc_model(freeze_state=True)
-    model.train()
 
     losses = model(
         gene=("GENE1", "GENE2"),
@@ -2277,7 +2326,7 @@ def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None
 
     assert not model.state_adapter.training
     assert all(parameter.grad is None for parameter in state_model.parameters())
-    assert model.projector.linear.weight.grad is not None
+    assert model.response_encoder.linear.weight.grad is not None
     assert model.c_head.net[-1].weight.grad is not None
     assert model.perturbations.missing_vectors["g0"].grad is not None
 
@@ -2327,7 +2376,7 @@ def test_esm2_build_requires_configured_checkpoint_width_and_freezes_state(
         "load_state_model",
         lambda **_kwargs: state_model,
     )
-    featureizer = _build_tiny_aivc_model()[0].featureizer
+    featureizer = _build_legacy_featureizer()
 
     model = train_module._build_model(
         config,
@@ -2348,7 +2397,9 @@ def test_esm2_build_requires_configured_checkpoint_width_and_freezes_state(
         parameter.grad is not None and torch.count_nonzero(parameter.grad).item() > 0
         for parameter in model.perturbations.adapter.parameters()
     )
-    assert all(parameter.requires_grad for parameter in model.projector.parameters())
+    assert all(
+        parameter.requires_grad for parameter in model.response_encoder.parameters()
+    )
     assert all(parameter.requires_grad for parameter in model.c_head.parameters())
 
 
@@ -2387,7 +2438,7 @@ def test_esm2_build_rejects_missing_external_gene_without_filtering(
     monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
-    featureizer = _build_tiny_aivc_model()[0].featureizer
+    featureizer = _build_legacy_featureizer()
 
     with pytest.raises(ValueError, match="ADAMSON_ONLY"):
         train_module._build_model(
@@ -2401,14 +2452,8 @@ def test_esm2_build_rejects_missing_external_gene_without_filtering(
         )
 
 
-def test_zero_weight_expensive_losses_skip_extra_compute(monkeypatch) -> None:
+def test_zero_weight_energy_losses_skip_extra_compute(monkeypatch) -> None:
     model, _state_model = _build_tiny_aivc_model()
-    original_occupancy = model.featureizer._occupancy
-    occupancy_calls: list[tuple[int, ...]] = []
-
-    def counting_occupancy(bag: torch.Tensor) -> torch.Tensor:
-        occupancy_calls.append(tuple(bag.shape))
-        return original_occupancy(bag)
 
     def fail_energy(
         predicted: torch.Tensor,
@@ -2417,7 +2462,6 @@ def test_zero_weight_expensive_losses_skip_extra_compute(monkeypatch) -> None:
         del predicted, target
         raise AssertionError("zero-weight energy loss should not be computed")
 
-    monkeypatch.setattr(model.featureizer, "_occupancy", counting_occupancy)
     monkeypatch.setattr(model_module, "_energy_distance", fail_energy)
 
     losses = model.losses_for_gene(
@@ -2438,13 +2482,11 @@ def test_zero_weight_expensive_losses_skip_extra_compute(monkeypatch) -> None:
         ),
     )
 
-    assert len(occupancy_calls) == 2
     assert losses["hvg_energy"].item() == 0.0
     assert losses["latent_energy"].item() == 0.0
-    assert losses["occupancy"].item() == 0.0
     assert losses["hvg_energy"].requires_grad
     assert losses["latent_energy"].requires_grad
-    assert losses["occupancy"].requires_grad
+    assert all(torch.isfinite(loss) for loss in losses.values())
 
 
 def test_nonzero_expensive_losses_match_previous_math() -> None:
@@ -2487,9 +2529,7 @@ def test_a_to_b_set_loss_is_target_order_invariant() -> None:
     target_expression = torch.tensor(
         [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0], [1.0, 1.0, 1.0]]
     )
-    weight = model.projector.linear.weight.detach()
-    bias = model.projector.linear.bias.detach()
-    target_latent = target_expression @ weight.T + bias
+    target_latent = model.response_encoder(target_expression).detach()
     shuffled = torch.tensor([2, 0, 3, 1])
 
     first = model.losses_for_gene(
@@ -3075,6 +3115,7 @@ def _loss_weights() -> LossWeights:
         pred_c=1.0,
         obs_c=0.25,
         occupancy=0.1,
+        gmm_nll=0.05,
     )
 
 
@@ -3090,14 +3131,36 @@ def _build_tiny_aivc_model(
         pert_dim=2,
     )
     perturbations = PerturbationVectorAdapter(["GENE1"], {}, pert_dim=2)
-    weight, bias = fit_linear_projector(
-        np.asarray([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]], dtype=np.float32),
-        np.asarray([[0.0, 0.0], [1.0, 1.0]], dtype=np.float32),
-        alpha=0.1,
+    response_encoder = ResponseEncoder(input_dim=3, latent_dim=2)
+    response_pooler = TrainableDiagonalGMM(
+        latent_dim=2,
+        n_components=2,
+        covariance_floor=1e-4,
+        init_scale=0.02,
     )
-    projector = ExpressionToLatentProjector(weight, bias, trainable=True)
+    state_adapter = StateForwardAdapter(state_model)
+    if freeze_state:
+        for parameter in state_adapter.parameters():
+            parameter.requires_grad = False
+        state_adapter.eval()
+    model = AivcModel(
+        state_adapter=state_adapter,
+        perturbations=perturbations,
+        response_encoder=response_encoder,
+        response_pooler=response_pooler,
+        c_head=MLPHead(response_pooler.output_dim, (8,), 0.0),
+        control_expression_mean=np.zeros(3, dtype=np.float32),
+    )
+    return model, state_model
+
+
+def _build_shared_response_aivc_model() -> tuple[AivcModel, torch.nn.Module]:
+    return _build_tiny_aivc_model()
+
+
+def _build_legacy_featureizer() -> torch.nn.Module:
     control_latent = np.asarray([[0.0, 0.0], [0.1, 0.1]], dtype=np.float32)
-    featureizer = fit_fixed_gmm(
+    return fit_fixed_gmm(
         (
             control_latent,
             np.asarray([[1.0, 1.0], [1.1, 1.1]], dtype=np.float32),
@@ -3108,17 +3171,17 @@ def _build_tiny_aivc_model(
         random_state=7,
         max_fit_cells=None,
     )
-    model = AivcModel(
-        state_adapter=StateForwardAdapter(state_model),
-        perturbations=perturbations,
-        projector=projector,
-        featureizer=featureizer,
-        c_head=MLPHead(featureizer.output_dim, (8,), 0.0),
-        control_expression_mean=np.zeros(3, dtype=np.float32),
-        control_latent_mean=np.zeros(2, dtype=np.float32),
-        freeze_state=freeze_state,
-    )
-    return model, state_model
+
+
+def _shared_response_gene_inputs() -> dict[str, object]:
+    return {
+        "gene": "GENE1",
+        "control_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
+        "target_expression_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
+        "target_latent_chunks": (torch.randn(3, 2), torch.randn(2, 2)),
+        "batch_index_chunks": (None, None),
+        "y": torch.tensor(-1.0),
+    }
 
 
 def _build_two_gene_aivc_model(
@@ -3151,29 +3214,20 @@ class _CountingStateModel(torch.nn.Module):
 def _build_counting_aivc_model() -> tuple[AivcModel, _CountingStateModel]:
     state_model = _CountingStateModel()
     perturbations = PerturbationVectorAdapter(["GENE1"], {}, pert_dim=3)
-    weight = np.asarray([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=np.float32)
-    bias = np.asarray([0.0, 0.0], dtype=np.float32)
-    projector = ExpressionToLatentProjector(weight, bias, trainable=False)
-    control_latent = np.asarray([[0.0, 0.0], [0.1, 0.1]], dtype=np.float32)
-    featureizer = fit_fixed_gmm(
-        (
-            control_latent,
-            np.asarray([[1.0, 1.0], [1.1, 1.1]], dtype=np.float32),
-        ),
-        control_latent,
+    response_encoder = ResponseEncoder(input_dim=3, latent_dim=2)
+    response_pooler = TrainableDiagonalGMM(
+        latent_dim=2,
         n_components=2,
         covariance_floor=1e-4,
-        random_state=7,
-        max_fit_cells=None,
+        init_scale=0.02,
     )
     model = AivcModel(
         state_adapter=StateForwardAdapter(state_model),
         perturbations=perturbations,
-        projector=projector,
-        featureizer=featureizer,
-        c_head=MLPHead(featureizer.output_dim, (8,), 0.0),
+        response_encoder=response_encoder,
+        response_pooler=response_pooler,
+        c_head=MLPHead(response_pooler.output_dim, (8,), 0.0),
         control_expression_mean=np.zeros(3, dtype=np.float32),
-        control_latent_mean=np.zeros(2, dtype=np.float32),
     )
     return model, state_model
 
@@ -3189,19 +3243,17 @@ def _legacy_chunk_loop_losses(
     y: torch.Tensor,
     weights: LossWeights,
 ) -> dict[str, torch.Tensor]:
+    del target_latent_chunks
     predicted_latent_chunks: list[torch.Tensor] = []
     hvg_mean_delta_terms: list[torch.Tensor] = []
     hvg_energy_terms: list[torch.Tensor] = []
-    latent_mean_delta_terms: list[torch.Tensor] = []
-    latent_energy_terms: list[torch.Tensor] = []
-    for control, target_expression, target_latent, batch_indices in zip(
+    for control, target_expression, batch_indices in zip(
         control_chunks,
         target_expression_chunks,
-        target_latent_chunks,
         batch_index_chunks,
         strict=True,
     ):
-        predicted_expression, predicted_latent = model.predict_bag(
+        predicted_expression, predicted_latent = model.predict_response(
             control,
             gene,
             batch_indices,
@@ -3217,29 +3269,27 @@ def _legacy_chunk_loop_losses(
         hvg_energy_terms.append(
             _test_energy_distance(predicted_expression, target_expression)
         )
-        latent_mean_delta_terms.append(
-            _test_mean_delta_loss(
-                predicted_latent,
-                target_latent,
-                model.control_latent_mean,
-            )
-        )
-        latent_energy_terms.append(
-            _test_energy_distance(predicted_latent, target_latent)
-        )
+    control_expression = torch.cat(control_chunks, dim=0)
+    target_expression = torch.cat(target_expression_chunks, dim=0)
     predicted_latent = torch.cat(predicted_latent_chunks, dim=0)
-    target_latent = torch.cat(target_latent_chunks, dim=0)
+    observed_latent = model.response_encoder(target_expression)
+    control_latent = model.response_encoder(control_expression)
     hvg_mean_delta = torch.stack(hvg_mean_delta_terms).mean()
     hvg_energy = torch.stack(hvg_energy_terms).mean()
-    latent_mean_delta = torch.stack(latent_mean_delta_terms).mean()
-    latent_energy = torch.stack(latent_energy_terms).mean()
-    pred_y = model.predict_c_from_latent(predicted_latent)
-    obs_y = model.predict_c_from_latent(target_latent)
+    latent_mean_delta = F.mse_loss(
+        predicted_latent.mean(dim=0),
+        observed_latent.detach().mean(dim=0),
+    )
+    latent_energy = _test_energy_distance(predicted_latent, observed_latent.detach())
+    pred_y = model.c_head(model.response_pooler(predicted_latent, control_latent))
+    obs_y = model.c_head(model.response_pooler(observed_latent, control_latent))
     pred_c = F.mse_loss(pred_y.view(()), y.view(()))
     obs_c = F.mse_loss(obs_y.view(()), y.view(()))
-    pred_occ = model.featureizer._occupancy(predicted_latent)
-    obs_occ = model.featureizer._occupancy(target_latent)
-    occupancy = F.mse_loss(pred_occ, obs_occ)
+    occupancy = F.mse_loss(
+        model.response_pooler.occupancy(predicted_latent),
+        model.response_pooler.occupancy(observed_latent).detach(),
+    )
+    gmm_nll = model.response_pooler.negative_log_likelihood(observed_latent)
     pred_rank = pred_y.sum() * 0.0
     total = (
         float(weights.hvg_mean_delta) * hvg_mean_delta
@@ -3249,6 +3299,7 @@ def _legacy_chunk_loop_losses(
         + float(weights.pred_c) * pred_c
         + float(weights.obs_c) * obs_c
         + float(weights.occupancy) * occupancy
+        + float(weights.gmm_nll) * gmm_nll
     )
     return {
         "total": total,
@@ -3259,6 +3310,7 @@ def _legacy_chunk_loop_losses(
         "pred_c": pred_c,
         "obs_c": obs_c,
         "occupancy": occupancy,
+        "gmm_nll": gmm_nll,
         "pred_rank": pred_rank,
         "pred_y": pred_y.view(()),
         "obs_y": obs_y.view(()),

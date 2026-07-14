@@ -15,6 +15,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 
 
@@ -27,6 +28,7 @@ class LossWeights:
     pred_c: float
     obs_c: float
     occupancy: float
+    gmm_nll: float = 0.0
     pred_rank: float = 0.0
     pred_rank_tau: float = 0.25
     pred_rank_pair_margin: float = 0.0
@@ -346,72 +348,52 @@ class MLPHead(nn.Module):
 
 
 class AivcModel(nn.Module):
-    """End-to-end STATE A->B plus GMM/MLP B_hat->C model."""
+    """End-to-end STATE A->B plus shared response B->C model."""
 
     def __init__(
         self,
         *,
         state_adapter: StateForwardAdapter,
         perturbations: PerturbationVectorAdapter | Esm2PerturbationAdapter,
-        projector: ExpressionToLatentProjector,
-        featureizer: FixedGMMFeatureizer,
+        response_encoder: ResponseEncoder,
+        response_pooler: TrainableDiagonalGMM,
         c_head: MLPHead,
         control_expression_mean: np.ndarray,
-        control_latent_mean: np.ndarray,
-        freeze_state: bool = False,
     ) -> None:
         super().__init__()
         self.state_adapter = state_adapter
         self.perturbations = perturbations
-        self.projector = projector
-        self.featureizer = featureizer
+        self.response_encoder = response_encoder
+        self.response_pooler = response_pooler
         self.c_head = c_head
         self.register_buffer(
             "control_expression_mean",
             torch.as_tensor(control_expression_mean, dtype=torch.float32),
         )
-        self.register_buffer(
-            "control_latent_mean",
-            torch.as_tensor(control_latent_mean, dtype=torch.float32),
-        )
-        self.freeze_state = bool(freeze_state)
-        if self.freeze_state:
-            for parameter in self.state_adapter.parameters():
-                parameter.requires_grad = False
-            self.state_adapter.eval()
 
-    def train(self, mode: bool = True) -> AivcModel:
-        """Set training mode while keeping a frozen STATE adapter in eval mode."""
-        super().train(mode)
-        if self.freeze_state:
-            self.state_adapter.eval()
-        return self
-
-    def predict_bag(
+    def predict_response(
         self,
         control_cells: torch.Tensor,
         gene: str,
         batch_indices: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        pert = self.perturbations(gene)
-        context = (
-            torch.no_grad()
-            if self.freeze_state and not pert.requires_grad
-            else nullcontext()
+        perturbation = self.perturbations(gene)
+        predicted_expression = self.state_adapter(
+            control_cells,
+            perturbation,
+            gene,
+            batch_indices,
         )
-        with context:
-            predicted_expression = self.state_adapter(
-                control_cells,
-                pert,
-                gene,
-                batch_indices,
-            )
-        predicted_latent = self.projector(predicted_expression)
-        return predicted_expression, predicted_latent
+        return predicted_expression, self.response_encoder(predicted_expression)
 
-    def predict_c_from_latent(self, latent_bag: torch.Tensor) -> torch.Tensor:
-        features = self.featureizer(latent_bag)
-        return self.c_head(features)
+    def predict_c_from_response(
+        self,
+        expression_bag: torch.Tensor,
+        control_expression_bag: torch.Tensor,
+    ) -> torch.Tensor:
+        latent = self.response_encoder(expression_bag)
+        control_latent = self.response_encoder(control_expression_bag)
+        return self.c_head(self.response_pooler(latent, control_latent))
 
     def losses_for_gene(
         self,
@@ -548,6 +530,7 @@ class AivcModel(nn.Module):
                 "pred_c",
                 "obs_c",
                 "occupancy",
+                "gmm_nll",
                 "pred_y",
                 "obs_y",
             )
@@ -577,6 +560,7 @@ class AivcModel(nn.Module):
             "pred_c": _masked_mean(stacked["pred_c"], valid_mask),
             "obs_c": _masked_mean(stacked["obs_c"], valid_mask),
             "occupancy": _masked_mean(stacked["occupancy"], valid_mask),
+            "gmm_nll": _masked_mean(stacked["gmm_nll"], valid_mask),
             "pred_rank": pred_rank,
             "pred_y": stacked["pred_y"],
             "obs_y": stacked["obs_y"],
@@ -588,6 +572,7 @@ class AivcModel(nn.Module):
             "per_gene_pred_c": stacked["pred_c"],
             "per_gene_obs_c": stacked["obs_c"],
             "per_gene_occupancy": stacked["occupancy"],
+            "per_gene_gmm_nll": stacked["gmm_nll"],
             "per_gene_pred_rank": torch.where(
                 valid_mask,
                 pred_rank.expand(len(gene)),
@@ -606,14 +591,10 @@ class AivcModel(nn.Module):
         y: torch.Tensor,
         weights: LossWeights,
     ) -> dict[str, torch.Tensor]:
-        predicted_latent_chunks: list[torch.Tensor] = []
         hvg_mean_delta_terms: list[torch.Tensor] = []
         hvg_energy_terms: list[torch.Tensor] = []
-        latent_mean_delta_terms: list[torch.Tensor] = []
-        latent_energy_terms: list[torch.Tensor] = []
         compute_hvg_energy = float(weights.hvg_energy) != 0.0
         compute_latent_energy = float(weights.latent_energy) != 0.0
-        compute_occupancy = float(weights.occupancy) != 0.0
         if not (
             len(control_chunks)
             == len(target_expression_chunks)
@@ -629,83 +610,67 @@ class AivcModel(nn.Module):
             chunk_sizes,
             batched_control.device,
         )
-        batched_prediction, batched_latent = self.predict_bag(
+        predicted_expression, predicted_latent = self.predict_response(
             batched_control,
             gene,
             batched_batch_indices,
         )
-        predicted_expression_chunks = batched_prediction.split(chunk_sizes, dim=0)
-        batched_latent_chunks = batched_latent.split(chunk_sizes, dim=0)
+        target_expression = torch.cat(target_expression_chunks, dim=0)
+        observed_latent = self.response_encoder(target_expression)
+        control_latent = self.response_encoder(batched_control)
+        predicted_expression_chunks = predicted_expression.split(chunk_sizes, dim=0)
         chunk_iter = zip(
             predicted_expression_chunks,
-            batched_latent_chunks,
             target_expression_chunks,
-            target_latent_chunks,
             strict=True,
         )
-        for chunk_values in chunk_iter:
-            (
-                predicted_expression,
-                predicted_latent,
-                target_expression,
-                target_latent,
-            ) = chunk_values
-            predicted_latent_chunks.append(predicted_latent)
+        for predicted_chunk, target_chunk in chunk_iter:
             hvg_mean_delta_terms.append(
                 _mean_delta_loss(
-                    predicted_expression,
-                    target_expression,
+                    predicted_chunk,
+                    target_chunk,
                     self.control_expression_mean,
                 )
             )
             if compute_hvg_energy:
                 hvg_energy_terms.append(
-                    _energy_distance(predicted_expression, target_expression)
+                    _energy_distance(predicted_chunk, target_chunk)
                 )
-            latent_mean_delta_terms.append(
-                _mean_delta_loss(
-                    predicted_latent,
-                    target_latent,
-                    self.control_latent_mean,
-                )
-            )
-            if compute_latent_energy:
-                latent_energy_terms.append(
-                    _energy_distance(predicted_latent, target_latent)
-                )
-        predicted_latent = torch.cat(predicted_latent_chunks, dim=0)
-        target_latent = torch.cat(target_latent_chunks, dim=0)
         hvg_mean_delta = torch.stack(hvg_mean_delta_terms).mean()
         hvg_energy = (
             torch.stack(hvg_energy_terms).mean()
             if compute_hvg_energy
-            else _zero_like_loss(batched_prediction)
+            else _zero_like_loss(predicted_expression)
         )
-        latent_mean_delta = torch.stack(latent_mean_delta_terms).mean()
+        latent_mean_delta = F.mse_loss(
+            predicted_latent.mean(dim=0),
+            observed_latent.detach().mean(dim=0),
+        )
         latent_energy = (
-            torch.stack(latent_energy_terms).mean()
+            _energy_distance(predicted_latent, observed_latent.detach())
             if compute_latent_energy
             else _zero_like_loss(predicted_latent)
         )
-        pred_y = self.predict_c_from_latent(predicted_latent)
-        obs_y = self.predict_c_from_latent(target_latent)
+        pred_y = self.c_head(self.response_pooler(predicted_latent, control_latent))
+        obs_y = self.c_head(self.response_pooler(observed_latent, control_latent))
         pred_c = F.mse_loss(pred_y.view(()), y.view(()))
         obs_c = F.mse_loss(obs_y.view(()), y.view(()))
-        if compute_occupancy:
-            pred_occ = self.featureizer._occupancy(predicted_latent)
-            obs_occ = self.featureizer._occupancy(target_latent)
-            occupancy = F.mse_loss(pred_occ, obs_occ)
-        else:
-            occupancy = _zero_like_loss(pred_y)
+        occupancy = F.mse_loss(
+            self.response_pooler.occupancy(predicted_latent),
+            self.response_pooler.occupancy(observed_latent).detach(),
+        )
+        gmm_nll = self.response_pooler.negative_log_likelihood(observed_latent)
         pred_rank = pred_y.sum() * 0.0
-        total = (
-            float(weights.hvg_mean_delta) * hvg_mean_delta
-            + float(weights.hvg_energy) * hvg_energy
-            + float(weights.latent_mean_delta) * latent_mean_delta
-            + float(weights.latent_energy) * latent_energy
-            + float(weights.pred_c) * pred_c
-            + float(weights.obs_c) * obs_c
-            + float(weights.occupancy) * occupancy
+        total = _weighted_loss_sum(
+            obs_y,
+            (weights.hvg_mean_delta, hvg_mean_delta),
+            (weights.hvg_energy, hvg_energy),
+            (weights.latent_mean_delta, latent_mean_delta),
+            (weights.latent_energy, latent_energy),
+            (weights.pred_c, pred_c),
+            (weights.obs_c, obs_c),
+            (weights.occupancy, occupancy),
+            (weights.gmm_nll, gmm_nll),
         )
         return {
             "total": total,
@@ -716,6 +681,7 @@ class AivcModel(nn.Module):
             "pred_c": pred_c,
             "obs_c": obs_c,
             "occupancy": occupancy,
+            "gmm_nll": gmm_nll,
             "pred_rank": pred_rank,
             "pred_y": pred_y.view(()),
             "obs_y": obs_y.view(()),
@@ -736,6 +702,17 @@ def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     if bool(mask.any().item()):
         return values[mask].mean()
     return values.sum() * 0.0
+
+
+def _weighted_loss_sum(
+    reference: torch.Tensor,
+    *terms: tuple[float, torch.Tensor],
+) -> torch.Tensor:
+    total = reference.sum() * 0.0
+    for weight, loss in terms:
+        if float(weight) != 0.0:
+            total = total + float(weight) * loss
+    return total
 
 
 def _zero_like_loss(reference: torch.Tensor) -> torch.Tensor:
