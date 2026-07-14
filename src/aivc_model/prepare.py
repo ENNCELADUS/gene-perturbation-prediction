@@ -187,6 +187,7 @@ class GmmConfig:
     n_components: int = 32
     covariance_floor: float = 1e-4
     init_scale: float = 0.02
+    trainable: bool = True
     max_fit_cells: int | None = 20000
 
 
@@ -2202,6 +2203,7 @@ def _gmm_config(values: dict[str, Any]) -> GmmConfig:
         n_components=int(values.get("n_components", 32)),
         covariance_floor=float(values.get("covariance_floor", 1e-4)),
         init_scale=float(values.get("init_scale", 0.02)),
+        trainable=_bool_value(values.get("trainable", True)),
         max_fit_cells=_int_or_none(values.get("max_fit_cells", 20000)),
     )
 

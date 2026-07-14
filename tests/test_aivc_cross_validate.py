@@ -366,6 +366,7 @@ def test_exp05_repaired_config_has_locked_contract() -> None:
     assert config.gmm.n_components == 64
     assert config.gmm.covariance_floor == 0.0001
     assert config.gmm.init_scale == 0.02
+    assert config.gmm.trainable is True
     assert config.train.run_id == "state_esm2_response_gmm_ddp_outer5"
     assert config.train.gene_batch_size == 1
     assert config.train.required_world_size == 4
@@ -749,6 +750,20 @@ def test_distributed_preflight_rejects_frozen_state(
             tmp_path / "config.yaml",
             _FourRankMainAccelerator(),  # type: ignore[arg-type]
         )
+
+
+def test_locked_preflight_rejects_nontrainable_gmm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    nontrainable_config = replace(
+        config,
+        gmm=replace(config.gmm, trainable=False),
+    )
+
+    with pytest.raises(ValueError, match="requires trainable GMM"):
+        cv._assert_locked_preflight_config(nontrainable_config)
 
 
 def test_preflight_rejects_nonfinite_prepared_cache(

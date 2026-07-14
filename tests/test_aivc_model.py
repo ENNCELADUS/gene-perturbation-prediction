@@ -1144,6 +1144,32 @@ def test_audited_e2e_builder_requires_locked_response_encoder(
         )
 
 
+def test_audited_e2e_builder_rejects_nontrainable_gmm(tmp_path: Path) -> None:
+    config_path = _write_scvi_cache_config(tmp_path)
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "train:\n",
+            "gmm:\n  trainable: false\ntrain:\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    config = replace(
+        load_config(config_path),
+        response_encoder=ResponseEncoderConfig(2000, 128),
+    )
+    assert config.gmm.trainable is False
+
+    with pytest.raises(ValueError, match="requires trainable GMM"):
+        train_module._build_e2e_model(
+            config,
+            _toy_gene_bags_with_batches(),
+            extra_genes=(),
+            canonical_gene_order=("GENE1", "GENE2"),
+            emit_checkpoint_output=False,
+        )
+
+
 def test_state_config_parses_strict_esm2_fields(tmp_path: Path) -> None:
     default_config = load_config(_write_scvi_cache_config(tmp_path))
     config_path = tmp_path / "esm2.yaml"

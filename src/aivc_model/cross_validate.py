@@ -116,6 +116,8 @@ def _assert_locked_preflight_config(config: AivcConfig) -> None:
         raise ValueError("repaired exp05 fixes the STATE representation to output")
     if config.response_encoder != ResponseEncoderConfig(2000, 128):
         raise ValueError("repaired exp05 requires a 2000-to-128 response encoder")
+    if config.gmm.trainable is not True:
+        raise ValueError("repaired exp05 requires trainable GMM")
 
 
 def _load_preflight_labels(config: AivcConfig) -> pd.DataFrame:
