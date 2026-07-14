@@ -1016,6 +1016,7 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
         "  pred_rank_tau: 0.25\n"
         "  pred_rank_pair_margin: 0.25\n"
         "  pred_rank_pair_weight_clip: 2.0\n"
+        "  gmm_nll_weight: 0.01\n"
         "  b_loss_anneal_epochs: 5\n"
         "  b_loss_anneal_final_fraction: 0.1\n"
         "train:\n",
@@ -1043,6 +1044,7 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert default_config.train.freeze_state is False
     assert default_config.train.input_tensor_cache_max_gib == 24.0
     assert default_config.loss.pred_rank_weight == 0.0
+    assert default_config.loss.gmm_nll_weight == 0.0
     assert default_config.loss.b_loss_anneal_epochs == 0
     assert parsed.train.gene_batch_size == 1
     assert parsed.train.learning_rate == 2.5e-5
@@ -1055,6 +1057,8 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert parsed.loss.pred_rank_tau == 0.25
     assert parsed.loss.pred_rank_pair_margin == 0.25
     assert parsed.loss.pred_rank_pair_weight_clip == 2.0
+    assert parsed.loss.gmm_nll_weight == 0.01
+    assert train_module._loss_weights(parsed).gmm_nll == 0.01
     assert parsed.loss.b_loss_anneal_epochs == 5
     assert parsed.loss.b_loss_anneal_final_fraction == 0.1
 

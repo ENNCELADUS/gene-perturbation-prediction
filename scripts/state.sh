@@ -29,14 +29,5 @@ if [ ! -d ".venv" ]; then
   exit 1
 fi
 
-export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
-export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-
 echo "Running STATE AIVC with config: $CONFIG_PATH"
-srun uv run --locked --no-sync --offline accelerate launch \
-  --num_processes 4 \
-  --num_machines 1 \
-  --mixed_precision bf16 \
-  --dynamo_backend no \
-  -m aivc_model.cross_validate \
-  --config "$CONFIG_PATH"
+srun scripts/run_exp05_ddp.sh "$CONFIG_PATH"

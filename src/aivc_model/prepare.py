@@ -205,6 +205,7 @@ class LossConfig:
     pred_c_weight: float = 1.0
     obs_c_weight: float = 0.25
     occupancy_weight: float = 0.1
+    gmm_nll_weight: float = 0.0
     pred_rank_weight: float = 0.0
     pred_rank_tau: float = 0.25
     pred_rank_pair_margin: float = 0.0
@@ -2225,6 +2226,7 @@ def _loss_config(values: dict[str, Any]) -> LossConfig:
         pred_c_weight=float(values.get("pred_c_weight", 1.0)),
         obs_c_weight=float(values.get("obs_c_weight", 0.25)),
         occupancy_weight=float(values.get("occupancy_weight", 0.1)),
+        gmm_nll_weight=float(values.get("gmm_nll_weight", 0.0)),
         pred_rank_weight=float(values.get("pred_rank_weight", 0.0)),
         pred_rank_tau=float(values.get("pred_rank_tau", 0.25)),
         pred_rank_pair_margin=float(values.get("pred_rank_pair_margin", 0.0)),
