@@ -15,7 +15,7 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 
-"$ACCELERATE_BIN" launch \
+"$PYTHON_BIN" "$ACCELERATE_BIN" launch \
   --num_processes 4 \
   --num_machines 1 \
   --mixed_precision bf16 \
