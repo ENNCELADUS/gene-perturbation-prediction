@@ -2569,6 +2569,68 @@ def test_pairwise_ranknet_filters_small_label_margins() -> None:
     assert no_pairs.item() == 0.0
 
 
+def test_global_ranknet_gathers_four_single_gene_ranks_with_gradient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rank_predictions = tuple(
+        torch.tensor([value], requires_grad=True) for value in (0.2, -0.5, 0.8, 0.1)
+    )
+    rank_labels = tuple(torch.tensor([value]) for value in (-1.0, 0.5, -0.2, 1.0))
+    rank_masks = tuple(torch.tensor([True]) for _ in range(4))
+    collective_order: list[str] = []
+
+    monkeypatch.setattr(model_module.dist, "is_available", lambda: True)
+    monkeypatch.setattr(model_module.dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(model_module.dist, "get_world_size", lambda: 4)
+
+    def differentiable_all_gather(
+        local_prediction: torch.Tensor,
+    ) -> tuple[torch.Tensor, ...]:
+        collective_order.append("predictions")
+        assert local_prediction.data_ptr() == rank_predictions[0].data_ptr()
+        return rank_predictions
+
+    def all_gather(
+        outputs: list[torch.Tensor],
+        local_value: torch.Tensor,
+    ) -> None:
+        assert not local_value.requires_grad
+        if local_value.dtype == torch.bool:
+            collective_order.append("masks")
+            gathered = rank_masks
+        else:
+            collective_order.append("labels")
+            gathered = rank_labels
+        for output, value in zip(outputs, gathered, strict=True):
+            output.copy_(value)
+
+    monkeypatch.setattr(
+        model_module,
+        "_differentiable_all_gather",
+        differentiable_all_gather,
+    )
+    monkeypatch.setattr(model_module.dist, "all_gather", all_gather)
+
+    loss = model_module._global_pairwise_ranknet_loss(
+        rank_predictions[0],
+        rank_labels[0],
+        rank_masks[0],
+        tau=0.25,
+        pair_margin=0.0,
+        pair_weight_clip=2.0,
+    )
+    loss.backward()
+
+    assert loss.item() > 0.0
+    assert collective_order == ["predictions", "labels", "masks"]
+    assert all(
+        prediction.grad is not None
+        and torch.isfinite(prediction.grad).all()
+        and prediction.grad.abs().sum().item() > 0.0
+        for prediction in rank_predictions
+    )
+
+
 def test_frozen_state_keeps_adapter_eval_and_trains_downstream_modules() -> None:
     model, state_model = _build_two_gene_aivc_model(freeze_state=True)
 
