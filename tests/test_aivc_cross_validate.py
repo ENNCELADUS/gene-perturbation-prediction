@@ -24,6 +24,11 @@ from accelerate.state import AcceleratorState
 from aivc_model import cross_validate as cv
 from aivc_model import gene_splits as gene_splits_module
 from aivc_model import train as train_module
+from aivc_model.distributed import (
+    assert_all_ranks_stepped,
+    require_exact_world_size,
+    run_rank_zero_or_raise,
+)
 from aivc_model.gene_splits import FoldSpec, GeneAccessRecorder
 from aivc_model.prepare import (
     AivcConfig,
@@ -43,6 +48,60 @@ class _SingleProcessAccelerator:
     @staticmethod
     def wait_for_everyone() -> None:
         return None
+
+
+class _FourRankMainAccelerator(_SingleProcessAccelerator):
+    num_processes = 4
+
+
+class _FakeAccelerator:
+    def __init__(
+        self,
+        *,
+        is_main_process: bool,
+        num_processes: int,
+        gathered: torch.Tensor | None = None,
+    ) -> None:
+        self.is_main_process = is_main_process
+        self.num_processes = num_processes
+        self.device = torch.device("cpu")
+        self._gathered = gathered
+
+    def gather(self, value: torch.Tensor) -> torch.Tensor:
+        return value if self._gathered is None else self._gathered
+
+
+def test_exp05_requires_exactly_four_ranks() -> None:
+    with pytest.raises(RuntimeError, match="requires exactly 4 DDP ranks"):
+        require_exact_world_size(types.SimpleNamespace(num_processes=1), expected=4)
+
+
+def test_rank_zero_exception_is_raised_on_every_rank(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    accelerator = _FakeAccelerator(is_main_process=True, num_processes=4)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "nccl")
+    monkeypatch.setattr(
+        torch.distributed,
+        "broadcast_object_list",
+        lambda values, src, device: None,
+    )
+    with pytest.raises(RuntimeError, match="checkpoint write failed.*disk full"):
+        run_rank_zero_or_raise(
+            accelerator,  # type: ignore[arg-type]
+            "checkpoint write",
+            lambda: (_ for _ in ()).throw(OSError("disk full")),
+        )
+
+
+def test_zero_optimizer_steps_on_any_rank_is_rejected() -> None:
+    accelerator = _FakeAccelerator(
+        is_main_process=True,
+        num_processes=4,
+        gathered=torch.tensor([8, 8, 0, 8]),
+    )
+    with pytest.raises(RuntimeError, match="rank optimizer-step counts.*0"):
+        assert_all_ranks_stepped(accelerator, local_steps=8)  # type: ignore[arg-type]
 
 
 @pytest.fixture(autouse=True)
@@ -78,12 +137,15 @@ def _distributed_rank_safety_worker(
         with marker.open("a", encoding="utf-8") as handle:
             handle.write(f"{rank}\n")
 
-    cv._run_main_process(accelerator, aggregate_once)
-    cv._wait_for_everyone(accelerator)
+    run_rank_zero_or_raise(
+        accelerator,
+        "aggregate marker write",
+        aggregate_once,
+    )
     try:
         cv._prepare_fresh_run_dir(path, accelerator)
-    except FileExistsError as error:
-        assert str(error) == f"fresh run directory required: {path}"
+    except RuntimeError as error:
+        assert f"fresh run directory required: {path}" in str(error)
         marker = path / f"freshness_error_rank_{rank}.txt"
         marker.write_text("rejected\n", encoding="utf-8")
     original_freshness_check = cv._require_fresh_run_dir
@@ -92,8 +154,8 @@ def _distributed_rank_safety_worker(
     )
     try:
         cv._prepare_fresh_run_dir(path / "permission", accelerator)
-    except PermissionError as error:
-        assert str(error) == "permission sentinel"
+    except RuntimeError as error:
+        assert "permission sentinel" in str(error)
         marker = path / f"permission_error_rank_{rank}.txt"
         marker.write_text("propagated\n", encoding="utf-8")
     finally:
@@ -671,25 +733,6 @@ def test_two_process_rank_safety_creates_once_and_aggregates_once(
     ]
 
 
-@pytest.mark.parametrize(
-    ("backend", "accelerator_device", "expected"),
-    [
-        ("gloo", torch.device("mps"), torch.device("cpu")),
-        ("nccl", torch.device("cuda", 2), torch.device("cuda", 2)),
-    ],
-)
-def test_object_broadcast_selects_backend_compatible_device(
-    backend: str,
-    accelerator_device: torch.device,
-    expected: torch.device,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(torch.distributed, "get_backend", lambda: backend)
-    accelerator = types.SimpleNamespace(device=accelerator_device)
-
-    assert cv._object_broadcast_device(accelerator) == expected
-
-
 def test_cross_validation_runs_preflight_before_creating_run_directory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -701,9 +744,18 @@ def test_cross_validation_runs_preflight_before_creating_run_directory(
         "run_preflight",
         lambda _path: (_ for _ in ()).throw(ValueError("locked preflight failed")),
     )
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
+    monkeypatch.setattr(
+        torch.distributed,
+        "broadcast_object_list",
+        lambda values, src, device: None,
+    )
 
-    with pytest.raises(ValueError, match="locked preflight failed"):
-        cv.run_cross_validation(tmp_path / "config.yaml")
+    with pytest.raises(RuntimeError, match="locked preflight failed"):
+        cv.run_cross_validation(
+            tmp_path / "config.yaml",
+            accelerator=_FourRankMainAccelerator(),  # type: ignore[arg-type]
+        )
 
     assert not (config.data.output_dir / "runs").exists()
 
@@ -1080,7 +1132,7 @@ def test_run_training_fold_rejects_nonempty_run_directory(tmp_path: Path) -> Non
     run_dir.mkdir()
     (run_dir / "stale.txt").write_text("stale", encoding="utf-8")
 
-    with pytest.raises(FileExistsError, match="fresh run directory"):
+    with pytest.raises(RuntimeError, match="fresh run directory"):
         cv.run_training_fold(
             config=_audited_config(tmp_path),
             data=_toy_bags(),
@@ -1179,7 +1231,12 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
     sha_path.write_text(f"{digest}\n", encoding="utf-8")
     config = types.SimpleNamespace(
         data=types.SimpleNamespace(output_dir=tmp_path),
-        train=types.SimpleNamespace(run_id="toy", seed=42, device="cpu"),
+        train=types.SimpleNamespace(
+            run_id="toy",
+            seed=42,
+            device="cpu",
+            required_world_size=4,
+        ),
         projector=types.SimpleNamespace(teacher="obsm"),
         cv=types.SimpleNamespace(
             outer_split_manifest=manifest_path,
@@ -1298,9 +1355,15 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         }
 
     monkeypatch.setattr(cv, "run_training_fold", fake_fold_runner)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
+    monkeypatch.setattr(
+        torch.distributed,
+        "broadcast_object_list",
+        lambda values, src, device: None,
+    )
     run_dir = cv.run_cross_validation(
         tmp_path / "config.yaml",
-        accelerator=_SingleProcessAccelerator(),  # type: ignore[arg-type]
+        accelerator=_FourRankMainAccelerator(),  # type: ignore[arg-type]
     )
     predictions = pd.read_csv(run_dir / "artifacts" / "predictions.csv")
     for scope in (
