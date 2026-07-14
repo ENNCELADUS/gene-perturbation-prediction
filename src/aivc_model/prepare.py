@@ -1542,7 +1542,9 @@ def _load_external_metadata(config: AivcConfig) -> pd.DataFrame:
     frame = pd.read_csv(config.external_test.overlap_csv)
     if config.data.matched_label_col in frame.columns:
         frame = frame.loc[frame[config.data.matched_label_col].astype(bool)]
-    frame = frame.loc[frame[config.data.depmap_label_col].notna()].copy()
+    labels = pd.to_numeric(frame[config.data.depmap_label_col], errors="coerce")
+    frame = frame.loc[np.isfinite(labels)].copy()
+    frame[config.data.depmap_label_col] = labels.loc[frame.index]
     if "perturbation_gene" not in frame.columns:
         msg = "external_test.overlap_csv must include perturbation_gene"
         raise ValueError(msg)
