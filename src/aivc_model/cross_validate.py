@@ -39,6 +39,7 @@ from aivc_model.prepare import (
     AivcConfig,
     ExternalGeneBags,
     GeneBags,
+    ResponseEncoderConfig,
     SealedGeneBags,
     load_config,
     load_external_gene_bags,
@@ -108,6 +109,8 @@ def _assert_locked_preflight_config(config: AivcConfig) -> None:
         raise ValueError("repaired exp05 requires strict ESM-2 coverage")
     if config.state.representation_layer != "output":
         raise ValueError("repaired exp05 fixes the STATE representation to output")
+    if config.response_encoder != ResponseEncoderConfig(2000, 128):
+        raise ValueError("repaired exp05 requires a 2000-to-128 response encoder")
 
 
 def _load_preflight_labels(config: AivcConfig) -> pd.DataFrame:
@@ -779,7 +782,7 @@ def _assert_predictions(predictions: pd.DataFrame, manifest: pd.DataFrame) -> No
     internal_scopes = {
         "internal_outer_test",
         "generation_quality_outer_test",
-        "observed_b_oracle_outer_test",
+        "observed_b_shared_oracle_outer_test",
     }
     internal = predictions.loc[predictions["evaluation_scope"].isin(internal_scopes)]
     canonical = manifest.set_index("perturbation_gene")["outer_fold"]
@@ -841,23 +844,17 @@ def _assert_access_audit(
 
 def _mandatory_audit_stages(config: AivcConfig) -> frozenset[str]:
     """Derive the exact executed stage contract from the repaired config."""
+    del config
     stages = {
         "adapter_fit",
-        "gmm_fit",
-        "normalizer_fit",
-        "projector_fit",
         "transition_supervision",
         "gene_prompt_fit",
         "fine_tuning",
         "early_stopping",
-        "observed_b_oracle_fit",
-        "observed_b_oracle_selection",
         "internal_outer_test",
         "generation_quality_outer_test",
         "observed_b_oracle_outer_test",
     }
-    if config.projector.teacher == "scvi":
-        stages.add("scvi_fit")
     return frozenset(stages)
 
 
