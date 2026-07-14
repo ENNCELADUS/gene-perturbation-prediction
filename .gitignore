@@ -109,3 +109,6 @@ docs/literature/
 # Large data files
 /data/
 *.npz
+
+# Legacy course project files
+archive/

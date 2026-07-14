@@ -1,9 +1,0 @@
-tag,value,source
-exp01_cv_spearman,0.485,docs/experiment/01 Replogle K562 5-fold CV Spearman (pca50_ridge)
-exp01_adamson_spearman,0.500,docs/experiment/01 Adamson same-line transfer Spearman
-exp01_adamson_auroc,0.886,docs/experiment/01 Adamson same-line transfer AUROC (GE<-1.0)
-exp02_nar_only,0.244,docs/experiment/02 NAR death-signature only Spearman
-exp02_transcriptome,0.494,docs/experiment/02 best pseudobulk transcriptome Spearman
-exp02_residualized,0.503,docs/experiment/02 NAR-residualized transcriptome Spearman
-exp03_adamson_spearman,0.666,docs/experiment/03 scVI128 GMM-Ridge Adamson Spearman (Adamson-guided sweep)
-exp03_adamson_auroc,0.911,docs/experiment/03 scVI128 GMM-Ridge Adamson AUROC (Adamson-guided sweep)
