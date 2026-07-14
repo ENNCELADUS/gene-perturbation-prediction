@@ -2110,6 +2110,8 @@ def _build_e2e_model(
             "audited exp05 requires response_encoder input_dim=2000 and "
             "latent_dim=128"
         )
+    if config.gmm.trainable is not True:
+        raise ValueError("audited exp05 requires trainable GMM")
     pert_dim = config.state.pert_dim
     tokenizer = config.state.gene_tokenizer
     known_vectors: dict[str, np.ndarray] = {}
