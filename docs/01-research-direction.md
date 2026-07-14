@@ -1,12 +1,12 @@
 # Research Direction: Outcome Dynamics Behind Net Fitness
 
-Status date: 2026-07-13 (revision 3 — frozen for L0 -> Gate 1)
-Type: research direction + literature review plan. **Not** an implementation spec.
-**Superseded by:** [`docs/01-research-direction.md`](../../01-research-direction.md) (revision 4). This revision-3 document is frozen and retained because the eleven review memos under `ideaspark_run/` cite it by path.
+**Status:** revision 4 (2026-07-14) — the active research contract for this project.
+**Type:** research direction + literature-review contract. **Not** an implementation spec.
+**Supersedes:** [`docs/superpowers/specs/2026-07-13-cell-fate-prediction-research-direction-design.md`](superpowers/specs/2026-07-13-cell-fate-prediction-research-direction-design.md) (revision 3, frozen).
+**Provenance:** revision 4 applies the eight amendments required by [`ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md`](../ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md) §9, which were never applied to revision 3.
 
-Origin: PI meeting notes on transcriptomics -> cellular phenotype / cell death;
-brainstorming over repository state; three reviewer passes (major revision, focused
-revision, focused minor revision).
+Origin: PI meeting notes on transcriptomics -> cellular phenotype / cell death; brainstorming over
+repository state; three reviewer passes; the L0 -> Gate 4 literature review and its decision memo.
 
 ## 0. Revision History and Withdrawn Claims
 
@@ -24,7 +24,7 @@ hypotheses, MNAR moved to an identifiability boundary); Gate 1's no-go was backw
 (an existing independent decomposition is ground truth, not a stop); the claim that
 removal-rate independence bounds pre-capture loss was withdrawn.
 
-**Revision 3** (this document) fixes:
+**Revision 3** fixes:
 
 | # | Defect in revision 2 | Fix |
 | --- | --- | --- |
@@ -36,6 +36,22 @@ removal-rate independence bounds pre-capture loss was withdrawn.
 | 6 | §9 item 1 required L0 to contain the selected primary unit, but item 6 was where selection happened. Circular. | **L0 builds parallel maps for A and B; selection happens only at the decision point** (§8, §9). |
 | 7 | Gate 4 carried the virtual-cell-baseline critique before generate-`B` was ever selected as a strategy. | Moved to a **post-selection tool-strategy review** (§10). |
 
+**Revision 4** (this document, provenance: [`ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md`](../ideaspark_run/cell-fate-outcome-dynamics/DECISION_MEMO.md) §9) applies eight amendments required by the L0 -> Gate 4 literature review's decision memo but never applied to revision 3:
+
+| # | Section | Change |
+| --- | --- | --- |
+| 1 | §1 | The wedge is demonstrated for selected drug perturbations (Gross 2023); prevalence and importance remain unresolved for genetic loss-of-function — replacing the "mathematically true and biologically unproven" framing. |
+| 2 | §2 | Chronos is structurally incapable of separating division from death because that decomposition lies outside its estimand — a readout limitation, not a tool defect. Retracts the earlier "unflagged identifiability hole" framing. |
+| 3 | §4.1 | A1 exists (Live-seq) but is an existence proof, throughput-bound, not a deployable platform (~4-5 extractions/hour, ~300 high-quality transcriptomes in the entire study, 85-89% post-biopsy viability, small cell-cycle delays not excluded). A2 remains the ceiling for anything pooled. |
+| 4 | §4 (Candidate B) | Adds an explicit falsifier: genetic LOF may act predominantly through division suppression, making the wedge substantially drug-specific. Enters as a hypothesis to test, not a finding. |
+| 5 | §5.1 | DepMap (Cas9 knockout, Chronos-scored) is a different intervention from a CRISPRi experiment. DepMap supports "incremental beyond an external DepMap reference," not "matched on the true net fitness of the same intervention." Any study matching on an external `F_net` must measure its own achieved net effect. |
+| 6 | §5.2 | Adds a context-dependence boundary condition (Nano 2023: Tjur R² 0.00-0.16 at baseline, rising to 0.70 under added stress). Corrects the exp02 grounding sentence: exp02 is evidence for the specificity hypothesis, not a headwind — with corrected Spearman figures (0.244 / 0.443 / 0.494 / 0.503). |
+| 7 | §7 | Strengthens the generate-`B` row: Ahlmann-Eltze 2025 shows no deep perturbation model beats a simple linear baseline at generating `B` in the first place. |
+| 8 | §12 | Appends four claim boundaries: the Live-seq viability caveat, the drug-vs-gene wedge transfer restriction, `|ΔF_net| ≤ 1 SD` is not equivalence, and Norman/Replogle are not prospective fate comparisons. |
+
+Each amendment is applied in the section named. Revision 3 is frozen and retained as a
+historical record.
+
 ## 1. The Preserved Wedge
 
 ```text
@@ -46,10 +62,12 @@ Strong division suppression with little loss, normal division with substantial l
 early loss followed by survivor regrowth, and transient arrest followed by recovery
 can all yield the same aggregate readout.
 
-This is **mathematically true and biologically unproven**. Whether such divergence is
-common, reproducible, large, and consequential in real genetic perturbations is an
-empirical question (Gate 2). Until it passes, this program has a motivating
-observation, not a finding.
+The wedge is **demonstrated for selected drug perturbations** (Gross 2023,
+https://pmc.ncbi.nlm.nih.gov/articles/PMC10257663/); **its prevalence and importance
+remain unresolved for genetic loss-of-function.** Whether such divergence is common,
+reproducible, large, and consequential in real genetic perturbations is an empirical
+question (Gate 2). Until it passes, this program has a motivating observation, not a
+finding.
 
 ## 2. Premise, Gap, and Value
 
@@ -57,8 +75,10 @@ What existing readouts already do (**to verify by reading** — reviewer-supplie
 yet read in full):
 
 - **Chronos** fits an explicit population-dynamics model, converting sgRNA abundance
-  change into a relative growth-rate effect of knockout. It does not uniquely decompose
-  reduced division from increased loss.
+  change into a relative growth-rate effect of knockout. It is **structurally
+  incapable of separating division from death, because that decomposition lies outside
+  its estimand** — a **readout limitation, not a tool defect**. A tool is not defective
+  for failing to identify a quantity it never claimed to identify.
   (https://pmc.ncbi.nlm.nih.gov/articles/PMC8686573/)
 - **GR / DIP-style metrics**, given time course and initial counts, can distinguish
   fully cytostatic from net cytotoxic responses under stated assumptions.
@@ -173,8 +193,14 @@ These are not the same evidence, and they do not license the same claim:
 | A2 | **Sibling / clone proxy** — one clone member is sequenced; siblings' futures are observed | Clone-level prospective association. **Not** per-cell fate. |
 | A3 | **Clone-average** — clone-level early-state summary vs. clone-level outcome | Clone-average association only |
 
-Absent a truly non-destructive same-cell system, **A2 is the realistic ceiling**, and
-the honest claim is clone-level prospective association, not per-cell fate prediction.
+**A1 exists but is not a deployable platform.** Live-seq is a genuine existence proof
+of same-cell prospective, minimally destructive measurement — but it is
+throughput-bound: roughly 4-5 extractions per hour, and only ~300 high-quality
+transcriptomes across the entire study. Post-biopsy viability is 85-89%, and the paper
+does **not** exclude small cell-cycle delays; the biopsy itself is a small but
+**non-zero** perturbation. Absent a system that closes this throughput and viability
+gap, **A2 remains the realistic ceiling for anything pooled**, and the honest claim for
+pooled designs is clone-level prospective association, not per-cell fate prediction.
 
 #### 4.2 Candidate A — Phenomenon, Falsifier, Risk
 
@@ -201,6 +227,11 @@ Estimand: §3.3, multi-state population trajectory summaries.
 - **Falsifier:** *under matched-net-fitness conditions there is no sufficiently large
   and reproducible dynamics divergence, or the early state distribution provides no
   incremental information about it.*
+- **Falsifier (drug-specificity risk):** *genetic loss-of-function may act
+  predominantly through division suppression rather than increased loss, making the
+  wedge substantially drug-specific.* This enters the program as a **hypothesis to
+  test**, not a finding — the drug literature (§1) answers the wedge question
+  affirmatively; the genetic literature has never asked it.
 - **Explicitly forfeits** any per-cell or per-lineage fate claim, permanently.
   Matched-population evidence supports population-level association and can never be
   upgraded.
@@ -255,10 +286,24 @@ prediction.
 
 | Analysis | `F_net` source | Claim ceiling |
 | --- | --- | --- |
-| **P (primary)** | An **independent, pre-existing** screen or replicate — DepMap/Chronos is exactly this relative to a new Perturb-seq experiment | **Prospective**: early state adds information at prediction time |
+| **P (primary)** | An **independent, pre-existing** screen or replicate — DepMap/Chronos is exactly this relative to a new Perturb-seq experiment | **Prospective**: early state adds **incremental information beyond an external DepMap fitness reference** at prediction time |
 | **R (secondary, clearly labelled)** | Same future window as `Y_future`; used for post-hoc matched analysis only | **Retrospective conditional decomposition.** Must never be reported as prospective prediction |
 
 Any reported "beyond net fitness" result states which analysis produced it.
+
+**DepMap is not the same intervention.** DepMap Achilles is genome-wide **Cas9
+knockout**, scored by Chronos. A CRISPRi Perturb-seq experiment is a **different
+intervention** — differing in perturbation strength, penetrance (hypomorph vs null),
+kinetics, screening horizon, guide efficacy, and K562 subclone/culture conditions.
+Analysis P therefore supports the claim *"incremental information beyond an external
+DepMap fitness reference"* and does **not** support the stronger claim *"matched on the
+true net fitness of the same intervention."* Any study that matches nominal pairs on an
+external `F_net` **must measure its own achieved net effect** under the intervention
+actually applied; unverified matching is a confound that can manufacture false
+positives — a CRISPRi/knockout transport mismatch masquerading as trajectory
+divergence. `|ΔF_net| ≤ 1 replicate SD` between nominally matched pairs is **not**
+equivalence: SD is not SE, and equivalence requires a TOST against a predefined margin,
+not a non-significant difference (§12).
 
 ### 5.2 Specificity hypothesis
 
@@ -266,8 +311,24 @@ Any reported "beyond net fitness" result states which analysis produced it.
 > score.**
 
 Tested by residualizing on burden/stress scalars, not by discarding them — generic
-stress stays biologically meaningful. Grounding: exp02 found a generic
-response-magnitude scalar reaches Spearman 0.426 against a 0.494 full-feature baseline.
+stress stays biologically meaningful.
+
+**Boundary condition.** Fate information is **context-dependent**, and a proximate
+death-effector readout alone is insufficient to predict individual fate. Nano et al.
+2023 (https://pmc.ncbi.nlm.nih.gov/articles/PMC9942801/) found that, at a matched
+caspase-3 activation dose, prospective information about individual fate is near-zero
+at baseline (Tjur R² 0.00-0.16), rising to R² = 0.70 only under added stress. This does
+not speak directly to transcriptome-wide early state in K562 CRISPRi, but it warns
+against assuming any single proximate readout is sufficient across regimes.
+
+**Grounding (corrected).** exp02 is **evidence for** the specificity hypothesis, not a
+headwind against it — the earlier "thin residual" reading was a misreading of our own
+data. A generic response-magnitude (NAR) scalar alone reaches Spearman 0.244; NAR +
+burden reaches 0.443; the best full-feature pseudobulk baseline (`delta_all`) reaches
+0.494; the NAR-residualized transcriptome reaches **0.503** — higher than the
+unresidualized baseline. See
+[`docs/results/prior-internal-evidence.md`](results/prior-internal-evidence.md) for the
+full table.
 
 ### 5.3 Causal Claim Boundary
 
@@ -314,7 +375,7 @@ belong in a **separate measurement memo**, not in this science spec.
 | Previously asserted | Now |
 | --- | --- |
 | The transcriptome can decompose division / arrest / loss dynamics | **The central hypothesis under test.** A snapshot measures state; it may reflect early fate commitment, generic stress severity, the consequence of already-executing death, or a residual after survivorship selection. |
-| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference; withdrawn.** Generating `B` is warranted only if `B` carries independently verifiable outcome-relevant information. A **tool hypothesis**, reviewed only post-selection (§10). |
+| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference; withdrawn — and materially weaker than previously stated.** Generating `B` is warranted only if `B` carries independently verifiable outcome-relevant information. Ahlmann-Eltze 2025 (https://pmc.ncbi.nlm.nih.gov/articles/PMC12328236/) shows **no deep perturbation model beats a simple linear baseline at generating `B` in the first place**, undercutting the case for a generate-`B` strategy before outcome-relevance is even assessed. A **tool hypothesis**, reviewed only post-selection (§10). |
 | One model unifies dependency, conditional essentiality, and SL | **Long-term hypothesis.** Dependency / conditional fitness retained as potential downstream relevance only. |
 | Bag-level output solves identifiability | **Withdrawn.** More honest than an uninterpreted per-cell latent, but not identifiable without independent anchors. |
 | Death mechanism (apoptosis / ferroptosis / necroptosis) | **Second-stage question, out of scope.** The plausible supervision route — perturbagens of known death mechanism — is recorded for later, not pursued now. |
@@ -480,3 +541,11 @@ Extending `CLAUDE.md`'s terminology guardrails:
   been shown.
 - Do not claim synthetic lethality without an explicit combination null and interaction
   residual.
+- Do not cite Live-seq as "non-destructive" without the 85-89% post-biopsy viability
+  caveat.
+- Do not present a drug-derived wedge result (e.g. Gross 2023) as evidence for genetic
+  perturbation.
+- Do not treat `|ΔF_net| ≤ 1 SD` as fitness equivalence. SD is not SE; equivalence
+  requires a TOST against a predefined margin.
+- Do not describe Norman or Replogle as prospective fate comparisons; both supply only
+  late survivor transcriptomes and aggregate growth.

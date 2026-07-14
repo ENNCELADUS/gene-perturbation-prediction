@@ -67,9 +67,10 @@ universe with train-positive pairs masked.
 
 ### exp08 STATE-Adapter DL
 
-The deep-learning extension of the SL-pair benchmark (`src/sl_dl_model/`,
-`docs/experiment/08_k562_sl_pair_perturbseq_state_dl.md`). A frozen Arc STATE
-backbone is fed by a trainable adapter mapping ESM2 gene embeddings to STATE's
+The deep-learning extension of the SL-pair benchmark (`src/sl_dl_model/`). Its
+write-up is archived locally (gitignored, not tracked in git); the summary
+below is the current record. A frozen Arc STATE backbone is fed by a trainable
+adapter mapping ESM2 gene embeddings to STATE's
 328-d perturbation token, producing a per-gene response embedding for all 9,471
 genes in one coordinate system. Trained with a 3-part loss (SL BCE + adapter
 token-distill + real-bag supervision on covered train genes) under
@@ -121,3 +122,87 @@ The transformer token hidden representation exposed by STATE during the same
 forward path that produces `B_hat`. For target-gene ablations, the perturbed bag
 uses control cells plus the target perturbation vector, while the control bag
 uses the same control cells plus the non-targeting vector.
+
+## Glossary: Cell-Fate Outcome Dynamics
+
+Terms for the active research direction (see
+[`docs/01-research-direction.md`](docs/01-research-direction.md)), distinct
+from the dependency-pipeline symbols (A/B/B_hat/C/D) above.
+
+### F_net: Net Fitness
+
+A single net rate summarizing a perturbation's aggregate effect over a time
+window — not a decomposition of division, death, or recovery. DepMap Chronos
+GeneEffect is **one instance** of `F_net`: it fits an explicit
+population-dynamics model and is structurally incapable of separating
+division from death, because that decomposition lies outside its estimand.
+`C` (the dependency-pipeline label above) is a specific realization of
+`F_net`, not a synonym for it.
+
+### T1 / T2 / T3: Prediction-Task Tiers
+
+Three distinct claims about state and outcome; do not conflate them.
+
+- **T1** — is this cell *currently* in a dying/arrested state? A
+  terminal-state classification, not a fate claim.
+- **T2** — what is the probability of division/persistence/recovery/
+  extinction within `[t, t+D]`? A **prospective prediction**, requiring
+  longitudinal or lineage pairing. Not a counterfactual.
+- **T3** — what would this same initial unit have done under a **different**
+  perturbation? A strict intervention counterfactual.
+
+Much of the apparent literature is T1 presented as if it were T2.
+
+### Analysis P vs. Analysis R
+
+Two ways of relating `F_net` to a future outcome `Y_future`, with different
+claim ceilings.
+
+- **Analysis P (primary)** — `F_net` comes from an **independent,
+  pre-existing** anchor (e.g. DepMap/Chronos relative to a new Perturb-seq
+  experiment). Supports a **prospective** claim: early state adds incremental
+  information beyond an external fitness reference.
+- **Analysis R (secondary)** — `F_net` comes from the **same future window**
+  as `Y_future`. A **retrospective conditional decomposition** only; must
+  never be reported as prospective prediction.
+
+### Biological Loss vs. Assay Attrition
+
+Two meanings of "loss" that must never be conflated.
+
+- **Biological loss / lineage extinction** — the lineage genuinely ends. A
+  biological outcome.
+- **Assay attrition** — the unit is not observed (died pre-collection, lost in
+  dissociation, failed capture, or removed by QC). A measurement-process
+  artifact, not evidence of biological loss.
+
+### Candidate A vs. Candidate B
+
+The two research-question candidates carried in parallel; no unit has been
+selected yet.
+
+- **Candidate A (lineage/clone level)** — does an early molecular state
+  predict the subsequent division/persistence/extinction trajectory of its
+  linked lineage, beyond an independently measured net fitness?
+- **Candidate B (population level)** — under comparable, independently
+  measured net fitness, does the early single-cell state *distribution* carry
+  incremental information about independently measured future population
+  dynamics? Candidate B explicitly forfeits any per-cell or per-lineage fate
+  claim, permanently.
+
+### Evidence Tiers A1 / A2 / A3
+
+Claim ceilings for Candidate A evidence. Destructive sequencing plus lineage
+barcoding does not observe the same founder before and after, so these tiers
+are not interchangeable.
+
+- **A1 — same-cell prospective**: non-destructive state measurement on a cell
+  whose own future is then observed. Supports per-cell prospective fate
+  prediction. Exists (Live-seq) but is throughput-bound (~4-5 extractions/hour,
+  ~300 high-quality transcriptomes in the entire study, 85-89% post-biopsy
+  viability) and is not a deployable platform.
+- **A2 — sibling/clone proxy**: one clone member is sequenced; siblings'
+  futures are observed. Supports clone-level prospective association only,
+  **not** per-cell fate. **The realistic ceiling for anything pooled.**
+- **A3 — clone-average**: clone-level early-state summary vs. clone-level
+  outcome. Supports clone-average association only.
