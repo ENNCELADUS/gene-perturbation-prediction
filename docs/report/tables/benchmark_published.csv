@@ -1,5 +1,0 @@
-model,cv1_f1,cv1_ndcg10,cv2_f1,cv2_ndcg10,cv3_f1,cv3_ndcg10,mean_auroc,mean_aupr,mean_f1,mean_ndcg10,source
-DDGCN,0.822,0.286,0.685,0.241,0.606,0.243,0.752,0.743,0.704,0.257,teammate SLBench reproduction (personal_report_sl_gene_perturbation.md §6); K562-DepMap Rand 1:1 splits; cal_metrics
-GRSMF,0.774,0.322,0.658,0.315,0.625,0.313,0.752,0.771,0.686,0.317,teammate SLBench reproduction (personal_report_sl_gene_perturbation.md §6); K562-DepMap Rand 1:1 splits; cal_metrics
-SL2MF,0.666,0.278,0.422,0.127,0.288,0.074,0.456,0.448,0.459,0.160,teammate SLBench reproduction (personal_report_sl_gene_perturbation.md §6); K562-DepMap Rand 1:1 splits; cal_metrics
-SLGNN,0.870,0.150,0.685,0.050,0.667,0.000,0.721,0.746,0.741,0.066,teammate SLBench reproduction (personal_report_sl_gene_perturbation.md §6); K562-DepMap Rand 1:1 splits; cal_metrics
