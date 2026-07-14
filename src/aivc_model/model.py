@@ -591,7 +591,6 @@ class AivcModel(nn.Module):
         y: torch.Tensor,
         weights: LossWeights,
     ) -> dict[str, torch.Tensor]:
-        hvg_mean_delta_terms: list[torch.Tensor] = []
         hvg_energy_terms: list[torch.Tensor] = []
         compute_hvg_energy = float(weights.hvg_energy) != 0.0
         compute_latent_energy = float(weights.latent_energy) != 0.0
@@ -619,24 +618,24 @@ class AivcModel(nn.Module):
         observed_latent = self.response_encoder(target_expression)
         control_latent = self.response_encoder(batched_control)
         predicted_expression_chunks = predicted_expression.split(chunk_sizes, dim=0)
-        chunk_iter = zip(
+        complete_predicted_expression = torch.cat(
             predicted_expression_chunks,
-            target_expression_chunks,
-            strict=True,
+            dim=0,
         )
-        for predicted_chunk, target_chunk in chunk_iter:
-            hvg_mean_delta_terms.append(
-                _mean_delta_loss(
-                    predicted_chunk,
-                    target_chunk,
-                    self.control_expression_mean,
-                )
-            )
-            if compute_hvg_energy:
+        if compute_hvg_energy:
+            for predicted_chunk, target_chunk in zip(
+                predicted_expression_chunks,
+                target_expression_chunks,
+                strict=True,
+            ):
                 hvg_energy_terms.append(
                     _energy_distance(predicted_chunk, target_chunk)
                 )
-        hvg_mean_delta = torch.stack(hvg_mean_delta_terms).mean()
+        hvg_mean_delta = _mean_delta_loss(
+            complete_predicted_expression,
+            target_expression,
+            self.control_expression_mean,
+        )
         hvg_energy = (
             torch.stack(hvg_energy_terms).mean()
             if compute_hvg_energy
