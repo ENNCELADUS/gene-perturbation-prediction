@@ -22,7 +22,9 @@
 
 </div>
 
-The central question:
+> **Status (2026-07-14):** The dependency → synthetic-lethality program below (central question, Research Framing) shipped the pipeline and the numbers in [Results](#results); it is now **retired as the roadmap** and kept as prior evidence. The active research direction is **cell-fate outcome dynamics** — see [Research Framing](#research-framing) below and the vault at [`docs/README.md`](docs/README.md) for the live contract, gate verdicts, and next steps.
+
+The central question that shaped the codebase below:
 
 > Given a cancer cell line and a gene perturbation, can the post-perturbation transcriptomic response predict whether that perturbation creates a meaningful fitness, vulnerability, or dependency phenotype?
 
@@ -66,6 +68,32 @@ uv run python -m pytest
 
 ## Research Framing
 
+> **Status:** literature funnel complete; decision **`narrow-or-pivot`** for both candidates below. Next step: three public-data reanalyses, then a bounded feasibility study. Live roadmap and status board: [`docs/README.md`](docs/README.md).
+
+```text
+The same net fitness loss can arise from completely different cellular dynamics —
+division suppression, cell loss, or loss followed by survivor regrowth — and it is
+unknown whether early molecular state prospectively distinguishes those trajectories
+in genetic loss-of-function.
+```
+
+A single endpoint net-fitness readout — DepMap Chronos GeneEffect is one instance — does not uniquely determine the underlying division / death / recovery dynamics: Chronos is structurally incapable of separating them, because that decomposition lies outside what it estimates. Two candidate research questions are carried in parallel, each with its own estimand, evidence hierarchy, and falsifier; no unit has been selected yet:
+
+- **Candidate A — lineage/clone level.** Within a fixed context and time horizon, does an early post-perturbation molecular state predict the subsequent division, persistence/recovery, and extinction trajectory of its linked lineage, beyond an independently measured net fitness?
+- **Candidate B — population level.** Under comparable, independently measured net fitness, does the early single-cell state distribution carry incremental information about independently measured future population dynamics?
+
+The full contract — estimands, frozen significance thresholds, gate verdicts, and the decision record — lives in the research vault, not here:
+
+- [`docs/README.md`](docs/README.md) — vault index and status board.
+- [`docs/01-research-direction.md`](docs/01-research-direction.md) — the frozen research contract.
+- [`docs/02-significance-criteria.md`](docs/02-significance-criteria.md) — frozen significance thresholds.
+- [`docs/03-review-findings.md`](docs/03-review-findings.md) — gate-by-gate verdicts.
+- [`docs/04-decision-and-roadmap.md`](docs/04-decision-and-roadmap.md) — the decision and what runs next.
+
+### Prior Program (Retired as Roadmap, Kept as Evidence)
+
+Through mid-2026 the project's roadmap was a staged dependency → synthetic-lethality program:
+
 ```text
 cell line + perturbation gene
     → observed or predicted post-perturbation transcriptome
@@ -73,58 +101,7 @@ cell line + perturbation gene
     → context-specific target ranking
 ```
 
-The matched training key is **(cell line, perturbation gene)** and is preserved across every intermediate table, filename, and model input. K562 is the proof-of-concept cell line; HCT116 and A549 are extensions.
-
-<div align="center">
-  <img src="./docs/images/roadmap.png" alt="Staged project roadmap" width="820">
-</div>
-
-The work is organized into three stages, each with an implemented baseline.
-
-### Stage 1 — Observed Response → Dependency
-
-Align real post-perturbation transcriptomes (Perturb-seq / CROP-seq / CRISPRi-seq) to DepMap CRISPR gene-effect labels, avoiding reliance on an imperfect forward model. K562 CRISPRi is the strongest starting point; CRISPRa (Norman) is treated as auxiliary reference, not primary label alignment.
-
-```bash
-# Pseudobulk delta baseline (Track 1)
-PSEUDOBULK_CONFIG=configs/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/full_model_ladder.yaml
-uv run vcc-dep-baseline build-features --config "$PSEUDOBULK_CONFIG"
-uv run vcc-dep-baseline run-cv --config "$PSEUDOBULK_CONFIG"
-RUN_DIR=$(cat results/experiments/01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/latest_run.txt)
-uv run vcc-dep-baseline fit-final --config "$PSEUDOBULK_CONFIG" --run-id "$(basename "$RUN_DIR")"
-uv run vcc-dep-baseline summarize --results-dir "$RUN_DIR"
-```
-
-### Stage 2 — Virtual-Cell Extension
-
-Before connecting a forward perturbation model, an observed single-cell MIL / set-learning gate tests whether single-cell heterogeneity beats pseudobulk delta. If it does not, predicted-transcriptome experiments are high risk.
-
-```bash
-# Single-cell Deep Sets baseline (Track 2)
-SINGLE_CELL_CONFIG=configs/experiments/03_replogle_k562_single_cell_deepsets_adamson/deepsets_cv_and_adamson.yaml
-uv run vcc-dep-baseline build-cell-bags --config "$SINGLE_CELL_CONFIG"
-uv run vcc-dep-baseline run-single-cell-cv --config "$SINGLE_CELL_CONFIG"
-
-# Fold-local linear predicted-B pilot (Track 2b)
-uv run vcc-dep-baseline run-predicted-b-cv \
-  --config configs/experiments/04_k562_linear_predicted_b_to_c/linear_predicted_b_cv.yaml
-```
-
-Forward-model candidates include the AIVC **STATE** A→B→C pipeline (`src/aivc_model/`, Experiment 05). STATE training is run as a direct module, not through the CLI — see [Installation](#the-aivc-state-exception).
-
-### Stage 3 — SL Candidate Prioritization
-
-Synthetic lethality requires context specificity: a gene essential in one line is not automatically an SL target. The dependency-only SL baseline establishes the floor that later observed-B / predicted-B / frozen-AIVC pair features must beat. It predicts a gene-pair label `D = sl_label(gene_a, gene_b)` from only the two genes' K562 DepMap GeneEffect scalars.
-
-```bash
-# Dependency-only SL pair baseline (official-metric protocol)
-uv run python -m sl_benchmark_baseline \
-  --input-csv data/SL_benchmark/derived/k562_depmap_rand_1to1/CV1_Rand_1to1_k562_depmap_pairs_balanced.csv \
-  --output-dir results/experiments/06_k562_sl_pair_dependency_only_mvp/official_metrics_cv1 \
-  --split-types CV1 --folds 0 1 2 3 4 --ranking-k 10 20 50
-```
-
-> CV1 (pair-level) is the easiest split; CV2 (one gene unseen) and CV3 (both genes unseen, cold-start) are the real generalization surfaces. CV1 numbers are **not** evidence of held-out-gene generalization.
+That staged program is **retired as the roadmap**. It is not retired as code: `src/dependency_baseline/`, `src/aivc_model/`, and `src/sl_benchmark_baseline/` all still run (see [Architecture](#architecture)), and the three planned public-data reanalyses reuse this pipeline. Its results are **prior evidence** for the new direction, not a roadmap to keep executing — see [Results](#results) for the numbers and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md) for the consolidated table.
 
 ## Installation
 
@@ -190,10 +167,6 @@ uv run python src/aivc_model/state_feature_ablation.py \
 
 The project closes a triangle: two edges (data → response, response → dependency) are provided by existing data, and the model focuses on the **transcriptome → death / essentiality** edge.
 
-<div align="center">
-  <img src="./docs/images/core.png" alt="Triangular technical framing" width="820">
-</div>
-
 ### Pipeline Tracks
 
 ```
@@ -246,17 +219,17 @@ The project closes a triangle: two edges (data → response, response → depend
 
 - **Observed-before-predicted** — Stage 1/2 validate observed response signal before any forward-model dependence, so predicted-transcriptome error is isolated.
 - **Fold-local everything** — In predicted-B and distribution tracks, A→B fitting, featurization, GMM prototypes, and the C head all train on train genes only.
-- **Config-driven runs** — Model ladders, selection filters, predicted-B settings, and viability-axis residualization live in YAML under `configs/experiments/`, grouped to match `docs/experiment/`.
+- **Config-driven runs** — Model ladders, selection filters, predicted-B settings, and viability-axis residualization live in YAML under `configs/experiments/`, grouped by experiment number. The numbered write-ups that used to accompany each experiment are archived locally (gitignored, not tracked in git); see [Documentation](#documentation) for what's actually tracked.
 
 ## Results
 
-Headline numbers from the implemented baselines. These are research checkpoints, not production claims.
+Headline numbers from the retired dependency → SL program's implemented baselines. These are now **prior evidence** feeding the cell-fate research direction (see [Research Framing](#research-framing)), not production claims and not claims about cell-fate dynamics. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
-### Stage 2 — Single-Cell Bag → Dependency (Adamson K562 external transfer)
+### Single-Cell Bag → Dependency (Track 2, Adamson K562 external transfer)
 
-The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson **Spearman ≈ 0.67**, **AUROC ≈ 0.91**, **AUPRC ≈ 0.80**, with held-out-gene Spearman ≈ 0.64 — clearing the original distribution-regression gate and beating the earlier scVI128 single-head gated-attention row. Full tables: [`docs/experiment/03_replogle_k562_single_cell_deepsets_adamson.md`](docs/experiment/03_replogle_k562_single_cell_deepsets_adamson.md).
+The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson **Spearman ≈ 0.67**, **AUROC ≈ 0.91**, **AUPRC ≈ 0.80**, with held-out-gene Spearman ≈ 0.64 — clearing the original distribution-regression gate and beating the earlier scVI128 single-head gated-attention row. Full tables: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
-### Stage 3 — Dependency-Only SL Floor (official-metric CV, 2026-06-17)
+### Dependency-Only SL Floor (official-metric CV, 2026-06-17)
 
 Models: **A** = symmetric logistic regression (honest floor), **B** = XGBoost (nonlinear interactions), **C** = preferential-attachment degree probe (CV-gameability control).
 
@@ -283,10 +256,10 @@ The degree-probe control (Model C) scores highest on CV1 — a reminder that pai
 
 ## Documentation
 
-- [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D and evaluation semantics.
+- [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D evaluation semantics, plus the cell-fate direction's load-bearing terms (`F_net`, T1/T2/T3, Candidate A/B, evidence tiers).
 - [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents.
-- [`docs/experiment/`](docs/experiment/) — numbered experiment summaries (01–06) with model cards.
-- [`docs/data/`](docs/data/) — dataset cards for downloaded Stage 1 data.
+- [`docs/README.md`](docs/README.md) — research vault index: contract, significance criteria, gate verdicts, decision and roadmap, results.
+- [`docs/data/`](docs/data/) — dataset cards for downloaded data.
 - [`docs/discussion/`](docs/discussion/) — project discussion notes.
 
 ## Contributing
@@ -324,7 +297,7 @@ Follow the **Plan → Confirm → Code** workflow for non-trivial research or im
 
 <div align="center">
   <p>
-    <strong>Connecting virtual-cell perturbation modeling to cancer dependency and synthetic-lethality target prioritization.</strong><br>
-    <sub>Observed response first, predicted transcriptomes second, context-specific SL claims last.</sub>
+    <strong>A retained dependency-prediction pipeline; the active research direction is cell-fate outcome dynamics.</strong><br>
+    <sub>See <a href="docs/README.md">docs/README.md</a> for the live contract, gate verdicts, and roadmap.</sub>
   </p>
 </div>
