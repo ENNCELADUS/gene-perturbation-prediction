@@ -48,6 +48,7 @@ from aivc_model.model import (
 )
 from aivc_model.distributed import (
     assert_all_ranks_stepped,
+    require_exact_world_size,
     run_rank_zero_or_raise,
 )
 from aivc_model.gene_splits import (
@@ -318,9 +319,14 @@ def run_training(
         source_fingerprint,
         canonical_gene_order,
     )
-    if any(value is not None for value in audited_values):
+    audited = any(value is not None for value in audited_values)
+    if audited:
         if any(value is None for value in audited_values):
             raise ValueError("audited training requires every fold-scoped input")
+    _require_authoritative_gene_batch_size(config)
+    accelerator = accelerator or _make_accelerator(config)
+    require_exact_world_size(accelerator, config.train.required_world_size)
+    if audited:
         return _run_audited_training(
             config=config,
             train_data=train_data,
@@ -333,7 +339,6 @@ def run_training(
             canonical_gene_order=canonical_gene_order,
             accelerator=accelerator,
         )
-    accelerator = accelerator or _make_accelerator(config)
     _configure_logging(accelerator)
     set_seed(config.train.seed)
     _configure_float32_matmul_precision(config)
@@ -1477,6 +1482,13 @@ def _configure_logging(accelerator: Accelerator) -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     logging.getLogger("aivc_model").setLevel(level)
+
+
+def _require_authoritative_gene_batch_size(config: AivcConfig) -> None:
+    if config.train.gene_batch_size != 1:
+        raise ValueError(
+            "gene_batch_size must be 1 for authoritative exp05 training"
+        )
 
 
 def _configure_cache_only_logging() -> None:

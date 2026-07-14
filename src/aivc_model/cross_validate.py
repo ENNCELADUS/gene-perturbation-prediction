@@ -49,7 +49,11 @@ from aivc_model.prepare import (
     load_gene_bags,
 )
 from aivc_model.model import load_state_model
-from aivc_model.train import _make_accelerator, run_training
+from aivc_model.train import (
+    _make_accelerator,
+    _require_authoritative_gene_batch_size,
+    run_training,
+)
 
 STATE_FEATURE_COUNT = 2000
 EXPECTED_STATE_PERT_DIM = 2024
@@ -329,7 +333,9 @@ def run_training_fold(
     canonical_gene_order: tuple[str, ...] | None = None,
 ) -> dict[str, Path]:
     """Run one outer fold through role-limited GeneBags views."""
+    _require_authoritative_gene_batch_size(config)
     accelerator = accelerator or _make_accelerator(config)
+    require_exact_world_size(accelerator, config.train.required_world_size)
     _prepare_fresh_run_dir(run_dir, accelerator)
     tokenizer = getattr(getattr(config, "state", None), "gene_tokenizer", None)
     if tokenizer == "esm2" and canonical_gene_order is None:
@@ -382,6 +388,7 @@ def run_cross_validation(
 ) -> Path:
     """Execute all frozen outer folds and aggregate audited final artifacts."""
     config = load_config(config_path)
+    _require_authoritative_gene_batch_size(config)
     accelerator = accelerator or _make_accelerator(config)
     require_exact_world_size(accelerator, config.train.required_world_size)
     _run_distributed_preflight(config_path, accelerator)
