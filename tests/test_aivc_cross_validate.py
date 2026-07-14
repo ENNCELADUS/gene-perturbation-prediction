@@ -86,6 +86,26 @@ class _FakeAccelerator:
         return value if self._gathered is None else self._gathered
 
 
+class _ResponseAccessTrap:
+    def __init__(
+        self,
+        values: tuple[np.ndarray, ...],
+        sealed_index: int,
+    ) -> None:
+        self._values = values
+        self._sealed_index = sealed_index
+        self.response_access_count = 0
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __getitem__(self, index: int) -> np.ndarray:
+        if index == self._sealed_index:
+            self.response_access_count += 1
+            raise PermissionError("inner-validation observed response is sealed")
+        return self._values[index]
+
+
 def test_exp05_requires_exactly_four_ranks() -> None:
     with pytest.raises(RuntimeError, match="requires exactly 4 DDP ranks"):
         require_exact_world_size(types.SimpleNamespace(num_processes=1), expected=4)
@@ -808,7 +828,7 @@ def test_actual_gene_view_rejects_unauthorized_access_without_recording() -> Non
     bags = replace(_toy_bags(), access_recorder=recorder)
 
     with pytest.raises(ValueError, match="outer-test"):
-        bags.for_genes(("D",), stage="projector_fit")
+        bags.for_genes(("D",), stage="response_encoder_fit")
 
     assert recorder.to_frame().empty
     selected = bags.for_genes(fold.train_genes, stage="fine_tuning")
@@ -828,7 +848,7 @@ def test_aggregation_rejects_unauthorized_emitted_event() -> None:
                 "checkpoint_frozen": False,
             },
             {
-                "stage": "projector_fit",
+                "stage": "response_encoder_fit",
                 "outer_fold": 0,
                 "gene_count": 1,
                 "gene_set_sha256": cv._gene_set_sha256(fold.test_genes),
@@ -937,21 +957,77 @@ def test_esm2_state_pert_dim_mismatch_fails_closed() -> None:
         train_module._effective_state_pert_dim(state, 2024)
 
 
-def test_sealed_outer_test_supports_exactly_two_post_freeze_routes() -> None:
+def test_observed_b_shared_oracle_opens_only_after_checkpoint_freeze() -> None:
     bags = replace(
         _toy_bags(),
         access_recorder=GeneAccessRecorder(FoldSpec(0, ("A",), ("C",), ("B", "D"))),
     )
     sealed = SealedGeneBags(bags, ("B", "D"))
-    with pytest.raises(ValueError, match="selected checkpoint is frozen"):
-        sealed.open("generation_quality_outer_test", checkpoint_frozen=False)
-    for stage in ("generation_quality_outer_test", "observed_b_oracle_outer_test"):
+    with pytest.raises(PermissionError, match="selected checkpoint is frozen"):
+        sealed.open(
+            "observed_b_shared_oracle_outer_test",
+            checkpoint_frozen=False,
+        )
+    for stage in (
+        "generation_quality_outer_test",
+        "observed_b_shared_oracle_outer_test",
+    ):
         assert sealed.open(stage, checkpoint_frozen=True).genes.tolist() == ["B", "D"]
     label_view = sealed.label_view(checkpoint_frozen=True)
     assert label_view.genes.tolist() == ["B", "D"]
     assert all(bag.shape[0] == 0 for bag in label_view.input_bags)
     with pytest.raises(ValueError, match="only be opened"):
         sealed.open("fine_tuning", checkpoint_frozen=True)
+
+
+def test_observed_b_shared_oracle_receives_frozen_eval_checkpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = train_module._evaluate_observed_b_shared
+    observed = False
+
+    def assert_frozen(
+        model: torch.nn.Module,
+        data: GeneBags,
+        device: torch.device,
+    ) -> tuple[dict[str, float], pd.DataFrame]:
+        nonlocal observed
+        observed = True
+        assert not model.training
+        assert all(not parameter.requires_grad for parameter in model.parameters())
+        return original(model, data, device)
+
+    monkeypatch.setattr(train_module, "_evaluate_observed_b_shared", assert_frozen)
+
+    _run_tiny_audited_fold(tmp_path)
+
+    assert observed
+
+
+def test_inner_validation_never_reads_observed_response(tmp_path: Path) -> None:
+    data = _toy_bags()
+    input_trap = _ResponseAccessTrap(data.input_bags, sealed_index=2)
+    latent_trap = _ResponseAccessTrap(data.latent_bags, sealed_index=2)
+    sealed_validation = replace(
+        data,
+        input_bags=input_trap,  # type: ignore[arg-type]
+        latent_bags=latent_trap,  # type: ignore[arg-type]
+    )
+    config = _audited_config(tmp_path)
+
+    cv.run_training_fold(
+        config=config,
+        data=sealed_validation,
+        external=None,
+        fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        run_dir=tmp_path / "fold_0",
+        source_fingerprint="source",
+        accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
+    )
+
+    assert input_trap.response_access_count == 0
+    assert latent_trap.response_access_count == 0
 
 
 def test_run_training_fold_never_passes_outer_test_responses_to_fit(
@@ -1037,24 +1113,28 @@ def test_audited_training_writes_three_final_scopes_and_fit_audit(
     audit = pd.read_csv(paths["fit_access_audit"])
     assert set(audit["stage"]) >= {
         "adapter_fit",
+        "state_fit",
+        "response_encoder_fit",
+        "gmm_fit",
+        "c_head_fit",
         "transition_supervision",
         "gene_prompt_fit",
         "fine_tuning",
-        "early_stopping",
+        "early_stopping_prediction_only",
         "internal_outer_test",
         "generation_quality_outer_test",
-        "observed_b_oracle_outer_test",
+        "observed_b_shared_oracle_outer_test",
     }
     assert set(audit["stage"]).isdisjoint(
         {
-            "state_fit",
             "scvi_fit",
             "projector_fit",
-            "gmm_fit",
             "normalizer_fit",
             "layer_selection",
             "observed_b_oracle_fit",
             "observed_b_oracle_selection",
+            "observed_b_oracle_outer_test",
+            "early_stopping",
         }
     )
     assert not audit.loc[audit["stage"].str.endswith("fit"), "checkpoint_frozen"].any()
@@ -1098,7 +1178,7 @@ def test_audited_fit_summary_has_e2e_artifacts_only(tmp_path: Path) -> None:
         assert not (artifacts_dir / directory).exists()
 
 
-def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
+def test_outer_test_prediction_is_invariant_to_observed_response(
     tmp_path: Path,
 ) -> None:
     data = _toy_bags()
@@ -1144,6 +1224,15 @@ def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
         "checkpoint_sha256",
     ):
         assert first_audit[key] == second_audit[key]
+    first_predictions = pd.read_csv(first["predictions"])
+    second_predictions = pd.read_csv(second["predictions"])
+    first_internal = first_predictions.query(
+        "evaluation_scope == 'internal_outer_test'"
+    ).reset_index(drop=True)
+    second_internal = second_predictions.query(
+        "evaluation_scope == 'internal_outer_test'"
+    ).reset_index(drop=True)
+    pd.testing.assert_frame_equal(first_internal, second_internal)
 
 
 def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> None:
@@ -1163,11 +1252,18 @@ def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> Non
     )
 
     expected_hash = train_module._sha256_strings(fold.train_genes)
+    artifact_kinds = {
+        "esm_adapter_fit": "esm_adapter",
+        "state_fit": "state",
+        "response_encoder_fit": "response_encoder",
+        "gmm_fit": "trainable_gmm",
+        "c_head_fit": "c_head",
+    }
     metadata_paths = [
-        run_dir / "artifacts" / "response_encoder_fit" / "metadata.json",
-        run_dir / "artifacts" / "response_gmm_fit" / "metadata.json",
-        run_dir / "artifacts" / "esm_adapter_fit" / "metadata.json",
-        run_dir / "artifacts" / "c_head_fit" / "metadata.json",
+        *(
+            run_dir / "artifacts" / directory / "metadata.json"
+            for directory in artifact_kinds
+        ),
         run_dir / "models" / "best" / "metadata.json",
         run_dir / "models" / "final" / "metadata.json",
     ]
@@ -1181,6 +1277,14 @@ def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> Non
         assert metadata["train_genes"] == ["A", "B"]
         assert metadata["val_genes"] == ["C"]
         assert metadata["test_genes"] == ["D"]
+        assert set(metadata["fit_genes"]).isdisjoint(metadata["test_genes"])
+    for directory, expected_kind in artifact_kinds.items():
+        metadata = json.loads(
+            (run_dir / "artifacts" / directory / "metadata.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert metadata["kind"] == expected_kind
 
 
 def test_projector_cache_rejects_source_change_and_test_gene_contamination(
@@ -1507,7 +1611,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
                     in {
                         "internal_outer_test",
                         "generation_quality_outer_test",
-                        "observed_b_oracle_outer_test",
+                        "observed_b_shared_oracle_outer_test",
                     },
                 }
                 for stage in sorted(cv._mandatory_audit_stages(config))

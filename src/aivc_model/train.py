@@ -701,7 +701,16 @@ def _run_audited_training(
     best_epoch = 0
     logs = []
     for epoch in range(1, config.train.max_epochs + 1):
-        for stage in ("adapter_fit", "gene_prompt_fit", "transition_supervision"):
+        fit_stages = (
+            "adapter_fit",
+            "state_fit",
+            "response_encoder_fit",
+            "gmm_fit",
+            "c_head_fit",
+            "gene_prompt_fit",
+            "transition_supervision",
+        )
+        for stage in fit_stages:
             _authorize_data_access(train_data, stage)
         train_row = _run_epoch(
             model,
@@ -717,7 +726,7 @@ def _run_audited_training(
             max_epochs=config.train.max_epochs,
             max_grad_norm=config.train.max_grad_norm,
         )
-        for stage in ("adapter_fit", "gene_prompt_fit", "transition_supervision"):
+        for stage in fit_stages:
             train_data.record_access(stage)
         val_row, _ = _evaluate_prediction_only_final(
             model,
@@ -782,6 +791,7 @@ def _run_audited_training(
     selected_model = accelerator.unwrap_model(model)
     selected_model.load_state_dict(state_dict)
     selected_model.eval()
+    selected_model.requires_grad_(False)
     checkpoint_frozen = True
 
     label_test = sealed_test.label_view(checkpoint_frozen=True)
@@ -827,7 +837,7 @@ def _run_audited_training(
         pad_short=False,
     )
     oracle_data = sealed_test.open(
-        "observed_b_oracle_outer_test",
+        "observed_b_shared_oracle_outer_test",
         checkpoint_frozen=checkpoint_frozen,
     )
     oracle_metrics, oracle_predictions = _evaluate_observed_b_shared(
@@ -1262,20 +1272,25 @@ def _write_fitted_artifact_metadata(
 ) -> None:
     common = authority.metadata()
     payloads = {
+        "esm_adapter_fit": {
+            **common,
+            "kind": "esm_adapter",
+            "artifact_sha256": _module_sha256(model.perturbations),
+        },
+        "state_fit": {
+            **common,
+            "kind": "state",
+            "artifact_sha256": _module_sha256(model.state_adapter),
+        },
         "response_encoder_fit": {
             **common,
             "kind": "response_encoder",
             "artifact_sha256": _module_sha256(model.response_encoder),
         },
-        "response_gmm_fit": {
+        "gmm_fit": {
             **common,
-            "kind": "response_gmm",
+            "kind": "trainable_gmm",
             "artifact_sha256": _module_sha256(model.response_pooler),
-        },
-        "esm_adapter_fit": {
-            **common,
-            "kind": "esm_adapter",
-            "artifact_sha256": _module_sha256(model.perturbations),
         },
         "c_head_fit": {
             **common,
@@ -1917,6 +1932,10 @@ def _artifact_metadata_is_authorized(metadata: dict[str, object]) -> bool:
         "outer_fold",
         "fit_stage",
         "fit_genes_sha256",
+        "train_genes_sha256",
+        "val_genes_sha256",
+        "test_genes_sha256",
+        "fit_genes",
         "train_genes",
         "val_genes",
         "test_genes",
@@ -1926,14 +1945,22 @@ def _artifact_metadata_is_authorized(metadata: dict[str, object]) -> bool:
         return True
     if not authority_keys <= set(metadata):
         return False
+    fit = tuple(str(gene) for gene in metadata["fit_genes"])
     train = tuple(str(gene) for gene in metadata["train_genes"])
-    val = {str(gene) for gene in metadata["val_genes"]}
-    test = {str(gene) for gene in metadata["test_genes"]}
+    val_genes = tuple(str(gene) for gene in metadata["val_genes"])
+    test_genes = tuple(str(gene) for gene in metadata["test_genes"])
+    val = set(val_genes)
+    test = set(test_genes)
     selection = {str(gene) for gene in metadata["selection_genes"]}
     return (
-        not set(train).intersection(test)
+        fit == train
+        and not set(train).intersection(test)
         and selection.issubset(val)
-        and metadata["fit_genes_sha256"] == _sha256_strings(train)
+        and metadata["fit_genes_sha256"] == _sha256_strings(fit)
+        and metadata["train_genes_sha256"] == _sha256_strings(train)
+        and metadata["val_genes_sha256"] == _sha256_strings(val_genes)
+        and metadata["test_genes_sha256"]
+        == _sha256_strings(test_genes)
     )
 
 

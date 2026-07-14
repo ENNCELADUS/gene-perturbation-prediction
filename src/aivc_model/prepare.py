@@ -140,6 +140,10 @@ class ArtifactAuthority:
             "outer_fold": int(self.outer_fold),
             "fit_stage": self.fit_stage,
             "fit_genes_sha256": _sha256_strings(fit),
+            "train_genes_sha256": _sha256_strings(train),
+            "val_genes_sha256": _sha256_strings(val),
+            "test_genes_sha256": _sha256_strings(test),
+            "fit_genes": list(fit),
             "train_genes": list(train),
             "val_genes": list(val),
             "test_genes": list(test),
@@ -287,36 +291,28 @@ class GeneBags:
             checkpoint_frozen=checkpoint_frozen,
         )
         indices = [index_by_gene[gene] for gene in requested]
-        return GeneBags(
+        return replace(
+            self,
             genes=np.asarray([self.genes[index] for index in indices], dtype=object),
             y=np.asarray([self.y[index] for index in indices], dtype=np.float32),
             input_bags=tuple(self.input_bags[index] for index in indices),
             latent_bags=tuple(self.latent_bags[index] for index in indices),
-            control_input=self.control_input,
-            control_latent=self.control_latent,
             cell_type_bags=(
                 tuple(self.cell_type_bags[index] for index in indices)
                 if self.cell_type_bags is not None
                 else None
             ),
-            control_cell_type=self.control_cell_type,
             batch_bags=(
                 tuple(self.batch_bags[index] for index in indices)
                 if self.batch_bags is not None
                 else None
             ),
-            control_batch=self.control_batch,
-            feature_names=self.feature_names,
-            feature_fill_values=self.feature_fill_values,
             metadata=self.metadata.iloc[indices].reset_index(drop=True),
-            input_dim=self.input_dim,
-            latent_dim=self.latent_dim,
             gene_outer_folds=(
                 np.asarray([self.gene_outer_folds[index] for index in indices])
                 if self.gene_outer_folds is not None
                 else None
             ),
-            access_recorder=self.access_recorder,
         )
 
     def record_access(
@@ -334,6 +330,69 @@ class GeneBags:
             checkpoint_frozen=checkpoint_frozen,
         )
 
+    def for_prediction_genes(
+        self,
+        genes: tuple[str, ...],
+        stage: str,
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> GeneBags:
+        """Return a label/control-only view without reading observed responses."""
+        requested = tuple(str(gene).upper() for gene in genes)
+        if self.access_recorder is None:
+            raise ValueError(
+                "GeneBags.for_prediction_genes requires a GeneAccessRecorder"
+            )
+        if len(set(requested)) != len(requested):
+            raise ValueError("gene view contains duplicate requested genes")
+        index_by_gene = {
+            str(gene).upper(): index for index, gene in enumerate(self.genes)
+        }
+        missing = [gene for gene in requested if gene not in index_by_gene]
+        if missing:
+            raise ValueError(f"gene view contains unknown genes: {missing[:5]}")
+        self.access_recorder.record(
+            stage,
+            requested,
+            checkpoint_frozen=checkpoint_frozen,
+        )
+        indices = [index_by_gene[gene] for gene in requested]
+        return GeneBags(
+            genes=np.asarray([self.genes[index] for index in indices], dtype=object),
+            y=np.asarray([self.y[index] for index in indices], dtype=np.float32),
+            input_bags=tuple(
+                np.empty((0, self.input_dim), dtype=np.float32) for _ in indices
+            ),
+            latent_bags=tuple(
+                np.empty((0, self.latent_dim), dtype=np.float32) for _ in indices
+            ),
+            control_input=self.control_input,
+            control_latent=self.control_latent,
+            cell_type_bags=(
+                tuple(np.empty(0, dtype=object) for _ in indices)
+                if self.cell_type_bags is not None
+                else None
+            ),
+            control_cell_type=self.control_cell_type,
+            batch_bags=(
+                tuple(np.empty(0, dtype=object) for _ in indices)
+                if self.batch_bags is not None
+                else None
+            ),
+            control_batch=self.control_batch,
+            feature_names=self.feature_names,
+            feature_fill_values=self.feature_fill_values,
+            metadata=self.metadata.iloc[indices].reset_index(drop=True),
+            input_dim=self.input_dim,
+            latent_dim=self.latent_dim,
+            gene_outer_folds=(
+                np.asarray([self.gene_outer_folds[index] for index in indices])
+                if self.gene_outer_folds is not None
+                else None
+            ),
+            access_recorder=self.access_recorder,
+        )
+
 
 @dataclass(frozen=True)
 class SealedGeneBags:
@@ -348,43 +407,22 @@ class SealedGeneBags:
             raise ValueError(
                 "selected checkpoint is frozen before outer-test label access"
             )
-        selected = self._data.for_genes(
+        return self._data.for_prediction_genes(
             self._genes,
             stage="internal_outer_test",
             checkpoint_frozen=True,
-        )
-        return replace(
-            selected,
-            input_bags=tuple(
-                np.empty((0, selected.input_dim), dtype=np.float32)
-                for _ in selected.input_bags
-            ),
-            latent_bags=tuple(
-                np.empty((0, selected.latent_dim), dtype=np.float32)
-                for _ in selected.latent_bags
-            ),
-            cell_type_bags=(
-                tuple(np.empty(0, dtype=object) for _ in selected.cell_type_bags)
-                if selected.cell_type_bags is not None
-                else None
-            ),
-            batch_bags=(
-                tuple(np.empty(0, dtype=object) for _ in selected.batch_bags)
-                if selected.batch_bags is not None
-                else None
-            ),
         )
 
     def open(self, stage: str, checkpoint_frozen: bool) -> GeneBags:
         """Open the sealed response for one of the two authorized final routes."""
         allowed = {
             "generation_quality_outer_test",
-            "observed_b_oracle_outer_test",
+            "observed_b_shared_oracle_outer_test",
         }
         if stage not in allowed:
             raise ValueError("outer-test response can only be opened by final routes")
         if not checkpoint_frozen:
-            raise ValueError(
+            raise PermissionError(
                 "selected checkpoint is frozen before outer-test response access"
             )
         return self._data.for_genes(

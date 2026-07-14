@@ -27,8 +27,6 @@ from aivc_model.gene_splits import (
     FINAL_RESPONSE_STAGES,
     FIT_STAGES,
     FINAL_LABEL_STAGES,
-    ORACLE_FIT_STAGES,
-    ORACLE_SELECTION_STAGES,
     SELECTION_STAGES,
     FoldSpec,
     GeneAccessRecorder,
@@ -343,7 +341,10 @@ def run_training_fold(
     recorder = GeneAccessRecorder(fold_spec)
     data = replace(data, access_recorder=recorder)
     train_data = data.for_genes(fold_spec.train_genes, stage="fine_tuning")
-    val_data = data.for_genes(fold_spec.val_genes, stage="early_stopping")
+    val_data = data.for_prediction_genes(
+        fold_spec.val_genes,
+        stage="early_stopping_prediction_only",
+    )
     manifest = _manifest_from_bags(data)
     train_data = replace(
         train_data,
@@ -803,23 +804,25 @@ def _mandatory_audit_stages(config: AivcConfig) -> frozenset[str]:
     del config
     stages = {
         "adapter_fit",
+        "state_fit",
+        "response_encoder_fit",
+        "gmm_fit",
+        "c_head_fit",
         "transition_supervision",
         "gene_prompt_fit",
         "fine_tuning",
-        "early_stopping",
+        "early_stopping_prediction_only",
         "internal_outer_test",
         "generation_quality_outer_test",
-        "observed_b_oracle_outer_test",
+        "observed_b_shared_oracle_outer_test",
     }
     return frozenset(stages)
 
 
 def _stage_genes(stage: str, fold: FoldSpec) -> tuple[str, ...]:
-    if stage == "normalizer_fit":
-        return ()
-    if stage in FIT_STAGES | ORACLE_FIT_STAGES:
+    if stage in FIT_STAGES:
         return fold.train_genes
-    if stage in SELECTION_STAGES | ORACLE_SELECTION_STAGES:
+    if stage in SELECTION_STAGES:
         return fold.val_genes
     if stage in FINAL_RESPONSE_STAGES | FINAL_LABEL_STAGES:
         return fold.test_genes

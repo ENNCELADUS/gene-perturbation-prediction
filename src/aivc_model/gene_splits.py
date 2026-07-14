@@ -18,21 +18,23 @@ FIT_STAGES = frozenset(
     {
         "adapter_fit",
         "state_fit",
-        "scvi_fit",
+        "response_encoder_fit",
         "gmm_fit",
-        "normalizer_fit",
-        "projector_fit",
+        "c_head_fit",
         "transition_supervision",
         "gene_prompt_fit",
         "fine_tuning",
     }
 )
-SELECTION_STAGES = frozenset({"early_stopping", "layer_selection"})
-FINAL_RESPONSE_STAGES = frozenset(
-    {"generation_quality_outer_test", "observed_b_oracle_outer_test"}
+SELECTION_STAGES = frozenset(
+    {"early_stopping_prediction_only", "layer_selection"}
 )
-ORACLE_FIT_STAGES = frozenset({"observed_b_oracle_fit"})
-ORACLE_SELECTION_STAGES = frozenset({"observed_b_oracle_selection"})
+FINAL_RESPONSE_STAGES = frozenset(
+    {
+        "generation_quality_outer_test",
+        "observed_b_shared_oracle_outer_test",
+    }
+)
 FINAL_LABEL_STAGES = frozenset({"internal_outer_test"})
 
 
@@ -237,17 +239,17 @@ def assert_gene_access(
     train = {gene.upper() for gene in fold.train_genes}
     validation = {gene.upper() for gene in fold.val_genes}
     test = {gene.upper() for gene in fold.test_genes}
-    if stage in FIT_STAGES | ORACLE_FIT_STAGES:
+    if stage in FIT_STAGES:
         if not requested <= train:
             raise ValueError(f"{stage} attempted outer-test or validation gene access")
         return
-    if stage in SELECTION_STAGES | ORACLE_SELECTION_STAGES:
+    if stage in SELECTION_STAGES:
         if not requested <= validation:
             raise ValueError(f"{stage} must use inner-validation genes only")
         return
     if stage in FINAL_RESPONSE_STAGES:
         if not checkpoint_frozen:
-            raise ValueError(
+            raise PermissionError(
                 "selected checkpoint is frozen before outer-test response access"
             )
         if not requested <= test:
