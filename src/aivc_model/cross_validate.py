@@ -108,8 +108,8 @@ def _assert_locked_preflight_config(config: AivcConfig) -> None:
         raise ValueError("exp05 preflight requires exactly five outer folds")
     if config.data.state_hvg_n_top_genes is not None:
         raise ValueError("variance-HVG fallback is forbidden in repaired exp05")
-    if not config.train.freeze_state:
-        raise ValueError("repaired exp05 requires frozen STATE")
+    if config.train.freeze_state:
+        raise ValueError("repaired exp05 requires trainable STATE")
     if config.state.gene_tokenizer != "esm2" or not config.state.require_resolved_esm2:
         raise ValueError("repaired exp05 requires strict ESM-2 coverage")
     if config.state.representation_layer != "output":

@@ -373,6 +373,7 @@ def test_exp05_repaired_config_has_locked_contract() -> None:
     assert config.train.state_learning_rate == 0.0000025
     assert config.train.max_grad_norm == 1.0
     assert config.train.freeze_state is False
+    cv._assert_locked_preflight_config(config)
     assert config.cv.n_splits == 5
     assert config.cv.expected_gene_count == 9338
     assert config.cv.outer_split_manifest is not None
@@ -640,6 +641,7 @@ def _preflight_config(
             esm2_npz=esm_path,
             require_resolved_esm2=True,
         ),
+        train=replace(base.train, freeze_state=False),
         external_test=ExternalTestConfig(
             name="adamson_k562",
             overlap_csv=labels,
@@ -704,6 +706,49 @@ def test_preflight_verifies_all_frozen_assets_and_reports_counts(
         "adamson_upr_epistasis_matches": "1/3",
         "adamson_upr_perturb_seq_matches": "1/3",
     }
+
+
+def test_distributed_preflight_accepts_trainable_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    assert config.train.freeze_state is False
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "nccl")
+    monkeypatch.setattr(
+        torch.distributed,
+        "broadcast_object_list",
+        lambda values, src, device: None,
+    )
+
+    cv._run_distributed_preflight(
+        tmp_path / "config.yaml",
+        _FourRankMainAccelerator(),  # type: ignore[arg-type]
+    )
+
+
+def test_distributed_preflight_rejects_frozen_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    frozen_config = replace(
+        config,
+        train=replace(config.train, freeze_state=True),
+    )
+    monkeypatch.setattr(cv, "load_config", lambda _path: frozen_config)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "nccl")
+    monkeypatch.setattr(
+        torch.distributed,
+        "broadcast_object_list",
+        lambda values, src, device: None,
+    )
+
+    with pytest.raises(RuntimeError, match="requires trainable STATE"):
+        cv._run_distributed_preflight(
+            tmp_path / "config.yaml",
+            _FourRankMainAccelerator(),  # type: ignore[arg-type]
+        )
 
 
 def test_preflight_rejects_nonfinite_prepared_cache(

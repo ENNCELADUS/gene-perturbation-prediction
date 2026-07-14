@@ -40,6 +40,7 @@ def test_launcher_uses_exactly_four_processes() -> None:
     assert "--num_processes 4" in script
     assert "--mixed_precision bf16" in script
     assert "aivc_model.cross_validate" in script
+    assert '"$PYTHON_BIN" "$ACCELERATE_BIN" launch \\' in script
 
 
 def test_state_slurm_script_delegates_to_shared_launcher() -> None:
