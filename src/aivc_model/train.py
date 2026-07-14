@@ -2075,6 +2075,7 @@ def _loss_weights(config: AivcConfig, epoch: int | None = None) -> LossWeights:
         pred_c=config.loss.pred_c_weight,
         obs_c=config.loss.obs_c_weight,
         occupancy=config.loss.occupancy_weight * b_loss_scale,
+        gmm_nll=config.loss.gmm_nll_weight * b_loss_scale,
         pred_rank=config.loss.pred_rank_weight,
         pred_rank_tau=config.loss.pred_rank_tau,
         pred_rank_pair_margin=config.loss.pred_rank_pair_margin,

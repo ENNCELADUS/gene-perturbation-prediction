@@ -344,20 +344,12 @@ def _distributed_rank_safety_worker(
         marker.write_text("propagated\n", encoding="utf-8")
 
 
-def test_exp05_repaired_config_has_locked_contract(tmp_path: Path) -> None:
+def test_exp05_repaired_config_has_locked_contract() -> None:
     path = Path("configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml")
-    with pytest.raises(ValueError, match="gene_batch_size must be 1"):
-        load_config(path)
-    repaired_path = tmp_path / path.name
-    repaired_path.write_text(
-        path.read_text(encoding="utf-8").replace(
-            "  gene_batch_size: 4\n",
-            "  gene_batch_size: 1\n",
-        ),
-        encoding="utf-8",
-    )
-    config = load_config(repaired_path)
+    config = load_config(path)
     assert config.data.h5ad_path.name == "K562_gwps_normalized_singlecell_01.h5ad"
+    assert config.data.prepared_cache_dir is not None
+    assert config.data.prepared_cache_dir.name == "k562_gwps_state2000_v2"
     assert config.data.var_gene_symbol_col == "gene_name"
     assert config.data.state_hvg_n_top_genes is None
     assert config.state.gene_tokenizer == "esm2"
@@ -368,8 +360,19 @@ def test_exp05_repaired_config_has_locked_contract(tmp_path: Path) -> None:
     assert config.state.input_dim == 2000
     assert config.state.output_dim == 2000
     assert config.state.pert_dim == 2024
+    assert config.response_encoder is not None
+    assert config.response_encoder.input_dim == 2000
+    assert config.response_encoder.latent_dim == 128
+    assert config.gmm.n_components == 64
+    assert config.gmm.covariance_floor == 0.0001
+    assert config.gmm.init_scale == 0.02
+    assert config.train.run_id == "state_esm2_response_gmm_ddp_outer5"
     assert config.train.gene_batch_size == 1
-    assert config.train.freeze_state is True
+    assert config.train.required_world_size == 4
+    assert config.train.learning_rate == 0.000025
+    assert config.train.state_learning_rate == 0.0000025
+    assert config.train.max_grad_norm == 1.0
+    assert config.train.freeze_state is False
     assert config.cv.n_splits == 5
     assert config.cv.expected_gene_count == 9338
     assert config.cv.outer_split_manifest is not None

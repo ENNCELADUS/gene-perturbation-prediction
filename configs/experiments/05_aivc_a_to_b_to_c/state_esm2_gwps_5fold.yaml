@@ -2,7 +2,7 @@
 data:
   h5ad_path: data/sl_dependency_v0/raw/replogle/K562_gwps_normalized_singlecell_01.h5ad
   overlap_csv: data/sl_dependency_v0/interim/k562_gwps_depmap_overlap.csv
-  prepared_cache_dir: data/exp05_cache/k562_gwps_state2000
+  prepared_cache_dir: data/exp05_cache/k562_gwps_state2000_v2
   output_dir: results/experiments/05_aivc_a_to_b_to_c
   obs_perturbation_col: gene
   control_label: non-targeting
@@ -11,7 +11,6 @@ data:
   var_gene_symbol_col: gene_name
   state_embed_key: X_hvg
   state_hvg_n_top_genes: null
-  scvi_obsm_key: null
   depmap_label_col: depmap_gene_effect
   matched_label_col: has_depmap_label
   min_cells_per_gene: 8
@@ -57,24 +56,15 @@ state:
   require_resolved_esm2: true
   representation_layer: output
 
-projector:
-  teacher: scvi
+response_encoder:
+  input_dim: 2000
   latent_dim: 128
-  ridge_alpha: 1.0
-  trainable: true
-  scvi_max_epochs: 100
-  scvi_batch_size: 256
-  scvi_num_workers: 4
-  scvi_hidden_units: 128
-  scvi_layers: 2
-  scvi_dropout: 0.1
-  scvi_disable_lightning_logger: true
-  scvi_suppress_slurm_warning: true
 
 gmm:
   n_components: 64
   covariance_floor: 0.0001
-  max_fit_cells: 20000
+  init_scale: 0.02
+  trainable: true
 
 model:
   c_hidden_units: [64, 32]
@@ -87,7 +77,8 @@ loss:
   hvg_energy_weight: 0.0
   pred_c_weight: 2.0
   obs_c_weight: 0.25
-  occupancy_weight: 0.0
+  occupancy_weight: 0.1
+  gmm_nll_weight: 0.01
   pred_rank_weight: 5.0
   pred_rank_tau: 0.25
   pred_rank_pair_margin: 0.25
@@ -96,13 +87,15 @@ loss:
   b_loss_anneal_final_fraction: 0.1
 
 train:
-  run_id: state_esm2_gwps_5fold
+  run_id: state_esm2_response_gmm_ddp_outer5
   seed: 42
   max_epochs: 20
   learning_rate: 0.000025
+  state_learning_rate: 0.0000025
   weight_decay: 0.0001
+  max_grad_norm: 1.0
   cell_set_len: 256
-  gene_batch_size: 4
+  gene_batch_size: 1
+  required_world_size: 4
   device: auto
   float32_matmul_precision: high
-  freeze_state: true
