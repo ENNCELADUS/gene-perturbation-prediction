@@ -52,6 +52,20 @@ class _SingleProcessAccelerator:
 
 class _FourRankMainAccelerator(_SingleProcessAccelerator):
     num_processes = 4
+    device = torch.device("cuda", 0)
+    _aivc_exp05_cuda_topology = (
+        4,
+        tuple(("cuda", index) for index in range(4)),
+    )
+
+
+def _mark_cuda_topology_validated(accelerator: object) -> object:
+    setattr(
+        accelerator,
+        "_aivc_exp05_cuda_topology",
+        (4, tuple(("cuda", index) for index in range(4))),
+    )
+    return accelerator
 
 
 class _FakeAccelerator:
@@ -61,10 +75,11 @@ class _FakeAccelerator:
         is_main_process: bool,
         num_processes: int,
         gathered: torch.Tensor | None = None,
+        device: torch.device = torch.device("cpu"),
     ) -> None:
         self.is_main_process = is_main_process
         self.num_processes = num_processes
-        self.device = torch.device("cpu")
+        self.device = device
         self._gathered = gathered
 
     def gather(self, value: torch.Tensor) -> torch.Tensor:
@@ -74,6 +89,59 @@ class _FakeAccelerator:
 def test_exp05_requires_exactly_four_ranks() -> None:
     with pytest.raises(RuntimeError, match="requires exactly 4 DDP ranks"):
         require_exact_world_size(types.SimpleNamespace(num_processes=1), expected=4)
+
+
+def test_exp05_rejects_four_cpu_processes(monkeypatch: pytest.MonkeyPatch) -> None:
+    accelerator = _FakeAccelerator(is_main_process=True, num_processes=4)
+
+    def gather(assignments: list[object], _local: object) -> None:
+        assignments[:] = [("cpu", None)] * 4
+
+    monkeypatch.setattr(torch.distributed, "all_gather_object", gather)
+
+    with pytest.raises(RuntimeError, match="requires CUDA on every rank"):
+        require_exact_world_size(accelerator)  # type: ignore[arg-type]
+
+
+def test_exp05_rejects_duplicate_cuda_assignments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    accelerator = _FakeAccelerator(
+        is_main_process=True,
+        num_processes=4,
+        device=torch.device("cuda", 0),
+    )
+
+    def gather(assignments: list[object], _local: object) -> None:
+        assignments[:] = [("cuda", 0), ("cuda", 1), ("cuda", 1), ("cuda", 3)]
+
+    monkeypatch.setattr(torch.distributed, "all_gather_object", gather)
+
+    with pytest.raises(RuntimeError, match="4 distinct CUDA device assignments"):
+        require_exact_world_size(accelerator)  # type: ignore[arg-type]
+
+
+def test_exp05_cuda_topology_guard_is_collective_once_per_accelerator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    accelerator = _FakeAccelerator(
+        is_main_process=True,
+        num_processes=4,
+        device=torch.device("cuda", 0),
+    )
+    gather_calls = 0
+
+    def gather(assignments: list[object], _local: object) -> None:
+        nonlocal gather_calls
+        gather_calls += 1
+        assignments[:] = [("cuda", index) for index in range(4)]
+
+    monkeypatch.setattr(torch.distributed, "all_gather_object", gather)
+
+    require_exact_world_size(accelerator)  # type: ignore[arg-type]
+    require_exact_world_size(accelerator)  # type: ignore[arg-type]
+
+    assert gather_calls == 1
 
 
 def test_rank_zero_exception_is_raised_on_every_rank(
@@ -102,6 +170,91 @@ def test_zero_optimizer_steps_on_any_rank_is_rejected() -> None:
     )
     with pytest.raises(RuntimeError, match="rank optimizer-step counts.*0"):
         assert_all_ranks_stepped(accelerator, local_steps=8)  # type: ignore[arg-type]
+
+
+def test_run_training_guards_audited_entrypoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _audited_config(tmp_path)
+    accelerator = _SingleProcessAccelerator()
+    guarded: list[object] = []
+    data = _toy_bags()
+    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    monkeypatch.setattr(
+        train_module,
+        "require_exact_world_size",
+        lambda value, expected: guarded.append((value, expected)),
+        raising=False,
+    )
+    monkeypatch.setattr(train_module, "_run_audited_training", lambda **_kwargs: {})
+
+    train_module.run_training(
+        config,
+        accelerator=accelerator,  # type: ignore[arg-type]
+        train_data=data,
+        val_data=data,
+        sealed_test=SealedGeneBags(data, fold.test_genes),
+        fold_spec=fold,
+        run_dir_override=tmp_path / "fold_0",
+        source_fingerprint="source",
+        canonical_gene_order=tuple(str(gene) for gene in data.genes),
+    )
+
+    assert guarded == [(accelerator, 4)]
+
+
+def test_run_training_fold_guards_direct_accelerator_construction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _audited_config(tmp_path)
+    accelerator = _SingleProcessAccelerator()
+    guarded: list[object] = []
+    monkeypatch.setattr(cv, "_make_accelerator", lambda _config: accelerator)
+    monkeypatch.setattr(
+        cv,
+        "require_exact_world_size",
+        lambda value, expected: guarded.append((value, expected)),
+    )
+    monkeypatch.setattr(cv, "_prepare_fresh_run_dir", lambda *_args: None)
+    monkeypatch.setattr(cv, "run_training", lambda *_args, **_kwargs: {})
+
+    cv.run_training_fold(
+        config=config,
+        data=_toy_bags(),
+        external=None,
+        fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        run_dir=tmp_path / "fold_0",
+        source_fingerprint="source",
+    )
+
+    assert guarded == [(accelerator, 4)]
+
+
+def test_run_training_fold_rejects_gene_batch_size_four_before_construction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _audited_config(tmp_path)
+    config = replace(config, train=replace(config.train, gene_batch_size=4))
+    monkeypatch.setattr(
+        cv,
+        "_make_accelerator",
+        lambda _config: pytest.fail("Accelerator constructed before config rejection"),
+    )
+
+    with pytest.raises(ValueError, match="gene_batch_size must be 1"):
+        cv.run_training_fold(
+            config=config,
+            data=_toy_bags(),
+            external=None,
+            fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+            run_dir=tmp_path / "fold_0",
+            source_fingerprint="source",
+        )
+
+    assert not (tmp_path / "fold_0").exists()
 
 
 @pytest.fixture(autouse=True)
@@ -171,9 +324,19 @@ def _distributed_rank_safety_worker(
         marker.write_text("propagated\n", encoding="utf-8")
 
 
-def test_exp05_repaired_config_has_locked_contract() -> None:
+def test_exp05_repaired_config_has_locked_contract(tmp_path: Path) -> None:
     path = Path("configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml")
-    config = load_config(path)
+    with pytest.raises(ValueError, match="gene_batch_size must be 1"):
+        load_config(path)
+    repaired_path = tmp_path / path.name
+    repaired_path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  gene_batch_size: 4\n",
+            "  gene_batch_size: 1\n",
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(repaired_path)
     assert config.data.h5ad_path.name == "K562_gwps_normalized_singlecell_01.h5ad"
     assert config.data.var_gene_symbol_col == "gene_name"
     assert config.data.state_hvg_n_top_genes is None
@@ -185,6 +348,7 @@ def test_exp05_repaired_config_has_locked_contract() -> None:
     assert config.state.input_dim == 2000
     assert config.state.output_dim == 2000
     assert config.state.pert_dim == 2024
+    assert config.train.gene_batch_size == 1
     assert config.train.freeze_state is True
     assert config.cv.n_splits == 5
     assert config.cv.expected_gene_count == 9338
@@ -293,14 +457,20 @@ train:
     return load_config(config_path)
 
 
+def _validated_cpu_accelerator(config: AivcConfig) -> object:
+    return _mark_cuda_topology_validated(train_module._make_accelerator(config))
+
+
 def _run_tiny_audited_fold(tmp_path: Path) -> dict[str, Path]:
+    config = _audited_config(tmp_path)
     return cv.run_training_fold(
-        config=_audited_config(tmp_path),
+        config=config,
         data=_toy_bags(),
         external=None,
         fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
         run_dir=tmp_path / "fold_0",
         source_fingerprint="source",
+        accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
     )
 
 
@@ -817,11 +987,18 @@ def test_run_training_fold_never_passes_outer_test_responses_to_fit(
 
     monkeypatch.setattr(cv, "run_training", fake_run_training)
     common = {
-        "config": types.SimpleNamespace(),
+        "config": types.SimpleNamespace(
+            train=types.SimpleNamespace(
+                gene_batch_size=1,
+                required_world_size=4,
+            )
+        ),
         "external": None,
         "fold_spec": fold,
         "source_fingerprint": "source",
-        "accelerator": _SingleProcessAccelerator(),
+        "accelerator": _mark_cuda_topology_validated(
+            _SingleProcessAccelerator()
+        ),
     }
     cv.run_training_fold(data=data, run_dir=tmp_path / "first", **common)
     changed_bags = list(data.input_bags)
@@ -839,14 +1016,16 @@ def test_audited_training_writes_three_final_scopes_and_fit_audit(
 ) -> None:
     data = _toy_bags()
     fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
+    config = _audited_config(tmp_path)
 
     paths = cv.run_training_fold(
-        config=_audited_config(tmp_path),
+        config=config,
         data=data,
         external=None,
         fold_spec=fold,
         run_dir=tmp_path / "fold_0",
         source_fingerprint="source",
+        accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
     )
 
     predictions = pd.read_csv(paths["predictions"])
@@ -925,6 +1104,7 @@ def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
     data = _toy_bags()
     fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
     config = _audited_config(tmp_path)
+    accelerator = _validated_cpu_accelerator(config)
     first = cv.run_training_fold(
         config=config,
         data=data,
@@ -932,6 +1112,7 @@ def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
         fold_spec=fold,
         run_dir=tmp_path / "first",
         source_fingerprint="source",
+        accelerator=accelerator,  # type: ignore[arg-type]
     )
     changed_input = list(data.input_bags)
     changed_latent = list(data.latent_bags)
@@ -949,6 +1130,7 @@ def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
         fold_spec=fold,
         run_dir=tmp_path / "changed",
         source_fingerprint="source",
+        accelerator=accelerator,  # type: ignore[arg-type]
     )
     first_audit = json.loads(first["fit_audit_summary"].read_text())
     second_audit = json.loads(second["fit_audit_summary"].read_text())
@@ -968,6 +1150,7 @@ def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> Non
     run_dir = tmp_path / "authority"
     fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
     config = _fingerprinted_config(tmp_path)
+    accelerator = _validated_cpu_accelerator(config)
 
     cv.run_training_fold(
         config=config,
@@ -976,6 +1159,7 @@ def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> Non
         fold_spec=fold,
         run_dir=run_dir,
         source_fingerprint="source",
+        accelerator=accelerator,  # type: ignore[arg-type]
     )
 
     expected_hash = train_module._sha256_strings(fold.train_genes)
@@ -1132,14 +1316,16 @@ def test_run_training_fold_rejects_nonempty_run_directory(tmp_path: Path) -> Non
     run_dir.mkdir()
     (run_dir / "stale.txt").write_text("stale", encoding="utf-8")
 
+    config = _audited_config(tmp_path)
     with pytest.raises(RuntimeError, match="fresh run directory"):
         cv.run_training_fold(
-            config=_audited_config(tmp_path),
+            config=config,
             data=_toy_bags(),
             external=None,
             fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
             run_dir=run_dir,
             source_fingerprint="source",
+            accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
         )
 
 
@@ -1184,6 +1370,7 @@ def test_audited_esm_uses_exact_canonical_manifest_order(
             require_resolved_esm2=True,
         ),
     )
+    accelerator = _validated_cpu_accelerator(config)
     monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 4)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 4)
     monkeypatch.setattr(
@@ -1200,6 +1387,7 @@ def test_audited_esm_uses_exact_canonical_manifest_order(
         run_dir=tmp_path / "esm_fold",
         source_fingerprint="source",
         canonical_gene_order=canonical_order,
+        accelerator=accelerator,  # type: ignore[arg-type]
     )
 
     evidence = json.loads(paths["runtime_evidence"].read_text())
@@ -1236,6 +1424,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
             seed=42,
             device="cpu",
             required_world_size=4,
+            gene_batch_size=1,
         ),
         projector=types.SimpleNamespace(teacher="obsm"),
         cv=types.SimpleNamespace(

@@ -6,17 +6,47 @@ import traceback
 from accelerate import Accelerator
 import torch
 
+_CUDA_TOPOLOGY_MARKER = "_aivc_exp05_cuda_topology"
+
 
 def require_exact_world_size(
     accelerator: Accelerator,
     expected: int = 4,
 ) -> None:
-    """Reject authoritative exp05 training outside the locked DDP topology."""
+    """Require one authoritative rank on each of four distinct CUDA devices."""
+    verified = getattr(accelerator, _CUDA_TOPOLOGY_MARKER, None)
+    if isinstance(verified, tuple) and len(verified) == 2 and verified[0] == expected:
+        return
     if accelerator.num_processes != expected:
         raise RuntimeError(
             f"authoritative exp05 requires exactly {expected} DDP ranks; "
             f"got {accelerator.num_processes}"
         )
+    local_assignment = (accelerator.device.type, accelerator.device.index)
+    assignments: list[object | None] = [None] * expected
+    torch.distributed.all_gather_object(assignments, local_assignment)
+    if any(
+        not isinstance(assignment, tuple)
+        or len(assignment) != 2
+        or assignment[0] != "cuda"
+        or not isinstance(assignment[1], int)
+        for assignment in assignments
+    ):
+        raise RuntimeError(
+            "authoritative exp05 requires CUDA on every rank; "
+            f"got assignments {tuple(assignments)}"
+        )
+    cuda_indices = tuple(int(assignment[1]) for assignment in assignments)  # type: ignore[index]
+    if len(set(cuda_indices)) != expected:
+        raise RuntimeError(
+            f"authoritative exp05 requires {expected} distinct CUDA device "
+            f"assignments; got {cuda_indices}"
+        )
+    setattr(
+        accelerator,
+        _CUDA_TOPOLOGY_MARKER,
+        (expected, tuple(assignments)),
+    )
 
 
 def run_rank_zero_or_raise(

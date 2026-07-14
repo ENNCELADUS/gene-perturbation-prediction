@@ -75,6 +75,16 @@ from aivc_model.prepare import (
 from aivc_model.train import _write_csv_if_main, run_training
 
 
+def _validated_cpu_accelerator(config: object) -> object:
+    accelerator = train_module._make_accelerator(config)
+    setattr(
+        accelerator,
+        "_aivc_exp05_cuda_topology",
+        (4, tuple(("cuda", index) for index in range(4))),
+    )
+    return accelerator
+
+
 def _toy_artifact_authority(
     *,
     source_fingerprint: str = "source",
@@ -1013,7 +1023,7 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     raw = raw.replace(
         "  device: cpu\n",
         "  device: cpu\n"
-        "  gene_batch_size: 4\n"
+        "  gene_batch_size: 1\n"
         "  learning_rate: 0.000025\n"
         "  state_learning_rate: 0.0000025\n"
         "  max_grad_norm: 0.5\n"
@@ -1034,7 +1044,7 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert default_config.train.input_tensor_cache_max_gib == 24.0
     assert default_config.loss.pred_rank_weight == 0.0
     assert default_config.loss.b_loss_anneal_epochs == 0
-    assert parsed.train.gene_batch_size == 4
+    assert parsed.train.gene_batch_size == 1
     assert parsed.train.learning_rate == 2.5e-5
     assert parsed.train.state_learning_rate == 2.5e-6
     assert parsed.train.max_grad_norm == 0.5
@@ -1059,6 +1069,7 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
         ),
         ({"max_grad_norm": 0.0}, "max_grad_norm must be positive"),
         ({"required_world_size": 1}, "required_world_size must be 4"),
+        ({"gene_batch_size": 4}, "gene_batch_size must be 1"),
     ],
 )
 def test_train_config_rejects_invalid_e2e_settings(
@@ -2917,7 +2928,10 @@ train:
         fail_non_train_target_chunking,
     )
 
-    paths = run_training(config)
+    paths = run_training(
+        config,
+        accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
+    )
 
     assert paths["train_log"].exists()
     assert paths["test_metrics"].exists()
@@ -3257,7 +3271,11 @@ def test_train_smoke_writes_external_adamson_outputs(tmp_path: Path) -> None:
         max_epochs=2,
     )
 
-    paths = run_training(load_config(config_path))
+    config = load_config(config_path)
+    paths = run_training(
+        config,
+        accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
+    )
 
     run_dir = paths["run_dir"]
     test_metrics = pd.read_csv(paths["test_metrics"])
@@ -3301,7 +3319,11 @@ def test_external_metadata_does_not_contaminate_shared_internal_gene(
         max_epochs=1,
     )
 
-    paths = run_training(load_config(config_path))
+    config = load_config(config_path)
+    paths = run_training(
+        config,
+        accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
+    )
 
     predictions = pd.read_csv(paths["run_dir"] / "artifacts" / "test_predictions.csv")
     shared = predictions.loc[predictions["perturbation_gene"] == "GENE1"]

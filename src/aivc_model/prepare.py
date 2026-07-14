@@ -2204,6 +2204,7 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
     state_learning_rate = float(values.get("state_learning_rate", 2.5e-6))
     max_grad_norm = float(values.get("max_grad_norm", 1.0))
     required_world_size = int(values.get("required_world_size", 4))
+    gene_batch_size = int(values.get("gene_batch_size", 1))
     if state_learning_rate <= 0:
         raise ValueError("state_learning_rate must be positive")
     if state_learning_rate > learning_rate:
@@ -2212,6 +2213,8 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         raise ValueError("max_grad_norm must be positive")
     if required_world_size != 4:
         raise ValueError("required_world_size must be 4")
+    if gene_batch_size != 1:
+        raise ValueError("gene_batch_size must be 1 for authoritative exp05 training")
     return TrainConfig(
         run_id=values.get("run_id"),
         seed=int(values.get("seed", 42)),
@@ -2222,7 +2225,7 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         required_world_size=required_world_size,
         weight_decay=float(values.get("weight_decay", 1e-4)),
         cell_set_len=int(cell_set_len),
-        gene_batch_size=int(values.get("gene_batch_size", 1)),
+        gene_batch_size=gene_batch_size,
         device=str(values.get("device", "auto")),
         float32_matmul_precision=_str_or_none(
             values.get("float32_matmul_precision", "high")
