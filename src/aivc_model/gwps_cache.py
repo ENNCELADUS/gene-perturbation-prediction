@@ -12,6 +12,11 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 
+from aivc_model.expression import (
+    assert_finite_npy,
+    compute_finite_feature_means,
+    replace_nonfinite,
+)
 from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
     load_canonical_outer_manifest,
@@ -24,7 +29,7 @@ from aivc_model.prepare import (
     resolve_state_gene_order,
 )
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _STATE_FEATURE_COUNT = 2000
 _ROW_CHUNK_SIZE = 1024
 _ARRAY_FILENAMES = (
@@ -36,6 +41,7 @@ _ARRAY_FILENAMES = (
     "control_cells.npy",
     "control_batch.npy",
     "feature_names.npy",
+    "feature_fill_values.npy",
 )
 
 
@@ -196,10 +202,27 @@ def _build_gwps_cache(
             )
 
         cache_dir.mkdir(parents=True, exist_ok=True)
-        _write_matrix_rows(cache_dir / "cells.npy", adata.X, selected_rows, indices)
-        _write_matrix_rows(
-            cache_dir / "control_cells.npy", adata.X, control_rows, indices
+        fill_values = compute_finite_feature_means(
+            adata.X,
+            control_rows,
+            indices,
+            chunk_size=_ROW_CHUNK_SIZE,
         )
+        _write_matrix_rows(
+            cache_dir / "cells.npy",
+            adata.X,
+            selected_rows,
+            indices,
+            fill_values,
+        )
+        _write_matrix_rows(
+            cache_dir / "control_cells.npy",
+            adata.X,
+            control_rows,
+            indices,
+            fill_values,
+        )
+        _write_array(cache_dir / "feature_fill_values.npy", fill_values)
     finally:
         adata.file.close()
 
@@ -242,6 +265,10 @@ def _load_gwps_cache(
     if not manifest_path.exists():
         raise FileNotFoundError(manifest_path)
     manifest = json.loads(manifest_path.read_text())
+    if manifest.get("schema_version") != _SCHEMA_VERSION:
+        raise ValueError(f"GWPS cache schema must be version {_SCHEMA_VERSION}")
+    if manifest.get("arrays") != list(_ARRAY_FILENAMES):
+        raise ValueError("GWPS cache manifest array contract is invalid")
     feature_names = _load_array(cache_dir / "feature_names.npy")
     _validate_state_contract(model_dir, feature_names, contract)
     canonical = _load_canonical_manifest(config, canonical_path, contract)
@@ -272,6 +299,15 @@ def _load_gwps_cache(
     batch_labels = _load_array(cache_dir / "batch_labels.npy")
     control_cells = _load_array(cache_dir / "control_cells.npy")
     control_batch = _load_array(cache_dir / "control_batch.npy")
+    feature_fill_values = _load_array(cache_dir / "feature_fill_values.npy")
+    if feature_fill_values.shape != (contract.state_dim,) or not np.isfinite(
+        feature_fill_values
+    ).all():
+        raise ValueError(
+            "GWPS cache feature fill values must match the finite STATE dimension"
+        )
+    assert_finite_npy(cache_dir / "cells.npy")
+    assert_finite_npy(cache_dir / "control_cells.npy")
     input_bags = tuple(
         cells[int(offsets[index]) : int(offsets[index + 1])]
         for index in range(len(genes))
@@ -294,6 +330,7 @@ def _load_gwps_cache(
         batch_bags=batch_bags,
         control_batch=control_batch,
         feature_names=feature_names.astype(object),
+        feature_fill_values=feature_fill_values,
         metadata=metadata,
         input_dim=int(feature_names.shape[0]),
         latent_dim=int(feature_names.shape[0]),
@@ -487,6 +524,7 @@ def _write_matrix_rows(
     matrix: object,
     row_indices: np.ndarray,
     column_indices: np.ndarray,
+    fill_values: np.ndarray,
 ) -> None:
     """Stream selected backed rows and columns into a float32 NPY memmap."""
     target = np.lib.format.open_memmap(
@@ -502,7 +540,8 @@ def _write_matrix_rows(
         chunk = matrix[rows[order], :]
         if hasattr(chunk, "toarray"):
             chunk = chunk.toarray()
-        target[start:stop] = np.asarray(chunk)[np.argsort(order)][:, column_indices]
+        values = np.asarray(chunk)[np.argsort(order)][:, column_indices]
+        target[start:stop] = replace_nonfinite(values, fill_values)
     target.flush()
 
 

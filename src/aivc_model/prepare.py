@@ -20,6 +20,7 @@ from scipy import sparse
 from sklearn.model_selection import train_test_split
 import yaml
 
+from aivc_model.expression import compute_finite_feature_means, replace_nonfinite
 from aivc_model.gene_splits import GeneAccessRecorder
 
 _LABEL_RTOL = 1e-6
@@ -246,6 +247,7 @@ class GeneBags:
     metadata: pd.DataFrame
     input_dim: int
     latent_dim: int
+    feature_fill_values: np.ndarray | None = None
     gene_outer_folds: np.ndarray | None = None
     access_recorder: GeneAccessRecorder | None = None
 
@@ -294,6 +296,7 @@ class GeneBags:
             ),
             control_batch=self.control_batch,
             feature_names=self.feature_names,
+            feature_fill_values=self.feature_fill_values,
             metadata=self.metadata.iloc[indices].reset_index(drop=True),
             input_dim=self.input_dim,
             latent_dim=self.latent_dim,
@@ -451,6 +454,16 @@ def load_external_gene_bags(
     if reference.feature_names is None:
         msg = "External test loading requires reference feature_names"
         raise ValueError(msg)
+    if reference.feature_fill_values is None:
+        raise ValueError("External test loading requires reference feature fills")
+    feature_fill_values = np.asarray(
+        reference.feature_fill_values,
+        dtype=np.float32,
+    )
+    if feature_fill_values.shape != (reference.input_dim,) or not np.isfinite(
+        feature_fill_values
+    ).all():
+        raise ValueError("External test reference feature fills must be finite")
     metadata = _load_external_metadata(config)
     source_rows: list[pd.DataFrame] = []
     source_input_bags: list[np.ndarray] = []
@@ -469,6 +482,14 @@ def load_external_gene_bags(
                 metadata=_external_source_metadata(metadata, source.name),
                 reference=reference,
             )
+        )
+        bags = tuple(
+            replace_nonfinite(np.asarray(bag, dtype=np.float32), feature_fill_values)
+            for bag in bags
+        )
+        control_input = replace_nonfinite(
+            np.asarray(control_input, dtype=np.float32),
+            feature_fill_values,
         )
         source_qa.append(qa)
         if rows.empty:
@@ -543,6 +564,7 @@ def load_external_gene_bags(
         batch_bags=tuple(merged_batch_bags) if merged_batch_bags else None,
         control_batch=control_batch,
         feature_names=reference.feature_names,
+        feature_fill_values=reference.feature_fill_values,
         metadata=merged_metadata,
         input_dim=int(control_input.shape[1]),
         latent_dim=int(control_latent.shape[1]),
@@ -577,6 +599,11 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
         raise ValueError(msg)
     control_input = input_matrix[control_mask].astype(np.float32)
     control_latent = latent_matrix[control_mask].astype(np.float32)
+    feature_fill_values = compute_finite_feature_means(
+        input_matrix,
+        np.flatnonzero(control_mask),
+        np.arange(input_matrix.shape[1], dtype=np.int64),
+    )
     control_cell_type = (
         cell_type_labels[control_mask] if cell_type_labels is not None else None
     )
@@ -614,6 +641,7 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
         batch_bags=tuple(batch_bags) if batch_labels is not None else None,
         control_batch=control_batch,
         feature_names=feature_names,
+        feature_fill_values=feature_fill_values,
         metadata=kept,
         input_dim=int(control_input.shape[1]),
         latent_dim=int(control_latent.shape[1]),
@@ -1619,7 +1647,9 @@ def _external_state_input_view(
     reference_names = reference.feature_names.astype(str).tolist()
     source_names = _var_symbols(adata, source.var_gene_symbol_col)
     source_to_index = {name: index for index, name in enumerate(source_names)}
-    fill_values = reference.control_input.mean(axis=0).astype(np.float32)
+    if reference.feature_fill_values is None:
+        raise ValueError("Cannot align external expression without feature fills")
+    fill_values = np.asarray(reference.feature_fill_values, dtype=np.float32)
     matrix = np.tile(fill_values[None, :], (adata.n_obs, 1)).astype(np.float32)
     matched_reference_indices = []
     matched_source_indices = []
