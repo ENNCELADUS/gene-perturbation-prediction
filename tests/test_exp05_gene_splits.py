@@ -152,10 +152,9 @@ def test_gene_provenance_rejects_missing_and_conflicting_fold() -> None:
     [
         "adapter_fit",
         "state_fit",
-        "scvi_fit",
+        "response_encoder_fit",
         "gmm_fit",
-        "normalizer_fit",
-        "projector_fit",
+        "c_head_fit",
         "transition_supervision",
         "gene_prompt_fit",
         "fine_tuning",
@@ -169,7 +168,12 @@ def test_outer_test_gene_is_rejected_from_every_fit_stage(stage: str) -> None:
 
 def test_selection_accepts_only_inner_validation_genes() -> None:
     fold = _toy_fold_spec()
-    assert_gene_access("early_stopping", fold.val_genes, fold, checkpoint_frozen=False)
+    assert_gene_access(
+        "early_stopping_prediction_only",
+        fold.val_genes,
+        fold,
+        checkpoint_frozen=False,
+    )
     with pytest.raises(ValueError, match="inner-validation"):
         assert_gene_access("layer_selection", fold.train_genes, fold, False)
 
@@ -177,9 +181,12 @@ def test_selection_accepts_only_inner_validation_genes() -> None:
 def test_outer_test_response_has_only_two_post_freeze_routes() -> None:
     fold = _toy_fold_spec()
     gene = fold.test_genes[0]
-    for stage in ("generation_quality_outer_test", "observed_b_oracle_outer_test"):
+    for stage in (
+        "generation_quality_outer_test",
+        "observed_b_shared_oracle_outer_test",
+    ):
         assert_gene_access(stage, [gene], fold, checkpoint_frozen=True)
-    with pytest.raises(ValueError, match="selected checkpoint is frozen"):
+    with pytest.raises(PermissionError, match="selected checkpoint is frozen"):
         assert_gene_access(
             "generation_quality_outer_test", [gene], fold, checkpoint_frozen=False
         )

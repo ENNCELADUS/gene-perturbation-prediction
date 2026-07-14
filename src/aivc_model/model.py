@@ -12,6 +12,8 @@ from typing import Any
 import numpy as np
 from sklearn.mixture import GaussianMixture
 import torch
+import torch.distributed as dist
+from torch.distributed.nn.functional import all_gather as _differentiable_all_gather
 from torch import nn
 import torch.nn.functional as F
 
@@ -536,9 +538,10 @@ class AivcModel(nn.Module):
             )
         }
         valid_count = valid_mask.sum().clamp_min(1)
-        pred_rank = _pairwise_ranknet_loss(
-            stacked["pred_y"][valid_mask],
-            y_values[valid_mask],
+        pred_rank = _global_pairwise_ranknet_loss(
+            stacked["pred_y"],
+            y_values,
+            valid_mask,
             tau=float(weights.pred_rank_tau),
             pair_margin=float(weights.pred_rank_pair_margin),
             pair_weight_clip=float(weights.pred_rank_pair_weight_clip),
@@ -756,6 +759,58 @@ def _pairwise_ranknet_loss(
     weighted_loss = F.softplus(-target * score_delta[valid] / float(tau))
     weights = label_delta[valid].abs().clamp_max(float(pair_weight_clip))
     return (weighted_loss * weights).sum() / weights.sum().clamp_min(1e-8)
+
+
+def _global_pairwise_ranknet_loss(
+    pred_y: torch.Tensor,
+    y: torch.Tensor,
+    gene_mask: torch.Tensor,
+    *,
+    tau: float,
+    pair_margin: float,
+    pair_weight_clip: float,
+) -> torch.Tensor:
+    """Compute RankNet over the four-rank global gene batch under DDP."""
+    scores, labels = _global_ranknet_batch(pred_y, y, gene_mask)
+    return _pairwise_ranknet_loss(
+        scores,
+        labels,
+        tau=tau,
+        pair_margin=pair_margin,
+        pair_weight_clip=pair_weight_clip,
+    )
+
+
+def _global_ranknet_batch(
+    pred_y: torch.Tensor,
+    y: torch.Tensor,
+    gene_mask: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    scores = pred_y.reshape(-1)
+    labels = y.reshape(-1).to(device=scores.device, dtype=scores.dtype).detach()
+    mask = gene_mask.reshape(-1).to(device=scores.device, dtype=torch.bool).detach()
+    if scores.shape != labels.shape or scores.shape != mask.shape:
+        raise ValueError("RankNet predictions, labels, and mask must have equal shape")
+    if not dist.is_available() or not dist.is_initialized():
+        return scores[mask], labels[mask]
+    world_size = dist.get_world_size()
+    if world_size == 1:
+        return scores[mask], labels[mask]
+    if world_size != 4:
+        raise RuntimeError("Distributed RankNet requires exactly four ranks")
+
+    gathered_scores = _differentiable_all_gather(scores)
+    gathered_labels = [torch.empty_like(labels) for _ in range(world_size)]
+    dist.all_gather(gathered_labels, labels)
+    gathered_masks = [torch.empty_like(mask) for _ in range(world_size)]
+    dist.all_gather(gathered_masks, mask)
+    global_mask = torch.cat(gathered_masks)
+    # Every rank evaluates the same loss. All-gather sums its backward while DDP
+    # averages parameter gradients, so the world-size factors cancel exactly.
+    return (
+        torch.cat(gathered_scores)[global_mask],
+        torch.cat(gathered_labels)[global_mask],
+    )
 
 
 def _concat_optional_batch_indices(
