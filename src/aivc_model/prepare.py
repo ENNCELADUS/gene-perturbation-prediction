@@ -597,12 +597,20 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
     if not np.any(control_mask):
         msg = f"No control cells found for {config.data.control_label!r}"
         raise ValueError(msg)
-    control_input = input_matrix[control_mask].astype(np.float32)
-    control_latent = latent_matrix[control_mask].astype(np.float32)
     feature_fill_values = compute_finite_feature_means(
         input_matrix,
         np.flatnonzero(control_mask),
         np.arange(input_matrix.shape[1], dtype=np.int64),
+    )
+    control_input = replace_nonfinite(
+        input_matrix[control_mask],
+        feature_fill_values,
+    )
+    latent_uses_expression = latent_matrix is input_matrix
+    control_latent = (
+        control_input.copy()
+        if latent_uses_expression
+        else latent_matrix[control_mask].astype(np.float32)
     )
     control_cell_type = (
         cell_type_labels[control_mask] if cell_type_labels is not None else None
@@ -617,8 +625,13 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
             continue
         genes.append(gene)
         y_values.append(float(getattr(row, config.data.depmap_label_col)))
-        input_bags.append(input_matrix[mask].astype(np.float32))
-        latent_bags.append(latent_matrix[mask].astype(np.float32))
+        input_bag = replace_nonfinite(input_matrix[mask], feature_fill_values)
+        input_bags.append(input_bag)
+        latent_bags.append(
+            input_bag.copy()
+            if latent_uses_expression
+            else latent_matrix[mask].astype(np.float32)
+        )
         if cell_type_labels is not None:
             cell_type_bags.append(cell_type_labels[mask])
         if batch_labels is not None:

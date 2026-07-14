@@ -2750,6 +2750,44 @@ def test_external_adamson_sources_merge_and_mean_impute_missing_genes(
     np.testing.assert_allclose(external.data.input_bags[0][:, 1], reference_fill[1])
 
 
+def test_fallback_primary_loader_replaces_nonfinite_from_control_only(
+    tmp_path: Path,
+) -> None:
+    h5ad_path, overlap_path = _write_toy_inputs(tmp_path)
+    adata = ad.read_h5ad(h5ad_path)
+    values = np.asarray(adata.X, dtype=np.float32)
+    values[0, 0] = np.nan
+    values[4, 1] = np.inf
+    values[5, 2] = -7.0
+    adata.X = values
+    adata.write_h5ad(h5ad_path)
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    config = replace(
+        config,
+        data=replace(
+            config.data,
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+        ),
+    )
+
+    bags = load_gene_bags(config)
+
+    assert np.isfinite(bags.feature_fill_values).all()
+    assert np.isfinite(bags.control_input).all()
+    assert np.isfinite(bags.control_latent).all()
+    assert all(np.isfinite(bag).all() for bag in bags.input_bags)
+    assert all(np.isfinite(bag).all() for bag in bags.latent_bags)
+    np.testing.assert_allclose(
+        bags.feature_fill_values,
+        np.asarray([0.6, 0.55, 0.65], dtype=np.float32),
+    )
+    np.testing.assert_allclose(bags.control_latent, bags.control_input)
+    for input_bag, latent_bag in zip(bags.input_bags, bags.latent_bags, strict=True):
+        np.testing.assert_allclose(latent_bag, input_bag)
+    assert bags.input_bags[0][1, 2] == pytest.approx(-7.0)
+
+
 def test_external_adamson_reuses_reference_fills_for_nonfinite_values(
     tmp_path: Path,
 ) -> None:
