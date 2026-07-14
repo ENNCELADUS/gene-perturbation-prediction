@@ -140,8 +140,9 @@ def test_exp05_repaired_config_has_locked_contract() -> None:
 
 
 def _toy_bags(genes: tuple[str, ...] = ("A", "B", "C", "D")) -> GeneBags:
+    input_dim = 2000
     bags = tuple(
-        np.full((2, 2), index + 1, dtype=np.float32)
+        np.full((2, input_dim), index + 1, dtype=np.float32)
         for index, _gene in enumerate(genes)
     )
     metadata = pd.DataFrame(
@@ -156,17 +157,25 @@ def _toy_bags(genes: tuple[str, ...] = ("A", "B", "C", "D")) -> GeneBags:
         y=metadata["depmap_gene_effect"].to_numpy(dtype=np.float32),
         input_bags=bags,
         latent_bags=tuple(bag.copy() for bag in bags),
-        control_input=np.zeros((2, 2), dtype=np.float32),
-        control_latent=np.zeros((2, 2), dtype=np.float32),
+        control_input=np.zeros((2, input_dim), dtype=np.float32),
+        control_latent=np.zeros((2, input_dim), dtype=np.float32),
         cell_type_bags=None,
         control_cell_type=None,
         batch_bags=None,
         control_batch=None,
-        feature_names=np.asarray(["X", "Y"], dtype=object),
-        feature_fill_values=np.asarray([0.25, 0.75], dtype=np.float32),
+        feature_names=np.asarray(
+            [f"FEATURE_{index}" for index in range(input_dim)],
+            dtype=object,
+        ),
+        feature_fill_values=np.linspace(
+            0.25,
+            0.75,
+            input_dim,
+            dtype=np.float32,
+        ),
         metadata=metadata,
-        input_dim=2,
-        latent_dim=2,
+        input_dim=input_dim,
+        latent_dim=input_dim,
         gene_outer_folds=metadata["outer_fold"].to_numpy(dtype=np.int64),
     )
 
@@ -192,15 +201,19 @@ data:
   output_dir: {tmp_path / "outputs"}
 state:
   backend: linear_mock
-  input_dim: 2
-  output_dim: 2
+  input_dim: 2000
+  output_dim: 2000
   pert_dim: 2
+response_encoder:
+  input_dim: 2000
+  latent_dim: 128
 projector:
   teacher: obsm
   latent_dim: 2
   ridge_alpha: 0.1
 gmm:
   n_components: 2
+  init_scale: 0.02
   max_fit_cells: 8
 cv:
   outer_split_manifest: {split_path}
@@ -216,6 +229,17 @@ train:
         encoding="utf-8",
     )
     return load_config(config_path)
+
+
+def _run_tiny_audited_fold(tmp_path: Path) -> dict[str, Path]:
+    return cv.run_training_fold(
+        config=_audited_config(tmp_path),
+        data=_toy_bags(),
+        external=None,
+        fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        run_dir=tmp_path / "fold_0",
+        source_fingerprint="source",
+    )
 
 
 def _fingerprinted_config(tmp_path: Path) -> AivcConfig:
@@ -777,25 +801,70 @@ def test_audited_training_writes_three_final_scopes_and_fit_audit(
     assert set(predictions["evaluation_scope"]) == {
         "internal_outer_test",
         "generation_quality_outer_test",
-        "observed_b_oracle_outer_test",
+        "observed_b_shared_oracle_outer_test",
     }
     audit = pd.read_csv(paths["fit_access_audit"])
     assert set(audit["stage"]) >= {
-        "projector_fit",
-        "gmm_fit",
-        "normalizer_fit",
+        "adapter_fit",
+        "transition_supervision",
+        "gene_prompt_fit",
         "fine_tuning",
         "early_stopping",
-        "observed_b_oracle_fit",
-        "observed_b_oracle_selection",
+        "internal_outer_test",
         "generation_quality_outer_test",
         "observed_b_oracle_outer_test",
     }
-    assert set(audit["stage"]).isdisjoint({"state_fit", "scvi_fit", "layer_selection"})
+    assert set(audit["stage"]).isdisjoint(
+        {
+            "state_fit",
+            "scvi_fit",
+            "projector_fit",
+            "gmm_fit",
+            "normalizer_fit",
+            "layer_selection",
+            "observed_b_oracle_fit",
+            "observed_b_oracle_selection",
+        }
+    )
     assert not audit.loc[audit["stage"].str.endswith("fit"), "checkpoint_frozen"].any()
     fit_summary = json.loads(paths["fit_audit_summary"].read_text())
     assert fit_summary["checkpoint_sha256"]
     assert fit_summary["state_sha256"]
+
+
+def test_audited_exp05_never_calls_scvi_ridge_or_fixed_gmm(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("removed precursor path was called")
+
+    monkeypatch.setattr(train_module, "_fit_audited_scvi_latents", forbidden)
+    monkeypatch.setattr(train_module, "_fit_or_load_projector_cache", forbidden)
+    monkeypatch.setattr(train_module, "_fit_or_load_fixed_gmm_cache", forbidden)
+    monkeypatch.setattr(train_module, "_fit_observed_b_oracle", forbidden)
+
+    _run_tiny_audited_fold(tmp_path)
+
+
+def test_audited_fit_summary_has_e2e_artifacts_only(tmp_path: Path) -> None:
+    summary = _run_tiny_audited_fold(tmp_path)
+    payload = json.loads(summary["fit_audit_summary"].read_text())
+    artifacts_dir = summary["run_dir"] / "artifacts"
+
+    assert "response_encoder_sha256" in payload
+    assert "gmm_sha256" in payload
+    assert "c_head_sha256" in payload
+    assert "state_sha256" in payload
+    assert "scvi_sha256" not in payload
+    assert "projector_sha256" not in payload
+    for directory in (
+        "scvi_teacher_latents",
+        "scvi_teacher_model",
+        "ridge_projector_fit",
+        "fixed_gmm_fit",
+    ):
+        assert not (artifacts_dir / directory).exists()
 
 
 def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
@@ -834,15 +903,11 @@ def test_changing_outer_test_responses_cannot_change_fitted_artifacts(
     for key in (
         "adapter_sha256",
         "state_sha256",
-        "scvi_sha256",
+        "response_encoder_sha256",
         "gmm_sha256",
-        "normalizer_sha256",
-        "projector_sha256",
-        "selected_layer",
+        "c_head_sha256",
         "best_epoch",
         "checkpoint_sha256",
-        "oracle_best_epoch",
-        "oracle_checkpoint_sha256",
     ):
         assert first_audit[key] == second_audit[key]
 
@@ -863,12 +928,10 @@ def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> Non
 
     expected_hash = train_module._sha256_strings(fold.train_genes)
     metadata_paths = [
-        run_dir / "artifacts" / "ridge_projector_fit" / "metadata.json",
-        run_dir / "artifacts" / "fixed_gmm_fit" / "metadata.json",
-        run_dir / "artifacts" / "normalizer_fit" / "metadata.json",
+        run_dir / "artifacts" / "response_encoder_fit" / "metadata.json",
+        run_dir / "artifacts" / "response_gmm_fit" / "metadata.json",
         run_dir / "artifacts" / "esm_adapter_fit" / "metadata.json",
         run_dir / "artifacts" / "c_head_fit" / "metadata.json",
-        run_dir / "artifacts" / "observed_b_oracle_fit" / "metadata.json",
         run_dir / "models" / "best" / "metadata.json",
         run_dir / "models" / "final" / "metadata.json",
     ]
@@ -1012,53 +1075,6 @@ def test_audited_checkpoint_loader_rejects_missing_schema_v2_metadata(
         )
 
 
-def test_observed_b_oracle_selection_depends_on_validation_response_only(
-    tmp_path: Path,
-) -> None:
-    data = _toy_bags()
-    fold = FoldSpec(0, ("A", "B"), ("C",), ("D",))
-    config = replace(
-        _audited_config(tmp_path),
-        train=replace(
-            _audited_config(tmp_path).train,
-            max_epochs=20,
-            learning_rate=0.1,
-        ),
-    )
-    first = cv.run_training_fold(
-        config=config,
-        data=data,
-        external=None,
-        fold_spec=fold,
-        run_dir=tmp_path / "oracle_first",
-        source_fingerprint="source",
-    )
-    changed_input = list(data.input_bags)
-    changed_latent = list(data.latent_bags)
-    changed_input[2] = np.full_like(changed_input[2], -100.0)
-    changed_latent[2] = np.full_like(changed_latent[2], -100.0)
-    changed = replace(
-        data,
-        input_bags=tuple(changed_input),
-        latent_bags=tuple(changed_latent),
-    )
-    second = cv.run_training_fold(
-        config=config,
-        data=changed,
-        external=None,
-        fold_spec=fold,
-        run_dir=tmp_path / "oracle_changed_val",
-        source_fingerprint="source",
-    )
-    first_audit = json.loads(first["fit_audit_summary"].read_text())
-    second_audit = json.loads(second["fit_audit_summary"].read_text())
-    assert first_audit["checkpoint_sha256"] == second_audit["checkpoint_sha256"]
-    assert (
-        first_audit["oracle_checkpoint_sha256"]
-        != second_audit["oracle_checkpoint_sha256"]
-    )
-
-
 def test_run_training_fold_rejects_nonempty_run_directory(tmp_path: Path) -> None:
     run_dir = tmp_path / "fold_0"
     run_dir.mkdir()
@@ -1142,39 +1158,6 @@ def test_audited_esm_uses_exact_canonical_manifest_order(
     )
 
 
-def test_scvi_fit_event_is_emitted_only_when_fit_boundary_executes(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    base = _audited_config(tmp_path)
-    config = replace(base, projector=replace(base.projector, teacher="scvi"))
-    monkeypatch.setattr(
-        train_module,
-        "_fit_audited_scvi_latents",
-        lambda _config, train, val, _split, _artifacts, _accelerator, _authority: (
-            train,
-            val,
-        ),
-    )
-    monkeypatch.setattr(
-        train_module,
-        "_project_audited_scvi_data",
-        lambda _config, data, _artifacts: data,
-    )
-
-    paths = cv.run_training_fold(
-        config=config,
-        data=_toy_bags(),
-        external=None,
-        fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
-        run_dir=tmp_path / "scvi_fold",
-        source_fingerprint="source",
-    )
-
-    audit = pd.read_csv(paths["fit_access_audit"])
-    assert audit["stage"].tolist().count("scvi_fit") == 1
-
-
 def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1228,7 +1211,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         for scope in (
             "internal_outer_test",
             "generation_quality_outer_test",
-            "observed_b_oracle_outer_test",
+            "observed_b_shared_oracle_outer_test",
         ):
             rows.extend(
                 {
@@ -1260,7 +1243,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
                 for scope in (
                     "internal_outer_test",
                     "generation_quality_outer_test",
-                    "observed_b_oracle_outer_test",
+                    "observed_b_shared_oracle_outer_test",
                 )
             ]
         ).to_csv(metrics, index=False)
@@ -1323,7 +1306,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
     for scope in (
         "internal_outer_test",
         "generation_quality_outer_test",
-        "observed_b_oracle_outer_test",
+        "observed_b_shared_oracle_outer_test",
     ):
         rows = predictions.query("evaluation_scope == @scope")
         assert rows["perturbation_gene"].nunique() == 9338

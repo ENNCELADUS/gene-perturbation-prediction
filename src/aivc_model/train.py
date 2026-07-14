@@ -38,7 +38,6 @@ from tqdm import tqdm
 from aivc_model.model import (
     AivcModel,
     Esm2PerturbationAdapter,
-    ExpressionToLatentProjector,
     FixedGMMFeatureizer,
     LossWeights,
     MLPHead,
@@ -58,6 +57,7 @@ from aivc_model.prepare import (
     ExternalGeneBags,
     GeneBags,
     GeneSplit,
+    ResponseEncoderConfig,
     SealedGeneBags,
     encode_batch_labels,
     fit_linear_projector,
@@ -72,6 +72,7 @@ from aivc_model.prepare import (
     with_cached_scvi_teacher_latents,
     _sha256_strings,
 )
+from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
 from sl_dl_model.gene_embeddings import (
     load_esm2_embeddings,
@@ -636,58 +637,18 @@ def _run_audited_training(
         canonical_split_sha256=_canonical_split_sha256(config),
     )
 
-    train_split = GeneSplit(
-        train=np.arange(len(train_data.genes), dtype=np.int64),
-        val=np.asarray([], dtype=np.int64),
-        test=np.asarray([], dtype=np.int64),
-    )
-    if config.projector.teacher == "scvi":
-        _authorize_data_access(train_data, "scvi_fit")
-        train_data, val_data = _fit_audited_scvi_latents(
-            config,
-            train_data,
-            val_data,
-            train_split,
-            artifacts_dir,
-            accelerator,
-            authority,
-        )
-        train_data.record_access("scvi_fit")
-    _authorize_data_access(train_data, "projector_fit")
-    projector_weight, projector_bias = _fit_or_load_projector_cache(
-        config,
-        train_data,
-        train_split,
-        artifacts_dir,
-        authority=authority,
-    )
-    train_data.record_access("projector_fit")
-    _authorize_data_access(train_data, "gmm_fit")
-    featureizer = _fit_or_load_fixed_gmm_cache(
-        config,
-        train_data,
-        train_split,
-        artifacts_dir,
-        authority=authority,
-    )
-    train_data.record_access("gmm_fit")
     external_genes = (
         tuple(str(gene) for gene in external.data.genes) if external is not None else ()
     )
     if train_data.access_recorder is None:
         raise ValueError("audited training lost its gene access recorder")
-    train_data.access_recorder.authorize("normalizer_fit", ())
-    model = _build_model(
+    model = _build_e2e_model(
         config,
         train_data,
-        featureizer,
-        projector_weight,
-        projector_bias,
         extra_genes=(*fold_spec.val_genes, *fold_spec.test_genes, *external_genes),
+        canonical_gene_order=canonical_gene_order,
         emit_checkpoint_output=accelerator.is_main_process,
-        canonical_gene_override=canonical_gene_order,
     )
-    train_data.access_recorder.record("normalizer_fit", ())
     runtime_evidence = _runtime_evidence(
         model,
         train_data,
@@ -798,13 +759,6 @@ def _run_audited_training(
     selected_model.requires_grad_(False)
     checkpoint_frozen = True
 
-    oracle_fit = _fit_observed_b_oracle(
-        config,
-        train_data,
-        val_data,
-        fold_spec,
-    )
-
     label_test = sealed_test.label_view(checkpoint_frozen=True)
     label_loader = accelerator.prepare(
         _gene_loader(
@@ -827,12 +781,6 @@ def _run_audited_training(
         "generation_quality_outer_test",
         checkpoint_frozen=checkpoint_frozen,
     )
-    if config.projector.teacher == "scvi":
-        generation_data = _project_audited_scvi_data(
-            config,
-            generation_data,
-            artifacts_dir,
-        )
     generation_loader = accelerator.prepare(
         _gene_loader(
             np.arange(len(generation_data.genes), dtype=np.int64),
@@ -857,11 +805,10 @@ def _run_audited_training(
         "observed_b_oracle_outer_test",
         checkpoint_frozen=checkpoint_frozen,
     )
-    if config.projector.teacher == "scvi":
-        oracle_data = _project_audited_scvi_data(config, oracle_data, artifacts_dir)
-    oracle_metrics, oracle_predictions = _evaluate_observed_b_oracle(
-        oracle_fit,
+    oracle_metrics, oracle_predictions = _evaluate_observed_b_shared(
+        selected_model,
         oracle_data,
+        accelerator.device,
     )
     return _write_audited_fold_outputs(
         config=config,
@@ -869,20 +816,14 @@ def _run_audited_training(
         artifacts_dir=artifacts_dir,
         models_dir=models_dir,
         model=selected_model,
-        featureizer=featureizer,
-        projector_weight=projector_weight,
-        projector_bias=projector_bias,
         fold_spec=fold_spec,
         train_data=train_data,
-        val_data=val_data,
-        generation_data=generation_data,
         internal_metrics=internal_metrics,
         internal_predictions=internal_predictions,
         response_metrics=response_metrics,
         response_predictions=response_predictions,
         oracle_metrics=oracle_metrics,
         oracle_predictions=oracle_predictions,
-        oracle_fit=oracle_fit,
         external=external,
         batch_lookup=batch_lookup,
         accelerator=accelerator,
@@ -974,6 +915,48 @@ def _evaluate_observed_b_oracle(
         )
     y_true = np.asarray(data.y, dtype=np.float64)
     y_pred = np.asarray(predictions, dtype=np.float64)
+    metrics = regression_metrics(y_true, y_pred)
+    metrics.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
+    frame = pd.DataFrame(
+        {
+            "perturbation_gene": [str(gene) for gene in data.genes],
+            "y_true": y_true,
+            "y_pred": y_pred,
+            "n_chunks": np.ones(len(data.genes), dtype=float),
+        }
+    )
+    return metrics, frame
+
+
+def _evaluate_observed_b_shared(
+    model: AivcModel,
+    data: GeneBags,
+    device: torch.device,
+) -> tuple[dict[str, float], pd.DataFrame]:
+    """Evaluate observed B through the frozen shared response encoder and C head."""
+    control_expression = torch.as_tensor(
+        np.asarray(data.control_input, dtype=np.float32),
+        dtype=torch.float32,
+        device=device,
+    )
+    predictions = []
+    with torch.no_grad():
+        for bag in data.input_bags:
+            observed_expression = torch.as_tensor(
+                np.asarray(bag, dtype=np.float32),
+                dtype=torch.float32,
+                device=device,
+            )
+            predictions.append(
+                model.predict_c_from_response(
+                    observed_expression,
+                    control_expression,
+                )
+            )
+    y_true = np.asarray(data.y, dtype=np.float64)
+    y_pred = (
+        torch.stack(predictions).detach().cpu().numpy().astype(np.float64, copy=False)
+    )
     metrics = regression_metrics(y_true, y_pred)
     metrics.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
     frame = pd.DataFrame(
@@ -1132,21 +1115,15 @@ def _write_audited_fold_outputs(
     run_dir: Path,
     artifacts_dir: Path,
     models_dir: Path,
-    model: torch.nn.Module,
-    featureizer: torch.nn.Module,
-    projector_weight: np.ndarray,
-    projector_bias: np.ndarray,
+    model: AivcModel,
     fold_spec: FoldSpec,
     train_data: GeneBags,
-    val_data: GeneBags,
-    generation_data: GeneBags,
     internal_metrics: dict[str, float],
     internal_predictions: pd.DataFrame,
     response_metrics: dict[str, float],
     response_predictions: pd.DataFrame,
     oracle_metrics: dict[str, float],
     oracle_predictions: pd.DataFrame,
-    oracle_fit: ObservedBOracleFit,
     external: ExternalGeneBags | None,
     batch_lookup: dict[str, int],
     accelerator: Accelerator,
@@ -1161,12 +1138,6 @@ def _write_audited_fold_outputs(
     external_predictions = pd.DataFrame()
     if external is not None:
         external_data = external.data
-        if config.projector.teacher == "scvi":
-            external_data = _project_audited_scvi_data(
-                config,
-                external_data,
-                artifacts_dir,
-            )
         external_loader = accelerator.prepare(
             _gene_loader(
                 np.arange(len(external_data.genes), dtype=np.int64),
@@ -1216,22 +1187,11 @@ def _write_audited_fold_outputs(
         fit_summary = {
             "adapter_sha256": _module_sha256(model.perturbations),
             "state_sha256": _module_sha256(model.state_adapter),
-            "scvi_sha256": _scvi_model_sha256(artifacts_dir),
-            "gmm_sha256": _module_sha256(featureizer),
-            "normalizer_sha256": _arrays_sha256(
-                train_data.control_input,
-                train_data.control_latent,
-            ),
-            "projector_sha256": _arrays_sha256(
-                projector_weight,
-                projector_bias,
-            ),
-            "selected_layer": None,
+            "response_encoder_sha256": _module_sha256(model.response_encoder),
+            "gmm_sha256": _module_sha256(model.response_pooler),
+            "c_head_sha256": _module_sha256(model.c_head),
             "best_epoch": int(best_epoch),
             "checkpoint_sha256": _path_sha256(checkpoint_path),
-            "oracle_best_epoch": oracle_fit.best_epoch,
-            "oracle_checkpoint_sha256": oracle_fit.checkpoint_sha256,
-            "oracle_val_mse": oracle_fit.val_mse,
             "source_fingerprint": source_fingerprint,
             **authority.metadata(),
         }
@@ -1243,7 +1203,6 @@ def _write_audited_fold_outputs(
             artifacts_dir,
             authority,
             model,
-            oracle_fit,
         )
         _save_model_checkpoint(
             accelerator,
@@ -1269,13 +1228,18 @@ def _write_fitted_artifact_metadata(
     artifacts_dir: Path,
     authority: ArtifactAuthority,
     model: AivcModel,
-    oracle_fit: ObservedBOracleFit,
 ) -> None:
     common = authority.metadata()
     payloads = {
-        "normalizer_fit": {
+        "response_encoder_fit": {
             **common,
-            "kind": "normalizer",
+            "kind": "response_encoder",
+            "artifact_sha256": _module_sha256(model.response_encoder),
+        },
+        "response_gmm_fit": {
+            **common,
+            "kind": "response_gmm",
+            "artifact_sha256": _module_sha256(model.response_pooler),
         },
         "esm_adapter_fit": {
             **common,
@@ -1286,12 +1250,6 @@ def _write_fitted_artifact_metadata(
             **common,
             "kind": "c_head",
             "artifact_sha256": _module_sha256(model.c_head),
-        },
-        "observed_b_oracle_fit": {
-            **common,
-            "kind": "observed_b_oracle",
-            "artifact_sha256": oracle_fit.checkpoint_sha256,
-            "best_epoch": oracle_fit.best_epoch,
         },
     }
     for directory, payload in payloads.items():
@@ -1348,7 +1306,7 @@ def _audited_metric_rows(
         },
         {
             "outer_fold": outer_fold,
-            "evaluation_scope": "observed_b_oracle_outer_test",
+            "evaluation_scope": "observed_b_shared_oracle_outer_test",
             **oracle,
         },
     ]
@@ -1384,7 +1342,7 @@ def _audited_prediction_rows(
     oracle = oracle_response.copy()
     if "y_obs_anchor" in oracle:
         oracle["y_pred"] = oracle["y_obs_anchor"]
-    oracle.insert(0, "evaluation_scope", "observed_b_oracle_outer_test")
+    oracle.insert(0, "evaluation_scope", "observed_b_shared_oracle_outer_test")
     oracle.insert(0, "inner_role", "outer_test")
     oracle.insert(0, "outer_fold", fold.outer_fold)
     frames.append(oracle)
@@ -2070,6 +2028,100 @@ def _b_loss_anneal_scale(config: AivcConfig, epoch: int | None) -> float:
     return 1.0 - (1.0 - final_fraction) * (progress / float(epochs - 1))
 
 
+def _build_e2e_model(
+    config: AivcConfig,
+    data: GeneBags,
+    extra_genes: tuple[str, ...],
+    canonical_gene_order: tuple[str, ...],
+    emit_checkpoint_output: bool = True,
+) -> AivcModel:
+    expected_response_config = ResponseEncoderConfig(input_dim=2000, latent_dim=128)
+    if config.response_encoder != expected_response_config:
+        raise ValueError(
+            "audited exp05 requires response_encoder input_dim=2000 and "
+            "latent_dim=128"
+        )
+    pert_dim = config.state.pert_dim
+    tokenizer = config.state.gene_tokenizer
+    known_vectors: dict[str, np.ndarray] = {}
+    canonical_genes: list[str] = []
+    esm = None
+    if tokenizer == "state_onehot":
+        known_vectors = load_perturbation_vectors(
+            config.state.known_perturbation_vectors
+        )
+        if pert_dim is None:
+            pert_dim = _infer_pert_dim(known_vectors)
+    elif tokenizer == "esm2":
+        if pert_dim is None:
+            raise ValueError("state.pert_dim is required for gene_tokenizer=esm2")
+        canonical_genes = _canonical_esm2_genes(
+            config,
+            data,
+            canonical_gene_override=canonical_gene_order,
+        )
+        if config.state.esm2_npz is None:
+            raise ValueError("state.esm2_npz is required for gene_tokenizer=esm2")
+        esm = load_esm2_embeddings(config.state.esm2_npz)
+        require_complete_esm_coverage(canonical_genes, esm)
+    else:
+        raise ValueError(f"Unknown state.gene_tokenizer: {tokenizer}")
+    output_dim = config.state.output_dim or data.input_dim
+    state_model = load_state_model(
+        backend=config.state.backend,
+        checkpoint_path=config.state.checkpoint_path,
+        input_dim=config.state.input_dim or data.input_dim,
+        output_dim=output_dim,
+        pert_dim=pert_dim,
+        emit_checkpoint_output=emit_checkpoint_output,
+    )
+    if tokenizer == "esm2":
+        if esm is None:
+            raise AssertionError("ESM-2 table was not loaded")
+        effective_pert_dim = _effective_state_pert_dim(state_model, pert_dim)
+        all_genes = canonical_genes + sorted(
+            set(str(gene).upper() for gene in extra_genes).difference(canonical_genes)
+        )
+        perturbations = Esm2PerturbationAdapter(
+            all_genes,
+            esm,
+            adapter_hidden=config.state.esm2_adapter_hidden,
+            pert_dim=effective_pert_dim,
+        )
+    else:
+        perturbations = PerturbationVectorAdapter(
+            sorted({*(str(gene) for gene in data.genes), *extra_genes}),
+            known_vectors,
+            pert_dim,
+        )
+    state_adapter = StateForwardAdapter(state_model)
+    if tokenizer == "esm2" or config.train.freeze_state:
+        state_adapter.requires_grad_(False)
+    response_encoder = ResponseEncoder(
+        config.response_encoder.input_dim,
+        config.response_encoder.latent_dim,
+    )
+    response_pooler = TrainableDiagonalGMM(
+        latent_dim=config.response_encoder.latent_dim,
+        n_components=config.gmm.n_components,
+        covariance_floor=config.gmm.covariance_floor,
+        init_scale=config.gmm.init_scale,
+    )
+    c_head = MLPHead(
+        input_dim=response_pooler.output_dim,
+        hidden_units=config.model.c_hidden_units,
+        dropout=config.model.dropout,
+    )
+    return AivcModel(
+        state_adapter=state_adapter,
+        perturbations=perturbations,
+        response_encoder=response_encoder,
+        response_pooler=response_pooler,
+        c_head=c_head,
+        control_expression_mean=data.control_input.mean(axis=0).astype(np.float32),
+    )
+
+
 def _build_model(
     config: AivcConfig,
     data: GeneBags,
@@ -2133,25 +2185,47 @@ def _build_model(
             known_vectors,
             pert_dim,
         )
-    projector = ExpressionToLatentProjector(
-        projector_weight,
-        projector_bias,
-        trainable=(tokenizer == "esm2" or config.projector.trainable),
+    response_encoder = ResponseEncoder(
+        input_dim=int(projector_weight.shape[0]),
+        latent_dim=int(projector_weight.shape[1]),
     )
+    with torch.no_grad():
+        response_encoder.linear.weight.copy_(
+            torch.as_tensor(projector_weight.T, dtype=torch.float32)
+        )
+        response_encoder.linear.bias.copy_(
+            torch.as_tensor(projector_bias, dtype=torch.float32)
+        )
+    if not (tokenizer == "esm2" or config.projector.trainable):
+        response_encoder.requires_grad_(False)
+    response_pooler = TrainableDiagonalGMM(
+        latent_dim=int(featureizer.means.shape[1]),
+        n_components=int(featureizer.means.shape[0]),
+        covariance_floor=config.gmm.covariance_floor,
+        init_scale=config.gmm.init_scale,
+    )
+    with torch.no_grad():
+        response_pooler.means.copy_(featureizer.means)
+        adjusted_variance = (
+            featureizer.variances - config.gmm.covariance_floor
+        ).clamp_min(1e-8)
+        response_pooler.raw_variances.copy_(torch.log(torch.expm1(adjusted_variance)))
+        response_pooler.mixture_logits.copy_(featureizer.log_weights)
     c_head = MLPHead(
-        input_dim=featureizer.output_dim,
+        input_dim=response_pooler.output_dim,
         hidden_units=config.model.c_hidden_units,
         dropout=config.model.dropout,
     )
+    state_adapter = StateForwardAdapter(state_model)
+    if tokenizer == "esm2" or config.train.freeze_state:
+        state_adapter.requires_grad_(False)
     return AivcModel(
-        state_adapter=StateForwardAdapter(state_model),
+        state_adapter=state_adapter,
         perturbations=perturbations,
-        projector=projector,
-        featureizer=featureizer,
+        response_encoder=response_encoder,
+        response_pooler=response_pooler,
         c_head=c_head,
         control_expression_mean=data.control_input.mean(axis=0).astype(np.float32),
-        control_latent_mean=data.control_latent.mean(axis=0).astype(np.float32),
-        freeze_state=(tokenizer == "esm2" or config.train.freeze_state),
     )
 
 
@@ -2435,12 +2509,14 @@ def _final_prediction_tensor(
     n_chunks: list[float] = []
     for index in gene_indices:
         gene = str(data.genes[index])
-        _pred_expression, predicted_latent = model.predict_bag(
+        predicted_expression, _predicted_latent = model.predict_response(
             control_cells,
             gene,
             control_batch_indices,
         )
-        y_pred.append(model.predict_c_from_latent(predicted_latent))
+        y_pred.append(
+            model.predict_c_from_response(predicted_expression, control_cells)
+        )
         n_chunks.append(1.0)
     return torch.stack(
         [

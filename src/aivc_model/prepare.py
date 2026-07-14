@@ -173,9 +173,16 @@ class ProjectorConfig:
 
 
 @dataclass(frozen=True)
+class ResponseEncoderConfig:
+    input_dim: int = 2000
+    latent_dim: int = 128
+
+
+@dataclass(frozen=True)
 class GmmConfig:
     n_components: int = 32
     covariance_floor: float = 1e-4
+    init_scale: float = 0.02
     max_fit_cells: int | None = 20000
 
 
@@ -224,6 +231,7 @@ class AivcConfig:
     split: SplitConfig
     cv: CVConfig
     state: StateConfig
+    response_encoder: ResponseEncoderConfig | None
     projector: ProjectorConfig
     gmm: GmmConfig
     model: ModelConfig
@@ -433,6 +441,7 @@ def load_config(path: Path) -> AivcConfig:
         split=_split_config(raw.get("split", {})),
         cv=_cv_config(raw.get("cv", {})),
         state=_state_config(raw.get("state", {})),
+        response_encoder=_response_encoder_config(raw.get("response_encoder")),
         projector=_projector_config(raw.get("projector", {})),
         gmm=_gmm_config(raw.get("gmm", {})),
         model=_model_config(raw.get("model", {})),
@@ -2137,10 +2146,20 @@ def _projector_config(values: dict[str, Any]) -> ProjectorConfig:
     )
 
 
+def _response_encoder_config(values: Any) -> ResponseEncoderConfig | None:
+    if values is None:
+        return None
+    return ResponseEncoderConfig(
+        input_dim=int(values.get("input_dim", 2000)),
+        latent_dim=int(values.get("latent_dim", 128)),
+    )
+
+
 def _gmm_config(values: dict[str, Any]) -> GmmConfig:
     return GmmConfig(
         n_components=int(values.get("n_components", 32)),
         covariance_floor=float(values.get("covariance_floor", 1e-4)),
+        init_scale=float(values.get("init_scale", 0.02)),
         max_fit_cells=_int_or_none(values.get("max_fit_cells", 20000)),
     )
 

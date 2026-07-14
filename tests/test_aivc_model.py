@@ -45,6 +45,7 @@ from aivc_model.prepare import (
     GeneBags,
     GeneSplit,
     ProjectorConfig,
+    ResponseEncoderConfig,
     SplitConfig,
     _external_state_input_view,
     _load_metadata,
@@ -1036,6 +1037,55 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert parsed.loss.b_loss_anneal_final_fraction == 0.1
 
 
+def test_response_encoder_config_is_optional_for_legacy_configs(tmp_path: Path) -> None:
+    legacy_path = _write_scvi_cache_config(tmp_path)
+    legacy = load_config(legacy_path)
+    configured_path = tmp_path / "response_encoder.yaml"
+    configured_path.write_text(
+        legacy_path.read_text(encoding="utf-8").replace(
+            "projector:\n",
+            "response_encoder:\n"
+            "  input_dim: 2000\n"
+            "  latent_dim: 128\n"
+            "projector:\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    configured = load_config(configured_path)
+
+    assert legacy.response_encoder is None
+    assert configured.response_encoder == ResponseEncoderConfig(2000, 128)
+
+
+@pytest.mark.parametrize(
+    "response_encoder",
+    [
+        None,
+        ResponseEncoderConfig(1999, 128),
+        ResponseEncoderConfig(2000, 127),
+    ],
+)
+def test_audited_e2e_builder_requires_locked_response_encoder(
+    tmp_path: Path,
+    response_encoder: ResponseEncoderConfig | None,
+) -> None:
+    config = replace(
+        load_config(_write_scvi_cache_config(tmp_path)),
+        response_encoder=response_encoder,
+    )
+
+    with pytest.raises(ValueError, match="input_dim=2000.*latent_dim=128"):
+        train_module._build_e2e_model(
+            config,
+            _toy_gene_bags_with_batches(),
+            extra_genes=(),
+            canonical_gene_order=("GENE1", "GENE2"),
+            emit_checkpoint_output=False,
+        )
+
+
 def test_state_config_parses_strict_esm2_fields(tmp_path: Path) -> None:
     default_config = load_config(_write_scvi_cache_config(tmp_path))
     config_path = tmp_path / "esm2.yaml"
@@ -1643,7 +1693,7 @@ def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
     assert set(summary) >= {"rmse", "spearman"}
 
 
-def test_final_prediction_only_matches_legacy_chunks_for_rowwise_predict_bag() -> None:
+def test_final_prediction_only_matches_chunked_predict_response() -> None:
     model, _state_model = _build_counting_aivc_model()
     data = replace(
         _toy_gene_bags_with_batches(),
@@ -1662,7 +1712,8 @@ def test_final_prediction_only_matches_legacy_chunks_for_rowwise_predict_bag() -
         gene_batch_size=1,
         world_size=1,
     )
-    legacy_latent_chunks = []
+    predicted_expression_chunks = []
+    control_chunks = []
     with torch.no_grad():
         for start in range(0, data.control_input.shape[0], 2):
             end = min(start + 2, data.control_input.shape[0])
@@ -1675,13 +1726,17 @@ def test_final_prediction_only_matches_legacy_chunks_for_rowwise_predict_bag() -
                 batch_lookup,
                 torch.device("cpu"),
             )
-            _pred_expression, predicted_latent = model.predict_bag(
+            predicted_expression, _predicted_latent = model.predict_response(
                 control_chunk,
                 "GENE1",
                 batch_indices,
             )
-            legacy_latent_chunks.append(predicted_latent)
-        expected = model.predict_c_from_latent(torch.cat(legacy_latent_chunks, dim=0))
+            predicted_expression_chunks.append(predicted_expression)
+            control_chunks.append(control_chunk)
+        expected = model.predict_c_from_response(
+            torch.cat(predicted_expression_chunks, dim=0),
+            torch.cat(control_chunks, dim=0),
+        )
 
         _summary, predictions = train_module._evaluate_prediction_only_final(
             model,
@@ -2276,6 +2331,13 @@ def test_aivc_batched_forward_gene_mask_excludes_padding_from_ranknet_and_loss()
         pair_margin=0.0,
         pair_weight_clip=2.0,
     )
+    expected_unmasked_rank = _pairwise_ranknet_loss(
+        unmasked["pred_y"],
+        common_kwargs["y"],
+        tau=0.25,
+        pair_margin=0.0,
+        pair_weight_clip=2.0,
+    )
     expected_total = (
         masked["per_gene_total_loss"][[0, 2]].sum()
         + masked["per_gene_pred_rank"][[0, 2]].sum() * 0.0
@@ -2284,7 +2346,7 @@ def test_aivc_batched_forward_gene_mask_excludes_padding_from_ranknet_and_loss()
     assert torch.allclose(masked["pred_rank"], expected_rank)
     assert masked["per_gene_total_loss"][1].item() == 0.0
     assert torch.allclose(masked["total"], expected_total)
-    assert not torch.allclose(masked["pred_rank"], unmasked["pred_rank"])
+    assert torch.allclose(unmasked["pred_rank"], expected_unmasked_rank)
     assert torch.allclose(all_true["total"], unmasked["total"])
     assert torch.allclose(all_true["pred_rank"], unmasked["pred_rank"])
 
@@ -2404,6 +2466,7 @@ def test_esm2_build_requires_configured_checkpoint_width_and_freezes_state(
     config = load_config(_write_scvi_cache_config(tmp_path))
     config = replace(
         config,
+        response_encoder=ResponseEncoderConfig(input_dim=2000, latent_dim=128),
         cv=replace(
             config.cv,
             outer_split_manifest=manifest,
@@ -2422,29 +2485,30 @@ def test_esm2_build_requires_configured_checkpoint_width_and_freezes_state(
     monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
     state_model = model_module.LinearMockStateModel(
-        input_dim=3, output_dim=3, pert_dim=5
+        input_dim=3, output_dim=2000, pert_dim=5
     )
     monkeypatch.setattr(
         train_module,
         "load_state_model",
         lambda **_kwargs: state_model,
     )
-    featureizer = _build_legacy_featureizer()
-
-    model = train_module._build_model(
+    model = train_module._build_e2e_model(
         config,
         data,
-        featureizer,
-        np.asarray([[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]], dtype=np.float32),
-        np.zeros(2, dtype=np.float32),
+        extra_genes=(),
+        canonical_gene_order=("GENE1", "GENE2"),
         emit_checkpoint_output=False,
     )
     assert model.perturbations("GENE1").shape == (5,)
-    predicted, _latent = model.predict_bag(torch.as_tensor(data.control_input), "GENE1")
+    predicted, _latent = model.predict_response(
+        torch.as_tensor(data.control_input), "GENE1"
+    )
     predicted.square().sum().backward()
 
     assert isinstance(model.perturbations, Esm2PerturbationAdapter)
-    assert model.freeze_state
+    assert not any(
+        parameter.requires_grad for parameter in model.state_adapter.parameters()
+    )
     assert all(parameter.grad is None for parameter in model.state_adapter.parameters())
     assert any(
         parameter.grad is not None and torch.count_nonzero(parameter.grad).item() > 0
@@ -2476,6 +2540,7 @@ def test_esm2_build_rejects_missing_external_gene_without_filtering(
     config = load_config(_write_scvi_cache_config(tmp_path))
     config = replace(
         config,
+        response_encoder=ResponseEncoderConfig(input_dim=2000, latent_dim=128),
         cv=replace(
             config.cv,
             outer_split_manifest=manifest,
@@ -2491,16 +2556,12 @@ def test_esm2_build_rejects_missing_external_gene_without_filtering(
     monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
-    featureizer = _build_legacy_featureizer()
-
     with pytest.raises(ValueError, match="ADAMSON_ONLY"):
-        train_module._build_model(
+        train_module._build_e2e_model(
             config,
             data,
-            featureizer,
-            np.asarray([[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]], dtype=np.float32),
-            np.zeros(2, dtype=np.float32),
             extra_genes=("ADAMSON_ONLY",),
+            canonical_gene_order=("GENE1", "GENE2"),
             emit_checkpoint_output=False,
         )
 
