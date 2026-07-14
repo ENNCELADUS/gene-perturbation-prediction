@@ -23,6 +23,7 @@ from accelerate.state import AcceleratorState
 
 from aivc_model import cross_validate as cv
 from aivc_model import gene_splits as gene_splits_module
+from aivc_model import gwps_cache as gwps_cache_module
 from aivc_model import train as train_module
 from aivc_model.distributed import (
     assert_all_ranks_stepped,
@@ -224,6 +225,38 @@ def test_run_training_guards_audited_entrypoint(
     assert guarded == [(accelerator, 4)]
 
 
+def test_run_training_generic_entrypoint_skips_authoritative_guards(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _audited_config(tmp_path)
+    config = replace(
+        config,
+        train=replace(config.train, required_world_size=1, gene_batch_size=4),
+    )
+    monkeypatch.setattr(
+        train_module,
+        "_require_authoritative_gene_batch_size",
+        lambda _config: pytest.fail("generic training used the exp05 batch guard"),
+    )
+    monkeypatch.setattr(
+        train_module,
+        "require_exact_world_size",
+        lambda *_args: pytest.fail("generic training used the exp05 world-size guard"),
+    )
+    monkeypatch.setattr(
+        train_module,
+        "load_gene_bags",
+        lambda _config: (_ for _ in ()).throw(RuntimeError("generic path reached")),
+    )
+
+    with pytest.raises(RuntimeError, match="generic path reached"):
+        train_module.run_training(
+            config,
+            accelerator=_SingleProcessAccelerator(),  # type: ignore[arg-type]
+        )
+
+
 def test_run_training_fold_guards_direct_accelerator_construction(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -265,6 +298,31 @@ def test_run_training_fold_rejects_gene_batch_size_four_before_construction(
     )
 
     with pytest.raises(ValueError, match="gene_batch_size must be 1"):
+        cv.run_training_fold(
+            config=config,
+            data=_toy_bags(),
+            external=None,
+            fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+            run_dir=tmp_path / "fold_0",
+            source_fingerprint="source",
+        )
+
+    assert not (tmp_path / "fold_0").exists()
+
+
+def test_run_training_fold_rejects_world_size_one_before_construction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _audited_config(tmp_path)
+    config = replace(config, train=replace(config.train, required_world_size=1))
+    monkeypatch.setattr(
+        cv,
+        "_make_accelerator",
+        lambda _config: pytest.fail("Accelerator constructed before config rejection"),
+    )
+
+    with pytest.raises(ValueError, match="required_world_size must be 4"):
         cv.run_training_fold(
             config=config,
             data=_toy_bags(),
@@ -571,21 +629,31 @@ def _preflight_config(
 
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
-    np.save(cache_dir / "genes.npy", np.asarray(genes, dtype=object))
+    np.save(cache_dir / "genes.npy", np.asarray(genes, dtype=str))
     np.save(cache_dir / "gene_outer_folds.npy", np.arange(len(genes)) % 5)
-    np.save(cache_dir / "feature_names.npy", np.asarray(state_genes, dtype=object))
+    np.save(cache_dir / "feature_names.npy", np.asarray(state_genes, dtype=str))
     np.save(cache_dir / "feature_fill_values.npy", np.zeros(3, dtype=np.float32))
-    np.save(cache_dir / "cells.npy", np.zeros((1, 3), dtype=np.float32))
+    np.save(cache_dir / "cells.npy", np.zeros((len(genes), 3), dtype=np.float32))
+    np.save(cache_dir / "offsets.npy", np.arange(len(genes) + 1, dtype=np.int64))
+    np.save(cache_dir / "batch_labels.npy", np.asarray(["1"] * len(genes)))
     np.save(cache_dir / "control_cells.npy", np.zeros((1, 3), dtype=np.float32))
+    np.save(cache_dir / "control_batch.npy", np.asarray(["1"]))
     (cache_dir / "manifest.json").write_text(
-        '{"schema_version":2,"source_fingerprint":"toy"}\n', encoding="utf-8"
+        json.dumps(
+            {
+                "schema_version": 2,
+                "source_fingerprint": "0" * 64,
+                "arrays": gwps_cache_module._array_manifest(cache_dir),
+            }
+        ),
+        encoding="utf-8",
     )
 
     esm_path = tmp_path / "esm2.npz"
     np.savez(
         esm_path,
         symbols=np.asarray(genes, dtype=object),
-        vectors=np.ones((len(genes), 4), dtype=np.float32),
+        vectors=np.ones((len(genes), 1280), dtype=np.float32),
         resolved=np.ones(len(genes), dtype=bool),
     )
 
@@ -845,6 +913,27 @@ def test_locked_preflight_rejects_nontrainable_gmm(
         cv._assert_locked_preflight_config(nontrainable_config)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("gene_batch_size", 4, "gene_batch_size must be 1"),
+        ("required_world_size", 1, "required_world_size must be 4"),
+    ],
+)
+def test_locked_preflight_rejects_non_authoritative_distribution_settings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: int,
+    message: str,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    config = replace(config, train=replace(config.train, **{field: value}))
+
+    with pytest.raises(ValueError, match=message):
+        cv._assert_locked_preflight_config(config)
+
+
 def test_preflight_rejects_nonfinite_prepared_cache(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -855,10 +944,35 @@ def test_preflight_rejects_nonfinite_prepared_cache(
     cells = np.load(cells_path)
     cells[0, 0] = np.nan
     np.save(cells_path, cells)
+    cache_manifest_path = config.data.prepared_cache_dir / "manifest.json"
+    cache_manifest = json.loads(cache_manifest_path.read_text())
+    cache_manifest["arrays"] = gwps_cache_module._array_manifest(
+        config.data.prepared_cache_dir
+    )
+    cache_manifest_path.write_text(json.dumps(cache_manifest), encoding="utf-8")
     assert config.cv.outer_split_manifest is not None
     manifest = pd.read_csv(config.cv.outer_split_manifest)
 
     with pytest.raises(ValueError, match="cells.npy contains nonfinite"):
+        cv._validate_prepared_cache(config, manifest)
+
+
+@pytest.mark.parametrize("filename", ["cells.npy", "offsets.npy", "batch_labels.npy"])
+def test_preflight_rejects_mutated_bound_cache_array(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    assert config.data.prepared_cache_dir is not None
+    path = config.data.prepared_cache_dir / filename
+    array = np.load(path, mmap_mode="r+")
+    array.flat[0] = "X" if array.dtype.kind in {"U", "S"} else array.flat[0] + 1
+    array.flush()
+    assert config.cv.outer_split_manifest is not None
+    manifest = pd.read_csv(config.cv.outer_split_manifest)
+
+    with pytest.raises(ValueError, match=f"{filename} SHA-256 mismatch"):
         cv._validate_prepared_cache(config, manifest)
 
 
@@ -871,12 +985,36 @@ def test_preflight_rejects_any_esm_gene_set_change(
     np.savez(
         config.state.esm2_npz,
         symbols=np.asarray([*(f"G{index:02d}" for index in range(9)), "EXTRA"]),
-        vectors=np.ones((10, 4), dtype=np.float32),
+        vectors=np.ones((10, 1280), dtype=np.float32),
         resolved=np.ones(10, dtype=bool),
     )
 
     with pytest.raises(ValueError, match="ESM-2 gene set"):
         cv.run_preflight(tmp_path / "config.yaml")
+
+
+@pytest.mark.parametrize("failure", ["wrong_width", "nonfinite"])
+def test_preflight_rejects_invalid_esm2_vectors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    assert config.state.esm2_npz is not None
+    genes = np.asarray([f"G{index:02d}" for index in range(10)])
+    width = 1279 if failure == "wrong_width" else 1280
+    vectors = np.ones((len(genes), width), dtype=np.float32)
+    if failure == "nonfinite":
+        vectors[0, 0] = np.nan
+    np.savez(
+        config.state.esm2_npz,
+        symbols=genes,
+        vectors=vectors,
+        resolved=np.ones(len(genes), dtype=bool),
+    )
+
+    with pytest.raises(ValueError, match="finite numeric.*1280"):
+        cv._validate_esm2_asset(config, genes, np.asarray([], dtype=str))
 
 
 def test_preflight_cli_does_not_start_cross_validation(

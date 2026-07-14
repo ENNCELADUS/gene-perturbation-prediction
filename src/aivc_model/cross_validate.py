@@ -17,7 +17,6 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 
-from aivc_model.expression import assert_finite_npy
 from aivc_model.distributed import (
     require_exact_world_size,
     run_rank_zero_or_raise,
@@ -35,7 +34,7 @@ from aivc_model.gene_splits import (
     load_canonical_outer_manifest,
     make_inner_fold_spec,
 )
-from aivc_model.gwps_cache import load_gwps_cache
+from aivc_model.gwps_cache import load_gwps_cache, validate_cache_arrays
 from aivc_model.prepare import (
     AivcConfig,
     ExternalGeneBags,
@@ -109,6 +108,7 @@ def run_preflight(config_path: Path) -> dict[str, object]:
 
 
 def _assert_locked_preflight_config(config: AivcConfig) -> None:
+    _require_authoritative_gene_batch_size(config)
     if config.cv.expected_gene_count != CANONICAL_GENE_COUNT:
         raise ValueError(
             f"expected_gene_count must be {CANONICAL_GENE_COUNT} for exp05"
@@ -183,11 +183,16 @@ def _validate_prepared_cache(
     manifest: pd.DataFrame,
 ) -> np.ndarray:
     cache_dir = config.data.prepared_cache_dir
-    if cache_dir is None or not (cache_dir / "manifest.json").is_file():
+    if cache_dir is None:
         raise ValueError("prepared GWPS cache manifest is missing")
-    genes = np.load(cache_dir / "genes.npy", allow_pickle=True).astype(str)
-    folds = np.load(cache_dir / "gene_outer_folds.npy").astype(np.int64)
-    features = np.load(cache_dir / "feature_names.npy", allow_pickle=True).astype(str)
+    arrays = validate_cache_arrays(
+        cache_dir,
+        gene_count=len(manifest),
+        state_dim=STATE_FEATURE_COUNT,
+    )
+    genes = arrays["genes.npy"].astype(str)
+    folds = arrays["gene_outer_folds.npy"].astype(np.int64)
+    features = arrays["feature_names.npy"].astype(str)
     expected_genes = manifest["perturbation_gene"].to_numpy(dtype=str)
     expected_folds = manifest["outer_fold"].to_numpy(dtype=np.int64)
     if not np.array_equal(genes, expected_genes):
@@ -196,11 +201,6 @@ def _validate_prepared_cache(
         raise ValueError("GWPS cache fold assignments differ from canonical manifest")
     if len(features) != STATE_FEATURE_COUNT or len(set(features)) != len(features):
         raise ValueError("GWPS cache must contain exactly 2000 unique STATE features")
-    fills = np.load(cache_dir / "feature_fill_values.npy", allow_pickle=False)
-    if fills.shape != (STATE_FEATURE_COUNT,) or not np.isfinite(fills).all():
-        raise ValueError("GWPS cache feature fill values must be 2000 finite values")
-    assert_finite_npy(cache_dir / "cells.npy")
-    assert_finite_npy(cache_dir / "control_cells.npy")
     return features
 
 
@@ -242,8 +242,15 @@ def _validate_esm2_asset(
     canonical_order = tuple(gene for gene in symbols if gene in canonical_set)
     if canonical_order != canonical:
         raise ValueError("ESM-2 canonical genes differ from manifest relative order")
-    if resolved.shape != (len(symbols),) or vectors.shape[0] != len(symbols):
+    if resolved.shape != (len(symbols),):
         raise ValueError("ESM-2 asset arrays have inconsistent row counts")
+    if (
+        vectors.ndim != 2
+        or vectors.shape != (len(symbols), 1280)
+        or not np.issubdtype(vectors.dtype, np.number)
+        or not np.isfinite(vectors).all()
+    ):
+        raise ValueError("ESM-2 vectors must be a finite numeric matrix of width 1280")
     if not resolved.all():
         unresolved = symbols[~resolved].tolist()
         raise ValueError(

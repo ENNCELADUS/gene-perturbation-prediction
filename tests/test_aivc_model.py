@@ -231,6 +231,78 @@ def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> No
     np.testing.assert_array_equal(bags.gene_outer_folds, np.asarray([0, 1]))
     np.testing.assert_array_equal(bags.control_batch, np.asarray(["25", "31"]))
     np.testing.assert_array_equal(bags.input_bags[0], np.asarray([[10.0, 1.0]]))
+    manifest = json.loads((cache_dir / "manifest.json").read_text())
+    assert set(manifest["arrays"]) == set(gwps_cache_module._ARRAY_FILENAMES)
+    assert all(
+        set(metadata) == {"sha256", "shape", "dtype"}
+        for metadata in manifest["arrays"].values()
+    )
+
+
+def test_gwps_cache_rejects_legacy_filename_only_manifest(tmp_path: Path) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    manifest_path = gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["arrays"] = list(gwps_cache_module._ARRAY_FILENAMES)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest array contract"):
+        gwps_cache_module._load_gwps_cache(config, cache_dir, contract)
+    with pytest.raises(ValueError, match="manifest array contract"):
+        gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+
+
+@pytest.mark.parametrize("filename", ["cells.npy", "offsets.npy", "batch_labels.npy"])
+def test_gwps_cache_rejects_array_mutation(
+    tmp_path: Path,
+    filename: str,
+) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    array = np.load(cache_dir / filename, mmap_mode="r+")
+    array.flat[0] = "X" if array.dtype.kind in {"U", "S"} else array.flat[0] + 1
+    array.flush()
+
+    with pytest.raises(ValueError, match=f"{filename} SHA-256 mismatch"):
+        gwps_cache_module._load_gwps_cache(config, cache_dir, contract)
+    with pytest.raises(ValueError, match=f"{filename} SHA-256 mismatch"):
+        gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+
+
+def test_gwps_cache_rejects_bound_structurally_invalid_offsets(tmp_path: Path) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    manifest_path = gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    offsets = np.load(cache_dir / "offsets.npy", mmap_mode="r+")
+    offsets[1] = offsets[0]
+    offsets.flush()
+    manifest = json.loads(manifest_path.read_text())
+    manifest["arrays"] = gwps_cache_module._array_manifest(cache_dir)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="every gene bag must be non-empty"):
+        gwps_cache_module._load_gwps_cache(config, cache_dir, contract)
+
+
+def test_gwps_cache_rejects_bound_structurally_invalid_batch_length(
+    tmp_path: Path,
+) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    manifest_path = gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    np.save(cache_dir / "batch_labels.npy", np.asarray(["25"]))
+    manifest = json.loads(manifest_path.read_text())
+    manifest["arrays"] = gwps_cache_module._array_manifest(cache_dir)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="response batches must match response cells"):
+        gwps_cache_module._load_gwps_cache(config, cache_dir, contract)
 
 
 def test_gwps_cache_replaces_nonfinite_from_control_only(tmp_path: Path) -> None:
@@ -1063,6 +1135,24 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert parsed.loss.b_loss_anneal_final_fraction == 0.1
 
 
+def test_train_config_accepts_positive_legacy_world_and_batch_sizes(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_scvi_cache_config(tmp_path)
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "  device: cpu\n",
+            "  device: cpu\n  required_world_size: 1\n  gene_batch_size: 16\n",
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.train.required_world_size == 1
+    assert config.train.gene_batch_size == 16
+
+
 @pytest.mark.parametrize(
     ("settings", "message"),
     [
@@ -1072,8 +1162,8 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
             "state_learning_rate must not exceed learning_rate",
         ),
         ({"max_grad_norm": 0.0}, "max_grad_norm must be positive"),
-        ({"required_world_size": 1}, "required_world_size must be 4"),
-        ({"gene_batch_size": 4}, "gene_batch_size must be 1"),
+        ({"required_world_size": 0}, "required_world_size must be positive"),
+        ({"gene_batch_size": 0}, "gene_batch_size must be positive"),
     ],
 )
 def test_train_config_rejects_invalid_e2e_settings(

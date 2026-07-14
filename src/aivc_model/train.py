@@ -323,10 +323,10 @@ def run_training(
     if audited:
         if any(value is None for value in audited_values):
             raise ValueError("audited training requires every fold-scoped input")
-    _require_authoritative_gene_batch_size(config)
-    accelerator = accelerator or _make_accelerator(config)
-    require_exact_world_size(accelerator, config.train.required_world_size)
     if audited:
+        _require_authoritative_gene_batch_size(config)
+        accelerator = accelerator or _make_accelerator(config)
+        require_exact_world_size(accelerator, config.train.required_world_size)
         return _run_audited_training(
             config=config,
             train_data=train_data,
@@ -339,6 +339,7 @@ def run_training(
             canonical_gene_order=canonical_gene_order,
             accelerator=accelerator,
         )
+    accelerator = accelerator or _make_accelerator(config)
     _configure_logging(accelerator)
     set_seed(config.train.seed)
     _configure_float32_matmul_precision(config)
@@ -1500,6 +1501,8 @@ def _configure_logging(accelerator: Accelerator) -> None:
 
 
 def _require_authoritative_gene_batch_size(config: AivcConfig) -> None:
+    if config.train.required_world_size != 4:
+        raise ValueError("required_world_size must be 4 for authoritative exp05")
     if config.train.gene_batch_size != 1:
         raise ValueError(
             "gene_batch_size must be 1 for authoritative exp05 training"
