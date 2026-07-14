@@ -216,10 +216,38 @@ def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> No
     gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
     bags = gwps_cache_module._load_gwps_cache(config, cache_dir, contract)
     assert bags.feature_names.tolist() == ["A", "B"]
+    np.testing.assert_allclose(bags.feature_fill_values, np.asarray([35.0, 3.5]))
     assert bags.genes.tolist() == ["G1", "G2"]
     np.testing.assert_array_equal(bags.gene_outer_folds, np.asarray([0, 1]))
     np.testing.assert_array_equal(bags.control_batch, np.asarray(["25", "31"]))
     np.testing.assert_array_equal(bags.input_bags[0], np.asarray([[10.0, 1.0]]))
+
+
+def test_gwps_cache_replaces_nonfinite_from_control_only(tmp_path: Path) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    adata = ad.read_h5ad(config.data.h5ad_path)
+    values = np.asarray(adata.X, dtype=np.float32)
+    values[0, 1] = np.nan
+    values[1, 0] = np.inf
+    values[3, 1] = np.nan
+    adata.X = values
+    adata.write_h5ad(config.data.h5ad_path)
+
+    cache_dir = tmp_path / "cache"
+    gwps_cache_module._build_gwps_cache(
+        config,
+        cache_dir,
+        gwps_cache_module._CacheContract(gene_count=2, state_dim=2),
+    )
+
+    cells = np.load(cache_dir / "cells.npy")
+    controls = np.load(cache_dir / "control_cells.npy")
+    fills = np.load(cache_dir / "feature_fill_values.npy")
+    assert np.isfinite(cells).all()
+    assert np.isfinite(controls).all()
+    assert np.isfinite(fills).all()
+    np.testing.assert_allclose(fills, np.asarray([30.0, 3.5], dtype=np.float32))
+    assert json.loads((cache_dir / "manifest.json").read_text())["schema_version"] == 2
 
 
 def test_gwps_cache_accepts_extra_source_gene_but_rejects_missing_canonical_gene(
@@ -2722,6 +2750,42 @@ def test_external_adamson_sources_merge_and_mean_impute_missing_genes(
     np.testing.assert_allclose(external.data.input_bags[0][:, 1], reference_fill[1])
 
 
+def test_external_adamson_reuses_reference_fills_for_nonfinite_values(
+    tmp_path: Path,
+) -> None:
+    h5ad_path, overlap_path = _write_toy_inputs(tmp_path)
+    source_a, source_b, external_overlap = _write_toy_external_inputs(tmp_path)
+    adata = ad.read_h5ad(source_a)
+    values = np.asarray(adata.X, dtype=np.float32)
+    values[0, 1] = np.inf
+    values[2, 0] = np.nan
+    adata.X = values
+    adata.write_h5ad(source_a)
+    config = load_config(
+        _write_external_smoke_config(
+            tmp_path,
+            h5ad_path,
+            overlap_path,
+            source_a,
+            source_b,
+            external_overlap,
+            run_id="finite_loader",
+            max_epochs=1,
+        )
+    )
+    reference = load_gene_bags(config)
+
+    external = load_external_gene_bags(config, reference, tmp_path / "artifacts")
+
+    assert external is not None
+    assert all(np.isfinite(bag).all() for bag in external.data.input_bags)
+    assert np.isfinite(external.data.control_input).all()
+    np.testing.assert_array_equal(
+        external.data.feature_fill_values,
+        reference.feature_fill_values,
+    )
+
+
 def test_external_var_names_align_to_state_symbols() -> None:
     adata = ad.AnnData(np.asarray([[1.0, 2.0]], dtype=np.float32))
     adata.var_names = ["A", "B"]
@@ -3216,6 +3280,7 @@ def _toy_gene_bags_with_batches() -> GeneBags:
         batch_bags=batch_bags,
         control_batch=np.asarray(["batch_a", "batch_a", "batch_b"], dtype=object),
         feature_names=None,
+        feature_fill_values=np.zeros(3, dtype=np.float32),
         metadata=pd.DataFrame({"perturbation_gene": ["GENE1", "GENE2"]}),
         input_dim=3,
         latent_dim=2,

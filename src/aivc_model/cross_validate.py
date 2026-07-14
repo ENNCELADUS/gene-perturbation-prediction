@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from aivc_model.expression import assert_finite_npy
 from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
     FINAL_RESPONSE_STAGES,
@@ -176,6 +177,11 @@ def _validate_prepared_cache(
         raise ValueError("GWPS cache fold assignments differ from canonical manifest")
     if len(features) != STATE_FEATURE_COUNT or len(set(features)) != len(features):
         raise ValueError("GWPS cache must contain exactly 2000 unique STATE features")
+    fills = np.load(cache_dir / "feature_fill_values.npy", allow_pickle=False)
+    if fills.shape != (STATE_FEATURE_COUNT,) or not np.isfinite(fills).all():
+        raise ValueError("GWPS cache feature fill values must be 2000 finite values")
+    assert_finite_npy(cache_dir / "cells.npy")
+    assert_finite_npy(cache_dir / "control_cells.npy")
     return features
 
 

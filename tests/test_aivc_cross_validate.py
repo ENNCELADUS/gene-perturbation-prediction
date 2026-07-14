@@ -163,6 +163,7 @@ def _toy_bags(genes: tuple[str, ...] = ("A", "B", "C", "D")) -> GeneBags:
         batch_bags=None,
         control_batch=None,
         feature_names=np.asarray(["X", "Y"], dtype=object),
+        feature_fill_values=np.asarray([0.25, 0.75], dtype=np.float32),
         metadata=metadata,
         input_dim=2,
         latent_dim=2,
@@ -290,8 +291,11 @@ def _preflight_config(
     np.save(cache_dir / "genes.npy", np.asarray(genes, dtype=object))
     np.save(cache_dir / "gene_outer_folds.npy", np.arange(len(genes)) % 5)
     np.save(cache_dir / "feature_names.npy", np.asarray(state_genes, dtype=object))
+    np.save(cache_dir / "feature_fill_values.npy", np.zeros(3, dtype=np.float32))
+    np.save(cache_dir / "cells.npy", np.zeros((1, 3), dtype=np.float32))
+    np.save(cache_dir / "control_cells.npy", np.zeros((1, 3), dtype=np.float32))
     (cache_dir / "manifest.json").write_text(
-        '{"schema_version":1,"source_fingerprint":"toy"}\n', encoding="utf-8"
+        '{"schema_version":2,"source_fingerprint":"toy"}\n', encoding="utf-8"
     )
 
     esm_path = tmp_path / "esm2.npz"
@@ -423,6 +427,23 @@ def test_preflight_verifies_all_frozen_assets_and_reports_counts(
     }
 
 
+def test_preflight_rejects_nonfinite_prepared_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    assert config.data.prepared_cache_dir is not None
+    cells_path = config.data.prepared_cache_dir / "cells.npy"
+    cells = np.load(cells_path)
+    cells[0, 0] = np.nan
+    np.save(cells_path, cells)
+    assert config.cv.outer_split_manifest is not None
+    manifest = pd.read_csv(config.cv.outer_split_manifest)
+
+    with pytest.raises(ValueError, match="cells.npy contains nonfinite"):
+        cv._validate_prepared_cache(config, manifest)
+
+
 def test_preflight_rejects_any_esm_gene_set_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -519,6 +540,10 @@ def test_gene_bag_views_preserve_only_requested_genes() -> None:
     assert selected.genes.tolist() == ["C", "A"]
     assert selected.metadata["perturbation_gene"].tolist() == ["C", "A"]
     np.testing.assert_array_equal(selected.input_bags[0], bags.input_bags[2])
+    np.testing.assert_array_equal(
+        selected.feature_fill_values,
+        bags.feature_fill_values,
+    )
 
 
 def test_actual_gene_view_rejects_unauthorized_access_without_recording() -> None:
