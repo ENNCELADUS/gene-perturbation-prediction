@@ -2061,8 +2061,14 @@ def _sample_control_indices(
     selected: list[int] = []
     fallback_count = 0
     global_indices = np.arange(data.control_input.shape[0], dtype=np.int64)
-    for label in target_batch:
-        matching = np.flatnonzero(data.control_batch.astype(str) == str(label))
+    normalized_control_batch = data.control_batch.astype(str)
+    normalized_target_batch = np.asarray(target_batch).astype(str)
+    matching_by_label = {
+        label: np.flatnonzero(normalized_control_batch == label)
+        for label in np.unique(normalized_target_batch)
+    }
+    for label in normalized_target_batch:
+        matching = matching_by_label[label]
         if matching.size == 0:
             matching = global_indices
             fallback_count += 1

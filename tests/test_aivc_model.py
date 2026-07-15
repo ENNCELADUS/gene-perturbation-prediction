@@ -2102,6 +2102,33 @@ def test_batch_matched_control_sampling_and_fallback() -> None:
     assert second.control_fallback_count == 3
 
 
+def test_control_sampling_scans_once_per_unique_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = _toy_gene_bags_with_batches()
+    original_flatnonzero = np.flatnonzero
+    scanned: list[np.ndarray] = []
+
+    def counting_flatnonzero(values: np.ndarray) -> np.ndarray:
+        scanned.append(values)
+        return original_flatnonzero(values)
+
+    monkeypatch.setattr(prepare_module.np, "flatnonzero", counting_flatnonzero)
+    selected, fallback_count = prepare_module._sample_control_indices(
+        data,
+        n_rows=4,
+        rng=np.random.default_rng(5),
+        target_batch=np.asarray(
+            ["batch_a", "batch_a", "batch_z", "batch_z"],
+            dtype=object,
+        ),
+    )
+
+    assert len(scanned) == 2
+    assert fallback_count == 2
+    assert set(data.control_batch[selected[:2]]) == {"batch_a"}
+
+
 def test_fixed_gmm_featureizer_is_differentiable() -> None:
     bag_a = np.asarray([[0.0, 0.0], [0.1, 0.0], [0.0, 0.1]], dtype=np.float32)
     bag_b = np.asarray([[1.0, 1.0], [1.1, 1.0], [1.0, 1.1]], dtype=np.float32)
