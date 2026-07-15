@@ -805,6 +805,7 @@ def make_cell_set_chunks(
     rng: np.random.Generator,
     pad_short: bool,
     shuffle: bool,
+    control_indices_by_batch: dict[str, np.ndarray] | None = None,
 ) -> tuple[CellSetChunk, ...]:
     """Build STATE-style cell-set chunks for one perturbation gene."""
     if cell_set_len < 1:
@@ -836,6 +837,7 @@ def make_cell_set_chunks(
                 n_rows=len(target_indices),
                 rng=rng,
                 target_batch=target_batch,
+                control_indices_by_batch=control_indices_by_batch,
             )
             chunks.append(
                 CellSetChunk(
@@ -2055,25 +2057,41 @@ def _sample_control_indices(
     n_rows: int,
     rng: np.random.Generator,
     target_batch: np.ndarray | None,
+    control_indices_by_batch: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, int]:
     if target_batch is None or data.control_batch is None:
         return sample_indices(data.control_input.shape[0], n_rows, rng), 0
     selected: list[int] = []
     fallback_count = 0
-    global_indices = np.arange(data.control_input.shape[0], dtype=np.int64)
-    normalized_control_batch = data.control_batch.astype(str)
+    global_indices: np.ndarray | None = None
     normalized_target_batch = np.asarray(target_batch).astype(str)
-    matching_by_label = {
-        label: np.flatnonzero(normalized_control_batch == label)
-        for label in np.unique(normalized_target_batch)
-    }
+    matching_by_label = (
+        _control_indices_by_batch(data)
+        if control_indices_by_batch is None
+        else control_indices_by_batch
+    )
     for label in normalized_target_batch:
-        matching = matching_by_label[label]
-        if matching.size == 0:
+        matching = matching_by_label.get(label)
+        if matching is None or matching.size == 0:
+            if global_indices is None:
+                global_indices = np.arange(
+                    data.control_input.shape[0],
+                    dtype=np.int64,
+                )
             matching = global_indices
             fallback_count += 1
         selected.append(int(rng.choice(matching)))
     return np.asarray(selected, dtype=np.int64), fallback_count
+
+
+def _control_indices_by_batch(data: GeneBags) -> dict[str, np.ndarray]:
+    if data.control_batch is None:
+        return {}
+    normalized = data.control_batch.astype(str)
+    return {
+        label: np.flatnonzero(normalized == label)
+        for label in np.unique(normalized)
+    }
 
 
 def _data_config(values: dict[str, Any]) -> DataConfig:

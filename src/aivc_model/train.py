@@ -75,6 +75,7 @@ from aivc_model.prepare import (
     make_gene_split,
     project_gene_bags_with_frozen_scvi,
     with_cached_scvi_teacher_latents,
+    _control_indices_by_batch,
     _sha256_strings,
 )
 from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
@@ -2406,6 +2407,7 @@ def _run_epoch(
     metric_sum = _empty_metric_sum(accelerator.device)
     metric_count = 0
     local_optimizer_steps = 0
+    control_indices_by_batch = _control_indices_by_batch(data)
     total = len(indices)
     iterator = tqdm(
         indices,
@@ -2436,6 +2438,7 @@ def _run_epoch(
             batch_lookup,
             pad_short=True,
             tensor_cache=tensor_cache,
+            control_indices_by_batch=control_indices_by_batch,
         )
         model_inputs["gene_mask"] = valid_mask
         losses = model(weights=weights, **model_inputs)
@@ -2476,6 +2479,7 @@ def _evaluate(
     metric_sum = _empty_metric_sum(accelerator.device)
     metric_count = 0
     pred_tensors = []
+    control_indices_by_batch = _control_indices_by_batch(data)
     with torch.no_grad():
         for batch in indices:
             gene_indices = _batch_indices(batch)
@@ -2496,6 +2500,7 @@ def _evaluate(
                 batch_lookup,
                 pad_short=pad_short,
                 tensor_cache=tensor_cache,
+                control_indices_by_batch=control_indices_by_batch,
             )
             model_inputs["gene_mask"] = valid_mask
             losses = model(weights=weights, **model_inputs)
@@ -2678,6 +2683,7 @@ def _model_inputs_for_indices(
     *,
     pad_short: bool,
     tensor_cache: _InputTensorCache | None = None,
+    control_indices_by_batch: dict[str, np.ndarray] | None = None,
 ) -> tuple[dict[str, Any], torch.Tensor, torch.Tensor]:
     genes: list[str] = []
     control_chunk_groups: list[tuple[torch.Tensor, ...]] = []
@@ -2696,6 +2702,7 @@ def _model_inputs_for_indices(
             rng=rng,
             pad_short=pad_short,
             shuffle=True,
+            control_indices_by_batch=control_indices_by_batch,
         )
         genes.append(gene)
         control_chunk_groups.append(
