@@ -1785,6 +1785,78 @@ def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
     assert row["total_loss"] == 1.5
 
 
+def test_train_and_evaluate_reuse_one_control_batch_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = _toy_gene_bags_with_batches()
+    lookup = prepare_module._control_indices_by_batch(data)
+    build_calls: list[GeneBags] = []
+    observed_lookups: list[dict[str, np.ndarray] | None] = []
+    original_inputs = train_module._model_inputs_for_indices
+
+    def build_lookup(current: GeneBags) -> dict[str, np.ndarray]:
+        build_calls.append(current)
+        return lookup
+
+    def capture_lookup(*args: object, **kwargs: object):
+        observed_lookups.append(kwargs.get("control_indices_by_batch"))
+        return original_inputs(*args, **kwargs)
+
+    monkeypatch.setattr(train_module, "_control_indices_by_batch", build_lookup)
+    monkeypatch.setattr(train_module, "_model_inputs_for_indices", capture_lookup)
+    accelerator = train_module.Accelerator(cpu=True)
+    model, _state_model = _build_tiny_aivc_model()
+    loader = train_module._gene_loader(
+        np.asarray([0, 0], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=1,
+        world_size=1,
+    )
+    train_module._run_epoch(
+        model,
+        data,
+        loader,
+        _loss_weights(),
+        torch.optim.SGD(model.parameters(), lr=0.01),
+        np.random.default_rng(1),
+        2,
+        accelerator,
+        {"batch_a": 0, "batch_b": 1, "batch_z": 2},
+        epoch=1,
+        max_epochs=1,
+    )
+
+    assert build_calls == [data]
+    assert len(observed_lookups) == 2
+    assert all(current is lookup for current in observed_lookups)
+
+    build_calls.clear()
+    observed_lookups.clear()
+    eval_loader = train_module._gene_loader(
+        np.asarray([0, 0], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=1,
+        world_size=1,
+    )
+    train_module._evaluate(
+        model,
+        data,
+        eval_loader,
+        _loss_weights(),
+        np.random.default_rng(1),
+        2,
+        accelerator,
+        {"batch_a": 0, "batch_b": 1, "batch_z": 2},
+        pad_short=False,
+    )
+
+    assert build_calls == [data]
+    assert len(observed_lookups) == 2
+    assert all(current is lookup for current in observed_lookups)
+
+
 def test_evaluate_filters_padding_rows_after_forward() -> None:
     model, _state_model = _build_tiny_aivc_model()
     data = _toy_gene_bags_with_batches()
