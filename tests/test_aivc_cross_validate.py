@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import replace
+import gc
 import hashlib
 import json
 import logging
@@ -13,6 +14,7 @@ from pathlib import Path
 import pickle
 import socket
 import types
+import weakref
 
 import anndata as ad
 import numpy as np
@@ -555,6 +557,63 @@ def _run_tiny_audited_fold(tmp_path: Path) -> dict[str, Path]:
         source_fingerprint="source",
         accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
     )
+
+
+def test_audited_training_passes_fold_local_tensor_cache_to_epoch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CacheMarker:
+        pass
+
+    cache_ref: weakref.ReferenceType[CacheMarker] | None = None
+    observed: list[int | None] = []
+    original_run_epoch = train_module._run_epoch
+    original_checkpoint_load = train_module._load_authorized_model_checkpoint
+
+    def build_cache(*_args: object, **_kwargs: object) -> CacheMarker:
+        nonlocal cache_ref
+        cache = CacheMarker()
+        cache_ref = weakref.ref(cache)
+        return cache
+
+    monkeypatch.setattr(
+        train_module._InputTensorCache,
+        "maybe_build",
+        classmethod(lambda cls, *args, **kwargs: build_cache(*args, **kwargs)),
+    )
+
+    def capture_cache(*args: object, **kwargs: object) -> dict[str, float]:
+        cache = kwargs.pop("tensor_cache", None)
+        observed.append(id(cache) if cache is not None else None)
+        return original_run_epoch(*args, tensor_cache=None, **kwargs)
+
+    def assert_cache_released(*args: object, **kwargs: object) -> object:
+        gc.collect()
+        assert cache_ref is not None and cache_ref() is None
+        return original_checkpoint_load(*args, **kwargs)
+
+    monkeypatch.setattr(train_module, "_run_epoch", capture_cache)
+    monkeypatch.setattr(
+        train_module,
+        "_load_authorized_model_checkpoint",
+        assert_cache_released,
+    )
+
+    config = _audited_config(tmp_path)
+    config = replace(config, train=replace(config.train, max_epochs=2))
+    cv.run_training_fold(
+        config=config,
+        data=_toy_bags(),
+        external=None,
+        fold_spec=FoldSpec(0, ("A", "B"), ("C",), ("D",)),
+        run_dir=tmp_path / "fold_0",
+        source_fingerprint="source",
+        accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
+    )
+
+    assert len(observed) == 2
+    assert observed[0] is not None and observed[0] == observed[1]
 
 
 def _fingerprinted_config(tmp_path: Path) -> AivcConfig:
