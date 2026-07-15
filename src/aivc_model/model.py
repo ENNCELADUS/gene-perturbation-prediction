@@ -605,22 +605,25 @@ class AivcModel(nn.Module):
         ):
             msg = "All chunk inputs must have the same length"
             raise ValueError(msg)
-        chunk_sizes = [int(control.shape[0]) for control in control_chunks]
         batched_control = torch.cat(control_chunks, dim=0)
-        batched_batch_indices = _concat_optional_batch_indices(
-            batch_index_chunks,
-            chunk_sizes,
-            batched_control.device,
+        predicted_responses = tuple(
+            self.predict_response(control, gene, batch_indices)
+            for control, batch_indices in zip(
+                control_chunks,
+                batch_index_chunks,
+                strict=True,
+            )
         )
-        predicted_expression, predicted_latent = self.predict_response(
-            batched_control,
-            gene,
-            batched_batch_indices,
+        predicted_expression_chunks = tuple(
+            expression for expression, _latent in predicted_responses
+        )
+        predicted_latent = torch.cat(
+            tuple(latent for _expression, latent in predicted_responses),
+            dim=0,
         )
         target_expression = torch.cat(target_expression_chunks, dim=0)
         observed_latent = self.response_encoder(target_expression)
         control_latent = self.response_encoder(batched_control)
-        predicted_expression_chunks = predicted_expression.split(chunk_sizes, dim=0)
         complete_predicted_expression = torch.cat(
             predicted_expression_chunks,
             dim=0,
@@ -642,7 +645,7 @@ class AivcModel(nn.Module):
         hvg_energy = (
             torch.stack(hvg_energy_terms).mean()
             if compute_hvg_energy
-            else _zero_like_loss(predicted_expression)
+            else _zero_like_loss(complete_predicted_expression)
         )
         latent_mean_delta = F.mse_loss(
             predicted_latent.mean(dim=0),
@@ -811,22 +814,6 @@ def _global_ranknet_batch(
         torch.cat(gathered_scores)[global_mask],
         torch.cat(gathered_labels)[global_mask],
     )
-
-
-def _concat_optional_batch_indices(
-    batch_index_chunks: tuple[torch.Tensor | None, ...],
-    chunk_sizes: list[int],
-    device: torch.device,
-) -> torch.Tensor | None:
-    if all(batch_indices is None for batch_indices in batch_index_chunks):
-        return None
-    normalized = [
-        batch_indices.to(device)
-        if batch_indices is not None
-        else torch.zeros(size, dtype=torch.long, device=device)
-        for batch_indices, size in zip(batch_index_chunks, chunk_sizes, strict=True)
-    ]
-    return torch.cat(normalized, dim=0)
 
 
 def fit_fixed_gmm(
