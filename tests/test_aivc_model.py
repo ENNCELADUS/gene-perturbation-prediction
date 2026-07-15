@@ -2385,8 +2385,9 @@ def test_aivc_forward_matches_loss_helper() -> None:
         assert torch.allclose(forward_losses[key], helper_losses[key])
 
 
-def test_aivc_forward_batches_chunks_without_changing_losses() -> None:
+def test_aivc_forward_processes_chunks_independently_without_changing_losses() -> None:
     model, state_model = _build_counting_aivc_model()
+    state_model.contextual = True
     kwargs = {
         "gene": "GENE1",
         "control_chunks": (
@@ -2401,16 +2402,18 @@ def test_aivc_forward_batches_chunks_without_changing_losses() -> None:
             torch.tensor([[1.0, 1.5], [1.5, 2.5]]),
             torch.tensor([[2.5, 3.5]]),
         ),
-        "batch_index_chunks": (None, None),
+        "batch_index_chunks": (torch.tensor([0, 0]), torch.tensor([1])),
         "y": torch.tensor(-1.0),
         "weights": _loss_weights(),
     }
 
     expected = _legacy_chunk_loop_losses(model, **kwargs)
     state_model.call_shapes.clear()
+    state_model.call_batches.clear()
     actual = model(**kwargs)
 
-    assert state_model.call_shapes == [3]
+    assert state_model.call_shapes == [2, 1]
+    assert state_model.call_batches == [[0, 0], [1]]
     assert set(actual) == set(expected)
     for key in actual:
         assert torch.allclose(actual[key], expected[key], atol=1e-6)
@@ -3686,6 +3689,8 @@ class _CountingStateModel(torch.nn.Module):
         super().__init__()
         self.weight = torch.nn.Parameter(torch.eye(3))
         self.call_shapes: list[int] = []
+        self.call_batches: list[list[int]] = []
+        self.contextual = False
 
     def forward(
         self,
@@ -3696,7 +3701,16 @@ class _CountingStateModel(torch.nn.Module):
         control = batch["ctrl_cell_emb"]
         pert = batch["pert_emb"]
         self.call_shapes.append(int(control.shape[0]))
-        return control @ self.weight + 0.1 * pert[:, :3]
+        batch_indices = batch.get("batch")
+        self.call_batches.append(
+            [] if batch_indices is None else batch_indices.tolist()
+        )
+        contextual = (
+            control + control.mean(dim=0, keepdim=True)
+            if self.contextual
+            else control
+        )
+        return contextual @ self.weight + 0.1 * pert[:, :3]
 
 
 def _build_counting_aivc_model() -> tuple[AivcModel, _CountingStateModel]:
