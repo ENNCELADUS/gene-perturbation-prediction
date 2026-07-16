@@ -71,14 +71,15 @@ prediction collection uses fixed-shape tensor collectives, not Python object
 gather. Accelerate DDP is configured with unused-parameter detection for sparse
 per-gene perturbation-vector parameters.
 
-Training is the only epoch path that builds observed target response chunks for
-A->B losses and observed-B anchor diagnostics. Validation and final evaluation
-are prediction-only: they use all available control cells plus perturbation
-identity in one same-gene STATE call per evaluated perturbation gene, emit
-regression/ranking metrics, and select `models/best/` by `val_spearman`.
+Validation and final evaluation reuse the training STATE window path: a fixed,
+batch-stratified representative control panel is cached on each device, split
+into 64-cell windows, and forwarded with `padded=True` in configurable window
+macro-batches. Observed B is never a downstream input; it is used only as the
+target of a separately reported generation MSE. Checkpoint selection minimizes
+prediction-only `val_c_loss`; Spearman, Pearson, and RMSE remain diagnostics.
 
 The current Replogle K562 STATE experiment uses `data.state_embed_key: X_hvg`,
-`train.cell_set_len: 256`, `train.gene_batch_size: 4`, and a scaled
+`train.cell_set_len: 64`, `train.gene_batch_size: 4`, and a scaled
 `train.learning_rate: 0.000025` because the four local gene losses are summed
 before backward. The `state` block only selects and locates the forward model
 and perturbation vectors; embedding selection and cell-set length are controlled

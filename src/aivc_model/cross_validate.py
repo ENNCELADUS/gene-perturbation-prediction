@@ -388,6 +388,7 @@ def run_training_fold(
     val_data = data.for_prediction_genes(
         fold_spec.val_genes,
         stage="early_stopping_prediction_only",
+        generation_targets=True,
     )
     manifest = _manifest_from_bags(data)
     train_data = replace(

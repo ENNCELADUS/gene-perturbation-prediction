@@ -29,7 +29,7 @@ FIT_STAGES = frozenset(
 SELECTION_STAGES = frozenset(
     {"early_stopping_prediction_only", "layer_selection"}
 )
-FINAL_RESPONSE_STAGES: frozenset[str] = frozenset()
+FINAL_RESPONSE_STAGES = frozenset({"generation_loss_outer_test"})
 FINAL_LABEL_STAGES = frozenset({"internal_outer_test"})
 
 

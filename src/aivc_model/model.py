@@ -85,21 +85,6 @@ class StateForwardAdapter(nn.Module):
         """Return token hidden features captured from the most recent forward."""
         return self._last_token_features
 
-    def forward(
-        self,
-        control_cells: torch.Tensor,
-        perturbation: torch.Tensor,
-        gene: str,
-        batch_indices: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        return self._forward_state(
-            control_cells,
-            perturbation,
-            gene,
-            batch_indices,
-            padded=False,
-        )
-
     def forward_chunks(
         self,
         control_chunks: tuple[torch.Tensor, ...],
@@ -114,14 +99,11 @@ class StateForwardAdapter(nn.Module):
             raise ValueError("at least one STATE condition chunk is required")
         chunk_sizes = tuple(int(chunk.shape[0]) for chunk in control_chunks)
         sentence_len = getattr(self.state_model, "cell_sentence_len", None)
-        if len(set(chunk_sizes)) != 1 or chunk_sizes[0] != sentence_len:
-            return tuple(
-                self(control, perturbation, gene, batch_indices)
-                for control, batch_indices in zip(
-                    control_chunks,
-                    batch_index_chunks,
-                    strict=True,
-                )
+        if len(set(chunk_sizes)) != 1 or (
+            sentence_len is not None and chunk_sizes[0] != sentence_len
+        ):
+            raise ValueError(
+                "STATE chunks must all equal the configured cell_sentence_len"
             )
         control_cells = torch.cat(control_chunks, dim=0)
         batch_indices = _concat_optional_batch_indices(
@@ -450,21 +432,6 @@ class AivcModel(nn.Module):
             torch.as_tensor(control_expression_mean, dtype=torch.float32),
         )
 
-    def predict_response(
-        self,
-        control_cells: torch.Tensor,
-        gene: str,
-        batch_indices: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        perturbation = self.perturbations(gene)
-        predicted_expression = self.state_adapter(
-            control_cells,
-            perturbation,
-            gene,
-            batch_indices,
-        )
-        return predicted_expression, self.response_encoder(predicted_expression)
-
     def predict_response_chunks(
         self,
         control_chunks: tuple[torch.Tensor, ...],
@@ -483,13 +450,11 @@ class AivcModel(nn.Module):
         )
         return predicted_expression_chunks, predicted_latent
 
-    def predict_c_from_response(
+    def predict_c_from_latents(
         self,
-        expression_bag: torch.Tensor,
-        control_expression_bag: torch.Tensor,
+        latent: torch.Tensor,
+        control_latent: torch.Tensor,
     ) -> torch.Tensor:
-        latent = self.response_encoder(expression_bag)
-        control_latent = self.response_encoder(control_expression_bag)
         return self.c_head(self.response_pooler(latent, control_latent))
 
     def losses_for_gene(

@@ -96,6 +96,8 @@ train:
   max_grad_norm: 1.0
   cell_set_len: 64
   gene_batch_size: 4
+  eval_control_panel_size: 4096
+  eval_window_macro_batch_size: 64
   required_world_size: 4
   device: auto
   float32_matmul_precision: high

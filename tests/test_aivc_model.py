@@ -1128,6 +1128,8 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
         "  state_learning_rate: 0.0000025\n"
         "  max_grad_norm: 0.5\n"
         "  required_world_size: 4\n"
+        "  eval_control_panel_size: 128\n"
+        "  eval_window_macro_batch_size: 8\n"
         "  freeze_state: true\n"
         "  input_tensor_cache_max_gib: 12.5\n",
     )
@@ -1140,6 +1142,8 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert default_config.train.state_learning_rate == 2.5e-6
     assert default_config.train.max_grad_norm == 1.0
     assert default_config.train.required_world_size == 4
+    assert default_config.train.eval_control_panel_size == 4096
+    assert default_config.train.eval_window_macro_batch_size == 64
     assert default_config.train.freeze_state is False
     assert default_config.train.input_tensor_cache_max_gib == 24.0
     assert default_config.loss.pred_rank_weight == 0.0
@@ -1150,6 +1154,8 @@ def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> Non
     assert parsed.train.state_learning_rate == 2.5e-6
     assert parsed.train.max_grad_norm == 0.5
     assert parsed.train.required_world_size == 4
+    assert parsed.train.eval_control_panel_size == 128
+    assert parsed.train.eval_window_macro_batch_size == 8
     assert parsed.train.freeze_state is True
     assert parsed.train.input_tensor_cache_max_gib == 12.5
     assert parsed.loss.pred_rank_weight == 5.0
@@ -1191,6 +1197,18 @@ def test_train_config_accepts_positive_legacy_world_and_batch_sizes(
         ({"max_grad_norm": 0.0}, "max_grad_norm must be positive"),
         ({"required_world_size": 0}, "required_world_size must be positive"),
         ({"gene_batch_size": 0}, "gene_batch_size must be positive"),
+        (
+            {"eval_control_panel_size": 1},
+            "eval_control_panel_size must be at least cell_set_len",
+        ),
+        (
+            {"eval_control_panel_size": 129},
+            "eval_control_panel_size must be divisible by cell_set_len",
+        ),
+        (
+            {"eval_window_macro_batch_size": 0},
+            "eval_window_macro_batch_size must be positive",
+        ),
     ],
 )
 def test_train_config_rejects_invalid_e2e_settings(
@@ -1989,7 +2007,7 @@ def test_evaluate_uses_tensor_gather_and_filters_padding(monkeypatch) -> None:
     assert math.isfinite(summary["total_loss"])
 
 
-def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
+def test_final_prediction_only_uses_fixed_padded_control_panel_and_batches(
     monkeypatch,
 ) -> None:
     class RecordingState(torch.nn.Module):
@@ -1999,17 +2017,18 @@ def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
             self.chunk_sizes: list[int] = []
             self.batch_values: list[list[int]] = []
             self.pert_names: list[list[str]] = []
+            self.padded_values: list[bool] = []
 
         def forward(
             self,
             batch: dict[str, torch.Tensor],
             padded: bool = False,
         ) -> torch.Tensor:
-            del padded
             control = batch["ctrl_cell_emb"]
             self.chunk_sizes.append(int(control.shape[0]))
             self.batch_values.append(batch["batch"].detach().cpu().tolist())
             self.pert_names.append(list(batch["pert_name"]))
+            self.padded_values.append(padded)
             return control @ self.weight
 
     def fail_target_chunking(*args: object, **kwargs: object) -> None:
@@ -2037,25 +2056,44 @@ def test_final_prediction_only_uses_all_control_chunks_and_control_batches(
     )
     monkeypatch.setattr(train_module, "make_cell_set_chunks", fail_target_chunking)
 
+    panel = train_module._build_evaluation_control_panel(
+        data,
+        cell_set_len=2,
+        panel_size=4,
+        macro_batch_windows=2,
+        seed=7,
+        device=torch.device("cpu"),
+        batch_lookup={"batch_a": 3, "batch_b": 4, "batch_c": 5},
+    )
     summary, predictions = train_module._evaluate_prediction_only_final(
         model,
         data,
         loader,
-        cell_set_len=2,
+        panel,
         accelerator=accelerator,
-        batch_lookup={"batch_a": 3, "batch_b": 4, "batch_c": 5},
+        generation_targets=data,
     )
 
-    assert recording_state.chunk_sizes == [5, 5]
-    assert recording_state.batch_values == [[3, 4, 3, 4, 5], [3, 4, 3, 4, 5]]
-    assert recording_state.pert_names == [["GENE1"] * 5, ["GENE2"] * 5]
+    expected_batches = train_module.encode_batch_labels(
+        data.control_batch[panel.selected_indices],
+        {"batch_a": 3, "batch_b": 4, "batch_c": 5},
+    ).tolist()
+    assert set(data.control_batch[panel.selected_indices]) == {
+        "batch_a",
+        "batch_b",
+        "batch_c",
+    }
+    assert recording_state.chunk_sizes == [4, 4]
+    assert recording_state.batch_values == [expected_batches, expected_batches]
+    assert recording_state.pert_names == [["GENE1"] * 4, ["GENE2"] * 4]
+    assert recording_state.padded_values == [True, True]
     assert predictions["perturbation_gene"].tolist() == ["GENE1", "GENE2"]
-    assert predictions["n_chunks"].tolist() == [1.0, 1.0]
+    assert predictions["n_chunks"].tolist() == [2.0, 2.0]
     assert "y_obs_anchor" not in predictions.columns
-    assert set(summary) >= {"rmse", "spearman"}
+    assert set(summary) >= {"c_loss", "generation_loss", "rmse", "spearman"}
 
 
-def test_final_prediction_only_matches_chunked_predict_response() -> None:
+def test_final_prediction_only_reuses_chunked_train_forward() -> None:
     model, _state_model = _build_counting_aivc_model()
     data = replace(
         _toy_gene_bags_with_batches(),
@@ -2074,42 +2112,38 @@ def test_final_prediction_only_matches_chunked_predict_response() -> None:
         gene_batch_size=1,
         world_size=1,
     )
-    predicted_expression_chunks = []
-    control_chunks = []
+    panel = train_module._build_evaluation_control_panel(
+        data,
+        cell_set_len=2,
+        panel_size=4,
+        macro_batch_windows=2,
+        seed=7,
+        device=torch.device("cpu"),
+        batch_lookup=batch_lookup,
+    )
     with torch.no_grad():
-        for start in range(0, data.control_input.shape[0], 2):
-            end = min(start + 2, data.control_input.shape[0])
-            control_chunk = torch.as_tensor(
-                data.control_input[start:end],
-                dtype=torch.float32,
-            )
-            batch_indices = train_module._batch_tensor(
-                data.control_batch[start:end],
-                batch_lookup,
-                torch.device("cpu"),
-            )
-            predicted_expression, _predicted_latent = model.predict_response(
-                control_chunk,
+        predicted_latents = []
+        for control_chunks, batch_chunks in panel.macro_batches():
+            _predicted_expression, predicted_latent = model.predict_response_chunks(
+                control_chunks,
                 "GENE1",
-                batch_indices,
+                batch_chunks,
             )
-            predicted_expression_chunks.append(predicted_expression)
-            control_chunks.append(control_chunk)
-        expected = model.predict_c_from_response(
-            torch.cat(predicted_expression_chunks, dim=0),
-            torch.cat(control_chunks, dim=0),
+            predicted_latents.append(predicted_latent)
+        expected = model.predict_c_from_latents(
+            torch.cat(predicted_latents, dim=0),
+            train_module._control_panel_latent(model, panel),
         )
 
         _summary, predictions = train_module._evaluate_prediction_only_final(
             model,
             data,
             loader,
-            cell_set_len=2,
+            panel,
             accelerator=accelerator,
-            batch_lookup=batch_lookup,
         )
 
-    assert predictions["n_chunks"].tolist() == [1.0]
+    assert predictions["n_chunks"].tolist() == [2.0]
     np.testing.assert_allclose(
         predictions["y_pred"].to_numpy(dtype=np.float32),
         np.asarray([float(expected.detach().cpu().item())], dtype=np.float32),
@@ -2146,14 +2180,22 @@ def test_final_prediction_only_unwraps_prepared_model() -> None:
         gene_batch_size=1,
         world_size=1,
     )
+    panel = train_module._build_evaluation_control_panel(
+        data,
+        cell_set_len=2,
+        panel_size=4,
+        macro_batch_windows=2,
+        seed=7,
+        device=torch.device("cpu"),
+        batch_lookup={},
+    )
 
     _summary, predictions = train_module._evaluate_prediction_only_final(
         wrapped,
         data,
         loader,
-        cell_set_len=2,
+        panel,
         accelerator=FakeAccelerator(),  # type: ignore[arg-type]
-        batch_lookup={},
     )
 
     assert predictions["perturbation_gene"].tolist() == ["GENE1"]
@@ -2177,10 +2219,10 @@ def test_gpu_peak_memory_uses_tensor_gather(monkeypatch) -> None:
     assert math.isnan(value)
 
 
-def test_metric_selection_maximizes_spearman() -> None:
-    assert train_module._is_better_metric(0.2, 0.1, mode="max")
-    assert not train_module._is_better_metric(0.1, 0.2, mode="max")
-    assert not train_module._is_better_metric(math.nan, 0.2, mode="max")
+def test_checkpoint_selection_minimizes_prediction_only_c_loss() -> None:
+    assert train_module._is_better_metric(0.1, 0.2, mode="min")
+    assert not train_module._is_better_metric(0.2, 0.1, mode="min")
+    assert not train_module._is_better_metric(math.nan, 0.2, mode="min")
 
 
 def test_train_val_chunks_cover_cells_and_pad_short_chunk() -> None:
@@ -2458,9 +2500,9 @@ def test_pred_c_loss_backprops_into_mock_state() -> None:
     model, state_model = _build_tiny_aivc_model()
     losses = model.losses_for_gene(
         gene="GENE1",
-        control_chunks=(torch.randn(3, 3), torch.randn(2, 3)),
-        target_expression_chunks=(torch.randn(3, 3), torch.randn(2, 3)),
-        target_latent_chunks=(torch.randn(3, 2), torch.randn(2, 2)),
+        control_chunks=(torch.randn(2, 3), torch.randn(2, 3)),
+        target_expression_chunks=(torch.randn(2, 3), torch.randn(2, 3)),
+        target_latent_chunks=(torch.randn(2, 2), torch.randn(2, 2)),
         batch_index_chunks=(None, None),
         y=torch.tensor(-1.0),
         weights=_loss_weights(),
@@ -2532,9 +2574,9 @@ def test_aivc_forward_matches_loss_helper() -> None:
     model, _state_model = _build_tiny_aivc_model()
     kwargs = {
         "gene": "GENE1",
-        "control_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
-        "target_expression_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
-        "target_latent_chunks": (torch.randn(3, 2), torch.randn(2, 2)),
+        "control_chunks": (torch.randn(2, 3), torch.randn(2, 3)),
+        "target_expression_chunks": (torch.randn(2, 3), torch.randn(2, 3)),
+        "target_latent_chunks": (torch.randn(2, 2), torch.randn(2, 2)),
         "batch_index_chunks": (None, None),
         "y": torch.tensor(-1.0),
         "weights": _loss_weights(),
@@ -2548,7 +2590,7 @@ def test_aivc_forward_matches_loss_helper() -> None:
         assert torch.allclose(forward_losses[key], helper_losses[key])
 
 
-def test_aivc_forward_processes_chunks_independently_without_changing_losses() -> None:
+def test_aivc_forward_rejects_nonuniform_state_windows() -> None:
     model, state_model = _build_counting_aivc_model()
     state_model.contextual = True
     kwargs = {
@@ -2570,16 +2612,9 @@ def test_aivc_forward_processes_chunks_independently_without_changing_losses() -
         "weights": _loss_weights(),
     }
 
-    expected = _legacy_chunk_loop_losses(model, **kwargs)
-    state_model.call_shapes.clear()
-    state_model.call_batches.clear()
-    actual = model(**kwargs)
-
-    assert state_model.call_shapes == [2, 1]
-    assert state_model.call_batches == [[0, 0], [1]]
-    assert set(actual) == set(expected)
-    for key in actual:
-        assert torch.allclose(actual[key], expected[key], atol=1e-6)
+    state_model.cell_sentence_len = 2
+    with pytest.raises(ValueError, match="cell_sentence_len"):
+        model(**kwargs)
 
 
 def test_aivc_forward_batches_native_state_sentences_without_mixing_chunks() -> None:
@@ -2618,10 +2653,11 @@ def test_aivc_forward_batches_native_state_sentences_without_mixing_chunks() -> 
         assert torch.allclose(actual[key], expected[key], atol=1e-6)
 
 
-def test_hvg_mean_delta_is_invariant_to_unequal_chunk_partitioning() -> None:
+def test_hvg_mean_delta_is_invariant_to_fixed_window_partitioning() -> None:
     model, _state_model = _build_counting_aivc_model()
     control = torch.tensor(
         [
+            [0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
@@ -2650,23 +2686,23 @@ def test_hvg_mean_delta_is_invariant_to_unequal_chunk_partitioning() -> None:
         **common,
         control_chunks=(control,),
         target_expression_chunks=(target,),
-        target_latent_chunks=(torch.zeros(5, 2),),
+        target_latent_chunks=(torch.zeros(6, 2),),
         batch_index_chunks=(None,),
     )
-    unequal_chunks = model.losses_for_gene(
+    fixed_windows = model.losses_for_gene(
         **common,
-        control_chunks=(control[:2], control[2:4], control[4:]),
-        target_expression_chunks=(target[:2], target[2:4], target[4:]),
+        control_chunks=(control[:2], control[2:4], control[4:6]),
+        target_expression_chunks=(target[:2], target[2:4], target[4:6]),
         target_latent_chunks=(
             torch.zeros(2, 2),
             torch.zeros(2, 2),
-            torch.zeros(1, 2),
+            torch.zeros(2, 2),
         ),
         batch_index_chunks=(None, None, None),
     )
 
     assert torch.allclose(
-        unequal_chunks["hvg_mean_delta"],
+        fixed_windows["hvg_mean_delta"],
         complete_bag["hvg_mean_delta"],
     )
 
@@ -3007,8 +3043,10 @@ def test_esm2_state_is_trainable_before_ddp_prepare(
         emit_checkpoint_output=False,
     )
     assert model.perturbations("GENE1").shape == (5,)
-    _predicted, latent = model.predict_response(
-        torch.as_tensor(data.control_input), "GENE1"
+    _predicted, latent = model.predict_response_chunks(
+        (torch.as_tensor(data.control_input),),
+        "GENE1",
+        (None,),
     )
     pred_y = model.c_head(model.response_pooler(latent, latent.detach()))
     pred_c = F.mse_loss(pred_y, torch.tensor(-1.0))
@@ -3262,12 +3300,17 @@ def test_state_forward_adapter_uses_predict_step_batch_schema() -> None:
     control = torch.eye(2, requires_grad=True)
     batch_indices = torch.tensor([1, 2])
 
-    output = adapter(control, torch.tensor([1.0, 0.0]), "GENE1", batch_indices)
+    (output,) = adapter.forward_chunks(
+        (control,),
+        torch.tensor([1.0, 0.0]),
+        "GENE1",
+        (batch_indices,),
+    )
     output.sum().backward()
 
     seen_batch = state.seen["batch"]
     assert isinstance(seen_batch, dict)
-    assert state.seen["padded"] is False
+    assert state.seen["padded"] is True
     assert {"ctrl_cell_emb", "pert_emb", "pert_name", "batch"}.issubset(seen_batch)
     assert state.weight.grad is not None
     assert torch.isfinite(output).all()
@@ -3376,6 +3419,7 @@ train:
         "epoch",
         "gpu_peak_memory_allocated_mb",
         "train_total_loss",
+        "val_c_loss",
         "val_spearman",
     }.issubset(train_log.columns)
     assert set(chunked_indices).issubset(train_indices)
@@ -3399,14 +3443,15 @@ train:
         )
     )
     selected_epoch = int(best_metadata["epoch"])
-    selected_val_spearman = float(
-        train_log.loc[train_log["epoch"] == selected_epoch, "val_spearman"].iloc[0]
+    selected_val_c_loss = float(
+        train_log.loc[train_log["epoch"] == selected_epoch, "val_c_loss"].iloc[0]
     )
-    assert best_metadata["selection_metric"] == "val_spearman"
-    if math.isnan(selected_val_spearman):
+    assert best_metadata["selection_metric"] == "val_c_loss"
+    assert best_metadata["selection_mode"] == "min"
+    if math.isnan(selected_val_c_loss):
         assert math.isnan(float(best_metadata["metric_value"]))
     else:
-        assert float(best_metadata["metric_value"]) == selected_val_spearman
+        assert float(best_metadata["metric_value"]) == selected_val_c_loss
     assert expected_loss_cols.isdisjoint(test_metrics.columns)
     assert {"rmse", "spearman"}.issubset(test_metrics.columns)
     assert {"obs_rmse", "obs_spearman"}.isdisjoint(test_metrics.columns)
@@ -3863,9 +3908,9 @@ def _build_legacy_featureizer() -> torch.nn.Module:
 def _shared_response_gene_inputs() -> dict[str, object]:
     return {
         "gene": "GENE1",
-        "control_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
-        "target_expression_chunks": (torch.randn(3, 3), torch.randn(2, 3)),
-        "target_latent_chunks": (torch.randn(3, 2), torch.randn(2, 2)),
+        "control_chunks": (torch.randn(2, 3), torch.randn(2, 3)),
+        "target_expression_chunks": (torch.randn(2, 3), torch.randn(2, 3)),
+        "target_latent_chunks": (torch.randn(2, 2), torch.randn(2, 2)),
         "batch_index_chunks": (None, None),
         "y": torch.tensor(-1.0),
     }
@@ -3960,11 +4005,15 @@ def _legacy_chunk_loop_losses(
         batch_index_chunks,
         strict=True,
     ):
-        predicted_expression, predicted_latent = model.predict_response(
+        perturbation = model.perturbations(gene)
+        predicted_expression = model.state_adapter._forward_state(
             control,
+            perturbation,
             gene,
             batch_indices,
+            padded=True,
         )
+        predicted_latent = model.response_encoder(predicted_expression)
         predicted_expression_chunks.append(predicted_expression)
         predicted_latent_chunks.append(predicted_latent)
         hvg_energy_terms.append(
