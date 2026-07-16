@@ -10,6 +10,7 @@ venv/
 ENV/
 .venv/
 .uv-cache/
+.worktrees/
 build/
 develop-eggs/
 dist/

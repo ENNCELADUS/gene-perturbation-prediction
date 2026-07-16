@@ -22,21 +22,12 @@ if [ -f "$HOME/.bashrc" ]; then
   source "$HOME/.bashrc"
 fi
 
-CONFIG_PATH="configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml"
+CONFIG_PATH="${CONFIG_PATH:-configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml}"
 
 if [ ! -d ".venv" ]; then
   echo "Missing .venv. Run 'uv sync' before running STATE AIVC."
   exit 1
 fi
 
-export PYTHONPATH="$PWD/src:$PWD:${PYTHONPATH:-}"
-export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-
 echo "Running STATE AIVC with config: $CONFIG_PATH"
-srun uv run --locked --no-sync --offline accelerate launch \
-  --num_processes 4 \
-  --num_machines 1 \
-  --mixed_precision bf16 \
-  --dynamo_backend no \
-  src/aivc_model/train.py \
-  --config "$CONFIG_PATH"
+srun scripts/run_exp05_ddp.sh "$CONFIG_PATH"

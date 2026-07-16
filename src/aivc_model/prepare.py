@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+import hashlib
 import json
 import os
 import pickle
@@ -19,6 +20,9 @@ from scipy import sparse
 from sklearn.model_selection import train_test_split
 import yaml
 
+from aivc_model.expression import compute_finite_feature_means, replace_nonfinite
+from aivc_model.gene_splits import GeneAccessRecorder
+
 _LABEL_RTOL = 1e-6
 _LABEL_ATOL = 1e-8
 
@@ -28,16 +32,20 @@ class DataConfig:
     h5ad_path: Path
     overlap_csv: Path
     output_dir: Path
+    prepared_cache_dir: Path | None = None
     obs_perturbation_col: str = "gene"
     control_label: str = "non-targeting"
     obs_cell_type_col: str | None = None
     obs_batch_col: str | None = None
+    var_gene_symbol_col: str = "gene_name"
     state_embed_key: str | None = None
     state_hvg_n_top_genes: int | None = None
     scvi_obsm_key: str | None = "X_scVI"
     depmap_label_col: str = "depmap_gene_effect"
     matched_label_col: str = "has_depmap_label"
     min_cells_per_gene: int = 2
+    cache_seed: int = 42
+    cache_cells_per_gene: int = 256
 
 
 @dataclass(frozen=True)
@@ -46,7 +54,7 @@ class ExternalSourceConfig:
     h5ad_path: Path
     obs_perturbation_col: str = "perturbation"
     control_label: str | None = None
-    var_gene_symbol_col: str = "gene_name"
+    var_gene_symbol_col: str | None = "gene_name"
     obs_batch_col: str | None = None
 
 
@@ -72,6 +80,17 @@ class SplitConfig:
 
 
 @dataclass(frozen=True)
+class CVConfig:
+    n_splits: int = 5
+    expected_gene_count: int = 9338
+    outer_split_manifest: Path | None = None
+    outer_split_sha256_file: Path | None = None
+    inner_val_fraction: float = 0.1
+    random_state: int = 42
+    stratify_bins: int = 10
+
+
+@dataclass(frozen=True)
 class StateConfig:
     backend: str = "state_checkpoint"
     checkpoint_path: Path | None = None
@@ -80,6 +99,65 @@ class StateConfig:
     output_dim: int | None = None
     pert_dim: int | None = None
     known_perturbation_vectors: Path | None = None
+    gene_tokenizer: str = "state_onehot"
+    esm2_npz: Path | None = None
+    esm2_adapter_hidden: int = 512
+    require_resolved_esm2: bool = False
+    representation_layer: str = "output"
+
+
+@dataclass(frozen=True)
+class ArtifactAuthority:
+    """Exact data authority used to fit one fold-local artifact."""
+
+    source_fingerprint: str
+    canonical_split_sha256: str
+    outer_fold: int
+    fit_stage: str
+    fit_genes: tuple[str, ...]
+    train_genes: tuple[str, ...]
+    val_genes: tuple[str, ...]
+    test_genes: tuple[str, ...]
+    selection_genes: tuple[str, ...] = ()
+
+    def metadata(self) -> dict[str, object]:
+        """Return validated, JSON-serializable artifact authority metadata."""
+        train = tuple(str(gene) for gene in self.train_genes)
+        fit = tuple(str(gene) for gene in self.fit_genes)
+        val = tuple(str(gene) for gene in self.val_genes)
+        test = tuple(str(gene) for gene in self.test_genes)
+        selection = tuple(str(gene) for gene in self.selection_genes)
+        if fit != train:
+            raise ValueError("fit genes must exactly match inner-train genes")
+        if set(train).intersection(test):
+            raise ValueError("fit metadata contains an outer-test gene")
+        if not set(selection).issubset(val):
+            raise ValueError("selection metadata contains a non-validation gene")
+        return {
+            "schema_version": 2,
+            "source_fingerprint": self.source_fingerprint,
+            "canonical_split_sha256": self.canonical_split_sha256,
+            "outer_fold": int(self.outer_fold),
+            "fit_stage": self.fit_stage,
+            "fit_genes_sha256": _sha256_strings(fit),
+            "train_genes_sha256": _sha256_strings(train),
+            "val_genes_sha256": _sha256_strings(val),
+            "test_genes_sha256": _sha256_strings(test),
+            "fit_genes": list(fit),
+            "train_genes": list(train),
+            "val_genes": list(val),
+            "test_genes": list(test),
+            "selection_genes": list(selection),
+        }
+
+
+def _sha256_strings(values: tuple[str, ...]) -> str:
+    digest = hashlib.sha256()
+    for value in values:
+        encoded = str(value).encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -99,9 +177,17 @@ class ProjectorConfig:
 
 
 @dataclass(frozen=True)
+class ResponseEncoderConfig:
+    input_dim: int = 2000
+    latent_dim: int = 128
+
+
+@dataclass(frozen=True)
 class GmmConfig:
     n_components: int = 32
     covariance_floor: float = 1e-4
+    init_scale: float = 0.02
+    trainable: bool = True
     max_fit_cells: int | None = 20000
 
 
@@ -120,6 +206,7 @@ class LossConfig:
     pred_c_weight: float = 1.0
     obs_c_weight: float = 0.25
     occupancy_weight: float = 0.1
+    gmm_nll_weight: float = 0.0
     pred_rank_weight: float = 0.0
     pred_rank_tau: float = 0.25
     pred_rank_pair_margin: float = 0.0
@@ -133,7 +220,10 @@ class TrainConfig:
     run_id: str | None = None
     seed: int = 42
     max_epochs: int = 50
-    learning_rate: float = 1e-4
+    learning_rate: float = 2.5e-5
+    state_learning_rate: float = 2.5e-6
+    max_grad_norm: float = 1.0
+    required_world_size: int = 4
     weight_decay: float = 1e-4
     cell_set_len: int = 128
     gene_batch_size: int = 1
@@ -148,7 +238,9 @@ class AivcConfig:
     data: DataConfig
     external_test: ExternalTestConfig | None
     split: SplitConfig
+    cv: CVConfig
     state: StateConfig
+    response_encoder: ResponseEncoderConfig | None
     projector: ProjectorConfig
     gmm: GmmConfig
     model: ModelConfig
@@ -172,6 +264,181 @@ class GeneBags:
     metadata: pd.DataFrame
     input_dim: int
     latent_dim: int
+    feature_fill_values: np.ndarray | None = None
+    gene_outer_folds: np.ndarray | None = None
+    access_recorder: GeneAccessRecorder | None = None
+
+    def for_genes(
+        self,
+        genes: tuple[str, ...],
+        stage: str,
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> GeneBags:
+        """Authorize, record, and return an ordered gene-only view."""
+        requested = tuple(str(gene).upper() for gene in genes)
+        if self.access_recorder is None:
+            raise ValueError("GeneBags.for_genes requires a GeneAccessRecorder")
+        if len(set(requested)) != len(requested):
+            raise ValueError("gene view contains duplicate requested genes")
+        index_by_gene = {
+            str(gene).upper(): index for index, gene in enumerate(self.genes)
+        }
+        missing = [gene for gene in requested if gene not in index_by_gene]
+        if missing:
+            raise ValueError(f"gene view contains unknown genes: {missing[:5]}")
+        self.access_recorder.record(
+            stage,
+            requested,
+            checkpoint_frozen=checkpoint_frozen,
+        )
+        indices = [index_by_gene[gene] for gene in requested]
+        return replace(
+            self,
+            genes=np.asarray([self.genes[index] for index in indices], dtype=object),
+            y=np.asarray([self.y[index] for index in indices], dtype=np.float32),
+            input_bags=tuple(self.input_bags[index] for index in indices),
+            latent_bags=tuple(self.latent_bags[index] for index in indices),
+            cell_type_bags=(
+                tuple(self.cell_type_bags[index] for index in indices)
+                if self.cell_type_bags is not None
+                else None
+            ),
+            batch_bags=(
+                tuple(self.batch_bags[index] for index in indices)
+                if self.batch_bags is not None
+                else None
+            ),
+            metadata=self.metadata.iloc[indices].reset_index(drop=True),
+            gene_outer_folds=(
+                np.asarray([self.gene_outer_folds[index] for index in indices])
+                if self.gene_outer_folds is not None
+                else None
+            ),
+        )
+
+    def record_access(
+        self,
+        stage: str,
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> None:
+        """Authorize and record an operation over every gene in this view."""
+        if self.access_recorder is None:
+            raise ValueError("audited gene access requires a GeneAccessRecorder")
+        self.access_recorder.record(
+            stage,
+            tuple(str(gene) for gene in self.genes),
+            checkpoint_frozen=checkpoint_frozen,
+        )
+
+    def for_prediction_genes(
+        self,
+        genes: tuple[str, ...],
+        stage: str,
+        *,
+        checkpoint_frozen: bool = False,
+    ) -> GeneBags:
+        """Return a label/control-only view without reading observed responses."""
+        requested = tuple(str(gene).upper() for gene in genes)
+        if self.access_recorder is None:
+            raise ValueError(
+                "GeneBags.for_prediction_genes requires a GeneAccessRecorder"
+            )
+        if len(set(requested)) != len(requested):
+            raise ValueError("gene view contains duplicate requested genes")
+        index_by_gene = {
+            str(gene).upper(): index for index, gene in enumerate(self.genes)
+        }
+        missing = [gene for gene in requested if gene not in index_by_gene]
+        if missing:
+            raise ValueError(f"gene view contains unknown genes: {missing[:5]}")
+        self.access_recorder.record(
+            stage,
+            requested,
+            checkpoint_frozen=checkpoint_frozen,
+        )
+        indices = [index_by_gene[gene] for gene in requested]
+        return GeneBags(
+            genes=np.asarray([self.genes[index] for index in indices], dtype=object),
+            y=np.asarray([self.y[index] for index in indices], dtype=np.float32),
+            input_bags=tuple(
+                np.empty((0, self.input_dim), dtype=np.float32) for _ in indices
+            ),
+            latent_bags=tuple(
+                np.empty((0, self.latent_dim), dtype=np.float32) for _ in indices
+            ),
+            control_input=self.control_input,
+            control_latent=self.control_latent,
+            cell_type_bags=(
+                tuple(np.empty(0, dtype=object) for _ in indices)
+                if self.cell_type_bags is not None
+                else None
+            ),
+            control_cell_type=self.control_cell_type,
+            batch_bags=(
+                tuple(np.empty(0, dtype=object) for _ in indices)
+                if self.batch_bags is not None
+                else None
+            ),
+            control_batch=self.control_batch,
+            feature_names=self.feature_names,
+            feature_fill_values=self.feature_fill_values,
+            metadata=self.metadata.iloc[indices].reset_index(drop=True),
+            input_dim=self.input_dim,
+            latent_dim=self.latent_dim,
+            gene_outer_folds=(
+                np.asarray([self.gene_outer_folds[index] for index in indices])
+                if self.gene_outer_folds is not None
+                else None
+            ),
+            access_recorder=self.access_recorder,
+        )
+
+
+@dataclass(frozen=True)
+class SealedGeneBags:
+    """Outer-test response bags that cannot be opened before checkpoint freeze."""
+
+    _data: GeneBags
+    _genes: tuple[str, ...]
+
+    def label_view(self, checkpoint_frozen: bool) -> GeneBags:
+        """Return final-metric labels and gene IDs without observed responses."""
+        if not checkpoint_frozen:
+            raise ValueError(
+                "selected checkpoint is frozen before outer-test label access"
+            )
+        return self._data.for_prediction_genes(
+            self._genes,
+            stage="internal_outer_test",
+            checkpoint_frozen=True,
+        )
+
+    def open(self, stage: str, checkpoint_frozen: bool) -> GeneBags:
+        """Reject outer-test response access; formal exp05 is label-only."""
+        del stage, checkpoint_frozen
+        raise PermissionError("formal exp05 disables outer-test response access")
+
+
+@dataclass(frozen=True)
+class ControlPromptPool:
+    """Fold-neutral non-targeting controls, separate from perturbed responses."""
+
+    rows: pd.DataFrame
+
+    def __post_init__(self) -> None:
+        required = {"source_kind", "perturbation_gene", "outer_fold"}
+        if not required <= set(self.rows.columns):
+            raise ValueError(f"control prompt pool requires columns {sorted(required)}")
+        if set(self.rows["source_kind"].dropna()) != {"non_targeting_control"}:
+            raise ValueError("control prompt pool accepts non-targeting controls only")
+        if self.rows["perturbation_gene"].notna().any():
+            raise ValueError(
+                "perturbed response cells cannot enter the control prompt pool"
+            )
+        if self.rows["outer_fold"].notna().any():
+            raise ValueError("non-targeting controls must remain fold-neutral")
 
 
 @dataclass(frozen=True)
@@ -202,7 +469,9 @@ def load_config(path: Path) -> AivcConfig:
         data=_data_config(raw.get("data", {})),
         external_test=_external_test_config(raw.get("external_test")),
         split=_split_config(raw.get("split", {})),
+        cv=_cv_config(raw.get("cv", {})),
         state=_state_config(raw.get("state", {})),
+        response_encoder=_response_encoder_config(raw.get("response_encoder")),
         projector=_projector_config(raw.get("projector", {})),
         gmm=_gmm_config(raw.get("gmm", {})),
         model=_model_config(raw.get("model", {})),
@@ -224,6 +493,16 @@ def load_external_gene_bags(
     if reference.feature_names is None:
         msg = "External test loading requires reference feature_names"
         raise ValueError(msg)
+    if reference.feature_fill_values is None:
+        raise ValueError("External test loading requires reference feature fills")
+    feature_fill_values = np.asarray(
+        reference.feature_fill_values,
+        dtype=np.float32,
+    )
+    if feature_fill_values.shape != (reference.input_dim,) or not np.isfinite(
+        feature_fill_values
+    ).all():
+        raise ValueError("External test reference feature fills must be finite")
     metadata = _load_external_metadata(config)
     source_rows: list[pd.DataFrame] = []
     source_input_bags: list[np.ndarray] = []
@@ -242,6 +521,14 @@ def load_external_gene_bags(
                 metadata=_external_source_metadata(metadata, source.name),
                 reference=reference,
             )
+        )
+        bags = tuple(
+            replace_nonfinite(np.asarray(bag, dtype=np.float32), feature_fill_values)
+            for bag in bags
+        )
+        control_input = replace_nonfinite(
+            np.asarray(control_input, dtype=np.float32),
+            feature_fill_values,
         )
         source_qa.append(qa)
         if rows.empty:
@@ -316,6 +603,7 @@ def load_external_gene_bags(
         batch_bags=tuple(merged_batch_bags) if merged_batch_bags else None,
         control_batch=control_batch,
         feature_names=reference.feature_names,
+        feature_fill_values=reference.feature_fill_values,
         metadata=merged_metadata,
         input_dim=int(control_input.shape[1]),
         latent_dim=int(control_latent.shape[1]),
@@ -348,8 +636,21 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
     if not np.any(control_mask):
         msg = f"No control cells found for {config.data.control_label!r}"
         raise ValueError(msg)
-    control_input = input_matrix[control_mask].astype(np.float32)
-    control_latent = latent_matrix[control_mask].astype(np.float32)
+    feature_fill_values = compute_finite_feature_means(
+        input_matrix,
+        np.flatnonzero(control_mask),
+        np.arange(input_matrix.shape[1], dtype=np.int64),
+    )
+    control_input = replace_nonfinite(
+        input_matrix[control_mask],
+        feature_fill_values,
+    )
+    latent_uses_expression = latent_matrix is input_matrix
+    control_latent = (
+        control_input.copy()
+        if latent_uses_expression
+        else latent_matrix[control_mask].astype(np.float32)
+    )
     control_cell_type = (
         cell_type_labels[control_mask] if cell_type_labels is not None else None
     )
@@ -363,8 +664,13 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
             continue
         genes.append(gene)
         y_values.append(float(getattr(row, config.data.depmap_label_col)))
-        input_bags.append(input_matrix[mask].astype(np.float32))
-        latent_bags.append(latent_matrix[mask].astype(np.float32))
+        input_bag = replace_nonfinite(input_matrix[mask], feature_fill_values)
+        input_bags.append(input_bag)
+        latent_bags.append(
+            input_bag.copy()
+            if latent_uses_expression
+            else latent_matrix[mask].astype(np.float32)
+        )
         if cell_type_labels is not None:
             cell_type_bags.append(cell_type_labels[mask])
         if batch_labels is not None:
@@ -387,6 +693,7 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
         batch_bags=tuple(batch_bags) if batch_labels is not None else None,
         control_batch=control_batch,
         feature_names=feature_names,
+        feature_fill_values=feature_fill_values,
         metadata=kept,
         input_dim=int(control_input.shape[1]),
         latent_dim=int(control_latent.shape[1]),
@@ -485,6 +792,7 @@ def make_cell_set_chunks(
     rng: np.random.Generator,
     pad_short: bool,
     shuffle: bool,
+    control_indices_by_batch: dict[str, np.ndarray] | None = None,
 ) -> tuple[CellSetChunk, ...]:
     """Build STATE-style cell-set chunks for one perturbation gene."""
     if cell_set_len < 1:
@@ -516,6 +824,7 @@ def make_cell_set_chunks(
                 n_rows=len(target_indices),
                 rng=rng,
                 target_batch=target_batch,
+                control_indices_by_batch=control_indices_by_batch,
             )
             chunks.append(
                 CellSetChunk(
@@ -626,6 +935,7 @@ def with_cached_scvi_teacher_latents(
     fit_teacher: bool = True,
     progress_interval: int = 50,
     log_fn: Callable[[str], None] | None = None,
+    authority: ArtifactAuthority | None = None,
 ) -> tuple[GeneBags, ExternalGeneBags | None]:
     """Fit or reuse train-only scVI teacher latents from a run-local cache."""
     if config.projector.teacher != "scvi":
@@ -636,6 +946,7 @@ def with_cached_scvi_teacher_latents(
         split,
         artifacts_dir,
         external,
+        authority,
     )
     if cached is not None:
         _log(log_fn, "Reusing cached scVI teacher latents")
@@ -684,9 +995,36 @@ def with_cached_scvi_teacher_latents(
         progress_interval=progress_interval,
         log_fn=log_fn,
     )
-    _write_scvi_latent_cache(config, data, split, artifacts_dir, external)
+    _write_scvi_latent_cache(
+        config, data, split, artifacts_dir, external, authority=authority
+    )
     _log(log_fn, "Wrote scVI teacher latent cache")
     return data, external
+
+
+def project_gene_bags_with_frozen_scvi(
+    config: AivcConfig,
+    data: GeneBags,
+    model_dir: Path,
+) -> GeneBags:
+    """Project a role-limited bag view through an already fitted scVI teacher."""
+    if config.projector.teacher != "scvi":
+        return data
+    scvi = _import_scvi()
+    control_latent, latent_bags = _project_scvi_latent_groups(
+        scvi,
+        model_dir,
+        data.control_input,
+        data.input_bags,
+        data.feature_names,
+        progress_label="audited-fold-view",
+    )
+    return replace(
+        data,
+        control_latent=control_latent,
+        latent_bags=latent_bags,
+        latent_dim=int(control_latent.shape[1]),
+    )
 
 
 def _materialize_scvi_latents(
@@ -746,6 +1084,7 @@ def _load_scvi_latent_cache(
     split: GeneSplit,
     artifacts_dir: Path,
     external: ExternalGeneBags | None,
+    authority: ArtifactAuthority | None = None,
 ) -> tuple[GeneBags, ExternalGeneBags | None] | None:
     cached, _reason = _load_scvi_latent_cache_with_reason(
         config,
@@ -753,6 +1092,7 @@ def _load_scvi_latent_cache(
         split,
         artifacts_dir,
         external,
+        authority,
     )
     return cached
 
@@ -763,6 +1103,7 @@ def _load_scvi_latent_cache_with_reason(
     split: GeneSplit,
     artifacts_dir: Path,
     external: ExternalGeneBags | None,
+    authority: ArtifactAuthority | None = None,
 ) -> tuple[tuple[GeneBags, ExternalGeneBags | None] | None, str | None]:
     cache_dir = _scvi_latent_cache_dir(artifacts_dir)
     if not (cache_dir / "COMPLETE").exists():
@@ -777,7 +1118,7 @@ def _load_scvi_latent_cache_with_reason(
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         return None, f"{metadata_path} is not valid JSON: {exc}"
-    expected = _scvi_cache_metadata(config, data, split, external)
+    expected = _scvi_cache_metadata(config, data, split, external, authority=authority)
     if metadata != expected:
         return None, f"{metadata_path} does not match current config/data"
     try:
@@ -833,6 +1174,8 @@ def _write_scvi_latent_cache(
     split: GeneSplit,
     artifacts_dir: Path,
     external: ExternalGeneBags | None,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> None:
     cache_dir = _scvi_latent_cache_dir(artifacts_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -852,7 +1195,7 @@ def _write_scvi_latent_cache(
         )
     _write_json_atomic(
         cache_dir / "metadata.json",
-        _scvi_cache_metadata(config, data, split, external),
+        _scvi_cache_metadata(config, data, split, external, authority=authority),
     )
     _write_text_atomic(complete_path, "ok\n")
 
@@ -970,9 +1313,11 @@ def _scvi_cache_metadata(
     data: GeneBags,
     split: GeneSplit,
     external: ExternalGeneBags | None,
+    *,
+    authority: ArtifactAuthority | None = None,
 ) -> dict[str, object]:
-    return {
-        "version": 1,
+    metadata: dict[str, object] = {
+        "version": 2,
         "teacher": "scvi",
         "latent_dim": int(config.projector.latent_dim),
         "seed": int(config.train.seed),
@@ -994,6 +1339,9 @@ def _scvi_cache_metadata(
             else None
         ),
     }
+    if authority is not None:
+        metadata.update(authority.metadata())
+    return metadata
 
 
 def _cache_dataset_metadata(data: GeneBags) -> dict[str, object]:
@@ -1183,7 +1531,9 @@ def _load_external_metadata(config: AivcConfig) -> pd.DataFrame:
     frame = pd.read_csv(config.external_test.overlap_csv)
     if config.data.matched_label_col in frame.columns:
         frame = frame.loc[frame[config.data.matched_label_col].astype(bool)]
-    frame = frame.loc[frame[config.data.depmap_label_col].notna()].copy()
+    labels = pd.to_numeric(frame[config.data.depmap_label_col], errors="coerce")
+    frame = frame.loc[np.isfinite(labels)].copy()
+    frame[config.data.depmap_label_col] = labels.loc[frame.index]
     if "perturbation_gene" not in frame.columns:
         msg = "external_test.overlap_csv must include perturbation_gene"
         raise ValueError(msg)
@@ -1345,6 +1695,7 @@ def _external_state_input_view(
             "matched_input_features": int(matrix.shape[1]),
             "missing_input_features": 0,
             "reference_input_features": int(reference.input_dim),
+            "matched_fraction": 1.0,
         }
     if reference.feature_names is None:
         msg = "Cannot align external expression without reference feature names"
@@ -1352,7 +1703,9 @@ def _external_state_input_view(
     reference_names = reference.feature_names.astype(str).tolist()
     source_names = _var_symbols(adata, source.var_gene_symbol_col)
     source_to_index = {name: index for index, name in enumerate(source_names)}
-    fill_values = reference.control_input.mean(axis=0).astype(np.float32)
+    if reference.feature_fill_values is None:
+        raise ValueError("Cannot align external expression without feature fills")
+    fill_values = np.asarray(reference.feature_fill_values, dtype=np.float32)
     matrix = np.tile(fill_values[None, :], (adata.n_obs, 1)).astype(np.float32)
     matched_reference_indices = []
     matched_source_indices = []
@@ -1368,12 +1721,17 @@ def _external_state_input_view(
             np.asarray(matched_source_indices, dtype=np.int64),
         )
     matched = int(len(matched_reference_indices))
+    if matched == 0:
+        raise ValueError(
+            f"External source {source.name!r} matched 0 reference input features"
+        )
     return matrix, {
         "input_source": "X_aligned_to_reference_features",
         "source_expression_features": int(len(source_names)),
         "reference_input_features": int(len(reference_names)),
         "matched_input_features": matched,
         "missing_input_features": int(len(reference_names) - matched),
+        "matched_fraction": float(matched / len(reference_names)),
     }
 
 
@@ -1485,10 +1843,12 @@ def _optional_obs_labels(adata: ad.AnnData, column: str | None) -> np.ndarray | 
     return adata.obs[column].astype(str).to_numpy()
 
 
-def _var_symbols(adata: ad.AnnData, column: str) -> list[str]:
-    if column in adata.var.columns:
-        return adata.var[column].astype(str).tolist()
-    return adata.var_names.astype(str).tolist()
+def _var_symbols(adata: ad.AnnData, column: str | None) -> list[str]:
+    if column is None:
+        return adata.var_names.astype(str).tolist()
+    if column not in adata.var.columns:
+        raise ValueError(f"AnnData var is missing configured symbol column {column!r}")
+    return adata.var[column].astype(str).tolist()
 
 
 def _matrix_view(adata: ad.AnnData, key: str | None) -> np.ndarray:
@@ -1507,6 +1867,21 @@ def _state_input_view(
     adata: ad.AnnData,
     config: AivcConfig,
 ) -> tuple[np.ndarray, np.ndarray | None]:
+    if config.state.backend == "state_checkpoint":
+        if config.state.model_dir is None:
+            raise ValueError("state_checkpoint requires state.model_dir")
+        if config.state.checkpoint_path is None:
+            raise ValueError("state_checkpoint requires state.checkpoint_path")
+        if not config.state.checkpoint_path.is_file():
+            raise ValueError(
+                f"STATE checkpoint_path does not exist: {config.state.checkpoint_path}"
+            )
+        indices, feature_names = resolve_state_gene_order(
+            adata,
+            config.state.model_dir,
+            config.data.var_gene_symbol_col,
+        )
+        return _dense_slice(adata.X, indices), feature_names
     key = config.data.state_embed_key
     if key:
         if key in adata.obsm:
@@ -1520,6 +1895,35 @@ def _state_input_view(
         raise ValueError(msg)
     matrix = _matrix_view(adata, None)
     return matrix, np.asarray(adata.var_names.astype(str))
+
+
+def resolve_state_gene_order(
+    adata: ad.AnnData,
+    model_dir: Path,
+    symbol_col: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resolve expression columns to the exact STATE checkpoint gene order."""
+    with (model_dir / "var_dims.pkl").open("rb") as handle:
+        payload = pickle.load(handle)
+    checkpoint_names = np.asarray(payload["gene_names"], dtype=object).astype(str)
+    source_names = adata.var[symbol_col].astype(str).to_numpy()
+    positions: dict[str, int] = {}
+    duplicates: set[str] = set()
+    for index, symbol in enumerate(source_names):
+        if symbol in positions:
+            duplicates.add(symbol)
+        else:
+            positions[symbol] = index
+    duplicate_matches = sorted(set(checkpoint_names).intersection(duplicates))
+    missing = [name for name in checkpoint_names if name not in positions]
+    if missing or duplicate_matches:
+        matched = len(checkpoint_names) - len(missing) - len(duplicate_matches)
+        raise ValueError(
+            f"STATE expression alignment matched {matched}/{len(checkpoint_names)}; "
+            f"missing={missing[:10]}, duplicate_matches={duplicate_matches[:10]}"
+        )
+    indices = np.asarray([positions[name] for name in checkpoint_names], dtype=np.int64)
+    return indices, checkpoint_names.astype(object)
 
 
 def _batch_labels(adata: ad.AnnData, config: DataConfig) -> np.ndarray | None:
@@ -1640,19 +2044,41 @@ def _sample_control_indices(
     n_rows: int,
     rng: np.random.Generator,
     target_batch: np.ndarray | None,
+    control_indices_by_batch: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, int]:
     if target_batch is None or data.control_batch is None:
         return sample_indices(data.control_input.shape[0], n_rows, rng), 0
     selected: list[int] = []
     fallback_count = 0
-    global_indices = np.arange(data.control_input.shape[0], dtype=np.int64)
-    for label in target_batch:
-        matching = np.flatnonzero(data.control_batch.astype(str) == str(label))
-        if matching.size == 0:
+    global_indices: np.ndarray | None = None
+    normalized_target_batch = np.asarray(target_batch).astype(str)
+    matching_by_label = (
+        _control_indices_by_batch(data)
+        if control_indices_by_batch is None
+        else control_indices_by_batch
+    )
+    for label in normalized_target_batch:
+        matching = matching_by_label.get(label)
+        if matching is None or matching.size == 0:
+            if global_indices is None:
+                global_indices = np.arange(
+                    data.control_input.shape[0],
+                    dtype=np.int64,
+                )
             matching = global_indices
             fallback_count += 1
         selected.append(int(rng.choice(matching)))
     return np.asarray(selected, dtype=np.int64), fallback_count
+
+
+def _control_indices_by_batch(data: GeneBags) -> dict[str, np.ndarray]:
+    if data.control_batch is None:
+        return {}
+    normalized = data.control_batch.astype(str)
+    return {
+        label: np.flatnonzero(normalized == label)
+        for label in np.unique(normalized)
+    }
 
 
 def _data_config(values: dict[str, Any]) -> DataConfig:
@@ -1660,16 +2086,20 @@ def _data_config(values: dict[str, Any]) -> DataConfig:
         h5ad_path=Path(values["h5ad_path"]),
         overlap_csv=Path(values["overlap_csv"]),
         output_dir=Path(values["output_dir"]),
+        prepared_cache_dir=_path_or_none(values.get("prepared_cache_dir")),
         obs_perturbation_col=str(values.get("obs_perturbation_col", "gene")),
         control_label=str(values.get("control_label", "non-targeting")),
         obs_cell_type_col=values.get("obs_cell_type_col"),
         obs_batch_col=values.get("obs_batch_col"),
+        var_gene_symbol_col=str(values.get("var_gene_symbol_col", "gene_name")),
         state_embed_key=values.get("state_embed_key"),
         state_hvg_n_top_genes=_int_or_none(values.get("state_hvg_n_top_genes")),
         scvi_obsm_key=values.get("scvi_obsm_key", "X_scVI"),
         depmap_label_col=str(values.get("depmap_label_col", "depmap_gene_effect")),
         matched_label_col=str(values.get("matched_label_col", "has_depmap_label")),
         min_cells_per_gene=int(values.get("min_cells_per_gene", 2)),
+        cache_seed=int(values.get("cache_seed", 42)),
+        cache_cells_per_gene=int(values.get("cache_cells_per_gene", 256)),
     )
 
 
@@ -1691,7 +2121,9 @@ def _external_test_config(values: Any) -> ExternalTestConfig | None:
                     if source.get("control_label") is not None
                     else None
                 ),
-                var_gene_symbol_col=str(source.get("var_gene_symbol_col", "gene_name")),
+                var_gene_symbol_col=_str_or_none(
+                    source.get("var_gene_symbol_col", "gene_name")
+                ),
                 obs_batch_col=(
                     str(source["obs_batch_col"])
                     if source.get("obs_batch_col") is not None
@@ -1718,6 +2150,18 @@ def _split_config(values: dict[str, Any]) -> SplitConfig:
     )
 
 
+def _cv_config(values: dict[str, Any]) -> CVConfig:
+    return CVConfig(
+        n_splits=int(values.get("n_splits", 5)),
+        expected_gene_count=int(values.get("expected_gene_count", 9338)),
+        outer_split_manifest=_path_or_none(values.get("outer_split_manifest")),
+        outer_split_sha256_file=_path_or_none(values.get("outer_split_sha256_file")),
+        inner_val_fraction=float(values.get("inner_val_fraction", 0.1)),
+        random_state=int(values.get("random_state", 42)),
+        stratify_bins=int(values.get("stratify_bins", 10)),
+    )
+
+
 def _state_config(values: dict[str, Any]) -> StateConfig:
     return StateConfig(
         backend=str(values.get("backend", "state_checkpoint")),
@@ -1729,6 +2173,11 @@ def _state_config(values: dict[str, Any]) -> StateConfig:
         known_perturbation_vectors=_path_or_none(
             values.get("known_perturbation_vectors")
         ),
+        gene_tokenizer=str(values.get("gene_tokenizer", "state_onehot")),
+        esm2_npz=_path_or_none(values.get("esm2_npz")),
+        esm2_adapter_hidden=int(values.get("esm2_adapter_hidden", 512)),
+        require_resolved_esm2=_bool_value(values.get("require_resolved_esm2", False)),
+        representation_layer=str(values.get("representation_layer", "output")),
     )
 
 
@@ -1753,10 +2202,21 @@ def _projector_config(values: dict[str, Any]) -> ProjectorConfig:
     )
 
 
+def _response_encoder_config(values: Any) -> ResponseEncoderConfig | None:
+    if values is None:
+        return None
+    return ResponseEncoderConfig(
+        input_dim=int(values.get("input_dim", 2000)),
+        latent_dim=int(values.get("latent_dim", 128)),
+    )
+
+
 def _gmm_config(values: dict[str, Any]) -> GmmConfig:
     return GmmConfig(
         n_components=int(values.get("n_components", 32)),
         covariance_floor=float(values.get("covariance_floor", 1e-4)),
+        init_scale=float(values.get("init_scale", 0.02)),
+        trainable=_bool_value(values.get("trainable", True)),
         max_fit_cells=_int_or_none(values.get("max_fit_cells", 20000)),
     )
 
@@ -1781,6 +2241,7 @@ def _loss_config(values: dict[str, Any]) -> LossConfig:
         pred_c_weight=float(values.get("pred_c_weight", 1.0)),
         obs_c_weight=float(values.get("obs_c_weight", 0.25)),
         occupancy_weight=float(values.get("occupancy_weight", 0.1)),
+        gmm_nll_weight=float(values.get("gmm_nll_weight", 0.0)),
         pred_rank_weight=float(values.get("pred_rank_weight", 0.0)),
         pred_rank_tau=float(values.get("pred_rank_tau", 0.25)),
         pred_rank_pair_margin=float(values.get("pred_rank_pair_margin", 0.0)),
@@ -1794,14 +2255,32 @@ def _loss_config(values: dict[str, Any]) -> LossConfig:
 
 def _train_config(values: dict[str, Any]) -> TrainConfig:
     cell_set_len = values.get("cell_set_len", values.get("cells_per_gene", 128))
+    learning_rate = float(values.get("learning_rate", 2.5e-5))
+    state_learning_rate = float(values.get("state_learning_rate", 2.5e-6))
+    max_grad_norm = float(values.get("max_grad_norm", 1.0))
+    required_world_size = int(values.get("required_world_size", 4))
+    gene_batch_size = int(values.get("gene_batch_size", 1))
+    if state_learning_rate <= 0:
+        raise ValueError("state_learning_rate must be positive")
+    if state_learning_rate > learning_rate:
+        raise ValueError("state_learning_rate must not exceed learning_rate")
+    if max_grad_norm <= 0:
+        raise ValueError("max_grad_norm must be positive")
+    if required_world_size <= 0:
+        raise ValueError("required_world_size must be positive")
+    if gene_batch_size <= 0:
+        raise ValueError("gene_batch_size must be positive")
     return TrainConfig(
         run_id=values.get("run_id"),
         seed=int(values.get("seed", 42)),
         max_epochs=int(values.get("max_epochs", 50)),
-        learning_rate=float(values.get("learning_rate", 1e-4)),
+        learning_rate=learning_rate,
+        state_learning_rate=state_learning_rate,
+        max_grad_norm=max_grad_norm,
+        required_world_size=required_world_size,
         weight_decay=float(values.get("weight_decay", 1e-4)),
         cell_set_len=int(cell_set_len),
-        gene_batch_size=int(values.get("gene_batch_size", 1)),
+        gene_batch_size=gene_batch_size,
         device=str(values.get("device", "auto")),
         float32_matmul_precision=_str_or_none(
             values.get("float32_matmul_precision", "high")
