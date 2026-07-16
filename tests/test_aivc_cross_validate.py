@@ -1270,6 +1270,41 @@ def test_audited_training_never_evaluates_outer_test_responses(
     _run_tiny_audited_fold(tmp_path)
 
 
+def test_audited_training_passes_cuda_input_cache_to_epoch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_run_epoch = train_module._run_epoch
+    observed_cache = False
+
+    def build_cpu_cache(
+        data: GeneBags,
+        batch_lookup: dict[str, int],
+        device: torch.device,
+        max_bytes: int,
+        *,
+        allow_cpu: bool = False,
+    ) -> train_module._InputTensorCache:
+        del max_bytes, allow_cpu
+        return train_module._InputTensorCache.build(data, batch_lookup, device)
+
+    def capture_cache(*args: object, **kwargs: object) -> dict[str, float]:
+        nonlocal observed_cache
+        observed_cache = kwargs.get("tensor_cache") is not None
+        return original_run_epoch(*args, **kwargs)
+
+    monkeypatch.setattr(
+        train_module._InputTensorCache,
+        "maybe_build",
+        build_cpu_cache,
+    )
+    monkeypatch.setattr(train_module, "_run_epoch", capture_cache)
+
+    _run_tiny_audited_fold(tmp_path)
+
+    assert observed_cache
+
+
 def test_inner_validation_never_reads_observed_response(tmp_path: Path) -> None:
     data = _toy_bags()
     input_trap = _ResponseAccessTrap(data.input_bags, sealed_index=2)

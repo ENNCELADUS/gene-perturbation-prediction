@@ -696,6 +696,19 @@ def _run_audited_training(
         train_loader,
         val_loader,
     )
+    input_tensor_cache = _InputTensorCache.maybe_build(
+        train_data,
+        batch_lookup,
+        accelerator.device,
+        _gib_to_bytes(config.train.input_tensor_cache_max_gib),
+    )
+    if accelerator.is_main_process:
+        _log_input_tensor_cache_state(
+            input_tensor_cache,
+            _InputTensorCache.estimate_bytes(train_data, batch_lookup),
+            _gib_to_bytes(config.train.input_tensor_cache_max_gib),
+            accelerator.device,
+        )
     rng = np.random.default_rng(
         config.train.seed + fold_spec.outer_fold + accelerator.process_index
     )
@@ -727,6 +740,7 @@ def _run_audited_training(
             epoch=epoch,
             max_epochs=config.train.max_epochs,
             max_grad_norm=config.train.max_grad_norm,
+            tensor_cache=input_tensor_cache,
         )
         for stage in fit_stages:
             train_data.record_access(stage)
