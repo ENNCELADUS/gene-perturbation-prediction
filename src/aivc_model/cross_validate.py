@@ -780,11 +780,7 @@ def _assert_predictions(predictions: pd.DataFrame, manifest: pd.DataFrame) -> No
         raise ValueError(
             f"predictions are missing columns {sorted(required - set(predictions))}"
         )
-    internal_scopes = {
-        "internal_outer_test",
-        "generation_quality_outer_test",
-        "observed_b_shared_oracle_outer_test",
-    }
+    internal_scopes = {"internal_outer_test"}
     internal = predictions.loc[predictions["evaluation_scope"].isin(internal_scopes)]
     canonical = manifest.set_index("perturbation_gene")["outer_fold"]
     observed = internal["perturbation_gene"].map(canonical)
@@ -857,8 +853,6 @@ def _mandatory_audit_stages(config: AivcConfig) -> frozenset[str]:
         "fine_tuning",
         "early_stopping_prediction_only",
         "internal_outer_test",
-        "generation_quality_outer_test",
-        "observed_b_shared_oracle_outer_test",
     }
     return frozenset(stages)
 

@@ -416,22 +416,9 @@ class SealedGeneBags:
         )
 
     def open(self, stage: str, checkpoint_frozen: bool) -> GeneBags:
-        """Open the sealed response for one of the two authorized final routes."""
-        allowed = {
-            "generation_quality_outer_test",
-            "observed_b_shared_oracle_outer_test",
-        }
-        if stage not in allowed:
-            raise ValueError("outer-test response can only be opened by final routes")
-        if not checkpoint_frozen:
-            raise PermissionError(
-                "selected checkpoint is frozen before outer-test response access"
-            )
-        return self._data.for_genes(
-            self._genes,
-            stage=stage,
-            checkpoint_frozen=True,
-        )
+        """Reject outer-test response access; formal exp05 is label-only."""
+        del stage, checkpoint_frozen
+        raise PermissionError("formal exp05 disables outer-test response access")
 
 
 @dataclass(frozen=True)
