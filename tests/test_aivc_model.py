@@ -1068,13 +1068,13 @@ def test_rank0_scvi_orchestration_runs_subprocess_then_reads_cache(
     np.testing.assert_allclose(loaded.control_latent, data.control_latent)
 
 
-def test_accelerator_enables_ddp_unused_parameter_detection(tmp_path: Path) -> None:
+def test_accelerator_uses_static_ddp_graph_without_unused_scan(tmp_path: Path) -> None:
     config = load_config(_write_scvi_cache_config(tmp_path))
 
     accelerator = train_module._make_accelerator(config)
 
     assert accelerator.ddp_handler is not None
-    assert accelerator.ddp_handler.find_unused_parameters is True
+    assert accelerator.ddp_handler.find_unused_parameters is False
 
 
 def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> None:
@@ -1347,6 +1347,43 @@ def test_padded_gene_loader_marks_padding_for_even_ddp_steps() -> None:
         [False, False, False, False],
         [False, True, True, True],
     ]
+
+
+def test_cost_balanced_sampler_groups_similar_work_and_reshuffles_epochs() -> None:
+    costs = np.asarray([1, 10, 2, 9, 3, 8, 4, 7], dtype=np.int64)
+    sampler = train_module._CostBalancedSampler(costs, world_size=4, seed=17)
+
+    first = list(sampler)
+    sampler.set_epoch(1)
+    second = list(sampler)
+
+    assert sorted(first) == list(range(len(costs)))
+    assert sorted(second) == list(range(len(costs)))
+    assert first != second
+    for start in range(0, len(first), 4):
+        assert np.ptp(costs[first[start : start + 4]]) <= 3
+
+
+def test_gene_chunk_costs_match_condition_chunking() -> None:
+    data = _toy_gene_bags_with_batches()
+    cell_set_len = 2
+
+    costs = train_module._gene_chunk_costs(data, cell_set_len)
+    actual = [
+        len(
+            make_cell_set_chunks(
+                data,
+                gene_index,
+                cell_set_len=cell_set_len,
+                rng=np.random.default_rng(3),
+                pad_short=True,
+                shuffle=True,
+            )
+        )
+        for gene_index in range(len(data.genes))
+    ]
+
+    assert costs.tolist() == actual
 
 
 def test_model_inputs_tensor_cache_matches_uncached_tensors_and_losses() -> None:
@@ -2514,6 +2551,42 @@ def test_aivc_forward_processes_chunks_independently_without_changing_losses() -
     assert state_model.call_shapes == [2, 1]
     assert state_model.call_batches == [[0, 0], [1]]
     assert set(actual) == set(expected)
+    for key in actual:
+        assert torch.allclose(actual[key], expected[key], atol=1e-6)
+
+
+def test_aivc_forward_batches_native_state_sentences_without_mixing_chunks() -> None:
+    model, state_model = _build_counting_aivc_model()
+    state_model.contextual = True
+    state_model.cell_sentence_len = 2
+    kwargs = {
+        "gene": "GENE1",
+        "control_chunks": (
+            torch.tensor([[0.0, 1.0, 2.0], [1.0, 2.0, 3.0]]),
+            torch.tensor([[8.0, 9.0, 10.0], [9.0, 10.0, 11.0]]),
+        ),
+        "target_expression_chunks": (
+            torch.tensor([[1.0, 1.5, 2.5], [1.5, 2.5, 3.5]]),
+            torch.tensor([[8.5, 9.5, 10.5], [9.5, 10.5, 11.5]]),
+        ),
+        "target_latent_chunks": (
+            torch.tensor([[1.0, 1.5], [1.5, 2.5]]),
+            torch.tensor([[8.5, 9.5], [9.5, 10.5]]),
+        ),
+        "batch_index_chunks": (torch.tensor([0, 0]), torch.tensor([1, 1])),
+        "y": torch.tensor(-1.0),
+        "weights": _loss_weights(),
+    }
+
+    expected = _legacy_chunk_loop_losses(model, **kwargs)
+    state_model.call_shapes.clear()
+    state_model.call_batches.clear()
+    state_model.call_padded.clear()
+    actual = model(**kwargs)
+
+    assert state_model.call_shapes == [4]
+    assert state_model.call_batches == [[0, 0, 1, 1]]
+    assert state_model.call_padded == [True]
     for key in actual:
         assert torch.allclose(actual[key], expected[key], atol=1e-6)
 
@@ -3789,26 +3862,35 @@ class _CountingStateModel(torch.nn.Module):
         self.weight = torch.nn.Parameter(torch.eye(3))
         self.call_shapes: list[int] = []
         self.call_batches: list[list[int]] = []
+        self.call_padded: list[bool] = []
         self.contextual = False
+        self.cell_sentence_len: int | None = None
 
     def forward(
         self,
         batch: dict[str, torch.Tensor],
         padded: bool = False,
     ) -> torch.Tensor:
-        del padded
         control = batch["ctrl_cell_emb"]
         pert = batch["pert_emb"]
         self.call_shapes.append(int(control.shape[0]))
+        self.call_padded.append(bool(padded))
         batch_indices = batch.get("batch")
         self.call_batches.append(
             [] if batch_indices is None else batch_indices.tolist()
         )
-        contextual = (
-            control + control.mean(dim=0, keepdim=True)
-            if self.contextual
-            else control
-        )
+        contextual = control
+        if self.contextual:
+            if padded and self.cell_sentence_len is not None:
+                sequences = control.reshape(
+                    -1,
+                    self.cell_sentence_len,
+                    control.shape[-1],
+                )
+                contextual = sequences + sequences.mean(dim=1, keepdim=True)
+                contextual = contextual.reshape_as(control)
+            else:
+                contextual = control + control.mean(dim=0, keepdim=True)
         return contextual @ self.weight + 0.1 * pert[:, :3]
 
 

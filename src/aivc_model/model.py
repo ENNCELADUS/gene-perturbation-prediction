@@ -67,9 +67,6 @@ def _flatten_state_output(output: object) -> torch.Tensor | None:
         return None
     if output.dim() == 3 and output.shape[0] == 1:
         output = output.squeeze(0)
-    elif output.dim() == 3:
-        msg = "STATE token features must have batch dimension 1 when using padded=False"
-        raise ValueError(msg)
     if output.dim() > 2:
         output = output.reshape(-1, output.shape[-1])
     return output
@@ -95,6 +92,61 @@ class StateForwardAdapter(nn.Module):
         gene: str,
         batch_indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        return self._forward_state(
+            control_cells,
+            perturbation,
+            gene,
+            batch_indices,
+            padded=False,
+        )
+
+    def forward_chunks(
+        self,
+        control_chunks: tuple[torch.Tensor, ...],
+        perturbation: torch.Tensor,
+        gene: str,
+        batch_index_chunks: tuple[torch.Tensor | None, ...],
+    ) -> tuple[torch.Tensor, ...]:
+        """Run equal-size condition chunks as independent STATE sequences."""
+        if len(control_chunks) != len(batch_index_chunks):
+            raise ValueError("control and batch-index chunks must have equal length")
+        if not control_chunks:
+            raise ValueError("at least one STATE condition chunk is required")
+        chunk_sizes = tuple(int(chunk.shape[0]) for chunk in control_chunks)
+        sentence_len = getattr(self.state_model, "cell_sentence_len", None)
+        if len(set(chunk_sizes)) != 1 or chunk_sizes[0] != sentence_len:
+            return tuple(
+                self(control, perturbation, gene, batch_indices)
+                for control, batch_indices in zip(
+                    control_chunks,
+                    batch_index_chunks,
+                    strict=True,
+                )
+            )
+        control_cells = torch.cat(control_chunks, dim=0)
+        batch_indices = _concat_optional_batch_indices(
+            batch_index_chunks,
+            chunk_sizes,
+            control_cells.device,
+        )
+        output = self._forward_state(
+            control_cells,
+            perturbation,
+            gene,
+            batch_indices,
+            padded=True,
+        )
+        return tuple(output.split(chunk_sizes, dim=0))
+
+    def _forward_state(
+        self,
+        control_cells: torch.Tensor,
+        perturbation: torch.Tensor,
+        gene: str,
+        batch_indices: torch.Tensor | None,
+        *,
+        padded: bool,
+    ) -> torch.Tensor:
         self._last_token_features = None
         if hasattr(self.state_model, "_token_features"):
             try:
@@ -117,12 +169,16 @@ class StateForwardAdapter(nn.Module):
             )
         if hasattr(self.state_model, "predict_step"):
             try:
-                output = self.state_model.predict_step(batch, batch_idx=0, padded=False)
+                output = self.state_model.predict_step(
+                    batch,
+                    batch_idx=0,
+                    padded=padded,
+                )
             except TypeError:
                 output = self.state_model.predict_step(batch, 0)
         else:
             try:
-                output = self.state_model(batch, padded=False)
+                output = self.state_model(batch, padded=padded)
             except TypeError:
                 output = self.state_model(batch)
         if isinstance(output, dict):
@@ -136,6 +192,27 @@ class StateForwardAdapter(nn.Module):
         if output.dim() > 2:
             output = output.reshape(-1, output.shape[-1])
         return output
+
+
+def _concat_optional_batch_indices(
+    batch_index_chunks: tuple[torch.Tensor | None, ...],
+    chunk_sizes: tuple[int, ...],
+    device: torch.device,
+) -> torch.Tensor | None:
+    if all(batch_indices is None for batch_indices in batch_index_chunks):
+        return None
+    return torch.cat(
+        tuple(
+            batch_indices.to(device)
+            if batch_indices is not None
+            else torch.zeros(size, dtype=torch.long, device=device)
+            for batch_indices, size in zip(
+                batch_index_chunks,
+                chunk_sizes,
+                strict=True,
+            )
+        )
+    )
 
 
 class PerturbationVectorAdapter(nn.Module):
@@ -388,6 +465,24 @@ class AivcModel(nn.Module):
         )
         return predicted_expression, self.response_encoder(predicted_expression)
 
+    def predict_response_chunks(
+        self,
+        control_chunks: tuple[torch.Tensor, ...],
+        gene: str,
+        batch_index_chunks: tuple[torch.Tensor | None, ...],
+    ) -> tuple[tuple[torch.Tensor, ...], torch.Tensor]:
+        perturbation = self.perturbations(gene)
+        predicted_expression_chunks = self.state_adapter.forward_chunks(
+            control_chunks,
+            perturbation,
+            gene,
+            batch_index_chunks,
+        )
+        predicted_latent = self.response_encoder(
+            torch.cat(predicted_expression_chunks, dim=0)
+        )
+        return predicted_expression_chunks, predicted_latent
+
     def predict_c_from_response(
         self,
         expression_bag: torch.Tensor,
@@ -606,20 +701,10 @@ class AivcModel(nn.Module):
             msg = "All chunk inputs must have the same length"
             raise ValueError(msg)
         batched_control = torch.cat(control_chunks, dim=0)
-        predicted_responses = tuple(
-            self.predict_response(control, gene, batch_indices)
-            for control, batch_indices in zip(
-                control_chunks,
-                batch_index_chunks,
-                strict=True,
-            )
-        )
-        predicted_expression_chunks = tuple(
-            expression for expression, _latent in predicted_responses
-        )
-        predicted_latent = torch.cat(
-            tuple(latent for _expression, latent in predicted_responses),
-            dim=0,
+        predicted_expression_chunks, predicted_latent = self.predict_response_chunks(
+            control_chunks,
+            gene,
+            batch_index_chunks,
         )
         target_expression = torch.cat(target_expression_chunks, dim=0)
         observed_latent = self.response_encoder(target_expression)
