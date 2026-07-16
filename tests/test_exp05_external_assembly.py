@@ -1,5 +1,6 @@
 """Tests for fixed-split external dataset assembly."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import anndata as ad
@@ -7,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from aivc_model.gene_splits import attach_gene_provenance
 from aivc_model.prepare import GeneBags, merge_gene_bag_pool
 from scripts.assemble_exp05_fixed_datasets import (
     build_dixit_overlap,
@@ -134,6 +136,34 @@ def test_gene_bag_pool_combines_shared_gene_and_adds_unseen_gene() -> None:
     assert result.genes.tolist() == ["A", "B", "C"]
     assert [len(bag) for bag in result.input_bags] == [2, 4, 2]
     assert result.metadata.loc[1, "source_dataset"] == "adamson;replogle"
+
+
+def test_gene_bag_pool_assigns_outer_fold_to_unseen_metadata() -> None:
+    reference = _bags(["A", "B"], [-1.0, 0.2], "replogle")
+    reference = replace(
+        reference,
+        metadata=reference.metadata.assign(outer_fold=[0, 1]),
+        gene_outer_folds=np.asarray([0, 1], dtype=np.int64),
+    )
+    result = merge_gene_bag_pool(
+        reference,
+        _bags(["C"], [-0.4], "adamson"),
+        "depmap_gene_effect",
+    )
+    assert result.metadata["outer_fold"].tolist() == [0, 1, -1]
+    manifest = pd.DataFrame(
+        {
+            "perturbation_gene": result.genes,
+            "outer_fold": result.gene_outer_folds,
+        }
+    )
+    attached = attach_gene_provenance(
+        result.metadata,
+        manifest,
+        "perturbation_gene",
+        "fine_tuning",
+    )
+    assert attached["outer_fold"].tolist() == [0, 1, -1]
 
 
 def test_xatlas_overlap_uses_passed_guide_pairs(tmp_path: Path) -> None:

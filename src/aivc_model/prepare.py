@@ -732,7 +732,9 @@ def merge_gene_bag_pool(
         control_batch=control_batch,
         feature_names=reference.feature_names,
         feature_fill_values=reference.feature_fill_values,
-        metadata=pd.DataFrame(metadata_rows),
+        metadata=pd.DataFrame(metadata_rows).assign(
+            outer_fold=np.asarray(outer_folds, dtype=np.int64)
+        ),
         input_dim=reference.input_dim,
         latent_dim=reference.latent_dim,
         gene_outer_folds=np.asarray(outer_folds, dtype=np.int64),
