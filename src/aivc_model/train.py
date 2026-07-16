@@ -1413,13 +1413,13 @@ class _GeneIndexDataset(Dataset[dict[str, int | bool]]):
 class _CostBalancedSampler(Sampler[int]):
     """Shuffle similar-cost groups so DDP ranks receive balanced STATE work."""
 
-    def __init__(self, costs: np.ndarray, world_size: int, seed: int) -> None:
+    def __init__(self, costs: np.ndarray, group_size: int, seed: int) -> None:
         self._costs = np.asarray(costs, dtype=np.int64)
-        self._world_size = int(world_size)
+        self._group_size = int(group_size)
         self._seed = int(seed)
         self._epoch = 0
-        if len(self._costs) % self._world_size != 0:
-            raise ValueError("cost-balanced sampler length must divide by world size")
+        if len(self._costs) % self._group_size != 0:
+            raise ValueError("cost-balanced sampler length must divide by group size")
 
     def __len__(self) -> int:
         return len(self._costs)
@@ -1430,7 +1430,7 @@ class _CostBalancedSampler(Sampler[int]):
     def __iter__(self) -> Iterator[int]:
         rng = np.random.default_rng(self._seed + self._epoch)
         order = np.lexsort((rng.random(len(self._costs)), self._costs))
-        groups = order.reshape(-1, self._world_size)
+        groups = order.reshape(-1, self._group_size)
         rng.shuffle(groups)
         for group in groups:
             rng.shuffle(group)
@@ -1466,9 +1466,9 @@ def _configure_logging(accelerator: Accelerator) -> None:
 def _require_authoritative_gene_batch_size(config: AivcConfig) -> None:
     if config.train.required_world_size != 4:
         raise ValueError("required_world_size must be 4 for authoritative exp05")
-    if config.train.gene_batch_size != 1:
+    if config.train.gene_batch_size not in {1, 2, 4}:
         raise ValueError(
-            "gene_batch_size must be 1 for authoritative exp05 training"
+            "gene_batch_size must be one of 1, 2, or 4 for authoritative exp05"
         )
 
 
@@ -1987,7 +1987,7 @@ def _gene_loader(
             raise ValueError("gene costs must cover every loader index")
         sampler = _CostBalancedSampler(
             normalized_costs[padded_indices],
-            world_size,
+            world_size * gene_batch_size,
             seed,
         )
     return DataLoader(

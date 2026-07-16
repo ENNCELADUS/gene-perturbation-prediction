@@ -285,19 +285,19 @@ def test_run_training_fold_guards_direct_accelerator_construction(
     assert guarded == [(accelerator, 4)]
 
 
-def test_run_training_fold_rejects_gene_batch_size_four_before_construction(
+def test_run_training_fold_rejects_unsupported_gene_batch_size_before_construction(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = _audited_config(tmp_path)
-    config = replace(config, train=replace(config.train, gene_batch_size=4))
+    config = replace(config, train=replace(config.train, gene_batch_size=3))
     monkeypatch.setattr(
         cv,
         "_make_accelerator",
         lambda _config: pytest.fail("Accelerator constructed before config rejection"),
     )
 
-    with pytest.raises(ValueError, match="gene_batch_size must be 1"):
+    with pytest.raises(ValueError, match="gene_batch_size must be one of"):
         cv.run_training_fold(
             config=config,
             data=_toy_bags(),
@@ -308,6 +308,20 @@ def test_run_training_fold_rejects_gene_batch_size_four_before_construction(
         )
 
     assert not (tmp_path / "fold_0").exists()
+
+
+@pytest.mark.parametrize("gene_batch_size", [1, 2, 4])
+def test_authoritative_exp05_accepts_global_batches_four_eight_and_sixteen(
+    tmp_path: Path,
+    gene_batch_size: int,
+) -> None:
+    config = _audited_config(tmp_path)
+    config = replace(
+        config,
+        train=replace(config.train, gene_batch_size=gene_batch_size),
+    )
+
+    train_module._require_authoritative_gene_batch_size(config)
 
 
 def test_run_training_fold_rejects_world_size_one_before_construction(
@@ -916,7 +930,7 @@ def test_locked_preflight_rejects_nontrainable_gmm(
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("gene_batch_size", 4, "gene_batch_size must be 1"),
+        ("gene_batch_size", 3, "gene_batch_size must be one of"),
         ("required_world_size", 1, "required_world_size must be 4"),
     ],
 )
@@ -1044,9 +1058,9 @@ def test_cross_validation_uses_configured_prepared_cache(
     monkeypatch.setattr(
         cv,
         "load_gwps_cache",
-        lambda _config, cache_dir: (
+        lambda _config, cache_dir, *, verify_hashes: (
             sentinel
-            if cache_dir == config.data.prepared_cache_dir
+            if cache_dir == config.data.prepared_cache_dir and verify_hashes is False
             else pytest.fail("wrong cache directory")
         ),
         raising=False,

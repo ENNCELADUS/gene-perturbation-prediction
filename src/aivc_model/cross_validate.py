@@ -524,7 +524,10 @@ def run_cross_validation(
 def _load_primary_bags(config: AivcConfig) -> GeneBags:
     cache_dir = getattr(config.data, "prepared_cache_dir", None)
     if cache_dir is not None:
-        return load_gwps_cache(config, cache_dir)
+        # The distributed preflight has already verified every array hash once on
+        # rank zero. Rehashing the 12.8 GiB cache independently on all four ranks
+        # adds minutes of redundant startup I/O.
+        return load_gwps_cache(config, cache_dir, verify_hashes=False)
     return load_gene_bags(config)
 
 
