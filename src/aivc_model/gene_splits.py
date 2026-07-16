@@ -29,12 +29,7 @@ FIT_STAGES = frozenset(
 SELECTION_STAGES = frozenset(
     {"early_stopping_prediction_only", "layer_selection"}
 )
-FINAL_RESPONSE_STAGES = frozenset(
-    {
-        "generation_quality_outer_test",
-        "observed_b_shared_oracle_outer_test",
-    }
-)
+FINAL_RESPONSE_STAGES: frozenset[str] = frozenset()
 FINAL_LABEL_STAGES = frozenset({"internal_outer_test"})
 
 

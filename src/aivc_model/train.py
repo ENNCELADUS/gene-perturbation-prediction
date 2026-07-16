@@ -794,7 +794,6 @@ def _run_audited_training(
     selected_model.load_state_dict(state_dict)
     selected_model.eval()
     selected_model.requires_grad_(False)
-    checkpoint_frozen = True
 
     label_test = sealed_test.label_view(checkpoint_frozen=True)
     label_loader = accelerator.prepare(
@@ -814,39 +813,6 @@ def _run_audited_training(
         accelerator,
         batch_lookup,
     )
-    generation_data = sealed_test.open(
-        "generation_quality_outer_test",
-        checkpoint_frozen=checkpoint_frozen,
-    )
-    generation_loader = accelerator.prepare(
-        _gene_loader(
-            np.arange(len(generation_data.genes), dtype=np.int64),
-            shuffle=False,
-            seed=config.train.seed,
-            gene_batch_size=config.train.gene_batch_size,
-            world_size=accelerator.num_processes,
-        )
-    )
-    response_metrics, response_predictions = _evaluate(
-        model,
-        generation_data,
-        generation_loader,
-        _loss_weights(config),
-        rng,
-        config.train.cell_set_len,
-        accelerator,
-        batch_lookup,
-        pad_short=False,
-    )
-    oracle_data = sealed_test.open(
-        "observed_b_shared_oracle_outer_test",
-        checkpoint_frozen=checkpoint_frozen,
-    )
-    oracle_metrics, oracle_predictions = _evaluate_observed_b_shared(
-        selected_model,
-        oracle_data,
-        accelerator.device,
-    )
     return _write_audited_fold_outputs(
         config=config,
         run_dir=run_dir,
@@ -857,10 +823,6 @@ def _run_audited_training(
         train_data=train_data,
         internal_metrics=internal_metrics,
         internal_predictions=internal_predictions,
-        response_metrics=response_metrics,
-        response_predictions=response_predictions,
-        oracle_metrics=oracle_metrics,
-        oracle_predictions=oracle_predictions,
         external=external,
         batch_lookup=batch_lookup,
         accelerator=accelerator,
@@ -1157,10 +1119,6 @@ def _write_audited_fold_outputs(
     train_data: GeneBags,
     internal_metrics: dict[str, float],
     internal_predictions: pd.DataFrame,
-    response_metrics: dict[str, float],
-    response_predictions: pd.DataFrame,
-    oracle_metrics: dict[str, float],
-    oracle_predictions: pd.DataFrame,
     external: ExternalGeneBags | None,
     batch_lookup: dict[str, int],
     accelerator: Accelerator,
@@ -1197,16 +1155,12 @@ def _write_audited_fold_outputs(
         metrics = _audited_metric_rows(
             fold_spec.outer_fold,
             internal_metrics,
-            response_metrics,
-            oracle_metrics,
             external_metrics,
             config.external_test.name if config.external_test is not None else None,
         )
         predictions = _audited_prediction_rows(
             fold_spec,
             internal_predictions,
-            response_predictions,
-            oracle_predictions,
             external_predictions,
             config.external_test.name if config.external_test is not None else None,
         )
@@ -1323,40 +1277,15 @@ def _audited_output_paths(run_dir: Path) -> dict[str, Path]:
 def _audited_metric_rows(
     outer_fold: int,
     internal: dict[str, float],
-    response: dict[str, float],
-    oracle_response: dict[str, float],
     external: dict[str, float],
     external_name: str | None,
 ) -> pd.DataFrame:
-    generation_keys = {
-        key: value
-        for key, value in response.items()
-        if key
-        in {
-            "hvg_mean_delta",
-            "hvg_energy",
-            "latent_mean_delta",
-            "latent_energy",
-            "occupancy",
-        }
-    }
-    oracle = dict(oracle_response)
     rows = [
         {
             "outer_fold": outer_fold,
             "evaluation_scope": "internal_outer_test",
             **internal,
-        },
-        {
-            "outer_fold": outer_fold,
-            "evaluation_scope": "generation_quality_outer_test",
-            **generation_keys,
-        },
-        {
-            "outer_fold": outer_fold,
-            "evaluation_scope": "observed_b_shared_oracle_outer_test",
-            **oracle,
-        },
+        }
     ]
     if external_name is not None:
         rows.append(
@@ -1372,28 +1301,16 @@ def _audited_metric_rows(
 def _audited_prediction_rows(
     fold: FoldSpec,
     internal: pd.DataFrame,
-    response: pd.DataFrame,
-    oracle_response: pd.DataFrame,
     external: pd.DataFrame,
     external_name: str | None,
 ) -> pd.DataFrame:
-    frames = []
-    for scope, frame in (
-        ("internal_outer_test", internal),
-        ("generation_quality_outer_test", response),
-    ):
-        scoped = frame.copy()
-        scoped.insert(0, "evaluation_scope", scope)
-        scoped.insert(0, "inner_role", "outer_test")
-        scoped.insert(0, "outer_fold", fold.outer_fold)
-        frames.append(scoped)
-    oracle = oracle_response.copy()
-    if "y_obs_anchor" in oracle:
-        oracle["y_pred"] = oracle["y_obs_anchor"]
-    oracle.insert(0, "evaluation_scope", "observed_b_shared_oracle_outer_test")
-    oracle.insert(0, "inner_role", "outer_test")
-    oracle.insert(0, "outer_fold", fold.outer_fold)
-    frames.append(oracle)
+    scoped = internal.copy()
+    scoped["gene_effect_error"] = scoped["y_pred"] - scoped["y_true"]
+    scoped["absolute_gene_effect_error"] = scoped["gene_effect_error"].abs()
+    scoped.insert(0, "evaluation_scope", "internal_outer_test")
+    scoped.insert(0, "inner_role", "outer_test")
+    scoped.insert(0, "outer_fold", fold.outer_fold)
+    frames = [scoped]
     if external_name is not None and not external.empty:
         scoped_external = external.copy()
         scoped_external.insert(0, "evaluation_scope", f"external:{external_name}")

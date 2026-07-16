@@ -1237,52 +1237,37 @@ def test_esm2_state_pert_dim_mismatch_fails_closed() -> None:
         train_module._effective_state_pert_dim(state, 2024)
 
 
-def test_observed_b_shared_oracle_opens_only_after_checkpoint_freeze() -> None:
+def test_outer_test_responses_cannot_be_opened() -> None:
     bags = replace(
         _toy_bags(),
         access_recorder=GeneAccessRecorder(FoldSpec(0, ("A",), ("C",), ("B", "D"))),
     )
     sealed = SealedGeneBags(bags, ("B", "D"))
-    with pytest.raises(PermissionError, match="selected checkpoint is frozen"):
-        sealed.open(
+    for checkpoint_frozen in (False, True):
+        for stage in (
+            "generation_quality_outer_test",
             "observed_b_shared_oracle_outer_test",
-            checkpoint_frozen=False,
-        )
-    for stage in (
-        "generation_quality_outer_test",
-        "observed_b_shared_oracle_outer_test",
-    ):
-        assert sealed.open(stage, checkpoint_frozen=True).genes.tolist() == ["B", "D"]
+        ):
+            with pytest.raises(PermissionError, match="disables outer-test response"):
+                sealed.open(stage, checkpoint_frozen=checkpoint_frozen)
     label_view = sealed.label_view(checkpoint_frozen=True)
     assert label_view.genes.tolist() == ["B", "D"]
     assert all(bag.shape[0] == 0 for bag in label_view.input_bags)
-    with pytest.raises(ValueError, match="only be opened"):
+    with pytest.raises(PermissionError, match="disables outer-test response"):
         sealed.open("fine_tuning", checkpoint_frozen=True)
 
 
-def test_observed_b_shared_oracle_receives_frozen_eval_checkpoint(
+def test_audited_training_never_evaluates_outer_test_responses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original = train_module._evaluate_observed_b_shared
-    observed = False
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("formal exp05 must not evaluate outer-test responses")
 
-    def assert_frozen(
-        model: torch.nn.Module,
-        data: GeneBags,
-        device: torch.device,
-    ) -> tuple[dict[str, float], pd.DataFrame]:
-        nonlocal observed
-        observed = True
-        assert not model.training
-        assert all(not parameter.requires_grad for parameter in model.parameters())
-        return original(model, data, device)
-
-    monkeypatch.setattr(train_module, "_evaluate_observed_b_shared", assert_frozen)
+    monkeypatch.setattr(train_module, "_evaluate_observed_b_shared", forbidden)
+    monkeypatch.setattr(SealedGeneBags, "open", forbidden)
 
     _run_tiny_audited_fold(tmp_path)
-
-    assert observed
 
 
 def test_inner_validation_never_reads_observed_response(tmp_path: Path) -> None:
@@ -1367,7 +1352,7 @@ def test_run_training_fold_never_passes_outer_test_responses_to_fit(
     assert captured[0]["train_hash"] == captured[1]["train_hash"]
 
 
-def test_audited_training_writes_three_final_scopes_and_fit_audit(
+def test_audited_training_writes_prediction_only_final_scope_and_fit_audit(
     tmp_path: Path,
 ) -> None:
     data = _toy_bags()
@@ -1385,11 +1370,15 @@ def test_audited_training_writes_three_final_scopes_and_fit_audit(
     )
 
     predictions = pd.read_csv(paths["predictions"])
-    assert set(predictions["evaluation_scope"]) == {
-        "internal_outer_test",
-        "generation_quality_outer_test",
-        "observed_b_shared_oracle_outer_test",
-    }
+    assert set(predictions["evaluation_scope"]) == {"internal_outer_test"}
+    assert np.allclose(
+        predictions["gene_effect_error"],
+        predictions["y_pred"] - predictions["y_true"],
+    )
+    assert np.allclose(
+        predictions["absolute_gene_effect_error"],
+        predictions["gene_effect_error"].abs(),
+    )
     audit = pd.read_csv(paths["fit_access_audit"])
     assert set(audit["stage"]) >= {
         "adapter_fit",
@@ -1402,8 +1391,6 @@ def test_audited_training_writes_three_final_scopes_and_fit_audit(
         "fine_tuning",
         "early_stopping_prediction_only",
         "internal_outer_test",
-        "generation_quality_outer_test",
-        "observed_b_shared_oracle_outer_test",
     }
     assert set(audit["stage"]).isdisjoint(
         {
@@ -1838,11 +1825,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         artifacts = fold_dir / "artifacts"
         artifacts.mkdir(parents=True)
         rows = []
-        for scope in (
-            "internal_outer_test",
-            "generation_quality_outer_test",
-            "observed_b_shared_oracle_outer_test",
-        ):
+        for scope in ("internal_outer_test",):
             rows.extend(
                 {
                     "perturbation_gene": gene,
@@ -1870,11 +1853,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         pd.DataFrame(
             [
                 {"outer_fold": fold.outer_fold, "evaluation_scope": scope, "mse": 0.0}
-                for scope in (
-                    "internal_outer_test",
-                    "generation_quality_outer_test",
-                    "observed_b_shared_oracle_outer_test",
-                )
+                for scope in ("internal_outer_test",)
             ]
         ).to_csv(metrics, index=False)
         audit = artifacts / "fit_access_audit.csv"
@@ -1887,12 +1866,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
                     "gene_set_sha256": cv._gene_set_sha256(
                         cv._stage_genes(stage, fold)
                     ),
-                    "checkpoint_frozen": stage
-                    in {
-                        "internal_outer_test",
-                        "generation_quality_outer_test",
-                        "observed_b_shared_oracle_outer_test",
-                    },
+                    "checkpoint_frozen": stage in {"internal_outer_test"},
                 }
                 for stage in sorted(cv._mandatory_audit_stages(config))
             ]
@@ -1939,11 +1913,7 @@ def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
         accelerator=_FourRankMainAccelerator(),  # type: ignore[arg-type]
     )
     predictions = pd.read_csv(run_dir / "artifacts" / "predictions.csv")
-    for scope in (
-        "internal_outer_test",
-        "generation_quality_outer_test",
-        "observed_b_shared_oracle_outer_test",
-    ):
+    for scope in ("internal_outer_test",):
         rows = predictions.query("evaluation_scope == @scope")
         assert rows["perturbation_gene"].nunique() == 9338
         assert not rows.duplicated(["perturbation_gene", "evaluation_scope"]).any()
