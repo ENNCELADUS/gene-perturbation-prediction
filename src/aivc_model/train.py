@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -32,7 +32,7 @@ from accelerate.utils import broadcast_object_list, set_seed
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Sampler
 from tqdm import tqdm
 
 from aivc_model.model import (
@@ -419,6 +419,7 @@ def run_training(
         _trainable_parameters(model),
         lr=config.train.learning_rate,
         weight_decay=config.train.weight_decay,
+        fused=accelerator.device.type == "cuda",
     )
     evaluation_sets = {
         "internal_outer_test": PredictionRequest(
@@ -437,6 +438,7 @@ def run_training(
         seed=config.train.seed,
         gene_batch_size=config.train.gene_batch_size,
         world_size=accelerator.num_processes,
+        costs=_gene_chunk_costs(data, config.train.cell_set_len),
     )
     val_loader = _gene_loader(
         split.val,
@@ -675,6 +677,7 @@ def _run_audited_training(
     optimizer = torch.optim.AdamW(
         _optimizer_parameter_groups(model, config),
         weight_decay=config.train.weight_decay,
+        fused=accelerator.device.type == "cuda",
     )
     train_loader = _gene_loader(
         np.arange(len(train_data.genes), dtype=np.int64),
@@ -682,6 +685,7 @@ def _run_audited_training(
         seed=config.train.seed + fold_spec.outer_fold,
         gene_batch_size=config.train.gene_batch_size,
         world_size=accelerator.num_processes,
+        costs=_gene_chunk_costs(train_data, config.train.cell_set_len),
     )
     val_loader = _gene_loader(
         np.arange(len(val_data.genes), dtype=np.int64),
@@ -1406,6 +1410,33 @@ class _GeneIndexDataset(Dataset[dict[str, int | bool]]):
         }
 
 
+class _CostBalancedSampler(Sampler[int]):
+    """Shuffle similar-cost groups so DDP ranks receive balanced STATE work."""
+
+    def __init__(self, costs: np.ndarray, world_size: int, seed: int) -> None:
+        self._costs = np.asarray(costs, dtype=np.int64)
+        self._world_size = int(world_size)
+        self._seed = int(seed)
+        self._epoch = 0
+        if len(self._costs) % self._world_size != 0:
+            raise ValueError("cost-balanced sampler length must divide by world size")
+
+    def __len__(self) -> int:
+        return len(self._costs)
+
+    def set_epoch(self, epoch: int) -> None:
+        self._epoch = int(epoch)
+
+    def __iter__(self) -> Iterator[int]:
+        rng = np.random.default_rng(self._seed + self._epoch)
+        order = np.lexsort((rng.random(len(self._costs)), self._costs))
+        groups = order.reshape(-1, self._world_size)
+        rng.shuffle(groups)
+        for group in groups:
+            rng.shuffle(group)
+        return iter(groups.reshape(-1).tolist())
+
+
 def _make_accelerator(config: AivcConfig) -> Accelerator:
     dataloader_config = DataLoaderConfiguration(
         even_batches=False,
@@ -1413,7 +1444,7 @@ def _make_accelerator(config: AivcConfig) -> Accelerator:
         data_seed=config.train.seed,
     )
     ddp_kwargs = DistributedDataParallelKwargs(
-        find_unused_parameters=True,
+        find_unused_parameters=False,
         static_graph=True,
     )
     return Accelerator(
@@ -1937,6 +1968,7 @@ def _gene_loader(
     seed: int,
     gene_batch_size: int,
     world_size: int,
+    costs: np.ndarray | None = None,
 ) -> DataLoader[dict[str, torch.Tensor]]:
     if gene_batch_size < 1:
         msg = "gene_batch_size must be at least 1"
@@ -1948,12 +1980,50 @@ def _gene_loader(
         batch_size=gene_batch_size,
         world_size=world_size,
     )
+    sampler: Sampler[int] | None = None
+    if shuffle and costs is not None:
+        normalized_costs = np.asarray(costs, dtype=np.int64)
+        if padded_indices.size and int(padded_indices.max()) >= len(normalized_costs):
+            raise ValueError("gene costs must cover every loader index")
+        sampler = _CostBalancedSampler(
+            normalized_costs[padded_indices],
+            world_size,
+            seed,
+        )
     return DataLoader(
         _GeneIndexDataset(padded_indices, is_padding),
         batch_size=gene_batch_size,
-        shuffle=shuffle,
+        shuffle=shuffle and sampler is None,
+        sampler=sampler,
         generator=generator,
     )
+
+
+def _gene_chunk_costs(data: GeneBags, cell_set_len: int) -> np.ndarray:
+    """Return the exact number of condition chunks produced for each gene."""
+    if cell_set_len < 1:
+        raise ValueError("cell_set_len must be at least 1")
+    costs: list[int] = []
+    for gene_index, bag in enumerate(data.input_bags):
+        n_cells = int(bag.shape[0])
+        cell_types = (
+            data.cell_type_bags[gene_index]
+            if data.cell_type_bags is not None
+            else np.full(n_cells, "K562", dtype=object)
+        )
+        batches = (
+            data.batch_bags[gene_index]
+            if data.batch_bags is not None
+            else np.full(n_cells, "", dtype=object)
+        )
+        counts: dict[tuple[str, str], int] = {}
+        for cell_type, batch in zip(cell_types, batches, strict=True):
+            key = (str(cell_type), str(batch))
+            counts[key] = counts.get(key, 0) + 1
+        costs.append(
+            sum(math.ceil(count / int(cell_set_len)) for count in counts.values())
+        )
+    return np.asarray(costs, dtype=np.int64)
 
 
 def _prediction_indices(
