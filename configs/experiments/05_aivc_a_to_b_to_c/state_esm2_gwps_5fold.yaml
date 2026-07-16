@@ -95,7 +95,7 @@ train:
   weight_decay: 0.0001
   max_grad_norm: 1.0
   cell_set_len: 64
-  gene_batch_size: 1
+  gene_batch_size: 4
   required_world_size: 4
   device: auto
   float32_matmul_precision: high
