@@ -13,6 +13,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 
 CANONICAL_GENE_COUNT = 9338
 CANONICAL_OUTER_FOLDS = frozenset(range(5))
+FIXED_SPLIT_ROLES = frozenset({"train", "validation", "internal_test"})
 
 FIT_STAGES = frozenset(
     {
@@ -312,6 +313,130 @@ def build_canonical_outer_manifest(
             "perturbation_gene": frame["perturbation_gene"],
             "outer_fold": outer_fold,
         }
+    )
+
+
+def build_fixed_split_manifest(
+    labels: pd.DataFrame,
+    *,
+    train_fraction: float,
+    validation_fraction: float,
+    seed: int,
+) -> pd.DataFrame:
+    """Build one deterministic split over the complete gene-level pool."""
+    if not 0.0 < train_fraction < 1.0:
+        raise ValueError("train_fraction must be between zero and one")
+    if not 0.0 < validation_fraction < 1.0:
+        raise ValueError("validation_fraction must be between zero and one")
+    if train_fraction + validation_fraction >= 1.0:
+        raise ValueError("train and validation fractions must leave an internal test")
+
+    frame = labels[["perturbation_gene", "depmap_gene_effect"]].copy()
+    frame["perturbation_gene"] = frame["perturbation_gene"].astype(str).str.upper()
+    if frame.empty or frame["perturbation_gene"].nunique() != len(frame):
+        raise ValueError("fixed split labels must contain unique genes")
+    values = frame["depmap_gene_effect"].to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("depmap_gene_effect must contain only finite values")
+    frame = frame.sort_values("perturbation_gene").reset_index(drop=True)
+
+    strata = quantile_strata(
+        frame["depmap_gene_effect"].to_numpy(),
+        10,
+    )
+    train_index, heldout_index = train_test_split(
+        np.arange(len(frame), dtype=np.int64),
+        train_size=train_fraction,
+        random_state=seed,
+        stratify=strata,
+    )
+    heldout = frame.iloc[heldout_index]
+    heldout_strata = quantile_strata(
+        heldout["depmap_gene_effect"].to_numpy(),
+        10,
+    )
+    validation_count = int(round(len(frame) * validation_fraction))
+    validation_local, internal_local = train_test_split(
+        np.arange(len(heldout), dtype=np.int64),
+        train_size=validation_count,
+        random_state=seed + 1,
+        stratify=heldout_strata,
+    )
+
+    roles = pd.Series(index=frame.index, dtype=object)
+    roles.iloc[train_index] = "train"
+    roles.iloc[heldout.index.to_numpy(dtype=np.int64)[validation_local]] = "validation"
+    roles.iloc[heldout.index.to_numpy(dtype=np.int64)[internal_local]] = "internal_test"
+    return pd.DataFrame(
+        {
+            "perturbation_gene": frame["perturbation_gene"],
+            "split_role": roles,
+        }
+    )
+
+
+def load_fixed_split_manifest(
+    path: Path,
+    labels: pd.DataFrame,
+    expected_sha256: str,
+) -> pd.DataFrame:
+    """Load a fixed role manifest only when its hash and universe are exact."""
+    observed_sha256 = sha256_file(path)
+    if observed_sha256 != expected_sha256:
+        raise ValueError(f"fixed split manifest SHA-256 mismatch: {observed_sha256}")
+    manifest = pd.read_csv(path)
+    expected_columns = ["perturbation_gene", "split_role"]
+    if manifest.columns.tolist() != expected_columns:
+        raise ValueError(f"fixed split manifest columns must be {expected_columns}")
+    manifest["perturbation_gene"] = (
+        manifest["perturbation_gene"].astype(str).str.upper()
+    )
+    label_genes = labels["perturbation_gene"].astype(str).str.upper()
+    exact_universe = (
+        len(manifest) == manifest["perturbation_gene"].nunique()
+        and len(label_genes) == label_genes.nunique()
+        and set(manifest["perturbation_gene"]) == set(label_genes)
+    )
+    if not exact_universe:
+        raise ValueError("fixed split gene universe does not match the label table")
+    if set(manifest["split_role"]) != FIXED_SPLIT_ROLES:
+        raise ValueError(
+            f"fixed split roles must be exactly {sorted(FIXED_SPLIT_ROLES)}"
+        )
+    return manifest
+
+
+def fixed_fold_spec(manifest: pd.DataFrame) -> FoldSpec:
+    """Convert one fixed role manifest into the existing role-limited contract."""
+    required = {"perturbation_gene", "split_role"}
+    if not required <= set(manifest):
+        raise ValueError("fixed split manifest is missing required columns")
+    normalized = manifest.copy()
+    normalized["perturbation_gene"] = (
+        normalized["perturbation_gene"].astype(str).str.upper()
+    )
+    if normalized["perturbation_gene"].duplicated().any():
+        raise ValueError("fixed split manifest contains duplicate genes")
+    if set(normalized["split_role"]) != FIXED_SPLIT_ROLES:
+        raise ValueError(
+            f"fixed split roles must be exactly {sorted(FIXED_SPLIT_ROLES)}"
+        )
+
+    def genes(role: str) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                normalized.loc[
+                    normalized["split_role"] == role,
+                    "perturbation_gene",
+                ]
+            )
+        )
+
+    return FoldSpec(
+        outer_fold=-1,
+        train_genes=genes("train"),
+        val_genes=genes("validation"),
+        test_genes=genes("internal_test"),
     )
 
 

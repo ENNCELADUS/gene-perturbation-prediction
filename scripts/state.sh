@@ -22,7 +22,7 @@ if [ -f "$HOME/.bashrc" ]; then
   source "$HOME/.bashrc"
 fi
 
-CONFIG_PATH="${CONFIG_PATH:-configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml}"
+CONFIG_PATH="${CONFIG_PATH:-configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_fixed.yaml}"
 
 if [ ! -d ".venv" ]; then
   echo "Missing .venv. Run 'uv sync' before running STATE AIVC."

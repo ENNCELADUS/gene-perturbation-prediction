@@ -31,7 +31,9 @@ from aivc_model.gene_splits import (
     GeneAccessRecorder,
     assert_gene_access,
     attach_gene_provenance,
+    fixed_fold_spec,
     load_canonical_outer_manifest,
+    load_fixed_split_manifest,
     make_inner_fold_spec,
 )
 from aivc_model.gwps_cache import load_gwps_cache, validate_cache_arrays
@@ -45,6 +47,7 @@ from aivc_model.prepare import (
     load_config,
     load_external_gene_bags,
     load_gene_bags,
+    merge_gene_bag_pool,
 )
 from aivc_model.model import load_state_model
 from aivc_model.train import (
@@ -81,7 +84,7 @@ def run_preflight(config_path: Path) -> dict[str, object]:
     )
     gwps_shape, noncontrol_count = _validate_gwps_source(config, canonical_genes)
     state_dims = _validate_state_assets(config, cache_features)
-    adamson_matches = _validate_adamson_sources(config, cache_features)
+    external_matches = _validate_external_sources(config, cache_features)
     report: dict[str, object] = {
         "gwps_shape": f"{gwps_shape[0]}x{gwps_shape[1]}",
         "gwps_noncontrol_genes": noncontrol_count,
@@ -101,7 +104,7 @@ def run_preflight(config_path: Path) -> dict[str, object]:
     report.update(
         {
             f"{name}_matches": f"{count}/{STATE_FEATURE_COUNT}"
-            for name, count in adamson_matches.items()
+            for name, count in external_matches.items()
         }
     )
     return report
@@ -324,29 +327,33 @@ def _checkpoint_pert_dim(config: AivcConfig) -> int:
     return int(raw_dim)
 
 
-def _validate_adamson_sources(
+def _validate_external_sources(
     config: AivcConfig,
     state_features: np.ndarray,
 ) -> dict[str, int]:
     if config.external_test is None:
-        raise ValueError("three Adamson sources are required")
+        raise ValueError("at least one external test source is required")
     reference = set(state_features.astype(str))
     observed: dict[str, int] = {}
     for source in config.external_test.sources:
-        if source.var_gene_symbol_col is not None:
-            raise ValueError("Adamson var_gene_symbol_col must be null")
         adata = ad.read_h5ad(source.h5ad_path, backed="r")
         try:
-            symbols = set(adata.var_names.astype(str))
+            symbols = set(
+                (
+                    adata.var[source.var_gene_symbol_col]
+                    if source.var_gene_symbol_col is not None
+                    else adata.var_names
+                ).astype(str)
+            )
         finally:
             adata.file.close()
         count = len(reference.intersection(symbols))
         expected = EXPECTED_ADAMSON_MATCHES.get(source.name)
-        if expected is None or count != expected:
+        if expected is not None and count != expected:
             raise ValueError(f"unexpected STATE feature matches for {source.name}")
+        if expected is None and count == 0:
+            raise ValueError(f"no STATE feature matches for {source.name}")
         observed[source.name] = count
-    if set(observed) != set(EXPECTED_ADAMSON_MATCHES):
-        raise ValueError("Adamson source set is incomplete")
     return observed
 
 
@@ -464,6 +471,14 @@ def run_cross_validation(
                 "gwps_response",
             ),
         )
+    if getattr(config.cv, "fixed_split_manifest", None) is not None:
+        return _run_fixed_split(
+            config=config,
+            data=data,
+            canonical_manifest=manifest,
+            accelerator=accelerator,
+        )
+
     run_id = config.train.run_id or "state_aivc_cv"
     run_dir = config.data.output_dir / "runs" / run_id
     _prepare_fresh_run_dir(run_dir, accelerator)
@@ -520,6 +535,65 @@ def run_cross_validation(
         ),
     )
     return run_dir
+
+
+def _run_fixed_split(
+    *,
+    config: AivcConfig,
+    data: GeneBags,
+    canonical_manifest: pd.DataFrame,
+    accelerator: Accelerator,
+) -> Path:
+    """Execute one fixed train/validation/internal-test fit."""
+    run_id = config.train.run_id or "state_aivc_fixed"
+    run_dir = config.data.output_dir / "runs" / run_id
+    supplement = load_external_gene_bags(
+        config,
+        data,
+        run_dir / "artifacts",
+        project_scvi=False,
+        source_as_batch=True,
+    )
+    if supplement is not None:
+        data = merge_gene_bag_pool(
+            data,
+            supplement.data,
+            config.data.depmap_label_col,
+        )
+    labels = pd.DataFrame(
+        {
+            "perturbation_gene": [str(gene).upper() for gene in data.genes],
+            "depmap_gene_effect": np.asarray(data.y, dtype=float),
+        }
+    )
+    manifest_path, expected_sha256 = _fixed_manifest_authority(config)
+    manifest = load_fixed_split_manifest(manifest_path, labels, expected_sha256)
+    fold = fixed_fold_spec(manifest)
+    canonical = tuple(canonical_manifest["perturbation_gene"].astype(str))
+    canonical_set = set(canonical)
+    added = tuple(sorted(set(labels["perturbation_gene"]).difference(canonical_set)))
+    run_training_fold(
+        config=config,
+        data=data,
+        external=None,
+        fold_spec=fold,
+        run_dir=run_dir,
+        source_fingerprint=experiment_source_fingerprint(config),
+        accelerator=accelerator,
+        canonical_gene_order=canonical + added,
+    )
+    return run_dir
+
+
+def _fixed_manifest_authority(config: AivcConfig) -> tuple[Path, str]:
+    manifest_path = config.cv.fixed_split_manifest
+    sha_path = config.cv.fixed_split_sha256_file
+    if manifest_path is None or sha_path is None:
+        raise ValueError("fixed split manifest and SHA-256 file are required")
+    text = sha_path.read_text(encoding="utf-8")
+    if re.fullmatch(r"[0-9a-f]{64}\n", text) is None:
+        raise ValueError("fixed split SHA-256 file must contain one digest and newline")
+    return manifest_path, text[:-1]
 
 
 def _load_primary_bags(config: AivcConfig) -> GeneBags:
@@ -614,6 +688,12 @@ def experiment_source_fingerprint(config: AivcConfig) -> str:
                 config.cv.outer_split_sha256_file,
                 "outer split SHA-256 file",
             )
+        ),
+        "fixed_split_manifest_sha256": _file_sha256_or_none(
+            config.cv.fixed_split_manifest
+        ),
+        "fixed_split_sha256_file_sha256": _file_sha256_or_none(
+            config.cv.fixed_split_sha256_file
         ),
         "esm2_npz": _file_stat_signature(config.state.esm2_npz),
         "checkpoint": _file_stat_signature(config.state.checkpoint_path),

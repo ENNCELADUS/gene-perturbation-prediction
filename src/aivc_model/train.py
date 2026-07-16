@@ -2268,9 +2268,7 @@ def _canonical_esm2_genes(
         raise ValueError("outer split SHA-256 file must contain one digest and newline")
     expected_sha256 = sha256_text[:-1]
     requested_genes = canonical_gene_override or tuple(str(gene) for gene in data.genes)
-    labels = pd.DataFrame(
-        {"perturbation_gene": [str(gene).upper() for gene in requested_genes]}
-    )
+    labels = pd.read_csv(manifest_path, usecols=["perturbation_gene"])
     manifest = load_canonical_outer_manifest(
         manifest_path,
         labels,
@@ -2278,11 +2276,19 @@ def _canonical_esm2_genes(
     )
     canonical_genes = manifest["perturbation_gene"].tolist()
     data_genes = [str(gene).upper() for gene in requested_genes]
-    if len(canonical_genes) != CANONICAL_GENE_COUNT or data_genes != canonical_genes:
+    canonical_set = set(canonical_genes)
+    added_genes = sorted(set(data_genes).difference(canonical_set))
+    expected_genes = canonical_genes + added_genes
+    if (
+        len(canonical_genes) != CANONICAL_GENE_COUNT
+        or len(data_genes) != len(set(data_genes))
+        or data_genes != expected_genes
+    ):
         raise ValueError(
-            "ESM-2 internal gene universe must remain exactly 9338 canonical rows"
+            "ESM-2 gene order must be 9338 canonical rows followed by sorted "
+            "K562 supplement genes"
         )
-    return canonical_genes
+    return data_genes
 
 
 def _trainable_parameters(model: torch.nn.Module) -> list[torch.nn.Parameter]:
