@@ -239,6 +239,33 @@ def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> No
     )
 
 
+def test_gwps_cache_can_skip_redundant_array_hashes_after_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    original_sha256 = gwps_cache_module.sha256_file
+
+    def reject_array_rehash(path: Path) -> str:
+        if path.parent == cache_dir and path.name in gwps_cache_module._ARRAY_FILENAMES:
+            raise AssertionError(f"redundant array hash: {path.name}")
+        return original_sha256(path)
+
+    monkeypatch.setattr(gwps_cache_module, "sha256_file", reject_array_rehash)
+
+    bags = gwps_cache_module._load_gwps_cache(
+        config,
+        cache_dir,
+        contract,
+        verify_hashes=False,
+    )
+
+    assert bags.genes.tolist() == ["G1", "G2"]
+
+
 def test_gwps_cache_rejects_legacy_filename_only_manifest(tmp_path: Path) -> None:
     config = _toy_gwps_cache_config(tmp_path)
     cache_dir = tmp_path / "cache"
@@ -1351,7 +1378,7 @@ def test_padded_gene_loader_marks_padding_for_even_ddp_steps() -> None:
 
 def test_cost_balanced_sampler_groups_similar_work_and_reshuffles_epochs() -> None:
     costs = np.asarray([1, 10, 2, 9, 3, 8, 4, 7], dtype=np.int64)
-    sampler = train_module._CostBalancedSampler(costs, world_size=4, seed=17)
+    sampler = train_module._CostBalancedSampler(costs, group_size=4, seed=17)
 
     first = list(sampler)
     sampler.set_epoch(1)
@@ -2759,10 +2786,7 @@ def test_aivc_batched_forward_gene_mask_excludes_padding_from_ranknet_and_loss()
         pair_margin=0.0,
         pair_weight_clip=2.0,
     )
-    expected_total = (
-        masked["per_gene_total_loss"][[0, 2]].sum()
-        + masked["per_gene_pred_rank"][[0, 2]].sum() * 0.0
-    )
+    expected_total = masked["per_gene_total_loss"][[0, 2]].mean()
 
     assert torch.allclose(masked["pred_rank"], expected_rank)
     assert masked["per_gene_total_loss"][1].item() == 0.0

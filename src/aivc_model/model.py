@@ -642,13 +642,16 @@ class AivcModel(nn.Module):
             pair_weight_clip=float(weights.pred_rank_pair_weight_clip),
         )
         weighted_rank = float(weights.pred_rank) * pred_rank
-        rank_share = weighted_rank / valid_count.to(dtype=stacked["total"].dtype)
         per_gene_total = torch.where(
             valid_mask,
-            stacked["total"] + rank_share,
+            stacked["total"] + weighted_rank,
             stacked["total"] * 0.0,
         )
-        total = stacked["total"][valid_mask].sum() + weighted_rank
+        total = (
+            stacked["total"][valid_mask].sum()
+            / valid_count.to(dtype=stacked["total"].dtype)
+            + weighted_rank
+        )
         return {
             "total": total,
             "hvg_mean_delta": _masked_mean(stacked["hvg_mean_delta"], valid_mask),

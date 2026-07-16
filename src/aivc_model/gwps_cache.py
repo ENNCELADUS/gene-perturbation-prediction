@@ -251,22 +251,39 @@ def _build_gwps_cache(
     return manifest_path
 
 
-def load_gwps_cache(config: AivcConfig, cache_dir: Path) -> GeneBags:
+def load_gwps_cache(
+    config: AivcConfig,
+    cache_dir: Path,
+    *,
+    verify_hashes: bool = True,
+) -> GeneBags:
     """Load and validate the memory-mappable raw GWPS cache."""
-    return _load_gwps_cache(config, cache_dir, _PRODUCTION_CONTRACT)
+    return _load_gwps_cache(
+        config,
+        cache_dir,
+        _PRODUCTION_CONTRACT,
+        verify_hashes=verify_hashes,
+    )
 
 
 def _load_gwps_cache(
     config: AivcConfig,
     cache_dir: Path,
     contract: _CacheContract,
+    *,
+    verify_hashes: bool = True,
 ) -> GeneBags:
     model_dir, checkpoint, canonical_path, canonical_sha_path = _required_paths(config)
     manifest_path = cache_dir / "manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    arrays = _validate_manifest_arrays(cache_dir, manifest, contract)
+    arrays = _validate_manifest_arrays(
+        cache_dir,
+        manifest,
+        contract,
+        verify_hashes=verify_hashes,
+    )
     feature_names = arrays["feature_names.npy"]
     _validate_state_contract(model_dir, feature_names, contract)
     canonical = _load_canonical_manifest(config, canonical_path, contract)
@@ -594,6 +611,8 @@ def _validate_manifest_arrays(
     cache_dir: Path,
     manifest: object,
     contract: _CacheContract,
+    *,
+    verify_hashes: bool = True,
 ) -> dict[str, np.ndarray]:
     if (
         not isinstance(manifest, dict)
@@ -629,7 +648,7 @@ def _validate_manifest_arrays(
             raise ValueError(f"{filename} shape differs from manifest")
         if expected["dtype"] != array.dtype.str:
             raise ValueError(f"{filename} dtype differs from manifest")
-        if expected["sha256"] != sha256_file(path):
+        if verify_hashes and expected["sha256"] != sha256_file(path):
             raise ValueError(f"{filename} SHA-256 mismatch")
         arrays[filename] = array
 
