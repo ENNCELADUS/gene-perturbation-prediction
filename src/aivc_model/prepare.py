@@ -227,6 +227,8 @@ class TrainConfig:
     weight_decay: float = 1e-4
     cell_set_len: int = 128
     gene_batch_size: int = 1
+    eval_control_panel_size: int = 4096
+    eval_window_macro_batch_size: int = 64
     device: str = "auto"
     float32_matmul_precision: str | None = "high"
     freeze_state: bool = False
@@ -338,8 +340,9 @@ class GeneBags:
         stage: str,
         *,
         checkpoint_frozen: bool = False,
+        generation_targets: bool = False,
     ) -> GeneBags:
-        """Return a label/control-only view without reading observed responses."""
+        """Return prediction inputs with optional target-only observed expression."""
         requested = tuple(str(gene).upper() for gene in genes)
         if self.access_recorder is None:
             raise ValueError(
@@ -362,8 +365,12 @@ class GeneBags:
         return GeneBags(
             genes=np.asarray([self.genes[index] for index in indices], dtype=object),
             y=np.asarray([self.y[index] for index in indices], dtype=np.float32),
-            input_bags=tuple(
-                np.empty((0, self.input_dim), dtype=np.float32) for _ in indices
+            input_bags=(
+                tuple(self.input_bags[index] for index in indices)
+                if generation_targets
+                else tuple(
+                    np.empty((0, self.input_dim), dtype=np.float32) for _ in indices
+                )
             ),
             latent_bags=tuple(
                 np.empty((0, self.latent_dim), dtype=np.float32) for _ in indices
@@ -398,7 +405,7 @@ class GeneBags:
 
 @dataclass(frozen=True)
 class SealedGeneBags:
-    """Outer-test response bags that cannot be opened before checkpoint freeze."""
+    """Outer-test bags with separate label and target-only response capabilities."""
 
     _data: GeneBags
     _genes: tuple[str, ...]
@@ -415,10 +422,23 @@ class SealedGeneBags:
             checkpoint_frozen=True,
         )
 
+    def generation_target_view(self, checkpoint_frozen: bool) -> GeneBags:
+        """Return observed B only after freeze for generation-target loss."""
+        if not checkpoint_frozen:
+            raise PermissionError(
+                "selected checkpoint is frozen before outer-test response access"
+            )
+        return self._data.for_prediction_genes(
+            self._genes,
+            stage="generation_loss_outer_test",
+            checkpoint_frozen=True,
+            generation_targets=True,
+        )
+
     def open(self, stage: str, checkpoint_frozen: bool) -> GeneBags:
-        """Reject outer-test response access; formal exp05 is label-only."""
+        """Reject unrestricted outer-test response access."""
         del stage, checkpoint_frozen
-        raise PermissionError("formal exp05 disables outer-test response access")
+        raise PermissionError("use the target-only generation_target_view capability")
 
 
 @dataclass(frozen=True)
@@ -2260,6 +2280,10 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
     max_grad_norm = float(values.get("max_grad_norm", 1.0))
     required_world_size = int(values.get("required_world_size", 4))
     gene_batch_size = int(values.get("gene_batch_size", 1))
+    eval_control_panel_size = int(values.get("eval_control_panel_size", 4096))
+    eval_window_macro_batch_size = int(
+        values.get("eval_window_macro_batch_size", 64)
+    )
     if state_learning_rate <= 0:
         raise ValueError("state_learning_rate must be positive")
     if state_learning_rate > learning_rate:
@@ -2270,6 +2294,12 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         raise ValueError("required_world_size must be positive")
     if gene_batch_size <= 0:
         raise ValueError("gene_batch_size must be positive")
+    if eval_control_panel_size < int(cell_set_len):
+        raise ValueError("eval_control_panel_size must be at least cell_set_len")
+    if eval_control_panel_size % int(cell_set_len) != 0:
+        raise ValueError("eval_control_panel_size must be divisible by cell_set_len")
+    if eval_window_macro_batch_size <= 0:
+        raise ValueError("eval_window_macro_batch_size must be positive")
     return TrainConfig(
         run_id=values.get("run_id"),
         seed=int(values.get("seed", 42)),
@@ -2281,6 +2311,8 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         weight_decay=float(values.get("weight_decay", 1e-4)),
         cell_set_len=int(cell_set_len),
         gene_batch_size=gene_batch_size,
+        eval_control_panel_size=eval_control_panel_size,
+        eval_window_macro_batch_size=eval_window_macro_batch_size,
         device=str(values.get("device", "auto")),
         float32_matmul_precision=_str_or_none(
             values.get("float32_matmul_precision", "high")

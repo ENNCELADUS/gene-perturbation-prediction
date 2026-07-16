@@ -124,6 +124,7 @@ _FINAL_PREDICTION_COLUMNS = [
     "perturbation_gene",
     "y_true",
     "y_pred",
+    "generation_loss",
     "n_chunks",
 ]
 _BYTES_PER_GIB = 1024**3
@@ -138,13 +139,26 @@ class PredictionRequest:
 
 
 @dataclass(frozen=True)
-class ObservedBOracleFit:
-    """Frozen observed-response-to-label oracle selected on inner validation."""
+class _EvaluationControlPanel:
+    """Fixed, device-resident 64-cell STATE windows for validation and test."""
 
-    model: torch.nn.Linear
-    best_epoch: int
-    checkpoint_sha256: str
-    val_mse: float
+    control_chunks: tuple[torch.Tensor, ...]
+    batch_index_chunks: tuple[torch.Tensor | None, ...]
+    macro_batch_windows: int
+    selected_indices: np.ndarray
+
+    @property
+    def n_windows(self) -> int:
+        return len(self.control_chunks)
+
+    def macro_batches(
+        self,
+    ) -> Iterator[
+        tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor | None, ...]]
+    ]:
+        for start in range(0, self.n_windows, self.macro_batch_windows):
+            end = start + self.macro_batch_windows
+            yield self.control_chunks[start:end], self.batch_index_chunks[start:end]
 
 
 @dataclass(frozen=True)
@@ -478,11 +492,20 @@ def run_training(
             _gib_to_bytes(config.train.input_tensor_cache_max_gib),
             accelerator.device,
         )
+    evaluation_panel = _build_evaluation_control_panel(
+        data,
+        config.train.cell_set_len,
+        config.train.eval_control_panel_size,
+        config.train.eval_window_macro_batch_size,
+        config.train.seed,
+        accelerator.device,
+        batch_lookup,
+    )
     rng = np.random.default_rng(config.train.seed + accelerator.process_index)
 
     logs: list[dict[str, float]] = []
-    best_val_spearman = -math.inf
-    last_val_spearman = math.nan
+    best_val_c_loss = math.inf
+    last_val_c_loss = math.nan
     best_checkpoint_written = False
     for epoch in range(1, config.train.max_epochs + 1):
         weights = _loss_weights(config, epoch=epoch)
@@ -507,13 +530,13 @@ def run_training(
             model,
             data,
             val_loader,
-            config.train.cell_set_len,
+            evaluation_panel,
             accelerator,
-            batch_lookup,
+            stage=f"validation epoch {epoch}",
         )
         gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(accelerator)
         if accelerator.is_main_process:
-            last_val_spearman = float(val_row.get("spearman", math.nan))
+            last_val_c_loss = float(val_row.get("c_loss", math.nan))
             row = {
                 "epoch": epoch,
                 "gpu_peak_memory_allocated_mb": gpu_peak_memory_allocated_mb,
@@ -528,14 +551,14 @@ def run_training(
             )
             should_save_best = (
                 _is_better_metric(
-                    last_val_spearman,
-                    best_val_spearman,
-                    mode="max",
+                    last_val_c_loss,
+                    best_val_c_loss,
+                    mode="min",
                 )
                 or not best_checkpoint_written
             )
             if should_save_best:
-                best_val_spearman = last_val_spearman
+                best_val_c_loss = last_val_c_loss
                 best_checkpoint_written = True
                 _save_model_checkpoint(
                     accelerator,
@@ -544,9 +567,9 @@ def run_training(
                     {
                         "checkpoint_kind": "best",
                         "epoch": epoch,
-                        "selection_metric": "val_spearman",
-                        "selection_mode": "max",
-                        "metric_value": best_val_spearman,
+                        "selection_metric": "val_c_loss",
+                        "selection_mode": "min",
+                        "metric_value": best_val_c_loss,
                         "run_id": run_id,
                         "train_log": str(run_dir / "train_log.csv"),
                     },
@@ -557,13 +580,27 @@ def run_training(
     prediction_frames = []
     for evaluation_scope, request in evaluation_sets.items():
         evaluation_data = request.observed_response or data
+        scope_panel = (
+            evaluation_panel
+            if request.observed_response is None
+            else _build_evaluation_control_panel(
+                evaluation_data,
+                config.train.cell_set_len,
+                config.train.eval_control_panel_size,
+                config.train.eval_window_macro_batch_size,
+                config.train.seed,
+                accelerator.device,
+                batch_lookup,
+            )
+        )
         test_row, scoped_predictions = _evaluate_prediction_only_final(
             model,
             evaluation_data,
             evaluation_loaders[evaluation_scope],
-            config.train.cell_set_len,
+            scope_panel,
             accelerator,
-            batch_lookup,
+            generation_targets=request.observed_response,
+            stage=evaluation_scope,
         )
         if accelerator.is_main_process:
             test_rows.append({"evaluation_scope": evaluation_scope, **test_row})
@@ -605,10 +642,10 @@ def run_training(
             {
                 "checkpoint_kind": "final",
                 "epoch": config.train.max_epochs,
-                "selection_metric": "val_spearman",
-                "selection_mode": "max",
-                "metric_value": last_val_spearman,
-                "best_metric_value": best_val_spearman,
+                "selection_metric": "val_c_loss",
+                "selection_mode": "min",
+                "metric_value": last_val_c_loss,
+                "best_metric_value": best_val_c_loss,
                 "run_id": run_id,
                 "train_log": str(run_dir / "train_log.csv"),
                 "test_metrics": str(run_dir / "test_metrics.csv"),
@@ -713,10 +750,19 @@ def _run_audited_training(
             _gib_to_bytes(config.train.input_tensor_cache_max_gib),
             accelerator.device,
         )
+    evaluation_panel = _build_evaluation_control_panel(
+        train_data,
+        config.train.cell_set_len,
+        config.train.eval_control_panel_size,
+        config.train.eval_window_macro_batch_size,
+        config.train.seed + fold_spec.outer_fold,
+        accelerator.device,
+        batch_lookup,
+    )
     rng = np.random.default_rng(
         config.train.seed + fold_spec.outer_fold + accelerator.process_index
     )
-    best_value = -math.inf
+    best_value = math.inf
     best_epoch = 0
     logs = []
     for epoch in range(1, config.train.max_epochs + 1):
@@ -752,9 +798,10 @@ def _run_audited_training(
             model,
             val_data,
             val_loader,
-            config.train.cell_set_len,
+            evaluation_panel,
             accelerator,
-            batch_lookup,
+            generation_targets=val_data,
+            stage=f"fold {fold_spec.outer_fold} validation epoch {epoch}",
         )
         local_optimizer_steps = int(train_row.pop("local_optimizer_steps"))
         rank_optimizer_steps = assert_all_ranks_stepped(
@@ -764,7 +811,7 @@ def _run_audited_training(
 
         def write_epoch_outputs() -> None:
             nonlocal best_epoch, best_value
-            value = float(val_row.get("spearman", math.nan))
+            value = float(val_row.get("c_loss", math.nan))
             logs.append(
                 {
                     "epoch": epoch,
@@ -774,7 +821,7 @@ def _run_audited_training(
                 }
             )
             pd.DataFrame(logs).to_csv(run_dir / "train_log.csv", index=False)
-            if _is_better_metric(value, best_value, mode="max") or best_epoch == 0:
+            if _is_better_metric(value, best_value, mode="min") or best_epoch == 0:
                 best_value = value
                 best_epoch = epoch
                 _save_model_checkpoint(
@@ -785,7 +832,8 @@ def _run_audited_training(
                         **authority.metadata(),
                         "checkpoint_kind": "best",
                         "epoch": epoch,
-                        "selection_metric": "val_spearman",
+                        "selection_metric": "val_c_loss",
+                        "selection_mode": "min",
                         "metric_value": value,
                         "outer_fold": fold_spec.outer_fold,
                         "selected_layer": None,
@@ -814,6 +862,7 @@ def _run_audited_training(
     selected_model.requires_grad_(False)
 
     label_test = sealed_test.label_view(checkpoint_frozen=True)
+    generation_test = sealed_test.generation_target_view(checkpoint_frozen=True)
     label_loader = accelerator.prepare(
         _gene_loader(
             np.arange(len(label_test.genes), dtype=np.int64),
@@ -827,9 +876,10 @@ def _run_audited_training(
         model,
         label_test,
         label_loader,
-        config.train.cell_set_len,
+        evaluation_panel,
         accelerator,
-        batch_lookup,
+        generation_targets=generation_test,
+        stage=f"fold {fold_spec.outer_fold} internal outer-test",
     )
     return _write_audited_fold_outputs(
         config=config,
@@ -852,139 +902,10 @@ def _run_audited_training(
     )
 
 
-def _fit_observed_b_oracle(
-    config: AivcConfig,
-    train_data: GeneBags,
-    val_data: GeneBags,
-    fold_spec: FoldSpec,
-) -> ObservedBOracleFit:
-    """Fit on train observed B and select one frozen epoch on validation B."""
-    _authorize_data_access(train_data, "observed_b_oracle_fit")
-    _authorize_data_access(val_data, "observed_b_oracle_selection")
-    train_x = torch.as_tensor(
-        _observed_b_features(train_data),
-        dtype=torch.float32,
-    )
-    train_y = torch.as_tensor(train_data.y, dtype=torch.float32).reshape(-1, 1)
-    val_x = torch.as_tensor(_observed_b_features(val_data), dtype=torch.float32)
-    val_y = torch.as_tensor(val_data.y, dtype=torch.float32).reshape(-1, 1)
-    torch.manual_seed(config.train.seed + fold_spec.outer_fold + 10_000)
-    model = torch.nn.Linear(train_data.latent_dim, 1)
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=config.train.learning_rate,
-        weight_decay=config.train.weight_decay,
-    )
-    best_epoch = 0
-    best_mse = math.inf
-    best_state: dict[str, torch.Tensor] | None = None
-    for epoch in range(1, config.train.max_epochs + 1):
-        model.train()
-        optimizer.zero_grad(set_to_none=True)
-        torch.nn.functional.mse_loss(model(train_x), train_y).backward()
-        optimizer.step()
-        model.eval()
-        with torch.no_grad():
-            val_mse = float(torch.nn.functional.mse_loss(model(val_x), val_y))
-        if val_mse < best_mse:
-            best_epoch = epoch
-            best_mse = val_mse
-            best_state = {
-                name: tensor.detach().clone()
-                for name, tensor in model.state_dict().items()
-            }
-    if best_state is None:
-        raise ValueError("observed-B oracle requires at least one training epoch")
-    model.load_state_dict(best_state)
-    model.eval()
-    model.requires_grad_(False)
-    train_data.record_access("observed_b_oracle_fit")
-    val_data.record_access("observed_b_oracle_selection")
-    return ObservedBOracleFit(
-        model=model,
-        best_epoch=best_epoch,
-        checkpoint_sha256=_module_sha256(model),
-        val_mse=best_mse,
-    )
-
-
 def _authorize_data_access(data: GeneBags, stage: str) -> None:
     if data.access_recorder is None:
         raise ValueError("audited operation requires a GeneAccessRecorder")
     data.access_recorder.authorize(stage, tuple(str(gene) for gene in data.genes))
-
-
-def _observed_b_features(data: GeneBags) -> np.ndarray:
-    return np.vstack(
-        [np.asarray(bag, dtype=np.float32).mean(axis=0) for bag in data.latent_bags]
-    ).astype(np.float32)
-
-
-def _evaluate_observed_b_oracle(
-    oracle: ObservedBOracleFit,
-    data: GeneBags,
-) -> tuple[dict[str, float], pd.DataFrame]:
-    with torch.no_grad():
-        predictions = (
-            oracle.model(torch.as_tensor(_observed_b_features(data)))
-            .reshape(-1)
-            .numpy()
-        )
-    y_true = np.asarray(data.y, dtype=np.float64)
-    y_pred = np.asarray(predictions, dtype=np.float64)
-    metrics = regression_metrics(y_true, y_pred)
-    metrics.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
-    frame = pd.DataFrame(
-        {
-            "perturbation_gene": [str(gene) for gene in data.genes],
-            "y_true": y_true,
-            "y_pred": y_pred,
-            "n_chunks": np.ones(len(data.genes), dtype=float),
-        }
-    )
-    return metrics, frame
-
-
-def _evaluate_observed_b_shared(
-    model: AivcModel,
-    data: GeneBags,
-    device: torch.device,
-) -> tuple[dict[str, float], pd.DataFrame]:
-    """Evaluate observed B through the frozen shared response encoder and C head."""
-    control_expression = torch.as_tensor(
-        np.asarray(data.control_input, dtype=np.float32),
-        dtype=torch.float32,
-        device=device,
-    )
-    predictions = []
-    with torch.no_grad():
-        for bag in data.input_bags:
-            observed_expression = torch.as_tensor(
-                np.asarray(bag, dtype=np.float32),
-                dtype=torch.float32,
-                device=device,
-            )
-            predictions.append(
-                model.predict_c_from_response(
-                    observed_expression,
-                    control_expression,
-                )
-            )
-    y_true = np.asarray(data.y, dtype=np.float64)
-    y_pred = (
-        torch.stack(predictions).detach().cpu().numpy().astype(np.float64, copy=False)
-    )
-    metrics = regression_metrics(y_true, y_pred)
-    metrics.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
-    frame = pd.DataFrame(
-        {
-            "perturbation_gene": [str(gene) for gene in data.genes],
-            "y_true": y_true,
-            "y_pred": y_pred,
-            "n_chunks": np.ones(len(data.genes), dtype=float),
-        }
-    )
-    return metrics, frame
 
 
 def _runtime_evidence(
@@ -1164,9 +1085,18 @@ def _write_audited_fold_outputs(
             model,
             external_data,
             external_loader,
-            config.train.cell_set_len,
+            _build_evaluation_control_panel(
+                external_data,
+                config.train.cell_set_len,
+                config.train.eval_control_panel_size,
+                config.train.eval_window_macro_batch_size,
+                config.train.seed + fold_spec.outer_fold,
+                accelerator.device,
+                batch_lookup,
+            ),
             accelerator,
-            batch_lookup,
+            generation_targets=external_data,
+            stage=f"fold {fold_spec.outer_fold} external test",
         )
 
     def write_fold_outputs() -> None:
@@ -2541,23 +2471,27 @@ def _evaluate_prediction_only_final(
     model: torch.nn.Module,
     data: GeneBags,
     indices: DataLoader[dict[str, torch.Tensor]],
-    cell_set_len: int,
+    control_panel: _EvaluationControlPanel,
     accelerator: Accelerator,
-    batch_lookup: dict[str, int],
+    *,
+    generation_targets: GeneBags | None = None,
+    stage: str = "evaluation",
 ) -> tuple[dict[str, float], pd.DataFrame]:
-    """Evaluate final y_pred from controls plus perturbation identity only."""
+    """Evaluate C from predicted B; observed B is an optional loss target only."""
     model.eval()
     inference_model = accelerator.unwrap_model(model)
     inference_model.eval()
-    control_cells, control_batch_indices = _final_prediction_control_tensors(
-        data,
-        cell_set_len,
-        accelerator.device,
-        batch_lookup,
-    )
+    target_means = _generation_target_means(generation_targets)
     pred_tensors = []
     with torch.no_grad():
-        for batch in indices:
+        control_latent = _control_panel_latent(inference_model, control_panel)
+        progress = tqdm(
+            indices,
+            desc=stage,
+            disable=not bool(getattr(accelerator, "is_local_main_process", True)),
+            leave=False,
+        )
+        for batch in progress:
             gene_indices = _batch_indices(batch)
             if not gene_indices:
                 continue
@@ -2569,8 +2503,9 @@ def _evaluate_prediction_only_final(
                     gene_indices,
                     padding_flags,
                     accelerator.device,
-                    control_cells,
-                    control_batch_indices,
+                    control_panel,
+                    control_latent,
+                    target_means,
                 )
             )
     predictions = _gather_final_predictions(pred_tensors, data, accelerator)
@@ -2578,30 +2513,140 @@ def _evaluate_prediction_only_final(
     if accelerator.is_main_process and not predictions.empty:
         y_true = predictions["y_true"].to_numpy(dtype=np.float64)
         y_pred = predictions["y_pred"].to_numpy(dtype=np.float64)
+        summary["c_loss"] = float(np.mean(np.square(y_pred - y_true)))
         summary.update(regression_metrics(y_true, y_pred))
         summary.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
+        generation_loss = predictions["generation_loss"].to_numpy(dtype=np.float64)
+        if np.isfinite(generation_loss).any():
+            summary["generation_loss"] = float(np.nanmean(generation_loss))
     return summary, predictions
 
 
-def _final_prediction_control_tensors(
+def _build_evaluation_control_panel(
     data: GeneBags,
     cell_set_len: int,
+    panel_size: int,
+    macro_batch_windows: int,
+    seed: int,
     device: torch.device,
     batch_lookup: dict[str, int],
-) -> tuple[torch.Tensor, torch.Tensor | None]:
+) -> _EvaluationControlPanel:
     if cell_set_len < 1:
-        msg = "cell_set_len must be at least 1"
-        raise ValueError(msg)
+        raise ValueError("cell_set_len must be at least 1")
+    if panel_size < cell_set_len or panel_size % cell_set_len != 0:
+        raise ValueError("evaluation panel size must be a multiple of cell_set_len")
+    if macro_batch_windows < 1:
+        raise ValueError("evaluation macro-batch must contain at least one window")
     if data.control_input.shape[0] < 1:
-        msg = "prediction-only final evaluation requires at least one control cell"
-        raise ValueError(msg)
+        raise ValueError("prediction-only evaluation requires control cells")
+    available = int(data.control_input.shape[0])
+    if available >= cell_set_len:
+        effective_size = min(panel_size, (available // cell_set_len) * cell_set_len)
+    else:
+        effective_size = cell_set_len
+    selected = _stratified_control_indices(
+        data.control_batch,
+        available,
+        effective_size,
+        seed,
+    )
     control_cells = torch.as_tensor(
-        np.asarray(data.control_input, dtype=np.float32),
+        np.asarray(data.control_input[selected], dtype=np.float32),
         dtype=torch.float32,
         device=device,
     )
-    control_batch_indices = _batch_tensor(data.control_batch, batch_lookup, device)
-    return control_cells, control_batch_indices
+    control_chunks = tuple(control_cells.split(cell_set_len, dim=0))
+    if any(int(chunk.shape[0]) != cell_set_len for chunk in control_chunks):
+        raise ValueError("evaluation control windows must have fixed cell_set_len")
+    batch_indices = _batch_tensor(
+        None if data.control_batch is None else data.control_batch[selected],
+        batch_lookup,
+        device,
+    )
+    batch_chunks: tuple[torch.Tensor | None, ...]
+    if batch_indices is None:
+        batch_chunks = tuple(None for _ in control_chunks)
+    else:
+        batch_chunks = tuple(batch_indices.split(cell_set_len, dim=0))
+    return _EvaluationControlPanel(
+        control_chunks=control_chunks,
+        batch_index_chunks=batch_chunks,
+        macro_batch_windows=min(macro_batch_windows, len(control_chunks)),
+        selected_indices=selected,
+    )
+
+
+def _stratified_control_indices(
+    batch_labels: np.ndarray | None,
+    available: int,
+    panel_size: int,
+    seed: int,
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    if panel_size > available:
+        return rng.choice(available, size=panel_size, replace=True).astype(np.int64)
+    if panel_size == available:
+        selected = np.arange(available, dtype=np.int64)
+        rng.shuffle(selected)
+        return selected
+    if batch_labels is None:
+        return rng.choice(available, size=panel_size, replace=False).astype(np.int64)
+    normalized = np.asarray(batch_labels).astype(str)
+    labels, inverse, counts = np.unique(
+        normalized,
+        return_inverse=True,
+        return_counts=True,
+    )
+    ideal = panel_size * counts.astype(np.float64) / float(available)
+    quotas = np.floor(ideal).astype(np.int64)
+    minimum = (
+        np.ones_like(quotas)
+        if panel_size >= len(labels)
+        else np.zeros_like(quotas)
+    )
+    quotas = np.maximum(quotas, minimum)
+    quotas = np.minimum(quotas, counts)
+    while int(quotas.sum()) < panel_size:
+        capacity = counts - quotas
+        candidates = np.flatnonzero(capacity > 0)
+        score = ideal[candidates] - quotas[candidates]
+        quotas[candidates[int(np.argmax(score))]] += 1
+    while int(quotas.sum()) > panel_size:
+        candidates = np.flatnonzero(quotas > minimum)
+        score = quotas[candidates] - ideal[candidates]
+        quotas[candidates[int(np.argmax(score))]] -= 1
+    selected = np.concatenate(
+        [
+            rng.choice(np.flatnonzero(inverse == index), size=int(quota), replace=False)
+            for index, quota in enumerate(quotas)
+            if quota > 0
+        ]
+    ).astype(np.int64)
+    rng.shuffle(selected)
+    return selected
+
+
+def _control_panel_latent(
+    model: AivcModel,
+    panel: _EvaluationControlPanel,
+) -> torch.Tensor:
+    return torch.cat(
+        [
+            model.response_encoder(torch.cat(control_chunks, dim=0))
+            for control_chunks, _batch_chunks in panel.macro_batches()
+        ],
+        dim=0,
+    )
+
+
+def _generation_target_means(data: GeneBags | None) -> dict[str, np.ndarray]:
+    if data is None:
+        return {}
+    return {
+        str(gene): np.asarray(bag, dtype=np.float32).mean(axis=0)
+        for gene, bag in zip(data.genes, data.input_bags, strict=True)
+        if bag.shape[0] > 0
+    }
 
 
 def _final_prediction_tensor(
@@ -2610,22 +2655,43 @@ def _final_prediction_tensor(
     gene_indices: list[int],
     padding_flags: list[bool],
     device: torch.device,
-    control_cells: torch.Tensor,
-    control_batch_indices: torch.Tensor | None,
+    control_panel: _EvaluationControlPanel,
+    control_latent: torch.Tensor,
+    target_means: Mapping[str, np.ndarray],
 ) -> torch.Tensor:
     y_pred: list[torch.Tensor] = []
-    n_chunks: list[float] = []
+    generation_losses: list[torch.Tensor] = []
     for index in gene_indices:
         gene = str(data.genes[index])
-        predicted_expression, _predicted_latent = model.predict_response(
-            control_cells,
-            gene,
-            control_batch_indices,
-        )
+        predicted_latents: list[torch.Tensor] = []
+        predicted_sum = torch.zeros(data.input_dim, dtype=torch.float32, device=device)
+        predicted_count = 0
+        for control_chunks, batch_chunks in control_panel.macro_batches():
+            expression_chunks, predicted_latent = model.predict_response_chunks(
+                control_chunks,
+                gene,
+                batch_chunks,
+            )
+            predicted_latents.append(predicted_latent)
+            for expression in expression_chunks:
+                predicted_sum += expression.sum(dim=0)
+                predicted_count += int(expression.shape[0])
         y_pred.append(
-            model.predict_c_from_response(predicted_expression, control_cells)
+            model.predict_c_from_latents(
+                torch.cat(predicted_latents, dim=0),
+                control_latent,
+            )
         )
-        n_chunks.append(1.0)
+        target_mean = target_means.get(gene)
+        if target_mean is None:
+            generation_losses.append(torch.full((), math.nan, device=device))
+        else:
+            generation_losses.append(
+                torch.nn.functional.mse_loss(
+                    predicted_sum / float(predicted_count),
+                    torch.as_tensor(target_mean, dtype=torch.float32, device=device),
+                )
+            )
     return torch.stack(
         [
             torch.as_tensor(gene_indices, dtype=torch.float32, device=device),
@@ -2636,7 +2702,13 @@ def _final_prediction_tensor(
                 device=device,
             ),
             torch.stack(y_pred).reshape(-1).detach().to(dtype=torch.float32),
-            torch.as_tensor(n_chunks, dtype=torch.float32, device=device),
+            torch.stack(generation_losses).detach().to(dtype=torch.float32),
+            torch.full(
+                (len(gene_indices),),
+                float(control_panel.n_windows),
+                dtype=torch.float32,
+                device=device,
+            ),
         ],
         dim=1,
     )
@@ -2651,7 +2723,7 @@ def _gather_final_predictions(
         local_predictions = torch.cat(pred_tensors, dim=0)
     else:
         local_predictions = torch.empty(
-            (0, 5),
+            (0, 6),
             dtype=torch.float32,
             device=accelerator.device,
         )
@@ -2667,7 +2739,8 @@ def _gather_final_predictions(
             "perturbation_gene": str(data.genes[int(row[0].item())]),
             "y_true": float(row[2].item()),
             "y_pred": float(row[3].item()),
-            "n_chunks": float(row[4].item()),
+            "generation_loss": float(row[4].item()),
+            "n_chunks": float(row[5].item()),
         }
         for row in gathered
     ]

@@ -178,12 +178,30 @@ def test_selection_accepts_only_inner_validation_genes() -> None:
         assert_gene_access("layer_selection", fold.train_genes, fold, False)
 
 
-def test_outer_test_response_routes_are_disabled() -> None:
+def test_outer_test_response_route_is_target_only_after_checkpoint_freeze() -> None:
     fold = _toy_fold_spec()
     gene = fold.test_genes[0]
-    for stage in (
+    assert_gene_access(
+        "generation_loss_outer_test",
+        [gene],
+        fold,
+        checkpoint_frozen=True,
+    )
+    with pytest.raises(PermissionError, match="checkpoint is frozen"):
+        assert_gene_access(
+            "generation_loss_outer_test",
+            [gene],
+            fold,
+            checkpoint_frozen=False,
+        )
+    for deprecated_stage in (
         "generation_quality_outer_test",
         "observed_b_shared_oracle_outer_test",
     ):
         with pytest.raises(ValueError, match="unknown gene-access stage"):
-            assert_gene_access(stage, [gene], fold, checkpoint_frozen=True)
+            assert_gene_access(
+                deprecated_stage,
+                [gene],
+                fold,
+                checkpoint_frozen=True,
+            )

@@ -1262,23 +1262,27 @@ def test_outer_test_responses_cannot_be_opened() -> None:
             "generation_quality_outer_test",
             "observed_b_shared_oracle_outer_test",
         ):
-            with pytest.raises(PermissionError, match="disables outer-test response"):
+            with pytest.raises(PermissionError, match="target-only"):
                 sealed.open(stage, checkpoint_frozen=checkpoint_frozen)
     label_view = sealed.label_view(checkpoint_frozen=True)
     assert label_view.genes.tolist() == ["B", "D"]
     assert all(bag.shape[0] == 0 for bag in label_view.input_bags)
-    with pytest.raises(PermissionError, match="disables outer-test response"):
+    with pytest.raises(PermissionError, match="target-only"):
         sealed.open("fine_tuning", checkpoint_frozen=True)
+    with pytest.raises(PermissionError, match="checkpoint is frozen"):
+        sealed.generation_target_view(checkpoint_frozen=False)
+    target_view = sealed.generation_target_view(checkpoint_frozen=True)
+    assert all(bag.shape[0] > 0 for bag in target_view.input_bags)
+    assert all(bag.shape[0] == 0 for bag in target_view.latent_bags)
 
 
-def test_audited_training_never_evaluates_outer_test_responses(
+def test_audited_training_never_uses_unrestricted_outer_test_response_access(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def forbidden(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("formal exp05 must not evaluate outer-test responses")
 
-    monkeypatch.setattr(train_module, "_evaluate_observed_b_shared", forbidden)
     monkeypatch.setattr(SealedGeneBags, "open", forbidden)
 
     _run_tiny_audited_fold(tmp_path)
@@ -1319,13 +1323,13 @@ def test_audited_training_passes_cuda_input_cache_to_epoch(
     assert observed_cache
 
 
-def test_inner_validation_never_reads_observed_response(tmp_path: Path) -> None:
+def test_inner_validation_uses_observed_b_only_as_generation_target(
+    tmp_path: Path,
+) -> None:
     data = _toy_bags()
-    input_trap = _ResponseAccessTrap(data.input_bags, sealed_index=2)
     latent_trap = _ResponseAccessTrap(data.latent_bags, sealed_index=2)
     sealed_validation = replace(
         data,
-        input_bags=input_trap,  # type: ignore[arg-type]
         latent_bags=latent_trap,  # type: ignore[arg-type]
     )
     config = _audited_config(tmp_path)
@@ -1340,8 +1344,9 @@ def test_inner_validation_never_reads_observed_response(tmp_path: Path) -> None:
         accelerator=_validated_cpu_accelerator(config),  # type: ignore[arg-type]
     )
 
-    assert input_trap.response_access_count == 0
     assert latent_trap.response_access_count == 0
+    train_log = pd.read_csv(tmp_path / "fold_0" / "train_log.csv")
+    assert train_log["val_generation_loss"].notna().all()
 
 
 def test_run_training_fold_never_passes_outer_test_responses_to_fit(
@@ -1469,7 +1474,6 @@ def test_audited_exp05_never_calls_scvi_ridge_or_fixed_gmm(
     monkeypatch.setattr(train_module, "_fit_audited_scvi_latents", forbidden)
     monkeypatch.setattr(train_module, "_fit_or_load_projector_cache", forbidden)
     monkeypatch.setattr(train_module, "_fit_or_load_fixed_gmm_cache", forbidden)
-    monkeypatch.setattr(train_module, "_fit_observed_b_oracle", forbidden)
 
     _run_tiny_audited_fold(tmp_path)
 
@@ -1548,7 +1552,13 @@ def test_outer_test_prediction_is_invariant_to_observed_response(
     second_internal = second_predictions.query(
         "evaluation_scope == 'internal_outer_test'"
     ).reset_index(drop=True)
-    pd.testing.assert_frame_equal(first_internal, second_internal)
+    pd.testing.assert_frame_equal(
+        first_internal.drop(columns="generation_loss"),
+        second_internal.drop(columns="generation_loss"),
+    )
+    assert first_internal["generation_loss"].iloc[0] != second_internal[
+        "generation_loss"
+    ].iloc[0]
 
 
 def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> None:
