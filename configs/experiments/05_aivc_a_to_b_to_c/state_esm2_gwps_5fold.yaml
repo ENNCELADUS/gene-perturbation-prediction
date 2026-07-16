@@ -87,7 +87,7 @@ loss:
   b_loss_anneal_final_fraction: 0.1
 
 train:
-  run_id: state_esm2_response_gmm_ddp_outer5
+  run_id: exp05_formal_padded_eval_v1
   seed: 42
   max_epochs: 20
   learning_rate: 0.000025
