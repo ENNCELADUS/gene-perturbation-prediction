@@ -440,7 +440,7 @@ def test_exp05_repaired_config_has_locked_contract() -> None:
     assert config.gmm.init_scale == 0.02
     assert config.gmm.trainable is True
     assert config.train.run_id == "state_esm2_response_gmm_ddp_outer5"
-    assert config.train.gene_batch_size == 1
+    assert config.train.gene_batch_size == 4
     assert config.train.required_world_size == 4
     assert config.train.learning_rate == 0.000025
     assert config.train.state_learning_rate == 0.0000025
