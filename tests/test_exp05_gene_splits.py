@@ -11,7 +11,10 @@ from aivc_model.gene_splits import (
     assert_gene_access,
     attach_gene_provenance,
     build_canonical_outer_manifest,
+    build_fixed_split_manifest,
+    fixed_fold_spec,
     load_canonical_outer_manifest,
+    load_fixed_split_manifest,
     make_inner_fold_spec,
     sha256_file,
 )
@@ -66,6 +69,46 @@ def test_manifest_loader_accepts_exact_canonical_manifest(tmp_path: Path) -> Non
     loaded = load_canonical_outer_manifest(path, labels, sha256_file(path))
 
     assert loaded.equals(manifest)
+
+
+def test_fixed_split_uses_complete_k562_pool_and_is_deterministic() -> None:
+    labels = _labels(9341)
+    first = build_fixed_split_manifest(
+        labels,
+        train_fraction=0.85,
+        validation_fraction=0.075,
+        seed=42,
+    )
+    second = build_fixed_split_manifest(
+        labels,
+        train_fraction=0.85,
+        validation_fraction=0.075,
+        seed=42,
+    )
+    assert first.equals(second)
+    assert first["perturbation_gene"].nunique() == 9341
+    assert first["split_role"].value_counts().to_dict() == {
+        "train": 7939,
+        "validation": 701,
+        "internal_test": 701,
+    }
+
+
+def test_fixed_split_loader_and_fold_contract(tmp_path: Path) -> None:
+    labels = _labels(9341)
+    manifest = build_fixed_split_manifest(
+        labels,
+        train_fraction=0.85,
+        validation_fraction=0.075,
+        seed=42,
+    )
+    path = tmp_path / "fixed.csv"
+    manifest.to_csv(path, index=False)
+    loaded = load_fixed_split_manifest(path, labels, sha256_file(path))
+    fold = fixed_fold_spec(loaded)
+    assigned = set(fold.train_genes) | set(fold.val_genes) | set(fold.test_genes)
+    assert fold.outer_fold == -1
+    assert len(assigned) == 9341
 
 
 def _toy_labels_and_manifest(count: int) -> tuple[pd.DataFrame, pd.DataFrame]:

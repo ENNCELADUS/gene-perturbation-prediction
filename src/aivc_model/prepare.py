@@ -85,6 +85,8 @@ class CVConfig:
     expected_gene_count: int = 9338
     outer_split_manifest: Path | None = None
     outer_split_sha256_file: Path | None = None
+    fixed_split_manifest: Path | None = None
+    fixed_split_sha256_file: Path | None = None
     inner_val_fraction: float = 0.1
     random_state: int = 42
     stratify_bins: int = 10
@@ -506,6 +508,7 @@ def load_external_gene_bags(
     artifacts_dir: Path,
     *,
     project_scvi: bool = True,
+    source_as_batch: bool = False,
 ) -> ExternalGeneBags | None:
     """Load and merge a configured external test set in the reference feature space."""
     if config.external_test is None:
@@ -558,9 +561,20 @@ def load_external_gene_bags(
         source_latent_bags.extend(bag.copy() for bag in bags)
         control_input_bags.append(control_input)
         control_latent_bags.append(control_input.copy())
-        if batch_bags is not None:
+        if source_as_batch:
+            source_batch_bags.extend(
+                _source_labeled_batches(source.name, bags, batch_bags)
+            )
+            control_batch_bags.append(
+                _source_labeled_batch(
+                    source.name,
+                    len(control_input),
+                    control_batch,
+                )
+            )
+        elif batch_bags is not None:
             source_batch_bags.extend(batch_bags)
-        if control_batch is not None:
+        if not source_as_batch and control_batch is not None:
             control_batch_bags.append(control_batch)
 
     if not source_rows:
@@ -629,6 +643,178 @@ def load_external_gene_bags(
         latent_dim=int(control_latent.shape[1]),
     )
     return ExternalGeneBags(data=data, qa=qa)
+
+
+def _source_labeled_batches(
+    source_name: str,
+    bags: tuple[np.ndarray, ...],
+    batch_bags: tuple[np.ndarray, ...] | None,
+) -> tuple[np.ndarray, ...]:
+    return tuple(
+        _source_labeled_batch(
+            source_name,
+            len(bag),
+            batch_bags[index] if batch_bags is not None else None,
+        )
+        for index, bag in enumerate(bags)
+    )
+
+
+def _source_labeled_batch(
+    source_name: str,
+    size: int,
+    batch: np.ndarray | None,
+) -> np.ndarray:
+    values = batch if batch is not None else np.full(size, "all", dtype=object)
+    return np.asarray([f"{source_name}:{value}" for value in values], dtype=object)
+
+
+def merge_gene_bag_pool(
+    reference: GeneBags,
+    supplement: GeneBags,
+    depmap_label_col: str,
+) -> GeneBags:
+    """Pool response cells by target gene across aligned K562 sources."""
+    _validate_pool_compatibility(reference, supplement)
+    primary = {str(gene).upper(): index for index, gene in enumerate(reference.genes)}
+    added = {str(gene).upper(): index for index, gene in enumerate(supplement.genes)}
+    gene_order = list(primary) + sorted(set(added).difference(primary))
+    input_bags: list[np.ndarray] = []
+    latent_bags: list[np.ndarray] = []
+    batch_bags: list[np.ndarray] = []
+    labels: list[float] = []
+    metadata_rows: list[dict[str, Any]] = []
+    outer_folds: list[int] = []
+    for gene in gene_order:
+        primary_index = primary.get(gene)
+        added_index = added.get(gene)
+        indices = [
+            ("replogle", reference, primary_index),
+            ("non_replogle", supplement, added_index),
+        ]
+        present = [
+            (source, bags, index)
+            for source, bags, index in indices
+            if index is not None
+        ]
+        _validate_pooled_label(gene, present)
+        labels.append(float(present[0][1].y[present[0][2]]))
+        input_bags.append(
+            np.vstack([bags.input_bags[index] for _, bags, index in present])
+        )
+        latent_bags.append(
+            np.vstack([bags.latent_bags[index] for _, bags, index in present])
+        )
+        batch_bags.append(_pooled_batches(present))
+        metadata_rows.append(
+            _pooled_metadata_row(gene, present, depmap_label_col, labels[-1])
+        )
+        outer_folds.append(_pooled_outer_fold(reference, primary_index))
+
+    control_input = np.vstack([reference.control_input, supplement.control_input])
+    control_latent = np.vstack([reference.control_latent, supplement.control_latent])
+    control_batch = np.concatenate(
+        [
+            _control_batches(reference, "replogle"),
+            _control_batches(supplement, "non_replogle"),
+        ]
+    )
+    return GeneBags(
+        genes=np.asarray(gene_order, dtype=object),
+        y=np.asarray(labels, dtype=np.float32),
+        input_bags=tuple(input_bags),
+        latent_bags=tuple(latent_bags),
+        control_input=control_input.astype(np.float32),
+        control_latent=control_latent.astype(np.float32),
+        cell_type_bags=None,
+        control_cell_type=None,
+        batch_bags=tuple(batch_bags),
+        control_batch=control_batch,
+        feature_names=reference.feature_names,
+        feature_fill_values=reference.feature_fill_values,
+        metadata=pd.DataFrame(metadata_rows),
+        input_dim=reference.input_dim,
+        latent_dim=reference.latent_dim,
+        gene_outer_folds=np.asarray(outer_folds, dtype=np.int64),
+        access_recorder=reference.access_recorder,
+    )
+
+
+def _validate_pool_compatibility(reference: GeneBags, supplement: GeneBags) -> None:
+    if (reference.input_dim, reference.latent_dim) != (
+        supplement.input_dim,
+        supplement.latent_dim,
+    ):
+        raise ValueError("K562 pool sources must have identical dimensions")
+    if reference.feature_names is None or supplement.feature_names is None:
+        raise ValueError("K562 pool sources require aligned feature names")
+    if not np.array_equal(reference.feature_names, supplement.feature_names):
+        raise ValueError("K562 pool source feature order differs")
+    if reference.cell_type_bags is not None or supplement.cell_type_bags is not None:
+        raise ValueError("K562 pool merge does not accept cell-type-stratified bags")
+
+
+def _validate_pooled_label(
+    gene: str,
+    present: list[tuple[str, GeneBags, int]],
+) -> None:
+    values = np.asarray([bags.y[index] for _, bags, index in present], dtype=float)
+    if not np.isfinite(values).all() or not np.allclose(
+        values, values[0], rtol=_LABEL_RTOL, atol=_LABEL_ATOL
+    ):
+        raise ValueError(f"K562 pool has conflicting GeneEffect labels for {gene}")
+
+
+def _pooled_batches(present: list[tuple[str, GeneBags, int]]) -> np.ndarray:
+    values = []
+    for prefix, bags, index in present:
+        if bags.batch_bags is None:
+            values.append(np.full(len(bags.input_bags[index]), prefix, dtype=object))
+        else:
+            values.append(
+                np.asarray(
+                    [f"{prefix}:{value}" for value in bags.batch_bags[index]],
+                    dtype=object,
+                )
+            )
+    return np.concatenate(values)
+
+
+def _control_batches(bags: GeneBags, prefix: str) -> np.ndarray:
+    if bags.control_batch is None:
+        return np.full(len(bags.control_input), prefix, dtype=object)
+    return np.asarray(
+        [f"{prefix}:{value}" for value in bags.control_batch],
+        dtype=object,
+    )
+
+
+def _pooled_metadata_row(
+    gene: str,
+    present: list[tuple[str, GeneBags, int]],
+    depmap_label_col: str,
+    label: float,
+) -> dict[str, Any]:
+    rows = [bags.metadata.iloc[index].to_dict() for _, bags, index in present]
+    row = rows[0]
+    sources = [str(item.get("source_dataset", "unknown")) for item in rows]
+    row["perturbation_gene"] = gene
+    row[depmap_label_col] = label
+    row["source_dataset"] = ";".join(sorted(set(sources)))
+    row["observed_n_cells"] = int(
+        sum(len(bags.input_bags[index]) for _, bags, index in present)
+    )
+    return row
+
+
+def _pooled_outer_fold(reference: GeneBags, index: int | None) -> int:
+    if index is None:
+        return -1
+    if reference.gene_outer_folds is not None:
+        return int(reference.gene_outer_folds[index])
+    if "outer_fold" in reference.metadata:
+        return int(reference.metadata.iloc[index]["outer_fold"])
+    return -1
 
 
 def load_gene_bags(config: AivcConfig) -> GeneBags:
@@ -2176,6 +2362,8 @@ def _cv_config(values: dict[str, Any]) -> CVConfig:
         expected_gene_count=int(values.get("expected_gene_count", 9338)),
         outer_split_manifest=_path_or_none(values.get("outer_split_manifest")),
         outer_split_sha256_file=_path_or_none(values.get("outer_split_sha256_file")),
+        fixed_split_manifest=_path_or_none(values.get("fixed_split_manifest")),
+        fixed_split_sha256_file=_path_or_none(values.get("fixed_split_sha256_file")),
         inner_val_fraction=float(values.get("inner_val_fraction", 0.1)),
         random_state=int(values.get("random_state", 42)),
         stratify_bins=int(values.get("stratify_bins", 10)),

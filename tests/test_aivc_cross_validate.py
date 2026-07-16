@@ -1828,6 +1828,55 @@ def test_audited_esm_uses_exact_canonical_manifest_order(
     )
 
 
+def test_audited_esm_appends_sorted_k562_supplement_genes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    canonical_order = ("D", "B", "A", "C")
+    manifest = pd.DataFrame(
+        {
+            "perturbation_gene": canonical_order,
+            "outer_fold": [0, 1, 1, 1],
+        }
+    )
+    manifest_path = tmp_path / "outer.csv"
+    manifest.to_csv(manifest_path, index=False)
+    sha_path = tmp_path / "outer.csv.sha256"
+    sha_path.write_text(
+        f"{hashlib.sha256(manifest_path.read_bytes()).hexdigest()}\n",
+        encoding="utf-8",
+    )
+    base = _audited_config(tmp_path)
+    config = replace(
+        base,
+        cv=replace(
+            base.cv,
+            outer_split_manifest=manifest_path,
+            outer_split_sha256_file=sha_path,
+        ),
+    )
+    monkeypatch.setattr(train_module, "CANONICAL_GENE_COUNT", 4)
+    monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 4)
+    monkeypatch.setattr(
+        gene_splits_module,
+        "CANONICAL_OUTER_FOLDS",
+        frozenset({0, 1}),
+    )
+
+    expected = canonical_order + ("E", "F")
+    assert train_module._canonical_esm2_genes(
+        config,
+        _toy_bags(),
+        canonical_gene_override=expected,
+    ) == list(expected)
+    with pytest.raises(ValueError, match="canonical rows followed by sorted"):
+        train_module._canonical_esm2_genes(
+            config,
+            _toy_bags(),
+            canonical_gene_override=canonical_order + ("F", "E"),
+        )
+
+
 def test_cross_validation_writes_each_outer_test_gene_once_per_final_scope(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

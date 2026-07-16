@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-CONFIG_PATH="${1:-configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml}"
+CONFIG_PATH="${1:-configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_fixed.yaml}"
 PYTHON_BIN="${PYTHON_BIN:-$REPO_ROOT/.venv/bin/python}"
 ACCELERATE_BIN="${ACCELERATE_BIN:-$REPO_ROOT/.venv/bin/accelerate}"
 
