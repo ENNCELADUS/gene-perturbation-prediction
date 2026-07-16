@@ -20,6 +20,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from sl_dl_model.gene_embeddings import (
+    Esm2EmbeddingTable,
+    require_complete_esm_coverage,
+)
+
 # ---------------------------------------------------------------------------
 # Lazy import: stub out heavy optional imports before loading the script
 # ---------------------------------------------------------------------------
@@ -112,6 +117,31 @@ def test_corrupt_cache_logs_warning_and_recovers(
         "corrupt" in str(m).lower() or "json" in str(m).lower()
         for m in warning_messages
     ), f"Expected a warning about corrupt JSON; got: {warning_messages}"
+
+
+def test_load_or_fetch_sequences_uses_identifier_for_missing_symbol(
+    tmp_path: Path,
+) -> None:
+    cache = tmp_path / "cache.json"
+    with patch.object(MOD, "fetch_sequence", return_value="MSEQ") as mock_fetch:
+        result = MOD.load_or_fetch_sequences(
+            ["PTEN"], cache, identifiers={"PTEN": "5728"}
+        )
+
+    assert result == {"PTEN": "MSEQ"}
+    mock_fetch.assert_called_once_with("PTEN", "5728")
+
+
+def test_identifiers_from_csv_normalizes_integer_ids(tmp_path: Path) -> None:
+    csv = tmp_path / "genes.csv"
+    pd.DataFrame(
+        {"perturbation_gene": ["tp53", "KRAS"], "entrez": [7157, 3845]}
+    ).to_csv(csv, index=False)
+
+    assert MOD.identifiers_from_csv(csv, "perturbation_gene", "entrez") == {
+        "TP53": "7157",
+        "KRAS": "3845",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -248,3 +278,145 @@ def test_universe_symbols_returns_sorted_unique_upper(tmp_path: Path) -> None:
 
     assert result == sorted({"BRCA1", "TP53", "PTEN", "KRAS"})
     assert result == sorted(set(result))  # sorted
+
+
+def test_symbols_from_csv_supports_single_gene_column(tmp_path: Path) -> None:
+    csv = tmp_path / "genes.csv"
+    pd.DataFrame({"perturbation_gene": ["tp53", "KRAS", "TP53"]}).to_csv(
+        csv, index=False
+    )
+    assert MOD.symbols_from_csv(csv, ("perturbation_gene",)) == ["KRAS", "TP53"]
+
+
+def test_exp05_esm_asset_must_resolve_all_canonical_genes() -> None:
+    canonical = ["A", "B", "C"]
+    table = Esm2EmbeddingTable(
+        dim=4,
+        vectors_by_symbol={
+            "A": np.ones(4, dtype=np.float32),
+            "B": np.ones(4, dtype=np.float32),
+        },
+    )
+    with pytest.raises(ValueError, match="2/3"):
+        require_complete_esm_coverage(canonical, table)
+
+
+def test_complete_esm_coverage_requires_exact_uppercase_order() -> None:
+    canonical = ["B", "A"]
+    table = Esm2EmbeddingTable(
+        dim=2,
+        vectors_by_symbol={
+            "A": np.ones(2, dtype=np.float32),
+            "B": np.ones(2, dtype=np.float32),
+        },
+    )
+    with pytest.raises(ValueError, match="order"):
+        require_complete_esm_coverage(canonical, table)
+
+
+def test_complete_esm_coverage_allows_resolved_extra_tokens() -> None:
+    canonical = ["B", "A"]
+    table = Esm2EmbeddingTable(
+        dim=2,
+        vectors_by_symbol={
+            "B": np.ones(2, dtype=np.float32),
+            "EXTERNAL": np.ones(2, dtype=np.float32),
+            "A": np.ones(2, dtype=np.float32),
+        },
+    )
+
+    require_complete_esm_coverage(canonical, table)
+
+
+def _run_asset_cli(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resolved: np.ndarray,
+    *,
+    strict: bool,
+) -> Path:
+    csv = tmp_path / "genes.csv"
+    pd.DataFrame({"perturbation_gene": ["A", "B", "C"]}).to_csv(csv, index=False)
+    output = tmp_path / "esm2.npz"
+    argv = [
+        "precompute_esm2_embeddings.py",
+        "--benchmark-csv",
+        str(csv),
+        "--symbol-column",
+        "perturbation_gene",
+        "--out",
+        str(output),
+        "--seq-cache",
+        str(tmp_path / "sequences.json"),
+    ]
+    if strict:
+        argv.append("--require-complete-coverage")
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(
+        MOD,
+        "load_or_fetch_sequences",
+        lambda symbols, cache: {symbol: "M" for symbol in symbols},
+    )
+    monkeypatch.setattr(
+        MOD,
+        "embed_sequences",
+        lambda *args, **kwargs: (
+            np.ones((3, 4), dtype=np.float32),
+            resolved,
+        ),
+    )
+    MOD.main()
+    return output
+
+
+@pytest.mark.parametrize("existing_output", [False, True])
+def test_strict_asset_rejects_incomplete_coverage_before_output_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing_output: bool,
+) -> None:
+    output = tmp_path / "esm2.npz"
+    if existing_output:
+        output.write_bytes(b"existing-asset")
+
+    with pytest.raises(ValueError, match="2/3"):
+        _run_asset_cli(
+            monkeypatch,
+            tmp_path,
+            np.asarray([True, True, False]),
+            strict=True,
+        )
+
+    if existing_output:
+        assert output.read_bytes() == b"existing-asset"
+    else:
+        assert not output.exists()
+
+
+def test_strict_asset_writes_when_coverage_is_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = _run_asset_cli(
+        monkeypatch,
+        tmp_path,
+        np.asarray([True, True, True]),
+        strict=True,
+    )
+
+    with np.load(output, allow_pickle=True) as payload:
+        assert payload["symbols"].tolist() == ["A", "B", "C"]
+        assert int(payload["resolved"].sum()) == 3
+
+
+def test_default_asset_path_remains_permissive_for_exp08(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = _run_asset_cli(
+        monkeypatch,
+        tmp_path,
+        np.asarray([True, True, False]),
+        strict=False,
+    )
+
+    with np.load(output, allow_pickle=True) as payload:
+        assert int(payload["resolved"].sum()) == 2

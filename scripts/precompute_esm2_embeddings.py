@@ -7,6 +7,16 @@ Run once on a network node:
 all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv \
         --out data/esm2/k562_sl_universe_esm2_650M.npz \
         --seq-cache data/esm2/symbol_to_sequence.json
+
+For exp05, require all canonical genes before writing the asset:
+    uv run python scripts/precompute_esm2_embeddings.py \
+        --benchmark-csv \
+        data/sl_dependency_v0/interim/k562_gwps_depmap_overlap.csv \
+        --symbol-column perturbation_gene \
+        --id-column depmap_entrez_id \
+        --require-complete-coverage \
+        --out data/esm2/k562_gwps_depmap_esm2_650M.npz \
+        --seq-cache data/esm2/symbol_to_sequence.json
 """
 
 from __future__ import annotations
@@ -24,8 +34,22 @@ import pandas as pd
 import torch
 from transformers import EsmModel, EsmTokenizer
 
+from sl_dl_model.gene_embeddings import (
+    Esm2EmbeddingTable,
+    require_complete_esm_coverage,
+)
+
 logger = logging.getLogger("precompute_esm2")
 UNIPROT_URL = "https://rest.uniprot.org/uniprotkb/search"
+
+
+def symbols_from_csv(csv_path: Path, symbol_columns: tuple[str, ...]) -> list[str]:
+    """Return sorted unique upper-case symbols from selected CSV columns."""
+    frame = pd.read_csv(csv_path, usecols=list(symbol_columns))
+    symbols: set[str] = set()
+    for column in symbol_columns:
+        symbols.update(frame[column].dropna().astype(str).str.upper())
+    return sorted(symbols)
 
 
 def universe_symbols(benchmark_csv: Path) -> list[str]:
@@ -38,14 +62,10 @@ def universe_symbols(benchmark_csv: Path) -> list[str]:
     Returns:
         Sorted list of unique upper-case gene symbols.
     """
-    frame = pd.read_csv(benchmark_csv, usecols=["gene_a_symbol", "gene_b_symbol"])
-    symbols = set(frame["gene_a_symbol"].str.upper()) | set(
-        frame["gene_b_symbol"].str.upper()
-    )
-    return sorted(symbols)
+    return symbols_from_csv(benchmark_csv, ("gene_a_symbol", "gene_b_symbol"))
 
 
-def fetch_sequence(symbol: str) -> str | None:
+def fetch_sequence(symbol: str, identifier: str | None = None) -> str | None:
     """Return the canonical human protein sequence for a gene symbol, or None.
 
     Queries UniProt REST for the top reviewed human hit. On any network
@@ -57,7 +77,8 @@ def fetch_sequence(symbol: str) -> str | None:
     Returns:
         Amino-acid sequence string, or ``None`` if not found or on error.
     """
-    query = f"(gene:{symbol}) AND (organism_id:9606) AND (reviewed:true)"
+    gene_query = f"xref:GeneID-{identifier}" if identifier else f"gene:{symbol}"
+    query = f"({gene_query}) AND (organism_id:9606) AND (reviewed:true)"
     params = urllib.parse.urlencode({"query": query, "format": "fasta", "size": 1})
     url = f"{UNIPROT_URL}?{params}"
     try:
@@ -70,7 +91,11 @@ def fetch_sequence(symbol: str) -> str | None:
     return "".join(lines) or None
 
 
-def load_or_fetch_sequences(symbols: list[str], cache: Path) -> dict[str, str]:
+def load_or_fetch_sequences(
+    symbols: list[str],
+    cache: Path,
+    identifiers: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Load cached symbol→sequence map; fetch missing symbols from UniProt.
 
     Writes incrementally to ``cache`` every 100 new symbols.
@@ -92,7 +117,12 @@ def load_or_fetch_sequences(symbols: list[str], cache: Path) -> dict[str, str]:
     for i, symbol in enumerate(symbols):
         if symbol in seqs:
             continue
-        seq = fetch_sequence(symbol)
+        identifier = identifiers.get(symbol) if identifiers is not None else None
+        seq = (
+            fetch_sequence(symbol, identifier)
+            if identifier is not None
+            else fetch_sequence(symbol)
+        )
         if seq:
             seqs[symbol] = seq
             if len(seqs) % 100 == 0:
@@ -102,6 +132,24 @@ def load_or_fetch_sequences(symbols: list[str], cache: Path) -> dict[str, str]:
         time.sleep(0.1)  # be polite to UniProt
     cache.write_text(json.dumps(seqs))
     return seqs
+
+
+def identifiers_from_csv(
+    csv_path: Path, symbol_column: str, identifier_column: str
+) -> dict[str, str]:
+    """Map upper-case symbols to integer identifiers from one CSV."""
+    frame = pd.read_csv(csv_path, usecols=[symbol_column, identifier_column])
+    identifiers: dict[str, str] = {}
+    for symbol, identifier in frame.itertuples(index=False, name=None):
+        if pd.isna(symbol) or pd.isna(identifier):
+            continue
+        key = str(symbol).upper()
+        value = str(int(identifier))
+        existing = identifiers.get(key)
+        if existing is not None and existing != value:
+            raise ValueError(f"conflicting identifiers for {key}: {existing}, {value}")
+        identifiers[key] = value
+    return identifiers
 
 
 def truncate_sequence(seq: str, symbol: str, max_len: int = 1022) -> str:
@@ -148,6 +196,23 @@ def check_resolution(resolved: np.ndarray, n_symbols: int) -> None:
             n_symbols,
             frac * 100,
         )
+
+
+def require_complete_asset_coverage(
+    symbols: list[str], vectors: np.ndarray, resolved: np.ndarray
+) -> None:
+    """Require complete canonical coverage before an ESM-2 asset is written."""
+    table = Esm2EmbeddingTable(
+        dim=int(vectors.shape[1]),
+        vectors_by_symbol={
+            symbol: vector
+            for symbol, vector, is_resolved in zip(
+                symbols, vectors, resolved, strict=True
+            )
+            if bool(is_resolved)
+        },
+    )
+    require_complete_esm_coverage(symbols, table)
 
 
 def mean_pool_residues(
@@ -244,6 +309,20 @@ def main() -> None:
         help="SL benchmark CSV with gene_a_symbol and gene_b_symbol columns.",
     )
     parser.add_argument(
+        "--symbol-column",
+        action="append",
+        default=None,
+        help=(
+            "CSV symbol column; repeat for multiple columns. Defaults to the "
+            "exp08 gene_a_symbol and gene_b_symbol columns."
+        ),
+    )
+    parser.add_argument(
+        "--id-column",
+        default=None,
+        help="Optional integer identifier column used for sequence lookup.",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         required=True,
@@ -271,11 +350,35 @@ def main() -> None:
         action="store_true",
         help="Use only already-cached Hugging Face files; do not download.",
     )
+    parser.add_argument(
+        "--require-complete-coverage",
+        action="store_true",
+        help=(
+            "Fail before writing unless every requested symbol has an embedding. "
+            "Required for exp05; absent by default for exp08 compatibility."
+        ),
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    symbols = universe_symbols(args.benchmark_csv)
+    symbol_columns = (
+        tuple(args.symbol_column)
+        if args.symbol_column
+        else ("gene_a_symbol", "gene_b_symbol")
+    )
+    symbols = symbols_from_csv(args.benchmark_csv, symbol_columns)
     logger.info("universe size: %d genes", len(symbols))
-    seqs = load_or_fetch_sequences(symbols, args.seq_cache)
+    identifiers = None
+    if args.id_column is not None:
+        if len(symbol_columns) != 1:
+            raise ValueError("--id-column requires exactly one --symbol-column")
+        identifiers = identifiers_from_csv(
+            args.benchmark_csv, symbol_columns[0], args.id_column
+        )
+    seqs = (
+        load_or_fetch_sequences(symbols, args.seq_cache, identifiers)
+        if identifiers is not None
+        else load_or_fetch_sequences(symbols, args.seq_cache)
+    )
     vectors, resolved = embed_sequences(
         symbols,
         seqs,
@@ -283,7 +386,10 @@ def main() -> None:
         cache_dir=args.cache_dir,
         local_files_only=args.local_files_only,
     )
-    check_resolution(resolved, n_symbols=len(symbols))
+    if args.require_complete_coverage:
+        require_complete_asset_coverage(symbols, vectors, resolved)
+    else:
+        check_resolution(resolved, n_symbols=len(symbols))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         args.out,
