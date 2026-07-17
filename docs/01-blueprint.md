@@ -1,534 +1,327 @@
-# Research Blueprint: Outcome Dynamics Behind Net Fitness
+# Research Blueprint: Virtual-Cell Composition for Synthetic-Lethality Discovery
 
 **Status:** established. This is the research contract — locked.
 **Type:** research direction and claim boundaries. **Not** an implementation spec.
-**Companions:** [`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md) (what counts as passing) · [`docs/03-literature-review.md`](03-literature-review.md) (what the literature showed) · [`docs/04-roadmap.md`](04-roadmap.md) (what happens next).
+**Supersedes:** the retired "cell-fate outcome dynamics" direction. Its evidence is preserved under `docs/archive/` and `ideaspark_run/` and is not edited. This document states what is true now; it is not a changelog.
+**Companions:** [`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md) (what counts as passing) · [`docs/03-literature-review.md`](03-literature-review.md) (related work — pending rewrite) · [`docs/04-roadmap.md`](04-roadmap.md) (what happens next — pending rewrite). The design that seeded this contract: [`docs/superpowers/specs/2026-07-17-virtual-cell-sl-composition-design.md`](superpowers/specs/2026-07-17-virtual-cell-sl-composition-design.md).
 
-## 1. The Preserved Wedge
+## 1. The Problem
 
 ```text
-The same net fitness loss can arise from completely different cellular dynamics.
+Rank a gene's synthetic-lethal partners for genes no SL screen or SL graph
+has ever seen.
 ```
 
-Strong division suppression with little loss, normal division with substantial loss,
-early loss followed by survivor regrowth, and transient arrest followed by recovery
-can all yield the same aggregate readout.
+Synthetic lethality (SL) — disrupting either of two genes is tolerated, disrupting
+both is lethal — turns a tumor's genetics into a selective target (PARP/BRCA). The
+candidate space is $\sim 10^8$ pairs, screens cannot cover it, and SL is
+context-specific, so **computational prioritization is a prerequisite for
+experimental follow-up.**
 
-The wedge is **demonstrated for selected drug perturbations** (Gross 2023,
-https://pmc.ncbi.nlm.nih.gov/articles/PMC10257663/); **its prevalence and importance
-remain unresolved for genetic loss-of-function.** Whether such divergence is common,
-reproducible, large, and consequential in real genetic perturbations is an empirical
-question (Gate 2). Until it passes, this program has a motivating observation, not a
-finding.
+The leading published predictors — **SLMGAE**, **KR4SL**, **KG4SL**, and the wider
+Feng2024 zoo (DDGCN, GRSMF, SLGNN, SL2MF, …) — are **transductive graph /
+knowledge-graph** models. Their signal is the topology of the curated SL graph.
+The consequence is structural, not incidental:
+
+- They are strong when test genes already sit in the training graph (CV1), but
+  their inductive bias **degrades as genes are held out** (CV1 → CV2 → CV3).
+- They **cannot score a gene with no curated SL edges** — the "beyond screened
+  genes" frontier where undiscovered biology lives.
+
+**The open problem is the inductive, graph-free, cold-start regime.** No method
+wins it. This program targets exactly that regime.
 
 ## 2. Premise, Gap, and Value
 
-What existing readouts already do (**to verify by reading** — reviewer-supplied, not
-yet read in full):
+**Premise (established internally).** A gene's knockout perturbation transcriptome
+predicts its *own* dependency. The exp05 forward model (`src/aivc_model/`) — Arc
+STATE + ESM2 protein identity, open-vocabulary — maps (K562 control state, gene
+identity) → predicted response → **DepMap GeneEffect**, and ranks single-gene
+dependency well. Foundation evidence: pseudobulk Δ-expression → GeneEffect reaches
+5-fold Spearman ≈ 0.485 on Replogle K562; the signal is not a generic death axis
+(death signature alone ≈ 0.244; death-residualized transcriptome ≈ 0.503).
 
-- **Chronos** fits an explicit population-dynamics model, converting sgRNA abundance
-  change into a relative growth-rate effect of knockout. It is **structurally
-  incapable of separating division from death, because that decomposition lies outside
-  its estimand** — a **readout limitation, not a tool defect**. A tool is not defective
-  for failing to identify a quantity it never claimed to identify.
-  (https://pmc.ncbi.nlm.nih.gov/articles/PMC8686573/)
-- **GR / DIP-style metrics**, given time course and initial counts, can distinguish
-  fully cytostatic from net cytotoxic responses under stated assumptions.
-  (Hafner et al. 2016, https://pmc.ncbi.nlm.nih.gov/articles/4887336/)
+**Gap.** A single-gene fitness model does not, by itself, score a *pair*. And
+**single-gene GeneEffect provably cannot capture SL**: classic SL pairs are
+individually near-neutral (GeneEffect ≈ 0) but jointly lethal, so a predictor that
+sees only $\text{GeneEffect}(a)$ and $\text{GeneEffect}(b)$ is the archive's
+"dependency-only floor" — ~0.70 AUROC, mostly pan-essentiality.
 
-Accurate premise:
+**Value.** If the forward model can be **composed** into a genuine *pairwise
+interaction*, the score reads from gene *features* (protein identity + predicted
+perturbation biology), not graph position — so it reaches pairs no SL graph has
+seen. That inductive reach is necessary but **not, by itself, the contribution**: a
+contemporaneous method (CILANTRO-SL — [`03`](03-literature-review.md) §5) already
+reaches unscreened genes and beats KG4SL cold-start with a foundation-model
+embedding-ablation. The contribution is the **mechanism** the prior art lacks: a
+*perturbation-response-trained* virtual cell composed through an **explicit
+interaction null** (§4), with the pairwise prediction **validated against measured
+epistasis** (§7.2).
 
-> A single endpoint-abundance or net-fitness readout is generally insufficient to
-> uniquely determine the underlying division, recovery, persistent-arrest, and
-> cell-loss dynamics.
+### 2.1 The Value Question — tested outside the benchmark label
 
-Accurate **biological** gap:
+A high benchmark rank on a curated label is not, by itself, evidence that the
+mechanism is real: the label is a database curation, its negatives are unconfirmed
+(§9), and topology can be gamed (CV1). The value of the composition must therefore
+be answered on **two axes that curated-label ranking alone cannot supply**:
 
-> It is unknown whether genetic perturbations with similar net fitness effects induce
-> distinct, reproducible outcome trajectories, and whether early molecular states
-> prospectively distinguish those trajectories.
+> **Value question.** (a) Does the composed pairwise score beat the label-graph
+> SOTA on the **honest cold-start splits** (CV2/CV3), on the **pair-specific**
+> (non-pan-essential) residual rather than on pan-essentiality? And (b) does the
+> **virtual double-knockout** score correspond to **measured** genetic
+> interactions, not only to the curated label?
 
-### 2.1 The Value Question — Tested Outside the Trajectory Definition
+The numeric bars for (a) and (b) are fixed **before evidence** in
+[`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md) and are not revisable
+to fit a result.
 
-The decomposition cannot be justified by its ability to explain recovery, persistence,
-and extinction. Those are **components of the trajectory estimand itself**; using them
-to prove the estimand is worth having is circular.
+### 2.2 The defensible novelty (post-review)
 
-The value question must therefore be answered on **downstream endpoints that are not
-part of trajectory construction**:
+Adversarial literature review ([`03`](03-literature-review.md)) fixed what is and is
+not novel. **Not novel:** graph-free / inductive SL that reaches unscreened genes and
+beats KG4SL cold-start — CILANTRO-SL, RFM-SL, PARIS, and ESM4SL occupy that ground.
+**Novel, and the claim this program leads with:**
 
-- long-term regrowth;
-- rebound after perturbation withdrawal;
-- durable clonogenic survival;
-- resistance emergence;
-- change in intervention prioritisation.
+> No prior work composes a *perturbation-response-trained* virtual cell into an SL
+> score via an **explicit double-knockout / sequential-counterfactual interaction
+> term** (against a stated additive/min null) and **validates it against measured
+> genetic interactions** rather than only curated labels.
 
-> **Value question.** Does a fate-resolved trajectory predict downstream outcomes that
-> are not already contained in net fitness, and not already contained in the trajectory
-> definition itself?
+The closest prior art (CILANTRO-SL) uses a non-causal embedding-ablation as its
+"knockout," a black-box classifier as its composition, and no joint perturbation and
+no epistasis check — its own authors defer double-KO to future work. The program's
+own retired exp08 already tried the weaker feature-transfer form and failed the
+floor; the mechanism in §4 is the falsifiable difference.
 
-**Predefined acceptance criteria.** The words *common*, *large*, and *consequential* carry
-**minimum biological thresholds, fixed before evidence is collected**, in
-[`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md). They are not left to
-post-hoc judgement, and they are not revisable to fit a result.
+## 3. Objects and Definitions
 
-## 3. Ontology and Estimands (L0)
-
-### 3.1 Retired Vocabulary
-
-`proliferating / arrested / dying / mechanism / timing` mixes levels and is not a
-simplex. `proliferating` is a rate; `arrested` is a window-defined, possibly reversible
-state; `dying` is a process; death is an event; mechanisms overlap; timing is part of
-the fate definition, not an extra label. **"Outcome composition" is retired** — a
-lineage can simultaneously produce descendants that keep dividing and descendants that
-are lost.
-
-### 3.2 Required Structure
-
-| Element | Requirement |
+| Symbol | Meaning |
 | --- | --- |
-| Time horizon `T` | All outcomes defined over `[t0, t0+T]` from perturbation onset. No horizon, no estimand. |
-| "Early" | Defined relative to `T` **and to fate commitment**, not to sample collection. Stated numerically per dataset. |
-| Unit | See §4 — the open decision, resolved only at §9. |
-| Censoring | Right censoring at `T` is explicit. |
-| Denominator | Fractions are of *what*? Observed units at `T` are survivors of a branching-plus-loss process; fraction-of-observed is not fraction-of-founders. |
+| $\mathcal{G}$ | The 9,471-gene K562 candidate universe (Feng2024, genes carrying numeric K562 DepMap GeneEffect). |
+| $s(a,b) \in \mathbb{R}$ | The pairwise SL score. **Swap-invariant:** $s(a,b)=s(b,a)$. Used for both ranking and classification. |
+| $F(X, g) \mapsto \hat B_g$ | exp05 forward model: control cells $X$ + gene identity $g$ → predicted response bag. |
+| $h_C(\hat B_g) \mapsto \hat c_g$ | dependency head → predicted **GeneEffect** for $g$. |
+| $\psi(\cdot,\cdot)$ | the **non-interaction null** (additive or min) against which an interaction is measured. |
+| $D_{ab}\in\{0,1\}$ | the benchmark SL label (SynLethDB-derived, balanced Rand 1:1). A **curated adapter label**, not a validated K562 SL assay. |
 
-### 3.3 Estimands as Trajectories, Not Categories
+**GeneEffect is a relative growth-rate effect** under an explicit
+population-dynamics model (Chronos): more negative = more essential. It is **not**
+a cell-death label, **not** single-cell, and **single-gene** — there is no
+double-knockout GeneEffect in DepMap.
 
-**Lineage/clone unit** — endpoints over `[t0, t0+T]`: division history; alive-but-
-non-dividing through `T`; recovery transition (arrest -> resumed division); **lineage
-extinction**; descendant abundance at `T`.
+**Evaluation object.** The Feng2024 SynLethDB-derived K562 benchmark under its
+per-anchor `cal_metrics` protocol: ranking (NDCG@{10,20,50}, MAP@k) + classification
+(AUROC, AUPR, F1), on three splits of increasing cold-start severity — **CV1**
+(pair-level holdout; genes may recur), **CV2** (one gene of each test pair unseen),
+**CV3** (both genes unseen). CV1 is a **degree-gameable diagnostic** (a gene-degree
+probe wins it); generalization claims come **only** from CV2/CV3.
 
-**Population unit** — a **multi-state transition process** or an explicitly enumerated
-set of trajectory summaries. Not a categorical mixture.
+## 4. The Mechanism and the Two Composition Bridges
 
-### 3.4 Two Kinds of "Loss" — Never Conflate
+Both bridges are built on the same exp05 forward model (frozen, or lightly
+re-trained to accept composed perturbations) and use **no SL labels to construct
+features**. They are compared **head-to-head**.
 
-| Term | Meaning |
-| --- | --- |
-| **Biological loss / lineage extinction** | The lineage genuinely ends. A biological outcome. |
-| **Assay attrition** | The unit is not observed: died pre-collection, lost in dissociation, failed capture, or removed by QC. A measurement process. |
+### 4.1 Bridge A — counterfactual co-dependency
 
-### 3.5 Three Distinct Prediction Tasks
+Simulate loss of $a$, then ask whether $b$ becomes essential in that state.
 
-| Task | Statement | Type |
-| --- | --- | --- |
-| T1 | Is this cell **currently** in a dying/arrested state? | Terminal-state classification. A state readout, **not fate**. |
-| T2 | What is the probability of division / persistence / recovery / extinction within `[t, t+D]`? | **Prospective prediction.** Requires longitudinal or lineage pairing. Not a counterfactual. |
-| T3 | What would this same initial unit have done under a **different** perturbation? | Strict intervention counterfactual. |
+1. Forward-simulate $a$-loss: $\hat B_a = F(X, a)$.
+2. Predict $b$'s dependency **in the $a$-lost context**, using $\hat B_a$ as the
+   control template: $\hat c_{b\mid a} = h_C\big(F(\hat B_a, b)\big)$.
+3. Score the symmetrized dependency spike:
 
-Much of the apparent literature will be T1 presented as if it were T2.
+$$
+s_A(a,b) = \tfrac{1}{2}\Big[(\hat c_{b} - \hat c_{b\mid a}) + (\hat c_{a} - \hat c_{a\mid b})\Big]
+$$
 
-## 4. The Two Candidate Research Questions
+GeneEffect is more negative when more essential, so positive $s_A$ means each gene
+becomes *more* essential once its partner is lost — the co-dependency signature of
+SL. Uses **only single-gene GeneEffect labels**; this is the "context-selective
+dependency" bridge. Requires the forward model to **compose two perturbations
+sequentially** (an extrapolation; see §6).
 
-The primary unit is **not selected here**. Both candidates are carried in parallel with
-separate estimands, evidence hierarchies, phenomena, and falsifiers. Selection happens
-only at §9.
+### 4.2 Bridge B — virtual double-knockout
 
-### Candidate A — Lineage / clone level
+Predict joint-knockout fitness and measure interaction against an explicit null.
 
-> Within a fixed biological context and time horizon, does an early post-perturbation
-> molecular state predict the subsequent division, persistence/recovery, and extinction
-> trajectory of **its linked lineage**, beyond an independently measured net fitness?
+1. Forward the **joint** perturbation of $a$ and $b$:
+   $\hat c_{ab} = h_C\big(F(X, \{a,b\})\big)$.
+2. Score the genetic-interaction residual against $\psi \in \{\hat c_a + \hat c_b,\ \min(\hat c_a,\hat c_b)\}$:
 
-Estimand: §3.3, lineage endpoints.
+$$
+s_B(a,b) = \psi\big(\hat c_a, \hat c_b\big) - \hat c_{ab}
+$$
 
-#### 4.1 Evidence Tiers Within Candidate A — Different Claim Ceilings
+oriented so that joint-worse-than-null ⇒ higher SL. This is the most literal
+"combination outcome." It has **no direct joint-fitness label** (DepMap is
+single-gene), so its correctness is established by validation against **measured
+epistasis** (§7.2, H3), not by the curated label alone.
 
-Destructive sequencing plus lineage barcoding does **not** observe the same founder
-before and after. It typically captures the state of a *clone member*, clone-level early-
-state distributions, and the later behaviour of *siblings/descendants* sharing a barcode.
-These are not the same evidence, and they do not license the same claim:
+### 4.3 Scoring and the label boundary
 
-| Tier | Design | Highest claim supported |
-| --- | --- | --- |
-| A1 | **Same-cell prospective** — non-destructive state measurement on a cell whose own future is then observed (e.g. imaging-paired, or a genuinely non-destructive readout) | Per-cell prospective fate prediction |
-| A2 | **Sibling / clone proxy** — one clone member is sequenced; siblings' futures are observed | Clone-level prospective association. **Not** per-cell fate. |
-| A3 | **Clone-average** — clone-level early-state summary vs. clone-level outcome | Clone-average association only |
-
-**A1 exists but is not a deployable platform.** Live-seq is a genuine existence proof
-of same-cell prospective, minimally destructive measurement — but it is
-throughput-bound: roughly 4-5 extractions per hour, and only ~300 high-quality
-transcriptomes across the entire study. Post-biopsy viability is 85-89%, and the paper
-does **not** exclude small cell-cycle delays; the biopsy itself is a small but
-**non-zero** perturbation. Absent a system that closes this throughput and viability
-gap, **A2 remains the realistic ceiling for anything pooled**, and the honest claim for
-pooled designs is clone-level prospective association, not per-cell fate prediction.
-
-#### 4.2 Candidate A — Phenomenon, Falsifier, Risk
-
-- **Phenomenon required (Gate 2A):** within the same perturbation and context, does
-  reproducible lineage-level trajectory heterogeneity exist, and is early lineage state
-  associated with it?
-- **Falsifier:** *under a reliable linked-lineage design and predefined detection
-  limits, early state provides no reproducible incremental information about subsequent
-  lineage trajectories.*
-- **Risk:** no such data for genetic perturbation in K562 is present in this repository,
-  and its existence at usable scale is unverified. May require data generation or
-  collaboration.
-
-### Candidate B — Population level
-
-> Under comparable, independently measured net fitness, does the early single-cell state
-> **distribution** provide incremental information about **independently measured**
-> future population dynamics?
-
-Estimand: §3.3, multi-state population trajectory summaries.
-
-- **Phenomenon required (Gate 2B):** under matched net fitness, does reproducible
-  divergence in population dynamics exist, and is it large enough to matter?
-- **Falsifier:** *under matched-net-fitness conditions there is no sufficiently large
-  and reproducible dynamics divergence, or the early state distribution provides no
-  incremental information about it.*
-- **Falsifier (drug-specificity risk):** *genetic loss-of-function may act
-  predominantly through division suppression rather than increased loss, making the
-  wedge substantially drug-specific.* This enters the program as a **hypothesis to
-  test**, not a finding — the drug literature (§1) answers the wedge question
-  affirmatively; the genetic literature has never asked it.
-- **Explicitly forfeits** any per-cell or per-lineage fate claim, permanently.
-  Matched-population evidence supports population-level association and can never be
-  upgraded.
-- **Risk:** requires an independently measured future-*dynamics* anchor. Endpoint
-  viability alone does not qualify.
-
-### 4.3 Falsification Is Not Absence of Data
-
-**Lack of data does not falsify either candidate.** A candidate is falsified only by a
-sufficiently powered study under a design capable of detecting the effect. "We could not
-find the data" routes to §8's insufficient-evidence branch, not to a stop.
-
-### 4.4 Terms Requiring Operational Definition Before Either Runs
-
-- **"Comparable net fitness"** — matching tolerance; whether matching is on the point
-  estimate or on its uncertainty.
-- **"Reproducible"** — across replicates, datasets, or contexts. Different claims of
-  different strength.
-- **"Early"** — numerically, per dataset, relative to `T`. Live constraint: Replogle
-  Perturb-seq is a **single, late** timepoint several days post-transduction. Whether
-  *any* existing genetic-perturbation dataset supplies a genuinely early state is a
-  Gate 1 question, not an assumption.
+Each bridge yields a continuous, directly-rankable $s(\cdot)$ (primary use).
+Optionally a light swap-invariant head may be **calibrated** on training-fold SL
+labels using $s_A/s_B$ plus swap-invariant GeneEffect features — but **the SL graph
+itself never enters feature construction**, preserving the inductive claim. The
+zero-shot composition result is always reported separately from any calibrated head.
 
 ## 5. Hypotheses
 
-Net fitness is a **summary of the outcome**, not an ordinary confounder. Generic stress
-may be a **true fate precursor**, not a nuisance to residualize away. Timing may itself
-be perturbation biology. Hence two hypotheses, tested separately.
+Three hypotheses, tested separately, each with a predictive null.
 
-### Utility hypothesis
+### 5.1 Utility hypothesis (H1)
 
-> The early state provides **incremental prospective information beyond net fitness**.
+> The composition provides **incremental cold-start ranking** beyond the
+> dependency-only floor **and** beyond the strong label-graph SOTA (**SLMGAE**,
+> **KR4SL**), on CV2/CV3.
 
-Predictive null:
+Null: $D_{ab} \perp s(a,b) \mid \text{floor features}$, on held-out genes.
 
-```text
-Y_future  ⟂  S_early  |  F_net, X
-```
+### 5.2 Pair-specificity hypothesis (H2)
 
-`Y_future` is an **independently measured** future outcome, never derived from
-`S_early`. `X` contains predefined context, timing, and measurement variables.
+> The signal is **pair-specific interaction**, not pan-essentiality.
 
-### 5.1 Temporal Contract for `F_net` — Choose One, State Which
+Null: the CV3 lift **vanishes on the non-pan-essential slice**. Grounding: the
+retired program's decomposition found the naive cross-line lift collapses there
+(CV3 AUROC 0.645 → 0.583, AUPR 0.651 → 0.490). A win that does not survive this
+slice is pan-essentiality wearing SL's costume, not SL.
 
-If `F_net` is computed from the **same future window** as `Y_future`, then conditioning
-on it uses future information. That analysis is still meaningful — it asks *"given the
-same final net fitness, does state distinguish the underlying trajectories?"* — but it
-is a **retrospective conditional decomposition**, not deployment-style prospective
-prediction.
+### 5.3 Mechanistic-realism hypothesis (H3)
 
-**Choice made in this spec (overturnable):**
+> The **virtual double-knockout** score corresponds to **measured** genetic
+> interactions in K562, not only to the curated label.
 
-| Analysis | `F_net` source | Claim ceiling |
-| --- | --- | --- |
-| **P (primary)** | An **independent, pre-existing** screen or replicate — DepMap/Chronos is exactly this relative to a new Perturb-seq experiment | **Prospective**: early state adds **incremental information beyond an external DepMap fitness reference** at prediction time |
-| **R (secondary, clearly labelled)** | Same future window as `Y_future`; used for post-hoc matched analysis only | **Retrospective conditional decomposition.** Must never be reported as prospective prediction |
+Null: $s_B \perp \text{measured GI}$. The measured-GI anchor is **Horlbeck 2018**
+(K562 dual-CRISPRi GI map, ~222k pairs; **to be acquired**), with **Adamson 2016
+UPR** (the only local combinatorial-CRISPRi set: 3 sensors + combos) as a small
+*qualitative* transcriptomic check. **Not** the Jost/Replogle dual-sgRNA file — that
+is single-gene knockdown-efficacy, not epistasis ([`03`](03-literature-review.md)
+§3). Because Feng2024's K562 positives may themselves be Horlbeck-derived, the
+Horlbeck validation must use continuous GI on pairs/genes **disjoint from the
+benchmark positives** to avoid circularity. H3 is the credibility anchor that
+survives even if the head-to-head ranking win (H1) is only partial.
 
-Any reported "beyond net fitness" result states which analysis produced it.
+## 6. What Is a Hypothesis, Not a Premise
 
-**DepMap is not the same intervention.** DepMap Achilles is genome-wide **Cas9
-knockout**, scored by Chronos. A CRISPRi Perturb-seq experiment is a **different
-intervention** — differing in perturbation strength, penetrance (hypomorph vs null),
-kinetics, screening horizon, guide efficacy, and K562 subclone/culture conditions.
-Analysis P therefore supports the claim *"incremental information beyond an external
-DepMap fitness reference"* and does **not** support the stronger claim *"matched on the
-true net fitness of the same intervention."* Any study that matches nominal pairs on an
-external `F_net` **must measure its own achieved net effect** under the intervention
-actually applied; unverified matching is a confound that can manufacture false
-positives — a CRISPRi/knockout transport mismatch masquerading as trajectory
-divergence. `|ΔF_net| ≤ 1 replicate SD` between nominally matched pairs is **not**
-equivalence: SD is not SE, and equivalence requires a TOST against a predefined margin,
-not a non-significant difference (§12).
-
-### 5.2 Specificity hypothesis
-
-> That information **cannot be reduced to a scalar response-burden or generic-injury
-> score.**
-
-Tested by residualizing on burden/stress scalars, not by discarding them — generic
-stress stays biologically meaningful.
-
-**Boundary condition.** Fate information is **context-dependent**, and a proximate
-death-effector readout alone is insufficient to predict individual fate. Nano et al.
-2023 (https://pmc.ncbi.nlm.nih.gov/articles/PMC9942801/) found that, at a matched
-caspase-3 activation dose, prospective information about individual fate is near-zero
-at baseline (Tjur R² 0.00-0.16), rising to R² = 0.70 only under added stress. This does
-not speak directly to transcriptome-wide early state in K562 CRISPRi, but it warns
-against assuming any single proximate readout is sufficient across regimes.
-
-**Grounding.** exp02 is **evidence for** the specificity hypothesis. A generic
-response-magnitude (NAR) scalar alone reaches Spearman 0.244; NAR + burden reaches 0.443;
-the best full-feature pseudobulk baseline (`delta_all`) reaches 0.494; the NAR-residualized
-transcriptome reaches **0.503** — higher than the unresidualized baseline. Generic
-viability is not what carries the signal. See
-[`docs/results/prior-internal-evidence.md`](results/prior-internal-evidence.md) for the
-full table.
-
-### 5.3 Causal Claim Boundary
-
-Incremental predictive information does **not** establish that the early state is
-causal, fate-committed, mechanistic, or manipulable. Controlling for response burden
-supports **specificity**, not **mechanism**. No mechanistic or interventional language
-is licensed by a positive utility or specificity result alone.
-
-### 5.4 Scoped separately, not in the null
-
-- **Two-way additive structure** (`GeneEffect(c,g) ~ gene_mean(g) + line_mean(c)`) gates
-  claims of **context-specific residual** effects only. Run it when, and only when, a
-  context-specificity claim is made. Grounding: exp09's non-pan-essential slice (CV3
-  AUROC 0.645 -> 0.583, AUPR 0.651 -> 0.490).
-- **MNAR observation bias** is an **identifiability boundary**, not a covariate (§6).
-
-## 6. Observation Process as an Identifiability Boundary
-
-State-dependent acquisition, dissociation, capture, and QC may induce
-**missing-not-at-random** observation. Cells that die before collection are **never
-observed**; no computational QC relaxation recovers them.
-
-Claims that must not be made:
-
-- High mito / low UMI is **not** a definitional signature of a dying cell. It also
-  arises from dissociation stress, genuinely low-RNA states, ambient RNA, and technical
-  failure; mito-rich clusters may reflect sample preparation
-  (https://www.nature.com/articles/s41467-022-29212-9).
-- "A cluster appears after relaxing QC" **cannot** be read as "the dying population was
-  recovered."
-- Independence between removal rate and perturbation strength **does not bound**
-  pre-capture loss. Every perturbation could lose the same *fraction* of cells while
-  losing biologically *different* cells; truly dead cells may vanish before any logged
-  stage.
-- A removal-rate/GeneEffect correlation is at most **evidence compatible with
-  perturbation-dependent attrition** — not direct evidence of state-dependent biological
-  loss.
-
-Concrete loss-accounting probes, QC ablation designs, and the relevant exp01 datapoints
-belong in a **separate measurement memo**, not in this science spec.
-
-## 7. What Is a Hypothesis, Not a Premise
-
-None of the following may be assumed. Each is either under test, out of scope, or invalid
-as an inference.
+None of the following may be assumed.
 
 | Proposition | Status |
 | --- | --- |
-| The transcriptome can decompose division / arrest / loss dynamics | **The central hypothesis under test.** A snapshot measures state; it may reflect early fate commitment, generic stress severity, the consequence of already-executing death, or a residual after survivorship selection. |
-| `B` is unobserved for most contexts, therefore `B` must be generated | **Invalid inference.** Generating `B` is warranted only if `B` carries independently verifiable outcome-relevant information. Ahlmann-Eltze 2025 (https://pmc.ncbi.nlm.nih.gov/articles/PMC12328236/) shows **no deep perturbation model beats a simple linear baseline at generating `B` in the first place**, undercutting the case for a generate-`B` strategy before outcome-relevance is even assessed. A **tool hypothesis**, reviewed only post-selection (§10). |
-| One model unifies dependency, conditional essentiality, and SL | **Long-term hypothesis.** Dependency / conditional fitness retained as potential downstream relevance only. |
-| Bag-level output solves identifiability | **False.** More honest than an uninterpreted per-cell latent, but not identifiable without independent anchors. |
-| Death mechanism (apoptosis / ferroptosis / necroptosis) | **Second-stage question, out of scope.** The plausible supervision route — perturbagens of known death mechanism — is recorded for later, not pursued now. |
+| STATE can predict **joint or sequential double-perturbation** responses | **Under test (H3), not assumed.** STATE was trained on single perturbations; the composition (§4) is an extrapolation. Its validity is gated by measured epistasis before benchmark numbers are trusted. |
+| A **generated** response preserves partner information as well as an observed one | **Under test.** The archive's frozen-STATE+adapter route (exp08) landed *below* the dependency-only floor. The new bet is the *composition* (interaction), not per-gene feature transfer, which already failed. |
+| A **graph-free** method can beat the SOTA on **CV1** | **False / not attempted.** CV1 is topology's home turf and is degree-gameable. The win is claimed only on CV2/CV3. |
+| Curated **Rand negatives** are true non-SL pairs | **False.** They are unconfirmed non-SL; every output is candidate prioritization, never a validated SL target. |
+| **GeneEffect alone** determines SL | **False.** That is the ~0.70-AUROC floor; the composition must emit an interaction, not a function of the two singles. |
+| A high **benchmark rank** implies the mechanism is real | **Invalid inference.** Curated-label ranking is gameable and label-bounded; mechanistic realism is a separate claim, tested by H3. |
+| **Graph-free inductive reach is itself the novelty** | **False (post-review).** CILANTRO-SL / RFM-SL / PARIS / ESM4SL already do inductive SL; the novelty is the mechanism (§2.2), not the reach. |
+| A virtual double-KO **faithfully preserves synergy** | **Doubted, under test.** Independent benchmarks find foundation models *underestimate* synergy and do worse than an additive baseline on double perturbations ([`03`](03-literature-review.md) §2); the explicit null and a GenePert-style linear ablation are guards, not options. |
 
-## 8. Literature Review: Go/No-Go Funnel
+## 7. Success Criteria (contract level; numeric bars in `02`)
 
-### 8.1 Evidence Hierarchies — One Per Candidate
+### 7.1 Primary — beat the label-graph SOTA on the honest splits
 
-The governing principle is **not** `lineage > condition`. It is:
+Beat the **strong** label-graph SOTA — **SLMGAE** (Feng2024 CV3 AUROC 0.790) and
+**KR4SL** (Feng2024's flagged CV3 leader) — and the dependency-only floor, on **CV2
+and CV3** per-anchor ranking, with the win **surviving the non-pan-essential
+control** (H2). All baselines reproduced under the **identical** K562 `cal_metrics`
+harness (only DDGCN/GRSMF/SL2MF/SLGNN reproduced so far; SLMGAE/KR4SL/KG4SL
+pending). **KG4SL is a weak reference, not the bar** — its CV3 AUROC (0.562) sits
+below the dependency floor (0.596). CV1 is reported only as the degree-gameable
+diagnostic.
 
-> **Direct prospective evidence at the same unit as the estimand** outranks **proxy
-> evidence at another unit.**
+### 7.2 Mechanistic anchor — measured epistasis
 
-| Rank | Candidate A (lineage/clone) | Candidate B (population) |
-| --- | --- | --- |
-| 1 | Same-cell prospective (A1) | Condition-level **paired prospective** anchor (state at `t0`, dynamics measured over `[t0, T]`) |
-| 2 | Sibling / clone proxy (A2) | Condition-level anchor with partial time resolution |
-| 3 | Clone-average (A3) | Cross-sectional condition comparison |
-| 4 | Terminal-state classifier | Terminal-state classifier |
-| 5 | Signature-only inference | Signature-only inference |
+The virtual double-knockout score $s_B$ (or $\hat c_{ab}$) must correspond to
+**measured** genetic interactions — **Horlbeck 2018** K562 GI (to acquire; the
+fitness-scale anchor) and **Adamson 2016 UPR** (local qualitative check) — by the
+bar in `02`, on pairs disjoint from the benchmark positives (§5.3). The
+Jost/Replogle dual-sgRNA file is **not** a GI dataset and is not used here.
 
-A finding's weight is capped by its tier under **its own** hierarchy. A terminal-state
-classifier can never establish a prospective claim, however strong its metrics.
+### 7.3 Integrity constraints
 
-### L0 — Ontology, Latent-to-Observable Maps (both candidates in parallel)
+- **Model selection is train-only.** Selecting the epoch/checkpoint on the test
+  fold (the archive's exp08 flaw) makes a result **inadmissible**.
+- **Identical harness.** The composition is evaluated under the same splits, seeds,
+  and `cal_metrics` as the reproduced baselines — a true ablation, not a cross-run
+  comparison.
+- **Zero-shot reported separately.** The pure composition (no SL labels in
+  features) is the headline; any label-calibrated head is an additional row.
 
-Define with citations: state; fate; death; biological loss vs. assay attrition;
-quiescence; senescence; recovery; time horizon; denominator. Build **parallel**
-latent-to-observable maps for A and B. **L0 does not select the primary unit** —
-selection happens at §9 item 6.
+## 8. Scope and Non-Goals
 
-### Gate 1 — Measurement and Observation Validity
+**Fixed:** K562 only; exp05 (STATE + ESM2) as the forward model; Feng2024 /
+SynLethDB as the benchmark and metric protocol; the SL graph never enters feature
+construction.
 
-Chronos and CRISPR fitness scoring; GR / DIP metrics; birth-death decomposition; which
-**combinations** of readouts separate division from loss, under which assumptions; what
-is knowable about MNAR structure and what bounds exist. Also: does any existing
-genetic-perturbation dataset supply a genuinely **early** state?
+**Non-goals (out of scope for this program):**
 
-Output: the **measurement -> identifiable-quantity map**, per candidate.
+- Multi-cell-line / context-specific SL (a future extension; co-dependency across
+  real contexts).
+- Any per-cell fate/death claim, or claiming SL from single-gene essentiality.
+- Re-implementing the benchmark, its splits, or `cal_metrics`.
+- Treating curated Rand negatives as validated non-SL.
+- Aligning Norman CRISPRa (or any activation modality) to knockout labels without an
+  explicit modality caveat (auxiliary only).
 
-**No-go:** if the target outcome cannot be defined and identified through **any**
-credible independent anchor -> **narrow the estimand or stop.**
-
-*Not* a no-go: existing readouts already decomposing dynamics. An independent
-decomposition is **the ground truth the prospective question requires** — it removes
-measurement novelty, not the biological question.
-
-### Gate 2 — Phenomenon Prevalence and Biological Importance
-
-Per candidate: Gate 2A (reproducible lineage-level trajectory heterogeneity within a
-perturbation, associated with early lineage state) and Gate 2B (reproducible,
-consequential divergence in population dynamics under matched net fitness). Judged
-against the **predefined acceptance criteria**
-([`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md)), plus the value question on
-downstream endpoints outside the trajectory definition.
-
-**Literature alone usually cannot settle this.** Therefore Gate 2 returns a
-**trichotomy**, not a binary:
-
-| Finding | Route |
-| --- | --- |
-| **Positive evidence** | Proceed |
-| **Sufficiently powered evidence of absence** | **Stop** (for that candidate) |
-| **Insufficient evidence** | **Bounded validation pilot** with explicit budget and stop rules. **Not a stop.** Absence of evidence is not evidence of absence. |
-
-### Gate 3 — Nearest Prior Art and Exact Novelty
-
-Who has come closest, on which unit, with which anchor, at which evidence tier. Output:
-a nearest-prior-work matrix, not a reading list.
-
-### Gate 4 — Prospective Incremental Information
-
-Do designs exist linking state to **future** outcome, per candidate's hierarchy? Enforce
-T1-vs-T2 strictly.
-
-Where no linkage design is found, **separate three distinct findings**:
-
-1. none exists because it is **technically infeasible** -> stop;
-2. none exists because the **data is unavailable to us** -> resourcing question;
-3. none exists and this is a genuine **methodological opportunity** -> the best possible
-   outcome.
-
-### Decision
-
-`proceed` | `narrow-or-pivot` | `stop`, per candidate.
-
-## 9. Deliverables, Decision Point, and What May Run Before It
-
-### Deliverables
-
-1. Ontology / estimand memo (L0), with **parallel** maps for A and B.
-2. Measurement -> identifiable-quantity map, per candidate.
-3. Evidence table **supporting and challenging** the core premise.
-4. Nearest-prior-work matrix.
-5. 2-3 candidate research questions, each with falsifier, claim boundary, and explicit
-   out-of-scope definition.
-6. **Selection of one primary research question and its unit.**
-7. Decision: `proceed` | `narrow-or-pivot` | `stop`.
-
-### What May and May Not Run Before Item 6
-
-> **No production modeling or large-scale data acquisition begins before selection.
-> Model-agnostic, bounded work explicitly required to resolve a decision gate is
-> permitted.**
-
-| Permitted (decision-enabling) | Prohibited before selection |
-| --- | --- |
-| Dataset / metadata / access audit | Production modeling |
-| Assay and linkage feasibility investigation | Model-specific feature engineering |
-| Identifiability and power calculations | Foundation-model benchmarking |
-| Predefined small-scale descriptive reanalysis | Large-scale or irreversible data acquisition |
-| Bounded phenomenon-validation pilot, with explicit budget and stop rules, when Gate 2 returns *insufficient evidence* | — |
-
-### Data-Acquisition Status
-
-The earlier decision to "acquire dose-response data with real viability" is
-**suspended, not cancelled.** Endpoint viability is an aggregate and supplies no
-prospective trajectory anchor on its own. **Combined with time-resolved counts, division
-tracking, and an independent death readout, it may still become a valid measurement
-component.** Re-decided at the decision point.
-
-## 10. Post-Selection Reviews (not part of the funnel)
-
-- **Tool-strategy review** — runs **only if** the decision selects a generate-`B` /
-  virtual-cell strategy. Carries the live critique that deep perturbation forward models
-  barely beat trivial baselines. Reviewing it before generate-`B` is selected is
-  premature.
-
-## 11. Separate Memos (out of scope here)
-
-- **Synthetic lethality.** SL is a joint-intervention effect relative to a combination
-  null. Not the same question as single-perturbation outcome decomposition; it must stop
-  driving this project's definition. The memo carries: exp09's cross-cell-line
-  selectivity result and its collapse on the non-pan-essential slice; the resulting
-  question ("how do we build a null that removes pan-essentiality so the residual is
-  genuinely interaction?"); and the combination-null problem governing any multi-gene
-  route, `interaction(a,b) = outcome(a,b) - psi(outcome(a), outcome(b))`, where the
-  choice of `psi` is the crux.
-- **Measurement memo.** Loss accounting, QC ablation design, attrition probes, and the
-  exp01 cell-count datapoint.
-
-## 12. Claim Boundaries
+## 9. Claim Boundaries
 
 Extending `CLAUDE.md`'s terminology guardrails:
 
-- Do not say population screens cannot separate death from arrest. Say a single endpoint
-  net-fitness readout does not uniquely determine the underlying dynamics.
-- Do not call DepMap GeneEffect a cell-death label. It is a relative growth-rate effect
-  under an explicit population-dynamics model.
-- Do not use "outcome composition"; state a trajectory or multi-state process estimand.
-- Do not write "loss" without disambiguating biological extinction from assay attrition.
-- Do not equate high-mito / low-UMI cells with dying cells.
-- Do not describe a QC-relaxation-induced cluster as a recovered dying population.
-- Do not claim observation bias is bounded by an independence check.
-- Do not call a prospective outcome prediction (T2) a counterfactual; reserve that for T3.
-- Do not report a same-window `F_net` result (Analysis R) as prospective prediction.
-- Do not upgrade a sibling/clone-proxy (A2) or clone-average (A3) result into a per-cell
-  fate claim.
-- Do not upgrade a population-level (Candidate B) result into a per-cell fate claim.
-- Do not infer causation, fate commitment, mechanism, or manipulability from incremental
-  predictive information.
-- Do not treat absence of data as falsification.
-- Do not claim an outcome decomposition is identified when only aggregate consistency has
-  been shown.
-- Do not claim synthetic lethality without an explicit combination null and interaction
-  residual.
-- Do not cite Live-seq as "non-destructive" without the 85-89% post-biopsy viability
-  caveat.
-- Do not present a drug-derived wedge result (e.g. Gross 2023) as evidence for genetic
-  perturbation.
-- Do not treat `|ΔF_net| ≤ 1 SD` as fitness equivalence. SD is not SE; equivalence
-  requires a TOST against a predefined margin.
-- Do not describe Norman or Replogle as prospective fate comparisons; both supply only
-  late survivor transcriptomes and aggregate growth.
+- **DepMap GeneEffect is a relative growth-rate effect**, single-gene, under an
+  explicit population-dynamics model. Never a cell-death label, never single-cell,
+  never a double-knockout quantity.
+- **SL benchmark outputs are candidate prioritization, not validated targets.** Rand
+  negatives are unconfirmed non-SL.
+- **Never claim SL from single-gene essentiality** — the interaction term is required
+  ($\text{interaction} = \text{joint} - \psi(\text{singles})$, and the choice of
+  $\psi$ is declared).
+- **Generalization claims come only from CV2/CV3.** CV1 is degree-gameable and is
+  reported as a diagnostic, never as evidence of cold-start generalization.
+- **A pan-essentiality lift is not a synthetic-lethality result.** Report the
+  non-pan-essential slice; a win that vanishes there is downgraded.
+- **The virtual double-knockout is an extrapolation** of a single-perturbation
+  backbone. Do not present its benchmark rank as mechanistically validated until it
+  clears the measured-epistasis bar (H3).
+- **A benchmark rank is not a mechanism.** Do not infer causation, fate commitment,
+  mechanism, or manipulability from predictive ranking.
+- **Modality/dataset roles:** Replogle (single-gene GWPS) and Adamson (UPR
+  epistasis) are CRISPRi, modality-aligned with knockout; **Jost/Replogle
+  dual-sgRNA is single-gene knockdown-efficacy, not epistasis**; Horlbeck is the
+  measured GI anchor; Norman is CRISPRa, auxiliary only, always with the caveat.
+- **A single-fold or test-fold-selected result is not a result.** Report 5-fold
+  mean ± spread with a stated comparison, and never select on the test fold.
 
-## 13. Locked Decisions
+## 10. Locked Decisions
 
 Settled. Changing any of these is a change of research program, not a refinement.
 
-1. **The question.** In genetic loss-of-function, is net fitness close to a sufficient
-   statistic — or does it frequently conceal reproducible and consequential
-   division / death / recovery dynamics?
-2. **Two candidates carried in parallel.** Candidate A (lineage/clone) and Candidate B
-   (population). **No unit is selected**, and selection does not happen implicitly.
-3. **Estimands are trajectories or multi-state processes**, never a categorical mixture.
-   "Outcome composition" is retired vocabulary.
-4. **A2 (sibling/clone proxy) is the evidence ceiling** for anything pooled. A1 exists
-   (Live-seq) but is throughput-bound and not a platform.
-5. **Analysis P vs Analysis R is declared on every result.** A same-window `F_net`
-   (Analysis R) is a retrospective conditional decomposition and is never reported as
-   prospective prediction.
-6. **DepMap is an external reference, not a matched anchor.** It is Cas9 knockout scored
-   by Chronos; a CRISPRi study is a different intervention and must measure its own
-   achieved net effect.
-7. **Acceptance criteria are frozen before evidence**
-   ([`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md)) and are not
-   revisable to fit a result.
-8. **Absence of data is not falsification.** Insufficient evidence routes to a bounded
-   pilot, never to a stop.
-9. **No production modeling before unit selection** (§9).
-10. **Synthetic lethality is out of scope** (§11).
+1. **The task.** Graph-free, inductive SL partner ranking in K562: learn $s(a,b)$
+   with **no SL graph in the feature path**. (The inductive reach is shared with
+   prior art; the contribution is the mechanism — §2.2 and #11.)
+2. **The mechanism.** Compose the exp05 virtual-cell single-gene fitness model
+   (response → GeneEffect) into a **pairwise interaction**. Single-gene GeneEffect
+   alone is the floor, not the method.
+3. **Two composition bridges, head-to-head.** Bridge A (counterfactual
+   co-dependency) and Bridge B (virtual double-knockout), each with an explicit
+   interaction null. Pure feature-transfer to a pair head (the archive's exp08) is
+   **not** revived — it already failed.
+4. **The win is claimed on CV2/CV3, never CV1.** CV1 is the degree-gameable
+   diagnostic.
+5. **The win must survive the non-pan-essential slice.** Pan-essentiality is not SL.
+6. **Measured epistasis is the mechanistic anchor.** Bridge B is validated against
+   **Horlbeck 2018** K562 GI (fitness-scale, to acquire) and **Adamson 2016 UPR**
+   (local qualitative check), on pairs disjoint from the benchmark positives — **not**
+   the Jost dual-sgRNA file, which is not epistasis. The north-star SOTA is **SLMGAE
+   + KR4SL**, not KG4SL.
+7. **The SL graph never enters feature construction.** Labels may calibrate a head;
+   they may not build features. Zero-shot composition is reported separately.
+8. **Model selection is train-only.** No test-fold epoch selection.
+9. **Scope is K562.** Multi-cell-line / context-specific SL is a future extension.
+10. **Acceptance criteria are frozen before evidence**
+    ([`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md)) and are not
+    revisable to fit a result.
+11. **The novelty is the mechanism, not the reach.** Lead with the
+    perturbation-response-trained composition + explicit interaction null +
+    measured-epistasis validation, differentiated from CILANTRO-SL and the retired
+    exp08 (§2.2). Do not claim first-to-graph-free-inductive-SL.

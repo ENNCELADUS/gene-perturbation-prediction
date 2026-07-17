@@ -1,8 +1,8 @@
 <div align="center">
 
-  <h1 style="margin-top: 10px;">Cancer Dependency Prediction from Perturbation-Induced Transcriptomes</h1>
+  <h1 style="margin-top: 10px;">Synthetic-Lethality Discovery by Virtual-Cell Composition</h1>
 
-  <h2>Predict DepMap-style CRISPR gene-effect scores from observed or predicted post-perturbation transcriptomes — and prioritize synthetic-lethality candidates with context evidence.</h2>
+  <h2>Rank a gene's synthetic-lethal partners — for genes no SL graph has seen — by composing a virtual cell that predicts cancer-cell fitness outcomes from perturbation transcriptomes.</h2>
 
   <div align="center">
     <a href="https://github.com/ENNCELADUS/gene-perturbation-prediction/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/ENNCELADUS/gene-perturbation-prediction"/></a>
@@ -22,16 +22,17 @@
 
 </div>
 
-> **Status (2026-07-14):** The dependency → synthetic-lethality program below (central question, Research Framing) shipped the pipeline and the numbers in [Results](#results); it is now **retired as the roadmap** and kept as prior evidence. The active research direction is **cell-fate outcome dynamics** — see [Research Framing](#research-framing) below and the vault at [`docs/README.md`](docs/README.md) for the live contract, gate verdicts, and next steps.
+> **Status (2026-07-17):** Active direction — **synthetic-lethality discovery by virtual-cell composition**: compose the exp05 forward model (perturbation transcriptome → DepMap GeneEffect) into a pairwise interaction score, and beat the strong SOTA (SLMGAE, KR4SL) on the inductive cold-start splits. The prior staged dependency → SL program (below) shipped the pipeline and the numbers in [Results](#results) and is kept as **prior evidence and baselines**. Live contract, acceptance criteria, and roadmap: [`docs/README.md`](docs/README.md).
 
-The central question that shaped the codebase below:
+The central question of the active direction:
 
-> Given a cancer cell line and a gene perturbation, can the post-perturbation transcriptomic response predict whether that perturbation creates a meaningful fitness, vulnerability, or dependency phenotype?
+> Can a virtual cell that predicts a gene's knockout fitness (DepMap GeneEffect) from its perturbation transcriptome be *composed* into a pairwise synthetic-lethality score that reaches genes no SL graph has seen — and beats the strong graph/knowledge-graph SOTA (SLMGAE, KR4SL) on the cold-start splits?
 
-This framing is deliberately narrower than "predict synthetic lethality end-to-end." DepMap/Achilles CRISPR gene-effect scores are population-level dependency labels — not single-cell death labels and not strict SL labels. The project first learns the link from perturbation-induced transcriptomic response to cancer dependency, then layers context specificity on top to prioritize SL-like candidates.
+The intuition is mechanistic: **synthetic lethality is a combination fitness outcome.** If a virtual cell predicts single-gene fitness from the perturbation "shockwave," composing it — simulating the loss of one gene and re-reading the other's dependency (Bridge A), or forwarding the joint double-knockout (Bridge B) — should expose the pair-specific interaction that curated SL graphs only memorize. Single-gene GeneEffect alone is the ~0.70-AUROC floor, not the method.
 
 ## *Latest News* 🔥
 
+- **[2026/07]** Research direction set to **SL discovery by virtual-cell composition** (contract: [`docs/01-blueprint.md`](docs/01-blueprint.md), bar: [`docs/02-acceptance-criteria.md`](docs/02-acceptance-criteria.md)). Two composition bridges — counterfactual co-dependency and virtual double-knockout — to beat the strong SOTA (SLMGAE, KR4SL) on the cold-start splits, validated against measured epistasis. (A close prior art, CILANTRO-SL, shares the graph-free framing; our novelty is the mechanism — see [`docs/03`](docs/03-literature-review.md).)
 - **[2026/06]** Stage 3 SL pair benchmark adapter and dependency-only baseline shipped (`src/sl_benchmark_baseline/`); official-metric CV1/CV2/CV3 rerun completed.
 - **[2026/06]** Experiment 05 AIVC STATE A→B→C forward-model pipeline reviewed, including a frozen-STATE feature ablation track.
 - **[2026/05]** Single-cell Deep Sets, attention-MIL, and distribution/prototype regressors landed with Adamson K562 external transfer.
@@ -39,9 +40,10 @@ This framing is deliberately narrower than "predict synthetic lethality end-to-e
 
 ## Why This Project?
 
-Most virtual-cell work stops at predicting the transcriptome. This project asks the next question — does that response actually predict whether a gene is a dependency — and builds an honest, leakage-controlled evaluation chain to answer it.
+Most SL predictors do link prediction over a curated SL graph — powerful on seen genes, blind on unseen ones. This project brings signal from *outside* the graph: a virtual cell that predicts cancer-cell fitness from the perturbation transcriptome, composed into a pairwise interaction that reaches genes no screen has touched.
 
-- **🔗 Closes the loop** — Connects perturbation → transcriptomic response → DepMap dependency, instead of treating forward prediction as the end goal.
+- **🔗 Composes, not memorizes** — Turns a single-gene fitness model into a pairwise SL score via an explicit interaction null, instead of reading topology off an SL graph.
+- **🧊 Inductive by construction** — The score reads from gene features (ESM2 identity + predicted perturbation biology), so it works on cold-start (CV2/CV3) genes where transductive SOTA breaks.
 - **🧪 Observed-first methodology** — Validates that *observed* response carries dependency signal before trusting any *predicted* transcriptome, so forward-model error never silently inflates results.
 - **🪜 Honest baseline ladder** — Dummy → ridge → PCA → tabular nonlinear → MIL/foundation models, so every gain is measured against a simpler control.
 - **🚪 Fold-local, no-leakage CV** — A→B models, featurizers, GMM prototypes, and C-heads are all fit on train genes only, inside each fold.
@@ -68,31 +70,31 @@ uv run python -m pytest
 
 ## Research Framing
 
-> **Status:** literature funnel complete; decision **`narrow-or-pivot`** for both candidates below. Next step: three public-data reanalyses, then a bounded feasibility study. Live roadmap and status board: [`docs/README.md`](docs/README.md).
+> **Status:** contract and acceptance criteria established; related-work review and experiment roadmap pending; forward model (exp05) in progress. Live contract and status board: [`docs/README.md`](docs/README.md).
 
 ```text
-The same net fitness loss can arise from completely different cellular dynamics —
-division suppression, cell loss, or loss followed by survivor regrowth — and it is
-unknown whether early molecular state prospectively distinguishes those trajectories
-in genetic loss-of-function.
+Rank a gene's synthetic-lethal partners — for genes no SL screen or SL graph
+has ever seen. SL is a combination fitness outcome; a virtual cell that predicts
+single-gene fitness from the perturbation transcriptome, composed into a pairwise
+interaction, can reach the cold-start genes transductive SOTA cannot.
 ```
 
-A single endpoint net-fitness readout — DepMap Chronos GeneEffect is one instance — does not uniquely determine the underlying division / death / recovery dynamics: Chronos is structurally incapable of separating them, because that decomposition lies outside what it estimates. Two candidate research questions are carried in parallel, each with its own estimand, evidence hierarchy, and falsifier; no unit has been selected yet:
+Graph/knowledge-graph SL predictors (SLMGAE, KR4SL, KG4SL, and the wider Feng2024 zoo) are *transductive* models: their signal is SL-graph topology, so they are strong on seen genes (CV1) but break on unseen genes (CV2 → CV3) and cannot score genes with no curated SL edges. This program brings signal from outside the graph, via two composition bridges:
 
-- **Candidate A — lineage/clone level.** Within a fixed context and time horizon, does an early post-perturbation molecular state predict the subsequent division, persistence/recovery, and extinction trajectory of its linked lineage, beyond an independently measured net fitness?
-- **Candidate B — population level.** Under comparable, independently measured net fitness, does the early single-cell state distribution carry incremental information about independently measured future population dynamics?
+- **Bridge A — counterfactual co-dependency.** Simulate loss of `a`, then predict `b`'s GeneEffect in the `a`-lost state; SL = the dependency spike. Uses only single-gene labels.
+- **Bridge B — virtual double-knockout.** Forward the joint `a+b` perturbation → joint fitness; SL = the interaction residual vs. an explicit additive/min null. Validated against measured epistasis.
 
 The full contract — estimands, acceptance criteria, gate verdicts, and the decision record — lives in the research vault, not here:
 
 - [`docs/README.md`](docs/README.md) — vault index and status board.
 - [`docs/01-blueprint.md`](docs/01-blueprint.md) — the frozen research contract.
 - [`docs/02-acceptance-criteria.md`](docs/02-acceptance-criteria.md) — the bar a result must clear to count as an answer. Frozen before evidence.
-- [`docs/03-literature-review.md`](docs/03-literature-review.md) — gate-by-gate verdicts.
-- [`docs/04-roadmap.md`](docs/04-roadmap.md) — the decision and what runs next.
+- [`docs/03-literature-review.md`](docs/03-literature-review.md) — related work (pending rewrite).
+- [`docs/04-roadmap.md`](docs/04-roadmap.md) — the experiment roadmap (pending rewrite).
 
 ### Prior Program (Retired as Roadmap, Kept as Evidence)
 
-Through mid-2026 the project's roadmap was a staged dependency → synthetic-lethality program:
+Through mid-2026 the project's roadmap was a **staged, context-ranking** dependency → synthetic-lethality program (distinct from the active *composition* direction above):
 
 ```text
 cell line + perturbation gene
@@ -101,7 +103,7 @@ cell line + perturbation gene
     → context-specific target ranking
 ```
 
-That staged program is **retired as the roadmap**. It is not retired as code: `src/dependency_baseline/`, `src/aivc_model/`, and `src/sl_benchmark_baseline/` all still run (see [Architecture](#architecture)), and the three planned public-data reanalyses reuse this pipeline. Its results are **prior evidence** for the new direction, not a roadmap to keep executing — see [Results](#results) for the numbers and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md) for the consolidated table.
+That staged program is **retired as the roadmap**. It is not retired as code: `src/dependency_baseline/`, `src/aivc_model/`, `src/sl_benchmark_baseline/`, `src/sl_dl_model/`, and `src/ddgcn/` all still run (see [Architecture](#architecture)), and the active composition direction reuses the exp05 forward model and the SL benchmark harness directly. Its results are **prior evidence and baselines** for the new direction — see [Results](#results) for the numbers and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md) for the consolidated table.
 
 ## Installation
 
@@ -223,7 +225,7 @@ The project closes a triangle: two edges (data → response, response → depend
 
 ## Results
 
-Headline numbers from the retired dependency → SL program's implemented baselines. These are now **prior evidence** feeding the cell-fate research direction (see [Research Framing](#research-framing)), not production claims and not claims about cell-fate dynamics. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
+Headline numbers from the implemented baselines. These are the **floor and baselines** for the active composition direction (see [Research Framing](#research-framing)) — the dependency-only SL floor and the observed-transcriptome result the composition must beat, plus the single-gene forward-model signal it builds on. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
 ### Single-Cell Bag → Dependency (Track 2, Adamson K562 external transfer)
 
@@ -256,7 +258,7 @@ The degree-probe control (Model C) scores highest on CV1 — a reminder that pai
 
 ## Documentation
 
-- [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D evaluation semantics, plus the cell-fate direction's load-bearing terms (`F_net`, T1/T2/T3, Candidate A/B, evidence tiers).
+- [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D evaluation semantics used by the SL benchmark and forward model. (Retired cell-fate terms may linger there pending cleanup.)
 - [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents.
 - [`docs/README.md`](docs/README.md) — research vault index: contract, acceptance criteria, gate verdicts, decision and roadmap, results.
 - [`docs/data/`](docs/data/) — dataset cards for downloaded data.
@@ -287,17 +289,19 @@ Follow the **Plan → Confirm → Code** workflow for non-trivial research or im
 
 ## Terminology Guardrails
 
-- Say **dependency prediction** or **essentiality ranking** for the supervised DepMap task.
-- Say **SL candidate prioritization** only after adding context-specificity evidence.
-- Do not call DepMap gene-effect scores single-cell death labels.
-- Do not equate gene essentiality with synthetic lethality.
-- Do not align CRISPRa activation perturbations with CRISPR knockout dependency labels without an explicit modality caveat.
+- Say **dependency / GeneEffect prediction** for the single-gene supervised task; **SL candidate prioritization** for the pairwise score — never "validated SL target" (benchmark negatives are unconfirmed).
+- Do not claim SL from single-gene essentiality; an explicit interaction null is required.
+- Generalization claims come only from CV2/CV3; CV1 is the degree-gameable diagnostic.
+- A pan-essentiality lift is not an SL result — report the non-pan-essential slice.
+- The virtual double-knockout is an extrapolation of a single-perturbation backbone; its benchmark rank is not mechanistic proof until it matches measured epistasis.
+- Do not call DepMap GeneEffect a single-cell death label; it is a single-gene relative growth-rate effect.
+- Norman CRISPRa is auxiliary only, never aligned to knockout labels without the modality caveat.
 
 ---
 
 <div align="center">
   <p>
-    <strong>A retained dependency-prediction pipeline; the active research direction is cell-fate outcome dynamics.</strong><br>
-    <sub>See <a href="docs/README.md">docs/README.md</a> for the live contract, gate verdicts, and roadmap.</sub>
+    <strong>Active direction: synthetic-lethality discovery by virtual-cell composition. The dependency-prediction pipeline is retained as prior evidence and baselines.</strong><br>
+    <sub>See <a href="docs/README.md">docs/README.md</a> for the live contract, acceptance criteria, and roadmap.</sub>
   </p>
 </div>

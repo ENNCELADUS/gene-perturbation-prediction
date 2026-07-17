@@ -4,49 +4,56 @@ This file provides guidance to Claude Code (claude.ai/code) and Codex when worki
 
 ## Quick Context
 
-- **Active project**: cell-fate outcome dynamics. The same net fitness loss can
-  arise from completely different cellular dynamics — division suppression, cell
-  loss, or loss followed by survivor regrowth — and it is unknown whether early
-  molecular state prospectively distinguishes those trajectories in genetic
-  loss-of-function.
-- **Status**: literature funnel (L0 -> Gate 4) complete; decision is
-  `narrow-or-pivot` for both candidates. **No production modeling is
-  authorized.** Next work is three public-data reanalyses.
+- **Active project**: synthetic-lethality discovery by virtual-cell composition.
+  Compose the exp05 forward model (perturbation transcriptome -> DepMap
+  GeneEffect) into a pairwise interaction score, and beat the strong graph/KG SOTA
+  (**SLMGAE, KR4SL**; KG4SL is weak at cold-start) on the inductive cold-start
+  splits where they break. The graph-free/inductive framing is shared with prior
+  art (CILANTRO-SL); the contribution is the mechanism + measured-epistasis
+  validation (see [`docs/03`](docs/03-literature-review.md)).
+- **Status**: contract (`01`) and acceptance criteria (`02`) established;
+  related-work review (`03`) and experiment roadmap (`04`) pending; forward model
+  (exp05) in progress on branch `codex/exp05-k562-fixed-pool`. **No SL graph in
+  the feature path.**
 - **Authority**: the vault under `docs/`, not this file. Start at
   [`docs/README.md`](docs/README.md).
-- **The code predates the current direction.** `src/` implements a retired
-  dependency-prediction / SL-ranking program. It still runs and the reanalyses
-  reuse parts of it — but do not assume a task is about dependency prediction
-  just because the code is.
+- **The code is now central, not retired.** `src/aivc_model/` (exp05) is the
+  composition backbone and `src/sl_benchmark_baseline/` + `data/SL_benchmark/`
+  are the benchmark, floor, and SOTA baselines. The dependency-prediction tracks
+  in `src/dependency_baseline/` remain as baselines and feature machinery.
 - **Role**: careful junior engineer. Follow **Plan -> Confirm -> Code** for
   non-trivial changes.
 
 ## Research Direction
 
-Two candidate research questions are carried **in parallel**; no unit has been
-selected:
+The task is graph-free, inductive SL partner ranking in K562: learn `s(a,b)` with
+**no SL graph in the feature path**. The mechanism composes the exp05 virtual cell
+into a pairwise interaction, two ways, compared head-to-head:
 
-- **Candidate A (lineage/clone)** — does an early molecular state predict a
-  linked lineage's division/persistence/extinction trajectory, beyond an
-  independently measured net fitness? Evidence ceiling is **A2** (sibling/clone
-  proxy) for anything pooled.
-- **Candidate B (population)** — under comparable, independently measured net
-  fitness, does the early single-cell state *distribution* carry incremental
-  information about independently measured future population dynamics?
+- **Bridge A (counterfactual co-dependency)** — simulate loss of `a`, predict
+  `b`'s GeneEffect in the `a`-lost state; SL = the dependency spike. Single-gene
+  labels only.
+- **Bridge B (virtual double-knockout)** — forward the joint `a+b` perturbation ->
+  joint fitness; SL = interaction residual vs. an explicit additive/min null.
+  Validated against measured epistasis (Horlbeck 2018 K562 GI, to acquire; Adamson
+  UPR as a small local check). Caveat: foundation models underestimate synergy on
+  double perturbations, so the explicit null + a GenePert-style linear ablation are
+  guards (see [`docs/03`](docs/03-literature-review.md) §2).
 
-The contract, acceptance criteria, gate verdicts, and decision record live in the
-vault. Do not restate them here — link to them.
+Single-gene GeneEffect alone is the ~0.70-AUROC floor, not the method. The
+contract, acceptance criteria, and roadmap live in the vault. Do not restate them
+here — link to them.
 
 ## Research Vault (`docs/`)
 
 1. **Authority ordering.** [`01-blueprint.md`](docs/01-blueprint.md)
    (contract) > [`02-acceptance-criteria.md`](docs/02-acceptance-criteria.md)
    (acceptance criteria) > [`03-literature-review.md`](docs/03-literature-review.md)
-   (gate verdicts) > [`04-roadmap.md`](docs/04-roadmap.md)
-   (decision) > `docs/results/`. **When two documents conflict, flag it — do not
+   (related work) > [`04-roadmap.md`](docs/04-roadmap.md)
+   (roadmap) > `docs/results/`. **When two documents conflict, flag it — do not
    resolve it unilaterally.**
 2. **Freeze rule.** `01` and `02` are frozen. Change them by editing **in place** —
-   **never** by writing a new file. `01` §13 Locked Decisions are settled; changing
+   **never** by writing a new file. `01` §10 Locked Decisions are settled; changing
    one is a change of research program, not a refinement.
 3. **The vault is a snapshot, not a changelog.** It states what is true now. Do not
    add revision histories, "what we got wrong" sections, or superseded-claim logs —
@@ -59,9 +66,9 @@ vault. Do not restate them here — link to them.
    new section in `03`.
 7. **Style**: plain GitHub markdown, relative links, no YAML frontmatter, no
    wikilinks, status as `**Status:**` bold-key lines.
-8. **The eleven review memos under `ideaspark_run/cell-fate-outcome-dynamics/`
-   are the evidence record and are not edited.** They hold the full evidence
-   tables and the `UNVERIFIED` registers.
+8. **The retired program's evidence memos (`ideaspark_run/`, `docs/archive/`) are
+   not edited.** They are prior evidence for the current direction, not a roadmap
+   to execute; they hold the full evidence tables and `UNVERIFIED` registers.
 
 ## Commands
 
@@ -89,12 +96,14 @@ entrypoints need assets that are not in the repo.
 | `src/sl_dl_model/` | STATE-adapter deep model for SL-pair ranking. | `uv run python -m sl_dl_model` |
 | `src/ddgcn/` | DDGCN reproduction on the SL benchmark. | `uv run python -m ddgcn` |
 
-**What the planned reanalyses reuse:** the residualization machinery in
-`src/dependency_baseline/` — `NuisanceResidualizer` in `models.py` and the
-burden / program-score / NAR feature sets in `features.py` + `datasets.py`. The
-three reanalyses (Jost 2020 titration, Dixit 2016 panel, Nadal-Ribelles
-mean-vs-variance on Replogle) are residualization audits in that same shape.
-The SL packages are prior evidence, not part of the current direction.
+**What the current direction uses:** `src/aivc_model/` (exp05) is the composition
+backbone; `src/sl_benchmark_baseline/` + `data/SL_benchmark/` (Feng2024 zoo incl.
+`kg4sl`, `slmgae`) are the benchmark, dependency-only floor, and SOTA baselines;
+`src/dependency_baseline/` supplies the swap-invariant GeneEffect features and
+residualization machinery. The only local combinatorial-CRISPRi set is
+`data/sl_dependency_v0/raw/adamson/adamson_2016_upr_epistasis.h5ad` (small,
+qualitative); the fitness-GI anchor **Horlbeck 2018** is not yet local. (The
+`jost_replogle_dual_sgrna` file is single-gene knockdown efficacy, **not** epistasis.)
 
 Configs live in `configs/experiments/<NN>_<name>/`; `models:` defines the ladder,
 `selection:` filters what actually runs. Experiment write-ups from the retired
@@ -105,8 +114,9 @@ program are under `docs/archive/` (untracked, gitignored).
 - K562 is the proof-of-concept line. Prioritize CRISPRi / knockout Perturb-seq.
 - Norman is CRISPRa — auxiliary only, never aligned to knockout labels without a
   modality caveat.
-- Replogle Perturb-seq is presumptively **late-state** and cannot support a
-  prospective (T2) claim.
+- Measured epistasis for the virtual double-KO: **Horlbeck 2018** K562 GI (to
+  acquire) + **Adamson UPR** (local, qualitative). Jost dual-sgRNA is single-gene
+  efficacy, **not** epistasis.
 - Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored.
 
 ## Code Style
@@ -122,29 +132,25 @@ program are under `docs/archive/` (untracked, gitignored).
 ## Terminology Guardrails
 
 Binding on all writing, per the contract's claim boundaries
-([`docs/01-blueprint.md`](docs/01-blueprint.md) §12).
+([`docs/01-blueprint.md`](docs/01-blueprint.md) §9).
 
 - **DepMap GeneEffect is a relative growth-rate effect** under an explicit
-  population-dynamics model. It is not a cell-death label and not a single-cell
-  readout.
-- Do not say population screens cannot separate death from arrest. Say: a single
-  endpoint net-fitness readout does not uniquely determine the underlying
-  dynamics.
-- Do not write "loss" without disambiguating **biological extinction** from
-  **assay attrition**.
-- Do not equate high-mito / low-UMI cells with dying cells, and do not describe a
-  QC-relaxation-induced cluster as a recovered dying population.
-- **T2 (prospective) is not T3 (counterfactual).** Do not report a same-window
-  `F_net` result (Analysis R) as prospective prediction.
-- Do not upgrade a sibling/clone-proxy (A2), clone-average (A3), or
-  population-level (Candidate B) result into a per-cell fate claim.
-- Do not infer causation, fate commitment, mechanism, or manipulability from
-  incremental predictive information.
-- Do not treat absence of data as falsification.
-- Do not cite Live-seq as "non-destructive" without the 85-89% post-biopsy
-  viability caveat.
-- Do not present a drug-derived wedge result as evidence for genetic
-  perturbation.
-- Do not treat `|ΔF_net| ≤ 1 SD` as fitness equivalence.
-- Synthetic lethality is **out of scope** (contract §11) and requires an explicit
-  combination null; never claim it from essentiality alone.
+  population-dynamics model — single-gene, not a cell-death label, not a
+  single-cell readout, and never a double-knockout quantity.
+- **SL benchmark outputs are candidate prioritization, not validated targets.**
+  Rand negatives are unconfirmed non-SL.
+- **Never claim SL from single-gene essentiality.** An explicit interaction null
+  is required (`interaction = joint - psi(singles)`; declare `psi`).
+- **Generalization claims come only from CV2/CV3.** CV1 is degree-gameable and is
+  a diagnostic, never evidence of cold-start generalization.
+- **A pan-essentiality lift is not an SL result.** Report the non-pan-essential
+  slice; a win that vanishes there is downgraded.
+- **The virtual double-knockout is an extrapolation** of a single-perturbation
+  backbone; its benchmark rank is not mechanistic proof until it clears the
+  measured-epistasis bar.
+- **A benchmark rank is not a mechanism.** Do not infer causation, fate
+  commitment, mechanism, or manipulability from predictive ranking.
+- **Norman CRISPRa is auxiliary only**, never aligned to knockout labels without
+  the modality caveat.
+- **A single-fold or test-fold-selected result is not a result.** Report 5-fold
+  mean +/- spread; never select on the test fold.
