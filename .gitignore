@@ -93,7 +93,6 @@ csc286_eval.py
 /logs/
 *.pptx
 *.key
-docs/literature/
 
 # TeX
 *.aux
@@ -111,5 +110,10 @@ docs/literature/
 /data/
 *.npz
 
-# Legacy course project files
+# Documentation
 archive/
+MANIFEST.md
+refine-logs/
+docs/superpowers
+docs/results/literature-review-2026-07
+docs/literature/

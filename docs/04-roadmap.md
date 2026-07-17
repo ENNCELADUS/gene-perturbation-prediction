@@ -1,7 +1,6 @@
 # Decision and Roadmap
 
-**Status:** active. This is the forward plan.
-**Decision:** both candidates `narrow-or-pivot`. **No production modeling. No unit selection yet.**
+**Status:** RETIRED-PROGRAM DOCUMENT — the cell-fate outcome-dynamics roadmap, not the active plan. The active direction is the virtual-cell SL composition program ([`01-blueprint.md`](01-blueprint.md)); the new experiment roadmap is **pending** (after the related-work review). Retained as prior evidence; not deleted.
 **Graded against:** [`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Evidence:** [`docs/03-literature-review.md`](03-literature-review.md) · **Contract:** [`docs/01-blueprint.md`](01-blueprint.md)
 
 ## 1. The decision
