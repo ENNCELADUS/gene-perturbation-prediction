@@ -37,3 +37,12 @@ config_file = "agents/reviewer.toml"
 [agents.docs_guard]
 description = "Read-only documentation guard for README, design docs, experiment docs, topology docs, and CONTEXT terminology alignment."
 config_file = "agents/docs-guard.toml"
+
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
+[mcp_servers.codebase-memory-mcp]
+command = "/Users/richardwang/.local/bin/codebase-memory-mcp"
+
+[mcp_servers.codebase-memory-mcp.tools.search_graph]
+approval_mode = "approve"
