@@ -64,8 +64,10 @@ records from the assay for evaluation. If source lineage or the purge cannot be
 verified, declare the line ineligible.
 
 The current K562 resources are included in the audit. The HCT116 single-gene
-transport audit is complete and consumed; it does not count as pairwise SL
-evaluation.
+transport audit is complete and its audited GeneEffect labels are open. HCT116
+may be assigned to a declared GeneEffect component training/development role,
+but it is no longer eligible as an untouched test line and does not count as
+pairwise SL evaluation.
 
 **Exit:** at least two training cell lines and two untouched test cell lines with
 eligible pairwise labels, or an explicit `CELL-LINE-GENERALIZATION: not evaluable`
@@ -139,8 +141,10 @@ frozen-backbone GeneEffect transport audit is complete and negative: direct K562
 GeneEffect transfer retained Spearman 0.554, while the frozen response head had
 Spearman -0.001 and collapsed output variance. This rejects direct transport of
 the frozen K562 response-to-fitness head, not the conserved gene-dependency
-prior. HCT116 labels are now unsealed; this line is consumed and cannot be
-recycled into development or reused as a formal held-out line. See the
+prior. HCT116 labels are now unsealed. HCT116 may enter later GeneEffect component
+training or development if that role is declared in the data manifest, but it
+cannot then be presented as an untouched held-out line. This does not change the
+completed audit's negative verdict. See the
 [`closeout`](results/exp05-hct116-frozen-backbone-transport.md). The audit does
 not count as pairwise or cross-cell-line SL generalization.
 
@@ -195,8 +199,11 @@ After every model and threshold is frozen:
 - repeat on the non-pan-essential slice; and
 - test whether the contextual increment remains after lineage/context covariates.
 
-No held-out line may be recycled into development after its labels are opened. A
-failed or underpowered line remains in the report.
+A cell line assigned to the formal Phase 6 held-out role may not be recycled into
+development after its labels are opened. A failed or underpowered line remains
+in the report. The earlier HCT116 single-gene component audit is not a Phase 6
+held-out SL assignment; under the current protocol HCT116 may be used for
+GeneEffect development but cannot later be selected as an untouched Phase 6 line.
 
 **Exit:** a named-context or population-level CELL-LINE-GENERALIZATION verdict and
 the SPECIFICITY verdict in `02`, or “not evaluable” if Phase 0 could not establish
