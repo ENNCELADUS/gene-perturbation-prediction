@@ -1,7 +1,9 @@
 # Exp05 Fixed Split and External Tests
 
 **Status:** unified K562 gene-pool fixed split implemented; X-Atlas/Orion HCT116
-is unchanged and remains source-verified but not downloaded locally.
+was downloaded on the experiment HPC and its one-shot frozen-backbone audit is
+complete and negative. HCT116 is now a consumed external line under this
+contract.
 
 ## Role contract
 
@@ -50,7 +52,7 @@ Generated, gitignored data products:
 
 | Dataset | Perturbation/readout | Decision | Reason |
 | --- | --- | --- | --- |
-| X-Atlas/Orion HCT116 | Genome-wide CRISPRi Perturb-seq | Accept, priority 1 | `gene_target`, batch, guide-QC, and non-targeting controls are present; map labels to HCT116 `ACH-000971` GeneEffect |
+| X-Atlas/Orion HCT116 | Genome-wide CRISPRi Perturb-seq | Consumed external audit | The sealed single-gene audit is complete and negative; HCT116 cannot be recycled into development or reused as an untouched test. See the [closeout](../results/exp05-hct116-frozen-backbone-transport.md). |
 | X-Atlas/Orion HEK293T | Genome-wide CRISPRi Perturb-seq | Exclude from current target | DepMap Public 26Q1 has no corresponding HEK293T GeneEffect row locally |
 | PRISM Repurposing | Small-molecule viability | Exclude | Drug conditions are not perturbation-gene conditions; drug-target assignment would change the supervision contract |
 | Tahoe-100M / sci-Plex | Small-molecule transcriptomics | Exclude | Chemical perturbations cannot be directly labeled with target-gene GeneEffect |
@@ -63,17 +65,9 @@ Primary sources:
 - [X-Atlas/Orion processed h5ads and metadata](https://doi.org/10.25452/figshare.plus.29190726)
 - [Broad PRISM Repurposing](https://depmap.org/repurposing/)
 
-After an X-Atlas processed HCT116 h5ad is local, build the exp05 overlap table
-without loading the full DepMap matrix into memory:
-
-```bash
-uv run python scripts/build_exp05_xatlas_overlap.py \
-  --h5ad data/sl_dependency_v0/raw/xatlas_orion/HCT116.h5ad \
-  --out data/sl_dependency_v0/interim/hct116_xatlas_depmap_overlap.csv
-```
-
-The resulting CSV has the same `source_perturbation_label`,
-`perturbation_gene`, `depmap_gene_effect`, `has_depmap_label`, and
-`source_dataset` fields consumed by the current exp05 external loader. HCT116
-must be evaluated as a separate external scope from K562 because GeneEffect is
-cell-line specific; rows from the two cell lines must never be merged by gene.
+The completed audit used 109 raw HCT116 parquet files on the experiment HPC,
+sample-matched Non-Targeting controls, and an Ensembl/token-aligned 2,000-feature
+cache. Its overlap table maps HCT116 `ACH-000971` GeneEffect without merging
+HCT116 and K562 rows by gene. The formal result covers 3,982 label-matched genes;
+full provenance, metrics, and the no-reuse decision are recorded in the
+[`closeout`](../results/exp05-hct116-frozen-backbone-transport.md).

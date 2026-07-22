@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "chunk_size": 64,
+  "pad_short": true,
+  "sample_gene_aggregation": "mean_chunks",
+  "gene_aggregation": "equal_mean_sample_gene",
+  "control_panel_size": 4096,
+  "random_seed": 42,
+  "covariance_floor": 0.0001,
+  "checkpoint_sha256": "48097722f5742a459b86ba6153dd21f145ff1a0e30dafa80061c325c2d46b811",
+  "preprocessing_contract_sha256": "3b517bb473dbfd58a3deb31b8b9b0d93a2882669fb1deb0bf701548950587ae2",
+  "k562_split_manifest_sha256": "c33dbe6cbdd78d0e590a9810eab8a47f74b1a7d1ff3d9872ceca26d65cd3d6ef"
+}

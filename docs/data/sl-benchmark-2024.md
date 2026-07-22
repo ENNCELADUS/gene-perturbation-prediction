@@ -2,9 +2,9 @@
 
 ## Role
 
-External synthetic-lethality pair benchmark for Stage 3. Use it to evaluate
-gene-pair SL scoring or ranking after K562 response features have been adapted
-to pair-level records.
+Primary general synthetic-lethality pair benchmark for comparison with the
+Feng2024 SOTA model zoo. Use the official 9,845-gene CV1/CV2/CV3 caches and metric
+implementation for the formal context-agnostic score `q(a,b)`.
 
 This is not a DepMap GeneEffect regression dataset and not a single-cell
 perturbation dataset. The supervised object is an undirected gene pair:
@@ -13,9 +13,10 @@ perturbation dataset. The supervised object is an undirected gene pair:
 (gene_a, gene_b) -> binary SL interaction label or pair score
 ```
 
-For this project, K562 perturbation-response features can be joined as evidence
-for one or both genes in a pair, but the benchmark label remains a gene-pair SL
-label.
+The main benchmark is not cell-line-specific. Contextual features may be
+aggregated into a declared context-agnostic score, but the benchmark label remains
+a generic curated gene-pair label and cannot establish cross-cell-line
+generalization.
 
 ## Sources
 
@@ -121,9 +122,10 @@ It also evaluates three negative sampling methods:
 | Expression-informed | `Exp` | Use DepMap cross-cell-line gene-expression correlation to select harder or more biologically controlled negatives. |
 | Dependency-informed | `Dep` | Use DepMap CRISPR dependency-score correlation to select negatives. |
 
-For this project, `Exp` and `Dep` need leakage warnings because they use DepMap
-expression or dependency information, and this repo's primary K562 task also
-uses DepMap GeneEffect labels.
+For this project, `Exp` and `Dep` need leakage warnings whenever model features or
+context supervision also use DepMap expression or dependency information. The
+primary formal comparison is therefore `Rand` 1:1; the other regimes are declared
+sensitivity analyses.
 
 ## Metrics
 
@@ -149,17 +151,17 @@ average precision over hits found in the top `k`.
 
 ## How to Use in This Project
 
-Use this benchmark as a pair-label adapter target, not as a replacement for the
-existing K562 GeneEffect task.
+Use this benchmark as the formal general pair-label target and SOTA comparison,
+not as a replacement for cell-line-resolved SL/GI evaluation.
 
-Recommended minimum route:
+Recommended formal route:
 
 ```text
-SL_benchmark data_split pair cache
+official SL_benchmark data_split pair cache
     -> convert unified_id pairs to gene symbols with fin_entities.csv
     -> build sl_pairs table with split, fold, label, negative sampling method
-    -> join K562 features by gene symbol
-    -> train/evaluate pair-level classifier or ranker
+    -> construct context-agnostic q(a,b) without changing the pair universe
+    -> train/evaluate alongside reproduced SOTA under identical cal_metrics
 ```
 
 Suggested canonical adapter schema:
@@ -180,7 +182,7 @@ split_role
 source_file
 ```
 
-Then build pair features by joining K562 response/dependency features:
+The historical K562 coverage ablation joins response/dependency features as:
 
 ```text
 pair_id
@@ -197,10 +199,10 @@ anchor_gene_effect_true
 anchor_observed_response_features
 ```
 
-For the first benchmark pass, include a `dependency_only` baseline using only
-K562 DepMap or predicted dependency scores. This checks whether broad
-essentiality explains the SL labels before attributing gains to transcriptomic
-or AIVC features.
+Retain that K562 `dependency_only` row as a prior floor, but do not let its gene
+coverage redefine the formal pair universe. The general benchmark ladder must
+also include gene-marginal/context-free controls that can score the full official
+universe under the same folds.
 
 ## K562 DepMap-Filtered Rand 1:1 CV1/CV2/CV3 Subset
 
@@ -209,14 +211,14 @@ CV1/CV2/CV3 Rand 1:1 split caches to pairs whose two genes both have numeric
 K562 DepMap GeneEffect values for `ACH-000551`, then writes per-split balanced
 tables and an all-CV concatenation for training and evaluation.
 
-Canonical K562 benchmark datasets (all under
+Historical K562 coverage-ablation datasets (all under
 `data/SL_benchmark/derived/k562_depmap_rand_1to1/`):
 
 ```text
 CV1_Rand_1to1_k562_depmap_pairs_balanced.csv
 CV2_Rand_1to1_k562_depmap_pairs_balanced.csv
 CV3_Rand_1to1_k562_depmap_pairs_balanced.csv
-all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv   # default benchmark input
+all_CV_Rand_1to1_k562_depmap_pairs_balanced.csv   # historical K562 baseline input
 ```
 
 Run:
@@ -286,9 +288,10 @@ positive: 165865
 negative: 165865
 ```
 
-This filtered dataset is K562-mappable by DepMap gene coverage. It is still not
-a cell-line-specific K562 SL assay unless a real `*_cell_k562.pkl` split is
-available and verified.
+This filtered dataset is K562-mappable by DepMap gene coverage. It is an ablation
+and prior-baseline surface, not the formal general benchmark and not a
+cell-line-specific K562 SL assay unless a real `*_cell_k562.pkl` split is available
+and verified.
 
 ## Official Reproduction Notes
 
@@ -323,6 +326,8 @@ uv run python <adapter_or_inspection_script>.py
   confirmed non-SL pairs.
 - Treat `CV1` as a pair split, not a held-out-gene split.
 - Prefer `CV2` or `CV3` for any claim about generalization to unseen genes.
+- Do not call CV2/CV3 cross-cell-line generalization; the main benchmark has no
+  held-out-cell-line axis.
 - Verify actual `*_cell_k562.pkl` files before claiming K562-specific SL
   benchmark execution. The local checkout checked on 2026-06-16 does not
   contain those files.

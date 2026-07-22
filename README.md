@@ -1,8 +1,8 @@
 <div align="center">
 
-  <h1 style="margin-top: 10px;">Synthetic-Lethality Discovery by Virtual-Cell Composition</h1>
+  <h1 style="margin-top: 10px;">Generalizable Synthetic-Lethality Discovery by Virtual-Cell Composition</h1>
 
-  <h2>Rank a gene's synthetic-lethal partners — for genes no SL graph has seen — by composing a virtual cell that predicts cancer-cell fitness outcomes from perturbation transcriptomes.</h2>
+  <h2>Discover synthetic-lethal gene pairs that generalize to genes withheld from SL-pair training and to held-out cancer cell-line contexts.</h2>
 
   <div align="center">
     <a href="https://github.com/ENNCELADUS/gene-perturbation-prediction/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/ENNCELADUS/gene-perturbation-prediction"/></a>
@@ -22,17 +22,19 @@
 
 </div>
 
-> **Status (2026-07-17):** Active direction — **synthetic-lethality discovery by virtual-cell composition**: compose the exp05 forward model (perturbation transcriptome → DepMap GeneEffect) into a pairwise interaction score, and beat the strong SOTA (SLMGAE, KR4SL) on the inductive cold-start splits. The prior staged dependency → SL program (below) shipped the pipeline and the numbers in [Results](#results) and is kept as **prior evidence and baselines**. Live contract, acceptance criteria, and roadmap: [`docs/README.md`](docs/README.md).
+> **Status (2026-07-21):** Active direction — **generalizable synthetic-lethality discovery by virtual-cell composition**. The first HCT116 frozen-K562-backbone single-gene transport audit is closed negative; it does not test pairwise or cross-cell-line SL. The official Feng2024 SOTA comparison and context-conditioned SL track remain pending. Live contract, acceptance criteria, roadmap, and results: [`docs/README.md`](docs/README.md).
 
 The central question of the active direction:
 
-> Can a virtual cell that predicts a gene's knockout fitness (DepMap GeneEffect) from its perturbation transcriptome be *composed* into a pairwise synthetic-lethality score that reaches genes no SL graph has seen — and beats the strong graph/knowledge-graph SOTA (SLMGAE, KR4SL) on the cold-start splits?
+> Can a perturbation-response-trained virtual cell be composed into an explicit pairwise interaction that beats strong SL-prediction SOTA for unseen genes and adds context-specific signal for cancer cell lines excluded from training?
 
-The intuition is mechanistic: **synthetic lethality is a combination fitness outcome.** If a virtual cell predicts single-gene fitness from the perturbation "shockwave," composing it — simulating the loss of one gene and re-reading the other's dependency (Bridge A), or forwarding the joint double-knockout (Bridge B) — should expose the pair-specific interaction that curated SL graphs only memorize. Single-gene GeneEffect alone is the ~0.70-AUROC floor, not the method.
+The intuition is mechanistic: **synthetic lethality is a combination fitness outcome.** If a virtual cell predicts single-gene fitness from the perturbation "shockwave," composing it — simulating the loss of one gene and re-reading the other's dependency (Bridge A), or forwarding the joint double-knockout (Bridge B) — should expose the pair-specific interaction that curated SL graphs only memorize. Single-gene GeneEffect alone is a prior K562-filtered floor (CV2 AUROC 0.704; CV3 0.596), not the method or the formal general-benchmark bar.
 
 ## *Latest News* 🔥
 
-- **[2026/07]** Research direction set to **SL discovery by virtual-cell composition** (contract: [`docs/01-blueprint.md`](docs/01-blueprint.md), bar: [`docs/02-acceptance-criteria.md`](docs/02-acceptance-criteria.md)). Two composition bridges — counterfactual co-dependency and virtual double-knockout — to beat the strong SOTA (SLMGAE, KR4SL) on the cold-start splits, validated against measured epistasis. (A close prior art, CILANTRO-SL, shares the graph-free framing; our novelty is the mechanism — see [`docs/03`](docs/03-literature-review.md).)
+- **[2026/07]** Formal HCT116 frozen-backbone audit closed negative: direct K562 GeneEffect transfer remained strong (Spearman 0.554), but the response head collapsed and added no independent HCT116 signal. This is single-gene backbone evidence, not cross-cell-line SL. [`Closeout`](docs/results/exp05-hct116-frozen-backbone-transport.md).
+- **[2026/07]** Research contract expanded from a K562-only formulation to a **general SL discovery model**. Feng2024 CV2/CV3 test genes withheld from SL-pair/graph training; held-out-cell-line splits separately test unseen contexts. K562 remains the current backbone and one mechanistic anchor.
+- **[2026/07]** Two composition bridges — counterfactual co-dependency and virtual double knockout — are specified to beat strong SOTA (SLMGAE, KR4SL), survive context/pan-essentiality controls, and match measured GI.
 - **[2026/06]** Stage 3 SL pair benchmark adapter and dependency-only baseline shipped (`src/sl_benchmark_baseline/`); official-metric CV1/CV2/CV3 rerun completed.
 - **[2026/06]** Experiment 05 AIVC STATE A→B→C forward-model pipeline reviewed, including a frozen-STATE feature ablation track.
 - **[2026/05]** Single-cell Deep Sets, attention-MIL, and distribution/prototype regressors landed with Adamson K562 external transfer.
@@ -40,10 +42,11 @@ The intuition is mechanistic: **synthetic lethality is a combination fitness out
 
 ## Why This Project?
 
-Most SL predictors do link prediction over a curated SL graph — powerful on seen genes, blind on unseen ones. This project brings signal from *outside* the graph: a virtual cell that predicts cancer-cell fitness from the perturbation transcriptome, composed into a pairwise interaction that reaches genes no screen has touched.
+Most SL predictors do link prediction over a curated SL graph — powerful on seen genes, weak on unseen ones, and usually not conditioned on an explicit cellular context. This project brings signal from *outside* the graph: a virtual cell that predicts cancer-cell fitness from perturbation response, composed into a pairwise interaction for both general pair ranking and held-out-cell-line transfer.
 
 - **🔗 Composes, not memorizes** — Turns a single-gene fitness model into a pairwise SL score via an explicit interaction null, instead of reading topology off an SL graph.
 - **🧊 Inductive by construction** — The score reads from gene features (ESM2 identity + predicted perturbation biology), so it works on cold-start (CV2/CV3) genes where transductive SOTA breaks.
+- **🌐 Context-resolved evaluation** — Unseen-gene performance on Feng2024 and unseen-cell-line performance are separate binding claims; neither is used as a proxy for the other.
 - **🧪 Observed-first methodology** — Validates that *observed* response carries dependency signal before trusting any *predicted* transcriptome, so forward-model error never silently inflates results.
 - **🪜 Honest baseline ladder** — Dummy → ridge → PCA → tabular nonlinear → MIL/foundation models, so every gain is measured against a simpler control.
 - **🚪 Fold-local, no-leakage CV** — A→B models, featurizers, GMM prototypes, and C-heads are all fit on train genes only, inside each fold.
@@ -70,16 +73,15 @@ uv run python -m pytest
 
 ## Research Framing
 
-> **Status:** contract and acceptance criteria established; related-work review and experiment roadmap pending; forward model (exp05) in progress. Live contract and status board: [`docs/README.md`](docs/README.md).
+> **Status:** general-model contract, claim-level acceptance criteria, literature review, and experiment roadmap established; the first HCT116 frozen-backbone audit closed negative. Phase 0 effect-size/eligibility registration, official SOTA reproduction, multi-cell-line data audit, and contextual SL model remain pending. Live status board: [`docs/README.md`](docs/README.md).
 
 ```text
-Rank a gene's synthetic-lethal partners — for genes no SL screen or SL graph
-has ever seen. SL is a combination fitness outcome; a virtual cell that predicts
-single-gene fitness from the perturbation transcriptome, composed into a pairwise
-interaction, can reach the cold-start genes transductive SOTA cannot.
+Discover synthetic-lethal pairs for genes withheld from the SL graph and for
+cancer cell lines withheld from model development. The first axis is evaluated on
+Feng2024 CV2/CV3; the second requires explicit held-out-cell-line data.
 ```
 
-Graph/knowledge-graph SL predictors (SLMGAE, KR4SL, KG4SL, and the wider Feng2024 zoo) are *transductive* models: their signal is SL-graph topology, so they are strong on seen genes (CV1) but break on unseen genes (CV2 → CV3) and cannot score genes with no curated SL edges. This program brings signal from outside the graph, via two composition bridges:
+Graph/knowledge-graph SL predictors (SLMGAE, KR4SL, KG4SL, and the wider Feng2024 zoo) rely heavily on graph relations and degrade as genes are withheld (CV1 → CV2 → CV3). This program compares against them on the official 9,845-gene benchmark, then separately evaluates context-conditioned transfer to unseen cell lines. The main Feng2024 benchmark is not a K562 assay and does not test cell-line generalization.
 
 - **Bridge A — counterfactual co-dependency.** Simulate loss of `a`, then predict `b`'s GeneEffect in the `a`-lost state; SL = the dependency spike. Uses only single-gene labels.
 - **Bridge B — virtual double-knockout.** Forward the joint `a+b` perturbation → joint fitness; SL = the interaction residual vs. an explicit additive/min null. Validated against measured epistasis.
@@ -89,8 +91,8 @@ The full contract — estimands, acceptance criteria, gate verdicts, and the dec
 - [`docs/README.md`](docs/README.md) — vault index and status board.
 - [`docs/01-blueprint.md`](docs/01-blueprint.md) — the frozen research contract.
 - [`docs/02-acceptance-criteria.md`](docs/02-acceptance-criteria.md) — the bar a result must clear to count as an answer. Frozen before evidence.
-- [`docs/03-literature-review.md`](docs/03-literature-review.md) — related work (pending rewrite).
-- [`docs/04-roadmap.md`](docs/04-roadmap.md) — the experiment roadmap (pending rewrite).
+- [`docs/03-literature-review.md`](docs/03-literature-review.md) — related work and novelty boundaries.
+- [`docs/04-roadmap.md`](docs/04-roadmap.md) — the active experiment roadmap.
 
 ### Prior Program (Retired as Roadmap, Kept as Evidence)
 
@@ -167,7 +169,9 @@ uv run python src/aivc_model/state_feature_ablation.py \
 
 ### Conceptual Framing
 
-The project closes a triangle: two edges (data → response, response → dependency) are provided by existing data, and the model focuses on the **transcriptome → death / essentiality** edge.
+The prior dependency pipeline closes a triangle: two edges (data → response,
+response → dependency) are provided by existing data, and the model focuses on
+the **transcriptomic response → single-gene GeneEffect** edge.
 
 ### Pipeline Tracks
 
@@ -227,6 +231,16 @@ The project closes a triangle: two edges (data → response, response → depend
 
 Headline numbers from the implemented baselines. These are the **floor and baselines** for the active composition direction (see [Research Framing](#research-framing)) — the dependency-only SL floor and the observed-transcriptome result the composition must beat, plus the single-gene forward-model signal it builds on. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
+### HCT116 Frozen-K562-Backbone Transport (formal one-shot audit, 2026-07-21)
+
+On the 1,652-gene primary cohort, direct K562 GeneEffect transfer retained
+Spearman **0.554**, while the frozen response head reached **-0.001** with a
+collapsed prediction standard deviation of 0.059 versus 0.409 for HCT116
+GeneEffect. A post-unseal diagnostic controlling for K562 GeneEffect gave
+partial Spearman about -0.005. The failed path is HCT116 observed response through the frozen K562
+fitness head; this is not a pairwise SL or cross-cell-line SL result. Full
+protocol, metrics, and interpretation: [`docs/results/exp05-hct116-frozen-backbone-transport.md`](docs/results/exp05-hct116-frozen-backbone-transport.md).
+
 ### Single-Cell Bag → Dependency (Track 2, Adamson K562 external transfer)
 
 The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson **Spearman ≈ 0.67**, **AUROC ≈ 0.91**, **AUPRC ≈ 0.80**, with held-out-gene Spearman ≈ 0.64 — clearing the original distribution-regression gate and beating the earlier scVI128 single-head gated-attention row. Full tables: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
@@ -249,16 +263,17 @@ The degree-probe control (Model C) scores highest on CV1 — a reminder that pai
 | --- | --- | --- |
 | Perturb-seq / CROP-seq / CRISPRi-seq | Mechanistic response input | Post-perturbation scRNA-seq, pseudobulk signatures, delta expression. |
 | DepMap / Achilles / CCLE | Supervision and context | CRISPR gene-effect scores, dependency labels, omics, lineage, mutation context. |
-| SL_benchmark 2024 (SynLethDB-derived) | External SL pair benchmark | Gene-pair SL labels, CV1/CV2/CV3 splits, pair-ranking metrics. Used via a pair-level adapter; not a K562 GeneEffect label source. |
+| SL_benchmark 2024 (SynLethDB-derived) | General SL pair benchmark | Official 9,845-gene labels, CV1/CV2/CV3 splits, pair-ranking metrics, and SOTA zoo. Not cell-line-specific. |
 | CancerSCEM / SCAR / CancerSEA | State annotation | Apoptosis, stress, cell-cycle, EMT, DNA-damage interpretation. |
-| TCGA / patient omics | Disease context | Biomarker framing and translational interpretation after cell-line proof-of-concept. |
+| Cell-line-resolved combinatorial screens | Cross-context evaluation | Required for held-out-cell-line SL/GI evaluation; roles must be frozen before modeling. |
+| TCGA / patient omics | Disease context | Future biomarker framing only; not evidence of cell-line or patient generalization under the current protocol. |
 | LINCS L1000 / Tahoe-100M | Later extensions | Bulk or drug perturbation expansion once the gene-perturbation task is stable. |
 
-> **Data rules**: Prioritize CRISPRi or knockout Perturb-seq for DepMap alignment. K562 is the proof-of-concept line. Norman CRISPRa is auxiliary, not primary label alignment. DepMap labels are population-level fitness readouts, not single-cell death.
+> **Data rules**: Prioritize CRISPRi or knockout Perturb-seq for DepMap alignment. K562 is the current backbone, not the target scope. Cross-cell-line claims require untouched cell lines with pairwise SL/GI labels; single-gene GeneEffect transfer is insufficient. Norman CRISPRa is auxiliary, and DepMap labels are population-level fitness readouts, not single-cell death.
 
 ## Documentation
 
-- [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D evaluation semantics used by the SL benchmark and forward model. (Retired cell-fate terms may linger there pending cleanup.)
+- [`CONTEXT.md`](CONTEXT.md) — glossary of A / B / B_hat / C / D evaluation semantics used by the SL benchmark and forward model, plus a clearly marked retired glossary for prior artifacts.
 - [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents.
 - [`docs/README.md`](docs/README.md) — research vault index: contract, acceptance criteria, gate verdicts, decision and roadmap, results.
 - [`docs/data/`](docs/data/) — dataset cards for downloaded data.
@@ -291,17 +306,21 @@ Follow the **Plan → Confirm → Code** workflow for non-trivial research or im
 
 - Say **dependency / GeneEffect prediction** for the single-gene supervised task; **SL candidate prioritization** for the pairwise score — never "validated SL target" (benchmark negatives are unconfirmed).
 - Do not claim SL from single-gene essentiality; an explicit interaction null is required.
-- Generalization claims come only from CV2/CV3; CV1 is the degree-gameable diagnostic.
+- CV2/CV3 support SL-pair/graph-gene-cold claims only; CV1 is the degree-gameable diagnostic. Cross-cell-line claims require separate untouched cell-line splits.
+- Qualify “unseen gene”: Feng2024 establishes absence from SL-pair/graph training,
+  not necessarily from auxiliary response, GeneEffect, or foundation-model
+  pretraining data.
 - A pan-essentiality lift is not an SL result — report the non-pan-essential slice.
 - The virtual double-knockout is an extrapolation of a single-perturbation backbone; its benchmark rank is not mechanistic proof until it matches measured epistasis.
 - Do not call DepMap GeneEffect a single-cell death label; it is a single-gene relative growth-rate effect.
 - Norman CRISPRa is auxiliary only, never aligned to knockout labels without the modality caveat.
+- A K562-mappable Feng2024 subset is not a K562-specific SL assay, and the main Feng2024 benchmark cannot establish cell-line generalization.
 
 ---
 
 <div align="center">
   <p>
-    <strong>Active direction: synthetic-lethality discovery by virtual-cell composition. The dependency-prediction pipeline is retained as prior evidence and baselines.</strong><br>
+    <strong>Active direction: generalizable synthetic-lethality discovery by virtual-cell composition, evaluated separately for unseen genes and unseen cell lines.</strong><br>
     <sub>See <a href="docs/README.md">docs/README.md</a> for the live contract, acceptance criteria, and roadmap.</sub>
   </p>
 </div>

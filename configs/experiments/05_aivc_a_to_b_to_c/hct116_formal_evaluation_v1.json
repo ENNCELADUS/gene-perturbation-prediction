@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "formal_prediction_contract_sha256": "808934e89f2e4c98b3b28d652547d612a40c78599e833a3ff8183e2eb718ca7a",
+  "prediction_seal_sha256": "ebf741dfff450dc5a1ece144a12fc3268d976b3be3e365833e0261d4ee6f5d06",
+  "hct116_label_table_sha256": "558bd6a0e775a1d0f354488c45cd5a54dc292c8ea7fd364d338ebd639125a5c2",
+  "k562_transfer_table_sha256": "9569be745495169fe4a584aac70ade94fda10f0b994aa256af9436cc1b906931",
+  "primary_scope": "e_shared_train",
+  "scopes": [
+    "e_shared_train",
+    "e_double_shift",
+    "e_all",
+    "e_selection_exposed"
+  ],
+  "essentiality_thresholds": [-0.5, -1.0],
+  "bootstrap_replicates": 1000,
+  "bootstrap_seed": 42,
+  "top_fraction": 0.05
+}

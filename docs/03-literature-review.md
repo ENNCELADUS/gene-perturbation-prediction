@@ -1,19 +1,19 @@
 # Literature Review: Related Work and Novelty
 
-**Status:** compiled 2026-07-17 from a four-agent literature review (local `docs/literature/` vault + arXiv/bioRxiv/Semantic Scholar). Supersedes the retired cell-fate literature funnel (preserved in git history and `ideaspark_run/`).
+**Status:** compiled 2026-07-17 from a four-agent literature review (local `docs/literature/` vault + arXiv/bioRxiv/Semantic Scholar) for the active general SL discovery program. Retired cell-fate evidence remains in git history and `ideaspark_run/`.
 **What this is:** the related-work landscape and an honest novelty adjudication for the virtual-cell SL composition program.
 **Companions:** [`01-blueprint.md`](01-blueprint.md) (contract) · [`02-acceptance-criteria.md`](02-acceptance-criteria.md) (bar).
 **Detailed per-slice syntheses (evidence tables, full citations):** [`results/literature-review-2026-07/`](results/literature-review-2026-07/) — slice 1 (SL methods), slice 2 (virtual-cell models), slice 3 (epistasis), slice 4 (dependency + novelty).
 **Verification note:** cold-start benchmark numbers verified directly from `data/SL_benchmark/src/summary_all_matrics.csv`; CILANTRO-SL verified to exist (bioRxiv `10.64898/2026.02.25.708096`). Numbers taken from a preprint's own text are attributed as such.
 
-## 0. Headline — what this review changes in the contract
+## 0. Headline — implications for the current contract
 
-The review surfaced four findings that touch the frozen contract. They are documented here; the specific `01`/`02` edits are proposed in §6 and are **not yet applied** (freeze rule — the user approves them).
+The review establishes four constraints on the general SL discovery program.
 
 1. **Novelty must be repositioned.** A contemporaneous bioRxiv preprint, **CILANTRO-SL** (Hua, Haber & Ma, CMU, Feb 2026), is a near-duplicate of the "graph-free, inductive SL from a foundation-model in-silico knockout supervised by DepMap viability, beats KG4SL cold-start" framing. That framing is **no longer novel on its own**. What survives adversarial search (all four agents independently) is the *mechanism*: a **perturbation-response-trained** virtual cell composed via an **explicit interaction null** (joint double-KO or sequential counterfactual) and **validated against measured epistasis**.
-2. **KG4SL is the wrong north-star.** Verified: KG4SL CV3 AUROC **0.562** (below our own 2-feature dependency floor, 0.596). The real cold-start bars are **SLMGAE** (CV3 AUROC **0.790**, NDCG@10 **0.039**) and **KR4SL** (flagged strongest-at-CV3 by Feng2024's own text).
+2. **KG4SL is the wrong north-star.** Verified: KG4SL CV3 AUROC **0.562** (below our own 2-feature dependency floor, 0.596). The published orientation points favor **SLMGAE** (CV3 AUROC **0.790**, NDCG@10 **0.039**) and **KR4SL** (flagged strongest-at-CV3 by Feng2024's own text); the formal bar remains pending an eligible reproduction under the official harness.
 3. **Bridge B has a named, evidenced failure mode.** Multiple independent 2025–26 benchmarks find deep perturbation models **underestimate synergy** and, for *double* perturbations, do **worse than a naive additive baseline** (Ahlmann-Eltze 2025; Systema 2025). The virtual double-KO may systematically miss the non-additivity SL is made of — so the explicit null and the measured-epistasis check are load-bearing, not optional.
-4. **The measured-epistasis data plan is partly wrong.** The "Jost/Replogle dual-sgRNA" file is a *single-gene* knockdown-efficacy resource, **not** a genetic-interaction dataset. The only real local combinatorial-CRISPRi anchor is **Adamson 2016 UPR epistasis** (tiny: 3 sensors + combos, transcriptomic-only). The genuine fitness-GI gold standard is **Horlbeck 2018** (K562, ~222k pairs) — not confirmed local, and partly circular with the benchmark's K562 labels.
+4. **Measured-GI evidence is presently context-limited.** The "Jost/Replogle dual-sgRNA" file is a *single-gene* knockdown-efficacy resource, **not** a genetic-interaction dataset. The only real local combinatorial-CRISPRi anchor is **Adamson 2016 UPR epistasis** (tiny: 3 sensors + combos, transcriptomic-only). The K562 arm of **Horlbeck 2018** provides a fitness-GI anchor but cannot alone establish cross-cell-line mechanism; its Jurkat arm is a candidate non-K562 context that still requires a data and independence audit.
 
 ## 1. Synthetic-lethality prediction and the cold-start critique
 
@@ -32,9 +32,9 @@ The field's unifying benchmark is **Feng et al. 2024** (*Nat. Commun.*), which r
 | DDGCN | 0.783 | 0.008 | 0.485 | 0.005 |
 | SLGNN | 0.735 | 0.045 | 0.530 | 0.000 |
 
-Pattern: **AUROC stays deceptively >0.5 into CV3 while NDCG@10 collapses to ~0** — models separate positives from negatives within a fixed test set but cannot *rank* a gene's true partners near the top of ~9,800 candidates, the operationally relevant failure. SLMGAE is the only model whose CV3 NDCG@10 clears 0.01. (Note: the pan-cancer CSV's ranking columns are corrupted for some models — GRSMF/SLGNN show NDCG > 1 — so the **K562 reproduction** in `docs/archive/report/tables/benchmark_published.csv` is the cleaner local ranking reference: GRSMF CV3 NDCG@10 0.313, DDGCN 0.243, SLGNN 0.000. KG4SL and SLMGAE were **not** reproduced on K562 and must be.)
+Pattern: **AUROC stays deceptively >0.5 into CV3 while NDCG@10 collapses to ~0** — models separate positives from negatives within a fixed test set but cannot *rank* a gene's true partners near the top of ~9,800 candidates, the operationally relevant failure. SLMGAE is the only listed model whose CV3 NDCG@10 clears 0.01. Some published aggregate ranking columns are internally invalid (for example, NDCG greater than 1), so the formal bar must come from a verified reproduction of the **official general benchmark**. The repo's earlier K562-DepMap-filtered reproduction is useful prior evidence but is a different coverage surface and is not the SOTA comparison harness.
 
-**Why CV1 is a degree trap (this repo's own diagnostic, exp06):** a "degree probe" scoring a pair purely as `train_degree[a]·train_degree[b]` — zero biology — is the single **best** CV1 ranker (NDCG@10 0.197) and collapses to 0.001 on CV2. CV1 rewards topology, not biology; generalization claims come only from CV2/CV3.
+**Why CV1 is a degree trap (this repo's own diagnostic, exp06):** a "degree probe" scoring a pair purely as `train_degree[a]·train_degree[b]` — zero biology — is the single **best** CV1 ranker (NDCG@10 0.197) and collapses to 0.001 on CV2. CV1 rewards topology, not biology; unseen-gene claims come only from CV2/CV3, while unseen-cell-line claims require a separate split.
 
 **Ground truth is itself unstable:** SLKB (Gökbağ 2024) shows five SL-scoring formulas over the same raw dual-KO screens agree on only **1.21%** of their top-10% calls. Some CV2/CV3 "failure" is label disagreement, not absent signal.
 
@@ -55,7 +55,7 @@ Forward perturbation prediction has two lineages: generative/representation (scG
 ## 3. Genetic interaction / epistasis: measurement, nulls, prediction
 
 **Measured GI landscapes (what Bridge B validates against):**
-- **Horlbeck 2018** (*Cell*): dual-sgRNA CRISPRi/a GI map, ~222,784 gene pairs, **K562** (+Jurkat) — the gold-standard fitness-GI reference, and (per slice 3) the likely source of Feng2024's K562 SL positive labels, which creates a **circularity** to manage.
+- **Horlbeck 2018** (*Cell*): dual-sgRNA CRISPRi/a GI map, ~222,784 gene pairs, **K562** (+Jurkat) — a fitness-GI reference for context-matched mechanistic validation. Any overlap with SynLethDB/Feng2024 labels must be audited and excluded from calibration/evaluation overlap.
 - **Norman 2019** (*Science*): K562 **CRISPRa** combinatorial Perturb-seq; the 5-subtype GI taxonomy (synergy/suppression/neomorphism/redundancy/epistasis). Auxiliary (modality caveat).
 - **Adamson 2016** (*Cell*): K562 **CRISPRi** single + combinatorial UPR epistasis (ATF6/PERK/IRE1). The **only real local combinatorial-CRISPRi dataset** — but tiny (3 sensors + 4 combos, transcriptomic epistasis only, no fitness GI).
 - **Jost/Replogle dual-sgRNA (GSE205310):** **NOT a GI dataset** — two guides per *single* gene for knockdown efficacy (403/150 target genes). Remove from the epistasis plan; usable only as a single-gene CRISPRi response supplement.
@@ -87,12 +87,13 @@ Ranked by closeness, with what each does **not** do:
 
 Lead the contribution with the **mechanism and mechanistic validation**, not "graph-free/inductive."
 
-## 6. Implications for the contract (`01`/`02`) — proposed, not yet applied
+## 6. Implications carried into the contract (`01`/`02`)
 
-1. **Reposition novelty** (`01` §2, §7, §10; `02` framing): lead with the mechanistic virtual-cell composition (Bridge B double-KO + explicit null; Bridge A counterfactual) + measured-epistasis validation; demote "graph-free/inductive" to a shared design property; add CILANTRO-SL and exp08 as the explicit reference points to beat/differentiate from.
-2. **Fix the north-star** (`01` §5/§7, §10 #1; `02` SOTA reference): center **SLMGAE** (CV3 AUROC 0.790) and **KR4SL**; keep KG4SL only as a named-but-weak reference; make reproducing SLMGAE + KR4SL (+KG4SL) under the identical K562 harness a hard prerequisite.
-3. **Rework the measured-epistasis criterion** (`01` §6.2/H3, §7.2, §9 Data Rules; `02` MECHANISTIC): drop Jost as a GI anchor; keep Adamson UPR as a small **qualitative transcriptomic** check; make **Horlbeck 2018** the fitness-GI anchor to acquire, and handle the **benchmark-label circularity** (validate on continuous GI for pairs/genes disjoint from the benchmark positives).
-4. **Add Bridge B's synergy-underestimation risk** (`01` §6, §11 risks): state that FMs compress synergy; require the explicit-null decomposition and the GenePert-style linear ablation as guards.
+1. **Lead with mechanism:** virtual-cell composition, an explicit interaction null, and measured-GI validation; graph-free induction is shared prior art.
+2. **Use the correct benchmark:** reproduce SLMGAE, KR4SL, KG4SL, and the relevant official ladder on the main Feng2024 9,845-gene benchmark. Do not substitute the K562-DepMap-filtered subset.
+3. **Separate generalization axes:** Feng2024 CV2/CV3 test unseen genes, not unseen cell lines. Cross-cell-line claims require a context-conditioned model and untouched cell-line splits.
+4. **Expand measured-GI scope:** the K562 Horlbeck arm and Adamson can support K562 mechanism only; a multi-cell-line mechanistic claim needs an eligible non-K562 context, with the Horlbeck Jurkat arm as one candidate to audit.
+5. **Guard Bridge B:** retain explicit additive/min nulls and the GenePert-style linear ablation because synergy compression is a known failure mode.
 
 ## 7. Required baselines and ablations (for the experiment plan, `04`)
 
@@ -100,9 +101,9 @@ Lead the contribution with the **mechanism and mechanistic validation**, not "gr
 - **GenePert-style cheap ablation**: linear/L2 model on ESM2 (and GenePT) embeddings + additive/min combination rule — the machinery must beat this.
 - **Tahoe-x1 essentiality head** on STATE's post-KO output — the "obvious alternative Bridge A."
 - **GEARS-as-SL** — its GI residual as a pseudo-`s(a,b)` (note the transcriptome-vs-fitness axis).
-- **CILANTRO-SL** — reproduce/compare on the K562 harness if feasible; at minimum differentiate head-to-head.
+- **CILANTRO-SL** — reproduce/compare on the official general benchmark if feasible; at minimum differentiate head-to-head.
 - **exp08 re-run** — the prior failed attempt, as the internal control the new composition must clear.
-- **SLMGAE, KR4SL, KG4SL** — reproduce under the identical K562 `cal_metrics` harness (only DDGCN/GRSMF/SL2MF/SLGNN reproduced so far).
+- **SLMGAE, KR4SL, KG4SL** — reproduce under the identical official Feng2024 `cal_metrics` harness; prior K562-filtered reproductions are ablations, not substitutes.
 
 ## 8. Key references (bibkeys → why cited)
 

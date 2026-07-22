@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "contract_id": "hct116-replogle-relative-z-v1",
+  "target_sum_policy": "median_non_targeting_library_size",
+  "log1p": false,
+  "relative_control_zscore": true,
+  "zscore_groupby": "sample",
+  "zscore_ddof": 0,
+  "zero_variance_policy": "unit_denominator",
+  "provenance_verified": true,
+  "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9380471/#sec7",
+  "k562_h5ad_sha256": "f53d71c787928d1c78ae0f142a4f7360b32bc37bc001d39adab33acc419fb17e",
+  "k562_reference_controls_sha256": "10c278ff3c35e45d0e0fe7289e1d6130fedb5a92c9d584016af8df93847c0c0c",
+  "frozen_checkpoint_sha256": "48097722f5742a459b86ba6153dd21f145ff1a0e30dafa80061c325c2d46b811",
+  "feature_fill_values_sha256": "d531f333c1e52580b257db2333ef63a4ea53f7de522a7ada131950b0f9b09595",
+  "state_var_dims_sha256": "e37e133d276aca89ee193356a546a26376cd6757ddb02e068b1f09429918a269"
+}
