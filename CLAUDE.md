@@ -4,17 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) and Codex when worki
 
 ## Quick Context
 
-- **Active project**: synthetic-lethality discovery by virtual-cell composition.
-  Compose the exp05 forward model (perturbation transcriptome -> DepMap
-  GeneEffect) into a pairwise interaction score, and beat the strong graph/KG SOTA
-  (**SLMGAE, KR4SL**; KG4SL is weak at cold-start) on the inductive cold-start
-  splits where they break. The graph-free/inductive framing is shared with prior
-  art (CILANTRO-SL); the contribution is the mechanism + measured-epistasis
-  validation (see [`docs/03`](docs/03-literature-review.md)).
-- **Status**: contract (`01`) and acceptance criteria (`02`) established;
-  related-work review (`03`) and experiment roadmap (`04`) pending; forward model
-  (exp05) in progress on branch `codex/exp05-k562-fixed-pool`. **No SL graph in
-  the feature path.**
+- **Active project**: generalizable synthetic-lethality discovery by virtual-cell
+  composition. First compare with the strong SOTA (**SLMGAE, KR4SL**) on the
+  official Feng2024 SL-pair/graph-gene-cold benchmark; separately evaluate a
+  context-conditioned score on cancer cell lines excluded from training. The main
+  Feng2024 benchmark is not cell-line-specific.
+- **Status**: contract (`01`), claim-level acceptance criteria (`02`),
+  related-work review (`03`), and experiment roadmap (`04`) established. Phase 0
+  effect-size/eligibility/estimator registration, official SOTA reproduction, the
+  multi-cell-line data audit, and contextual model are pending. The current exp05
+  K562 forward model is an initial backbone. **No SL graph in the feature path.**
 - **Authority**: the vault under `docs/`, not this file. Start at
   [`docs/README.md`](docs/README.md).
 - **The code is now central, not retired.** `src/aivc_model/` (exp05) is the
@@ -26,21 +25,28 @@ This file provides guidance to Claude Code (claude.ai/code) and Codex when worki
 
 ## Research Direction
 
-The task is graph-free, inductive SL partner ranking in K562: learn `s(a,b)` with
-**no SL graph in the feature path**. The mechanism composes the exp05 virtual cell
-into a pairwise interaction, two ways, compared head-to-head:
+The task is general SL partner discovery with two explicitly separate scores:
 
-- **Bridge A (counterfactual co-dependency)** — simulate loss of `a`, predict
-  `b`'s GeneEffect in the `a`-lost state; SL = the dependency spike. Single-gene
-  labels only.
+- `q(a,b)` for context-agnostic comparison on the official Feng2024 benchmark;
+- `s(a,b | c)` for transfer to untouched held-out cancer cell lines.
+
+Feng2024 CV2/CV3 test unseen genes, not unseen cell lines. K562 is the current
+backbone and one measured-GI context, not the scope of the target model. The
+mechanism composes a context-conditioned virtual cell into a pairwise interaction,
+two ways, compared head-to-head:
+
+- **Bridge A (counterfactual co-dependency)** — in cell line `c`, simulate loss of
+  `a`, then predict `b`'s GeneEffect in the `a`-lost state; SL = the symmetrized
+  dependency spike. Single-gene labels only.
 - **Bridge B (virtual double-knockout)** — forward the joint `a+b` perturbation ->
-  joint fitness; SL = interaction residual vs. an explicit additive/min null.
-  Validated against measured epistasis (Horlbeck 2018 K562 GI, to acquire; Adamson
-  UPR as a small local check). Caveat: foundation models underestimate synergy on
-  double perturbations, so the explicit null + a GenePert-style linear ablation are
-  guards (see [`docs/03`](docs/03-literature-review.md) §2).
+  joint fitness in `c`; SL = interaction residual vs. an explicit additive/min
+  null. K562 Horlbeck/Adamson can support K562 mechanism only; multi-cell-line
+  mechanism needs a non-K562 GI anchor. Foundation models underestimate synergy on
+  double perturbations, so the explicit null + a GenePert-style linear ablation
+  are guards (see [`docs/03`](docs/03-literature-review.md) §2).
 
-Single-gene GeneEffect alone is the ~0.70-AUROC floor, not the method. The
+Single-gene GeneEffect alone is a prior K562-filtered floor (CV2 AUROC 0.704;
+CV3 0.596), not the method or the formal general-benchmark bar. The
 contract, acceptance criteria, and roadmap live in the vault. Do not restate them
 here — link to them.
 
@@ -53,7 +59,7 @@ here — link to them.
    (roadmap) > `docs/results/`. **When two documents conflict, flag it — do not
    resolve it unilaterally.**
 2. **Freeze rule.** `01` and `02` are frozen. Change them by editing **in place** —
-   **never** by writing a new file. `01` §10 Locked Decisions are settled; changing
+   **never** by writing a new file. `01` §9 Locked Decisions are settled; changing
    one is a change of research program, not a refinement.
 3. **The vault is a snapshot, not a changelog.** It states what is true now. Do not
    add revision histories, "what we got wrong" sections, or superseded-claim logs —
@@ -96,9 +102,10 @@ entrypoints need assets that are not in the repo.
 | `src/sl_dl_model/` | STATE-adapter deep model for SL-pair ranking. | `uv run python -m sl_dl_model` |
 | `src/ddgcn/` | DDGCN reproduction on the SL benchmark. | `uv run python -m ddgcn` |
 
-**What the current direction uses:** `src/aivc_model/` (exp05) is the composition
-backbone; `src/sl_benchmark_baseline/` + `data/SL_benchmark/` (Feng2024 zoo incl.
-`kg4sl`, `slmgae`) are the benchmark, dependency-only floor, and SOTA baselines;
+**What the current direction uses:** `src/aivc_model/` (exp05) is the current K562
+composition backbone to be extended across contexts;
+`src/sl_benchmark_baseline/` + `data/SL_benchmark/` (Feng2024 zoo incl. `kg4sl`,
+`slmgae`) are the general benchmark, dependency-only floor, and SOTA baselines;
 `src/dependency_baseline/` supplies the swap-invariant GeneEffect features and
 residualization machinery. The only local combinatorial-CRISPRi set is
 `data/sl_dependency_v0/raw/adamson/adamson_2016_upr_epistasis.h5ad` (small,
@@ -111,7 +118,12 @@ program are under `docs/archive/` (untracked, gitignored).
 
 ## Data Rules
 
-- K562 is the proof-of-concept line. Prioritize CRISPRi / knockout Perturb-seq.
+- K562 is the current backbone and one mechanistic context, not the target scope.
+  Prioritize CRISPRi / knockout Perturb-seq across multiple cell lines.
+- Cross-cell-line SL claims require pairwise labels in untouched held-out cell
+  lines. Single-gene GeneEffect transfer does not satisfy that contract.
+- The official Feng2024 benchmark is not cell-line-specific. A K562-DepMap-filtered
+  subset is a coverage ablation, not a K562 SL assay or the formal SOTA harness.
 - Norman is CRISPRa — auxiliary only, never aligned to knockout labels without a
   modality caveat.
 - Measured epistasis for the virtual double-KO: **Horlbeck 2018** K562 GI (to
@@ -141,8 +153,10 @@ Binding on all writing, per the contract's claim boundaries
   Rand negatives are unconfirmed non-SL.
 - **Never claim SL from single-gene essentiality.** An explicit interaction null
   is required (`interaction = joint - psi(singles)`; declare `psi`).
-- **Generalization claims come only from CV2/CV3.** CV1 is degree-gameable and is
-  a diagnostic, never evidence of cold-start generalization.
+- **Name the generalization axis.** CV2/CV3 support genes unseen to SL-pair/graph
+  training only; disclose auxiliary-data and pretraining exposure separately.
+  CV1 is diagnostic. Cross-cell-line claims require untouched cell-line splits
+  and per-line reporting.
 - **A pan-essentiality lift is not an SL result.** Report the non-pan-essential
   slice; a win that vanishes there is downgraded.
 - **The virtual double-knockout is an extrapolation** of a single-perturbation
@@ -150,6 +164,8 @@ Binding on all writing, per the contract's claim boundaries
   measured-epistasis bar.
 - **A benchmark rank is not a mechanism.** Do not infer causation, fate
   commitment, mechanism, or manipulability from predictive ranking.
+- **K562 mechanism is not multi-cell-line mechanism.** Multi-cell-line mechanistic
+  claims require measured GI in at least one eligible non-K562 context.
 - **Norman CRISPRa is auxiliary only**, never aligned to knockout labels without
   the modality caveat.
 - **A single-fold or test-fold-selected result is not a result.** Report 5-fold

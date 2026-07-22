@@ -1,138 +1,253 @@
-# Decision and Roadmap
+# Experiment Roadmap: Generalizable SL Discovery
 
-**Status:** RETIRED-PROGRAM DOCUMENT — the cell-fate outcome-dynamics roadmap, not the active plan. The active direction is the virtual-cell SL composition program ([`01-blueprint.md`](01-blueprint.md)); the new experiment roadmap is **pending** (after the related-work review). Retained as prior evidence; not deleted.
-**Graded against:** [`docs/02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Evidence:** [`docs/03-literature-review.md`](03-literature-review.md) · **Contract:** [`docs/01-blueprint.md`](01-blueprint.md)
+**Status:** active plan. The first HCT116 frozen-K562-backbone single-gene audit
+completed with a negative transport result; no Bridge A/Bridge B, formal SOTA,
+or pairwise cross-cell-line result has completed.
+**Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**
+[`02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Related work:**
+[`03-literature-review.md`](03-literature-review.md)
 
-## 1. The decision
+## 1. Objective and order of operations
 
-Both candidates: **`narrow-or-pivot`**.
+Build and evaluate a general synthetic-lethality discovery model in two stages:
 
-The literature funnel established that the phenomenon is real in drug perturbation, that
-no dataset or design currently supports a prospective (Analysis P) claim in genetic
-loss-of-function, and that the specificity half of the program is already substantially
-answered. What remains open is the trajectory half — and no existing assay captures it.
+1. compare a context-agnostic pair score `q(a,b)` with the Feng2024 SOTA on the
+   official benchmark; then
+2. test a context-conditioned score `s(a,b | c)` on untouched held-out cancer
+   cell lines.
 
-That does not license a stop (absence of data is not falsification, §8 of the blueprint's
-locked decisions), and it does not license production modeling. It licenses **two bounded
-steps, in order**.
+K562 is the current implementation context for the virtual-cell backbone and one
+mechanistic validation context. It is not the final target population. Work does
+not advance to a stronger claim merely because an earlier dataset is unavailable;
+the corresponding claim remains not evaluable.
 
-## 2. The question this program is now answering
+## 2. Phase 0 — freeze data and evaluation contracts
 
-> **In genetic loss-of-function, is net fitness close to a sufficient statistic — or does
-> it frequently conceal reproducible and consequential division / death / recovery
-> dynamics?**
+### 2.1 Official Feng2024 contract
 
-Biological, falsifiable, and the thing the drug literature has answered *yes* to while the
-genetic literature has never asked. Everything downstream — transcriptomic utility,
-virtual-cell modeling, target prioritization — is contingent on it.
+- Verify the official 9,845-gene entity table, five-fold CV1/CV2/CV3 caches,
+  `Rand` 1:1 labels, candidate construction, and `cal_metrics` behavior.
+- Record exact local checkout commit, archive checksums, seeds, and metric code.
+- Keep the official benchmark separate from the derived K562-DepMap-filtered
+  subset. The latter is an ablation/coverage surface only.
+- Materialize one immutable manifest per split and fold before model runs.
 
-**Attribute-stacking is not a novelty claim.** "Transcriptome + CRISPR + K562 + DepMap +
-full trajectory have never been combined" is a description of a gap, not a scientific
-question: satisfiable trivially and defensible only by counting attributes. The surviving
-novelty statement is in [`03-literature-review.md`](03-literature-review.md) §7.
+**Exit:** a small metric-parity test reproduces a known official row or explains
+any mismatch with a checked artifact and no hidden protocol change.
 
-## 3. Step 1 — three reanalysis extensions
+### 2.2 Cell-line data audit
 
-Analyst-days against data already on disk. No wet lab.
+Inventory candidate datasets containing pairwise SL/GI labels with explicit cell
+line, intervention modality, continuous/binary outcome, negative definition, and
+gene/pair coverage. Separately inventory perturbation-response and DepMap inputs
+needed to construct `F(X_c,g)`.
 
-| # | Reanalysis | Why this one |
-|---|---|---|
-| 1 | exp02's residualization audit applied to **Jost 2020's titration series** | A **within-gene** test — cleaner than exp02's cross-gene one |
-| 2 | The same audit on **Dixit 2016's 13-gene cell-cycle panel** | Two same-direction-fitness perturbations, materially different transcriptional routes |
-| 3 | **Nadal-Ribelles's mean-vs-variance test generalized to Replogle 2022 raw single-cell K562** | The first "distribution beyond mean" test on **mammalian genetic loss-of-function** |
+For every candidate cell line, record:
 
-All three reuse the residualization machinery in `src/dependency_baseline/`
-(`NuisanceResidualizer`, plus the burden / program-score / NAR feature sets).
+- whether it can be train, validation, or untouched test;
+- whether labels are measured, curated, or sampled;
+- intervention modality and time scale;
+- overlap with model inputs and Feng2024 genes;
+- known exposure in foundation-model/checkpoint pretraining;
+- source-level leakage/circularity with SynLethDB, Feng2024, and calibration
+  labels; and
+- whether per-anchor ranking and line-level inference are statistically evaluable.
 
-**The categorical limit.** This class of work **cannot** address survivorship (the
-structurally absent cells), has **no time course**, and has **no trajectory label to
-predict**. Every dataset in scope (Jost day 5, Dixit day 7/14, Replogle day 6–8) profiles
-cells that already survived to that timepoint, and every available fitness readout is a
-single net rate. No residualization, however clever, manufactures a division/death/recovery
-label the underlying assay never captured.
+For every proposed label source, freeze the relevance/sign rule, candidate
+universe, handling of unmeasured pairs, minimum anchors/positives/coverage,
+assay/time-scale compatibility, and study/batch-confounding analysis. A
+prospective simulation fixes the minimum practically meaningful effects and the
+paired hierarchical estimators before any formal model result is opened. If an
+held-out line/assay contributed to a calibration source, purge every label derived
+from that line/assay from `q` and contextual calibration, then use pair-disjoint
+records from the assay for evaluation. If source lineage or the purge cannot be
+verified, declare the line ineligible.
 
-> **The reanalysis can address specificity (Gate 3). It categorically cannot address the
-> phenomenon question (Gate 2) or the trajectory question.**
+The current K562 resources are included in the audit. The HCT116 single-gene
+transport audit is complete and consumed; it does not count as pairwise SL
+evaluation.
 
-**Why reanalysis first.** It costs analyst-days, and its result changes Study 0's scope and
-budget ask. A robust "beyond burden, beyond an independent anchor" result across Jost +
-Dixit + Replogle raises the expected value of paying for trajectory infrastructure; a null
-result narrows the specificity claim before any wet-lab spend. It is a prerequisite, **not
-a substitute** — Study 0's claim ceiling is unchanged either way.
+**Exit:** at least two training cell lines and two untouched test cell lines with
+eligible pairwise labels, or an explicit `CELL-LINE-GENERALIZATION: not evaluable`
+decision. Exact dataset roles, pretraining-exposure status, hashes, effect-size
+thresholds, and estimators are frozen before formal modeling. Two held-out lines
+support claims about those named contexts; a broader claim additionally requires
+a powered design with cell lines as inferential units.
 
-## 4. Step 2 — Study 0, a bounded feasibility and calibration study
+## 3. Phase 1 — reproduce the Feng2024 SOTA bar
 
-**Not a phenomenon test. Not a selection study.** Its only purpose is to determine whether
-a phenomenon test is justified and, if so, how large it must be.
+Run the official model ladder under one isolated, verified benchmark environment.
+At minimum reproduce:
 
-**Question.** In K562 genetic loss-of-function, does matched-fitness trajectory divergence
-appear to exist, and what would it cost to measure it properly?
+- SLMGAE and KR4SL as the strong cold-start targets;
+- KG4SL as a named reference;
+- the best remaining official method on CV2/CV3;
+- the dependency-only floor; and
+- a degree probe as the CV1 gameability diagnostic.
 
-**What it delivers:**
+Use the official five folds and report NDCG@10, MAP@10, NDCG@{20,50}, AUROC,
+AUPR, and F1. Do not use the K562-filtered reproduction as the formal SOTA bar.
 
-1. **Anchor transportability** — achieved CRISPRi net effect per gene vs. its DepMap Cas9
-   GeneEffect, quantifying the KO→CRISPRi mismatch *before it can masquerade as biology*.
-2. **Achieved matching** — via an equivalence test (TOST), not a null-difference test.
-3. **Tracking completeness and censoring structure** in suspension K562 — the fraction of
-   founders followed to a resolved outcome, and whether loss-to-follow-up is
-   state-dependent.
-4. **Replicate SD/SE of every trajectory quantity** — the variance inputs any real power
-   calculation needs, and that no existing paper reports.
-5. **Effect-size range** — is divergence, where seen, anywhere near the 0.20 founder-loss
-   bar?
+**Exit:** the best eligible reproduced comparator is known on CV2 and CV3 and all
+input/metric differences are controlled.
 
-**Claim ceiling — written into the protocol before any data is collected:**
+## 4. Phase 2 — establish the context-free model `q(a,b)`
 
-- ❌ Does **not** test transcriptomic utility (there is no molecular linkage arm).
-- ❌ Does **not** select between Candidate A and Candidate B.
-- ❌ Does **not** support powered absence below 5% (that needs ~59+ zero-event pairs).
-- ❌ Does **not** reach R2 (single dataset; R1 by construction).
-- ❌ Does **not** license a Gate 2 `positive`.
-- ✅ Estimates feasibility, variance, effect-size range, tracking completeness, and anchor
-  transportability.
+Build the smallest ladder that isolates where signal comes from:
 
-> **Study 0 informs whether Candidate B is affordable and whether Candidate A is
-> technically supportable. It does not empirically adjudicate their scientific utility.**
+1. gene marginals and dependency-only floor;
+2. ESM2/GenePT identity embeddings with a linear swap-invariant head;
+3. prior exp08 pooled-response pair head as a negative/internal control;
+4. zero-shot Bridge A and Bridge B scores aggregated by a prespecified
+   context-free rule; and
+5. optional SL-label-calibrated heads, reported separately.
 
-Its phenotype data must never be read as a scientific comparison of the two candidates: it
-has no molecular linkage arm and therefore cannot see Candidate A's independent variable at
-all. **A candidate cannot lose a contest it was never entered in.**
+No SL graph topology enters feature construction. Each more complex row must beat
+the simpler row before its added machinery is credited.
 
-## 5. Step 3 (unscheduled) — testing Candidate A
+**Exit:** five-fold Feng2024 CV1/CV2/CV3 predictions and metrics for the full
+ladder, with train-only model selection and coverage accounting. The selected
+`q(a,b)` artifact is produced by a prespecified retrain on all admissible
+calibration data or a fixed ensemble of all folds, using train-only-selected
+hyperparameters. It is never the best test-fold checkpoint. The artifact and its
+auxiliary-data exposure manifest are frozen before Phase 3; contextual fitting
+cannot update it.
 
-Requires a true early molecular-state linkage arm — an A2 scaffold (ReSisTrace, SIS-seq,
-CellTag-multi, STRACK), **none of which has ever been run on a CRISPR-knockout library.**
-That is the most actionable methodological opportunity the review found, and it is a
-different experiment at a different scale, cost, and power analysis. **It cannot be bolted
-onto Study 0 and must not be described as if it could.**
+## 5. Phase 3 — generalize the virtual-cell backbone across contexts
 
-## 6. Design constraints carried into any wet-lab work
+Extend the forward model from its current K562 implementation to a declared
+multi-cell-line interface:
 
-**DepMap is an external reference, not a matched anchor.** DepMap Achilles is Cas9 knockout
-scored by Chronos; a CRISPRi study performs a different intervention (penetrance, strength,
-kinetics, horizon, guide efficacy, subclone). It supports *"incremental information beyond
-an external DepMap fitness reference"* — never *"matched on the true net fitness of the
-same intervention."* Unverified matching is a confound that would manufacture exactly the
-positive result this program wants, which makes it the single most dangerous artifact in
-the design.
+```text
+F(control state X_c, cell-line context c, perturbation gene g)
+    -> predicted response
+    -> declared single-gene fitness readout
+```
 
-**K562 is a suspension line, so imaging does not come free.** Continuous pedigree imaging
-faces out-of-field drift, focus loss, cell overlap, tracking breaks, detachment,
-fragmentation, and state-dependent censoring. Confinement (microwells, agarose, hydrogel)
-is required and is itself a perturbation to validate. The honest claim: continuous imaging
-**preserves a founder denominator and makes attrition auditable** — it does not guarantee
-complete tracking.
+Implementation proceeds only after Phase 0 fixes train/validation/test cell-line
+roles and records known checkpoint-pretraining exposure. Unknown exposure narrows
+the eventual claim to task-data-held-out transfer. Required controls are:
 
-**FUCCI + caspase/Annexin is not an assumption-free four-state readout.** FUCCI phase ≠
-arrest; Annexin positivity can be reversible; caspase-independent death exists; long cycles
-and durable arrest need sufficient follow-up; recovery needs predefined criteria. And
-**ambiguous disappearance must be logged as its own outcome category, never silently
-assigned to death.** It remains the strongest available phenotype route — it is not a
-complete identification of the four states.
+- cell-line identity/lineage only;
+- gene identity only;
+- direct K562 transfer without contextual adaptation;
+- observed-response upper bound where permitted; and
+- frozen-backbone versus trained-context-adapter variants.
 
-## 7. The standing risk
+The existing K562 exp05 run is prior evidence. The one-shot HCT116
+frozen-backbone GeneEffect transport audit is complete and negative: direct K562
+GeneEffect transfer retained Spearman 0.554, while the frozen response head had
+Spearman -0.001 and collapsed output variance. This rejects direct transport of
+the frozen K562 response-to-fitness head, not the conserved gene-dependency
+prior. HCT116 labels are now unsealed; this line is consumed and cannot be
+recycled into development or reused as a formal held-out line. See the
+[`closeout`](results/exp05-hct116-frozen-backbone-transport.md). The audit does
+not count as pairwise or cross-cell-line SL generalization.
 
-> A genuine literature gap has been identified. The temptation is to over-interpret a small
-> feasibility pilot as an experiment that simultaneously proves the phenomenon, selects the
-> primary unit, validates transcriptomic utility, and demonstrates powered absence.
-> **It can do none of those.**
+**Exit:** single-gene response/fitness transfer is measured on development cell
+lines without opening pairwise labels from untouched test lines.
+
+## 6. Phase 4 — implement contextual Bridge A and Bridge B
+
+### Bridge A
+
+- sequentially simulate `a` then `b`, and `b` then `a`, in the same cell-line
+  context;
+- symmetrize the dependency spike; and
+- compare with observed co-dependency and context-free dependency controls.
+
+### Bridge B
+
+- simulate the joint perturbation in the same context;
+- compute both additive and min/HSA interaction residuals; and
+- compare with a GenePert-style linear/additive baseline and any eligible GEARS
+  interaction residual.
+
+Both bridges emit zero-shot scores before any SL-label calibration. Failures of
+the underlying response model, fitness head, composition, and label calibration
+are reported separately.
+
+**Exit:** deterministic per-pair, per-cell-line scores with swap-invariance tests,
+declared nulls, and no access to held-out cell-line pair labels.
+
+## 7. Phase 5 — formal Feng2024 evaluation
+
+- Evaluate `q(a,b)` on all five official folds.
+- Compare head-to-head with the reproduced SOTA and simple model ladder.
+- Bind the headline to CV2/CV3 NDCG@10; report CV1 as diagnostic.
+- Repeat the comparison on the non-pan-essential slice.
+- Report zero-shot composition separately from calibrated heads.
+
+**Exit:** one of the BEAT-SOTA verdicts in `02`, including a negative verdict if
+the bar is not cleared.
+
+## 8. Phase 6 — formal held-out-cell-line evaluation
+
+After every model and threshold is frozen:
+
+- open each held-out cell line once;
+- score the fixed pair universe for that line;
+- compare `s(a,b | c)` with `q(a,b)`, gene marginals, context-only controls, and
+  the strongest eligible contextual baseline;
+- report per-line metrics, coverage, and uncertainty before the macro-average;
+- require every prespecified eligible held-out line to pass the named-context
+  criterion; no subset may be selected after opening labels;
+- repeat on the non-pan-essential slice; and
+- test whether the contextual increment remains after lineage/context covariates.
+
+No held-out line may be recycled into development after its labels are opened. A
+failed or underpowered line remains in the report.
+
+**Exit:** a named-context or population-level CELL-LINE-GENERALIZATION verdict and
+the SPECIFICITY verdict in `02`, or “not evaluable” if Phase 0 could not establish
+an eligible contract.
+
+## 9. Phase 7 — mechanistic validation
+
+### K562 anchor
+
+- acquire and provenance-check Horlbeck 2018 continuous fitness GI;
+- use evaluation pairs/genes disjoint from SL-label calibration;
+- use Adamson UPR only as a qualitative transcriptomic check; and
+- exclude Jost/Replogle dual-sgRNA from GI claims.
+
+### Non-K562 anchor
+
+Use at least one eligible non-K562 combinatorial perturbation context with a
+continuous or prespecified binary GI definition. Audit the Horlbeck Jurkat arm as
+the first candidate; do not assume eligibility until provenance, coverage, and
+independence are verified. Apply the same frozen interaction null and prevent
+overlap with any contextual calibration labels.
+
+**Exit:** K562-only or multi-cell-line MECHANISTIC verdict, stated at exactly the
+contexts supported by the data.
+
+## 10. Required artifacts
+
+Every formal stage writes:
+
+- immutable data-role and split manifests with hashes;
+- configuration and code/checkpoint identity;
+- fit-access and held-out-access audits;
+- per-pair predictions with fold and cell-line provenance;
+- per-anchor and aggregate metrics with confidence intervals;
+- gene/pair/anchor/cell-line coverage tables; and
+- a `docs/results/<slug>.md` note only after the analysis completes.
+
+Status is then synchronized across this file, `docs/README.md`, and root
+`README.md`. Planned numbers never enter result documents.
+
+## 11. Stop and downgrade rules
+
+- If official metric parity cannot be established, do not claim a SOTA
+  comparison.
+- If fewer than two eligible training and two eligible held-out cell lines exist,
+  do not claim general cross-cell-line SL discovery.
+- If the contextual model only transfers single-gene GeneEffect, report backbone
+  transfer, not SL transfer.
+- If gains vanish off pan-essential pairs, downgrade to essentiality signal.
+- If `s(a,b | c)` does not beat `q(a,b)`, report general pair-prior transfer, not
+  context-specific SL.
+- If Bridge B does not beat the additive/linear ablation, do not credit the
+  virtual-cell machinery.
+- If measured GI is unavailable, MECHANISTIC is not evaluable.

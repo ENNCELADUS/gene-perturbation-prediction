@@ -1,177 +1,259 @@
-# Acceptance Criteria (Frozen)
+# Acceptance Criteria (Pre-Evaluation Contract)
 
-**Status:** frozen before evidence. **Not revisable to fit a result.**
-**What this is:** the bar a result must clear to count as an answer. [`01-blueprint.md`](01-blueprint.md) says what may be *claimed*; this document says what counts as *established*.
-**Governs:** every reported head-to-head, every "beats SOTA" statement, and every mechanistic claim in [`04-roadmap.md`](04-roadmap.md) and the paper.
+**Status:** claim structure frozen. Dataset-specific minimum effect sizes,
+eligibility thresholds, power targets, and hierarchical estimators are the only
+open registrations; Phase 0 must freeze them before any formal model result is
+opened. They are **not revisable to fit a result**.
+**What this is:** the bar a result must clear to establish benchmark
+competitiveness, cross-cell-line generalization, pair/context specificity, and
+mechanistic correspondence.
+**Governs:** [`01-blueprint.md`](01-blueprint.md),
+[`04-roadmap.md`](04-roadmap.md), every result note, and every paper claim.
 
-A threshold set after seeing the data is not a threshold. "More powerful and
-accurate" is only meaningful against numbers fixed in advance. This document fixes
-them, and it is frozen.
+## 1. Claim axes
 
-## What "more powerful and accurate" decomposes into
+| Claim | Criterion | Required evaluation |
+| --- | --- | --- |
+| Competitive general SL discovery | **BEAT-SOTA** | Feng2024 CV2 and CV3 |
+| Generalization across cancer cell lines | **CELL-LINE-GENERALIZATION** | untouched held-out cell lines |
+| Pair- and context-specific signal | **SPECIFICITY** | non-pan-essential and context ablations |
+| Biologically grounded interaction | **MECHANISTIC** | matched measured GI |
+| Admissible result | **INTEGRITY** | leakage, selection, fold, and uncertainty audit |
 
-| Phrase | Criterion | Axis |
-|---|---|---|
-| **more powerful** | **BEAT-SOTA** | beats SLMGAE/KR4SL on cold-start ranking |
-| **accurate** | **MECHANISTIC** | the virtual double-KO matches *measured* epistasis |
-| (guard) | **PAIR-SPECIFIC** | the win is SL, not pan-essentiality |
-| (guard) | **INTEGRITY** | the number is admissible, not an artifact |
+No single axis substitutes for another. In particular, Feng2024 CV2/CV3 do not
+test held-out cell lines, and K562 measured-GI correspondence does not establish
+multi-cell-line generality.
 
-All four bind. A result that misses one is reported as missing it — the bar does not
-move.
+## 2. Operational definitions
 
-## Operational definitions
+### 2.1 Feng2024 benchmark harness
 
-### The harness
+Use the official Feng2024/SynLethDB-derived 9,845-gene universe, official cached
+five-fold CV1/CV2/CV3 splits, declared negative-sampling regime, and official
+`cal_metrics` implementation. The primary comparison is `Rand` 1:1; `Exp`, `Dep`,
+and other positive:negative ratios are sensitivity analyses and are never pooled
+with the primary result.
 
-Every number is produced by the **identical** Feng2024 K562 `cal_metrics` harness:
-9,471-gene universe, balanced Rand 1:1 pairs, per-anchor ranking, five folds, fixed
-seeds. Method and baselines differ only in the scorer, never in splits, seeds, or
-metric code. A cross-run comparison is **inadmissible**; the comparison must be a
-true in-harness ablation.
+The main benchmark is **not cell-line-specific**. No result on it may be labelled
+K562 SL or cross-cell-line generalization. A locally derived K562-DepMap-filtered
+subset is a coverage/ablation dataset only and cannot replace the official SOTA
+comparison.
 
-### Primary metric
+### 2.2 Metrics
 
-**Per-anchor NDCG@10** is primary (MAP@10 and NDCG@{20,50} reported alongside).
-Classification (AUROC, AUPR, F1) is reported but is **not** the discriminating axis:
-the dependency-only floor already reaches AUROC ≈ 0.70, near the label-graph SOTA, so
-ranking is where cold-start SL is won or lost.
+**Per-anchor NDCG@10** is the primary ranking metric. Report MAP@10,
+NDCG@{20,50}, AUROC, AUPR, and F1 alongside it. Classification gains do not count
+as ranking wins, and vice versa.
 
-### The SOTA reference
+### 2.3 SOTA reference
 
-The bar is the **best reproduced label-graph method under this harness.** Reproduced
-K562 reference points (source: retired-program SLBench reproduction):
+The formal bar is the best eligible method reproduced under the identical
+official harness. The required ladder includes **SLMGAE** and **KR4SL**, plus
+KG4SL and the other official methods needed to verify the best comparator.
 
-| Method | CV2 NDCG@10 | CV3 NDCG@10 | cross-CV NDCG@10 |
-|---|---:|---:|---:|
-| GRSMF | 0.315 | 0.313 | 0.317 |
-| DDGCN | 0.241 | 0.243 | 0.257 |
-| Dependency-only floor | 0.042 | 0.002 | 0.032 |
-| Archive best label-free (exp07) | 0.094 | ~0.001 | 0.090 |
+Published Feng2024 Rand 1:1 results are orientation, not a substitute for local
+reproduction. Known local K562-filtered results and any corrupted published
+ranking columns are inadmissible as the formal general-benchmark bar.
 
-**The strong bar is SLMGAE and KR4SL, not KG4SL.** Per Feng2024 (pan-cancer, Rand
-1:1), SLMGAE is the top cold-start model (CV3 AUROC 0.790, NDCG@10 0.039) and KR4SL is
-Feng2024's flagged CV3 leader, whereas **KG4SL is weak** (CV3 AUROC 0.562, below the
-dependency floor's 0.596). **SLMGAE, KR4SL, and KG4SL must be reproduced under this
-identical K562 harness** (a prerequisite deliverable); their reproduced CV2/CV3
-NDCG@10 become the formal target. Until then, **GRSMF's ≈ 0.31 is the standing K562
-ranking bar** and the method must exceed the best reproduced label-graph method.
-(K562-reproduction NDCG differs sharply from Feng2024 pan-cancer — e.g. GRSMF CV3
-0.313 vs 0.000 — so only same-harness numbers are comparable.)
+### 2.4 Held-out cell line
 
-### "Pan-essential"
+A cell line is held out only if its response data, GeneEffect labels, SL/GI
+labels, and derived statistics were not used for:
 
-A gene is **pan-essential** iff it is a DepMap common-essential gene (the
-DepMap-provided common-essential list for the release in use). A pair is
-pan-essential if **either** gene is. The **non-pan-essential slice** is the set of
-test pairs with **neither** gene common-essential.
+- representation or model fitting;
+- feature selection or normalization decisions;
+- checkpoint or hyperparameter selection;
+- calibration, threshold choice, or null selection; or
+- manual selection of the reported model variant.
 
-### Measured genetic interaction
+The manifest assigns every foundation checkpoint or pretrained representation one
+of three exposure states for each target line: **verified absent**, **known
+present**, or **unknown/unauditable**. Only verified absent permits an
+unseen-context claim. Known present and unknown exposure permit differently
+qualified task-data-held-out claims.
 
-The wet-lab interaction score from a **CRISPRi double-perturbation** assay. The
-fitness-scale anchor is **Horlbeck 2018** (K562 dual-CRISPRi GI map, ~222k pairs) —
-**to be acquired**, evaluated on pairs/genes **disjoint from the benchmark positives**
-(Feng2024's K562 positives may be Horlbeck-derived). **Adamson 2016 UPR epistasis**
-(3 sensors + combos) is the only *local* combinatorial set — a small **qualitative
-transcriptomic** check, not a powered fitness-GI benchmark. The **Jost/Replogle
-dual-sgRNA file is NOT a GI dataset** (single-gene knockdown efficacy) and is
-excluded. **Norman 2019 is CRISPRa — auxiliary only,** never counted toward the
-primary MECHANISTIC verdict, always with the modality caveat.
+Development requires at least two training cell lines and at least two
+prespecified eligible held-out lines. Every eligible held-out line is binding and
+reported individually. With only a small number of lines, the verdict is limited
+to those named contexts. A broader population-level claim requires a prospective
+power analysis and an estimator that treats cell lines, not anchors, as the
+inferential units. If suitable pairwise labels are unavailable, the criterion is
+**not evaluable**, not passed by single-gene GeneEffect transfer.
 
-## BEAT-SOTA — the ranking win (primary)
+### 2.5 Cell-line label eligibility
 
-> On **both CV2 and CV3**, the method's per-anchor NDCG@10 (mean over the five
-> folds) must exceed the **best reproduced strong label-graph SOTA (SLMGAE, KR4SL)**
-> **and** the dependency-only floor. (KG4SL is a weak reference, not the bar.)
+A pairwise dataset is eligible only after a label contract freezes, before model
+evaluation:
 
-Two claims, never conflated (mirroring "exists vs. large"):
+- the positive or continuous relevance rule and sign convention;
+- the candidate universe and treatment of unmeasured pairs (never implicit
+  negatives);
+- minimum anchors, positives per anchor, and coverage required by a prospective
+  power/simulation analysis;
+- assay, intervention, time-scale, study, and batch compatibility;
+- source-level provenance against SynLethDB/Feng2024 and all calibration labels;
+  and
+- a study/batch-confounding sensitivity analysis.
+
+If a held-out line or assay contributed labels to SynLethDB or another calibration
+source, **all labels derived from that line/assay are purged from `q` and
+contextual calibration before fitting**. Formal evaluation then uses pair-disjoint
+records from the held-out assay. If source lineage cannot be mapped or the purge
+cannot be verified, the affected line is ineligible for the formal verdict.
+
+### 2.6 Pan-essential and context-free controls
+
+A pair is pan-essential if either gene is on the declared DepMap
+common-essential list for the release in use. The non-pan-essential slice contains
+pairs for which neither gene is common-essential.
+
+After train-only hyperparameter selection, the final Feng2024 `q(a,b)` artifact is
+created by a prespecified retrain on all admissible calibration data or a fixed
+ensemble of all fold models — never by choosing the best test-fold checkpoint.
+It is frozen before contextual fitting and used unchanged for every held-out
+line. The contextual model may only learn the increment beyond that fixed score.
+A cell-line-conditioned gain must exceed:
+
+1. `q(a,b)` transferred unchanged;
+2. gene-marginal dependency/essentiality features;
+3. context-only features such as cell-line or lineage identity; and
+4. the strongest eligible published/reproduced contextual baseline available for
+   the same data contract.
+
+### 2.7 Measured genetic interaction
+
+MECHANISTIC uses a continuous interaction score from a combinatorial perturbation
+assay in the same cell line as the prediction. The currently planned K562 evidence
+is the K562 arm of Horlbeck 2018 plus Adamson UPR. It does not prove
+cross-cell-line mechanism. At least one eligible non-K562 measured-GI context is
+required for a multi-cell-line mechanistic claim; Horlbeck's Jurkat arm is a
+candidate only after its data contract and independence are verified.
+
+Jost/Replogle dual-sgRNA is single-gene knockdown-efficacy data, not a GI dataset.
+Norman CRISPRa is auxiliary and must retain the modality caveat.
+
+## 3. BEAT-SOTA — official benchmark win
+
+> On both Feng2024 CV2 and CV3, the model must exceed the best reproduced
+> eligible SOTA and the dependency-only floor in per-anchor NDCG@10.
 
 | Claim | Requirement |
-|---|---|
-| A win **EXISTS** | The paired improvement (method − best SOTA), bootstrapped over anchors and across the five folds, has a **95% CI excluding zero on both CV2 and CV3.** |
-| The method is **SOTA-grade (LARGE)** | The **95% CI lower bound** on that improvement **exceeds `δ_win` = +0.02 absolute NDCG@10** over the best SOTA, on both CV2 and CV3. |
+| --- | --- |
+| Win **EXISTS** | The paired improvement over the best SOTA has a 95% CI excluding zero on both CV2 and CV3. |
+| Win is **PRACTICALLY MEANINGFUL** | The 95% CI lower bound exceeds a prespecified `delta_win` on both CV2 and CV3. `delta_win` is justified by a prospective candidate-ranking utility/power simulation and registered before formal model evaluation. |
 
-A point estimate above SOTA with a CI touching zero is **"above the reproduced SOTA
-mean, difference not established"** — not a win. A win on CV2 but not CV3 is reported
-as **"CV2 (one-gene-cold) only"** and does not clear the cold-start bar, whose whole
-point is CV3.
+Use synchronized paired resampling of anchors within each fold, equal-weighted
+fold effects, and repeated training seeds. Report anchor uncertainty and
+between-seed variability separately; the exact hierarchical estimator is frozen
+with the power simulation. A point estimate above SOTA with a CI touching zero is
+reported as “above the reproduced mean; difference not established.” A win on
+CV2 but not CV3 is “one-SL-gene-cold only.” CV1 is always a diagnostic and is
+inadmissible as the headline win.
 
-**CV1 is inadmissible as a win.** It is degree-gameable (a gene-degree probe tops it);
-it is reported only as the diagnostic. A method that "beats SOTA" only on CV1 has not
-beaten SOTA.
+## 4. CELL-LINE-GENERALIZATION — unseen-context win
 
-## PAIR-SPECIFIC — the win is SL, not pan-essentiality
-
-> The BEAT-SOTA improvement must **persist on the non-pan-essential slice** of CV3.
-
-| Observed on the non-pan-essential CV3 slice | Verdict |
-|---|---|
-| Improvement CI still excludes zero | Pair-specific SL signal established |
-| Improvement CI includes zero | **"Pan-essentiality signal; pair-specific SL not established."** The full-set win is downgraded, not accepted as SL. |
-
-Grounding: the retired decomposition showed a naive cross-line lift collapses on this
-slice (CV3 AUROC 0.645 → 0.583, AUPR 0.651 → 0.490). Pan-essentiality is easy and is
-not the biology of interest; the residual is.
-
-## MECHANISTIC — correspondence with measured epistasis
-
-> The virtual double-knockout score `s_B` (or the interaction residual) must correlate
-> with the **measured** genetic-interaction score on the pairs covered by a CRISPRi
-> dual-perturbation assay.
+> On untouched held-out cell lines, `s(a,b | c)` must improve per-anchor
+> NDCG@10 over the strongest control defined in §2.6.
 
 | Claim | Requirement |
-|---|---|
-| Correspondence **EXISTS** | Spearman between `s_B` and the **measured fitness GI** (Horlbeck 2018 K562, on pairs disjoint from the benchmark positives) has a **95% CI excluding zero**, in the direction where SL-predicted pairs carry stronger (more negative) measured interaction. |
-| **STRONG** correspondence | Spearman **point estimate ≥ 0.30** with CI excluding zero on Horlbeck. |
-| **Qualitative local check** | On **Adamson 2016 UPR** (transcriptomic, ~3 sensors), the predicted interaction ordering matches the known UPR-branch epistasis direction. Supportive only — its tiny n can neither certify nor refute EXISTS/STRONG. |
+| --- | --- |
+| Named-context transfer **EXISTS** | Improvement has a 95% CI excluding zero on every prespecified eligible held-out line. The macro-average is reported but cannot rescue a line. |
+| Named-context transfer is **PRACTICALLY MEANINGFUL** | Every line has a positive point estimate and the macro-average lower CI exceeds a registered `delta_context`, justified by prospective utility/power simulation before formal evaluation. |
+| Population-level cross-cell-line evidence | The line-level hierarchical effect has a 95% CI excluding zero under a prospectively powered design that treats cell lines as the inferential units. |
 
-**No leakage:** genes/pairs used for any SL-label head calibration must be disjoint
-from the measured-GI evaluation set. A correspondence computed on pairs that also
-trained a calibration head is inadmissible.
+Report the number of anchors, positive pairs, candidate partners, label source,
+lineage, and coverage for every cell line. Pooled micro-averages are secondary;
+they cannot hide failure on one line. With too few lines for line-level inference,
+claims are limited to the named held-out contexts. A K562-to-HCT116 single-gene GeneEffect
+transport result is backbone evidence only and does not satisfy this criterion.
 
-**Availability caveat:** if Horlbeck 2018 is not acquired, MECHANISTIC is **"not
-evaluable"** (only the qualitative Adamson check exists) — it cannot be quietly
-downgraded to a pass on the local transcriptomic set alone.
+## 5. SPECIFICITY — the gain is pairwise and contextual
 
-## INTEGRITY — the number is admissible
+Both parts bind:
 
-Every reported result must satisfy all of:
+1. **Non-pan-essential:** the relevant BEAT-SOTA and
+   CELL-LINE-GENERALIZATION improvements retain a 95% CI excluding zero after
+   removing pan-essential pairs.
+2. **Context increment:** on held-out lines, `s(a,b | c) - q(a,b)` improves over
+   zero and over the context-only and gene-marginal controls.
 
-1. **Train-only selection.** Epoch/checkpoint/hyperparameter selection reads **no**
-   test-fold metric. A test-fold-selected number (the archive's exp08 flaw) is
-   **inadmissible**, not merely caveated.
-2. **Five folds.** Report mean ± 95% CI across the benchmark's five folds. A
-   single-fold number is a diagnostic, not a result.
-3. **Zero-shot reported separately.** The pure composition (no SL labels in features)
-   is a standalone row; any label-calibrated head is an additional, clearly-labelled
-   row. A win that exists only with a label-calibrated head is reported as such.
-4. **Identical harness** (above). 
+If the full-set gain disappears on the non-pan-essential slice, report
+“pan-essentiality signal; pair-specific SL not established.” If the contextual
+increment disappears, report “general pair prior transferred; cell-line-specific
+SL not established.”
 
-## Verdict rule
+## 6. MECHANISTIC — correspondence with measured GI
 
-| Condition | Verdict | Meaning |
-|---|---|---|
-| BEAT-SOTA (≥ EXISTS on CV2 **and** CV3) **and** PAIR-SPECIFIC **and** INTEGRITY | **Beats SOTA on cold-start SL** | The headline success ("more powerful"). |
-| …**and** MECHANISTIC STRONG | **Mechanistically-grounded SOTA** | The full claim ("more powerful **and** accurate"). |
-| BEAT-SOTA fails **but** MECHANISTIC ≥ EXISTS | **Mechanism validated, ranking not yet SOTA** | Partial. Honest, still a contribution (composition + measured-epistasis correspondence). |
-| Neither BEAT-SOTA nor MECHANISTIC | **Negative** | Reported as such. The composition did not beat the floor/SOTA and did not match measured epistasis. |
+> The composed interaction residual must correlate with measured GI in the
+> matching cellular context on evaluation pairs disjoint from calibration data.
 
-## What would make these thresholds wrong
+| Claim | Requirement |
+| --- | --- |
+| Context correspondence **EXISTS** | Spearman has a 95% CI excluding zero in the prespecified SL direction within the assayed cell line. |
+| Context correspondence is **PRACTICALLY MEANINGFUL** | The CI clears a prespecified `rho_min` justified by prospective power and biological utility, registered before formal evaluation. |
+| Multi-cell-line mechanism | EXISTS in K562 and at least one eligible non-K562 context, with concordant direction and no pooled-only rescue. |
 
-Each is deliberately falsifiable, with a named failure mode:
+The small Adamson UPR set is qualitative and cannot alone certify EXISTS.
+Without an eligible fitness-GI anchor, MECHANISTIC is “not evaluable.” Calibration
+and measured-GI evaluation pairs/genes must be disjoint according to a manifest
+frozen before labels are inspected.
 
-1. **`δ_win` = 0.02 NDCG@10 may be too lax or too strict.** At a SOTA of ≈ 0.31 it is
-   a ~6% relative lift — enough to matter, small enough to be reachable. If the
-   reproduced SLMGAE/KR4SL bar is much higher or lower than GRSMF's 0.31, the
-   *relative* interpretation shifts; the rule (CI-based, on both CV2 and CV3) does
-   not.
-2. **The non-pan-essential slice may be small**, widening its CI and making
-   PAIR-SPECIFIC hard to clear even for a real effect. Report the slice size and its
-   power; an underpowered slice routes to "not established," not to a claim either way.
-3. **Measured-GI coverage is thin.** Adamson UPR is a 3-sensor qualitative set;
-   Horlbeck 2018 (the fitness-GI anchor) must be acquired and de-circularized against
-   the benchmark positives. A MECHANISTIC verdict is bounded by that coverage and must
-   be stated, not implied; without Horlbeck it is "not evaluable," not a pass.
-4. **Ranking primacy may understate a real classification gain.** If the method
-   clearly wins AUROC/AUPR on CV2/CV3 but not NDCG@10, that is reported as a
-   classification result, explicitly not a ranking-SOTA claim.
+## 7. INTEGRITY — admissibility
+
+Every formal result must satisfy all of the following:
+
+1. **Train-only selection.** Test folds and held-out cell lines are never used for
+   model or protocol selection.
+2. **Fixed manifests.** Gene, pair, cell-line, modality, and label-source roles are
+   materialized and hashed before the formal run.
+3. **Pretraining lineage disclosed.** Known foundation-checkpoint exposure to
+   held-out genes, cell lines, assays, and label sources is audited; unknown
+   exposure narrows the claim.
+4. **Five official folds.** Feng2024 results report all five folds; partial folds
+   are diagnostics only.
+5. **Identical harness.** Method and comparators differ only in the scorer and
+   declared model inputs, not splits, seeds, candidates, or metric code.
+6. **Zero-shot separated.** Pure composition and any SL-label-calibrated head are
+   separate rows.
+7. **No cross-axis relabelling.** SL-pair/graph-gene cold-start, cell-line
+   transfer, and mechanistic correspondence are named separately.
+8. **Coverage disclosed.** Filtering is reported at the gene, pair, anchor, and
+   cell-line levels; a coverage-filtered subset is not presented as the full
+   benchmark.
+9. **Estimator registered.** Paired resampling units, fold/seed aggregation, and
+   cell-line-level inference are fixed before formal results are opened.
+
+## 8. Verdicts
+
+| Conditions met | Allowed verdict |
+| --- | --- |
+| BEAT-SOTA + SPECIFICITY + INTEGRITY | **Beats SOTA for genes unseen to SL-pair/graph training** |
+| Named-context transfer + SPECIFICITY + INTEGRITY; checkpoint non-exposure verified | **Generalizes SL ranking to the named unseen cell-line contexts** |
+| Named-context transfer + SPECIFICITY + INTEGRITY; checkpoint exposure known present | **Transfers SL ranking to task-data-held-out named cell lines; checkpoint pretrained on the target lines** |
+| Named-context transfer + SPECIFICITY + INTEGRITY; checkpoint exposure unknown | **Transfers SL ranking to task-data-held-out named cell lines; pretraining exposure unknown** |
+| Population-level cross-cell-line evidence + SPECIFICITY + INTEGRITY; checkpoint non-exposure verified | **Cross-cell-line generalization supported under the registered line-level design** |
+| Population-level cross-cell-line evidence + SPECIFICITY + INTEGRITY; checkpoint exposure known present | **Cross-cell-line task-data-held-out transfer supported; checkpoint pretrained on target lines** |
+| Population-level cross-cell-line evidence + SPECIFICITY + INTEGRITY; checkpoint exposure unknown | **Cross-cell-line task-data-held-out transfer supported; pretraining exposure unknown** |
+| BEAT-SOTA plus an applicable cell-line verdict | **General SL discovery model with unseen-SL-gene and held-out-context evidence**, inheriting the most restrictive checkpoint-exposure qualifier |
+| BEAT-SOTA + population-level cross-cell-line evidence + multi-cell-line MECHANISTIC | **Mechanistically grounded general SL discovery model**, inheriting the most restrictive checkpoint-exposure qualifier |
+| Only K562 MECHANISTIC | **Mechanistic correspondence in K562** |
+| Any required dataset unavailable | Relevant axis **not evaluable** |
+| Neither predictive axis clears its bar | **Negative** |
+
+Composite verdicts never erase exposure status. If target lines differ in
+exposure, the combined claim uses the most restrictive state: known present is
+reported explicitly, otherwise unknown dominates verified absent. “Unseen
+context” is reserved for verified-absent pretraining exposure.
+
+## 9. Named risks
+
+- Feng2024 labels are curated and negatives are noisy; success remains candidate
+  prioritization, not target validation.
+- Published ranking columns may be inconsistent; the formal bar depends on a
+  verified reproduction under one harness.
+- Cell-line-specific SL labels may be sparse or heterogeneous. Sparse coverage
+  widens uncertainty; it does not justify pooling away context.
+- Deep perturbation models may underestimate synergy. Bridge B must be compared
+  with additive/min and GenePert-style linear baselines.
+- A non-K562 GI anchor may not be obtainable. In that case the multi-cell-line
+  mechanistic claim remains explicitly unestablished.

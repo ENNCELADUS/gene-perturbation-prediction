@@ -39,31 +39,22 @@ The population-level DepMap/Achilles CRISPR GeneEffect label for the same
 cell-line and perturbation-gene key. It is a dependency score, not a single-cell
 death label and not a true synthetic-lethality label.
 
-### D: SL Pair Benchmark Label
+### D: General SL Pair Benchmark Label
 
-The downstream gene-pair synthetic-lethality benchmark target used after the
-single-gene K562 dependency bridge. `D` is keyed by a pair of genes and carries a
-binary SL label plus a fold-level train/test role. It is not interchangeable with
-`C`: `C` is `GeneEffect(K562, g)`, while `D` is an SL benchmark label for
-`(gene_a, gene_b)`.
+`D` is the official Feng2024/SynLethDB-derived gene-pair target. It is keyed by
+an unordered pair, carries a binary SL label plus fold-level train/test role, and
+lives in the official 9,845-gene universe. It is not interchangeable with `C`:
+`C` is a cell-line-specific single-gene GeneEffect, whereas `D` is a curated
+context-agnostic pair label.
 
-The canonical K562-mappable benchmark datasets are the three per-split
-Rand 1:1 balanced tables (and their all-CV concatenation):
+The formal benchmark uses the official Rand 1:1 CV1/CV2/CV3 caches and the
+official `data/SL_benchmark/src/preprocess.py:cal_metrics` semantics. Ranking is
+per-anchor candidate-partner retrieval over the official candidate universe with
+training positives masked. CV2/CV3 test unseen genes, not unseen cell lines.
 
-These keep only SL_benchmark Rand 1:1 pairs whose two genes both have numeric
-K562 DepMap GeneEffect values for `ACH-000551`, across all three CV splits
-(CV1 pair-level, CV2 one-gene held out, CV3 both-genes held out). The all-CV
-file is the default benchmark input (it contains all three splits, so the
-baseline runs CV1/CV2/CV3 by default). Treat them as pair-level benchmark
-adapter targets with K562 dependency coverage, not as a validated K562-specific
-SL assay.
-
-The dependency-only SL baseline uses official `SL_benchmark` metric semantics
-from `data/SL_benchmark/src/preprocess.py:cal_metrics`: classification metrics
-are computed on sampled test pairs from a full candidate score matrix; AUPR is
-trapezoidal PR-curve AUC; F1 is the maximum F1 over the PR curve; ranking is
-per-anchor candidate-partner retrieval over the K562-filtered candidate-gene
-universe with train-positive pairs masked. 
+The derived K562-DepMap-filtered CSVs retain only pairs whose genes have numeric
+K562 GeneEffect. They are historical coverage/baseline ablations, not the default
+formal benchmark and not a K562-specific SL assay.
 
 ### exp08 STATE-Adapter DL
 
@@ -80,8 +71,8 @@ CV2/CV3 NDCG/MAP lift over exp06. Benchmark-adapter only; no biological SL claim
 ### Observed-B -> C
 
 A downstream predictor trained and evaluated on measured post-perturbation
-single-cell bags or summaries. This is the validated K562 bridge in the current
-roadmap.
+single-cell bags or summaries. Existing evidence is K562-based and supports the
+current forward-model backbone, not the scope of the general SL claim.
 
 ### Predicted-B -> C
 
@@ -123,11 +114,10 @@ forward path that produces `B_hat`. For target-gene ablations, the perturbed bag
 uses control cells plus the target perturbation vector, while the control bag
 uses the same control cells plus the non-targeting vector.
 
-## Glossary: Cell-Fate Outcome Dynamics
+## Retired Glossary: Cell-Fate Outcome Dynamics
 
-Terms for the active research direction (see
-[`docs/01-blueprint.md`](docs/01-blueprint.md)), distinct
-from the dependency-pipeline symbols (A/B/B_hat/C/D) above.
+Historical terms retained to interpret prior artifacts. They do not define the
+active research direction; see [`docs/01-blueprint.md`](docs/01-blueprint.md).
 
 ### F_net: Net Fitness
 
