@@ -1,11 +1,13 @@
 # Experiment Roadmap: Generalizable SL Discovery
 
 **Status:** active plan. The first HCT116 frozen-K562-backbone single-gene audit
-completed with a negative transport result. The Horlbeck K562 GI map is acquired
-and coverage-audited, but no Bridge A/Bridge B, formal SOTA, measured-GI model
-evaluation, or pairwise cross-cell-line result has completed. An immediate
-two-track development plan is set (§1.1): a K562 Bridge-A mechanism kill-test and
-a DepMap GeneEffect cross-cell-type generalization test.
+completed with a negative transport result. **T1, the K562 Bridge-A-vs-Horlbeck
+mechanism kill-test, has completed and is negative**: the composed frozen backbone
+does not recover measured K562 epistasis (|Spearman| < 0.01; AUROC(s_A -> strong-SL)
+approximately 0.52), so the composition mechanism is paused for redesign and not
+extended across contexts ([result](results/exp05-bridge-a-horlbeck-kill-test.md)).
+T2 (DepMap GeneEffect cross-cell-type generalization), formal SOTA reproduction,
+Bridge B, and any pairwise cross-cell-line result remain not started.
 **Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**
 [`02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Related work:**
 [`03-literature-review.md`](03-literature-review.md)
@@ -32,16 +34,19 @@ held-out cell-line labels, and yield no formal `02` verdict before their Phase 0
 registrations are frozen. Full design:
 [`specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
 
-- **T1 — K562 mechanism kill-test.** Compose the frozen exp05 backbone with
-  **Bridge A** (feed the observed `a`-perturbed Replogle state as basal, query
-  `b`) and correlate the symmetrized co-dependency spike with the frozen Horlbeck
-  `gi_score` on the covered pairs (83,028 exp05-ready; 1,523 strong-SL at
-  `gi_score < -3.0`). Bridge B is not run on this checkpoint: its ESM2 per-gene
-  perturbation embeddings admit no trained two-gene operator, so a
-  combined-embedding input is an untrained out-of-distribution query rather than
-  a validated joint-fitness prediction. This pulls Phases 3/4/7-K562 forward; a null
-  result stops cross-context extension before it starts. It is a development
-  diagnostic, not the MECHANISTIC verdict (§9 and `02` §6).
+- **T1 — K562 mechanism kill-test (completed 2026-07-22; negative).** Composed the
+  frozen exp05 backbone with **Bridge A** (observed `a`-perturbed Replogle state as
+  basal, query `b`) over the 83,028 exp05-ready covered pairs (1,281 strong-SL at
+  `gi_score < -3.0`), with independent-N panel matching and both pooler reference
+  conventions. The symmetrized co-dependency spike does **not** correlate with the
+  frozen Horlbeck `gi_score` (|Spearman| < 0.01; AUROC(s_A -> strong-SL)
+  approximately 0.52, below the single-gene GeneEffect floor). Bridge B was not run
+  on this checkpoint: its ESM2 per-gene perturbation embeddings admit no trained
+  two-gene operator, so a combined-embedding input is an untrained out-of-distribution
+  query rather than a validated joint-fitness prediction. Per the kill-test rule the
+  composition mechanism is **paused for redesign and not extended across contexts**.
+  Development diagnostic, not the MECHANISTIC verdict (§9 and `02` §6). Result:
+  [`results/exp05-bridge-a-horlbeck-kill-test.md`](results/exp05-bridge-a-horlbeck-kill-test.md).
 - **T2 — GeneEffect cross-cell-type generalization.** Leave-one-cell-line-out on
   DepMap GeneEffect × CCLE baseline expression — not Feng2024, which has no
   cell-type axis — scored on the differentially-essential slice against

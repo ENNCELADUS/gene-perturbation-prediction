@@ -4,9 +4,10 @@
 established · Phase 0 effect-size/eligibility/estimator registration pending ·
 related-work review complete · active experiment roadmap established · exp05
 K562 backbone established · first HCT116 frozen-backbone transport audit closed
-negative · Horlbeck K562 GI acquired and coverage-audited · immediate two-track
-execution plan set (T1 K562 Bridge-A mechanism kill-test, T2 DepMap GeneEffect
-generalization) · SOTA reproduction and contextual SL model not yet complete.
+negative · Horlbeck K562 GI acquired and coverage-audited · T1 K562
+Bridge-A-vs-Horlbeck mechanism kill-test completed **negative** (composition
+mechanism paused for redesign) · T2 DepMap GeneEffect generalization not started ·
+SOTA reproduction and contextual SL model not yet complete.
 **Goal:** build a virtual-cell SL discovery model that competes with the Feng2024
 SOTA for genes withheld from SL-pair/graph training and separately generalizes to
 cancer cell lines excluded from training.
@@ -66,15 +67,17 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | Multi-cell-line data-role audit | Not started. |
 | Multi-cell-line virtual-cell backbone | Not started; current exp05 is K562-based. |
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
-| Context-conditioned Bridge A / Bridge B | Not started. |
+| Context-conditioned Bridge A / Bridge B | Not started; the K562 Bridge A **mechanism** was tested and is negative (see measured-GI row). |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
-| Measured-GI validation | K562 Horlbeck acquired and coverage-audited; model evaluation not started, and a non-K562 anchor remains to identify. |
+| Measured-GI validation | K562 Horlbeck acquired and coverage-audited; **K562 Bridge-A kill-test completed, negative** ([result](results/exp05-bridge-a-horlbeck-kill-test.md)); a non-K562 anchor remains to identify. |
 
 ## Immediate worklist
 
-- [ ] **T1** — run the K562 Bridge-A-vs-Horlbeck mechanism kill-test on the frozen
-  exp05 backbone over the covered pairs (development diagnostic, not the formal
-  MECHANISTIC verdict); [plan](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
+- [x] **T1** — K562 Bridge-A-vs-Horlbeck mechanism kill-test completed on the frozen
+  exp05 backbone over the 83,028 covered pairs: **negative** (|Spearman| < 0.01;
+  AUROC(s_A -> strong-SL) approximately 0.52, below the single-gene floor). The
+  composition mechanism is paused for redesign and not extended across contexts;
+  [result](results/exp05-bridge-a-horlbeck-kill-test.md).
 - [ ] **T2** — run DepMap leave-one-cell-line-out GeneEffect generalization scored
   on the differentially-essential slice (single-gene backbone transfer, not
   cross-cell-line SL); [plan](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).

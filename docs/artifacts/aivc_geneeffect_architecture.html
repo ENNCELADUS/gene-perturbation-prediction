@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIVC A→B→C GeneEffect Model Architecture</title>
+<style>
+  :root{
+    --f:"Inter","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+    --mono:"SFMono-Regular",Menlo,"JetBrains Mono",Consolas,monospace;
+    --ink:#1f2733; --sub:#5c6672; --faint:#8a94a2; --line:#e5e8ec; --bg:#f5f6f8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg); color:var(--ink); font-family:var(--f);
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; line-height:1.55}
+  .wrap{max-width:1000px; margin:0 auto; padding:40px 26px 60px}
+  .kicker{font-size:11px; font-weight:600; letter-spacing:2.2px; text-transform:uppercase; color:var(--faint); margin:0 0 8px}
+  h1{font-size:23px; font-weight:650; letter-spacing:-.3px; margin:0 0 6px}
+  .lede{font-size:14px; color:var(--sub); margin:0; max-width:760px}
+  .lede code{font-family:var(--mono); font-size:.86em; background:#eceff2; padding:1px 5px; border-radius:5px; color:#3a4550}
+
+  .figcard{background:#fff; border:1px solid var(--line); border-radius:14px; padding:26px 26px 20px; margin:24px 0 0;
+    box-shadow:0 1px 2px rgba(31,42,55,.05), 0 8px 26px rgba(31,42,55,.05)}
+  .scroller{overflow-x:auto}
+  .scroller svg{display:block; width:100%; height:auto; min-width:720px}
+
+  .callouts{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:22px}
+  .callout{border:1px solid var(--line); border-radius:11px; padding:14px 16px}
+  .callout.train{border-left:3px solid #3d6fb2}
+  .callout.eval{border-left:3px solid #6b7480}
+  .callout h4{margin:0 0 9px; font-size:12px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:var(--faint)}
+  .callout ul{margin:0; padding:0; list-style:none}
+  .callout li{font-size:12.5px; color:var(--sub); padding:3px 0; display:flex; gap:8px}
+  .callout li b{color:var(--ink); font-weight:600}
+  .callout .eq{font-family:var(--mono); font-size:11.5px; background:#f5f7f9; border:1px solid #eef1f4; border-radius:7px;
+    padding:7px 9px; color:#39424d; margin:8px 0 2px; overflow-x:auto; white-space:nowrap}
+  .callout .dot{color:var(--faint)}
+
+  figcaption{font-size:13px; color:var(--sub); margin:22px 2px 2px; line-height:1.62; border-top:1px solid var(--line); padding-top:16px}
+  figcaption b{color:var(--ink); font-weight:600}
+  figcaption .mono{font-family:var(--mono); font-size:.9em}
+  footer{margin-top:20px; font-size:11.5px; color:var(--faint); line-height:1.7}
+  footer code{font-family:var(--mono); color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">vcc-perturbation-prediction · exp05 · K562 backbone</p>
+  <h1>AIVC A→B→C model for GeneEffect prediction</h1>
+  <p class="lede">A pretrained single-cell perturbation backbone (STATE) is turned into a differentiable virtual cell:
+  a trainable perturbation adapter and a light response head map predicted transcriptomes to single-gene DepMap GeneEffect.</p>
+
+  <div class="figcard">
+    <div class="scroller">
+    <svg viewBox="0 0 860 1000" role="img" aria-label="AIVC A to B to C model architecture, vertical pipeline">
+      <defs>
+        <marker id="ah" markerWidth="9" markerHeight="9" refX="6.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#7f8894"/>
+        </marker>
+        <marker id="ahr" markerWidth="9" markerHeight="9" refX="6.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#c0574a"/>
+        </marker>
+        <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="1.4" stdDeviation="2" flood-color="#1f2a37" flood-opacity="0.09"/>
+        </filter>
+        <style>
+          text{font-family:var(--f)}
+          .tt{font-weight:600;font-size:12.5px;fill:#1f2733}
+          .tb{font-weight:650;font-size:13px;fill:#1f2733}
+          .sb{font-weight:400;font-size:10.2px;fill:#5c6672}
+          .bl{font-weight:400;font-size:9.6px;fill:#5c6672}
+          .nt{font-weight:400;font-size:9px;font-style:italic;fill:#8a94a2}
+          .lab{font-family:var(--mono);font-size:10px;fill:#5f6975}
+          .sub{font-size:74%}.sup{font-size:74%}
+          .bg{font-weight:700;font-size:8px;letter-spacing:.4px}
+          .sec{font-weight:600;font-size:9.5px;letter-spacing:2px;fill:#aeb6c1}
+          .lg{font-weight:400;font-size:11px;fill:#5c6672}
+          .tag{font-weight:700;font-size:7.6px;letter-spacing:.5px;fill:#c0574a}
+          .flow{stroke:#7f8894;stroke-width:1.5;fill:none}
+          .sup-arrow{stroke:#c0574a;stroke-width:1.4;fill:none;stroke-dasharray:5 3}
+        </style>
+      </defs>
+
+      <!-- section rails -->
+      <text class="sec" x="22" y="182" transform="rotate(-90 22 182)" text-anchor="middle">A · PERTURBATION</text>
+      <text class="sec" x="22" y="414" transform="rotate(-90 22 414)" text-anchor="middle">A→B · BACKBONE</text>
+      <text class="sec" x="22" y="655" transform="rotate(-90 22 655)" text-anchor="middle">B→C · RESPONSE HEAD</text>
+      <text class="sec" x="22" y="879" transform="rotate(-90 22 879)" text-anchor="middle">C · OUTPUT</text>
+
+      <!-- =============== MAIN SPINE =============== -->
+
+      <!-- INPUT (yellow) -->
+      <g filter="url(#sh)"><rect x="250" y="64" width="300" height="52" rx="9" fill="#fbf5e3" stroke="#e6d29a" stroke-width="1.3"/></g>
+      <text class="tt" x="266" y="86">Input · perturbation query</text>
+      <text class="sb" x="266" y="102">gene symbol&#160; g&#160; (e.g. TP53)</text>
+
+      <!-- ESM (frozen · purple) -->
+      <g filter="url(#sh)"><rect x="250" y="150" width="300" height="52" rx="9" fill="#efecf7" stroke="#c6bfdd" stroke-width="1.3"/></g>
+      <text class="tt" x="266" y="172">ESM-2 (650M) protein encoder</text>
+      <text class="sb" x="266" y="188">per-gene sequence embedding</text>
+      <g><rect x="492" y="159" width="48" height="15" rx="7.5" fill="#e5e1f1"/><text class="bg" x="516" y="169.5" text-anchor="middle" fill="#6f63a6">FROZEN</text></g>
+
+      <!-- PertAdapter (trainable · blue) -->
+      <g filter="url(#sh)"><rect x="250" y="238" width="300" height="58" rx="9" fill="#e9f1fb" stroke="#a6c1e6" stroke-width="1.3"/></g>
+      <text class="tt" x="266" y="260">PertAdapter (MLP)</text>
+      <text class="sb" x="266" y="277">1280 → 512 → 2024&#160; ·&#160; adapts STATE pert input</text>
+      <g><rect x="478" y="247" width="62" height="15" rx="7.5" fill="#dce8f8"/><text class="bg" x="509" y="257.5" text-anchor="middle" fill="#3d6fb2">TRAINABLE</text></g>
+
+      <!-- STATE backbone (frozen · gray) -->
+      <g filter="url(#sh)"><rect x="250" y="344" width="300" height="140" rx="10" fill="#e9f1fb" stroke="#a6c1e6" stroke-width="1.4"/></g>
+      <text class="tb" x="266" y="366">ST-HVG-Replogle</text>
+      <text class="sb" x="266" y="383">pretrained STATE cell-set transformer</text>
+      <text class="bl" x="266" y="404">·&#160; set self-attention over 64 cells</text>
+      <text class="bl" x="266" y="421">·&#160; perturbation conditioning via p<tspan class="sub" dy="2">g</tspan></text>
+      <text class="bl" x="266" y="438">·&#160; expression decoder → 2000 HVG</text>
+      <text class="nt" x="266" y="459">fine-tuned at LR 2.5×10<tspan class="sup" dy="-3">−6</tspan> · downstream 2.5×10<tspan class="sup" dy="-3">−5</tspan> · frozen at inference</text>
+      <g><rect x="466" y="353" width="74" height="15" rx="7.5" fill="#dce8f8"/><text class="bg" x="503" y="363.5" text-anchor="middle" fill="#3d6fb2">FINE-TUNED</text></g>
+
+      <!-- Response encoder (trainable · blue) -->
+      <g filter="url(#sh)"><rect x="250" y="524" width="300" height="62" rx="9" fill="#e9f1fb" stroke="#a6c1e6" stroke-width="1.3"/></g>
+      <text class="tt" x="266" y="546">Response encoder</text>
+      <text class="sb" x="266" y="562">per-cell&#160; 2000 → 128&#160; + LayerNorm</text>
+      <text class="nt" x="266" y="578">shared over predicted B and basal control</text>
+      <g><rect x="478" y="533" width="62" height="15" rx="7.5" fill="#dce8f8"/><text class="bg" x="509" y="543.5" text-anchor="middle" fill="#3d6fb2">TRAINABLE</text></g>
+
+      <!-- Aggregation: E1 moment pooling (green non-param) -->
+      <g filter="url(#sh)"><rect x="250" y="620" width="144" height="66" rx="9" fill="#eaf3ec" stroke="#aecfb5" stroke-width="1.3"/></g>
+      <text class="tt" x="262" y="641" style="font-size:12px">Moment pooling</text>
+      <text class="sb" x="262" y="657">mean · var · entropy</text>
+      <g><rect x="258" y="666" width="70" height="14" rx="7" fill="#dcecdf"/><text class="bg" x="293" y="676" text-anchor="middle" fill="#4e8a5f">NON-PARAMETRIC</text></g>
+
+      <!-- E2 GMM occupancy (trainable blue) -->
+      <g filter="url(#sh)"><rect x="406" y="620" width="144" height="66" rx="9" fill="#e9f1fb" stroke="#a6c1e6" stroke-width="1.3"/></g>
+      <text class="tt" x="418" y="641" style="font-size:12px">GMM occupancy</text>
+      <text class="sb" x="418" y="657">K=64 · occ, occ−ctrl</text>
+      <g><rect x="447" y="666" width="62" height="14" rx="7" fill="#dce8f8"/><text class="bg" x="478" y="676" text-anchor="middle" fill="#3d6fb2">TRAINABLE</text></g>
+
+      <!-- concat junction -->
+      <circle cx="400" cy="706" r="11" fill="#eaf3ec" stroke="#aecfb5" stroke-width="1.3"/>
+      <text x="400" y="710" text-anchor="middle" style="font-size:14px;fill:#4e8a5f;font-weight:600">&#8853;</text>
+
+      <!-- Prediction head (trainable blue) -->
+      <g filter="url(#sh)"><rect x="250" y="748" width="300" height="60" rx="9" fill="#e9f1fb" stroke="#a6c1e6" stroke-width="1.3"/></g>
+      <text class="tt" x="266" y="771">Prediction head (MLP)</text>
+      <text class="sb" x="266" y="788">385 → 64 → 32 → 1&#160; ·&#160; ReLU · dropout 0.1</text>
+      <g><rect x="478" y="757" width="62" height="15" rx="7.5" fill="#dce8f8"/><text class="bg" x="509" y="767.5" text-anchor="middle" fill="#3d6fb2">TRAINABLE</text></g>
+
+      <!-- OUTPUT (orange) -->
+      <g filter="url(#sh)"><rect x="250" y="852" width="300" height="54" rx="9" fill="#fcefe4" stroke="#e8c49c" stroke-width="1.4"/></g>
+      <text class="tb" x="266" y="874">Predicted GeneEffect&#160; ĉ</text>
+      <text class="sb" x="266" y="891">relative growth-rate effect · scalar</text>
+
+      <!-- =============== LEFT: basal cell state side input =============== -->
+      <g filter="url(#sh)"><rect x="40" y="300" width="190" height="54" rx="9" fill="#fbf5e3" stroke="#e6d29a" stroke-width="1.3"/></g>
+      <text class="tt" x="56" y="322" style="font-size:12px">Basal cell state</text>
+      <text class="sb" x="56" y="338">K562 non-targeting cells</text>
+
+      <g filter="url(#sh)"><rect x="40" y="384" width="190" height="50" rx="9" fill="#eaf3ec" stroke="#aecfb5" stroke-width="1.3"/></g>
+      <text class="tt" x="56" y="405" style="font-size:12px">HVG + cell-sentences</text>
+      <text class="sb" x="56" y="421">2000 HVG → cell set 64×2000</text>
+
+      <!-- =============== RIGHT: supervision + reference =============== -->
+      <!-- T1 observed expression (training only, red dashed) -->
+      <g filter="url(#sh)"><rect x="590" y="506" width="232" height="52" rx="9" fill="#fdf2f1" stroke="#e6b3ad" stroke-width="1.3" stroke-dasharray="5 3"/></g>
+      <text class="tt" x="606" y="528" style="font-size:12px">Observed expression&#160; X</text>
+      <text class="sb" x="606" y="544">matched perturbed cells · teacher</text>
+      <text class="tag" x="810" y="519" text-anchor="end">TRAINING ONLY</text>
+
+      <!-- control reference (inference input, blue) -->
+      <g filter="url(#sh)"><rect x="590" y="628" width="200" height="50" rx="9" fill="#eef4fb" stroke="#b9cfe8" stroke-width="1.2"/></g>
+      <text class="tt" x="606" y="649" style="font-size:12px">Control reference&#160; z<tspan class="sub" dy="2">ctrl</tspan></text>
+      <text class="sb" x="606" y="665">shared encoder on basal cells</text>
+
+      <!-- T2 DepMap label (training only, red dashed) -->
+      <g filter="url(#sh)"><rect x="590" y="852" width="232" height="52" rx="9" fill="#fdf2f1" stroke="#e6b3ad" stroke-width="1.3" stroke-dasharray="5 3"/></g>
+      <text class="tt" x="606" y="874" style="font-size:12px">DepMap GeneEffect&#160; c</text>
+      <text class="sb" x="606" y="890">ground-truth label</text>
+      <text class="tag" x="810" y="865" text-anchor="end">TRAINING ONLY</text>
+
+      <!-- =============== ARROWS (solid = inference forward) =============== -->
+      <path class="flow" d="M400,116 L400,148" marker-end="url(#ah)"/>
+      <text class="lab" x="408" y="136">g</text>
+
+      <path class="flow" d="M400,202 L400,236" marker-end="url(#ah)"/>
+      <text class="lab" x="408" y="223">e<tspan class="sub" dy="2">g</tspan><tspan dy="-2"> ∈ ℝ</tspan><tspan class="sup" dy="-3">1280</tspan></text>
+
+      <path class="flow" d="M400,296 L400,342" marker-end="url(#ah)"/>
+      <text class="lab" x="408" y="322">p<tspan class="sub" dy="2">g</tspan><tspan dy="-2"> ∈ ℝ</tspan><tspan class="sup" dy="-3">2024</tspan></text>
+
+      <!-- cell side-input into STATE -->
+      <path class="flow" d="M135,354 L135,382" marker-end="url(#ah)"/>
+      <path class="flow" d="M230,409 L248,409" marker-end="url(#ah)"/>
+
+      <!-- STATE -> encoder -->
+      <path class="flow" d="M400,484 L400,522" marker-end="url(#ah)"/>
+      <text class="lab" x="408" y="508">X̂ ∈ ℝ<tspan class="sup" dy="-3">N×2000</tspan></text>
+
+      <!-- encoder -> split -->
+      <path class="flow" d="M400,586 L400,600 L322,600 L322,618" marker-end="url(#ah)"/>
+      <path class="flow" d="M400,600 L478,600 L478,618" marker-end="url(#ah)"/>
+      <text class="lab" x="408" y="596">z<tspan class="sub" dy="2">i</tspan><tspan dy="-2"> ∈ ℝ</tspan><tspan class="sup" dy="-3">128</tspan></text>
+
+      <!-- control ref -> E2 -->
+      <path class="flow" d="M588,653 L552,653" marker-end="url(#ah)"/>
+      <text class="lab" x="570" y="647" text-anchor="middle">ℝ<tspan class="sup" dy="-3">M×128</tspan></text>
+
+      <!-- E1,E2 -> concat -->
+      <path class="flow" d="M322,686 L322,706 L387,706" marker-end="url(#ah)"/>
+      <path class="flow" d="M478,686 L478,706 L413,706" marker-end="url(#ah)"/>
+
+      <!-- concat -> head -->
+      <path class="flow" d="M400,717 L400,746" marker-end="url(#ah)"/>
+      <text class="lab" x="408" y="735">h ∈ ℝ<tspan class="sup" dy="-3">385</tspan></text>
+
+      <!-- head -> output -->
+      <path class="flow" d="M400,808 L400,850" marker-end="url(#ah)"/>
+      <text class="lab" x="408" y="833">ĉ ∈ ℝ</text>
+
+      <!-- =============== SUPERVISION ARROWS (dashed red = training only) =============== -->
+      <path class="sup-arrow" d="M588,532 L553,552" marker-end="url(#ahr)"/>
+      <text class="lab" x="572" y="530" text-anchor="middle" fill="#c0574a">L<tspan class="sub" dy="2">obs</tspan><tspan dy="-2"> · L</tspan><tspan class="sub" dy="2">aux</tspan></text>
+
+      <path class="sup-arrow" d="M588,879 L553,879" marker-end="url(#ahr)"/>
+      <text class="lab" x="571" y="873" text-anchor="middle" fill="#c0574a">L<tspan class="sub" dy="2">pred</tspan><tspan dy="-2"> · L</tspan><tspan class="sub" dy="2">rank</tspan></text>
+
+      <!-- =============== LEGEND =============== -->
+      <line x1="40" y1="930" x2="822" y2="930" stroke="#e5e8ec" stroke-width="1"/>
+      <!-- row 1 -->
+      <rect x="40" y="947" width="13" height="13" rx="3.5" fill="#e9f1fb" stroke="#a6c1e6"/><text class="lg" x="60" y="957">Trainable</text>
+      <rect x="150" y="947" width="13" height="13" rx="3.5" fill="#eef0f2" stroke="#cbd2d8"/><text class="lg" x="170" y="957">Frozen (pretrained)</text>
+      <rect x="320" y="947" width="13" height="13" rx="3.5" fill="#eaf3ec" stroke="#aecfb5"/><text class="lg" x="340" y="957">Non-parametric</text>
+      <rect x="470" y="947" width="13" height="13" rx="3.5" fill="#fbf5e3" stroke="#e6d29a"/><text class="lg" x="490" y="957">Input / data</text>
+      <rect x="600" y="947" width="13" height="13" rx="3.5" fill="#fcefe4" stroke="#e8c49c"/><text class="lg" x="620" y="957">Output</text>
+      <!-- row 2: dashed red -->
+      <line x1="690" y1="953.5" x2="716" y2="953.5" stroke="#c0574a" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#ahr)"/>
+      <text class="lg" x="724" y="957">Training-only supervision</text>
+    </svg>
+    </div>
+
+    <div class="callouts">
+      <div class="callout train">
+        <h4>Train</h4>
+        <ul>
+          <li><b>Update (2.5e-5):</b>&#160;PertAdapter · Response encoder · GMM occupancy · Prediction head</li>
+          <li><b>Fine-tune (2.5e-6):</b>&#160;STATE (ST-HVG-Replogle) backbone</li>
+          <li><b>Access:</b>&#160;observed expression X, DepMap labels c</li>
+        </ul>
+        <div class="eq">L_total = 2·L_pred + 5·L_rank + 0.25·L_obs + L_aux</div>
+        <ul><li><span class="dot">L_rank: pairwise RankNet · L_aux: B-space (annealed)</span></li></ul>
+      </div>
+      <div class="callout eval">
+        <h4>Eval / inference</h4>
+        <ul>
+          <li><b>No access:</b>&#160;observed X or labels c; whole model frozen</li>
+          <li><b>Produce:</b>&#160;ĉ = predicted GeneEffect, per gene</li>
+          <li><b>Apply (Bridge A):</b>&#160;swap basal state → a-perturbed cells</li>
+        </ul>
+        <div class="eq">s_A(a,b) = ½·( ĉ[b|ctrl]−ĉ[b|a] + ĉ[a|ctrl]−ĉ[a|b] )</div>
+        <ul><li><span class="dot">symmetric co-dependency score: s_A(a,b) = s_A(b,a)</span></li></ul>
+      </div>
+    </div>
+
+    <figcaption>
+      <b>Figure&#160;1.&#160; Key idea.</b> A frozen single-cell perturbation backbone is repurposed as a differentiable
+      virtual cell — a trainable perturbation adapter injects the query gene, and a light response head reads the
+      predicted transcriptome out as a single-gene DepMap GeneEffect, enabling counterfactual co-dependency scoring at
+      inference. <span class="mono">A</span> gene <span class="mono">g</span> is embedded (ESM-2, frozen) and adapted to
+      STATE's raw perturbation vector <span class="mono">p_g</span>; STATE transforms the basal K562 cell set (side input)
+      into predicted expression <span class="mono">X̂</span>; the shared encoder + diagonal-GMM / moment aggregation pool it
+      to <span class="mono">h∈ℝ³⁸⁵</span>, and an MLP head predicts <span class="mono">ĉ</span>. Dashed red arrows are
+      training-only supervision (observed expression and DepMap labels); solid arrows are the inference forward path.
+    </figcaption>
+  </div>
+
+  <footer>
+    Sources: <code>src/aivc_model/model.py</code> · <code>src/aivc_model/response.py</code> ·
+    <code>configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml</code> · <code>src/aivc_model/bridge_a.py</code>.
+    DepMap GeneEffect is a relative growth-rate effect under a population-dynamics model — single-gene, not a cell-death or single-cell readout, and never a double-knockout quantity.
+  </footer>
+
+</div>
+</body>
+</html>
