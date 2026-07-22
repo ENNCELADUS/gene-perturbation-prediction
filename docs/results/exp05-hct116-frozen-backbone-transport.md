@@ -86,7 +86,8 @@ The bound interpretation is therefore:
 - the result does not show that the gene-dependency prior fails to transfer;
 - the result does not evaluate pairwise SL, Bridge A, Bridge B, or cross-cell-line
   SL generalization; and
-- HCT116 GeneEffect is now unsealed and the line is consumed under this research
-  contract. It cannot be recycled into model development or reused as an
-  untouched formal external test; any later HCT116-informed analysis is
-  post-unseal diagnostic work only.
+- HCT116 GeneEffect is now unsealed. The completed audit remains the binding
+  result for this frozen model, while the current protocol permits HCT116 to be
+  reassigned to a declared GeneEffect component training/development role. It
+  cannot again be presented as an untouched external test, and later
+  HCT116-informed results must disclose that development exposure.
