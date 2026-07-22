@@ -4,7 +4,9 @@
 established · Phase 0 effect-size/eligibility/estimator registration pending ·
 related-work review complete · active experiment roadmap established · exp05
 K562 backbone established · first HCT116 frozen-backbone transport audit closed
-negative · SOTA reproduction and contextual SL model not yet complete.
+negative · Horlbeck K562 GI acquired and coverage-audited · immediate two-track
+execution plan set (T1 K562 Bridge-A mechanism kill-test, T2 DepMap GeneEffect
+generalization) · SOTA reproduction and contextual SL model not yet complete.
 **Goal:** build a virtual-cell SL discovery model that competes with the Feng2024
 SOTA for genes withheld from SL-pair/graph training and separately generalizes to
 cancer cell lines excluded from training.
@@ -66,10 +68,16 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
 | Context-conditioned Bridge A / Bridge B | Not started. |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
-| Measured-GI validation | Not started; K562 Horlbeck to acquire and non-K562 anchor to identify. |
+| Measured-GI validation | K562 Horlbeck acquired and coverage-audited; model evaluation not started, and a non-K562 anchor remains to identify. |
 
 ## Immediate worklist
 
+- [ ] **T1** — run the K562 Bridge-A-vs-Horlbeck mechanism kill-test on the frozen
+  exp05 backbone over the covered pairs (development diagnostic, not the formal
+  MECHANISTIC verdict); [plan](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
+- [ ] **T2** — run DepMap leave-one-cell-line-out GeneEffect generalization scored
+  on the differentially-essential slice (single-gene backbone transfer, not
+  cross-cell-line SL); [plan](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
 - [ ] Freeze and verify the official Feng2024 folds, labels, candidates, and
   `cal_metrics` contract.
 - [ ] Reproduce the strong SOTA under that identical official harness.
@@ -85,6 +93,8 @@ gene marginals, cell-line identity, and direct context-free transfer.
 - [ ] Run untouched held-out-cell-line evaluation.
 - [ ] Validate measured GI in K562 and at least one non-K562 context before making
   a multi-cell-line mechanistic claim.
+- [x] Acquire and provenance-check the Horlbeck K562 GI map and freeze its exp05
+  coverage bound; [result](results/horlbeck-k562-exp05-coverage.md).
 
 ## Where things live
 

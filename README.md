@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-07-21):** Active direction — **generalizable synthetic-lethality discovery by virtual-cell composition**. The first HCT116 frozen-K562-backbone single-gene transport audit is closed negative; it does not test pairwise or cross-cell-line SL. The official Feng2024 SOTA comparison and context-conditioned SL track remain pending. Live contract, acceptance criteria, roadmap, and results: [`docs/README.md`](docs/README.md).
+> **Status (2026-07-22):** Active direction — **generalizable synthetic-lethality discovery by virtual-cell composition**. The first HCT116 frozen-K562-backbone single-gene transport audit is closed negative; it does not test pairwise or cross-cell-line SL. The Horlbeck 2018 K562 fitness-GI map is acquired and coverage-audited, and an immediate two-track development plan is set (K562 Bridge-A mechanism kill-test; DepMap GeneEffect generalization). The official Feng2024 SOTA comparison and context-conditioned SL track remain pending. Live contract, acceptance criteria, roadmap, and results: [`docs/README.md`](docs/README.md).
 
 The central question of the active direction:
 
@@ -32,6 +32,7 @@ The intuition is mechanistic: **synthetic lethality is a combination fitness out
 
 ## *Latest News* 🔥
 
+- **[2026/07]** Horlbeck 2018 K562 fitness-GI map acquired and coverage-audited (448 genes, 100,128 pairs; 83,028 exp05-covered), and an execution plan set: two parallel development tracks — a **K562 Bridge-A-vs-Horlbeck mechanism kill-test** on the frozen exp05 backbone, and **DepMap leave-one-cell-line-out GeneEffect** transfer (single-gene backbone, not cross-cell-line SL). Neither opens held-out-cell-line SL labels. See [`docs/04-roadmap.md`](docs/04-roadmap.md) §1.1.
 - **[2026/07]** Formal HCT116 frozen-backbone audit closed negative: direct K562 GeneEffect transfer remained strong (Spearman 0.554), but the response head collapsed and added no independent HCT116 signal. This is single-gene backbone evidence, not cross-cell-line SL. [`Closeout`](docs/results/exp05-hct116-frozen-backbone-transport.md).
 - **[2026/07]** Research contract expanded from a K562-only formulation to a **general SL discovery model**. Feng2024 CV2/CV3 test genes withheld from SL-pair/graph training; held-out-cell-line splits separately test unseen contexts. K562 remains the current backbone and one mechanistic anchor.
 - **[2026/07]** Two composition bridges — counterfactual co-dependency and virtual double knockout — are specified to beat strong SOTA (SLMGAE, KR4SL), survive context/pan-essentiality controls, and match measured GI.
@@ -73,7 +74,7 @@ uv run python -m pytest
 
 ## Research Framing
 
-> **Status:** general-model contract, claim-level acceptance criteria, literature review, and experiment roadmap established; the first HCT116 frozen-backbone audit closed negative. Phase 0 effect-size/eligibility registration, official SOTA reproduction, multi-cell-line data audit, and contextual SL model remain pending. Live status board: [`docs/README.md`](docs/README.md).
+> **Status:** general-model contract, claim-level acceptance criteria, literature review, and experiment roadmap established; the first HCT116 frozen-backbone audit closed negative, and the Horlbeck K562 GI map is acquired and coverage-audited. Phase 0 effect-size/eligibility registration, official SOTA reproduction, measured-GI model evaluation, multi-cell-line data audit, and contextual SL model remain pending. Live status board: [`docs/README.md`](docs/README.md).
 
 ```text
 Discover synthetic-lethal pairs for genes withheld from the SL graph and for
