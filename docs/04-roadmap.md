@@ -1,8 +1,11 @@
 # Experiment Roadmap: Generalizable SL Discovery
 
 **Status:** active plan. The first HCT116 frozen-K562-backbone single-gene audit
-completed with a negative transport result; no Bridge A/Bridge B, formal SOTA,
-or pairwise cross-cell-line result has completed.
+completed with a negative transport result. The Horlbeck K562 GI map is acquired
+and coverage-audited, but no Bridge A/Bridge B, formal SOTA, measured-GI model
+evaluation, or pairwise cross-cell-line result has completed. An immediate
+two-track development plan is set (§1.1): a K562 Bridge-A mechanism kill-test and
+a DepMap GeneEffect cross-cell-type generalization test.
 **Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**
 [`02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Related work:**
 [`03-literature-review.md`](03-literature-review.md)
@@ -20,6 +23,30 @@ K562 is the current implementation context for the virtual-cell backbone and one
 mechanistic validation context. It is not the final target population. Work does
 not advance to a stronger claim merely because an earlier dataset is unavailable;
 the corresponding claim remains not evaluable.
+
+### 1.1 Immediate execution order (2026-07-22)
+
+Two development tracks are the near-term work. They proceed in parallel and
+independently of the Feng-axis reproduction (Phases 1–2), open no untouched
+held-out cell-line labels, and yield no formal `02` verdict before their Phase 0
+registrations are frozen. Full design:
+[`specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
+
+- **T1 — K562 mechanism kill-test.** Compose the frozen exp05 backbone with
+  **Bridge A** (feed the observed `a`-perturbed Replogle state as basal, query
+  `b`) and correlate the symmetrized co-dependency spike with the frozen Horlbeck
+  `gi_score` on the covered pairs (83,028 exp05-ready; 1,523 strong-SL at
+  `gi_score < -3.0`). Bridge B is not run on this checkpoint: its ESM2 per-gene
+  perturbation embeddings admit no trained two-gene operator, so a
+  combined-embedding input is an untrained out-of-distribution query rather than
+  a validated joint-fitness prediction. This pulls Phases 3/4/7-K562 forward; a null
+  result stops cross-context extension before it starts. It is a development
+  diagnostic, not the MECHANISTIC verdict (§9 and `02` §6).
+- **T2 — GeneEffect cross-cell-type generalization.** Leave-one-cell-line-out on
+  DepMap GeneEffect × CCLE baseline expression — not Feng2024, which has no
+  cell-type axis — scored on the differentially-essential slice against
+  mean/nearest-line transfer, lineage-only, and a plain CCLE-regression baseline.
+  This is the Phase 3 single-gene backbone-transfer exit, not cross-cell-line SL.
 
 ## 2. Phase 0 — freeze data and evaluation contracts
 
@@ -213,7 +240,8 @@ an eligible contract.
 
 ### K562 anchor
 
-- acquire and provenance-check Horlbeck 2018 continuous fitness GI;
+- use the acquired, provenance-checked Horlbeck 2018 continuous fitness GI and
+  its frozen [exp05 coverage audit](results/horlbeck-k562-exp05-coverage.md);
 - use evaluation pairs/genes disjoint from SL-label calibration;
 - use Adamson UPR only as a qualitative transcriptomic check; and
 - exclude Jost/Replogle dual-sgRNA from GI claims.

@@ -109,7 +109,8 @@ composition backbone to be extended across contexts;
 `src/dependency_baseline/` supplies the swap-invariant GeneEffect features and
 residualization machinery. The only local combinatorial-CRISPRi set is
 `data/sl_dependency_v0/raw/adamson/adamson_2016_upr_epistasis.h5ad` (small,
-qualitative); the fitness-GI anchor **Horlbeck 2018** is not yet local. (The
+qualitative); the K562 fitness-GI anchor **Horlbeck 2018** is local and
+coverage-audited (see `docs/data/horlbeck-2018-k562-gi.md`). (The
 `jost_replogle_dual_sgrna` file is single-gene knockdown efficacy, **not** epistasis.)
 
 Configs live in `configs/experiments/<NN>_<name>/`; `models:` defines the ladder,
@@ -126,8 +127,9 @@ program are under `docs/archive/` (untracked, gitignored).
   subset is a coverage ablation, not a K562 SL assay or the formal SOTA harness.
 - Norman is CRISPRa — auxiliary only, never aligned to knockout labels without a
   modality caveat.
-- Measured epistasis for the virtual double-KO: **Horlbeck 2018** K562 GI (to
-  acquire) + **Adamson UPR** (local, qualitative). Jost dual-sgRNA is single-gene
+- Measured epistasis for the virtual double-KO: **Horlbeck 2018** K562 GI
+  (local, coverage-audited) + **Adamson UPR** (local, qualitative). Jost
+  dual-sgRNA is single-gene
   efficacy, **not** epistasis.
 - Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored.
 
