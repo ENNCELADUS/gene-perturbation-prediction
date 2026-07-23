@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Discussion · 2026-07-23 · GeneEffect backbone → cross-cell-line → SL bridge</title>
+<style>
+  :root{
+    --f:"Inter","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+    --mono:"SFMono-Regular",Menlo,"JetBrains Mono",Consolas,monospace;
+    --ink:#1f2733; --sub:#5c6672; --faint:#8a94a2; --line:#e5e8ec; --bg:#f5f6f8;
+    --blue:#3d6fb2; --gray:#6b7480; --red:#c0574a; --green:#4e8a5f; --amber:#a9822e;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg); color:var(--ink); font-family:var(--f);
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; line-height:1.55}
+  .wrap{max-width:1000px; margin:0 auto; padding:40px 26px 72px}
+  code{font-family:var(--mono); font-size:.86em; background:#eceff2; padding:1px 5px; border-radius:5px; color:#3a4550}
+
+  /* header */
+  .kicker{font-size:11px; font-weight:600; letter-spacing:2.2px; text-transform:uppercase; color:var(--faint); margin:0 0 8px}
+  h1{font-size:25px; font-weight:650; letter-spacing:-.3px; margin:0 0 8px}
+  .lede{font-size:14px; color:var(--sub); margin:0; max-width:800px}
+  .lede b{color:var(--ink); font-weight:600}
+
+  /* table of contents strip */
+  .toc{display:flex; flex-wrap:wrap; gap:10px; margin:22px 0 6px}
+  .toc a{flex:1; min-width:220px; text-decoration:none; color:inherit; border:1px solid var(--line);
+    border-radius:11px; padding:12px 14px; background:#fff; display:block;
+    box-shadow:0 1px 2px rgba(31,42,55,.04); transition:border-color .15s}
+  .toc a:hover{border-color:#c7cfd8}
+  .toc .n{font-family:var(--mono); font-size:11px; color:var(--faint)}
+  .toc .t{font-size:13px; font-weight:600; margin:3px 0 2px}
+  .toc .s{font-size:11.5px; color:var(--sub)}
+
+  /* sections */
+  section{margin-top:30px}
+  .sec-head{display:flex; align-items:baseline; gap:12px; margin:0 0 4px}
+  .sec-num{font-family:var(--mono); font-size:13px; font-weight:600; color:var(--faint)}
+  h2{font-size:19px; font-weight:650; letter-spacing:-.2px; margin:0}
+  .sec-sub{font-size:13px; color:var(--sub); margin:6px 0 0; max-width:820px}
+
+  .pill{display:inline-block; font-size:10px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+    padding:2px 9px; border-radius:20px; vertical-align:middle}
+  .pill.done{background:#e6f0e9; color:#3f7a53}
+  .pill.wip{background:#e9f1fb; color:#356199}
+  .pill.paused{background:#fbeae7; color:#b0503f}
+
+  /* cards */
+  .card{background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px 24px; margin:16px 0 0;
+    box-shadow:0 1px 2px rgba(31,42,55,.05), 0 8px 26px rgba(31,42,55,.05)}
+  .card h3{font-size:13px; font-weight:700; letter-spacing:.4px; margin:0 0 12px; color:var(--ink)}
+  .card h3 .tag{font-family:var(--mono); font-weight:500; font-size:11px; color:var(--faint); letter-spacing:0}
+  .card p{font-size:13px; color:var(--sub); margin:10px 0 0}
+  .card p b{color:var(--ink); font-weight:600}
+  .card + .card{margin-top:16px}
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px}
+  @media(max-width:720px){.two{grid-template-columns:1fr} .toc a{min-width:100%}}
+
+  /* tables */
+  .scroller{overflow-x:auto}
+  table{border-collapse:collapse; width:100%; font-size:12.5px; min-width:520px}
+  caption{caption-side:top; text-align:left; font-size:11.5px; color:var(--faint); padding:0 0 9px; letter-spacing:.2px}
+  th,td{padding:7px 11px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--faint); border-bottom:1.5px solid #d7dce1}
+  tbody tr:last-child td{border-bottom:none}
+  td.mono,th.mono{font-family:var(--mono); font-size:11.5px}
+  tr.hi td{background:#f3f7fb}
+  tr.bad td{color:var(--red)}
+  td b{font-weight:650}
+
+  /* pipeline strip */
+  .pipe{display:flex; align-items:stretch; gap:0; flex-wrap:nowrap; overflow-x:auto; padding:4px 0 2px}
+  .pnode{flex:0 0 auto; border:1px solid var(--line); border-radius:9px; padding:9px 12px; min-width:96px; text-align:center; background:#fff}
+  .pnode .l{font-size:11.5px; font-weight:600; color:var(--ink); line-height:1.3}
+  .pnode .m{font-family:var(--mono); font-size:9.5px; color:var(--faint); margin-top:2px}
+  .pnode.inp{background:#fbf5e3; border-color:#e6d29a}
+  .pnode.frz{background:#efecf7; border-color:#c6bfdd}
+  .pnode.trn{background:#e9f1fb; border-color:#a6c1e6}
+  .pnode.out{background:#fcefe4; border-color:#e8c49c}
+  .parrow{flex:0 0 auto; align-self:center; color:#aeb6c1; font-size:15px; padding:0 7px}
+
+  /* equation */
+  .eq{font-family:var(--mono); font-size:12.5px; background:#f5f7f9; border:1px solid #eef1f4; border-radius:9px;
+    padding:13px 15px; color:#333c46; margin:12px 0; overflow-x:auto; line-height:1.9}
+  .eq .cm{color:var(--faint)}
+  .eq .hl{color:var(--red); font-weight:600}
+
+  /* callout note */
+  .note{border-left:3px solid var(--gray); background:#fafbfc; border-radius:0 8px 8px 0; padding:11px 15px; margin:14px 0 0;
+    font-size:12.5px; color:var(--sub)}
+  .note.red{border-color:var(--red)} .note.blue{border-color:var(--blue)} .note.green{border-color:var(--green)}
+  .note b{color:var(--ink); font-weight:600}
+  .note .h{display:block; font-size:10.5px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--faint); margin-bottom:4px}
+
+  ul.tight{margin:10px 0 0; padding-left:18px} ul.tight li{font-size:12.8px; color:var(--sub); padding:2px 0}
+  ul.tight li b{color:var(--ink); font-weight:600}
+
+  a.inline{color:var(--blue); text-decoration:none; border-bottom:1px solid #cdddf0}
+  a.inline:hover{border-bottom-color:var(--blue)}
+
+  footer{margin-top:38px; border-top:1px solid var(--line); padding-top:16px; font-size:11.5px; color:var(--faint); line-height:1.75}
+  footer code{color:var(--sub)}
+  .divider{height:1px; background:var(--line); margin:34px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">vcc-perturbation-prediction · weekly research discussion</p>
+  <h1>GeneEffect backbone → cross-cell-line generalization → the SL bridge</h1>
+  <p class="lede">Three tracks this week. <b>(1)</b> The exp05 virtual-cell backbone that predicts single-gene
+  DepMap GeneEffect — K562 cross-validation and a zero-shot HCT116 audit, both complete. <b>(2)</b> The in-progress
+  rebuild for cross-cell-line generalization — more cell lines, a stronger encoder, a de-collapsed head — no results yet.
+  <b>(3)</b> The open question underneath it all: how a single-gene GeneEffect model can reach a <em>pairwise</em>
+  synthetic-lethality score at all, from first principles.</p>
+
+  <nav class="toc">
+    <a href="#s1"><span class="n">01 · done</span><div class="t">The exp05 GeneEffect backbone</div><div class="s">K562 3-fold CV + zero-shot HCT116 transfer</div></a>
+    <a href="#s2"><span class="n">02 · in progress</span><div class="t">Cross-cell-line generalization</div><div class="s">more lines · stronger encoder · rebuilt head</div></a>
+    <a href="#s3"><span class="n">03 · discussion</span><div class="t">From GeneEffect to SL</div><div class="s">the GI definition and the three routes</div></a>
+  </nav>
+
+  <!-- ============================= SECTION 1 ============================= -->
+  <section id="s1">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2>The exp05 GeneEffect backbone <span class="pill done">Done</span></h2>
+    </div>
+    <p class="sec-sub">A pretrained single-cell perturbation backbone (Arc STATE) is turned into a differentiable virtual
+    cell: a trainable perturbation adapter injects a query gene, STATE forwards the basal K562 cell set into a predicted
+    transcriptome, and a light head reads it out as a single-gene <b>DepMap GeneEffect</b> — a relative growth-rate
+    effect, not a cell-death label and never a double-knockout quantity.</p>
+
+    <div class="card">
+      <h3>Architecture <span class="tag">— full diagram: <a class="inline" href="aivc_geneeffect_architecture.html">aivc_geneeffect_architecture.html</a></span></h3>
+      <div class="pipe">
+        <div class="pnode inp"><div class="l">gene g</div><div class="m">e.g. TP53</div></div>
+        <span class="parrow">→</span>
+        <div class="pnode frz"><div class="l">ESM-2 650M</div><div class="m">frozen</div></div>
+        <span class="parrow">→</span>
+        <div class="pnode trn"><div class="l">PertAdapter</div><div class="m">1280→2024</div></div>
+        <span class="parrow">→</span>
+        <div class="pnode trn"><div class="l">STATE backbone</div><div class="m">fine-tuned</div></div>
+        <span class="parrow">→</span>
+        <div class="pnode trn"><div class="l">response head</div><div class="m">pool + MLP</div></div>
+        <span class="parrow">→</span>
+        <div class="pnode out"><div class="l">GeneEffect ĉ</div><div class="m">scalar</div></div>
+      </div>
+      <p>Basal K562 non-targeting cells enter STATE as a side input, so the predicted response is cell-state–specific.
+      Training supervises on observed perturbation expression and DepMap labels; at inference the whole model is frozen
+      and produces <code>ĉ</code> per gene. The head is a moment-pool + diagonal-GMM occupancy summary into a small MLP
+      — the component that later carries the cross-cell-line failure (§2).</p>
+    </div>
+
+    <div class="card">
+      <h3>K562 experiment — 3-fold cross-validation <span class="tag">— Replogle GWPS → DepMap K562 GeneEffect</span></h3>
+      <p>Five-fold outer CV over the 9,338-gene DepMap-labeled Replogle GWPS universe (seed 42), single-gene GeneEffect
+      regression. The run was stopped after <b>3 of 5 folds completed</b> (fold 3 interrupted); the numbers below are the
+      partial 3-fold mean ± sample SD — a development readout, not the planned 5-fold result.</p>
+      <div class="scroller">
+      <table>
+        <caption>Table 1.1 — exp05 K562 GeneEffect prediction, folds 0–2 (n = 3). Run <code>exp05_formal_padded_eval_v1</code>, rev <code>9eff7e4</code>.</caption>
+        <thead><tr><th>Metric</th><th>Mean ± SD</th><th>Reads as</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td>Spearman</td><td class="mono"><b>0.428 ± 0.039</b></td><td>rank agreement with true GeneEffect</td></tr>
+          <tr><td>Pearson</td><td class="mono">0.550 ± 0.018</td><td>linear agreement</td></tr>
+          <tr><td>RMSE</td><td class="mono">0.459 ± 0.019</td><td>absolute error (GeneEffect units)</td></tr>
+          <tr><td>MAE</td><td class="mono">0.297 ± 0.014</td><td>absolute error</td></tr>
+          <tr><td>R²</td><td class="mono">0.277 ± 0.008</td><td>variance explained</td></tr>
+          <tr class="hi"><td>AUROC · GE &lt; −0.5</td><td class="mono"><b>0.827 ± 0.018</b></td><td>essential-vs-not ranking</td></tr>
+          <tr><td>AUPRC · GE &lt; −0.5</td><td class="mono">0.591 ± 0.029</td><td>precision on the essential slice</td></tr>
+          <tr><td>Top-5% enrichment · GE &lt; −0.5</td><td class="mono">4.34 ± 0.28×</td><td>fold-enrichment of hits in the top 5%</td></tr>
+          <tr><td>AUROC · GE &lt; −1.0</td><td class="mono">0.851 ± 0.016</td><td>strongly-essential ranking</td></tr>
+          <tr><td>Top-5% enrichment · GE &lt; −1.0</td><td class="mono">6.25 ± 0.33×</td><td>fold-enrichment (strong)</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="note green"><span class="h">Reading</span> In its home context the backbone predicts single-gene
+      GeneEffect with real signal — <b>Spearman ≈ 0.43</b> continuous, and it separates essential from non-essential
+      genes well (<b>AUROC ≈ 0.83–0.85</b>, top-5% enrichment 4–6×). This is a single-gene fitness readout, not an SL
+      result.</div>
+    </div>
+
+    <div class="card">
+      <h3>Zero-shot transfer to HCT116 <span class="tag">— frozen K562 model, external line, label-blind then sealed</span></h3>
+      <p>The frozen K562 model was run on HCT116 observed responses (HCT116 non-targeting cells as controls), predictions
+      sealed <em>before</em> HCT116 GeneEffect was opened. The question: does the K562-trained response→fitness head carry
+      to an unseen line?</p>
+      <div class="scroller">
+      <table>
+        <caption>Table 1.2 — HCT116 single-gene transfer, primary cohort = 1,652 shared genes. Run <code>hct116_formal_relative_z_evaluation_v1</code>.</caption>
+        <thead><tr><th>System</th><th>Spearman (95% CI)</th><th>Pearson</th><th>RMSE</th><th>MAE</th><th>AUROC</th><th>output SD</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td>Frozen K562 <b>response head</b> → HCT116</td><td class="mono">−0.001 (−0.05, 0.05)</td><td class="mono">−0.017</td><td class="mono">0.419</td><td class="mono">0.280</td><td class="mono">0.475</td><td class="mono">0.059</td></tr>
+          <tr class="hi"><td>Direct K562 <b>GeneEffect</b> transfer</td><td class="mono"><b>0.554 (0.52, 0.59)</b></td><td class="mono">0.751</td><td class="mono">0.296</td><td class="mono">0.200</td><td class="mono">0.945</td><td class="mono">—</td></tr>
+          <tr><td>K562-train mean (constant)</td><td class="mono">—</td><td class="mono">—</td><td class="mono">0.420</td><td class="mono">0.292</td><td class="mono">0.500</td><td class="mono">0</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p style="font-size:12px;color:var(--faint);margin-top:8px">Reference spread: HCT116 GeneEffect SD = 0.409, K562 GeneEffect SD = 0.428 — vs. the response head's 0.059.</p>
+      <div class="note red"><span class="h">Reading — a clean split</span> The <b>conserved gene-dependency prior
+      transfers</b>: just copying the K562 GeneEffect value predicts HCT116 at Spearman 0.554. The <b>K562-fit
+      response→fitness head does not</b>: Spearman ≈ 0, worse than direct transfer on paired error, and its output
+      variance collapsed to 0.059 (it regressed toward the K562 mean off-distribution). The failure lives
+      <b>downstream of the encoder</b>, in the K562-fit GMM pooler + MSE head — which is exactly what §2 rebuilds. Scope:
+      single-gene backbone evidence; <b>not</b> SL and not a cross-cell-line SL claim.</div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============================= SECTION 2 ============================= -->
+  <section id="s2">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2>Cross-cell-line generalization <span class="pill wip">In progress · no results yet</span></h2>
+    </div>
+    <p class="sec-sub">The HCT116 audit localized the problem: the encoder-level dependency prior is conserved, but the
+    K562-fit readout does not transfer. So the current build asks a sharper question — <b>can a single-gene GeneEffect
+    backbone be made genuinely cell-line-specific?</b> — by fetching more cell lines and rebuilding the parts that
+    collapsed. Everything below is planned/under-construction; no number here is a result.</p>
+
+    <div class="two">
+      <div class="card">
+        <h3>① More cell lines — train on some, hold out others</h3>
+        <p>A context→fitness function needs many contexts. We assemble a multi-line Perturb-seq + DepMap universe with
+        strictly separated roles, then test leave-one-cell-line-out and true held-out lines.</p>
+        <div class="scroller" style="margin-top:12px">
+        <table style="min-width:440px">
+          <thead><tr><th>Line</th><th>Perturb-seq</th><th>DepMap</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td>K562</td><td>Replogle GWPS</td><td>yes</td><td>train</td></tr>
+            <tr><td>HCT116</td><td>X-Atlas/Orion</td><td>yes</td><td>train only</td></tr>
+            <tr><td>~50 Tahoe lines</td><td>DMSO basal only</td><td>yes</td><td>head context</td></tr>
+            <tr class="hi"><td>Jurkat</td><td>Replogle-Nadig</td><td>yes</td><td><b>test — held out</b></td></tr>
+            <tr class="hi"><td>HepG2</td><td>Replogle-Nadig</td><td>yes</td><td><b>test — held out</b></td></tr>
+          </tbody>
+        </table>
+        </div>
+        <p style="font-size:11.5px;color:var(--faint)">Tahoe enters only as basal (unperturbed) single cells supplying
+        context breadth — no drug perturbation, no compound token. Held-out lines never inform training, preprocessing,
+        or slice selection.</p>
+      </div>
+
+      <div class="card">
+        <h3>② Architecture improvements</h3>
+        <ul class="tight">
+          <li><b>Stronger encoder — Tx1-3B (frozen).</b> Replace the per-cell HVG/ESM2 input with Tahoe-pretrained
+          cell embeddings; its pretraining on ~50 cancer lines is the a-priori edge for held-out cancer lines. An
+          HVG-ST control isolates encoder gains from head gains.</li>
+          <li><b>Drop the K562-fit GMM + MSE head.</b> That is the exact part that collapsed on HCT116. Rebuild with a
+          permutation-invariant moment pool + a head conditioned on the <b>basal embedding</b> — inductive, with
+          <b>no one-hot line ID</b> (a one-hot has no slot for an unseen line).</li>
+          <li><b>Rank / correlation loss + variance-matching.</b> Pure MSE is won by predicting the line mean — precisely
+          the observed collapse — so the objective is rank-correlation with an explicit variance-preservation term.</li>
+          <li><b>Few-shot adaptation.</b> Context is inductive, so zero-shot is well-defined; k labels from a held-out
+          line drive a light affine/head-only calibration, reported as an accuracy-vs-k curve.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>What success looks like — the single kill test</h3>
+      <p>Primary metric: paired rank-correlation on the <b>differentially-essential slice</b> (genes whose GeneEffect
+      varies across lines — slice fixed on training lines only), per held-out line. The rebuilt model must <b>beat
+      "copy-K562 + k labels"</b> with a per-line 95% CI excluding zero, at a pre-registered <code>k</code>. Baselines:
+      copy-K562, cross-line mean, nearest-line, lineage-only, plain CCLE-bulk→GeneEffect regression — each with its own
+      k-shot correction.</p>
+      <div class="note blue"><span class="h">Claim boundary</span> Even a strong result here is <b>backbone transfer,
+      not synthetic lethality</b>. It is single-gene GeneEffect across lines; it opens no pairwise labels in any untouched
+      line and makes no cross-cell-line SL claim. It is the substrate the bridge in §3 would compose — nothing more.</div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============================= SECTION 3 ============================= -->
+  <section id="s3">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <h2>From GeneEffect to SL: the bridge <span class="pill paused">Discussion · Bridge A paused</span></h2>
+    </div>
+    <p class="sec-sub">Sections 1–2 give us single-gene GeneEffect, one gene at a time. Synthetic lethality is a
+    <em>pairwise</em>, second-order quantity. This is the conceptual gap — and the first-principles reason two single
+    GeneEffects, on their own, can never bridge it.</p>
+
+    <div class="card">
+      <h3>The definition — GI is a mixed second difference</h3>
+      <p>Let <code>f(a,b)</code> be fitness over two perturbation switches, WT = <code>f(0,0)</code>. Single-mutant
+      fitness is a first-order (gradient) quantity; the genetic interaction is second-order (curvature):</p>
+      <div class="eq">
+GI<span class="cm">ₐᵦ</span> = DMF<span class="cm">ₐᵦ</span> − ψ(SMF<span class="cm">ₐ</span>, SMF<span class="cm">ᵦ</span>)   <span class="cm">← ψ = additive/HSA null</span>
+     = f(1,1) − f(1,0) − f(0,1) + f(0,0)          <span class="cm">← discrete ∂²f/∂a∂b  (curvature)</span>
+     = [ f(1,1) − f(1,0) ] − [ f(0,1) − f(0,0) ]  <span class="cm">← "how much more essential is b once a is lost"</span>
+      </div>
+      <div class="note red"><span class="h">The theorem that governs everything</span> From the two scalars
+      <code>SMF_A</code> and <code>SMF_B</code> you know three corners — <code>f(0,0)</code>, <code>f(1,0)</code>,
+      <code>f(0,1)</code> — but <b>not the (1,1) corner</b>. GI is exactly the deviation of <code>f(1,1)</code> from the
+      null. So predicting SL from two single GeneEffect scalars is not merely underpowered — under any fixed null it is
+      <b>identically zero</b> (<code>GI := DMF − ψ</code>, and if your only guess for <code>DMF</code> is <code>ψ</code>,
+      then <code>GI ≡ 0</code>). The missing datum is always the <b>(1,1) corner</b>, and it must come from somewhere.</div>
+    </div>
+
+    <div class="card">
+      <h3>Three routes to the missing corner</h3>
+      <div class="scroller">
+      <table>
+        <caption>Table 3.1 — the only three ways to supply the curvature, with the data reality in K562-KO.</caption>
+        <thead><tr><th>Route</th><th>Gets f(1,1) by</th><th>Data / feasibility</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Bridge B</b><br><span style="font-size:11px;color:var(--faint)">double-KO enabled</span></td>
+            <td>predicting the joint corner directly with a two-gene operator</td>
+            <td>no in-modality K562-KO combinatorial training data — Horlbeck is the <em>eval</em> anchor, Norman is CRISPRa, Adamson is tiny. FMs compress synergy.</td>
+            <td><span class="pill" style="background:#eef0f2;color:#6b7480">not run</span></td>
+          </tr>
+          <tr class="hi">
+            <td><b>Bridge A</b><br><span style="font-size:11px;color:var(--faint)">from single-pert states</span></td>
+            <td>reading b's essentiality off the <em>a-perturbed transcriptomic state</em> — never doing the double KO</td>
+            <td>data-efficient — single-perturbation states are abundant (Replogle), one arm is a real measured state</td>
+            <td><span class="pill paused">failed kill-test</span></td>
+          </tr>
+          <tr>
+            <td><b>Learned operator</b><br><span style="font-size:11px;color:var(--faint)">regress the curvature</span></td>
+            <td>fitting GI from gene/state features across many measured pairs</td>
+            <td>needs GI labels → a calibrated head on pair-disjoint splits, reported apart from zero-shot; circularity guardrails</td>
+            <td><span class="pill" style="background:#eef0f2;color:#6b7480">not attempted</span></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <p style="font-size:12px;color:var(--faint);margin-top:8px">Bridge A and Bridge B estimate the <em>same</em> mixed
+      partial derivative — they differ only in what is observed vs. predicted, and in how much data each needs.</p>
+    </div>
+
+    <div class="card">
+      <h3>What we tried, and why it paused — Bridge A vs measured K562 epistasis</h3>
+      <p>Bridge A was run on the frozen exp05 backbone: feed the <em>observed</em> a-perturbed K562 cells as the basal
+      state, re-query b's GeneEffect, symmetrize the co-dependency spike, and correlate against the measured Horlbeck 2018
+      K562 GI map (100,128 pairs; 83,028 covered).</p>
+      <div class="scroller">
+      <table>
+        <caption>Table 3.2 — Bridge A co-dependency score s_A vs Horlbeck gi_score (SL ⇒ negative gi_score). Development diagnostic, not a formal mechanistic verdict.</caption>
+        <thead><tr><th>Slice</th><th>Pairs</th><th>Spearman(s_A, gi)</th><th>AUROC(s_A → strong-SL)</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td>Full universe</td><td class="mono">83,028</td><td class="mono">+0.004</td><td class="mono">0.518</td></tr>
+          <tr class="bad"><td>Both genes ≥ 64 cells</td><td class="mono">56,616</td><td class="mono">+0.009</td><td class="mono">0.526</td></tr>
+          <tr class="bad"><td>Cleanest (low-noise)</td><td class="mono">6,795</td><td class="mono">−0.008</td><td class="mono">0.617</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="note red"><span class="h">Reading — negative, and diagnostic of why</span> <b>|Spearman| &lt; 0.01,
+      AUROC ≈ 0.52</b> — below even the single-gene floor, with no dose-response. The counterfactual shift is <em>real</em>
+      (the model responds to the a-perturbed basal), but its signal-to-noise is ≈ 1.0: about half of each pair's score is
+      cell-sampling noise. The composition mechanism is <b>paused for redesign, not extended across contexts</b>.</div>
+    </div>
+
+    <div class="card">
+      <h3>The reframe — why it failed, generalized to a design principle</h3>
+      <ul class="tight">
+        <li><b>The scalars carry none of the curvature — the <em>state</em> does.</b> Bridge A works with singles only
+        because it uses the a-perturbed <em>transcriptome</em> (does the network now route through b?), not the scalar
+        SMF_A. The failure isn't "singles are too little."</li>
+        <li><b>Differencing first-order predictions to extract a second-order quantity is ill-conditioned.</b> The readout
+        collapsed a rich state to one scalar and then subtracted two noisy first-order predictions — SNR ≈ 1.0 is the
+        signature — on the same K562-fit head that §1 showed collapses off-distribution.</li>
+        <li><b>Both bridges share one precondition: an accurate, non-collapsing backbone.</b> That is exactly what §2 is
+        building. So the composition redesign should ride the rebuilt backbone and change the readout — predict the
+        interaction residual more directly, read a pathway-level co-dependency signal instead of a scalar, and use a
+        paired estimator that cancels shared noise.</li>
+      </ul>
+      <div class="note blue"><span class="h">Where this leaves us</span> The real axis is not <em>singles vs doubles</em>
+      — it is <b>what carries the curvature and how noisy the estimator is</b>. Native Bridge B is a data dead-end in
+      K562-KO right now; the state-based estimator is data-efficient but needs a better backbone and a direct-residual
+      readout; a GI-label-calibrated head is the separate test of whether the signal exists at all. Direction for the
+      redesign is the open item — §2's backbone is the shared prerequisite either way.</div>
+    </div>
+  </section>
+
+  <footer>
+    <b>Sources.</b>
+    §1 architecture <code>docs/artifacts/aivc_geneeffect_architecture.html</code>;
+    K562 CV <code>results/experiments/05_aivc_a_to_b_to_c/runs/exp05_formal_padded_eval_v1/</code>;
+    HCT116 <code>docs/results/exp05-hct116-frozen-backbone-transport.md</code>.
+    §2 <code>docs/specs/2026-07-23-tx1-st-geneeffect-backbone-design.md</code>.
+    §3 <code>docs/results/exp05-bridge-a-horlbeck-kill-test.md</code>, <code>docs/data/horlbeck-2018-k562-gi.md</code>; contract <code>docs/01-blueprint.md</code> §4.
+    <br>
+    <b>Claim boundaries.</b> DepMap GeneEffect is a single-gene relative growth-rate effect — never a double-knockout or SL quantity.
+    The HCT116 audit and the §2 backbone are single-gene backbone transfer, not SL. The Bridge A run is a K562 development
+    diagnostic (not a formal mechanistic verdict), on a single-perturbation backbone used out-of-distribution. K562 CV is
+    a partial 3-of-5-fold readout. No SL is ever claimed from single-gene essentiality.
+  </footer>
+
+</div>
+</body>
+</html>

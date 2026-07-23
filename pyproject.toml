@@ -61,7 +61,7 @@ default-groups = ["dev"]
 vcc-dep-baseline = "dependency_baseline.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dependency_baseline", "src/aivc_model", "src/sl_benchmark_baseline", "src/sl_dl_model", "src/ddgcn"]
+packages = ["src/dependency_baseline", "src/aivc_model", "src/sl_benchmark_baseline", "src/sl_dl_model", "src/ddgcn", "src/sl_profile_baseline"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

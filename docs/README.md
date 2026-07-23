@@ -66,7 +66,7 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | Reproduce SLMGAE, KR4SL, KG4SL and best official comparator | Pending. |
 | Context-free composition score `q(a,b)` | Not started. |
 | Multi-cell-line data-role audit | Not started. |
-| Multi-cell-line virtual-cell backbone | **Active focus (in design).** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`; current exp05 is K562-based; adaptation method pending selection. |
+| Multi-cell-line virtual-cell backbone | **Active focus (design approved 2026-07-23).** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); current exp05 is K562-based; not yet built. |
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
 | Context-conditioned Bridge A / Bridge B | Not started; the K562 Bridge A **mechanism** was tested and is negative (see measured-GI row). |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
