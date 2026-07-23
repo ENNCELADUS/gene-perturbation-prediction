@@ -1,0 +1,36 @@
+# Strict two-GeneEffect-profile candidate-prioritization baseline.
+# Labels and folds come directly from Feng2024's official Rand 1:1 caches.
+# The output is not a biological SL probability.
+# Run: uv run python -m sl_profile_baseline --config <this file>
+sl_root: data/SL_benchmark
+gene_effect_csv: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+output_dir: results/experiments/11_feng_depmap_geneeffect_profiles/run
+split_types: [CV1, CV2, CV3]
+folds: [0, 1, 2, 3, 4]
+ranking_k: [10, 20, 50]
+models:
+  - pearson_abs
+  - spearman_abs
+  - cell_line_residual_pearson_abs
+  - missingness_only
+  - summary_logreg
+  - summary_xgb
+  - raw_sgd
+ranking_models:
+  - pearson_abs
+  - spearman_abs
+  - cell_line_residual_pearson_abs
+min_finite_lines: 20
+dependency_threshold: -0.5
+pan_essential_fraction: 0.5
+seed: 17
+logreg_c: 1.0
+logreg_max_iter: 1000
+xgb_n_estimators: 200
+xgb_max_depth: 4
+xgb_learning_rate: 0.1
+raw_alpha: 1.0e-4
+raw_l1_ratio: 0.15
+raw_max_iter: 200
+pair_feature_chunk_size: 2048
+score_matrix_chunk_rows: 4

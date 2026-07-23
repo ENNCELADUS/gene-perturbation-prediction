@@ -61,8 +61,10 @@ GeneEffect backbone**. It runs independently of the Feng-axis reproduction
   only) against copy-K562 transfer, cross-line mean, nearest-line transfer,
   lineage-only, and a plain CCLE-regression baseline, with a few-shot curve
   (accuracy vs. k held-out-line labels). This is the Phase 3 single-gene
-  backbone-transfer exit, not cross-cell-line SL. The model-adaptation method is
-  pending selection.
+  backbone-transfer exit, not cross-cell-line SL. Concrete architecture:
+  [`specs/2026-07-23-tx1-st-geneeffect-backbone-design.md`](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)
+  (Tx1-3B-conditioned ST + rebuilt hybrid head, K562+HCT116 observed-response
+  anchors, ~50 Tahoe basal-context lines, Jurkat/HepG2 held out).
 
 ## 2. Phase 0 — freeze data and evaluation contracts
 

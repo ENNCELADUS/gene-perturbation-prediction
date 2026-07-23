@@ -3,7 +3,8 @@
 **Status:** T1 completed 2026-07-22 and is **negative** (composition mechanism
 paused; [result](../results/exp05-bridge-a-horlbeck-kill-test.md)). T2 is the
 active near-term track, **sharpened 2026-07-23 to a few-shot cross-cell-line
-GeneEffect backbone** (not yet run; adaptation method pending selection).
+GeneEffect backbone** (not yet run; concrete architecture specified 2026-07-23,
+see §3 and [design](2026-07-23-tx1-st-geneeffect-backbone-design.md)).
 Authority: [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
 [`../02-acceptance-criteria.md`](../02-acceptance-criteria.md) (frozen bar) govern;
 [`../04-roadmap.md`](../04-roadmap.md) is the tracked phase plan this refines (see
@@ -111,6 +112,13 @@ anchor), pulled forward. It is independent of the Feng `q(a,b)` track
 (Phases 1–2, 5).
 
 ## 3. Track 2 — GeneEffect cross-cell-line generalization and few-shot adaptation (DepMap LOCO)
+
+**Concrete architecture (2026-07-23):** the model, data roles, and execution plan
+are specified in
+[`2026-07-23-tx1-st-geneeffect-backbone-design.md`](2026-07-23-tx1-st-geneeffect-backbone-design.md)
+(Tx1-3B-conditioned ST + rebuilt hybrid head; HVG-ST control; Jurkat/HepG2 held
+out). The T2 contract below (testbed, differentially-essential slice, baselines)
+stands and governs; the design doc specifies how it is met.
 
 **Objective (active round).** Build `F(X_c, c, g) -> GeneEffect`, a
 context-conditioned single-gene predictor that (a) generalizes leave-one-cell-line-out
