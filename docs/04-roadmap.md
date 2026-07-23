@@ -6,8 +6,12 @@ mechanism kill-test, has completed and is negative**: the composed frozen backbo
 does not recover measured K562 epistasis (|Spearman| < 0.01; AUROC(s_A -> strong-SL)
 approximately 0.52), so the composition mechanism is paused for redesign and not
 extended across contexts ([result](results/exp05-bridge-a-horlbeck-kill-test.md)).
-T2 (DepMap GeneEffect cross-cell-type generalization), formal SOTA reproduction,
-Bridge B, and any pairwise cross-cell-line result remain not started.
+With composition paused, the active near-term development focus is **T2, sharpened:
+a few-shot cross-cell-line GeneEffect backbone** — an accurate, context-conditioned
+single-gene predictor that both bridges depend on, pursued as the Phase 3
+backbone-transfer exit and reported as backbone transfer, not as an SL claim
+(§1.1, §5). Formal SOTA reproduction, Bridge B, and any pairwise cross-cell-line
+result remain not started.
 **Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**
 [`02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Related work:**
 [`03-literature-review.md`](03-literature-review.md)
@@ -26,12 +30,13 @@ mechanistic validation context. It is not the final target population. Work does
 not advance to a stronger claim merely because an earlier dataset is unavailable;
 the corresponding claim remains not evaluable.
 
-### 1.1 Immediate execution order (2026-07-22)
+### 1.1 Immediate execution order (updated 2026-07-23)
 
-Two development tracks are the near-term work. They proceed in parallel and
-independently of the Feng-axis reproduction (Phases 1–2), open no untouched
-held-out cell-line labels, and yield no formal `02` verdict before their Phase 0
-registrations are frozen. Full design:
+T1 (below) has completed and is negative, pausing the composition mechanism; the
+near-term work is now a single track — **T2, the few-shot cross-cell-line
+GeneEffect backbone**. It runs independently of the Feng-axis reproduction
+(Phases 1–2), opens no untouched held-out cell-line labels, and yields no formal
+`02` verdict before its Phase 0 registrations are frozen. Full design:
 [`specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
 
 - **T1 — K562 mechanism kill-test (completed 2026-07-22; negative).** Composed the
@@ -47,11 +52,17 @@ registrations are frozen. Full design:
   composition mechanism is **paused for redesign and not extended across contexts**.
   Development diagnostic, not the MECHANISTIC verdict (§9 and `02` §6). Result:
   [`results/exp05-bridge-a-horlbeck-kill-test.md`](results/exp05-bridge-a-horlbeck-kill-test.md).
-- **T2 — GeneEffect cross-cell-type generalization.** Leave-one-cell-line-out on
-  DepMap GeneEffect × CCLE baseline expression — not Feng2024, which has no
-  cell-type axis — scored on the differentially-essential slice against
-  mean/nearest-line transfer, lineage-only, and a plain CCLE-regression baseline.
-  This is the Phase 3 single-gene backbone-transfer exit, not cross-cell-line SL.
+- **T2 — few-shot cross-cell-line GeneEffect backbone (active near-term focus).**
+  Build `F(X_c, c, g) -> GeneEffect`: a context-conditioned single-gene predictor
+  that (a) generalizes leave-one-cell-line-out on DepMap GeneEffect × CCLE baseline
+  expression — not Feng2024, which has no cell-type axis — and (b) adapts to a
+  held-out line from a few of its own labels (k-shot line adaptation). Scored on
+  the differentially-essential slice (slice membership fixed on training lines
+  only) against copy-K562 transfer, cross-line mean, nearest-line transfer,
+  lineage-only, and a plain CCLE-regression baseline, with a few-shot curve
+  (accuracy vs. k held-out-line labels). This is the Phase 3 single-gene
+  backbone-transfer exit, not cross-cell-line SL. The model-adaptation method is
+  pending selection.
 
 ## 2. Phase 0 — freeze data and evaluation contracts
 
@@ -164,9 +175,11 @@ the eventual claim to task-data-held-out transfer. Required controls are:
 
 - cell-line identity/lineage only;
 - gene identity only;
-- direct K562 transfer without contextual adaptation;
+- direct K562 transfer without contextual adaptation (copy-K562);
+- cross-line mean and nearest-line transfer;
 - observed-response upper bound where permitted; and
-- frozen-backbone versus trained-context-adapter variants.
+- frozen-backbone versus trained-context-adapter versus k-shot-line-adapted
+  variants, reported as an accuracy-vs-k curve.
 
 The existing K562 exp05 run is prior evidence. The one-shot HCT116
 frozen-backbone GeneEffect transport audit is complete and negative: direct K562
@@ -180,8 +193,15 @@ completed audit's negative verdict. See the
 [`closeout`](results/exp05-hct116-frozen-backbone-transport.md). The audit does
 not count as pairwise or cross-cell-line SL generalization.
 
-**Exit:** single-gene response/fitness transfer is measured on development cell
-lines without opening pairwise labels from untouched test lines.
+**Exit:** on the differentially-essential slice (slice membership fixed on
+training lines only), the context-conditioned predictor beats copy-K562,
+cross-line mean, nearest-line transfer, lineage-only, and the plain
+CCLE-regression baseline on the paired rank-correlation difference (per-line 95%
+CI excluding zero via a within-line gene bootstrap; reported per line and
+macro-averaged), with a reported few-shot curve — all measured on development
+cell lines without opening pairwise labels from untouched test lines. A predictor
+that only matches copy-K562 on this slice is reported as conserved-prior transfer,
+not context-specific GeneEffect.
 
 ## 6. Phase 4 — implement contextual Bridge A and Bridge B
 

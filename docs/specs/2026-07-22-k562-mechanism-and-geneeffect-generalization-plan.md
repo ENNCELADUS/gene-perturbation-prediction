@@ -1,6 +1,9 @@
 # Plan: K562 Mechanism Kill-Test and GeneEffect Cross-Cell-Type Generalization
 
-**Status:** active execution plan set 2026-07-22; no listed experiment has run.
+**Status:** T1 completed 2026-07-22 and is **negative** (composition mechanism
+paused; [result](../results/exp05-bridge-a-horlbeck-kill-test.md)). T2 is the
+active near-term track, **sharpened 2026-07-23 to a few-shot cross-cell-line
+GeneEffect backbone** (not yet run; adaptation method pending selection).
 Authority: [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
 [`../02-acceptance-criteria.md`](../02-acceptance-criteria.md) (frozen bar) govern;
 [`../04-roadmap.md`](../04-roadmap.md) is the tracked phase plan this refines (see
@@ -9,8 +12,9 @@ its §1.1). A local model-boundary design note is kept at
 
 ## 1. Objective and first principles
 
-Two independent, parallel development tracks, each retiring one load-bearing risk
-before any cross-cell-line SL claim is attempted:
+Two independent development tracks were set, each retiring one load-bearing risk
+before any cross-cell-line SL claim is attempted. **T1 has completed and is
+negative** (composition paused); **T2 is the active track**:
 
 - **T1 — does the interaction mechanism work at all, in the home context?** A
   single-gene backbone composed into a pair score is only worth extending across
@@ -106,7 +110,15 @@ This instantiates roadmap Phases 3 (frozen backbone) + 4 (Bridge A) + 7 (K562
 anchor), pulled forward. It is independent of the Feng `q(a,b)` track
 (Phases 1–2, 5).
 
-## 3. Track 2 — GeneEffect generalization across cell lines (DepMap LOCO)
+## 3. Track 2 — GeneEffect cross-cell-line generalization and few-shot adaptation (DepMap LOCO)
+
+**Objective (active round).** Build `F(X_c, c, g) -> GeneEffect`, a
+context-conditioned single-gene predictor that (a) generalizes leave-one-cell-line-out
+and (b) adapts to a held-out line from a few of its own labels (k-shot line
+adaptation), and is accurate against real DepMap GeneEffect on the
+differentially-essential slice. This is the Phase 3 backbone-transfer exit,
+reported as backbone transfer, not SL. The model-adaptation method is pending
+selection and does not change this contract.
 
 ### 3.1 Testbed: DepMap, not Feng
 
@@ -124,25 +136,33 @@ method, not the regression.
 The backbone's only cell-line input is the basal state, so give the C-head a
 cell-line context and train it across many lines. Unify the modality so transfer
 is not confounded: pseudobulk the perturb-seq control cells into a bulk-like
-vector matched to CCLE bulk. Few-shot refinement: 2–4 perturb-seq lines cannot
-define a context→GeneEffect function; use the many DepMap lines' bulk to learn
-the context map (LOCO), with the perturb-seq lines as the modality-matched subset
-that additionally exercises the perturbation pathway.
+vector matched to CCLE bulk. Line-scarcity note (distinct from k-shot line
+adaptation below): 2–4 perturb-seq lines cannot define a context→GeneEffect
+function; use the many DepMap lines' bulk to learn the context map (LOCO), with the
+perturb-seq lines as the modality-matched subset that additionally exercises the
+perturbation pathway.
 
 ### 3.3 Metric and controls
 
-Leave-one-cell-line-out. Primary score = rank correlation on the
-**differentially-essential slice** — genes with high cross-line GeneEffect
+Leave-one-cell-line-out, in two regimes: **zero-shot** (no held-out-line labels)
+and **k-shot line adaptation** (the predictor may see k GeneEffect labels from the
+held-out line for a prespecified schedule of k; the adapted predictor is scored on
+the remaining, disjoint genes of that line). Primary score = rank correlation on
+the **differentially-essential slice** — genes with high cross-line GeneEffect
 variance and non-common-essential, both computed on **training lines only** so the
 held-out line never informs slice membership. Beat each baseline on the **paired
 difference** of rank correlation (method − baseline) per held-out line, with a
 95% CI excluding zero via a within-line gene bootstrap; report per-line and
 aggregated across the LOCO lines (line count and cross-line aggregator registered
-in Phase 0). Baselines: (i) transfer the training-line mean / nearest line; (ii)
-lineage-identity-only; (iii) the plain CCLE-bulk→GeneEffect regression. Aggregate
-correlation over the full evaluated gene set is reported but is inflated by
-pan-essential genes and is not the gate (cf. the K562→HCT116 transfer Spearman
-0.554 on shared genes).
+in Phase 0). Baselines: (i) single source-line transfer (copy-K562) and the
+training-line mean / nearest line; (ii) lineage-identity-only; (iii) the plain
+CCLE-bulk→GeneEffect regression. In the k-shot regime each baseline gets its
+natural k-shot correction (e.g. copy-K562 plus a k-label offset/calibration), so
+added machinery must beat "copy-K562 + k labels", not just copy-K562. Report the
+**few-shot curve**: slice rank correlation and paired-difference-vs-baseline as a
+function of k. Aggregate correlation over the full evaluated gene set is reported
+but is inflated by pan-essential genes and is not the gate (cf. the K562→HCT116
+transfer Spearman 0.554 on shared genes).
 
 ### 3.4 Scope
 
@@ -165,12 +185,13 @@ validates the frozen-checkpoint Bridge A directly against Horlbeck.
 
 ## 5. Execution order
 
-T1 and T2 run in parallel and independently of the Feng-axis reproduction
-(Phases 1–2). T1 gates the whole composition approach (mechanism must work at
-home); T2 gates context-specific GeneEffect (precondition for context-specific
-SL). Both touch no untouched held-out cell-line SL labels and produce no formal
-`02` verdict until their Phase-0 registrations are frozen. Results enter
-`../results/<slug>.md` only after each analysis runs.
+T1 has completed and is negative, pausing the composition mechanism; T2 is now the
+active track, run independently of the Feng-axis reproduction (Phases 1–2). T2
+gates context-specific GeneEffect — a precondition for any future context-specific
+SL, and the substrate a redesigned composition would compose. It touches no
+untouched held-out cell-line SL labels and produces no formal `02` verdict until
+its Phase-0 registrations are frozen. Results enter `../results/<slug>.md` only
+after each analysis runs.
 
 ## 6. Claim boundaries
 

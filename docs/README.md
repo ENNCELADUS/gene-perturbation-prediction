@@ -6,7 +6,8 @@ related-work review complete · active experiment roadmap established · exp05
 K562 backbone established · first HCT116 frozen-backbone transport audit closed
 negative · Horlbeck K562 GI acquired and coverage-audited · T1 K562
 Bridge-A-vs-Horlbeck mechanism kill-test completed **negative** (composition
-mechanism paused for redesign) · T2 DepMap GeneEffect generalization not started ·
+mechanism paused for redesign) · **T2 few-shot cross-cell-line GeneEffect backbone
+now the active near-term development focus** (task established; not yet run) ·
 SOTA reproduction and contextual SL model not yet complete.
 **Goal:** build a virtual-cell SL discovery model that competes with the Feng2024
 SOTA for genes withheld from SL-pair/graph training and separately generalizes to
@@ -65,7 +66,7 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | Reproduce SLMGAE, KR4SL, KG4SL and best official comparator | Pending. |
 | Context-free composition score `q(a,b)` | Not started. |
 | Multi-cell-line data-role audit | Not started. |
-| Multi-cell-line virtual-cell backbone | Not started; current exp05 is K562-based. |
+| Multi-cell-line virtual-cell backbone | **Active focus (in design).** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`; current exp05 is K562-based; adaptation method pending selection. |
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
 | Context-conditioned Bridge A / Bridge B | Not started; the K562 Bridge A **mechanism** was tested and is negative (see measured-GI row). |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
@@ -78,9 +79,12 @@ gene marginals, cell-line identity, and direct context-free transfer.
   AUROC(s_A -> strong-SL) approximately 0.52, below the single-gene floor). The
   composition mechanism is paused for redesign and not extended across contexts;
   [result](results/exp05-bridge-a-horlbeck-kill-test.md).
-- [ ] **T2** — run DepMap leave-one-cell-line-out GeneEffect generalization scored
-  on the differentially-essential slice (single-gene backbone transfer, not
-  cross-cell-line SL); [plan](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
+- [ ] **T2 (active focus)** — build the few-shot cross-cell-line GeneEffect
+  backbone `F(X_c, c, g)`: DepMap leave-one-cell-line-out plus k-shot adaptation
+  to a held-out line, scored on the differentially-essential slice against
+  copy-K562 / mean / nearest-line / lineage-only / CCLE-regression baselines with
+  a few-shot curve (single-gene backbone transfer, not cross-cell-line SL);
+  [plan](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
 - [ ] Freeze and verify the official Feng2024 folds, labels, candidates, and
   `cal_metrics` contract.
 - [ ] Reproduce the strong SOTA under that identical official harness.
