@@ -27,8 +27,13 @@ from scipy import sparse
 from scipy.sparse import csr_matrix
 
 from aivc_model.gene_splits import sha256_file
+from aivc_model.gwps_cache import sha256_strings
 from aivc_model.prepare import resolve_state_gene_order
-from aivc_model.tx1_basal import build_perturbseq_basal_adata, build_tahoe_basal_adata
+from aivc_model.tx1_basal import (
+    build_perturbseq_basal_adata,
+    build_tahoe_basal_adata,
+    load_line_manifest,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +47,14 @@ REJECTED_MODEL_LABEL: Final[str] = "tx-70m-merged"
 
 _SCHEMA_VERSION: Final[int] = 1
 _UNIT_NORM_ATOL: Final[float] = 1e-3
+
+#: Per-line sidecar recording the HVG gene-order hash a line's ``hvg.npy``
+#: was written against (Critical 2). Not part of the ``arrays`` metadata
+#: returned by :func:`write_line_cache` (its width is a gene count, not a
+#: cell/row count, so mixing it into the generic per-array row-count-
+#: agreement check in :func:`_verify_line` would be spurious); read
+#: directly by :func:`_is_cached` instead.
+_HVG_GENE_ORDER_FILENAME: Final[str] = "hvg_gene_order.json"
 
 #: Basal-source enum values, as documented in the frozen Phase-A manifest
 #: contract (Global Constraint 1). Duplicated as literals rather than
@@ -115,6 +128,9 @@ def write_line_cache(
         np.save(tmp_dir / "embeddings.npy", embeddings)
         np.save(tmp_dir / "hvg.npy", hvg_matrix)
         obs.to_parquet(tmp_dir / "obs.parquet")
+        (tmp_dir / _HVG_GENE_ORDER_FILENAME).write_text(
+            json.dumps(_hvg_gene_order_signature(hvg_gene_order), sort_keys=True) + "\n"
+        )
         metadata = _line_dir_array_metadata(tmp_dir)
         final_dir = cache_dir / model_id
         if final_dir.exists():
@@ -158,6 +174,27 @@ def _validate_line_cache_inputs(
         raise ValueError(f"line {model_id}: hvg_matrix contains non-finite values")
 
 
+def _hvg_gene_order_signature(
+    hvg_gene_order: Sequence[str] | np.ndarray,
+) -> dict[str, object]:
+    """Hash + width signature identifying an HVG checkpoint gene order.
+
+    Persisted per line (Critical 2) so a resumed :func:`embed_lines` pass
+    can tell a genuinely still-valid cache from one written against a
+    since-changed ``--hvg-state-model-dir``, and recorded per line in the
+    run manifest so :func:`verify_cache` can flag the same staleness
+    independently of :func:`_is_cached` having caught it mid-run.
+
+    Args:
+        hvg_gene_order: The resolved HVG checkpoint gene order.
+
+    Returns:
+        ``{"sha256": ..., "width": ...}``.
+    """
+    names = np.asarray(hvg_gene_order, dtype=object).astype(str)
+    return {"sha256": sha256_strings(names), "width": int(len(names))}
+
+
 def embedding_norm_stats(embeddings: np.ndarray) -> dict[str, float]:
     """Compute per-cell L2-norm statistics (Global Constraint 3).
 
@@ -174,13 +211,19 @@ def embedding_norm_stats(embeddings: np.ndarray) -> dict[str, float]:
     Raises:
         ValueError: ``embeddings`` is not a non-empty 2-D array.
     """
-    array = np.asarray(embeddings, dtype=np.float64)
+    # Deliberately no `dtype=np.float64` upcast of the full array here: a
+    # 140k-cell line's ~1.4 GB float32 (possibly mmap-backed) cache would
+    # otherwise double to ~2.8 GB on every resumed pass, for every
+    # already-cached line this is recomputed for. Only the tiny
+    # (n_cells,)-length per-cell-norm reduction output is upcast, which is
+    # numerically equivalent for these summary statistics.
+    array = np.asarray(embeddings)
     if array.ndim != 2 or array.shape[0] == 0:
         raise ValueError(
             f"embedding_norm_stats requires a non-empty 2-D array; "
             f"got shape {array.shape}"
         )
-    norms = np.linalg.norm(array, axis=1)
+    norms = np.linalg.norm(array, axis=1).astype(np.float64)
     unit_norm = np.abs(norms - 1.0) <= _UNIT_NORM_ATOL
     return {
         "mean": float(np.mean(norms)),
@@ -201,6 +244,26 @@ def write_run_manifest(
 ) -> Path:
     """Write the cache-root ``manifest.json`` (the run-level record).
 
+    Merges ``line_entries`` into any existing ``manifest.json``'s recorded
+    ``"lines"`` rather than overwriting them (Important 3), so the
+    documented 4-GPU sharding workflow (``--only-line``, repeatable, each
+    process writing a disjoint ``model_id`` subset) does not have the last
+    process to finish erase the other three's records. An entry in
+    ``line_entries`` overrides an existing entry recorded for the same
+    ``model_id``.
+
+    This merge is read-then-write and **not** protected by a file lock: two
+    processes calling this function at truly the same moment can each read
+    the manifest before the other's write lands, and the later ``os.replace``
+    wins outright -- silently dropping whichever entries only the other
+    process's read captured. The 4 shard processes in the intended workflow
+    finish at different wall-clock times in practice (they process
+    differently sized DMSO subsets), which makes an exact simultaneous
+    write unlikely but does not eliminate it; a caller needing a hard
+    guarantee should have one process merge every shard's ``line_entries``
+    in a single final call instead of having each shard process call this
+    function directly against the same ``cache_dir``.
+
     Args:
         cache_dir: Root cache directory.
         model_label: The Tx1 model label actually used (must not be
@@ -209,7 +272,7 @@ def write_run_manifest(
             the parsed ``tx1_source_manifest.json`` contents), naming the
             weight/config/vocab file sha256s.
         line_entries: Per-``model_id`` entries, as returned by
-            :func:`embed_lines`.
+            :func:`embed_lines`, to merge into the recorded lines.
         config_snapshot: Miscellaneous per-run scalars to record verbatim:
             at minimum the frozen line-manifest sha256, the subsample cap
             and seed actually used, and the HVG gene order sha256.
@@ -227,18 +290,38 @@ def write_run_manifest(
         )
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = cache_dir / "manifest.json"
+    merged_lines = _existing_manifest_lines(manifest_path)
+    merged_lines.update(
+        {model_id: dict(entry) for model_id, entry in line_entries.items()}
+    )
     payload = {
         "schema_version": _SCHEMA_VERSION,
         "model_label": model_label,
         "tx1_source_manifest": dict(source_manifest),
         "config_snapshot": dict(config_snapshot),
-        "lines": {model_id: dict(entry) for model_id, entry in line_entries.items()},
+        "lines": merged_lines,
     }
-    manifest_path = cache_dir / "manifest.json"
     tmp_path = cache_dir / f".tmp-manifest-{uuid.uuid4().hex}.json"
     tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     os.replace(tmp_path, manifest_path)
     return manifest_path
+
+
+def _existing_manifest_lines(manifest_path: Path) -> dict[str, dict[str, object]]:
+    """Read a prior run's recorded ``"lines"``, or ``{}`` if none exist yet."""
+    if not manifest_path.is_file():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError:
+        _LOGGER.warning(
+            "existing manifest at %s is not valid JSON; not merging its lines",
+            manifest_path,
+        )
+        return {}
+    lines = manifest.get("lines") if isinstance(manifest, dict) else None
+    return dict(lines) if isinstance(lines, dict) else {}
 
 
 # --- cache reader -------------------------------------------------------
@@ -286,20 +369,37 @@ def load_hvg_gene_order(state_model_dir: Path) -> np.ndarray:
 # --- verifier: the Phase B exit criterion --------------------------------
 
 
-def verify_cache(cache_dir: Path) -> dict[str, object]:
+def verify_cache(
+    cache_dir: Path, *, frozen_manifest_path: Path | None = None
+) -> dict[str, object]:
     """Verify every embedding cache under ``cache_dir`` against its manifest.
 
     This is the spec's "verified embedding caches" exit criterion. It
     recomputes every sha256 (not trusting any recorded value), re-asserts
     every embedding width against :data:`EMBEDDING_WIDTH`, re-asserts
-    row-count agreement across ``embeddings``/``hvg``/``obs``, and confirms
-    the set of on-disk line directories matches exactly the set
-    ``manifest.json`` declares. A caller must not be able to mistake a
-    partial, stale, or corrupted cache for a good one: any discrepancy sets
-    ``status="failed"``, never a partial "verified".
+    row-count agreement across ``embeddings``/``hvg``/``obs``, confirms the
+    set of on-disk line directories matches exactly the set
+    ``manifest.json`` declares, diffs the frozen Phase-A manifest's full
+    ``model_id`` set against what this run actually recorded (Critical 1 --
+    a run's own ``manifest.json`` only records what it claims to have
+    embedded, so without this a partial run, e.g. Tahoe-only, would report a
+    perfect disk/manifest match and be mistaken for complete), and confirms
+    every line was recorded against the same HVG gene order (Critical 2 --
+    independent, run-manifest-level detection of the same staleness
+    :func:`_is_cached` guards against mid-run). A caller must not be able to
+    mistake a partial, stale, or corrupted cache for a good one: any
+    discrepancy sets ``status="failed"``, never a partial "verified".
 
     Args:
         cache_dir: Root cache directory.
+        frozen_manifest_path: Override for locating the frozen Phase-A line
+            manifest (Global Constraint 1's
+            ``results/phase_a_tx1_20260724/cell_line_manifest.csv``). If
+            omitted, it is recovered from this run's own recorded
+            ``manifest.json["config_snapshot"]["line_manifest_path"]``. An
+            unlocatable, unloadable, or since-changed (sha256 mismatch)
+            frozen manifest is itself a discrepancy -- never silently
+            skipped.
 
     Returns:
         A report with ``status`` (``"verified"`` or ``"failed"``),
@@ -320,6 +420,11 @@ def verify_cache(cache_dir: Path) -> dict[str, object]:
     if not isinstance(lines, dict) or not lines:
         discrepancies.append("run manifest has no recorded lines")
         return _failed_report(cache_dir, discrepancies)
+
+    discrepancies.extend(
+        _frozen_manifest_discrepancies(manifest, lines, frozen_manifest_path)
+    )
+    discrepancies.extend(_hvg_gene_order_consistency_discrepancies(lines))
 
     present_dirs = {
         entry.name
@@ -363,6 +468,92 @@ def _manifest_contract_discrepancies(manifest: object) -> list[str]:
             f"run manifest model_label={model_label!r}; expected {MODEL_LABEL!r}"
         )
     return problems
+
+
+def _frozen_manifest_discrepancies(
+    manifest: Mapping[str, object],
+    lines: Mapping[str, object],
+    frozen_manifest_path: Path | None,
+) -> list[str]:
+    """Diff the frozen Phase-A manifest's full ``model_id`` set against this run.
+
+    Global Constraint 1: the frozen manifest is the single source of which
+    lines exist and must be embedded. Resolves the frozen manifest from
+    ``frozen_manifest_path`` if given, else from this run's own recorded
+    ``config_snapshot["line_manifest_path"]`` (the CLI always points
+    ``--line-manifest`` at the frozen file, so that recorded path is the
+    frozen manifest regardless of any ``--only-line`` sharding used for a
+    given run). An unlocatable, unloadable, or since-changed (sha256
+    mismatch against ``config_snapshot["line_manifest_sha256"]``) frozen
+    manifest is itself returned as a discrepancy -- the check is never
+    silently skipped.
+    """
+    config_snapshot = manifest.get("config_snapshot")
+    recorded_sha256 = (
+        config_snapshot.get("line_manifest_sha256")
+        if isinstance(config_snapshot, dict)
+        else None
+    )
+    path = frozen_manifest_path
+    if path is None:
+        recorded_path = (
+            config_snapshot.get("line_manifest_path")
+            if isinstance(config_snapshot, dict)
+            else None
+        )
+        if not recorded_path:
+            return [
+                "cannot locate the frozen line manifest: no frozen_manifest_path "
+                "override given and run manifest config_snapshot has no "
+                "line_manifest_path"
+            ]
+        path = Path(recorded_path)
+    if not path.is_file():
+        return [f"frozen line manifest not found at {path}"]
+
+    problems: list[str] = []
+    actual_sha256 = sha256_file(path)
+    if recorded_sha256 is not None and actual_sha256 != recorded_sha256:
+        problems.append(
+            f"frozen line manifest at {path} has sha256 {actual_sha256} but "
+            f"the run manifest recorded {recorded_sha256}"
+        )
+    try:
+        frozen = load_line_manifest(path)
+    except ValueError as exc:
+        problems.append(f"frozen line manifest at {path} failed to load: {exc}")
+        return problems
+    missing = sorted(set(frozen["model_id"].astype(str)) - set(lines))
+    problems.extend(
+        f"line {model_id}: present in the frozen line manifest but was never "
+        "embedded (missing from run manifest.json lines)"
+        for model_id in missing
+    )
+    return problems
+
+
+def _hvg_gene_order_consistency_discrepancies(lines: Mapping[str, object]) -> list[str]:
+    """Flag lines recorded with a disagreeing HVG gene-order hash (Critical 2).
+
+    A single run resolves one HVG checkpoint gene order
+    (``--hvg-state-model-dir``) and applies it to every line, so every
+    entry's ``hvg_gene_order_sha256`` should agree. Disagreement means some
+    lines were embedded (or last validly resumed) against a different HVG
+    checkpoint than the others -- the same staleness :func:`_is_cached`
+    guards against mid-run, detected here independently from that guard
+    having worked correctly.
+    """
+    hashes = {
+        model_id: entry.get("hvg_gene_order_sha256")
+        for model_id, entry in lines.items()
+        if isinstance(entry, dict)
+    }
+    if len({value for value in hashes.values()}) > 1:
+        return [
+            "lines were recorded with disagreeing hvg_gene_order_sha256 "
+            f"values (stale HVG cache): {hashes}"
+        ]
+    return []
 
 
 def _verify_line(cache_dir: Path, model_id: str, expected_entry: object) -> list[str]:
@@ -465,8 +656,9 @@ def embed_lines(
 
     Returns:
         Per-``model_id`` entries (``arrays``, ``norm_stats``, ``n_cells``,
-        ``hvg_fill_rate``, ``basal_source``, ``cellosaurus_id``), directly
-        usable as :func:`write_run_manifest`'s ``line_entries``.
+        ``hvg_fill_rate``, ``basal_source``, ``cellosaurus_id``,
+        ``hvg_gene_order_sha256``), directly usable as
+        :func:`write_run_manifest`'s ``line_entries``.
     """
     sources = perturbseq_sources or {}
     restrict = set(only_lines) if only_lines is not None else None
@@ -515,7 +707,7 @@ def _embed_one_line(
     hvg_matrix, hvg_gene_order, fill_rate = _resolve_hvg_matrix(
         adata, hvg_state_model_dir, hvg_gene_symbol_col
     )
-    if _is_cached(cache_dir, model_id):
+    if _is_cached(cache_dir, model_id, hvg_gene_order=hvg_gene_order):
         _LOGGER.info("line %s: valid cache already exists, skipping encoder", model_id)
         embeddings, _, _ = load_line_cache(cache_dir, model_id)
         arrays = _line_dir_array_metadata(Path(cache_dir) / model_id)
@@ -537,6 +729,7 @@ def _embed_one_line(
         "hvg_fill_rate": fill_rate,
         "basal_source": str(row.basal_source),
         "cellosaurus_id": str(row.cellosaurus_id),
+        "hvg_gene_order_sha256": _hvg_gene_order_signature(hvg_gene_order)["sha256"],
     }
 
 
@@ -583,8 +776,29 @@ def _build_basal_adata(
     raise ValueError(f"line {row.model_id}: unsupported basal_source={basal_source!r}")
 
 
-def _is_cached(cache_dir: Path, model_id: str) -> bool:
-    """Check whether a line's on-disk cache is structurally complete and valid."""
+def _is_cached(
+    cache_dir: Path, model_id: str, *, hvg_gene_order: Sequence[str] | np.ndarray
+) -> bool:
+    """Check whether a line's on-disk cache is complete, valid, and current.
+
+    Beyond the existing structural checks (files present, widths and row
+    counts self-consistent), this requires the cached ``hvg.npy`` to have
+    been written against ``hvg_gene_order`` -- the gene order this call just
+    resolved from the *current* ``--hvg-state-model-dir`` (Critical 2).
+    Without this, a line cached under one HVG checkpoint would be silently
+    skipped forever on a resumed run after an operator corrects a
+    misconfigured ``--hvg-state-model-dir``, even though its width and row
+    counts still self-agree and its stale ``hvg.npy`` no longer means what
+    the current run believes.
+
+    Args:
+        cache_dir: Root cache directory.
+        model_id: DepMap model id identifying the line.
+        hvg_gene_order: The HVG gene order currently resolved for this line.
+
+    Returns:
+        Whether the on-disk cache may be trusted and the encoder skipped.
+    """
     try:
         embeddings, hvg_matrix, obs = load_line_cache(cache_dir, model_id)
     except (FileNotFoundError, OSError, ValueError, EOFError):
@@ -594,7 +808,24 @@ def _is_cached(cache_dir: Path, model_id: str) -> bool:
     if hvg_matrix.ndim != 2:
         return False
     n_cells = embeddings.shape[0]
-    return hvg_matrix.shape[0] == n_cells and len(obs) == n_cells
+    if hvg_matrix.shape[0] != n_cells or len(obs) != n_cells:
+        return False
+    return _cached_hvg_gene_order_matches(cache_dir, model_id, hvg_gene_order)
+
+
+def _cached_hvg_gene_order_matches(
+    cache_dir: Path, model_id: str, hvg_gene_order: Sequence[str] | np.ndarray
+) -> bool:
+    """Compare the on-disk HVG gene-order sidecar against the resolved order."""
+    sidecar_path = Path(cache_dir) / model_id / _HVG_GENE_ORDER_FILENAME
+    if not sidecar_path.is_file():
+        return False
+    try:
+        recorded = json.loads(sidecar_path.read_text())
+    except json.JSONDecodeError:
+        return False
+    expected = _hvg_gene_order_signature(hvg_gene_order)
+    return isinstance(recorded, dict) and recorded.get("sha256") == expected["sha256"]
 
 
 # --- HVG gene-order resolution (zero-fill for absent genes) --------------
@@ -671,7 +902,7 @@ def _line_dir_array_metadata(line_dir: Path) -> dict[str, dict[str, object]]:
 
 
 def _npy_metadata(path: Path) -> dict[str, object]:
-    array = np.load(path, mmap_mode="r")
+    array = np.load(path, mmap_mode="r", allow_pickle=False)
     return {
         "sha256": sha256_file(path),
         "shape": list(array.shape),

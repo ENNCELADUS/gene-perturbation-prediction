@@ -10,10 +10,18 @@ reimplementing it. Requires a CUDA GPU and the real Tahoe-100M / Tx1-3B
 assets on the HPC; nothing here runs on the dev machine (see
 ``tests/test_tx1_embed_cache.py`` for the encoder-agnostic unit tests).
 
-This CLI wires the **Tahoe-100M DMSO** basal source only (the ``--shard-dir``
-/ ``--gene-metadata`` flags below); ``embed_lines`` itself also supports the
-4 Perturb-seq-sourced lines via ``perturbseq_sources``, but wiring those
-per-source h5ad paths into this CLI is left to a follow-up.
+This CLI wires both Phase-A basal sources: the **Tahoe-100M DMSO** source
+(``--shard-dir`` / ``--gene-metadata``) for the 38 Tahoe-sourced lines, and
+the 4 Perturb-seq-sourced lines (the ``train_response_and_head`` role) via
+``--perturbseq-source-config``, a JSON file mapping each Perturb-seq
+``model_id`` to its h5ad path and per-source schema (perturbation column,
+control label, Ensembl var column). A JSON config was chosen over a
+repeatable per-field flag because the 4 lines (Replogle K562, Nadig
+Jurkat/HepG2, X-Atlas HCT116) have differing h5ad schemas -- a flag per
+field per line would not scale. Every in-scope manifest line with a
+non-Tahoe ``basal_source`` must have a configured entry before any GPU work
+begins; an unconfigured line raises loudly, listing every missing
+``model_id``, rather than silently skipping it.
 """
 
 from __future__ import annotations
@@ -22,9 +30,11 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Mapping
 
 import anndata as ad
 import numpy as np
+import pandas as pd
 import torch
 
 from aivc_model.gene_splits import sha256_file
@@ -33,6 +43,7 @@ from aivc_model.tx1_basal import load_line_manifest
 from aivc_model.tx1_embed_cache import (
     MODEL_LABEL,
     EncoderFn,
+    PerturbseqSource,
     embed_lines,
     load_hvg_gene_order,
     verify_cache,
@@ -45,9 +56,19 @@ from scripts.verify_tx1_obsm_width import (
 
 _LOGGER = logging.getLogger(__name__)
 
-#: The only basal source this CLI wires an ``EncoderFn``-ready AnnData
-#: builder for (Global Constraint 1's documented enum value).
+#: The basal source this CLI can embed without a ``--perturbseq-source-config``
+#: entry (Global Constraint 1's documented enum value); every other
+#: ``basal_source`` value requires a configured :class:`PerturbseqSource`.
 _TAHOE_BASAL_SOURCE = "Tahoe-100M DMSO"
+
+#: Required keys of each ``--perturbseq-source-config`` entry, one-to-one
+#: with :class:`PerturbseqSource`'s fields.
+_PERTURBSEQ_SOURCE_CONFIG_KEYS = (
+    "h5ad_path",
+    "perturbation_col",
+    "control_label",
+    "var_ensembl_col",
+)
 
 
 def _build_tx1_encoder(
@@ -129,6 +150,74 @@ def _require_embedding_args(args: argparse.Namespace) -> None:
         )
 
 
+def _load_perturbseq_source_config(path: Path) -> dict[str, PerturbseqSource]:
+    """Load the per-``model_id`` Perturb-seq source config JSON.
+
+    A JSON config was chosen over a repeatable per-field CLI flag because the
+    4 Perturb-seq-sourced lines (Replogle K562, Nadig Jurkat/HepG2, X-Atlas
+    HCT116) have differing h5ad schemas; see the module docstring.
+
+    Args:
+        path: JSON file shaped ``{model_id: {h5ad_path, perturbation_col,
+            control_label, var_ensembl_col}}``.
+
+    Returns:
+        Per-``model_id`` :class:`PerturbseqSource` configs.
+
+    Raises:
+        ValueError: The file is not a JSON object, or an entry is not an
+            object or is missing a required key.
+    """
+    raw = json.loads(path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError(f"--perturbseq-source-config at {path} must be a JSON object")
+    sources: dict[str, PerturbseqSource] = {}
+    for model_id, entry in raw.items():
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"--perturbseq-source-config entry {model_id!r} must be a JSON object"
+            )
+        missing = [key for key in _PERTURBSEQ_SOURCE_CONFIG_KEYS if key not in entry]
+        if missing:
+            raise ValueError(
+                f"--perturbseq-source-config entry {model_id!r} is missing "
+                f"keys: {missing}"
+            )
+        sources[str(model_id)] = PerturbseqSource(
+            h5ad_path=Path(entry["h5ad_path"]),
+            control_label=str(entry["control_label"]),
+            perturbation_col=str(entry["perturbation_col"]),
+            var_ensembl_col=str(entry["var_ensembl_col"]),
+        )
+    return sources
+
+
+def _require_perturbseq_sources_configured(
+    working: pd.DataFrame, perturbseq_sources: Mapping[str, PerturbseqSource]
+) -> None:
+    """Fail loudly, before any GPU work, if an in-scope line lacks a source.
+
+    Args:
+        working: The in-scope manifest slice (after ``--only-line``
+            filtering).
+        perturbseq_sources: Configured Perturb-seq sources, keyed by
+            ``model_id``.
+
+    Raises:
+        ValueError: A ``basal_source`` other than Tahoe-100M DMSO appears in
+            ``working`` without a matching ``perturbseq_sources`` entry.
+    """
+    non_tahoe = working[working["basal_source"] != _TAHOE_BASAL_SOURCE]
+    unconfigured = sorted(
+        set(non_tahoe["model_id"].astype(str)) - set(perturbseq_sources)
+    )
+    if unconfigured:
+        raise ValueError(
+            "the following in-scope lines have a non-Tahoe basal_source but "
+            f"no --perturbseq-source-config entry: {unconfigured}"
+        )
+
+
 def _run_embedding(args: argparse.Namespace) -> dict[str, object]:
     """Build (or resume) every in-scope line's cache, then verify the result."""
     _require_embedding_args(args)
@@ -139,14 +228,12 @@ def _run_embedding(args: argparse.Namespace) -> dict[str, object]:
         if only_lines is None
         else manifest[manifest["model_id"].isin(only_lines)]
     )
-    unsupported = sorted(set(working["basal_source"]) - {_TAHOE_BASAL_SOURCE})
-    if unsupported:
-        raise ValueError(
-            "this CLI only wires the Tahoe-100M DMSO basal source; "
-            f"unsupported basal_source values in scope: {unsupported} "
-            "(restrict with --only-line, or extend this CLI for Perturb-seq "
-            "sources via embed_lines(perturbseq_sources=...))"
-        )
+    perturbseq_sources = (
+        _load_perturbseq_source_config(args.perturbseq_source_config)
+        if args.perturbseq_source_config is not None
+        else {}
+    )
+    _require_perturbseq_sources_configured(working, perturbseq_sources)
     source_manifest = json.loads(args.tx1_source_manifest.read_text())
     _verify_model_dir_matches_source_manifest(args.model_dir, source_manifest)
     _LOGGER.info("loading Tx1-3B checkpoint from %s", args.model_dir)
@@ -165,6 +252,7 @@ def _run_embedding(args: argparse.Namespace) -> dict[str, object]:
         hvg_gene_symbol_col=args.hvg_gene_symbol_col,
         max_cells_per_line=args.max_cells_per_line,
         seed=args.seed,
+        perturbseq_sources=perturbseq_sources,
         only_lines=only_lines,
     )
     config_snapshot = {
@@ -178,6 +266,11 @@ def _run_embedding(args: argparse.Namespace) -> dict[str, object]:
         "hvg_gene_symbol_col": args.hvg_gene_symbol_col,
         "hvg_gene_order_sha256": sha256_strings(checkpoint_gene_order),
         "checkpoint_load_report": load_report,
+        "perturbseq_source_config": (
+            str(args.perturbseq_source_config)
+            if args.perturbseq_source_config is not None
+            else None
+        ),
     }
     write_run_manifest(
         args.cache_dir,
@@ -187,7 +280,7 @@ def _run_embedding(args: argparse.Namespace) -> dict[str, object]:
         config_snapshot=config_snapshot,
     )
     _LOGGER.info("wrote run manifest; verifying cache at %s", args.cache_dir)
-    return verify_cache(args.cache_dir)
+    return verify_cache(args.cache_dir, frozen_manifest_path=args.line_manifest)
 
 
 def parse_args() -> argparse.Namespace:
@@ -201,6 +294,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hvg-state-model-dir", type=Path)
     parser.add_argument("--hvg-gene-symbol-col", default="gene_symbol")
     parser.add_argument("--tx1-source-manifest", type=Path)
+    parser.add_argument("--perturbseq-source-config", type=Path)
     parser.add_argument("--max-cells-per-line", type=int)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=32)
@@ -214,7 +308,11 @@ def main() -> None:
     """Build (or verify) the configured Tx1 basal embedding cache."""
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    report = verify_cache(args.cache_dir) if args.verify_only else _run_embedding(args)
+    report = (
+        verify_cache(args.cache_dir, frozen_manifest_path=args.line_manifest)
+        if args.verify_only
+        else _run_embedding(args)
+    )
     print(json.dumps(report, indent=2, sort_keys=True))
     if report["status"] != "verified":
         raise SystemExit(1)
