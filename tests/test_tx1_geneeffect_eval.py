@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 from scipy.stats import spearmanr
 
+from aivc_model.tx1_fewshot_calibration import make_predictions_long
 from aivc_model.tx1_geneeffect_eval import (
     EvaluationContractError,
     affine_kshot_calibrate,
@@ -26,6 +27,7 @@ from aivc_model.tx1_geneeffect_eval import (
     panel_spearman,
     per_line_metric,
 )
+from aivc_model.tx1_geneeffect_eval import _validate_slice_coverage
 
 N_GENES = 150
 N_PANELS = 20
@@ -252,6 +254,94 @@ def test_per_line_metric_returns_nan_when_every_panel_is_dropped() -> None:
     assert np.isnan(result)
 
 
+def test_per_line_metric_is_panel_k_aware_and_measures_the_reranker() -> None:
+    """Finding 1 regression: per_line_metric must not dedup away (panel, k).
+
+    Phase E's ``make_predictions_long`` emits one already-adapted
+    ``base_pred`` per (panel, gene, k); dropping the panel/k dimensions
+    (the old ``drop_duplicates("depmap_column")`` behavior) collapses every
+    k onto the first (panel 0, k=0) row, so the few-shot curve never
+    actually measures the re-ranking adapter. Build a fixture where
+    increasing k genuinely re-ranks genes (base_pred is dominated by
+    feature directions irrelevant to y_true; the ridge adapter recovers the
+    true direction from labeled genes), and assert the resulting per-k
+    curve differs meaningfully across k -- i.e. is not flat / not silently
+    reusing the k=0 value.
+    """
+    n_genes = 400
+    n_features = 10
+    rng = np.random.default_rng(2026)
+    features = rng.normal(size=(n_genes, n_features))
+    true_w = np.array([1.5, -1.0, 0.8] + [0.0] * (n_features - 3))
+    y_true = features @ true_w + 0.2 * rng.normal(size=n_genes)
+    base_pred = features[:, 3:].sum(axis=1) + 0.1 * features[:, 0]
+    genes = [f"RGENE{i}" for i in range(n_genes)]
+
+    panels_for_line = _build_panels(
+        ["LINE_RERANK"], genes, seed=2027, n_panels=4, n_labels=50
+    )
+    k_schedule = [0, 5, 25]
+
+    long_df = make_predictions_long(
+        model_id="LINE_RERANK",
+        genes=np.array(genes),
+        features=features,
+        base_pred=base_pred,
+        y_true=y_true,
+        panels_for_line=panels_for_line,
+        k_schedule=k_schedule,
+        method="tx1_3b_st",
+    )
+    assert {"panel", "k"} <= set(long_df.columns)  # sanity: panel-aware schema
+
+    rho_by_k = {
+        k: per_line_metric(
+            long_df, panels_for_line, method="tx1_3b_st", k=k, min_genes=100
+        )
+        for k in k_schedule
+    }
+
+    # The curve must genuinely move with k (the reranker is being measured),
+    # not stay pinned at the k=0 value as the pre-fix dedup bug would give.
+    assert not any(np.isnan(v) for v in rho_by_k.values())
+    assert rho_by_k[25] > rho_by_k[0] + 0.2
+    assert rho_by_k[5] != pytest.approx(rho_by_k[0], abs=1e-9)
+
+
+def test_per_line_metric_simple_schema_path_is_unaffected_by_panel_awareness() -> None:
+    """Finding 1 regression: the pre-existing simple-schema path is unchanged.
+
+    A predictions frame with no ``panel``/``k`` columns must still be
+    scored via the pluggable ``calibrate`` seam applied once per panel
+    (the original, pre-fix behavior), not the panel-aware IDENTITY path.
+    """
+    rng = np.random.default_rng(2028)
+    y_true = rng.normal(size=N_GENES)
+    base_pred = y_true + 0.3 * rng.normal(size=N_GENES)
+    preds_for_line = pd.DataFrame(
+        {"depmap_column": SLICE_GENES, "base_pred": base_pred, "y_true": y_true}
+    )
+    assert not ({"panel", "k"} <= set(preds_for_line.columns))
+    panels_for_line = _build_panels(["LINE_SIMPLE"], SLICE_GENES, seed=2029)
+
+    k = 10
+    result = per_line_metric(preds_for_line, panels_for_line, method="dummy", k=k)
+
+    expected_rhos = []
+    for panel_id in sorted(panels_for_line["panel"].unique()):
+        panel_rows = panels_for_line[panels_for_line["panel"] == panel_id]
+        label_genes = set(
+            panel_rows.loc[panel_rows["label_order"] <= k, "depmap_column"]
+        )
+        label_mask = np.array([g in label_genes for g in SLICE_GENES])
+        adjusted = affine_kshot_calibrate(base_pred, y_true, label_mask)
+        scored_mask = ~label_mask
+        rho = spearmanr(y_true[scored_mask], adjusted[scored_mask]).statistic
+        expected_rhos.append(rho)
+
+    assert result == pytest.approx(float(np.mean(expected_rhos)), abs=1e-9)
+
+
 # --------------------------------------------------------------------------
 # line_bootstrap_ci
 # --------------------------------------------------------------------------
@@ -457,6 +547,162 @@ def test_evaluate_rejects_inconsistent_y_true_across_methods() -> None:
     broken = fixture._replace(predictions=preds)
     with pytest.raises(EvaluationContractError, match="y_true disagrees"):
         _evaluate_default(broken)
+
+
+def test_evaluate_rejects_dropped_label_row() -> None:
+    """Finding 2: a panel missing even one of its 50 frozen label rows."""
+    fixture = _build_fixture()
+    panels = fixture.panels
+    drop = (
+        (panels["model_id"] == "TEST_2")
+        & (panels["panel"] == 0)
+        & (panels["label_order"] == 1)
+    )
+    broken = fixture._replace(panels=panels[~drop])
+    with pytest.raises(EvaluationContractError, match="label rows"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_duplicate_label_order_within_panel() -> None:
+    """Finding 2: two rows of the same panel sharing one label_order."""
+    fixture = _build_fixture()
+    panels = fixture.panels.copy()
+    mask = (
+        (panels["model_id"] == "TEST_2")
+        & (panels["panel"] == 0)
+        & (panels["label_order"] == 2)
+    )
+    panels.loc[mask, "label_order"] = 1  # duplicate of label_order 1
+    broken = fixture._replace(panels=panels)
+    with pytest.raises(EvaluationContractError, match="label_order"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_duplicate_gene_within_panel() -> None:
+    """Finding 2: two rows of the same panel sharing one depmap_column."""
+    fixture = _build_fixture()
+    panels = fixture.panels.copy()
+    panel_mask = (panels["model_id"] == "TEST_2") & (panels["panel"] == 0)
+    idx = panels.index[panel_mask]
+    panels.loc[idx[1], "depmap_column"] = panels.loc[idx[0], "depmap_column"]
+    broken = fixture._replace(panels=panels)
+    with pytest.raises(EvaluationContractError, match="depmap_column"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_partial_slice_coverage() -> None:
+    """Finding 3: a method covering only part of the 589(here 150)-gene slice."""
+    fixture = _build_fixture()
+    preds = fixture.predictions
+    drop = (
+        (preds["model_id"] == "TEST_4")
+        & (preds["method"] == "tx1_3b_st")
+        & (preds["depmap_column"].isin(SLICE_GENES[:5]))
+    )
+    broken = fixture._replace(predictions=preds[~drop])
+    with pytest.raises(EvaluationContractError, match="slice gene"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_accepts_full_slice_coverage() -> None:
+    """Finding 3: a method covering every slice gene for every line passes."""
+    fixture = _build_fixture()
+    result = _evaluate_default(fixture)
+    assert "gate" in result
+
+
+def test_validate_slice_coverage_rejects_missing_scored_gene_panel_aware() -> None:
+    """Finding 3: the panel-aware branch also enforces full scored-gene coverage."""
+    slice_genes = {"G0", "G1", "G2", "G3", "G4"}
+    panels = pd.DataFrame(
+        {
+            "model_id": ["LINE_A", "LINE_A"],
+            "panel": [0, 0],
+            "label_order": [1, 2],
+            "depmap_column": ["G0", "G1"],
+        }
+    )
+    # (panel=0, k=1) scores slice_genes - {G0} = {G1, G2, G3, G4}; G4 is
+    # missing from the predicted rows below.
+    predictions = pd.DataFrame(
+        {
+            "model_id": ["LINE_A"] * 3,
+            "panel": [0, 0, 0],
+            "k": [1, 1, 1],
+            "depmap_column": ["G1", "G2", "G3"],
+            "method": ["tx1_3b_st"] * 3,
+            "base_pred": [0.1, 0.2, 0.3],
+            "y_true": [0.1, 0.2, 0.3],
+        }
+    )
+    with pytest.raises(EvaluationContractError, match="scored gene"):
+        _validate_slice_coverage(
+            predictions, panels, slice_genes, {"LINE_A"}, {"tx1_3b_st"}
+        )
+
+
+def test_validate_slice_coverage_accepts_full_panel_aware_coverage() -> None:
+    """Finding 3: full scored-gene coverage in the panel-aware schema passes."""
+    slice_genes = {"G0", "G1", "G2", "G3", "G4"}
+    panels = pd.DataFrame(
+        {
+            "model_id": ["LINE_A", "LINE_A"],
+            "panel": [0, 0],
+            "label_order": [1, 2],
+            "depmap_column": ["G0", "G1"],
+        }
+    )
+    predictions = pd.DataFrame(
+        {
+            "model_id": ["LINE_A"] * 4,
+            "panel": [0, 0, 0, 0],
+            "k": [1, 1, 1, 1],
+            "depmap_column": ["G1", "G2", "G3", "G4"],
+            "method": ["tx1_3b_st"] * 4,
+            "base_pred": [0.1, 0.2, 0.3, 0.4],
+            "y_true": [0.1, 0.2, 0.3, 0.4],
+        }
+    )
+    _validate_slice_coverage(  # must not raise
+        predictions, panels, slice_genes, {"LINE_A"}, {"tx1_3b_st"}
+    )
+
+
+def test_evaluate_rejects_mixed_nan_and_finite_y_true_across_methods() -> None:
+    """Finding 4: one method NaN + another finite for the same (line, gene).
+
+    The old ``nanmax - nanmin`` spread check ignores NaN entirely, so this
+    case silently reported zero spread and passed; it must now raise.
+    """
+    fixture = _build_fixture()
+    preds = fixture.predictions.copy()
+    mask = (
+        (preds["model_id"] == "TEST_1")
+        & (preds["method"] == "copy_k562")
+        & (preds["depmap_column"] == SLICE_GENES[0])
+    )
+    preds.loc[mask, "y_true"] = float("nan")
+    broken = fixture._replace(predictions=preds)
+    with pytest.raises(EvaluationContractError, match="y_true disagrees"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_accepts_all_nan_y_true_for_a_gene() -> None:
+    """Finding 4: a gene that is NaN across EVERY method is consistent."""
+    fixture = _build_fixture()
+    preds = fixture.predictions.copy()
+    mask = preds["depmap_column"] == SLICE_GENES[0]
+    preds.loc[mask, "y_true"] = float("nan")
+    broken = fixture._replace(predictions=preds)
+    result = _evaluate_default(broken)
+    assert "gate" in result
+
+
+def test_evaluate_accepts_all_equal_finite_y_true() -> None:
+    """Finding 4: identical finite y_true across methods remains accepted."""
+    fixture = _build_fixture()  # y_true is shared by construction per gene/line
+    result = _evaluate_default(fixture)
+    assert "gate" in result
 
 
 def test_evaluate_rejects_duplicate_test_line() -> None:

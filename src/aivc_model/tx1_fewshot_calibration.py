@@ -244,8 +244,13 @@ def fit_ridge_calibration(
     target_mean = target.mean()
     target_centered = target - target_mean
 
+    # lstsq (SVD-based) rather than solve: at alpha=0 with more features than
+    # labeled genes (F > k), the Gram matrix is exactly singular, and solve
+    # raises LinAlgError. lstsq is always well-defined (returns the min-norm
+    # least-squares solution) and agrees with solve whenever the system is
+    # actually well-posed (alpha > 0, or alpha=0 with a full-rank Gram).
     gram = standardized.T @ standardized + alpha * np.eye(n_features)
-    weights = np.linalg.solve(gram, standardized.T @ target_centered)
+    weights, *_ = np.linalg.lstsq(gram, standardized.T @ target_centered, rcond=None)
 
     return RidgeCalibrator(
         weights=weights,
