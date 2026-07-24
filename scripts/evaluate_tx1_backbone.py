@@ -73,6 +73,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rho-min", type=float, default=RHO_MIN)
     parser.add_argument("--gate-k", type=int, default=GATE_K)
     parser.add_argument("--k-schedule", type=int, nargs="+", default=K_SCHEDULE)
+    parser.add_argument(
+        "--expected-test-lines",
+        type=int,
+        default=9,
+        help="Registered held-out line count the formal gate must match "
+        "(Phase A froze 9). Pass 0 to skip the count check.",
+    )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Bypass frozen-contract validation (diagnostic only; never a "
+        "formal verdict).",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args(argv)
 
@@ -110,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
         primary_method=args.primary_method,
         gate_k=args.gate_k,
         rho_min=args.rho_min,
+        strict=not args.allow_partial,
+        expected_test_lines=(args.expected_test_lines or None),
     )
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
