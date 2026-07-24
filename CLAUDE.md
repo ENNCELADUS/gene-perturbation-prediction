@@ -132,6 +132,12 @@ program are under `docs/archive/` (untracked, gitignored).
   dual-sgRNA is single-gene
   efficacy, **not** epistasis.
 - Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored.
+  **Exception:** the small, hash-pinned frozen Phase-A T2 evaluation contract
+  (`results/phase_a_tx1_20260724/`: `phase_a_registration.json` +
+  `cell_line_manifest.csv` / `differentially_essential_slice.csv` /
+  `k_label_panels.csv`) is tracked via explicit `.gitignore` negations, since it
+  is the acceptance contract the evaluator's committed `FROZEN_REGISTRATION_SHA256`
+  digest verifies.
 
 ## Code Style
 
