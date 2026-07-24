@@ -22,55 +22,12 @@ from aivc_model.tx1_basal import (
     build_tahoe_basal_adata,
     load_line_manifest,
 )
-
-_MANIFEST_COLUMNS = (
-    "model_id",
-    "cellosaurus_id",
-    "cell_line_name",
-    "lineage",
-    "dmso_cells",
-    "basal_source",
-    "tx1_pretraining_exposure",
-    "role",
-    "omics_expression_available",
-)
-
-
-def _manifest_row(**overrides: object) -> dict[str, object]:
-    row: dict[str, object] = {
-        "model_id": "ACH-000001",
-        "cellosaurus_id": "CVCL_0001",
-        "cell_line_name": "Line1",
-        "lineage": "Lung",
-        "dmso_cells": 1000,
-        "basal_source": "Tahoe-100M DMSO",
-        "tx1_pretraining_exposure": "known_present",
-        "role": "train_head",
-        "omics_expression_available": True,
-    }
-    row.update(overrides)
-    return row
-
-
-def _write_manifest(path: Path, rows: list[dict[str, object]]) -> Path:
-    pd.DataFrame(rows, columns=_MANIFEST_COLUMNS).to_csv(path, index=False)
-    return path
-
-
-def _write_gene_metadata(path: Path, tokens: list[int]) -> Path:
-    pd.DataFrame(
-        {
-            "token_id": tokens,
-            "ensembl_id": [f"ENSG{token:011d}" for token in tokens],
-            "gene_symbol": [f"GENE{token}" for token in tokens],
-        }
-    ).to_parquet(path)
-    return path
-
-
-def _write_shard(path: Path, rows: list[dict[str, object]]) -> Path:
-    pd.DataFrame(rows).to_parquet(path)
-    return path
+from conftest import TX1_MANIFEST_COLUMNS as _MANIFEST_COLUMNS
+from conftest import tx1_manifest_row as _manifest_row
+from conftest import write_tx1_gene_metadata as _write_gene_metadata
+from conftest import write_tx1_line_manifest as _write_manifest
+from conftest import write_tx1_perturbseq_h5ad as _write_perturbseq_h5ad
+from conftest import write_tx1_shard as _write_shard
 
 
 def _write_pooled_shard(shard_dir: Path, n_cells: int, cellosaurus_id: str) -> None:
@@ -466,32 +423,6 @@ def test_assert_tx1_input_contract_rejects_non_ensembl_var() -> None:
 
 
 # --- build_perturbseq_basal_adata ----------------------------------------
-
-
-def _write_perturbseq_h5ad(
-    path: Path,
-    *,
-    n_control: int,
-    n_other: int,
-    ensembl_col: str = "ensembl_id",
-    perturbation_col: str = "gene",
-    control_label: str = "non-targeting",
-    n_genes: int = 3,
-) -> Path:
-    n_cells = n_control + n_other
-    rng = np.random.default_rng(0)
-    counts = rng.integers(0, 10, size=(n_cells, n_genes)).astype(np.float32)
-    labels = [control_label] * n_control + ["TP53"] * n_other
-    obs = pd.DataFrame(
-        {perturbation_col: labels}, index=[f"cell{index}" for index in range(n_cells)]
-    )
-    var = pd.DataFrame(
-        {ensembl_col: [f"ENSG{index:011d}" for index in range(n_genes)]},
-        index=[f"gene{index}" for index in range(n_genes)],
-    )
-    adata = ad.AnnData(X=csr_matrix(counts), obs=obs, var=var)
-    adata.write_h5ad(path)
-    return path
 
 
 def test_build_perturbseq_basal_adata_selects_only_controls(tmp_path: Path) -> None:
