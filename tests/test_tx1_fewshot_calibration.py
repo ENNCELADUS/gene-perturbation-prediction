@@ -272,6 +272,69 @@ def test_fit_ridge_calibration_rejects_negative_alpha() -> None:
         fit_ridge_calibration(features, y_true, alpha=-1.0)
 
 
+# ---------------------------------------------------------------------------
+# alpha=0 with a rank-deficient design (F > k) must not raise LinAlgError.
+# ---------------------------------------------------------------------------
+
+
+def test_fit_ridge_calibration_alpha_zero_rank_deficient_is_finite() -> None:
+    """alpha=0 with F > k makes the normal-equations Gram exactly singular.
+
+    ``np.linalg.solve`` raises ``LinAlgError: Singular matrix`` in this
+    case; the fix (``np.linalg.lstsq``) must instead return a finite,
+    well-defined min-norm solution.
+    """
+    features, _, y_true = _mis_ranking_fixture(n_genes=20, n_features=8, seed=20)
+    k = 3  # k < n_features=8: Gram is rank-deficient at alpha=0.
+
+    calibrator = fit_ridge_calibration(features[:k], y_true[:k], alpha=0.0)
+
+    assert np.all(np.isfinite(calibrator.weights))
+    assert np.isfinite(calibrator.intercept)
+
+
+def test_calibrate_line_alpha_zero_rank_deficient_returns_finite_predictions() -> None:
+    """The same alpha=0/F>k case, exercised through the calibrate_line seam."""
+    n_genes = 20
+    features, base_pred, y_true = _mis_ranking_fixture(
+        n_genes=n_genes, n_features=8, seed=21
+    )
+    label_mask = _label_mask(n_genes, k=3)
+
+    result = calibrate_line(
+        features, base_pred, y_true, label_mask, k=3, alpha=0.0, residual=False
+    )
+
+    assert result.shape == (n_genes,)
+    assert np.all(np.isfinite(result))
+
+
+def test_fit_ridge_calibration_well_posed_matches_manual_solve() -> None:
+    """The lstsq-based fix must not change the well-posed-system solution.
+
+    With F <= k (a full-rank Gram), ``np.linalg.lstsq`` and
+    ``np.linalg.solve`` solve the same well-posed normal equations and must
+    agree numerically, for both a regularized (alpha>0) and an
+    unregularized-but-well-posed (alpha=0) fit.
+    """
+    features, _, y_true = _mis_ranking_fixture(n_genes=40, n_features=3, seed=22)
+    features_labeled = features[:20]
+    y_labeled = y_true[:20]
+
+    for alpha in (0.0, 1.0):
+        calibrator = fit_ridge_calibration(features_labeled, y_labeled, alpha=alpha)
+
+        feature_mean = features_labeled.mean(axis=0)
+        feature_std = np.maximum(features_labeled.std(axis=0, ddof=0), 1e-8)
+        standardized = (features_labeled - feature_mean) / feature_std
+        target_centered = y_labeled - y_labeled.mean()
+        n_features = features_labeled.shape[1]
+        gram = standardized.T @ standardized + alpha * np.eye(n_features)
+        expected_weights = np.linalg.solve(gram, standardized.T @ target_centered)
+
+        assert np.allclose(calibrator.weights, expected_weights, atol=1e-6), alpha
+
+
 def test_calibrate_line_rejects_k_exceeding_available_labels() -> None:
     n_genes = 20
     features, base_pred, y_true = _mis_ranking_fixture(n_genes=n_genes, seed=13)

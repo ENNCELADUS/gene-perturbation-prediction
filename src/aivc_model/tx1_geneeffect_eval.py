@@ -42,6 +42,9 @@ BOOTSTRAP_SEED: int = 20260725
 MIN_SCORED_GENES: int = 100
 #: Frozen number of nested label panels per held-out line (Phase A contract).
 N_PANELS: int = 20
+#: Frozen number of label genes per panel (Phase A contract: k_label_panels.csv
+#: has label_order 1..50 for every (model_id, panel)).
+N_LABELS: int = 50
 #: Frozen paired-difference baseline method (Phase A contract).
 DEFAULT_BASELINE_METHOD: str = "copy_k562"
 #: Primary candidate method under test (Phase A contract).
@@ -200,6 +203,109 @@ def panel_spearman(
     return float(result.statistic)
 
 
+def _label_genes_for_panel(panel_rows: pd.DataFrame, k: int) -> set[str]:
+    """Return the set of first-``k`` label genes for one frozen panel.
+
+    Args:
+        panel_rows: Rows of the panels table restricted to a single
+            ``(model_id, panel)``, with columns ``[label_order,
+            depmap_column]``.
+        k: Number of nested label genes to select (``k <= 0`` -> empty set).
+
+    Returns:
+        The set of ``depmap_column`` values with ``label_order <= k``.
+    """
+    if k <= 0:
+        return set()
+    return set(panel_rows.loc[panel_rows["label_order"] <= k, "depmap_column"])
+
+
+def _schema_is_panel_aware(preds: pd.DataFrame) -> bool:
+    """Detect the Phase-E per-(panel, k) predictions schema.
+
+    Args:
+        preds: A predictions frame (or slice of one).
+
+    Returns:
+        True if ``preds`` carries the ``panel``/``k`` columns emitted by
+        :func:`aivc_model.tx1_fewshot_calibration.make_predictions_long`
+        (one already-adapted ``base_pred`` per panel AND k), False for the
+        plain one-row-per-gene schema scored with a pluggable ``calibrate``.
+    """
+    return {"panel", "k"} <= set(preds.columns)
+
+
+def _panel_aware_rho(
+    preds_for_line: pd.DataFrame,
+    panel_rows: pd.DataFrame,
+    panel_id: object,
+    k: int,
+    min_genes: int,
+) -> float:
+    """Score one already-adapted (panel, k) prediction slice with IDENTITY.
+
+    Args:
+        preds_for_line: Panel/k-aware predictions for one line and method,
+            with columns ``[panel, k, depmap_column, base_pred, y_true]``.
+        panel_rows: This panel's rows of the frozen k-label panel table.
+        panel_id: The panel identifier to select.
+        k: The k value to select; also determines the panel's label genes.
+        min_genes: Minimum pairwise-complete scored genes, forwarded to
+            :func:`panel_spearman`.
+
+    Returns:
+        Spearman rho for this (panel, k) slice, or NaN if the slice is
+        empty or under-powered. ``base_pred`` is used AS-IS: Phase E
+        already applied the re-ranking adapter upstream of this call.
+    """
+    rows = preds_for_line[
+        (preds_for_line["panel"] == panel_id) & (preds_for_line["k"] == k)
+    ]
+    rows = rows.drop_duplicates("depmap_column").set_index("depmap_column")
+    if rows.empty:
+        return float("nan")
+    genes = rows.index.to_numpy()
+    y_true = rows["y_true"].to_numpy(dtype=float)
+    base_pred = rows["base_pred"].to_numpy(dtype=float)
+    label_genes = _label_genes_for_panel(panel_rows, k)
+    label_mask = (
+        np.isin(genes, list(label_genes)) if label_genes else np.zeros(len(genes), bool)
+    )
+    return panel_spearman(y_true, base_pred, ~label_mask, min_genes=min_genes)
+
+
+def _simple_schema_rho(
+    genes: np.ndarray,
+    y_true: np.ndarray,
+    base_pred: np.ndarray,
+    panel_rows: pd.DataFrame,
+    k: int,
+    calibrate: KShotCalibrator,
+    min_genes: int,
+) -> float:
+    """Score one panel with the pluggable scalar ``calibrate`` seam.
+
+    Args:
+        genes: Gene identifiers for the line/method's predictions.
+        y_true: True GeneEffect values, aligned with ``genes``.
+        base_pred: Pre-calibration scores, aligned with ``genes``.
+        panel_rows: This panel's rows of the frozen k-label panel table.
+        k: Number of nested label genes to use for calibration.
+        calibrate: Pluggable k-shot calibrator.
+        min_genes: Minimum pairwise-complete scored genes, forwarded to
+            :func:`panel_spearman`.
+
+    Returns:
+        Spearman rho for this panel, or NaN if under-powered.
+    """
+    label_genes = _label_genes_for_panel(panel_rows, k)
+    label_mask = (
+        np.isin(genes, list(label_genes)) if label_genes else np.zeros(len(genes), bool)
+    )
+    adjusted = calibrate(base_pred, y_true, label_mask)
+    return panel_spearman(y_true, adjusted, ~label_mask, min_genes=min_genes)
+
+
 def per_line_metric(
     preds_for_line: pd.DataFrame,
     panels_for_line: pd.DataFrame,
@@ -210,17 +316,29 @@ def per_line_metric(
 ) -> float:
     """Mean Spearman rho for one (line, method, k) across the 20 panels.
 
+    Two predictions schemas are supported (see
+    :func:`_schema_is_panel_aware`): the plain one-row-per-gene schema,
+    scored by applying ``calibrate`` to a single shared ``base_pred`` per
+    panel; and the Phase-E per-(panel, k) schema (one already-adapted
+    ``base_pred`` per panel AND k, as emitted by
+    ``tx1_fewshot_calibration.make_predictions_long``), scored with
+    IDENTITY since the re-ranking already happened upstream. The schema is
+    detected once from ``preds_for_line`` and applied to every panel.
+
     Args:
-        preds_for_line: Predictions for a single test line and method, with
-            columns ``[depmap_column, base_pred, y_true]``, already
-            restricted to the differential-essential slice gene set.
+        preds_for_line: Predictions for a single test line and method,
+            already restricted to the differential-essential slice gene
+            set. Simple schema: columns ``[depmap_column, base_pred,
+            y_true]``. Panel-aware schema: columns ``[panel, k,
+            depmap_column, base_pred, y_true]``.
         panels_for_line: The frozen k-label panels for the same line, with
             columns ``[panel, label_order, depmap_column]``.
         method: Method identifier, used only for logging (``preds_for_line``
             is assumed pre-filtered to this method).
         k: Number of nested label genes to use for calibration (0 disables
             calibration; see :func:`affine_kshot_calibrate`).
-        calibrate: Pluggable k-shot calibrator.
+        calibrate: Pluggable k-shot calibrator; ignored for the panel-aware
+            schema, where the ``base_pred`` values are already adapted.
         min_genes: Minimum pairwise-complete scored genes per panel, passed
             through to :func:`panel_spearman`.
 
@@ -228,10 +346,14 @@ def per_line_metric(
         Mean Spearman rho across panels with a defined (non-NaN) score, or
         NaN if every panel was dropped for insufficient scored genes.
     """
-    preds = preds_for_line.drop_duplicates("depmap_column").set_index("depmap_column")
-    genes = preds.index.to_numpy()
-    y_true = preds["y_true"].to_numpy(dtype=float)
-    base_pred = preds["base_pred"].to_numpy(dtype=float)
+    panel_aware = _schema_is_panel_aware(preds_for_line)
+    if not panel_aware:
+        preds = preds_for_line.drop_duplicates("depmap_column").set_index(
+            "depmap_column"
+        )
+        genes = preds.index.to_numpy()
+        y_true = preds["y_true"].to_numpy(dtype=float)
+        base_pred = preds["base_pred"].to_numpy(dtype=float)
 
     panel_ids = sorted(panels_for_line["panel"].unique())
     if len(panel_ids) != N_PANELS:
@@ -246,20 +368,14 @@ def per_line_metric(
     rhos = np.full(len(panel_ids), np.nan, dtype=float)
     for i, panel_id in enumerate(panel_ids):
         panel_rows = panels_for_line[panels_for_line["panel"] == panel_id]
-        if k > 0:
-            label_genes = set(
-                panel_rows.loc[panel_rows["label_order"] <= k, "depmap_column"]
+        if panel_aware:
+            rhos[i] = _panel_aware_rho(
+                preds_for_line, panel_rows, panel_id, k, min_genes
             )
         else:
-            label_genes = set()
-        label_mask = (
-            np.isin(genes, list(label_genes))
-            if label_genes
-            else np.zeros(len(genes), dtype=bool)
-        )
-        scored_mask = ~label_mask
-        adjusted = calibrate(base_pred, y_true, label_mask)
-        rhos[i] = panel_spearman(y_true, adjusted, scored_mask, min_genes=min_genes)
+            rhos[i] = _simple_schema_rho(
+                genes, y_true, base_pred, panel_rows, k, calibrate, min_genes
+            )
 
     if np.all(np.isnan(rhos)):
         _LOGGER.warning(
@@ -398,38 +514,224 @@ class EvaluationContractError(ValueError):
     """Raised when inputs violate the frozen Phase-A evaluation contract."""
 
 
+def _validate_panel_label_rows(
+    panels: pd.DataFrame, test_set: set[str], n_labels: int
+) -> None:
+    """Require exactly ``n_labels`` unique, well-formed label rows per panel.
+
+    Args:
+        panels: Frozen nested k-label panels.
+        test_set: Held-out test-line ``model_id`` set.
+        n_labels: Required label-row count per ``(model_id, panel)`` (Phase
+            A contract: 50, ``label_order`` 1..50).
+
+    Raises:
+        EvaluationContractError: If any ``(model_id, panel)`` has a label
+            row count other than ``n_labels``, a duplicate ``label_order``,
+            or a duplicate ``depmap_column``.
+    """
+    line_panels = panels[panels["model_id"].isin(test_set)]
+    grouped = line_panels.groupby(["model_id", "panel"])
+
+    counts = grouped.size()
+    bad_counts = counts[counts != n_labels]
+    if not bad_counts.empty:
+        raise EvaluationContractError(
+            f"Expected {n_labels} label rows per (line, panel); found "
+            f"{bad_counts.to_dict()}."
+        )
+
+    dup_order = grouped["label_order"].apply(lambda s: s.duplicated().any())
+    bad_order = sorted(dup_order[dup_order].index.tolist())
+    if bad_order:
+        raise EvaluationContractError(
+            f"Duplicate label_order within (line, panel): {bad_order}."
+        )
+
+    dup_gene = grouped["depmap_column"].apply(lambda s: s.duplicated().any())
+    bad_gene = sorted(dup_gene[dup_gene].index.tolist())
+    if bad_gene:
+        raise EvaluationContractError(
+            f"Duplicate depmap_column within (line, panel): {bad_gene}."
+        )
+
+
+def _validate_simple_coverage(
+    line_preds: pd.DataFrame,
+    model_id: str,
+    method: str,
+    slice_genes: set[str],
+    max_listed: int,
+) -> None:
+    """Require full slice-gene coverage for one (method, line), simple schema.
+
+    Args:
+        line_preds: This method's predictions for one test line.
+        model_id: The test line identifier (for the error message).
+        method: The method identifier (for the error message).
+        slice_genes: The full differential-essential slice gene set.
+        max_listed: Maximum number of missing genes to name in the error.
+
+    Raises:
+        EvaluationContractError: If any slice gene has no prediction row.
+    """
+    missing = slice_genes - set(line_preds["depmap_column"])
+    if missing:
+        raise EvaluationContractError(
+            f"method={method!r} line={model_id!r} missing {len(missing)} "
+            f"slice gene(s), e.g. {sorted(missing)[:max_listed]}."
+        )
+
+
+def _validate_panel_aware_coverage(
+    line_preds: pd.DataFrame,
+    line_panels: pd.DataFrame,
+    model_id: str,
+    method: str,
+    slice_genes: set[str],
+    max_listed: int,
+) -> None:
+    """Require full SCORED-gene coverage per (panel, k) present, panel-aware.
+
+    Args:
+        line_preds: This method's panel-aware predictions for one test
+            line, with columns ``[panel, k, depmap_column]``.
+        line_panels: The frozen k-label panels for the same line.
+        model_id: The test line identifier (for the error message).
+        method: The method identifier (for the error message).
+        slice_genes: The full differential-essential slice gene set.
+        max_listed: Maximum number of missing genes to name in the error.
+
+    Raises:
+        EvaluationContractError: If any (panel, k) slice present in
+            ``line_preds`` is missing predictions for a scored gene (a
+            slice gene not among that panel's first-``k`` labels).
+    """
+    present = line_preds[["panel", "k"]].drop_duplicates()
+    for panel_id, k in present.itertuples(index=False):
+        panel_rows = line_panels[line_panels["panel"] == panel_id]
+        scored_genes = slice_genes - _label_genes_for_panel(panel_rows, int(k))
+        slice_rows = line_preds[
+            (line_preds["panel"] == panel_id) & (line_preds["k"] == k)
+        ]
+        missing = scored_genes - set(slice_rows["depmap_column"])
+        if missing:
+            raise EvaluationContractError(
+                f"method={method!r} line={model_id!r} panel={panel_id} k={k} "
+                f"missing {len(missing)} scored gene(s), e.g. "
+                f"{sorted(missing)[:max_listed]}."
+            )
+
+
+def _validate_slice_coverage(
+    predictions: pd.DataFrame,
+    panels: pd.DataFrame,
+    slice_genes: set[str],
+    test_set: set[str],
+    methods: set[str],
+    max_listed: int = 20,
+) -> None:
+    """Require full (scored-)slice-gene coverage for every method x line.
+
+    Args:
+        predictions: Tidy long-format predictions, already known to have at
+            least one row per (method, line).
+        panels: Frozen nested k-label panels.
+        slice_genes: The full differential-essential slice gene set.
+        test_set: Held-out test-line ``model_id`` set.
+        methods: Method identifiers to validate (candidates + baseline).
+        max_listed: Maximum number of missing genes to name in one error.
+
+    Raises:
+        EvaluationContractError: See :func:`_validate_simple_coverage` and
+            :func:`_validate_panel_aware_coverage`.
+    """
+    for method in methods:
+        method_preds = predictions[
+            (predictions["method"] == method) & (predictions["model_id"].isin(test_set))
+        ]
+        panel_aware = _schema_is_panel_aware(method_preds)
+        for model_id in sorted(test_set):
+            line_preds = method_preds[method_preds["model_id"] == model_id]
+            if panel_aware:
+                line_panels = panels[panels["model_id"] == model_id]
+                _validate_panel_aware_coverage(
+                    line_preds, line_panels, model_id, method, slice_genes, max_listed
+                )
+            else:
+                _validate_simple_coverage(
+                    line_preds, model_id, method, slice_genes, max_listed
+                )
+
+
+def _y_true_group_is_inconsistent(y_true: pd.Series, tol: float) -> bool:
+    """Flag a (line, gene) group whose y_true mixes NaN and finite values.
+
+    A group is consistent if EVERY method reports the same finite value
+    (within ``tol``), or EVERY method reports NaN; it is inconsistent if
+    some methods are NaN and others finite (a silent way past the old
+    ``nanmax - nanmin`` check, which ignored NaN and so reported zero
+    spread), or if the finite values disagree by more than ``tol``.
+
+    Args:
+        y_true: The ``y_true`` values for one ``(model_id, depmap_column)``
+            group, one entry per method.
+        tol: Max allowed spread among the finite values.
+
+    Returns:
+        True if the group violates the consistency contract.
+    """
+    finite = y_true[np.isfinite(y_true)]
+    if finite.empty:
+        return False
+    if finite.shape[0] != y_true.shape[0]:
+        return True
+    return bool((finite.max() - finite.min()) > tol)
+
+
 def _validate_evaluation_inputs(
     predictions: pd.DataFrame,
     manifest: pd.DataFrame,
+    slice_df: pd.DataFrame,
     panels: pd.DataFrame,
     methods: Sequence[str],
     baseline_method: str,
     n_panels: int = N_PANELS,
+    n_labels: int = N_LABELS,
     y_true_tol: float = 1e-8,
     expected_test_lines: int | None = None,
 ) -> list[str]:
     """Enforce frozen-contract invariants before a formal gate verdict.
 
-    Closes the three ways a silent evaluator could pass the gate on a
-    different estimator than the registered one: a changed inferential line
-    sample, an altered panel schedule, and paired methods scored against
-    inconsistent targets.
+    Closes ways a silent evaluator could pass the gate on a different
+    estimator than the registered one: a changed inferential line sample,
+    an altered panel/label schedule, incomplete prediction coverage of the
+    frozen gene slice, and paired methods scored against inconsistent
+    targets.
 
     Args:
         predictions: Tidy long-format predictions.
         manifest: Cell-line manifest with a ``role`` column.
+        slice_df: Differential-essential slice with a ``depmap_column``
+            column.
         panels: Frozen nested k-label panels.
         methods: Method identifiers to be scored.
         baseline_method: Paired-difference baseline (also must be covered).
         n_panels: Required panel count per held-out line.
-        y_true_tol: Max allowed spread of ``y_true`` across methods per gene.
+        n_labels: Required label-row count per (line, panel) (Phase A
+            contract: 50, ``label_order`` 1..50).
+        y_true_tol: Max allowed spread of ``y_true`` across methods per gene
+            (only among methods that report a finite value; see
+            :func:`_y_true_group_is_inconsistent`).
+        expected_test_lines: If given, the exact required test-line count.
 
     Returns:
         The validated list of held-out test-line ``model_id``s.
 
     Raises:
         EvaluationContractError: On duplicate/absent test lines, a per-line
-            panel count other than ``n_panels``, prediction-coverage gaps for
+            panel or label-row schedule that deviates from the frozen
+            contract, prediction-coverage gaps against the full slice for
             any scored method, or per-gene ``y_true`` disagreement.
     """
     test_lines = manifest.loc[manifest["role"] == "test", "model_id"].tolist()
@@ -454,22 +756,26 @@ def _validate_evaluation_inputs(
         raise EvaluationContractError(
             f"Expected {n_panels} panels per line; found {bad.to_dict()}."
         )
+    _validate_panel_label_rows(panels, test_set, n_labels)
 
-    for method in set(methods) | {baseline_method}:
+    all_methods = set(methods) | {baseline_method}
+    for method in all_methods:
         covered = predictions.loc[predictions["method"] == method, "model_id"]
         gap = test_set - set(covered)
         if gap:
             raise EvaluationContractError(
                 f"method={method!r} missing predictions for line(s): {sorted(gap)}."
             )
+    slice_genes = set(slice_df["depmap_column"])
+    _validate_slice_coverage(predictions, panels, slice_genes, test_set, all_methods)
 
-    spread = (
+    spread_bad = (
         predictions[predictions["model_id"].isin(test_set)]
         .groupby(["model_id", "depmap_column"])["y_true"]
-        .agg(lambda s: float(np.nanmax(s) - np.nanmin(s)))
+        .apply(lambda s: _y_true_group_is_inconsistent(s, y_true_tol))
     )
-    if (spread > y_true_tol).any():
-        n_bad = int((spread > y_true_tol).sum())
+    if spread_bad.any():
+        n_bad = int(spread_bad.sum())
         raise EvaluationContractError(
             f"y_true disagrees across methods for {n_bad} (line, gene) pair(s); "
             "paired differences would compare against different targets."
@@ -533,6 +839,7 @@ def evaluate(
         test_lines = _validate_evaluation_inputs(
             predictions,
             manifest,
+            slice_df,
             panels,
             methods,
             baseline_method,

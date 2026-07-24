@@ -3,9 +3,15 @@
 
 Consumes a tidy long-format predictions table (see
 ``aivc_model.tx1_geneeffect_eval`` for the schema) and the frozen Phase-A
-manifest/slice/panels, then writes ``per_line.csv``, ``curve.csv``, and
-``verdict.json`` to the output directory. Exits 0 if the gate passes, 1
-otherwise.
+manifest/slice/panels, then writes ``per_line.csv``, ``curve.csv``, and a
+gate verdict to the output directory. In the default strict mode, the
+verdict is a FORMAL one (frozen-contract validated): it is written to
+``verdict.json`` with ``"formal": true``, and the process exits 0 if the
+gate passes, 1 otherwise. With ``--allow-partial``, frozen-contract
+validation is bypassed and the run is diagnostic only: the verdict is
+written to ``verdict_diagnostic.json`` (never ``verdict.json``) with
+``"formal": false`` and a ``"reason"``, and the process always exits 2 so a
+diagnostic run can never be mistaken for a passing formal verdict.
 """
 
 from __future__ import annotations
@@ -97,7 +103,9 @@ def main(argv: list[str] | None = None) -> int:
         argv: Argument list, or None to use ``sys.argv``.
 
     Returns:
-        Process exit code: 0 if the gate passes, 1 otherwise.
+        Process exit code: 0 if the gate passes and 1 otherwise for a
+        strict (formal) run; 2 always for an ``--allow-partial``
+        (diagnostic) run, regardless of ``passes``.
     """
     args = parse_args(argv)
     logging.basicConfig(
@@ -127,14 +135,19 @@ def main(argv: list[str] | None = None) -> int:
         expected_test_lines=(args.expected_test_lines or None),
     )
 
+    verdict = dict(result["gate"])
+    verdict["formal"] = not args.allow_partial
+    if args.allow_partial:
+        verdict["reason"] = "partial/diagnostic run (contract validation bypassed)"
+        verdict_path = args.out_dir / "verdict_diagnostic.json"
+    else:
+        verdict_path = args.out_dir / "verdict.json"
+
     args.out_dir.mkdir(parents=True, exist_ok=True)
     result["per_line"].to_csv(args.out_dir / "per_line.csv", index=False)
     result["curve"].to_csv(args.out_dir / "curve.csv", index=False)
-    (args.out_dir / "verdict.json").write_text(
-        json.dumps(result["gate"], indent=2) + "\n"
-    )
+    verdict_path.write_text(json.dumps(verdict, indent=2) + "\n")
 
-    verdict = result["gate"]
     _LOGGER.info(
         "Gate k=%d method=%s: macro_mean=%.4f ci=[%.4f, %.4f] rho_min=%.4f passes=%s",
         verdict["k"],
@@ -145,6 +158,13 @@ def main(argv: list[str] | None = None) -> int:
         verdict["rho_min"],
         verdict["passes"],
     )
+    if args.allow_partial:
+        _LOGGER.warning(
+            "PARTIAL/DIAGNOSTIC RUN: frozen-contract validation was bypassed "
+            "(--allow-partial). This is NOT a formal verdict; see %s.",
+            verdict_path,
+        )
+        return 2
     return 0 if verdict["passes"] else 1
 
 
