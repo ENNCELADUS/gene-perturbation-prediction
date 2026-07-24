@@ -232,6 +232,21 @@ def test_correlation_loss_constant_pred_is_finite_worst_case() -> None:
     assert loss.item() > 0.9
 
 
+def test_collapsed_pred_gradients_are_finite_not_nan() -> None:
+    # Regression for the anti-collapse contract: the std epsilon must sit
+    # INSIDE the sqrt, or the backward pass produces NaN gradients on exactly
+    # the constant (mean-collapse) prediction the loss exists to punish --
+    # which would permanently poison an Adam-optimized training run.
+    target = torch.randn(10)
+    for loss_fn in (correlation_loss, rank_variance_loss):
+        pred = torch.full((10,), 5.0, requires_grad=True)
+        loss_fn(pred, target).backward()
+        assert pred.grad is not None
+        assert torch.isfinite(pred.grad).all(), (
+            f"{loss_fn.__name__} produced a non-finite gradient on constant pred"
+        )
+
+
 # ---------------------------------------------------------------------------
 # variance_matching_loss
 # ---------------------------------------------------------------------------

@@ -283,8 +283,8 @@ def correlation_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     pred_centered = pred - pred.mean()
     target_centered = target - target.mean()
     covariance = (pred_centered * target_centered).mean()
-    pred_std = pred_centered.square().mean().sqrt() + _STD_EPS
-    target_std = target_centered.square().mean().sqrt() + _STD_EPS
+    pred_std = (pred_centered.square().mean() + _STD_EPS).sqrt()
+    target_std = (target_centered.square().mean() + _STD_EPS).sqrt()
     correlation = covariance / (pred_std * target_std)
     return 1.0 - correlation
 
