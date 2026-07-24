@@ -1,0 +1,43 @@
+model_id,cellosaurus_id,cell_line_name,lineage,dmso_cells,basal_source,tx1_pretraining_exposure,role,omics_expression_available
+ACH-000178,CVCL_0334,Hs 766T,Pancreas,55202,Tahoe-100M DMSO,known_present,test,True
+ACH-000348,CVCL_1666,RPMI-7951,Skin,36612,Tahoe-100M DMSO,known_present,test,True
+ACH-000389,CVCL_1239,H4,CNS/Brain,24306,Tahoe-100M DMSO,known_present,test,True
+ACH-000496,CVCL_1495,NCI-H1792,Lung,42864,Tahoe-100M DMSO,known_present,test,True
+ACH-000552,CVCL_0320,HT-29,Bowel,50552,Tahoe-100M DMSO,known_present,test,True
+ACH-000790,CVCL_1693,SHP-77,Lung,50344,Tahoe-100M DMSO,known_present,test,True
+ACH-000793,CVCL_0371,KATO III,Esophagus/Stomach,51949,Tahoe-100M DMSO,known_present,test,True
+ACH-000890,CVCL_1716,SW 1271,Lung,4940,Tahoe-100M DMSO,known_present,test,True
+ACH-000950,CVCL_0399,LoVo,Bowel,67833,Tahoe-100M DMSO,known_present,test,True
+ACH-000120,CVCL_1125,CHP-212,Peripheral Nervous System,11219,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000138,CVCL_1119,CFPAC-1,Pancreas,51178,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000139,CVCL_1635,Panc 03.27,Pancreas,37487,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000148,CVCL_0332,Hs 578T,Breast,39854,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000164,CVCL_0480,PANC-1,Pancreas,95259,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000222,CVCL_0152,AsPC-1,Pancreas,51407,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000311,CVCL_1531,NCI-H2122,Lung,610,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000396,CVCL_0359,J82,Bladder/Urinary Tract,56439,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000437,CVCL_1715,SW 1088,CNS/Brain,3254,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000463,CVCL_0459,NCI-H460,Lung,126345,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000493,CVCL_0366,SNU-423,Liver,36803,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000521,CVCL_1517,NCI-H2030,Lung,46472,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000558,CVCL_0131,A-172,CNS/Brain,56447,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000580,CVCL_1097,C32,Skin,49119,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000601,CVCL_0428,MIA PaCa-2,Pancreas,56383,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000681,CVCL_0023,A549,Lung,60135,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000757,CVCL_1055,A427,Lung,35415,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000853,CVCL_1577,NCI-H661,Lung,3206,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000861,CVCL_1285,HOP-62,Lung,75431,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000900,CVCL_1547,NCI-H23,Lung,43557,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000916,CVCL_1478,NCI-H1573,Lung,46867,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000932,CVCL_0099,SNU-1,Esophagus/Stomach,29414,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000943,CVCL_0504,RKO,Bowel,54386,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000957,CVCL_0397,LS 180,Bowel,41614,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000958,CVCL_1724,SW48,Bowel,22444,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000997,CVCL_0292,HCT-15,Bowel,34053,Tahoe-100M DMSO,known_present,train_head,True
+ACH-001039,CVCL_0218,COLO 205,Bowel,32353,Tahoe-100M DMSO,known_present,train_head,False
+ACH-001190,CVCL_0069,SK-MEL-2,Skin,35843,Tahoe-100M DMSO,known_present,train_head,True
+ACH-001333,CVCL_1094,C-33 A,Cervix,34685,Tahoe-100M DMSO,known_present,train_head,True
+ACH-000551,CVCL_0004,K562,Myeloid,,Perturb-seq non-targeting control,declared_separately,train_response_and_head,True
+ACH-000739,CVCL_0027,HepG2,Liver,,Perturb-seq non-targeting control,declared_separately,train_response_and_head,True
+ACH-000971,CVCL_0291,HCT116,Bowel,,Perturb-seq non-targeting control,declared_separately,train_response_and_head,True
+ACH-000995,CVCL_0065,Jurkat,Lymphoid,,Perturb-seq non-targeting control,declared_separately,train_response_and_head,True
