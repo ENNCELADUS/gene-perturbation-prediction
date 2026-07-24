@@ -7,6 +7,7 @@ and are never touched here (Wave 1 Phase B, Task 1).
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import anndata as ad
@@ -203,6 +204,47 @@ def test_build_tahoe_basal_adata_drops_special_tokens_and_nonpositive(
     assert adata.X.toarray().tolist() == [[3.0]]
 
 
+def test_build_tahoe_basal_adata_warns_on_missing_gene_metadata(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Otherwise-valid tokens missing from gene metadata must warn, not vanish."""
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_shard(
+        shard_dir / "part-0.parquet",
+        [
+            {
+                # ids 3, 4, 5 are all otherwise-valid (>= 3, positive value),
+                # but gene metadata only knows about id 3, so ids 4 and 5
+                # (2 of 3 valid tokens) are dropped from the panel.
+                "genes": np.array([3, 4, 5]),
+                "expressions": np.array([1.0, 2.0, 3.0]),
+                "cell_line_id": "CVCL_A",
+            }
+        ],
+    )
+    metadata_path = _write_gene_metadata(tmp_path / "genes.parquet", [3])
+    with caplog.at_level(logging.WARNING, logger="aivc_model.tx1_basal"):
+        adata = build_tahoe_basal_adata(
+            shard_dir,
+            metadata_path,
+            "CVCL_A",
+            cell_line_name="LineA",
+            model_id="ACH-A",
+            seed=0,
+        )
+    assert adata.n_vars == 1
+    warnings = [
+        record.message
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+        and "missing from gene metadata index" in record.message
+    ]
+    assert len(warnings) == 1
+    assert "2/3" in warnings[0]
+    assert "66.7%" in warnings[0]
+
+
 def test_build_tahoe_basal_adata_var_and_obs_schema(tmp_path: Path) -> None:
     shard_dir = tmp_path / "shards"
     shard_dir.mkdir()
@@ -379,6 +421,27 @@ def test_assert_tx1_input_contract_rejects_negative_x() -> None:
         var=pd.DataFrame(index=["ENSG1", "ENSG2"]),
     )
     with pytest.raises(ValueError, match="negative"):
+        assert_tx1_input_contract(adata)
+
+
+def test_assert_tx1_input_contract_rejects_nan_dense_x() -> None:
+    """NaN must not slip past the negativity check (NaN < 0 is False in numpy)."""
+    adata = ad.AnnData(
+        X=np.array([[1.0, np.nan]], dtype=np.float32),
+        obs=pd.DataFrame({"cell_type": ["LineA"]}, index=["cell0"]),
+        var=pd.DataFrame(index=["ENSG1", "ENSG2"]),
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        assert_tx1_input_contract(adata)
+
+
+def test_assert_tx1_input_contract_rejects_nan_sparse_x() -> None:
+    adata = ad.AnnData(
+        X=csr_matrix(np.array([[1.0, np.nan]], dtype=np.float32)),
+        obs=pd.DataFrame({"cell_type": ["LineA"]}, index=["cell0"]),
+        var=pd.DataFrame(index=["ENSG1", "ENSG2"]),
+    )
+    with pytest.raises(ValueError, match="non-finite"):
         assert_tx1_input_contract(adata)
 
 
