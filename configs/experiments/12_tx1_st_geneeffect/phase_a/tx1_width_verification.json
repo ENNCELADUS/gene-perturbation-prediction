@@ -1,0 +1,52 @@
+{
+  "actual_obsm_width": 2560,
+  "attention_implementation": "torch portability fallback for the width probe; weights and output shape are unchanged",
+  "checkpoint_load": {
+    "allowed_unexpected_keys": [
+      "model.chem_encoder.embedding.weight",
+      "model.chem_encoder.fc.bias",
+      "model.chem_encoder.fc.weight",
+      "model.chem_encoder.norm.bias",
+      "model.chem_encoder.norm.weight",
+      "model.chem_encoder.proj.bias",
+      "model.chem_encoder.proj.weight"
+    ],
+    "complete_backbone_load": true,
+    "missing_keys": [],
+    "unexpected_keys": [
+      "model.chem_encoder.embedding.weight",
+      "model.chem_encoder.fc.bias",
+      "model.chem_encoder.fc.weight",
+      "model.chem_encoder.norm.bias",
+      "model.chem_encoder.norm.weight",
+      "model.chem_encoder.proj.bias",
+      "model.chem_encoder.proj.weight"
+    ]
+  },
+  "device": "NVIDIA H20",
+  "expected_obsm_width": 2560,
+  "input_contract": {
+    "X": "raw non-negative counts",
+    "cells": 2,
+    "genes": 1252,
+    "obs_key": "cell_type",
+    "var_key": "ensembl_id"
+  },
+  "model_label": "tahoe_x1_3b",
+  "obsm_key": "tahoe_x1_3b",
+  "obsm_shape": [
+    2,
+    2560
+  ],
+  "padding_metadata_implementation": "pure-Torch equivalent of flash_attn.bert_padding.unpad_input",
+  "rejected_label": "tx-70m-merged",
+  "source_sha256": {
+    "collator_config": "38863a6151038ae8392a9bf5271ea41d8131e97ff002b11dd491668d339a506a",
+    "model_config": "e370fba480d7c09974e28fbeb0e95aabf750677afbbaefabee0e60d3a4a9d254",
+    "model_safetensors": "424911f1d7425001db3dc6792193ce6470b6b15ab7ec10a35267cc27bd46634c",
+    "probe_h5ad": "e72524baaddc179ed932140a721cd5f2bb326598cad5e703db6935ba8f75d222",
+    "vocab": "67afad54426a6871e3499bb61ad1a4dc65b87821ed6d2960ec8ed26d8947d9bc"
+  },
+  "status": "verified",
+  "torch_version": "2.6.0+cu124"
+}

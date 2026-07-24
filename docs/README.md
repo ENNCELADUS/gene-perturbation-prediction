@@ -66,7 +66,7 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | Reproduce SLMGAE, KR4SL, KG4SL and best official comparator | Pending. |
 | Context-free composition score `q(a,b)` | Not started. |
 | Multi-cell-line data-role audit | Not started. |
-| Multi-cell-line virtual-cell backbone | **Active focus (design approved 2026-07-23).** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); current exp05 is K562-based; not yet built. |
+| Multi-cell-line virtual-cell backbone | **Active focus (design approved 2026-07-23).** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); fixed most-train / few-test split with Tahoe DMSO-basal DepMap lines held out; current exp05 is K562-based; not yet built. |
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
 | Context-conditioned Bridge A / Bridge B | Not started; the K562 Bridge A **mechanism** was tested and is negative (see measured-GI row). |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
@@ -80,11 +80,13 @@ gene marginals, cell-line identity, and direct context-free transfer.
   composition mechanism is paused for redesign and not extended across contexts;
   [result](results/exp05-bridge-a-horlbeck-kill-test.md).
 - [ ] **T2 (active focus)** — build the few-shot cross-cell-line GeneEffect
-  backbone `F(X_c, c, g)`: DepMap leave-one-cell-line-out plus k-shot adaptation
-  to a held-out line, scored on the differentially-essential slice against
-  copy-K562 / mean / nearest-line / lineage-only / CCLE-regression baselines with
-  a few-shot curve (single-gene backbone transfer, not cross-cell-line SL);
-  [plan](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
+  backbone `F(X_c, c, g)`: fixed most-train / few-test split (four CRISPRi
+  Perturb-seq lines train; a lineage-stratified few of the 38 Tahoe DMSO-basal∩DepMap
+  lines are the held-out unseen test) plus k-shot adaptation, scored on the
+  differentially-essential slice against copy-K562 / mean / nearest-line /
+  lineage-only / CCLE-bulk / pseudobulk-basal baselines with a few-shot curve
+  (single-gene backbone transfer, task-data-held-out, not cross-cell-line SL);
+  [design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md).
 - [ ] Freeze and verify the official Feng2024 folds, labels, candidates, and
   `cal_metrics` contract.
 - [ ] Reproduce the strong SOTA under that identical official harness.

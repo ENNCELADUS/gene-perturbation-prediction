@@ -111,17 +111,22 @@ This instantiates roadmap Phases 3 (frozen backbone) + 4 (Bridge A) + 7 (K562
 anchor), pulled forward. It is independent of the Feng `q(a,b)` track
 (Phases 1–2, 5).
 
-## 3. Track 2 — GeneEffect cross-cell-line generalization and few-shot adaptation (DepMap LOCO)
+## 3. Track 2 — GeneEffect cross-cell-line generalization and few-shot adaptation (DepMap, fixed split)
 
 **Concrete architecture (2026-07-23):** the model, data roles, and execution plan
 are specified in
 [`2026-07-23-tx1-st-geneeffect-backbone-design.md`](2026-07-23-tx1-st-geneeffect-backbone-design.md)
-(Tx1-3B-conditioned ST + rebuilt hybrid head; HVG-ST control; Jurkat/HepG2 held
-out). The T2 contract below (testbed, differentially-essential slice, baselines)
-stands and governs; the design doc specifies how it is met.
+(Tx1-3B-conditioned ST + rebuilt hybrid head; HVG-ST encoder-unseen control). The
+data are re-scoped there to a **fixed most-train / few-test split (no
+cross-validation)**: the four CRISPRi Perturb-seq lines (K562, HCT116, Jurkat,
+HepG2) are training anchors, and a lineage-stratified few of the Tahoe
+DMSO-basal∩DepMap lines are the fixed unseen test. The T2 contract below (testbed,
+differentially-essential slice, baselines) stands and governs; the design doc
+specifies how it is met.
 
 **Objective (active round).** Build `F(X_c, c, g) -> GeneEffect`, a
-context-conditioned single-gene predictor that (a) generalizes leave-one-cell-line-out
+context-conditioned single-gene predictor that (a) generalizes across held-out
+cancer lines seen only through their basal single-cell state
 and (b) adapts to a held-out line from a few of its own labels (k-shot line
 adaptation), and is accurate against real DepMap GeneEffect on the
 differentially-essential slice. This is the Phase 3 backbone-transfer exit,
@@ -142,29 +147,32 @@ method, not the regression.
 ### 3.2 Mechanism and modality bridge
 
 The backbone's only cell-line input is the basal state, so give the C-head a
-cell-line context and train it across many lines. Unify the modality so transfer
-is not confounded: pseudobulk the perturb-seq control cells into a bulk-like
-vector matched to CCLE bulk. Line-scarcity note (distinct from k-shot line
-adaptation below): 2–4 perturb-seq lines cannot define a context→GeneEffect
-function; use the many DepMap lines' bulk to learn the context map (LOCO), with the
-perturb-seq lines as the modality-matched subset that additionally exercises the
-perturbation pathway.
+cell-line context and train it across many lines. Line-scarcity note (distinct from
+k-shot line adaptation below): the four Perturb-seq lines cannot alone define a
+context→GeneEffect function; the design supplies head breadth from the ~28–30 Tahoe
+DMSO **basal single-cell** lines (their DepMap GeneEffect via predicted response),
+with the Perturb-seq lines as the observed-response subset that additionally
+exercises the perturbation pathway. CCLE bulk enters as a baseline (and a possible
+later genomic-context augmentation), not as the method's context channel — see the
+design doc.
 
 ### 3.3 Metric and controls
 
-Leave-one-cell-line-out, in two regimes: **zero-shot** (no held-out-line labels)
-and **k-shot line adaptation** (the predictor may see k GeneEffect labels from the
-held-out line for a prespecified schedule of k; the adapted predictor is scored on
-the remaining, disjoint genes of that line). Primary score = rank correlation on
-the **differentially-essential slice** — genes with high cross-line GeneEffect
-variance and non-common-essential, both computed on **training lines only** so the
-held-out line never informs slice membership. Beat each baseline on the **paired
-difference** of rank correlation (method − baseline) per held-out line, with a
-95% CI excluding zero via a within-line gene bootstrap; report per-line and
-aggregated across the LOCO lines (line count and cross-line aggregator registered
-in Phase 0). Baselines: (i) single source-line transfer (copy-K562) and the
-training-line mean / nearest line; (ii) lineage-identity-only; (iii) the plain
-CCLE-bulk→GeneEffect regression. In the k-shot regime each baseline gets its
+Over the fixed few held-out Tahoe basal lines, in two regimes: **zero-shot** (no
+held-out-line labels) and **k-shot line adaptation** (the predictor may see k
+GeneEffect labels from the held-out line for a prespecified schedule of k; the
+adapted predictor is scored on the remaining, disjoint genes of that line). Primary
+score = rank correlation on the **differentially-essential slice** — genes with
+high cross-line GeneEffect variance and non-common-essential, both computed on
+**training lines only** so the held-out line never informs slice membership. Beat
+each baseline on the **paired difference** of rank correlation (method − baseline);
+the gate is at a registered k (k=10): the macro-averaged paired difference has a
+**line-level bootstrap 95% CI (cell lines as inferential units) excluding zero**,
+with per-line CIs and fraction-positive as descriptive support and k=0 as a stress
+point (estimator and `rho_min` registered in Phase 0). Baselines: (i) single
+source-line transfer (copy-K562) and the training-line mean / nearest line; (ii)
+lineage-identity-only; (iii) the CCLE-bulk→GeneEffect regression and a
+pseudobulk-basal→GeneEffect regression. In the k-shot regime each baseline gets its
 natural k-shot correction (e.g. copy-K562 plus a k-label offset/calibration), so
 added machinery must beat "copy-K562 + k labels", not just copy-K562. Report the
 **few-shot curve**: slice rank correlation and paired-difference-vs-baseline as a
@@ -205,8 +213,8 @@ after each analysis runs.
 
 - A Bridge-A/Horlbeck correlation is K562 mechanism only, never multi-cell-line
   mechanism.
-- Single-gene GeneEffect LOCO is backbone transfer, never SL transfer or
-  cross-cell-line SL.
+- Single-gene GeneEffect cross-cell-line transfer is backbone transfer, never SL
+  transfer or cross-cell-line SL.
 - No SL from single-gene essentiality; the interaction null is explicit.
 - Norman CRISPRa is never aligned to knockout labels without the modality caveat.
 - No planned number is reported as a result.

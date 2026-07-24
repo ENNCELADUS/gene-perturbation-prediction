@@ -1,0 +1,310 @@
+{
+  "artifacts": {
+    "batch_audit_sha256": "21378ce462263ba5cf665ab2d61f78af997bc6b93c4c6b9ea9f3383970122de9",
+    "cell_line_manifest_sha256": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297",
+    "differential_slice_sha256": "d05ed2d4f44c8189d6a66cddb10cc21ca7ecbd73b7a6f80f8bff9f2035585d4b",
+    "k_label_panels_sha256": "7d4ccb4cc247f944d1431b636e63581877a3f00d5c0acb6306266f13d61e7fa5",
+    "power_simulation_sha256": "8185f3efb2dc86ca39c0ce6df64180fe67ed7b39a6fa9f966e3ab00e8bde014d",
+    "training_proxy_deltas_sha256": "4315bb6ecfeb273ff916efa78486e5e97424654a2e9ea7875d5173e1bcd9d707",
+    "tx1_source_manifest_sha256": "10516bb0f42c2280f8b529455c1bb4a727a7e859e9c88b70aed71a37a793300c",
+    "tx1_width_verification_sha256": "775a8f71250602bedf367925645f90d6a2252ec8176664d72f5e7e055f778c83"
+  },
+  "batch_confound_sensitivity": {
+    "batch_matched_head": "retrain the GeneEffect head without the four Perturb-seq anchor lines, using Tahoe-source head-training lines only; ST response training on the four anchors is unchanged",
+    "gate_policy": "primary unadjusted estimator remains the sole gate; both fixed sensitivities are reported and cannot replace it",
+    "lineage_balanced_estimate": "unweighted mean of the six held-out-lineage mean paired effects",
+    "not_used": "no line-level source covariate adjustment because source is constant across all held-out Tahoe lines",
+    "primary": "unadjusted registered estimator"
+  },
+  "design": "Tx1-conditioned ST GeneEffect backbone Phase A",
+  "eligible_tahoe_lines": 38,
+  "estimator": {
+    "adapter_freeze_boundary": "adapter architecture and hyperparameters are selected using training lines only in Phase E and hashed before any held-out GeneEffect label is opened; all methods use the same panels",
+    "bootstrap_repetitions": 10000,
+    "bootstrap_seed": 20260725,
+    "confidence_interval": "two-sided 95% percentile bootstrap over lines",
+    "gate": "at k=10, bootstrap lower bound must exceed rho_min",
+    "inferential_unit": "cell line",
+    "k_label_sampling": "20 fixed nested panels per held-out line; panel seeds and ordered genes are materialized in k_label_panels.csv; k uses the first k",
+    "paired_difference": "Tx1-3B-ST minus copy-K562 + k labels",
+    "panel_aggregation": "mean Spearman within line across 20 panels, then paired method difference; bootstrap only the nine line-level means",
+    "per_line_metric": "Spearman rank correlation",
+    "population_estimate": "unweighted macro mean over held-out lines",
+    "scored_genes": "differential slice minus that panel's k labels; target/prediction pairwise complete cases, minimum 100 genes",
+    "ties": "average ranks as in scipy.stats.spearmanr"
+  },
+  "exposure": {
+    "claim": "task-data-held-out cross-line GeneEffect transfer",
+    "held_out_task_labels": "excluded from training",
+    "held_out_tx1_pretraining": "known present for every Tahoe test line"
+  },
+  "gate_k": 10,
+  "k_schedule": [
+    0,
+    5,
+    10,
+    25,
+    50
+  ],
+  "lineage_test_allocation": {
+    "Bowel": 2,
+    "CNS/Brain": 1,
+    "Esophagus/Stomach": 1,
+    "Lung": 3,
+    "Pancreas": 1,
+    "Skin": 1
+  },
+  "omics_expression_missing_ids": [
+    "ACH-001039"
+  ],
+  "omics_expression_missing_policy": "ACH-001039 remains a Tahoe training line for Tx1/HVG/pseudobulk heads but is excluded from the CCLE-bulk baseline; no expression imputation",
+  "open_gates": [],
+  "perturbseq_anchor_lines": 4,
+  "phase_a_gate_evidence": {
+    "batch_audit": {
+      "audit_scope": "paired Tahoe-DMSO pseudobulk versus DepMap/CCLE bulk",
+      "cells_per_line": 256,
+      "gene_selection": "top training-line mean within-source variance",
+      "heldout_lines_in_descriptive_audit": 9,
+      "interpretation_limit": "This crossed-source proxy identifies source separation independently of cell-line identity; it is not a direct Perturb-seq-control versus Tahoe comparison because those sources have no overlapping lines.",
+      "line_silhouette": -0.03834513046327092,
+      "lineages": {
+        "ACH-000120": "Peripheral Nervous System",
+        "ACH-000138": "Pancreas",
+        "ACH-000139": "Pancreas",
+        "ACH-000148": "Breast",
+        "ACH-000164": "Pancreas",
+        "ACH-000178": "Pancreas",
+        "ACH-000222": "Pancreas",
+        "ACH-000311": "Lung",
+        "ACH-000348": "Skin",
+        "ACH-000389": "CNS/Brain",
+        "ACH-000396": "Bladder/Urinary Tract",
+        "ACH-000437": "CNS/Brain",
+        "ACH-000463": "Lung",
+        "ACH-000493": "Liver",
+        "ACH-000496": "Lung",
+        "ACH-000521": "Lung",
+        "ACH-000552": "Bowel",
+        "ACH-000558": "CNS/Brain",
+        "ACH-000580": "Skin",
+        "ACH-000601": "Pancreas",
+        "ACH-000681": "Lung",
+        "ACH-000757": "Lung",
+        "ACH-000790": "Lung",
+        "ACH-000793": "Esophagus/Stomach",
+        "ACH-000853": "Lung",
+        "ACH-000861": "Lung",
+        "ACH-000890": "Lung",
+        "ACH-000900": "Lung",
+        "ACH-000916": "Lung",
+        "ACH-000932": "Esophagus/Stomach",
+        "ACH-000943": "Bowel",
+        "ACH-000950": "Bowel",
+        "ACH-000957": "Bowel",
+        "ACH-000958": "Bowel",
+        "ACH-000997": "Bowel",
+        "ACH-001190": "Skin",
+        "ACH-001333": "Cervix"
+      },
+      "matched_cross_source_correlation_mean": 0.7886125441262205,
+      "matched_line_median_rank_all": 1.0,
+      "matched_line_median_rank_heldout": 1.0,
+      "matched_line_top1_accuracy_all": 1.0,
+      "matched_line_top1_accuracy_heldout": 1.0,
+      "observed_dmso_cells": {
+        "ACH-000120": 11219,
+        "ACH-000138": 51178,
+        "ACH-000139": 37487,
+        "ACH-000148": 39854,
+        "ACH-000164": 95259,
+        "ACH-000178": 55202,
+        "ACH-000222": 51407,
+        "ACH-000311": 610,
+        "ACH-000348": 36612,
+        "ACH-000389": 24306,
+        "ACH-000396": 56439,
+        "ACH-000437": 3254,
+        "ACH-000463": 126345,
+        "ACH-000493": 36803,
+        "ACH-000496": 42864,
+        "ACH-000521": 46472,
+        "ACH-000552": 50552,
+        "ACH-000558": 56447,
+        "ACH-000580": 49119,
+        "ACH-000601": 56383,
+        "ACH-000681": 60135,
+        "ACH-000757": 35415,
+        "ACH-000790": 50344,
+        "ACH-000793": 51949,
+        "ACH-000853": 3206,
+        "ACH-000861": 75431,
+        "ACH-000890": 4940,
+        "ACH-000900": 43557,
+        "ACH-000916": 46867,
+        "ACH-000932": 29414,
+        "ACH-000943": 54386,
+        "ACH-000950": 67833,
+        "ACH-000957": 41614,
+        "ACH-000958": 22444,
+        "ACH-000997": 34053,
+        "ACH-001190": 35843,
+        "ACH-001333": 34685
+      },
+      "paired_lines": 37,
+      "partial_line_r2_after_source": 0.8800606255082025,
+      "partial_source_r2_after_line": 0.6002117371365057,
+      "registered_response": "Keep the unadjusted estimator as the sole gate; additionally report a Tahoe-only head-training sensitivity and a lineage-balanced macro estimate. Do not fit a line-level source covariate because every held-out line has the Tahoe source.",
+      "risk_level": "high",
+      "seed": 20260724,
+      "selected_genes": 2000,
+      "source_classifier_leave_one_line_out_accuracy": 1.0,
+      "source_sha256": {
+        "depmap_omics_expression": "0377be80c525fde98cbd2c6e8b06bdf2a4014a9683eb70182c1f8649d711021a",
+        "gene_metadata": "d6104d1ca570d94832be0d27ffe8b7e4e54cfd366c9080239219f9c406eb751c",
+        "manifest": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297"
+      },
+      "source_silhouette": 0.1792238064617233,
+      "status": "complete",
+      "unmatched_cross_source_correlation_mean": -0.016941514384932025
+    },
+    "tx1_source_manifest": {
+      "expected_obsm_width": 2560,
+      "files": {
+        "collator_config.yml": {
+          "bytes": 382,
+          "sha256": "38863a6151038ae8392a9bf5271ea41d8131e97ff002b11dd491668d339a506a"
+        },
+        "model.safetensors": {
+          "bytes": 10868228196,
+          "sha256": "424911f1d7425001db3dc6792193ce6470b6b15ab7ec10a35267cc27bd46634c"
+        },
+        "model_config.yml": {
+          "bytes": 931,
+          "sha256": "e370fba480d7c09974e28fbeb0e95aabf750677afbbaefabee0e60d3a4a9d254"
+        },
+        "vocab.json": {
+          "bytes": 1744985,
+          "sha256": "67afad54426a6871e3499bb61ad1a4dc65b87821ed6d2960ec8ed26d8947d9bc"
+        }
+      },
+      "label_resolution": "The official 3b-model artifact is selected explicitly; the top-level or legacy tx-70m-merged label is not accepted as the 3B encoder.",
+      "model_label": "tahoe_x1_3b",
+      "model_repo": "tahoebio/Tahoe-x1",
+      "model_revision": "d218a580b9c2500ae9dfc8367a398545e6f017a8",
+      "model_subdirectory": "3b-model",
+      "rejected_label": "tx-70m-merged",
+      "source_commit": "167cc19fce5888c7738b0f73f61cb4a8d3d1d457",
+      "source_repository": "https://github.com/tahoebio/tahoe-x1",
+      "source_worktree_clean": true,
+      "status": "verified"
+    },
+    "tx1_width_verification": {
+      "actual_obsm_width": 2560,
+      "attention_implementation": "torch portability fallback for the width probe; weights and output shape are unchanged",
+      "checkpoint_load": {
+        "allowed_unexpected_keys": [
+          "model.chem_encoder.embedding.weight",
+          "model.chem_encoder.fc.bias",
+          "model.chem_encoder.fc.weight",
+          "model.chem_encoder.norm.bias",
+          "model.chem_encoder.norm.weight",
+          "model.chem_encoder.proj.bias",
+          "model.chem_encoder.proj.weight"
+        ],
+        "complete_backbone_load": true,
+        "missing_keys": [],
+        "unexpected_keys": [
+          "model.chem_encoder.embedding.weight",
+          "model.chem_encoder.fc.bias",
+          "model.chem_encoder.fc.weight",
+          "model.chem_encoder.norm.bias",
+          "model.chem_encoder.norm.weight",
+          "model.chem_encoder.proj.bias",
+          "model.chem_encoder.proj.weight"
+        ]
+      },
+      "device": "NVIDIA H20",
+      "expected_obsm_width": 2560,
+      "input_contract": {
+        "X": "raw non-negative counts",
+        "cells": 2,
+        "genes": 1252,
+        "obs_key": "cell_type",
+        "var_key": "ensembl_id"
+      },
+      "model_label": "tahoe_x1_3b",
+      "obsm_key": "tahoe_x1_3b",
+      "obsm_shape": [
+        2,
+        2560
+      ],
+      "padding_metadata_implementation": "pure-Torch equivalent of flash_attn.bert_padding.unpad_input",
+      "rejected_label": "tx-70m-merged",
+      "source_sha256": {
+        "collator_config": "38863a6151038ae8392a9bf5271ea41d8131e97ff002b11dd491668d339a506a",
+        "model_config": "e370fba480d7c09974e28fbeb0e95aabf750677afbbaefabee0e60d3a4a9d254",
+        "model_safetensors": "424911f1d7425001db3dc6792193ce6470b6b15ab7ec10a35267cc27bd46634c",
+        "probe_h5ad": "e72524baaddc179ed932140a721cd5f2bb326598cad5e703db6935ba8f75d222",
+        "vocab": "67afad54426a6871e3499bb61ad1a4dc65b87821ed6d2960ec8ed26d8947d9bc"
+      },
+      "status": "verified",
+      "torch_version": "2.6.0+cu124"
+    }
+  },
+  "registration_payload_sha256": "aa0ea42a738c97f4120a4effb81b483acf80a04058a22029033af5424533919d",
+  "rho_min": 0.05,
+  "rho_min_justification": {
+    "decision_alternative": 0.15,
+    "decision_alternative_rule": "training proxy mean minus one half between-line SD, rounded to 0.01; no clipping or post-power tuning",
+    "inner_bootstrap_repetitions": 1000,
+    "noise_source": "training-only nearest-expression-line vs copy-K562 paired rho deltas",
+    "power_at_rho_min": 0.802,
+    "proxy_delta_mean": 0.20027669778657706,
+    "proxy_delta_std": 0.10240540874971352,
+    "selection_rule": "rho_min is fixed by utility; simulation must show >=80% power at the training-derived conservative decision alternative or Phase A fails",
+    "simulation_repetitions": 1000,
+    "utility_anchor_rho": 0.554,
+    "utility_derivation": "floor(0.10 * 0.554 * 100) / 100 = 0.05; 0.554 is the previously observed HCT116 retained GeneEffect transfer rho, and one tenth is the prespecified smallest worthwhile rank lift",
+    "utility_fraction": 0.1
+  },
+  "schema_version": 1,
+  "seed": 20260723,
+  "slice": {
+    "complete_case_required": true,
+    "defined_on": "training lines only",
+    "dependency_cutoff": -0.5,
+    "eligible_before_variance_filter": 2353,
+    "max_dependency_prevalence": 0.8,
+    "min_dependent_lines": 2,
+    "min_non_dependent_lines": 2,
+    "selected_gene_count": 589,
+    "variance_cutoff": 0.28374455548628413,
+    "variance_quantile": 0.75
+  },
+  "sources": {
+    "depmap_gene_effect": {
+      "path": "data/sl_dependency_v0/raw/depmap_26q1/CRISPRGeneEffect.csv",
+      "sha256": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e"
+    },
+    "depmap_model": {
+      "path": "data/sl_dependency_v0/raw/depmap_26q1/Model.csv",
+      "sha256": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8"
+    },
+    "depmap_omics_expression": {
+      "path": "data/sl_dependency_v0/raw/depmap_26q1/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv",
+      "sha256": "0377be80c525fde98cbd2c6e8b06bdf2a4014a9683eb70182c1f8649d711021a"
+    },
+    "tahoe_cell_metadata": {
+      "path": "data/sl_dependency_v0/raw/tahoe_100m_dmso/metadata/cell_line_metadata.parquet",
+      "sha256": "67641f5bdd3fb077978ff1fec4d0d617490674bcd42850515ae3997194c29d4d"
+    },
+    "tahoe_summary": {
+      "path": "data/sl_dependency_v0/raw/tahoe_100m_dmso/summary.json",
+      "sha256": "8e407943e3b0a40c4246c21c4c91b4adf4ba59101f33a57c3a9e5c3898b73224"
+    }
+  },
+  "status": "frozen",
+  "tahoe_test_lines": 9,
+  "tahoe_train_lines": 29
+}

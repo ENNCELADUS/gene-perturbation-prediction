@@ -1,0 +1,31 @@
+{
+  "expected_obsm_width": 2560,
+  "files": {
+    "collator_config.yml": {
+      "bytes": 382,
+      "sha256": "38863a6151038ae8392a9bf5271ea41d8131e97ff002b11dd491668d339a506a"
+    },
+    "model.safetensors": {
+      "bytes": 10868228196,
+      "sha256": "424911f1d7425001db3dc6792193ce6470b6b15ab7ec10a35267cc27bd46634c"
+    },
+    "model_config.yml": {
+      "bytes": 931,
+      "sha256": "e370fba480d7c09974e28fbeb0e95aabf750677afbbaefabee0e60d3a4a9d254"
+    },
+    "vocab.json": {
+      "bytes": 1744985,
+      "sha256": "67afad54426a6871e3499bb61ad1a4dc65b87821ed6d2960ec8ed26d8947d9bc"
+    }
+  },
+  "label_resolution": "The official 3b-model artifact is selected explicitly; the top-level or legacy tx-70m-merged label is not accepted as the 3B encoder.",
+  "model_label": "tahoe_x1_3b",
+  "model_repo": "tahoebio/Tahoe-x1",
+  "model_revision": "d218a580b9c2500ae9dfc8367a398545e6f017a8",
+  "model_subdirectory": "3b-model",
+  "rejected_label": "tx-70m-merged",
+  "source_commit": "167cc19fce5888c7738b0f73f61cb4a8d3d1d457",
+  "source_repository": "https://github.com/tahoebio/tahoe-x1",
+  "source_worktree_clean": true,
+  "status": "verified"
+}

@@ -36,8 +36,8 @@ T1 (below) has completed and is negative, pausing the composition mechanism; the
 near-term work is now a single track — **T2, the few-shot cross-cell-line
 GeneEffect backbone**. It runs independently of the Feng-axis reproduction
 (Phases 1–2), opens no untouched held-out cell-line labels, and yields no formal
-`02` verdict before its Phase 0 registrations are frozen. Full design:
-[`specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md).
+`02` verdict before its Phase 0 registrations are frozen. Concrete design:
+[`specs/2026-07-23-tx1-st-geneeffect-backbone-design.md`](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md).
 
 - **T1 — K562 mechanism kill-test (completed 2026-07-22; negative).** Composed the
   frozen exp05 backbone with **Bridge A** (observed `a`-perturbed Replogle state as
@@ -54,17 +54,22 @@ GeneEffect backbone**. It runs independently of the Feng-axis reproduction
   [`results/exp05-bridge-a-horlbeck-kill-test.md`](results/exp05-bridge-a-horlbeck-kill-test.md).
 - **T2 — few-shot cross-cell-line GeneEffect backbone (active near-term focus).**
   Build `F(X_c, c, g) -> GeneEffect`: a context-conditioned single-gene predictor
-  that (a) generalizes leave-one-cell-line-out on DepMap GeneEffect × CCLE baseline
-  expression — not Feng2024, which has no cell-type axis — and (b) adapts to a
-  held-out line from a few of its own labels (k-shot line adaptation). Scored on
-  the differentially-essential slice (slice membership fixed on training lines
-  only) against copy-K562 transfer, cross-line mean, nearest-line transfer,
-  lineage-only, and a plain CCLE-regression baseline, with a few-shot curve
-  (accuracy vs. k held-out-line labels). This is the Phase 3 single-gene
-  backbone-transfer exit, not cross-cell-line SL. Concrete architecture:
+  that predicts DepMap GeneEffect for cancer lines seen only through their basal
+  single-cell state — not Feng2024, which has no cell-type axis — and (b) adapts to
+  a held-out line from a few of its own labels (k-shot line adaptation). Data uses a
+  **fixed most-train / few-test split (no cross-validation)**: the four CRISPRi
+  Perturb-seq lines (K562, HCT116, Jurkat, HepG2) supply observed-response ST
+  supervision and head anchors; most of the 38 Tahoe DMSO-basal∩DepMap lines train
+  the head on predicted response; a lineage-stratified ~8–10 of them are the fixed
+  unseen test. Scored on the differentially-essential slice (slice membership fixed
+  on training lines only) against copy-K562 transfer, cross-line mean, nearest-line
+  transfer, lineage-only, a CCLE-bulk regression, and a pseudobulk-basal regression,
+  with a few-shot curve (accuracy vs. k held-out-line labels). This is the Phase 3
+  single-gene backbone-transfer exit, reported as task-data-held-out transfer (test
+  lines are inside the Tx1 encoder's Tahoe pretraining), not cross-cell-line SL.
+  Concrete architecture:
   [`specs/2026-07-23-tx1-st-geneeffect-backbone-design.md`](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)
-  (Tx1-3B-conditioned ST + rebuilt hybrid head, K562+HCT116 observed-response
-  anchors, ~50 Tahoe basal-context lines, Jurkat/HepG2 held out).
+  (Tx1-3B-conditioned ST + rebuilt hybrid head, HVG-ST encoder-unseen control).
 
 ## 2. Phase 0 — freeze data and evaluation contracts
 
@@ -196,14 +201,16 @@ completed audit's negative verdict. See the
 not count as pairwise or cross-cell-line SL generalization.
 
 **Exit:** on the differentially-essential slice (slice membership fixed on
-training lines only), the context-conditioned predictor beats copy-K562,
-cross-line mean, nearest-line transfer, lineage-only, and the plain
-CCLE-regression baseline on the paired rank-correlation difference (per-line 95%
-CI excluding zero via a within-line gene bootstrap; reported per line and
-macro-averaged), with a reported few-shot curve — all measured on development
-cell lines without opening pairwise labels from untouched test lines. A predictor
-that only matches copy-K562 on this slice is reported as conserved-prior transfer,
-not context-specific GeneEffect.
+training lines only), over the fixed few held-out lines, the context-conditioned
+predictor beats copy-K562, cross-line mean, nearest-line transfer, lineage-only,
+a CCLE-bulk regression, and a pseudobulk-basal regression on the paired
+rank-correlation difference. The T2 gate is at a registered k (k=10): the
+macro-averaged paired difference has a **line-level bootstrap 95% CI (cell lines as
+the inferential units) excluding zero**, with per-line CIs and fraction-positive
+reported as descriptive support and k=0 reported as a stress point — all measured
+without opening pairwise labels from untouched test lines. A predictor that only
+matches copy-K562 on this slice is reported as conserved-prior transfer, not
+context-specific GeneEffect.
 
 ## 6. Phase 4 — implement contextual Bridge A and Bridge B
 
