@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 
 import aivc_model.tx1_embed_cache as tx1_embed_cache_module
+from aivc_model.gene_splits import sha256_file
 from aivc_model.tx1_basal import load_line_manifest
 from aivc_model.tx1_embed_cache import (
     EMBEDDING_WIDTH,
@@ -37,6 +38,10 @@ from conftest import write_tx1_gene_metadata as _write_gene_metadata
 from conftest import write_tx1_line_manifest as _write_manifest
 from conftest import write_tx1_perturbseq_h5ad as _write_perturbseq_h5ad
 from conftest import write_tx1_shard as _write_shard
+from scripts.build_tx1_basal_embeddings import (
+    _load_perturbseq_source_config,
+    _require_perturbseq_sources_configured,
+)
 
 # --- shared fixtures --------------------------------------------------------
 
@@ -121,9 +126,38 @@ def _two_line_manifest() -> pd.DataFrame:
     )
 
 
-def _build_good_cache(tmp_path: Path) -> Path:
-    """Write a 2-line cache with a matching run manifest.json; return cache_dir."""
+def _build_good_cache(
+    tmp_path: Path, *, extra_frozen_only_lines: list[dict[str, object]] | None = None
+) -> Path:
+    """Write a 2-line embedded cache with a matching run manifest.json.
+
+    Also writes a frozen line manifest CSV (Critical 1's
+    ``config_snapshot["line_manifest_path"]``/``["line_manifest_sha256"]``
+    source of truth) recording the same two embedded lines, plus any
+    ``extra_frozen_only_lines`` that are present in the frozen manifest but
+    were never embedded (for Critical-1 missing-line coverage).
+
+    Returns:
+        The cache_dir path.
+    """
+    frozen_rows = [
+        _manifest_row(
+            model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+        ),
+        _manifest_row(
+            model_id="ACH-B", cellosaurus_id="CVCL_B", cell_line_name="LineB"
+        ),
+        *(extra_frozen_only_lines or []),
+    ]
+    frozen_manifest_path = _write_manifest(
+        tmp_path / "frozen_manifest.csv", frozen_rows
+    )
+
     cache_dir = tmp_path / "cache"
+    hvg_gene_order = ["G0", "G1"]
+    hvg_gene_order_sha256 = tx1_embed_cache_module._hvg_gene_order_signature(
+        hvg_gene_order
+    )["sha256"]
     line_entries: dict[str, dict[str, object]] = {}
     for model_id, n_cells in (("ACH-A", 2), ("ACH-B", 3)):
         embeddings = _embeddings(n_cells)
@@ -134,7 +168,7 @@ def _build_good_cache(tmp_path: Path) -> Path:
             embeddings,
             hvg,
             _obs(n_cells),
-            hvg_gene_order=["G0", "G1"],
+            hvg_gene_order=hvg_gene_order,
         )
         line_entries[model_id] = {
             "arrays": arrays,
@@ -143,13 +177,18 @@ def _build_good_cache(tmp_path: Path) -> Path:
             "hvg_fill_rate": 0.0,
             "basal_source": "Tahoe-100M DMSO",
             "cellosaurus_id": f"CVCL_{model_id}",
+            "hvg_gene_order_sha256": hvg_gene_order_sha256,
         }
     write_run_manifest(
         cache_dir,
         model_label=MODEL_LABEL,
         source_manifest={"files": {}},
         line_entries=line_entries,
-        config_snapshot={"seed": 0},
+        config_snapshot={
+            "seed": 0,
+            "line_manifest_path": str(frozen_manifest_path),
+            "line_manifest_sha256": sha256_file(frozen_manifest_path),
+        },
     )
     return cache_dir
 
@@ -255,6 +294,34 @@ def test_embedding_norm_stats_rejects_empty() -> None:
         embedding_norm_stats(np.zeros((0, 4), dtype=np.float32))
 
 
+def test_embedding_norm_stats_does_not_upcast_full_array_to_float64(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Important 4: no full ``(n_cells, width)`` float64 copy may be made --
+    that would double a ~1.4 GB float32 cache to ~2.8 GB on every resumed
+    pass, for every already-cached line. Only the tiny ``(n_cells,)``-length
+    norm reduction output may be upcast."""
+    embeddings = np.tile(
+        np.array([3.0, 4.0], dtype=np.float32), (5, EMBEDDING_WIDTH // 2)
+    )
+    original_asarray = np.asarray
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def spy_asarray(*args: object, **kwargs: object) -> np.ndarray:
+        calls.append((args, kwargs))
+        return original_asarray(*args, **kwargs)
+
+    monkeypatch.setattr(tx1_embed_cache_module.np, "asarray", spy_asarray)
+    embedding_norm_stats(embeddings)
+    full_array_float64_calls = [
+        (args, kwargs)
+        for args, kwargs in calls
+        if kwargs.get("dtype") == np.float64
+        and getattr(args[0], "shape", None) == embeddings.shape
+    ]
+    assert full_array_float64_calls == []
+
+
 # --- write_run_manifest -------------------------------------------------
 
 
@@ -284,6 +351,51 @@ def test_write_run_manifest_records_config_snapshot(tmp_path: Path) -> None:
     assert (
         manifest["tx1_source_manifest"]["files"]["model.safetensors"]["sha256"] == "abc"
     )
+
+
+def test_write_run_manifest_merges_with_existing_lines(tmp_path: Path) -> None:
+    """Important 3: the documented 4-GPU ``--only-line`` sharding workflow is
+    4 separate invocations, each writing a disjoint model_id subset -- the
+    last one to finish must not erase the other three's recorded lines."""
+    cache_dir = tmp_path / "cache"
+    write_run_manifest(
+        cache_dir,
+        model_label=MODEL_LABEL,
+        source_manifest={"files": {}},
+        line_entries={"ACH-A": {"n_cells": 2}},
+        config_snapshot={"only_line": ["ACH-A"]},
+    )
+    write_run_manifest(
+        cache_dir,
+        model_label=MODEL_LABEL,
+        source_manifest={"files": {}},
+        line_entries={"ACH-B": {"n_cells": 3}},
+        config_snapshot={"only_line": ["ACH-B"]},
+    )
+    manifest = json.loads((cache_dir / "manifest.json").read_text())
+    assert set(manifest["lines"]) == {"ACH-A", "ACH-B"}
+    assert manifest["lines"]["ACH-A"]["n_cells"] == 2
+    assert manifest["lines"]["ACH-B"]["n_cells"] == 3
+
+
+def test_write_run_manifest_new_entry_overrides_same_model_id(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    write_run_manifest(
+        cache_dir,
+        model_label=MODEL_LABEL,
+        source_manifest={"files": {}},
+        line_entries={"ACH-A": {"n_cells": 2}},
+        config_snapshot={},
+    )
+    write_run_manifest(
+        cache_dir,
+        model_label=MODEL_LABEL,
+        source_manifest={"files": {}},
+        line_entries={"ACH-A": {"n_cells": 99}},
+        config_snapshot={},
+    )
+    manifest = json.loads((cache_dir / "manifest.json").read_text())
+    assert manifest["lines"]["ACH-A"]["n_cells"] == 99
 
 
 # --- verify_cache: the Phase B exit criterion -------------------------------
@@ -380,6 +492,116 @@ def test_verify_cache_failed_wrong_model_label(tmp_path: Path) -> None:
     report = verify_cache(cache_dir)
     assert report["status"] == "failed"
     assert any("model_label" in discrepancy for discrepancy in report["discrepancies"])
+
+
+def test_verify_cache_failed_standalone_embedding_width_reassertion(
+    tmp_path: Path,
+) -> None:
+    """Isolate ``_verify_line``'s standalone ``EMBEDDING_WIDTH`` re-assertion,
+    analogous to ``test_verify_cache_failed_row_count_disagreement``: the
+    on-disk array is tampered to a wrong width but its manifest metadata is
+    updated to match (sha256/shape checks pass, and the row count -- 2 --
+    still agrees with hvg/obs), so only the width check can catch it."""
+    cache_dir = _build_good_cache(tmp_path)
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    path = cache_dir / "ACH-A" / "embeddings.npy"
+    wrong_width = np.zeros((2, EMBEDDING_WIDTH - 1), dtype=np.float32)
+    np.save(path, wrong_width)
+    manifest["lines"]["ACH-A"]["arrays"]["embeddings.npy"] = (
+        tx1_embed_cache_module._npy_metadata(path)
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    expected_width_text = f"embeddings width {EMBEDDING_WIDTH - 1}"
+    assert any(
+        "ACH-A" in discrepancy and expected_width_text in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+
+
+# --- verify_cache: frozen Phase-A manifest cross-check (Critical 1) --------
+
+
+def test_verify_cache_failed_frozen_manifest_line_missing(tmp_path: Path) -> None:
+    """The frozen Phase-A manifest is the single source of which lines must
+    exist (Critical 1): a run that embeds only 2 of the frozen manifest's 3
+    lines must fail verify_cache, even though its own manifest.json is
+    internally consistent (disk matches exactly what the run itself claims
+    to have written)."""
+    cache_dir = _build_good_cache(
+        tmp_path,
+        extra_frozen_only_lines=[
+            _manifest_row(
+                model_id="ACH-C", cellosaurus_id="CVCL_C", cell_line_name="LineC"
+            )
+        ],
+    )
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    assert any(
+        "ACH-C" in discrepancy and "never" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+
+
+def test_verify_cache_failed_frozen_manifest_not_found(tmp_path: Path) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["config_snapshot"]["line_manifest_path"] = str(
+        tmp_path / "does_not_exist.csv"
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    assert any(
+        "frozen line manifest not found" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+
+
+def test_verify_cache_failed_frozen_manifest_sha256_mismatch(tmp_path: Path) -> None:
+    """A frozen manifest that has changed on disk since the run must fail
+    loudly rather than be trusted as-is."""
+    cache_dir = _build_good_cache(tmp_path)
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["config_snapshot"]["line_manifest_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest))
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    assert any("sha256" in discrepancy for discrepancy in report["discrepancies"])
+
+
+def test_verify_cache_frozen_manifest_path_override(tmp_path: Path) -> None:
+    """An explicit override lets verify_cache locate the frozen manifest even
+    if the run's own recorded path is stale/unavailable on this host."""
+    cache_dir = _build_good_cache(tmp_path)
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    real_frozen_path = Path(manifest["config_snapshot"]["line_manifest_path"])
+    manifest["config_snapshot"]["line_manifest_path"] = "/nonexistent/on/this/host.csv"
+    manifest_path.write_text(json.dumps(manifest))
+    report = verify_cache(cache_dir, frozen_manifest_path=real_frozen_path)
+    assert report["status"] == "verified"
+
+
+# --- verify_cache: HVG gene-order consistency (Critical 2) -----------------
+
+
+def test_verify_cache_failed_hvg_gene_order_disagreement(tmp_path: Path) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["lines"]["ACH-B"]["hvg_gene_order_sha256"] = "deadbeef" * 8
+    manifest_path.write_text(json.dumps(manifest))
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    assert any(
+        "hvg_gene_order" in discrepancy for discrepancy in report["discrepancies"]
+    )
 
 
 # --- load_hvg_gene_order ------------------------------------------------
@@ -575,6 +797,51 @@ def test_embed_lines_resumability_skips_encoder_for_cached_lines(
     assert set(entries) == {"ACH-A", "ACH-B"}
 
 
+def test_embed_lines_hvg_gene_order_change_forces_reembedding(tmp_path: Path) -> None:
+    """Critical 2: resuming with a corrected ``--hvg-state-model-dir`` must
+    re-embed every previously-cached line, not silently skip it. Without the
+    fix, ``_is_cached`` only checks width/row-count self-consistency, so a
+    line cached under one HVG checkpoint's gene order would be skipped
+    forever after the checkpoint changes, permanently keeping the stale
+    ``hvg.npy`` gene order."""
+    shard_dir, gene_metadata_path = _tahoe_shard_fixture(tmp_path)
+    cache_dir = tmp_path / "cache"
+    manifest = _two_line_manifest()
+
+    hvg_dir_a = _write_var_dims(tmp_path / "hvg_state_a", ["GENE3", "GENE4"])
+    first_encoder = _CountingEncoder()
+    embed_lines(
+        manifest,
+        cache_dir,
+        encoder=first_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir_a,
+        seed=0,
+    )
+    assert first_encoder.call_count == 2
+    _, hvg_before, _ = load_line_cache(cache_dir, "ACH-A")
+    np.testing.assert_array_equal(np.asarray(hvg_before)[0], [1.0, 2.0])  # GENE3, GENE4
+
+    # Resume against a corrected checkpoint with the same width but a
+    # different gene order (GENE4 before GENE3).
+    hvg_dir_b = _write_var_dims(tmp_path / "hvg_state_b", ["GENE4", "GENE3"])
+    second_encoder = _CountingEncoder()
+    entries = embed_lines(
+        manifest,
+        cache_dir,
+        encoder=second_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir_b,
+        seed=0,
+    )
+    assert second_encoder.call_count == 2
+    assert set(entries) == {"ACH-A", "ACH-B"}
+    _, hvg_after, _ = load_line_cache(cache_dir, "ACH-A")
+    np.testing.assert_array_equal(np.asarray(hvg_after)[0], [2.0, 1.0])  # GENE4, GENE3
+
+
 def test_embed_lines_atomicity_raising_encoder_leaves_no_partial_dir(
     tmp_path: Path,
 ) -> None:
@@ -599,3 +866,109 @@ def test_embed_lines_atomicity_raising_encoder_leaves_no_partial_dir(
     # than mistake this partial, mid-run state for a good cache.
     report = verify_cache(cache_dir)
     assert report["status"] == "failed"
+
+
+def test_embed_lines_wrong_width_encoder_raises(tmp_path: Path) -> None:
+    """Minor 5: drive a wrong-width stub encoder through the full
+    ``embed_lines``/``_embed_one_line`` pipeline (not just
+    ``write_line_cache`` directly), proving the width check is reachable
+    from the actual orchestration path a real run uses."""
+    shard_dir, gene_metadata_path = _tahoe_shard_fixture(tmp_path)
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["GENE3"])
+    manifest = pd.DataFrame(
+        [
+            _manifest_row(
+                model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+            )
+        ]
+    )
+    bad_encoder = _CountingEncoder(width=EMBEDDING_WIDTH - 1)
+    with pytest.raises(ValueError, match=str(EMBEDDING_WIDTH)):
+        embed_lines(
+            manifest,
+            tmp_path / "cache",
+            encoder=bad_encoder,
+            shard_dir=shard_dir,
+            gene_metadata_path=gene_metadata_path,
+            hvg_state_model_dir=hvg_dir,
+            seed=0,
+        )
+
+
+# --- CLI: scripts/build_tx1_basal_embeddings.py Perturb-seq wiring ---------
+
+
+def test_load_perturbseq_source_config_round_trip(tmp_path: Path) -> None:
+    config_path = tmp_path / "perturbseq_sources.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "ACH-P": {
+                    "h5ad_path": "/data/k562.h5ad",
+                    "perturbation_col": "gene",
+                    "control_label": "non-targeting",
+                    "var_ensembl_col": "ensembl_id",
+                }
+            }
+        )
+    )
+    sources = _load_perturbseq_source_config(config_path)
+    assert set(sources) == {"ACH-P"}
+    source = sources["ACH-P"]
+    assert isinstance(source, PerturbseqSource)
+    assert source.h5ad_path == Path("/data/k562.h5ad")
+    assert source.control_label == "non-targeting"
+    assert source.perturbation_col == "gene"
+    assert source.var_ensembl_col == "ensembl_id"
+
+
+def test_load_perturbseq_source_config_missing_key_raises(tmp_path: Path) -> None:
+    config_path = tmp_path / "perturbseq_sources.json"
+    config_path.write_text(json.dumps({"ACH-P": {"h5ad_path": "/data/k562.h5ad"}}))
+    with pytest.raises(ValueError, match="ACH-P"):
+        _load_perturbseq_source_config(config_path)
+
+
+def test_load_perturbseq_source_config_not_an_object_raises(tmp_path: Path) -> None:
+    config_path = tmp_path / "perturbseq_sources.json"
+    config_path.write_text(json.dumps(["not", "an", "object"]))
+    with pytest.raises(ValueError, match="JSON object"):
+        _load_perturbseq_source_config(config_path)
+
+
+def test_require_perturbseq_sources_configured_raises_for_unconfigured_line() -> None:
+    """CLI gap: before this fix, this CLI could not embed any of the 4
+    Perturb-seq-sourced lines at all -- ``_run_embedding`` unconditionally
+    rejected any in-scope non-Tahoe ``basal_source``. This proves the
+    replacement validation still fails loudly for a truly unconfigured
+    line, listing its model_id."""
+    working = pd.DataFrame(
+        [
+            _manifest_row(model_id="ACH-A", basal_source="Tahoe-100M DMSO"),
+            _manifest_row(
+                model_id="ACH-P", basal_source="Perturb-seq non-targeting control"
+            ),
+        ]
+    )
+    with pytest.raises(ValueError, match="ACH-P"):
+        _require_perturbseq_sources_configured(working, {})
+
+
+def test_require_perturbseq_sources_configured_passes_when_all_configured() -> None:
+    """CLI gap: a Perturb-seq line with a configured source must not raise,
+    proving the CLI can now proceed to embed it (unlike before this fix,
+    which rejected every non-Tahoe line unconditionally)."""
+    working = pd.DataFrame(
+        [
+            _manifest_row(
+                model_id="ACH-P", basal_source="Perturb-seq non-targeting control"
+            )
+        ]
+    )
+    source = PerturbseqSource(
+        h5ad_path=Path("/data/k562.h5ad"),
+        control_label="non-targeting",
+        perturbation_col="gene",
+        var_ensembl_col="ensembl_id",
+    )
+    _require_perturbseq_sources_configured(working, {"ACH-P": source})  # no raise
