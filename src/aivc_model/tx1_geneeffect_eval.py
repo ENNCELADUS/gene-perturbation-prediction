@@ -394,6 +394,89 @@ def line_bootstrap_ci(
     return point, float(lo), float(hi)
 
 
+class EvaluationContractError(ValueError):
+    """Raised when inputs violate the frozen Phase-A evaluation contract."""
+
+
+def _validate_evaluation_inputs(
+    predictions: pd.DataFrame,
+    manifest: pd.DataFrame,
+    panels: pd.DataFrame,
+    methods: Sequence[str],
+    baseline_method: str,
+    n_panels: int = N_PANELS,
+    y_true_tol: float = 1e-8,
+    expected_test_lines: int | None = None,
+) -> list[str]:
+    """Enforce frozen-contract invariants before a formal gate verdict.
+
+    Closes the three ways a silent evaluator could pass the gate on a
+    different estimator than the registered one: a changed inferential line
+    sample, an altered panel schedule, and paired methods scored against
+    inconsistent targets.
+
+    Args:
+        predictions: Tidy long-format predictions.
+        manifest: Cell-line manifest with a ``role`` column.
+        panels: Frozen nested k-label panels.
+        methods: Method identifiers to be scored.
+        baseline_method: Paired-difference baseline (also must be covered).
+        n_panels: Required panel count per held-out line.
+        y_true_tol: Max allowed spread of ``y_true`` across methods per gene.
+
+    Returns:
+        The validated list of held-out test-line ``model_id``s.
+
+    Raises:
+        EvaluationContractError: On duplicate/absent test lines, a per-line
+            panel count other than ``n_panels``, prediction-coverage gaps for
+            any scored method, or per-gene ``y_true`` disagreement.
+    """
+    test_lines = manifest.loc[manifest["role"] == "test", "model_id"].tolist()
+    if not test_lines:
+        raise EvaluationContractError("Manifest declares no held-out test lines.")
+    if len(test_lines) != len(set(test_lines)):
+        raise EvaluationContractError("Manifest repeats held-out test line(s).")
+    if expected_test_lines is not None and len(test_lines) != expected_test_lines:
+        raise EvaluationContractError(
+            f"Expected {expected_test_lines} held-out test lines; "
+            f"manifest declares {len(test_lines)}."
+        )
+    test_set = set(test_lines)
+
+    counts = panels[panels["model_id"].isin(test_set)].groupby("model_id")["panel"]
+    counts = counts.nunique()
+    missing = test_set - set(counts.index)
+    if missing:
+        raise EvaluationContractError(f"No panels for test line(s): {sorted(missing)}.")
+    bad = counts[counts != n_panels]
+    if not bad.empty:
+        raise EvaluationContractError(
+            f"Expected {n_panels} panels per line; found {bad.to_dict()}."
+        )
+
+    for method in set(methods) | {baseline_method}:
+        covered = predictions.loc[predictions["method"] == method, "model_id"]
+        gap = test_set - set(covered)
+        if gap:
+            raise EvaluationContractError(
+                f"method={method!r} missing predictions for line(s): {sorted(gap)}."
+            )
+
+    spread = (
+        predictions[predictions["model_id"].isin(test_set)]
+        .groupby(["model_id", "depmap_column"])["y_true"]
+        .agg(lambda s: float(np.nanmax(s) - np.nanmin(s)))
+    )
+    if (spread > y_true_tol).any():
+        n_bad = int((spread > y_true_tol).sum())
+        raise EvaluationContractError(
+            f"y_true disagrees across methods for {n_bad} (line, gene) pair(s); "
+            "paired differences would compare against different targets."
+        )
+    return test_lines
+
+
 def evaluate(
     predictions: pd.DataFrame,
     manifest: pd.DataFrame,
@@ -409,6 +492,8 @@ def evaluate(
     min_genes: int = MIN_SCORED_GENES,
     bootstrap_reps: int = BOOTSTRAP_REPS,
     bootstrap_seed: int = BOOTSTRAP_SEED,
+    strict: bool = True,
+    expected_test_lines: int | None = None,
 ) -> dict[str, object]:
     """Run the full frozen evaluation contract and the k=10 gate.
 
@@ -440,7 +525,21 @@ def evaluate(
                 bootstrapped macro-mean paired difference and its 95% CI.
             "gate": Dict ``{rho_min, k, method, baseline_method, macro_mean,
                 ci_lo, ci_hi, passes}`` for ``primary_method`` at ``gate_k``.
+        strict: When True (the default, required for a formal verdict),
+            validate the frozen-contract invariants and raise
+            ``EvaluationContractError`` on any violation before scoring.
     """
+    if strict:
+        test_lines = _validate_evaluation_inputs(
+            predictions,
+            manifest,
+            panels,
+            methods,
+            baseline_method,
+            expected_test_lines=expected_test_lines,
+        )
+    else:
+        test_lines = manifest.loc[manifest["role"] == "test", "model_id"].tolist()
     per_line = paired_differences(
         predictions,
         manifest,
@@ -482,6 +581,11 @@ def evaluate(
             f"gate_k={gate_k}; check the methods/k_schedule inputs."
         )
     gate_row = gate_rows.iloc[0]
+    if strict and int(gate_row["n_lines"]) != len(test_lines):
+        raise EvaluationContractError(
+            f"Gate computed on {int(gate_row['n_lines'])} line(s) but "
+            f"{len(test_lines)} held-out line(s) are registered."
+        )
     gate = {
         "rho_min": rho_min,
         "k": gate_k,

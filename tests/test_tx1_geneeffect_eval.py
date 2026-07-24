@@ -15,6 +15,7 @@ import pytest
 from scipy.stats import spearmanr
 
 from aivc_model.tx1_geneeffect_eval import (
+    EvaluationContractError,
     affine_kshot_calibrate,
     evaluate,
     line_bootstrap_ci,
@@ -406,3 +407,91 @@ def test_load_helpers_roundtrip_csv(tmp_path) -> None:
     }
     assert len(predictions_csv) == len(fixture.predictions)
     assert len(predictions_parquet) == len(fixture.predictions)
+
+
+# --------------------------------------------------------------------------
+# evaluate: frozen-contract validation (the gate must refuse a wrong sample)
+# --------------------------------------------------------------------------
+
+
+def _evaluate_default(fixture: Fixture, **kwargs) -> dict:
+    return evaluate(
+        predictions=fixture.predictions,
+        manifest=fixture.manifest,
+        slice_df=fixture.slice_df,
+        panels=fixture.panels,
+        methods=["tx1_3b_st", "copy_k562"],
+        baseline_method="copy_k562",
+        primary_method="tx1_3b_st",
+        **kwargs,
+    )
+
+
+def test_evaluate_rejects_missing_prediction_coverage() -> None:
+    fixture = _build_fixture()
+    preds = fixture.predictions
+    drop = (preds["model_id"] == "TEST_3") & (preds["method"] == "tx1_3b_st")
+    broken = fixture._replace(predictions=preds[~drop])
+    with pytest.raises(EvaluationContractError, match="missing predictions"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_incomplete_panel_set() -> None:
+    fixture = _build_fixture()
+    panels = fixture.panels
+    drop = (panels["model_id"] == "TEST_2") & (panels["panel"] == 0)
+    broken = fixture._replace(panels=panels[~drop])
+    with pytest.raises(EvaluationContractError, match="panels per line"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_inconsistent_y_true_across_methods() -> None:
+    fixture = _build_fixture()
+    preds = fixture.predictions.copy()
+    mask = (
+        (preds["model_id"] == "TEST_1")
+        & (preds["method"] == "copy_k562")
+        & (preds["depmap_column"] == SLICE_GENES[0])
+    )
+    preds.loc[mask, "y_true"] = preds.loc[mask, "y_true"] + 5.0
+    broken = fixture._replace(predictions=preds)
+    with pytest.raises(EvaluationContractError, match="y_true disagrees"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_duplicate_test_line() -> None:
+    fixture = _build_fixture()
+    dup = fixture.manifest[fixture.manifest["model_id"] == "TEST_0"]
+    manifest = pd.concat([fixture.manifest, dup], ignore_index=True)
+    broken = fixture._replace(manifest=manifest)
+    with pytest.raises(EvaluationContractError, match="repeats"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_manifest_with_wrong_expected_count() -> None:
+    fixture = _build_fixture()
+    manifest = fixture.manifest[fixture.manifest["model_id"] != "TEST_8"]
+    preds = fixture.predictions[fixture.predictions["model_id"] != "TEST_8"]
+    panels = fixture.panels[fixture.panels["model_id"] != "TEST_8"]
+    broken = Fixture(manifest, fixture.slice_df, panels, preds)
+    # A self-consistent 8-line sample validates without a pinned count...
+    _evaluate_default(broken)
+    # ...but a formal run pinned to the registered 9 rejects it.
+    with pytest.raises(EvaluationContractError, match="Expected 9"):
+        _evaluate_default(broken, expected_test_lines=9)
+
+
+def test_evaluate_strict_false_bypasses_contract_validation() -> None:
+    fixture = _build_fixture()
+    preds = fixture.predictions.copy()
+    mask = (
+        (preds["model_id"] == "TEST_1")
+        & (preds["method"] == "copy_k562")
+        & (preds["depmap_column"] == SLICE_GENES[0])
+    )
+    preds.loc[mask, "y_true"] = preds.loc[mask, "y_true"] + 5.0
+    broken = fixture._replace(predictions=preds)
+    with pytest.raises(EvaluationContractError):
+        _evaluate_default(broken)  # strict default catches it
+    result = _evaluate_default(broken, strict=False)  # bypass for diagnostics
+    assert "gate" in result
