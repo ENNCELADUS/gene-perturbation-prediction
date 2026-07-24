@@ -7,6 +7,8 @@ self-contained and independent of ``results/phase_a_tx1_20260724``.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import NamedTuple
 
 import numpy as np
@@ -25,7 +27,9 @@ from aivc_model.tx1_geneeffect_eval import (
     load_predictions,
     load_slice,
     panel_spearman,
+    paired_differences,
     per_line_metric,
+    verify_artifact_hashes,
 )
 from aivc_model.tx1_geneeffect_eval import _validate_slice_coverage
 
@@ -342,6 +346,115 @@ def test_per_line_metric_simple_schema_path_is_unaffected_by_panel_awareness() -
     assert result == pytest.approx(float(np.mean(expected_rhos)), abs=1e-9)
 
 
+def test_baseline_and_paired_diff_stay_finite_when_concatenated_with_panel_aware_method() -> (  # noqa: E501
+    None
+):
+    """T2 code review regression: panel-awareness must be per-method, not
+    per-column.
+
+    ``_schema_is_panel_aware`` used to detect the Phase-E schema purely from
+    column PRESENCE. When a panel-aware method (``tx1_3b_st``, emitted by
+    ``make_predictions_long``) is concatenated in the same predictions table
+    with a simple-schema baseline (``copy_k562``), pandas fills the
+    baseline's ``panel``/``k`` cells with NaN rather than dropping the
+    columns -- so the old check misclassified the baseline as panel-aware,
+    every (panel, k) lookup for it came back empty, and its score (and the
+    paired difference against it) became NaN. This asserts the baseline's
+    per-line metric and the paired difference stay finite, and that the
+    candidate's few-shot curve still reflects genuine re-ranking.
+    """
+    n_genes = 400
+    n_features = 10
+    rng = np.random.default_rng(4040)
+    features = rng.normal(size=(n_genes, n_features))
+    true_w = np.array([1.5, -1.0, 0.8] + [0.0] * (n_features - 3))
+    y_true = features @ true_w + 0.2 * rng.normal(size=n_genes)
+    base_pred = features[:, 3:].sum(axis=1) + 0.1 * features[:, 0]
+    genes = [f"MGENE{i}" for i in range(n_genes)]
+    model_id = "TEST_MIXED"
+
+    manifest = pd.DataFrame({"model_id": [model_id], "role": ["test"]})
+    slice_df = pd.DataFrame({"depmap_column": genes})
+    panels_for_line = _build_panels(
+        [model_id], genes, seed=4041, n_panels=4, n_labels=50
+    )
+    k_schedule = [0, 5, 25]
+
+    tx1_long = make_predictions_long(
+        model_id=model_id,
+        genes=np.array(genes),
+        features=features,
+        base_pred=base_pred,
+        y_true=y_true,
+        panels_for_line=panels_for_line,
+        k_schedule=k_schedule,
+        method="tx1_3b_st",
+    )
+
+    copy_pred = rng.normal(size=n_genes)
+    copy_simple = pd.DataFrame(
+        {
+            "model_id": model_id,
+            "depmap_column": genes,
+            "method": "copy_k562",
+            "base_pred": copy_pred,
+            "y_true": y_true,
+        }
+    )
+    # Concatenating a panel-aware frame with a simple-schema frame is
+    # exactly the bug trigger: the baseline's panel/k cells become NaN
+    # rather than the columns being absent.
+    predictions = pd.concat([tx1_long, copy_simple], ignore_index=True)
+    assert predictions.loc[predictions["method"] == "copy_k562", "panel"].isna().all()
+    assert predictions.loc[predictions["method"] == "copy_k562", "k"].isna().all()
+
+    baseline_rows = predictions[predictions["method"] == "copy_k562"]
+    baseline_mean = per_line_metric(
+        baseline_rows, panels_for_line, method="copy_k562", k=5
+    )
+    assert np.isfinite(baseline_mean)
+
+    per_line = paired_differences(
+        predictions,
+        manifest,
+        slice_df,
+        panels_for_line,
+        methods=["tx1_3b_st"],
+        k_schedule=k_schedule,
+        baseline_method="copy_k562",
+    )
+    assert np.all(np.isfinite(per_line["baseline_mean_spearman"]))
+    assert np.all(np.isfinite(per_line["method_mean_spearman"]))
+    assert np.all(np.isfinite(per_line["paired_diff"]))
+
+    # The few-shot curve for tx1_3b_st still reflects re-ranking: more
+    # labels genuinely improves the held-out rank correlation.
+    curve = per_line.set_index("k")["method_mean_spearman"]
+    assert curve.loc[25] > curve.loc[0] + 0.2
+
+
+def test_schema_is_panel_aware_raises_on_mixed_null_and_nonnull_rows() -> None:
+    """A single method mixing panel-aware and simple-schema rows is malformed."""
+    predictions = pd.DataFrame(
+        {
+            "model_id": ["LINE_A", "LINE_A"],
+            "panel": [0, np.nan],
+            "k": [5, np.nan],
+            "depmap_column": ["G0", "G1"],
+            "method": ["tx1_3b_st", "tx1_3b_st"],
+            "base_pred": [0.1, 0.2],
+            "y_true": [0.1, 0.2],
+        }
+    )
+    with pytest.raises(EvaluationContractError, match="[Mm]ixed"):
+        per_line_metric(
+            predictions,
+            _build_panels(["LINE_A"], ["G0", "G1"], seed=1, n_panels=1, n_labels=1),
+            method="tx1_3b_st",
+            k=0,
+        )
+
+
 # --------------------------------------------------------------------------
 # line_bootstrap_ci
 # --------------------------------------------------------------------------
@@ -612,7 +725,15 @@ def test_evaluate_accepts_full_slice_coverage() -> None:
 
 
 def test_validate_slice_coverage_rejects_missing_scored_gene_panel_aware() -> None:
-    """Finding 3: the panel-aware branch also enforces full scored-gene coverage."""
+    """Finding 3: the panel-aware branch also enforces full scored-gene coverage.
+
+    Deliberately passes ``k_schedule=[1]`` (matching the single k value this
+    fixture's predictions use): the grid-completeness check added for the
+    T2 review's Finding 2 requires every (panel, k) cell in
+    ``registered_panels x k_schedule`` to be present, and panel=0's only
+    registered k here is 1, so this isolates the scored-gene-coverage check
+    this test targets from that separate, now-mandatory grid check.
+    """
     slice_genes = {"G0", "G1", "G2", "G3", "G4"}
     panels = pd.DataFrame(
         {
@@ -637,12 +758,15 @@ def test_validate_slice_coverage_rejects_missing_scored_gene_panel_aware() -> No
     )
     with pytest.raises(EvaluationContractError, match="scored gene"):
         _validate_slice_coverage(
-            predictions, panels, slice_genes, {"LINE_A"}, {"tx1_3b_st"}
+            predictions, panels, slice_genes, {"LINE_A"}, {"tx1_3b_st"}, k_schedule=[1]
         )
 
 
 def test_validate_slice_coverage_accepts_full_panel_aware_coverage() -> None:
-    """Finding 3: full scored-gene coverage in the panel-aware schema passes."""
+    """Finding 3: full scored-gene coverage in the panel-aware schema passes.
+
+    See the k_schedule=[1] note on the sibling rejection test above.
+    """
     slice_genes = {"G0", "G1", "G2", "G3", "G4"}
     panels = pd.DataFrame(
         {
@@ -664,7 +788,91 @@ def test_validate_slice_coverage_accepts_full_panel_aware_coverage() -> None:
         }
     )
     _validate_slice_coverage(  # must not raise
-        predictions, panels, slice_genes, {"LINE_A"}, {"tx1_3b_st"}
+        predictions, panels, slice_genes, {"LINE_A"}, {"tx1_3b_st"}, k_schedule=[1]
+    )
+
+
+def test_validate_slice_coverage_rejects_missing_panel_k_cell() -> None:
+    """T2 code review regression: an entirely absent (panel, k) cell.
+
+    A prior version of panel-aware coverage validation only checked
+    (panel, k) combinations PRESENT in the predictions; if a whole
+    registered panel or k value were absent, validation passed silently and
+    ``per_line_metric`` would average over fewer than the registered panel
+    count. Dropping (panel=1, k=5) entirely (not just some of its genes)
+    must now raise, naming the missing cell.
+    """
+    slice_genes = {"G0", "G1", "G2"}
+    panels = pd.DataFrame(
+        {
+            "model_id": ["LINE_A", "LINE_A"],
+            "panel": [0, 1],
+            "label_order": [1, 1],
+            "depmap_column": ["G0", "G0"],
+        }
+    )
+    k_schedule = [0, 5]
+    rows = [
+        {
+            "model_id": "LINE_A",
+            "panel": panel_id,
+            "k": k,
+            "depmap_column": gene,
+            "method": "tx1_3b_st",
+            "base_pred": 0.0,
+            "y_true": 0.0,
+        }
+        for panel_id in (0, 1)
+        for k in k_schedule
+        for gene in slice_genes
+        if (panel_id, k) != (1, 5)  # drop this cell entirely
+    ]
+    predictions = pd.DataFrame(rows)
+    with pytest.raises(EvaluationContractError, match=r"\(panel, k\) cell"):
+        _validate_slice_coverage(
+            predictions,
+            panels,
+            slice_genes,
+            {"LINE_A"},
+            {"tx1_3b_st"},
+            k_schedule=k_schedule,
+        )
+
+
+def test_validate_slice_coverage_accepts_complete_panel_k_grid() -> None:
+    """T2 code review regression: the complete panel x k_schedule grid passes."""
+    slice_genes = {"G0", "G1", "G2"}
+    panels = pd.DataFrame(
+        {
+            "model_id": ["LINE_A", "LINE_A"],
+            "panel": [0, 1],
+            "label_order": [1, 1],
+            "depmap_column": ["G0", "G0"],
+        }
+    )
+    k_schedule = [0, 5]
+    rows = [
+        {
+            "model_id": "LINE_A",
+            "panel": panel_id,
+            "k": k,
+            "depmap_column": gene,
+            "method": "tx1_3b_st",
+            "base_pred": 0.0,
+            "y_true": 0.0,
+        }
+        for panel_id in (0, 1)
+        for k in k_schedule
+        for gene in slice_genes
+    ]
+    predictions = pd.DataFrame(rows)
+    _validate_slice_coverage(  # must not raise
+        predictions,
+        panels,
+        slice_genes,
+        {"LINE_A"},
+        {"tx1_3b_st"},
+        k_schedule=k_schedule,
     )
 
 
@@ -741,3 +949,88 @@ def test_evaluate_strict_false_bypasses_contract_validation() -> None:
         _evaluate_default(broken)  # strict default catches it
     result = _evaluate_default(broken, strict=False)  # bypass for diagnostics
     assert "gate" in result
+
+
+# --------------------------------------------------------------------------
+# verify_artifact_hashes
+# --------------------------------------------------------------------------
+
+
+def _write_phase_a_dir(tmp_path) -> tuple:
+    """Write a tiny phase_a dir (manifest/slice/panels) + matching registration.
+
+    Returns:
+        ``(phase_a_dir, manifest_path, slice_path, panels_path)``.
+    """
+    phase_a_dir = tmp_path / "phase_a"
+    phase_a_dir.mkdir()
+    manifest_path = phase_a_dir / "cell_line_manifest.csv"
+    slice_path = phase_a_dir / "differentially_essential_slice.csv"
+    panels_path = phase_a_dir / "k_label_panels.csv"
+    manifest_path.write_text("model_id,role\nTEST_0,test\n")
+    slice_path.write_text("depmap_column\nG0\nG1\n")
+    panels_path.write_text("model_id,panel,label_order,depmap_column\nTEST_0,0,1,G0\n")
+
+    registration = {
+        "artifacts": {
+            "cell_line_manifest_sha256": hashlib.sha256(
+                manifest_path.read_bytes()
+            ).hexdigest(),
+            "differential_slice_sha256": hashlib.sha256(
+                slice_path.read_bytes()
+            ).hexdigest(),
+            "k_label_panels_sha256": hashlib.sha256(
+                panels_path.read_bytes()
+            ).hexdigest(),
+        }
+    }
+    (phase_a_dir / "phase_a_registration.json").write_text(json.dumps(registration))
+    return phase_a_dir, manifest_path, slice_path, panels_path
+
+
+def test_verify_artifact_hashes_passes_for_matching_files(tmp_path) -> None:
+    phase_a_dir, *_ = _write_phase_a_dir(tmp_path)
+    verify_artifact_hashes(phase_a_dir)  # must not raise
+
+
+def test_verify_artifact_hashes_rejects_modified_file(tmp_path) -> None:
+    """Finding 3: a same-shaped but modified artifact must fail verification."""
+    phase_a_dir, manifest_path, _, _ = _write_phase_a_dir(tmp_path)
+    manifest_path.write_text("model_id,role\nTEST_0,test\nTEST_1,test\n")  # tamper
+
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
+        verify_artifact_hashes(phase_a_dir)
+
+
+def test_verify_artifact_hashes_rejects_missing_registration_file(tmp_path) -> None:
+    phase_a_dir = tmp_path / "empty_phase_a"
+    phase_a_dir.mkdir()
+    with pytest.raises(EvaluationContractError, match="registration"):
+        verify_artifact_hashes(phase_a_dir)
+
+
+def test_verify_artifact_hashes_rejects_missing_hash_entry(tmp_path) -> None:
+    phase_a_dir, manifest_path, slice_path, panels_path = _write_phase_a_dir(tmp_path)
+    registration = {
+        "artifacts": {
+            "cell_line_manifest_sha256": hashlib.sha256(
+                manifest_path.read_bytes()
+            ).hexdigest(),
+            # differential_slice_sha256 missing entirely
+            "k_label_panels_sha256": hashlib.sha256(
+                panels_path.read_bytes()
+            ).hexdigest(),
+        }
+    }
+    (phase_a_dir / "phase_a_registration.json").write_text(json.dumps(registration))
+
+    with pytest.raises(EvaluationContractError, match="differential_slice_sha256"):
+        verify_artifact_hashes(phase_a_dir)
+
+
+def test_verify_artifact_hashes_rejects_missing_artifact_file(tmp_path) -> None:
+    phase_a_dir, manifest_path, slice_path, panels_path = _write_phase_a_dir(tmp_path)
+    panels_path.unlink()
+
+    with pytest.raises(EvaluationContractError, match="Missing frozen artifact"):
+        verify_artifact_hashes(phase_a_dir)
