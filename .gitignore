@@ -48,6 +48,11 @@ wheels/
 *.pkl
 # Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
 !docs/report/tables/*.csv
+# Frozen Phase-A T2 evaluation contract (small, hash-pinned source-of-truth; the
+# acceptance artifacts the evaluator's committed digest verifies -- not a data dump)
+!results/phase_a_tx1_20260724/cell_line_manifest.csv
+!results/phase_a_tx1_20260724/differentially_essential_slice.csv
+!results/phase_a_tx1_20260724/k_label_panels.csv
 data/**/features
 data/**/interim
 data/**/manifests
