@@ -214,7 +214,11 @@ def main(argv: list[str] | None = None) -> int:
         args.expected_test_lines,
     )
     is_diagnostic = args.allow_partial or args.skip_hash_check or bool(override_reasons)
-    run_hash_check = not (args.allow_partial or args.skip_hash_check)
+    # Hash verification is an integrity check independent of coverage: only
+    # --skip-hash-check bypasses it. --allow-partial bypasses contract
+    # validation (coverage/schedule) but must still confirm the artifacts are
+    # the frozen ones.
+    run_hash_check = not args.skip_hash_check
     strict = not args.allow_partial
     reason = _diagnostic_reason(
         args.allow_partial, args.skip_hash_check, override_reasons

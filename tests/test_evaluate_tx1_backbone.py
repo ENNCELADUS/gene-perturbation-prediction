@@ -201,9 +201,12 @@ def test_strict_run_writes_formal_verdict_json(
 
 
 def test_allow_partial_writes_diagnostic_verdict_not_formal(
-    tmp_path: pathlib.Path, caplog
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog
 ) -> None:
     """--allow-partial writes verdict_diagnostic.json, never verdict.json."""
+    _install_lenient_hash_check(
+        monkeypatch
+    )  # hash check now runs under --allow-partial
     phase_a_dir, predictions_path = _write_fixture(tmp_path)
     out_dir = tmp_path / "out_partial"
 
@@ -301,6 +304,36 @@ def test_skip_hash_check_writes_diagnostic_verdict_not_formal(
     assert exit_code == 2
 
 
+def test_allow_partial_still_verifies_artifact_hashes(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--allow-partial bypasses contract validation only, NOT the hash check.
+
+    Hash verification is an independent integrity check gated solely by
+    --skip-hash-check; a tampered artifact must still fail-closed under
+    --allow-partial (T2 review round-3 finding).
+    """
+    _install_lenient_hash_check(monkeypatch)
+    phase_a_dir, predictions_path = _write_fixture(tmp_path)
+    out_dir = tmp_path / "out_partial_tampered"
+    manifest_path = phase_a_dir / "cell_line_manifest.csv"
+    manifest_path.write_text(manifest_path.read_text() + "\n# tampered\n")
+
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
+        evaluate_tx1_backbone.main(
+            [
+                "--predictions",
+                str(predictions_path),
+                "--phase-a-dir",
+                str(phase_a_dir),
+                "--out-dir",
+                str(out_dir),
+                "--allow-partial",
+            ]
+        )
+    assert not out_dir.exists()
+
+
 def test_cli_override_forces_diagnostic_mode(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -340,9 +373,9 @@ def test_cli_override_forces_diagnostic_mode(
 def test_cli_override_does_not_bypass_hash_check(tmp_path: pathlib.Path) -> None:
     """Finding 1 regression: a non-frozen override still runs the hash check.
 
-    Per the mode matrix, ``run_hash_check = not (allow_partial or
-    skip_hash_check)`` -- an override alone does not set it to False. Uses
-    the REAL (unpatched) ``verify_artifact_hashes``, so this synthetic
+    Per the mode matrix, ``run_hash_check = not skip_hash_check`` -- an
+    override alone does not disable it. Uses the REAL (unpatched)
+    ``verify_artifact_hashes``, so this synthetic
     fixture's registration can never match the pinned
     ``FROZEN_REGISTRATION_SHA256`` anchor, and the override path must still
     raise rather than silently reaching a diagnostic verdict.
