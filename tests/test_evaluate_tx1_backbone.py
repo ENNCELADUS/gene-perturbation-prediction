@@ -20,6 +20,9 @@ import pandas as pd
 import pytest
 
 from aivc_model.tx1_geneeffect_eval import EvaluationContractError
+from aivc_model.tx1_geneeffect_eval import (
+    verify_artifact_hashes as _real_verify_artifact_hashes,
+)
 
 _SCRIPT_PATH = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -140,8 +143,40 @@ def _write_matching_registration(
     (phase_a_dir / "phase_a_registration.json").write_text(json.dumps(registration))
 
 
-def test_strict_run_writes_formal_verdict_json(tmp_path: pathlib.Path) -> None:
-    """Default (strict) run writes verdict.json with formal=true."""
+def _install_lenient_hash_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Decouple these CLI tests from the real frozen-registration anchor.
+
+    ``verify_artifact_hashes`` pins its registration-identity check to
+    ``FROZEN_REGISTRATION_SHA256``, the SHA-256 of the real, committed
+    ``results/phase_a_tx1_20260724/phase_a_registration.json`` (T2 review
+    Finding 2). These CLI tests build tiny synthetic fixtures instead, to
+    stay self-contained, so this patches
+    ``evaluate_tx1_backbone.verify_artifact_hashes`` to trust whatever
+    registration file is actually on disk in the fixture at call time --
+    the per-artifact hash comparisons (what these tests actually exercise)
+    still run for real. Finding 2's real trust anchor is tested directly,
+    against the real frozen file, in ``test_tx1_geneeffect_eval.py``.
+    """
+
+    def _lenient_verify(phase_a_dir: pathlib.Path) -> None:
+        registration_path = pathlib.Path(phase_a_dir) / "phase_a_registration.json"
+        expected = hashlib.sha256(registration_path.read_bytes()).hexdigest()
+        _real_verify_artifact_hashes(phase_a_dir, expected_registration_sha256=expected)
+
+    monkeypatch.setattr(
+        evaluate_tx1_backbone, "verify_artifact_hashes", _lenient_verify
+    )
+
+
+def test_strict_run_writes_formal_verdict_json(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default (strict) run writes verdict.json with formal=true.
+
+    Finding 1 regression: a clean default run (no override, no bypass flag)
+    must stay formal.
+    """
+    _install_lenient_hash_check(monkeypatch)
     phase_a_dir, predictions_path = _write_fixture(tmp_path)
     out_dir = tmp_path / "out_strict"
 
@@ -199,12 +234,18 @@ def test_allow_partial_writes_diagnostic_verdict_not_formal(
     )
 
 
-def test_strict_run_fails_closed_on_tampered_artifact(tmp_path: pathlib.Path) -> None:
+def test_strict_run_fails_closed_on_tampered_artifact(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Finding 3 regression: a strict run must verify frozen artifact hashes.
 
     A same-shaped but modified manifest file must never reach a formal
-    ``formal: true`` verdict; ``main()`` must raise before any scoring.
+    ``formal: true`` verdict; ``main()`` must raise before any scoring. Uses
+    the lenient registration-identity patch (Finding 2 is tested directly
+    elsewhere) so this isolates the per-artifact hash comparison the
+    tampered manifest is meant to trip.
     """
+    _install_lenient_hash_check(monkeypatch)
     phase_a_dir, predictions_path = _write_fixture(tmp_path)
     out_dir = tmp_path / "out_tampered"
     manifest_path = phase_a_dir / "cell_line_manifest.csv"
@@ -258,3 +299,68 @@ def test_skip_hash_check_writes_diagnostic_verdict_not_formal(
         "partial/diagnostic run (artifact hash verification bypassed)"
     )
     assert exit_code == 2
+
+
+def test_cli_override_forces_diagnostic_mode(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 1 regression: a non-frozen CLI override forces diagnostic mode.
+
+    Passing --rho-min (a frozen Phase-A constant) must downgrade the run to
+    diagnostic even though every artifact is valid and neither
+    --allow-partial nor --skip-hash-check was passed: a CLI override must
+    never be able to relabel a run as formal.
+    """
+    _install_lenient_hash_check(monkeypatch)
+    phase_a_dir, predictions_path = _write_fixture(tmp_path)
+    out_dir = tmp_path / "out_override"
+
+    exit_code = evaluate_tx1_backbone.main(
+        [
+            "--predictions",
+            str(predictions_path),
+            "--phase-a-dir",
+            str(phase_a_dir),
+            "--out-dir",
+            str(out_dir),
+            "--rho-min",
+            "0.1",
+        ]
+    )
+
+    diagnostic_path = out_dir / "verdict_diagnostic.json"
+    assert diagnostic_path.exists()
+    assert not (out_dir / "verdict.json").exists()
+    verdict = json.loads(diagnostic_path.read_text())
+    assert verdict["formal"] is False
+    assert verdict["reason"] == "partial/diagnostic run (non-frozen overrides: rho_min)"
+    assert exit_code == 2  # distinct from the 0/1 formal gate exit codes
+
+
+def test_cli_override_does_not_bypass_hash_check(tmp_path: pathlib.Path) -> None:
+    """Finding 1 regression: a non-frozen override still runs the hash check.
+
+    Per the mode matrix, ``run_hash_check = not (allow_partial or
+    skip_hash_check)`` -- an override alone does not set it to False. Uses
+    the REAL (unpatched) ``verify_artifact_hashes``, so this synthetic
+    fixture's registration can never match the pinned
+    ``FROZEN_REGISTRATION_SHA256`` anchor, and the override path must still
+    raise rather than silently reaching a diagnostic verdict.
+    """
+    phase_a_dir, predictions_path = _write_fixture(tmp_path)
+    out_dir = tmp_path / "out_override_hash"
+
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
+        evaluate_tx1_backbone.main(
+            [
+                "--predictions",
+                str(predictions_path),
+                "--phase-a-dir",
+                str(phase_a_dir),
+                "--out-dir",
+                str(out_dir),
+                "--rho-min",
+                "0.1",
+            ]
+        )
+    assert not out_dir.exists()  # failed before any output was written

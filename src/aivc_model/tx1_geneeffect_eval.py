@@ -304,6 +304,9 @@ def _panel_aware_rho(
     rows = preds_for_line[
         (preds_for_line["panel"] == panel_id) & (preds_for_line["k"] == k)
     ]
+    # Defensive no-op: _validate_no_duplicate_prediction_keys (Finding 3)
+    # already guarantees no (model_id, method, panel, k, depmap_column)
+    # duplicates for a formally validated run.
     rows = rows.drop_duplicates("depmap_column").set_index("depmap_column")
     if rows.empty:
         return float("nan")
@@ -391,6 +394,9 @@ def per_line_metric(
     """
     panel_aware = _schema_is_panel_aware(preds_for_line)
     if not panel_aware:
+        # Defensive no-op: _validate_no_duplicate_prediction_keys (Finding 3)
+        # already guarantees no (model_id, method, depmap_column) duplicates
+        # for a formally validated run.
         preds = preds_for_line.drop_duplicates("depmap_column").set_index(
             "depmap_column"
         )
@@ -567,7 +573,9 @@ def _validate_panel_label_rows(
     Raises:
         EvaluationContractError: If any ``(model_id, panel)`` has a label
             row count other than ``n_labels``, a duplicate ``label_order``,
-            or a duplicate ``depmap_column``.
+            a duplicate ``depmap_column``, or a ``label_order`` set other
+            than ``{1, ..., n_labels}`` (e.g. shifted to 51..100, which would
+            pass the count/dup checks but make every k-selection empty).
     """
     line_panels = panels[panels["model_id"].isin(test_set)]
     grouped = line_panels.groupby(["model_id", "panel"])
@@ -592,6 +600,17 @@ def _validate_panel_label_rows(
     if bad_gene:
         raise EvaluationContractError(
             f"Duplicate depmap_column within (line, panel): {bad_gene}."
+        )
+
+    expected_orders = set(range(1, n_labels + 1))
+    bad_range = grouped["label_order"].apply(
+        lambda s: set(s.tolist()) != expected_orders
+    )
+    bad_range = sorted(bad_range[bad_range].index.tolist())
+    if bad_range:
+        raise EvaluationContractError(
+            f"label_order must be exactly 1..{n_labels} within (line, "
+            f"panel); violated for: {bad_range}."
         )
 
 
@@ -761,6 +780,58 @@ def _validate_slice_coverage(
                 )
 
 
+def _validate_no_duplicate_prediction_keys(
+    predictions: pd.DataFrame,
+    slice_genes: set[str],
+    test_set: set[str],
+    methods: set[str],
+    max_listed: int = 20,
+) -> None:
+    """Reject duplicate prediction keys among the rows that will be scored.
+
+    ``per_line_metric`` (via ``drop_duplicates(...)``) keeps the first row
+    of a repeated key, so a duplicate key with a different ``base_pred``
+    would otherwise silently depend on row order rather than raising. This
+    makes duplication a hard contract violation instead, restricted to rows
+    actually in scope for scoring: scored methods x test lines x slice
+    genes.
+
+    Args:
+        predictions: Tidy long-format predictions.
+        slice_genes: The full differential-essential slice gene set.
+        test_set: Held-out test-line ``model_id`` set.
+        methods: Method identifiers to be scored (candidates + baseline).
+        max_listed: Maximum number of duplicate keys to name in one error.
+
+    Raises:
+        EvaluationContractError: If any ``(model_id, method, depmap_column)``
+            key (simple schema) or ``(model_id, method, panel, k,
+            depmap_column)`` key (panel-aware schema) repeats.
+    """
+    scoped = predictions[
+        predictions["method"].isin(methods)
+        & predictions["model_id"].isin(test_set)
+        & predictions["depmap_column"].isin(slice_genes)
+    ]
+    for method in sorted(methods):
+        method_rows = scoped[scoped["method"] == method]
+        if method_rows.empty:
+            continue
+        if _schema_is_panel_aware(method_rows):
+            key_cols = ["model_id", "method", "panel", "k", "depmap_column"]
+        else:
+            key_cols = ["model_id", "method", "depmap_column"]
+        dup_mask = method_rows.duplicated(subset=key_cols, keep=False)
+        if dup_mask.any():
+            dup_keys = (
+                method_rows.loc[dup_mask, key_cols].drop_duplicates().to_dict("records")
+            )
+            raise EvaluationContractError(
+                f"method={method!r} has duplicate prediction key(s) "
+                f"{key_cols}: {dup_keys[:max_listed]}."
+            )
+
+
 def _y_true_group_is_inconsistent(y_true: pd.Series, tol: float) -> bool:
     """Flag a (line, gene) group whose y_true mixes NaN and finite values.
 
@@ -805,7 +876,8 @@ def _validate_evaluation_inputs(
     estimator than the registered one: a changed inferential line sample,
     an altered panel/label schedule, incomplete prediction coverage of the
     frozen gene slice (including, for panel-aware methods, the complete
-    registered-panel x ``k_schedule`` grid), and paired methods scored
+    registered-panel x ``k_schedule`` grid), duplicate prediction keys that
+    would make scoring depend on row order, and paired methods scored
     against inconsistent targets.
 
     Args:
@@ -823,7 +895,11 @@ def _validate_evaluation_inputs(
             contract: 50, ``label_order`` 1..50).
         y_true_tol: Max allowed spread of ``y_true`` across methods per gene
             (only among methods that report a finite value; see
-            :func:`_y_true_group_is_inconsistent`).
+            :func:`_y_true_group_is_inconsistent`). Checked only over rows
+            actually in scope for scoring: ``methods`` (plus
+            ``baseline_method``) x held-out test lines x slice genes, so an
+            unselected method or an out-of-slice gene cannot fail a valid
+            ``methods`` subset run.
         expected_test_lines: If given, the exact required test-line count.
 
     Returns:
@@ -834,7 +910,8 @@ def _validate_evaluation_inputs(
             panel or label-row schedule that deviates from the frozen
             contract, prediction-coverage gaps against the full slice (or,
             for panel-aware methods, the full panel x k grid) for any scored
-            method, or per-gene ``y_true`` disagreement.
+            method, duplicate prediction keys within a scored method, or
+            per-gene ``y_true`` disagreement among evaluated rows.
     """
     test_lines = manifest.loc[manifest["role"] == "test", "model_id"].tolist()
     if not test_lines:
@@ -872,11 +949,22 @@ def _validate_evaluation_inputs(
     _validate_slice_coverage(
         predictions, panels, slice_genes, test_set, all_methods, k_schedule=k_schedule
     )
+    _validate_no_duplicate_prediction_keys(
+        predictions, slice_genes, test_set, all_methods
+    )
 
-    spread_bad = (
-        predictions[predictions["model_id"].isin(test_set)]
-        .groupby(["model_id", "depmap_column"])["y_true"]
-        .apply(lambda s: _y_true_group_is_inconsistent(s, y_true_tol))
+    # Restrict the y_true-consistency check to rows actually in scope for
+    # scoring (Finding 5): grouping ALL prediction rows would wrongly reject
+    # a valid `methods` subset run over an unselected method, or over a gene
+    # outside the frozen slice, that happens to carry inconsistent/missing
+    # y_true.
+    evaluated = predictions[
+        predictions["model_id"].isin(test_set)
+        & predictions["method"].isin(all_methods)
+        & predictions["depmap_column"].isin(slice_genes)
+    ]
+    spread_bad = evaluated.groupby(["model_id", "depmap_column"])["y_true"].apply(
+        lambda s: _y_true_group_is_inconsistent(s, y_true_tol)
     )
     if spread_bad.any():
         n_bad = int(spread_bad.sum())
@@ -1019,8 +1107,21 @@ _REGISTERED_ARTIFACT_FILES: dict[str, str] = {
     "k_label_panels.csv": "k_label_panels_sha256",
 }
 
+#: SHA-256 of ``results/phase_a_tx1_20260724/phase_a_registration.json``, the
+#: frozen Phase-A registration itself. This is the out-of-band trust anchor:
+#: without it, ``verify_artifact_hashes`` only checks that each artifact
+#: matches the hash recorded BESIDE it, so a matched swap of an artifact and
+#: its recorded hash in the registration file would pass (self-consistency,
+#: not identity with the frozen registration).
+FROZEN_REGISTRATION_SHA256: str = (
+    "63fb8f2c9e749b9fcfb2b54d605aa4b71fd740faa8871069d9a39dec983092b9"
+)
 
-def verify_artifact_hashes(phase_a_dir: Path) -> None:
+
+def verify_artifact_hashes(
+    phase_a_dir: Path,
+    expected_registration_sha256: str = FROZEN_REGISTRATION_SHA256,
+) -> None:
     """Verify frozen Phase-A artifact bytes against the registered SHA-256s.
 
     A same-shaped but silently modified manifest/slice/panels file would
@@ -1029,17 +1130,29 @@ def verify_artifact_hashes(phase_a_dir: Path) -> None:
     file's SHA-256 and comparing it to the value recorded at Phase-A freeze
     time in ``phase_a_registration.json``.
 
+    That registration file is itself untrusted input: a matched swap of an
+    artifact and its recorded hash would leave the registration
+    self-consistent. So before trusting any hash it records, this first
+    verifies the registration file's own bytes against
+    ``expected_registration_sha256``, an out-of-band trust anchor pinned in
+    this module.
+
     Args:
         phase_a_dir: Directory holding ``phase_a_registration.json`` and the
             frozen ``cell_line_manifest.csv``,
             ``differentially_essential_slice.csv``, and ``k_label_panels.csv``
             artifacts.
+        expected_registration_sha256: The trusted SHA-256 of
+            ``phase_a_registration.json`` itself (default:
+            :data:`FROZEN_REGISTRATION_SHA256`). Overridable so tests can pin
+            a synthetic digest instead of the real frozen one.
 
     Raises:
         EvaluationContractError: If ``phase_a_registration.json`` is
-            missing or has no recorded hash for one of the three artifacts,
-            if an artifact file is missing, or if a file's computed SHA-256
-            does not match its recorded hash.
+            missing or its own SHA-256 does not match
+            ``expected_registration_sha256``, if it has no recorded hash for
+            one of the three artifacts, if an artifact file is missing, or
+            if a file's computed SHA-256 does not match its recorded hash.
     """
     phase_a_dir = Path(phase_a_dir)
     registration_path = phase_a_dir / "phase_a_registration.json"
@@ -1047,7 +1160,17 @@ def verify_artifact_hashes(phase_a_dir: Path) -> None:
         raise EvaluationContractError(
             f"Missing registration file: {registration_path}."
         )
-    registration = json.loads(registration_path.read_text())
+    registration_bytes = registration_path.read_bytes()
+    actual_registration_hash = hashlib.sha256(registration_bytes).hexdigest()
+    if actual_registration_hash != expected_registration_sha256:
+        raise EvaluationContractError(
+            f"{registration_path} SHA-256 mismatch: expected "
+            f"{expected_registration_sha256!r}, computed "
+            f"{actual_registration_hash!r}. The frozen Phase-A registration "
+            "itself has changed; its recorded artifact hashes cannot be "
+            "trusted."
+        )
+    registration = json.loads(registration_bytes)
     artifacts = registration.get("artifacts", {})
 
     for filename, hash_key in _REGISTERED_ARTIFACT_FILES.items():

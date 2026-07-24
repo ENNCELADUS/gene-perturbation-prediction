@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pathlib
+import shutil
 from typing import NamedTuple
 
 import numpy as np
@@ -31,7 +33,10 @@ from aivc_model.tx1_geneeffect_eval import (
     per_line_metric,
     verify_artifact_hashes,
 )
-from aivc_model.tx1_geneeffect_eval import _validate_slice_coverage
+from aivc_model.tx1_geneeffect_eval import (
+    _validate_no_duplicate_prediction_keys,
+    _validate_slice_coverage,
+)
 
 N_GENES = 150
 N_PANELS = 20
@@ -703,6 +708,46 @@ def test_evaluate_rejects_duplicate_gene_within_panel() -> None:
         _evaluate_default(broken)
 
 
+def test_evaluate_rejects_shifted_label_order_range() -> None:
+    """T2 review Finding 4: label_order 51..100 passes count/dup checks.
+
+    A panel with 50 unique orders shifted to e.g. 51..100 would pass a
+    count-only and duplicate-only check, but every k-selection
+    (``label_order <= k``, for k in the frozen 0/5/10/25/50 schedule) then
+    selects nothing -- so a "k=10" run would silently be scored as k=0. This
+    must raise instead of passing validation.
+    """
+    fixture = _build_fixture()
+    panels = fixture.panels.copy()
+    mask = (panels["model_id"] == "TEST_2") & (panels["panel"] == 0)
+    panels.loc[mask, "label_order"] = panels.loc[mask, "label_order"] + 50
+    broken = fixture._replace(panels=panels)
+    with pytest.raises(EvaluationContractError, match="label_order must be exactly"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_label_order_missing_value_one() -> None:
+    """T2 review Finding 4: 50 unique orders that omit 1 must still raise."""
+    fixture = _build_fixture()
+    panels = fixture.panels.copy()
+    mask = (
+        (panels["model_id"] == "TEST_2")
+        & (panels["panel"] == 0)
+        & (panels["label_order"] == 1)
+    )
+    panels.loc[mask, "label_order"] = 51  # {2..50, 51}: still 50 unique values
+    broken = fixture._replace(panels=panels)
+    with pytest.raises(EvaluationContractError, match="label_order must be exactly"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_accepts_canonical_label_order_one_through_fifty() -> None:
+    """T2 review Finding 4: the canonical 1..50 label_order range passes."""
+    fixture = _build_fixture()  # built with label_order 1..N_LABELS throughout
+    result = _evaluate_default(fixture)
+    assert "gate" in result
+
+
 def test_evaluate_rejects_partial_slice_coverage() -> None:
     """Finding 3: a method covering only part of the 589(here 150)-gene slice."""
     fixture = _build_fixture()
@@ -952,6 +997,148 @@ def test_evaluate_strict_false_bypasses_contract_validation() -> None:
 
 
 # --------------------------------------------------------------------------
+# T2 review Finding 3: duplicate prediction keys
+# --------------------------------------------------------------------------
+
+
+def test_evaluate_rejects_duplicate_prediction_key_simple_schema() -> None:
+    """A duplicated (line, method, gene) row raises, not silent first-wins.
+
+    ``per_line_metric``'s ``drop_duplicates(...)`` keeps the first row of a
+    repeated key, so a duplicate with a different ``base_pred`` would
+    otherwise silently depend on row order. Validation must reject it.
+    """
+    fixture = _build_fixture()
+    preds = fixture.predictions
+    dup_row = preds[
+        (preds["model_id"] == "TEST_1")
+        & (preds["method"] == "tx1_3b_st")
+        & (preds["depmap_column"] == SLICE_GENES[0])
+    ].copy()
+    assert len(dup_row) == 1
+    dup_row["base_pred"] = dup_row["base_pred"] + 10.0  # same key, different value
+    broken = fixture._replace(
+        predictions=pd.concat([preds, dup_row], ignore_index=True)
+    )
+    with pytest.raises(EvaluationContractError, match="duplicate prediction key"):
+        _evaluate_default(broken)
+
+
+def test_evaluate_rejects_duplicate_prediction_key_panel_aware_schema() -> None:
+    """The panel-aware duplicate key (line, method, panel, k, gene) raises.
+
+    Exercises ``_validate_no_duplicate_prediction_keys`` directly (like the
+    existing ``_validate_slice_coverage`` panel-aware tests below): a tiny
+    4-panel fixture is enough to trigger the duplicate check but would fail
+    ``evaluate()``'s earlier "20 panels per line" contract check first, which
+    is a separate, already-covered invariant.
+    """
+    n_genes = 400
+    n_features = 10
+    rng = np.random.default_rng(5050)
+    features = rng.normal(size=(n_genes, n_features))
+    true_w = np.array([1.5, -1.0, 0.8] + [0.0] * (n_features - 3))
+    y_true = features @ true_w + 0.2 * rng.normal(size=n_genes)
+    base_pred = features[:, 3:].sum(axis=1) + 0.1 * features[:, 0]
+    genes = [f"DGENE{i}" for i in range(n_genes)]
+    model_id = "TEST_DUP"
+
+    panels_for_line = _build_panels(
+        [model_id], genes, seed=5051, n_panels=4, n_labels=50
+    )
+    k_schedule = [0, 5, 25]
+
+    tx1_long = make_predictions_long(
+        model_id=model_id,
+        genes=np.array(genes),
+        features=features,
+        base_pred=base_pred,
+        y_true=y_true,
+        panels_for_line=panels_for_line,
+        k_schedule=k_schedule,
+        method="tx1_3b_st",
+    )
+    first_panel = tx1_long["panel"].iloc[0]
+    dup_row = tx1_long[
+        (tx1_long["panel"] == first_panel)
+        & (tx1_long["k"] == 0)
+        & (tx1_long["depmap_column"] == genes[0])
+    ].copy()
+    assert len(dup_row) == 1
+    dup_row["base_pred"] = dup_row["base_pred"] + 10.0  # same key, different value
+    predictions = pd.concat([tx1_long, dup_row], ignore_index=True)
+
+    with pytest.raises(EvaluationContractError, match="duplicate prediction key"):
+        _validate_no_duplicate_prediction_keys(
+            predictions, set(genes), {model_id}, {"tx1_3b_st"}
+        )
+
+
+# --------------------------------------------------------------------------
+# T2 review Finding 5: y_true-consistency check scoped to evaluated rows
+# --------------------------------------------------------------------------
+
+
+def test_evaluate_ignores_y_true_inconsistency_outside_evaluated_scope() -> None:
+    """An unselected method's or an out-of-slice gene's y_true is out of scope.
+
+    Grouping ALL prediction rows for the consistency check would wrongly
+    reject a valid ``methods`` subset run whenever some OTHER method (not
+    selected, not the baseline) or some gene outside the frozen slice
+    happens to carry inconsistent/NaN ``y_true``. Both must be ignored here.
+    """
+    fixture = _build_fixture()
+    preds = fixture.predictions.copy()
+
+    # Unselected method ("cross_line_mean"): methods=["tx1_3b_st"] and
+    # baseline_method="copy_k562" never include it, so its inconsistent
+    # y_true on TEST_1 must not fail validation.
+    extra_rows = fixture.predictions[
+        (fixture.predictions["model_id"] == "TEST_1")
+        & (fixture.predictions["method"] == "copy_k562")
+    ].copy()
+    extra_rows["method"] = "cross_line_mean"
+    mask = extra_rows["depmap_column"] == SLICE_GENES[0]
+    extra_rows.loc[mask, "y_true"] = extra_rows.loc[mask, "y_true"] + 5.0
+    preds = pd.concat([preds, extra_rows], ignore_index=True)
+
+    # Out-of-slice gene: not in slice_df, so its inconsistent y_true across
+    # every evaluated method must not fail validation either.
+    out_of_slice_rows = pd.DataFrame(
+        [
+            {
+                "model_id": "TEST_1",
+                "depmap_column": "OUT_OF_SLICE_GENE",
+                "method": method,
+                "base_pred": 0.0,
+                "y_true": 0.0 if method == "tx1_3b_st" else 99.0,
+            }
+            for method in ("tx1_3b_st", "copy_k562")
+        ]
+    )
+    preds = pd.concat([preds, out_of_slice_rows], ignore_index=True)
+
+    broken = fixture._replace(predictions=preds)
+    result = _evaluate_default(broken)
+    assert "gate" in result
+
+
+def test_evaluate_still_rejects_y_true_inconsistency_within_evaluated_scope() -> None:
+    """Inconsistency WITHIN an evaluated method x slice gene still raises."""
+    fixture = _build_fixture()
+    preds = fixture.predictions.copy()
+    mask = (
+        (preds["model_id"] == "TEST_1")
+        & (preds["method"] == "copy_k562")  # the baseline: in scope
+        & (preds["depmap_column"] == SLICE_GENES[0])  # a slice gene: in scope
+    )
+    preds.loc[mask, "y_true"] = preds.loc[mask, "y_true"] + 5.0
+    broken = fixture._replace(predictions=preds)
+    with pytest.raises(EvaluationContractError, match="y_true disagrees"):
+        _evaluate_default(broken)
+
+
+# --------------------------------------------------------------------------
 # verify_artifact_hashes
 # --------------------------------------------------------------------------
 
@@ -988,18 +1175,37 @@ def _write_phase_a_dir(tmp_path) -> tuple:
     return phase_a_dir, manifest_path, slice_path, panels_path
 
 
+def _registration_sha256(phase_a_dir) -> str:
+    """SHA-256 of a synthetic ``phase_a_dir``'s CURRENT registration bytes.
+
+    T2 review Finding 2 pins ``verify_artifact_hashes``'s default
+    ``expected_registration_sha256`` to the real, frozen
+    ``results/phase_a_tx1_20260724/phase_a_registration.json``, so tests
+    using a synthetic fixture (built by ``_write_phase_a_dir``) must pin
+    their own digest explicitly instead of relying on that default.
+    """
+    return hashlib.sha256(
+        (phase_a_dir / "phase_a_registration.json").read_bytes()
+    ).hexdigest()
+
+
 def test_verify_artifact_hashes_passes_for_matching_files(tmp_path) -> None:
     phase_a_dir, *_ = _write_phase_a_dir(tmp_path)
-    verify_artifact_hashes(phase_a_dir)  # must not raise
+    verify_artifact_hashes(
+        phase_a_dir, expected_registration_sha256=_registration_sha256(phase_a_dir)
+    )  # must not raise
 
 
 def test_verify_artifact_hashes_rejects_modified_file(tmp_path) -> None:
-    """Finding 3: a same-shaped but modified artifact must fail verification."""
+    """A same-shaped but modified artifact must fail verification."""
     phase_a_dir, manifest_path, _, _ = _write_phase_a_dir(tmp_path)
+    expected_registration = _registration_sha256(phase_a_dir)  # before tampering
     manifest_path.write_text("model_id,role\nTEST_0,test\nTEST_1,test\n")  # tamper
 
     with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
-        verify_artifact_hashes(phase_a_dir)
+        verify_artifact_hashes(
+            phase_a_dir, expected_registration_sha256=expected_registration
+        )
 
 
 def test_verify_artifact_hashes_rejects_missing_registration_file(tmp_path) -> None:
@@ -1025,12 +1231,101 @@ def test_verify_artifact_hashes_rejects_missing_hash_entry(tmp_path) -> None:
     (phase_a_dir / "phase_a_registration.json").write_text(json.dumps(registration))
 
     with pytest.raises(EvaluationContractError, match="differential_slice_sha256"):
-        verify_artifact_hashes(phase_a_dir)
+        verify_artifact_hashes(
+            phase_a_dir, expected_registration_sha256=_registration_sha256(phase_a_dir)
+        )
 
 
 def test_verify_artifact_hashes_rejects_missing_artifact_file(tmp_path) -> None:
     phase_a_dir, manifest_path, slice_path, panels_path = _write_phase_a_dir(tmp_path)
+    expected_registration = _registration_sha256(phase_a_dir)
     panels_path.unlink()
 
     with pytest.raises(EvaluationContractError, match="Missing frozen artifact"):
+        verify_artifact_hashes(
+            phase_a_dir, expected_registration_sha256=expected_registration
+        )
+
+
+# --------------------------------------------------------------------------
+# T2 review Finding 2: registration-identity trust anchor
+# --------------------------------------------------------------------------
+
+_REAL_PHASE_A_DIR = (
+    pathlib.Path(__file__).resolve().parent.parent / "results" / "phase_a_tx1_20260724"
+)
+
+
+def _copy_real_phase_a_dir(tmp_path) -> pathlib.Path:
+    """Copy the real (gitignored, locally present) frozen Phase-A artifacts.
+
+    Unlike ``_write_phase_a_dir``'s synthetic fixture, this exercises the
+    default ``FROZEN_REGISTRATION_SHA256`` trust anchor against the actual
+    committed-outside-git ``results/phase_a_tx1_20260724/`` files it was
+    computed from.
+    """
+    dest = tmp_path / "real_phase_a"
+    dest.mkdir()
+    for filename in (
+        "phase_a_registration.json",
+        "cell_line_manifest.csv",
+        "differentially_essential_slice.csv",
+        "k_label_panels.csv",
+    ):
+        shutil.copyfile(_REAL_PHASE_A_DIR / filename, dest / filename)
+    return dest
+
+
+def test_verify_artifact_hashes_accepts_real_frozen_registration(tmp_path) -> None:
+    """The real registration + artifacts pass with the default (pinned)
+    ``FROZEN_REGISTRATION_SHA256`` trust anchor -- no override needed.
+    """
+    if not _REAL_PHASE_A_DIR.exists():
+        pytest.skip("real Phase-A artifacts not present in this checkout")
+    phase_a_dir = _copy_real_phase_a_dir(tmp_path)
+    verify_artifact_hashes(phase_a_dir)  # must not raise; uses the default digest
+
+
+def test_verify_artifact_hashes_rejects_tampered_registration_bytes(tmp_path) -> None:
+    """Mutating the registration file's own bytes must raise, even though
+    every artifact still matches ITS recorded hash -- self-consistency
+    alone is not identity with the frozen registration.
+    """
+    if not _REAL_PHASE_A_DIR.exists():
+        pytest.skip("real Phase-A artifacts not present in this checkout")
+    phase_a_dir = _copy_real_phase_a_dir(tmp_path)
+    registration_path = phase_a_dir / "phase_a_registration.json"
+    registration_path.write_text(registration_path.read_text() + "\n")  # tamper
+
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
         verify_artifact_hashes(phase_a_dir)
+
+
+def test_verify_artifact_hashes_rejects_wrong_pinned_digest(tmp_path) -> None:
+    """An explicitly wrong ``expected_registration_sha256`` raises even
+    against a perfectly self-consistent synthetic fixture.
+    """
+    phase_a_dir, *_ = _write_phase_a_dir(tmp_path)
+    wrong_digest = "0" * 64
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
+        verify_artifact_hashes(phase_a_dir, expected_registration_sha256=wrong_digest)
+
+
+def test_verify_artifact_hashes_rejects_matched_artifact_and_hash_swap(
+    tmp_path,
+) -> None:
+    """A matched swap of an artifact + its recorded hash is self-consistent
+    but must still fail: without the outer registration-identity check, a
+    swapped manifest whose recorded hash is updated to match would pass.
+    """
+    phase_a_dir, manifest_path, _, _ = _write_phase_a_dir(tmp_path)
+    manifest_path.write_text("model_id,role\nTEST_0,test\nTEST_1,test\n")
+    registration_path = phase_a_dir / "phase_a_registration.json"
+    registration = json.loads(registration_path.read_text())
+    registration["artifacts"]["cell_line_manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()  # attacker also updates the recorded hash to match
+    registration_path.write_text(json.dumps(registration))
+
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
+        verify_artifact_hashes(phase_a_dir)  # default (real) trust anchor
