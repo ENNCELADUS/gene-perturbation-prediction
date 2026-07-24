@@ -10,12 +10,16 @@ touches real prediction files or ``results/phase_a_tx1_20260724``.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import pathlib
 
 import numpy as np
 import pandas as pd
+import pytest
+
+from aivc_model.tx1_geneeffect_eval import EvaluationContractError
 
 _SCRIPT_PATH = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -94,13 +98,46 @@ def _write_fixture(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
 
     phase_a_dir = tmp_path / "phase_a"
     phase_a_dir.mkdir()
-    manifest.to_csv(phase_a_dir / "cell_line_manifest.csv", index=False)
-    slice_df.to_csv(phase_a_dir / "differentially_essential_slice.csv", index=False)
-    panels.to_csv(phase_a_dir / "k_label_panels.csv", index=False)
+    manifest_path = phase_a_dir / "cell_line_manifest.csv"
+    slice_path = phase_a_dir / "differentially_essential_slice.csv"
+    panels_path = phase_a_dir / "k_label_panels.csv"
+    manifest.to_csv(manifest_path, index=False)
+    slice_df.to_csv(slice_path, index=False)
+    panels.to_csv(panels_path, index=False)
+    _write_matching_registration(phase_a_dir, manifest_path, slice_path, panels_path)
 
     predictions_path = tmp_path / "predictions.csv"
     predictions.to_csv(predictions_path, index=False)
     return phase_a_dir, predictions_path
+
+
+def _write_matching_registration(
+    phase_a_dir: pathlib.Path,
+    manifest_path: pathlib.Path,
+    slice_path: pathlib.Path,
+    panels_path: pathlib.Path,
+) -> None:
+    """Write a ``phase_a_registration.json`` whose hashes match the files.
+
+    Finding 3 regression: ``main()`` now calls ``verify_artifact_hashes``
+    before scoring in strict mode, so every strict-mode fixture needs a
+    registration file whose recorded SHA-256s actually match the bytes on
+    disk (mirroring how the real Phase-A freeze script would produce it).
+    """
+    registration = {
+        "artifacts": {
+            "cell_line_manifest_sha256": hashlib.sha256(
+                manifest_path.read_bytes()
+            ).hexdigest(),
+            "differential_slice_sha256": hashlib.sha256(
+                slice_path.read_bytes()
+            ).hexdigest(),
+            "k_label_panels_sha256": hashlib.sha256(
+                panels_path.read_bytes()
+            ).hexdigest(),
+        }
+    }
+    (phase_a_dir / "phase_a_registration.json").write_text(json.dumps(registration))
 
 
 def test_strict_run_writes_formal_verdict_json(tmp_path: pathlib.Path) -> None:
@@ -160,3 +197,64 @@ def test_allow_partial_writes_diagnostic_verdict_not_formal(
         for record in caplog.records
         if record.levelname == "WARNING"
     )
+
+
+def test_strict_run_fails_closed_on_tampered_artifact(tmp_path: pathlib.Path) -> None:
+    """Finding 3 regression: a strict run must verify frozen artifact hashes.
+
+    A same-shaped but modified manifest file must never reach a formal
+    ``formal: true`` verdict; ``main()`` must raise before any scoring.
+    """
+    phase_a_dir, predictions_path = _write_fixture(tmp_path)
+    out_dir = tmp_path / "out_tampered"
+    manifest_path = phase_a_dir / "cell_line_manifest.csv"
+    manifest_path.write_text(manifest_path.read_text() + "\n# tampered\n")
+
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
+        evaluate_tx1_backbone.main(
+            [
+                "--predictions",
+                str(predictions_path),
+                "--phase-a-dir",
+                str(phase_a_dir),
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+    assert not out_dir.exists()  # failed before any output was written
+
+
+def test_skip_hash_check_writes_diagnostic_verdict_not_formal(
+    tmp_path: pathlib.Path,
+) -> None:
+    """--skip-hash-check downgrades to diagnostic, like --allow-partial.
+
+    Tampering the artifact must not block a run that explicitly opts out of
+    the hash check, but the resulting verdict must never claim formal:true.
+    """
+    phase_a_dir, predictions_path = _write_fixture(tmp_path)
+    out_dir = tmp_path / "out_skip_hash"
+    manifest_path = phase_a_dir / "cell_line_manifest.csv"
+    manifest_path.write_text(manifest_path.read_text() + "\n# tampered\n")
+
+    exit_code = evaluate_tx1_backbone.main(
+        [
+            "--predictions",
+            str(predictions_path),
+            "--phase-a-dir",
+            str(phase_a_dir),
+            "--out-dir",
+            str(out_dir),
+            "--skip-hash-check",
+        ]
+    )
+
+    diagnostic_path = out_dir / "verdict_diagnostic.json"
+    assert diagnostic_path.exists()
+    assert not (out_dir / "verdict.json").exists()
+    verdict = json.loads(diagnostic_path.read_text())
+    assert verdict["formal"] is False
+    assert verdict["reason"] == (
+        "partial/diagnostic run (artifact hash verification bypassed)"
+    )
+    assert exit_code == 2

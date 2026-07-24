@@ -18,6 +18,8 @@ from scipy.stats import spearmanr
 
 from aivc_model.tx1_geneeffect_eval import affine_kshot_calibrate
 from aivc_model.tx1_fewshot_calibration import (
+    MIN_FINITE_LABELS,
+    InsufficientFiniteLabelsError,
     calibrate_line,
     fit_ridge_calibration,
     make_predictions_long,
@@ -349,6 +351,97 @@ def test_calibrate_line_rejects_negative_k() -> None:
     label_mask = _label_mask(n_genes, k=5)
     with pytest.raises(ValueError, match="k must be >= 0"):
         calibrate_line(features, base_pred, y_true, label_mask, k=-1)
+
+
+# ---------------------------------------------------------------------------
+# T2 code review regression: non-finite held-out labels must not poison the
+# ridge fit. Held-out lines are NOT completeness-guaranteed (the
+# differential slice was frozen on TRAINING lines), so a k-shot panel can
+# land on a gene with a missing GeneEffect label.
+# ---------------------------------------------------------------------------
+
+
+def test_fit_ridge_calibration_raises_on_insufficient_finite_labels() -> None:
+    """Below MIN_FINITE_LABELS finite targets, fit_ridge_calibration refuses."""
+    features, _, y_true = _mis_ranking_fixture(n_genes=10, seed=32)
+    all_nan_y = np.full_like(y_true[:5], np.nan)
+    with pytest.raises(InsufficientFiniteLabelsError):
+        fit_ridge_calibration(features[:5], all_nan_y, alpha=1.0)
+
+
+def test_fit_ridge_calibration_fits_on_the_finite_subset() -> None:
+    """Above MIN_FINITE_LABELS finite targets, the fit drops only the NaNs."""
+    n_genes = 40
+    features, _, y_true = _mis_ranking_fixture(n_genes=n_genes, seed=33)
+    corrupted_y = y_true[:20].copy()
+    corrupted_y[0] = np.nan  # 1 of 20 labels is non-finite; 19 >= minimum
+
+    calibrator = fit_ridge_calibration(features[:20], corrupted_y, alpha=1.0)
+    finite_mask = np.isfinite(corrupted_y)
+    expected = fit_ridge_calibration(
+        features[:20][finite_mask], corrupted_y[finite_mask], alpha=1.0
+    )
+
+    assert np.allclose(calibrator.weights, expected.weights)
+    assert calibrator.intercept == pytest.approx(expected.intercept)
+
+
+def test_calibrate_line_drops_nonfinite_target_and_returns_finite_predictions() -> None:
+    """A NaN held-out label among the k labels must not poison the panel.
+
+    Regression for the bug where ``target.mean()`` becomes NaN (and hence
+    every fitted weight) as soon as one of the k labeled genes has a
+    non-finite GeneEffect. With enough OTHER finite labels remaining, the
+    fit proceeds on the finite subset and returns finite predictions for
+    every gene, not just the scored ones.
+    """
+    n_genes = 60
+    features, base_pred, y_true = _mis_ranking_fixture(n_genes=n_genes, seed=30)
+    k = 10
+    label_mask = _label_mask(n_genes, k)
+    fit_indices = np.flatnonzero(label_mask)[:k]
+
+    corrupted_y = y_true.copy()
+    corrupted_y[fit_indices[0]] = np.nan  # one of the k labels is NaN
+
+    result = calibrate_line(features, base_pred, corrupted_y, label_mask, k=k)
+
+    assert np.all(np.isfinite(result))
+
+
+def test_calibrate_line_falls_back_to_identity_with_too_few_finite_labels(
+    caplog,
+) -> None:
+    """Below MIN_FINITE_LABELS finite labels, calibrate_line returns base_pred.
+
+    Rather than raising or returning NaN across the panel, too few finite
+    labeled genes falls back to identity (unchanged ``base_pred``), with a
+    warning logged so the fallback is observable.
+    """
+    n_genes = 30
+    features, base_pred, y_true = _mis_ranking_fixture(n_genes=n_genes, seed=31)
+    k = MIN_FINITE_LABELS  # exactly at the minimum; corrupt all of it below
+    label_mask = _label_mask(n_genes, k)
+    fit_indices = np.flatnonzero(label_mask)[:k]
+
+    corrupted_y = y_true.copy()
+    corrupted_y[fit_indices] = np.nan  # every k=MIN_FINITE_LABELS label is NaN
+
+    with caplog.at_level("WARNING"):
+        result = calibrate_line(features, base_pred, corrupted_y, label_mask, k=k)
+
+    assert np.array_equal(result, base_pred)
+    assert result is not base_pred  # a copy, not an alias, matching k=0 identity
+    assert any("falling back" in r.message.lower() for r in caplog.records)
+
+
+def test_calibrate_line_k_zero_identity_is_unaffected_by_finite_label_fix() -> None:
+    """The k=0 identity path is untouched by the finite-label fallback logic."""
+    features, base_pred, y_true = _mis_ranking_fixture(n_genes=20, seed=34)
+    label_mask = np.zeros(20, dtype=bool)
+    result = calibrate_line(features, base_pred, y_true, label_mask, k=0)
+    assert np.array_equal(result, base_pred)
+    assert result is not base_pred
 
 
 # ---------------------------------------------------------------------------

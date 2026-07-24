@@ -91,6 +91,20 @@ _STD_EPS: float = 1e-8
 #: line-specific k-shot fits).
 DEFAULT_ALPHA: float = 1.0
 
+#: Minimum finite labeled genes required to fit a ridge calibrator. Held-out
+#: lines are NOT completeness-guaranteed (the differential slice was frozen
+#: on TRAINING lines), so a k-shot panel can land on a gene with a missing
+#: GeneEffect label; below this minimum, :func:`calibrate_line` falls back
+#: to identity (``base_pred``) rather than fit on too little (or no) signal.
+#: A ridge fit is technically well-posed from a single finite point (the
+#: intercept alone), but 2 is the smallest count that lets the fit reflect
+#: any actual feature-target relationship rather than a single anecdote.
+MIN_FINITE_LABELS: int = 2
+
+
+class InsufficientFiniteLabelsError(ValueError):
+    """Raised when too few labeled genes have finite target/features to fit."""
+
 
 @dataclass(frozen=True)
 class RidgeCalibrator:
@@ -205,6 +219,11 @@ def fit_ridge_calibration(
     Raises:
         ValueError: If shapes are inconsistent, ``k == 0``, or ``alpha`` is
             negative.
+        InsufficientFiniteLabelsError: If fewer than :data:`MIN_FINITE_LABELS`
+            labeled genes have a finite target (after any residual
+            subtraction) AND finite features; a held-out line's labels are
+            not completeness-guaranteed, and fitting on a non-finite target
+            would silently poison every weight with NaN.
     """
     features_labeled = np.asarray(features_labeled, dtype=float)
     y_labeled = np.asarray(y_labeled, dtype=float).reshape(-1)
@@ -232,6 +251,29 @@ def fit_ridge_calibration(
         target = y_labeled - base_pred_labeled
     else:
         target = y_labeled
+
+    # Held-out lines are not completeness-guaranteed: drop labeled genes
+    # with a non-finite target or any non-finite feature before fitting, so
+    # one NaN GeneEffect cannot poison target.mean() (and hence every
+    # weight) for the whole panel.
+    finite_mask = np.isfinite(target) & np.all(np.isfinite(features_labeled), axis=1)
+    n_finite = int(finite_mask.sum())
+    if n_finite < MIN_FINITE_LABELS:
+        msg = (
+            f"Only {n_finite} finite labeled gene(s) out of {k} (minimum "
+            f"{MIN_FINITE_LABELS}); refusing to fit a ridge calibrator on "
+            "non-finite targets/features."
+        )
+        raise InsufficientFiniteLabelsError(msg)
+    if n_finite < k:
+        _LOGGER.warning(
+            "Dropping %d of %d labeled gene(s) with non-finite target/features "
+            "before fitting ridge calibration.",
+            k - n_finite,
+            k,
+        )
+        features_labeled = features_labeled[finite_mask]
+        target = target[finite_mask]
 
     feature_mean = features_labeled.mean(axis=0)
     feature_std = features_labeled.std(axis=0, ddof=0)
@@ -304,7 +346,11 @@ def calibrate_line(
     Returns:
         Adapted per-gene predictions for all G genes, shape (G,). Entries
         outside the k selected labeled genes are the ones a caller should
-        score (per the disjointness contract above).
+        score (per the disjointness contract above). Held-out lines are not
+        completeness-guaranteed: if fewer than :data:`MIN_FINITE_LABELS` of
+        the k selected genes have a finite target/features, this falls back
+        to ``base_pred`` unchanged (with a logged warning) instead of
+        raising or returning NaN; see :func:`fit_ridge_calibration`.
 
     Raises:
         ValueError: If ``k`` is negative, larger than the number of
@@ -335,12 +381,22 @@ def calibrate_line(
         raise ValueError(msg)
     fit_indices = label_indices[:k]
 
-    calibrator = fit_ridge_calibration(
-        features_labeled=features[fit_indices],
-        y_labeled=y_true[fit_indices],
-        alpha=alpha,
-        base_pred_labeled=base_pred[fit_indices] if residual else None,
-    )
+    try:
+        calibrator = fit_ridge_calibration(
+            features_labeled=features[fit_indices],
+            y_labeled=y_true[fit_indices],
+            alpha=alpha,
+            base_pred_labeled=base_pred[fit_indices] if residual else None,
+        )
+    except InsufficientFiniteLabelsError as exc:
+        _LOGGER.warning(
+            "k=%d labeled gene(s): %s Falling back to identity (base_pred) "
+            "calibration for this panel/k rather than emitting NaN.",
+            k,
+            exc,
+        )
+        return base_pred.copy()
+
     return calibrator.apply(
         features_all=features,
         base_pred_all=base_pred if residual else None,

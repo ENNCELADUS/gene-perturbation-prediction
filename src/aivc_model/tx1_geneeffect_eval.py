@@ -18,6 +18,8 @@ slice, and the k-label panels. It does not produce predictions itself.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Callable, Sequence
@@ -64,6 +66,10 @@ KNOWN_METHODS: frozenset[str] = frozenset(
 
 #: A pluggable k-shot calibrator: (base_pred, y_true, is_label_mask) -> adjusted_pred.
 KShotCalibrator = Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]
+
+
+class EvaluationContractError(ValueError):
+    """Raised when inputs violate the frozen Phase-A evaluation contract."""
 
 
 def load_manifest(path: Path) -> pd.DataFrame:
@@ -221,18 +227,55 @@ def _label_genes_for_panel(panel_rows: pd.DataFrame, k: int) -> set[str]:
 
 
 def _schema_is_panel_aware(preds: pd.DataFrame) -> bool:
-    """Detect the Phase-E per-(panel, k) predictions schema.
+    """Detect the Phase-E per-(panel, k) predictions schema for ONE method.
+
+    Column presence alone is not enough: when a panel-aware method (e.g.
+    ``tx1_3b_st``, from :func:`aivc_model.tx1_fewshot_calibration.
+    make_predictions_long`) is concatenated in the same predictions table
+    with a simple-schema method (e.g. ``copy_k562``), pandas fills the
+    simple-schema method's ``panel``/``k`` cells with NaN rather than
+    dropping the columns. ``preds`` must therefore already be restricted to
+    a single method's rows; panel-awareness is then decided from whether
+    THIS method's ``panel``/``k`` values are populated, not merely present.
 
     Args:
-        preds: A predictions frame (or slice of one).
+        preds: A predictions frame already restricted to one method (or a
+            further slice of one, e.g. one line's rows).
 
     Returns:
-        True if ``preds`` carries the ``panel``/``k`` columns emitted by
-        :func:`aivc_model.tx1_fewshot_calibration.make_predictions_long`
-        (one already-adapted ``base_pred`` per panel AND k), False for the
-        plain one-row-per-gene schema scored with a pluggable ``calibrate``.
+        True if ``preds`` is non-empty and every row has non-null
+        ``panel``/``k`` (the Phase-E schema); False if the columns are
+        absent, or present but every row is null (the plain one-row-per-gene
+        schema scored with a pluggable ``calibrate``).
+
+    Raises:
+        EvaluationContractError: If ``panel``/``k`` are null for some rows
+            and non-null for others -- a malformed mix of the two schemas
+            within what should be a single method's predictions.
     """
-    return {"panel", "k"} <= set(preds.columns)
+    if not ({"panel", "k"} <= set(preds.columns)) or preds.empty:
+        return False
+
+    panel_null = preds["panel"].isna()
+    k_null = preds["k"].isna()
+    if not panel_null.equals(k_null):
+        raise EvaluationContractError(
+            "panel/k null-ness disagrees within these rows (some rows have "
+            "panel set but not k, or vice versa); malformed predictions "
+            "schema."
+        )
+
+    n_null = int(panel_null.sum())
+    if n_null == 0:
+        return True
+    if n_null == len(preds):
+        return False
+    raise EvaluationContractError(
+        f"Mixed panel-aware and simple-schema rows within one method's "
+        f"predictions: {len(preds) - n_null} row(s) have panel/k set and "
+        f"{n_null} row(s) do not. A method's predictions must be entirely "
+        "panel-aware or entirely simple-schema."
+    )
 
 
 def _panel_aware_rho(
@@ -510,10 +553,6 @@ def line_bootstrap_ci(
     return point, float(lo), float(hi)
 
 
-class EvaluationContractError(ValueError):
-    """Raised when inputs violate the frozen Phase-A evaluation contract."""
-
-
 def _validate_panel_label_rows(
     panels: pd.DataFrame, test_set: set[str], n_labels: int
 ) -> None:
@@ -583,15 +622,51 @@ def _validate_simple_coverage(
         )
 
 
+def _missing_panel_k_cells(
+    line_preds: pd.DataFrame,
+    required_panels: set[object],
+    k_schedule: Sequence[int],
+) -> list[tuple[object, int]]:
+    """Return required (panel, k) cells absent from ``line_preds``.
+
+    Args:
+        line_preds: This method's panel-aware predictions for one test
+            line, with columns ``[panel, k]``.
+        required_panels: The frozen panel-id set for this line (every
+            registered panel, not just the ones observed in predictions).
+        k_schedule: The k values every registered panel must be scored at.
+
+    Returns:
+        Sorted list of ``(panel, k)`` cells in ``required_panels x
+        k_schedule`` that have no row in ``line_preds``.
+    """
+    required = {(panel_id, int(k)) for panel_id in required_panels for k in k_schedule}
+    present = {
+        (panel_id, int(k))
+        for panel_id, k in line_preds[["panel", "k"]]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    }
+    return sorted(required - present, key=lambda cell: (str(cell[0]), cell[1]))
+
+
 def _validate_panel_aware_coverage(
     line_preds: pd.DataFrame,
     line_panels: pd.DataFrame,
     model_id: str,
     method: str,
     slice_genes: set[str],
+    k_schedule: Sequence[int],
     max_listed: int,
 ) -> None:
-    """Require full SCORED-gene coverage per (panel, k) present, panel-aware.
+    """Require every (panel, k) cell and its full SCORED-gene coverage.
+
+    A prior version only checked (panel, k) combinations PRESENT in
+    ``line_preds``; if an entire registered panel or k value were absent,
+    validation passed silently and ``per_line_metric`` would nanmean-average
+    over fewer than the frozen 20 panels. This requires the COMPLETE grid:
+    every panel registered for this line in ``line_panels``, crossed with
+    every k in ``k_schedule``.
 
     Args:
         line_preds: This method's panel-aware predictions for one test
@@ -600,27 +675,40 @@ def _validate_panel_aware_coverage(
         model_id: The test line identifier (for the error message).
         method: The method identifier (for the error message).
         slice_genes: The full differential-essential slice gene set.
-        max_listed: Maximum number of missing genes to name in the error.
+        k_schedule: The k values every registered panel must be scored at.
+        max_listed: Maximum number of missing genes/cells to name in one
+            error.
 
     Raises:
-        EvaluationContractError: If any (panel, k) slice present in
-            ``line_preds`` is missing predictions for a scored gene (a
-            slice gene not among that panel's first-``k`` labels).
+        EvaluationContractError: If any (panel, k) cell required by the
+            frozen panel set x ``k_schedule`` grid is entirely absent from
+            ``line_preds``, or if a present cell is missing predictions for
+            a scored gene (a slice gene not among that panel's first-``k``
+            labels).
     """
-    present = line_preds[["panel", "k"]].drop_duplicates()
-    for panel_id, k in present.itertuples(index=False):
+    required_panels = set(line_panels["panel"].unique())
+    missing_cells = _missing_panel_k_cells(line_preds, required_panels, k_schedule)
+    if missing_cells:
+        raise EvaluationContractError(
+            f"method={method!r} line={model_id!r} missing {len(missing_cells)} "
+            f"(panel, k) cell(s) required by k_schedule={list(k_schedule)}, "
+            f"e.g. {missing_cells[:max_listed]}."
+        )
+
+    for panel_id in required_panels:
         panel_rows = line_panels[line_panels["panel"] == panel_id]
-        scored_genes = slice_genes - _label_genes_for_panel(panel_rows, int(k))
-        slice_rows = line_preds[
-            (line_preds["panel"] == panel_id) & (line_preds["k"] == k)
-        ]
-        missing = scored_genes - set(slice_rows["depmap_column"])
-        if missing:
-            raise EvaluationContractError(
-                f"method={method!r} line={model_id!r} panel={panel_id} k={k} "
-                f"missing {len(missing)} scored gene(s), e.g. "
-                f"{sorted(missing)[:max_listed]}."
-            )
+        for k in k_schedule:
+            scored_genes = slice_genes - _label_genes_for_panel(panel_rows, k)
+            slice_rows = line_preds[
+                (line_preds["panel"] == panel_id) & (line_preds["k"] == k)
+            ]
+            missing = scored_genes - set(slice_rows["depmap_column"])
+            if missing:
+                raise EvaluationContractError(
+                    f"method={method!r} line={model_id!r} panel={panel_id} "
+                    f"k={k} missing {len(missing)} scored gene(s), e.g. "
+                    f"{sorted(missing)[:max_listed]}."
+                )
 
 
 def _validate_slice_coverage(
@@ -629,6 +717,7 @@ def _validate_slice_coverage(
     slice_genes: set[str],
     test_set: set[str],
     methods: set[str],
+    k_schedule: Sequence[int] = K_SCHEDULE,
     max_listed: int = 20,
 ) -> None:
     """Require full (scored-)slice-gene coverage for every method x line.
@@ -640,6 +729,8 @@ def _validate_slice_coverage(
         slice_genes: The full differential-essential slice gene set.
         test_set: Held-out test-line ``model_id`` set.
         methods: Method identifiers to validate (candidates + baseline).
+        k_schedule: k values every panel-aware method x line must cover for
+            every registered panel (frozen contract default: ``K_SCHEDULE``).
         max_listed: Maximum number of missing genes to name in one error.
 
     Raises:
@@ -656,7 +747,13 @@ def _validate_slice_coverage(
             if panel_aware:
                 line_panels = panels[panels["model_id"] == model_id]
                 _validate_panel_aware_coverage(
-                    line_preds, line_panels, model_id, method, slice_genes, max_listed
+                    line_preds,
+                    line_panels,
+                    model_id,
+                    method,
+                    slice_genes,
+                    k_schedule,
+                    max_listed,
                 )
             else:
                 _validate_simple_coverage(
@@ -696,6 +793,7 @@ def _validate_evaluation_inputs(
     panels: pd.DataFrame,
     methods: Sequence[str],
     baseline_method: str,
+    k_schedule: Sequence[int] = K_SCHEDULE,
     n_panels: int = N_PANELS,
     n_labels: int = N_LABELS,
     y_true_tol: float = 1e-8,
@@ -706,8 +804,9 @@ def _validate_evaluation_inputs(
     Closes ways a silent evaluator could pass the gate on a different
     estimator than the registered one: a changed inferential line sample,
     an altered panel/label schedule, incomplete prediction coverage of the
-    frozen gene slice, and paired methods scored against inconsistent
-    targets.
+    frozen gene slice (including, for panel-aware methods, the complete
+    registered-panel x ``k_schedule`` grid), and paired methods scored
+    against inconsistent targets.
 
     Args:
         predictions: Tidy long-format predictions.
@@ -717,6 +816,8 @@ def _validate_evaluation_inputs(
         panels: Frozen nested k-label panels.
         methods: Method identifiers to be scored.
         baseline_method: Paired-difference baseline (also must be covered).
+        k_schedule: k values every panel-aware method x line must cover for
+            every registered panel (frozen contract default: ``K_SCHEDULE``).
         n_panels: Required panel count per held-out line.
         n_labels: Required label-row count per (line, panel) (Phase A
             contract: 50, ``label_order`` 1..50).
@@ -731,8 +832,9 @@ def _validate_evaluation_inputs(
     Raises:
         EvaluationContractError: On duplicate/absent test lines, a per-line
             panel or label-row schedule that deviates from the frozen
-            contract, prediction-coverage gaps against the full slice for
-            any scored method, or per-gene ``y_true`` disagreement.
+            contract, prediction-coverage gaps against the full slice (or,
+            for panel-aware methods, the full panel x k grid) for any scored
+            method, or per-gene ``y_true`` disagreement.
     """
     test_lines = manifest.loc[manifest["role"] == "test", "model_id"].tolist()
     if not test_lines:
@@ -767,7 +869,9 @@ def _validate_evaluation_inputs(
                 f"method={method!r} missing predictions for line(s): {sorted(gap)}."
             )
     slice_genes = set(slice_df["depmap_column"])
-    _validate_slice_coverage(predictions, panels, slice_genes, test_set, all_methods)
+    _validate_slice_coverage(
+        predictions, panels, slice_genes, test_set, all_methods, k_schedule=k_schedule
+    )
 
     spread_bad = (
         predictions[predictions["model_id"].isin(test_set)]
@@ -843,6 +947,7 @@ def evaluate(
             panels,
             methods,
             baseline_method,
+            k_schedule=k_schedule,
             expected_test_lines=expected_test_lines,
         )
     else:
@@ -904,3 +1009,60 @@ def evaluate(
         "passes": bool(gate_row["ci_lo"] > rho_min),
     }
     return {"per_line": per_line, "curve": curve, "gate": gate}
+
+
+#: Frozen Phase-A artifact filenames, mapped to their
+#: ``phase_a_registration.json`` ``artifacts.*_sha256`` key.
+_REGISTERED_ARTIFACT_FILES: dict[str, str] = {
+    "cell_line_manifest.csv": "cell_line_manifest_sha256",
+    "differentially_essential_slice.csv": "differential_slice_sha256",
+    "k_label_panels.csv": "k_label_panels_sha256",
+}
+
+
+def verify_artifact_hashes(phase_a_dir: Path) -> None:
+    """Verify frozen Phase-A artifact bytes against the registered SHA-256s.
+
+    A same-shaped but silently modified manifest/slice/panels file would
+    otherwise pass every other check in this module and still produce a
+    ``formal: true`` verdict. This closes that gap by recomputing each
+    file's SHA-256 and comparing it to the value recorded at Phase-A freeze
+    time in ``phase_a_registration.json``.
+
+    Args:
+        phase_a_dir: Directory holding ``phase_a_registration.json`` and the
+            frozen ``cell_line_manifest.csv``,
+            ``differentially_essential_slice.csv``, and ``k_label_panels.csv``
+            artifacts.
+
+    Raises:
+        EvaluationContractError: If ``phase_a_registration.json`` is
+            missing or has no recorded hash for one of the three artifacts,
+            if an artifact file is missing, or if a file's computed SHA-256
+            does not match its recorded hash.
+    """
+    phase_a_dir = Path(phase_a_dir)
+    registration_path = phase_a_dir / "phase_a_registration.json"
+    if not registration_path.exists():
+        raise EvaluationContractError(
+            f"Missing registration file: {registration_path}."
+        )
+    registration = json.loads(registration_path.read_text())
+    artifacts = registration.get("artifacts", {})
+
+    for filename, hash_key in _REGISTERED_ARTIFACT_FILES.items():
+        expected = artifacts.get(hash_key)
+        if not expected:
+            raise EvaluationContractError(
+                f"{registration_path} has no {hash_key!r} entry under 'artifacts'."
+            )
+        artifact_path = phase_a_dir / filename
+        if not artifact_path.exists():
+            raise EvaluationContractError(f"Missing frozen artifact: {artifact_path}.")
+        actual = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+        if actual != expected:
+            raise EvaluationContractError(
+                f"{filename} SHA-256 mismatch: registered {expected!r}, "
+                f"computed {actual!r}. The frozen Phase-A artifact has "
+                "changed since registration."
+            )

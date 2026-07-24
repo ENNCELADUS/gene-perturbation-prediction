@@ -32,6 +32,7 @@ from aivc_model.tx1_geneeffect_eval import (
     load_panels,
     load_predictions,
     load_slice,
+    verify_artifact_hashes,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,8 +93,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Bypass frozen-contract validation (diagnostic only; never a "
         "formal verdict).",
     )
+    parser.add_argument(
+        "--skip-hash-check",
+        action="store_true",
+        help="Bypass frozen-artifact SHA-256 verification against "
+        "phase_a_registration.json (diagnostic only, like --allow-partial; "
+        "never a formal verdict).",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args(argv)
+
+
+def _diagnostic_reason(allow_partial: bool, skip_hash_check: bool) -> str | None:
+    """Build the diagnostic-downgrade reason string for the verdict.
+
+    Args:
+        allow_partial: Whether ``--allow-partial`` was passed.
+        skip_hash_check: Whether ``--skip-hash-check`` was passed.
+
+    Returns:
+        A human-readable reason naming every bypassed check, or None if
+        neither flag was passed (a formal run).
+    """
+    if not (allow_partial or skip_hash_check):
+        return None
+    bypassed = []
+    if allow_partial:
+        bypassed.append("contract validation bypassed")
+    if skip_hash_check:
+        bypassed.append("artifact hash verification bypassed")
+    return f"partial/diagnostic run ({'; '.join(bypassed)})"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -104,13 +133,20 @@ def main(argv: list[str] | None = None) -> int:
 
     Returns:
         Process exit code: 0 if the gate passes and 1 otherwise for a
-        strict (formal) run; 2 always for an ``--allow-partial``
-        (diagnostic) run, regardless of ``passes``.
+        strict (formal) run; 2 always for a diagnostic run (``--allow-partial``
+        and/or ``--skip-hash-check``), regardless of ``passes``.
     """
     args = parse_args(argv)
     logging.basicConfig(
         level=args.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
+
+    reason = _diagnostic_reason(args.allow_partial, args.skip_hash_check)
+    is_diagnostic = reason is not None
+
+    if not is_diagnostic:
+        # A formal verdict must never skip the frozen-artifact hash check.
+        verify_artifact_hashes(args.phase_a_dir)
 
     manifest = load_manifest(args.phase_a_dir / "cell_line_manifest.csv")
     slice_df = load_slice(args.phase_a_dir / "differentially_essential_slice.csv")
@@ -136,9 +172,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     verdict = dict(result["gate"])
-    verdict["formal"] = not args.allow_partial
-    if args.allow_partial:
-        verdict["reason"] = "partial/diagnostic run (contract validation bypassed)"
+    verdict["formal"] = not is_diagnostic
+    if is_diagnostic:
+        verdict["reason"] = reason
         verdict_path = args.out_dir / "verdict_diagnostic.json"
     else:
         verdict_path = args.out_dir / "verdict.json"
@@ -158,10 +194,10 @@ def main(argv: list[str] | None = None) -> int:
         verdict["rho_min"],
         verdict["passes"],
     )
-    if args.allow_partial:
+    if is_diagnostic:
         _LOGGER.warning(
-            "PARTIAL/DIAGNOSTIC RUN: frozen-contract validation was bypassed "
-            "(--allow-partial). This is NOT a formal verdict; see %s.",
+            "PARTIAL/DIAGNOSTIC RUN: %s. This is NOT a formal verdict; see %s.",
+            reason,
             verdict_path,
         )
         return 2
