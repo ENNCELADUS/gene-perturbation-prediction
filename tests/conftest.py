@@ -30,9 +30,11 @@ except ImportError:
 
 from pathlib import Path
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.sparse import csr_matrix
 
 
 def _write_synthetic_benchmark(path: Path) -> Path:
@@ -310,3 +312,90 @@ def synthetic_selectivity_fixture(tmp_path: Path) -> dict:
     csv_path = tmp_path / "bench_sel.csv"
     pd.DataFrame(rows).to_csv(csv_path, index=False)
     return {"benchmark_csv": csv_path, "depmap_dir": depmap_dir}
+
+
+# --- Wave 1 Phase B (tx1_basal / tx1_embed_cache) shared fixtures ----------
+#
+# Shared between test_tx1_basal.py (Task 1) and test_tx1_embed_cache.py
+# (Task 2): tiny synthetic Phase-A line manifests, Tahoe-100M DMSO parquet
+# shards, gene metadata, and Perturb-seq h5ad files, all built in tmp_path.
+
+TX1_MANIFEST_COLUMNS = (
+    "model_id",
+    "cellosaurus_id",
+    "cell_line_name",
+    "lineage",
+    "dmso_cells",
+    "basal_source",
+    "tx1_pretraining_exposure",
+    "role",
+    "omics_expression_available",
+)
+
+
+def tx1_manifest_row(**overrides: object) -> dict[str, object]:
+    """Return one frozen-Phase-A-manifest-shaped row, with field overrides."""
+    row: dict[str, object] = {
+        "model_id": "ACH-000001",
+        "cellosaurus_id": "CVCL_0001",
+        "cell_line_name": "Line1",
+        "lineage": "Lung",
+        "dmso_cells": 1000,
+        "basal_source": "Tahoe-100M DMSO",
+        "tx1_pretraining_exposure": "known_present",
+        "role": "train_head",
+        "omics_expression_available": True,
+    }
+    row.update(overrides)
+    return row
+
+
+def write_tx1_line_manifest(path: Path, rows: list[dict[str, object]]) -> Path:
+    """Write ``rows`` (see :func:`tx1_manifest_row`) as a manifest CSV."""
+    pd.DataFrame(rows, columns=TX1_MANIFEST_COLUMNS).to_csv(path, index=False)
+    return path
+
+
+def write_tx1_gene_metadata(path: Path, tokens: list[int]) -> Path:
+    """Write a Tahoe token-id -> Ensembl gene metadata parquet."""
+    pd.DataFrame(
+        {
+            "token_id": tokens,
+            "ensembl_id": [f"ENSG{token:011d}" for token in tokens],
+            "gene_symbol": [f"GENE{token}" for token in tokens],
+        }
+    ).to_parquet(path)
+    return path
+
+
+def write_tx1_shard(path: Path, rows: list[dict[str, object]]) -> Path:
+    """Write one Tahoe-100M DMSO parquet shard from ``genes``/``expressions`` rows."""
+    pd.DataFrame(rows).to_parquet(path)
+    return path
+
+
+def write_tx1_perturbseq_h5ad(
+    path: Path,
+    *,
+    n_control: int,
+    n_other: int,
+    ensembl_col: str = "ensembl_id",
+    perturbation_col: str = "gene",
+    control_label: str = "non-targeting",
+    n_genes: int = 3,
+) -> Path:
+    """Write a tiny Perturb-seq h5ad with ``n_control`` non-targeting cells."""
+    n_cells = n_control + n_other
+    rng = np.random.default_rng(0)
+    counts = rng.integers(0, 10, size=(n_cells, n_genes)).astype(np.float32)
+    labels = [control_label] * n_control + ["TP53"] * n_other
+    obs = pd.DataFrame(
+        {perturbation_col: labels}, index=[f"cell{index}" for index in range(n_cells)]
+    )
+    var = pd.DataFrame(
+        {ensembl_col: [f"ENSG{index:011d}" for index in range(n_genes)]},
+        index=[f"gene{index}" for index in range(n_genes)],
+    )
+    adata = ad.AnnData(X=csr_matrix(counts), obs=obs, var=var)
+    adata.write_h5ad(path)
+    return path
