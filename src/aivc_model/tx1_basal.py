@@ -189,15 +189,24 @@ def _assemble_tahoe_matrix(
     reservoir: list[tuple[np.ndarray, np.ndarray]],
     metadata: pd.DataFrame,
 ) -> tuple[csr_matrix, pd.DataFrame]:
-    """Build the CSR matrix and Ensembl-indexed var frame for sampled cells."""
-    tokens = sorted(
-        {
-            int(token)
-            for genes, _ in reservoir
-            for token in genes.tolist()
-            if token in metadata.index
-        }
-    )
+    """Build the CSR matrix and Ensembl-indexed var frame for sampled cells.
+
+    Otherwise-valid token ids (id >= 3, positive expression value) that are
+    absent from ``metadata.index`` are dropped from the gene panel. A stale
+    or partial ``gene_metadata.parquet`` would otherwise silently truncate
+    the panel, so the count and fraction dropped are logged as a warning.
+    """
+    valid_tokens = {int(token) for genes, _ in reservoir for token in genes.tolist()}
+    tokens = sorted(token for token in valid_tokens if token in metadata.index)
+    n_dropped = len(valid_tokens) - len(tokens)
+    if n_dropped:
+        _LOGGER.warning(
+            "dropped %d/%d (%.1f%%) otherwise-valid gene tokens missing from "
+            "gene metadata index",
+            n_dropped,
+            len(valid_tokens),
+            100.0 * n_dropped / len(valid_tokens),
+        )
     positions = {token: index for index, token in enumerate(tokens)}
     rows: list[int] = []
     columns: list[int] = []
@@ -340,11 +349,16 @@ def assert_tx1_input_contract(adata: ad.AnnData) -> None:
         adata: Candidate basal AnnData.
 
     Raises:
-        ValueError: ``.X`` contains negative values, ``var.index`` does not
-            look like Ensembl gene ids, or ``obs`` is missing ``cell_type``.
+        ValueError: ``.X`` contains negative or non-finite (NaN/Inf) values,
+            ``var.index`` does not look like Ensembl gene ids, or ``obs`` is
+            missing ``cell_type``.
     """
     matrix = adata.X
     data = matrix.data if sparse.issparse(matrix) else np.asarray(matrix).ravel()
+    if data.size and not np.all(np.isfinite(data)):
+        raise ValueError(
+            "Tx1 input contract violation: .X contains non-finite values (NaN or inf)"
+        )
     if data.size and np.any(data < 0):
         raise ValueError("Tx1 input contract violation: .X contains negative values")
     if "cell_type" not in adata.obs.columns:
