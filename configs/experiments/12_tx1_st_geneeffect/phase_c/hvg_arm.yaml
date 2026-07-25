@@ -1,0 +1,132 @@
+# Phase C -- HVG-ST arm (Wave 2 Task 7).
+#
+# This is the spec's "encoder-unseen" attribution control (docs/specs/
+# 2026-07-23-tx1-st-geneeffect-backbone-design.md Sec 2.2/Sec 7): ST's INPUT
+# stays gene/HVG space (2000-d), the SAME view as its own response-encoder
+# target, matching the released ST-HVG-Replogle checkpoint's own input space
+# exactly -- so this arm warm-starts the checkpoint's weights unmodified
+# (no fresh basal_encoder.0; shapes already match, unlike the Tx1 arm).
+#
+# Both Phase C arms train on the SAME data: the frozen manifest's 4
+# `train_response_and_head` lines (K562/HCT116/Jurkat/HepG2, C4/C5),
+# assembled by `aivc_model.tx1_response_data.assemble_train_response_gene_bags`
+# via `scripts/train_tx1_st_response.py --cache-dir/--line-manifest
+# /--perturbseq-source-config`. This config's own `data:` section is NOT
+# that data source (see below) -- the two arms differ only in which VIEW of
+# the assembled two-view GeneBags is handed to ST as input.
+
+data:
+  # Unused by this pipeline: scripts/train_tx1_st_response.py sources
+  # training data via --cache-dir/--line-manifest/--perturbseq-source-config,
+  # never via AivcConfig.data. These keys are populated only because
+  # DataConfig requires them; `output_dir` is the one value this pipeline
+  # actually reads (the base for --run-dir's default, `<output_dir>/runs/...`).
+  h5ad_path: UNUSED
+  overlap_csv: UNUSED
+  output_dir: results/experiments/12_tx1_st_geneeffect/phase_c
+  # Documentary only in this pipeline (assemble_train_response_gene_bags
+  # never reads config.data.state_embed_key), but set explicitly so the two
+  # arms' input-space decision reads the same either way: this arm's ST
+  # input is the response-encoder's own gene/HVG view, not an obsm key.
+  state_embed_key: null
+
+split:
+  # Phase C's GeneBags carry no GeneEffect label (`y` is an all-NaN
+  # placeholder -- ST supervises on observed *expression*, not GeneEffect;
+  # see loss: below), so this is a plain non-stratified gene-name split,
+  # not exp05's label-stratified canonical CV split.
+  train_fraction: 0.8
+  val_fraction: 0.1
+  test_fraction: 0.1
+  random_state: 42
+
+state:
+  backend: state_checkpoint
+  model_dir: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562
+  checkpoint_path: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
+  # Same-shape warm start: 2000-in matches the checkpoint's own saved
+  # input_dim, so no fresh basal_encoder.0 is needed (Task 4). Left null so
+  # the plain load_from_checkpoint path (Lightning, strict=False) is used,
+  # exactly like every pre-Phase-C state_checkpoint config.
+  warm_start_from: null
+  input_dim: 2000
+  output_dim: 2000
+  pert_dim: 2024
+  known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
+  gene_tokenizer: state_onehot
+  representation_layer: output
+  # This IS the input-view decision: ST's input equals its response-encoder
+  # target (gene/HVG space). scripts/train_tx1_st_response.py projects the
+  # two-view assembled GeneBags onto this single view before training.
+  input_view: checkpoint_hvg
+  # Matches the checkpoint's own saved output_space (verified locally); set
+  # explicitly rather than left implicit so both arms record the same
+  # audited decision (output_space=gene in both arms -- C9).
+  output_space: gene
+  # C7: no Tx1 embeddings enter this arm at all, but the flag is recorded
+  # explicitly (at its default) so the decision is visible in both configs,
+  # not just the one where it has an effect.
+  l2_normalize_input: false
+
+response_encoder:
+  input_dim: 2000
+  latent_dim: 128
+
+gmm:
+  n_components: 32
+  covariance_floor: 0.0001
+  init_scale: 0.02
+  trainable: true
+
+model:
+  c_hidden_units: [64, 32]
+  dropout: 0.1
+
+loss:
+  # Phase C trains ST's response prediction only (spec Sec 6 Phase C exit:
+  # "ST checkpoints"); the GeneEffect head/GMM pooler are Phase D's job, and
+  # these GeneBags carry no GeneEffect label (`y` is all-NaN). pred_c/obs_c
+  # MUST stay 0: F.mse_loss(*, NaN) is NaN regardless of its weight
+  # (0.0 * NaN == NaN in IEEE754), so a nonzero default here would poison
+  # total_loss even though model.py's _weighted_loss_sum skips
+  # exactly-zero-weighted terms. occupancy/gmm_nll do not depend on `y` but
+  # are zeroed too since Phase C does not fit the pooler/head.
+  latent_mean_delta_weight: 1.0
+  latent_energy_weight: 1.0
+  hvg_mean_delta_weight: 0.1
+  hvg_energy_weight: 0.1
+  pred_c_weight: 0.0
+  obs_c_weight: 0.0
+  occupancy_weight: 0.0
+  gmm_nll_weight: 0.0
+  pred_rank_weight: 0.0
+
+train:
+  run_id: tx1_st_geneeffect_phase_c_hvg_arm
+  seed: 42
+  max_epochs: 20
+  learning_rate: 0.000025
+  state_learning_rate: 0.0000025
+  weight_decay: 0.0001
+  max_grad_norm: 1.0
+  # Must equal the checkpoint's own cell_sentence_len (its config.yaml:
+  # model.kwargs.cell_set_len == transformer_backbone_kwargs
+  # .max_position_embeddings == 64); StateForwardAdapter.forward_chunks
+  # rejects any other chunk size for a warm-started/loaded checkpoint.
+  cell_set_len: 64
+  # Kept at the default (1) as a conservative choice for this wave: this
+  # is the first time the assembled two-view path has run at all, and
+  # gene_batch_size > 1 routes through model.py::_forward_gene_batch, a
+  # separate code path this wave's tests never exercise (all-NaN `y` is
+  # confirmed NaN-safe there too -- _pairwise_ranknet_loss early-returns a
+  # real zero when every label-delta comparison is False under NaN -- but
+  # that path's *other* per-gene-batch behavior with this data shape is
+  # untested). Raise once a follow-up task verifies the batched path
+  # end to end; {1, 2, 4} are all otherwise legal per
+  # train._require_authoritative_gene_batch_size.
+  gene_batch_size: 1
+  eval_control_panel_size: 4096
+  eval_window_macro_batch_size: 64
+  required_world_size: 4
+  device: auto
+  float32_matmul_precision: high

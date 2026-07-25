@@ -575,7 +575,7 @@ def run_training(
         )
         gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(accelerator)
         if accelerator.is_main_process:
-            last_val_c_loss = float(val_row.get("c_loss", math.nan))
+            last_val_c_loss = _checkpoint_selection_metric(val_row)
             row = {
                 "epoch": epoch,
                 "gpu_peak_memory_allocated_mb": gpu_peak_memory_allocated_mb,
@@ -850,7 +850,7 @@ def _run_audited_training(
 
         def write_epoch_outputs() -> None:
             nonlocal best_epoch, best_value
-            value = float(val_row.get("c_loss", math.nan))
+            value = _checkpoint_selection_metric(val_row)
             logs.append(
                 {
                     "epoch": epoch,
@@ -2117,7 +2117,12 @@ def _build_e2e_model(
         require_complete_esm_coverage(canonical_genes, esm)
     else:
         raise ValueError(f"Unknown state.gene_tokenizer: {tokenizer}")
-    output_dim = config.state.output_dim or data.input_dim
+    # ``effective_target_dim`` (falls back to ``input_dim`` when no distinct
+    # target space is configured): ST's output is always target/gene space
+    # (C2), so falling back to ``data.input_dim`` here would silently size
+    # a two-view Tx1-arm model's output at the 2560-d *input* width instead
+    # of the 2000-d gene width whenever a config omits ``state.output_dim``.
+    output_dim = config.state.output_dim or data.effective_target_dim
     state_model = load_state_model(
         backend=config.state.backend,
         checkpoint_path=config.state.checkpoint_path,
@@ -2125,6 +2130,8 @@ def _build_e2e_model(
         output_dim=output_dim,
         pert_dim=pert_dim,
         emit_checkpoint_output=emit_checkpoint_output,
+        output_space=config.state.output_space,
+        warm_start_from=config.state.warm_start_from,
     )
     if tokenizer == "esm2":
         if esm is None:
@@ -2209,7 +2216,9 @@ def _build_model(
         require_complete_esm_coverage(canonical_genes, esm)
     else:
         raise ValueError(f"Unknown state.gene_tokenizer: {tokenizer}")
-    output_dim = config.state.output_dim or data.input_dim
+    # See the audited (``_build_e2e_model``) builder above for why this
+    # falls back to ``effective_target_dim`` rather than ``input_dim``.
+    output_dim = config.state.output_dim or data.effective_target_dim
     state_model = load_state_model(
         backend=config.state.backend,
         checkpoint_path=config.state.checkpoint_path,
@@ -2217,6 +2226,8 @@ def _build_model(
         output_dim=output_dim,
         pert_dim=pert_dim,
         emit_checkpoint_output=emit_checkpoint_output,
+        output_space=config.state.output_space,
+        warm_start_from=config.state.warm_start_from,
     )
     if tokenizer == "esm2":
         if esm is None:
@@ -2568,9 +2579,20 @@ def _evaluate_prediction_only_final(
     if accelerator.is_main_process and not predictions.empty:
         y_true = predictions["y_true"].to_numpy(dtype=np.float64)
         y_pred = predictions["y_pred"].to_numpy(dtype=np.float64)
-        summary["c_loss"] = float(np.mean(np.square(y_pred - y_true)))
-        summary.update(regression_metrics(y_true, y_pred))
-        summary.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
+        # GeneEffect-label metrics require a finite label: a GeneBags built
+        # with no GeneEffect column (e.g. Phase C's ST-response-only
+        # training, whose `y` is an all-NaN placeholder -- ST supervises on
+        # observed expression, not GeneEffect) has none, and
+        # sklearn's regression_metrics/ranking_metrics raise outright on a
+        # NaN input rather than returning NaN, unlike the loss terms in
+        # model.py that a zero weight already skips. Omit these keys
+        # instead of reporting a NaN-poisoned "c_loss" (or crashing);
+        # `generation_loss` below is unaffected -- it compares predicted vs.
+        # observed expression, not against `y`.
+        if np.isfinite(y_true).all():
+            summary["c_loss"] = float(np.mean(np.square(y_pred - y_true)))
+            summary.update(regression_metrics(y_true, y_pred))
+            summary.update(ranking_metrics(y_true, y_pred, (-0.5, -1.0)))
         generation_loss = predictions["generation_loss"].to_numpy(dtype=np.float64)
         if np.isfinite(generation_loss).any():
             summary["generation_loss"] = float(np.nanmean(generation_loss))
@@ -3121,6 +3143,31 @@ def _batch_tensor(
 
 def _prefix(row: dict[str, float], prefix: str) -> dict[str, float]:
     return {f"{prefix}_{key}": value for key, value in row.items()}
+
+
+def _checkpoint_selection_metric(val_row: dict[str, float]) -> float:
+    """The validation scalar (lower is better) used to pick the "best" epoch.
+
+    Prefers ``c_loss`` (GeneEffect MSE against the labeled target) exactly
+    as before this function existed. Falls back to ``generation_loss``
+    (predicted-vs-observed expression reconstruction error, which does not
+    depend on any GeneEffect label) only when ``c_loss`` is absent or
+    non-finite -- e.g. a GeneBags built with no GeneEffect column at all
+    (``y`` an all-NaN placeholder), such as Phase C's ST-response-only
+    training. For every existing config ``c_loss`` is always finite (labels
+    are filtered to non-null before any GeneBags is built), so this fallback
+    is unreachable there and behavior is unchanged.
+
+    Without this fallback, a labelless GeneBags makes ``val_row["c_loss"]``
+    NaN every epoch, and ``_is_better_metric`` always returns ``False`` for
+    a non-finite candidate -- so only the first epoch (the ``best_epoch ==
+    0`` special case) is ever saved as "best", silently discarding every
+    later epoch's improvement for the rest of training.
+    """
+    value = float(val_row.get("c_loss", math.nan))
+    if math.isfinite(value):
+        return value
+    return float(val_row.get("generation_loss", math.nan))
 
 
 def _is_better_metric(value: float, best_value: float, *, mode: str) -> bool:

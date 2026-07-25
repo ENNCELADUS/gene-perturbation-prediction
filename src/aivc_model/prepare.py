@@ -115,6 +115,19 @@ class StateConfig:
     require_resolved_esm2: bool = False
     representation_layer: str = "output"
     input_view: str = "checkpoint_hvg"
+    # Phase C (Wave 2, Task 7): STATE ``output_space`` override and the
+    # shape-filtered warm-start path (``state_warm_start.py``, Task 4).
+    # ``None``/``None`` is byte-identical to every pre-Phase-C config (the
+    # checkpoint's own saved ``output_space`` and Lightning's plain
+    # ``load_from_checkpoint`` are used, exactly as before these fields
+    # existed) -- see ``load_state_model``'s docstring.
+    output_space: str | None = None
+    warm_start_from: Path | None = None
+    # C7: whether to L2-normalize the Tx1 input embeddings before ST sees
+    # them. Default ``false`` reproduces Phase B's measured un-normalized
+    # Tx1 output (``fraction_unit_norm == 0.0``); a config must set this
+    # explicitly so the choice is auditable rather than an implicit default.
+    l2_normalize_input: bool = False
 
 
 @dataclass(frozen=True)
@@ -2628,6 +2641,9 @@ def _state_config(values: dict[str, Any]) -> StateConfig:
         require_resolved_esm2=_bool_value(values.get("require_resolved_esm2", False)),
         representation_layer=str(values.get("representation_layer", "output")),
         input_view=input_view,
+        output_space=_str_or_none(values.get("output_space")),
+        warm_start_from=_path_or_none(values.get("warm_start_from")),
+        l2_normalize_input=_bool_value(values.get("l2_normalize_input", False)),
     )
 
 
