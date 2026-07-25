@@ -29,7 +29,7 @@ from aivc_model.prepare import (
     resolve_state_gene_order,
 )
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _STATE_FEATURE_COUNT = 2000
 _ROW_CHUNK_SIZE = 1024
 _ARRAY_FILENAMES = (
@@ -111,8 +111,25 @@ def source_fingerprint(
     obs_perturbation_col: str,
     control_label: str,
     obs_batch_col: str | None,
+    state_input_view: str,
+    state_embed_key: str | None,
+    state_input_width: int | None,
 ) -> str:
-    """Hash every source that can affect the deterministic raw cache."""
+    """Hash every source that can affect the deterministic raw cache.
+
+    ``state_input_view`` records the configured ST-input feature space
+    (``state.input_view``: ``"checkpoint_hvg"`` or ``"obsm"``) directly from
+    config. This module always resolves the checkpoint's HVG gene order for
+    the arrays it writes (see module docstring) regardless of that setting,
+    so without this field a cache built while intending the checkpoint-HVG
+    input space and a config intending an ``"obsm"`` (e.g. Tx1) input space
+    could hash identically and silently reuse a stale HVG cache for the
+    wrong feature space (C8). ``state_embed_key``/``state_input_width`` are
+    hashed only when ``state_input_view == "obsm"``, since they have no
+    effect on the resolved cache otherwise and would force a spurious
+    rebuild whenever an unrelated obsm key is left set in config.
+    """
+    is_obsm_view = state_input_view == "obsm"
     payload = {
         "schema_version": _SCHEMA_VERSION,
         "h5ad": file_signature(h5ad),
@@ -134,14 +151,37 @@ def source_fingerprint(
         "obs_perturbation_col": obs_perturbation_col,
         "control_label": control_label,
         "obs_batch_col": obs_batch_col,
+        "state_input_view": state_input_view,
+        "state_embed_key": state_embed_key if is_obsm_view else None,
+        "state_input_width": (
+            int(state_input_width)
+            if is_obsm_view and state_input_width is not None
+            else None
+        ),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
-def build_gwps_cache(config: AivcConfig, cache_dir: Path) -> Path:
-    """Build deterministic raw STATE-aligned GWPS arrays and their manifest."""
-    return _build_gwps_cache(config, cache_dir, _PRODUCTION_CONTRACT)
+def build_gwps_cache(
+    config: AivcConfig,
+    cache_dir: Path,
+    *,
+    contract: _CacheContract | None = None,
+) -> Path:
+    """Build deterministic raw STATE-aligned GWPS arrays and their manifest.
+
+    Args:
+        config: Loaded AIVC config.
+        cache_dir: Directory to build the cache into.
+        contract: Cache gene-count/width contract. Defaults to
+            ``_PRODUCTION_CONTRACT`` (the legacy 2000-wide STATE-HVG path,
+            C1). An explicit override widens the enforced width without
+            weakening ``_validate_state_contract``/``_validate_array_structure``
+            (C8) -- e.g. for a non-2000-wide STATE checkpoint.
+    """
+    resolved_contract = _PRODUCTION_CONTRACT if contract is None else contract
+    return _build_gwps_cache(config, cache_dir, resolved_contract)
 
 
 def _build_gwps_cache(
@@ -256,12 +296,25 @@ def load_gwps_cache(
     cache_dir: Path,
     *,
     verify_hashes: bool = True,
+    contract: _CacheContract | None = None,
 ) -> GeneBags:
-    """Load and validate the memory-mappable raw GWPS cache."""
+    """Load and validate the memory-mappable raw GWPS cache.
+
+    Args:
+        config: Loaded AIVC config.
+        cache_dir: Directory holding the built cache.
+        verify_hashes: Whether to re-hash every array (skip only after a
+            preflight already verified them this run).
+        contract: Cache gene-count/width contract. Defaults to
+            ``_PRODUCTION_CONTRACT`` (the legacy 2000-wide STATE-HVG path,
+            C1). An explicit override validates a differently-contracted
+            cache without weakening the width guard (C8).
+    """
+    resolved_contract = _PRODUCTION_CONTRACT if contract is None else contract
     return _load_gwps_cache(
         config,
         cache_dir,
-        _PRODUCTION_CONTRACT,
+        resolved_contract,
         verify_hashes=verify_hashes,
     )
 
@@ -342,6 +395,20 @@ def _load_gwps_cache(
         input_dim=int(feature_names.shape[0]),
         latent_dim=int(feature_names.shape[0]),
         gene_outer_folds=outer_folds,
+        # This cache is always single-view (it only ever resolves the
+        # checkpoint HVG gene order -- see module docstring): the response
+        # encoder's target space is the input space, exactly like a fresh
+        # `prepare.load_gene_bags` call under `state.input_view ==
+        # "checkpoint_hvg"` (`two_view=False`). Setting these explicitly to
+        # `None`, rather than relying on the dataclass defaults, keeps a
+        # cached load and a fresh load the same *kind* of `GeneBags` object
+        # so `effective_target_*` falls back to the identical input-view
+        # object in both cases (C1).
+        target_bags=None,
+        control_target=None,
+        target_dim=None,
+        target_feature_names=None,
+        target_fill_values=None,
     )
 
 
@@ -392,6 +459,9 @@ def _config_fingerprint(
         obs_perturbation_col=config.data.obs_perturbation_col,
         control_label=config.data.control_label,
         obs_batch_col=config.data.obs_batch_col,
+        state_input_view=config.state.input_view,
+        state_embed_key=config.data.state_embed_key,
+        state_input_width=config.state.input_dim,
     )
 
 

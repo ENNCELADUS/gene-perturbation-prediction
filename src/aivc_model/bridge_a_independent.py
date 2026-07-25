@@ -316,9 +316,21 @@ def independent_perturbed_panel(
             table.
         ValueError: If ``gene``'s merged bag is entirely non-Replogle source
             (no Replogle-source cells available for the a-perturbed basal --
-            see ``_eligible_perturbed_rows``).
+            see ``_eligible_perturbed_rows``), or if ``context.data`` is a
+            two-view ``GeneBags`` (see below).
         RuntimeError: If the panel does not reach the computed window budget.
     """
+    if context.data.target_bags is not None or context.data.control_target is not None:
+        raise ValueError(
+            "Bridge A does not support two-space GeneBags: the a-perturbed "
+            "basal panel below replaces control_input/control_batch with the "
+            "gene-specific eligible rows but leaves control_target/target_bags "
+            "pointing at the original, unfiltered basal cells, so the two "
+            "views would describe different cells. Bridge A is paused "
+            "(docs/04-roadmap.md Sec 1.1 T1) and has no two-view config today; "
+            "deriving the parallel target-space rows is a design question for "
+            "whoever un-pauses it, not a fallback to guess here."
+        )
     upper = str(gene).upper()
     if upper not in context.gene_to_index:
         raise KeyError(f"gene not in the exp05 fixed pool: {gene!r}")

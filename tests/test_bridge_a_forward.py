@@ -7,6 +7,8 @@ no HPC checkpoint, GWPS data, or GPU required.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -334,6 +336,41 @@ def test_independent_perturbed_panel_is_deterministic_given_seed() -> None:
     torch.testing.assert_close(
         torch.cat(first.control_chunks), torch.cat(second.control_chunks)
     )
+
+
+def test_independent_perturbed_panel_rejects_two_view_gene_bags() -> None:
+    """Bridge A is paused and has no two-view config (docs/04-roadmap.md Sec
+    1.1 T1). The panel below only overrides ``control_input``/``control_batch``
+    with the gene-specific eligible rows; a populated target view would keep
+    pointing at the ORIGINAL, unfiltered basal cells, silently describing two
+    different cell sets. This must fail closed rather than guess which rows
+    the target view should have followed.
+    """
+    context = _toy_context()
+    coverage = _toy_coverage(context)
+    two_view_data = replace(
+        context.data,
+        target_bags=context.data.input_bags,
+        control_target=context.data.control_input,
+        target_dim=context.data.input_dim,
+    )
+    two_view_context = replace(context, data=two_view_data)
+    with pytest.raises(ValueError, match="two-space GeneBags"):
+        independent_perturbed_panel(
+            two_view_context, "SMALL", coverage, _INDEPENDENT_SPEC
+        )
+
+
+def test_independent_perturbed_panel_single_view_bag_still_works() -> None:
+    """Regression guard for the two-view guard above: the ordinary
+    single-view path (``target_bags is None``, exercised by every other test
+    in this module) must be completely unaffected."""
+    context = _toy_context()
+    coverage = _toy_coverage(context)
+    panel, budget = independent_perturbed_panel(
+        context, "SMALL", coverage, _INDEPENDENT_SPEC
+    )
+    assert panel.n_windows == budget.n_windows
 
 
 def test_independent_perturbed_panel_raises_keyerror_for_unknown_gene() -> None:
