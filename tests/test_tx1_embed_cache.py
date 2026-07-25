@@ -9,8 +9,11 @@ shared parquet-shard/h5ad/manifest fixtures in ``conftest.py``.
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +21,7 @@ import pandas as pd
 import pytest
 
 import aivc_model.tx1_embed_cache as tx1_embed_cache_module
+import scripts.build_tx1_basal_embeddings as build_tx1_basal_embeddings_module
 from aivc_model.gene_splits import sha256_file
 from aivc_model.tx1_basal import load_line_manifest
 from aivc_model.tx1_embed_cache import (
@@ -42,6 +46,8 @@ from scripts.build_tx1_basal_embeddings import (
     _load_perturbseq_source_config,
     _require_perturbseq_sources_configured,
 )
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # --- shared fixtures --------------------------------------------------------
 
@@ -107,6 +113,27 @@ def _tahoe_shard_fixture(tmp_path: Path) -> tuple[Path, Path]:
         }
         for cellosaurus_id in ("CVCL_A", "CVCL_B")
         for cell in range(2)
+    ]
+    _write_shard(shard_dir / "part-0.parquet", rows)
+    gene_metadata_path = _write_gene_metadata(tmp_path / "genes.parquet", [3, 4, 5])
+    return shard_dir, gene_metadata_path
+
+
+def _tahoe_shard_fixture_one_line(tmp_path: Path, *, n_cells: int) -> tuple[Path, Path]:
+    """One Tahoe DMSO line (CVCL_A), 3 genes (tokens 3,4,5), ``n_cells`` cells.
+
+    Unlike :func:`_tahoe_shard_fixture` (fixed at 2 cells/line), this lets
+    cap/seed-change tests select genuinely different subsets on resume.
+    """
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    rows = [
+        {
+            "genes": np.array([3, 4, 5]),
+            "expressions": np.array([1.0 + cell, 2.0 + cell, 3.0 + cell]),
+            "cell_line_id": "CVCL_A",
+        }
+        for cell in range(n_cells)
     ]
     _write_shard(shard_dir / "part-0.parquet", rows)
     gene_metadata_path = _write_gene_metadata(tmp_path / "genes.parquet", [3, 4, 5])
@@ -464,6 +491,26 @@ def test_verify_cache_failed_row_count_disagreement(tmp_path: Path) -> None:
     )
 
 
+def test_verify_cache_failed_n_cells_disagrees_with_actual_rows(tmp_path: Path) -> None:
+    """Codex P1-b (part 2): verify_cache must cross-check a line's recorded
+    manifest n_cells against actual embeddings.npy/hvg.npy/obs.parquet row
+    counts. Without this, a resumed run whose --max-cells-per-line changed
+    could skip the encoder, leave stale (smaller) on-disk arrays, but record
+    the freshly-resolved (larger) n_cells -- and verify_cache would still
+    report 'verified' because it never looked at n_cells at all."""
+    cache_dir = _build_good_cache(tmp_path)
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["lines"]["ACH-A"]["n_cells"] = 999  # ACH-A actually has 2 rows
+    manifest_path.write_text(json.dumps(manifest))
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    assert any(
+        "ACH-A" in discrepancy and "n_cells" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+
+
 def test_verify_cache_failed_line_missing_from_disk(tmp_path: Path) -> None:
     cache_dir = _build_good_cache(tmp_path)
     shutil.rmtree(cache_dir / "ACH-B")
@@ -542,6 +589,39 @@ def test_verify_cache_failed_frozen_manifest_line_missing(tmp_path: Path) -> Non
     assert report["status"] == "failed"
     assert any(
         "ACH-C" in discrepancy and "never" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+
+
+def test_verify_cache_failed_extra_line_not_in_frozen_manifest(tmp_path: Path) -> None:
+    """Codex P2: verify_cache must reject the reverse direction too -- an
+    extra model_id present (and even fully, validly written to disk) in
+    this run's manifest.json that is absent from the frozen Phase-A
+    manifest must fail, not silently report 'verified'. Before this fix,
+    only frozen-manifest-lines-missing-from-the-run was checked, never an
+    out-of-contract line present in the run but absent from the contract."""
+    cache_dir = _build_good_cache(tmp_path)
+    hvg_gene_order = ["G0", "G1"]
+    rogue_arrays = write_line_cache(
+        cache_dir,
+        "ACH-ROGUE",
+        _embeddings(2),
+        np.zeros((2, 2), dtype=np.float32),
+        _obs(2),
+        hvg_gene_order=hvg_gene_order,
+    )
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["lines"]["ACH-ROGUE"] = {
+        "arrays": rogue_arrays,
+        "n_cells": 2,
+        "hvg_gene_order_sha256": manifest["lines"]["ACH-A"]["hvg_gene_order_sha256"],
+    }
+    manifest_path.write_text(json.dumps(manifest))
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    assert any(
+        "ACH-ROGUE" in discrepancy and "out-of-contract" in discrepancy
         for discrepancy in report["discrepancies"]
     )
 
@@ -842,6 +922,220 @@ def test_embed_lines_hvg_gene_order_change_forces_reembedding(tmp_path: Path) ->
     np.testing.assert_array_equal(np.asarray(hvg_after)[0], [2.0, 1.0])  # GENE4, GENE3
 
 
+def test_embed_lines_cap_change_on_resume_forces_reembedding(tmp_path: Path) -> None:
+    """Codex P1-b: resuming with a changed --max-cells-per-line must
+    re-embed, not silently skip the encoder for a now-stale, smaller
+    on-disk cache while recording the newly-resolved (larger) n_cells in
+    the manifest. Before this fix, ``_is_cached`` only checked internal
+    row-count self-consistency and the HVG-order hash -- never comparing
+    against the freshly resolved selection -- so this exact scenario left
+    100 cached cells on disk while the manifest claimed 200."""
+    shard_dir, gene_metadata_path = _tahoe_shard_fixture_one_line(tmp_path, n_cells=4)
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["GENE3"])
+    cache_dir = tmp_path / "cache"
+    manifest = pd.DataFrame(
+        [
+            _manifest_row(
+                model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+            )
+        ]
+    )
+
+    first_encoder = _CountingEncoder()
+    embed_lines(
+        manifest,
+        cache_dir,
+        encoder=first_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=1,
+        seed=0,
+    )
+    assert first_encoder.call_count == 1
+    embeddings_before, _, _ = load_line_cache(cache_dir, "ACH-A")
+    assert embeddings_before.shape[0] == 1
+
+    second_encoder = _CountingEncoder()
+    entries = embed_lines(
+        manifest,
+        cache_dir,
+        encoder=second_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=2,
+        seed=0,
+    )
+    assert second_encoder.call_count == 1  # must re-embed, not silently skip
+    embeddings_after, _, _ = load_line_cache(cache_dir, "ACH-A")
+    assert embeddings_after.shape[0] == 2
+    assert entries["ACH-A"]["n_cells"] == 2
+    # The re-embedded cache must itself verify cleanly (recorded n_cells now
+    # agrees with the actual, freshly-written row count) -- proving this is
+    # a genuine fix, not just a shifted-but-still-wrong n_cells value.
+    frozen_manifest_path = _write_manifest(
+        tmp_path / "frozen.csv",
+        [
+            _manifest_row(
+                model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+            )
+        ],
+    )
+    write_run_manifest(
+        cache_dir,
+        model_label=MODEL_LABEL,
+        source_manifest={"files": {}},
+        line_entries=entries,
+        config_snapshot={
+            "line_manifest_path": str(frozen_manifest_path),
+            "line_manifest_sha256": sha256_file(frozen_manifest_path),
+        },
+    )
+    report = verify_cache(cache_dir)
+    assert report["status"] == "verified", report["discrepancies"]
+
+
+def test_embed_lines_seed_change_on_resume_forces_reembedding(tmp_path: Path) -> None:
+    """Codex P1-b: resuming with an unchanged cap but a changed --seed must
+    also re-embed. The recorded sample-provenance signature includes the
+    seed itself (not just a hash of the selected cell ids), so this is
+    caught even for a Tahoe basal source whose per-cell identifiers are
+    reservoir-position labels rather than real source-row barcodes."""
+    shard_dir, gene_metadata_path = _tahoe_shard_fixture_one_line(tmp_path, n_cells=6)
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["GENE3"])
+    cache_dir = tmp_path / "cache"
+    manifest = pd.DataFrame(
+        [
+            _manifest_row(
+                model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+            )
+        ]
+    )
+
+    first_encoder = _CountingEncoder()
+    embed_lines(
+        manifest,
+        cache_dir,
+        encoder=first_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=2,
+        seed=0,
+    )
+    assert first_encoder.call_count == 1
+
+    second_encoder = _CountingEncoder()
+    embed_lines(
+        manifest,
+        cache_dir,
+        encoder=second_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=2,
+        seed=99,
+    )
+    assert second_encoder.call_count == 1  # must re-embed, not silently skip
+
+
+def test_embed_lines_unchanged_cap_and_seed_still_skips_encoder(tmp_path: Path) -> None:
+    """Sanity converse of the two tests above: an identical resume (same
+    cap, same seed, same source) must still hit the resumability fast path
+    and skip the encoder -- the new provenance check must not force
+    needless re-embedding when nothing actually changed."""
+    shard_dir, gene_metadata_path = _tahoe_shard_fixture_one_line(tmp_path, n_cells=4)
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["GENE3"])
+    cache_dir = tmp_path / "cache"
+    manifest = pd.DataFrame(
+        [
+            _manifest_row(
+                model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+            )
+        ]
+    )
+
+    first_encoder = _CountingEncoder()
+    embed_lines(
+        manifest,
+        cache_dir,
+        encoder=first_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=2,
+        seed=0,
+    )
+    assert first_encoder.call_count == 1
+
+    second_encoder = _CountingEncoder()
+    entries = embed_lines(
+        manifest,
+        cache_dir,
+        encoder=second_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=2,
+        seed=0,
+    )
+    assert second_encoder.call_count == 0
+    assert entries["ACH-A"]["n_cells"] == 2
+
+
+def test_embed_lines_legacy_cache_without_provenance_sidecar_is_accepted(
+    tmp_path: Path,
+) -> None:
+    """Backward compatibility (mandatory for the in-flight HPC run): a line
+    cached by code that predates this provenance signature has no
+    ``sample_provenance.json`` sidecar on disk. Resuming with the *same*
+    cap/seed the in-flight run always used must still skip the encoder --
+    treating "no recorded signature" as a mismatch would force re-embedding
+    every already-completed line and discard already-completed GPU work."""
+    shard_dir, gene_metadata_path = _tahoe_shard_fixture_one_line(tmp_path, n_cells=4)
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["GENE3"])
+    cache_dir = tmp_path / "cache"
+    manifest = pd.DataFrame(
+        [
+            _manifest_row(
+                model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+            )
+        ]
+    )
+
+    legacy_encoder = _CountingEncoder()
+    embed_lines(
+        manifest,
+        cache_dir,
+        encoder=legacy_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=2,
+        seed=20260725,
+    )
+    assert legacy_encoder.call_count == 1
+    # Simulate "written by pre-fix code": no sample_provenance.json sidecar.
+    sidecar = cache_dir / "ACH-A" / "sample_provenance.json"
+    assert sidecar.is_file()
+    sidecar.unlink()
+
+    resumed_encoder = _CountingEncoder()
+    entries = embed_lines(
+        manifest,
+        cache_dir,
+        encoder=resumed_encoder,
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        hvg_state_model_dir=hvg_dir,
+        max_cells_per_line=2,
+        seed=20260725,
+    )
+    assert resumed_encoder.call_count == 0  # legacy cache accepted, not re-embedded
+    assert entries["ACH-A"]["n_cells"] == 2
+
+
 def test_embed_lines_atomicity_raising_encoder_leaves_no_partial_dir(
     tmp_path: Path,
 ) -> None:
@@ -972,3 +1266,168 @@ def test_require_perturbseq_sources_configured_passes_when_all_configured() -> N
         var_ensembl_col="ensembl_id",
     )
     _require_perturbseq_sources_configured(working, {"ACH-P": source})  # no raise
+
+
+# --- verify_cache: --only-line restricted scope (Codex P1-c) ---------------
+
+
+def test_verify_cache_only_lines_restricted_run_verifies_own_scope(
+    tmp_path: Path,
+) -> None:
+    """Codex P1-c: a restricted --only-line shard that has only embedded
+    ACH-A (of the frozen manifest's ACH-A/ACH-B) must itself report
+    'verified' when checked with only_lines=["ACH-A"] -- it must not be
+    penalized for ACH-B (another shard's line) being absent, and ACH-B's
+    directory must not need to exist under cache_dir at all."""
+    cache_dir = _build_good_cache(tmp_path)
+    shutil.rmtree(cache_dir / "ACH-B")
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["lines"]["ACH-B"]
+    manifest_path.write_text(json.dumps(manifest))
+
+    report = verify_cache(cache_dir, only_lines=["ACH-A"])
+    assert report["status"] == "verified", report["discrepancies"]
+    assert report["lines_expected"] == 1
+    assert report["lines_present"] == 1
+
+
+def test_verify_cache_unrestricted_still_fails_on_the_same_incomplete_cache(
+    tmp_path: Path,
+) -> None:
+    """The converse of the test above: the same partial cache (only ACH-A
+    embedded) must still fail the full, unrestricted check -- proving the
+    restricted-scope fix does not weaken the real 'verified embedding
+    caches' exit criterion (Global Constraints), it only adds a narrower
+    per-shard mode alongside it."""
+    cache_dir = _build_good_cache(tmp_path)
+    shutil.rmtree(cache_dir / "ACH-B")
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["lines"]["ACH-B"]
+    manifest_path.write_text(json.dumps(manifest))
+
+    report = verify_cache(cache_dir)
+    assert report["status"] == "failed"
+    assert any("ACH-B" in discrepancy for discrepancy in report["discrepancies"])
+
+
+def test_verify_cache_only_lines_still_rejects_out_of_contract_request(
+    tmp_path: Path,
+) -> None:
+    """A restricted run's own requested lines must still be legitimate
+    frozen-manifest lines (Codex P2 applied to the restricted case): asking
+    to verify a model_id the frozen manifest never named is a failure, not
+    a silently accepted no-op scope."""
+    cache_dir = _build_good_cache(tmp_path)
+    report = verify_cache(cache_dir, only_lines=["ACH-A", "ACH-NOT-IN-CONTRACT"])
+    assert report["status"] == "failed"
+    assert any(
+        "ACH-NOT-IN-CONTRACT" in discrepancy for discrepancy in report["discrepancies"]
+    )
+
+
+# --- CLI: entrypoint importability under direct execution (Codex P1-a) -----
+
+
+def test_cli_help_succeeds_under_direct_script_execution() -> None:
+    """Codex P1-a: ``python scripts/build_tx1_basal_embeddings.py --help``
+    must succeed without the caller setting PYTHONPATH. Before the fix,
+    Python puts scripts/ (not the repo root) on sys.path when the script is
+    executed directly, so ``from scripts.verify_tx1_obsm_width import ...``
+    raised ModuleNotFoundError even for --help -- confirmed in production
+    (the HPC run only worked via an explicit PYTHONPATH=src:. workaround)."""
+    script = _REPO_ROOT / "scripts" / "build_tx1_basal_embeddings.py"
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=str(_REPO_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+    assert "usage:" in result.stdout.lower()
+
+
+# --- CLI: --only-line shard exit code vs --verify-only aggregation ---------
+# (Codex P1-c)
+
+
+def test_cli_only_line_shard_exits_zero_but_verify_only_over_incomplete_cache_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex P1-c end to end: with --only-line, every shard used to run the
+    FULL-cache verifier, which necessarily reports other shards' lines as
+    missing -- so main() exited 1 for a shard that actually succeeded. A
+    restricted --only-line run over a 2-line frozen manifest, having
+    embedded only its own 1 requested line, must now exit 0; an explicit,
+    unrestricted --verify-only pass over that same (still 1-of-2-lines)
+    cache must still exit 1 -- the full criterion is not weakened."""
+    shard_dir, gene_metadata_path = _tahoe_shard_fixture(tmp_path)
+    manifest_path = _write_manifest(
+        tmp_path / "manifest.csv",
+        [
+            _manifest_row(
+                model_id="ACH-A", cellosaurus_id="CVCL_A", cell_line_name="LineA"
+            ),
+            _manifest_row(
+                model_id="ACH-B", cellosaurus_id="CVCL_B", cell_line_name="LineB"
+            ),
+        ],
+    )
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["GENE3"])
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    source_manifest_path = tmp_path / "source_manifest.json"
+    source_manifest_path.write_text(json.dumps({"files": {}}))
+    cache_dir = tmp_path / "cache"
+
+    monkeypatch.setattr(
+        build_tx1_basal_embeddings_module,
+        "_build_tx1_encoder",
+        lambda model_dir, batch_size, max_length: (_CountingEncoder(), {}),
+    )
+    monkeypatch.setattr(
+        build_tx1_basal_embeddings_module,
+        "_verify_model_dir_matches_source_manifest",
+        lambda model_dir, source_manifest: None,
+    )
+
+    shard_argv = [
+        "build_tx1_basal_embeddings.py",
+        "--cache-dir",
+        str(cache_dir),
+        "--line-manifest",
+        str(manifest_path),
+        "--model-dir",
+        str(model_dir),
+        "--shard-dir",
+        str(shard_dir),
+        "--gene-metadata",
+        str(gene_metadata_path),
+        "--hvg-state-model-dir",
+        str(hvg_dir),
+        "--tx1-source-manifest",
+        str(source_manifest_path),
+        "--only-line",
+        "ACH-A",
+    ]
+    monkeypatch.setattr(sys, "argv", shard_argv)
+    build_tx1_basal_embeddings_module.main()  # must not raise SystemExit(1)
+
+    verify_only_argv = [
+        "build_tx1_basal_embeddings.py",
+        "--cache-dir",
+        str(cache_dir),
+        "--line-manifest",
+        str(manifest_path),
+        "--verify-only",
+    ]
+    monkeypatch.setattr(sys, "argv", verify_only_argv)
+    with pytest.raises(SystemExit) as excinfo:
+        build_tx1_basal_embeddings_module.main()
+    assert excinfo.value.code == 1
