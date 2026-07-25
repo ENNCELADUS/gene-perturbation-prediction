@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -77,12 +77,12 @@ from aivc_model.prepare import (
     _control_indices_by_batch,
     _sha256_strings,
 )
-from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
-from dependency_baseline.metrics import ranking_metrics, regression_metrics
-from sl_dl_model.gene_embeddings import (
+from aivc_model.gene_embeddings import (
     load_esm2_embeddings,
     require_complete_esm_coverage,
 )
+from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
+from dependency_baseline.metrics import ranking_metrics, regression_metrics
 
 _LOGGER = logging.getLogger(__name__)
 _SCVI_CACHE_WAIT_TIMEOUT_SECONDS = 24 * 60 * 60
@@ -545,6 +545,8 @@ def run_training(
     logs: list[dict[str, float]] = []
     best_val_c_loss = math.inf
     last_val_c_loss = math.nan
+    best_selection_metric_name = "val_c_loss"
+    last_selection_metric_name = "val_c_loss"
     best_checkpoint_written = False
     for epoch in range(1, config.train.max_epochs + 1):
         weights = _loss_weights(config, epoch=epoch)
@@ -575,7 +577,9 @@ def run_training(
         )
         gpu_peak_memory_allocated_mb = _global_peak_gpu_memory_allocated_mb(accelerator)
         if accelerator.is_main_process:
-            last_val_c_loss = _checkpoint_selection_metric(val_row)
+            last_selection_metric_name, last_val_c_loss = _checkpoint_selection_metric(
+                val_row
+            )
             row = {
                 "epoch": epoch,
                 "gpu_peak_memory_allocated_mb": gpu_peak_memory_allocated_mb,
@@ -598,6 +602,7 @@ def run_training(
             )
             if should_save_best:
                 best_val_c_loss = last_val_c_loss
+                best_selection_metric_name = last_selection_metric_name
                 best_checkpoint_written = True
                 _save_model_checkpoint(
                     accelerator,
@@ -606,7 +611,7 @@ def run_training(
                     {
                         "checkpoint_kind": "best",
                         "epoch": epoch,
-                        "selection_metric": "val_c_loss",
+                        "selection_metric": best_selection_metric_name,
                         "selection_mode": "min",
                         "metric_value": best_val_c_loss,
                         "run_id": run_id,
@@ -681,7 +686,7 @@ def run_training(
             {
                 "checkpoint_kind": "final",
                 "epoch": config.train.max_epochs,
-                "selection_metric": "val_c_loss",
+                "selection_metric": last_selection_metric_name,
                 "selection_mode": "min",
                 "metric_value": last_val_c_loss,
                 "best_metric_value": best_val_c_loss,
@@ -789,7 +794,7 @@ def _run_audited_training(
             _gib_to_bytes(config.train.input_tensor_cache_max_gib),
             accelerator.device,
         )
-    evaluation_panel = _build_evaluation_control_panel(
+    evaluation_panel = _build_evaluation_control_panel_maybe_line_matched(
         train_data,
         config.train.cell_set_len,
         config.train.eval_control_panel_size,
@@ -803,6 +808,7 @@ def _run_audited_training(
     )
     best_value = math.inf
     best_epoch = 0
+    best_selection_metric_name = "val_c_loss"
     logs = []
     for epoch in range(1, config.train.max_epochs + 1):
         fit_stages = (
@@ -849,8 +855,8 @@ def _run_audited_training(
         )
 
         def write_epoch_outputs() -> None:
-            nonlocal best_epoch, best_value
-            value = _checkpoint_selection_metric(val_row)
+            nonlocal best_epoch, best_value, best_selection_metric_name
+            metric_name, value = _checkpoint_selection_metric(val_row)
             logs.append(
                 {
                     "epoch": epoch,
@@ -863,6 +869,7 @@ def _run_audited_training(
             if _is_better_metric(value, best_value, mode="min") or best_epoch == 0:
                 best_value = value
                 best_epoch = epoch
+                best_selection_metric_name = metric_name
                 _save_model_checkpoint(
                     accelerator,
                     model,
@@ -871,7 +878,7 @@ def _run_audited_training(
                         **authority.metadata(),
                         "checkpoint_kind": "best",
                         "epoch": epoch,
-                        "selection_metric": "val_c_loss",
+                        "selection_metric": metric_name,
                         "selection_mode": "min",
                         "metric_value": value,
                         "outer_fold": fold_spec.outer_fold,
@@ -934,6 +941,8 @@ def _run_audited_training(
         batch_lookup=batch_lookup,
         accelerator=accelerator,
         best_epoch=best_epoch,
+        best_selection_metric_name=best_selection_metric_name,
+        best_value=best_value,
         checkpoint_path=checkpoint_path,
         source_fingerprint=source_fingerprint,
         runtime_evidence=runtime_evidence,
@@ -1101,6 +1110,8 @@ def _write_audited_fold_outputs(
     batch_lookup: dict[str, int],
     accelerator: Accelerator,
     best_epoch: int,
+    best_selection_metric_name: str,
+    best_value: float,
     checkpoint_path: Path,
     source_fingerprint: str,
     runtime_evidence: dict[str, object],
@@ -1191,6 +1202,9 @@ def _write_audited_fold_outputs(
                 **authority.metadata(),
                 "checkpoint_kind": "frozen_selected",
                 "epoch": best_epoch,
+                "selection_metric": best_selection_metric_name,
+                "selection_mode": "min",
+                "metric_value": best_value,
                 "outer_fold": fold_spec.outer_fold,
                 "source_fingerprint": source_fingerprint,
                 "selected_layer": None,
@@ -2070,6 +2084,34 @@ def _b_loss_anneal_scale(config: AivcConfig, epoch: int | None) -> float:
     return 1.0 - (1.0 - final_fraction) * (progress / float(epochs - 1))
 
 
+#: Mirrors ``tx1_response_data.GENE_LINE_SEPARATOR`` (duplicated locally,
+#: not imported: this generic training module must not depend on Phase C's
+#: data-assembly module -- the same "mirrored locally" layering this repo
+#: already uses elsewhere, e.g. ``tx1_response_data.py``'s own docstring).
+_GENE_LINE_SEPARATOR = "@"
+
+
+def _base_gene_name(gene: str) -> str:
+    """Resolve a possibly line-disambiguated bag key to its bare gene symbol.
+
+    Phase C's assembly (``tx1_response_data.composite_gene_key``) keys
+    ``GeneBags.genes`` as ``f"{gene}@{model_id}"`` so every line's bag
+    survives ``for_genes``/``for_prediction_genes`` (Codex P1-b). That key
+    is the right identity for splitting/authorization/output labeling, but
+    it is NOT a valid STATE perturbation-vector lookup key: ``self.
+    perturbations`` (``PerturbationVectorAdapter``/``Esm2PerturbationAdapter``)
+    is built and queried against bare gene symbols (``known_vectors``/ESM-2
+    tables never carry a ``model_id`` suffix). Passing the composite key
+    straight through would make EVERY Phase C gene register as "unknown" to
+    ``PerturbationVectorAdapter`` -- silently discarding STATE's pretrained
+    per-gene tokens and giving each (gene, line) pair its own untied
+    trainable vector instead of one shared per gene, defeating the entire
+    point of training the same gene identity across lines. A no-op for any
+    gene name without ``"@"`` (every non-Phase-C config).
+    """
+    return str(gene).partition(_GENE_LINE_SEPARATOR)[0]
+
+
 def _build_e2e_model(
     config: AivcConfig,
     data: GeneBags,
@@ -2147,8 +2189,17 @@ def _build_e2e_model(
             pert_dim=effective_pert_dim,
         )
     else:
+        # _base_gene_name: data.genes/extra_genes may be Phase C's
+        # line-disambiguated composite keys; the perturbation-vector
+        # universe must be keyed by the bare gene so known_vectors lookup
+        # and parameter sharing work across lines (see its docstring).
         perturbations = PerturbationVectorAdapter(
-            sorted({*(str(gene) for gene in data.genes), *extra_genes}),
+            sorted(
+                {
+                    *(_base_gene_name(str(gene)) for gene in data.genes),
+                    *(_base_gene_name(str(gene)) for gene in extra_genes),
+                }
+            ),
             known_vectors,
             pert_dim,
         )
@@ -2537,20 +2588,39 @@ def _evaluate_prediction_only_final(
     model: torch.nn.Module,
     data: GeneBags,
     indices: DataLoader[dict[str, torch.Tensor]],
-    control_panel: _EvaluationControlPanel,
+    control_panel: _EvaluationControlPanel | Mapping[str, _EvaluationControlPanel],
     accelerator: Accelerator,
     *,
     generation_targets: GeneBags | None = None,
     stage: str = "evaluation",
 ) -> tuple[dict[str, float], pd.DataFrame]:
-    """Evaluate C from predicted B; observed B is an optional loss target only."""
+    """Evaluate C from predicted B; observed B is an optional loss target only.
+
+    ``control_panel`` is normally one pooled panel shared by every gene
+    (unchanged legacy behavior). When ``data`` spans multiple cell lines
+    (Phase C's multi-line ``GeneBags``, whose ``metadata`` carries a
+    ``model_id`` column -- see
+    ``_build_evaluation_control_panel_maybe_line_matched``), the caller
+    instead passes a ``{model_id: panel}`` mapping, and each gene is routed
+    to its OWN line's panel: a single pooled panel silently averages
+    predicted response over unrelated cell lines' basal states (Codex
+    P1-c), which corrupts both checkpoint selection and final metrics.
+    """
     model.eval()
     inference_model = accelerator.unwrap_model(model)
     inference_model.eval()
     target_means = _generation_target_means(generation_targets)
+    line_matched = isinstance(control_panel, Mapping)
     pred_tensors = []
     with torch.no_grad():
-        control_latent = _control_panel_latent(inference_model, control_panel)
+        control_latent: torch.Tensor | dict[str, torch.Tensor]
+        if line_matched:
+            control_latent = {
+                model_id: _control_panel_latent(inference_model, panel)
+                for model_id, panel in control_panel.items()
+            }
+        else:
+            control_latent = _control_panel_latent(inference_model, control_panel)
         progress = tqdm(
             indices,
             desc=stage,
@@ -2562,18 +2632,32 @@ def _evaluate_prediction_only_final(
             if not gene_indices:
                 continue
             padding_flags = _batch_padding_flags(batch)
-            pred_tensors.append(
-                _final_prediction_tensor(
-                    inference_model,
-                    data,
-                    gene_indices,
-                    padding_flags,
-                    accelerator.device,
-                    control_panel,
-                    control_latent,
-                    target_means,
+            if line_matched:
+                pred_tensors.append(
+                    _line_matched_prediction_tensor(
+                        inference_model,
+                        data,
+                        gene_indices,
+                        padding_flags,
+                        accelerator.device,
+                        control_panel,
+                        control_latent,
+                        target_means,
+                    )
                 )
-            )
+            else:
+                pred_tensors.append(
+                    _final_prediction_tensor(
+                        inference_model,
+                        data,
+                        gene_indices,
+                        padding_flags,
+                        accelerator.device,
+                        control_panel,
+                        control_latent,
+                        target_means,
+                    )
+                )
     predictions = _gather_final_predictions(pred_tensors, data, accelerator)
     summary: dict[str, float] = {}
     if accelerator.is_main_process and not predictions.empty:
@@ -2672,6 +2756,87 @@ def _build_evaluation_control_panel(
     )
 
 
+#: Metadata column that identifies a bag's owning cell line. Only Phase C's
+#: ``tx1_response_data.assemble_train_response_gene_bags`` sets this -- no
+#: pre-Phase-C ``GeneBags`` builder does, so gating on its presence can never
+#: change behavior for an existing single-line config (C1).
+_LINE_ID_METADATA_COLUMN = "model_id"
+
+
+def _build_evaluation_control_panel_maybe_line_matched(
+    data: GeneBags,
+    cell_set_len: int,
+    panel_size: int,
+    macro_batch_windows: int,
+    seed: int,
+    device: torch.device,
+    batch_lookup: dict[str, int],
+) -> _EvaluationControlPanel | dict[str, _EvaluationControlPanel]:
+    """Build one pooled panel, or one panel per line for a multi-line ``data``.
+
+    A single panel pooled across cell lines silently averages a predicted
+    response over unrelated lines' basal states whenever ``data`` spans more
+    than one line (Codex P1-c) -- the exact class of contamination Phase C's
+    multi-line ``GeneBags`` introduces (``metadata["model_id"]``). Detected
+    once, from ``data`` alone, so every caller (per-epoch validation and the
+    final internal outer-test) gets a consistently line-matched or
+    consistently pooled panel without needing to know which case applies.
+    """
+    if _LINE_ID_METADATA_COLUMN not in data.metadata.columns:
+        return _build_evaluation_control_panel(
+            data,
+            cell_set_len,
+            panel_size,
+            macro_batch_windows,
+            seed,
+            device,
+            batch_lookup,
+        )
+    if data.control_batch is None:
+        raise ValueError(
+            "multi-line GeneBags (metadata has a model_id column) requires "
+            "control_batch to build line-matched evaluation panels"
+        )
+    model_ids = sorted({str(value) for value in data.control_batch})
+    return {
+        model_id: _build_evaluation_control_panel(
+            _line_filtered_control_view(data, model_id),
+            cell_set_len,
+            panel_size,
+            macro_batch_windows,
+            seed,
+            device,
+            batch_lookup,
+        )
+        for model_id in model_ids
+    }
+
+
+def _line_filtered_control_view(data: GeneBags, model_id: str) -> GeneBags:
+    """Restrict ``data``'s control-cell arrays to one line's own cells.
+
+    Filters ``control_input``/``control_target``/``control_batch``/
+    ``control_cell_type`` by the SAME boolean mask, so the two spaces stay
+    row-aligned -- unlike ``bridge_a_independent.py``'s guarded misuse
+    pattern (which replaces only ``control_input``/``control_batch``), this
+    never touches per-gene ``input_bags``/``target_bags``.
+    """
+    mask = np.asarray(data.control_batch).astype(str) == str(model_id)
+    if not mask.any():
+        raise ValueError(f"no control cells recorded for line {model_id!r}")
+    return replace(
+        data,
+        control_input=data.control_input[mask],
+        control_target=(
+            data.control_target[mask] if data.control_target is not None else None
+        ),
+        control_batch=data.control_batch[mask],
+        control_cell_type=(
+            data.control_cell_type[mask] if data.control_cell_type is not None else None
+        ),
+    )
+
+
 def _stratified_control_indices(
     batch_labels: np.ndarray | None,
     available: int,
@@ -2757,7 +2922,13 @@ def _final_prediction_tensor(
     y_pred: list[torch.Tensor] = []
     generation_losses: list[torch.Tensor] = []
     for index in gene_indices:
-        gene = str(data.genes[index])
+        # ``gene_key`` indexes ``target_means`` (keyed by whatever
+        # ``data.genes`` holds, including Phase C's line-disambiguated
+        # composite keys -- see _generation_target_means); the model call
+        # below needs the bare biological gene identity instead (see
+        # _base_gene_name).
+        gene_key = str(data.genes[index])
+        gene_identity = _base_gene_name(gene_key)
         predicted_latents: list[torch.Tensor] = []
         predicted_sum = torch.zeros(
             data.effective_target_dim, dtype=torch.float32, device=device
@@ -2766,7 +2937,7 @@ def _final_prediction_tensor(
         for control_chunks, batch_chunks in control_panel.macro_batches():
             expression_chunks, predicted_latent = model.predict_response_chunks(
                 control_chunks,
-                gene,
+                gene_identity,
                 batch_chunks,
             )
             predicted_latents.append(predicted_latent)
@@ -2779,7 +2950,7 @@ def _final_prediction_tensor(
                 control_latent,
             )
         )
-        target_mean = target_means.get(gene)
+        target_mean = target_means.get(gene_key)
         if target_mean is None:
             generation_losses.append(torch.full((), math.nan, device=device))
         else:
@@ -2809,6 +2980,56 @@ def _final_prediction_tensor(
         ],
         dim=1,
     )
+
+
+def _line_matched_prediction_tensor(
+    model: torch.nn.Module,
+    data: GeneBags,
+    gene_indices: list[int],
+    padding_flags: list[bool],
+    device: torch.device,
+    panels_by_line: Mapping[str, _EvaluationControlPanel],
+    control_latents_by_line: Mapping[str, torch.Tensor],
+    target_means: Mapping[str, np.ndarray],
+) -> torch.Tensor:
+    """Route each gene to its OWN line's control panel (Codex P1-c).
+
+    Groups ``gene_indices`` by ``data.metadata["model_id"]`` and calls
+    :func:`_final_prediction_tensor` once per line, then concatenates the
+    per-line tensors -- row order need not match ``gene_indices``' order
+    since every downstream consumer (``_gather_final_predictions``) reads
+    the gene index recorded in each row, not positional order.
+
+    Raises:
+        ValueError: A gene's recorded ``model_id`` has no matching panel.
+    """
+    line_of = data.metadata[_LINE_ID_METADATA_COLUMN].astype(str)
+    groups: dict[str, tuple[list[int], list[bool]]] = {}
+    for position, index in enumerate(gene_indices):
+        model_id = str(line_of.iloc[index])
+        group_indices, group_flags = groups.setdefault(model_id, ([], []))
+        group_indices.append(index)
+        group_flags.append(padding_flags[position])
+    tensors = []
+    for model_id, (group_indices, group_flags) in groups.items():
+        if model_id not in panels_by_line:
+            raise ValueError(
+                f"no evaluation control panel for line {model_id!r}; known "
+                f"lines: {sorted(panels_by_line)}"
+            )
+        tensors.append(
+            _final_prediction_tensor(
+                model,
+                data,
+                group_indices,
+                group_flags,
+                device,
+                panels_by_line[model_id],
+                control_latents_by_line[model_id],
+                target_means,
+            )
+        )
+    return torch.cat(tensors, dim=0)
 
 
 def _gather_final_predictions(
@@ -2866,7 +3087,10 @@ def _model_inputs_for_indices(
     n_chunks: list[float] = []
     y_values: list[float] = []
     for index in indices:
-        gene = str(data.genes[index])
+        # _base_gene_name: data.genes[index] may be Phase C's composite
+        # bag key; the model's perturbation-vector lookup needs the bare
+        # gene identity (see _base_gene_name's docstring).
+        gene = _base_gene_name(str(data.genes[index]))
         chunks = make_cell_set_chunks(
             data,
             index,
@@ -3145,8 +3369,8 @@ def _prefix(row: dict[str, float], prefix: str) -> dict[str, float]:
     return {f"{prefix}_{key}": value for key, value in row.items()}
 
 
-def _checkpoint_selection_metric(val_row: dict[str, float]) -> float:
-    """The validation scalar (lower is better) used to pick the "best" epoch.
+def _checkpoint_selection_metric(val_row: dict[str, float]) -> tuple[str, float]:
+    """The ``(metric_name, value)`` (lower is better) used to pick the "best" epoch.
 
     Prefers ``c_loss`` (GeneEffect MSE against the labeled target) exactly
     as before this function existed. Falls back to ``generation_loss``
@@ -3163,11 +3387,16 @@ def _checkpoint_selection_metric(val_row: dict[str, float]) -> float:
     a non-finite candidate -- so only the first epoch (the ``best_epoch ==
     0`` special case) is ever saved as "best", silently discarding every
     later epoch's improvement for the rest of training.
+
+    Callers must record the returned ``metric_name`` in checkpoint metadata
+    instead of a hardcoded ``"val_c_loss"`` (Codex P2-b): under the fallback,
+    a hardcoded name would claim selection happened by a metric (``c_loss``)
+    that was actually absent/NaN the whole run.
     """
     value = float(val_row.get("c_loss", math.nan))
     if math.isfinite(value):
-        return value
-    return float(val_row.get("generation_loss", math.nan))
+        return "val_c_loss", value
+    return "val_generation_loss", float(val_row.get("generation_loss", math.nan))
 
 
 def _is_better_metric(value: float, best_value: float, *, mode: str) -> bool:

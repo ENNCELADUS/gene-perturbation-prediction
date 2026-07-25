@@ -3,9 +3,10 @@
 Covers: both checked-in Phase C configs parse and pass config-shape
 preflight (item 6 of the brief), the per-arm view projection, a full
 ``--dry-run`` exercised against tiny local fixtures (no real Tx1/HPC
-assets), bad-config rejection, and a characterization test documenting the
-gene-name-collision limitation called out in the module docstring of
-``scripts/train_tx1_st_response.py``.
+assets), bad-config rejection, a characterization test documenting
+``GeneBags.for_genes``'s general name-keyed-dict behavior, and (fix round 1)
+the base-gene-grouped split's leakage guarantee and the widened source
+fingerprint.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from __future__ import annotations
 import json
 import pickle
 from pathlib import Path
+from types import SimpleNamespace
 
 import anndata as ad
 import numpy as np
@@ -23,9 +25,11 @@ from scipy.sparse import csr_matrix
 import scripts.train_tx1_st_response as cli
 from aivc_model import train as train_module
 from aivc_model.gene_splits import FoldSpec, GeneAccessRecorder
-from aivc_model.prepare import GeneBags, load_config
+from aivc_model.prepare import GeneBags, SplitConfig, load_config
 from aivc_model.tx1_embed_cache import EMBEDDING_WIDTH, write_line_cache
+from aivc_model.tx1_response_data import base_gene_name, composite_gene_key
 from conftest import tx1_manifest_row as _manifest_row
+from conftest import write_tx1_cache_run_manifest as _write_cache_run_manifest
 from conftest import write_tx1_line_manifest as _write_manifest
 from conftest import write_tx1_perturbseq_h5ad_ensembl_index as _write_perturbseq_h5ad
 
@@ -364,13 +368,28 @@ def _dry_run_fixture(tmp_path: Path) -> dict[str, Path]:
     hvg_matrix = np.arange(n_control_cache * len(hvg_genes), dtype=np.float32).reshape(
         n_control_cache, len(hvg_genes)
     )
-    write_line_cache(
+    arrays_a = write_line_cache(
         cache_dir,
         "ACH-A",
         embeddings,
         hvg_matrix,
         pd.DataFrame(index=[f"ctrl{i}" for i in range(n_control_cache)]),
         hvg_gene_order=hvg_genes,
+    )
+    # ACH-T (role=test) is never read by the assembly, but an unrestricted
+    # verify_cache pass (Codex P1-d) requires every frozen-manifest line to
+    # have SOME cache entry -- mirrors the real Phase B contract (all 42
+    # lines cached, not just the 4 response ones).
+    arrays_t = write_line_cache(
+        cache_dir,
+        "ACH-T",
+        embeddings[:2],
+        hvg_matrix[:2],
+        pd.DataFrame(index=["ctrl-t0", "ctrl-t1"]),
+        hvg_gene_order=hvg_genes,
+    )
+    _write_cache_run_manifest(
+        cache_dir, {"ACH-A": arrays_a, "ACH-T": arrays_t}, hvg_genes
     )
     return {
         "manifest": manifest_path,
@@ -449,7 +468,7 @@ def _multi_gene_dry_run_fixture(tmp_path: Path) -> dict[str, Path]:
     hvg_matrix = np.arange(n_control_cache * len(hvg_genes), dtype=np.float32).reshape(
         n_control_cache, len(hvg_genes)
     )
-    write_line_cache(
+    arrays_a = write_line_cache(
         cache_dir,
         "ACH-A",
         embeddings,
@@ -457,6 +476,7 @@ def _multi_gene_dry_run_fixture(tmp_path: Path) -> dict[str, Path]:
         pd.DataFrame(index=[f"ctrl{i}" for i in range(n_control_cache)]),
         hvg_gene_order=hvg_genes,
     )
+    _write_cache_run_manifest(cache_dir, {"ACH-A": arrays_a}, hvg_genes)
     return {
         "manifest": manifest_path,
         "cache_dir": cache_dir,
@@ -578,22 +598,22 @@ def test_dry_run_fails_loudly_on_a_bad_config(tmp_path: Path) -> None:
         sys.argv = old_argv
 
 
-# --- KNOWN LIMITATION: gene-name collisions across lines --------------------
+# --- GeneBags.for_genes's general name-keyed-dict behavior -----------------
 
 
 def test_for_genes_silently_drops_a_duplicate_gene_name_across_lines() -> None:
-    """Characterizes a real composition gap flagged in the Task 7 report.
+    """Characterizes ``GeneBags.for_genes``'s general mechanism, unchanged by
+    the fix round below.
 
-    Task 5's assembly keeps one bag per (gene, line) pair, so the SAME gene
-    symbol legitimately appears more than once in ``GeneBags.genes`` once
-    real multi-line data (with overlapping panels) is assembled. But
-    ``GeneBags.for_genes`` (the only mechanism available for building
-    ``train_data``/``val_data`` for ``train.run_training``'s audited
-    entrypoint) looks names up in a ``{name: index}`` dict, which silently
-    collapses duplicate keys to the last-seen index. This test proves that
-    against the real, unmodified implementation -- it is NOT proof this
-    behavior is fine, only proof of what currently happens: pinned so the
-    NEXT bad surprise here is a broken test, not a broken production run.
+    ``GeneBags.for_genes`` (shared, generic CV-protocol machinery) looks
+    gene names up in a ``{name: index}`` dict, which silently collapses a
+    truly duplicate requested name to the last-seen index. This is NOT
+    itself the bug Codex P1-b flagged -- Task 5's assembly now avoids ever
+    requesting a duplicate by keying every bag as ``f"{gene}@{model_id}"``
+    (see ``test_split_fold_never_splits_a_base_gene_across_roles`` below),
+    so this dict's behavior is simply never exercised on a real duplicate
+    for Phase C data. Pinned so the next bad surprise here is a broken
+    test, not a broken production run.
     """
     genes = np.asarray(["TP53", "TP53"], dtype=object)  # same gene, 2 lines
     bags = GeneBags(
@@ -630,22 +650,147 @@ def test_for_genes_silently_drops_a_duplicate_gene_name_across_lines() -> None:
     assert len(bags.genes) == 2
 
 
-def test_warn_on_duplicate_gene_names_logs_a_warning(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    genes = np.asarray(["TP53", "TP53", "MYC"], dtype=object)
-    with caplog.at_level("WARNING"):
-        cli._warn_on_duplicate_gene_names(genes)
-    assert any("1 of 3" in record.message for record in caplog.records)
+# --- _split_fold: composite-key grouping and leakage prevention (fix 1) ----
 
 
-def test_warn_on_duplicate_gene_names_silent_when_unique(
-    caplog: pytest.LogCaptureFixture,
+def _split_only_config(seed: int) -> SimpleNamespace:
+    """A minimal duck-typed config exposing only what ``_split_fold`` reads."""
+    return SimpleNamespace(split=SplitConfig(random_state=seed))
+
+
+def test_split_fold_never_splits_a_base_gene_across_roles() -> None:
+    """The required leakage test: no base gene may appear in two fold roles.
+
+    Six base genes, each with 2-4 per-line composite bags (mirroring
+    real overlapping-panel data), repeated over several seeds. Without the
+    base-gene grouping this directly asserts, ``KIF11@ACH-000551`` could
+    land in train while ``KIF11@ACH-000995`` lands in test -- cross-line
+    leakage of the same biological gene, a CV-protocol violation.
+    """
+    lines = ("ACH-000551", "ACH-000971", "ACH-000995", "ACH-000739")
+    # A deterministic, varied 2-4 lines per gene (mirrors overlapping panels
+    # of differing size across genes) -- fixed, not hash()-derived, so this
+    # test's composition never depends on PYTHONHASHSEED.
+    lines_per_gene = {
+        "KIF11": 4,
+        "TP53": 2,
+        "MYC": 3,
+        "EGFR": 2,
+        "BRCA1": 4,
+        "PTEN": 3,
+    }
+    composite_genes = [
+        composite_gene_key(gene, line)
+        for gene, n_lines in lines_per_gene.items()
+        for line in lines[:n_lines]
+    ]
+    for seed in range(10):
+        fold = cli._split_fold(composite_genes, _split_only_config(seed))  # type: ignore[arg-type]
+
+        role_by_composite = {
+            gene: role
+            for role, genes in (
+                ("train", fold.train_genes),
+                ("val", fold.val_genes),
+                ("test", fold.test_genes),
+            )
+            for gene in genes
+        }
+        # Every composite bag was assigned exactly one role.
+        assert set(role_by_composite) == set(composite_genes)
+
+        # THE LEAKAGE ASSERTION: every base gene's per-line bags share ONE role.
+        roles_by_base: dict[str, set[str]] = {}
+        for composite, role in role_by_composite.items():
+            roles_by_base.setdefault(base_gene_name(composite), set()).add(role)
+        multi_role_genes = {
+            base: roles for base, roles in roles_by_base.items() if len(roles) > 1
+        }
+        assert not multi_role_genes, (
+            f"base gene(s) split across multiple fold roles (seed={seed}): "
+            f"{multi_role_genes}"
+        )
+
+
+def test_split_fold_preserves_every_composite_bag() -> None:
+    """Codex P1-b's core ask: no line's bag is dropped by the split itself."""
+    composite_genes = [
+        composite_gene_key(gene, line)
+        for gene in ("KIF11", "TP53", "MYC")
+        for line in ("ACH-A", "ACH-B")
+    ]
+    fold = cli._split_fold(composite_genes, _split_only_config(0))  # type: ignore[arg-type]
+    all_assigned = sorted(fold.train_genes + fold.val_genes + fold.test_genes)
+    assert all_assigned == sorted(composite_genes)
+
+
+# --- _source_fingerprint: covers the actual training inputs (fix 4) --------
+
+
+def test_source_fingerprint_changes_when_cache_manifest_changes(
+    tmp_path: Path,
 ) -> None:
-    genes = np.asarray(["TP53", "MYC"], dtype=object)
-    with caplog.at_level("WARNING"):
-        cli._warn_on_duplicate_gene_names(genes)
-    assert not caplog.records
+    """Codex P2-a: two runs against different Tx1 caches must not collide."""
+    line_manifest = tmp_path / "manifest.csv"
+    line_manifest.write_text("model_id\nACH-A\n", encoding="utf-8")
+    sources = tmp_path / "sources.json"
+    sources.write_text("{}", encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    (cache_dir / "manifest.json").write_text('{"lines": {}}', encoding="utf-8")
+
+    before = cli._source_fingerprint(line_manifest, sources, cache_dir)
+    (cache_dir / "manifest.json").write_text(
+        '{"lines": {"ACH-A": {}}}', encoding="utf-8"
+    )
+    after = cli._source_fingerprint(line_manifest, sources, cache_dir)
+    assert before != after
+
+
+def test_source_fingerprint_changes_when_a_referenced_h5ad_is_modified(
+    tmp_path: Path,
+) -> None:
+    """Codex P2-a: a modified response source at the SAME configured path
+    must not collide in provenance with the original."""
+    line_manifest = tmp_path / "manifest.csv"
+    line_manifest.write_text("model_id\nACH-A\n", encoding="utf-8")
+    h5ad_path = tmp_path / "line_a.h5ad"
+    h5ad_path.write_bytes(b"original bytes")
+    sources = tmp_path / "sources.json"
+    sources.write_text(
+        json.dumps(
+            {
+                "ACH-A": {
+                    "source_type": "h5ad",
+                    "h5ad_path": str(h5ad_path),
+                    "perturbation_col": "gene",
+                    "control_label": "non-targeting",
+                    "var_ensembl_col": "gene_id",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    cache_dir = tmp_path / "cache"  # no manifest.json -- exercises the
+    # "cache not yet built" branch, still a valid fingerprint input.
+
+    before = cli._source_fingerprint(line_manifest, sources, cache_dir)
+    h5ad_path.write_bytes(b"modified bytes -- same path, different content")
+    after = cli._source_fingerprint(line_manifest, sources, cache_dir)
+    assert before != after
+
+
+def test_source_fingerprint_deterministic_for_unchanged_inputs(
+    tmp_path: Path,
+) -> None:
+    line_manifest = tmp_path / "manifest.csv"
+    line_manifest.write_text("model_id\nACH-A\n", encoding="utf-8")
+    sources = tmp_path / "sources.json"
+    sources.write_text("{}", encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    first = cli._source_fingerprint(line_manifest, sources, cache_dir)
+    second = cli._source_fingerprint(line_manifest, sources, cache_dir)
+    assert first == second
 
 
 # --- real (non-dry-run) training: closes the "missing cv:" gap ------------

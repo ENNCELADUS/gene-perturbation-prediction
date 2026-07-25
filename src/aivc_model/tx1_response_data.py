@@ -20,7 +20,12 @@ mechanism ``tx1_embed_cache._resolve_hvg_matrix`` uses on the basal side
 
 Three design decisions (expanded in the task report): (1) per-line bags,
 not a cross-line gene intersection -- a gene tested in more than one line
-gets one bag *per line*, disambiguated by ``metadata["model_id"]``, since
+gets one bag *per line*, keyed as ``f"{gene}{GENE_LINE_SEPARATOR}{model_id}"``
+(e.g. ``"KIF11@ACH-000551"``) in ``GeneBags.genes`` itself (Codex P1-b:
+``GeneBags.for_genes``/``for_prediction_genes`` resolve genes through a
+``{name: index}`` dict, so a bare, repeated gene name would silently keep
+only the last-seen line's bag -- see :func:`base_gene_name` and
+``metadata["perturbation_gene"]`` for recovering the plain symbol), since
 the four sources' gene panels differ wildly in size; (2) ``l2_normalize``
 (C7) defaults to ``False`` (Phase B's measured un-normalized Tx1 output),
 recorded in every ``metadata["l2_normalize"]`` row; (3)
@@ -48,6 +53,7 @@ import pandas as pd
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
+from aivc_model.gwps_cache import sha256_strings
 from aivc_model.prepare import GeneBags, resolve_state_gene_order
 from aivc_model.tx1_basal import (
     build_perturbseq_response_adata,
@@ -61,12 +67,35 @@ from aivc_model.tx1_embed_cache import (
     XatlasOrionSource,
     load_hvg_gene_order,
     load_line_cache,
+    verify_cache,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 #: C5/C4: the only role this module ever reads from the frozen manifest.
 _TRAIN_RESPONSE_ROLE = "train_response_and_head"
+
+#: Separates a bare gene symbol from its owning line's ``model_id`` in
+#: ``GeneBags.genes`` (Codex P1-b). Gene symbols never contain ``"@"``, so
+#: splitting on it is unambiguous and a no-op for any single-view legacy
+#: ``GeneBags`` that never uses this convention.
+GENE_LINE_SEPARATOR = "@"
+
+
+def composite_gene_key(gene: str, model_id: str) -> str:
+    """Build one line-disambiguated bag key: ``f"{gene}@{model_id}"``."""
+    return f"{gene}{GENE_LINE_SEPARATOR}{model_id}"
+
+
+def base_gene_name(gene: str) -> str:
+    """Recover the bare gene symbol from a :func:`composite_gene_key`.
+
+    A no-op for any gene name without ``"@"`` -- callers outside this
+    module's multi-line convention (e.g. a single-line legacy ``GeneBags``)
+    are unaffected.
+    """
+    return str(gene).partition(GENE_LINE_SEPARATOR)[0]
+
 
 #: C1's Perturb-seq-derived ``basal_source`` value (Tahoe DMSO has no labels).
 _PERTURBSEQ_BASAL_SOURCE = "Perturb-seq non-targeting control"
@@ -150,17 +179,23 @@ def assemble_train_response_gene_bags(
     Raises:
         ValueError: No ``train_response_and_head`` row exists, a selected
             line lacks a cache entry/configured source, its
-            ``basal_source`` is not Perturb-seq-derived, or the extracted
-            target gene order does not match the cache's.
+            ``basal_source`` is not Perturb-seq-derived, the Tx1 embedding
+            cache is not verified (Codex P1-d), its recorded HVG gene order
+            disagrees with the checkpoint's, or the extracted target gene
+            order does not match the cache's.
     """
     manifest = load_line_manifest(cell_line_manifest_path)
     selected = _select_train_response_lines(manifest)
     model_ids = selected["model_id"].astype(str).tolist()
+    _require_verified_cache(tx1_cache_dir, cell_line_manifest_path)
     what = f"Tx1 embedding cache entry under {tx1_cache_dir}"
     _require_present(model_ids, _cache_line_ids(tx1_cache_dir), what)
     sources, symbol_cols = _load_perturbseq_sources(perturbseq_sources_path)
     _require_present(model_ids, set(sources), "perturbseq source config entry")
     checkpoint_gene_order = load_hvg_gene_order(hvg_state_model_dir)
+    _assert_cache_hvg_order_matches_checkpoint(
+        tx1_cache_dir, model_ids, checkpoint_gene_order
+    )
     per_line: list[_LinePerturbationBags] = []
     control_views: list[_ControlView] = []
     for row in selected.itertuples(index=False):
@@ -217,6 +252,78 @@ def _cache_line_ids(tx1_cache_dir: Path) -> set[str]:
     if not root.is_dir():
         return set()
     return {entry.name for entry in root.iterdir() if entry.is_dir()}
+
+
+def _require_verified_cache(tx1_cache_dir: Path, frozen_manifest_path: Path) -> None:
+    """Require an unrestricted ``verify_cache`` pass before training reads it (C8).
+
+    ``load_line_cache`` (used below, per line) only mmaps whatever bytes are
+    on disk -- it never re-checks a hash, a shape, or completeness against
+    the run's own manifest. A stale, partial, or corrupted cache would
+    therefore be silently consumed exactly like a good one: the same class
+    of failure that produced two Critical findings in the Phase B wave.
+    ``only_lines`` is deliberately omitted (Codex P1-d): a sharded/restricted
+    pass would hide exactly the kind of partial-cache problem this guards
+    against.
+
+    Raises:
+        ValueError: ``verify_cache`` reports anything other than
+            ``"verified"``.
+    """
+    report = verify_cache(tx1_cache_dir, frozen_manifest_path=frozen_manifest_path)
+    if report.get("status") != "verified":
+        raise ValueError(
+            f"Tx1 embedding cache at {tx1_cache_dir} is not verified; refusing "
+            f"to train on it: {report.get('discrepancies')}"
+        )
+
+
+def _assert_cache_hvg_order_matches_checkpoint(
+    tx1_cache_dir: Path,
+    model_ids: Sequence[str],
+    checkpoint_gene_order: np.ndarray,
+) -> None:
+    """Fail loudly if a cached line's HVG was built from a different gene order.
+
+    ``verify_cache`` only checks that every cached line's recorded
+    ``hvg_gene_order_sha256`` agrees with every OTHER cached line (internal
+    consistency) -- it has no ``hvg_state_model_dir`` argument and so cannot
+    know whether that shared order is the SAME one this run resolves via
+    ``load_hvg_gene_order``. A same-width, different-order ``hvg.npy``
+    (Codex P1-d) would otherwise pass every existing check while silently
+    misaligning cached control targets against the freshly extracted
+    response targets, column for column.
+
+    Raises:
+        ValueError: The run manifest is missing/unreadable, or any of
+            ``model_ids`` has a recorded ``hvg_gene_order_sha256`` other than
+            the checkpoint's.
+    """
+    manifest_path = Path(tx1_cache_dir) / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"cannot read Tx1 cache run manifest at {manifest_path}: {exc}"
+        ) from exc
+    lines = manifest.get("lines") if isinstance(manifest, dict) else None
+    if not isinstance(lines, dict):
+        raise ValueError(f"Tx1 cache run manifest at {manifest_path} has no lines")
+    expected_sha256 = sha256_strings(np.asarray(checkpoint_gene_order, dtype=object))
+    mismatched = {}
+    for model_id in model_ids:
+        entry = lines.get(model_id)
+        recorded = (
+            entry.get("hvg_gene_order_sha256") if isinstance(entry, dict) else None
+        )
+        if recorded != expected_sha256:
+            mismatched[model_id] = recorded
+    if mismatched:
+        raise ValueError(
+            "Tx1 embedding cache line(s) were built against a different HVG "
+            f"checkpoint gene order than hvg_state_model_dir's "
+            f"(sha256={expected_sha256}): {mismatched}"
+        )
 
 
 def _require_present(model_ids: Sequence[str], present: set[str], what: str) -> None:
@@ -290,6 +397,32 @@ def _parse_source_entry(
         shard_glob=str(entry.get("shard_glob", "*.parquet")),
         pass_guide_filter_value=int(entry.get("pass_guide_filter_value", 1)),
     )
+
+
+def referenced_source_paths(perturbseq_sources_path: Path) -> tuple[Path, ...]:
+    """Every response-source file a Perturb-seq source config directly names.
+
+    Built on the same parsed ``PerturbseqSource``/``XatlasOrionSource``
+    objects :func:`assemble_train_response_gene_bags` itself uses, so this
+    can never drift from the config schema those types encode. Used by
+    ``scripts/train_tx1_st_response.py``'s source fingerprint (Codex P2-a):
+    hashing the config JSON alone catches a changed path/glob, but not a
+    modified file's bytes at the same path.
+
+    Returns:
+        The h5ad path for an h5ad source, or the gene-metadata path plus
+        every shard file currently matching ``shard_glob`` for an
+        X-Atlas-Orion source -- only paths that actually exist on disk.
+    """
+    sources, _ = _load_perturbseq_sources(perturbseq_sources_path)
+    paths: list[Path] = []
+    for source in sources.values():
+        if isinstance(source, PerturbseqSource):
+            paths.append(Path(source.h5ad_path))
+        elif isinstance(source, XatlasOrionSource):
+            paths.append(Path(source.gene_metadata_path))
+            paths.extend(sorted(Path(source.shard_dir).glob(source.shard_glob)))
+    return tuple(path for path in paths if path.is_file())
 
 
 def _build_response_adata(
@@ -441,7 +574,7 @@ def _build_gene_bags_for_line(
     metadata_rows: list[dict[str, object]] = []
     for gene, indices in groups.items():
         n_cells = int(len(indices))
-        genes.append(gene)
+        genes.append(composite_gene_key(gene, model_id))
         target_bags.append(target_matrix[indices])
         # NaN placeholder: see the module docstring's third design decision.
         input_bags.append(np.full((n_cells, EMBEDDING_WIDTH), np.nan, dtype=np.float32))
@@ -597,4 +730,10 @@ def _combine(
     )
 
 
-__all__ = ["assemble_train_response_gene_bags"]
+__all__ = [
+    "GENE_LINE_SEPARATOR",
+    "assemble_train_response_gene_bags",
+    "base_gene_name",
+    "composite_gene_key",
+    "referenced_source_paths",
+]

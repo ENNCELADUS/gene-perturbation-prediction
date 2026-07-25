@@ -44,7 +44,7 @@ from aivc_model.state_warm_start import (
     validate_output_space,
     warm_start_state_dict,
 )
-from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
+from aivc_model.gene_embeddings import Esm2EmbeddingTable
 from aivc_model.prepare import (
     DataConfig,
     ExternalSourceConfig,
@@ -2642,6 +2642,226 @@ def test_evaluate_uses_tensor_gather_and_filters_padding(monkeypatch) -> None:
     assert math.isfinite(summary["total_loss"])
 
 
+def _toy_two_line_gene_bags() -> GeneBags:
+    """Two 'lines' (``model_id`` A/B), each with its own recognizable
+    control-cell value range, for testing Codex P1-c's line-matched
+    evaluation panels: a pooled panel would mix both ranges together."""
+    input_bags = (
+        np.full((2, 3), np.nan, dtype=np.float32),
+        np.full((2, 3), np.nan, dtype=np.float32),
+    )
+    target_bags = (
+        np.ones((2, 3), dtype=np.float32),
+        np.ones((2, 3), dtype=np.float32) * 2.0,
+    )
+    control_input = np.asarray(
+        [[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [100.0, 0.0, 0.0], [100.1, 0.0, 0.0]],
+        dtype=np.float32,
+    )
+    control_target = np.asarray(
+        [[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [100.0, 0.0, 0.0], [100.1, 0.0, 0.0]],
+        dtype=np.float32,
+    )
+    control_batch = np.asarray(["ACH-A", "ACH-A", "ACH-B", "ACH-B"], dtype=object)
+    metadata = pd.DataFrame(
+        {
+            "perturbation_gene": ["GENE1@ACH-A", "GENE1@ACH-B"],
+            "model_id": ["ACH-A", "ACH-B"],
+        }
+    )
+    return GeneBags(
+        genes=np.asarray(["GENE1@ACH-A", "GENE1@ACH-B"], dtype=object),
+        y=np.full(2, np.nan, dtype=np.float32),
+        input_bags=input_bags,
+        latent_bags=target_bags,
+        control_input=control_input,
+        control_latent=control_target,
+        cell_type_bags=None,
+        control_cell_type=None,
+        batch_bags=None,
+        control_batch=control_batch,
+        feature_names=None,
+        metadata=metadata,
+        input_dim=3,
+        latent_dim=3,
+        target_bags=target_bags,
+        control_target=control_target,
+        target_dim=3,
+    )
+
+
+def test_line_filtered_control_view_restricts_to_one_line() -> None:
+    data = _toy_two_line_gene_bags()
+    filtered = train_module._line_filtered_control_view(data, "ACH-A")
+    np.testing.assert_array_equal(filtered.control_input, data.control_input[:2])
+    np.testing.assert_array_equal(filtered.control_target, data.control_target[:2])
+    assert list(filtered.control_batch) == ["ACH-A", "ACH-A"]
+
+
+def test_line_filtered_control_view_raises_for_unknown_line() -> None:
+    data = _toy_two_line_gene_bags()
+    with pytest.raises(ValueError, match="ACH-Z"):
+        train_module._line_filtered_control_view(data, "ACH-Z")
+
+
+def test_build_evaluation_panel_maybe_line_matched_unchanged_without_model_id() -> None:
+    """C1: no ``model_id`` metadata column -> the legacy single pooled panel."""
+    data = _toy_gene_bags_with_batches()
+    assert "model_id" not in data.metadata.columns
+    result = train_module._build_evaluation_control_panel_maybe_line_matched(
+        data,
+        cell_set_len=1,
+        panel_size=2,
+        macro_batch_windows=1,
+        seed=0,
+        device=torch.device("cpu"),
+        batch_lookup={"batch_a": 0, "batch_b": 1, "batch_c": 2},
+    )
+    assert isinstance(result, train_module._EvaluationControlPanel)
+
+
+def test_build_evaluation_panel_maybe_line_matched_builds_one_panel_per_line() -> None:
+    """Codex P1-c: a multi-line ``GeneBags`` gets one panel PER line, each
+    built only from that line's own control cells, not pooled together."""
+    data = _toy_two_line_gene_bags()
+    result = train_module._build_evaluation_control_panel_maybe_line_matched(
+        data,
+        cell_set_len=1,
+        panel_size=2,
+        macro_batch_windows=1,
+        seed=0,
+        device=torch.device("cpu"),
+        batch_lookup={"ACH-A": 0, "ACH-B": 1},
+    )
+    assert isinstance(result, dict)
+    assert set(result) == {"ACH-A", "ACH-B"}
+    a_cells = torch.cat(result["ACH-A"].control_chunks, dim=0).numpy()
+    assert (a_cells[:, 0] < 50).all(), "ACH-A's panel must draw only from ACH-A cells"
+    b_cells = torch.cat(result["ACH-B"].control_chunks, dim=0).numpy()
+    assert (b_cells[:, 0] > 50).all(), "ACH-B's panel must draw only from ACH-B cells"
+
+
+def test_line_matched_prediction_tensor_routes_each_gene_to_its_own_line_panel(
+    monkeypatch,
+) -> None:
+    data = _toy_two_line_gene_bags()
+    calls: list[tuple[tuple[int, ...], object]] = []
+
+    def fake_final_prediction_tensor(
+        model, data_arg, gene_indices, padding_flags, device, control_panel, *_rest
+    ):
+        del model, data_arg, padding_flags, device
+        calls.append((tuple(gene_indices), control_panel))
+        return torch.zeros((len(gene_indices), 6))
+
+    monkeypatch.setattr(
+        train_module, "_final_prediction_tensor", fake_final_prediction_tensor
+    )
+    result = train_module._line_matched_prediction_tensor(
+        None,
+        data,
+        [0, 1],
+        [False, False],
+        torch.device("cpu"),
+        {"ACH-A": "panel-a", "ACH-B": "panel-b"},
+        {"ACH-A": "latent-a", "ACH-B": "latent-b"},
+        {},
+    )
+    assert result.shape == (2, 6)
+    assert dict(calls) == {(0,): "panel-a", (1,): "panel-b"}
+
+
+def test_line_matched_prediction_tensor_raises_for_a_line_missing_a_panel() -> None:
+    data = _toy_two_line_gene_bags()
+    with pytest.raises(ValueError, match="ACH-A"):
+        train_module._line_matched_prediction_tensor(
+            None,
+            data,
+            [0],
+            [False],
+            torch.device("cpu"),
+            {},
+            {},
+            {},
+        )
+
+
+def test_evaluate_prediction_only_final_uses_line_matched_panels_end_to_end() -> None:
+    """Integration check for Codex P1-c: a real ``_evaluate_prediction_only_
+    final`` call, given a multi-line ``GeneBags``, actually feeds each
+    gene's forward pass its OWN line's control cells -- not the mock in
+    ``test_line_matched_prediction_tensor_routes_each_gene_to_its_own_line_
+    panel`` above, the real dispatch inside ``_evaluate_prediction_only_
+    final`` itself."""
+
+    class RecordingState(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.eye(3))
+            self.seen_first_control_values: list[float] = []
+
+        def forward(self, batch: dict, padded: bool = False) -> torch.Tensor:
+            del padded
+            control = batch["ctrl_cell_emb"]
+            self.seen_first_control_values.append(float(control[0, 0].item()))
+            return control @ self.weight
+
+    model, _ = _build_two_gene_aivc_model()
+    recording_state = RecordingState()
+    model.state_adapter = StateForwardAdapter(recording_state)
+    data = _toy_two_line_gene_bags()
+    panels = train_module._build_evaluation_control_panel_maybe_line_matched(
+        data,
+        cell_set_len=1,
+        panel_size=2,
+        macro_batch_windows=2,  # both windows in one macro-batch: 1 call/gene
+        seed=0,
+        device=torch.device("cpu"),
+        batch_lookup={"ACH-A": 0, "ACH-B": 1},
+    )
+    assert isinstance(panels, dict)
+    loader = train_module._gene_loader(
+        np.asarray([0, 1], dtype=np.int64),
+        shuffle=False,
+        seed=1,
+        gene_batch_size=1,
+        world_size=1,
+    )
+    accelerator = train_module.Accelerator(cpu=True)
+
+    _summary, predictions = train_module._evaluate_prediction_only_final(
+        model,
+        data,
+        loader,
+        panels,
+        accelerator,
+    )
+
+    assert len(predictions) == 2
+    # Sequential, unshuffled gene_batch_size=1 loader: index 0
+    # ("GENE1@ACH-A") is forwarded before index 1 ("GENE1@ACH-B"), so the
+    # FIRST forward call must have seen ACH-A's own control range (< 50)
+    # and the SECOND ACH-B's own (> 50) -- not a pooled mix of both.
+    assert recording_state.seen_first_control_values[0] < 50
+    assert recording_state.seen_first_control_values[1] > 50
+
+
+def test_checkpoint_selection_metric_prefers_finite_c_loss() -> None:
+    name, value = train_module._checkpoint_selection_metric(
+        {"c_loss": 0.5, "generation_loss": 9.9}
+    )
+    assert name == "val_c_loss"
+    assert value == 0.5
+
+
+def test_checkpoint_selection_metric_falls_back_when_c_loss_nan() -> None:
+    name, value = train_module._checkpoint_selection_metric(
+        {"c_loss": math.nan, "generation_loss": 1.25}
+    )
+    assert name == "val_generation_loss"
+    assert value == 1.25
+
+
 def test_final_prediction_only_uses_fixed_padded_control_panel_and_batches(
     monkeypatch,
 ) -> None:
@@ -4867,7 +5087,7 @@ def test_load_state_model_new_params_default_matches_legacy_call(
     """With ``output_space`` and ``warm_start_from`` both at their default
     (``None``), ``load_state_model`` must call ``load_from_checkpoint`` with
     exactly today's arguments -- no extra kwargs -- so every existing caller
-    (``train.py``, ``state_feature_ablation.py``, ``sl_dl_model/encoder.py``)
+    (``train.py`` and ``state_feature_ablation.py``)
     is byte-identical after this change (C1).
     """
     calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
