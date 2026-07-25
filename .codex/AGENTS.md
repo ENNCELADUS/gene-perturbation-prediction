@@ -1,71 +1,69 @@
-# GRAND Codex Multiagent Guide
+# VCC Codex Multiagent Guide
 
-This directory contains project-local Codex subagent configuration for the GRAND
-protein-interaction network reconstruction repository. It supplements the root
-`AGENTS.md`; it does not replace the root project rules.
+This directory contains project-local Codex subagent configuration for the VCC
+synthetic-lethality research repository. It supplements the root `AGENTS.md`; it
+does not replace the repository rules or the authoritative documents under
+`docs/`.
 
-## Skills Discovery
+## Authority and Required Context
 
-Relevant globally installed skills from `~/.codex/skills/` include:
+- Read the root `AGENTS.md` first. It is a symlink to `CLAUDE.md`; edit
+  `CLAUDE.md`, not the symlink.
+- Start documentation discovery at `docs/README.md`, then read the relevant data
+  cards, specifications, and acceptance criteria before making claims.
+- Treat `.superpowers/sdd/` as the live, gitignored plan and execution ledger and
+  `docs/specs/` as the tracked design record.
+- Use current code, configs, artifacts, and test output as implementation evidence.
+  Do not let stale prose override them.
 
-- `grill-with-docs` — Stress-test plans against `CONTEXT.md`, terminology, and
-  documented decisions.
-- `experiment-plan` — Design experiment plans, comparisons, and acceptance
-  criteria.
-- `ml-pipeline-architecture-review` — Review ML pipeline structure, data flow,
-  and experiment boundaries.
-- `python-testing` — Build focused pytest coverage and verification strategy.
-- `python-patterns` — Keep Python implementation idiomatic and maintainable.
-- `pytorch-patterns` — Apply PyTorch modeling and training patterns when model
-  code changes.
-- `train` — Run or structure model-training workflows.
-- `train-debug` — Diagnose failed or stalled training runs.
-- `benchmark` — Design and interpret benchmark comparisons.
-- `interpret-curves` — Analyze training curves, metrics, and performance
-  trends.
-- `run-validation` — Execute validation checks before completion.
-- `verification-loop` — Coordinate build, test, lint, and typecheck loops.
-- `documentation-lookup` — Verify library and API behavior against docs.
-- `paper-analysis` — Extract evidence and methods from papers.
-- `deep-research-ingest` — Ingest research artifacts into the literature vault.
-- `security-review` — Check security and data-handling risks.
-- `git-workflow` — Keep commits, branches, and diffs clean.
+## Required Skills
 
-Project-local skills, if added later, should live under `.agents/skills/`.
-Each skill should provide:
+Load the area-specific skill named by the root instructions before touching that
+area:
 
-- `SKILL.md` — Detailed instructions and workflow.
-- `agents/openai.yaml` — Optional Codex interface metadata when the skill
-  provides it.
+- `research-vault` for documentation edits, claims, and recorded results.
+- `tx1-cache` for Tx1 cache, basal embedding, and GeneEffect evaluation work.
+- `benchmark-harness` for Feng2024 splits, SL metrics, benchmark configs, and
+  model-selection logic.
+- `hpc-execution` for GPU work, large gitignored assets, foundation-model
+  inference, and frozen-checkpoint execution.
+- `codex-review` when finishing an implementation wave.
 
-Prefer skills that support research planning, Python testing, documentation
-review, and verification. Do not invent or list unavailable skills.
+Do not invent or list unavailable skills. Project-local skills, if added, belong
+under `.agents/skills/` and should provide a `SKILL.md` entry point.
 
 ## Default Workflow
 
-- Use subagents only when the user explicitly asks for multiagent or parallel
-  work.
-- Keep `max_depth = 1`; child agents should not recursively fan out work.
-- Each custom agent must read the root `AGENTS.md` and `CONTEXT.md` before
-  making claims or edits.
-- The parent agent owns orchestration, final decisions, and integration.
-- Remote SSH, tmux, scheduler, and artifact-state operations stay with the
-  parent agent.
+- Use subagents only when the user explicitly requests multiagent, delegated, or
+  parallel work and delegation reduces coordination cost.
+- Give each editing agent an explicit ownership boundary. Agents share the same
+  worktree and must preserve unrelated or concurrent changes.
+- Keep remote SSH, scheduler, long-running experiment, and formal-artifact state
+  operations with the parent agent unless the user explicitly requests otherwise.
+- The parent agent owns orchestration, final decisions, integration, and the
+  evidence-backed final report.
+- After an implementation wave, ask the user to run `/codex:review --wait`.
 
-## Roles
+## Agent Roles
 
-- `domain_mapper`: read-only mapping of real code, config, data, and docs paths.
-- `experiment_planner`: read-only experiment and verification planning around
-  PRING splits, pairwise scoring, topology fine-tuning, and topology-evaluation
-  constraints.
-- `implementation_worker`: scoped code or config edits after the parent agent
-  assigns a specific ownership boundary.
-- `reviewer`: read-only correctness, leakage, data-contract, security, and
-  missing-test review.
-- `docs_guard`: read-only documentation and terminology drift checks.
+- `domain_mapper`: read-only mapping of the active `aivc_model` backbone and the
+  relevant code, config, data, artifact, and documentation paths.
+- `experiment_planner`: read-only planning for Feng CV1/CV2/CV3 evaluation,
+  held-out-cell-line transfer, leakage controls, acceptance gates, and verification.
+- `implementation_worker`: narrowly scoped code, config, or test changes after the
+  parent assigns ownership and success criteria.
+- `reviewer`: read-only adversarial review for correctness, leakage, silent
+  defaults, data contracts, claim boundaries, and missing tests.
+- `docs_guard`: read-only review of documentation authority, dataset semantics,
+  terminology, acceptance criteria, and implementation-to-claim alignment.
 
-## Documentation Flow
+## Review Boundaries
 
-`docs_guard` reports stale wording and suggested replacements. The parent agent
-performs final documentation edits so `README.md`, root `AGENTS.md`,
-`CLAUDE.md`, `CONTEXT.md`, and experiment docs stay synchronized.
+- Keep single-gene GeneEffect evidence separate from pairwise SL or measured
+  genetic-interaction evidence.
+- Name the generalization axis: CV2/CV3 hold out genes, not cell lines; cross-line
+  claims require untouched cell-line splits.
+- Treat off-contract flags, partial artifacts, and skipped hash or completeness
+  checks as non-formal even when the command exits successfully.
+- Distinguish engineering completion from scientific success, and require the
+  registered multi-fold evidence before reporting a benchmark result.
