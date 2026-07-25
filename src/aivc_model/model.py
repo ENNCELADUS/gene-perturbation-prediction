@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext, redirect_stderr, redirect_stdout
+from contextlib import nullcontext
 from dataclasses import dataclass
 import importlib
-import os
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,11 @@ from torch import nn
 import torch.nn.functional as F
 
 from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
+from aivc_model.state_warm_start import (
+    _suppress_checkpoint_output,
+    build_warm_started_state_model,
+    validate_output_space,
+)
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 
 
@@ -744,9 +748,7 @@ class AivcModel(nn.Module):
                 target_expression_chunks,
                 strict=True,
             ):
-                hvg_energy_terms.append(
-                    _energy_distance(predicted_chunk, target_chunk)
-                )
+                hvg_energy_terms.append(_energy_distance(predicted_chunk, target_chunk))
         hvg_mean_delta = _mean_delta_loss(
             complete_predicted_expression,
             target_expression,
@@ -969,24 +971,77 @@ def load_state_model(
     output_dim: int,
     pert_dim: int,
     emit_checkpoint_output: bool = True,
+    output_space: str | None = None,
+    warm_start_from: Path | None = None,
 ) -> nn.Module:
-    """Load a STATE checkpoint model or a small mock backend."""
+    """Load a STATE checkpoint model or a small mock backend.
+
+    When both ``output_space`` and ``warm_start_from`` are ``None`` (the
+    default), behavior is byte-identical to before these parameters existed:
+    the checkpoint's own saved hyperparameters and weights drive construction
+    entirely, and ``input_dim``/``output_dim``/``pert_dim`` are ignored for
+    the ``state_checkpoint`` backend (they still size ``linear_mock``).
+
+    Args:
+        backend: ``"linear_mock"`` or ``"state_checkpoint"``.
+        checkpoint_path: Required for ``state_checkpoint``. When
+            ``warm_start_from`` is set, also supplies the reference
+            hyperparameters for a freshly constructed model -- see
+            :func:`aivc_model.state_warm_start.build_warm_started_state_model`.
+        input_dim: Sizes ``linear_mock`` always. Sizes a fresh
+            ``state_checkpoint`` model only when ``warm_start_from`` is set;
+            otherwise ignored (the checkpoint's own saved ``input_dim`` wins,
+            unchanged from prior behavior).
+        output_dim: See ``input_dim``.
+        pert_dim: See ``input_dim``.
+        emit_checkpoint_output: Whether to let STATE's constructor print its
+            architecture summary to stdout/stderr.
+        output_space: STATE ``output_space`` override (``"gene"``, ``"all"``,
+            or ``"embedding"``). ``None`` (the default) keeps the
+            checkpoint's own saved value untouched.
+        warm_start_from: When set, build a fresh model from
+            ``checkpoint_path``'s other hparams plus this call's
+            ``input_dim``/``output_dim``/``pert_dim``/``output_space``, then
+            shape-filter-load ``warm_start_from``'s weights into it (see
+            :func:`aivc_model.state_warm_start.warm_start_state_dict`).
+            ``None`` (the default) keeps the prior plain
+            ``load_from_checkpoint`` behavior.
+
+    Returns:
+        The constructed backend module.
+
+    Raises:
+        ValueError: Missing ``checkpoint_path`` for a non-mock backend, an
+            illegal ``output_space``, or (via the warm-start path) a warm
+            start that loads zero keys.
+    """
     if backend == "linear_mock":
         return LinearMockStateModel(input_dim, output_dim, pert_dim)
     if checkpoint_path is None:
         msg = "state_checkpoint backend requires checkpoint_path"
         raise ValueError(msg)
+    validate_output_space(output_space)
     module = importlib.import_module("state.tx.models.state_transition")
     cls = getattr(module, "StateTransitionPerturbationModel")
+    if warm_start_from is not None:
+        model, _report = build_warm_started_state_model(
+            model_cls=cls,
+            hparams_checkpoint_path=checkpoint_path,
+            warm_start_from=warm_start_from,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            pert_dim=pert_dim,
+            output_space=output_space,
+            emit_checkpoint_output=emit_checkpoint_output,
+        )
+        return model
     output_context = (
         nullcontext() if emit_checkpoint_output else _suppress_checkpoint_output()
     )
+    hparam_overrides: dict[str, Any] = (
+        {} if output_space is None else {"output_space": output_space}
+    )
     with output_context:
-        return cls.load_from_checkpoint(str(checkpoint_path), strict=False)
-
-
-@contextmanager
-def _suppress_checkpoint_output() -> Any:
-    with open(os.devnull, "w", encoding="utf-8") as devnull:
-        with redirect_stdout(devnull), redirect_stderr(devnull):
-            yield
+        return cls.load_from_checkpoint(
+            str(checkpoint_path), strict=False, **hparam_overrides
+        )
