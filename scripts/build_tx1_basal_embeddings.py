@@ -14,14 +14,19 @@ This CLI wires both Phase-A basal sources: the **Tahoe-100M DMSO** source
 (``--shard-dir`` / ``--gene-metadata``) for the 38 Tahoe-sourced lines, and
 the 4 Perturb-seq-sourced lines (the ``train_response_and_head`` role) via
 ``--perturbseq-source-config``, a JSON file mapping each Perturb-seq
-``model_id`` to its h5ad path and per-source schema (perturbation column,
-control label, Ensembl var column). A JSON config was chosen over a
-repeatable per-field flag because the 4 lines (Replogle K562, Nadig
-Jurkat/HepG2, X-Atlas HCT116) have differing h5ad schemas -- a flag per
-field per line would not scale. Every in-scope manifest line with a
-non-Tahoe ``basal_source`` must have a configured entry before any GPU work
-begins; an unconfigured line raises loudly, listing every missing
-``model_id``, rather than silently skipping it.
+``model_id`` to a per-source schema. Three of those four (Replogle K562,
+Nadig Jurkat/HepG2) are h5ad files (an ``"h5ad_path"`` plus perturbation
+column, control label, and Ensembl var column); the fourth (X-Atlas-Orion
+HCT116) is parquet shards (a ``"shard_dir"``/``"shard_glob"`` plus a
+gene-token-id-to-Ensembl metadata parquet, control label, and guide-QC
+filter value). Each entry's optional ``"source_type"`` field
+(``"h5ad"``, the default, or ``"xatlas_orion_parquet"``) selects which
+schema it is parsed against. A JSON config was chosen over a repeatable
+per-field flag because the 4 lines' schemas differ -- a flag per field per
+line would not scale. Every in-scope manifest line with a non-Tahoe
+``basal_source`` must have a configured entry before any GPU work begins;
+an unconfigured line raises loudly, listing every missing ``model_id``,
+rather than silently skipping it.
 """
 
 from __future__ import annotations
@@ -60,6 +65,8 @@ from aivc_model.tx1_embed_cache import (  # noqa: E402
     MODEL_LABEL,
     EncoderFn,
     PerturbseqSource,
+    PerturbseqSourceConfig,
+    XatlasOrionSource,
     embed_lines,
     load_hvg_gene_order,
     verify_cache,
@@ -77,13 +84,29 @@ _LOGGER = logging.getLogger(__name__)
 #: ``basal_source`` value requires a configured :class:`PerturbseqSource`.
 _TAHOE_BASAL_SOURCE = "Tahoe-100M DMSO"
 
-#: Required keys of each ``--perturbseq-source-config`` entry, one-to-one
-#: with :class:`PerturbseqSource`'s fields.
-_PERTURBSEQ_SOURCE_CONFIG_KEYS = (
+#: ``--perturbseq-source-config`` entry ``"source_type"`` values. ``"h5ad"``
+#: is the default when an entry omits the field, so the 3 already-supported
+#: h5ad sources' config entries need not add it.
+_SOURCE_TYPE_H5AD = "h5ad"
+_SOURCE_TYPE_XATLAS_PARQUET = "xatlas_orion_parquet"
+_VALID_SOURCE_TYPES = frozenset({_SOURCE_TYPE_H5AD, _SOURCE_TYPE_XATLAS_PARQUET})
+
+#: Required keys of an ``"h5ad"``-type entry, one-to-one with
+#: :class:`PerturbseqSource`'s fields.
+_H5AD_SOURCE_CONFIG_KEYS = (
     "h5ad_path",
     "perturbation_col",
     "control_label",
     "var_ensembl_col",
+)
+
+#: Required keys of an ``"xatlas_orion_parquet"``-type entry;
+#: ``shard_glob``/``pass_guide_filter_value`` are optional, matching
+#: :class:`XatlasOrionSource`'s defaults.
+_XATLAS_SOURCE_CONFIG_REQUIRED_KEYS = (
+    "shard_dir",
+    "gene_metadata_path",
+    "control_label",
 )
 
 
@@ -166,50 +189,83 @@ def _require_embedding_args(args: argparse.Namespace) -> None:
         )
 
 
-def _load_perturbseq_source_config(path: Path) -> dict[str, PerturbseqSource]:
+def _load_perturbseq_source_config(path: Path) -> dict[str, PerturbseqSourceConfig]:
     """Load the per-``model_id`` Perturb-seq source config JSON.
 
     A JSON config was chosen over a repeatable per-field CLI flag because the
     4 Perturb-seq-sourced lines (Replogle K562, Nadig Jurkat/HepG2, X-Atlas
-    HCT116) have differing h5ad schemas; see the module docstring.
+    HCT116) have differing schemas; see the module docstring. Each entry's
+    ``"source_type"`` (default ``"h5ad"``) selects whether it is parsed as a
+    :class:`PerturbseqSource` or a :class:`XatlasOrionSource`.
 
     Args:
-        path: JSON file shaped ``{model_id: {h5ad_path, perturbation_col,
-            control_label, var_ensembl_col}}``.
+        path: JSON file shaped ``{model_id: {source_type?, ...}}``, where an
+            ``"h5ad"`` entry carries ``h5ad_path``/``perturbation_col``/
+            ``control_label``/``var_ensembl_col`` and an
+            ``"xatlas_orion_parquet"`` entry carries
+            ``shard_dir``/``gene_metadata_path``/``control_label`` plus
+            optional ``shard_glob``/``pass_guide_filter_value``.
 
     Returns:
-        Per-``model_id`` :class:`PerturbseqSource` configs.
+        Per-``model_id`` :class:`PerturbseqSourceConfig` configs.
 
     Raises:
-        ValueError: The file is not a JSON object, or an entry is not an
-            object or is missing a required key.
+        ValueError: The file is not a JSON object, an entry is not an
+            object, an entry names an unknown ``source_type``, or an entry
+            is missing a key its ``source_type`` requires.
     """
     raw = json.loads(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"--perturbseq-source-config at {path} must be a JSON object")
-    sources: dict[str, PerturbseqSource] = {}
+    sources: dict[str, PerturbseqSourceConfig] = {}
     for model_id, entry in raw.items():
         if not isinstance(entry, dict):
             raise ValueError(
                 f"--perturbseq-source-config entry {model_id!r} must be a JSON object"
             )
-        missing = [key for key in _PERTURBSEQ_SOURCE_CONFIG_KEYS if key not in entry]
-        if missing:
-            raise ValueError(
-                f"--perturbseq-source-config entry {model_id!r} is missing "
-                f"keys: {missing}"
-            )
-        sources[str(model_id)] = PerturbseqSource(
+        sources[str(model_id)] = _parse_source_entry(str(model_id), entry)
+    return sources
+
+
+def _parse_source_entry(
+    model_id: str, entry: Mapping[str, object]
+) -> PerturbseqSourceConfig:
+    """Parse one ``--perturbseq-source-config`` entry, dispatched on ``source_type``."""
+    source_type = str(entry.get("source_type", _SOURCE_TYPE_H5AD))
+    if source_type not in _VALID_SOURCE_TYPES:
+        raise ValueError(
+            f"--perturbseq-source-config entry {model_id!r} has unknown "
+            f"source_type {source_type!r}; expected one of "
+            f"{sorted(_VALID_SOURCE_TYPES)}"
+        )
+    required_keys = (
+        _H5AD_SOURCE_CONFIG_KEYS
+        if source_type == _SOURCE_TYPE_H5AD
+        else _XATLAS_SOURCE_CONFIG_REQUIRED_KEYS
+    )
+    missing = [key for key in required_keys if key not in entry]
+    if missing:
+        raise ValueError(
+            f"--perturbseq-source-config entry {model_id!r} is missing keys: {missing}"
+        )
+    if source_type == _SOURCE_TYPE_H5AD:
+        return PerturbseqSource(
             h5ad_path=Path(entry["h5ad_path"]),
             control_label=str(entry["control_label"]),
             perturbation_col=str(entry["perturbation_col"]),
             var_ensembl_col=str(entry["var_ensembl_col"]),
         )
-    return sources
+    return XatlasOrionSource(
+        shard_dir=Path(entry["shard_dir"]),
+        gene_metadata_path=Path(entry["gene_metadata_path"]),
+        control_label=str(entry["control_label"]),
+        shard_glob=str(entry.get("shard_glob", "*.parquet")),
+        pass_guide_filter_value=int(entry.get("pass_guide_filter_value", 1)),
+    )
 
 
 def _require_perturbseq_sources_configured(
-    working: pd.DataFrame, perturbseq_sources: Mapping[str, PerturbseqSource]
+    working: pd.DataFrame, perturbseq_sources: Mapping[str, PerturbseqSourceConfig]
 ) -> None:
     """Fail loudly, before any GPU work, if an in-scope line lacks a source.
 
