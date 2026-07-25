@@ -552,6 +552,384 @@ def test_state_alignment_never_falls_back_when_checkpoint_gene_is_missing(
         resolve_state_gene_order(adata, model_dir, "gene_name")
 
 
+def _write_two_view_state_model(
+    tmp_path: Path,
+    gene_names: tuple[str, ...],
+) -> tuple[Path, Path]:
+    model_dir = tmp_path / "tx1_state_model"
+    model_dir.mkdir(exist_ok=True)
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump({"gene_names": list(gene_names)}, handle)
+    checkpoint_path = model_dir / "checkpoints" / "final.ckpt"
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_path.write_bytes(b"checkpoint")
+    return model_dir, checkpoint_path
+
+
+def _write_two_view_h5ad(
+    tmp_path: Path,
+    *,
+    checkpoint_genes: tuple[str, ...] = ("A", "B", "C", "D", "E"),
+    embed_width: int = 7,
+    embed_key: str = "X_tx1",
+) -> tuple[Path, Path]:
+    genes_obs = ["non-targeting"] * 4
+    for gene in ("GENE1", "GENE2"):
+        genes_obs.extend([gene] * 3)
+    n_cells = len(genes_obs)
+    n_genes = len(checkpoint_genes)
+    x = np.arange(n_cells * n_genes, dtype=np.float32).reshape(n_cells, n_genes) / 10.0
+    embed = (
+        np.arange(n_cells * embed_width, dtype=np.float32).reshape(n_cells, embed_width)
+        / 100.0
+    )
+    adata = ad.AnnData(x)
+    adata.var_names = list(checkpoint_genes)
+    adata.var["gene_name"] = list(checkpoint_genes)
+    adata.obs["gene"] = genes_obs
+    adata.obsm[embed_key] = embed
+    h5ad_path = tmp_path / "two_view.h5ad"
+    adata.write_h5ad(h5ad_path)
+    overlap = pd.DataFrame(
+        {
+            "perturbation_gene": ["GENE1", "GENE2"],
+            "depmap_gene_effect": [-1.0, -0.5],
+            "has_depmap_label": [True, True],
+        }
+    )
+    overlap_path = tmp_path / "two_view_overlap.csv"
+    overlap.to_csv(overlap_path, index=False)
+    return h5ad_path, overlap_path
+
+
+def _two_view_config(
+    tmp_path: Path,
+    h5ad_path: Path,
+    overlap_path: Path,
+    model_dir: Path,
+    checkpoint_path: Path,
+    *,
+    input_view: str = "obsm",
+    state_embed_key: str | None = "X_tx1",
+) -> prepare_module.AivcConfig:
+    return prepare_module.AivcConfig(
+        data=DataConfig(
+            h5ad_path=h5ad_path,
+            overlap_csv=overlap_path,
+            output_dir=tmp_path / "outputs",
+            obs_perturbation_col="gene",
+            control_label="non-targeting",
+            var_gene_symbol_col="gene_name",
+            state_embed_key=state_embed_key,
+            scvi_obsm_key=None,
+        ),
+        external_test=None,
+        split=SplitConfig(),
+        cv=prepare_module.CVConfig(),
+        state=prepare_module.StateConfig(
+            backend="state_checkpoint",
+            checkpoint_path=checkpoint_path,
+            model_dir=model_dir,
+            input_view=input_view,
+        ),
+        response_encoder=None,
+        projector=ProjectorConfig(),
+        gmm=prepare_module.GmmConfig(),
+        model=prepare_module.ModelConfig(),
+        loss=prepare_module.LossConfig(),
+        train=prepare_module.TrainConfig(),
+    )
+
+
+def test_input_view_defaults_to_checkpoint_hvg_with_identical_target_object(
+    tmp_path: Path,
+) -> None:
+    checkpoint_genes = ("A", "B", "C", "D", "E")
+    h5ad_path, overlap_path = _write_two_view_h5ad(
+        tmp_path, checkpoint_genes=checkpoint_genes
+    )
+    model_dir, checkpoint_path = _write_two_view_state_model(tmp_path, checkpoint_genes)
+    config = _two_view_config(
+        tmp_path,
+        h5ad_path,
+        overlap_path,
+        model_dir,
+        checkpoint_path,
+        input_view="checkpoint_hvg",
+    )
+    assert config.state.input_view == "checkpoint_hvg"
+
+    bags = load_gene_bags(config)
+
+    assert bags.target_bags is None
+    assert bags.effective_target_bags is bags.input_bags
+    assert bags.effective_control_target is bags.control_input
+    assert bags.effective_target_dim == bags.input_dim == 5
+
+
+def test_input_view_obsm_builds_distinct_input_and_target_views(
+    tmp_path: Path,
+) -> None:
+    checkpoint_genes = ("A", "B", "C", "D", "E")
+    h5ad_path, overlap_path = _write_two_view_h5ad(
+        tmp_path, checkpoint_genes=checkpoint_genes, embed_width=7
+    )
+    model_dir, checkpoint_path = _write_two_view_state_model(tmp_path, checkpoint_genes)
+    config = _two_view_config(
+        tmp_path,
+        h5ad_path,
+        overlap_path,
+        model_dir,
+        checkpoint_path,
+        input_view="obsm",
+    )
+
+    bags = load_gene_bags(config)
+
+    assert bags.input_dim == 7
+    assert bags.effective_target_dim == 5
+    assert bags.target_bags is not None
+    assert bags.target_bags is not bags.input_bags
+    assert bags.control_target is not None
+    assert bags.control_target is not bags.control_input
+    assert bags.control_input.shape[1] == 7
+    assert bags.effective_control_target.shape[1] == 5
+    assert len(bags.genes) == 2
+    for input_bag, target_bag in zip(
+        bags.input_bags, bags.effective_target_bags, strict=True
+    ):
+        assert input_bag.shape[1] == 7
+        assert target_bag.shape[1] == 5
+        assert input_bag.shape[0] == target_bag.shape[0]
+
+
+def test_input_view_obsm_requires_state_embed_key(tmp_path: Path) -> None:
+    checkpoint_genes = ("A", "B", "C", "D", "E")
+    h5ad_path, overlap_path = _write_two_view_h5ad(
+        tmp_path, checkpoint_genes=checkpoint_genes
+    )
+    model_dir, checkpoint_path = _write_two_view_state_model(tmp_path, checkpoint_genes)
+    config = _two_view_config(
+        tmp_path,
+        h5ad_path,
+        overlap_path,
+        model_dir,
+        checkpoint_path,
+        input_view="obsm",
+        state_embed_key=None,
+    )
+
+    with pytest.raises(ValueError, match="data.state_embed_key"):
+        load_gene_bags(config)
+
+
+def test_input_view_obsm_requires_key_present_in_obsm(tmp_path: Path) -> None:
+    checkpoint_genes = ("A", "B", "C", "D", "E")
+    h5ad_path, overlap_path = _write_two_view_h5ad(
+        tmp_path, checkpoint_genes=checkpoint_genes, embed_key="X_tx1"
+    )
+    model_dir, checkpoint_path = _write_two_view_state_model(tmp_path, checkpoint_genes)
+    config = _two_view_config(
+        tmp_path,
+        h5ad_path,
+        overlap_path,
+        model_dir,
+        checkpoint_path,
+        input_view="obsm",
+        state_embed_key="X_missing",
+    )
+
+    with pytest.raises(ValueError, match="X_missing"):
+        load_gene_bags(config)
+
+
+def test_state_config_rejects_invalid_input_view() -> None:
+    with pytest.raises(ValueError, match="input_view"):
+        prepare_module._state_config({"input_view": "bogus"})
+
+
+def test_load_gene_bags_default_input_view_matches_legacy_numerics(
+    tmp_path: Path,
+) -> None:
+    """Pin `load_gene_bags` against its pre-two-view numeric behavior.
+
+    `_write_toy_inputs` builds a deterministic `x = arange(...) / 10.0` matrix
+    with control rows 0-3 and GENE1 occupying rows 4-6, so the expected values
+    below are hand-computed, not copied from the implementation.
+    """
+    h5ad_path, overlap_path = _write_toy_inputs(tmp_path)
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    config = replace(
+        config,
+        data=replace(config.data, h5ad_path=h5ad_path, overlap_csv=overlap_path),
+    )
+    assert config.state.input_view == "checkpoint_hvg"
+
+    bags = load_gene_bags(config)
+
+    assert bags.target_bags is None
+    assert bags.effective_target_bags is bags.input_bags
+    assert bags.effective_control_target is bags.control_input
+    assert bags.effective_target_dim == bags.input_dim
+    expected_control_input = np.asarray(
+        [[0.0, 0.1, 0.2], [0.3, 0.4, 0.5], [0.6, 0.7, 0.8], [0.9, 1.0, 1.1]],
+        dtype=np.float32,
+    )
+    np.testing.assert_array_equal(bags.control_input, expected_control_input)
+    expected_gene1_bag = np.asarray(
+        [[1.2, 1.3, 1.4], [1.5, 1.6, 1.7], [1.8, 1.9, 2.0]],
+        dtype=np.float32,
+    )
+    gene1_index = bags.genes.tolist().index("GENE1")
+    np.testing.assert_array_equal(bags.input_bags[gene1_index], expected_gene1_bag)
+
+
+def _toy_two_view_gene_bags() -> GeneBags:
+    genes = ("GENE1", "GENE2", "GENE3")
+    input_bags = tuple(
+        np.full((2, 3), float(index + 1), dtype=np.float32)
+        for index in range(len(genes))
+    )
+    target_bags = tuple(
+        np.full((2, 2), float(100 * (index + 1)), dtype=np.float32)
+        for index in range(len(genes))
+    )
+    metadata = pd.DataFrame({"perturbation_gene": genes})
+    fold = gene_splits_module.FoldSpec(0, ("GENE1", "GENE3"), (), ("GENE2",))
+    return GeneBags(
+        genes=np.asarray(genes, dtype=object),
+        y=np.asarray([-1.0, -0.5, 0.2], dtype=np.float32),
+        input_bags=input_bags,
+        latent_bags=tuple(bag.copy() for bag in input_bags),
+        control_input=np.zeros((2, 3), dtype=np.float32),
+        control_latent=np.zeros((2, 3), dtype=np.float32),
+        cell_type_bags=None,
+        control_cell_type=None,
+        batch_bags=None,
+        control_batch=None,
+        feature_names=np.asarray(["I0", "I1", "I2"], dtype=object),
+        feature_fill_values=np.zeros(3, dtype=np.float32),
+        metadata=metadata,
+        input_dim=3,
+        latent_dim=3,
+        access_recorder=gene_splits_module.GeneAccessRecorder(fold),
+        target_bags=target_bags,
+        control_target=np.full((2, 2), -1.0, dtype=np.float32),
+        target_dim=2,
+        target_feature_names=np.asarray(["T0", "T1"], dtype=object),
+        target_fill_values=np.zeros(2, dtype=np.float32),
+    )
+
+
+def test_for_genes_subsets_target_bags_with_same_index_set_as_input_bags() -> None:
+    bags = _toy_two_view_gene_bags()
+
+    selected = bags.for_genes(("GENE3", "GENE1"), stage="fine_tuning")
+
+    assert selected.genes.tolist() == ["GENE3", "GENE1"]
+    assert selected.target_bags is not None
+    assert len(selected.target_bags) == len(selected.input_bags) == 2
+    np.testing.assert_array_equal(selected.input_bags[0], bags.input_bags[2])
+    np.testing.assert_array_equal(selected.target_bags[0], bags.target_bags[2])
+    np.testing.assert_array_equal(selected.input_bags[1], bags.input_bags[0])
+    np.testing.assert_array_equal(selected.target_bags[1], bags.target_bags[0])
+
+
+def test_for_prediction_genes_subsets_target_bags_with_same_indices() -> None:
+    bags = _toy_two_view_gene_bags()
+
+    selected = bags.for_prediction_genes(
+        ("GENE2",),
+        stage="generation_loss_outer_test",
+        checkpoint_frozen=True,
+        generation_targets=True,
+    )
+
+    assert selected.target_bags is not None
+    assert len(selected.target_bags) == len(selected.input_bags) == 1
+    np.testing.assert_array_equal(selected.input_bags[0], bags.input_bags[1])
+    np.testing.assert_array_equal(selected.target_bags[0], bags.target_bags[1])
+
+
+def test_for_prediction_genes_labels_only_view_empties_target_bags_too() -> None:
+    bags = _toy_two_view_gene_bags()
+
+    selected = bags.for_prediction_genes(
+        ("GENE2",),
+        stage="internal_outer_test",
+        checkpoint_frozen=True,
+    )
+
+    assert selected.target_bags is not None
+    assert selected.target_bags[0].shape == (0, bags.target_dim)
+    assert selected.input_bags[0].shape == (0, bags.input_dim)
+
+
+def test_merge_gene_bag_pool_propagates_target_space_when_present() -> None:
+    reference = _toy_two_view_gene_bags()
+    supplement = replace(
+        reference,
+        genes=np.asarray(["GENE4"], dtype=object),
+        y=np.asarray([0.3], dtype=np.float32),
+        input_bags=(np.full((2, 3), 9.0, dtype=np.float32),),
+        latent_bags=(np.full((2, 3), 9.0, dtype=np.float32),),
+        target_bags=(np.full((2, 2), 900.0, dtype=np.float32),),
+        metadata=pd.DataFrame({"perturbation_gene": ["GENE4"]}),
+        access_recorder=None,
+    )
+
+    merged = prepare_module.merge_gene_bag_pool(
+        reference, supplement, "depmap_gene_effect"
+    )
+
+    assert merged.target_bags is not None
+    assert len(merged.target_bags) == len(merged.genes)
+    gene4_index = merged.genes.tolist().index("GENE4")
+    np.testing.assert_array_equal(
+        merged.target_bags[gene4_index], supplement.target_bags[0]
+    )
+    assert merged.control_target is not None
+    assert merged.control_target.shape[1] == 2
+
+
+def test_external_state_input_view_produces_target_view_when_reference_has_two_spaces(
+    tmp_path: Path,
+) -> None:
+    reference = replace(
+        _toy_two_view_gene_bags(),
+        feature_names=np.asarray(["I0", "I1", "I2"], dtype=object),
+    )
+    adata = ad.AnnData(
+        np.asarray(
+            [[1.0, 2.0, 3.0, 10.0, 20.0], [4.0, 5.0, 6.0, 40.0, 50.0]],
+            dtype=np.float32,
+        )
+    )
+    adata.var_names = ["I0", "I1", "I2", "T0", "T1"]
+    source = ExternalSourceConfig(
+        "toy_source",
+        Path("unused"),
+        var_gene_symbol_col=None,
+    )
+    config = load_config(_write_scvi_cache_config(tmp_path))
+    assert config.data.state_embed_key is None
+
+    input_matrix, target_matrix, qa = _external_state_input_view(
+        adata,
+        source,
+        config,
+        reference,
+    )
+
+    assert input_matrix is not target_matrix
+    assert input_matrix.shape == (2, 3)
+    assert target_matrix.shape == (2, 2)
+    np.testing.assert_array_equal(
+        target_matrix, np.asarray([[10.0, 20.0], [40.0, 50.0]], dtype=np.float32)
+    )
+    assert qa["matched_input_features"] == 3
+
+
 def test_make_gene_split_is_disjoint() -> None:
     genes = np.asarray([f"GENE{i}" for i in range(12)], dtype=object)
     y = np.linspace(-2.0, 1.0, len(genes), dtype=np.float32)
@@ -1237,10 +1615,7 @@ def test_response_encoder_config_is_optional_for_legacy_configs(tmp_path: Path) 
     configured_path.write_text(
         legacy_path.read_text(encoding="utf-8").replace(
             "projector:\n",
-            "response_encoder:\n"
-            "  input_dim: 2000\n"
-            "  latent_dim: 128\n"
-            "projector:\n",
+            "response_encoder:\n  input_dim: 2000\n  latent_dim: 128\nprojector:\n",
             1,
         ),
         encoding="utf-8",
@@ -3118,9 +3493,7 @@ def test_esm2_build_rejects_missing_external_gene_without_filtering(
         )
 
 
-def test_esm2_build_accepts_resolved_external_gene(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_esm2_build_accepts_resolved_external_gene(tmp_path: Path, monkeypatch) -> None:
     data = _toy_gene_bags_with_batches()
     manifest = tmp_path / "outer.csv"
     pd.DataFrame(

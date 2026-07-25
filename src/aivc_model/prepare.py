@@ -21,10 +21,18 @@ from sklearn.model_selection import train_test_split
 import yaml
 
 from aivc_model.expression import compute_finite_feature_means, replace_nonfinite
+from aivc_model.external_state_views import (
+    external_target_context,
+    external_target_view,
+    gene_symbol_matched_matrix,
+    merge_external_target_bags,
+)
 from aivc_model.gene_splits import GeneAccessRecorder
+from aivc_model.state_views import StateViews, obsm_input_view
 
 _LABEL_RTOL = 1e-6
 _LABEL_ATOL = 1e-8
+_VALID_STATE_INPUT_VIEWS = frozenset({"checkpoint_hvg", "obsm"})
 
 
 @dataclass(frozen=True)
@@ -106,6 +114,7 @@ class StateConfig:
     esm2_adapter_hidden: int = 512
     require_resolved_esm2: bool = False
     representation_layer: str = "output"
+    input_view: str = "checkpoint_hvg"
 
 
 @dataclass(frozen=True)
@@ -271,6 +280,54 @@ class GeneBags:
     feature_fill_values: np.ndarray | None = None
     gene_outer_folds: np.ndarray | None = None
     access_recorder: GeneAccessRecorder | None = None
+    target_bags: tuple[np.ndarray, ...] | None = None
+    control_target: np.ndarray | None = None
+    target_dim: int | None = None
+    target_feature_names: np.ndarray | None = None
+    target_fill_values: np.ndarray | None = None
+
+    @property
+    def effective_target_bags(self) -> tuple[np.ndarray, ...]:
+        """Per-gene response-encoder-target bags.
+
+        Falls back to ``input_bags`` (the identical object, not a copy) when no
+        distinct target space is configured.
+        """
+        return self.input_bags if self.target_bags is None else self.target_bags
+
+    @property
+    def effective_control_target(self) -> np.ndarray:
+        """Control-cell response-encoder-target matrix.
+
+        Falls back to ``control_input`` (the identical object, not a copy) when
+        no distinct target space is configured.
+        """
+        return (
+            self.control_input if self.control_target is None else self.control_target
+        )
+
+    @property
+    def effective_target_dim(self) -> int:
+        """Response-encoder-target feature width, falling back to ``input_dim``."""
+        return self.input_dim if self.target_dim is None else self.target_dim
+
+    @property
+    def effective_target_feature_names(self) -> np.ndarray | None:
+        """Response-encoder-target feature names, falling back to ``feature_names``."""
+        return (
+            self.feature_names
+            if self.target_feature_names is None
+            else self.target_feature_names
+        )
+
+    @property
+    def effective_target_fill_values(self) -> np.ndarray | None:
+        """Response-encoder-target fill values (falls back to feature_fill_values)."""
+        return (
+            self.feature_fill_values
+            if self.target_fill_values is None
+            else self.target_fill_values
+        )
 
     def for_genes(
         self,
@@ -317,6 +374,11 @@ class GeneBags:
             gene_outer_folds=(
                 np.asarray([self.gene_outer_folds[index] for index in indices])
                 if self.gene_outer_folds is not None
+                else None
+            ),
+            target_bags=(
+                tuple(self.target_bags[index] for index in indices)
+                if self.target_bags is not None
                 else None
             ),
         )
@@ -402,6 +464,22 @@ class GeneBags:
                 else None
             ),
             access_recorder=self.access_recorder,
+            target_bags=(
+                (
+                    tuple(self.target_bags[index] for index in indices)
+                    if generation_targets
+                    else tuple(
+                        np.empty((0, self.effective_target_dim), dtype=np.float32)
+                        for _ in indices
+                    )
+                )
+                if self.target_bags is not None
+                else None
+            ),
+            control_target=self.control_target,
+            target_dim=self.target_dim,
+            target_feature_names=self.target_feature_names,
+            target_fill_values=self.target_fill_values,
         )
 
 
@@ -522,28 +600,39 @@ def load_external_gene_bags(
         reference.feature_fill_values,
         dtype=np.float32,
     )
-    if feature_fill_values.shape != (reference.input_dim,) or not np.isfinite(
-        feature_fill_values
-    ).all():
+    if (
+        feature_fill_values.shape != (reference.input_dim,)
+        or not np.isfinite(feature_fill_values).all()
+    ):
         raise ValueError("External test reference feature fills must be finite")
+    target_context = external_target_context(reference)
     metadata = _load_external_metadata(config)
     source_rows: list[pd.DataFrame] = []
     source_input_bags: list[np.ndarray] = []
     source_latent_bags: list[np.ndarray] = []
+    source_target_bags: list[np.ndarray] = []
     source_batch_bags: list[np.ndarray] = []
     control_input_bags: list[np.ndarray] = []
     control_latent_bags: list[np.ndarray] = []
+    control_target_bags: list[np.ndarray] = []
     control_batch_bags: list[np.ndarray] = []
     source_qa = []
 
     for source in config.external_test.sources:
-        rows, bags, control_input, batch_bags, control_batch, qa = (
-            _load_external_source(
-                config=config,
-                source=source,
-                metadata=_external_source_metadata(metadata, source.name),
-                reference=reference,
-            )
+        (
+            rows,
+            bags,
+            control_input,
+            batch_bags,
+            control_batch,
+            qa,
+            target_bags,
+            control_target,
+        ) = _load_external_source(
+            config=config,
+            source=source,
+            metadata=_external_source_metadata(metadata, source.name),
+            reference=reference,
         )
         bags = tuple(
             replace_nonfinite(np.asarray(bag, dtype=np.float32), feature_fill_values)
@@ -553,12 +642,25 @@ def load_external_gene_bags(
             np.asarray(control_input, dtype=np.float32),
             feature_fill_values,
         )
+        if target_context is not None:
+            _, target_fill_values = target_context
+            target_bags = tuple(
+                replace_nonfinite(np.asarray(bag, dtype=np.float32), target_fill_values)
+                for bag in target_bags
+            )
+            control_target = replace_nonfinite(
+                np.asarray(control_target, dtype=np.float32),
+                target_fill_values,
+            )
         source_qa.append(qa)
         if rows.empty:
             continue
         source_rows.append(rows)
         source_input_bags.extend(bags)
         source_latent_bags.extend(bag.copy() for bag in bags)
+        if target_context is not None:
+            source_target_bags.extend(target_bags)
+            control_target_bags.append(control_target)
         control_input_bags.append(control_input)
         control_latent_bags.append(control_input.copy())
         if source_as_batch:
@@ -597,8 +699,18 @@ def load_external_gene_bags(
             config.data.depmap_label_col,
         )
     )
+    merged_target_bags = (
+        merge_external_target_bags(row_metadata, source_target_bags)
+        if target_context is not None
+        else None
+    )
     control_input = np.vstack(control_input_bags).astype(np.float32)
     control_latent = np.vstack(control_latent_bags).astype(np.float32)
+    control_target = (
+        np.vstack(control_target_bags).astype(np.float32)
+        if target_context is not None
+        else None
+    )
     control_batch = (
         np.concatenate(control_batch_bags).astype(object)
         if control_batch_bags
@@ -641,6 +753,17 @@ def load_external_gene_bags(
         metadata=merged_metadata,
         input_dim=int(control_input.shape[1]),
         latent_dim=int(control_latent.shape[1]),
+        target_bags=merged_target_bags,
+        control_target=control_target,
+        target_dim=(
+            reference.effective_target_dim if target_context is not None else None
+        ),
+        target_feature_names=(
+            reference.effective_target_feature_names
+            if target_context is not None
+            else None
+        ),
+        target_fill_values=(target_context[1] if target_context is not None else None),
     )
     return ExternalGeneBags(data=data, qa=qa)
 
@@ -676,11 +799,13 @@ def merge_gene_bag_pool(
 ) -> GeneBags:
     """Pool response cells by target gene across aligned K562 sources."""
     _validate_pool_compatibility(reference, supplement)
+    two_view = reference.target_bags is not None or supplement.target_bags is not None
     primary = {str(gene).upper(): index for index, gene in enumerate(reference.genes)}
     added = {str(gene).upper(): index for index, gene in enumerate(supplement.genes)}
     gene_order = list(primary) + sorted(set(added).difference(primary))
     input_bags: list[np.ndarray] = []
     latent_bags: list[np.ndarray] = []
+    target_bags: list[np.ndarray] = []
     batch_bags: list[np.ndarray] = []
     labels: list[float] = []
     metadata_rows: list[dict[str, Any]] = []
@@ -705,6 +830,12 @@ def merge_gene_bag_pool(
         latent_bags.append(
             np.vstack([bags.latent_bags[index] for _, bags, index in present])
         )
+        if two_view:
+            target_bags.append(
+                np.vstack(
+                    [bags.effective_target_bags[index] for _, bags, index in present]
+                )
+            )
         batch_bags.append(_pooled_batches(present))
         metadata_rows.append(
             _pooled_metadata_row(gene, present, depmap_label_col, labels[-1])
@@ -713,6 +844,13 @@ def merge_gene_bag_pool(
 
     control_input = np.vstack([reference.control_input, supplement.control_input])
     control_latent = np.vstack([reference.control_latent, supplement.control_latent])
+    control_target = (
+        np.vstack(
+            [reference.effective_control_target, supplement.effective_control_target]
+        ).astype(np.float32)
+        if two_view
+        else None
+    )
     control_batch = np.concatenate(
         [
             _control_batches(reference, "replogle"),
@@ -739,6 +877,15 @@ def merge_gene_bag_pool(
         latent_dim=reference.latent_dim,
         gene_outer_folds=np.asarray(outer_folds, dtype=np.int64),
         access_recorder=reference.access_recorder,
+        target_bags=tuple(target_bags) if two_view else None,
+        control_target=control_target,
+        target_dim=reference.effective_target_dim if two_view else None,
+        target_feature_names=(
+            reference.effective_target_feature_names if two_view else None
+        ),
+        target_fill_values=(
+            reference.effective_target_fill_values if two_view else None
+        ),
     )
 
 
@@ -754,6 +901,18 @@ def _validate_pool_compatibility(reference: GeneBags, supplement: GeneBags) -> N
         raise ValueError("K562 pool source feature order differs")
     if reference.cell_type_bags is not None or supplement.cell_type_bags is not None:
         raise ValueError("K562 pool merge does not accept cell-type-stratified bags")
+    if reference.effective_target_dim != supplement.effective_target_dim:
+        raise ValueError("K562 pool sources must have identical target dimensions")
+    if (
+        reference.effective_target_feature_names is None
+        or supplement.effective_target_feature_names is None
+    ):
+        raise ValueError("K562 pool sources require aligned target feature names")
+    if not np.array_equal(
+        reference.effective_target_feature_names,
+        supplement.effective_target_feature_names,
+    ):
+        raise ValueError("K562 pool source target feature order differs")
 
 
 def _validate_pooled_label(
@@ -824,7 +983,12 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
     metadata = _load_metadata(config.data)
     adata = ad.read_h5ad(config.data.h5ad_path)
     obs_labels = adata.obs[config.data.obs_perturbation_col].astype(str).to_numpy()
-    input_matrix, feature_names = _state_input_view(adata, config)
+    state_views = _state_views(adata, config)
+    input_matrix = state_views.input_matrix
+    feature_names = state_views.input_feature_names
+    target_matrix = state_views.target_matrix
+    target_feature_names = state_views.target_feature_names
+    two_view = target_matrix is not input_matrix
     latent_matrix = (
         input_matrix
         if config.projector.teacher == "scvi"
@@ -836,6 +1000,7 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
     y_values: list[float] = []
     input_bags: list[np.ndarray] = []
     latent_bags: list[np.ndarray] = []
+    target_bags: list[np.ndarray] = []
     cell_type_bags: list[np.ndarray] = []
     batch_bags: list[np.ndarray] = []
     rows: list[pd.Series] = []
@@ -852,6 +1017,13 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
     control_input = replace_nonfinite(
         input_matrix[control_mask],
         feature_fill_values,
+    )
+    target_fill_values, control_target = _target_control_view(
+        target_matrix,
+        control_mask,
+        two_view=two_view,
+        feature_fill_values=feature_fill_values,
+        control_input=control_input,
     )
     latent_uses_expression = latent_matrix is input_matrix
     control_latent = (
@@ -879,6 +1051,10 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
             if latent_uses_expression
             else latent_matrix[mask].astype(np.float32)
         )
+        if two_view:
+            target_bags.append(
+                replace_nonfinite(target_matrix[mask], target_fill_values)
+            )
         if cell_type_labels is not None:
             cell_type_bags.append(cell_type_labels[mask])
         if batch_labels is not None:
@@ -905,7 +1081,38 @@ def load_gene_bags(config: AivcConfig) -> GeneBags:
         metadata=kept,
         input_dim=int(control_input.shape[1]),
         latent_dim=int(control_latent.shape[1]),
+        target_bags=tuple(target_bags) if two_view else None,
+        control_target=control_target if two_view else None,
+        target_dim=int(control_target.shape[1]) if two_view else None,
+        target_feature_names=target_feature_names if two_view else None,
+        target_fill_values=target_fill_values if two_view else None,
     )
+
+
+def _target_control_view(
+    target_matrix: np.ndarray,
+    control_mask: np.ndarray,
+    *,
+    two_view: bool,
+    feature_fill_values: np.ndarray,
+    control_input: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resolve target-space fill values and control cells for `load_gene_bags`.
+
+    When the input and target views are the same object (`two_view` False),
+    the input-space values are returned unused by the caller, which passes
+    `None` for the target fields so `GeneBags.effective_control_target` falls
+    back to `control_input` by identity rather than by an equal copy.
+    """
+    if not two_view:
+        return feature_fill_values, control_input
+    target_fill_values = compute_finite_feature_means(
+        target_matrix,
+        np.flatnonzero(control_mask),
+        np.arange(target_matrix.shape[1], dtype=np.int64),
+    )
+    control_target = replace_nonfinite(target_matrix[control_mask], target_fill_values)
+    return target_fill_values, control_target
 
 
 def make_gene_split(genes: np.ndarray, y: np.ndarray, config: SplitConfig) -> GeneSplit:
@@ -1819,6 +2026,8 @@ def _load_external_source(
     list[np.ndarray] | None,
     np.ndarray | None,
     dict[str, object],
+    list[np.ndarray],
+    np.ndarray,
 ]:
     adata = ad.read_h5ad(source.h5ad_path)
     obs_labels = adata.obs[source.obs_perturbation_col].astype(str).to_numpy()
@@ -1827,7 +2036,7 @@ def _load_external_source(
         source.control_label
         or (config.external_test.control_label if config.external_test else None),
     )
-    input_matrix, alignment_qa = _external_state_input_view(
+    input_matrix, target_matrix, alignment_qa = _external_state_input_view(
         adata,
         source,
         config,
@@ -1847,9 +2056,11 @@ def _load_external_source(
         msg = f"Control label {control_label!r} has no cells in {source.name}"
         raise ValueError(msg)
     control_input = input_matrix[control_mask].astype(np.float32)
+    control_target = target_matrix[control_mask].astype(np.float32)
     control_batch = batch_labels[control_mask] if batch_labels is not None else None
     rows = []
     bags: list[np.ndarray] = []
+    target_bags: list[np.ndarray] = []
     batch_bags: list[np.ndarray] = []
     for row in source_metadata.itertuples(index=False):
         label = str(row.source_perturbation_label)
@@ -1858,6 +2069,7 @@ def _load_external_source(
         if n_cells < int(config.data.min_cells_per_gene):
             continue
         bags.append(input_matrix[mask].astype(np.float32))
+        target_bags.append(target_matrix[mask].astype(np.float32))
         if batch_labels is not None:
             batch_bags.append(batch_labels[mask])
         row_dict = row._asdict()
@@ -1880,6 +2092,8 @@ def _load_external_source(
         batch_bags if batch_labels is not None else None,
         control_batch,
         qa,
+        target_bags,
+        control_target,
     )
 
 
@@ -1888,7 +2102,13 @@ def _external_state_input_view(
     source: ExternalSourceConfig,
     config: AivcConfig,
     reference: GeneBags,
-) -> tuple[np.ndarray, dict[str, object]]:
+) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    """Align an external source to the reference input space.
+
+    Also aligns to the reference *target* space when it is distinct from the
+    input space (`reference.target_bags is not None`); otherwise the target
+    view is the identical input-space matrix object.
+    """
     key = config.data.state_embed_key
     if key and key in adata.obsm:
         matrix = np.asarray(adata.obsm[key], dtype=np.float32)
@@ -1898,49 +2118,38 @@ def _external_state_input_view(
                 f"expected {reference.input_dim}"
             )
             raise ValueError(msg)
-        return matrix, {
+        qa: dict[str, object] = {
             "input_source": f"obsm:{key}",
             "matched_input_features": int(matrix.shape[1]),
             "missing_input_features": 0,
             "reference_input_features": int(reference.input_dim),
             "matched_fraction": 1.0,
         }
-    if reference.feature_names is None:
-        msg = "Cannot align external expression without reference feature names"
-        raise ValueError(msg)
-    reference_names = reference.feature_names.astype(str).tolist()
-    source_names = _var_symbols(adata, source.var_gene_symbol_col)
-    source_to_index = {name: index for index, name in enumerate(source_names)}
-    if reference.feature_fill_values is None:
-        raise ValueError("Cannot align external expression without feature fills")
-    fill_values = np.asarray(reference.feature_fill_values, dtype=np.float32)
-    matrix = np.tile(fill_values[None, :], (adata.n_obs, 1)).astype(np.float32)
-    matched_reference_indices = []
-    matched_source_indices = []
-    for ref_index, name in enumerate(reference_names):
-        source_index = source_to_index.get(str(name))
-        if source_index is None:
-            continue
-        matched_reference_indices.append(ref_index)
-        matched_source_indices.append(source_index)
-    if matched_reference_indices:
-        matrix[:, np.asarray(matched_reference_indices, dtype=np.int64)] = _dense_slice(
-            adata.X,
-            np.asarray(matched_source_indices, dtype=np.int64),
+    else:
+        if reference.feature_names is None:
+            msg = "Cannot align external expression without reference feature names"
+            raise ValueError(msg)
+        if reference.feature_fill_values is None:
+            raise ValueError("Cannot align external expression without feature fills")
+        matrix, matched, total, source_total = gene_symbol_matched_matrix(
+            adata, source, reference.feature_names, reference.feature_fill_values
         )
-    matched = int(len(matched_reference_indices))
-    if matched == 0:
-        raise ValueError(
-            f"External source {source.name!r} matched 0 reference input features"
-        )
-    return matrix, {
-        "input_source": "X_aligned_to_reference_features",
-        "source_expression_features": int(len(source_names)),
-        "reference_input_features": int(len(reference_names)),
-        "matched_input_features": matched,
-        "missing_input_features": int(len(reference_names) - matched),
-        "matched_fraction": float(matched / len(reference_names)),
-    }
+        if matched == 0:
+            raise ValueError(
+                f"External source {source.name!r} matched 0 reference input features"
+            )
+        qa = {
+            "input_source": "X_aligned_to_reference_features",
+            "source_expression_features": source_total,
+            "reference_input_features": total,
+            "matched_input_features": matched,
+            "missing_input_features": total - matched,
+            "matched_fraction": float(matched / total),
+        }
+    if reference.target_bags is None:
+        return matrix, matrix, qa
+    target_matrix = external_target_view(adata, source, reference)
+    return matrix, target_matrix, qa
 
 
 def _merge_external_gene_rows(
@@ -2103,6 +2312,30 @@ def _state_input_view(
         raise ValueError(msg)
     matrix = _matrix_view(adata, None)
     return matrix, np.asarray(adata.var_names.astype(str))
+
+
+def _state_views(adata: ad.AnnData, config: AivcConfig) -> StateViews:
+    """Resolve the ST-input and response-encoder-target feature matrices.
+
+    Default (`state.input_view == "checkpoint_hvg"`) reproduces the
+    pre-Phase-C behavior exactly: `_state_input_view`'s single matrix serves
+    both roles, and the two views are the *identical object* (C1). Only
+    `state.backend == "state_checkpoint"` combined with `state.input_view ==
+    "obsm"` decouples them: the input comes from the configured obsm embedding
+    (e.g. a frozen Tx1 basal-cell embedding) while the target stays the
+    checkpoint's HVG gene order, exactly as `_state_input_view` already
+    computes it for `backend == "state_checkpoint"`.
+    """
+    if config.state.backend == "state_checkpoint" and config.state.input_view == "obsm":
+        input_matrix, input_feature_names = obsm_input_view(
+            adata, config.data.state_embed_key
+        )
+        target_matrix, target_feature_names = _state_input_view(adata, config)
+        return StateViews(
+            input_matrix, input_feature_names, target_matrix, target_feature_names
+        )
+    matrix, feature_names = _state_input_view(adata, config)
+    return StateViews(matrix, feature_names, matrix, feature_names)
 
 
 def resolve_state_gene_order(
@@ -2284,8 +2517,7 @@ def _control_indices_by_batch(data: GeneBags) -> dict[str, np.ndarray]:
         return {}
     normalized = data.control_batch.astype(str)
     return {
-        label: np.flatnonzero(normalized == label)
-        for label in np.unique(normalized)
+        label: np.flatnonzero(normalized == label) for label in np.unique(normalized)
     }
 
 
@@ -2373,6 +2605,13 @@ def _cv_config(values: dict[str, Any]) -> CVConfig:
 
 
 def _state_config(values: dict[str, Any]) -> StateConfig:
+    input_view = str(values.get("input_view", "checkpoint_hvg"))
+    if input_view not in _VALID_STATE_INPUT_VIEWS:
+        msg = (
+            f"state.input_view must be one of {sorted(_VALID_STATE_INPUT_VIEWS)}, "
+            f"got {input_view!r}"
+        )
+        raise ValueError(msg)
     return StateConfig(
         backend=str(values.get("backend", "state_checkpoint")),
         checkpoint_path=_path_or_none(values.get("checkpoint_path")),
@@ -2388,6 +2627,7 @@ def _state_config(values: dict[str, Any]) -> StateConfig:
         esm2_adapter_hidden=int(values.get("esm2_adapter_hidden", 512)),
         require_resolved_esm2=_bool_value(values.get("require_resolved_esm2", False)),
         representation_layer=str(values.get("representation_layer", "output")),
+        input_view=input_view,
     )
 
 
@@ -2471,9 +2711,7 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
     required_world_size = int(values.get("required_world_size", 4))
     gene_batch_size = int(values.get("gene_batch_size", 1))
     eval_control_panel_size = int(values.get("eval_control_panel_size", 4096))
-    eval_window_macro_batch_size = int(
-        values.get("eval_window_macro_batch_size", 64)
-    )
+    eval_window_macro_batch_size = int(values.get("eval_window_macro_batch_size", 64))
     if state_learning_rate <= 0:
         raise ValueError("state_learning_rate must be positive")
     if state_learning_rate > learning_rate:
