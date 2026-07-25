@@ -288,6 +288,19 @@ def test_phase_c_two_view_smoke_trains_and_losses_decrease(
         "fallback to generation_loss is not working"
     )
 
+    # Codex P2-b: the checkpoint metadata must NAME the metric that actually
+    # selected it, not a hardcoded "val_c_loss" left over from before the
+    # generation_loss fallback existed -- c_loss is NaN every epoch here (an
+    # all-NaN `y`), so "val_c_loss" would be an outright false claim.
+    best_metadata = json.loads(
+        (paths["run_dir"] / "models" / "best" / "metadata.json").read_text()
+    )
+    assert best_metadata["selection_metric"] == "val_generation_loss"
+    final_metadata = json.loads(
+        (paths["run_dir"] / "models" / "final" / "metadata.json").read_text()
+    )
+    assert final_metadata["selection_metric"] == "val_generation_loss"
+
 
 def test_load_state_model_forwards_output_space_and_warm_start_from(
     tmp_path: Path,

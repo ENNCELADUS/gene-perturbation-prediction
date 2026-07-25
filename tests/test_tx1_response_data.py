@@ -30,8 +30,11 @@ from aivc_model.tx1_response_data import (
     _assert_target_order_matches,
     _select_train_response_lines,
     assemble_train_response_gene_bags,
+    base_gene_name,
+    composite_gene_key,
 )
 from conftest import tx1_manifest_row as _manifest_row
+from conftest import write_tx1_cache_run_manifest as _write_cache_run_manifest
 from conftest import write_tx1_line_manifest as _write_manifest
 from conftest import write_tx1_xatlas_gene_metadata as _write_xatlas_gene_metadata
 from conftest import write_tx1_xatlas_shard as _write_xatlas_shard
@@ -63,13 +66,15 @@ def _obs(n_cells: int, prefix: str) -> pd.DataFrame:
 
 def _write_line_cache(
     cache_dir: Path, model_id: str, n_control: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Write a fake Phase B cache entry; returns the raw arrays for comparison."""
+) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    """Write a fake Phase B cache entry; returns the raw arrays for comparison
+    plus the array metadata ``write_line_cache`` recorded (needed to build a
+    valid run manifest via ``write_tx1_cache_run_manifest``)."""
     embeddings = _embeddings(n_control)
     hvg = np.arange(n_control * len(_HVG_GENES), dtype=np.float32).reshape(
         n_control, len(_HVG_GENES)
     )
-    write_line_cache(
+    arrays = write_line_cache(
         cache_dir,
         model_id,
         embeddings,
@@ -77,7 +82,7 @@ def _write_line_cache(
         _obs(n_control, f"{model_id}-ctrl"),
         hvg_gene_order=_HVG_GENES,
     )
-    return embeddings, hvg
+    return embeddings, hvg, arrays
 
 
 def _write_multi_gene_perturbseq_h5ad(
@@ -220,8 +225,18 @@ def _build_two_line_fixture(tmp_path: Path) -> _TwoLineFixture:
     sources_path.write_text(json.dumps(sources))
 
     cache_dir = tmp_path / "cache"
-    embeddings_a, hvg_a = _write_line_cache(cache_dir, "ACH-A", n_control=5)
-    embeddings_b, hvg_b = _write_line_cache(cache_dir, "ACH-B", n_control=4)
+    embeddings_a, hvg_a, arrays_a = _write_line_cache(cache_dir, "ACH-A", n_control=5)
+    embeddings_b, hvg_b, arrays_b = _write_line_cache(cache_dir, "ACH-B", n_control=4)
+    # ACH-T (role=test) is never read by the assembly, but verify_cache's
+    # unrestricted completeness check (Codex P1-d) requires every frozen-
+    # manifest line to have SOME cache entry, mirroring the real Phase B
+    # contract (the cache covers all 42 lines, not just the 4 response ones).
+    _, _, arrays_t = _write_line_cache(cache_dir, "ACH-T", n_control=2)
+    _write_cache_run_manifest(
+        cache_dir,
+        {"ACH-A": arrays_a, "ACH-B": arrays_b, "ACH-T": arrays_t},
+        _HVG_GENES,
+    )
 
     return _TwoLineFixture(
         manifest_path=manifest_path,
@@ -335,9 +350,18 @@ def test_assemble_two_line_shapes_and_per_gene_bag_lengths(tmp_path: Path) -> No
     assert bags.control_input.shape == (9, EMBEDDING_WIDTH)  # 5 + 4 control cells
     assert bags.control_target.shape == (9, len(_HVG_GENES))
     assert len(bags.genes) == 4  # 2 genes x 2 lines, PERT_SHARED once per line
+    # Codex P1-b: every bag is keyed as f"{gene}@{model_id}", so PERT_SHARED's
+    # two per-line bags are distinct keys, not a name collision.
+    assert set(bags.genes) == {
+        composite_gene_key("PERT_A_ONLY", "ACH-A"),
+        composite_gene_key("PERT_SHARED", "ACH-A"),
+        composite_gene_key("PERT_B_ONLY", "ACH-B"),
+        composite_gene_key("PERT_SHARED", "ACH-B"),
+    }
+    assert len(set(bags.genes)) == 4, "composite keys must be unique, not collapsed"
 
     actual_counts = {
-        (str(gene), str(bags.metadata.iloc[index]["model_id"])): int(
+        (base_gene_name(str(gene)), str(bags.metadata.iloc[index]["model_id"])): int(
             bags.metadata.iloc[index]["n_cells"]
         )
         for index, gene in enumerate(bags.genes)

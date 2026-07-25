@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-# MPS fallback guard for exp08 (sl_dl_model). The bag-supervision loss uses
+# MPS fallback guard for torch tests. Some losses use
 # torch.cdist, whose backward is unimplemented on the MPS backend; the energy
 # distance therefore needs the CPU fallback. This env var must be set before
 # torch initializes the MPS backend, so it lives here in conftest (imported
@@ -354,6 +354,43 @@ def write_tx1_line_manifest(path: Path, rows: list[dict[str, object]]) -> Path:
     """Write ``rows`` (see :func:`tx1_manifest_row`) as a manifest CSV."""
     pd.DataFrame(rows, columns=TX1_MANIFEST_COLUMNS).to_csv(path, index=False)
     return path
+
+
+def write_tx1_cache_run_manifest(
+    cache_dir: Path,
+    line_arrays: dict[str, dict[str, object]],
+    hvg_gene_order: list[str],
+) -> Path:
+    """Write a ``manifest.json`` so ``tx1_embed_cache.verify_cache`` can pass.
+
+    Fixtures that call ``write_line_cache`` per line (which writes only that
+    line's own files, never the cache-root run manifest -- see
+    ``write_run_manifest``) must call this once afterwards, over every line
+    written into ``cache_dir``, or ``assemble_train_response_gene_bags``'s
+    ``verify_cache`` gate (Codex P1-d) rejects the fixture outright.
+
+    Args:
+        cache_dir: The same root passed to every ``write_line_cache`` call.
+        line_arrays: ``model_id -> write_line_cache(...)``'s own return
+            value for that line.
+        hvg_gene_order: The gene order every line's ``hvg.npy`` was written
+            against (``write_line_cache``'s own ``hvg_gene_order`` arg).
+    """
+    from aivc_model.gwps_cache import sha256_strings
+    from aivc_model.tx1_embed_cache import MODEL_LABEL, write_run_manifest
+
+    hvg_sha256 = sha256_strings(np.asarray(hvg_gene_order, dtype=object))
+    line_entries = {
+        model_id: {"arrays": arrays, "hvg_gene_order_sha256": hvg_sha256}
+        for model_id, arrays in line_arrays.items()
+    }
+    return write_run_manifest(
+        cache_dir,
+        model_label=MODEL_LABEL,
+        source_manifest={},
+        line_entries=line_entries,
+        config_snapshot={},
+    )
 
 
 def write_tx1_gene_metadata(path: Path, tokens: list[int]) -> Path:

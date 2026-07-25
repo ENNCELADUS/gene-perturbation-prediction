@@ -38,23 +38,26 @@ to satisfy ``required_world_size: 4`` -- see both Phase C configs)::
         --cache-dir data/tx1_basal_embeddings/v1 \\
         --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv
 
-KNOWN LIMITATION (flagged, not fixed, in Task 7's report): the fold/gene
-split below is name-keyed, like every other caller of ``GeneBags.for_genes``
-/``for_prediction_genes``/``SealedGeneBags`` in this codebase. Task 5's
-assembly keeps one bag per (gene, line) pair, so if the SAME gene symbol was
-tested in more than one of the four training lines -- expected once real
-multi-line data is assembled, since large Perturb-seq panels commonly
-overlap -- the name-keyed lookup inside ``for_genes`` silently keeps only
-one matching bag per requested name (a dict comprehension collapses same-
-name keys to the last-seen index), dropping the rest with no error. This is
-a pre-existing property of ``GeneBags.for_genes``/``SealedGeneBags``
-(unchanged here); see ``tests/test_train_tx1_st_response.py``'s
-``test_for_genes_silently_drops_a_duplicate_gene_name_across_lines`` for a
-characterization test against the real implementation.
-``run_real_training`` logs a WARNING naming the affected bag count
-(``_warn_on_duplicate_gene_names``) so a real run at least surfaces this,
-but does not (and, without a design decision about how a gene's role should
-behave when it spans lines, safely cannot) change which bag survives.
+FIXED (Codex review, wave 2 round 1): ``GeneBags.for_genes``/
+``for_prediction_genes``/``SealedGeneBags`` still resolve genes through a
+``{name: index}`` dict, and Task 5's assembly still keeps one bag per
+(gene, line) pair -- so a bare, repeated gene name would still silently
+collapse to the last-seen line's bag. What changed is the KEY: Task 5's
+assembly now keys every bag as ``f"{gene}@{model_id}"``
+(``tx1_response_data.composite_gene_key``), so no two of the four training
+lines' bags ever share a key, and every line's observed response survives
+``for_genes``/``for_prediction_genes`` unchanged. The gene-level split
+below (``_split_fold``) groups those composite keys by their BASE gene
+(``tx1_response_data.base_gene_name``) before splitting, so every per-line
+bag of one gene takes the SAME train/val/test role -- without that
+grouping, ``KIF11@ACH-000551`` could land in train while
+``KIF11@ACH-000995`` lands in test, which is cross-line leakage of the same
+biological gene (a CV-protocol violation), not a real held-out split. See
+``tests/test_train_tx1_st_response.py``'s
+``test_split_fold_never_splits_a_base_gene_across_roles`` for the direct
+leakage assertion. ``GeneBags.for_genes``'s own name-keyed dict lookup is
+unchanged and is not the concern here: this module's keys are unique by
+construction, so it never collapses anything for this data.
 """
 
 from __future__ import annotations
@@ -67,7 +70,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
-import numpy as np
 import pandas as pd
 
 # Codex P1-a (Phase B): executed directly, this file's own directory lands on
@@ -97,7 +99,11 @@ from aivc_model.prepare import (  # noqa: E402
     load_config,
 )
 from aivc_model.tx1_embed_cache import EMBEDDING_WIDTH  # noqa: E402
-from aivc_model.tx1_response_data import assemble_train_response_gene_bags  # noqa: E402
+from aivc_model.tx1_response_data import (  # noqa: E402
+    assemble_train_response_gene_bags,
+    base_gene_name,
+    referenced_source_paths,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -350,88 +356,107 @@ def validate_config_against_bags(config: AivcConfig, bags: GeneBags) -> None:
 
 
 def _split_fold(genes: Sequence[str], config: AivcConfig) -> FoldSpec:
-    """Deterministic, non-stratified train/val/test split over distinct gene names.
+    """Deterministic, non-stratified train/val/test split grouped by BASE gene.
 
     Phase C's assembled ``GeneBags`` carry no GeneEffect label (``y`` is an
     all-NaN placeholder), so -- unlike exp05's label-stratified canonical
     splits -- this is a plain partition of distinct gene names driven by
     ``config.split``'s fractions/seed.
 
-    See the module docstring's KNOWN LIMITATION note: the resulting
-    ``FoldSpec`` is a set of gene NAMES, and ``GeneBags.for_genes`` (used to
-    build ``train_data``/``val_data`` from it) looks names up in a
-    ``{name: index}`` dict, so a gene tested in more than one line only
-    contributes one line's bag once split this way.
+    ``genes`` here are Task 5's composite ``f"{gene}@{model_id}"`` bag keys
+    (``tx1_response_data.composite_gene_key``), one per (gene, line) pair.
+    The split groups them by BASE gene (``tx1_response_data.base_gene_name``)
+    and assigns every per-line bag of one gene the SAME fold role (user
+    ruling, 2026-07-25): splitting on the composite key directly would let
+    e.g. ``KIF11@ACH-000551`` land in train while ``KIF11@ACH-000995`` lands
+    in test -- cross-line leakage of the same biological gene, a violation
+    of this repo's CV protocol, since ``GeneAccessRecorder`` authorizes by
+    bag key, not by base gene identity.
     """
-    unique_genes = sorted({str(gene).upper() for gene in genes})
-    if len(unique_genes) < 3:
+    composite_genes = [str(gene).upper() for gene in genes]
+    composite_by_base: dict[str, list[str]] = {}
+    for composite in composite_genes:
+        composite_by_base.setdefault(base_gene_name(composite), []).append(composite)
+    unique_base_genes = sorted(composite_by_base)
+    if len(unique_base_genes) < 3:
         raise ValueError(
-            f"need at least 3 distinct genes to split train/val/test; got "
-            f"{len(unique_genes)}"
+            f"need at least 3 distinct base genes to split train/val/test; got "
+            f"{len(unique_base_genes)}"
         )
     split = config.split
-    train_genes, remainder = train_test_split(
-        unique_genes,
+    train_base, remainder_base = train_test_split(
+        unique_base_genes,
         train_size=split.train_fraction,
         random_state=split.random_state,
         shuffle=True,
     )
     remainder_total = split.val_fraction + split.test_fraction
     val_share = split.val_fraction / remainder_total if remainder_total > 0 else 0.5
-    if len(remainder) < 2:
-        val_genes, test_genes = remainder, []
+    if len(remainder_base) < 2:
+        val_base, test_base = remainder_base, []
     else:
-        val_genes, test_genes = train_test_split(
-            remainder,
+        val_base, test_base = train_test_split(
+            remainder_base,
             train_size=val_share,
             random_state=split.random_state,
             shuffle=True,
         )
+
+    def _expand(base_genes: Sequence[str]) -> tuple[str, ...]:
+        """Every composite bag key for each of ``base_genes`` (sorted)."""
+        return tuple(
+            sorted(
+                composite
+                for base in base_genes
+                for composite in composite_by_base[base]
+            )
+        )
+
     return FoldSpec(
         outer_fold=0,
-        train_genes=tuple(train_genes),
-        val_genes=tuple(val_genes),
-        test_genes=tuple(test_genes),
+        train_genes=_expand(train_base),
+        val_genes=_expand(val_base),
+        test_genes=_expand(test_base),
     )
 
 
-def _source_fingerprint(line_manifest: Path, perturbseq_source_config: Path) -> str:
-    """Hash the data-selection inputs (not the trained model) for provenance."""
-    return sha256_strings(
-        [sha256_file(line_manifest), sha256_file(perturbseq_source_config)]
+def _source_fingerprint(
+    line_manifest: Path,
+    perturbseq_source_config: Path,
+    tx1_cache_dir: Path,
+) -> str:
+    """Hash every data-selection input actually consumed, for provenance (C8).
+
+    Task 6 (``7cb77c7``) applied this same honesty principle to the GWPS
+    cache fingerprint. Before this fix (Codex P2-a), hashing only the line
+    manifest and source-config JSON let two runs built from different
+    sampled cells, Tx1 embeddings/HVG arrays, or a modified response source
+    collide in ``ArtifactAuthority.source_fingerprint``, making incompatible
+    checkpoints indistinguishable in provenance. Includes:
+
+    - the line manifest and perturbseq source-config JSON (as before);
+    - the verified Tx1 cache's own run ``manifest.json`` (assembly already
+      requires this cache to pass an unrestricted ``verify_cache`` before
+      this point -- its manifest covers every sampled cell, embedding, and
+      HVG array actually consumed, by content hash);
+    - every response source file the config JSON directly names
+      (:func:`aivc_model.tx1_response_data.referenced_source_paths`), so a
+      modified h5ad/parquet at the same configured path changes provenance
+      too, not just a changed path/glob string.
+    """
+    hashes = [sha256_file(line_manifest), sha256_file(perturbseq_source_config)]
+    cache_manifest_path = Path(tx1_cache_dir) / "manifest.json"
+    if cache_manifest_path.is_file():
+        hashes.append(sha256_file(cache_manifest_path))
+    hashes.extend(
+        sha256_file(path) for path in referenced_source_paths(perturbseq_source_config)
     )
+    return sha256_strings(hashes)
 
 
 def _default_run_dir(config: AivcConfig) -> Path:
     run_id = config.train.run_id or "tx1_st_response"
     return Path(config.data.output_dir) / "runs" / run_id
-
-
-def _warn_on_duplicate_gene_names(genes: np.ndarray) -> None:
-    """Surface the KNOWN LIMITATION (module docstring) instead of relying on
-    a human reading it before every run.
-
-    Task 5's assembly keeps one bag per (gene, line) pair, so the SAME gene
-    symbol legitimately repeats across lines with overlapping panels --
-    ``GeneBags.for_genes``/``for_prediction_genes`` (used below) can only
-    keep one bag per distinct requested name, silently dropping the rest.
-    This does not raise (duplicate names are an expected property of real
-    multi-line data, not necessarily a misconfiguration), but a silent drop
-    should never be the ONLY signal a real run produces.
-    """
-    upper = [str(gene).upper() for gene in genes]
-    duplicates = len(upper) - len(set(upper))
-    if duplicates:
-        _LOGGER.warning(
-            "%d of %d assembled bags share a gene name already used by "
-            "another line; GeneBags.for_genes keeps only one bag per "
-            "distinct name once split, so %d line-specific bag(s) will be "
-            "silently absent from train/val/test (see this module's KNOWN "
-            "LIMITATION docstring)",
-            duplicates,
-            len(upper),
-            duplicates,
-        )
 
 
 def _split_authority_paths(run_dir: Path) -> tuple[Path, Path]:
@@ -479,10 +504,10 @@ def run_real_training(
     *,
     line_manifest: Path,
     perturbseq_source_config: Path,
+    tx1_cache_dir: Path,
     run_dir: Path | None,
 ) -> dict[str, Path]:
     """Split, seal, and hand ``bags`` to ``aivc_model.train.run_training``."""
-    _warn_on_duplicate_gene_names(bags.genes)
     fold = _split_fold(bags.genes, config)
     _LOGGER.info(
         "gene split: %d train, %d val, %d test",
@@ -521,7 +546,9 @@ def run_real_training(
             outer_split_sha256_file=sha_path,
         ),
     )
-    source_fingerprint = _source_fingerprint(line_manifest, perturbseq_source_config)
+    source_fingerprint = _source_fingerprint(
+        line_manifest, perturbseq_source_config, tx1_cache_dir
+    )
     canonical_gene_order = tuple(str(gene).upper() for gene in data.genes)
     return train_module.run_training(
         config,
@@ -579,6 +606,7 @@ def main() -> None:
         bags,
         line_manifest=args.line_manifest,
         perturbseq_source_config=args.perturbseq_source_config,
+        tx1_cache_dir=args.cache_dir,
         run_dir=args.run_dir,
     )
     print(f"run dir: {paths['run_dir']}")
