@@ -29,6 +29,7 @@ from aivc_model.tx1_embed_cache import (
     MODEL_LABEL,
     REJECTED_MODEL_LABEL,
     PerturbseqSource,
+    XatlasOrionSource,
     embed_lines,
     embedding_norm_stats,
     load_hvg_gene_order,
@@ -42,12 +43,25 @@ from conftest import write_tx1_gene_metadata as _write_gene_metadata
 from conftest import write_tx1_line_manifest as _write_manifest
 from conftest import write_tx1_perturbseq_h5ad as _write_perturbseq_h5ad
 from conftest import write_tx1_shard as _write_shard
+from conftest import write_tx1_xatlas_gene_metadata as _write_xatlas_gene_metadata
+from conftest import write_tx1_xatlas_shard as _write_xatlas_shard
 from scripts.build_tx1_basal_embeddings import (
     _load_perturbseq_source_config,
     _require_perturbseq_sources_configured,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+_PHASE_B_PERTURBSEQ_SOURCE_CONFIG = (
+    _REPO_ROOT
+    / "configs"
+    / "experiments"
+    / "12_tx1_st_geneeffect"
+    / "phase_b"
+    / "perturbseq_sources.json"
+)
+_FROZEN_LINE_MANIFEST = (
+    _REPO_ROOT / "results" / "phase_a_tx1_20260724" / "cell_line_manifest.csv"
+)
 
 # --- shared fixtures --------------------------------------------------------
 
@@ -781,6 +795,75 @@ def test_embed_lines_dispatches_perturbseq_source(tmp_path: Path) -> None:
     assert hvg.shape == (3, 2)
 
 
+def test_embed_lines_dispatches_xatlas_orion_source(tmp_path: Path) -> None:
+    """The parquet-sourced HCT116 anchor line must dispatch through the same
+    ``perturbseq_sources`` mapping as the h5ad-sourced lines, distinguished
+    by the configured source's type (``XatlasOrionSource`` vs.
+    ``PerturbseqSource``)."""
+    shard_dir = tmp_path / "xatlas_shards"
+    shard_dir.mkdir()
+    _write_xatlas_shard(
+        shard_dir / "HCT116_Batch1.parquet",
+        [
+            {
+                "gene_token_id": np.array([0, 1]),
+                "gene_expression": np.array([1.0, 2.0], dtype=np.float32),
+                "cell_barcode": "AAA",
+                "sample": "HCT116_Batch1",
+                "gene_target": "Non-Targeting",
+                "pass_guide_filter": 1,
+            },
+            {
+                "gene_token_id": np.array([0, 1]),
+                "gene_expression": np.array([3.0, 4.0], dtype=np.float32),
+                "cell_barcode": "BBB",
+                "sample": "HCT116_Batch1",
+                "gene_target": "Non-Targeting",
+                "pass_guide_filter": 1,
+            },
+        ],
+    )
+    gene_metadata_path = _write_xatlas_gene_metadata(
+        tmp_path / "xatlas_genes.parquet", [0, 1]
+    )
+    manifest = pd.DataFrame(
+        [
+            _manifest_row(
+                model_id="ACH-000971",
+                cellosaurus_id="CVCL_0291",
+                cell_line_name="HCT116",
+                basal_source="Perturb-seq non-targeting control",
+            )
+        ]
+    )
+    hvg_dir = _write_var_dims(
+        tmp_path / "hvg_state", ["ENSG00000000000", "ENSG00000000001"]
+    )
+    source = XatlasOrionSource(
+        shard_dir=shard_dir,
+        gene_metadata_path=gene_metadata_path,
+        control_label="Non-Targeting",
+    )
+    cache_dir = tmp_path / "cache"
+    entries = embed_lines(
+        manifest,
+        cache_dir,
+        encoder=_CountingEncoder(),
+        shard_dir=tmp_path / "unused_shards",
+        gene_metadata_path=tmp_path / "unused_genes.parquet",
+        hvg_state_model_dir=hvg_dir,
+        hvg_gene_symbol_col="ensembl_id",
+        perturbseq_sources={"ACH-000971": source},
+        seed=0,
+    )
+    assert entries["ACH-000971"]["n_cells"] == 2
+    assert entries["ACH-000971"]["hvg_fill_rate"] == 0.0
+    embeddings, hvg, obs = load_line_cache(cache_dir, "ACH-000971")
+    assert embeddings.shape == (2, EMBEDDING_WIDTH)
+    assert hvg.shape == (2, 2)
+    assert obs["sample"].tolist() == ["HCT116_Batch1", "HCT116_Batch1"]
+
+
 def test_embed_lines_perturbseq_without_source_config_raises(tmp_path: Path) -> None:
     manifest = pd.DataFrame(
         [
@@ -1228,6 +1311,111 @@ def test_load_perturbseq_source_config_not_an_object_raises(tmp_path: Path) -> N
     config_path.write_text(json.dumps(["not", "an", "object"]))
     with pytest.raises(ValueError, match="JSON object"):
         _load_perturbseq_source_config(config_path)
+
+
+def test_load_perturbseq_source_config_xatlas_round_trip(tmp_path: Path) -> None:
+    config_path = tmp_path / "perturbseq_sources.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "ACH-000971": {
+                    "source_type": "xatlas_orion_parquet",
+                    "shard_dir": "/data/xatlas_orion/data",
+                    "shard_glob": "HCT116_Batch*.parquet",
+                    "gene_metadata_path": (
+                        "/data/xatlas_orion/metadata/gene_metadata.parquet"
+                    ),
+                    "control_label": "Non-Targeting",
+                    "pass_guide_filter_value": 1,
+                }
+            }
+        )
+    )
+    sources = _load_perturbseq_source_config(config_path)
+    assert set(sources) == {"ACH-000971"}
+    source = sources["ACH-000971"]
+    assert isinstance(source, XatlasOrionSource)
+    assert source.shard_dir == Path("/data/xatlas_orion/data")
+    assert source.shard_glob == "HCT116_Batch*.parquet"
+    assert source.gene_metadata_path == Path(
+        "/data/xatlas_orion/metadata/gene_metadata.parquet"
+    )
+    assert source.control_label == "Non-Targeting"
+    assert source.pass_guide_filter_value == 1
+
+
+def test_load_perturbseq_source_config_xatlas_optional_keys_default(
+    tmp_path: Path,
+) -> None:
+    """``shard_glob``/``pass_guide_filter_value`` are optional; omitting them
+    must fall back to :class:`XatlasOrionSource`'s own defaults, not raise."""
+    config_path = tmp_path / "perturbseq_sources.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "ACH-000971": {
+                    "source_type": "xatlas_orion_parquet",
+                    "shard_dir": "/data/xatlas_orion/data",
+                    "gene_metadata_path": (
+                        "/data/xatlas_orion/metadata/gene_metadata.parquet"
+                    ),
+                    "control_label": "Non-Targeting",
+                }
+            }
+        )
+    )
+    source = _load_perturbseq_source_config(config_path)["ACH-000971"]
+    assert source.shard_glob == "*.parquet"
+    assert source.pass_guide_filter_value == 1
+
+
+def test_load_perturbseq_source_config_xatlas_missing_key_raises(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "perturbseq_sources.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "ACH-000971": {
+                    "source_type": "xatlas_orion_parquet",
+                    "shard_dir": "/data/xatlas_orion/data",
+                }
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="ACH-000971"):
+        _load_perturbseq_source_config(config_path)
+
+
+def test_load_perturbseq_source_config_unknown_source_type_raises(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "perturbseq_sources.json"
+    config_path.write_text(
+        json.dumps({"ACH-P": {"source_type": "bogus_type", "h5ad_path": "/x.h5ad"}})
+    )
+    with pytest.raises(ValueError, match="ACH-P"):
+        _load_perturbseq_source_config(config_path)
+
+
+def test_shipped_phase_b_perturbseq_source_config_names_the_4_anchor_lines() -> None:
+    """The committed ``perturbseq_sources.json`` must parse and must name
+    exactly the frozen manifest's 4 non-Tahoe (``basal_source ==
+    "Perturb-seq non-targeting control"``) lines -- neither more nor
+    fewer -- so an unconfigured or misconfigured anchor fails loudly before
+    any GPU work, per the CLI's documented contract."""
+    frozen_manifest = load_line_manifest(_FROZEN_LINE_MANIFEST)
+    expected = set(
+        frozen_manifest.loc[
+            frozen_manifest["basal_source"] == "Perturb-seq non-targeting control",
+            "model_id",
+        ].astype(str)
+    )
+    sources = _load_perturbseq_source_config(_PHASE_B_PERTURBSEQ_SOURCE_CONFIG)
+    assert set(sources) == expected
+    assert isinstance(sources["ACH-000971"], XatlasOrionSource)
+    for model_id in expected - {"ACH-000971"}:
+        assert isinstance(sources[model_id], PerturbseqSource)
 
 
 def test_require_perturbseq_sources_configured_raises_for_unconfigured_line() -> None:

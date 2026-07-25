@@ -32,6 +32,7 @@ from aivc_model.prepare import resolve_state_gene_order
 from aivc_model.tx1_basal import (
     build_perturbseq_basal_adata,
     build_tahoe_basal_adata,
+    build_xatlas_orion_basal_adata,
     load_line_manifest,
 )
 
@@ -87,6 +88,40 @@ class PerturbseqSource:
     control_label: str
     perturbation_col: str
     var_ensembl_col: str
+
+
+@dataclass(frozen=True)
+class XatlasOrionSource:
+    """Per-line configuration for an X-Atlas-Orion parquet Perturb-seq source.
+
+    Counterpart to :class:`PerturbseqSource` for the one non-h5ad
+    Perturb-seq-sourced line (HCT116), whose raw counts live in X-Atlas-Orion
+    parquet shards rather than an h5ad file (see
+    ``aivc_model.tx1_basal.build_xatlas_orion_basal_adata``).
+
+    Attributes:
+        shard_dir: Directory holding this line's X-Atlas-Orion parquet
+            shards (may also hold other cell lines' shards).
+        gene_metadata_path: Parquet file mapping ``gene_token_id`` to
+            ``ensembl_id`` and ``gene_name``.
+        control_label: Exact ``gene_target`` value identifying
+            non-targeting-control cells.
+        shard_glob: Glob pattern (relative to ``shard_dir``) selecting this
+            line's shard files.
+        pass_guide_filter_value: Required ``pass_guide_filter`` value.
+    """
+
+    shard_dir: Path
+    gene_metadata_path: Path
+    control_label: str
+    shard_glob: str = "*.parquet"
+    pass_guide_filter_value: int = 1
+
+
+#: A configured Perturb-seq-derived line's source, either an h5ad file
+#: (:class:`PerturbseqSource`) or X-Atlas-Orion parquet shards
+#: (:class:`XatlasOrionSource`); dispatched on type in :func:`_build_basal_adata`.
+PerturbseqSourceConfig = PerturbseqSource | XatlasOrionSource
 
 
 # --- cache writer -----------------------------------------------------------
@@ -771,19 +806,20 @@ def embed_lines(
     hvg_gene_symbol_col: str = "gene_symbol",
     max_cells_per_line: int | None = None,
     seed: int = 0,
-    perturbseq_sources: Mapping[str, PerturbseqSource] | None = None,
+    perturbseq_sources: Mapping[str, PerturbseqSourceConfig] | None = None,
     only_lines: Sequence[str] | None = None,
 ) -> dict[str, dict[str, object]]:
     """Build (or resume) verified Tx1 basal embedding caches for every line.
 
     For each ``manifest`` row: build its basal AnnData via Task 1
-    (``build_tahoe_basal_adata`` or ``build_perturbseq_basal_adata``,
-    dispatched on ``basal_source``), resolve its HVG control matrix, and
-    write the cache. A line whose cache already exists and is structurally
-    valid skips the (expensive, GPU-bound) ``encoder`` call (Global
-    Constraint 5: resumability) -- its basal AnnData is still rebuilt so the
-    HVG fill rate is always freshly computed from the current source, since
-    the encoder call is the one resource this guards.
+    (``build_tahoe_basal_adata``, ``build_perturbseq_basal_adata``, or
+    ``build_xatlas_orion_basal_adata``, dispatched on ``basal_source`` and,
+    for Perturb-seq-sourced rows, on the configured source's type), resolve
+    its HVG control matrix, and write the cache. A line whose cache already
+    exists and is structurally valid skips the (expensive, GPU-bound)
+    ``encoder`` call (Global Constraint 5: resumability) -- its basal AnnData
+    is still rebuilt so the HVG fill rate is always freshly computed from the
+    current source, since the encoder call is the one resource this guards.
 
     Args:
         manifest: The frozen line manifest (``load_line_manifest`` output).
@@ -798,8 +834,10 @@ def embed_lines(
             the checkpoint's gene order.
         max_cells_per_line: Optional per-line cell cap forwarded to Task 1.
         seed: Seed forwarded to Task 1's deterministic subsampling.
-        perturbseq_sources: Per-``model_id`` Perturb-seq source config, for
-            rows whose ``basal_source`` is Perturb-seq-derived.
+        perturbseq_sources: Per-``model_id`` Perturb-seq source config
+            (``PerturbseqSource`` for an h5ad source, ``XatlasOrionSource``
+            for an X-Atlas-Orion parquet source), for rows whose
+            ``basal_source`` is Perturb-seq-derived.
         only_lines: If given, restrict processing to these ``model_id``
             values (sharding a run across multiple GPUs/processes).
 
@@ -842,7 +880,7 @@ def _embed_one_line(
     hvg_gene_symbol_col: str,
     max_cells_per_line: int | None,
     seed: int,
-    perturbseq_sources: Mapping[str, PerturbseqSource],
+    perturbseq_sources: Mapping[str, PerturbseqSourceConfig],
 ) -> dict[str, object]:
     model_id = str(row.model_id)
     adata = _build_basal_adata(
@@ -896,7 +934,7 @@ def _build_basal_adata(
     *,
     shard_dir: Path,
     gene_metadata_path: Path,
-    perturbseq_sources: Mapping[str, PerturbseqSource],
+    perturbseq_sources: Mapping[str, PerturbseqSourceConfig],
     max_cells: int | None,
     seed: int,
 ) -> ad.AnnData:
@@ -917,9 +955,24 @@ def _build_basal_adata(
         if source is None:
             raise ValueError(
                 f"line {row.model_id}: basal_source is "
-                f"{_PERTURBSEQ_BASAL_SOURCE!r} but no PerturbseqSource was "
-                "configured for it"
+                f"{_PERTURBSEQ_BASAL_SOURCE!r} but no PerturbseqSource or "
+                "XatlasOrionSource was configured for it"
             )
+        return _build_perturbseq_source_adata(
+            row, source, max_cells=max_cells, seed=seed
+        )
+    raise ValueError(f"line {row.model_id}: unsupported basal_source={basal_source!r}")
+
+
+def _build_perturbseq_source_adata(
+    row: object,
+    source: PerturbseqSourceConfig,
+    *,
+    max_cells: int | None,
+    seed: int,
+) -> ad.AnnData:
+    """Dispatch a Perturb-seq-sourced row to its configured source's builder."""
+    if isinstance(source, PerturbseqSource):
         return build_perturbseq_basal_adata(
             source.h5ad_path,
             control_label=source.control_label,
@@ -931,7 +984,22 @@ def _build_basal_adata(
             max_cells=max_cells,
             seed=seed,
         )
-    raise ValueError(f"line {row.model_id}: unsupported basal_source={basal_source!r}")
+    if isinstance(source, XatlasOrionSource):
+        return build_xatlas_orion_basal_adata(
+            source.shard_dir,
+            source.gene_metadata_path,
+            cell_line_name=str(row.cell_line_name),
+            model_id=str(row.model_id),
+            cellosaurus_id=str(row.cellosaurus_id),
+            shard_glob=source.shard_glob,
+            control_label=source.control_label,
+            pass_guide_filter_value=source.pass_guide_filter_value,
+            max_cells=max_cells,
+            seed=seed,
+        )
+    raise ValueError(  # pragma: no cover - exhaustive over PerturbseqSourceConfig
+        f"line {row.model_id}: unsupported PerturbseqSourceConfig type {type(source)!r}"
+    )
 
 
 def _is_cached(
@@ -1134,6 +1202,8 @@ __all__ = [
     "REJECTED_MODEL_LABEL",
     "EncoderFn",
     "PerturbseqSource",
+    "PerturbseqSourceConfig",
+    "XatlasOrionSource",
     "write_line_cache",
     "embedding_norm_stats",
     "write_run_manifest",

@@ -399,3 +399,65 @@ def write_tx1_perturbseq_h5ad(
     adata = ad.AnnData(X=csr_matrix(counts), obs=obs, var=var)
     adata.write_h5ad(path)
     return path
+
+
+def write_tx1_perturbseq_h5ad_ensembl_index(
+    path: Path,
+    *,
+    n_control: int,
+    n_other: int,
+    index_name: str = "gene_id",
+    perturbation_col: str = "gene",
+    control_label: str = "non-targeting",
+    n_genes: int = 3,
+) -> Path:
+    """Write a Perturb-seq h5ad whose ``var`` carries Ensembl ids only in its
+    index (``var.index.name == index_name``), with no separate Ensembl
+    column -- the schema audited for the local Replogle-lineage K562
+    essential h5ad, distinct from :func:`write_tx1_perturbseq_h5ad`'s
+    column-based schema (audited for the local Adamson UPR h5ad)."""
+    n_cells = n_control + n_other
+    rng = np.random.default_rng(0)
+    counts = rng.integers(0, 10, size=(n_cells, n_genes)).astype(np.float32)
+    labels = [control_label] * n_control + ["TP53"] * n_other
+    obs = pd.DataFrame(
+        {perturbation_col: labels}, index=[f"cell{index}" for index in range(n_cells)]
+    )
+    var_index = pd.Index(
+        [f"ENSG{index:011d}" for index in range(n_genes)], name=index_name
+    )
+    var = pd.DataFrame({"gene_symbol": [f"GENE{index}" for index in range(n_genes)]})
+    var.index = var_index
+    adata = ad.AnnData(X=csr_matrix(counts), obs=obs, var=var)
+    adata.write_h5ad(path)
+    return path
+
+
+def write_tx1_xatlas_gene_metadata(path: Path, tokens: list[int]) -> Path:
+    """Write an X-Atlas-Orion ``gene_token_id`` -> Ensembl metadata parquet.
+
+    Mirrors the real, audited ``gene_metadata.parquet`` schema (columns
+    ``ensembl_id``, ``gene_name``, ``gene_token_id``), including tokens
+    starting at 0 (this vocabulary does not reserve low ids as special
+    tokens, unlike Tahoe-100M's).
+    """
+    pd.DataFrame(
+        {
+            "ensembl_id": [f"ENSG{token:011d}" for token in tokens],
+            "gene_name": [f"GENE{token}" for token in tokens],
+            "gene_token_id": tokens,
+        }
+    ).to_parquet(path)
+    return path
+
+
+def write_tx1_xatlas_shard(path: Path, rows: list[dict[str, object]]) -> Path:
+    """Write one X-Atlas-Orion parquet shard from row dicts.
+
+    Each row dict is shaped like the audited real schema: ``gene_token_id``
+    (int array), ``gene_expression`` (float array), ``cell_barcode`` (str),
+    ``sample`` (str, the batch key), ``gene_target`` (str, perturbation
+    identity), ``pass_guide_filter`` (int 0/1).
+    """
+    pd.DataFrame(rows).to_parquet(path)
+    return path

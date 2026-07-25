@@ -1,0 +1,31 @@
+{
+  "ACH-000551": {
+    "source_type": "h5ad",
+    "h5ad_path": "data/sl_dependency_v0/raw/replogle/K562_gwps_raw_singlecell_01.h5ad",
+    "perturbation_col": "gene",
+    "control_label": "non-targeting",
+    "var_ensembl_col": "ensembl_id"
+  },
+  "ACH-000995": {
+    "source_type": "h5ad",
+    "h5ad_path": "data/sl_dependency_v0/raw/nadig_2025/jurkat_raw_singlecell_01.h5ad",
+    "perturbation_col": "gene",
+    "control_label": "non-targeting",
+    "var_ensembl_col": "ensembl_id"
+  },
+  "ACH-000739": {
+    "source_type": "h5ad",
+    "h5ad_path": "data/sl_dependency_v0/raw/nadig_2025/hepg2_raw_singlecell_01.h5ad",
+    "perturbation_col": "gene",
+    "control_label": "non-targeting",
+    "var_ensembl_col": "ensembl_id"
+  },
+  "ACH-000971": {
+    "source_type": "xatlas_orion_parquet",
+    "shard_dir": "data/sl_dependency_v0/raw/xatlas_orion/X-Atlas-Orion/data",
+    "shard_glob": "HCT116_Batch*.parquet",
+    "gene_metadata_path": "data/sl_dependency_v0/raw/xatlas_orion/X-Atlas-Orion/metadata/gene_metadata.parquet",
+    "control_label": "Non-Targeting",
+    "pass_guide_filter_value": 1
+  }
+}
