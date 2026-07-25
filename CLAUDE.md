@@ -43,8 +43,6 @@ carries model and effort, so no `-c` flags are needed. `--effort` is not a valid
 either — `review` takes only `--base/--scope/--model/--cwd`, and a stray value is
 parsed as focus text, which is rejected.
 
-Output runs to ~300 KB. Findings are input to adjudicate, not instructions to apply.
-
 ## Environment
 
 - The six `src/` packages look peer-level but are not: **`aivc_model/` (exp05 → exp12 Tx1)
