@@ -23,6 +23,18 @@ from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 
 @dataclass(frozen=True)
 class LossWeights:
+    """Per-loss-term weights for one AIVC training step.
+
+    ``hvg_mean_delta`` and ``hvg_energy`` are output-space (gene-expression)
+    quantities in *both* the legacy checkpoint-HVG-input arm and the
+    Tx1-embedding-input arm: ST's output stays gene/HVG space in both arms,
+    only ST's *input* space changes between them, so these losses never
+    become embedding-space quantities. The ``hvg_`` name is kept rather than
+    renamed to avoid breaking the ``hvg_mean_delta_weight`` /
+    ``hvg_energy_weight`` config keys used by every existing experiment
+    config.
+    """
+
     latent_mean_delta: float
     latent_energy: float
     hvg_mean_delta: float
@@ -467,6 +479,7 @@ class AivcModel(nn.Module):
         batch_index_chunks: tuple[torch.Tensor | None, ...],
         y: torch.Tensor,
         weights: LossWeights,
+        control_target_chunks: tuple[torch.Tensor, ...] | None = None,
         gene_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         return self.forward(
@@ -477,6 +490,7 @@ class AivcModel(nn.Module):
             batch_index_chunks=batch_index_chunks,
             y=y,
             weights=weights,
+            control_target_chunks=control_target_chunks,
             gene_mask=gene_mask,
         )
 
@@ -493,6 +507,9 @@ class AivcModel(nn.Module):
         | tuple[tuple[torch.Tensor | None, ...], ...],
         y: torch.Tensor,
         weights: LossWeights,
+        control_target_chunks: tuple[torch.Tensor, ...]
+        | tuple[tuple[torch.Tensor, ...], ...]
+        | None = None,
         gene_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """Compute one gene-level A->B->C loss through the module forward path."""
@@ -505,6 +522,7 @@ class AivcModel(nn.Module):
                 batch_index_chunks=batch_index_chunks,
                 y=y,
                 weights=weights,
+                control_target_chunks=control_target_chunks,
                 gene_mask=gene_mask,
             )
         if gene_mask is not None and gene_mask.reshape(-1).shape[0] != 1:
@@ -518,6 +536,7 @@ class AivcModel(nn.Module):
             batch_index_chunks=batch_index_chunks,
             y=y,
             weights=weights,
+            control_target_chunks=control_target_chunks,
         )
 
     def _forward_gene_batch(
@@ -530,6 +549,7 @@ class AivcModel(nn.Module):
         batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
         y: torch.Tensor,
         weights: LossWeights,
+        control_target_chunks: tuple[tuple[torch.Tensor, ...], ...] | None = None,
         gene_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         if not (
@@ -541,6 +561,16 @@ class AivcModel(nn.Module):
         ):
             msg = "All gene batch inputs must have the same length"
             raise ValueError(msg)
+        if control_target_chunks is not None and len(control_target_chunks) != len(
+            gene
+        ):
+            msg = "control_target_chunks must have one entry per gene"
+            raise ValueError(msg)
+        per_gene_control_targets: tuple[tuple[torch.Tensor, ...] | None, ...] = (
+            tuple(None for _ in gene)
+            if control_target_chunks is None
+            else control_target_chunks
+        )
         y_values = y.reshape(-1)
         if y_values.shape[0] != len(gene):
             msg = "Batched y must have one value per gene"
@@ -563,10 +593,12 @@ class AivcModel(nn.Module):
                 batch_index_chunks=current_batch_indices,
                 y=y_values[index],
                 weights=weights,
+                control_target_chunks=current_control_target,
             )
             for index, (
                 current_gene,
                 current_control,
+                current_control_target,
                 current_target_expression,
                 current_target_latent,
                 current_batch_indices,
@@ -574,6 +606,7 @@ class AivcModel(nn.Module):
                 zip(
                     gene,
                     control_chunks,
+                    per_gene_control_targets,
                     target_expression_chunks,
                     target_latent_chunks,
                     batch_index_chunks,
@@ -656,6 +689,7 @@ class AivcModel(nn.Module):
         batch_index_chunks: tuple[torch.Tensor | None, ...],
         y: torch.Tensor,
         weights: LossWeights,
+        control_target_chunks: tuple[torch.Tensor, ...] | None = None,
     ) -> dict[str, torch.Tensor]:
         hvg_energy_terms: list[torch.Tensor] = []
         compute_hvg_energy = float(weights.hvg_energy) != 0.0
@@ -668,7 +702,28 @@ class AivcModel(nn.Module):
         ):
             msg = "All chunk inputs must have the same length"
             raise ValueError(msg)
-        batched_control = torch.cat(control_chunks, dim=0)
+        # ``control_target_chunks`` is the response-encoder-target-space (gene)
+        # view of the same control cells as ``control_chunks`` (ST-input
+        # space). Legacy single-space callers omit it, which falls back to
+        # ``control_chunks`` unchanged -- byte-identical to the pre-Phase-C
+        # behavior, per the codebase's `effective_*` fallback convention.
+        effective_control_target_chunks = (
+            control_chunks if control_target_chunks is None else control_target_chunks
+        )
+        if len(effective_control_target_chunks) != len(control_chunks):
+            msg = "control_target_chunks must have the same length as control_chunks"
+            raise ValueError(msg)
+        for control_chunk, control_target_chunk in zip(
+            control_chunks,
+            effective_control_target_chunks,
+            strict=True,
+        ):
+            if control_chunk.shape[0] != control_target_chunk.shape[0]:
+                msg = (
+                    "control_chunks and control_target_chunks must address the "
+                    "same cells"
+                )
+                raise ValueError(msg)
         predicted_expression_chunks, predicted_latent = self.predict_response_chunks(
             control_chunks,
             gene,
@@ -676,7 +731,9 @@ class AivcModel(nn.Module):
         )
         target_expression = torch.cat(target_expression_chunks, dim=0)
         observed_latent = self.response_encoder(target_expression)
-        control_latent = self.response_encoder(batched_control)
+        control_latent = self.response_encoder(
+            torch.cat(effective_control_target_chunks, dim=0)
+        )
         complete_predicted_expression = torch.cat(
             predicted_expression_chunks,
             dim=0,
