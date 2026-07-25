@@ -4,21 +4,21 @@
     "h5ad_path": "data/sl_dependency_v0/raw/replogle/K562_gwps_raw_singlecell_01.h5ad",
     "perturbation_col": "gene",
     "control_label": "non-targeting",
-    "var_ensembl_col": "ensembl_id"
+    "var_ensembl_col": "gene_id"
   },
   "ACH-000995": {
     "source_type": "h5ad",
     "h5ad_path": "data/sl_dependency_v0/raw/nadig_2025/jurkat_raw_singlecell_01.h5ad",
     "perturbation_col": "gene",
     "control_label": "non-targeting",
-    "var_ensembl_col": "ensembl_id"
+    "var_ensembl_col": "gene_id"
   },
   "ACH-000739": {
     "source_type": "h5ad",
     "h5ad_path": "data/sl_dependency_v0/raw/nadig_2025/hepg2_raw_singlecell_01.h5ad",
     "perturbation_col": "gene",
     "control_label": "non-targeting",
-    "var_ensembl_col": "ensembl_id"
+    "var_ensembl_col": "gene_id"
   },
   "ACH-000971": {
     "source_type": "xatlas_orion_parquet",
