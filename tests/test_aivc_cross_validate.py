@@ -656,7 +656,7 @@ def _preflight_config(
     (cache_dir / "manifest.json").write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": gwps_cache_module._SCHEMA_VERSION,
                 "source_fingerprint": "0" * 64,
                 "arrays": gwps_cache_module._array_manifest(cache_dir),
             }

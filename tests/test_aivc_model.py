@@ -136,6 +136,9 @@ def _toy_cache_inputs(tmp_path: Path) -> dict[str, object]:
         "obs_perturbation_col": "gene",
         "control_label": "non-targeting",
         "obs_batch_col": "gem_group",
+        "state_input_view": "checkpoint_hvg",
+        "state_embed_key": None,
+        "state_input_width": None,
     }
 
 
@@ -203,11 +206,14 @@ def _toy_gwps_cache_config(
             matched_label_col="has_depmap_label",
             cache_seed=42,
             cache_cells_per_gene=1,
+            state_embed_key=None,
         ),
         state=types.SimpleNamespace(
             backend="state_checkpoint",
             model_dir=model_dir,
             checkpoint_path=checkpoint,
+            input_view="checkpoint_hvg",
+            input_dim=None,
         ),
         cv=types.SimpleNamespace(
             outer_split_manifest=outer_manifest,
@@ -223,6 +229,61 @@ def test_gwps_cache_manifest_changes_with_state_sidecar(tmp_path: Path) -> None:
     inputs["var_dims"].write_bytes(b"changed")
     second = source_fingerprint(**inputs)
     assert first != second
+
+
+def test_gwps_cache_fingerprint_differs_by_state_input_view(tmp_path: Path) -> None:
+    """C8: an HVG-intended config and an obsm/Tx1-intended config must not
+    hash identically, even though this module always resolves the
+    checkpoint HVG order regardless of ``state.input_view``."""
+    inputs = _toy_cache_inputs(tmp_path)
+    inputs["state_input_view"] = "checkpoint_hvg"
+    checkpoint_hvg = source_fingerprint(**inputs)
+    inputs["state_input_view"] = "obsm"
+    obsm = source_fingerprint(**inputs)
+    assert checkpoint_hvg != obsm
+
+
+def test_gwps_cache_fingerprint_differs_by_state_embed_key_under_obsm(
+    tmp_path: Path,
+) -> None:
+    """C8: under ``input_view="obsm"``, changing the obsm key alone (e.g.
+    swapping which Tx1 embedding column to read) must change the
+    fingerprint -- nothing else in the hashed payload depends on it."""
+    inputs = _toy_cache_inputs(tmp_path)
+    inputs["state_input_view"] = "obsm"
+    inputs["state_embed_key"] = "X_tx1"
+    first = source_fingerprint(**inputs)
+    inputs["state_embed_key"] = "X_tx1_v2"
+    second = source_fingerprint(**inputs)
+    assert first != second
+
+
+def test_gwps_cache_fingerprint_differs_by_state_input_width_under_obsm(
+    tmp_path: Path,
+) -> None:
+    inputs = _toy_cache_inputs(tmp_path)
+    inputs["state_input_view"] = "obsm"
+    inputs["state_embed_key"] = "X_tx1"
+    inputs["state_input_width"] = 2560
+    first = source_fingerprint(**inputs)
+    inputs["state_input_width"] = 1280
+    second = source_fingerprint(**inputs)
+    assert first != second
+
+
+def test_gwps_cache_fingerprint_ignores_embed_key_under_checkpoint_hvg(
+    tmp_path: Path,
+) -> None:
+    """An obsm key left over in config has no effect on the resolved cache
+    while ``input_view == "checkpoint_hvg"``, so it must not force a
+    spurious rebuild."""
+    inputs = _toy_cache_inputs(tmp_path)
+    inputs["state_input_view"] = "checkpoint_hvg"
+    inputs["state_embed_key"] = None
+    first = source_fingerprint(**inputs)
+    inputs["state_embed_key"] = "X_leftover"
+    second = source_fingerprint(**inputs)
+    assert first == second
 
 
 def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> None:
@@ -243,6 +304,15 @@ def test_gwps_cache_round_trip_preserves_order_and_batches(tmp_path: Path) -> No
         set(metadata) == {"sha256", "shape", "dtype"}
         for metadata in manifest["arrays"].values()
     )
+    # Exact change 3: a cached load is single-view, exactly like a fresh
+    # `load_gene_bags` call under `state.input_view == "checkpoint_hvg"`
+    # (`two_view=False`) -- `effective_target_*` falls back to the identical
+    # input-view object, not a copy (C1).
+    assert bags.target_bags is None
+    assert bags.control_target is None
+    assert bags.effective_target_bags is bags.input_bags
+    assert bags.effective_control_target is bags.control_input
+    assert bags.effective_target_dim == bags.input_dim
 
 
 def test_gwps_cache_can_skip_redundant_array_hashes_after_preflight(
@@ -362,7 +432,8 @@ def test_gwps_cache_replaces_nonfinite_from_control_only(tmp_path: Path) -> None
     assert np.isfinite(controls).all()
     assert np.isfinite(fills).all()
     np.testing.assert_allclose(fills, np.asarray([30.0, 3.5], dtype=np.float32))
-    assert json.loads((cache_dir / "manifest.json").read_text())["schema_version"] == 2
+    manifest = json.loads((cache_dir / "manifest.json").read_text())
+    assert manifest["schema_version"] == gwps_cache_module._SCHEMA_VERSION
 
 
 def test_gwps_cache_accepts_extra_source_gene_but_rejects_missing_canonical_gene(
@@ -470,6 +541,99 @@ def test_production_state_contract_rejects_wrong_checkpoint_dimensions(
         )
 
 
+def test_production_state_contract_still_validates_2000_wide(tmp_path: Path) -> None:
+    """The legacy 2000-wide contract must keep validating unchanged (C1)."""
+    model_dir = tmp_path / "state"
+    model_dir.mkdir()
+    feature_count = gwps_cache_module._PRODUCTION_CONTRACT.state_dim
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump(
+            {
+                "gene_names": [f"G{i}" for i in range(feature_count)],
+                "input_dim": feature_count,
+                "output_dim": feature_count,
+            },
+            handle,
+        )
+    gwps_cache_module._validate_state_contract(
+        model_dir,
+        np.asarray([f"G{i}" for i in range(feature_count)], dtype=object),
+        gwps_cache_module._PRODUCTION_CONTRACT,
+    )
+
+
+def test_widened_state_contract_accepts_2560_wide_checkpoint(tmp_path: Path) -> None:
+    """C8 non-negotiable: widen the width guard, do not delete it -- a
+    2560-wide checkpoint validates under an explicit widened contract."""
+    model_dir = tmp_path / "state"
+    model_dir.mkdir()
+    widened = gwps_cache_module._CacheContract(gene_count=2, state_dim=2560)
+    with (model_dir / "var_dims.pkl").open("wb") as handle:
+        pickle.dump(
+            {
+                "gene_names": [f"G{i}" for i in range(2560)],
+                "input_dim": 2560,
+                "output_dim": 2560,
+            },
+            handle,
+        )
+    gwps_cache_module._validate_state_contract(
+        model_dir,
+        np.asarray([f"G{i}" for i in range(2560)], dtype=object),
+        widened,
+    )
+
+
+def _toy_array_bundle(width: int) -> dict[str, np.ndarray]:
+    return {
+        "cells.npy": np.zeros((3, width), dtype=np.float32),
+        "offsets.npy": np.asarray([0, 1, 3], dtype=np.int64),
+        "genes.npy": np.asarray(["G1", "G2"], dtype=object),
+        "gene_outer_folds.npy": np.asarray([0, 1], dtype=np.int64),
+        "batch_labels.npy": np.asarray(["b1", "b1", "b1"], dtype=object),
+        "control_cells.npy": np.ones((4, width), dtype=np.float32),
+        "control_batch.npy": np.asarray(["b1"] * 4, dtype=object),
+        "feature_names.npy": np.asarray([f"G{i}" for i in range(width)], dtype=object),
+        "feature_fill_values.npy": np.zeros(width, dtype=np.float32),
+    }
+
+
+def test_widened_array_structure_validates_2560_wide_arrays(tmp_path: Path) -> None:
+    """A genuinely 2560-wide array set validates under a widened contract."""
+    widened = gwps_cache_module._CacheContract(gene_count=2, state_dim=2560)
+    arrays = _toy_array_bundle(2560)
+    np.save(tmp_path / "cells.npy", arrays["cells.npy"])
+    np.save(tmp_path / "control_cells.npy", arrays["control_cells.npy"])
+
+    gwps_cache_module._validate_array_structure(tmp_path, arrays, widened)
+
+
+def test_widened_array_structure_still_rejects_wrong_width(tmp_path: Path) -> None:
+    """A widened contract does not stop rejecting a genuinely wrong width."""
+    mismatched = gwps_cache_module._CacheContract(gene_count=2, state_dim=2560)
+    arrays = _toy_array_bundle(2000)
+    np.save(tmp_path / "cells.npy", arrays["cells.npy"])
+    np.save(tmp_path / "control_cells.npy", arrays["control_cells.npy"])
+
+    with pytest.raises(ValueError, match="STATE width"):
+        gwps_cache_module._validate_array_structure(tmp_path, arrays, mismatched)
+
+
+def test_public_build_and_load_gwps_cache_accept_contract_override(
+    tmp_path: Path,
+) -> None:
+    """Exact change 2: a caller can express a non-default (e.g. widened)
+    contract through the public entry points, not only the private ones."""
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+
+    gwps_cache_module.build_gwps_cache(config, cache_dir, contract=contract)
+    bags = gwps_cache_module.load_gwps_cache(config, cache_dir, contract=contract)
+
+    assert bags.genes.tolist() == ["G1", "G2"]
+
+
 def test_production_canonical_count_cannot_be_redefined_by_config(
     tmp_path: Path,
 ) -> None:
@@ -500,6 +664,29 @@ def test_gwps_cache_label_change_invalidates_existing_cache(tmp_path: Path) -> N
     labels = pd.read_csv(config.data.overlap_csv)
     labels.loc[0, "depmap_gene_effect"] = -9.0
     labels.to_csv(config.data.overlap_csv, index=False)
+
+    with pytest.raises(ValueError, match="GWPS cache fingerprint mismatch"):
+        gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+
+
+def test_gwps_cache_old_schema_manifest_raises_fingerprint_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Bumping `_SCHEMA_VERSION` changes every existing fingerprint, since
+    `schema_version` is itself part of the hashed payload. A manifest left
+    over from an older schema must still be caught by the pre-existing
+    fingerprint-mismatch guard, not a new or more confusing error."""
+    config = _toy_gwps_cache_config(tmp_path)
+    cache_dir = tmp_path / "cache"
+    contract = gwps_cache_module._CacheContract(gene_count=2, state_dim=2)
+    manifest_path = gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
+    manifest = json.loads(manifest_path.read_text())
+    # Simulate a manifest left over from an older schema version: a stale
+    # source_fingerprint (as the differently-shaped older hashed payload
+    # would have produced) tagged with the old schema_version.
+    manifest["schema_version"] = gwps_cache_module._SCHEMA_VERSION - 1
+    manifest["source_fingerprint"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with pytest.raises(ValueError, match="GWPS cache fingerprint mismatch"):
         gwps_cache_module._build_gwps_cache(config, cache_dir, contract)
