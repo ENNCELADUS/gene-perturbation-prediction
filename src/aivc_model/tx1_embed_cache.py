@@ -56,6 +56,13 @@ _UNIT_NORM_ATOL: Final[float] = 1e-3
 #: directly by :func:`_is_cached` instead.
 _HVG_GENE_ORDER_FILENAME: Final[str] = "hvg_gene_order.json"
 
+#: Per-line sidecar recording the sample-provenance signature (selected
+#: cell identifiers plus seed and cap) a line was embedded against
+#: (Codex P1-b). A **missing** sidecar is treated as a legacy cache written
+#: before this check existed, not as a mismatch -- see
+#: :func:`_cached_sample_signature_matches`.
+_SAMPLE_PROVENANCE_FILENAME: Final[str] = "sample_provenance.json"
+
 #: Basal-source enum values, as documented in the frozen Phase-A manifest
 #: contract (Global Constraint 1). Duplicated as literals rather than
 #: importing ``tx1_basal``'s private equivalents, since they are part of the
@@ -93,6 +100,7 @@ def write_line_cache(
     obs: pd.DataFrame,
     *,
     hvg_gene_order: Sequence[str] | np.ndarray,
+    sample_signature: Mapping[str, object] | None = None,
 ) -> dict[str, dict[str, object]]:
     """Validate and atomically write one line's embedding + HVG cache.
 
@@ -108,6 +116,12 @@ def write_line_cache(
         hvg_matrix: HVG-arm control matrix, shape ``(n_cells, len(hvg_gene_order))``.
         obs: Per-cell metadata, ``len(obs) == n_cells``.
         hvg_gene_order: The released gene order ``hvg_matrix`` columns align to.
+        sample_signature: Optional sample-provenance signature (see
+            :func:`_sample_provenance_signature`), written as a sidecar so a
+            resumed run can detect a changed ``--max-cells-per-line``/
+            ``--seed`` (Codex P1-b). ``None`` writes no sidecar, which a
+            resumed run's :func:`_is_cached` treats as a legacy cache
+            (accept, not mismatch) rather than skip it.
 
     Returns:
         Per-array metadata (``sha256``/``shape``/``dtype``) for the three files.
@@ -131,6 +145,10 @@ def write_line_cache(
         (tmp_dir / _HVG_GENE_ORDER_FILENAME).write_text(
             json.dumps(_hvg_gene_order_signature(hvg_gene_order), sort_keys=True) + "\n"
         )
+        if sample_signature is not None:
+            (tmp_dir / _SAMPLE_PROVENANCE_FILENAME).write_text(
+                json.dumps(dict(sample_signature), sort_keys=True) + "\n"
+            )
         metadata = _line_dir_array_metadata(tmp_dir)
         final_dir = cache_dir / model_id
         if final_dir.exists():
@@ -193,6 +211,40 @@ def _hvg_gene_order_signature(
     """
     names = np.asarray(hvg_gene_order, dtype=object).astype(str)
     return {"sha256": sha256_strings(names), "width": int(len(names))}
+
+
+def _sample_provenance_signature(
+    obs: pd.DataFrame, *, seed: int, max_cells_per_line: int | None
+) -> dict[str, object]:
+    """Fingerprint the freshly resolved cell selection for one line (P1-b).
+
+    Hashes the selected cells' identifiers (``obs.index`` -- real barcodes
+    for Perturb-seq sources, deterministic reservoir-derived ids for Tahoe
+    sources) together with the seed and cap that produced the selection.
+    This lets a resumed run tell a genuinely unchanged selection from one
+    whose ``--max-cells-per-line`` or ``--seed`` changed since the cache was
+    written, even though the on-disk cache's own row/width counts stay
+    internally self-consistent in both cases: resumability's existing
+    structural checks (Global Constraint 5) cannot see that; only comparing
+    against the freshly rebuilt AnnData can.
+
+    Args:
+        obs: The freshly built basal AnnData's ``obs``.
+        seed: The seed used to build ``obs``.
+        max_cells_per_line: The per-line cell cap used to build ``obs``.
+
+    Returns:
+        ``{"cell_ids_sha256", "n_cells", "seed", "max_cells_per_line"}``.
+    """
+    cell_ids = obs.index.astype(str).to_numpy()
+    return {
+        "cell_ids_sha256": sha256_strings(cell_ids),
+        "n_cells": int(len(cell_ids)),
+        "seed": int(seed),
+        "max_cells_per_line": (
+            None if max_cells_per_line is None else int(max_cells_per_line)
+        ),
+    }
 
 
 def embedding_norm_stats(embeddings: np.ndarray) -> dict[str, float]:
@@ -370,25 +422,33 @@ def load_hvg_gene_order(state_model_dir: Path) -> np.ndarray:
 
 
 def verify_cache(
-    cache_dir: Path, *, frozen_manifest_path: Path | None = None
+    cache_dir: Path,
+    *,
+    frozen_manifest_path: Path | None = None,
+    only_lines: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Verify every embedding cache under ``cache_dir`` against its manifest.
 
     This is the spec's "verified embedding caches" exit criterion. It
     recomputes every sha256 (not trusting any recorded value), re-asserts
     every embedding width against :data:`EMBEDDING_WIDTH`, re-asserts
-    row-count agreement across ``embeddings``/``hvg``/``obs``, confirms the
-    set of on-disk line directories matches exactly the set
-    ``manifest.json`` declares, diffs the frozen Phase-A manifest's full
-    ``model_id`` set against what this run actually recorded (Critical 1 --
-    a run's own ``manifest.json`` only records what it claims to have
-    embedded, so without this a partial run, e.g. Tahoe-only, would report a
-    perfect disk/manifest match and be mistaken for complete), and confirms
-    every line was recorded against the same HVG gene order (Critical 2 --
-    independent, run-manifest-level detection of the same staleness
-    :func:`_is_cached` guards against mid-run). A caller must not be able to
-    mistake a partial, stale, or corrupted cache for a good one: any
-    discrepancy sets ``status="failed"``, never a partial "verified".
+    row-count agreement across ``embeddings``/``hvg``/``obs``, cross-checks
+    each line's recorded ``n_cells`` against its arrays' actual row count
+    (Codex P1-b -- catches e.g. a resumed run whose sampling inputs changed
+    but whose cache was wrongly skipped), confirms the set of on-disk line
+    directories matches exactly the set ``manifest.json`` declares, diffs
+    the frozen Phase-A manifest's full ``model_id`` set against what this
+    run actually recorded in both directions (Critical 1 -- a run's own
+    ``manifest.json`` only records what it claims to have embedded, so
+    without this a partial run, e.g. Tahoe-only, would report a perfect
+    disk/manifest match and be mistaken for complete; Codex P2 -- an extra,
+    out-of-contract ``model_id`` absent from the frozen manifest must also
+    fail, not just a missing one), and confirms every line was recorded
+    against the same HVG gene order (Critical 2 -- independent,
+    run-manifest-level detection of the same staleness :func:`_is_cached`
+    guards against mid-run). A caller must not be able to mistake a
+    partial, stale, or corrupted cache for a good one: any discrepancy sets
+    ``status="failed"``, never a partial "verified".
 
     Args:
         cache_dir: Root cache directory.
@@ -400,6 +460,19 @@ def verify_cache(
             unlocatable, unloadable, or since-changed (sha256 mismatch)
             frozen manifest is itself a discrepancy -- never silently
             skipped.
+        only_lines: Restrict verification to exactly these ``model_id``
+            values (Codex P1-c -- the ``--only-line`` 4-GPU sharding
+            workflow). When given, this is a **per-shard** check: it
+            verifies only the requested lines' own on-disk correctness and
+            that each is a legitimate frozen-manifest line, without
+            requiring every other frozen-manifest line to already exist and
+            without flagging other shards' directories under the same
+            ``cache_dir`` as untracked. ``None`` (the default) performs the
+            full, unrestricted check against the complete frozen manifest --
+            the spec's actual "verified embedding caches" exit criterion,
+            unweakened. A caller running the 4-GPU ``--only-line`` sharding
+            workflow must still run one final unrestricted (or
+            ``--verify-only``) pass to certify the whole cache.
 
     Returns:
         A report with ``status`` (``"verified"`` or ``"failed"``),
@@ -421,31 +494,49 @@ def verify_cache(
         discrepancies.append("run manifest has no recorded lines")
         return _failed_report(cache_dir, discrepancies)
 
+    scope_ids = set(only_lines) if only_lines is not None else None
     discrepancies.extend(
-        _frozen_manifest_discrepancies(manifest, lines, frozen_manifest_path)
+        _frozen_manifest_discrepancies(manifest, lines, frozen_manifest_path, scope_ids)
     )
-    discrepancies.extend(_hvg_gene_order_consistency_discrepancies(lines))
+    scoped_lines = (
+        {model_id: entry for model_id, entry in lines.items() if model_id in scope_ids}
+        if scope_ids is not None
+        else lines
+    )
+    discrepancies.extend(_hvg_gene_order_consistency_discrepancies(scoped_lines))
 
     present_dirs = {
         entry.name
         for entry in cache_dir.iterdir()
         if entry.is_dir() and not entry.name.startswith(".")
     }
-    expected_ids = set(lines)
-    for missing_id in sorted(expected_ids - present_dirs):
+    expected_ids = scope_ids if scope_ids is not None else set(lines)
+    for missing_id in sorted(expected_ids - set(lines)):
+        discrepancies.append(
+            f"line {missing_id}: requested via --only-line but missing from "
+            "run manifest.json lines"
+        )
+    check_ids = expected_ids & set(lines)
+    for missing_id in sorted(check_ids - present_dirs):
         discrepancies.append(f"line {missing_id}: directory missing from cache_dir")
-    for extra_id in sorted(present_dirs - expected_ids):
-        discrepancies.append(f"line {extra_id}: directory not recorded in run manifest")
-    for model_id in sorted(expected_ids & present_dirs):
+    if scope_ids is None:
+        for extra_id in sorted(present_dirs - expected_ids):
+            discrepancies.append(
+                f"line {extra_id}: directory not recorded in run manifest"
+            )
+    for model_id in sorted(check_ids & present_dirs):
         discrepancies.extend(_verify_line(cache_dir, model_id, lines[model_id]))
 
     status = "failed" if discrepancies else "verified"
+    lines_present = (
+        len(present_dirs) if scope_ids is None else len(check_ids & present_dirs)
+    )
     return {
         "status": status,
         "cache_dir": str(cache_dir),
         "model_label": manifest.get("model_label"),
         "lines_expected": len(expected_ids),
-        "lines_present": len(present_dirs),
+        "lines_present": lines_present,
         "discrepancies": discrepancies,
     }
 
@@ -474,6 +565,7 @@ def _frozen_manifest_discrepancies(
     manifest: Mapping[str, object],
     lines: Mapping[str, object],
     frozen_manifest_path: Path | None,
+    scope_ids: set[str] | None = None,
 ) -> list[str]:
     """Diff the frozen Phase-A manifest's full ``model_id`` set against this run.
 
@@ -487,6 +579,22 @@ def _frozen_manifest_discrepancies(
     mismatch against ``config_snapshot["line_manifest_sha256"]``) frozen
     manifest is itself returned as a discrepancy -- the check is never
     silently skipped.
+
+    Checks both set differences (Codex P2): a frozen line never embedded is
+    a discrepancy, and so is an out-of-contract ``model_id`` recorded in
+    ``lines`` that the frozen manifest does not name at all.
+
+    Args:
+        manifest: The parsed run ``manifest.json``.
+        lines: ``manifest["lines"]``.
+        frozen_manifest_path: See :func:`verify_cache`.
+        scope_ids: If given (the ``--only-line`` restricted-verify case,
+            Codex P1-c), skip the completeness check -- this run is not
+            expected to have embedded every frozen line, only its own
+            shard's scope -- and instead only check that every requested id
+            is itself a legitimate frozen-manifest line. ``None`` performs
+            the full completeness check plus the out-of-contract check
+            across every line this run actually recorded.
     """
     config_snapshot = manifest.get("config_snapshot")
     recorded_sha256 = (
@@ -523,11 +631,21 @@ def _frozen_manifest_discrepancies(
     except ValueError as exc:
         problems.append(f"frozen line manifest at {path} failed to load: {exc}")
         return problems
-    missing = sorted(set(frozen["model_id"].astype(str)) - set(lines))
+    frozen_ids = set(frozen["model_id"].astype(str))
+    if scope_ids is None:
+        missing = sorted(frozen_ids - set(lines))
+        problems.extend(
+            f"line {model_id}: present in the frozen line manifest but was "
+            "never embedded (missing from run manifest.json lines)"
+            for model_id in missing
+        )
+        extra = sorted(set(lines) - frozen_ids)
+    else:
+        extra = sorted(scope_ids - frozen_ids)
     problems.extend(
-        f"line {model_id}: present in the frozen line manifest but was never "
-        "embedded (missing from run manifest.json lines)"
-        for model_id in missing
+        f"line {model_id}: present in run manifest.json lines but absent "
+        "from the frozen line manifest (out-of-contract line)"
+        for model_id in extra
     )
     return problems
 
@@ -587,7 +705,38 @@ def _verify_line(cache_dir: Path, model_id: str, expected_entry: object) -> list
         problems.append(
             f"line {model_id}: row counts disagree across arrays: {row_counts}"
         )
+    problems.extend(
+        _n_cells_agreement_discrepancy(model_id, expected_entry, row_counts)
+    )
     return problems
+
+
+def _n_cells_agreement_discrepancy(
+    model_id: str, expected_entry: Mapping[str, object], row_counts: Mapping[str, int]
+) -> list[str]:
+    """Cross-check the manifest's recorded ``n_cells`` against actual rows.
+
+    Codex P1-b (part 2): a resumed run that wrongly skips a line whose
+    sampling inputs changed (e.g. ``--max-cells-per-line``) can leave the
+    on-disk arrays at the old, smaller row count while the manifest entry's
+    ``n_cells`` reflects the newly resolved (larger) selection -- the two
+    still self-agree across ``embeddings``/``hvg``/``obs`` (all still the
+    old count), so the row-count-agreement check above cannot see it. Only
+    an explicit comparison against ``n_cells`` catches this.
+    """
+    recorded_n_cells = expected_entry.get("n_cells")
+    if recorded_n_cells is None or not row_counts:
+        return []
+    actual_counts = set(row_counts.values())
+    if len(actual_counts) != 1:
+        return []  # already reported as a row-count disagreement above
+    actual_n_cells = next(iter(actual_counts))
+    if int(recorded_n_cells) != actual_n_cells:
+        return [
+            f"line {model_id}: manifest n_cells={recorded_n_cells} but actual "
+            f"array row count={actual_n_cells}"
+        ]
+    return []
 
 
 def _file_shape(path: Path) -> tuple[int, ...]:
@@ -707,7 +856,15 @@ def _embed_one_line(
     hvg_matrix, hvg_gene_order, fill_rate = _resolve_hvg_matrix(
         adata, hvg_state_model_dir, hvg_gene_symbol_col
     )
-    if _is_cached(cache_dir, model_id, hvg_gene_order=hvg_gene_order):
+    sample_signature = _sample_provenance_signature(
+        adata.obs, seed=seed, max_cells_per_line=max_cells_per_line
+    )
+    if _is_cached(
+        cache_dir,
+        model_id,
+        hvg_gene_order=hvg_gene_order,
+        sample_signature=sample_signature,
+    ):
         _LOGGER.info("line %s: valid cache already exists, skipping encoder", model_id)
         embeddings, _, _ = load_line_cache(cache_dir, model_id)
         arrays = _line_dir_array_metadata(Path(cache_dir) / model_id)
@@ -721,6 +878,7 @@ def _embed_one_line(
             hvg_matrix,
             adata.obs,
             hvg_gene_order=hvg_gene_order,
+            sample_signature=sample_signature,
         )
     return {
         "arrays": arrays,
@@ -777,7 +935,11 @@ def _build_basal_adata(
 
 
 def _is_cached(
-    cache_dir: Path, model_id: str, *, hvg_gene_order: Sequence[str] | np.ndarray
+    cache_dir: Path,
+    model_id: str,
+    *,
+    hvg_gene_order: Sequence[str] | np.ndarray,
+    sample_signature: Mapping[str, object] | None = None,
 ) -> bool:
     """Check whether a line's on-disk cache is complete, valid, and current.
 
@@ -791,10 +953,22 @@ def _is_cached(
     counts still self-agree and its stale ``hvg.npy`` no longer means what
     the current run believes.
 
+    It also requires the cached sample-provenance sidecar (if one is
+    recorded) to match ``sample_signature`` -- the selection this call just
+    resolved for the *current* ``--max-cells-per-line``/``--seed`` (Codex
+    P1-b). A cache with **no** recorded sidecar is treated as a legacy
+    cache written before this check existed and is accepted as-is (see
+    :func:`_cached_sample_signature_matches`) -- this is deliberate so that
+    switching to this fixed code does not force re-embedding of lines an
+    in-flight run already wrote under the previous code.
+
     Args:
         cache_dir: Root cache directory.
         model_id: DepMap model id identifying the line.
         hvg_gene_order: The HVG gene order currently resolved for this line.
+        sample_signature: The sample-provenance signature currently resolved
+            for this line (see :func:`_sample_provenance_signature`).
+            ``None`` skips this check entirely.
 
     Returns:
         Whether the on-disk cache may be trusted and the encoder skipped.
@@ -810,7 +984,9 @@ def _is_cached(
     n_cells = embeddings.shape[0]
     if hvg_matrix.shape[0] != n_cells or len(obs) != n_cells:
         return False
-    return _cached_hvg_gene_order_matches(cache_dir, model_id, hvg_gene_order)
+    if not _cached_hvg_gene_order_matches(cache_dir, model_id, hvg_gene_order):
+        return False
+    return _cached_sample_signature_matches(cache_dir, model_id, sample_signature)
 
 
 def _cached_hvg_gene_order_matches(
@@ -826,6 +1002,39 @@ def _cached_hvg_gene_order_matches(
         return False
     expected = _hvg_gene_order_signature(hvg_gene_order)
     return isinstance(recorded, dict) and recorded.get("sha256") == expected["sha256"]
+
+
+def _cached_sample_signature_matches(
+    cache_dir: Path, model_id: str, expected: Mapping[str, object] | None
+) -> bool:
+    """Compare the on-disk sample-provenance sidecar against ``expected``.
+
+    A **missing** on-disk sidecar is treated as a legacy cache written
+    before this check existed, not as a mismatch (Codex P1-b backward
+    compatibility): forcing a re-embed here would silently discard
+    already-completed GPU work for every line an in-flight run wrote before
+    this fix shipped. Absence is trusted as-is; only a *recorded and
+    disagreeing* signature invalidates the cache.
+
+    Args:
+        cache_dir: Root cache directory.
+        model_id: DepMap model id identifying the line.
+        expected: The sample-provenance signature currently resolved for
+            this line. ``None`` disables the check (always matches).
+
+    Returns:
+        Whether the cached sample provenance may be trusted.
+    """
+    if expected is None:
+        return True
+    sidecar_path = Path(cache_dir) / model_id / _SAMPLE_PROVENANCE_FILENAME
+    if not sidecar_path.is_file():
+        return True  # legacy cache, written before this sidecar existed
+    try:
+        recorded = json.loads(sidecar_path.read_text())
+    except json.JSONDecodeError:
+        return False
+    return recorded == dict(expected)
 
 
 # --- HVG gene-order resolution (zero-fill for absent genes) --------------

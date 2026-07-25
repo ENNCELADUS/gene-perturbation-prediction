@@ -29,18 +29,34 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Mapping
 
-import anndata as ad
-import numpy as np
-import pandas as pd
-import torch
+# Codex P1-a: when this file is executed directly (``python
+# scripts/build_tx1_basal_embeddings.py ...``), Python puts this file's own
+# directory (``scripts/``) on ``sys.path``, not the repository root -- so
+# ``from scripts.verify_tx1_obsm_width import ...`` below raises
+# ModuleNotFoundError before any argument is even parsed, and
+# ``from aivc_model...`` fails too unless this project's own packages are
+# pip-installed into the interpreter running it (the HPC's dedicated
+# ``.venv-tx1`` is not). Prepending the repo root and ``src/`` here makes
+# both import families resolve without the caller having to set
+# ``PYTHONPATH`` -- this must run before any of the local imports below.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+for _extra_path in (_REPO_ROOT, _REPO_ROOT / "src"):
+    if str(_extra_path) not in sys.path:
+        sys.path.insert(0, str(_extra_path))
 
-from aivc_model.gene_splits import sha256_file
-from aivc_model.gwps_cache import sha256_strings
-from aivc_model.tx1_basal import load_line_manifest
-from aivc_model.tx1_embed_cache import (
+import anndata as ad  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import torch  # noqa: E402
+
+from aivc_model.gene_splits import sha256_file  # noqa: E402
+from aivc_model.gwps_cache import sha256_strings  # noqa: E402
+from aivc_model.tx1_basal import load_line_manifest  # noqa: E402
+from aivc_model.tx1_embed_cache import (  # noqa: E402
     MODEL_LABEL,
     EncoderFn,
     PerturbseqSource,
@@ -49,7 +65,7 @@ from aivc_model.tx1_embed_cache import (
     verify_cache,
     write_run_manifest,
 )
-from scripts.verify_tx1_obsm_width import (
+from scripts.verify_tx1_obsm_width import (  # noqa: E402
     install_padding_metadata_fallback,
     load_local_safetensors,
 )
@@ -280,7 +296,19 @@ def _run_embedding(args: argparse.Namespace) -> dict[str, object]:
         config_snapshot=config_snapshot,
     )
     _LOGGER.info("wrote run manifest; verifying cache at %s", args.cache_dir)
-    return verify_cache(args.cache_dir, frozen_manifest_path=args.line_manifest)
+    # Codex P1-c: a --only-line shard must verify only its own in-scope
+    # lines (only_lines=only_lines), not the full frozen manifest -- else
+    # every shard's exit code reflects the *other* shards' lines being
+    # absent, making exit codes useless for detecting real per-shard
+    # failure. The full, unrestricted criterion still runs for an
+    # unsharded invocation (only_lines is None) and for the explicit
+    # --verify-only aggregation pass in main() below (which never passes
+    # only_lines).
+    return verify_cache(
+        args.cache_dir,
+        frozen_manifest_path=args.line_manifest,
+        only_lines=only_lines,
+    )
 
 
 def parse_args() -> argparse.Namespace:
