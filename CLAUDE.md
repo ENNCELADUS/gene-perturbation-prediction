@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Guidance for Claude Code and Codex working in this repository.
+
 ## What this is
 
 Research code for **generalizable synthetic-lethality discovery by virtual-cell
@@ -9,11 +11,6 @@ score to cell lines excluded from training. **No SL graph in the feature path.**
 is the authority, not this file — start at `docs/README.md`. Role: careful junior
 engineer; **Plan → Confirm → Code**.
 
-## After each implementation wave
-
-Ask the user to run **`/codex:review --wait`** — Claude cannot invoke it
-(`disable-model-invocation`), and no `--model`/`--effort` flags. See `codex-review`.
-
 ## Skills — load before touching the area
 
 | Skill | Load before |
@@ -22,7 +19,31 @@ Ask the user to run **`/codex:review --wait`** — Claude cannot invoke it
 | `tx1-cache` | `tx1_basal.py`, `tx1_embed_cache.py`, `tx1_geneeffect_eval.py`, `build_tx1_basal_embeddings.py` |
 | `benchmark-harness` | `data/SL_benchmark/` splits, SL metrics, `vcc-dep-baseline`, `models:`/`selection:` configs |
 | `hpc-execution` | anything needing GPU, GWPS h5ad, ESM2, Tx1-3B, or the frozen exp05 checkpoint |
-| `codex-review` | finishing a wave |
+
+## After each implementation wave
+
+**You run the review, not the user.** Background it to a file and read the findings
+when it finishes — output runs to ~200 KB, so never let it land in context:
+
+```bash
+CH=<scratch>/codex-home; mkdir -p "$CH"; cp ~/.codex/auth.json "$CH/"
+printf 'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "high"\napproval_policy = "never"\nsandbox_mode = "workspace-write"\n' > "$CH/config.toml"
+CODEX_HOME="$CH" codex review --base <WAVE_BASE_SHA> > <wave>-review.txt 2>&1
+```
+
+`/codex:review` is `disable-model-invocation`, but that blocks only the slash command
+— the `codex` CLI beneath it is yours to run.
+
+**`-c 'mcp_servers={}'` does NOT disable MCP** — `-c` merges into the config, so the
+`[mcp_servers.*]` sub-tables in `~/.codex/config.toml` survive it. Verified 2026-07-25:
+a review launched with that override still started `gitnexus/detect_changes` and hung
+there with zero output growth, which is the same failure that killed two Phase B
+reviews. A clean `CODEX_HOME` (no `[mcp_servers]` table at all) is the fix; it also
+carries model and effort, so no `-c` flags are needed. `--effort` is not a valid flag
+either — `review` takes only `--base/--scope/--model/--cwd`, and a stray value is
+parsed as focus text, which is rejected.
+
+Output runs to ~300 KB. Findings are input to adjudicate, not instructions to apply.
 
 ## Environment
 
@@ -31,8 +52,10 @@ Ask the user to run **`/codex:review --wait`** — Claude cannot invoke it
   baselines. Most entrypoints need gitignored assets, so "it imports" ≠ "it runs here".
 - `.superpowers/sdd/` is gitignored but holds the **live plan and execution ledger**;
   `docs/specs/` holds the tracked designs.
-- **`AGENTS.md` is a symlink to `CLAUDE.md`** — edit `CLAUDE.md` only. **`.codex/AGENTS.md`
-  is stale and describes a different project**; ignore it.
+- **`AGENTS.md` is a symlink to `CLAUDE.md`** — edit `CLAUDE.md` only. **`.codex/` is a
+  current, tracked Codex setup** — `config.toml`, five agents under `agents/`, five
+  mirrored skills under `skills/`, and `AGENTS.md`, which is up to date and supplements
+  the root guide. Keep the two trees in sync; don't treat `.codex/` as leftovers.
 - Prefix every Python/pytest/ruff call with `uv run`. A global `rtk hook claude` hook
   **rewrites Bash output** (`ruff check .` prints `[]`) — call `.venv/bin/ruff` for real output.
 - `uv sync` installs the `dev` group only (`scib`/`datasets` absent). A new `src/<pkg>/` is
@@ -46,7 +69,7 @@ Ask the user to run **`/codex:review --wait`** — Claude cannot invoke it
   the repo root**.
 - **`tests/conftest.py` is load-bearing**: it sets `PYTORCH_ENABLE_MPS_FALLBACK` and
   `OMP_NUM_THREADS` *before* torch imports, imports xgboost first, and covers
-  `tests/sl_dl_model/` too. **Running a test file directly segfaults.** Reuse its fixtures.
+  the whole suite. **Running a test file directly segfaults.** Reuse its fixtures.
 - **The suite is not green** — baseline it first; don't assume a failure is yours. Tests
   also **skip silently** on missing gitignored data or `accelerate`, so a green run may
   have covered far less than it looks.

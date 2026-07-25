@@ -108,7 +108,7 @@ cell line + perturbation gene
     → context-specific target ranking
 ```
 
-That staged program is **retired as the roadmap**. It is not retired as code: `src/dependency_baseline/`, `src/aivc_model/`, `src/sl_benchmark_baseline/`, `src/sl_dl_model/`, and `src/ddgcn/` all still run (see [Architecture](#architecture)), and the active composition direction reuses the exp05 forward model and the SL benchmark harness directly. Its results are **prior evidence and baselines** for the new direction — see [Results](#results) for the numbers and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md) for the consolidated table.
+That staged program is **retired as the roadmap**. Its exp08/exp08b implementation has been removed; the remaining dependency, exp05 forward-model, SL-benchmark, and DDGCN code supports active work and retained baselines. Historical results remain **prior evidence** for the new direction — see [Results](#results) and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
 ## Installation
 
