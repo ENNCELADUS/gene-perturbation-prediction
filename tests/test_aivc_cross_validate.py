@@ -36,6 +36,7 @@ from aivc_model.prepare import (
     ExternalSourceConfig,
     ExternalTestConfig,
     GeneBags,
+    ResponseEncoderConfig,
     SealedGeneBags,
     load_config,
 )
@@ -927,6 +928,54 @@ def test_locked_preflight_rejects_nontrainable_gmm(
         cv._assert_locked_preflight_config(nontrainable_config)
 
 
+def test_locked_preflight_accepts_nonstandard_response_encoder_width(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_assert_locked_preflight_config` no longer hardcodes input_dim=2000.
+
+    Task 2 made the response encoder consume only target-space tensors, so
+    `input_dim` describes a target width that `_build_e2e_model` checks
+    against `data.effective_target_dim`. This preflight function has no
+    `GeneBags` in scope to check that width against, so it only pins
+    `latent_dim=128` and non-None-ness; a Tx1-shaped 2560-wide encoder must
+    be accepted here even though it is unrelated to the 2000-wide legacy
+    GWPS/STATE assets this preflight otherwise validates.
+    """
+    config = _preflight_config(tmp_path, monkeypatch)
+    tx1_shaped = replace(
+        config,
+        response_encoder=ResponseEncoderConfig(input_dim=2560, latent_dim=128),
+    )
+
+    cv._assert_locked_preflight_config(tx1_shaped)
+
+
+def test_locked_preflight_rejects_wrong_latent_dim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    wrong_latent_dim = replace(
+        config,
+        response_encoder=ResponseEncoderConfig(input_dim=2560, latent_dim=64),
+    )
+
+    with pytest.raises(ValueError, match="latent_dim=64"):
+        cv._assert_locked_preflight_config(wrong_latent_dim)
+
+
+def test_locked_preflight_rejects_missing_response_encoder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _preflight_config(tmp_path, monkeypatch)
+    missing_encoder = replace(config, response_encoder=None)
+
+    with pytest.raises(ValueError, match="response_encoder"):
+        cv._assert_locked_preflight_config(missing_encoder)
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -1391,9 +1440,7 @@ def test_run_training_fold_never_passes_outer_test_responses_to_fit(
         "external": None,
         "fold_spec": fold,
         "source_fingerprint": "source",
-        "accelerator": _mark_cuda_topology_validated(
-            _SingleProcessAccelerator()
-        ),
+        "accelerator": _mark_cuda_topology_validated(_SingleProcessAccelerator()),
     }
     cv.run_training_fold(data=data, run_dir=tmp_path / "first", **common)
     changed_bags = list(data.input_bags)
@@ -1556,9 +1603,10 @@ def test_outer_test_prediction_is_invariant_to_observed_response(
         first_internal.drop(columns="generation_loss"),
         second_internal.drop(columns="generation_loss"),
     )
-    assert first_internal["generation_loss"].iloc[0] != second_internal[
-        "generation_loss"
-    ].iloc[0]
+    assert (
+        first_internal["generation_loss"].iloc[0]
+        != second_internal["generation_loss"].iloc[0]
+    )
 
 
 def test_audited_fold_artifacts_share_exact_fit_authority(tmp_path: Path) -> None:

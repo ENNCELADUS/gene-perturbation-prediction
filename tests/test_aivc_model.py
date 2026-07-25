@@ -1628,23 +1628,30 @@ def test_response_encoder_config_is_optional_for_legacy_configs(tmp_path: Path) 
 
 
 @pytest.mark.parametrize(
-    "response_encoder",
+    ("response_encoder", "match"),
     [
-        None,
-        ResponseEncoderConfig(1999, 128),
-        ResponseEncoderConfig(2000, 127),
+        (None, "response_encoder"),
+        (ResponseEncoderConfig(3, 127), "latent_dim=127"),
+        (ResponseEncoderConfig(1999, 128), "input_dim=1999"),
     ],
 )
 def test_audited_e2e_builder_requires_locked_response_encoder(
     tmp_path: Path,
     response_encoder: ResponseEncoderConfig | None,
+    match: str,
 ) -> None:
+    """`_build_e2e_model` still locks `latent_dim=128` (the GMM/`c_head` are
+    built against it), but `input_dim` is now checked against
+    `data.effective_target_dim` (3 for this toy fixture) instead of a
+    hardcoded 2000 -- the old literal happened to be right only for the
+    legacy 2000-in/2000-out path.
+    """
     config = replace(
         load_config(_write_scvi_cache_config(tmp_path)),
         response_encoder=response_encoder,
     )
 
-    with pytest.raises(ValueError, match="input_dim=2000.*latent_dim=128"):
+    with pytest.raises(ValueError, match=match):
         train_module._build_e2e_model(
             config,
             _toy_gene_bags_with_batches(),
@@ -1652,6 +1659,60 @@ def test_audited_e2e_builder_requires_locked_response_encoder(
             canonical_gene_order=("GENE1", "GENE2"),
             emit_checkpoint_output=False,
         )
+
+
+def test_audited_e2e_builder_width_mismatch_names_observed_and_expected(
+    tmp_path: Path,
+) -> None:
+    """The input_dim mismatch error names both the observed and expected width."""
+    config = replace(
+        load_config(_write_scvi_cache_config(tmp_path)),
+        response_encoder=ResponseEncoderConfig(1999, 128),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        train_module._build_e2e_model(
+            config,
+            _toy_gene_bags_with_batches(),
+            extra_genes=(),
+            canonical_gene_order=("GENE1", "GENE2"),
+            emit_checkpoint_output=False,
+        )
+
+    message = str(exc_info.value)
+    assert "input_dim=1999" in message
+    assert "effective_target_dim=3" in message
+
+
+def test_audited_e2e_builder_accepts_response_encoder_matching_target_width(
+    tmp_path: Path,
+) -> None:
+    """A non-2000 response_encoder.input_dim is accepted once it matches the
+    data's target-space width, proving the check is a real
+    config-vs-data invariant and not the old `== 2000` guess. `input_dim`
+    (999) is deliberately different from `target_dim` (2560) so the test
+    cannot pass by coincidentally checking the wrong field.
+    """
+    data = _toy_dual_space_gene_bags(input_dim=999, target_dim=2560)
+    config = replace(
+        load_config(_write_scvi_cache_config(tmp_path)),
+        state=prepare_module.StateConfig(
+            backend="linear_mock",
+            output_dim=data.effective_target_dim,
+            pert_dim=4,
+        ),
+        response_encoder=ResponseEncoderConfig(2560, 128),
+    )
+
+    model = train_module._build_e2e_model(
+        config,
+        data,
+        extra_genes=(),
+        canonical_gene_order=("GENE1", "GENE2"),
+        emit_checkpoint_output=False,
+    )
+
+    assert model.response_encoder.linear.in_features == 2560
 
 
 def test_audited_e2e_builder_rejects_nontrainable_gmm(tmp_path: Path) -> None:
@@ -1666,7 +1727,7 @@ def test_audited_e2e_builder_rejects_nontrainable_gmm(tmp_path: Path) -> None:
     )
     config = replace(
         load_config(config_path),
-        response_encoder=ResponseEncoderConfig(2000, 128),
+        response_encoder=ResponseEncoderConfig(3, 128),
     )
     assert config.gmm.trainable is False
 
@@ -3774,7 +3835,9 @@ def test_esm2_state_is_trainable_before_ddp_prepare(
     config = load_config(_write_scvi_cache_config(tmp_path))
     config = replace(
         config,
-        response_encoder=ResponseEncoderConfig(input_dim=2000, latent_dim=128),
+        response_encoder=ResponseEncoderConfig(
+            input_dim=data.effective_target_dim, latent_dim=128
+        ),
         cv=replace(
             config.cv,
             outer_split_manifest=manifest,
@@ -3793,7 +3856,7 @@ def test_esm2_state_is_trainable_before_ddp_prepare(
     monkeypatch.setattr(gene_splits_module, "CANONICAL_GENE_COUNT", 2)
     monkeypatch.setattr(gene_splits_module, "CANONICAL_OUTER_FOLDS", frozenset({0, 1}))
     state_model = model_module.LinearMockStateModel(
-        input_dim=3, output_dim=2000, pert_dim=5
+        input_dim=3, output_dim=data.effective_target_dim, pert_dim=5
     )
     monkeypatch.setattr(
         train_module,
@@ -3857,7 +3920,9 @@ def test_esm2_build_rejects_missing_external_gene_without_filtering(
     config = load_config(_write_scvi_cache_config(tmp_path))
     config = replace(
         config,
-        response_encoder=ResponseEncoderConfig(input_dim=2000, latent_dim=128),
+        response_encoder=ResponseEncoderConfig(
+            input_dim=data.effective_target_dim, latent_dim=128
+        ),
         cv=replace(
             config.cv,
             outer_split_manifest=manifest,
@@ -3901,7 +3966,9 @@ def test_esm2_build_accepts_resolved_external_gene(tmp_path: Path, monkeypatch) 
     config = load_config(_write_scvi_cache_config(tmp_path))
     config = replace(
         config,
-        response_encoder=ResponseEncoderConfig(input_dim=2000, latent_dim=128),
+        response_encoder=ResponseEncoderConfig(
+            input_dim=data.effective_target_dim, latent_dim=128
+        ),
         cv=replace(
             config.cv,
             outer_split_manifest=manifest,

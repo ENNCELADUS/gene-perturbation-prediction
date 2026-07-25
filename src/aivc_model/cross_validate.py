@@ -41,7 +41,6 @@ from aivc_model.prepare import (
     AivcConfig,
     ExternalGeneBags,
     GeneBags,
-    ResponseEncoderConfig,
     SealedGeneBags,
     _load_external_metadata,
     load_config,
@@ -93,9 +92,7 @@ def run_preflight(config_path: Path) -> dict[str, object]:
         "canonical_split_folds": int(manifest["outer_fold"].nunique()),
         "canonical_split_sha256_length": len(split_sha256),
         "esm2_resolved": f"{esm_resolved}/{len(canonical_genes)}",
-        "esm2_external_resolved": (
-            f"{external_esm_resolved}/{len(external_genes)}"
-        ),
+        "esm2_external_resolved": (f"{external_esm_resolved}/{len(external_genes)}"),
         "state_expression_matches": (f"{len(cache_features)}/{STATE_FEATURE_COUNT}"),
         "state_input_dim": state_dims[0],
         "state_output_dim": state_dims[1],
@@ -126,8 +123,13 @@ def _assert_locked_preflight_config(config: AivcConfig) -> None:
         raise ValueError("repaired exp05 requires strict ESM-2 coverage")
     if config.state.representation_layer != "output":
         raise ValueError("repaired exp05 fixes the STATE representation to output")
-    if config.response_encoder != ResponseEncoderConfig(2000, 128):
-        raise ValueError("repaired exp05 requires a 2000-to-128 response encoder")
+    if config.response_encoder is None:
+        raise ValueError("repaired exp05 requires a response_encoder config; got None")
+    if config.response_encoder.latent_dim != 128:
+        raise ValueError(
+            "repaired exp05 requires response_encoder latent_dim=128; got "
+            f"latent_dim={config.response_encoder.latent_dim}"
+        )
     if config.gmm.trainable is not True:
         raise ValueError("repaired exp05 requires trainable GMM")
 
@@ -212,9 +214,7 @@ def _required_external_esm_genes(
     canonical_genes: np.ndarray,
 ) -> np.ndarray:
     metadata = _load_external_metadata(config)
-    external = {
-        str(gene).upper() for gene in metadata["perturbation_gene"].astype(str)
-    }
+    external = {str(gene).upper() for gene in metadata["perturbation_gene"].astype(str)}
     return np.asarray(sorted(external.difference(canonical_genes)), dtype=str)
 
 

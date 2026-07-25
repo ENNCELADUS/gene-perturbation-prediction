@@ -62,7 +62,6 @@ from aivc_model.prepare import (
     ExternalGeneBags,
     GeneBags,
     GeneSplit,
-    ResponseEncoderConfig,
     SealedGeneBags,
     encode_batch_labels,
     fit_linear_projector,
@@ -154,9 +153,7 @@ class _EvaluationControlPanel:
 
     def macro_batches(
         self,
-    ) -> Iterator[
-        tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor | None, ...]]
-    ]:
+    ) -> Iterator[tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor | None, ...]]]:
         for start in range(0, self.n_windows, self.macro_batch_windows):
             end = start + self.macro_batch_windows
             yield self.control_chunks[start:end], self.batch_index_chunks[start:end]
@@ -1897,8 +1894,7 @@ def _artifact_metadata_is_authorized(metadata: dict[str, object]) -> bool:
         and metadata["fit_genes_sha256"] == _sha256_strings(fit)
         and metadata["train_genes_sha256"] == _sha256_strings(train)
         and metadata["val_genes_sha256"] == _sha256_strings(val_genes)
-        and metadata["test_genes_sha256"]
-        == _sha256_strings(test_genes)
+        and metadata["test_genes_sha256"] == _sha256_strings(test_genes)
     )
 
 
@@ -2081,11 +2077,18 @@ def _build_e2e_model(
     canonical_gene_order: tuple[str, ...],
     emit_checkpoint_output: bool = True,
 ) -> AivcModel:
-    expected_response_config = ResponseEncoderConfig(input_dim=2000, latent_dim=128)
-    if config.response_encoder != expected_response_config:
+    if config.response_encoder is None:
+        raise ValueError("audited exp05 requires a response_encoder config; got None")
+    if config.response_encoder.latent_dim != 128:
         raise ValueError(
-            "audited exp05 requires response_encoder input_dim=2000 and "
-            "latent_dim=128"
+            "audited exp05 requires response_encoder latent_dim=128; got "
+            f"latent_dim={config.response_encoder.latent_dim}"
+        )
+    if config.response_encoder.input_dim != data.effective_target_dim:
+        raise ValueError(
+            "audited exp05 requires response_encoder input_dim to match "
+            f"data.effective_target_dim={data.effective_target_dim}; "
+            f"got input_dim={config.response_encoder.input_dim}"
         )
     if config.gmm.trainable is not True:
         raise ValueError("audited exp05 requires trainable GMM")
@@ -2671,9 +2674,7 @@ def _stratified_control_indices(
     ideal = panel_size * counts.astype(np.float64) / float(available)
     quotas = np.floor(ideal).astype(np.int64)
     minimum = (
-        np.ones_like(quotas)
-        if panel_size >= len(labels)
-        else np.zeros_like(quotas)
+        np.ones_like(quotas) if panel_size >= len(labels) else np.zeros_like(quotas)
     )
     quotas = np.maximum(quotas, minimum)
     quotas = np.minimum(quotas, counts)
