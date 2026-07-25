@@ -143,6 +143,7 @@ class _EvaluationControlPanel:
     """Fixed, device-resident 64-cell STATE windows for validation and test."""
 
     control_chunks: tuple[torch.Tensor, ...]
+    control_target_chunks: tuple[torch.Tensor, ...]
     batch_index_chunks: tuple[torch.Tensor | None, ...]
     macro_batch_windows: int
     selected_indices: np.ndarray
@@ -160,6 +161,12 @@ class _EvaluationControlPanel:
             end = start + self.macro_batch_windows
             yield self.control_chunks[start:end], self.batch_index_chunks[start:end]
 
+    def target_macro_batches(self) -> Iterator[tuple[torch.Tensor, ...]]:
+        """Yield the same window groups as `macro_batches` in target space."""
+        for start in range(0, self.n_windows, self.macro_batch_windows):
+            end = start + self.macro_batch_windows
+            yield self.control_target_chunks[start:end]
+
 
 @dataclass(frozen=True)
 class _InputTensorCache:
@@ -168,6 +175,8 @@ class _InputTensorCache:
     latent_bags: tuple[torch.Tensor, ...]
     batch_bags: tuple[torch.Tensor | None, ...]
     control_batch: torch.Tensor | None
+    control_target: torch.Tensor
+    target_bags: tuple[torch.Tensor, ...]
     estimated_bytes: int
 
     @classmethod
@@ -179,6 +188,10 @@ class _InputTensorCache:
         total += _label_array_bytes(data.control_batch)
         if data.batch_bags is not None:
             total += sum(_label_array_bytes(labels) for labels in data.batch_bags)
+        if data.control_target is not None:
+            total += _float32_array_bytes(data.control_target)
+        if data.target_bags is not None:
+            total += sum(_float32_array_bytes(bag) for bag in data.target_bags)
         return int(total)
 
     @classmethod
@@ -196,20 +209,47 @@ class _InputTensorCache:
                 _batch_tensor(labels, batch_lookup, device)
                 for labels in data.batch_bags
             )
-        return cls(
-            control_input=torch.as_tensor(
-                np.asarray(data.control_input, dtype=np.float32),
+        control_input = torch.as_tensor(
+            np.asarray(data.control_input, dtype=np.float32),
+            dtype=torch.float32,
+            device=device,
+        )
+        input_bags = tuple(
+            torch.as_tensor(
+                np.asarray(bag, dtype=np.float32),
                 dtype=torch.float32,
                 device=device,
-            ),
-            input_bags=tuple(
+            )
+            for bag in data.input_bags
+        )
+        # Reuse the ST-input cache tensors when no distinct target space is
+        # configured (``effective_control_target``/``effective_target_bags``
+        # fall back to the identical object) so legacy configs neither drift
+        # numerically nor pay double the cache memory.
+        control_target = (
+            control_input
+            if data.control_target is None
+            else torch.as_tensor(
+                np.asarray(data.control_target, dtype=np.float32),
+                dtype=torch.float32,
+                device=device,
+            )
+        )
+        target_bags = (
+            input_bags
+            if data.target_bags is None
+            else tuple(
                 torch.as_tensor(
                     np.asarray(bag, dtype=np.float32),
                     dtype=torch.float32,
                     device=device,
                 )
-                for bag in data.input_bags
-            ),
+                for bag in data.target_bags
+            )
+        )
+        return cls(
+            control_input=control_input,
+            input_bags=input_bags,
             latent_bags=tuple(
                 torch.as_tensor(
                     np.asarray(bag, dtype=np.float32),
@@ -220,6 +260,8 @@ class _InputTensorCache:
             ),
             batch_bags=batch_bags,
             control_batch=_batch_tensor(data.control_batch, batch_lookup, device),
+            control_target=control_target,
+            target_bags=target_bags,
             estimated_bytes=cls.estimate_bytes(data, batch_lookup),
         )
 
@@ -2123,7 +2165,9 @@ def _build_e2e_model(
         response_encoder=response_encoder,
         response_pooler=response_pooler,
         c_head=c_head,
-        control_expression_mean=data.control_input.mean(axis=0).astype(np.float32),
+        control_expression_mean=data.effective_control_target.mean(axis=0).astype(
+            np.float32
+        ),
     )
 
 
@@ -2230,7 +2274,9 @@ def _build_model(
         response_encoder=response_encoder,
         response_pooler=response_pooler,
         c_head=c_head,
-        control_expression_mean=data.control_input.mean(axis=0).astype(np.float32),
+        control_expression_mean=data.effective_control_target.mean(axis=0).astype(
+            np.float32
+        ),
     )
 
 
@@ -2546,6 +2592,11 @@ def _build_evaluation_control_panel(
     if data.control_input.shape[0] < 1:
         raise ValueError("prediction-only evaluation requires control cells")
     available = int(data.control_input.shape[0])
+    if int(data.effective_control_target.shape[0]) != available:
+        raise ValueError(
+            "control_input and effective_control_target must address the same "
+            "cells (row counts differ)"
+        )
     if available >= cell_set_len:
         effective_size = min(panel_size, (available // cell_set_len) * cell_set_len)
     else:
@@ -2564,6 +2615,19 @@ def _build_evaluation_control_panel(
     control_chunks = tuple(control_cells.split(cell_set_len, dim=0))
     if any(int(chunk.shape[0]) != cell_set_len for chunk in control_chunks):
         raise ValueError("evaluation control windows must have fixed cell_set_len")
+    # Same `selected` row indices as `control_chunks` -- the control-target
+    # windows must address the same cells, just in the response-encoder
+    # target (gene) feature space.
+    control_target_cells = torch.as_tensor(
+        np.asarray(data.effective_control_target[selected], dtype=np.float32),
+        dtype=torch.float32,
+        device=device,
+    )
+    control_target_chunks = tuple(control_target_cells.split(cell_set_len, dim=0))
+    if any(int(chunk.shape[0]) != cell_set_len for chunk in control_target_chunks):
+        raise ValueError(
+            "evaluation control target windows must have fixed cell_set_len"
+        )
     batch_indices = _batch_tensor(
         None if data.control_batch is None else data.control_batch[selected],
         batch_lookup,
@@ -2576,6 +2640,7 @@ def _build_evaluation_control_panel(
         batch_chunks = tuple(batch_indices.split(cell_set_len, dim=0))
     return _EvaluationControlPanel(
         control_chunks=control_chunks,
+        control_target_chunks=control_target_chunks,
         batch_index_chunks=batch_chunks,
         macro_batch_windows=min(macro_batch_windows, len(control_chunks)),
         selected_indices=selected,
@@ -2636,10 +2701,11 @@ def _control_panel_latent(
     model: AivcModel,
     panel: _EvaluationControlPanel,
 ) -> torch.Tensor:
+    """Encode the panel's control cells in response-encoder target space."""
     return torch.cat(
         [
-            model.response_encoder(torch.cat(control_chunks, dim=0))
-            for control_chunks, _batch_chunks in panel.macro_batches()
+            model.response_encoder(torch.cat(control_target_chunks, dim=0))
+            for control_target_chunks in panel.target_macro_batches()
         ],
         dim=0,
     )
@@ -2650,7 +2716,7 @@ def _generation_target_means(data: GeneBags | None) -> dict[str, np.ndarray]:
         return {}
     return {
         str(gene): np.asarray(bag, dtype=np.float32).mean(axis=0)
-        for gene, bag in zip(data.genes, data.input_bags, strict=True)
+        for gene, bag in zip(data.genes, data.effective_target_bags, strict=True)
         if bag.shape[0] > 0
     }
 
@@ -2670,7 +2736,9 @@ def _final_prediction_tensor(
     for index in gene_indices:
         gene = str(data.genes[index])
         predicted_latents: list[torch.Tensor] = []
-        predicted_sum = torch.zeros(data.input_dim, dtype=torch.float32, device=device)
+        predicted_sum = torch.zeros(
+            data.effective_target_dim, dtype=torch.float32, device=device
+        )
         predicted_count = 0
         for control_chunks, batch_chunks in control_panel.macro_batches():
             expression_chunks, predicted_latent = model.predict_response_chunks(
@@ -2767,6 +2835,7 @@ def _model_inputs_for_indices(
 ) -> tuple[dict[str, Any], torch.Tensor, torch.Tensor]:
     genes: list[str] = []
     control_chunk_groups: list[tuple[torch.Tensor, ...]] = []
+    control_target_chunk_groups: list[tuple[torch.Tensor, ...]] = []
     target_expression_groups: list[tuple[torch.Tensor, ...]] = []
     target_latent_groups: list[tuple[torch.Tensor, ...]] = []
     batch_index_groups: list[tuple[torch.Tensor | None, ...]] = []
@@ -2796,15 +2865,30 @@ def _model_inputs_for_indices(
                 for chunk in chunks
             )
         )
+        # Same `chunk.control_indices` as `control_chunk_groups` above -- the
+        # response-encoder-target-space view of the *same* control cells, not
+        # an independently sampled set. A different index set here would
+        # silently pair the wrong cells.
+        control_target_chunk_groups.append(
+            tuple(
+                _cached_or_numpy_rows(
+                    tensor_cache.control_target if tensor_cache is not None else None,
+                    data.effective_control_target,
+                    chunk.control_indices,
+                    device,
+                )
+                for chunk in chunks
+            )
+        )
         target_expression_groups.append(
             tuple(
                 _cached_or_numpy_rows(
                     (
-                        tensor_cache.input_bags[index]
+                        tensor_cache.target_bags[index]
                         if tensor_cache is not None
                         else None
                     ),
-                    data.input_bags[index],
+                    data.effective_target_bags[index],
                     chunk.target_indices,
                     device,
                 )
@@ -2851,6 +2935,7 @@ def _model_inputs_for_indices(
         {
             "gene": tuple(genes),
             "control_chunks": tuple(control_chunk_groups),
+            "control_target_chunks": tuple(control_target_chunk_groups),
             "target_expression_chunks": tuple(target_expression_groups),
             "target_latent_chunks": tuple(target_latent_groups),
             "batch_index_chunks": tuple(batch_index_groups),

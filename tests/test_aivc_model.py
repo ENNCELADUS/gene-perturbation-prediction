@@ -1894,6 +1894,7 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
             batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
             y: torch.Tensor,
             weights: LossWeights,
+            control_target_chunks: tuple[tuple[torch.Tensor, ...], ...] | None = None,
             gene_mask: torch.Tensor | None = None,
         ) -> dict[str, torch.Tensor]:
             batch_size = len(gene)
@@ -1905,6 +1906,7 @@ def test_run_epoch_sums_multi_gene_losses_in_one_optimizer_step(monkeypatch) -> 
                 batch_index_chunks,
                 y,
                 weights,
+                control_target_chunks,
                 gene_mask,
             )
             values = torch.arange(
@@ -2047,6 +2049,7 @@ def test_run_epoch_zero_weights_padding_for_loss_metrics_and_count() -> None:
             batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
             y: torch.Tensor,
             weights: LossWeights,
+            control_target_chunks: tuple[tuple[torch.Tensor, ...], ...] | None = None,
             gene_mask: torch.Tensor | None = None,
         ) -> dict[str, torch.Tensor]:
             del (
@@ -2057,6 +2060,7 @@ def test_run_epoch_zero_weights_padding_for_loss_metrics_and_count() -> None:
                 batch_index_chunks,
                 y,
                 weights,
+                control_target_chunks,
             )
             assert gene_mask is not None
             self.seen_masks.append(gene_mask.detach().cpu().tolist())
@@ -2149,6 +2153,7 @@ def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
             batch_index_chunks: tuple[tuple[torch.Tensor | None, ...], ...],
             y: torch.Tensor,
             weights: LossWeights,
+            control_target_chunks: tuple[tuple[torch.Tensor, ...], ...] | None = None,
             gene_mask: torch.Tensor | None = None,
         ) -> dict[str, torch.Tensor]:
             del (
@@ -2158,6 +2163,7 @@ def test_run_epoch_uses_one_model_forward_for_gene_batch(monkeypatch) -> None:
                 batch_index_chunks,
                 y,
                 weights,
+                control_target_chunks,
                 gene_mask,
             )
             if isinstance(gene, str):
@@ -3080,6 +3086,390 @@ def test_hvg_mean_delta_is_invariant_to_fixed_window_partitioning() -> None:
         fixed_windows["hvg_mean_delta"],
         complete_bag["hvg_mean_delta"],
     )
+
+
+def _toy_dual_space_gene_bags(
+    *,
+    input_dim: int = 2560,
+    target_dim: int = 2000,
+    n_control: int = 8,
+    cells_per_gene: int = 4,
+) -> GeneBags:
+    """Build a small two-view GeneBags with distinct ST-input/target widths.
+
+    Input- and target-space arrays are drawn from *different* RNG streams so
+    a chunk-index bug (right shape, wrong cells) would not coincidentally
+    produce a matching value.
+    """
+    genes = ("GENE1", "GENE2")
+    input_rng = np.random.default_rng(101)
+    target_rng = np.random.default_rng(202)
+    input_bags = tuple(
+        input_rng.standard_normal((cells_per_gene, input_dim)).astype(np.float32)
+        for _ in genes
+    )
+    target_bags = tuple(
+        target_rng.standard_normal((cells_per_gene, target_dim)).astype(np.float32)
+        for _ in genes
+    )
+    control_input = input_rng.standard_normal((n_control, input_dim)).astype(np.float32)
+    control_target = target_rng.standard_normal((n_control, target_dim)).astype(
+        np.float32
+    )
+    return GeneBags(
+        genes=np.asarray(genes, dtype=object),
+        y=np.asarray([-1.0, 0.4], dtype=np.float32),
+        input_bags=input_bags,
+        latent_bags=tuple(bag[:, :4].copy() for bag in input_bags),
+        control_input=control_input,
+        control_latent=control_input[:, :4].copy(),
+        cell_type_bags=None,
+        control_cell_type=None,
+        batch_bags=None,
+        control_batch=None,
+        feature_names=None,
+        feature_fill_values=np.zeros(input_dim, dtype=np.float32),
+        metadata=pd.DataFrame({"perturbation_gene": list(genes)}),
+        input_dim=input_dim,
+        latent_dim=4,
+        target_bags=target_bags,
+        control_target=control_target,
+        target_dim=target_dim,
+        target_feature_names=None,
+        target_fill_values=np.zeros(target_dim, dtype=np.float32),
+    )
+
+
+def _build_dual_space_aivc_model(data: GeneBags, *, latent_dim: int = 16) -> AivcModel:
+    """Build a small `AivcModel` matching `data`'s two feature spaces."""
+    state_model = load_state_model(
+        backend="linear_mock",
+        checkpoint_path=None,
+        input_dim=data.input_dim,
+        output_dim=data.effective_target_dim,
+        pert_dim=4,
+    )
+    perturbations = PerturbationVectorAdapter(list(data.genes), {}, pert_dim=4)
+    response_encoder = ResponseEncoder(
+        input_dim=data.effective_target_dim,
+        latent_dim=latent_dim,
+    )
+    response_pooler = TrainableDiagonalGMM(
+        latent_dim=latent_dim,
+        n_components=3,
+        covariance_floor=1e-4,
+        init_scale=0.02,
+    )
+    return AivcModel(
+        state_adapter=StateForwardAdapter(state_model),
+        perturbations=perturbations,
+        response_encoder=response_encoder,
+        response_pooler=response_pooler,
+        c_head=MLPHead(response_pooler.output_dim, (8,), 0.0),
+        control_expression_mean=data.effective_control_target.mean(axis=0).astype(
+            np.float32
+        ),
+    )
+
+
+def test_two_view_model_forward_runs_end_to_end_with_finite_losses() -> None:
+    """A 2560-in/2000-out GeneBags runs `forward` end to end (brief test 1)."""
+    torch.manual_seed(3)
+    data = _toy_dual_space_gene_bags()
+    model = _build_dual_space_aivc_model(data)
+    model_inputs, _fallback_counts, _n_chunks = train_module._model_inputs_for_indices(
+        data,
+        [0, 1],
+        np.random.default_rng(5),
+        cell_set_len=2,
+        device=torch.device("cpu"),
+        batch_lookup={},
+        pad_short=True,
+    )
+
+    losses = model(weights=_loss_weights(), **model_inputs)
+
+    for key, value in losses.items():
+        if isinstance(value, torch.Tensor) and value.numel() > 0:
+            assert torch.isfinite(value).all(), f"{key} is not finite: {value}"
+
+
+def test_response_encoder_is_never_called_with_an_input_space_tensor() -> None:
+    """Brief test 2: every response_encoder call this step is target-width."""
+    torch.manual_seed(4)
+    data = _toy_dual_space_gene_bags()
+    model = _build_dual_space_aivc_model(data)
+    assert model.response_encoder.linear.in_features == data.effective_target_dim
+    assert data.effective_target_dim != data.input_dim
+
+    observed_widths: list[int] = []
+
+    def _record_width(
+        _module: torch.nn.Module,
+        inputs: tuple[torch.Tensor, ...],
+        _output: torch.Tensor,
+    ) -> None:
+        observed_widths.append(int(inputs[0].shape[-1]))
+
+    handle = model.response_encoder.register_forward_hook(_record_width)
+    try:
+        model_inputs, _fallback, _n_chunks = train_module._model_inputs_for_indices(
+            data,
+            [0, 1],
+            np.random.default_rng(6),
+            cell_set_len=2,
+            device=torch.device("cpu"),
+            batch_lookup={},
+            pad_short=True,
+        )
+        model(weights=_loss_weights(), **model_inputs)
+    finally:
+        handle.remove()
+
+    assert observed_widths, "response_encoder was never called"
+    assert set(observed_widths) == {data.effective_target_dim}
+
+
+def test_control_expression_mean_has_target_width_not_input_width(
+    tmp_path: Path,
+) -> None:
+    """Brief test 3: the `control_expression_mean` construction sites (train.py)."""
+    data = _toy_dual_space_gene_bags()
+    config = replace(
+        load_config(_write_scvi_cache_config(tmp_path)),
+        state=prepare_module.StateConfig(
+            backend="linear_mock",
+            output_dim=data.effective_target_dim,
+            pert_dim=4,
+        ),
+        response_encoder=ResponseEncoderConfig(2000, 128),
+    )
+
+    model = train_module._build_e2e_model(
+        config,
+        data,
+        extra_genes=(),
+        canonical_gene_order=("GENE1", "GENE2"),
+        emit_checkpoint_output=False,
+    )
+
+    assert model.control_expression_mean.shape[0] == data.effective_target_dim
+    assert model.control_expression_mean.shape[0] != data.input_dim
+    np.testing.assert_allclose(
+        model.control_expression_mean.detach().cpu().numpy(),
+        data.effective_control_target.mean(axis=0),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_control_panel_latent_and_final_prediction_tensor_run_under_dual_space() -> (
+    None
+):
+    """Brief test 4: breakage sites 3 and 4 both run under 2560-in/2000-out."""
+    latent_dim = 16
+    data = _toy_dual_space_gene_bags()
+    model = _build_dual_space_aivc_model(data, latent_dim=latent_dim)
+    panel = train_module._build_evaluation_control_panel(
+        data,
+        cell_set_len=2,
+        panel_size=4,
+        macro_batch_windows=2,
+        seed=9,
+        device=torch.device("cpu"),
+        batch_lookup={},
+    )
+
+    control_latent = train_module._control_panel_latent(model, panel)
+    assert control_latent.shape[-1] == latent_dim
+
+    prediction = train_module._final_prediction_tensor(
+        model,
+        data,
+        [0, 1],
+        [False, False],
+        torch.device("cpu"),
+        panel,
+        control_latent,
+        train_module._generation_target_means(data),
+    )
+    assert torch.isfinite(prediction).all()
+
+
+def test_legacy_single_space_gene_bags_losses_match_pre_refactor_values() -> None:
+    """Legacy pin: single-space losses are unchanged by the Phase C tensor split.
+
+    Values captured by running this exact scenario (fixed seeds, fixed toy
+    data) against the pre-Task-2 code at commit 812fd0d, before
+    `control_target_chunks` existed -- see `task-2-report.md` for the capture
+    method. The Phase C fallback (`control_target_chunks=None` ->
+    `control_chunks`) must reproduce them bit-for-bit.
+    """
+    torch.manual_seed(1234)
+    model, _state_model = _build_two_gene_aivc_model()
+    data = _toy_gene_bags_with_batches()
+    assert data.target_bags is None
+
+    model_inputs, _fallback_counts, _n_chunks = train_module._model_inputs_for_indices(
+        data,
+        [0, 1],
+        np.random.default_rng(7),
+        cell_set_len=2,
+        device=torch.device("cpu"),
+        batch_lookup={"batch_a": 0, "batch_b": 1},
+        pad_short=True,
+    )
+
+    with torch.no_grad():
+        losses = model(weights=_loss_weights(), **model_inputs)
+
+    expected_scalars = {
+        "total": 31.59136199951172,
+        "hvg_mean_delta": 168.19288635253906,
+        "hvg_energy": 37.39579772949219,
+        "latent_mean_delta": 3.999521255493164,
+        "latent_energy": 5.656502723693848,
+        "pred_c": 1.087026596069336,
+        "obs_c": 0.5943214893341064,
+        "occupancy": 5.037659320805687e-07,
+        "gmm_nll": 2.817262649536133,
+        "pred_rank": 0.6931472420692444,
+    }
+    for key, value in expected_scalars.items():
+        torch.testing.assert_close(
+            losses[key],
+            torch.tensor(value, dtype=torch.float32),
+            msg=f"{key} drifted from the pre-refactor pinned value",
+        )
+    torch.testing.assert_close(
+        losses["pred_y"],
+        torch.tensor([0.26218903064727783, 0.26218900084495544]),
+    )
+    torch.testing.assert_close(
+        losses["obs_y"],
+        torch.tensor([-0.020738311111927032, -0.020740635693073273]),
+    )
+
+
+def test_control_chunks_and_control_target_chunks_address_the_same_cells() -> None:
+    """Highest-risk part of the Phase C diff: chunk-index pairing.
+
+    `control_chunks` and `control_target_chunks` must be built from
+    identical `chunk.control_indices` so both address the same control
+    cells, just in two feature spaces. Each control row is stamped with a
+    matched fingerprint (`target[:, 0] == input[:, 0] * 1000`) so a
+    different index set -- same shape, wrong cells -- shows up as a
+    mismatched value, not a shape error.
+    """
+    n_control = 12
+    input_dim = 6
+    target_dim = 5
+    control_input = np.zeros((n_control, input_dim), dtype=np.float32)
+    control_target = np.zeros((n_control, target_dim), dtype=np.float32)
+    for row in range(n_control):
+        control_input[row, 0] = float(row)
+        control_target[row, 0] = float(row) * 1000.0
+
+    genes = ("GENE1", "GENE2")
+    rng_bags = np.random.default_rng(3)
+    input_bags = tuple(
+        rng_bags.standard_normal((4, input_dim)).astype(np.float32) for _ in genes
+    )
+    target_bags = tuple(
+        rng_bags.standard_normal((4, target_dim)).astype(np.float32) for _ in genes
+    )
+    data = GeneBags(
+        genes=np.asarray(genes, dtype=object),
+        y=np.asarray([-1.0, 0.2], dtype=np.float32),
+        input_bags=input_bags,
+        latent_bags=tuple(bag[:, :2].copy() for bag in input_bags),
+        control_input=control_input,
+        control_latent=control_input[:, :2].copy(),
+        cell_type_bags=None,
+        control_cell_type=None,
+        batch_bags=None,
+        control_batch=None,
+        feature_names=None,
+        feature_fill_values=np.zeros(input_dim, dtype=np.float32),
+        metadata=pd.DataFrame({"perturbation_gene": list(genes)}),
+        input_dim=input_dim,
+        latent_dim=2,
+        target_bags=target_bags,
+        control_target=control_target,
+        target_dim=target_dim,
+        target_feature_names=None,
+        target_fill_values=np.zeros(target_dim, dtype=np.float32),
+    )
+
+    model_inputs, _fallback, _n_chunks = train_module._model_inputs_for_indices(
+        data,
+        [0, 1],
+        np.random.default_rng(21),
+        cell_set_len=3,
+        device=torch.device("cpu"),
+        batch_lookup={},
+        pad_short=True,
+    )
+
+    checked_chunks = 0
+    for gene_control_chunks, gene_control_target_chunks in zip(
+        model_inputs["control_chunks"],
+        model_inputs["control_target_chunks"],
+        strict=True,
+    ):
+        for control_chunk, control_target_chunk in zip(
+            gene_control_chunks,
+            gene_control_target_chunks,
+            strict=True,
+        ):
+            assert control_chunk.shape[0] == control_target_chunk.shape[0]
+            torch.testing.assert_close(
+                control_target_chunk[:, 0],
+                control_chunk[:, 0] * 1000.0,
+            )
+            checked_chunks += 1
+    assert checked_chunks > 0
+
+
+def test_evaluation_control_panel_pairs_control_chunks_with_control_target_chunks() -> (
+    None
+):
+    """The evaluation-time control panel (breakage site 3) pairs cells too."""
+    n_control = 12
+    data = replace(
+        _toy_dual_space_gene_bags(input_dim=4, target_dim=3, n_control=n_control),
+        control_input=np.zeros((n_control, 4), dtype=np.float32),
+        control_target=np.zeros((n_control, 3), dtype=np.float32),
+    )
+    control_input = np.asarray(data.control_input).copy()
+    control_target = np.asarray(data.control_target).copy()
+    for row in range(n_control):
+        control_input[row, 0] = float(row)
+        control_target[row, 0] = float(row) * 1000.0
+    data = replace(data, control_input=control_input, control_target=control_target)
+
+    panel = train_module._build_evaluation_control_panel(
+        data,
+        cell_set_len=3,
+        panel_size=6,
+        macro_batch_windows=2,
+        seed=4,
+        device=torch.device("cpu"),
+        batch_lookup={},
+    )
+
+    checked_chunks = 0
+    for control_chunk, control_target_chunk in zip(
+        panel.control_chunks,
+        panel.control_target_chunks,
+        strict=True,
+    ):
+        torch.testing.assert_close(
+            control_target_chunk[:, 0],
+            control_chunk[:, 0] * 1000.0,
+        )
+        checked_chunks += 1
+    assert checked_chunks > 0
 
 
 def test_aivc_batched_forward_backprops_each_gene_vector() -> None:
