@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 import hashlib
+import importlib
 import math
 from pathlib import Path
 import pickle
@@ -38,6 +39,11 @@ from aivc_model.model import (
     _pairwise_ranknet_loss,
 )
 from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
+from aivc_model.state_warm_start import (
+    build_warm_started_state_model,
+    validate_output_space,
+    warm_start_state_dict,
+)
 from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 from aivc_model.prepare import (
     DataConfig,
@@ -4666,6 +4672,258 @@ def test_load_state_model_can_suppress_checkpoint_stdout(
 
     assert isinstance(model, torch.nn.Identity)
     assert capsys.readouterr().out == ""
+
+
+def test_load_state_model_new_params_default_matches_legacy_call(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """With ``output_space`` and ``warm_start_from`` both at their default
+    (``None``), ``load_state_model`` must call ``load_from_checkpoint`` with
+    exactly today's arguments -- no extra kwargs -- so every existing caller
+    (``train.py``, ``state_feature_ablation.py``, ``sl_dl_model/encoder.py``)
+    is byte-identical after this change (C1).
+    """
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class FakeStateTransitionPerturbationModel:
+        @classmethod
+        def load_from_checkpoint(
+            cls, *args: object, **kwargs: object
+        ) -> torch.nn.Module:
+            calls.append((args, kwargs))
+            return torch.nn.Identity()
+
+    module = types.ModuleType("state.tx.models.state_transition")
+    module.StateTransitionPerturbationModel = FakeStateTransitionPerturbationModel
+    monkeypatch.setitem(sys.modules, "state.tx.models.state_transition", module)
+
+    checkpoint_path = tmp_path / "state.ckpt"
+    model = load_state_model(
+        backend="state_checkpoint",
+        checkpoint_path=checkpoint_path,
+        input_dim=3,
+        output_dim=3,
+        pert_dim=2,
+    )
+
+    assert isinstance(model, torch.nn.Identity)
+    assert calls == [((str(checkpoint_path),), {"strict": False})]
+
+
+def test_warm_start_state_dict_loads_every_matching_key(tmp_path: Path) -> None:
+    reference = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.Linear(4, 2))
+    checkpoint_path = tmp_path / "reference.ckpt"
+    torch.save({"state_dict": reference.state_dict()}, checkpoint_path)
+
+    destination = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.Linear(4, 2))
+    report = warm_start_state_dict(destination, checkpoint_path)
+
+    assert report.shape_skipped_keys == ()
+    assert report.missing_keys == ()
+    assert report.unexpected_keys == ()
+    assert sorted(report.loaded_keys) == sorted(reference.state_dict().keys())
+    destination_state = dict(destination.state_dict())
+    for name, tensor in reference.state_dict().items():
+        assert torch.equal(destination_state[name], tensor)
+
+
+def test_warm_start_state_dict_skips_shape_mismatch_and_keeps_fresh_init(
+    tmp_path: Path,
+) -> None:
+    class TinyStateLike(torch.nn.Module):
+        def __init__(self, input_dim: int) -> None:
+            super().__init__()
+            self.basal_encoder = torch.nn.Sequential(torch.nn.Linear(input_dim, 6))
+            self.project_out = torch.nn.Linear(6, 4)
+
+    reference = TinyStateLike(input_dim=3)
+    checkpoint_path = tmp_path / "reference.ckpt"
+    torch.save({"state_dict": reference.state_dict()}, checkpoint_path)
+
+    destination = TinyStateLike(input_dim=5)
+    fresh_weight = destination.basal_encoder[0].weight.clone()
+
+    report = warm_start_state_dict(destination, checkpoint_path)
+
+    assert report.shape_skipped_keys == ("basal_encoder.0.weight",)
+    assert set(report.loaded_keys) == {
+        "basal_encoder.0.bias",
+        "project_out.weight",
+        "project_out.bias",
+    }
+    assert report.missing_keys == ()
+    assert report.unexpected_keys == ()
+    # The shape-mismatched key must keep its freshly initialized value...
+    assert torch.equal(destination.basal_encoder[0].weight, fresh_weight)
+    # ...while every shape-matched key (including the same layer's bias)
+    # actually loaded the checkpoint's values.
+    assert torch.equal(
+        destination.basal_encoder[0].bias, reference.basal_encoder[0].bias
+    )
+    assert torch.equal(destination.project_out.weight, reference.project_out.weight)
+    assert torch.equal(destination.project_out.bias, reference.project_out.bias)
+
+
+def test_warm_start_state_dict_raises_when_nothing_loadable(tmp_path: Path) -> None:
+    reference = torch.nn.Linear(3, 4)
+    checkpoint_path = tmp_path / "reference.ckpt"
+    torch.save({"state_dict": reference.state_dict()}, checkpoint_path)
+
+    destination = torch.nn.Linear(5, 6)  # weight and bias both mismatch
+
+    with pytest.raises(ValueError, match="loaded zero keys"):
+        warm_start_state_dict(destination, checkpoint_path)
+
+
+def test_validate_output_space_rejects_illegal_value() -> None:
+    validate_output_space(None)
+    validate_output_space("gene")
+    validate_output_space("all")
+    validate_output_space("embedding")
+    with pytest.raises(ValueError, match="output_space"):
+        validate_output_space("bogus")
+
+
+def test_load_state_model_rejects_illegal_output_space(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="output_space"):
+        load_state_model(
+            backend="state_checkpoint",
+            checkpoint_path=tmp_path / "state.ckpt",
+            input_dim=3,
+            output_dim=3,
+            pert_dim=2,
+            output_space="bogus",
+        )
+
+
+class _FakeStateModel(torch.nn.Module):
+    """Minimal STATE-shaped module for the warm-start-construction tests."""
+
+    def __init__(
+        self,
+        *,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        pert_dim: int,
+        **_unused_hparams: object,
+    ) -> None:
+        super().__init__()
+        del pert_dim
+        self.basal_encoder = torch.nn.Sequential(torch.nn.Linear(input_dim, hidden_dim))
+        self.project_out = torch.nn.Linear(hidden_dim, output_dim)
+
+
+def _write_fake_reference_checkpoint(tmp_path: Path) -> tuple[Path, "_FakeStateModel"]:
+    reference = _FakeStateModel(input_dim=3, hidden_dim=6, output_dim=4, pert_dim=2)
+    checkpoint_path = tmp_path / "reference.ckpt"
+    torch.save(
+        {
+            "hyper_parameters": {
+                "input_dim": 3,
+                "hidden_dim": 6,
+                "output_dim": 4,
+                "pert_dim": 2,
+            },
+            "state_dict": reference.state_dict(),
+        },
+        checkpoint_path,
+    )
+    return checkpoint_path, reference
+
+
+def test_build_warm_started_state_model_overrides_input_dim(tmp_path: Path) -> None:
+    checkpoint_path, reference = _write_fake_reference_checkpoint(tmp_path)
+
+    model, report = build_warm_started_state_model(
+        model_cls=_FakeStateModel,
+        hparams_checkpoint_path=checkpoint_path,
+        warm_start_from=checkpoint_path,
+        input_dim=5,
+        output_dim=4,
+        pert_dim=2,
+        output_space=None,
+        emit_checkpoint_output=True,
+    )
+
+    assert model.basal_encoder[0].weight.shape == (6, 5)
+    assert report.shape_skipped_keys == ("basal_encoder.0.weight",)
+    assert torch.equal(model.project_out.weight, reference.project_out.weight)
+    assert torch.equal(model.basal_encoder[0].bias, reference.basal_encoder[0].bias)
+
+
+def test_load_state_model_warm_start_from_wires_to_fresh_construction(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = types.ModuleType("state.tx.models.state_transition")
+    module.StateTransitionPerturbationModel = _FakeStateModel
+    monkeypatch.setitem(sys.modules, "state.tx.models.state_transition", module)
+
+    checkpoint_path, reference = _write_fake_reference_checkpoint(tmp_path)
+
+    model = load_state_model(
+        backend="state_checkpoint",
+        checkpoint_path=checkpoint_path,
+        input_dim=5,
+        output_dim=4,
+        pert_dim=2,
+        warm_start_from=checkpoint_path,
+        emit_checkpoint_output=False,
+    )
+
+    assert model.basal_encoder[0].weight.shape == (6, 5)
+    assert torch.equal(model.project_out.weight, reference.project_out.weight)
+
+
+_REAL_ST_CHECKPOINT = Path(
+    "model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt"
+)
+
+
+def test_real_st_checkpoint_warm_start_skips_input_projection_loads_llama_body() -> (
+    None
+):
+    """Warm start the real 450 MB ``ST-HVG-Replogle`` checkpoint into a fresh
+    2560-input variant (the Tx1 arm's input width, with no released
+    checkpoint for it): only ``basal_encoder.0.weight`` should shape-skip,
+    while the 8-layer llama transformer body loads unchanged.
+    """
+    if not _REAL_ST_CHECKPOINT.exists():
+        pytest.skip(
+            "Real ST-HVG-Replogle checkpoint not present at "
+            f"{_REAL_ST_CHECKPOINT.resolve()} -- the warm-start shape-filter "
+            "path against the actual released checkpoint is UNTESTED this run."
+        )
+    module = importlib.import_module("state.tx.models.state_transition")
+    cls = module.StateTransitionPerturbationModel
+
+    model, report = build_warm_started_state_model(
+        model_cls=cls,
+        hparams_checkpoint_path=_REAL_ST_CHECKPOINT,
+        warm_start_from=_REAL_ST_CHECKPOINT,
+        input_dim=2560,
+        output_dim=2000,
+        pert_dim=2024,
+        output_space="gene",
+        emit_checkpoint_output=False,
+    )
+
+    assert model.basal_encoder[0].weight.shape == (328, 2560)
+    assert report.shape_skipped_keys == ("basal_encoder.0.weight",)
+    assert "basal_encoder.0.bias" in report.loaded_keys
+
+    llama_layer_indices = {
+        key.split(".")[2]
+        for key in report.loaded_keys
+        if key.startswith("transformer_backbone.layers.")
+    }
+    assert llama_layer_indices == {str(index) for index in range(8)}
+    per_layer_tensor_count = sum(
+        1
+        for key in report.loaded_keys
+        if key.startswith("transformer_backbone.layers.0.")
+    )
+    assert per_layer_tensor_count == 9
 
 
 def _loss_weights() -> LossWeights:
