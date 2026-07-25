@@ -678,6 +678,285 @@ def _log_xatlas_filter_counts(
     )
 
 
+# --- RESPONSE (perturbed-cell) builders ------------------------------------
+#
+# Counterparts to the basal (control-only) builders above, added for Wave 2
+# Phase C Task 5 (multi-line observed-response assembly:
+# `.superpowers/sdd/phase-c/task-5-brief.md`). ST's observed-response
+# supervision target is post-perturbation gene expression from *perturbed*
+# cells -- CPU-only raw-count extraction, never Tx1 inference (that stays
+# basal-only, Phase B). These reuse the same per-source parsing/assembly
+# primitives as their basal siblings (`_require_ensembl_source`,
+# `_materialize_rows`, `_assemble_token_matrix`, `_row_to_xatlas_cell`)
+# rather than duplicating them, and deliberately do not reservoir-sample or
+# cap cell counts: unlike a fixed-size basal panel, the observed-response
+# target needs every available perturbed cell for the requested gene(s).
+
+
+def build_perturbseq_response_adata(
+    h5ad_path: Path,
+    *,
+    control_label: str,
+    perturbation_col: str,
+    cell_line_name: str,
+    model_id: str,
+    cellosaurus_id: str,
+    var_ensembl_col: str,
+    genes: Sequence[str] | None = None,
+) -> ad.AnnData:
+    """Assemble one cell line's observed post-perturbation response AnnData.
+
+    Counterpart to :func:`build_perturbseq_basal_adata` for RESPONSE
+    (perturbed, not control) cells: selects every cell whose
+    ``obs[perturbation_col]`` is **not** ``control_label``, optionally
+    further restricted to ``genes``, and keeps each cell's own perturbation
+    label as ``obs["perturbation_gene"]`` so a caller can group cells into
+    per-gene bags.
+
+    Args:
+        h5ad_path: Path to the Perturb-seq h5ad file.
+        control_label: Exact ``obs[perturbation_col]`` value identifying
+            non-targeting controls, excluded from the result.
+        perturbation_col: ``obs`` column carrying the perturbation label.
+        cell_line_name: Human-readable line name written to
+            ``obs["cell_type"]``.
+        model_id: DepMap model id written to ``obs["model_id"]``.
+        cellosaurus_id: Cellosaurus id written to ``obs["cellosaurus_id"]``.
+        var_ensembl_col: ``var`` column or index name carrying Ensembl gene
+            ids (see :func:`_require_ensembl_source`).
+        genes: Optional subset of perturbation-gene labels to keep (exact
+            ``obs[perturbation_col]`` string match). ``None`` keeps every
+            non-control cell.
+
+    Returns:
+        An AnnData satisfying ``assert_tx1_input_contract``, with
+        ``obs["perturbation_gene"]`` set to each cell's own perturbation
+        label plus the same ``cellosaurus_id``/``model_id`` provenance
+        columns as :func:`build_perturbseq_basal_adata`.
+
+    Raises:
+        ValueError: ``var_ensembl_col`` names neither a ``var`` column nor
+            ``var.index.name``, no perturbed cell survives the requested
+            filters, or the assembled AnnData fails the Tx1 input contract.
+    """
+    backed = ad.read_h5ad(h5ad_path, backed="r")
+    try:
+        _require_ensembl_source(backed.var, var_ensembl_col, h5ad_path)
+        obs_labels = backed.obs[perturbation_col].astype(str)
+        mask = obs_labels != control_label
+        if genes is not None:
+            allowed = {str(gene) for gene in genes}
+            mask = mask & obs_labels.isin(allowed)
+        selected = np.flatnonzero(mask.to_numpy())
+        if not selected.size:
+            restriction = f" restricted to {sorted(set(genes))}" if genes else ""
+            raise ValueError(
+                f"No perturbed cells found for {perturbation_col}!={control_label!r}"
+                f"{restriction} in {h5ad_path}"
+            )
+        matrix = csr_matrix(_materialize_rows(backed.X, selected))
+        obs_names = backed.obs_names.to_numpy()[selected].astype(str).tolist()
+        perturbation_gene = obs_labels.to_numpy()[selected]
+        var = backed.var.copy()
+    finally:
+        backed.file.close()
+
+    if var_ensembl_col in var.columns:
+        var.index = var[var_ensembl_col].astype(str)
+    # else: _require_ensembl_source already confirmed var.index.name ==
+    # var_ensembl_col, matching build_perturbseq_basal_adata's convention.
+    n_cells = matrix.shape[0]
+    obs = pd.DataFrame(
+        {
+            "cell_type": [cell_line_name] * n_cells,
+            "cellosaurus_id": [cellosaurus_id] * n_cells,
+            "model_id": [model_id] * n_cells,
+            "perturbation_gene": perturbation_gene,
+        },
+        index=obs_names,
+    )
+    adata = ad.AnnData(X=matrix, obs=obs, var=var)
+    assert_tx1_input_contract(adata)
+    _LOGGER.info(
+        "built Perturb-seq response AnnData for %s: %d cells, %d genes, %d "
+        "distinct perturbations",
+        cellosaurus_id,
+        n_cells,
+        adata.n_vars,
+        len(set(perturbation_gene.tolist())),
+    )
+    return adata
+
+
+def build_xatlas_orion_response_adata(
+    shard_dir: Path,
+    gene_metadata_path: Path,
+    *,
+    cell_line_name: str,
+    model_id: str,
+    cellosaurus_id: str,
+    shard_glob: str = "*.parquet",
+    control_label: str = _XATLAS_CONTROL_LABEL,
+    pass_guide_filter_value: int = _XATLAS_PASS_GUIDE_FILTER_VALUE,
+    genes: Sequence[str] | None = None,
+) -> ad.AnnData:
+    """Assemble one line's observed post-perturbation response AnnData from
+    X-Atlas-Orion parquet shards.
+
+    Counterpart to :func:`build_xatlas_orion_basal_adata` for RESPONSE
+    cells: selects every guide-QC-passing cell whose ``gene_target`` is
+    **not** ``control_label``, optionally further restricted to ``genes``,
+    keeping each cell's own ``gene_target`` as ``obs["perturbation_gene"]``.
+
+    Args:
+        shard_dir: Directory holding this line's X-Atlas-Orion parquet
+            shards.
+        gene_metadata_path: Parquet file mapping ``gene_token_id`` to
+            ``ensembl_id`` and ``gene_name``.
+        cell_line_name: Human-readable line name written to
+            ``obs["cell_type"]``.
+        model_id: DepMap model id written to ``obs["model_id"]``.
+        cellosaurus_id: Cellosaurus id written to ``obs["cellosaurus_id"]``.
+        shard_glob: Glob pattern (relative to ``shard_dir``) selecting this
+            line's shard files.
+        control_label: Exact ``gene_target`` value identifying
+            non-targeting-control cells, excluded from the result.
+        pass_guide_filter_value: Required ``pass_guide_filter`` value.
+        genes: Optional subset of ``gene_target`` labels to keep. ``None``
+            keeps every perturbed cell.
+
+    Returns:
+        An AnnData satisfying ``assert_tx1_input_contract``, with
+        ``obs["perturbation_gene"]``/``obs["sample"]`` set alongside the
+        same provenance columns as :func:`build_xatlas_orion_basal_adata`.
+
+    Raises:
+        ValueError: No shard matches ``shard_glob``, no cell survives the
+            requested filters, or the assembled AnnData fails the Tx1 input
+            contract.
+    """
+    cells, perturbation_genes = _stream_xatlas_response_cells(
+        shard_dir,
+        shard_glob,
+        control_label=control_label,
+        pass_guide_filter_value=pass_guide_filter_value,
+        genes=genes,
+    )
+    metadata = pd.read_parquet(gene_metadata_path).set_index(
+        _XATLAS_GENE_METADATA_TOKEN_COL
+    )
+    matrix, var = _assemble_token_matrix(
+        [(cell.genes, cell.values) for cell in cells],
+        metadata,
+        metadata_var_columns=_XATLAS_GENE_METADATA_VAR_COLUMNS,
+    )
+    n_cells = matrix.shape[0]
+    obs = pd.DataFrame(
+        {
+            "cell_type": [cell_line_name] * n_cells,
+            "cellosaurus_id": [cellosaurus_id] * n_cells,
+            "model_id": [model_id] * n_cells,
+            "perturbation_gene": perturbation_genes,
+            "sample": [cell.sample for cell in cells],
+        },
+        index=[f"{cell.sample}:{cell.cell_barcode}" for cell in cells],
+    )
+    adata = ad.AnnData(X=matrix, obs=obs, var=var)
+    assert_tx1_input_contract(adata)
+    _LOGGER.info(
+        "built X-Atlas-Orion response AnnData for %s: %d cells, %d genes, %d "
+        "distinct perturbations",
+        cellosaurus_id,
+        n_cells,
+        adata.n_vars,
+        len(set(perturbation_genes.tolist())),
+    )
+    return adata
+
+
+def _stream_xatlas_response_cells(
+    shard_dir: Path,
+    shard_glob: str,
+    *,
+    control_label: str,
+    pass_guide_filter_value: int,
+    genes: Sequence[str] | None,
+) -> tuple[list[_XatlasCell], np.ndarray]:
+    """Stream every perturbed, guide-QC-passing X-Atlas-Orion cell (no cap).
+
+    Mirrors :func:`_reservoir_sample_xatlas_cells`'s shard-streaming shape
+    but keeps every matching row instead of reservoir-sampling a fixed-size
+    subset, and filters to ``gene_target != control_label`` (perturbed)
+    rather than ``== control_label`` (basal).
+    """
+    paths = sorted(shard_dir.glob(shard_glob))
+    if not paths:
+        raise ValueError(
+            f"No parquet shards matching {shard_glob!r} found under {shard_dir}"
+        )
+    allowed = {str(gene) for gene in genes} if genes is not None else None
+    cells: list[_XatlasCell] = []
+    perturbation_genes: list[str] = []
+    counts = np.zeros(3, dtype=np.int64)  # total, after-perturbed, after-guide-filter
+    for path in paths:
+        frame = pd.read_parquet(path, columns=list(_XATLAS_READ_COLUMNS))
+        total = len(frame)
+        frame = frame[frame[_XATLAS_PERTURBATION_COL].astype(str) != control_label]
+        if allowed is not None:
+            frame = frame[frame[_XATLAS_PERTURBATION_COL].astype(str).isin(allowed)]
+        after_perturbed = len(frame)
+        frame = frame[
+            frame[_XATLAS_PASS_GUIDE_FILTER_COL].astype(int) == pass_guide_filter_value
+        ]
+        after_guide = len(frame)
+        counts += np.array([total, after_perturbed, after_guide], dtype=np.int64)
+        for row in frame.itertuples(index=False):
+            cells.append(_row_to_xatlas_cell(row))
+            perturbation_genes.append(str(getattr(row, _XATLAS_PERTURBATION_COL)))
+    _log_xatlas_response_filter_counts(
+        shard_dir, shard_glob, counts, control_label, pass_guide_filter_value
+    )
+    if not cells:
+        raise ValueError(
+            f"No perturbed cells found matching {_XATLAS_PERTURBATION_COL}!="
+            f"{control_label!r} under {shard_dir} ({shard_glob!r})"
+        )
+    return cells, np.asarray(perturbation_genes, dtype=object)
+
+
+def _log_xatlas_response_filter_counts(
+    shard_dir: Path,
+    shard_glob: str,
+    counts: np.ndarray,
+    control_label: str,
+    pass_guide_filter_value: int,
+) -> None:
+    """Log how many cells the perturbed-label and guide-QC filters each removed.
+
+    A separate function from :func:`_log_xatlas_filter_counts` rather than a
+    reuse: that one's message hardcodes an ``==`` comparison against
+    ``control_label``, which would misreport this builder's ``!=`` (plus
+    optional gene-subset) selection as an equality filter.
+    """
+    total, after_perturbed, after_guide = (int(value) for value in counts)
+    _LOGGER.info(
+        "X-Atlas-Orion response cell filtering under %s (%s): %d total rows, "
+        "%d after selecting %s!=%r (optionally gene-restricted) (removed %d), "
+        "%d after %s==%d (removed %d)",
+        shard_dir,
+        shard_glob,
+        total,
+        after_perturbed,
+        _XATLAS_PERTURBATION_COL,
+        control_label,
+        total - after_perturbed,
+        after_guide,
+        _XATLAS_PASS_GUIDE_FILTER_COL,
+        pass_guide_filter_value,
+        after_perturbed - after_guide,
+    )
+
+
 def assert_tx1_input_contract(adata: ad.AnnData) -> None:
     """Enforce the verified Tx1 input contract on a candidate basal AnnData.
 

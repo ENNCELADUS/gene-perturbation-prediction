@@ -19,8 +19,10 @@ from scipy.sparse import csr_matrix
 from aivc_model.tx1_basal import (
     assert_tx1_input_contract,
     build_perturbseq_basal_adata,
+    build_perturbseq_response_adata,
     build_tahoe_basal_adata,
     build_xatlas_orion_basal_adata,
+    build_xatlas_orion_response_adata,
     load_line_manifest,
 )
 from conftest import TX1_MANIFEST_COLUMNS as _MANIFEST_COLUMNS
@@ -1044,3 +1046,185 @@ def test_build_xatlas_orion_basal_adata_logs_filter_removal_counts(
     assert "3 total rows" in filter_logs[0]
     assert "2 after" in filter_logs[0]  # after gene_target control filter
     assert "1 after" in filter_logs[0]  # after guide filter
+
+
+# --- build_perturbseq_response_adata (Phase C Task 5) ----------------------
+
+
+def test_build_perturbseq_response_adata_selects_only_perturbed_cells(
+    tmp_path: Path,
+) -> None:
+    h5ad_path = _write_perturbseq_h5ad(tmp_path / "data.h5ad", n_control=4, n_other=6)
+    adata = build_perturbseq_response_adata(
+        h5ad_path,
+        control_label="non-targeting",
+        perturbation_col="gene",
+        cell_line_name="LineP",
+        model_id="ACH-P",
+        cellosaurus_id="CVCL_P",
+        var_ensembl_col="ensembl_id",
+    )
+    assert adata.n_obs == 6
+    assert set(adata.obs["perturbation_gene"].unique()) == {"TP53"}
+    assert "non-targeting" not in adata.obs["perturbation_gene"].unique()
+
+
+def test_build_perturbseq_response_adata_genes_filter_restricts_selection(
+    tmp_path: Path,
+) -> None:
+    h5ad_path = _write_perturbseq_h5ad(tmp_path / "data.h5ad", n_control=2, n_other=3)
+    adata = build_perturbseq_response_adata(
+        h5ad_path,
+        control_label="non-targeting",
+        perturbation_col="gene",
+        cell_line_name="LineP",
+        model_id="ACH-P",
+        cellosaurus_id="CVCL_P",
+        var_ensembl_col="ensembl_id",
+        genes=["TP53"],
+    )
+    assert adata.n_obs == 3
+    with pytest.raises(ValueError, match="No perturbed cells"):
+        build_perturbseq_response_adata(
+            h5ad_path,
+            control_label="non-targeting",
+            perturbation_col="gene",
+            cell_line_name="LineP",
+            model_id="ACH-P",
+            cellosaurus_id="CVCL_P",
+            var_ensembl_col="ensembl_id",
+            genes=["NOT_A_REAL_GENE"],
+        )
+
+
+def test_build_perturbseq_response_adata_accepts_ensembl_only_index(
+    tmp_path: Path,
+) -> None:
+    h5ad_path = _write_perturbseq_h5ad_ensembl_index(
+        tmp_path / "data.h5ad", n_control=2, n_other=3, index_name="gene_id"
+    )
+    adata = build_perturbseq_response_adata(
+        h5ad_path,
+        control_label="non-targeting",
+        perturbation_col="gene",
+        cell_line_name="LineP",
+        model_id="ACH-P",
+        cellosaurus_id="CVCL_P",
+        var_ensembl_col="gene_id",
+    )
+    assert adata.n_obs == 3
+    assert adata.var.index.tolist() == [f"ENSG{index:011d}" for index in range(3)]
+
+
+# --- build_xatlas_orion_response_adata (Phase C Task 5) ---------------------
+
+
+def test_build_xatlas_orion_response_adata_selects_only_perturbed_passing_guide(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_xatlas_shard(
+        shard_dir / "HCT116_Batch1.parquet",
+        [
+            _xatlas_row(
+                gene_token_id=[0, 1],
+                gene_expression=[1.0, 2.0],
+                cell_barcode="AAA",
+                gene_target="TP53",
+            ),
+            _xatlas_row(
+                gene_token_id=[0, 1],
+                gene_expression=[9.0, 9.0],
+                cell_barcode="BBB",
+                gene_target="TP53",
+                pass_guide_filter=0,  # fails guide QC -> excluded
+            ),
+            _xatlas_row(
+                gene_token_id=[0, 1],
+                gene_expression=[9.0, 9.0],
+                cell_barcode="CCC",  # control -> excluded
+            ),
+            _xatlas_row(
+                gene_token_id=[0, 1],
+                gene_expression=[3.0, 4.0],
+                cell_barcode="DDD",
+                gene_target="MYC",
+            ),
+        ],
+    )
+    metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0, 1])
+    adata = build_xatlas_orion_response_adata(
+        shard_dir,
+        metadata_path,
+        cell_line_name="HCT116",
+        model_id="ACH-000971",
+        cellosaurus_id="CVCL_0291",
+    )
+    assert adata.n_obs == 2
+    assert sorted(adata.obs_names.tolist()) == [
+        "HCT116_Batch1:AAA",
+        "HCT116_Batch1:DDD",
+    ]
+    assert sorted(adata.obs["perturbation_gene"].tolist()) == ["MYC", "TP53"]
+
+
+def test_build_xatlas_orion_response_adata_genes_filter_restricts_selection(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_xatlas_shard(
+        shard_dir / "HCT116_Batch1.parquet",
+        [
+            _xatlas_row(
+                gene_token_id=[0],
+                gene_expression=[1.0],
+                cell_barcode="AAA",
+                gene_target="TP53",
+            ),
+            _xatlas_row(
+                gene_token_id=[0],
+                gene_expression=[2.0],
+                cell_barcode="BBB",
+                gene_target="MYC",
+            ),
+        ],
+    )
+    metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
+    adata = build_xatlas_orion_response_adata(
+        shard_dir,
+        metadata_path,
+        cell_line_name="HCT116",
+        model_id="ACH-000971",
+        cellosaurus_id="CVCL_0291",
+        genes=["MYC"],
+    )
+    assert adata.n_obs == 1
+    assert adata.obs["perturbation_gene"].tolist() == ["MYC"]
+
+
+def test_build_xatlas_orion_response_adata_raises_when_nothing_matches(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_xatlas_shard(
+        shard_dir / "HCT116_Batch1.parquet",
+        [
+            _xatlas_row(
+                gene_token_id=[0],
+                gene_expression=[1.0],
+                cell_barcode="AAA",  # control only, no perturbed cells
+            ),
+        ],
+    )
+    metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
+    with pytest.raises(ValueError, match="No perturbed cells"):
+        build_xatlas_orion_response_adata(
+            shard_dir,
+            metadata_path,
+            cell_line_name="HCT116",
+            model_id="ACH-000971",
+            cellosaurus_id="CVCL_0291",
+        )
