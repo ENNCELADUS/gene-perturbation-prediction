@@ -25,6 +25,7 @@ Phase B split ``tx1_basal.py`` (build) from ``tx1_embed_cache.py`` (cache).
 from __future__ import annotations
 
 import logging
+from types import MappingProxyType
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Mapping, Sequence
@@ -56,6 +57,22 @@ _DROPPED_EXACT_KEYS: Final[frozenset[str]] = frozenset({"control_expression_mean
 ARM_TX1: Final[str] = "tx1_arm"
 ARM_HVG: Final[str] = "hvg_arm"
 _VALID_ARMS: Final[frozenset[str]] = frozenset({ARM_TX1, ARM_HVG})
+
+# Symbol-history renames between the frozen slice and the anchors' perturbation
+# vocabularies. MEASURED, not guessed: the Phase D Task 0 coverage pass
+# (`.superpowers/sdd/phase-d/task-0-coverage.md` §2) checked all four anchor
+# libraries and found the frozen slice's CRIPTO and HEMK2 are perturbed under
+# their current HGNC symbols TDGF1 and N6AMT1 in every one of them.
+#
+# This is load-bearing, not cosmetic. Without it those two genes fail vocabulary
+# resolution, slice coverage silently drops from 587/587 to 585/587, and Phase F's
+# _validate_panel_aware_coverage fails closed -- after the training run. The naive
+# (alias-blind) union count was 585/589; correcting for these two aliases is what
+# established that only FOXO3B and MRPL12 were genuinely unreachable, which is the
+# measurement the 589 -> 587 contract amendment rests on.
+SLICE_SYMBOL_ALIASES: Final[Mapping[str, str]] = MappingProxyType(
+    {"CRIPTO": "TDGF1", "HEMK2": "N6AMT1"}
+)
 
 
 class UnknownPerturbationGeneError(ValueError):
@@ -250,7 +267,7 @@ def resolve_genes_against_vocabulary(
             alias resolution) are outside the vocabulary.
     """
     vocabulary = vocabulary_genes(perturbations)
-    aliases = dict(alias_map) if alias_map is not None else {}
+    aliases = dict(SLICE_SYMBOL_ALIASES if alias_map is None else alias_map)
     resolved: list[str] = []
     unresolved: list[str] = []
     for gene in genes:
