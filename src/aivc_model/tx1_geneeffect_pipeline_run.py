@@ -27,16 +27,39 @@ Two things this module resolves that no earlier Phase D task did:
    translation, built once from the frozen slice's own
    ``gene_symbol``/``depmap_column`` pairing.
 
-An open gap this module does NOT resolve (Task 2's own docstring flagged it
-first): ``state.gene_vocabulary_path`` must be Phase C's exact, ordered, full
-perturbation-adapter training vocabulary --
-:class:`~aivc_model.model.PerturbationVectorAdapter` keys its trainable
-"missing" parameters by construction-time list POSITION, not gene identity,
-so the wrong order/vocabulary silently loads the wrong gene's vector into
-each slot once Phase C's checkpoint loads. No Phase C artifact under today's
-``results/experiments/12_tx1_st_geneeffect/phase_c/`` output tree is confirmed
-to hold that exact list in that exact order; producing it is a follow-up,
-not something this task invents or guesses at.
+Wave 3 Codex gate (fix round 1) closed the gap the module docstring used to
+flag here: Phase C's checkpoint writer now emits ``gene_vocabulary.json``
+(the exact, ordered, full perturbation-adapter training vocabulary) beside
+``pytorch_model.bin``, records its sha256 in that checkpoint's sibling
+``metadata.json``, and this module authenticates ``state.gene_vocabulary_path``
+against that recorded hash before ever constructing a model from it
+(:func:`~aivc_model.tx1_geneeffect_pipeline.verify_gene_vocabulary_authenticity`,
+P1-3) -- a same-genes-different-order file would otherwise pass gene-coverage
+and ``load_state_dict`` alike while silently binding every positional
+missing-gene weight to the wrong symbol.
+
+That same gate also closed four other gaps in this module specifically:
+
+* **P1-1**: :func:`run_training_pipeline` now runs an UNRESTRICTED
+  ``tx1_embed_cache.verify_cache`` (Phase B's own "verified embedding
+  caches" exit criterion) before any basal cache is read. The width check
+  this module previously relied on alone
+  (``tx1_geneeffect_pipeline.validate_widths``) only cross-checks the
+  FIRST manifest entry's recorded shape -- a stale or corrupted entry for
+  any other line passed silently.
+* **P1-2**: now runs ``tx1_geneeffect_eval.verify_artifact_hashes`` before
+  reading the frozen Phase-A registration/slice/panels -- that trust
+  anchor was previously read unauthenticated here despite already existing
+  precisely to catch this.
+* **P1-4**: ``predicted_response_fingerprint`` now also hashes the FULL,
+  ORDERED gene vocabulary (not just the sorted set of requested genes), so
+  a reordered vocabulary can no longer reuse another construction's cached
+  responses under an identical key.
+* **P1-5**: resolves an accelerator device
+  (:func:`~aivc_model.tx1_predicted_response.resolve_device`, config
+  ``state.device``, default ``"auto"``) once, moves the forward-only model
+  there, and threads it through every response-generation call -- ST
+  inference no longer runs unconditionally on CPU.
 """
 
 from __future__ import annotations
@@ -48,9 +71,15 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 import pandas as pd
+import torch
 
+from aivc_model.tx1_embed_cache import verify_cache
 from aivc_model.tx1_geneeffect_data import LineRoleSplit, load_depmap_gene_effect
-from aivc_model.tx1_geneeffect_eval import load_panels, load_slice
+from aivc_model.tx1_geneeffect_eval import (
+    load_panels,
+    load_slice,
+    verify_artifact_hashes,
+)
 from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead
 from aivc_model.tx1_geneeffect_pipeline import (
     Tx1GeneEffectHeadConfig,
@@ -58,6 +87,7 @@ from aivc_model.tx1_geneeffect_pipeline import (
     validate_gene_coverage,
     validate_roles,
     validate_widths,
+    verify_gene_vocabulary_authenticity,
 )
 from aivc_model.tx1_geneeffect_predict import (
     assemble_test_line_examples,
@@ -76,6 +106,7 @@ from aivc_model.tx1_predicted_response import (
     construct_forward_only_model,
     generate_predicted_response_for_line,
     load_forward_only_checkpoint,
+    resolve_device,
 )
 from aivc_model.tx1_predicted_response_cache import (
     load_predicted_response_cache,
@@ -175,11 +206,14 @@ def warm_predicted_response_cache(
     model_id: str,
     role: str,
     genes: Sequence[str],
+    vocabulary_genes: Sequence[str],
     arm: str,
     cell_set_len: int,
     seed: int,
     st_checkpoint_path: Path,
     phase_b_manifest_path: Path,
+    *,
+    device: torch.device | str = "cpu",
 ) -> str:
     """Ensure ``model_id``/``arm``'s predicted-response cache entry is fresh
     (D11); return its fingerprint (for
@@ -189,12 +223,21 @@ def warm_predicted_response_cache(
     Reuses an existing cache entry when its fingerprint already matches;
     otherwise forwards ST for every gene and writes a fresh entry. Never
     partially reuses a stale entry (D11).
+
+    Args:
+        vocabulary_genes: The full, ordered gene vocabulary ``model`` was
+            constructed with -- folded into the cache fingerprint (P1-4) so
+            a reordered vocabulary cannot silently reuse another
+            construction's cached responses.
+        device: Where to run ST's forward pass (P1-5); ``model`` must
+            already be on this device (see :func:`run_training_pipeline`).
     """
     fingerprint = predicted_response_fingerprint(
         st_checkpoint_path=st_checkpoint_path,
         phase_b_manifest_path=phase_b_manifest_path,
         model_id=model_id,
         genes=genes,
+        vocabulary_genes=vocabulary_genes,
         seed=seed,
         arm=arm,
         cell_set_len=cell_set_len,
@@ -222,6 +265,7 @@ def warm_predicted_response_cache(
             arm=arm,
             cell_set_len=cell_set_len,
             seed=seed,
+            device=device,
             require_training_role=True,
         )
         for gene in genes
@@ -230,6 +274,33 @@ def warm_predicted_response_cache(
         predicted_response_cache_dir, model_id, arm, fingerprint, responses
     )
     return fingerprint
+
+
+def _ensure_fresh_run_dir(resolved_run_dir: Path) -> None:
+    """Refuse to write into a run directory that already exists (P2-3).
+
+    A rerun with a fixed ``run_id`` would otherwise overwrite the checkpoint
+    and provenance in place while leaving any OTHER prior file untouched --
+    e.g. an old ``tx1_3b_st_predictions.csv`` from an earlier run that used
+    ``--skip-test-predictions`` differently, sitting beside a checkpoint it
+    was never actually produced from. A plausible, mismatched artifact is
+    worse than a crash (D10): require a fresh directory instead.
+
+    Checked first, before any other validation, so a doomed rerun fails
+    immediately rather than after minutes of cache verification/training.
+
+    Raises:
+        FileExistsError: ``resolved_run_dir`` already exists.
+    """
+    if resolved_run_dir.exists():
+        raise FileExistsError(
+            f"run directory {resolved_run_dir} already exists; refusing to "
+            "reuse it (Wave 3 Codex gate P2-3): a rerun could leave a stale "
+            "output file -- e.g. an old tx1_3b_st_predictions.csv -- beside "
+            "a new checkpoint. Choose a fresh run_id/run_dir, or remove the "
+            "existing directory yourself if you are intentionally replacing "
+            "its contents."
+        )
 
 
 def run_training_pipeline(
@@ -248,12 +319,21 @@ def run_training_pipeline(
 
     D6/D12 are enforced by the functions this delegates to (Task 1's
     ``assert_training_role``/``build_line_role_split``, Task 3's
-    ``_assert_examples_admissible``) -- never re-derived here.
+    ``_assert_examples_admissible``) -- never re-derived here. Wave 3 Codex
+    gate P1-1/P1-2/P1-3/P1-5/P2-3 are enforced directly in this function
+    (see the module docstring); ordered cheapest-check-first, and every
+    trust check runs before any cache is read or model is constructed from
+    it.
 
     Returns:
         Output paths: always ``run_dir``/``checkpoint``/``provenance``; also
         ``predictions`` when ``emit_test_predictions_flag``.
     """
+    resolved_run_dir = (
+        Path(run_dir) if run_dir else Path(config.output_dir) / "runs" / config.run_id
+    )
+    _ensure_fresh_run_dir(resolved_run_dir)  # P2-3
+
     validate_config_shape(config, check_paths=True)
     validate_widths(config, tx1_cache_dir)
     manifest, registration, split = validate_roles(
@@ -263,6 +343,25 @@ def run_training_pipeline(
         str(row.model_id): str(row.role) for row in manifest.itertuples(index=False)
     }
 
+    # P1-2: authenticate the frozen Phase-A registration/slice/panels before
+    # trusting anything read from phase_a_dir below.
+    verify_artifact_hashes(Path(phase_a_dir))
+
+    # P1-1: the Phase B exit criterion ("verified embedding caches") --
+    # unrestricted (no only_lines), and run before `load_line_cache` is
+    # ever reached (deep inside `assemble_split_examples`/
+    # `emit_test_predictions`). `validate_widths` above only cross-checks
+    # ONE manifest entry's recorded shape; it is not a substitute.
+    cache_report = verify_cache(
+        Path(tx1_cache_dir), frozen_manifest_path=Path(line_manifest_path)
+    )
+    if cache_report["status"] != "verified":
+        raise ValueError(
+            f"Phase B basal-embedding cache at {tx1_cache_dir} failed "
+            "verification (Wave 3 Codex gate P1-1); refusing to read it: "
+            f"{cache_report['discrepancies']}"
+        )
+
     phase_a_registration = json.loads(
         (Path(phase_a_dir) / "phase_a_registration.json").read_text()
     )
@@ -270,8 +369,20 @@ def run_training_pipeline(
     resolved_genes = validate_gene_coverage(slice_df, config.state.gene_vocabulary_path)
     vocabulary_genes = json.loads(Path(config.state.gene_vocabulary_path).read_text())
 
+    # P1-3: authenticate state.gene_vocabulary_path against Phase C's own
+    # recorded hash before it ever seeds a model's parameter positions.
+    verify_gene_vocabulary_authenticity(
+        config.state.gene_vocabulary_path,
+        config.state.st_checkpoint_path,
+        config.state.backend,
+    )
+
+    # P1-5: resolve an accelerator device once and move the model there --
+    # every response-generation call below threads it through explicitly.
+    device = resolve_device(config.state.device)
     model = build_forward_only_model(config, vocabulary_genes)
     load_forward_only_checkpoint(model, config.state.st_checkpoint_path)
+    model.to(device)
 
     train_and_validation_ids = tuple(
         sorted(set(split.train_model_ids) | set(split.validation_model_ids))
@@ -293,11 +404,13 @@ def run_training_pipeline(
             model_id,
             role_by_id[model_id],
             resolved_genes,
+            vocabulary_genes,
             config.arm,
             config.state.cell_set_len,
             config.state.response_generation_seed,
             config.state.st_checkpoint_path,
             phase_b_manifest_path,
+            device=device,
         )
         for model_id in train_and_validation_ids
     }
@@ -324,9 +437,6 @@ def run_training_pipeline(
         train_lines, validation_lines, training_config
     )
 
-    resolved_run_dir = (
-        Path(run_dir) if run_dir else Path(config.output_dir) / "runs" / config.run_id
-    )
     checkpoint_path = save_checkpoint(head, resolved_run_dir / "models" / "head.pt")
     provenance = build_provenance(
         st_checkpoint_path=config.state.st_checkpoint_path,
@@ -356,6 +466,7 @@ def run_training_pipeline(
             depmap_gene_effect_path=depmap_gene_effect_path,
             tx1_cache_dir=tx1_cache_dir,
             run_dir=resolved_run_dir,
+            device=device,
         )
     return outputs
 
@@ -373,9 +484,14 @@ def emit_test_predictions(
     depmap_gene_effect_path: Path,
     tx1_cache_dir: Path,
     run_dir: Path,
+    device: torch.device | str = "cpu",
 ) -> Path:
     """Build and write the D1 ``tx1_3b_st`` predictions table for the 9
     frozen held-out lines (Task 4).
+
+    Args:
+        device: Where to run ST's forward pass for these 9 lines (P1-5);
+            ``model`` must already be on this device.
 
     Returns:
         The path the table was written to.
@@ -401,6 +517,7 @@ def emit_test_predictions(
             depmap_frame.loc[model_id],
             cell_set_len=config.state.cell_set_len,
             seed=config.state.response_generation_seed,
+            device=device,
         )
         for model_id in split.test_model_ids
     ]

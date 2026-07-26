@@ -29,6 +29,18 @@ Fingerprint field-by-field rationale (:func:`predicted_response_fingerprint`):
   with a cache write for a different ``model_id``.
 * ``gene_list`` -- sorted, deduplicated: a different requested gene panel
   must never reuse another panel's cache.
+* ``vocabulary_gene_order`` -- Wave 3 Codex gate P1-4: the FULL, ORDERED
+  ``PerturbationVectorAdapter``/forward-only model gene vocabulary the
+  response was generated from (Phase D's ``state.gene_vocabulary_path``),
+  preserved in construction order and NOT sorted or deduplicated here (unlike
+  ``gene_list`` above). ``gene_list`` alone only captures the *requested*
+  genes -- reordering the vocabulary a model was constructed with changes
+  which positional ``missing_vectors`` slot binds to which gene (fix rounds
+  5/6; ``tx1_geneeffect_pipeline_run``'s module docstring), which changes
+  every generated response, WITHOUT changing ``gene_list`` at all. Hashing
+  order-sensitively is deliberate and mirrors
+  ``gwps_cache.py::source_fingerprint`` hashing ``state_input_view`` for the
+  same reason: two constructions that could otherwise hash alike must not.
 * ``seed`` -- the padding-resample seed
   (``tx1_predicted_response._chunk_control_cell_indices``); changing it
   changes which basal cells get duplicated into a line's final short window.
@@ -69,7 +81,11 @@ from aivc_model.gene_splits import sha256_file
 
 #: Bump whenever the fingerprint payload or cache file layout changes -- a
 #: stale schema_version must refuse to load, same as a stale fingerprint.
-_SCHEMA_VERSION: Final[int] = 1
+#: Bumped 1 -> 2 for Wave 3 Codex gate P1-4: schema 1 caches never hashed
+#: ``vocabulary_gene_order``, so any pre-existing cache entry could be
+#: silently stale against a reordered vocabulary; bumping forces every
+#: existing entry to miss and regenerate rather than being trusted blind.
+_SCHEMA_VERSION: Final[int] = 2
 
 
 def predicted_response_fingerprint(
@@ -78,6 +94,7 @@ def predicted_response_fingerprint(
     phase_b_manifest_path: Path,
     model_id: str,
     genes: Sequence[str],
+    vocabulary_genes: Sequence[str],
     seed: int,
     arm: str,
     cell_set_len: int,
@@ -85,6 +102,12 @@ def predicted_response_fingerprint(
     """Fingerprint every source that can silently change a predicted response.
 
     See the module docstring for the field-by-field rationale.
+
+    Args:
+        vocabulary_genes: The FULL, ORDERED gene vocabulary the forward-only
+            model's perturbation adapter was constructed with (e.g.
+            ``PerturbationVectorAdapter.genes``) -- order preserved, not
+            sorted or deduplicated (see module docstring).
 
     Returns:
         A 64-character hex sha256 digest.
@@ -97,6 +120,7 @@ def predicted_response_fingerprint(
         ),
         "model_id": str(model_id),
         "gene_list": sorted({str(gene) for gene in genes}),
+        "vocabulary_gene_order": [str(gene) for gene in vocabulary_genes],
         "seed": int(seed),
         "arm": str(arm),
         "cell_set_len": int(cell_set_len),

@@ -385,8 +385,58 @@ def load_validation_line_registration(
             f"{current_sha256}, but this registration was derived from "
             f"{recorded_sha256}; regenerate it against the current contract"
         )
+    _assert_validation_registration_count(path, registration)
     _assert_validation_disjoint(manifest, registration["validation_model_ids"])
     return registration
+
+
+def _assert_validation_registration_count(
+    path: Path, registration: Mapping[str, object]
+) -> None:
+    """Wave 3 Codex gate P2-2: reject a truncated or duplicated registration.
+
+    ``_assert_validation_disjoint`` (called right after this) converts
+    ``validation_model_ids`` to a ``set`` before checking disjointness, so a
+    DUPLICATED id collapses invisibly there without ever being noticed. A
+    TRUNCATED list (fewer ids than this registration's own recorded
+    ``validation_count``) has no check anywhere else in this module. Both
+    would otherwise silently train with fewer validation lines than the
+    registration claims -- the manifest-freshness check above cannot catch
+    either, since neither requires the frozen manifest itself to have
+    changed.
+
+    This does not, and cannot, catch a registration where BOTH
+    ``validation_model_ids`` and ``validation_count`` were edited together
+    to agree on a smaller, self-consistent number -- that is a genuinely
+    different (re-registered) contract, not a truncation/duplication bug,
+    and is out of scope for a generic loader that legitimately serves
+    smaller synthetic registrations in tests. Guarding the specific,
+    frozen, real ``validation_lines.json`` contract's line count of 5 is a
+    dedicated test on that file (not a runtime assertion here), since this
+    function is also exercised by tests with deliberately smaller
+    registrations.
+
+    Raises:
+        ValueError: ``validation_model_ids`` contains a duplicate id, or its
+            length disagrees with the registration's own ``validation_count``.
+    """
+    ids = [str(value) for value in registration["validation_model_ids"]]
+    if len(set(ids)) != len(ids):
+        duplicates = sorted({value for value in ids if ids.count(value) > 1})
+        raise ValueError(
+            f"{path}: validation_model_ids contains duplicate id(s) "
+            f"{duplicates} -- a duplicated id silently trains with fewer "
+            "than the registered validation line count"
+        )
+    recorded_count = int(registration["validation_count"])
+    if len(ids) != recorded_count:
+        raise ValueError(
+            f"{path}: validation_model_ids has {len(ids)} entries but this "
+            f"registration's own validation_count is {recorded_count}; "
+            "refusing to trust a registration whose recorded count "
+            "disagrees with its own id list (a truncated or otherwise "
+            "edited validation_lines.json)"
+        )
 
 
 def build_line_role_split(

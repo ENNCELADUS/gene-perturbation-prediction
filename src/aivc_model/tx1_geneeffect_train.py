@@ -96,7 +96,7 @@ class LineExamples:
     targets: torch.Tensor
 
 
-def _line_pooled_features(head: Tx1GeneEffectHead, line: LineExamples) -> torch.Tensor:
+def _line_pooled_features(line: LineExamples, moments: int) -> torch.Tensor:
     """The pooled response+basal feature matrix for every gene in ``line``.
 
     Shape ``[G, (response_dim + basal_dim) * moments]``: response-moments
@@ -105,14 +105,46 @@ def _line_pooled_features(head: Tx1GeneEffectHead, line: LineExamples) -> torch.
     bit-for-bit the vector the head's MLP trunk actually consumes. The
     basal bag is pooled once and broadcast across every gene (it is not
     gene-specific), rather than recomputed per gene.
+
+    Takes ``moments`` directly (not a ``Tx1GeneEffectHead``, as earlier
+    versions of this function did) so it can be called once, before the
+    epoch loop starts (see :func:`_precompute_pooled_features`) -- moments
+    is fixed for the whole training run (only ``head.net`` trains), so
+    nothing about this computation depends on the head beyond that one
+    already-known constant (Wave 3 Codex gate P2-1).
     """
-    pooled_basal = moment_pool(line.basal_bag, moments=head.moments)
+    pooled_basal = moment_pool(line.basal_bag, moments=moments)
     pooled_responses = torch.stack(
-        [moment_pool(bag, moments=head.moments) for bag in line.response_bags],
+        [moment_pool(bag, moments=moments) for bag in line.response_bags],
         dim=0,
     )
     basal_expanded = pooled_basal.unsqueeze(0).expand(pooled_responses.shape[0], -1)
     return torch.cat([pooled_responses, basal_expanded], dim=1)
+
+
+def _precompute_pooled_features(
+    lines: Sequence[LineExamples], moments: int
+) -> dict[str, torch.Tensor]:
+    """Pool every line's bags exactly once (Wave 3 Codex gate P2-1).
+
+    The bags in ``lines`` are frozen for the whole training run -- only
+    ``Tx1GeneEffectHead.net`` trains, and ``moment_pool`` has no trainable
+    parameters of its own -- so recomputing ``_line_pooled_features`` on
+    every epoch (as the training loop used to) repeats the same tensor
+    reduction over every cell of every gene's bag, unchanged, at the
+    configured epoch count (200 by default). Precomputing once here and
+    reusing the result on every epoch removes that repeated dominant cost
+    without changing a single value: this calls the SAME function
+    (``_line_pooled_features``) the old per-epoch code path called, so the
+    returned tensors are bit-for-bit identical to what recomputing them
+    fresh from ``line.basal_bag``/``line.response_bags`` on any given epoch
+    would have produced (see ``tests/test_tx1_geneeffect_train.py``'s
+    ``test_precomputed_pooled_features_match_fresh_recomputation``).
+
+    Returns:
+        ``{model_id: features}`` -- one pooled feature matrix per line.
+    """
+    return {line.model_id: _line_pooled_features(line, moments) for line in lines}
 
 
 def compute_line_features_and_predictions(
@@ -123,9 +155,10 @@ def compute_line_features_and_predictions(
     This is the export Phase E's calibrator needs: a per-gene ``features``
     matrix in the same space the head used internally, alongside the
     zero-shot scalar prediction. Runs in eval mode under ``no_grad`` --
-    intended for post-training feature/inference export, not for gradient
-    steps (see the training loop in :func:`train_tx1_geneeffect_head` for
-    that).
+    intended for post-training feature/inference export (one-off, not a
+    per-epoch hot loop), not for gradient steps (see the training loop in
+    :func:`train_tx1_geneeffect_head` for that, which precomputes pooled
+    features once up front rather than calling this per epoch).
 
     Args:
         head: A (typically trained) :class:`Tx1GeneEffectHead`.
@@ -138,21 +171,9 @@ def compute_line_features_and_predictions(
     """
     head.eval()
     with torch.no_grad():
-        features = _line_pooled_features(head, line)
+        features = _line_pooled_features(line, head.moments)
         predictions = head.net(features).squeeze(-1)
     return features, predictions
-
-
-def _predict_line(head: Tx1GeneEffectHead, line: LineExamples) -> torch.Tensor:
-    """Gradient-bearing scalar predictions for every gene in ``line``.
-
-    Same computation as :func:`compute_line_features_and_predictions`,
-    without forcing ``eval``/``no_grad`` -- used inside the training loop's
-    forward/backward step, where the caller's ``head.train()``/grad context
-    must stay in effect.
-    """
-    features = _line_pooled_features(head, line)
-    return head.net(features).squeeze(-1)
 
 
 def _assert_examples_admissible(
@@ -340,6 +361,17 @@ def train_tx1_geneeffect_head(
     ordered_train = sorted(train_lines, key=lambda line: line.model_id)
     ordered_validation = sorted(validation_lines, key=lambda line: line.model_id)
 
+    # Wave 3 Codex gate P2-1: pool every line's (frozen) bags ONCE, up front
+    # -- moments is fixed for the whole run and only `head.net` trains, so
+    # the old per-epoch recomputation inside this loop repeated the same
+    # tensor reduction hundreds of times (at the configured epoch count) for
+    # no different result. See `_precompute_pooled_features`'s own docstring
+    # for why this cannot change any value, only when it is computed.
+    train_features = _precompute_pooled_features(ordered_train, config.moments)
+    validation_features = _precompute_pooled_features(
+        ordered_validation, config.moments
+    )
+
     history: list[EpochMetrics] = []
     epoch_states: dict[int, dict[str, torch.Tensor]] = {}
     for epoch in range(config.epochs):
@@ -347,17 +379,19 @@ def train_tx1_geneeffect_head(
         train_losses: list[float] = []
         for line in ordered_train:
             optimizer.zero_grad()
-            predictions = _predict_line(head, line)
+            predictions = head.net(train_features[line.model_id]).squeeze(-1)
             loss = rank_variance_loss(predictions, line.targets, lam=config.lam)
             loss.backward()
             optimizer.step()
             train_losses.append(float(loss.detach()))
 
+        head.eval()
         validation_losses: list[float] = []
-        for line in ordered_validation:
-            _, predictions = compute_line_features_and_predictions(head, line)
-            loss = rank_variance_loss(predictions, line.targets, lam=config.lam)
-            validation_losses.append(float(loss))
+        with torch.no_grad():
+            for line in ordered_validation:
+                predictions = head.net(validation_features[line.model_id]).squeeze(-1)
+                loss = rank_variance_loss(predictions, line.targets, lam=config.lam)
+                validation_losses.append(float(loss))
 
         history.append(
             EpochMetrics(

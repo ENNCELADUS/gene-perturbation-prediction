@@ -14,6 +14,7 @@ Task 1/Task 2's own tests do (``tx1_embed_cache.write_line_cache``,
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -32,7 +33,7 @@ from aivc_model.tx1_geneeffect_data import (
     build_line_role_split,
     generate_validation_line_registration,
 )
-from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead
+from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead, rank_variance_loss
 from aivc_model.tx1_geneeffect_train import (
     SELECTION_METRIC_NAME,
     EpochMetrics,
@@ -41,7 +42,11 @@ from aivc_model.tx1_geneeffect_train import (
     compute_line_features_and_predictions,
     train_tx1_geneeffect_head,
 )
-from aivc_model.tx1_geneeffect_train import _select_best_epoch
+from aivc_model.tx1_geneeffect_train import (
+    _line_pooled_features,
+    _precompute_pooled_features,
+    _select_best_epoch,
+)
 from aivc_model.tx1_geneeffect_train_io import (
     Tx1GeneEffectProvenance,
     assemble_line_examples,
@@ -173,6 +178,120 @@ def test_compute_line_features_and_predictions_matches_forward_and_width() -> No
     for index, response_bag in enumerate(line.response_bags):
         expected = head.forward(response_bag, line.basal_bag)
         assert torch.allclose(predictions[index], expected, atol=1e-5)
+
+
+# --- P2-1: pooled features are precomputed once, not every epoch ------------
+
+
+def test_precomputed_pooled_features_match_fresh_recomputation() -> None:
+    """The precomputed feature cache must be bit-for-bit identical to what
+    freshly recomputing ``_line_pooled_features`` from a line's own (frozen)
+    basal/response bags produces -- proving the precompute step introduces
+    no staleness, off-by-one, or cross-line mixup. This would fail if
+    ``_precompute_pooled_features`` ever cached the WRONG line's tensor
+    under a given ``model_id``, or pooled with the wrong ``moments``."""
+    lines = [
+        _make_line_examples(
+            "ACH-A", TRAIN_HEAD_ROLE, n_genes=4, response_dim=3, basal_dim=2, seed=101
+        ),
+        _make_line_examples(
+            "ACH-B", TRAIN_HEAD_ROLE, n_genes=5, response_dim=3, basal_dim=2, seed=102
+        ),
+    ]
+    moments = 3
+
+    precomputed = _precompute_pooled_features(lines, moments)
+
+    assert set(precomputed) == {"ACH-A", "ACH-B"}
+    for line in lines:
+        fresh = _line_pooled_features(line, moments)
+        assert torch.equal(precomputed[line.model_id], fresh)
+
+
+def test_train_tx1_geneeffect_head_matches_a_naive_per_epoch_recomputation() -> None:
+    """P2-1's deeper claim: precomputing pooled features once must not
+    change training dynamics at all. Reimplements the OLD per-epoch
+    recomputation training loop by hand (identical seed, data, and
+    hyperparameters) and asserts the real (new, precomputing)
+    ``train_tx1_geneeffect_head`` produces BIT-FOR-BIT identical final head
+    weights and the same selected epoch -- proving moving the pooling
+    earlier in time changed nothing about what was computed."""
+    response_dim, basal_dim = 3, 2
+    train_a = _make_line_examples(
+        "ACH-TRAIN-A",
+        TRAIN_HEAD_ROLE,
+        n_genes=6,
+        response_dim=response_dim,
+        basal_dim=basal_dim,
+        seed=201,
+    )
+    train_b = _make_line_examples(
+        "ACH-TRAIN-B",
+        TRAIN_HEAD_ROLE,
+        n_genes=6,
+        response_dim=response_dim,
+        basal_dim=basal_dim,
+        seed=202,
+    )
+    validation = _make_line_examples(
+        "ACH-VAL",
+        TRAIN_HEAD_ROLE,
+        n_genes=6,
+        response_dim=response_dim,
+        basal_dim=basal_dim,
+        seed=203,
+    )
+    config = TrainingConfig(
+        hidden=16, moments=2, lam=1.0, learning_rate=0.05, epochs=5, seed=7
+    )
+
+    new_head, new_result = train_tx1_geneeffect_head(
+        [train_a, train_b], [validation], config
+    )
+
+    # The OLD code path, reimplemented here: recompute pooled features from
+    # the raw bags on every single epoch, rather than once up front.
+    torch.manual_seed(int(config.seed))
+    old_head = Tx1GeneEffectHead(
+        response_dim=response_dim,
+        basal_dim=basal_dim,
+        hidden=config.hidden,
+        moments=config.moments,
+    )
+    optimizer = torch.optim.Adam(old_head.parameters(), lr=config.learning_rate)
+    ordered_train = sorted([train_a, train_b], key=lambda line: line.model_id)
+    ordered_validation = [validation]
+    history: list[tuple[int, float]] = []
+    epoch_states: dict[int, dict[str, torch.Tensor]] = {}
+    for epoch in range(config.epochs):
+        old_head.train()
+        for line in ordered_train:
+            optimizer.zero_grad()
+            features = _line_pooled_features(line, old_head.moments)  # recomputed
+            predictions = old_head.net(features).squeeze(-1)
+            loss = rank_variance_loss(predictions, line.targets, lam=config.lam)
+            loss.backward()
+            optimizer.step()
+
+        old_head.eval()
+        validation_losses = []
+        with torch.no_grad():
+            for line in ordered_validation:
+                features = _line_pooled_features(line, old_head.moments)  # recomputed
+                predictions = old_head.net(features).squeeze(-1)
+                loss = rank_variance_loss(predictions, line.targets, lam=config.lam)
+                validation_losses.append(float(loss))
+        history.append((epoch, float(np.mean(validation_losses))))
+        epoch_states[epoch] = copy.deepcopy(old_head.state_dict())
+
+    best_epoch = min(history, key=lambda entry: entry[1])[0]
+    old_head.load_state_dict(epoch_states[best_epoch])
+
+    assert new_result.best_epoch == best_epoch
+    for new_param, old_param in zip(
+        new_head.parameters(), old_head.parameters(), strict=True
+    ):
+        assert torch.equal(new_param, old_param)
 
 
 # --- D6: a test-role line must never enter training --------------------------
