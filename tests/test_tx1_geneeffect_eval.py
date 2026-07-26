@@ -34,6 +34,7 @@ from aivc_model.tx1_geneeffect_eval import (
     verify_artifact_hashes,
 )
 from aivc_model.tx1_geneeffect_eval import (
+    _label_genes_for_panel,
     _validate_no_duplicate_prediction_keys,
     _validate_slice_coverage,
 )
@@ -749,7 +750,7 @@ def test_evaluate_accepts_canonical_label_order_one_through_fifty() -> None:
 
 
 def test_evaluate_rejects_partial_slice_coverage() -> None:
-    """Finding 3: a method covering only part of the 589(here 150)-gene slice."""
+    """Finding 3: a method covering only part of the 587(here 150)-gene slice."""
     fixture = _build_fixture()
     preds = fixture.predictions
     drop = (
@@ -1329,3 +1330,151 @@ def test_verify_artifact_hashes_rejects_matched_artifact_and_hash_swap(
 
     with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
         verify_artifact_hashes(phase_a_dir)  # default (real) trust anchor
+
+
+# --------------------------------------------------------------------------
+# Task 0b amendment: frozen slice 589 -> 587 genes (FOXO3B, MRPL12 dropped)
+# --------------------------------------------------------------------------
+
+
+def test_real_frozen_slice_has_587_genes_without_dropped_genes() -> None:
+    """The amended frozen slice drops exactly FOXO3B and MRPL12 (Task 0b).
+
+    Per ``.superpowers/sdd/phase-d/task-0-coverage.md``, these two genes are
+    never targeted (under any spelling or known HGNC alias) in any of the
+    four Perturb-seq anchor libraries, so the closed-vocabulary adapter
+    cannot score them.
+    """
+    if not _REAL_PHASE_A_DIR.exists():
+        pytest.skip("real Phase-A artifacts not present in this checkout")
+    slice_df = load_slice(_REAL_PHASE_A_DIR / "differentially_essential_slice.csv")
+    assert len(slice_df) == 587
+    dropped = {"FOXO3B (2310)", "MRPL12 (6182)"}
+    assert dropped.isdisjoint(set(slice_df["depmap_column"]))
+    assert slice_df["gene_symbol"].is_unique
+
+
+def test_real_k_label_panels_has_9000_rows_with_50_distinct_amended_labels() -> None:
+    """Task 0b: panels were regenerated wholesale from the 587-gene pool.
+
+    Every (model_id, panel) still has exactly 50 distinct ``label_order``
+    values (1..50) and 50 distinct genes, all drawn from the amended
+    (587-gene) slice -- confirming the panel cascade, not just the slice
+    file, was amended.
+    """
+    if not _REAL_PHASE_A_DIR.exists():
+        pytest.skip("real Phase-A artifacts not present in this checkout")
+    slice_df = load_slice(_REAL_PHASE_A_DIR / "differentially_essential_slice.csv")
+    panels = load_panels(_REAL_PHASE_A_DIR / "k_label_panels.csv")
+    assert len(panels) == 9000
+    slice_genes = set(slice_df["depmap_column"])
+    grouped = panels.groupby(["model_id", "panel"])
+    assert grouped.size().eq(50).all()
+    assert grouped["label_order"].apply(lambda s: set(s) == set(range(1, 51))).all()
+    assert (
+        grouped["depmap_column"]
+        .apply(lambda s: len(set(s)) == 50 and set(s) <= slice_genes)
+        .all()
+    )
+
+
+def test_verify_artifact_hashes_rejects_stale_589_gene_slice(tmp_path) -> None:
+    """Task 0b regression: reinstating a dropped gene must fail the digest.
+
+    Reconstructs a pre-amendment-shaped 589-row slice by adding back the two
+    genes Task 0 found unreachable (FOXO3B, MRPL12) with their original
+    recorded per-gene statistics, and confirms the amended registration's
+    recorded ``differential_slice_sha256`` rejects it -- proving the
+    re-freeze actually changed the trust anchor, not just the working copy.
+    """
+    if not _REAL_PHASE_A_DIR.exists():
+        pytest.skip("real Phase-A artifacts not present in this checkout")
+    phase_a_dir = _copy_real_phase_a_dir(tmp_path)
+    slice_path = phase_a_dir / "differentially_essential_slice.csv"
+    slice_df = pd.read_csv(slice_path)
+    assert len(slice_df) == 587  # amended
+
+    stale_rows = pd.DataFrame(
+        [
+            {
+                "depmap_column": "FOXO3B (2310)",
+                "gene_symbol": "FOXO3B",
+                "entrez_id": 2310,
+                "training_std": 0.3393494025050988,
+                "training_dependency_prevalence": 0.15151515151515152,
+                "training_line_count": 33,
+            },
+            {
+                "depmap_column": "MRPL12 (6182)",
+                "gene_symbol": "MRPL12",
+                "entrez_id": 6182,
+                "training_std": 0.39271054788425686,
+                "training_dependency_prevalence": 0.5454545454545454,
+                "training_line_count": 33,
+            },
+        ]
+    )
+    stale_slice = pd.concat([slice_df, stale_rows], ignore_index=True)
+    stale_slice = stale_slice.sort_values(["gene_symbol", "entrez_id"]).reset_index(
+        drop=True
+    )
+    assert len(stale_slice) == 589
+    stale_slice.to_csv(slice_path, index=False)  # overwrite with a stale 589-row file
+
+    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
+        verify_artifact_hashes(phase_a_dir)  # default (real, amended) trust anchor
+
+
+def test_validate_slice_coverage_accepts_real_587_gene_panel_aware_table() -> None:
+    """Task 0b: the coverage validator has no hardcoded slice size.
+
+    Builds a fully-covering panel-aware (k=50) predictions table for one
+    real held-out test line, across all 20 real registered panels, scored
+    against the real amended 587-gene slice, and confirms
+    ``_validate_slice_coverage`` accepts it -- then drops one required
+    scored gene from one panel and confirms it still rejects a genuinely
+    incomplete table.
+    """
+    if not _REAL_PHASE_A_DIR.exists():
+        pytest.skip("real Phase-A artifacts not present in this checkout")
+    slice_df = load_slice(_REAL_PHASE_A_DIR / "differentially_essential_slice.csv")
+    panels = load_panels(_REAL_PHASE_A_DIR / "k_label_panels.csv")
+    slice_genes = set(slice_df["depmap_column"])
+    model_id = panels["model_id"].iloc[0]
+    line_panels = panels[panels["model_id"] == model_id]
+
+    scored_by_panel = {
+        panel_id: slice_genes - _label_genes_for_panel(panel_rows, 50)
+        for panel_id, panel_rows in line_panels.groupby("panel")
+    }
+    rows = [
+        {
+            "model_id": model_id,
+            "panel": panel_id,
+            "k": 50,
+            "depmap_column": gene,
+            "method": "tx1_3b_st",
+            "base_pred": 0.0,
+            "y_true": 0.0,
+        }
+        for panel_id, scored in scored_by_panel.items()
+        for gene in scored
+    ]
+    predictions = pd.DataFrame(rows)
+
+    _validate_slice_coverage(  # must not raise
+        predictions, panels, slice_genes, {model_id}, {"tx1_3b_st"}, k_schedule=[50]
+    )
+
+    first_panel_id = next(iter(scored_by_panel))
+    missing_gene = sorted(scored_by_panel[first_panel_id])[0]
+    broken = predictions[
+        ~(
+            (predictions["panel"] == first_panel_id)
+            & (predictions["depmap_column"] == missing_gene)
+        )
+    ]
+    with pytest.raises(EvaluationContractError, match="scored gene"):
+        _validate_slice_coverage(
+            broken, panels, slice_genes, {model_id}, {"tx1_3b_st"}, k_schedule=[50]
+        )
