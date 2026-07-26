@@ -556,3 +556,22 @@ def test_load_predicted_response_cache_raises_when_missing(tmp_path: Path) -> No
     cache_dir = tmp_path / "predicted_response_cache"
     with pytest.raises(FileNotFoundError):
         load_predicted_response_cache(cache_dir, "ACH-NOPE", ARM_TX1, "fingerprint-a")
+
+
+def test_slice_symbol_aliases_resolve_by_default() -> None:
+    """CRIPTO/HEMK2 must resolve without the caller knowing to pass a map.
+
+    Regression guard for the gap that would drop slice coverage from 587/587
+    to 585/587 and fail Phase F's coverage validator *after* a training run.
+    The pairs are measured (task-0-coverage.md §2), not assumed.
+    """
+    adapter = PerturbationVectorAdapter(["TDGF1", "N6AMT1", "ACLY"], {}, 4)
+    resolved = resolve_genes_against_vocabulary(["CRIPTO", "HEMK2", "ACLY"], adapter)
+    assert resolved == ("TDGF1", "N6AMT1", "ACLY")
+
+
+def test_explicit_empty_alias_map_disables_aliasing() -> None:
+    """Passing {} means 'no aliases', distinct from passing None."""
+    adapter = PerturbationVectorAdapter(["TDGF1"], {}, 4)
+    with pytest.raises(UnknownPerturbationGeneError, match="CRIPTO"):
+        resolve_genes_against_vocabulary(["CRIPTO"], adapter, alias_map={})
