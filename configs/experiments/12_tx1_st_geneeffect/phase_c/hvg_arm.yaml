@@ -44,7 +44,11 @@ data:
   # the choice is visible in this file, not implicit. Both arms train on the
   # SAME assembled data (see this file's header comment), so this value
   # must match tx1_arm.yaml's.
-  response_max_cells_per_gene: 256
+  # 32, NOT 256 -- see tx1_arm.yaml for the full reasoning. The cap bounds
+  # cells PER GENE while the allocation is per-gene x gene-count, and HCT116
+  # has 18,293 perturbed genes. Kept identical to the Tx1 arm so the two arms
+  # remain a matched control (spec Phase D: "identical head and data").
+  response_max_cells_per_gene: 32
   # Fix-round-3, Fix 1's RESERVED total-per-line cell budget, applied AFTER
   # the cap above. Left UNSET (null = unbounded, today's behavior) --
   # choosing a value requires the peak-RSS measurement
