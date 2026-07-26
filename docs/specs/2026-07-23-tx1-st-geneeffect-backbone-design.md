@@ -1,10 +1,22 @@
 # Design: Tx1-conditioned ST GeneEffect backbone (few-shot, cross-cell-line)
 
-**Status:** design approved 2026-07-23; test-set re-scoped 2026-07-23; not yet
-built. Concrete architecture for roadmap **T2 / Phase 3** (the few-shot
-cross-cell-line GeneEffect backbone). No listed step has run; no number here is a
+**Status:** design approved 2026-07-23; test-set re-scoped 2026-07-23; execution
+under way, no result yet. Concrete architecture for roadmap **T2 / Phase 3** (the
+few-shot cross-cell-line GeneEffect backbone). **Phase A** (data audit, manifest
+freeze) is **complete**, and was amended 2026-07-26: the differentially-essential
+slice narrowed from 589 to **587** genes after a coverage measurement found
+`FOXO3B`/`MRPL12` unreachable by the closed-vocabulary perturbation adapter in
+any of the four anchor libraries (`CRIPTO`/`HEMK2` were kept — they resolve
+under their current HGNC symbols `TDGF1`/`N6AMT1`); see §6. **Phase B** (Tx1-3B
+basal embeddings) is **complete** — verified for all 42 manifest lines. **Phase
+C** (ST response model) is code-complete and dry-run-validated on real data for
+both arms, but **no ST checkpoint has been produced**; a training run is in
+progress. **Phase D** (rebuilt hybrid head) is **partially built**: the head,
+moment pooling, rank/correlation + variance-matching losses, few-shot
+calibrator, and evaluator exist, but the runner that trains the head does not
+yet. No listed step has produced a result; no number in this document is a
 result. Line counts (49 Tahoe DMSO lines, 38 with DepMap) are audited-from-disk
-facts, not model results; Phase A freezes the final manifest.
+facts, not model results.
 **Authority:** [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
 [`../02-acceptance-criteria.md`](../02-acceptance-criteria.md) (frozen bar) govern;
 [`../04-roadmap.md`](../04-roadmap.md) §1.1/§5 is the phase plan this refines; it
@@ -90,14 +102,24 @@ is acquired for the baselines (§5) and would also feed this improvement.
 
 ## 3. Data plan
 
-### 3.1 Cell-line roles (fixed split, no cross-validation)
+### 3.1 Cell-line roles (fixed split: 28 train / 5 validation / 9 test)
 
 The two input pools with DepMap GeneEffect labels are (a) lines carrying genetic
 Perturb-seq (rich: observed response available) and (b) Tahoe DMSO basal-only
 lines (basal single-cell + DepMap only). The test set is drawn from pool (b): the
 lines that have **no** genetic perturbation data of their own. The split is
-**fixed** — most of pool (b) trains the head, a lineage-stratified few are held
-out — with **no rotation/cross-validation**.
+**fixed**, with **no rotation/cross-validation**, and has three roles — train,
+validation, test. Phase A froze the 38-line Tahoe DMSO∩DepMap pool into 29
+`train_head` lines and 9 `test` lines (lineage-stratified, fixed seed, never
+revisited). Phase D Task 1 then drew **5 validation lines from those 29
+`train_head` lines only** — lineage-stratified, independent fixed seed — leaving
+24 Tahoe lines plus the 4 Perturb-seq anchors as the 28-line **train** pool. The
+four anchors are never eligible for validation or test: they remain training
+data because they carry the only observed perturbation responses, and that
+supervision is not spent on model selection. The validation split is registered
+in a derived artifact
+(`configs/experiments/12_tx1_st_geneeffect/phase_d/validation_lines.json`), not
+by editing the hash-pinned Phase A manifest.
 
 | Line(s) | Source (local) | DepMap | Role |
 | --- | --- | --- | --- |
@@ -105,22 +127,26 @@ out — with **no rotation/cross-validation**.
 | **HCT116** | X-Atlas/Orion CRISPRi (44 GB) | yes (`ACH-000971`) | **train** — observed-response ST + head anchor |
 | **Jurkat** | Nadig 2025 CRISPRi (262,956 cells, 2,394 targets) | yes (`ACH-000995`) | **train** — observed-response ST + head anchor |
 | **HepG2** | Nadig 2025 CRISPRi | yes (`ACH-000739`) | **train** — observed-response ST + head anchor |
-| ~28–30 Tahoe DMSO lines | Tahoe-100M DMSO single-cell (basal only) | yes | **train (head)** — GeneEffect via *predicted* response (ST forward from basal) |
-| **~8–10 Tahoe DMSO lines** | Tahoe-100M DMSO single-cell (basal only) | yes | **test** — held out, never in training; scored k=0 + k-shot |
+| 24 Tahoe DMSO lines | Tahoe-100M DMSO single-cell (basal only) | yes | **train (head)** — GeneEffect via *predicted* response (ST forward from basal) |
+| **5 Tahoe DMSO lines** | Tahoe-100M DMSO single-cell (basal only) | yes | **validation** — held out of head training, lineage-stratified fixed seed, drawn only from the 29 `train_head` lines; for model/hyperparameter selection, never scored as a result |
+| **9 Tahoe DMSO lines** | Tahoe-100M DMSO single-cell (basal only) | yes | **test** — held out, never in training or validation; scored k=0 + k-shot |
 
 All four Perturb-seq training lines are **CRISPRi** (verified: same
 non-targeting/dual-guide design across Replogle, Nadig, X-Atlas), so the response
 model carries no hidden CRISPRi/CRISPRko mix. The knockdown→KO-GeneEffect modality
 gap is the accepted program premise (`01` §2), unchanged.
 
-**Audited eligible pool (to freeze in Phase A):** the Tahoe DMSO subset holds
-**49** single-cell lines; **38** carry DepMap GeneEffect; none of the four
+**Audited eligible pool (frozen in Phase A, complete):** the Tahoe DMSO subset
+holds **49** single-cell lines; **38** carry DepMap GeneEffect; none of the four
 Perturb-seq training lines fall in that 38, so the split is clean. Lineage spread
 of the 38: Lung 12, Bowel 7, Pancreas 6, CNS/Brain 3, Skin 3, then smaller
-(Esophagus/Stomach, Bladder, Breast, Cervix, Liver, PNS). The ~8–10 test lines are
+(Esophagus/Stomach, Bladder, Breast, Cervix, Liver, PNS). The 9 test lines were
 selected by a **frozen rule** — stratified across lineages for diversity, fixed
-seed — recorded in the manifest before any run. Contract floor satisfied: ≥2
-labeled training lines and ≥2 held-out test lines.
+seed — recorded in the manifest before any run; the 5 validation lines were
+drawn from the remaining 29 `train_head` lines by the same stratification rule
+with an independent fixed seed, in Phase D (never touching the 9 test lines or
+the 4 anchors). Contract floor satisfied: ≥2 labeled training lines and ≥2
+held-out test lines.
 
 ### 3.2 Tahoe as basal context, not drug transfer
 
@@ -161,7 +187,7 @@ not just copy-K562. Registered k-schedule: **{0, 5, 10, 25, 50}**.
 
 ## 5. Evaluation and kill test
 
-- **Testbed:** DepMap GeneEffect on the ~8–10 held-out Tahoe basal lines. Not
+- **Testbed:** DepMap GeneEffect on the 9 held-out Tahoe basal test lines. Not
   Feng2024 (no cell-type axis).
 - **Primary metric:** paired rank-correlation on the **differentially-essential
   slice** (slice membership — high cross-line GeneEffect variance,
@@ -189,50 +215,73 @@ not just copy-K562. Registered k-schedule: **{0, 5, 10, 25, 50}**.
 
 ## 6. Execution plan
 
-**Phase A — data audit, manifest freeze, and acquisitions (Phase 0).** Acquire the
-two infrastructure items (both complete the 26q1 release; no biological data
-invented): **TahoeX1-3B encoder weights** and **DepMap OmicsExpression** (CCLE
-bulk). Confirm DepMap GeneEffect coverage for K562, HCT116, Jurkat, HepG2 and the
-38-line Tahoe DMSO∩DepMap pool against `CRISPRGeneEffect.csv`; apply the
-lineage-stratified ~8–10 hold-out with a fixed seed and **exclude the held-out
-lines from all training**. Run the basal-source batch-confound audit (§3.4).
-Materialize an immutable train/test manifest with hashes and per-line Tx1
-pretraining-exposure status (all test lines = **known present**). Define the
-differentially-essential slice on training lines only; register `rho_min`, the
-k-schedule, and the estimator. **Exit:** frozen manifest and registrations.
+**Phase A — data audit, manifest freeze, and acquisitions (Phase 0). COMPLETE,
+amended 2026-07-26.** Acquired the two infrastructure items (both complete the
+26q1 release; no biological data invented): **TahoeX1-3B encoder weights** and
+**DepMap OmicsExpression** (CCLE bulk). Confirmed DepMap GeneEffect coverage for
+K562, HCT116, Jurkat, HepG2 and the 38-line Tahoe DMSO∩DepMap pool against
+`CRISPRGeneEffect.csv`; applied the lineage-stratified 9-line hold-out with a
+fixed seed and **excluded the held-out lines from all training**. Ran the
+basal-source batch-confound audit (§3.4). Materialized the immutable train/test
+manifest with hashes and per-line Tx1 pretraining-exposure status (all test
+lines = **known present**). Defined the differentially-essential slice on
+training lines only; registered `rho_min`, the k-schedule, and the estimator.
+**Amendment (2026-07-26):** a read-only coverage measurement
+(`.superpowers/sdd/phase-d/task-0-coverage.md`) against the real Perturb-seq
+anchor libraries found `FOXO3B`/`MRPL12` never targeted under any spelling in
+any of the four anchors, so the closed-vocabulary perturbation adapter cannot
+score them; they were dropped, narrowing the differentially-essential slice
+from 589 to **587** genes. `CRIPTO`/`HEMK2` were **kept** — they resolve under
+their current HGNC symbols `TDGF1`/`N6AMT1`. `k_label_panels.csv` was
+regenerated from the 587-gene pool using the original per-panel seeds (9,000
+rows preserved, 50 labels/panel); `cell_line_manifest.csv` was left untouched;
+`FROZEN_REGISTRATION_SHA256` moved from `63fb8f2c…` to `63c82623…`. The
+amendment predates any Phase D result. **Exit met:** frozen manifest and
+registrations.
 
-**Phase B — Tx1-3B embeddings (offline).** Build AnnData (`.X` raw counts,
-`var["ensembl_id"]`, `obs["cell_type"]`) for all basal cells; run Tx1-3B inference
-into `.obsm`. **Verify `.obsm[...].shape[1]` against the known 3B width** to resolve
-the `tx-70m-merged`/`tahoe_x1_3b` labeling bug before trusting any run; do not
-assume L2-normalization (add it if ST expects unit-norm inputs). Cache HVG matrices
-for the control arm. **Exit:** verified embedding caches.
+**Phase B — Tx1-3B embeddings (offline). COMPLETE.** Built AnnData (`.X` raw
+counts, `var["ensembl_id"]`, `obs["cell_type"]`) for all basal cells; ran
+Tx1-3B inference into `.obsm`, verified `.obsm[...].shape[1]` against the known
+3B width to resolve the `tx-70m-merged`/`tahoe_x1_3b` labeling bug, and cached
+HVG matrices for the control arm. **Exit met:** `verify_cache` reports
+`"status": "verified"` for all 42 manifest lines (`lines_expected: 42`,
+`lines_present: 42`, `discrepancies: []`).
 
-**Phase C — ST response model.** Reactivate the currently-dead `.obsm`
-embedding-input path in `prepare.py::_state_input_view` (it is bypassed for the
-`state_checkpoint` backend), and update the response-encoder input dim off the
-hardcoded 2000; the `_effective_state_pert_dim` assertion (a safety net) stays. The
-HVG arm warm-starts from released `ST-HVG-Replogle` (matching input space). The Tx1
-arm retrains ST for the 2560-dim Tx1 input space — a fresh input projection,
+**Phase C — ST response model. Code-complete; training NOT complete.**
+Reactivated the previously-dead `.obsm` embedding-input path in
+`prepare.py::_state_input_view` (it was bypassed for the `state_checkpoint`
+backend), and updated the response-encoder input dim off the hardcoded 2000;
+the `_effective_state_pert_dim` assertion (a safety net) stays. The HVG arm
+warm-starts from released `ST-HVG-Replogle` (matching input space). The Tx1 arm
+retrains ST for the 2560-dim Tx1 input space — a fresh input projection,
 optionally warm-starting the transformer body — since no released Tx1-input ST
-checkpoint exists. Train on K562+HCT116+Jurkat+HepG2 observed KO responses,
-`output_space=gene`. Note the HVG-space delta/energy losses become embedding-space
-quantities for the Tx1 arm — keep, rename, or drop deliberately. **Exit:** ST
-checkpoints (Tx1 and HVG arms).
+checkpoint exists. Trains on K562+HCT116+Jurkat+HepG2 observed KO responses,
+`output_space=gene`. Both arms are dry-run-clean on real HPC data (ST consuming
+2560-d Tx1 embeddings in the Tx1 arm and 2000-d HVG in the matched control arm,
+both emitting gene space). **No ST checkpoint has been produced.** A training
+run is in progress. **Exit not yet met:** ST checkpoints (Tx1 and HVG arms).
 
-**Phase D — rebuilt hybrid head.** Implement moment pooling + inductive
-basal-conditioned head with the rank/correlation + variance-matching objective;
-train on GeneEffect across the four Perturb-seq lines and the ~28–30 Tahoe-training
-lines using predicted response uniformly. Run the HVG-ST control with the identical
-head and data. **Exit:** trained heads for both encoder arms.
+**Phase D — rebuilt hybrid head. Partially built.** The head, moment pooling,
+the rank/correlation + variance-matching losses, the few-shot calibrator, and
+the evaluator already exist. The line-role selector (28 train / 5 validation /
+9 test), the derived validation-line registration, the DepMap GeneEffect
+loader, the forward-only ST loader, and the fingerprinted predicted-response
+cache are built. **The runner that trains the head — driving those existing
+components end to end on GeneEffect across the four Perturb-seq anchors and
+the 24 Tahoe train-only lines using predicted response uniformly, selecting
+over the 5 validation lines, with the HVG-ST control run through the identical
+head and data — does not exist yet and is under construction.** **Exit not
+met:** trained heads for both encoder arms.
 
 **Phase E — few-shot calibration.** Implement the per-line affine/low-rank (or
-head-only) calibration and the k-schedule. **Exit:** k-shot adapter.
+head-only) calibration and the k-schedule. **Exit:** k-shot adapter. Not
+started.
 
-**Phase F — evaluation.** Score Tx1-3B-ST and HVG-ST on the ~8–10 held-out lines on
-the differentially-essential slice against all baselines; the k=10 population gate,
-per-line CIs, k=0 stress point, few-shot curve, and variance-preservation check.
-Write `../results/<slug>.md` only after it runs. **Exit:** a Phase-3
+**Phase F — evaluation.** Score Tx1-3B-ST and HVG-ST on the 9 held-out test
+lines on the differentially-essential slice against all baselines; the k=10
+population gate, per-line CIs, k=0 stress point, few-shot curve, and
+variance-preservation check. Write `../results/<slug>.md` only after it runs.
+Not started. **Exit:** a Phase-3
 backbone-transfer verdict (positive or negative), status synced across the vault.
 
 ## 7. Claim boundaries and risks
@@ -255,7 +304,8 @@ backbone-transfer verdict (positive or negative), status synced across the vault
   ST path can only reach lines with baseline single-cell data; this bounds the
   reachable generalization set (the 38-line Tahoe DMSO∩DepMap pool this round).
 - **Four labeled observed-response lines** anchor ST; the head's cross-line variance
-  comes from the ~28–30 Tahoe training lines. If they contribute too little real
+  comes from the 24 Tahoe train-only lines (with 5 further Tahoe lines held out
+  for validation, not scored as a result). If they contribute too little real
   signal, the single-gate kill test will show it.
 - **No planned number is a result;** results enter `docs/results/` only after the
   analysis runs.
