@@ -1,9 +1,27 @@
 {
+  "amendment": {
+    "cascade": "k_label_panels.csv (9,000 rows: 9 test lines x 20 panels x 50 labels) was regenerated wholesale from the 587-gene pool using the original per-panel seeds and draw rule (34/9000 rows referenced the 2 dropped genes; surgical row deletion would have broken the frozen N_LABELS=50 invariant, so panels were regenerated in full, deterministically, rather than patched).",
+    "date": "2026-07-26",
+    "genes_removed": [
+      "FOXO3B (2310)",
+      "MRPL12 (6182)"
+    ],
+    "measurement": "Phase D Task 0 (.superpowers/sdd/phase-d/task-0-coverage.md): read-only union-vocabulary coverage check against the real HPC Perturb-seq sources found 587/589 slice genes reachable (alias-corrected: CRIPTO=TDGF1 and HEMK2=N6AMT1 resolve under current HGNC symbols in all four anchors and are NOT removed; only FOXO3B and MRPL12 have no hit under any spelling).",
+    "prior_hashes": {
+      "differential_slice_sha256": "d05ed2d4f44c8189d6a66cddb10cc21ca7ecbd73b7a6f80f8bff9f2035585d4b",
+      "k_label_panels_sha256": "7d4ccb4cc247f944d1431b636e63581877a3f00d5c0acb6306266f13d61e7fa5",
+      "registration_payload_sha256": "aa0ea42a738c97f4120a4effb81b483acf80a04058a22029033af5424533919d"
+    },
+    "reason": "FOXO3B and MRPL12 are never targeted (under any spelling or known HGNC alias) in any of the four Perturb-seq anchor libraries (K562 GWPS, Jurkat, HepG2, HCT116 X-Atlas-Orion), so the closed-vocabulary PerturbationVectorAdapter cannot score them and slice.complete_case_required=True makes a partial table a contract violation. Phase A defined the slice from DepMap cross-line variance without checking ST-vocabulary reachability; this amendment corrects that oversight in the contract's construction, not a statistical re-derivation -- training_std/training_dependency_prevalence/training_line_count for the retained 587 genes, and the variance_cutoff/eligible_before_variance_filter that defined the original 589-gene selection, are unchanged.",
+    "timing": "This amendment predates any Phase D result: no Phase D prediction, evaluation, or checkpoint exists yet on this branch. It is registered before any held-out GeneEffect label is opened for the amended slice, so it is a contract correction, not a post-hoc goalpost move.",
+    "type": "slice_gene_removal",
+    "unchanged": "cell_line_manifest.csv (role assignment, test-line identities), differentially_essential_slice.csv's 587 retained rows (byte-identical), slice.variance_cutoff, slice.eligible_before_variance_filter, seed, sources.*, estimator.*, rho_min, rho_min_justification.*, batch_confound_sensitivity.*, phase_a_gate_evidence.*, training_proxy_line_deltas.csv, and rho_min_power_simulation.csv are all untouched by this amendment."
+  },
   "artifacts": {
     "batch_audit_sha256": "21378ce462263ba5cf665ab2d61f78af997bc6b93c4c6b9ea9f3383970122de9",
     "cell_line_manifest_sha256": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297",
-    "differential_slice_sha256": "d05ed2d4f44c8189d6a66cddb10cc21ca7ecbd73b7a6f80f8bff9f2035585d4b",
-    "k_label_panels_sha256": "7d4ccb4cc247f944d1431b636e63581877a3f00d5c0acb6306266f13d61e7fa5",
+    "differential_slice_sha256": "bb0567e275519850d0643678a8119b6077d78bf5951bd792321de45b1c2307ac",
+    "k_label_panels_sha256": "c0ffc58aff2113ccb8c14439455fadde206df595d53246afbf7e73473c4be360",
     "power_simulation_sha256": "8185f3efb2dc86ca39c0ce6df64180fe67ed7b39a6fa9f966e3ab00e8bde014d",
     "training_proxy_deltas_sha256": "4315bb6ecfeb273ff916efa78486e5e97424654a2e9ea7875d5173e1bcd9d707",
     "tx1_source_manifest_sha256": "10516bb0f42c2280f8b529455c1bb4a727a7e859e9c88b70aed71a37a793300c",
@@ -252,7 +270,7 @@
       "torch_version": "2.6.0+cu124"
     }
   },
-  "registration_payload_sha256": "aa0ea42a738c97f4120a4effb81b483acf80a04058a22029033af5424533919d",
+  "registration_payload_sha256": "8a2132bf4d5e41078c2ce648601a89a1122b286091cd59df46ab46060be1a38a",
   "rho_min": 0.05,
   "rho_min_justification": {
     "decision_alternative": 0.15,
@@ -278,7 +296,7 @@
     "max_dependency_prevalence": 0.8,
     "min_dependent_lines": 2,
     "min_non_dependent_lines": 2,
-    "selected_gene_count": 589,
+    "selected_gene_count": 587,
     "variance_cutoff": 0.28374455548628413,
     "variance_quantile": 0.75
   },

@@ -2,7 +2,8 @@
 
 Implements, without modification, the evaluation contract frozen in
 ``results/phase_a_tx1_20260724/phase_a_registration.json``: per-line Spearman
-correlation on the 589-gene differentially-essential slice, a k-shot affine
+correlation on the 587-gene differentially-essential slice (amended from 589
+-- see ``phase_a_registration.json``'s ``amendment`` record), a k-shot affine
 calibration evaluated over a fixed nested-panel schedule, panel-then-line
 aggregation, a paired difference against the copy-K562 baseline, and a
 two-sided 95% percentile bootstrap over the 9 held-out test-line means. The
@@ -1114,7 +1115,7 @@ _REGISTERED_ARTIFACT_FILES: dict[str, str] = {
 #: its recorded hash in the registration file would pass (self-consistency,
 #: not identity with the frozen registration).
 FROZEN_REGISTRATION_SHA256: str = (
-    "63fb8f2c9e749b9fcfb2b54d605aa4b71fd740faa8871069d9a39dec983092b9"
+    "63c8262305c219ca6ca9e749f30523239c5fad63f21dda609620350ad182ab6c"
 )
 
 
