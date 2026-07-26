@@ -52,6 +52,7 @@ from aivc_model.tx1_geneeffect_train import SELECTION_METRIC_NAME
 from aivc_model.tx1_predicted_response import (
     ARM_HVG,
     ARM_TX1,
+    resolve_device,
     resolve_genes_against_vocabulary,
 )
 
@@ -75,6 +76,7 @@ __all__ = [
     "validate_roles",
     "validate_widths",
     "verify_depmap_hash",
+    "verify_gene_vocabulary_authenticity",
 ]
 
 
@@ -98,6 +100,9 @@ class StateArmConfig:
     output_space: str | None
     cell_set_len: int
     response_generation_seed: int
+    #: "auto" (default) resolves to CUDA when available, else CPU
+    #: (aivc_model.tx1_predicted_response.resolve_device); P1-5.
+    device: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -190,6 +195,13 @@ def load_pipeline_config(path: Path) -> Tx1GeneEffectHeadConfig:
         response_generation_seed=int(
             _require(state_raw, "response_generation_seed", "state")
         ),
+        # Genuinely optional (P1-5): "auto" (the default) picks CUDA when
+        # available, CPU otherwise (aivc_model.tx1_predicted_response.
+        # resolve_device), mirroring exp05's own `train.device: str =
+        # "auto"` convention. Unlike every `_require`d field above, a config
+        # simply omitting this key is a legitimate, intended default -- not
+        # the D10 misspelled-key hazard those fields guard against.
+        device=str(state_raw.get("device", "auto")),
     )
     objective = ObjectiveConfig(
         lam=float(_require(objective_raw, "lam", "objective")),
@@ -432,6 +444,84 @@ def validate_gene_coverage(
     )
 
 
+def verify_gene_vocabulary_authenticity(
+    gene_vocabulary_path: Path, st_checkpoint_path: Path | None, backend: str
+) -> None:
+    """Authenticate ``gene_vocabulary_path`` against Phase C's own recorded
+    hash (Wave 3 Codex gate P1-3).
+
+    :func:`validate_gene_coverage` cannot detect a vocabulary whose genes are
+    merely reordered: ``PerturbationVectorAdapter`` keys its trainable
+    "missing" parameters by construction-time list POSITION, not gene
+    identity (fix rounds 5/6), so a reordered file passes gene-coverage AND
+    ``load_state_dict`` (identical ``gN`` keys/shapes) while silently binding
+    every positional weight to the wrong gene symbol.
+
+    ``aivc_model.train._save_model_checkpoint`` emits ``gene_vocabulary.json``
+    beside ``pytorch_model.bin`` and records its sha256 as
+    ``gene_vocabulary_sha256`` in that checkpoint's sibling ``metadata.json``.
+    This recomputes ``gene_vocabulary_path``'s sha256 and compares it against
+    that recorded value -- any reordering, edit, or wrong-file substitution
+    changes the digest and is rejected. A no-op when
+    ``backend != "state_checkpoint"`` (``linear_mock`` has no real checkpoint
+    to authenticate against).
+
+    Args:
+        gene_vocabulary_path: The configured ``state.gene_vocabulary_path``.
+        st_checkpoint_path: The configured ``state.st_checkpoint_path``; its
+            sibling ``metadata.json`` is read from the same directory.
+        backend: ``config.state.backend``.
+
+    Raises:
+        ValueError: ``backend == "state_checkpoint"`` and: ``st_checkpoint_
+            path`` is ``None``; the checkpoint has no sibling
+            ``metadata.json``; that metadata has no ``gene_vocabulary_sha256``
+            (predates this fix -- fail loudly rather than trust an
+            unauthenticated file); or the vocabulary file's sha256 disagrees
+            with the recorded one.
+    """
+    if backend != "state_checkpoint":
+        return
+    if st_checkpoint_path is None:
+        raise ValueError(
+            "state.st_checkpoint_path is required to authenticate "
+            "state.gene_vocabulary_path for backend=state_checkpoint"
+        )
+    metadata_path = Path(st_checkpoint_path).parent / "metadata.json"
+    if not metadata_path.is_file():
+        raise ValueError(
+            f"no metadata.json beside checkpoint {st_checkpoint_path} "
+            f"(expected {metadata_path}); cannot authenticate "
+            "state.gene_vocabulary_path (P1-3). This checkpoint predates "
+            "Phase C's gene_vocabulary.json/metadata.json emission fix, or "
+            "is otherwise missing its sidecar metadata -- regenerate it "
+            "with the current Phase C pipeline before using it in Phase D"
+        )
+    metadata = json.loads(metadata_path.read_text())
+    expected = (
+        metadata.get("gene_vocabulary_sha256") if isinstance(metadata, dict) else None
+    )
+    if not expected:
+        raise ValueError(
+            f"{metadata_path} has no gene_vocabulary_sha256 -- this "
+            "checkpoint predates Phase C's ordered-vocabulary emission fix "
+            "(P1-3) and cannot be safely authenticated; regenerate the "
+            "checkpoint with the current Phase C pipeline before using it "
+            "here rather than assuming the configured "
+            "state.gene_vocabulary_path is trustworthy"
+        )
+    observed = sha256_file(Path(gene_vocabulary_path))
+    if observed != expected:
+        raise ValueError(
+            f"state.gene_vocabulary_path {gene_vocabulary_path} sha256 "
+            f"{observed} does not match checkpoint {st_checkpoint_path}'s "
+            f"recorded gene_vocabulary_sha256 {expected} ({metadata_path}); "
+            "refusing to load -- a mismatched or reordered vocabulary "
+            "silently binds trainable missing-gene weights to the wrong "
+            "gene symbol (P1-3)"
+        )
+
+
 def verify_depmap_hash(
     depmap_gene_effect_path: Path, phase_a_registration: Mapping[str, object]
 ) -> None:
@@ -475,6 +565,11 @@ def dry_run_summary(
     )
     slice_df = load_slice(Path(phase_a_dir) / "differentially_essential_slice.csv")
     resolved_genes = validate_gene_coverage(slice_df, config.state.gene_vocabulary_path)
+    verify_gene_vocabulary_authenticity(
+        config.state.gene_vocabulary_path,
+        config.state.st_checkpoint_path,
+        config.state.backend,
+    )
     phase_a_registration = json.loads(
         (Path(phase_a_dir) / "phase_a_registration.json").read_text()
     )
@@ -483,6 +578,7 @@ def dry_run_summary(
         "arm": config.arm,
         "run_id": config.run_id,
         "state_backend": config.state.backend,
+        "state_device": str(resolve_device(config.state.device)),
         "state_input_dim": config.state.input_dim,
         "state_output_dim": config.state.output_dim,
         "objective_lam": config.objective.lam,

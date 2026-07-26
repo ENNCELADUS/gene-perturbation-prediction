@@ -34,6 +34,7 @@ from aivc_model.tx1_predicted_response import (
     generate_predicted_response,
     generate_predicted_response_for_line,
     load_forward_only_checkpoint,
+    resolve_device,
     resolve_genes_against_vocabulary,
     vocabulary_genes,
 )
@@ -216,6 +217,36 @@ def test_vocabulary_genes_matches_construction_vocabulary() -> None:
     assert vocabulary_genes(model.perturbations) == frozenset(_GENES)
 
 
+# --- P1-5: device resolution ---------------------------------------------
+
+
+def test_resolve_device_explicit_string_is_used_verbatim() -> None:
+    assert resolve_device("cpu") == torch.device("cpu")
+
+
+def test_resolve_device_passthrough_for_existing_torch_device() -> None:
+    device = torch.device("cpu")
+    assert resolve_device(device) is device
+
+
+def test_resolve_device_auto_falls_back_to_cpu_when_no_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    assert resolve_device("auto") == torch.device("cpu")
+
+
+def test_resolve_device_auto_prefers_cuda_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Not a real-GPU test (none exists on this machine) -- this only pins
+    the resolution RULE (P1-5: `warm_predicted_response_cache` and
+    `emit_test_predictions` must not stay hardcoded to CPU when a GPU is
+    actually available)."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    assert resolve_device("auto") == torch.device("cuda")
+
+
 # --- predicted-response generation --------------------------------------------
 
 
@@ -231,6 +262,7 @@ def test_generate_predicted_response_shape_and_no_gradient() -> None:
 
     assert response.shape == (n_cells, _OUTPUT_DIM)
     assert response.requires_grad is False
+    assert response.device == torch.device("cpu")
 
 
 def test_generate_predicted_response_raises_named_error_not_keyerror() -> None:
@@ -431,6 +463,7 @@ def _baseline_fingerprint_kwargs(tmp_path: Path) -> dict[str, object]:
         "phase_b_manifest_path": manifest_path,
         "model_id": "ACH-0001",
         "genes": ["G1", "G2"],
+        "vocabulary_genes": ["G1", "G2", "G3"],
         "seed": 0,
         "arm": ARM_TX1,
         "cell_set_len": 4,
@@ -499,6 +532,41 @@ def test_fingerprint_changes_when_cell_set_len_changes(tmp_path: Path) -> None:
     changed = {**baseline, "cell_set_len": 8}
     assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
         **changed
+    )
+
+
+def test_fingerprint_changes_when_vocabulary_gene_order_changes(tmp_path: Path) -> None:
+    """P1-4: reordering the SAME vocabulary genes must change the fingerprint.
+
+    Before this fix, ``predicted_response_fingerprint`` only hashed the
+    sorted, deduplicated *requested* ``genes`` -- a vocabulary holding the
+    exact same gene SET in a different construction order (which silently
+    binds every positional ``missing_vectors`` weight to a different gene,
+    per fix rounds 5/6) hashed identically and would have been treated as
+    cache-equivalent.
+    """
+    baseline = _baseline_fingerprint_kwargs(tmp_path)
+    reordered = {
+        **baseline,
+        "vocabulary_genes": list(reversed(baseline["vocabulary_genes"])),
+    }
+    assert set(reordered["vocabulary_genes"]) == set(baseline["vocabulary_genes"])
+    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
+        **reordered
+    )
+
+
+def test_fingerprint_unchanged_when_vocabulary_gene_set_and_order_both_match(
+    tmp_path: Path,
+) -> None:
+    """Sanity check: an identical vocabulary (same genes, same order) built
+    from a fresh list instance must reproduce the identical fingerprint --
+    the new field must not introduce spurious non-determinism (e.g. from
+    iterating a set)."""
+    baseline = _baseline_fingerprint_kwargs(tmp_path)
+    rebuilt = {**baseline, "vocabulary_genes": list(baseline["vocabulary_genes"])}
+    assert predicted_response_fingerprint(**baseline) == predicted_response_fingerprint(
+        **rebuilt
     )
 
 

@@ -301,6 +301,22 @@ def test_phase_c_two_view_smoke_trains_and_losses_decrease(
     )
     assert final_metadata["selection_metric"] == "val_generation_loss"
 
+    # Wave 3 Codex gate P1-3: the "best" checkpoint must carry an ordered
+    # gene_vocabulary.json beside pytorch_model.bin, with its sha256
+    # recorded in metadata.json -- the hash Phase D authenticates
+    # state.gene_vocabulary_path against
+    # (tx1_geneeffect_pipeline.verify_gene_vocabulary_authenticity) before
+    # ever constructing a model from this checkpoint's vocabulary.
+    best_dir = paths["run_dir"] / "models" / "best"
+    vocabulary_path = best_dir / "gene_vocabulary.json"
+    assert vocabulary_path.is_file()
+    vocabulary = json.loads(vocabulary_path.read_text())
+    assert vocabulary == sorted(_ALL_GENES)  # train + val + test genes, deduped
+    assert (
+        best_metadata["gene_vocabulary_sha256"]
+        == hashlib.sha256(vocabulary_path.read_bytes()).hexdigest()
+    )
+
 
 def test_load_state_model_forwards_output_space_and_warm_start_from(
     tmp_path: Path,

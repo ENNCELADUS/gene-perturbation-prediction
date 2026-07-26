@@ -55,6 +55,7 @@ from aivc_model.gene_splits import (
     CANONICAL_GENE_COUNT,
     FoldSpec,
     load_canonical_outer_manifest,
+    sha256_file,
 )
 from aivc_model.prepare import (
     AivcConfig,
@@ -3516,11 +3517,51 @@ def _save_model_checkpoint(
     path: Path,
     metadata: dict[str, object],
 ) -> None:
+    """Save one checkpoint: state dict, metadata, and (Wave 3 Codex gate
+    P1-3) the exact ordered perturbation-vocabulary the checkpoint was
+    trained with.
+
+    ``PerturbationVectorAdapter`` keys its trainable "missing" parameters by
+    construction-time list POSITION, not gene identity -- a consumer that
+    reconstructs the adapter from the SAME gene set in a DIFFERENT order
+    would pass every shape/coverage check while silently binding each
+    positional weight to the wrong gene symbol. Nothing downstream of this
+    checkpoint previously had any artifact recording that exact order.
+
+    When ``model``'s (unwrapped) ``perturbations`` submodule is a
+    ``PerturbationVectorAdapter``, this writes its ordered ``genes`` list to
+    ``gene_vocabulary.json`` beside ``pytorch_model.bin`` and records that
+    file's sha256 as ``gene_vocabulary_sha256`` in ``metadata.json`` -- the
+    hash a downstream consumer (Phase D's
+    ``tx1_geneeffect_pipeline.verify_gene_vocabulary_authenticity``)
+    authenticates its own copy of the vocabulary against before ever
+    constructing a model from it. A no-op for any other perturbation
+    adapter (e.g. ``Esm2PerturbationAdapter``, which resolves every gene
+    through one shared MLP and has no fixed-vocabulary/positional-binding
+    hazard).
+    """
     if not accelerator.is_main_process:
         return
     path.mkdir(parents=True, exist_ok=True)
     unwrapped = accelerator.unwrap_model(model)
     accelerator.save(unwrapped.state_dict(), path / "pytorch_model.bin")
+    metadata = dict(metadata)
+    perturbations = getattr(unwrapped, "perturbations", None)
+    if isinstance(perturbations, PerturbationVectorAdapter):
+        vocabulary_path = path / "gene_vocabulary.json"
+        vocabulary_path.write_text(
+            json.dumps(list(perturbations.genes), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        # Pure file-content hash (`gene_splits.sha256_file`), NOT
+        # `_path_sha256` (which mixes the filename into the digest, by
+        # design, for its own directory-auditing use case) -- the consumer
+        # of this hash (Phase D's
+        # tx1_geneeffect_pipeline.verify_gene_vocabulary_authenticity)
+        # recomputes a plain content hash of whatever file
+        # state.gene_vocabulary_path points at, which need not share this
+        # file's name.
+        metadata["gene_vocabulary_sha256"] = sha256_file(vocabulary_path)
     (path / "metadata.json").write_text(
         json.dumps(metadata, indent=2, sort_keys=True),
         encoding="utf-8",

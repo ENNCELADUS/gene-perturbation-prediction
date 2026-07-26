@@ -68,19 +68,16 @@ state:
   # Sizes/construction-initializes PerturbationVectorAdapter before Phase C's
   # checkpoint overwrites every value; same file both Phase C arm configs use.
   known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
-  # OPEN GAP, inherited from Task 2's own docstring (tx1_predicted_response.py
-  # construct_forward_only_model): a plain JSON list of gene symbols, in
-  # Phase C's EXACT training-time order -- PerturbationVectorAdapter keys its
-  # trainable "missing" parameters by construction-time list POSITION, not
-  # gene identity, so a different order/vocabulary silently loads the WRONG
-  # gene's vector into each checkpoint slot with no error. No artifact under
-  # today's Phase C run output tree is confirmed to hold this exact ordered
-  # list; producing it (e.g. dumping canonical_gene_order at Phase C
-  # checkpoint-save time) is a follow-up this task does not invent or guess
-  # at. Until it exists, --dry-run's gene-coverage check and any real run
-  # both fail loudly on this path, by design (D10: loud failure over a
-  # plausible-looking guess).
-  gene_vocabulary_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_tx1_arm/gene_vocabulary.json
+  # Wave 3 Codex gate fix round 1 (P1-3) closed the gap this comment used to
+  # flag: train._save_model_checkpoint now writes this file, in Phase C's
+  # EXACT training-time perturbation-adapter order, ALONGSIDE the checkpoint
+  # (models/best/), and records its sha256 in that checkpoint's sibling
+  # metadata.json. tx1_geneeffect_pipeline.verify_gene_vocabulary_authenticity
+  # recomputes this file's sha256 and refuses to proceed if it disagrees with
+  # that recorded hash -- a same-genes-different-order file would otherwise
+  # pass gene-coverage AND load_state_dict while silently binding every
+  # positional missing-gene weight to the wrong symbol.
+  gene_vocabulary_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_tx1_arm/models/best/gene_vocabulary.json
   # ST's INPUT width == the head's basal_dim for this arm: the frozen Tx1-3B
   # embedding (tx1_embed_cache.EMBEDDING_WIDTH). validate_config_shape
   # enforces this exact value for arm=tx1_arm; never silently coerced.

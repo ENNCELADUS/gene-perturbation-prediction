@@ -40,13 +40,12 @@ state:
   # here until that run completes.
   st_checkpoint_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/models/best/pytorch_model.bin
   known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
-  # Same OPEN GAP as tx1_arm.yaml (see that file's extensive comment): a
-  # plain JSON list of gene symbols in Phase C's exact HVG-arm training-time
-  # order. This is a SEPARATE file from tx1_arm.yaml's -- the two arms trained
-  # separate Phase C checkpoints and there is no guarantee their
+  # Same authenticated-vocabulary mechanism as tx1_arm.yaml (see that file's
+  # comment; P1-3). This is a SEPARATE file from tx1_arm.yaml's -- the two
+  # arms trained separate Phase C checkpoints and there is no guarantee their
   # PerturbationVectorAdapter construction order agrees, even though both
   # trained over the same nominal 4-line gene universe.
-  gene_vocabulary_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/gene_vocabulary.json
+  gene_vocabulary_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/models/best/gene_vocabulary.json
   # THIS is the arm's defining difference from tx1_arm.yaml: ST's input here
   # is gene/HVG space (2000-d, the checkpoint's own released input width),
   # not the 2560-d Tx1 embedding -- so the head's basal_dim for this arm is

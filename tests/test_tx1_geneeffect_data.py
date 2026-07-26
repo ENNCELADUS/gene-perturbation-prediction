@@ -256,6 +256,71 @@ def test_load_validation_line_registration_raises_on_disjointness_violation(
         load_validation_line_registration(registration_path, manifest, manifest_path)
 
 
+# --- P2-2: a truncated or duplicated registration must not silently pass ----
+
+
+def test_load_validation_line_registration_rejects_duplicate_id(
+    tmp_path: Path,
+) -> None:
+    """A duplicated id keeps the list length equal to validation_count (5),
+    so nothing about the recorded count looks wrong -- only an explicit
+    uniqueness check catches it. Without this fix, `_assert_validation_
+    disjoint`'s set() conversion would collapse the duplicate invisibly and
+    this would silently train with only 4 UNIQUE validation lines."""
+    manifest_path = tmp_path / "cell_line_manifest.csv"
+    manifest = _synthetic_manifest(manifest_path)
+    registration = generate_validation_line_registration(manifest, manifest_path)
+    corrupted = dict(registration)
+    ids = list(registration["validation_model_ids"])
+    corrupted["validation_model_ids"] = [ids[0]] + ids[:-1]  # ids[0] duplicated
+    assert len(corrupted["validation_model_ids"]) == registration["validation_count"]
+    registration_path = tmp_path / "validation_lines.json"
+    registration_path.write_text(json.dumps(corrupted))
+
+    with pytest.raises(ValueError, match="duplicate id"):
+        load_validation_line_registration(registration_path, manifest, manifest_path)
+
+
+def test_load_validation_line_registration_rejects_truncated_list(
+    tmp_path: Path,
+) -> None:
+    """Dropping one id without updating validation_count must raise -- the
+    manifest hash is untouched (this is not the staleness case) and every
+    remaining id is a genuine, disjoint train_head line, so nothing but an
+    explicit count check catches the registration silently training with
+    fewer than its own claimed validation-line count."""
+    manifest_path = tmp_path / "cell_line_manifest.csv"
+    manifest = _synthetic_manifest(manifest_path)
+    registration = generate_validation_line_registration(manifest, manifest_path)
+    corrupted = dict(registration)
+    corrupted["validation_model_ids"] = list(registration["validation_model_ids"])[:-1]
+    assert len(corrupted["validation_model_ids"]) < registration["validation_count"]
+    registration_path = tmp_path / "validation_lines.json"
+    registration_path.write_text(json.dumps(corrupted))
+
+    with pytest.raises(ValueError, match="validation_count"):
+        load_validation_line_registration(registration_path, manifest, manifest_path)
+
+
+def test_load_validation_line_registration_accepts_self_consistent_registration(
+    tmp_path: Path,
+) -> None:
+    """Sanity check: an untouched, genuinely-generated registration (unique
+    ids, count matches) must still round-trip -- P2-2's new checks must not
+    reject a valid registration."""
+    manifest_path = tmp_path / "cell_line_manifest.csv"
+    manifest = _synthetic_manifest(manifest_path)
+    registration = generate_validation_line_registration(manifest, manifest_path)
+    registration_path = tmp_path / "validation_lines.json"
+    registration_path.write_text(json.dumps(registration))
+
+    loaded = load_validation_line_registration(
+        registration_path, manifest, manifest_path
+    )  # must not raise
+
+    assert loaded == registration
+
+
 # --- load_depmap_gene_effect -------------------------------------------------
 
 

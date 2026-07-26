@@ -315,6 +315,35 @@ def _chunk_control_cell_indices(
     return tuple(chunks)
 
 
+def resolve_device(requested: str | torch.device = "auto") -> torch.device:
+    """Resolve a configured device string the same way exp05's own
+    ``train.TrainConfig.device`` convention does (Wave 3 Codex gate P1-5).
+
+    ``"auto"`` (the default) picks CUDA when available, CPU otherwise --
+    Phase D's forward-only ST inference generates roughly ``33 + 9`` lines
+    times the full ~587-gene slice worth of forward passes
+    (:func:`generate_predicted_response_for_line` calls), which stayed
+    CPU-only before this fix because nothing ever resolved or threaded a
+    device through it. This is a resolution, not a hard requirement: CPU
+    keeps working unchanged for tests and for machines with no GPU.
+
+    Args:
+        requested: ``"auto"``, an explicit device string (e.g. ``"cpu"``,
+            ``"cuda"``, ``"cuda:0"``), or an already-constructed
+            :class:`torch.device`.
+
+    Returns:
+        The resolved :class:`torch.device`.
+    """
+    if isinstance(requested, torch.device):
+        return requested
+    if str(requested) == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
+    return torch.device(str(requested))
+
+
 def generate_predicted_response(
     model: ForwardOnlyStateModel,
     control_input: np.ndarray,
@@ -340,10 +369,18 @@ def generate_predicted_response(
     codebase keys basal control cells by ``model_id`` --
     ``tx1_response_data.py:603-625``); ``None`` omits ``batch`` entirely.
 
+    ``device`` (Wave 3 Codex gate P1-5) is where the forward pass itself
+    runs -- ``model`` must already have been moved there by the caller
+    (``model.to(device)``; not repeated per call here, since this function
+    is invoked once per gene). The returned tensor is always moved back to
+    CPU regardless of ``device`` (below), so every downstream consumer
+    (disk caching, the CPU-resident ``Tx1GeneEffectHead``) stays
+    device-oblivious exactly as it was before this fix.
+
     Returns:
         The predicted response, shape ``(n_basal_cells, response_dim)`` --
-        exactly ``control_input``'s row count, padding trimmed off. No
-        gradient is tracked (runs under ``torch.no_grad()``).
+        exactly ``control_input``'s row count, padding trimmed off, always
+        on CPU. No gradient is tracked (runs under ``torch.no_grad()``).
 
     Raises:
         UnknownPerturbationGeneError: ``gene`` is outside the ST vocabulary.
@@ -365,7 +402,15 @@ def generate_predicted_response(
     with torch.no_grad():
         outputs = model.predict_response_chunks(control_chunks, gene, batch_chunks)
         response = torch.cat(outputs, dim=0)[:n_cells]
-    return response
+    # Always return CPU: `device` is only where the (expensive) forward pass
+    # itself runs. Every caller today (the disk cache writer, and Phase D's
+    # CPU-resident Tx1GeneEffectHead training/inference) expects a CPU
+    # tensor; without this, a non-CPU `device` would silently leave GPU
+    # tensors flowing into `LineExamples`/`moment_pool`, which either raises
+    # a device-mismatch error against the CPU-resident head or basal bag, or
+    # (worse) silently succeeds only when everything happens to already be
+    # on the same device.
+    return response.detach().cpu()
 
 
 def _batch_index_chunks(
@@ -447,6 +492,7 @@ __all__ = [
     "generate_predicted_response",
     "generate_predicted_response_for_line",
     "load_forward_only_checkpoint",
+    "resolve_device",
     "resolve_genes_against_vocabulary",
     "vocabulary_genes",
 ]
