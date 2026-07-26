@@ -1,0 +1,152 @@
+# Phase D Task 5 -- Tx1-3B-ST arm: train the context-conditioned GeneEffect
+# head (Tx1GeneEffectHead, tx1_geneeffect_head.py) on top of Phase C's
+# trained ST + perturbation-adapter weights for THIS arm (ST's input is the
+# frozen Tx1-3B basal-cell embedding, 2560-d).
+#
+# D7 (binding): the hvg_arm.yaml sibling config runs the IDENTICAL head and
+# data (same objective, same hyperparameters, same 28/5/9 line split, same
+# frozen 587-gene slice) -- it differs ONLY in state.input_dim/backend
+# widths, because it is the encoder-unseen attribution control (spec Sec 7):
+# if the Tx1 arm wins, this is what tells you whether that win came from the
+# Tx1 encoder or merely from the rebuilt head. Any change to objective/
+# training/phase_f here must be mirrored there.
+#
+# Launched via scripts/train_tx1_geneeffect_head.py (see that file's own
+# docstring for the exact invocation). This wave (Phase D) produces code and
+# checkpoints, not numbers (D8) -- no GPU training or real run was performed
+# while authoring this config; --dry-run is the only mode exercised locally.
+
+# Which of Task 2's two forward-only ST arms this config trains
+# (tx1_predicted_response.ARM_TX1/ARM_HVG) -- selects which cached basal
+# view (Tx1 embedding vs. HVG matrix) feeds both ST's input and the head's
+# basal_bag.
+arm: tx1_arm
+
+run:
+  run_id: tx1_st_geneeffect_phase_d_tx1_arm
+  # Base dir for this run's outputs (models/head.pt, provenance.json,
+  # tx1_3b_st_predictions.csv under runs/<run_id>/) -- matches Phase C's own
+  # results/experiments/12_tx1_st_geneeffect/<phase>/ convention.
+  output_dir: results/experiments/12_tx1_st_geneeffect/phase_d
+
+data:
+  # Task 1's one-time, lineage-stratified 5-line validation carve-out
+  # (derived from the 29 train_head lines only; see
+  # tx1_geneeffect_data.load_validation_line_registration, which re-checks
+  # this file's derived_from_sha256 against the manifest actually passed on
+  # the CLI and refuses to load if the manifest has changed underneath it).
+  # Explicit here (not a hardcoded default anywhere in the pipeline) per this
+  # wave's config-discipline instruction: which validation lines gate model
+  # selection is a decision that must be visible and auditable in the config
+  # that trained a given checkpoint, not an implicit CLI default.
+  validation_lines_path: configs/experiments/12_tx1_st_geneeffect/phase_d/validation_lines.json
+
+state:
+  # state_checkpoint = the real Phase C-trained ST + perturbation adapter
+  # (see aivc_model.tx1_geneeffect_pipeline_run.build_forward_only_model).
+  # linear_mock is test-only (CPU, no state.tx.models.state_transition
+  # import, no hparams checkpoint) -- used by this wave's e2e smoke test,
+  # never by a real run's config.
+  backend: state_checkpoint
+  # The RELEASED ST checkpoint's own hparams (hidden size, transformer
+  # backbone, batch count, ...) -- construct_forward_only_model's
+  # architecture source, matching phase_c/tx1_arm.yaml's state.checkpoint_path.
+  hparams_checkpoint_path: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
+  # Phase C's TRAINED state_adapter/perturbations weights for the tx1_arm run
+  # (tx1_predicted_response.load_forward_only_checkpoint loads exactly these
+  # two submodules and drops response_encoder/response_pooler/c_head, the
+  # GMM/MLP head this wave replaces). Matches phase_c/tx1_arm.yaml's
+  # train.run_id (tx1_st_geneeffect_phase_c_tx1_arm) and this repo's own
+  # results/experiments/<exp>/runs/<run_id>/models/best/pytorch_model.bin
+  # convention (see the frozen exp05 checkpoint path for the same shape).
+  # NOTE: as of authoring this config, Phase C's tx1_arm run has not yet
+  # produced this file (Phase C is a separate, currently-running wave task,
+  # per this wave's own hard boundary against launching anything remote) --
+  # --dry-run's check_paths=True will correctly fail against this path until
+  # that run completes. This is expected, not a defect in this config.
+  st_checkpoint_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_tx1_arm/models/best/pytorch_model.bin
+  # Sizes/construction-initializes PerturbationVectorAdapter before Phase C's
+  # checkpoint overwrites every value; same file both Phase C arm configs use.
+  known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
+  # OPEN GAP, inherited from Task 2's own docstring (tx1_predicted_response.py
+  # construct_forward_only_model): a plain JSON list of gene symbols, in
+  # Phase C's EXACT training-time order -- PerturbationVectorAdapter keys its
+  # trainable "missing" parameters by construction-time list POSITION, not
+  # gene identity, so a different order/vocabulary silently loads the WRONG
+  # gene's vector into each checkpoint slot with no error. No artifact under
+  # today's Phase C run output tree is confirmed to hold this exact ordered
+  # list; producing it (e.g. dumping canonical_gene_order at Phase C
+  # checkpoint-save time) is a follow-up this task does not invent or guess
+  # at. Until it exists, --dry-run's gene-coverage check and any real run
+  # both fail loudly on this path, by design (D10: loud failure over a
+  # plausible-looking guess).
+  gene_vocabulary_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_tx1_arm/gene_vocabulary.json
+  # ST's INPUT width == the head's basal_dim for this arm: the frozen Tx1-3B
+  # embedding (tx1_embed_cache.EMBEDDING_WIDTH). validate_config_shape
+  # enforces this exact value for arm=tx1_arm; never silently coerced.
+  input_dim: 2560
+  # ST's OUTPUT width == the head's response_dim, gene/HVG space in BOTH
+  # arms (phase_c's own C9 decision) -- must equal hvg_arm.yaml's output_dim.
+  output_dim: 2000
+  pert_dim: 2024
+  # Matches the checkpoint's own saved output_space (phase_c/tx1_arm.yaml
+  # records the same value for the same reason: making the choice visible
+  # rather than implicit, even where it is a same-value, non-shape-affecting
+  # override).
+  output_space: gene
+  # Must equal the checkpoint's own cell_sentence_len (phase_c/tx1_arm.yaml's
+  # train.cell_set_len) -- StateForwardAdapter.forward_chunks rejects any
+  # other chunk size for a loaded checkpoint.
+  cell_set_len: 64
+  # Seed for the deterministic padding-resample that fills a basal-cell
+  # count not evenly divisible by cell_set_len
+  # (tx1_predicted_response._chunk_control_cell_indices) -- part of the D11
+  # cache fingerprint, since it changes which cells get duplicated into a
+  # line's final window and hence that window's predicted output.
+  response_generation_seed: 0
+
+objective:
+  # D3 (binding): the ONLY registered objective is rank_variance_loss =
+  # correlation_loss + lam * variance_matching_loss (tx1_geneeffect_head.py).
+  # lam is its only knob; no MSE term is added anywhere in this pipeline --
+  # MSE is what collapsed the earlier head to the line mean (spec Sec 2.2).
+  # 1.0 is the registered default; not yet tuned against a real run (no GPU
+  # training has happened under this config).
+  lam: 1.0
+  # Must equal tx1_geneeffect_train.SELECTION_METRIC_NAME exactly --
+  # validate_config_shape raises if this drifts from the metric selection
+  # actually uses. Recorded explicitly (not left implicit) so this config
+  # can never reproduce Wave 2's bug of a recorded selection_metric string
+  # ("val_c_loss") that did not match what selection actually computed
+  # (generation_loss).
+  selection_metric: val_rank_variance_loss
+
+training:
+  # Tx1GeneEffectHead's own MLP-trunk default width (tx1_geneeffect_head.py).
+  hidden: 256
+  # moment_pool's moment count (mean + variance); matches the head's default.
+  moments: 2
+  # Unmeasured first-run default (Task 3's TrainingConfig default) -- no real
+  # run has been executed under this config; a real run may need its own
+  # tuning pass, but nothing about correctness depends on this exact value.
+  learning_rate: 0.001
+  epochs: 200
+  # Seed for torch.manual_seed (head weight initialization only -- distinct
+  # from state.response_generation_seed above, which seeds ST's own padding
+  # resample).
+  seed: 0
+
+phase_f:
+  # D1 (binding): the frozen k-shot schedule -- must equal
+  # tx1_geneeffect_eval.K_SCHEDULE exactly (validate_config_shape rejects any
+  # subset or reordering; the frozen contract requires the FULL schedule for
+  # every registered panel, not a subset).
+  k_schedule: [0, 5, 10, 25, 50]
+  # D1: the frozen candidate method identifier the Phase F table rows are
+  # stamped with -- must equal tx1_geneeffect_eval.DEFAULT_PRIMARY_METHOD.
+  method: tx1_3b_st
+  # tx1_fewshot_calibration.DEFAULT_ALPHA, recorded explicitly.
+  alpha: 1.0
+  # Residual ridge correction on top of base_pred (tx1_fewshot_calibration's
+  # own default), recorded explicitly rather than left implicit.
+  residual: true

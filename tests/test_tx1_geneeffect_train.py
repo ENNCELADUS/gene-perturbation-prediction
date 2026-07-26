@@ -433,9 +433,9 @@ def test_assemble_split_examples_wires_to_task1_selector_and_skips_test_line(
 
     tx1_cache_dir = tmp_path / "tx1_cache"
     predicted_cache_dir = tmp_path / "predicted_cache"
-    fingerprint = "fp-test"
     genes = ["G1", "G2"]
     gene_effect_by_line: dict[str, pd.Series] = {}
+    fingerprint_by_line: dict[str, str] = {}
     line_arrays: dict[str, dict] = {}
     for row in manifest.itertuples(index=False):
         model_id = str(row.model_id)
@@ -449,6 +449,12 @@ def test_assemble_split_examples_wires_to_task1_selector_and_skips_test_line(
             .astype(np.float32)
             for gene in genes
         }
+        # Deliberately a DIFFERENT literal per line (not the real
+        # sha256-based fingerprint, since these are hand-built synthetic
+        # bytes) -- this is the property `fingerprint_by_line` exists to
+        # carry: a real run's per-model_id fingerprint always differs.
+        fingerprint = f"fp-{model_id}"
+        fingerprint_by_line[model_id] = fingerprint
         write_predicted_response_cache(
             predicted_cache_dir, model_id, ARM_TX1, fingerprint, responses
         )
@@ -461,7 +467,7 @@ def test_assemble_split_examples_wires_to_task1_selector_and_skips_test_line(
         arm=ARM_TX1,
         tx1_cache_dir=tx1_cache_dir,
         predicted_response_cache_dir=predicted_cache_dir,
-        fingerprint=fingerprint,
+        fingerprint_by_line=fingerprint_by_line,
         gene_effect_by_line=gene_effect_by_line,
     )
 
