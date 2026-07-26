@@ -362,6 +362,11 @@ def build_perturbseq_basal_adata(
     # else: _require_ensembl_source already confirmed var.index.name ==
     # var_ensembl_col, so var.index (copied from backed.var) already holds
     # the Ensembl ids -- no reassignment needed.
+    # The Tahoe and X-Atlas builders both emit an explicit ``ensembl_id`` column
+    # because the Tx1 encoder reads ``adata.var["ensembl_id"]`` directly. A
+    # Perturb-seq h5ad carries its ids in ``var.index`` instead, so materialize
+    # the column here rather than leaving the encoder to fail at GPU time.
+    var["ensembl_id"] = var.index.astype(str)
     n_cells = matrix.shape[0]
     obs = pd.DataFrame(
         {
@@ -765,6 +770,7 @@ def build_perturbseq_response_adata(
         var.index = var[var_ensembl_col].astype(str)
     # else: _require_ensembl_source already confirmed var.index.name ==
     # var_ensembl_col, matching build_perturbseq_basal_adata's convention.
+    var["ensembl_id"] = var.index.astype(str)
     n_cells = matrix.shape[0]
     obs = pd.DataFrame(
         {
@@ -986,4 +992,9 @@ def assert_tx1_input_contract(adata: ad.AnnData) -> None:
         raise ValueError(
             "Tx1 input contract violation: var.index must be Ensembl gene ids "
             f"matching {_ENSEMBL_ID_PATTERN.pattern!r}"
+        )
+    if "ensembl_id" not in adata.var.columns:
+        raise ValueError(
+            "Tx1 input contract violation: var is missing the 'ensembl_id' column "
+            "that the Tx1 encoder reads"
         )
