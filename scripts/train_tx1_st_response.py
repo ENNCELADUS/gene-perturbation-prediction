@@ -426,11 +426,31 @@ def _split_fold(genes: Sequence[str], config: AivcConfig) -> FoldSpec:
     in test -- cross-line leakage of the same biological gene, a violation
     of this repo's CV protocol, since ``GeneAccessRecorder`` authorizes by
     bag key, not by base gene identity.
+
+    fix-round-6: the returned ``train_genes``/``val_genes``/``test_genes``
+    keep each composite key's ORIGINAL case. The grouping key (which base
+    genes get merged together) is still upper-cased internally -- so two
+    lines whose raw sources happen to case a symbol differently still group
+    into ONE fold role -- but the composite STRINGS handed back are exactly
+    the ones ``genes`` was given. Force-uppercasing them (the old behavior)
+    silently broke every ``Cxxorfyy``-style HGNC symbol (the only common
+    gene symbols with lowercase letters, e.g. ``C10orf67``): a val/test-only
+    ORF gene's uppercased composite key flowed into
+    ``train._build_e2e_model``'s ``PerturbationVectorAdapter`` vocabulary,
+    while evaluation (``train._final_prediction_tensor``) looked it up in
+    its ORIGINAL case via ``GeneBags.for_genes``/``for_prediction_genes``
+    (which always return the bag's own case, never the request string) --
+    two different dict keys for the same gene, so the adapter's exact-string
+    lookup raised a bare ``KeyError`` for that gene, only in POST-EPOCH
+    evaluation, only for the lines/genes assigned to val/test (see
+    .superpowers/sdd/phase-c/fix-round-6-report.md).
     """
-    composite_genes = [str(gene).upper() for gene in genes]
+    composite_genes = [str(gene) for gene in genes]
     composite_by_base: dict[str, list[str]] = {}
     for composite in composite_genes:
-        composite_by_base.setdefault(base_gene_name(composite), []).append(composite)
+        composite_by_base.setdefault(base_gene_name(composite).upper(), []).append(
+            composite
+        )
     unique_base_genes = sorted(composite_by_base)
     if len(unique_base_genes) < 3:
         raise ValueError(

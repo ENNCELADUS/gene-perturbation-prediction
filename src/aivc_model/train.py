@@ -82,6 +82,7 @@ from aivc_model.gene_embeddings import (
     require_complete_esm_coverage,
 )
 from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
+from aivc_model.tx1_predicted_response import resolve_genes_against_vocabulary
 from dependency_baseline.metrics import ranking_metrics, regression_metrics
 
 _LOGGER = logging.getLogger(__name__)
@@ -749,6 +750,9 @@ def _run_audited_training(
         canonical_gene_order=canonical_gene_order,
         emit_checkpoint_output=accelerator.is_main_process,
     )
+    _require_perturbation_vocabulary_coverage(
+        model, train_data, val_data, fold_spec, external
+    )
     runtime_evidence = _runtime_evidence(
         model,
         train_data,
@@ -954,6 +958,57 @@ def _authorize_data_access(data: GeneBags, stage: str) -> None:
     if data.access_recorder is None:
         raise ValueError("audited operation requires a GeneAccessRecorder")
     data.access_recorder.authorize(stage, tuple(str(gene) for gene in data.genes))
+
+
+def _require_perturbation_vocabulary_coverage(
+    model: AivcModel,
+    train_data: GeneBags,
+    val_data: GeneBags,
+    fold_spec: FoldSpec,
+    external: ExternalGeneBags | None,
+) -> None:
+    """Fail loudly, before training starts, if a gene cannot be forwarded.
+
+    ``PerturbationVectorAdapter.forward`` (``model.py:291-294``) is a
+    closed, exact-string dict lookup with no fallback: a gene present only
+    in ``val_data``/the outer-test fold and absent from the adapter's
+    constructed vocabulary previously surfaced as a bare ``KeyError`` deep
+    inside ``_final_prediction_tensor``, after a full epoch of training
+    (fix-round-6 incident: ``C10orf67``/``C11orf21``/``C11orf71`` --
+    see ``.superpowers/sdd/phase-c/fix-round-6-report.md``).
+
+    Checks the REAL gene identities the audited protocol will forward --
+    ``train_data.genes``/``val_data.genes`` (already case-preserved,
+    independent of how ``extra_genes`` built the vocabulary) and the frozen
+    fold's test-gene NAMES (label-free: reading a gene name here never
+    touches the sealed outer-test response/label) -- against the adapter's
+    actual constructed vocabulary, via the same exact-string matching
+    ``forward`` itself performs
+    (:func:`aivc_model.tx1_predicted_response.resolve_genes_against_vocabulary`).
+    A no-op for ``Esm2PerturbationAdapter``: it resolves every gene through
+    one shared MLP, so it has no fixed-vocabulary gap to check.
+
+    Raises:
+        UnknownPerturbationGeneError: One or more train/val/test/external
+            genes are outside the adapter's vocabulary.
+    """
+    if not isinstance(model.perturbations, PerturbationVectorAdapter):
+        return
+    external_genes = (
+        tuple(str(gene) for gene in external.data.genes) if external is not None else ()
+    )
+    requested = sorted(
+        {
+            _base_gene_name(str(gene))
+            for gene in (
+                *train_data.genes,
+                *val_data.genes,
+                *fold_spec.test_genes,
+                *external_genes,
+            )
+        }
+    )
+    resolve_genes_against_vocabulary(requested, model.perturbations, alias_map={})
 
 
 def _runtime_evidence(
