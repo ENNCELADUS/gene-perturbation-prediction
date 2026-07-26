@@ -73,7 +73,7 @@ Three lineages predict a gene's own dependency: from **static omics** (DeepDep, 
 Ranked by closeness, with what each does **not** do:
 
 1. **CILANTRO-SL** (Hua, Haber & Ma, CMU; bioRxiv `10.64898/2026.02.25.708096`, Feb 2026; RECOMB 2026) — **the closest.** Two-stage, graph-free: a foundation model (**Geneformer**) does in-silico single-gene knockouts on bulk RNA-seq → CRISPR-viability-supervised "knockout-aware viability embeddings" → pairwise classifier + conformal uncertainty; evaluated zero-shot on unseen genes/pairs on SynLethDB; **reportedly beats KG4SL by +28.6% F1 and ESM4SL by +49.9% F1** on the gene-holdout split (per the preprint). Does **not**: (a) use a *perturbation-response-trained* forward model — Geneformer token-removal "does not simulate a mechanistic knockout" (their words); (b) simulate a **joint double perturbation** or a **sequential counterfactual** — it composes two *independent* single-gene embeddings via a black-box MLP; (c) use an **explicit interaction null**; (d) **validate against measured epistasis**; and it explicitly **defers combinatorial/double-KO to future work** (citing DANGO — same senior author).
-2. **This repo's own retired exp08** (`src/sl_dl_model/`) — architecturally the same claim, **already attempted and already measured to fail** the dependency floor (CV2 AUROC 0.667 < 0.704; CV3 0.587 < 0.596; `docs/superpowers/claim_evidence_map.md`, claim CNEW). The new program must justify, in falsifiable terms, why Bridge A/B differ from exp08's pooled-embedding pair-head.
+2. **This repo's retired exp08 result** — its removed implementation tested an architecturally similar claim and **already measured a failure** against the dependency floor (CV2 AUROC 0.667 < 0.704; CV3 0.587 < 0.596; `docs/superpowers/claim_evidence_map.md`, claim CNEW). The new program must justify, in falsifiable terms, why Bridge A/B differ from that pooled-embedding pair-head.
 3. **Tahoe-x1** (embedding→CERES) and **X-Cell** (ESM-2 + DepMap virtual cell) — own "Bridge A plumbing" halves; neither chains a simulated KO into a second gene's fitness, neither is SL-evaluated.
 4. **GEARS** — conceptual ancestor of Bridge B (joint perturbation + GI subtypes), but transcriptome-magnitude GI, closed GO graph, never SL-DB-benchmarked.
 5. **RFM-SL** (Cai/Uhler 2023, static feature attribution), **PARIS** (co-dependency on observed data), **ESM4SL** (ESM-2 sequence-only; shares our identity backbone; documents the unseen-gene collapse F1 0.914→0.453), **Large Perturbation Model** (Miladinovic 2025, impute-missing-perturbation MoA).
@@ -102,7 +102,6 @@ Lead the contribution with the **mechanism and mechanistic validation**, not "gr
 - **Tahoe-x1 essentiality head** on STATE's post-KO output — the "obvious alternative Bridge A."
 - **GEARS-as-SL** — its GI residual as a pseudo-`s(a,b)` (note the transcriptome-vs-fitness axis).
 - **CILANTRO-SL** — reproduce/compare on the official general benchmark if feasible; at minimum differentiate head-to-head.
-- **exp08 re-run** — the prior failed attempt, as the internal control the new composition must clear.
 - **SLMGAE, KR4SL, KG4SL** — reproduce under the identical official Feng2024 `cal_metrics` harness; prior K562-filtered reproductions are ablations, not substitutes.
 
 ## 8. Key references (bibkeys → why cited)

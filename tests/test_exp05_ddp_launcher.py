@@ -3,12 +3,10 @@ from pathlib import Path
 import yaml
 
 
-CONFIG_PATH = Path(
-    "configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml"
-)
+CONFIG_PATH = Path("configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_5fold.yaml")
 
 
-def test_exp05_config_is_e2e_response_gmm_ddp() -> None:
+def test_exp05_config_matches_current_padded_ddp_contract() -> None:
     config = yaml.safe_load(CONFIG_PATH.read_text())
 
     assert "projector" not in config
@@ -20,15 +18,13 @@ def test_exp05_config_is_e2e_response_gmm_ddp() -> None:
         "init_scale": 0.02,
         "trainable": True,
     }
-    assert config["data"]["prepared_cache_dir"].endswith(
-        "k562_gwps_state2000_v2"
-    )
+    assert config["data"]["prepared_cache_dir"].endswith("k562_gwps_state2000_v2")
     assert config["train"]["required_world_size"] == 4
-    assert config["train"]["gene_batch_size"] == 1
+    assert config["train"]["gene_batch_size"] == 4
     assert config["train"]["learning_rate"] == 0.000025
     assert config["train"]["state_learning_rate"] == 0.0000025
     assert config["train"]["max_grad_norm"] == 1.0
-    assert config["train"]["run_id"] == "state_esm2_response_gmm_ddp_outer5"
+    assert config["train"]["run_id"] == "exp05_formal_padded_eval_v1"
     assert "freeze_state" not in config["train"]
     assert config["loss"]["occupancy_weight"] == 0.1
     assert config["loss"]["gmm_nll_weight"] == 0.01

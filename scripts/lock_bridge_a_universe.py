@@ -43,7 +43,7 @@ from pathlib import Path
 import pandas as pd
 
 from aivc_model.gene_splits import sha256_file
-from sl_dl_model.gene_embeddings import load_esm2_embeddings
+from aivc_model.gene_embeddings import load_esm2_embeddings
 
 logger = logging.getLogger("lock_bridge_a_universe")
 
