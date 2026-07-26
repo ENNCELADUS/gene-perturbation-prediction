@@ -1426,9 +1426,17 @@ def _make_accelerator(config: AivcConfig) -> Accelerator:
         use_seedable_sampler=True,
         data_seed=config.train.seed,
     )
+    # Config-gated (fix-round-5), not hardcoded: `config.train.ddp_static_graph`
+    # / `ddp_find_unused_parameters` default to today's values (True/False) so
+    # every pre-existing config behaves byte-identically (C1). These are
+    # correctness knobs, not a performance tuning pair -- see
+    # `TrainConfig.ddp_static_graph`'s docstring for why a config whose
+    # `PerturbationVectorAdapter` gene universe outgrows its
+    # `known_perturbation_vectors` panel (Phase C's multi-line composite
+    # keys) must relax both together.
     ddp_kwargs = DistributedDataParallelKwargs(
-        find_unused_parameters=False,
-        static_graph=True,
+        find_unused_parameters=config.train.ddp_find_unused_parameters,
+        static_graph=config.train.ddp_static_graph,
     )
     return Accelerator(
         cpu=config.train.device == "cpu",

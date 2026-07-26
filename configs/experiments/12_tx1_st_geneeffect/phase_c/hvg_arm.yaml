@@ -158,3 +158,10 @@ train:
   required_world_size: 4
   device: auto
   float32_matmul_precision: high
+  # fix-round-5: same DDP relaxation as tx1_arm.yaml, for the same reason --
+  # both arms train on the SAME assembled 4-line gene universe (this file's
+  # header comment), so both hit the identical PerturbationVectorAdapter
+  # missing-vector variance. See tx1_arm.yaml's train: section for the full
+  # reasoning and .superpowers/sdd/phase-c/fix-round-5-report.md.
+  ddp_static_graph: false
+  ddp_find_unused_parameters: true
