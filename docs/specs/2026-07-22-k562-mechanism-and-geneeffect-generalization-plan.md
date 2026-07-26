@@ -3,8 +3,10 @@
 **Status:** T1 completed 2026-07-22 and is **negative** (composition mechanism
 paused; [result](../results/exp05-bridge-a-horlbeck-kill-test.md)). T2 is the
 active near-term track, **sharpened 2026-07-23 to a few-shot cross-cell-line
-GeneEffect backbone** (not yet run; concrete architecture specified 2026-07-23,
-see §3 and [design](2026-07-23-tx1-st-geneeffect-backbone-design.md)).
+GeneEffect backbone**; its concrete architecture, data split, and current
+per-phase execution status are tracked in
+[design](2026-07-23-tx1-st-geneeffect-backbone-design.md) §3/§6, which
+supersedes the abstract sketch in §3 below.
 Authority: [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
 [`../02-acceptance-criteria.md`](../02-acceptance-criteria.md) (frozen bar) govern;
 [`../04-roadmap.md`](../04-roadmap.md) is the tracked phase plan this refines (see

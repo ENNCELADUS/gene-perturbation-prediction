@@ -10,8 +10,12 @@ With composition paused, the active near-term development focus is **T2, sharpen
 a few-shot cross-cell-line GeneEffect backbone** — an accurate, context-conditioned
 single-gene predictor that both bridges depend on, pursued as the Phase 3
 backbone-transfer exit and reported as backbone transfer, not as an SL claim
-(§1.1, §5). Formal SOTA reproduction, Bridge B, and any pairwise cross-cell-line
-result remain not started.
+(§1.1, §5). T2's own Phase A (data-audit/manifest freeze) and Phase B (Tx1-3B
+basal embeddings) are **complete**; Phase C (ST response model) is code-complete
+with a training run in progress and no checkpoint yet; Phase D (rebuilt hybrid
+head) is partially built and its training runner is under construction — no
+Phase 3 result exists. Formal SOTA reproduction, Bridge B, and any pairwise
+cross-cell-line result remain not started.
 **Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**
 [`02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Related work:**
 [`03-literature-review.md`](03-literature-review.md)
@@ -52,22 +56,33 @@ GeneEffect backbone**. It runs independently of the Feng-axis reproduction
   composition mechanism is **paused for redesign and not extended across contexts**.
   Development diagnostic, not the MECHANISTIC verdict (§9 and `02` §6). Result:
   [`results/exp05-bridge-a-horlbeck-kill-test.md`](results/exp05-bridge-a-horlbeck-kill-test.md).
-- **T2 — few-shot cross-cell-line GeneEffect backbone (active near-term focus).**
-  Build `F(X_c, c, g) -> GeneEffect`: a context-conditioned single-gene predictor
-  that predicts DepMap GeneEffect for cancer lines seen only through their basal
-  single-cell state — not Feng2024, which has no cell-type axis — and (b) adapts to
-  a held-out line from a few of its own labels (k-shot line adaptation). Data uses a
-  **fixed most-train / few-test split (no cross-validation)**: the four CRISPRi
-  Perturb-seq lines (K562, HCT116, Jurkat, HepG2) supply observed-response ST
-  supervision and head anchors; most of the 38 Tahoe DMSO-basal∩DepMap lines train
-  the head on predicted response; a lineage-stratified ~8–10 of them are the fixed
-  unseen test. Scored on the differentially-essential slice (slice membership fixed
-  on training lines only) against copy-K562 transfer, cross-line mean, nearest-line
-  transfer, lineage-only, a CCLE-bulk regression, and a pseudobulk-basal regression,
-  with a few-shot curve (accuracy vs. k held-out-line labels). This is the Phase 3
-  single-gene backbone-transfer exit, reported as task-data-held-out transfer (test
-  lines are inside the Tx1 encoder's Tahoe pretraining), not cross-cell-line SL.
-  Concrete architecture:
+- **T2 — few-shot cross-cell-line GeneEffect backbone (active near-term focus;
+  execution under way).** Build `F(X_c, c, g) -> GeneEffect`: a context-conditioned
+  single-gene predictor that predicts DepMap GeneEffect for cancer lines seen only
+  through their basal single-cell state — not Feng2024, which has no cell-type axis
+  — and (b) adapts to a held-out line from a few of its own labels (k-shot line
+  adaptation). Data uses a **fixed 28 train / 5 validation / 9 test split (no
+  cross-validation)**: the four CRISPRi Perturb-seq lines (K562, HCT116, Jurkat,
+  HepG2) supply observed-response ST supervision, head anchors, and remain in
+  training (their supervision is not spent on model selection); 24 of the 38
+  Tahoe DMSO-basal∩DepMap lines train the head on predicted response; 5 more,
+  lineage-stratified with a fixed seed and drawn only from the 29 non-anchor
+  training-pool lines, are held out for validation/model-selection only; the
+  remaining 9, lineage-stratified and frozen at Phase A, are the untouched unseen
+  test. Scored on the differentially-essential slice (587 genes; slice membership
+  fixed on training lines only) against copy-K562 transfer, cross-line mean,
+  nearest-line transfer, lineage-only, a CCLE-bulk regression, and a
+  pseudobulk-basal regression, with a few-shot curve (accuracy vs. k held-out-line
+  labels). This is the Phase 3 single-gene backbone-transfer exit, reported as
+  task-data-held-out transfer (test lines are inside the Tx1 encoder's Tahoe
+  pretraining), not cross-cell-line SL. Phase A (data audit/manifest freeze) and
+  Phase B (Tx1-3B basal embeddings, verified for all 42 manifest lines) are
+  **complete**; Phase C (ST response model) is code-complete and dry-run-validated
+  on real data for both arms, but **no ST checkpoint has been produced** and a
+  training run is in progress; Phase D (rebuilt hybrid head) is **partially
+  built** — the head, moment pooling, losses, few-shot calibrator, and evaluator
+  exist, but the runner that trains the head is under construction. No result
+  exists yet. Concrete architecture:
   [`specs/2026-07-23-tx1-st-geneeffect-backbone-design.md`](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)
   (Tx1-3B-conditioned ST + rebuilt hybrid head, HVG-ST encoder-unseen control).
 

@@ -7,7 +7,11 @@ K562 backbone established · first HCT116 frozen-backbone transport audit closed
 negative · Horlbeck K562 GI acquired and coverage-audited · T1 K562
 Bridge-A-vs-Horlbeck mechanism kill-test completed **negative** (composition
 mechanism paused for redesign) · **T2 few-shot cross-cell-line GeneEffect backbone
-now the active near-term development focus** (task established; not yet run) ·
+now the active near-term development focus, execution under way**: Phase A
+(data-audit/manifest freeze, amended 2026-07-26) and Phase B (Tx1-3B basal
+embeddings) **complete**; Phase C (ST response model) code-complete with a
+training run in progress and no checkpoint yet; Phase D (rebuilt hybrid head)
+partially built, training runner under construction; no Phase 3 result yet ·
 SOTA reproduction and contextual SL model not yet complete.
 **Goal:** build a virtual-cell SL discovery model that competes with the Feng2024
 SOTA for genes withheld from SL-pair/graph training and separately generalizes to
@@ -66,7 +70,7 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | Reproduce SLMGAE, KR4SL, KG4SL and best official comparator | Pending. |
 | Context-free composition score `q(a,b)` | Not started. |
 | Multi-cell-line data-role audit | Not started. |
-| Multi-cell-line virtual-cell backbone | **Active focus (design approved 2026-07-23).** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); fixed most-train / few-test split with Tahoe DMSO-basal DepMap lines held out; current exp05 is K562-based; not yet built. |
+| Multi-cell-line virtual-cell backbone | **Active focus, execution under way.** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); fixed 28 train / 5 validation / 9 test split over Tahoe DMSO-basal DepMap lines plus the 4 Perturb-seq anchors (validation drawn only from the non-anchor training pool). Phase A + Phase B complete; Phase C code-complete, training in progress, no checkpoint yet; Phase D partially built, head-training runner under construction. No Phase 3 result yet. |
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
 | Context-conditioned Bridge A / Bridge B | Not started; the K562 Bridge A **mechanism** was tested and is negative (see measured-GI row). |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
@@ -79,14 +83,19 @@ gene marginals, cell-line identity, and direct context-free transfer.
   AUROC(s_A -> strong-SL) approximately 0.52, below the single-gene floor). The
   composition mechanism is paused for redesign and not extended across contexts;
   [result](results/exp05-bridge-a-horlbeck-kill-test.md).
-- [ ] **T2 (active focus)** — build the few-shot cross-cell-line GeneEffect
-  backbone `F(X_c, c, g)`: fixed most-train / few-test split (four CRISPRi
-  Perturb-seq lines train; a lineage-stratified few of the 38 Tahoe DMSO-basal∩DepMap
-  lines are the held-out unseen test) plus k-shot adaptation, scored on the
-  differentially-essential slice against copy-K562 / mean / nearest-line /
-  lineage-only / CCLE-bulk / pseudobulk-basal baselines with a few-shot curve
-  (single-gene backbone transfer, task-data-held-out, not cross-cell-line SL);
-  [design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md).
+- [ ] **T2 (active focus, execution under way)** — build the few-shot
+  cross-cell-line GeneEffect backbone `F(X_c, c, g)`: fixed 28 train / 5
+  validation / 9 test split (four CRISPRi Perturb-seq lines plus 24 Tahoe
+  DMSO-basal∩DepMap lines train; 5 more Tahoe lines, lineage-stratified and
+  drawn only from the non-anchor training pool, validate; 9 lineage-stratified
+  Tahoe lines are the untouched unseen test) plus k-shot adaptation, scored on
+  the differentially-essential slice (587 genes) against copy-K562 / mean /
+  nearest-line / lineage-only / CCLE-bulk / pseudobulk-basal baselines with a
+  few-shot curve (single-gene backbone transfer, task-data-held-out, not
+  cross-cell-line SL). Phase A (amended 2026-07-26) and Phase B are complete;
+  Phase C is code-complete with training in progress and no checkpoint yet;
+  Phase D is partially built and its head-training runner is under
+  construction; [design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md).
 - [ ] Freeze and verify the official Feng2024 folds, labels, candidates, and
   `cal_metrics` contract.
 - [ ] Reproduce the strong SOTA under that identical official harness.
