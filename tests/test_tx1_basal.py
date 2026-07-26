@@ -14,9 +14,11 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import sparse
 from scipy.sparse import csr_matrix
 
 from aivc_model.tx1_basal import (
+    _materialize_rows,
     assert_tx1_input_contract,
     build_perturbseq_basal_adata,
     build_perturbseq_response_adata,
@@ -49,6 +51,40 @@ def _write_pooled_shard(shard_dir: Path, n_cells: int, cellosaurus_id: str) -> N
         for index in range(n_cells)
     ]
     _write_shard(shard_dir / "part-0.parquet", rows)
+
+
+def _write_multi_gene_perturbseq_h5ad(
+    path: Path,
+    *,
+    control_label: str = "non-targeting",
+    perturbation_col: str = "gene",
+    control_n: int,
+    gene_cells: dict[str, int],
+    ensembl_col: str = "ensembl_id",
+    n_genes: int = 3,
+) -> Path:
+    """A Perturb-seq h5ad with several distinct perturbed genes, each with its
+    own cell count -- unlike conftest's ``write_tx1_perturbseq_h5ad``, which
+    hardcodes every non-control cell to a single ``"TP53"`` label. Needed to
+    exercise the per-gene cell cap (fix-round-2, Defect 2): a single-gene
+    fixture can never show one gene capped while another is left untouched.
+    """
+    labels = [control_label] * control_n
+    for gene, n in gene_cells.items():
+        labels += [gene] * n
+    n_cells = len(labels)
+    rng = np.random.default_rng(0)
+    counts = rng.integers(1, 10, size=(n_cells, n_genes)).astype(np.float32)
+    obs = pd.DataFrame(
+        {perturbation_col: labels}, index=[f"cell{index}" for index in range(n_cells)]
+    )
+    var = pd.DataFrame(
+        {ensembl_col: [f"ENSG{index:011d}" for index in range(n_genes)]},
+        index=[f"gene{index}" for index in range(n_genes)],
+    )
+    adata = ad.AnnData(X=csr_matrix(counts), obs=obs, var=var)
+    adata.write_h5ad(path)
+    return path
 
 
 # --- load_line_manifest ------------------------------------------------
@@ -428,6 +464,79 @@ def test_assert_tx1_input_contract_rejects_non_ensembl_var() -> None:
     )
     with pytest.raises(ValueError, match="Ensembl"):
         assert_tx1_input_contract(adata)
+
+
+# --- _materialize_rows: bounded chunking (fix-round-2, Defect 1) -----------
+
+
+def test_materialize_rows_chunked_matches_single_call_dense(tmp_path: Path) -> None:
+    """The test that matters most for Defect 1: reading in bounded chunks
+    must return EXACTLY the same rows, in the same order, as one single
+    (unchunked) call -- proving the chunking split introduces no reordering
+    or dropped rows. Uses an unsorted, non-contiguous ``row_indices`` so a
+    chunk-boundary or sort/inverse-permutation bug would show up."""
+    rng = np.random.default_rng(0)
+    dense = rng.integers(0, 100, size=(23, 4)).astype(np.float32)
+    h5ad_path = tmp_path / "dense.h5ad"
+    ad.AnnData(X=dense).write_h5ad(h5ad_path)
+    backed = ad.read_h5ad(h5ad_path, backed="r")
+    try:
+        row_indices = np.array([17, 2, 9, 0, 22, 5, 6, 11, 3], dtype=np.int64)
+        chunked = _materialize_rows(backed.X, row_indices, chunk_size=3)
+        single_call = _materialize_rows(backed.X, row_indices, chunk_size=1000)
+        np.testing.assert_array_equal(np.asarray(chunked), np.asarray(single_call))
+        np.testing.assert_array_equal(np.asarray(chunked), dense[row_indices])
+    finally:
+        backed.file.close()
+
+
+def test_materialize_rows_chunked_matches_single_call_sparse(tmp_path: Path) -> None:
+    """Same guarantee as the dense test, for a backed sparse ``X`` -- the real
+    GWPS anchor files vary between the two, and the fix must hold for both."""
+    rng = np.random.default_rng(1)
+    dense = rng.integers(0, 5, size=(19, 4)).astype(np.float32)
+    h5ad_path = tmp_path / "sparse.h5ad"
+    ad.AnnData(X=csr_matrix(dense)).write_h5ad(h5ad_path)
+    backed = ad.read_h5ad(h5ad_path, backed="r")
+    try:
+        row_indices = np.array([14, 1, 8, 0, 18, 4, 6, 10, 2], dtype=np.int64)
+        chunked = _materialize_rows(backed.X, row_indices, chunk_size=2)
+        single_call = _materialize_rows(backed.X, row_indices, chunk_size=1000)
+        assert sparse.issparse(chunked)
+        np.testing.assert_array_equal(chunked.toarray(), single_call.toarray())
+        np.testing.assert_array_equal(chunked.toarray(), dense[row_indices])
+    finally:
+        backed.file.close()
+
+
+def test_materialize_rows_default_chunk_size_matches_ground_truth(
+    tmp_path: Path,
+) -> None:
+    """Regression against the real default (not just an artificially small
+    ``chunk_size`` chosen to force multiple chunks)."""
+    rng = np.random.default_rng(2)
+    dense = rng.integers(0, 100, size=(37, 5)).astype(np.float32)
+    h5ad_path = tmp_path / "dense.h5ad"
+    ad.AnnData(X=dense).write_h5ad(h5ad_path)
+    backed = ad.read_h5ad(h5ad_path, backed="r")
+    try:
+        row_indices = np.array([30, 1, 15, 4, 36, 0], dtype=np.int64)
+        result = _materialize_rows(backed.X, row_indices)  # default chunk_size
+        np.testing.assert_array_equal(np.asarray(result), dense[row_indices])
+    finally:
+        backed.file.close()
+
+
+def test_materialize_rows_empty_selection_does_not_crash(tmp_path: Path) -> None:
+    dense = np.zeros((5, 2), dtype=np.float32)
+    h5ad_path = tmp_path / "dense.h5ad"
+    ad.AnnData(X=dense).write_h5ad(h5ad_path)
+    backed = ad.read_h5ad(h5ad_path, backed="r")
+    try:
+        result = _materialize_rows(backed.X, np.array([], dtype=np.int64))
+        assert np.asarray(result).shape == (0, 2)
+    finally:
+        backed.file.close()
 
 
 # --- build_perturbseq_basal_adata ----------------------------------------
@@ -1116,6 +1225,73 @@ def test_build_perturbseq_response_adata_accepts_ensembl_only_index(
     assert adata.var.index.tolist() == [f"ENSG{index:011d}" for index in range(3)]
 
 
+# --- build_perturbseq_response_adata: per-gene cap (fix-round-2 Defect 2) --
+
+
+def test_build_perturbseq_response_adata_caps_per_gene_deterministically(
+    tmp_path: Path,
+) -> None:
+    h5ad_path = _write_multi_gene_perturbseq_h5ad(
+        tmp_path / "data.h5ad", control_n=2, gene_cells={"GENE_A": 20, "GENE_B": 3}
+    )
+    kwargs = {
+        "control_label": "non-targeting",
+        "perturbation_col": "gene",
+        "cell_line_name": "LineP",
+        "model_id": "ACH-P",
+        "cellosaurus_id": "CVCL_P",
+        "var_ensembl_col": "ensembl_id",
+        "max_cells_per_gene": 5,
+        "seed": 3,
+    }
+    first = build_perturbseq_response_adata(h5ad_path, **kwargs)
+    second = build_perturbseq_response_adata(h5ad_path, **kwargs)
+    counts = first.obs["perturbation_gene"].value_counts()
+    assert counts["GENE_A"] == 5, "over-cap gene must be capped to max_cells_per_gene"
+    assert counts["GENE_B"] == 3, "under-cap gene must be left untouched"
+    assert first.obs_names.tolist() == second.obs_names.tolist()
+    np.testing.assert_array_equal(first.X.toarray(), second.X.toarray())
+
+
+def test_build_perturbseq_response_adata_max_cells_per_gene_none_returns_everything(
+    tmp_path: Path,
+) -> None:
+    h5ad_path = _write_multi_gene_perturbseq_h5ad(
+        tmp_path / "data.h5ad", control_n=2, gene_cells={"GENE_A": 7, "GENE_B": 4}
+    )
+    adata = build_perturbseq_response_adata(
+        h5ad_path,
+        control_label="non-targeting",
+        perturbation_col="gene",
+        cell_line_name="LineP",
+        model_id="ACH-P",
+        cellosaurus_id="CVCL_P",
+        var_ensembl_col="ensembl_id",
+        max_cells_per_gene=None,
+    )
+    assert adata.n_obs == 11
+
+
+def test_build_perturbseq_response_adata_different_seed_changes_capped_selection(
+    tmp_path: Path,
+) -> None:
+    h5ad_path = _write_multi_gene_perturbseq_h5ad(
+        tmp_path / "data.h5ad", control_n=2, gene_cells={"GENE_A": 20}
+    )
+    kwargs = {
+        "control_label": "non-targeting",
+        "perturbation_col": "gene",
+        "cell_line_name": "LineP",
+        "model_id": "ACH-P",
+        "cellosaurus_id": "CVCL_P",
+        "var_ensembl_col": "ensembl_id",
+        "max_cells_per_gene": 5,
+    }
+    seed7 = build_perturbseq_response_adata(h5ad_path, seed=7, **kwargs)
+    seed99 = build_perturbseq_response_adata(h5ad_path, seed=99, **kwargs)
+    assert set(seed7.obs_names.tolist()) != set(seed99.obs_names.tolist())
+
+
 # --- build_xatlas_orion_response_adata (Phase C Task 5) ---------------------
 
 
@@ -1228,6 +1404,97 @@ def test_build_xatlas_orion_response_adata_raises_when_nothing_matches(
             model_id="ACH-000971",
             cellosaurus_id="CVCL_0291",
         )
+
+
+# --- build_xatlas_orion_response_adata: per-gene cap (fix-round-2 Defect 2) -
+
+
+def _write_multi_gene_xatlas_response_shard(
+    path: Path, gene_cells: dict[str, int]
+) -> None:
+    """One X-Atlas-Orion shard with several distinct perturbed genes, each
+    with its own cell count -- needed to show one gene capped while another,
+    smaller one is left untouched."""
+    rows = [
+        _xatlas_row(
+            gene_token_id=[0],
+            gene_expression=[float(index + 1)],
+            cell_barcode=f"{gene}_{index}",
+            gene_target=gene,
+        )
+        for gene, n in gene_cells.items()
+        for index in range(n)
+    ]
+    _write_xatlas_shard(path, rows)
+
+
+def test_build_xatlas_orion_response_adata_caps_per_gene_deterministically(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_multi_gene_xatlas_response_shard(
+        shard_dir / "HCT116_Batch1.parquet", {"GENE_A": 20, "GENE_B": 3}
+    )
+    metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
+    kwargs = {
+        "cell_line_name": "HCT116",
+        "model_id": "ACH-000971",
+        "cellosaurus_id": "CVCL_0291",
+        "max_cells_per_gene": 5,
+        "seed": 3,
+    }
+    first = build_xatlas_orion_response_adata(shard_dir, metadata_path, **kwargs)
+    second = build_xatlas_orion_response_adata(shard_dir, metadata_path, **kwargs)
+    counts = first.obs["perturbation_gene"].value_counts()
+    assert counts["GENE_A"] == 5, "over-cap gene must be capped to max_cells_per_gene"
+    assert counts["GENE_B"] == 3, "under-cap gene must be left untouched"
+    assert first.obs_names.tolist() == second.obs_names.tolist()
+    np.testing.assert_array_equal(first.X.toarray(), second.X.toarray())
+
+
+def test_build_xatlas_orion_response_adata_max_cells_per_gene_none_returns_everything(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_multi_gene_xatlas_response_shard(
+        shard_dir / "HCT116_Batch1.parquet", {"GENE_A": 7, "GENE_B": 4}
+    )
+    metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
+    adata = build_xatlas_orion_response_adata(
+        shard_dir,
+        metadata_path,
+        cell_line_name="HCT116",
+        model_id="ACH-000971",
+        cellosaurus_id="CVCL_0291",
+        max_cells_per_gene=None,
+    )
+    assert adata.n_obs == 11
+
+
+def test_build_xatlas_orion_response_adata_different_seed_changes_capped_selection(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_multi_gene_xatlas_response_shard(
+        shard_dir / "HCT116_Batch1.parquet", {"GENE_A": 20}
+    )
+    metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
+    kwargs = {
+        "cell_line_name": "HCT116",
+        "model_id": "ACH-000971",
+        "cellosaurus_id": "CVCL_0291",
+        "max_cells_per_gene": 5,
+    }
+    seed7 = build_xatlas_orion_response_adata(
+        shard_dir, metadata_path, seed=7, **kwargs
+    )
+    seed99 = build_xatlas_orion_response_adata(
+        shard_dir, metadata_path, seed=99, **kwargs
+    )
+    assert set(seed7.obs_names.tolist()) != set(seed99.obs_names.tolist())
 
 
 def test_perturbseq_basal_adata_emits_ensembl_id_column(tmp_path: Path) -> None:

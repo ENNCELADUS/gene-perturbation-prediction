@@ -103,6 +103,7 @@ from aivc_model.tx1_response_data import (  # noqa: E402
     assemble_train_response_gene_bags,
     base_gene_name,
     referenced_source_paths,
+    validate_response_sources_shape,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -202,11 +203,13 @@ def assemble_and_project(
         )
     _LOGGER.info(
         "assembling response GeneBags: cache_dir=%s line_manifest=%s "
-        "perturbseq_source_config=%s l2_normalize=%s",
+        "perturbseq_source_config=%s l2_normalize=%s "
+        "response_max_cells_per_gene=%s",
         cache_dir,
         line_manifest,
         perturbseq_source_config,
         config.state.l2_normalize_input,
+        config.data.response_max_cells_per_gene,
     )
     bags = assemble_train_response_gene_bags(
         cell_line_manifest_path=line_manifest,
@@ -214,6 +217,8 @@ def assemble_and_project(
         hvg_state_model_dir=config.state.model_dir,
         perturbseq_sources_path=perturbseq_source_config,
         l2_normalize=config.state.l2_normalize_input,
+        max_cells_per_gene=config.data.response_max_cells_per_gene,
+        seed=config.train.seed,
     )
     _LOGGER.info(
         "assembled %d bags (input_dim=%d, target_dim=%d); projecting onto "
@@ -563,21 +568,94 @@ def run_real_training(
     )
 
 
-def _dry_run_summary(
-    config: AivcConfig, bags: GeneBags, args: argparse.Namespace
-) -> dict[str, object]:
+def _validate_widths_against_checkpoint(
+    config: AivcConfig, checkpoint_hvg_width: int
+) -> None:
+    """Cross-check config widths against the checkpoint's own HVG width alone.
+
+    Mirrors :func:`validate_config_against_bags`'s ``response_encoder``/
+    ``output_dim`` checks, but sourced from ``checkpoint_hvg_width`` (a
+    cheap ``var_dims.pkl`` read) instead of a real assembled ``GeneBags`` --
+    :func:`_assemble_line`'s ``_align_to_checkpoint_order`` always makes the
+    real assembled target width equal exactly this number (raising
+    otherwise), so this catches the same misconfiguration `--dry-run`
+    always caught, without assembling any data.
+
+    Raises:
+        ValueError: A configured width disagrees with ``checkpoint_hvg_width``.
+    """
+    if (
+        config.response_encoder is not None
+        and config.response_encoder.input_dim != checkpoint_hvg_width
+    ):
+        raise ValueError(
+            "response_encoder.input_dim "
+            f"{config.response_encoder.input_dim} != checkpoint HVG width "
+            f"{checkpoint_hvg_width}"
+        )
+    if (
+        config.state.output_dim is not None
+        and config.state.output_dim != checkpoint_hvg_width
+    ):
+        raise ValueError(
+            f"state.output_dim {config.state.output_dim} != checkpoint HVG "
+            f"width {checkpoint_hvg_width}"
+        )
+
+
+def _dry_run_summary(config: AivcConfig, args: argparse.Namespace) -> dict[str, object]:
+    """Validate every Phase C input cheaply, without reading a cell matrix.
+
+    Codex fix-round-2 Defect 3: a real run's very first action
+    (``assemble_and_project`` -> ``assemble_train_response_gene_bags`` ->
+    ``_build_response_adata``) materializes every selected line's perturbed-
+    cell expression matrix -- exactly the call that hung for 58+ minutes at
+    100% CPU with SIGINT ignored against a dense, unchunked 66 GB h5ad,
+    before a single byte was read. ``--dry-run``'s whole job is a cheap
+    preflight that "validates every path and width and exit[s] without
+    training", so it must never reach that call. This instead validates
+    everything :func:`validate_response_sources_shape` can check from small
+    metadata alone (manifest roles, cache verification, source presence, HVG
+    gene-order agreement, gene-vocabulary coverage) plus the width
+    cross-check :func:`_validate_widths_against_checkpoint` derives from the
+    same cheap checkpoint read, and stops there -- typically sub-second to a
+    few seconds, never proportional to a source's cell count.
+
+    Raises:
+        ValueError: ``state.model_dir`` is unset, or any check
+            :func:`validate_response_sources_shape`/
+            :func:`_validate_widths_against_checkpoint` performs fails.
+    """
+    if config.state.model_dir is None:
+        raise ValueError(
+            "state.model_dir is required (the checkpoint dir supplying the "
+            "HVG gene order)"
+        )
+    sources_summary = validate_response_sources_shape(
+        cell_line_manifest_path=args.line_manifest,
+        tx1_cache_dir=args.cache_dir,
+        hvg_state_model_dir=config.state.model_dir,
+        perturbseq_sources_path=args.perturbseq_source_config,
+    )
+    _validate_widths_against_checkpoint(
+        config, int(sources_summary["checkpoint_hvg_width"])
+    )
     return {
         "config": str(args.config),
         "cache_dir": str(args.cache_dir),
         "line_manifest": str(args.line_manifest),
         "perturbseq_source_config": str(args.perturbseq_source_config),
         "input_view": config.state.input_view,
-        "state_input_dim": bags.input_dim,
-        "response_encoder_input_dim": bags.effective_target_dim,
-        "n_bags": int(len(bags.genes)),
-        "n_control_cells": int(bags.control_input.shape[0]),
+        "state_input_dim": config.state.input_dim,
+        "response_encoder_input_dim": (
+            config.response_encoder.input_dim
+            if config.response_encoder is not None
+            else None
+        ),
+        "response_max_cells_per_gene": config.data.response_max_cells_per_gene,
         "l2_normalize_input": config.state.l2_normalize_input,
         "run_dir": str(_default_run_dir(config)),
+        **sources_summary,
     }
 
 
@@ -590,6 +668,12 @@ def main() -> None:
     # catch a bad config before training starts, not just before *this*
     # invocation happens to also want to train.
     validate_config_shape(config, check_paths=True)
+    if args.dry_run:
+        # Defect 3: never assemble (and thus never read a single cell's
+        # expression values) for a dry run -- see _dry_run_summary.
+        summary = _dry_run_summary(config, args)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return
     bags = assemble_and_project(
         config,
         cache_dir=args.cache_dir,
@@ -597,10 +681,6 @@ def main() -> None:
         perturbseq_source_config=args.perturbseq_source_config,
     )
     validate_config_against_bags(config, bags)
-    if args.dry_run:
-        summary = _dry_run_summary(config, bags, args)
-        print(json.dumps(summary, indent=2, sort_keys=True))
-        return
     paths = run_real_training(
         config,
         bags,

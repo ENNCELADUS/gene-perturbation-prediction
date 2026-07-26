@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Final, NamedTuple, Sequence
+from typing import Final, Mapping, NamedTuple, Sequence
 
 import anndata as ad
 import numpy as np
@@ -432,14 +432,133 @@ def _select_indices_deterministic(
     return np.sort(candidate_indices[chosen])
 
 
-def _materialize_rows(matrix: object, row_indices: np.ndarray) -> np.ndarray:
-    """Read selected backed rows, sorting first for backends requiring it."""
+#: Bounds any single underlying fancy-index selection (fix-round-2, Defect
+#: 1). A single ~1.9M-row h5py fancy index over a dense, unchunked HDF5
+#: dataset builds and iterates a hyperslab selection of that size entirely
+#: in C -- CPU-bound work that ignores SIGINT and can run for tens of
+#: minutes before a single byte is read (observed: 58:57 CPU time,
+#: read_bytes=372736, SIGINT ignored, against a 66 GB dense
+#: ``compression=None, chunks=None`` dataset). Splitting into
+#: ``chunk_size``-row reads keeps every intermediate HDF5 selection and
+#: result buffer small regardless of ``len(row_indices)``.
+_MATERIALIZE_CHUNK_ROWS: Final[int] = 2000
+
+
+def _materialize_rows(
+    matrix: object,
+    row_indices: np.ndarray,
+    *,
+    chunk_size: int = _MATERIALIZE_CHUNK_ROWS,
+) -> np.ndarray:
+    """Read selected backed rows in bounded chunks, sorting first for backends
+    requiring sorted fancy indices.
+
+    Reads ``row_indices`` in ``chunk_size``-row slices instead of one single
+    fancy index, so neither the HDF5 selection nor any single result buffer
+    ever spans the full row count -- see ``_MATERIALIZE_CHUNK_ROWS``. Each
+    chunk is a contiguous slice of the globally sorted indices, so it is
+    itself sorted (monotonically increasing), satisfying the same
+    sorted-index requirement the original single-shot call relied on.
+    Returns EXACTLY the same rows in the same order a single unchunked call
+    would (see
+    ``tests/test_tx1_basal.py::test_materialize_rows_chunked_matches_single_call``).
+
+    Args:
+        matrix: A 2D array-like (dense ``h5py.Dataset``/ndarray or backed
+            sparse matrix) supporting integer-array row fancy indexing.
+        row_indices: Row indices to read, in the caller's desired output
+            order (not required to be sorted or unique-adjacent).
+        chunk_size: Maximum rows read in one underlying fancy index. Bounds
+            peak memory and the size of any single HDF5 selection
+            regardless of ``len(row_indices)``.
+
+    Returns:
+        The rows at ``row_indices``, in ``row_indices``'s original order, as
+        a dense ``np.ndarray`` or a ``scipy.sparse`` CSR matrix (matching
+        whichever type ``matrix`` itself returns for a row selection).
+    """
     order = np.argsort(row_indices)
-    chunk = matrix[row_indices[order], :]
+    sorted_indices = row_indices[order]
+    if not sorted_indices.size:
+        chunks = [matrix[sorted_indices, :]]
+    else:
+        chunks = [
+            matrix[sorted_indices[start : start + chunk_size], :]
+            for start in range(0, len(sorted_indices), chunk_size)
+        ]
+    if sparse.issparse(chunks[0]):
+        stacked = sparse.vstack(chunks, format="csr")
+    else:
+        stacked = np.concatenate([np.asarray(chunk) for chunk in chunks], axis=0)
     inverse = np.argsort(order)
-    if sparse.issparse(chunk):
-        return chunk.tocsr()[inverse, :]
-    return np.asarray(chunk)[inverse]
+    if sparse.issparse(stacked):
+        return stacked.tocsr()[inverse, :]
+    return np.asarray(stacked)[inverse]
+
+
+def _group_candidate_indices_by_label(
+    candidate_indices: np.ndarray, labels: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Group ``candidate_indices`` by each index's own ``labels`` entry.
+
+    ``labels[i]`` must be the label for ``candidate_indices[i]`` (i.e. both
+    arrays are already aligned/co-indexed, as they are at every call site:
+    ``labels`` is a fancy-indexed slice taken with the same ``candidate_indices``).
+    Each returned group is sorted ascending, since ``candidate_indices`` is
+    itself ascending (built via ``np.flatnonzero``) and ``groupby`` preserves
+    row order within a group.
+    """
+    frame = pd.DataFrame(
+        {"index": candidate_indices, "label": np.asarray(labels).astype(str)}
+    )
+    return {
+        str(label): group["index"].to_numpy(dtype=np.int64)
+        for label, group in frame.groupby("label", sort=True)
+    }
+
+
+def _cap_indices_by_group(
+    grouped_indices: Mapping[str, np.ndarray],
+    max_per_group: int | None,
+    seed: int,
+) -> np.ndarray:
+    """Deterministically cap each group's candidate indices to ``max_per_group``.
+
+    Mirrors :func:`_select_indices_deterministic`'s cap-or-keep-all
+    semantics, applied once PER GROUP (e.g. per perturbed gene) rather than
+    once over the whole candidate pool: the response builders need a
+    per-gene cap (fix-round-2, Defect 2), not a per-line cap like the basal
+    builders' ``max_cells``. Groups are processed in sorted key order,
+    each drawing its own sub-seed from one shared
+    ``np.random.default_rng(seed)`` (rather than reusing ``seed`` directly
+    for every group), so two equally-sized groups do not draw identical
+    relative positions -- while the whole selection stays fully
+    reproducible: the same ``seed`` and the same group keys/sizes always
+    produce the same sub-seed sequence and thus the same selection.
+
+    Args:
+        grouped_indices: ``label -> candidate row indices`` for that label
+            (e.g. :func:`_group_candidate_indices_by_label`'s output).
+        max_per_group: Cap applied independently to each group. ``None``
+            keeps every candidate in every group.
+        seed: Seed for the shared sub-seed generator.
+
+    Returns:
+        The concatenation (in sorted-key order) of each group's capped
+        indices. Not globally sorted across groups -- callers that need
+        sorted output (or that feed an h5py backend requiring it) must sort
+        themselves; :func:`_materialize_rows` already does this internally.
+    """
+    if not grouped_indices:
+        return np.asarray([], dtype=np.int64)
+    rng = np.random.default_rng(seed)
+    selected = [
+        _select_indices_deterministic(
+            grouped_indices[key], max_per_group, int(rng.integers(0, 2**32))
+        )
+        for key in sorted(grouped_indices)
+    ]
+    return np.concatenate(selected)
 
 
 class _XatlasCell(NamedTuple):
@@ -693,9 +812,23 @@ def _log_xatlas_filter_counts(
 # basal-only, Phase B). These reuse the same per-source parsing/assembly
 # primitives as their basal siblings (`_require_ensembl_source`,
 # `_materialize_rows`, `_assemble_token_matrix`, `_row_to_xatlas_cell`)
-# rather than duplicating them, and deliberately do not reservoir-sample or
-# cap cell counts: unlike a fixed-size basal panel, the observed-response
-# target needs every available perturbed cell for the requested gene(s).
+# rather than duplicating them.
+#
+# Fix-round-2 Defect 2: both builders below take an optional PER-GENE cell
+# cap (`max_cells_per_gene`), unlike the basal builders' PER-LINE `max_cells`.
+# Before this fix neither builder capped at all -- the module docstring for
+# this section used to say so explicitly ("deliberately do not reservoir-
+# sample or cap cell counts"), which was true but unsafe: with no caller-side
+# cap either (Phase C's configs set none), `build_perturbseq_response_adata`
+# would materialize every perturbed cell across the whole source in one
+# `_materialize_rows` call -- for the ~1.9M-cell dense GWPS h5ad, effectively
+# all of it. ST trains on cell sets of a few hundred (`train.cell_set_len`),
+# so a few hundred response cells per gene is already ample; see
+# `_cap_indices_by_group` (h5ad) and `_stream_xatlas_response_cells`'s
+# per-gene Algorithm-R reservoir (X-Atlas-Orion) for the two cap
+# implementations, chosen per source because the h5ad path already has every
+# candidate row index available up front (cheap `obs` column read) while the
+# X-Atlas-Orion path only ever sees rows by streaming shards.
 
 
 def build_perturbseq_response_adata(
@@ -708,6 +841,8 @@ def build_perturbseq_response_adata(
     cellosaurus_id: str,
     var_ensembl_col: str,
     genes: Sequence[str] | None = None,
+    max_cells_per_gene: int | None = None,
+    seed: int = 0,
 ) -> ad.AnnData:
     """Assemble one cell line's observed post-perturbation response AnnData.
 
@@ -716,7 +851,14 @@ def build_perturbseq_response_adata(
     ``obs[perturbation_col]`` is **not** ``control_label``, optionally
     further restricted to ``genes``, and keeps each cell's own perturbation
     label as ``obs["perturbation_gene"]`` so a caller can group cells into
-    per-gene bags.
+    per-gene bags. When ``max_cells_per_gene`` bounds the result, the cap is
+    applied PER perturbation-gene label (:func:`_cap_indices_by_group`), not
+    once over the whole selection -- a line with 200 perturbed genes and a
+    cap of 256 can still return up to 200*256 cells, just never more than 256
+    for any one gene. Candidate row indices for every gene are known up
+    front from a cheap ``obs`` column read (backed ``obs`` is never lazy),
+    so -- unlike the X-Atlas-Orion streaming path below -- capping happens
+    before ``_materialize_rows`` ever reads a single expression value.
 
     Args:
         h5ad_path: Path to the Perturb-seq h5ad file.
@@ -732,6 +874,11 @@ def build_perturbseq_response_adata(
         genes: Optional subset of perturbation-gene labels to keep (exact
             ``obs[perturbation_col]`` string match). ``None`` keeps every
             non-control cell.
+        max_cells_per_gene: Optional per-gene cell cap. ``None`` returns
+            every perturbed cell for every selected gene (the pre-fix
+            behavior).
+        seed: Seed for deterministic per-gene index sampling; unused when
+            ``max_cells_per_gene`` is ``None``.
 
     Returns:
         An AnnData satisfying ``assert_tx1_input_contract``, with
@@ -752,13 +899,17 @@ def build_perturbseq_response_adata(
         if genes is not None:
             allowed = {str(gene) for gene in genes}
             mask = mask & obs_labels.isin(allowed)
-        selected = np.flatnonzero(mask.to_numpy())
-        if not selected.size:
+        candidate = np.flatnonzero(mask.to_numpy())
+        if not candidate.size:
             restriction = f" restricted to {sorted(set(genes))}" if genes else ""
             raise ValueError(
                 f"No perturbed cells found for {perturbation_col}!={control_label!r}"
                 f"{restriction} in {h5ad_path}"
             )
+        grouped = _group_candidate_indices_by_label(
+            candidate, obs_labels.to_numpy()[candidate]
+        )
+        selected = _cap_indices_by_group(grouped, max_cells_per_gene, seed)
         matrix = csr_matrix(_materialize_rows(backed.X, selected))
         obs_names = backed.obs_names.to_numpy()[selected].astype(str).tolist()
         perturbation_gene = obs_labels.to_numpy()[selected]
@@ -805,6 +956,8 @@ def build_xatlas_orion_response_adata(
     control_label: str = _XATLAS_CONTROL_LABEL,
     pass_guide_filter_value: int = _XATLAS_PASS_GUIDE_FILTER_VALUE,
     genes: Sequence[str] | None = None,
+    max_cells_per_gene: int | None = None,
+    seed: int = 0,
 ) -> ad.AnnData:
     """Assemble one line's observed post-perturbation response AnnData from
     X-Atlas-Orion parquet shards.
@@ -813,6 +966,11 @@ def build_xatlas_orion_response_adata(
     cells: selects every guide-QC-passing cell whose ``gene_target`` is
     **not** ``control_label``, optionally further restricted to ``genes``,
     keeping each cell's own ``gene_target`` as ``obs["perturbation_gene"]``.
+    When ``max_cells_per_gene`` bounds the result, each ``gene_target`` is
+    capped independently via a per-gene Algorithm-R reservoir
+    (:func:`_stream_xatlas_response_cells`) -- unlike the h5ad response
+    builder, shard rows are only ever seen by streaming, so candidate counts
+    per gene are not known up front.
 
     Args:
         shard_dir: Directory holding this line's X-Atlas-Orion parquet
@@ -830,6 +988,11 @@ def build_xatlas_orion_response_adata(
         pass_guide_filter_value: Required ``pass_guide_filter`` value.
         genes: Optional subset of ``gene_target`` labels to keep. ``None``
             keeps every perturbed cell.
+        max_cells_per_gene: Optional per-``gene_target`` cell cap. ``None``
+            returns every perturbed, guide-QC-passing cell for every
+            selected gene (the pre-fix behavior).
+        seed: Seed for the deterministic per-gene reservoir sampling; unused
+            when ``max_cells_per_gene`` is ``None``.
 
     Returns:
         An AnnData satisfying ``assert_tx1_input_contract``, with
@@ -847,6 +1010,8 @@ def build_xatlas_orion_response_adata(
         control_label=control_label,
         pass_guide_filter_value=pass_guide_filter_value,
         genes=genes,
+        max_cells_per_gene=max_cells_per_gene,
+        seed=seed,
     )
     metadata = pd.read_parquet(gene_metadata_path).set_index(
         _XATLAS_GENE_METADATA_TOKEN_COL
@@ -887,13 +1052,20 @@ def _stream_xatlas_response_cells(
     control_label: str,
     pass_guide_filter_value: int,
     genes: Sequence[str] | None,
+    max_cells_per_gene: int | None = None,
+    seed: int = 0,
 ) -> tuple[list[_XatlasCell], np.ndarray]:
-    """Stream every perturbed, guide-QC-passing X-Atlas-Orion cell (no cap).
+    """Stream every perturbed, guide-QC-passing X-Atlas-Orion cell, optionally
+    capped per ``gene_target`` (fix-round-2, Defect 2).
 
     Mirrors :func:`_reservoir_sample_xatlas_cells`'s shard-streaming shape
-    but keeps every matching row instead of reservoir-sampling a fixed-size
-    subset, and filters to ``gene_target != control_label`` (perturbed)
-    rather than ``== control_label`` (basal).
+    and filters to ``gene_target != control_label`` (perturbed) rather than
+    ``== control_label`` (basal), but -- unlike that single-reservoir
+    function -- maintains one independent Algorithm-R reservoir PER
+    ``gene_target`` label rather than one reservoir for the whole line, so a
+    cap bounds every gene's cell count without bounding the number of
+    distinct genes returned. ``max_cells_per_gene=None`` keeps every row
+    (the pre-fix behavior).
     """
     paths = sorted(shard_dir.glob(shard_glob))
     if not paths:
@@ -901,8 +1073,9 @@ def _stream_xatlas_response_cells(
             f"No parquet shards matching {shard_glob!r} found under {shard_dir}"
         )
     allowed = {str(gene) for gene in genes} if genes is not None else None
-    cells: list[_XatlasCell] = []
-    perturbation_genes: list[str] = []
+    rng = np.random.default_rng(seed)
+    reservoirs: dict[str, list[_XatlasCell]] = {}
+    seen: dict[str, int] = {}
     counts = np.zeros(3, dtype=np.int64)  # total, after-perturbed, after-guide-filter
     for path in paths:
         frame = pd.read_parquet(path, columns=list(_XATLAS_READ_COLUMNS))
@@ -917,11 +1090,26 @@ def _stream_xatlas_response_cells(
         after_guide = len(frame)
         counts += np.array([total, after_perturbed, after_guide], dtype=np.int64)
         for row in frame.itertuples(index=False):
-            cells.append(_row_to_xatlas_cell(row))
-            perturbation_genes.append(str(getattr(row, _XATLAS_PERTURBATION_COL)))
+            gene = str(getattr(row, _XATLAS_PERTURBATION_COL))
+            cell = _row_to_xatlas_cell(row)
+            bucket = reservoirs.setdefault(gene, [])
+            seen[gene] = seen.get(gene, 0) + 1
+            gene_seen = seen[gene]
+            if max_cells_per_gene is None or len(bucket) < max_cells_per_gene:
+                bucket.append(cell)
+                continue
+            replacement = int(rng.integers(0, gene_seen))
+            if replacement < max_cells_per_gene:
+                bucket[replacement] = cell
     _log_xatlas_response_filter_counts(
         shard_dir, shard_glob, counts, control_label, pass_guide_filter_value
     )
+    cells: list[_XatlasCell] = []
+    perturbation_genes: list[str] = []
+    for gene in sorted(reservoirs):
+        for cell in reservoirs[gene]:
+            cells.append(cell)
+            perturbation_genes.append(gene)
     if not cells:
         raise ValueError(
             f"No perturbed cells found matching {_XATLAS_PERTURBATION_COL}!="

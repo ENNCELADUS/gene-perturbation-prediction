@@ -19,9 +19,10 @@
 data:
   # Unused by this pipeline: scripts/train_tx1_st_response.py sources
   # training data via --cache-dir/--line-manifest/--perturbseq-source-config,
-  # never via AivcConfig.data. These keys are populated only because
-  # DataConfig requires them; `output_dir` is the one value this pipeline
-  # actually reads (the base for --run-dir's default, `<output_dir>/runs/...`).
+  # never via AivcConfig.data. `output_dir` (run-dir default base) and
+  # `response_max_cells_per_gene` (below) are the two values this pipeline
+  # actually reads from this section; every other key here is populated only
+  # because DataConfig requires it.
   h5ad_path: UNUSED
   overlap_csv: UNUSED
   output_dir: results/experiments/12_tx1_st_geneeffect/phase_c
@@ -30,6 +31,15 @@ data:
   # cache directly via --cache-dir), but named explicitly so the obsm-input
   # decision is auditable rather than an unlabeled 2560-d array.
   state_embed_key: X_tx1_3b
+  # Fix-round-2 Defect 2: per-gene cell cap for the observed-response
+  # builders (previously UNCAPPED -- build_perturbseq_response_adata had no
+  # limit at all, so it could pull ~1.9M rows of a dense, unchunked h5ad
+  # into memory for a single perturbed gene's cell set). ST trains on cell
+  # sets of train.cell_set_len (64 in this config), so a few hundred
+  # response cells per gene is already ample. Set explicitly here (matching
+  # DataConfig's own bounded default) rather than left to that default so
+  # the choice is visible in this file, not implicit.
+  response_max_cells_per_gene: 256
 
 split:
   # Phase C's GeneBags carry no GeneEffect label (`y` is an all-NaN
