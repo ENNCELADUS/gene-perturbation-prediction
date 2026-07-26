@@ -1,0 +1,87 @@
+# Phase D Task 5 -- HVG-ST arm: the encoder-unseen attribution control
+# (spec Sec 7, D7 binding). Trains the IDENTICAL Tx1GeneEffectHead over the
+# IDENTICAL 28/5/9 line split, objective, and frozen 587-gene slice as
+# tx1_arm.yaml -- the ONLY difference is that ST's input here is the
+# gene/HVG matrix (the same view as its own response-encoder target),
+# matching the released ST-HVG-Replogle checkpoint's own input space,
+# instead of the Tx1-3B basal embedding. This is what reveals whether a Tx1
+# arm win comes from the Tx1 encoder or merely from the rebuilt head -- it
+# is NOT optional and NOT a stub; any change to objective/training/phase_f
+# in tx1_arm.yaml must be mirrored here.
+#
+# Launched via scripts/train_tx1_geneeffect_head.py. This wave (Phase D)
+# produces code and checkpoints, not numbers (D8) -- no GPU training or real
+# run was performed while authoring this config; --dry-run is the only mode
+# exercised locally.
+
+arm: hvg_arm
+
+run:
+  run_id: tx1_st_geneeffect_phase_d_hvg_arm
+  output_dir: results/experiments/12_tx1_st_geneeffect/phase_d
+
+data:
+  # Same registration file as tx1_arm.yaml -- D7 requires the identical
+  # 28/5/9 split for both arms; this is the SAME artifact, not a per-arm copy.
+  validation_lines_path: configs/experiments/12_tx1_st_geneeffect/phase_d/validation_lines.json
+
+state:
+  backend: state_checkpoint
+  # Same released ST checkpoint as tx1_arm.yaml (the reference architecture
+  # hparams); this arm warm-starts its weights UNMODIFIED at Phase-C-training
+  # time (no fresh basal_encoder.0, unlike the Tx1 arm), since its input
+  # shape already matches the checkpoint's own saved input_dim.
+  hparams_checkpoint_path: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
+  # Phase C's TRAINED state_adapter/perturbations weights for the HVG-arm run
+  # -- a DIFFERENT trained checkpoint from tx1_arm.yaml's (matches
+  # phase_c/hvg_arm.yaml's train.run_id,
+  # tx1_st_geneeffect_phase_c_hvg_arm). Same not-yet-produced-by-Phase-C
+  # caveat as tx1_arm.yaml: --dry-run's check_paths=True will correctly fail
+  # here until that run completes.
+  st_checkpoint_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/models/best/pytorch_model.bin
+  known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
+  # Same OPEN GAP as tx1_arm.yaml (see that file's extensive comment): a
+  # plain JSON list of gene symbols in Phase C's exact HVG-arm training-time
+  # order. This is a SEPARATE file from tx1_arm.yaml's -- the two arms trained
+  # separate Phase C checkpoints and there is no guarantee their
+  # PerturbationVectorAdapter construction order agrees, even though both
+  # trained over the same nominal 4-line gene universe.
+  gene_vocabulary_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/gene_vocabulary.json
+  # THIS is the arm's defining difference from tx1_arm.yaml: ST's input here
+  # is gene/HVG space (2000-d, the checkpoint's own released input width),
+  # not the 2560-d Tx1 embedding -- so the head's basal_dim for this arm is
+  # 2000, matching phase_c/hvg_arm.yaml's own state.input_dim.
+  # validate_widths cross-checks this against the Phase B cache's own
+  # recorded hvg.npy width (never the array itself) rather than trusting
+  # this number blindly.
+  input_dim: 2000
+  # Gene/HVG space in BOTH arms (C9) -- must equal tx1_arm.yaml's output_dim.
+  output_dim: 2000
+  pert_dim: 2024
+  output_space: gene
+  cell_set_len: 64
+  # Same value as tx1_arm.yaml -- D7 requires identical data, and this seed
+  # only affects the deterministic padding-resample, not which view is used.
+  response_generation_seed: 0
+
+objective:
+  # D3/D7: byte-identical to tx1_arm.yaml -- this arm's whole purpose is
+  # isolating the encoder, not re-tuning the objective.
+  lam: 1.0
+  selection_metric: val_rank_variance_loss
+
+training:
+  # D7: byte-identical to tx1_arm.yaml.
+  hidden: 256
+  moments: 2
+  learning_rate: 0.001
+  epochs: 200
+  seed: 0
+
+phase_f:
+  # D1/D7: byte-identical to tx1_arm.yaml -- both arms are scored against
+  # the same frozen contract so their tx1_3b_st rows are directly comparable.
+  k_schedule: [0, 5, 10, 25, 50]
+  method: tx1_3b_st
+  alpha: 1.0
+  residual: true

@@ -138,7 +138,7 @@ def assemble_split_examples(
     arm: str,
     tx1_cache_dir: Path,
     predicted_response_cache_dir: Path,
-    fingerprint: str,
+    fingerprint_by_line: Mapping[str, str],
     gene_effect_by_line: Mapping[str, pd.Series],
 ) -> tuple[list[LineExamples], list[LineExamples]]:
     """Build ``(train_lines, validation_lines)`` via Task 1's own split.
@@ -159,7 +159,16 @@ def assemble_split_examples(
         tx1_cache_dir: Root of the Phase B basal-embedding cache.
         predicted_response_cache_dir: Root of the Task 2 predicted-response
             cache.
-        fingerprint: The D11 fingerprint every line's cache entry must match.
+        fingerprint_by_line: ``model_id -> fingerprint`` (D11). One shared
+            string is NOT correct here: ``tx1_predicted_response_cache.
+            predicted_response_fingerprint`` bakes ``model_id`` into the hash
+            (by design -- it is belt-and-suspenders against a caller pairing
+            the wrong line's cache entry), so every line's real fingerprint
+            differs. Task 5 found this the first time this function was
+            wired to a real multi-line run: a single shared ``fingerprint``
+            string (this parameter's shape prior to that fix) can only ever
+            match the ONE line whose real fingerprint happens to equal it,
+            and raises a stale-cache ``ValueError`` for every other line.
         gene_effect_by_line: ``model_id -> gene_effect`` Series (see
             :func:`assemble_line_examples`), covering every training and
             validation line.
@@ -179,7 +188,7 @@ def assemble_split_examples(
             arm,
             tx1_cache_dir,
             predicted_response_cache_dir,
-            fingerprint,
+            fingerprint_by_line[model_id],
             gene_effect_by_line[model_id],
         )
 
