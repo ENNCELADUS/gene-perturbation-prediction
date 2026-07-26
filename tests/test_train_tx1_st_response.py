@@ -684,6 +684,222 @@ def test_dry_run_fails_loudly_on_a_bad_config(tmp_path: Path) -> None:
         sys.argv = old_argv
 
 
+# --- --warm-response-cache: fix-round-4 --------------------------------
+
+
+def _warm_cache_argv(
+    config_path: Path, fixture: dict[str, Path], response_cache_dir: Path
+) -> list[str]:
+    return [
+        "train_tx1_st_response.py",
+        "--config",
+        str(config_path),
+        "--cache-dir",
+        str(fixture["cache_dir"]),
+        "--line-manifest",
+        str(fixture["manifest"]),
+        "--perturbseq-source-config",
+        str(fixture["sources"]),
+        "--response-cache-dir",
+        str(response_cache_dir),
+        "--warm-response-cache",
+    ]
+
+
+def test_warm_response_cache_writes_cache_and_exits_before_training(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The whole point of the mode: write the shared cache, exit 0, and
+    never reach ``run_real_training``/``run_training`` (the DDP gate)."""
+    fixture = _multi_gene_dry_run_fixture(tmp_path)
+    config_path = _write_dry_run_config(
+        tmp_path, fixture["hvg_dir"], input_view="checkpoint_hvg"
+    )
+    response_cache_dir = tmp_path / "response_cache"
+    argv = _warm_cache_argv(config_path, fixture, response_cache_dir)
+
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        cli.main()  # must not raise; must return (exit 0) normally
+    finally:
+        sys.argv = old_argv
+
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["response_cache_dir"] == str(response_cache_dir)
+    assert summary["n_bags"] == 3  # PERT1/PERT2/PERT3
+    assert summary["target_dim"] == 3  # GENE0/GENE1/GENE2
+    # Unprojected (the warm step never applies _project_to_configured_view,
+    # since the on-disk cache is identical either way -- C9): always the
+    # raw Tx1 embedding width, regardless of this config's checkpoint_hvg
+    # input_view.
+    assert summary["input_dim"] == EMBEDDING_WIDTH
+    assert (response_cache_dir / "response_targets" / "manifest.json").is_file()
+
+    # Never entered run_real_training: no run dir was ever created.
+    assert not (tmp_path / "outputs" / "runs").exists()
+
+
+def test_warm_response_cache_never_calls_run_training(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The DDP gate (``distributed.require_exact_world_size``) lives inside
+    ``train_module.run_training`` -- structurally prove the warm step never
+    reaches it, rather than only inferring this from absent side effects."""
+    fixture = _multi_gene_dry_run_fixture(tmp_path)
+    config_path = _write_dry_run_config(
+        tmp_path, fixture["hvg_dir"], input_view="checkpoint_hvg"
+    )
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("--warm-response-cache must never reach run_training")
+
+    monkeypatch.setattr(train_module, "run_training", _boom)
+
+    argv = _warm_cache_argv(config_path, fixture, tmp_path / "response_cache")
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        cli.main()  # must not raise
+    finally:
+        sys.argv = old_argv
+
+
+def test_warm_response_cache_requires_response_cache_dir(tmp_path: Path) -> None:
+    fixture = _dry_run_fixture(tmp_path)
+    config_path = _write_dry_run_config(tmp_path, fixture["hvg_dir"], input_view="obsm")
+    argv = [
+        "train_tx1_st_response.py",
+        "--config",
+        str(config_path),
+        "--cache-dir",
+        str(fixture["cache_dir"]),
+        "--line-manifest",
+        str(fixture["manifest"]),
+        "--perturbseq-source-config",
+        str(fixture["sources"]),
+        "--warm-response-cache",
+    ]
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        with pytest.raises(ValueError, match="response-cache-dir"):
+            cli.main()
+    finally:
+        sys.argv = old_argv
+
+
+def test_warm_response_cache_rejects_combination_with_dry_run(tmp_path: Path) -> None:
+    fixture = _dry_run_fixture(tmp_path)
+    config_path = _write_dry_run_config(tmp_path, fixture["hvg_dir"], input_view="obsm")
+    argv = _warm_cache_argv(config_path, fixture, tmp_path / "response_cache")
+    argv.append("--dry-run")
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            cli.main()
+    finally:
+        sys.argv = old_argv
+
+
+def test_warm_response_cache_reused_by_a_second_identical_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Simulates what every subsequent DDP rank's own ``assemble_and_project``
+    call does once the cache is warm: a second invocation with IDENTICAL
+    arguments -- the same command line every rank under one
+    ``accelerate launch`` actually runs -- must hit the cache, never
+    re-materializing a raw source's cell matrix. This is the reuse the
+    whole task exists to guarantee: nothing here is rank-dependent (no PID,
+    hostname, or rank id enters the fingerprint), so two separate CLI
+    invocations are a faithful stand-in for two separate DDP ranks.
+    """
+    fixture = _multi_gene_dry_run_fixture(tmp_path)
+    config_path = _write_dry_run_config(
+        tmp_path, fixture["hvg_dir"], input_view="checkpoint_hvg"
+    )
+    response_cache_dir = tmp_path / "response_cache"
+    argv = _warm_cache_argv(config_path, fixture, response_cache_dir)
+
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        cli.main()  # cold cache: builds and writes
+    finally:
+        sys.argv = old_argv
+
+    import aivc_model.tx1_basal as tx1_basal_module
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError(
+            "must not rematerialize a cell matrix: the first invocation's "
+            "warm cache should have been reused, not rebuilt"
+        )
+
+    monkeypatch.setattr(tx1_basal_module, "_materialize_rows", _boom)
+
+    sys.argv = argv
+    try:
+        cli.main()  # must reuse the cache, not rebuild
+    finally:
+        sys.argv = old_argv
+
+
+def test_warm_response_cache_rebuilds_when_underlying_source_changes(
+    tmp_path: Path,
+) -> None:
+    """A changed fingerprint input (the h5ad's own bytes, at the SAME
+    configured path) must refuse the stale cache and rebuild -- never
+    silently reuse it (C8, Codex P2-a's discipline applied to this cache)."""
+    fixture = _multi_gene_dry_run_fixture(tmp_path)
+    config_path = _write_dry_run_config(
+        tmp_path, fixture["hvg_dir"], input_view="checkpoint_hvg"
+    )
+    response_cache_dir = tmp_path / "response_cache"
+    argv = _warm_cache_argv(config_path, fixture, response_cache_dir)
+
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        cli.main()
+    finally:
+        sys.argv = old_argv
+
+    manifest_path = response_cache_dir / "response_targets" / "manifest.json"
+    first_fingerprint = json.loads(manifest_path.read_text())["fingerprint"]
+
+    # Rewrite the SAME-path h5ad with different content: one more cell for
+    # PERT3 than the original fixture.
+    _write_multi_gene_perturbseq_h5ad(
+        tmp_path / "line_a.h5ad",
+        hvg_genes=["GENE0", "GENE1", "GENE2"],
+        control_n=5,
+        gene_cells={"PERT1": 4, "PERT2": 4, "PERT3": 5},
+    )
+
+    sys.argv = argv
+    try:
+        cli.main()  # must rebuild, not raise, not silently reuse
+    finally:
+        sys.argv = old_argv
+
+    second_fingerprint = json.loads(manifest_path.read_text())["fingerprint"]
+    assert second_fingerprint != first_fingerprint
+
+
 # --- GeneBags.for_genes's general name-keyed-dict behavior -----------------
 
 
