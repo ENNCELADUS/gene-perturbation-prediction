@@ -21,6 +21,8 @@ import pandas as pd
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
+from aivc_model.tx1_response_streaming import drain_gene_reservoirs_to_matrix
+
 _LOGGER = logging.getLogger(__name__)
 
 _REQUIRED_MANIFEST_COLUMNS = (
@@ -351,7 +353,7 @@ def build_perturbseq_basal_adata(
                 f"in {h5ad_path}"
             )
         selected = _select_indices_deterministic(control_indices, max_cells, seed)
-        matrix = csr_matrix(_materialize_rows(backed.X, selected))
+        matrix = csr_matrix(_materialize_rows(backed.X, selected, sparsify_chunks=True))
         obs_names = backed.obs_names.to_numpy()[selected].astype(str).tolist()
         var = backed.var.copy()
     finally:
@@ -449,6 +451,7 @@ def _materialize_rows(
     row_indices: np.ndarray,
     *,
     chunk_size: int = _MATERIALIZE_CHUNK_ROWS,
+    sparsify_chunks: bool = False,
 ) -> np.ndarray:
     """Read selected backed rows in bounded chunks, sorting first for backends
     requiring sorted fancy indices.
@@ -471,29 +474,69 @@ def _materialize_rows(
         chunk_size: Maximum rows read in one underlying fancy index. Bounds
             peak memory and the size of any single HDF5 selection
             regardless of ``len(row_indices)``.
+        sparsify_chunks: When ``True`` and ``matrix`` is DENSE, convert each
+            chunk to a sparse CSR matrix immediately after it is read,
+            before reading the next chunk (fix-round-3, Fix 1's h5ad
+            counterpart), instead of building the full dense selection
+            first and sparsifying it once at the end. Every existing caller
+            leaves this ``False`` (the default) and gets byte-identical
+            behavior to before this flag existed (C1); a caller that always
+            wraps the result in ``csr_matrix(...)`` anyway (both current
+            call sites do) can opt in for free, since the final values are
+            identical either way -- only the peak-memory shape differs.
+            No effect when ``matrix`` is already sparse (each chunk is
+            already sparse in that case, with or without this flag).
 
     Returns:
         The rows at ``row_indices``, in ``row_indices``'s original order, as
         a dense ``np.ndarray`` or a ``scipy.sparse`` CSR matrix (matching
-        whichever type ``matrix`` itself returns for a row selection).
+        whichever type ``matrix`` itself returns for a row selection, unless
+        ``sparsify_chunks`` forces a dense source to sparse).
     """
     order = np.argsort(row_indices)
     sorted_indices = row_indices[order]
+    inverse = np.argsort(order)
     if not sorted_indices.size:
-        chunks = [matrix[sorted_indices, :]]
+        stacked = matrix[sorted_indices, :]
+    elif sparsify_chunks:
+        stacked = _materialize_rows_sparsifying(matrix, sorted_indices, chunk_size)
     else:
         chunks = [
             matrix[sorted_indices[start : start + chunk_size], :]
             for start in range(0, len(sorted_indices), chunk_size)
         ]
-    if sparse.issparse(chunks[0]):
-        stacked = sparse.vstack(chunks, format="csr")
-    else:
-        stacked = np.concatenate([np.asarray(chunk) for chunk in chunks], axis=0)
-    inverse = np.argsort(order)
+        if sparse.issparse(chunks[0]):
+            stacked = sparse.vstack(chunks, format="csr")
+        else:
+            stacked = np.concatenate([np.asarray(chunk) for chunk in chunks], axis=0)
     if sparse.issparse(stacked):
         return stacked.tocsr()[inverse, :]
     return np.asarray(stacked)[inverse]
+
+
+def _materialize_rows_sparsifying(
+    matrix: object, sorted_indices: np.ndarray, chunk_size: int
+) -> csr_matrix:
+    """Read backed rows in bounded chunks, sparsifying each DENSE chunk
+    immediately (fix-round-3, Fix 1's h5ad counterpart to the X-Atlas-Orion
+    streaming fix).
+
+    A dense backend (e.g. the GWPS anchor's dense, unchunked HDF5 layout)
+    otherwise forces the caller to hold the ENTIRE selection as one dense
+    array before ``csr_matrix(...)`` ever runs -- for the response builder's
+    per-gene-capped selection (potentially hundreds of thousands of rows
+    across a genome-scale line), that dense intermediate can be far larger
+    than the sparse result it is about to become. Converting each chunk to
+    sparse before reading the next one bounds the dense footprint to one
+    ``chunk_size``-row slice at a time, regardless of the total selection
+    size -- the previous (already dense) chunk becomes garbage as soon as
+    the loop variable is reassigned.
+    """
+    pieces: list[csr_matrix] = []
+    for start in range(0, len(sorted_indices), chunk_size):
+        chunk = matrix[sorted_indices[start : start + chunk_size], :]
+        pieces.append(chunk if sparse.issparse(chunk) else sparse.csr_matrix(chunk))
+    return sparse.vstack(pieces, format="csr")
 
 
 def _group_candidate_indices_by_label(
@@ -842,6 +885,7 @@ def build_perturbseq_response_adata(
     var_ensembl_col: str,
     genes: Sequence[str] | None = None,
     max_cells_per_gene: int | None = None,
+    total_cells_per_line: int | None = None,
     seed: int = 0,
 ) -> ad.AnnData:
     """Assemble one cell line's observed post-perturbation response AnnData.
@@ -877,8 +921,17 @@ def build_perturbseq_response_adata(
         max_cells_per_gene: Optional per-gene cell cap. ``None`` returns
             every perturbed cell for every selected gene (the pre-fix
             behavior).
-        seed: Seed for deterministic per-gene index sampling; unused when
-            ``max_cells_per_gene`` is ``None``.
+        total_cells_per_line: Optional cap on the TOTAL cell count across
+            every gene combined, applied (deterministically, seeded by
+            ``seed``) AFTER the per-gene cap (fix-round-3, Fix 1's reserved
+            knob -- see ``.superpowers/sdd/phase-c/progress.md``'s
+            2026-07-26 incident: ``max_cells_per_gene`` alone bounds the
+            wrong dimension once multiplied by a genome-scale gene count).
+            ``None`` (the default) applies no total cap, i.e. today's
+            behavior -- this repo does not choose a value here; see the
+            module importing this function for the recorded reasoning.
+        seed: Seed for deterministic per-gene/total-budget index sampling;
+            unused when both caps are ``None``.
 
     Returns:
         An AnnData satisfying ``assert_tx1_input_contract``, with
@@ -910,7 +963,8 @@ def build_perturbseq_response_adata(
             candidate, obs_labels.to_numpy()[candidate]
         )
         selected = _cap_indices_by_group(grouped, max_cells_per_gene, seed)
-        matrix = csr_matrix(_materialize_rows(backed.X, selected))
+        selected = _select_indices_deterministic(selected, total_cells_per_line, seed)
+        matrix = csr_matrix(_materialize_rows(backed.X, selected, sparsify_chunks=True))
         obs_names = backed.obs_names.to_numpy()[selected].astype(str).tolist()
         perturbation_gene = obs_labels.to_numpy()[selected]
         var = backed.var.copy()
@@ -957,6 +1011,7 @@ def build_xatlas_orion_response_adata(
     pass_guide_filter_value: int = _XATLAS_PASS_GUIDE_FILTER_VALUE,
     genes: Sequence[str] | None = None,
     max_cells_per_gene: int | None = None,
+    total_cells_per_line: int | None = None,
     seed: int = 0,
 ) -> ad.AnnData:
     """Assemble one line's observed post-perturbation response AnnData from
@@ -970,7 +1025,13 @@ def build_xatlas_orion_response_adata(
     capped independently via a per-gene Algorithm-R reservoir
     (:func:`_stream_xatlas_response_cells`) -- unlike the h5ad response
     builder, shard rows are only ever seen by streaming, so candidate counts
-    per gene are not known up front.
+    per gene are not known up front. The finalized per-gene reservoir is
+    then handed to
+    :func:`aivc_model.tx1_response_streaming.drain_gene_reservoirs_to_matrix`,
+    which builds the CSR matrix directly with vectorized numpy operations
+    and drains the reservoir as it goes (fix-round-3, Fix 1) -- see that
+    module's docstring for why the OLD flatten-then-``_assemble_token_matrix``
+    pipeline is what pushed a single HCT116 line to ~621 GB RSS.
 
     Args:
         shard_dir: Directory holding this line's X-Atlas-Orion parquet
@@ -991,8 +1052,16 @@ def build_xatlas_orion_response_adata(
         max_cells_per_gene: Optional per-``gene_target`` cell cap. ``None``
             returns every perturbed, guide-QC-passing cell for every
             selected gene (the pre-fix behavior).
-        seed: Seed for the deterministic per-gene reservoir sampling; unused
-            when ``max_cells_per_gene`` is ``None``.
+        total_cells_per_line: Optional cap on the TOTAL cell count across
+            every gene combined, applied (deterministically, seeded by
+            ``seed``) AFTER the per-gene cap (fix-round-3, Fix 1's reserved
+            knob -- ``max_cells_per_gene`` alone bounds the wrong dimension
+            once multiplied by a genome-scale gene count; see
+            ``.superpowers/sdd/phase-c/progress.md``'s 2026-07-26 incident).
+            ``None`` (the default) applies no total cap, i.e. today's
+            behavior -- this repo does not choose a value here.
+        seed: Seed for the deterministic per-gene/total-budget reservoir
+            sampling; unused when both caps are ``None``.
 
     Returns:
         An AnnData satisfying ``assert_tx1_input_contract``, with
@@ -1004,7 +1073,7 @@ def build_xatlas_orion_response_adata(
             requested filters, or the assembled AnnData fails the Tx1 input
             contract.
     """
-    cells, perturbation_genes = _stream_xatlas_response_cells(
+    reservoirs = _stream_xatlas_response_cells(
         shard_dir,
         shard_glob,
         control_label=control_label,
@@ -1016,10 +1085,14 @@ def build_xatlas_orion_response_adata(
     metadata = pd.read_parquet(gene_metadata_path).set_index(
         _XATLAS_GENE_METADATA_TOKEN_COL
     )
-    matrix, var = _assemble_token_matrix(
-        [(cell.genes, cell.values) for cell in cells],
-        metadata,
-        metadata_var_columns=_XATLAS_GENE_METADATA_VAR_COLUMNS,
+    matrix, var, perturbation_genes, barcodes, samples = (
+        drain_gene_reservoirs_to_matrix(
+            reservoirs,
+            metadata,
+            metadata_var_columns=_XATLAS_GENE_METADATA_VAR_COLUMNS,
+            total_cells=total_cells_per_line,
+            seed=seed,
+        )
     )
     n_cells = matrix.shape[0]
     obs = pd.DataFrame(
@@ -1028,9 +1101,9 @@ def build_xatlas_orion_response_adata(
             "cellosaurus_id": [cellosaurus_id] * n_cells,
             "model_id": [model_id] * n_cells,
             "perturbation_gene": perturbation_genes,
-            "sample": [cell.sample for cell in cells],
+            "sample": samples,
         },
-        index=[f"{cell.sample}:{cell.cell_barcode}" for cell in cells],
+        index=[f"{sample}:{barcode}" for sample, barcode in zip(samples, barcodes)],
     )
     adata = ad.AnnData(X=matrix, obs=obs, var=var)
     assert_tx1_input_contract(adata)
@@ -1054,7 +1127,7 @@ def _stream_xatlas_response_cells(
     genes: Sequence[str] | None,
     max_cells_per_gene: int | None = None,
     seed: int = 0,
-) -> tuple[list[_XatlasCell], np.ndarray]:
+) -> dict[str, list[_XatlasCell]]:
     """Stream every perturbed, guide-QC-passing X-Atlas-Orion cell, optionally
     capped per ``gene_target`` (fix-round-2, Defect 2).
 
@@ -1066,6 +1139,14 @@ def _stream_xatlas_response_cells(
     cap bounds every gene's cell count without bounding the number of
     distinct genes returned. ``max_cells_per_gene=None`` keeps every row
     (the pre-fix behavior).
+
+    Returns the finalized ``{gene: [cell, ...]}`` reservoir directly
+    (fix-round-3, Fix 1): the caller hands this straight to
+    :func:`aivc_model.tx1_response_streaming.drain_gene_reservoirs_to_matrix`,
+    which drains it while building the CSR matrix, instead of this function
+    first flattening it into a second full-size list (as the pre-fix
+    implementation did) that then had to stay resident alongside the
+    matrix-building step's own intermediates.
     """
     paths = sorted(shard_dir.glob(shard_glob))
     if not paths:
@@ -1078,17 +1159,10 @@ def _stream_xatlas_response_cells(
     seen: dict[str, int] = {}
     counts = np.zeros(3, dtype=np.int64)  # total, after-perturbed, after-guide-filter
     for path in paths:
-        frame = pd.read_parquet(path, columns=list(_XATLAS_READ_COLUMNS))
-        total = len(frame)
-        frame = frame[frame[_XATLAS_PERTURBATION_COL].astype(str) != control_label]
-        if allowed is not None:
-            frame = frame[frame[_XATLAS_PERTURBATION_COL].astype(str).isin(allowed)]
-        after_perturbed = len(frame)
-        frame = frame[
-            frame[_XATLAS_PASS_GUIDE_FILTER_COL].astype(int) == pass_guide_filter_value
-        ]
-        after_guide = len(frame)
-        counts += np.array([total, after_perturbed, after_guide], dtype=np.int64)
+        frame, shard_counts = _filter_xatlas_response_shard(
+            path, control_label, allowed, pass_guide_filter_value
+        )
+        counts += shard_counts
         for row in frame.itertuples(index=False):
             gene = str(getattr(row, _XATLAS_PERTURBATION_COL))
             cell = _row_to_xatlas_cell(row)
@@ -1104,18 +1178,39 @@ def _stream_xatlas_response_cells(
     _log_xatlas_response_filter_counts(
         shard_dir, shard_glob, counts, control_label, pass_guide_filter_value
     )
-    cells: list[_XatlasCell] = []
-    perturbation_genes: list[str] = []
-    for gene in sorted(reservoirs):
-        for cell in reservoirs[gene]:
-            cells.append(cell)
-            perturbation_genes.append(gene)
-    if not cells:
+    if not reservoirs:
         raise ValueError(
             f"No perturbed cells found matching {_XATLAS_PERTURBATION_COL}!="
             f"{control_label!r} under {shard_dir} ({shard_glob!r})"
         )
-    return cells, np.asarray(perturbation_genes, dtype=object)
+    return reservoirs
+
+
+def _filter_xatlas_response_shard(
+    path: Path,
+    control_label: str,
+    allowed: set[str] | None,
+    pass_guide_filter_value: int,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    """Read one shard and apply the perturbed-label, optional gene-subset, and
+    guide-QC row filters for the RESPONSE (not basal) streaming path.
+
+    Returns:
+        The filtered frame and ``[total_rows, after_perturbed, after_guide]``
+        row counts, for the caller to accumulate and log across shards --
+        the RESPONSE counterpart to :func:`_filter_xatlas_shard`.
+    """
+    frame = pd.read_parquet(path, columns=list(_XATLAS_READ_COLUMNS))
+    total = len(frame)
+    frame = frame[frame[_XATLAS_PERTURBATION_COL].astype(str) != control_label]
+    if allowed is not None:
+        frame = frame[frame[_XATLAS_PERTURBATION_COL].astype(str).isin(allowed)]
+    after_perturbed = len(frame)
+    frame = frame[
+        frame[_XATLAS_PASS_GUIDE_FILTER_COL].astype(int) == pass_guide_filter_value
+    ]
+    after_guide = len(frame)
+    return frame, np.array([total, after_perturbed, after_guide], dtype=np.int64)
 
 
 def _log_xatlas_response_filter_counts(
