@@ -374,7 +374,7 @@ def test_assert_tx1_input_contract_accepts_valid_adata() -> None:
     adata = ad.AnnData(
         X=csr_matrix(np.array([[1.0, 0.0]], dtype=np.float32)),
         obs=pd.DataFrame({"cell_type": ["LineA"]}, index=["cell0"]),
-        var=pd.DataFrame(index=["ENSG1", "ENSG2"]),
+        var=pd.DataFrame({"ensembl_id": ["ENSG1", "ENSG2"]}, index=["ENSG1", "ENSG2"]),
     )
     assert_tx1_input_contract(adata)
 
@@ -1228,3 +1228,38 @@ def test_build_xatlas_orion_response_adata_raises_when_nothing_matches(
             model_id="ACH-000971",
             cellosaurus_id="CVCL_0291",
         )
+
+
+def test_perturbseq_basal_adata_emits_ensembl_id_column(tmp_path: Path) -> None:
+    """The Tx1 encoder reads var['ensembl_id']; the builder must materialize it.
+
+    Regression: a Perturb-seq h5ad carries its Ensembl ids in ``var.index`` with
+    no ``ensembl_id`` column, so the encoder died with ``KeyError: 'ensembl_id'``
+    only after the 3B model had already been loaded onto the GPU.
+    """
+    h5ad_path = _write_perturbseq_h5ad_ensembl_index(
+        tmp_path / "index_ids.h5ad", n_control=3, n_other=2
+    )
+    adata = build_perturbseq_basal_adata(
+        h5ad_path,
+        control_label="non-targeting",
+        perturbation_col="gene",
+        cell_line_name="LineP",
+        model_id="ACH-P",
+        cellosaurus_id="CVCL_P",
+        var_ensembl_col="gene_id",
+        seed=0,
+    )
+    assert "ensembl_id" in adata.var.columns
+    assert adata.var["ensembl_id"].tolist() == adata.var.index.astype(str).tolist()
+
+
+def test_tx1_input_contract_rejects_missing_ensembl_id_column() -> None:
+    """The contract must enforce what the Tx1 encoder actually requires."""
+    var = pd.DataFrame(index=[f"ENSG{index:011d}" for index in range(2)])
+    obs = pd.DataFrame({"cell_type": ["LineP"]}, index=["c0"])
+    adata = ad.AnnData(
+        X=csr_matrix(np.array([[1.0, 2.0]], dtype=np.float32)), obs=obs, var=var
+    )
+    with pytest.raises(ValueError, match="missing the 'ensembl_id' column"):
+        assert_tx1_input_contract(adata)
