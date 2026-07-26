@@ -1,0 +1,19 @@
+{
+  "derived_from_sha256": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297",
+  "rule": "lineage-stratified hold-out drawn only from train_head lines, mirroring scripts/freeze_tx1_phase_a.py's stratified_holdout/_allocate_test_counts: per-lineage allocation proportional to the train_head pool size (floor of lineage_count * validation_count / pool_size), remainder slots assigned one at a time to the lineage with the largest fractional shortfall (ties broken by lineage pool size, then lineage name), never leaving a lineage with zero train_head lines remaining; then numpy.random.default_rng(seed).choice per allocated lineage (visited in sorted alphabetical order) without replacement from that lineage's own sorted model_id list",
+  "seed": 20260726,
+  "validation_count": 5,
+  "validation_lineage_allocation": {
+    "Bowel": 1,
+    "Lung": 2,
+    "Pancreas": 1,
+    "Skin": 1
+  },
+  "validation_model_ids": [
+    "ACH-000463",
+    "ACH-000601",
+    "ACH-000853",
+    "ACH-000943",
+    "ACH-001190"
+  ]
+}
