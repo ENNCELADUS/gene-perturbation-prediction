@@ -426,9 +426,16 @@ def _write_multi_gene_perturbseq_h5ad(
     return path
 
 
-def _multi_gene_dry_run_fixture(tmp_path: Path) -> dict[str, Path]:
+def _multi_gene_dry_run_fixture(
+    tmp_path: Path, *, gene_cells: dict[str, int] | None = None
+) -> dict[str, Path]:
     """Like ``_dry_run_fixture``, but with 3 distinct perturbed genes -- the
-    minimum ``_split_fold`` needs to produce a non-empty train/val/test."""
+    minimum ``_split_fold`` needs to produce a non-empty train/val/test.
+
+    ``gene_cells`` defaults to the original ``PERT1``/``PERT2``/``PERT3``
+    trio; pass an override (e.g. an ORF-style ``Cxxorfyy`` symbol) to
+    exercise fix-round-6's case-preservation fix end to end.
+    """
     hvg_genes = ["GENE0", "GENE1", "GENE2"]
     hvg_dir = _write_var_dims(tmp_path / "hvg_state", hvg_genes)
     manifest_rows = [
@@ -445,7 +452,7 @@ def _multi_gene_dry_run_fixture(tmp_path: Path) -> dict[str, Path]:
         tmp_path / "line_a.h5ad",
         hvg_genes=hvg_genes,
         control_n=5,
-        gene_cells={"PERT1": 4, "PERT2": 4, "PERT3": 4},
+        gene_cells=gene_cells or {"PERT1": 4, "PERT2": 4, "PERT3": 4},
     )
     sources = {
         "ACH-A": {
@@ -1026,6 +1033,69 @@ def test_split_fold_preserves_every_composite_bag() -> None:
     assert all_assigned == sorted(composite_genes)
 
 
+def test_split_fold_preserves_original_case_of_composite_keys() -> None:
+    """fix-round-6: the FoldSpec's own returned strings must stay in
+    whatever case the input composite keys arrived in.
+
+    ``GeneBags.for_genes``/``for_prediction_genes`` (prepare.py) already do
+    case-INSENSITIVE lookups against ``GeneBags.genes`` and always return
+    the bag's ORIGINAL-case value at the resolved index -- never the
+    caller-provided (possibly re-cased) request string. Before this fix,
+    ``_split_fold`` silently force-uppercased every composite key before
+    returning it in ``FoldSpec.train_genes``/``val_genes``/``test_genes``,
+    so a gene whose canonical HGNC symbol is not all-uppercase (the
+    ``Cxxorfyy`` ORF nomenclature is the only common case) ended up with TWO
+    different string spellings for the SAME identity: the case-preserved
+    one flowing through ``GeneBags``, and the force-uppercased one
+    ``train._build_e2e_model`` used (via ``extra_genes``) to build the
+    ``PerturbationVectorAdapter`` vocabulary. Evaluating a val/test-only ORF
+    gene then raised a bare ``KeyError`` deep inside
+    ``train._final_prediction_tensor`` -- see fix-round-6-report.md.
+    """
+    composite_genes = [
+        composite_gene_key("C10orf67", "ACH-A"),
+        composite_gene_key("TP53", "ACH-A"),
+        composite_gene_key("MYC", "ACH-A"),
+    ]
+    fold = cli._split_fold(composite_genes, _split_only_config(0))  # type: ignore[arg-type]
+    all_assigned = fold.train_genes + fold.val_genes + fold.test_genes
+    assert composite_gene_key("C10orf67", "ACH-A") in all_assigned
+    assert composite_gene_key("C10ORF67", "ACH-A") not in all_assigned
+
+
+def test_split_fold_groups_same_base_gene_across_case_variants() -> None:
+    """Cross-line case drift in the SAME biological gene's symbol must still
+    group into one fold role -- the grouping key stays case-insensitive
+    even though the returned strings keep their own case (see
+    ``test_split_fold_preserves_original_case_of_composite_keys`` above)."""
+    composite_genes = [
+        composite_gene_key("C10orf67", "ACH-A"),
+        composite_gene_key("C10ORF67", "ACH-B"),  # same gene, differently-cased source
+        composite_gene_key("TP53", "ACH-A"),
+        composite_gene_key("MYC", "ACH-A"),
+    ]
+    for seed in range(5):
+        fold = cli._split_fold(composite_genes, _split_only_config(seed))  # type: ignore[arg-type]
+        role_by_composite = {
+            gene: role
+            for role, genes in (
+                ("train", fold.train_genes),
+                ("val", fold.val_genes),
+                ("test", fold.test_genes),
+            )
+            for gene in genes
+        }
+        assert set(role_by_composite) == set(composite_genes)
+        c10_roles = {
+            role
+            for composite, role in role_by_composite.items()
+            if base_gene_name(composite).upper() == "C10ORF67"
+        }
+        assert len(c10_roles) == 1, (
+            f"C10orf67's per-line bags split across roles (seed={seed}): {c10_roles}"
+        )
+
+
 # --- _source_fingerprint: covers the actual training inputs (fix 4) --------
 
 
@@ -1098,11 +1168,25 @@ def test_source_fingerprint_deterministic_for_unchanged_inputs(
 # --- real (non-dry-run) training: closes the "missing cv:" gap ------------
 
 
-def _write_real_training_config(tmp_path: Path, hvg_dir: Path) -> Path:
+def _write_real_training_config(
+    tmp_path: Path, hvg_dir: Path, *, split_random_state: int | None = None
+) -> Path:
     """Like ``_write_dry_run_config``, but sized for an actual (if tiny)
     training run and, crucially, WITHOUT a ``cv:`` section -- proving
     ``run_real_training`` synthesizes its own split-authority file rather
-    than requiring one pre-declared in the checked-in YAML."""
+    than requiring one pre-declared in the checked-in YAML.
+
+    ``split_random_state`` overrides ``split.random_state`` (default: omit
+    the ``split:`` section entirely, matching every existing caller). Used
+    by the fix-round-6 regression test to deterministically steer which
+    gene lands in the validation-only role, instead of depending on
+    ``SplitConfig``'s default seed picking one by chance.
+    """
+    split_section = (
+        f"split:\n  random_state: {split_random_state}\n"
+        if split_random_state is not None
+        else ""
+    )
     config_path = tmp_path / "real_config.yaml"
     config_path.write_text(
         f"""
@@ -1111,7 +1195,7 @@ data:
   overlap_csv: UNUSED
   output_dir: {tmp_path / "outputs"}
   state_embed_key: null
-state:
+{split_section}state:
   backend: linear_mock
   model_dir: {hvg_dir}
   input_dim: 3
@@ -1197,3 +1281,70 @@ def test_run_real_training_end_to_end_against_tiny_fixtures(
     split = pd.read_csv(run_dir / "phase_c_gene_split.csv")
     assert set(split["role"]) <= {"train", "val", "test"}
     assert len(split) == 3  # PERT1/PERT2/PERT3, one role each
+
+
+def test_run_real_training_serves_a_val_only_orf_style_gene(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression test for the fix-round-6 incident.
+
+    Phase C's real run trained a full epoch on 4 DDP ranks, then every rank
+    died in POST-EPOCH evaluation with a bare ``KeyError`` on an ORF-style
+    gene (``C10orf67``/``C11orf21``/``C11orf71`` in the incident) assigned
+    to the validation-only fold role: ``_split_fold`` force-uppercased
+    composite keys before returning them, so ``train._build_e2e_model``
+    built the ``PerturbationVectorAdapter`` vocabulary with the WRONG case
+    for any gene whose canonical HGNC symbol is not all-uppercase, while
+    ``GeneBags.for_prediction_genes`` (used to build ``val_data``) always
+    returns the bag's ORIGINAL case. ``random_state=1`` deterministically
+    assigns ``C10orf67`` to the validation-only role for this fixture's 3
+    genes (checked directly against ``sklearn.model_selection
+    .train_test_split`` while designing this test -- see
+    fix-round-6-report.md), so this reproduces the exact crash shape end to
+    end: a real epoch of training, then evaluating a gene absent from the
+    training gene set.
+    """
+    fixture = _multi_gene_dry_run_fixture(
+        tmp_path, gene_cells={"PERT1": 4, "PERT2": 4, "C10orf67": 4}
+    )
+    config_path = _write_real_training_config(
+        tmp_path, fixture["hvg_dir"], split_random_state=1
+    )
+    monkeypatch.setattr(
+        train_module,
+        "require_exact_world_size",
+        lambda *_args, **_kwargs: None,
+    )
+
+    argv = [
+        "train_tx1_st_response.py",
+        "--config",
+        str(config_path),
+        "--cache-dir",
+        str(fixture["cache_dir"]),
+        "--line-manifest",
+        str(fixture["manifest"]),
+        "--perturbseq-source-config",
+        str(fixture["sources"]),
+    ]
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        cli.main()  # must not raise KeyError (fix-round-6)
+    finally:
+        sys.argv = old_argv
+
+    run_dir = tmp_path / "outputs" / "runs" / "real_training_test"
+    assert (run_dir / "train_log.csv").is_file()
+    assert (run_dir / "artifacts" / "fold_metrics.csv").is_file()
+    assert (run_dir / "artifacts" / "predictions.csv").is_file()
+    split = pd.read_csv(run_dir / "phase_c_gene_split.csv")
+    orf_key = composite_gene_key("C10orf67", "ACH-A")
+    orf_row = split.loc[split["perturbation_gene"] == orf_key]
+    assert len(orf_row) == 1, (
+        f"expected {orf_key!r} (original case) in the split artifact; got "
+        f"{sorted(split['perturbation_gene'])}"
+    )
+    assert orf_row["role"].iloc[0] == "val", "test setup assumption: seed=1 -> val-only"

@@ -4527,6 +4527,144 @@ def test_esm2_build_accepts_resolved_external_gene(tmp_path: Path, monkeypatch) 
     assert model.perturbations("ADAMSON_ONLY").shape == (2,)
 
 
+# --- _require_perturbation_vocabulary_coverage: fix-round-6 loud/early check
+
+
+def test_require_perturbation_vocabulary_coverage_passes_when_everything_resolves() -> (
+    None
+):
+    """Happy path: train / val / test all resolve against the vocabulary; no raise."""
+    perturbations = PerturbationVectorAdapter(["PERT1", "PERT2", "C10orf67"], {}, 4)
+    model = types.SimpleNamespace(perturbations=perturbations)
+    train_data = types.SimpleNamespace(
+        genes=np.asarray(["PERT1@ACH-A", "PERT2@ACH-A"], dtype=object)
+    )
+    val_data = types.SimpleNamespace(genes=np.asarray(["C10orf67@ACH-A"], dtype=object))
+    fold = gene_splits_module.FoldSpec(
+        outer_fold=0, train_genes=(), val_genes=(), test_genes=()
+    )
+    train_module._require_perturbation_vocabulary_coverage(
+        model, train_data, val_data, fold, None
+    )  # must not raise
+
+
+def test_require_perturbation_vocabulary_coverage_raises_for_missing_gene() -> None:
+    """fix-round-6: the exact incident shape -- a val-only gene outside the
+    adapter's constructed vocabulary must raise a NAMED error at
+    construction time, not a bare ``KeyError`` deep inside evaluation."""
+    perturbations = PerturbationVectorAdapter(["PERT1"], {}, 4)
+    model = types.SimpleNamespace(perturbations=perturbations)
+    train_data = types.SimpleNamespace(genes=np.asarray(["PERT1@ACH-A"], dtype=object))
+    val_data = types.SimpleNamespace(genes=np.asarray(["C10orf67@ACH-A"], dtype=object))
+    fold = gene_splits_module.FoldSpec(
+        outer_fold=0, train_genes=(), val_genes=(), test_genes=()
+    )
+    with pytest.raises(ValueError, match="C10orf67"):
+        train_module._require_perturbation_vocabulary_coverage(
+            model, train_data, val_data, fold, None
+        )
+
+
+def test_require_perturbation_vocabulary_coverage_checks_test_genes_by_name_only() -> (
+    None
+):
+    """Outer-test genes are checked from ``fold_spec.test_genes`` NAMES
+    alone -- this never needs (and must never require) unsealing
+    ``SealedGeneBags``' response/label data to build the pre-flight check."""
+    perturbations = PerturbationVectorAdapter(["PERT1"], {}, 4)
+    model = types.SimpleNamespace(perturbations=perturbations)
+    train_data = types.SimpleNamespace(genes=np.asarray(["PERT1@ACH-A"], dtype=object))
+    val_data = types.SimpleNamespace(genes=np.asarray([], dtype=object))
+    fold = gene_splits_module.FoldSpec(
+        outer_fold=0,
+        train_genes=(),
+        val_genes=(),
+        test_genes=("C11orf21@ACH-A",),
+    )
+    with pytest.raises(ValueError, match="C11orf21"):
+        train_module._require_perturbation_vocabulary_coverage(
+            model, train_data, val_data, fold, None
+        )
+
+
+def test_require_perturbation_vocabulary_coverage_skips_esm2_adapter() -> None:
+    """``Esm2PerturbationAdapter`` resolves every gene through one shared
+    MLP (no fixed vocabulary gap to check), so this must be a no-op for it
+    -- required so this new check can never affect the ESM-2 5-fold/fixed
+    CV configs (C1)."""
+    table = Esm2EmbeddingTable(
+        dim=3, vectors_by_symbol={"PERT1": np.ones(3, dtype=np.float32)}
+    )
+    perturbations = Esm2PerturbationAdapter(
+        ["PERT1"], table, adapter_hidden=4, pert_dim=4
+    )
+    model = types.SimpleNamespace(perturbations=perturbations)
+    train_data = types.SimpleNamespace(genes=np.asarray(["PERT1@ACH-A"], dtype=object))
+    val_data = types.SimpleNamespace(
+        genes=np.asarray(["SOME_UNRELATED_GENE@ACH-A"], dtype=object)
+    )
+    fold = gene_splits_module.FoldSpec(
+        outer_fold=0, train_genes=(), val_genes=(), test_genes=()
+    )
+    train_module._require_perturbation_vocabulary_coverage(
+        model, train_data, val_data, fold, None
+    )  # must not raise -- isinstance guard skips ESM2 adapters entirely
+
+
+# --- _load_authorized_model_checkpoint: stale-vocabulary-ordering guard ----
+
+
+def test_load_authorized_model_checkpoint_rejects_stale_gene_case_metadata(
+    tmp_path: Path,
+) -> None:
+    """fix-round-6: an old checkpoint recorded under the PRE-fix
+    force-uppercased fold genes must be rejected loudly against a new run's
+    (post-fix, case-preserved) authority, never silently loaded into a
+    ``PerturbationVectorAdapter`` whose vocabulary was built from a
+    differently-cased -- and therefore differently ORDERED, since
+    construction sorts the gene-name set -- gene universe.
+
+    This is the EXISTING authority-check mechanism
+    (``train._load_authorized_model_checkpoint``), not new production code:
+    it already compares every ``ArtifactAuthority`` field verbatim,
+    including the exact ``val_genes``/``test_genes`` string lists, so any
+    case difference between an old and a new run's fold already trips it.
+    """
+    old_authority = prepare_module.ArtifactAuthority(
+        source_fingerprint="src",
+        canonical_split_sha256="split",
+        outer_fold=0,
+        fit_stage="inner_train",
+        fit_genes=("PERT1@ACH-A", "PERT2@ACH-A"),
+        train_genes=("PERT1@ACH-A", "PERT2@ACH-A"),
+        val_genes=("C10ORF67@ACH-A",),  # pre-fix: force-uppercased
+        test_genes=(),
+        selection_genes=("C10ORF67@ACH-A",),
+    )
+    new_authority = prepare_module.ArtifactAuthority(
+        source_fingerprint="src",
+        canonical_split_sha256="split",
+        outer_fold=0,
+        fit_stage="inner_train",
+        fit_genes=("PERT1@ACH-A", "PERT2@ACH-A"),
+        train_genes=("PERT1@ACH-A", "PERT2@ACH-A"),
+        val_genes=("C10orf67@ACH-A",),  # post-fix: original case preserved
+        test_genes=(),
+        selection_genes=("C10orf67@ACH-A",),
+    )
+    checkpoint_dir = tmp_path / "best"
+    checkpoint_dir.mkdir()
+    metadata = {**old_authority.metadata(), "checkpoint_kind": "best"}
+    (checkpoint_dir / "metadata.json").write_text(
+        json.dumps(metadata), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="checkpoint authority does not match"):
+        train_module._load_authorized_model_checkpoint(
+            checkpoint_dir, new_authority, map_location="cpu"
+        )
+
+
 def test_zero_weight_energy_losses_skip_extra_compute(monkeypatch) -> None:
     model, _state_model = _build_tiny_aivc_model()
 
