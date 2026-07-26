@@ -39,16 +39,41 @@ to satisfy ``required_world_size: 4`` -- see both Phase C configs)::
         --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv \\
         --response-cache-dir data/tx1_response_targets_cache
 
-**Both arms, the documented way (fix-round-3, Fix 4):** use
-``scripts/launch_phase_c_arms.sh``, which runs the two arms SEQUENTIALLY by
-default and passes both the same ``--response-cache-dir`` so the second arm
-reuses the first's expensive response-target assembly (Fix 2) instead of
-repeating it. Do **not** launch both arms concurrently by hand: the
-2026-07-26 incident (``.superpowers/sdd/phase-c/progress.md``) killed both
-arms after they independently climbed to ~621-625 GB RSS EACH on a shared
-node, because each arm's own invocation of this script re-ran the identical,
-arm-independent raw-source read at the same time. See that script's own
-header for the (non-default, explicitly opt-in) parallel-run override.
+**fix-round-4: warm the response cache BEFORE that multi-rank launch.**
+``main()``'s real-training path calls ``assemble_and_project`` (this
+module's own wrapper around Task 5's expensive, arm-independent raw-source
+read) unconditionally, for every rank, *before* any accelerator/DDP object
+exists -- there is no rank gating in that call. Under a cold
+``--response-cache-dir``, 4 concurrent ``accelerate launch`` ranks would
+each independently materialize the full per-line response matrices at the
+same time, multiplying the ~195 GB single-process peak measured in the
+2026-07-26 incident by ``--num_processes``. ``--warm-response-cache`` runs
+that same assembly ONE TIME, single-process (plain ``python``, no
+``accelerate``), writes ``--response-cache-dir``, and exits 0 without ever
+calling ``run_real_training``/``run_training`` -- so it can never trip
+``distributed.require_exact_world_size``'s 4-rank gate::
+
+    .venv-tx1/bin/python scripts/train_tx1_st_response.py \\
+        --config configs/experiments/12_tx1_st_geneeffect/phase_c/tx1_arm.yaml \\
+        --cache-dir data/tx1_basal_embeddings/v1 \\
+        --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv \\
+        --response-cache-dir data/tx1_response_targets_cache \\
+        --warm-response-cache
+
+**Both arms, the documented way (fix-round-3 Fix 4, fix-round-4):** use
+``scripts/launch_phase_c_arms.sh``, which runs the warm step above once,
+then runs the two arms SEQUENTIALLY by default, passing all three the same
+``--response-cache-dir`` so every subsequent read (the second arm's own
+ranks included) reuses the first's expensive response-target assembly (Fix
+2) instead of repeating it. Do **not** launch either arm concurrently by
+hand, and do **not** skip the warm step: the 2026-07-26 incident
+(``.superpowers/sdd/phase-c/progress.md``) killed both single-process arms
+after they independently climbed to ~621-625 GB RSS EACH on a shared node,
+because each arm's own invocation of this script re-ran the identical,
+arm-independent raw-source read at the same time -- 4 concurrent DDP ranks
+against a cold cache reproduce the same failure mode, only worse. See
+that script's own header for the (non-default, explicitly opt-in)
+parallel-run override.
 
 FIXED (Codex review, wave 2 round 1): ``GeneBags.for_genes``/
 ``for_prediction_genes``/``SealedGeneBags`` still resolve genes through a
@@ -111,8 +136,11 @@ from aivc_model.prepare import (  # noqa: E402
     load_config,
 )
 from aivc_model.tx1_embed_cache import EMBEDDING_WIDTH  # noqa: E402
+from aivc_model.tx1_response_cache_warmer import (  # noqa: E402
+    assemble_response_bags,
+    warm_response_cache_summary,
+)
 from aivc_model.tx1_response_data import (  # noqa: E402
-    assemble_train_response_gene_bags,
     base_gene_name,
     referenced_source_paths,
     validate_response_sources_shape,
@@ -162,6 +190,21 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--warm-response-cache",
+        action="store_true",
+        help=(
+            "fix-round-4: assemble and write --response-cache-dir's shared "
+            "response-target cache, single-process, then exit 0 WITHOUT "
+            "calling run_training. Run this once, under plain python (no "
+            "accelerate), before `accelerate launch --num_processes 4 ...` "
+            "against the SAME --response-cache-dir -- assemble_and_project "
+            "has no rank gating, so a cold cache read concurrently by "
+            "multiple DDP ranks would each pay the full raw-source-read "
+            "cost at once. Requires --response-cache-dir; mutually "
+            "exclusive with --dry-run."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -226,43 +269,14 @@ def assemble_and_project(
             assembly itself raises (missing cache/source entries, gene
             order mismatch, unsupported ``input_view``, ...).
     """
-    if config.state.model_dir is None:
-        raise ValueError(
-            "state.model_dir is required (the checkpoint dir supplying the "
-            "HVG gene order)"
-        )
-    _LOGGER.info(
-        "assembling response GeneBags: cache_dir=%s line_manifest=%s "
-        "perturbseq_source_config=%s l2_normalize=%s "
-        "response_max_cells_per_gene=%s response_total_cells_per_line=%s "
-        "response_cache_dir=%s",
-        cache_dir,
-        line_manifest,
-        perturbseq_source_config,
-        config.state.l2_normalize_input,
-        config.data.response_max_cells_per_gene,
-        config.data.response_total_cells_per_line,
-        response_cache_dir,
-    )
-    bags = assemble_train_response_gene_bags(
-        cell_line_manifest_path=line_manifest,
-        tx1_cache_dir=cache_dir,
-        hvg_state_model_dir=config.state.model_dir,
-        perturbseq_sources_path=perturbseq_source_config,
-        l2_normalize=config.state.l2_normalize_input,
-        max_cells_per_gene=config.data.response_max_cells_per_gene,
-        total_cells_per_line=config.data.response_total_cells_per_line,
+    bags = assemble_response_bags(
+        config,
+        cache_dir=cache_dir,
+        line_manifest=line_manifest,
+        perturbseq_source_config=perturbseq_source_config,
         response_cache_dir=response_cache_dir,
-        seed=config.train.seed,
     )
-    _LOGGER.info(
-        "assembled %d bags (input_dim=%d, target_dim=%d); projecting onto "
-        "input_view=%s",
-        len(bags.genes),
-        bags.input_dim,
-        bags.effective_target_dim,
-        config.state.input_view,
-    )
+    _LOGGER.info("projecting onto input_view=%s", config.state.input_view)
     return _project_to_configured_view(bags, config.state.input_view)
 
 
@@ -698,19 +712,60 @@ def _dry_run_summary(config: AivcConfig, args: argparse.Namespace) -> dict[str, 
     }
 
 
+def _warm_response_cache_summary(
+    config: AivcConfig, args: argparse.Namespace
+) -> dict[str, object]:
+    """Thin CLI wrapper over ``tx1_response_cache_warmer.warm_response_cache_summary``.
+
+    fix-round-4: that function must run once, single-process (plain
+    ``python``, no ``accelerate``), strictly BEFORE any multi-rank
+    ``accelerate launch`` reads the same ``--response-cache-dir`` -- see
+    its docstring for the full 2026-07-26-incident memory-multiplication
+    reasoning and the argument for why cache reuse across DDP ranks cannot
+    be rank-dependent. This wrapper only adds ``args.config`` for CLI
+    provenance; it never calls ``run_real_training``/``run_training``, so
+    ``distributed.require_exact_world_size``'s 4-rank gate is never reached
+    from this mode.
+
+    Raises:
+        ValueError: ``args.response_cache_dir`` is unset, or anything
+            :func:`tx1_response_cache_warmer.warm_response_cache_summary`
+            itself raises.
+    """
+    summary = warm_response_cache_summary(
+        config,
+        cache_dir=args.cache_dir,
+        line_manifest=args.line_manifest,
+        perturbseq_source_config=args.perturbseq_source_config,
+        response_cache_dir=args.response_cache_dir,
+    )
+    return {"config": str(args.config), **summary}
+
+
 def main() -> None:
-    """Assemble Phase C data for one arm, then dry-run-validate or train it."""
+    """Assemble Phase C data for one arm: warm the response cache, dry-run
+    validate, or train it."""
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if args.dry_run and args.warm_response_cache:
+        raise ValueError("--dry-run and --warm-response-cache are mutually exclusive")
     config = load_config(args.config)
-    # Path existence is checked in both modes: --dry-run's whole point is to
-    # catch a bad config before training starts, not just before *this*
-    # invocation happens to also want to train.
+    # Path existence is checked in every mode: --dry-run's/
+    # --warm-response-cache's whole point is to catch a bad config before
+    # training starts, not just before *this* invocation happens to train.
     validate_config_shape(config, check_paths=True)
     if args.dry_run:
         # Defect 3: never assemble (and thus never read a single cell's
         # expression values) for a dry run -- see _dry_run_summary.
         summary = _dry_run_summary(config, args)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return
+    if args.warm_response_cache:
+        # fix-round-4: assemble + write the shared response cache and stop
+        # -- never reaches run_real_training/run_training (the DDP gate),
+        # so this mode is safe to run single-process ahead of the real
+        # multi-rank `accelerate launch`. See _warm_response_cache_summary.
+        summary = _warm_response_cache_summary(config, args)
         print(json.dumps(summary, indent=2, sort_keys=True))
         return
     bags = assemble_and_project(
