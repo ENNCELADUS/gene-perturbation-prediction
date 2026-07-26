@@ -68,6 +68,16 @@ class DataConfig:
     # gene is already ample -- ~1.9M cells (a whole Perturb-seq source) were
     # never needed.
     response_max_cells_per_gene: int = 256
+    # Fix-round-3, Fix 1's RESERVED knob: the per-gene cap above bounds the
+    # wrong dimension once multiplied by a genome-scale gene count (18,293
+    # perturbed genes x 256 cells/gene = 4.68M cells -> ~621 GB RSS, the
+    # 2026-07-26 incident -- see `.superpowers/sdd/phase-c/progress.md`).
+    # This total-per-line budget, applied AFTER the per-gene cap, is the
+    # fix for that -- but CHOOSING its value requires the peak-RSS
+    # measurement `tx1_response_data`'s Fix 3 logging now provides, which is
+    # a human decision explicitly deferred, not made by this diff. Defaults
+    # to `None` (unbounded, today's behavior) rather than any number.
+    response_total_cells_per_line: int | None = None
 
 
 @dataclass(frozen=True)
@@ -2568,6 +2578,9 @@ def _data_config(values: dict[str, Any]) -> DataConfig:
         cache_seed=int(values.get("cache_seed", 42)),
         cache_cells_per_gene=int(values.get("cache_cells_per_gene", 256)),
         response_max_cells_per_gene=int(values.get("response_max_cells_per_gene", 256)),
+        response_total_cells_per_line=_int_or_none(
+            values.get("response_total_cells_per_line")
+        ),
     )
 
 

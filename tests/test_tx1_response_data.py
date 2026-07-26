@@ -729,3 +729,193 @@ def test_validate_response_sources_shape_requires_verified_cache(
             hvg_state_model_dir=fixture.hvg_dir,
             perturbseq_sources_path=fixture.sources_path,
         )
+
+
+# --- total_cells_per_line wiring (fix-round-3, Fix 1's reserved knob) ------
+
+
+def test_assemble_total_cells_per_line_caps_combined_total_per_line(
+    tmp_path: Path,
+) -> None:
+    """The reserved total-cell-budget knob, wired end to end: applied AFTER
+    the per-gene cap, independently per line (not globally across both
+    lines) -- ACH-A has 5 cells total (2 + 3) pre-budget, ACH-B has 7 (1 +
+    6); a per-LINE budget of 4 must trim each line to 4, not the combined
+    pool to 4."""
+    fixture = _build_two_line_fixture(tmp_path)
+    bags = assemble_train_response_gene_bags(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        total_cells_per_line=4,
+        seed=0,
+    )
+    n_cells_by_line: dict[str, int] = {}
+    for index in range(len(bags.genes)):
+        model_id = str(bags.metadata.iloc[index]["model_id"])
+        n_cells_by_line[model_id] = n_cells_by_line.get(model_id, 0) + int(
+            bags.metadata.iloc[index]["n_cells"]
+        )
+    assert n_cells_by_line == {"ACH-A": 4, "ACH-B": 4}
+
+
+def test_assemble_total_cells_per_line_none_keeps_pre_budget_counts(
+    tmp_path: Path,
+) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    bags = assemble_train_response_gene_bags(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        total_cells_per_line=None,
+    )
+    actual_counts = {
+        (base_gene_name(str(gene)), str(bags.metadata.iloc[index]["model_id"])): int(
+            bags.metadata.iloc[index]["n_cells"]
+        )
+        for index, gene in enumerate(bags.genes)
+    }
+    assert actual_counts == fixture.expected_counts
+
+
+# --- Fix 3: peak-RSS logging per line ---------------------------------------
+
+
+def test_assemble_logs_peak_rss_before_and_after_each_line(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    with caplog.at_level("INFO", logger="aivc_model.tx1_response_data"):
+        assemble_train_response_gene_bags(
+            cell_line_manifest_path=fixture.manifest_path,
+            tx1_cache_dir=fixture.cache_dir,
+            hvg_state_model_dir=fixture.hvg_dir,
+            perturbseq_sources_path=fixture.sources_path,
+        )
+    messages = [record.message for record in caplog.records]
+    peak_rss_messages = [m for m in messages if "peak RSS so far" in m]
+    # Two lines, each bracketed before and after -> at least 4 log lines.
+    assert sum("before line ACH-A" in m for m in peak_rss_messages) == 1
+    assert sum("after line ACH-A" in m for m in peak_rss_messages) == 1
+    assert sum("before line ACH-B" in m for m in peak_rss_messages) == 1
+    assert sum("after line ACH-B" in m for m in peak_rss_messages) == 1
+
+
+# --- Fix 2: shared, fingerprinted response-targets cache -------------------
+
+
+def test_assemble_response_cache_hit_matches_fresh_build(tmp_path: Path) -> None:
+    """The cache-populating (miss) run and a cache-hit run of the SAME inputs
+    must produce byte-identical assembled GeneBags -- the correctness bar
+    Fix 2 must clear, not just "it returns something"."""
+    fixture = _build_two_line_fixture(tmp_path)
+    response_cache_dir = tmp_path / "response_cache"
+    kwargs = dict(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        max_cells_per_gene=2,
+        seed=3,
+    )
+    fresh = assemble_train_response_gene_bags(**kwargs)
+    miss = assemble_train_response_gene_bags(
+        response_cache_dir=response_cache_dir, **kwargs
+    )
+    hit = assemble_train_response_gene_bags(
+        response_cache_dir=response_cache_dir, **kwargs
+    )
+    for candidate in (miss, hit):
+        assert candidate.genes.tolist() == fresh.genes.tolist()
+        np.testing.assert_array_equal(candidate.control_target, fresh.control_target)
+        np.testing.assert_array_equal(candidate.control_input, fresh.control_input)
+        for a, b in zip(candidate.target_bags, fresh.target_bags, strict=True):
+            np.testing.assert_array_equal(a, b)
+        pd.testing.assert_frame_equal(
+            candidate.metadata.reset_index(drop=True),
+            fresh.metadata.reset_index(drop=True),
+        )
+
+
+def test_assemble_response_cache_second_call_never_rereads_raw_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole point of Fix 2: a second arm's invocation, given the same
+    ``response_cache_dir``, must not call either response-cell builder
+    again."""
+    fixture = _build_two_line_fixture(tmp_path)
+    response_cache_dir = tmp_path / "response_cache"
+    kwargs = dict(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        response_cache_dir=response_cache_dir,
+    )
+    assemble_train_response_gene_bags(**kwargs)  # populates the cache
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a response-cell builder must not run on a cache hit")
+
+    monkeypatch.setattr(
+        tx1_response_data_module, "build_perturbseq_response_adata", _boom
+    )
+    monkeypatch.setattr(
+        tx1_response_data_module, "build_xatlas_orion_response_adata", _boom
+    )
+    assemble_train_response_gene_bags(**kwargs)  # must be a pure cache hit
+
+
+def test_assemble_response_cache_stale_fingerprint_rebuilds_not_reuses(
+    tmp_path: Path,
+) -> None:
+    """A cache built under one ``max_cells_per_gene`` must NOT be silently
+    reused for a different one -- the fingerprint must detect this and
+    rebuild, never warn-and-continue."""
+    fixture = _build_two_line_fixture(tmp_path)
+    response_cache_dir = tmp_path / "response_cache"
+    base_kwargs = dict(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        response_cache_dir=response_cache_dir,
+        seed=0,
+    )
+    uncapped = assemble_train_response_gene_bags(max_cells_per_gene=None, **base_kwargs)
+    capped = assemble_train_response_gene_bags(max_cells_per_gene=2, **base_kwargs)
+    # If the stale (uncapped) cache had been silently reused, `capped` would
+    # equal `uncapped` -- assert the cap actually took effect instead.
+    uncapped_counts = {
+        (base_gene_name(str(g)), str(uncapped.metadata.iloc[i]["model_id"])): int(
+            uncapped.metadata.iloc[i]["n_cells"]
+        )
+        for i, g in enumerate(uncapped.genes)
+    }
+    capped_counts = {
+        (base_gene_name(str(g)), str(capped.metadata.iloc[i]["model_id"])): int(
+            capped.metadata.iloc[i]["n_cells"]
+        )
+        for i, g in enumerate(capped.genes)
+    }
+    assert uncapped_counts == fixture.expected_counts
+    assert capped_counts[("PERT_SHARED", "ACH-A")] == 2
+    assert capped_counts[("PERT_SHARED", "ACH-B")] == 2
+
+
+def test_assemble_response_cache_none_never_touches_disk(
+    tmp_path: Path,
+) -> None:
+    """``response_cache_dir=None`` (the default) must not create anything --
+    C1 backward compatibility for every existing caller."""
+    fixture = _build_two_line_fixture(tmp_path)
+    would_be_cache_dir = tmp_path / "never_created"
+    assemble_train_response_gene_bags(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+    )
+    assert not would_be_cache_dir.exists()

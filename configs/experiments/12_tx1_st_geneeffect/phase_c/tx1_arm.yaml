@@ -15,6 +15,15 @@
 # via `scripts/train_tx1_st_response.py --cache-dir/--line-manifest
 # /--perturbseq-source-config`. This config's own `data:` section is NOT
 # that data source (see below).
+#
+# Launch BOTH arms via `scripts/launch_phase_c_arms.sh` (sequential by
+# default -- fix-round-3, Fix 4), not by hand: the observed-response target
+# data this config and hvg_arm.yaml both assemble is IDENTICAL (only ST's
+# input view differs, C9), so the launch script points both arms at the
+# same `--response-cache-dir` (fix-round-3, Fix 2) and runs them one after
+# the other so the second arm reuses the first's assembly instead of
+# repeating it. Concurrent arms independently doubled peak RAM in the
+# 2026-07-26 incident (.superpowers/sdd/phase-c/progress.md).
 
 data:
   # Unused by this pipeline: scripts/train_tx1_st_response.py sources
@@ -40,6 +49,14 @@ data:
   # DataConfig's own bounded default) rather than left to that default so
   # the choice is visible in this file, not implicit.
   response_max_cells_per_gene: 256
+  # Fix-round-3, Fix 1's RESERVED total-per-line cell budget, applied AFTER
+  # the cap above. Left UNSET (null = unbounded, today's behavior) --
+  # choosing a value requires the peak-RSS measurement
+  # `tx1_response_data`'s Fix 3 logging now provides from a real run; that
+  # is an explicit human decision this wave does not make (see
+  # .superpowers/sdd/phase-c/progress.md's 2026-07-26 incident and
+  # fix-round-3-report.md's recommendation). Must match hvg_arm.yaml's.
+  response_total_cells_per_line: null
 
 split:
   # Phase C's GeneBags carry no GeneEffect label (`y` is an all-NaN

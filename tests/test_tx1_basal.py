@@ -539,6 +539,54 @@ def test_materialize_rows_empty_selection_does_not_crash(tmp_path: Path) -> None
         backed.file.close()
 
 
+# --- _materialize_rows: sparsify_chunks (fix-round-3, Fix 1's h5ad path) ---
+
+
+def test_materialize_rows_sparsify_chunks_matches_default_values(
+    tmp_path: Path,
+) -> None:
+    """``sparsify_chunks=True`` must produce the SAME values as the default
+    (dense) path for a dense source -- only the in-flight representation
+    differs, never the result (both current callers wrap the result in
+    ``csr_matrix(...)`` regardless)."""
+    rng = np.random.default_rng(4)
+    dense = rng.integers(0, 10, size=(17, 6)).astype(np.float32)
+    h5ad_path = tmp_path / "dense.h5ad"
+    ad.AnnData(X=dense).write_h5ad(h5ad_path)
+    backed = ad.read_h5ad(h5ad_path, backed="r")
+    try:
+        row_indices = np.array([13, 0, 9, 4, 16, 2], dtype=np.int64)
+        default = _materialize_rows(backed.X, row_indices, chunk_size=3)
+        sparsified = _materialize_rows(
+            backed.X, row_indices, chunk_size=3, sparsify_chunks=True
+        )
+        assert sparse.issparse(sparsified)
+        assert not sparse.issparse(default)
+        np.testing.assert_array_equal(sparsified.toarray(), default)
+        np.testing.assert_array_equal(sparsified.toarray(), dense[row_indices])
+    finally:
+        backed.file.close()
+
+
+def test_materialize_rows_sparsify_chunks_no_effect_on_already_sparse_source(
+    tmp_path: Path,
+) -> None:
+    rng = np.random.default_rng(5)
+    dense = rng.integers(0, 5, size=(15, 4)).astype(np.float32)
+    h5ad_path = tmp_path / "sparse.h5ad"
+    ad.AnnData(X=csr_matrix(dense)).write_h5ad(h5ad_path)
+    backed = ad.read_h5ad(h5ad_path, backed="r")
+    try:
+        row_indices = np.array([11, 0, 7, 3, 14], dtype=np.int64)
+        sparsified = _materialize_rows(
+            backed.X, row_indices, chunk_size=2, sparsify_chunks=True
+        )
+        assert sparse.issparse(sparsified)
+        np.testing.assert_array_equal(sparsified.toarray(), dense[row_indices])
+    finally:
+        backed.file.close()
+
+
 # --- build_perturbseq_basal_adata ----------------------------------------
 
 
@@ -1292,6 +1340,44 @@ def test_build_perturbseq_response_adata_different_seed_changes_capped_selection
     assert set(seed7.obs_names.tolist()) != set(seed99.obs_names.tolist())
 
 
+# --- build_perturbseq_response_adata: total-cell budget (fix-round-3) -----
+
+
+def test_build_perturbseq_response_adata_total_cells_per_line_caps_combined_total(
+    tmp_path: Path,
+) -> None:
+    """Fix-round-3's reserved total-cell-budget knob: applied AFTER the
+    per-gene cap, over every gene combined. Not a value this repo chooses
+    (see the module docstring) -- only that the knob works when a caller
+    sets it."""
+    h5ad_path = _write_multi_gene_perturbseq_h5ad(
+        tmp_path / "data.h5ad", control_n=2, gene_cells={"GENE_A": 20, "GENE_B": 20}
+    )
+    kwargs = {
+        "control_label": "non-targeting",
+        "perturbation_col": "gene",
+        "cell_line_name": "LineP",
+        "model_id": "ACH-P",
+        "cellosaurus_id": "CVCL_P",
+        "var_ensembl_col": "ensembl_id",
+        "max_cells_per_gene": 10,  # would keep 20 combined without a total cap
+        "seed": 5,
+    }
+    uncapped = build_perturbseq_response_adata(
+        h5ad_path, total_cells_per_line=None, **kwargs
+    )
+    assert uncapped.n_obs == 20
+    capped = build_perturbseq_response_adata(
+        h5ad_path, total_cells_per_line=12, **kwargs
+    )
+    assert capped.n_obs == 12
+    # Deterministic for a fixed seed.
+    capped_again = build_perturbseq_response_adata(
+        h5ad_path, total_cells_per_line=12, **kwargs
+    )
+    assert capped.obs_names.tolist() == capped_again.obs_names.tolist()
+
+
 # --- build_xatlas_orion_response_adata (Phase C Task 5) ---------------------
 
 
@@ -1495,6 +1581,43 @@ def test_build_xatlas_orion_response_adata_different_seed_changes_capped_selecti
         shard_dir, metadata_path, seed=99, **kwargs
     )
     assert set(seed7.obs_names.tolist()) != set(seed99.obs_names.tolist())
+
+
+# --- build_xatlas_orion_response_adata: total-cell budget (fix-round-3) ---
+
+
+def test_build_xatlas_orion_response_adata_total_cells_per_line_caps_combined_total(
+    tmp_path: Path,
+) -> None:
+    """Fix-round-3's reserved total-cell-budget knob, X-Atlas-Orion side:
+    applied AFTER the per-gene reservoir cap, over every gene combined --
+    the dimension the 2026-07-26 incident showed the per-gene cap alone does
+    not bound. Not a value this repo chooses; only that the knob works."""
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    _write_multi_gene_xatlas_response_shard(
+        shard_dir / "HCT116_Batch1.parquet", {"GENE_A": 20, "GENE_B": 20}
+    )
+    metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
+    kwargs = {
+        "cell_line_name": "HCT116",
+        "model_id": "ACH-000971",
+        "cellosaurus_id": "CVCL_0291",
+        "max_cells_per_gene": 10,  # would keep 20 combined without a total cap
+        "seed": 5,
+    }
+    uncapped = build_xatlas_orion_response_adata(
+        shard_dir, metadata_path, total_cells_per_line=None, **kwargs
+    )
+    assert uncapped.n_obs == 20
+    capped = build_xatlas_orion_response_adata(
+        shard_dir, metadata_path, total_cells_per_line=12, **kwargs
+    )
+    assert capped.n_obs == 12
+    capped_again = build_xatlas_orion_response_adata(
+        shard_dir, metadata_path, total_cells_per_line=12, **kwargs
+    )
+    assert capped.obs_names.tolist() == capped_again.obs_names.tolist()
 
 
 def test_perturbseq_basal_adata_emits_ensembl_id_column(tmp_path: Path) -> None:

@@ -36,7 +36,19 @@ to satisfy ``required_world_size: 4`` -- see both Phase C configs)::
     accelerate launch --num_processes 4 scripts/train_tx1_st_response.py \\
         --config configs/experiments/12_tx1_st_geneeffect/phase_c/tx1_arm.yaml \\
         --cache-dir data/tx1_basal_embeddings/v1 \\
-        --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv
+        --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv \\
+        --response-cache-dir data/tx1_response_targets_cache
+
+**Both arms, the documented way (fix-round-3, Fix 4):** use
+``scripts/launch_phase_c_arms.sh``, which runs the two arms SEQUENTIALLY by
+default and passes both the same ``--response-cache-dir`` so the second arm
+reuses the first's expensive response-target assembly (Fix 2) instead of
+repeating it. Do **not** launch both arms concurrently by hand: the
+2026-07-26 incident (``.superpowers/sdd/phase-c/progress.md``) killed both
+arms after they independently climbed to ~621-625 GB RSS EACH on a shared
+node, because each arm's own invocation of this script re-ran the identical,
+arm-independent raw-source read at the same time. See that script's own
+header for the (non-default, explicitly opt-in) parallel-run override.
 
 FIXED (Codex review, wave 2 round 1): ``GeneBags.for_genes``/
 ``for_prediction_genes``/``SealedGeneBags`` still resolve genes through a
@@ -136,6 +148,19 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Training output dir; defaults to <data.output_dir>/runs/<train.run_id>.",
     )
+    parser.add_argument(
+        "--response-cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Fix-round-3, Fix 2: fingerprinted cache directory for the "
+            "expensive, arm-independent observed-response target assembly. "
+            "Pass the SAME directory to both arms' invocations so the "
+            "second arm reuses the first's raw-source read instead of "
+            "repeating it. Omit (the default) to never touch the cache, "
+            "i.e. today's per-invocation-from-scratch behavior."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -188,8 +213,13 @@ def assemble_and_project(
     cache_dir: Path,
     line_manifest: Path,
     perturbseq_source_config: Path,
+    response_cache_dir: Path | None = None,
 ) -> GeneBags:
     """Assemble the 4-line response ``GeneBags`` and project it onto ``config``'s arm.
+
+    Args:
+        response_cache_dir: Fix-round-3, Fix 2's shared response-targets
+            cache directory. ``None`` (the default) never touches it.
 
     Raises:
         ValueError: ``state.model_dir`` is unset, or any error Task 5's
@@ -204,12 +234,15 @@ def assemble_and_project(
     _LOGGER.info(
         "assembling response GeneBags: cache_dir=%s line_manifest=%s "
         "perturbseq_source_config=%s l2_normalize=%s "
-        "response_max_cells_per_gene=%s",
+        "response_max_cells_per_gene=%s response_total_cells_per_line=%s "
+        "response_cache_dir=%s",
         cache_dir,
         line_manifest,
         perturbseq_source_config,
         config.state.l2_normalize_input,
         config.data.response_max_cells_per_gene,
+        config.data.response_total_cells_per_line,
+        response_cache_dir,
     )
     bags = assemble_train_response_gene_bags(
         cell_line_manifest_path=line_manifest,
@@ -218,6 +251,8 @@ def assemble_and_project(
         perturbseq_sources_path=perturbseq_source_config,
         l2_normalize=config.state.l2_normalize_input,
         max_cells_per_gene=config.data.response_max_cells_per_gene,
+        total_cells_per_line=config.data.response_total_cells_per_line,
+        response_cache_dir=response_cache_dir,
         seed=config.train.seed,
     )
     _LOGGER.info(
@@ -576,10 +611,10 @@ def _validate_widths_against_checkpoint(
     Mirrors :func:`validate_config_against_bags`'s ``response_encoder``/
     ``output_dim`` checks, but sourced from ``checkpoint_hvg_width`` (a
     cheap ``var_dims.pkl`` read) instead of a real assembled ``GeneBags`` --
-    :func:`_assemble_line`'s ``_align_to_checkpoint_order`` always makes the
-    real assembled target width equal exactly this number (raising
-    otherwise), so this catches the same misconfiguration `--dry-run`
-    always caught, without assembling any data.
+    ``tx1_response_data._build_line_gene_bags``'s ``_align_to_checkpoint_order``
+    always makes the real assembled target width equal exactly this number
+    (raising otherwise), so this catches the same misconfiguration
+    `--dry-run` always caught, without assembling any data.
 
     Raises:
         ValueError: A configured width disagrees with ``checkpoint_hvg_width``.
@@ -653,6 +688,10 @@ def _dry_run_summary(config: AivcConfig, args: argparse.Namespace) -> dict[str, 
             else None
         ),
         "response_max_cells_per_gene": config.data.response_max_cells_per_gene,
+        "response_total_cells_per_line": config.data.response_total_cells_per_line,
+        "response_cache_dir": (
+            str(args.response_cache_dir) if args.response_cache_dir else None
+        ),
         "l2_normalize_input": config.state.l2_normalize_input,
         "run_dir": str(_default_run_dir(config)),
         **sources_summary,
@@ -679,6 +718,7 @@ def main() -> None:
         cache_dir=args.cache_dir,
         line_manifest=args.line_manifest,
         perturbseq_source_config=args.perturbseq_source_config,
+        response_cache_dir=args.response_cache_dir,
     )
     validate_config_against_bags(config, bags)
     paths = run_real_training(

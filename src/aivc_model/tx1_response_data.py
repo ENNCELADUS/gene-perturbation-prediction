@@ -44,6 +44,8 @@ from __future__ import annotations
 
 import json
 import logging
+import resource
+import sys
 from pathlib import Path
 from typing import Mapping, NamedTuple, Sequence
 
@@ -69,6 +71,11 @@ from aivc_model.tx1_embed_cache import (
     load_hvg_gene_order,
     load_line_cache,
     verify_cache,
+)
+from aivc_model.tx1_response_gene_bags_cache import (
+    load_response_targets_cache,
+    response_targets_fingerprint,
+    write_response_targets_cache,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -204,6 +211,8 @@ def assemble_train_response_gene_bags(
     l2_normalize: bool = False,
     genes: Sequence[str] | None = None,
     max_cells_per_gene: int | None = None,
+    total_cells_per_line: int | None = None,
+    response_cache_dir: Path | None = None,
     seed: int = 42,
 ) -> GeneBags:
     """Assemble a two-view ``GeneBags`` spanning the 4 ST response-training lines.
@@ -225,8 +234,23 @@ def assemble_train_response_gene_bags(
             perturbed cell for every gene, the pre-fix (unbounded)
             behavior -- callers should set this for any source large enough
             that "every perturbed cell" could mean millions of rows.
-        seed: Seed for the per-gene cap's deterministic sampling; unused
-            when ``max_cells_per_gene`` is ``None``.
+        total_cells_per_line: Optional cap on the TOTAL cell count per line
+            across every gene combined, applied after ``max_cells_per_gene``
+            (fix-round-3, Fix 1's reserved knob -- see
+            ``.superpowers/sdd/phase-c/progress.md``'s 2026-07-26 incident:
+            the per-gene cap alone bounds the wrong dimension once
+            multiplied by a genome-scale gene count). ``None`` (the
+            default) applies no total cap; this repo does not choose a
+            value here.
+        response_cache_dir: Optional directory for the fingerprinted,
+            arm-independent response-TARGET cache (fix-round-3, Fix 2 --
+            see ``tx1_response_gene_bags_cache``). ``None`` (the default)
+            never reads or writes a cache, i.e. today's behavior. Set this
+            to the SAME directory across both Phase C arms' invocations so
+            the second arm reuses the first's expensive raw-source read
+            instead of repeating it.
+        seed: Seed for the per-gene/total-budget cap's deterministic
+            sampling; unused when both caps are ``None``.
 
     Returns:
         A two-view ``GeneBags``: ``input_bags``/``control_input`` are Tx1
@@ -247,24 +271,29 @@ def assemble_train_response_gene_bags(
         hvg_state_model_dir,
         perturbseq_sources_path,
     )
-    per_line: list[_LinePerturbationBags] = []
-    control_views: list[_ControlView] = []
     for row in resolved.selected.itertuples(index=False):
         _assert_admissible_role(row)
-        model_id = str(row.model_id)
-        gene_bags, control_view = _assemble_line(
-            row,
-            resolved.sources[model_id],
-            resolved.symbol_cols.get(model_id, _DEFAULT_TARGET_GENE_SYMBOL_COL),
-            resolved.checkpoint_gene_order,
-            hvg_state_model_dir,
+    per_line = _assemble_all_line_gene_bags(
+        resolved,
+        cell_line_manifest_path=cell_line_manifest_path,
+        perturbseq_sources_path=perturbseq_sources_path,
+        tx1_cache_dir=tx1_cache_dir,
+        hvg_state_model_dir=hvg_state_model_dir,
+        genes=genes,
+        max_cells_per_gene=max_cells_per_gene,
+        total_cells_per_line=total_cells_per_line,
+        seed=seed,
+        response_cache_dir=response_cache_dir,
+    )
+    control_views = [
+        _line_control_view(
+            str(row.model_id),
+            str(row.cell_line_name),
             tx1_cache_dir,
-            genes,
-            max_cells_per_gene,
-            seed,
+            resolved.checkpoint_gene_order,
         )
-        per_line.append(gene_bags)
-        control_views.append(control_view)
+        for row in resolved.selected.itertuples(index=False)
+    ]
     return _combine(
         per_line, control_views, resolved.checkpoint_gene_order, l2_normalize
     )
@@ -606,13 +635,15 @@ def _build_response_adata(
     source: PerturbseqSourceConfig,
     genes: Sequence[str] | None,
     max_cells_per_gene: int | None,
+    total_cells_per_line: int | None,
     seed: int,
 ) -> ad.AnnData:
     """Dispatch one manifest row to the matching response-cell builder.
 
     ``max_cells_per_gene``/``seed`` (fix-round-2, Defect 2) forward straight
-    to the builders' own per-gene cap -- see
-    ``tx1_basal.build_perturbseq_response_adata``/
+    to the builders' own per-gene cap; ``total_cells_per_line``
+    (fix-round-3, Fix 1) forwards to their reserved total-cell-budget knob
+    -- see ``tx1_basal.build_perturbseq_response_adata``/
     ``build_xatlas_orion_response_adata`` for the cap semantics.
     """
     if isinstance(source, PerturbseqSource):
@@ -626,6 +657,7 @@ def _build_response_adata(
             var_ensembl_col=source.var_ensembl_col,
             genes=genes,
             max_cells_per_gene=max_cells_per_gene,
+            total_cells_per_line=total_cells_per_line,
             seed=seed,
         )
     if isinstance(source, XatlasOrionSource):
@@ -640,11 +672,28 @@ def _build_response_adata(
             pass_guide_filter_value=source.pass_guide_filter_value,
             genes=genes,
             max_cells_per_gene=max_cells_per_gene,
+            total_cells_per_line=total_cells_per_line,
             seed=seed,
         )
     raise ValueError(  # pragma: no cover - exhaustive over PerturbseqSourceConfig
         f"line {row.model_id}: unsupported PerturbseqSourceConfig type {type(source)!r}"
     )
+
+
+def _log_peak_rss(label: str) -> None:
+    """INFO-log this process's peak RSS so far (fix-round-3, Fix 3).
+
+    Uses ``resource.getrusage`` (no extra dependency, already-imported-
+    everywhere-else pattern in this repo) rather than a proper
+    high-water-mark sampler: ``ru_maxrss`` is a MONOTONIC peak since process
+    start, so logging it before and after one line's assembly brackets that
+    line's OWN contribution even though the absolute number also includes
+    everything before it. Normalizes to MiB regardless of platform (Linux's
+    ``ru_maxrss`` is KiB; macOS's is bytes).
+    """
+    raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    mib = raw / (1024 * 1024) if sys.platform == "darwin" else raw / 1024
+    _LOGGER.info("peak RSS so far (%s): %.1f MiB", label, mib)
 
 
 def _align_to_checkpoint_order(
@@ -813,21 +862,38 @@ def _line_control_view(
     return _ControlView(control_input, control_target, control_batch, control_cell_type)
 
 
-def _assemble_line(
+def _build_line_gene_bags(
     row: object,
     source: PerturbseqSourceConfig,
     target_gene_symbol_col: str,
     checkpoint_gene_order: np.ndarray,
     hvg_state_model_dir: Path,
-    tx1_cache_dir: Path,
     genes: Sequence[str] | None,
     max_cells_per_gene: int | None,
+    total_cells_per_line: int | None,
     seed: int,
-) -> tuple[_LinePerturbationBags, _ControlView]:
-    """Assemble one line's per-gene response bags plus its control-cell view."""
+) -> _LinePerturbationBags:
+    """Assemble one line's per-gene TARGET response bags from raw sources.
+
+    The EXPENSIVE, arm-independent half of what used to be one combined
+    ``_assemble_line`` step (fix-round-3, Fix 2's cache boundary -- see
+    ``tx1_response_gene_bags_cache``): raw-source read, HVG alignment, and
+    per-gene grouping. The CHEAP, always-fresh half
+    (:func:`_line_control_view`, a Phase B cache mmap read) is the caller's
+    own responsibility, never gated behind this cache.
+
+    Fix 3: brackets this line's own contribution to peak RSS with an INFO
+    log before and after -- this is exactly the step the 2026-07-26
+    incident showed can silently blow past a shared node's available
+    memory; the next sizing decision (a total-cell budget value) depends on
+    seeing real numbers here, not estimates.
+    """
     model_id = str(row.model_id)
     cell_line_name = str(row.cell_line_name)
-    response_adata = _build_response_adata(row, source, genes, max_cells_per_gene, seed)
+    _log_peak_rss(f"before line {model_id}")
+    response_adata = _build_response_adata(
+        row, source, genes, max_cells_per_gene, total_cells_per_line, seed
+    )
     target_matrix, resolved_names, fill_rate = _align_to_checkpoint_order(
         response_adata,
         hvg_state_model_dir,
@@ -846,10 +912,149 @@ def _assemble_line(
         basal_source=str(row.basal_source),
         fill_rate=fill_rate,
     )
-    control_view = _line_control_view(
-        model_id, cell_line_name, tx1_cache_dir, checkpoint_gene_order
+    _log_peak_rss(f"after line {model_id}")
+    return gene_bags
+
+
+def _assemble_all_line_gene_bags(
+    resolved: _ResolvedResponseSources,
+    *,
+    cell_line_manifest_path: Path,
+    perturbseq_sources_path: Path,
+    tx1_cache_dir: Path,
+    hvg_state_model_dir: Path,
+    genes: Sequence[str] | None,
+    max_cells_per_gene: int | None,
+    total_cells_per_line: int | None,
+    seed: int,
+    response_cache_dir: Path | None,
+) -> list[_LinePerturbationBags]:
+    """Build (or load from cache) every selected line's target-space gene bags.
+
+    fix-round-3, Fix 2: the expensive per-line target extraction is
+    arm-independent (spec C9 -- only ST's INPUT space differs between
+    arms), so a caller-set ``response_cache_dir`` lets a second arm's
+    invocation reuse the first's raw-source read instead of repeating it.
+    ``response_cache_dir=None`` (the default) never touches the cache,
+    reproducing today's per-call behavior exactly.
+    """
+    if response_cache_dir is None:
+        return [
+            _build_line_gene_bags(
+                row,
+                resolved.sources[str(row.model_id)],
+                resolved.symbol_cols.get(
+                    str(row.model_id), _DEFAULT_TARGET_GENE_SYMBOL_COL
+                ),
+                resolved.checkpoint_gene_order,
+                hvg_state_model_dir,
+                genes,
+                max_cells_per_gene,
+                total_cells_per_line,
+                seed,
+            )
+            for row in resolved.selected.itertuples(index=False)
+        ]
+    fingerprint = response_targets_fingerprint(
+        cell_line_manifest_path=cell_line_manifest_path,
+        perturbseq_sources_path=perturbseq_sources_path,
+        referenced_source_paths=referenced_source_paths(perturbseq_sources_path),
+        tx1_cache_manifest_path=Path(tx1_cache_dir) / "manifest.json",
+        checkpoint_var_dims_path=Path(hvg_state_model_dir) / "var_dims.pkl",
+        max_cells_per_gene=max_cells_per_gene,
+        total_cells_per_line=total_cells_per_line,
+        seed=seed,
+        genes=genes,
     )
-    return gene_bags, control_view
+    try:
+        cached_genes, cached_target_bags, cached_metadata = load_response_targets_cache(
+            response_cache_dir, fingerprint
+        )
+        _LOGGER.info(
+            "response-targets cache hit at %s (fingerprint=%s...)",
+            response_cache_dir,
+            fingerprint[:12],
+        )
+        return _reconstruct_line_bags_from_cache(
+            cached_genes, cached_target_bags, cached_metadata
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        _LOGGER.info(
+            "response-targets cache miss/stale at %s (%s); rebuilding",
+            response_cache_dir,
+            exc,
+        )
+    per_line = [
+        _build_line_gene_bags(
+            row,
+            resolved.sources[str(row.model_id)],
+            resolved.symbol_cols.get(
+                str(row.model_id), _DEFAULT_TARGET_GENE_SYMBOL_COL
+            ),
+            resolved.checkpoint_gene_order,
+            hvg_state_model_dir,
+            genes,
+            max_cells_per_gene,
+            total_cells_per_line,
+            seed,
+        )
+        for row in resolved.selected.itertuples(index=False)
+    ]
+    write_response_targets_cache(
+        response_cache_dir,
+        fingerprint,
+        genes=[gene for line in per_line for gene in line.genes],
+        target_bags=[bag for line in per_line for bag in line.target_bags],
+        metadata=pd.DataFrame([row for line in per_line for row in line.metadata_rows]),
+    )
+    return per_line
+
+
+def _reconstruct_line_bags_from_cache(
+    genes: np.ndarray, target_bags: list[np.ndarray], metadata: pd.DataFrame
+) -> list[_LinePerturbationBags]:
+    """Rebuild per-line ``_LinePerturbationBags`` from cached target data.
+
+    ``input_bags`` (NaN placeholders) and ``batch_bags``/``cell_type_bags``
+    (each bag's cell count repeated ``model_id``/``cell_line_name``) are
+    cheap, deterministic functions of a bag's own metadata row and cell
+    count -- exactly what :func:`_build_gene_bags_for_line` itself would
+    have produced -- so nothing beyond the cached target arrays and per-bag
+    metadata is needed to reproduce :func:`_combine`'s expected input
+    exactly. Groups by ``model_id`` in FIRST-SEEN order (a plain ``dict``,
+    not ``sorted()``) so a cache hit reproduces the exact same overall bag
+    order a fresh (cache-miss) build would have -- ``metadata`` rows are
+    already grouped contiguously by line in that same order, since
+    :func:`_assemble_all_line_gene_bags` wrote them from
+    ``resolved.selected``'s own iteration order.
+    """
+    per_line: dict[str, _LinePerturbationBags] = {}
+    for index, meta_row in enumerate(metadata.itertuples(index=False)):
+        model_id = str(meta_row.model_id)
+        bag = per_line.setdefault(
+            model_id,
+            _LinePerturbationBags(
+                genes=[],
+                input_bags=[],
+                target_bags=[],
+                batch_bags=[],
+                cell_type_bags=[],
+                metadata_rows=[],
+            ),
+        )
+        target = np.asarray(target_bags[index], dtype=np.float32)
+        n_cells = int(target.shape[0])
+        bag.genes.append(str(genes[index]))
+        bag.target_bags.append(target)
+        bag.input_bags.append(
+            np.full((n_cells, EMBEDDING_WIDTH), np.nan, dtype=np.float32)
+        )
+        bag.batch_bags.append(np.full(n_cells, model_id, dtype=object))
+        bag.cell_type_bags.append(
+            np.full(n_cells, str(meta_row.cell_line_name), dtype=object)
+        )
+        bag.metadata_rows.append(dict(metadata.iloc[index]))
+    return list(per_line.values())
 
 
 def _l2_normalize_rows(matrix: np.ndarray) -> np.ndarray:
