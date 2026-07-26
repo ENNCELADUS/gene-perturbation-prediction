@@ -149,10 +149,9 @@ Build the smallest ladder that isolates where signal comes from:
 
 1. gene marginals and dependency-only floor;
 2. ESM2/GenePT identity embeddings with a linear swap-invariant head;
-3. prior exp08 pooled-response pair head as a negative/internal control;
-4. zero-shot Bridge A and Bridge B scores aggregated by a prespecified
+3. zero-shot Bridge A and Bridge B scores aggregated by a prespecified
    context-free rule; and
-5. optional SL-label-calibrated heads, reported separately.
+4. optional SL-label-calibrated heads, reported separately.
 
 No SL graph topology enters feature construction. Each more complex row must beat
 the simpler row before its added machinery is credited.

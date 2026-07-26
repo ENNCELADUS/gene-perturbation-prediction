@@ -16,13 +16,13 @@ from torch.distributed.nn.functional import all_gather as _differentiable_all_ga
 from torch import nn
 import torch.nn.functional as F
 
+from aivc_model.gene_embeddings import Esm2EmbeddingTable, PertAdapter
 from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
 from aivc_model.state_warm_start import (
     _suppress_checkpoint_output,
     build_warm_started_state_model,
     validate_output_space,
 )
-from sl_dl_model.gene_embeddings import Esm2EmbeddingTable
 
 
 @dataclass(frozen=True)
@@ -100,6 +100,22 @@ class StateForwardAdapter(nn.Module):
     def last_token_features(self) -> torch.Tensor | None:
         """Return token hidden features captured from the most recent forward."""
         return self._last_token_features
+
+    def forward(
+        self,
+        control_cells: torch.Tensor,
+        perturbation: torch.Tensor,
+        gene: str,
+        batch_indices: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Run one unpadded condition for frozen-feature extraction."""
+        return self._forward_state(
+            control_cells,
+            perturbation,
+            gene,
+            batch_indices,
+            padded=False,
+        )
 
     def forward_chunks(
         self,
@@ -184,6 +200,14 @@ class StateForwardAdapter(nn.Module):
         if isinstance(output, tuple):
             output = output[0]
         token_features = getattr(self.state_model, "_token_features", None)
+        if (
+            not padded
+            and isinstance(token_features, torch.Tensor)
+            and token_features.dim() == 3
+            and token_features.shape[0] != 1
+        ):
+            msg = "STATE token features must have batch dimension 1 when unpadded"
+            raise ValueError(msg)
         self._last_token_features = _flatten_state_output(token_features)
         if output.dim() == 3 and output.shape[0] == 1:
             output = output.squeeze(0)
@@ -275,7 +299,7 @@ class PerturbationVectorAdapter(nn.Module):
 
 
 class Esm2PerturbationAdapter(nn.Module):
-    """Map fixed per-gene ESM-2 vectors through one trainable exp08 adapter."""
+    """Map fixed per-gene ESM-2 vectors to STATE perturbation vectors."""
 
     def __init__(
         self,
@@ -285,8 +309,6 @@ class Esm2PerturbationAdapter(nn.Module):
         pert_dim: int,
     ) -> None:
         super().__init__()
-        from sl_dl_model.encoder import PertAdapter
-
         self.genes = [str(gene).upper() for gene in genes]
         missing = [gene for gene in self.genes if gene not in table.vectors_by_symbol]
         if missing:

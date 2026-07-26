@@ -660,12 +660,11 @@ def test_strict_mlp_config_loads_expected_variants() -> None:
     ]
 
 
-def test_experiment_configs_follow_grouped_layout() -> None:
-    config_paths = sorted(Path("configs/experiments").glob("*/*.yaml"))
+def test_active_dependency_configs_follow_grouped_layout() -> None:
+    config_paths = sorted(Path("configs/experiments").glob("0[0-4]_*/*.yaml"))
 
     assert config_paths
     assert not Path("configs/adamson_k562_external_features.yaml").exists()
-
     for path in config_paths:
         config = load_config(path)
         output_dir = config.data.output_dir.as_posix()

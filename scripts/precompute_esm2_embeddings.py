@@ -34,7 +34,7 @@ import pandas as pd
 import torch
 from transformers import EsmModel, EsmTokenizer
 
-from sl_dl_model.gene_embeddings import (
+from aivc_model.gene_embeddings import (
     Esm2EmbeddingTable,
     require_complete_esm_coverage,
 )
@@ -314,7 +314,7 @@ def main() -> None:
         default=None,
         help=(
             "CSV symbol column; repeat for multiple columns. Defaults to the "
-            "exp08 gene_a_symbol and gene_b_symbol columns."
+            "gene_a_symbol and gene_b_symbol columns."
         ),
     )
     parser.add_argument(
@@ -355,7 +355,7 @@ def main() -> None:
         action="store_true",
         help=(
             "Fail before writing unless every requested symbol has an embedding. "
-            "Required for exp05; absent by default for exp08 compatibility."
+            "Required for canonical exp05 assets; optional for exploratory assets."
         ),
     )
     args = parser.parse_args()

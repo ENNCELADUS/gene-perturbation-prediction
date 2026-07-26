@@ -2,7 +2,7 @@
 """CV runner and artifact writer for the DDGCN reproduction (exp10).
 
 Reuses the sl_benchmark_baseline protocol (load, universe, summarize) and the
-exp08 artifact layout (flat files + per-split subdirs + combined summary +
+the established artifact layout (flat files + per-split subdirs + combined summary +
 manifest). The metric path is never reimplemented here.
 """
 

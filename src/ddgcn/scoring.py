@@ -1,7 +1,7 @@
 # src/ddgcn/scoring.py
 """Bridge the DDGCN model to the sl_benchmark_baseline protocol harness.
 
-Mirrors ``sl_dl_model/scoring.py``: build the gene universe once, slice the
+Build the gene universe once, slice the
 fold, map pairs to universe indices, train DDGCN on train-positive/negative
 adjacency, and feed the fused score matrix to the official metric functions.
 """
