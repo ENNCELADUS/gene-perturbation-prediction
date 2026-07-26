@@ -32,6 +32,7 @@ from aivc_model.tx1_response_data import (
     assemble_train_response_gene_bags,
     base_gene_name,
     composite_gene_key,
+    validate_response_sources_shape,
 )
 from conftest import tx1_manifest_row as _manifest_row
 from conftest import write_tx1_cache_run_manifest as _write_cache_run_manifest
@@ -498,6 +499,232 @@ def test_assemble_missing_cache_entry_names_the_model_id(tmp_path: Path) -> None
     with pytest.raises(ValueError, match="ACH-MISSING"):
         assemble_train_response_gene_bags(
             cell_line_manifest_path=manifest_path,
+            tx1_cache_dir=fixture.cache_dir,
+            hvg_state_model_dir=fixture.hvg_dir,
+            perturbseq_sources_path=fixture.sources_path,
+        )
+
+
+# --- max_cells_per_gene wiring through the full assembly (fix-round-2 D2) --
+
+
+def test_assemble_max_cells_per_gene_caps_each_line_gene_bag(tmp_path: Path) -> None:
+    """End-to-end: the cap must reach both the h5ad line (ACH-A) and the
+    X-Atlas-Orion line (ACH-B), each independently, per gene."""
+    fixture = _build_two_line_fixture(tmp_path)
+    bags = assemble_train_response_gene_bags(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        max_cells_per_gene=2,
+        seed=0,
+    )
+    n_cells_by_gene = {
+        (base_gene_name(str(gene)), str(bags.metadata.iloc[index]["model_id"])): int(
+            bags.metadata.iloc[index]["n_cells"]
+        )
+        for index, gene in enumerate(bags.genes)
+    }
+    # PERT_A_ONLY (2 cells) and PERT_B_ONLY (1 cell) are already <= cap=2.
+    assert n_cells_by_gene[("PERT_A_ONLY", "ACH-A")] == 2
+    assert n_cells_by_gene[("PERT_B_ONLY", "ACH-B")] == 1
+    # PERT_SHARED has 3 cells on ACH-A and 6 on ACH-B -- both over cap=2,
+    # both must be capped independently (per line, per gene).
+    assert n_cells_by_gene[("PERT_SHARED", "ACH-A")] == 2
+    assert n_cells_by_gene[("PERT_SHARED", "ACH-B")] == 2
+
+
+def test_assemble_max_cells_per_gene_none_keeps_full_counts(tmp_path: Path) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    bags = assemble_train_response_gene_bags(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        max_cells_per_gene=None,
+    )
+    actual_counts = {
+        (base_gene_name(str(gene)), str(bags.metadata.iloc[index]["model_id"])): int(
+            bags.metadata.iloc[index]["n_cells"]
+        )
+        for index, gene in enumerate(bags.genes)
+    }
+    assert actual_counts == fixture.expected_counts
+
+
+def test_assemble_same_seed_reproduces_capped_selection(tmp_path: Path) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    kwargs = {
+        "cell_line_manifest_path": fixture.manifest_path,
+        "tx1_cache_dir": fixture.cache_dir,
+        "hvg_state_model_dir": fixture.hvg_dir,
+        "perturbseq_sources_path": fixture.sources_path,
+        "max_cells_per_gene": 2,
+        "seed": 11,
+    }
+    first = assemble_train_response_gene_bags(**kwargs)
+    second = assemble_train_response_gene_bags(**kwargs)
+    np.testing.assert_array_equal(first.control_target, second.control_target)
+    for a, b in zip(first.target_bags, second.target_bags, strict=True):
+        np.testing.assert_array_equal(a, b)
+
+
+# --- validate_response_sources_shape (fix-round-2, Defect 3) ---------------
+
+
+def test_validate_response_sources_shape_summary(tmp_path: Path) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    summary = validate_response_sources_shape(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+    )
+    assert summary["n_lines"] == 2
+    assert summary["checkpoint_hvg_width"] == len(_HVG_GENES)
+    assert set(summary["lines"]) == {"ACH-A", "ACH-B"}
+    assert summary["lines"]["ACH-A"]["role"] == "train_response_and_head"
+    assert summary["lines"]["ACH-A"]["source_type"] == "h5ad"
+    assert summary["lines"]["ACH-A"]["hvg_vocabulary_coverage"] == 1.0
+    assert summary["lines"]["ACH-B"]["source_type"] == "xatlas_orion_parquet"
+    assert summary["lines"]["ACH-B"]["hvg_vocabulary_coverage"] == 1.0
+    # the excluded test-role line (ACH-T) never appears.
+    assert "ACH-T" not in summary["lines"]
+
+
+def test_validate_response_sources_shape_never_reads_cell_matrices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both response-cell builders must never be called during validation --
+    they are exactly the functions that read a source's bulk expression
+    matrix (see tx1_basal.py's ``_materialize_rows``/``_assemble_token_matrix``)."""
+    fixture = _build_two_line_fixture(tmp_path)
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a response-cell builder must not run during validation")
+
+    monkeypatch.setattr(
+        tx1_response_data_module, "build_perturbseq_response_adata", _boom
+    )
+    monkeypatch.setattr(
+        tx1_response_data_module, "build_xatlas_orion_response_adata", _boom
+    )
+
+    validate_response_sources_shape(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+    )  # must not raise
+
+
+def test_validate_response_sources_shape_reports_partial_coverage(
+    tmp_path: Path,
+) -> None:
+    """A checkpoint gene absent from a source's gene vocabulary must lower
+    the reported coverage fraction, not silently read as 1.0.
+
+    Built as its own minimal single-line fixture (rather than reusing
+    ``_build_two_line_fixture``) so only the SOURCE's gene vocabulary is
+    incomplete -- the checkpoint gene order and the cache's recorded
+    ``hvg_gene_order_sha256`` still agree, isolating this from
+    ``_assert_cache_hvg_order_matches_checkpoint``'s own (different) check.
+    """
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", list(_HVG_GENES))
+    manifest_rows = [
+        _manifest_row(
+            model_id="ACH-A",
+            cellosaurus_id="CVCL_A",
+            cell_line_name="LineA",
+            basal_source="Perturb-seq non-targeting control",
+            role="train_response_and_head",
+        ),
+    ]
+    manifest_path = _write_manifest(tmp_path / "manifest.csv", manifest_rows)
+
+    # This source's var carries only GENE0/GENE1 -- missing GENE2, one of
+    # the checkpoint's 3 HVG genes -- unlike _write_multi_gene_perturbseq_h5ad,
+    # which always writes the full _HVG_GENES symbol set.
+    incomplete_genes = ["GENE0", "GENE1"]
+    obs = pd.DataFrame(
+        {"gene": ["non-targeting", "non-targeting", "PERT_A"]},
+        index=["c0", "c1", "c2"],
+    )
+    var_index = pd.Index(
+        [f"ENSG{index:011d}" for index in range(len(incomplete_genes))],
+        name="gene_id",
+    )
+    var = pd.DataFrame({"gene_symbol": incomplete_genes})
+    var.index = var_index
+    counts = np.ones((3, len(incomplete_genes)), dtype=np.float32)
+    h5ad_path = tmp_path / "line_a.h5ad"
+    ad.AnnData(X=csr_matrix(counts), obs=obs, var=var).write_h5ad(h5ad_path)
+
+    sources_path = tmp_path / "perturbseq_sources.json"
+    sources_path.write_text(
+        json.dumps(
+            {
+                "ACH-A": {
+                    "source_type": "h5ad",
+                    "h5ad_path": str(h5ad_path),
+                    "perturbation_col": "gene",
+                    "control_label": "non-targeting",
+                    "var_ensembl_col": "gene_id",
+                    "target_gene_symbol_col": "gene_symbol",
+                }
+            }
+        )
+    )
+
+    cache_dir = tmp_path / "cache"
+    _, _, arrays_a = _write_line_cache(cache_dir, "ACH-A", n_control=5)
+    _write_cache_run_manifest(cache_dir, {"ACH-A": arrays_a}, _HVG_GENES)
+
+    summary = validate_response_sources_shape(
+        cell_line_manifest_path=manifest_path,
+        tx1_cache_dir=cache_dir,
+        hvg_state_model_dir=hvg_dir,
+        perturbseq_sources_path=sources_path,
+    )
+    assert summary["checkpoint_hvg_width"] == len(_HVG_GENES)
+    assert summary["lines"]["ACH-A"]["hvg_vocabulary_coverage"] == 2 / 3
+
+
+def test_validate_response_sources_shape_rejects_inadmissible_role(
+    tmp_path: Path,
+) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    # Corrupt only ACH-A's basal_source, in place -- ACH-B/ACH-T stay
+    # exactly as _build_two_line_fixture wrote them, so this exercises only
+    # the C5 role/basal_source check, not verify_cache's own completeness
+    # check (which requires the manifest and cache's run manifest to agree
+    # on the full set of lines).
+    manifest_text = fixture.manifest_path.read_text(encoding="utf-8").replace(
+        "Perturb-seq non-targeting control,known_present,train_response_and_head",
+        "Tahoe-100M DMSO,known_present,train_response_and_head",
+        1,  # only the first occurrence -- ACH-A's row
+    )
+    fixture.manifest_path.write_text(manifest_text, encoding="utf-8")
+    with pytest.raises(ValueError, match="basal_source"):
+        validate_response_sources_shape(
+            cell_line_manifest_path=fixture.manifest_path,
+            tx1_cache_dir=fixture.cache_dir,
+            hvg_state_model_dir=fixture.hvg_dir,
+            perturbseq_sources_path=fixture.sources_path,
+        )
+
+
+def test_validate_response_sources_shape_requires_verified_cache(
+    tmp_path: Path,
+) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    # Corrupt the cache's run manifest so verify_cache no longer reports
+    # "verified" (mirrors assemble_train_response_gene_bags's own guard).
+    (fixture.cache_dir / "manifest.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="not verified"):
+        validate_response_sources_shape(
+            cell_line_manifest_path=fixture.manifest_path,
             tx1_cache_dir=fixture.cache_dir,
             hvg_state_model_dir=fixture.hvg_dir,
             perturbseq_sources_path=fixture.sources_path,

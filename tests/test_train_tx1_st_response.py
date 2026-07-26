@@ -528,8 +528,9 @@ train:
 def test_dry_run_end_to_end_against_tiny_fixtures(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], input_view: str
 ) -> None:
-    """Both arms' full plumbing (assembly -> projection -> width validation)
-    runs against small local fixtures -- no real Tx1/HPC assets."""
+    """Both arms' config-shape + cheap source validation runs against small
+    local fixtures -- no real Tx1/HPC assets, and (Defect 3) no cell matrix
+    is ever read; see ``test_dry_run_never_materializes_a_cell_matrix``."""
     fixture = _dry_run_fixture(tmp_path)
     config_path = _write_dry_run_config(
         tmp_path, fixture["hvg_dir"], input_view=input_view
@@ -559,7 +560,92 @@ def test_dry_run_end_to_end_against_tiny_fixtures(
     assert summary["input_view"] == input_view
     assert summary["response_encoder_input_dim"] == 3
     assert summary["state_input_dim"] == (2560 if input_view == "obsm" else 3)
-    assert summary["n_bags"] >= 1
+    assert summary["n_lines"] == 1
+    assert summary["checkpoint_hvg_width"] == 3
+    assert summary["lines"]["ACH-A"]["role"] == "train_response_and_head"
+    assert summary["lines"]["ACH-A"]["source_type"] == "h5ad"
+    assert summary["lines"]["ACH-A"]["hvg_vocabulary_coverage"] == 1.0
+    # the excluded test-role line never appears in the dry-run summary either.
+    assert "ACH-T" not in summary["lines"]
+
+
+def test_dry_run_never_materializes_a_cell_matrix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Defect 3's core assertion: --dry-run must not read a single cell's
+    expression values. ``_materialize_rows`` is the shared function every
+    h5ad-backed builder calls right before reading the bulk matrix
+    (tx1_basal.py); making it raise proves --dry-run never reaches it,
+    while a real (non-dry-run) assembly still would (see
+    ``test_run_real_training_end_to_end_against_tiny_fixtures``, unaffected
+    by this monkeypatch)."""
+    import aivc_model.tx1_basal as tx1_basal_module
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("_materialize_rows must not run during --dry-run")
+
+    monkeypatch.setattr(tx1_basal_module, "_materialize_rows", _boom)
+
+    fixture = _dry_run_fixture(tmp_path)
+    config_path = _write_dry_run_config(tmp_path, fixture["hvg_dir"], input_view="obsm")
+    argv = [
+        "train_tx1_st_response.py",
+        "--config",
+        str(config_path),
+        "--cache-dir",
+        str(fixture["cache_dir"]),
+        "--line-manifest",
+        str(fixture["manifest"]),
+        "--perturbseq-source-config",
+        str(fixture["sources"]),
+        "--dry-run",
+    ]
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        cli.main()  # must not raise
+    finally:
+        sys.argv = old_argv
+
+
+def test_dry_run_rejects_inadmissible_role_without_reading_cells(
+    tmp_path: Path,
+) -> None:
+    """A bad line role/basal_source must fail --dry-run loudly (C5), not hang
+    or silently admit the line."""
+    fixture = _dry_run_fixture(tmp_path)
+    # Corrupt ACH-A's basal_source so it fails _assert_admissible_role's C5
+    # check, without touching anything else about the fixture.
+    manifest_text = (
+        fixture["manifest"]
+        .read_text(encoding="utf-8")
+        .replace("Perturb-seq non-targeting control", "Tahoe-100M DMSO")
+    )
+    fixture["manifest"].write_text(manifest_text, encoding="utf-8")
+    config_path = _write_dry_run_config(tmp_path, fixture["hvg_dir"], input_view="obsm")
+    argv = [
+        "train_tx1_st_response.py",
+        "--config",
+        str(config_path),
+        "--cache-dir",
+        str(fixture["cache_dir"]),
+        "--line-manifest",
+        str(fixture["manifest"]),
+        "--perturbseq-source-config",
+        str(fixture["sources"]),
+        "--dry-run",
+    ]
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        with pytest.raises(ValueError, match="basal_source"):
+            cli.main()
+    finally:
+        sys.argv = old_argv
 
 
 def test_dry_run_fails_loudly_on_a_bad_config(tmp_path: Path) -> None:

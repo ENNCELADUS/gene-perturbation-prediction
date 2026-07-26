@@ -54,6 +54,20 @@ class DataConfig:
     min_cells_per_gene: int = 2
     cache_seed: int = 42
     cache_cells_per_gene: int = 256
+    # Phase C (Wave 2, fix-round-2 Defect 2): per-gene cell cap for the Tx1
+    # ST observed-response builders
+    # (`tx1_response_data.assemble_train_response_gene_bags` ->
+    # `tx1_basal.build_perturbseq_response_adata`/
+    # `build_xatlas_orion_response_adata`). Unrelated to `cache_cells_per_gene`
+    # above -- that field feeds exp05's separate GWPS prepared-feature cache
+    # pipeline (`gwps_cache.py`), not Phase C. Defaults to a bounded value
+    # (matching `cache_cells_per_gene`'s own precedent), not `None`/uncapped:
+    # before this fix, neither response builder had ANY cap, so an unset key
+    # here must not silently reintroduce that defect. ST trains on cell sets
+    # of `train.cell_set_len` (64-256), so a few hundred response cells per
+    # gene is already ample -- ~1.9M cells (a whole Perturb-seq source) were
+    # never needed.
+    response_max_cells_per_gene: int = 256
 
 
 @dataclass(frozen=True)
@@ -2553,6 +2567,7 @@ def _data_config(values: dict[str, Any]) -> DataConfig:
         min_cells_per_gene=int(values.get("min_cells_per_gene", 2)),
         cache_seed=int(values.get("cache_seed", 42)),
         cache_cells_per_gene=int(values.get("cache_cells_per_gene", 256)),
+        response_max_cells_per_gene=int(values.get("response_max_cells_per_gene", 256)),
     )
 
 

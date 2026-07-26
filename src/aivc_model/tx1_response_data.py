@@ -56,6 +56,7 @@ from scipy.sparse import csr_matrix
 from aivc_model.gwps_cache import sha256_strings
 from aivc_model.prepare import GeneBags, resolve_state_gene_order
 from aivc_model.tx1_basal import (
+    _require_ensembl_source,
     build_perturbseq_response_adata,
     build_xatlas_orion_response_adata,
     load_line_manifest,
@@ -147,6 +148,53 @@ class _ControlView(NamedTuple):
     control_cell_type: np.ndarray
 
 
+class _ResolvedResponseSources(NamedTuple):
+    """The manifest/cache/source/checkpoint resolution shared by a real
+    assembly (:func:`assemble_train_response_gene_bags`) and the cheap
+    dry-run preflight (:func:`validate_response_sources_shape`) -- every
+    check here reads only small metadata (a manifest CSV, a cache
+    ``manifest.json``, a source-config JSON, a checkpoint's
+    ``var_dims.pkl``), never a raw source's cell matrix."""
+
+    selected: pd.DataFrame
+    model_ids: list[str]
+    sources: dict[str, PerturbseqSourceConfig]
+    symbol_cols: dict[str, str]
+    checkpoint_gene_order: np.ndarray
+
+
+def _resolve_response_sources(
+    cell_line_manifest_path: Path,
+    tx1_cache_dir: Path,
+    hvg_state_model_dir: Path,
+    perturbseq_sources_path: Path,
+) -> _ResolvedResponseSources:
+    """Resolve and cross-validate every response-training input except the
+    per-line perturbed-cell data itself (see :class:`_ResolvedResponseSources`).
+
+    Raises:
+        ValueError: No ``train_response_and_head`` row exists, a selected
+            line lacks a cache entry/configured source, the Tx1 embedding
+            cache is not verified (Codex P1-d), or its recorded HVG gene
+            order disagrees with the checkpoint's.
+    """
+    manifest = load_line_manifest(cell_line_manifest_path)
+    selected = _select_train_response_lines(manifest)
+    model_ids = selected["model_id"].astype(str).tolist()
+    _require_verified_cache(tx1_cache_dir, cell_line_manifest_path)
+    what = f"Tx1 embedding cache entry under {tx1_cache_dir}"
+    _require_present(model_ids, _cache_line_ids(tx1_cache_dir), what)
+    sources, symbol_cols = _load_perturbseq_sources(perturbseq_sources_path)
+    _require_present(model_ids, set(sources), "perturbseq source config entry")
+    checkpoint_gene_order = load_hvg_gene_order(hvg_state_model_dir)
+    _assert_cache_hvg_order_matches_checkpoint(
+        tx1_cache_dir, model_ids, checkpoint_gene_order
+    )
+    return _ResolvedResponseSources(
+        selected, model_ids, sources, symbol_cols, checkpoint_gene_order
+    )
+
+
 def assemble_train_response_gene_bags(
     *,
     cell_line_manifest_path: Path,
@@ -155,6 +203,8 @@ def assemble_train_response_gene_bags(
     perturbseq_sources_path: Path,
     l2_normalize: bool = False,
     genes: Sequence[str] | None = None,
+    max_cells_per_gene: int | None = None,
+    seed: int = 42,
 ) -> GeneBags:
     """Assemble a two-view ``GeneBags`` spanning the 4 ST response-training lines.
 
@@ -170,6 +220,13 @@ def assemble_train_response_gene_bags(
         genes: Optional restriction to these perturbation-gene labels.
             ``None`` processes every perturbed cell per line -- bound
             memory with an explicit subset for a genome-scale line.
+        max_cells_per_gene: Optional per-gene cell cap forwarded to the
+            response builders (fix-round-2, Defect 2). ``None`` keeps every
+            perturbed cell for every gene, the pre-fix (unbounded)
+            behavior -- callers should set this for any source large enough
+            that "every perturbed cell" could mean millions of rows.
+        seed: Seed for the per-gene cap's deterministic sampling; unused
+            when ``max_cells_per_gene`` is ``None``.
 
     Returns:
         A two-view ``GeneBags``: ``input_bags``/``control_input`` are Tx1
@@ -184,34 +241,153 @@ def assemble_train_response_gene_bags(
             disagrees with the checkpoint's, or the extracted target gene
             order does not match the cache's.
     """
-    manifest = load_line_manifest(cell_line_manifest_path)
-    selected = _select_train_response_lines(manifest)
-    model_ids = selected["model_id"].astype(str).tolist()
-    _require_verified_cache(tx1_cache_dir, cell_line_manifest_path)
-    what = f"Tx1 embedding cache entry under {tx1_cache_dir}"
-    _require_present(model_ids, _cache_line_ids(tx1_cache_dir), what)
-    sources, symbol_cols = _load_perturbseq_sources(perturbseq_sources_path)
-    _require_present(model_ids, set(sources), "perturbseq source config entry")
-    checkpoint_gene_order = load_hvg_gene_order(hvg_state_model_dir)
-    _assert_cache_hvg_order_matches_checkpoint(
-        tx1_cache_dir, model_ids, checkpoint_gene_order
+    resolved = _resolve_response_sources(
+        cell_line_manifest_path,
+        tx1_cache_dir,
+        hvg_state_model_dir,
+        perturbseq_sources_path,
     )
     per_line: list[_LinePerturbationBags] = []
     control_views: list[_ControlView] = []
-    for row in selected.itertuples(index=False):
+    for row in resolved.selected.itertuples(index=False):
         _assert_admissible_role(row)
+        model_id = str(row.model_id)
         gene_bags, control_view = _assemble_line(
             row,
-            sources[str(row.model_id)],
-            symbol_cols.get(str(row.model_id), _DEFAULT_TARGET_GENE_SYMBOL_COL),
-            checkpoint_gene_order,
+            resolved.sources[model_id],
+            resolved.symbol_cols.get(model_id, _DEFAULT_TARGET_GENE_SYMBOL_COL),
+            resolved.checkpoint_gene_order,
             hvg_state_model_dir,
             tx1_cache_dir,
             genes,
+            max_cells_per_gene,
+            seed,
         )
         per_line.append(gene_bags)
         control_views.append(control_view)
-    return _combine(per_line, control_views, checkpoint_gene_order, l2_normalize)
+    return _combine(
+        per_line, control_views, resolved.checkpoint_gene_order, l2_normalize
+    )
+
+
+def validate_response_sources_shape(
+    *,
+    cell_line_manifest_path: Path,
+    tx1_cache_dir: Path,
+    hvg_state_model_dir: Path,
+    perturbseq_sources_path: Path,
+) -> dict[str, object]:
+    """Validate every :func:`assemble_train_response_gene_bags` input WITHOUT
+    reading any perturbed cell's expression values (fix-round-2, Defect 3).
+
+    A real assembly's very first action is ``_build_response_adata`` ->
+    ``_materialize_rows``, which reads the whole selected cell matrix. For a
+    dense, unchunked 66 GB h5ad this is exactly the call that hung for 58+
+    minutes at 100% CPU with SIGINT ignored, before a single byte was read
+    (see the fix-round-2 brief's diagnosis) -- so ``--dry-run`` cannot go
+    through that path and still be a cheap preflight. This function instead
+    performs every OTHER check :func:`assemble_train_response_gene_bags`
+    would (manifest roles, cache verification, source-config presence, HVG
+    gene-order agreement -- all :func:`_resolve_response_sources`, which
+    reads only small metadata) plus a gene-vocabulary coverage check per
+    source, reading only that source's gene identity metadata: a backed
+    h5ad's ``var`` (anndata never eagerly loads ``.X`` in backed mode -- see
+    ``build_perturbseq_basal_adata``'s own use of ``backed="r"``) or the
+    X-Atlas-Orion ``gene_metadata_path`` parquet. Neither touches a cell's
+    expression values.
+
+    Args:
+        cell_line_manifest_path: Frozen ``cell_line_manifest.csv`` (C4).
+        tx1_cache_dir: Root of the Phase B Tx1 basal embedding cache.
+        hvg_state_model_dir: Released ST checkpoint dir.
+        perturbseq_sources_path: Path to ``perturbseq_sources.json``.
+
+    Returns:
+        A JSON-serializable summary: ``n_lines``, ``checkpoint_hvg_width``,
+        and per-line ``role``/``source_type``/``hvg_vocabulary_coverage``
+        (fraction of checkpoint HVG genes present in that line's source).
+
+    Raises:
+        ValueError: Any check :func:`_resolve_response_sources` performs
+            fails, a line's role/``basal_source`` is inadmissible (C5), or a
+            source is missing its Ensembl/gene-symbol column.
+    """
+    resolved = _resolve_response_sources(
+        cell_line_manifest_path,
+        tx1_cache_dir,
+        hvg_state_model_dir,
+        perturbseq_sources_path,
+    )
+    lines: dict[str, dict[str, object]] = {}
+    for row in resolved.selected.itertuples(index=False):
+        _assert_admissible_role(row)
+        model_id = str(row.model_id)
+        source = resolved.sources[model_id]
+        gene_symbol_col = resolved.symbol_cols.get(
+            model_id, _DEFAULT_TARGET_GENE_SYMBOL_COL
+        )
+        coverage = _source_gene_vocabulary_coverage(
+            source, gene_symbol_col, resolved.checkpoint_gene_order
+        )
+        source_type = (
+            "h5ad" if isinstance(source, PerturbseqSource) else "xatlas_orion_parquet"
+        )
+        lines[model_id] = {
+            "role": str(row.role),
+            "source_type": source_type,
+            "hvg_vocabulary_coverage": coverage,
+        }
+    return {
+        "n_lines": len(lines),
+        "checkpoint_hvg_width": int(len(resolved.checkpoint_gene_order)),
+        "lines": lines,
+    }
+
+
+def _source_gene_vocabulary_coverage(
+    source: PerturbseqSourceConfig,
+    gene_symbol_col: str,
+    checkpoint_gene_order: np.ndarray,
+) -> float:
+    """Fraction of ``checkpoint_gene_order`` present in ``source``'s gene vocabulary.
+
+    Reads only gene-identity metadata: a backed h5ad's ``var`` (``.X`` stays
+    an unread HDF5 reference in backed mode) or the X-Atlas-Orion
+    ``gene_metadata_path`` parquet -- never a cell's expression values.
+
+    Raises:
+        ValueError: ``gene_symbol_col`` (or, for an h5ad source,
+            ``source.var_ensembl_col``) names no column of the source's
+            gene metadata.
+    """
+    if isinstance(source, PerturbseqSource):
+        backed = ad.read_h5ad(source.h5ad_path, backed="r")
+        try:
+            _require_ensembl_source(
+                backed.var, source.var_ensembl_col, source.h5ad_path
+            )
+            if gene_symbol_col not in backed.var.columns:
+                raise ValueError(
+                    f"{source.h5ad_path} var is missing gene symbol column "
+                    f"{gene_symbol_col!r}"
+                )
+            vocabulary = set(backed.var[gene_symbol_col].astype(str))
+        finally:
+            backed.file.close()
+    elif isinstance(source, XatlasOrionSource):
+        metadata = pd.read_parquet(source.gene_metadata_path)
+        if gene_symbol_col not in metadata.columns:
+            raise ValueError(
+                f"{source.gene_metadata_path} is missing gene symbol column "
+                f"{gene_symbol_col!r}"
+            )
+        vocabulary = set(metadata[gene_symbol_col].astype(str))
+    else:  # pragma: no cover - exhaustive over PerturbseqSourceConfig
+        raise ValueError(f"unsupported PerturbseqSourceConfig type {type(source)!r}")
+    if not len(checkpoint_gene_order):
+        return 0.0
+    present = sum(1 for gene in checkpoint_gene_order if str(gene) in vocabulary)
+    return present / len(checkpoint_gene_order)
 
 
 def _assert_admissible_role(row: object) -> None:
@@ -429,8 +605,16 @@ def _build_response_adata(
     row: object,
     source: PerturbseqSourceConfig,
     genes: Sequence[str] | None,
+    max_cells_per_gene: int | None,
+    seed: int,
 ) -> ad.AnnData:
-    """Dispatch one manifest row to the matching response-cell builder."""
+    """Dispatch one manifest row to the matching response-cell builder.
+
+    ``max_cells_per_gene``/``seed`` (fix-round-2, Defect 2) forward straight
+    to the builders' own per-gene cap -- see
+    ``tx1_basal.build_perturbseq_response_adata``/
+    ``build_xatlas_orion_response_adata`` for the cap semantics.
+    """
     if isinstance(source, PerturbseqSource):
         return build_perturbseq_response_adata(
             source.h5ad_path,
@@ -441,6 +625,8 @@ def _build_response_adata(
             cellosaurus_id=str(row.cellosaurus_id),
             var_ensembl_col=source.var_ensembl_col,
             genes=genes,
+            max_cells_per_gene=max_cells_per_gene,
+            seed=seed,
         )
     if isinstance(source, XatlasOrionSource):
         return build_xatlas_orion_response_adata(
@@ -453,6 +639,8 @@ def _build_response_adata(
             control_label=source.control_label,
             pass_guide_filter_value=source.pass_guide_filter_value,
             genes=genes,
+            max_cells_per_gene=max_cells_per_gene,
+            seed=seed,
         )
     raise ValueError(  # pragma: no cover - exhaustive over PerturbseqSourceConfig
         f"line {row.model_id}: unsupported PerturbseqSourceConfig type {type(source)!r}"
@@ -633,11 +821,13 @@ def _assemble_line(
     hvg_state_model_dir: Path,
     tx1_cache_dir: Path,
     genes: Sequence[str] | None,
+    max_cells_per_gene: int | None,
+    seed: int,
 ) -> tuple[_LinePerturbationBags, _ControlView]:
     """Assemble one line's per-gene response bags plus its control-cell view."""
     model_id = str(row.model_id)
     cell_line_name = str(row.cell_line_name)
-    response_adata = _build_response_adata(row, source, genes)
+    response_adata = _build_response_adata(row, source, genes, max_cells_per_gene, seed)
     target_matrix, resolved_names, fill_rate = _align_to_checkpoint_order(
         response_adata,
         hvg_state_model_dir,
@@ -736,4 +926,5 @@ __all__ = [
     "base_gene_name",
     "composite_gene_key",
     "referenced_source_paths",
+    "validate_response_sources_shape",
 ]
