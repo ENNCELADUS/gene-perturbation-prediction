@@ -1667,12 +1667,130 @@ def test_rank0_scvi_orchestration_runs_subprocess_then_reads_cache(
 
 
 def test_accelerator_uses_static_ddp_graph_without_unused_scan(tmp_path: Path) -> None:
+    """C1 pin: a config that never sets the new ddp_* keys must reproduce
+    today's hardcoded `_make_accelerator` behavior byte-identically
+    (fix-round-5)."""
     config = load_config(_write_scvi_cache_config(tmp_path))
+
+    assert config.train.ddp_static_graph is True
+    assert config.train.ddp_find_unused_parameters is False
 
     accelerator = train_module._make_accelerator(config)
 
     assert accelerator.ddp_handler is not None
+    assert accelerator.ddp_handler.static_graph is True
     assert accelerator.ddp_handler.find_unused_parameters is False
+
+
+def test_accelerator_ddp_flags_are_config_gated_for_relaxed_configs(
+    tmp_path: Path,
+) -> None:
+    """fix-round-5: a config that explicitly sets ddp_static_graph/
+    ddp_find_unused_parameters (as Phase C's two arm configs now do) must
+    produce an Accelerator built with those exact values, not the legacy
+    hardcoded ones."""
+    config_path = tmp_path / "relaxed_ddp.yaml"
+    config_path.write_text(
+        _write_scvi_cache_config(tmp_path)
+        .read_text(encoding="utf-8")
+        .replace(
+            "  device: cpu\n",
+            "  device: cpu\n"
+            "  ddp_static_graph: false\n"
+            "  ddp_find_unused_parameters: true\n",
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.train.ddp_static_graph is False
+    assert config.train.ddp_find_unused_parameters is True
+
+    accelerator = train_module._make_accelerator(config)
+
+    assert accelerator.ddp_handler is not None
+    assert accelerator.ddp_handler.static_graph is False
+    assert accelerator.ddp_handler.find_unused_parameters is True
+
+
+def test_ddp_static_graph_crashes_on_varying_parameter_participation(
+    tmp_path: Path,
+) -> None:
+    """Regression test for the Phase C fix-round-5 incident.
+
+    ``PerturbationVectorAdapter`` (model.py) gives every gene without a
+    ``known_perturbation_vectors`` entry its own trainable parameter in a
+    ``nn.ParameterDict``, and ``forward`` returns exactly one such parameter
+    (or a non-trainable buffer entry) per call. With
+    ``train.gene_batch_size: 1``, each training step therefore touches a
+    DIFFERENT single trainable parameter. This test reproduces that pattern
+    against the REAL ``torch.nn.parallel.DistributedDataParallel`` reducer
+    (gloo backend) rather than mocking it: the "training graph has changed"
+    check is a per-process check on the local autograd graph, not a
+    cross-rank comparison, so ``world_size=1`` exercises the identical code
+    path a multi-rank launch hits (empirically confirmed while diagnosing
+    this incident -- see fix-round-5-report.md).
+
+    Asserts BOTH halves of the fix: (1) today's hardcoded
+    ``static_graph=True`` genuinely crashes on this pattern -- proving the
+    relaxation is necessary, not cosmetic -- and (2) the relaxed
+    ``static_graph=False`` + ``find_unused_parameters=True`` pair Phase C's
+    configs now set genuinely tolerates it. ``static_graph=False`` alone
+    would not suffice: leaving ``find_unused_parameters=False`` trades the
+    "graph has changed" crash for a different DDP error ("parameters that
+    were not used in producing loss"), confirmed manually while diagnosing
+    this incident.
+    """
+    if not torch.distributed.is_available():
+        pytest.skip("torch.distributed is not available in this environment")
+
+    class VaryingParticipationModule(torch.nn.Module):
+        """Mirrors PerturbationVectorAdapter's shape: many parameters, one
+        used per forward call, and a different one each call."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.missing_vectors = torch.nn.ParameterDict(
+                {f"g{index}": torch.nn.Parameter(torch.zeros(4)) for index in range(4)}
+            )
+
+        def forward(self, gene: str) -> torch.Tensor:
+            return self.missing_vectors[gene].sum()
+
+    def _run_two_steps(
+        store_path: Path, *, static_graph: bool, find_unused_parameters: bool
+    ) -> None:
+        torch.distributed.init_process_group(
+            backend="gloo",
+            init_method=f"file://{store_path}",
+            world_size=1,
+            rank=0,
+        )
+        try:
+            wrapped = torch.nn.parallel.DistributedDataParallel(
+                VaryingParticipationModule(),
+                static_graph=static_graph,
+                find_unused_parameters=find_unused_parameters,
+            )
+            wrapped("g0").backward()
+            wrapped.zero_grad()
+            wrapped("g1").backward()
+        finally:
+            torch.distributed.destroy_process_group()
+
+    with pytest.raises(RuntimeError, match="training graph has changed"):
+        _run_two_steps(
+            tmp_path / "store_hardcoded_today",
+            static_graph=True,
+            find_unused_parameters=False,
+        )
+
+    _run_two_steps(
+        tmp_path / "store_relaxed",
+        static_graph=False,
+        find_unused_parameters=True,
+    )
 
 
 def test_train_config_parses_gene_batch_size_and_defaults(tmp_path: Path) -> None:

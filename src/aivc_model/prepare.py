@@ -281,6 +281,28 @@ class TrainConfig:
     float32_matmul_precision: str | None = "high"
     freeze_state: bool = False
     input_tensor_cache_max_gib: float = 24.0
+    # DDP correctness knobs for `train._make_accelerator`, NOT a performance
+    # tuning pair (fix-round-5). Defaults reproduce every pre-existing config's
+    # hardcoded behavior byte-identically (C1): `static_graph=True`,
+    # `find_unused_parameters=False`. Every `PerturbationVectorAdapter` gene
+    # that lacks a `known_perturbation_vectors` entry gets its own trainable
+    # `nn.Parameter` in `missing_vectors`, used ONLY on a training step that
+    # samples that exact gene (model.py `PerturbationVectorAdapter.forward`).
+    # Single-line K562 configs' `known_perturbation_vectors` already covers
+    # essentially every gene they train on, so `missing_vectors` is empty/
+    # near-empty and the used-parameter set is static across steps. Phase C's
+    # multi-line composite (`GENE@model_id`) gene universe is far larger than
+    # that known-vector panel, so with `train.gene_batch_size=1` each step
+    # touches a DIFFERENT single trainable parameter (or none, on a known
+    # gene) -- exactly the pattern `static_graph=True` forbids ("training
+    # graph has changed") and that `find_unused_parameters=False` separately
+    # forbids ("parameters that were not used in producing loss"). Both must
+    # be relaxed together for a config whose gene universe outgrows its
+    # known-vector panel; see the Phase C arm configs for the explicit
+    # override and `.superpowers/sdd/phase-c/fix-round-5-report.md` for the
+    # empirical confirmation.
+    ddp_static_graph: bool = True
+    ddp_find_unused_parameters: bool = False
 
 
 @dataclass(frozen=True)
@@ -2792,6 +2814,10 @@ def _train_config(values: dict[str, Any]) -> TrainConfig:
         freeze_state=_bool_value(values.get("freeze_state", False)),
         input_tensor_cache_max_gib=float(
             values.get("input_tensor_cache_max_gib", 24.0)
+        ),
+        ddp_static_graph=_bool_value(values.get("ddp_static_graph", True)),
+        ddp_find_unused_parameters=_bool_value(
+            values.get("ddp_find_unused_parameters", False)
         ),
     )
 

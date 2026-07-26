@@ -176,3 +176,22 @@ train:
   required_world_size: 4
   device: auto
   float32_matmul_precision: high
+  # fix-round-5: Phase C's 4-line composite (`GENE@model_id`) gene universe is
+  # far larger than the 2024-gene K562 GWPS `known_perturbation_vectors` panel
+  # above (K562 alone ~9,875 perturbed genes at this file's response_max_cells
+  # _per_gene cap, HCT116 ~18,293, Jurkat/HepG2 ~2,406 each), so most genes
+  # get their own trainable `PerturbationVectorAdapter.missing_vectors` entry
+  # (model.py). With gene_batch_size: 1 above, each training step forwards
+  # through exactly ONE gene, so a different single trainable parameter (or
+  # none, on a known gene) participates every step -- the DDP reducer's
+  # static_graph=True default demands the same used/unused set every
+  # iteration and crashed with "training graph has changed" at step 2 of the
+  # first real 4-rank launch. static_graph=False alone is not sufficient:
+  # find_unused_parameters=False (the OTHER default) separately demands every
+  # DDP-tracked parameter receive a gradient every iteration and raises a
+  # DIFFERENT DDP error the moment static_graph stops masking it. Both
+  # relaxed together; every non-Phase-C config keeps today's defaults
+  # (static_graph=True, find_unused_parameters=False) unchanged (C1). See
+  # .superpowers/sdd/phase-c/fix-round-5-report.md.
+  ddp_static_graph: false
+  ddp_find_unused_parameters: true
