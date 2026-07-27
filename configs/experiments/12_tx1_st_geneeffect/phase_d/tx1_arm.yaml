@@ -97,9 +97,9 @@ state:
   cell_set_len: 64
   # Seed for the deterministic padding-resample that fills a basal-cell
   # count not evenly divisible by cell_set_len
-  # (tx1_predicted_response._chunk_control_cell_indices) -- part of the D11
-  # cache fingerprint, since it changes which cells get duplicated into a
-  # line's final window and hence that window's predicted output.
+  # (tx1_predicted_response._chunk_control_cell_indices). Phase D streams raw
+  # responses directly into moments without a disk cache; this seed is bound
+  # into provenance because it changes the final padded window's output.
   response_generation_seed: 0
 
 objective:

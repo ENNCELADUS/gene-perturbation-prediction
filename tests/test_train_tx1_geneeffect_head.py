@@ -519,6 +519,7 @@ def _full_fixture(tmp_path: Path) -> dict[str, Path]:
 
 
 def _argv(fixture: dict[str, Path], predicted_cache_dir: Path) -> list[str]:
+    del predicted_cache_dir
     return [
         "--config",
         str(fixture["config_path"]),
@@ -528,8 +529,6 @@ def _argv(fixture: dict[str, Path], predicted_cache_dir: Path) -> list[str]:
         str(fixture["phase_a_dir"]),
         "--tx1-cache-dir",
         str(fixture["tx1_cache_dir"]),
-        "--predicted-response-cache-dir",
-        str(predicted_cache_dir),
         "--depmap-gene-effect",
         str(fixture["depmap_path"]),
     ]
@@ -788,14 +787,8 @@ def test_e2e_smoke_line_selection_through_phase_f_table_and_real_validator(
     assert len(provenance["validation_model_ids"]) == 1
     assert len(provenance["train_model_ids"]) == 3
 
-    # --- D6: the predicted-response cache was warmed for train/validation
-    # lines only, never for a held-out test line.
-    for test_model_id in _TEST_LINES:
-        assert not (predicted_cache_dir / test_model_id).exists()
-    for train_model_id in provenance["train_model_ids"] + list(
-        provenance["validation_model_ids"]
-    ):
-        assert (predicted_cache_dir / train_model_id / "tx1_arm").is_dir()
+    # Raw predicted responses are streamed into moments and never persisted.
+    assert not predicted_cache_dir.exists()
 
     # --- the Phase F table exists and matches the D1 schema ---------------
     predictions_path = run_dir / "tx1_3b_st_predictions.csv"
@@ -1094,23 +1087,21 @@ def test_e2e_smoke_threads_resolved_device_into_response_generation(
         tx1_geneeffect_pipeline_run_module, "resolve_device", _spy_resolve_device
     )
 
-    generate_devices: list[object] = []
-    real_generate = (
-        tx1_geneeffect_pipeline_run_module.generate_predicted_response_for_line
-    )
+    split_devices: list[object] = []
+    real_assemble_split = tx1_geneeffect_pipeline_run_module.assemble_split_features
 
-    def _spy_generate(*args: object, **kwargs: object) -> object:
-        generate_devices.append(kwargs.get("device"))
-        return real_generate(*args, **kwargs)
+    def _spy_assemble_split(*args: object, **kwargs: object) -> object:
+        split_devices.append(kwargs.get("device"))
+        return real_assemble_split(*args, **kwargs)
 
     monkeypatch.setattr(
         tx1_geneeffect_pipeline_run_module,
-        "generate_predicted_response_for_line",
-        _spy_generate,
+        "assemble_split_features",
+        _spy_assemble_split,
     )
 
     assemble_test_devices: list[object] = []
-    real_assemble_test = tx1_geneeffect_pipeline_run_module.assemble_test_line_examples
+    real_assemble_test = tx1_geneeffect_pipeline_run_module.assemble_test_line_features
 
     def _spy_assemble_test(*args: object, **kwargs: object) -> object:
         assemble_test_devices.append(kwargs.get("device"))
@@ -1118,7 +1109,7 @@ def test_e2e_smoke_threads_resolved_device_into_response_generation(
 
     monkeypatch.setattr(
         tx1_geneeffect_pipeline_run_module,
-        "assemble_test_line_examples",
+        "assemble_test_line_features",
         _spy_assemble_test,
     )
 
@@ -1127,8 +1118,7 @@ def test_e2e_smoke_threads_resolved_device_into_response_generation(
     assert exit_code == 0
 
     assert resolve_calls == ["auto"]  # config's default, resolved exactly once
-    assert generate_devices, "warm_predicted_response_cache never generated a response"
-    assert all(device == sentinel_device for device in generate_devices)
+    assert split_devices == [sentinel_device]
     assert assemble_test_devices, "emit_test_predictions never assembled a test line"
     assert all(device == sentinel_device for device in assemble_test_devices)
 
@@ -1201,7 +1191,6 @@ def test_run_training_pipeline_rejects_existing_run_dir_before_any_validation(
             line_manifest_path=tmp_path / "does-not-exist.csv",
             phase_a_dir=tmp_path / "does-not-exist-dir",
             tx1_cache_dir=tmp_path / "does-not-exist-cache",
-            predicted_response_cache_dir=tmp_path / "unused",
             depmap_gene_effect_path=tmp_path / "does-not-exist.csv",
             run_dir=run_dir,
         )

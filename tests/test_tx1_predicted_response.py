@@ -265,6 +265,34 @@ def test_generate_predicted_response_shape_and_no_gradient() -> None:
     assert response.device == torch.device("cpu")
 
 
+def test_generate_predicted_response_forwards_one_window_at_a_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = _forward_only_model()
+    observed_chunk_counts: list[int] = []
+    original = model.predict_response_chunks
+
+    def _record(
+        control_chunks: tuple[torch.Tensor, ...],
+        gene: str,
+        batch_chunks: tuple[torch.Tensor | None, ...],
+    ) -> tuple[torch.Tensor, ...]:
+        observed_chunk_counts.append(len(control_chunks))
+        return original(control_chunks, gene, batch_chunks)
+
+    monkeypatch.setattr(model, "predict_response_chunks", _record)
+    response = generate_predicted_response(
+        model,
+        np.zeros((13, _INPUT_DIM), dtype=np.float32),
+        "G1",
+        cell_set_len=4,
+        seed=0,
+    )
+
+    assert response.shape == (13, _OUTPUT_DIM)
+    assert observed_chunk_counts == [1, 1, 1, 1]
+
+
 def test_generate_predicted_response_raises_named_error_not_keyerror() -> None:
     model = _forward_only_model()
     control_input = np.zeros((5, _INPUT_DIM))

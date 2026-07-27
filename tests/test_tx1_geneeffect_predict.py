@@ -34,7 +34,7 @@ from aivc_model.tx1_geneeffect_eval import (
 from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead
 from aivc_model.tx1_geneeffect_train import LineExamples, train_tx1_geneeffect_head
 from aivc_model.tx1_geneeffect_predict import (
-    assemble_test_line_examples,
+    assemble_test_line_features,
     assert_test_role,
     build_test_line_predictions,
     build_tx1_3b_st_predictions,
@@ -181,7 +181,7 @@ def test_assemble_test_line_examples_covers_full_slice_including_missing_target(
     model = _forward_only_model(["G1", "TDGF1", "G3"], input_dim=3)
     gene_effect = pd.Series({"G1 (1)": -1.5, "CRIPTO (2)": 0.75})  # G3 (3) absent
 
-    line = assemble_test_line_examples(
+    line = assemble_test_line_features(
         model_id,
         TEST_ROLE,
         model,
@@ -189,15 +189,14 @@ def test_assemble_test_line_examples_covers_full_slice_including_missing_target(
         cache_dir,
         slice_df,
         gene_effect,
+        moments=2,
         cell_set_len=4,
         seed=0,
     )
 
     assert line.role == TEST_ROLE
     assert line.genes == ("G1 (1)", "CRIPTO (2)", "G3 (3)")
-    assert len(line.response_bags) == 3
-    for bag in line.response_bags:
-        assert bag.shape == (5, _OUTPUT_DIM)
+    assert line.features.shape == (3, (_OUTPUT_DIM + 3) * 2)
     targets = line.targets.tolist()
     assert targets[0] == pytest.approx(-1.5)
     assert targets[1] == pytest.approx(0.75)
@@ -212,7 +211,7 @@ def test_assemble_test_line_examples_rejects_non_test_role(tmp_path: Path) -> No
     model = _forward_only_model(["G1"], input_dim=3)
 
     with pytest.raises(ValueError, match="held-out inference"):
-        assemble_test_line_examples(
+        assemble_test_line_features(
             model_id,
             TRAIN_HEAD_ROLE,
             model,
@@ -220,6 +219,7 @@ def test_assemble_test_line_examples_rejects_non_test_role(tmp_path: Path) -> No
             cache_dir,
             slice_df,
             pd.Series(dtype=float),
+            moments=2,
             cell_set_len=4,
             seed=0,
         )

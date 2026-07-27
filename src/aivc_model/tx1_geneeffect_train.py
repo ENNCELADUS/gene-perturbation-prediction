@@ -4,11 +4,11 @@ Trains ``tx1_geneeffect_head.Tx1GeneEffectHead`` on ``(predicted response
 bag, basal bag) -> GeneEffect scalar`` over a set of training lines,
 selecting the returned checkpoint on a disjoint set of validation lines
 (D12). This module is the pure-tensor half: it consumes already-
-materialized per-line, per-gene bags (:class:`LineExamples`) and has no
-disk/cache dependency. The sibling module
-:mod:`aivc_model.tx1_geneeffect_train_io` is the I/O half -- assembling
-:class:`LineExamples` from Phase B/Task 2 caches via Task 1's line-role
-selector, and writing the trained checkpoint plus its provenance record.
+materialized per-line, per-gene bags (:class:`LineExamples`) or compact
+streamed moments (:class:`PooledLineExamples`) and has no disk/cache
+dependency. The sibling module :mod:`aivc_model.tx1_geneeffect_train_io` is
+the I/O half -- streaming Task 2 responses into moments via Task 1's
+line-role selector, and writing the trained checkpoint and provenance.
 Split the same way Phase B split ``tx1_basal.py``/``tx1_embed_cache.py`` and
 Phase D Task 2 split ``tx1_predicted_response.py``/
 ``tx1_predicted_response_cache.py``: one file for this diff came to well
@@ -96,6 +96,24 @@ class LineExamples:
     targets: torch.Tensor
 
 
+@dataclass(frozen=True)
+class PooledLineExamples:
+    """Per-gene moment features for one line, with no raw cell tensor retained."""
+
+    model_id: str
+    role: str
+    arm: str
+    genes: tuple[str, ...]
+    features: torch.Tensor
+    targets: torch.Tensor
+    response_dim: int
+    basal_dim: int
+    moments: int
+
+
+LineData = LineExamples | PooledLineExamples
+
+
 def _line_pooled_features(line: LineExamples, moments: int) -> torch.Tensor:
     """The pooled response+basal feature matrix for every gene in ``line``.
 
@@ -123,7 +141,7 @@ def _line_pooled_features(line: LineExamples, moments: int) -> torch.Tensor:
 
 
 def _precompute_pooled_features(
-    lines: Sequence[LineExamples], moments: int
+    lines: Sequence[LineData], moments: int
 ) -> dict[str, torch.Tensor]:
     """Pool every line's bags exactly once (Wave 3 Codex gate P2-1).
 
@@ -144,11 +162,22 @@ def _precompute_pooled_features(
     Returns:
         ``{model_id: features}`` -- one pooled feature matrix per line.
     """
-    return {line.model_id: _line_pooled_features(line, moments) for line in lines}
+    features: dict[str, torch.Tensor] = {}
+    for line in lines:
+        if isinstance(line, PooledLineExamples):
+            if line.moments != moments:
+                raise ValueError(
+                    f"line {line.model_id}: pooled moments={line.moments} does not "
+                    f"match training moments={moments}"
+                )
+            features[line.model_id] = line.features
+        else:
+            features[line.model_id] = _line_pooled_features(line, moments)
+    return features
 
 
 def compute_line_features_and_predictions(
-    head: Tx1GeneEffectHead, line: LineExamples
+    head: Tx1GeneEffectHead, line: LineData
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Pooled features (D2) and scalar predictions for every gene in ``line``.
 
@@ -171,13 +200,21 @@ def compute_line_features_and_predictions(
     """
     head.eval()
     with torch.no_grad():
-        features = _line_pooled_features(line, head.moments)
+        if isinstance(line, PooledLineExamples):
+            if line.moments != head.moments:
+                raise ValueError(
+                    f"line {line.model_id}: pooled moments={line.moments} does not "
+                    f"match head moments={head.moments}"
+                )
+            features = line.features
+        else:
+            features = _line_pooled_features(line, head.moments)
         predictions = head.net(features).squeeze(-1)
     return features, predictions
 
 
 def _assert_examples_admissible(
-    train_lines: Sequence[LineExamples], validation_lines: Sequence[LineExamples]
+    train_lines: Sequence[LineData], validation_lines: Sequence[LineData]
 ) -> None:
     """D6/D12 defense-in-depth guard, re-checked independently of how
     ``train_lines``/``validation_lines`` were assembled.
@@ -210,24 +247,51 @@ def _assert_examples_admissible(
 
 
 def _infer_and_validate_dims(
-    train_lines: Sequence[LineExamples], validation_lines: Sequence[LineExamples]
+    train_lines: Sequence[LineData], validation_lines: Sequence[LineData]
 ) -> tuple[int, int]:
     """Infer ``(response_dim, basal_dim)``, raising if any line disagrees."""
     all_lines = list(train_lines) + list(validation_lines)
-    basal_dims = {int(line.basal_bag.shape[-1]) for line in all_lines}
+    basal_dims = {
+        line.basal_dim
+        if isinstance(line, PooledLineExamples)
+        else int(line.basal_bag.shape[-1])
+        for line in all_lines
+    }
     if len(basal_dims) != 1:
         raise ValueError(
             f"basal_bag feature width disagrees across lines: {sorted(basal_dims)}"
         )
     response_dims = {
-        int(bag.shape[-1]) for line in all_lines for bag in line.response_bags
+        line.response_dim
+        if isinstance(line, PooledLineExamples)
+        else int(line.response_bags[0].shape[-1])
+        for line in all_lines
     }
     if len(response_dims) != 1:
         raise ValueError(
             "response_bag feature width disagrees across examples: "
             f"{sorted(response_dims)}"
         )
-    return next(iter(response_dims)), next(iter(basal_dims))
+    response_dim = next(iter(response_dims))
+    basal_dim = next(iter(basal_dims))
+    for line in all_lines:
+        if len(line.genes) == 0 or line.targets.shape != (len(line.genes),):
+            raise ValueError(
+                f"line {line.model_id}: genes/targets must be non-empty and aligned"
+            )
+        if isinstance(line, PooledLineExamples):
+            expected_width = (response_dim + basal_dim) * line.moments
+            if line.features.shape != (len(line.genes), expected_width):
+                raise ValueError(
+                    f"line {line.model_id}: pooled feature shape "
+                    f"{tuple(line.features.shape)} != "
+                    f"({len(line.genes)}, {expected_width})"
+                )
+        elif len(line.response_bags) != len(line.genes):
+            raise ValueError(
+                f"line {line.model_id}: genes/response_bags are not aligned"
+            )
+    return response_dim, basal_dim
 
 
 @dataclass(frozen=True)
@@ -307,8 +371,8 @@ def _select_best_epoch(history: Sequence[EpochMetrics]) -> EpochMetrics:
 
 
 def train_tx1_geneeffect_head(
-    train_lines: Sequence[LineExamples],
-    validation_lines: Sequence[LineExamples],
+    train_lines: Sequence[LineData],
+    validation_lines: Sequence[LineData],
     config: TrainingConfig = TrainingConfig(),
 ) -> tuple[Tx1GeneEffectHead, TrainingResult]:
     """Train ``Tx1GeneEffectHead`` over ``train_lines``, selecting on
@@ -431,6 +495,7 @@ __all__ = [
     "SELECTION_METRIC_NAME",
     "EpochMetrics",
     "LineExamples",
+    "PooledLineExamples",
     "TrainingConfig",
     "TrainingResult",
     "compute_line_features_and_predictions",
