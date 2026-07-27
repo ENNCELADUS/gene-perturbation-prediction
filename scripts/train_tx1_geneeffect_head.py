@@ -4,7 +4,7 @@
 Wires Phase D Tasks 1-4 into one runnable chain for a single arm
 (``tx1_arm`` or ``hvg_arm``, D7 -- both run the identical head and data,
 differing only in which basal/ST-input view a config selects): line
-selection -> forward-only ST + predicted-response generation/caching -> head
+selection -> forward-only ST + immediate moment pooling -> head
 training -> (optionally) the Phase F ``tx1_3b_st`` predictions table for the
 9 frozen held-out lines.
 
@@ -50,7 +50,6 @@ enough for one GPU, unlike Phase C's ST training)::
         --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv \\
         --phase-a-dir results/phase_a_tx1_20260724 \\
         --tx1-cache-dir data/tx1_basal_embeddings/v1 \\
-        --predicted-response-cache-dir data/tx1_predicted_response_cache \\
         --depmap-gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
 """
 
@@ -95,12 +94,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--line-manifest", type=Path, required=True)
     parser.add_argument("--phase-a-dir", type=Path, default=_DEFAULT_PHASE_A_DIR)
     parser.add_argument("--tx1-cache-dir", type=Path, required=True)
-    parser.add_argument(
-        "--predicted-response-cache-dir",
-        type=Path,
-        default=None,
-        help="Required for a real run; unused by --dry-run.",
-    )
     parser.add_argument("--depmap-gene-effect", type=Path, required=True)
     parser.add_argument(
         "--run-dir",
@@ -147,15 +140,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
 
-    if args.predicted_response_cache_dir is None:
-        raise ValueError("--predicted-response-cache-dir is required for a real run")
-
     outputs = run_training_pipeline(
         config,
         line_manifest_path=args.line_manifest,
         phase_a_dir=args.phase_a_dir,
         tx1_cache_dir=args.tx1_cache_dir,
-        predicted_response_cache_dir=args.predicted_response_cache_dir,
         depmap_gene_effect_path=args.depmap_gene_effect,
         run_dir=args.run_dir,
         emit_test_predictions_flag=not args.skip_test_predictions,

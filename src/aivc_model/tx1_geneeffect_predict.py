@@ -13,22 +13,19 @@ Two things a training-time assembler must not do, that this INFERENCE
 assembler must:
 
 1. **Cover every requested gene, not just the ones with a finite target.**
-   ``tx1_geneeffect_train_io.assemble_line_examples`` intersects the
-   predicted-response cache with ``gene_effect.notna()`` -- correct for
+   ``tx1_geneeffect_train_io.assemble_line_features`` intersects the
+   requested genes with ``gene_effect.notna()`` -- correct for
    training (a gene with no signal is simply not trained on), wrong here:
    ``tx1_geneeffect_eval._validate_panel_aware_coverage`` requires a
    prediction ROW for every scored slice gene regardless of whether
    ``y_true`` is finite (held-out lines are not completeness-guaranteed --
    see ``tx1_fewshot_calibration.fit_ridge_calibration``'s identical
-   caveat). :func:`assemble_test_line_examples` therefore assembles every
+   caveat). :func:`assemble_test_line_features` therefore assembles every
    gene in the caller's slice, filling a missing DepMap target with NaN
    rather than dropping the gene.
-2. **Use Task 2's explicit held-out-line opt-out, deliberately.**
-   ``tx1_predicted_response.generate_predicted_response_for_line`` defaults
-   ``require_training_role=True`` (D6: refuse a ``test``-role line by
-   default). This module is the one legitimate caller of
-   ``require_training_role=False`` -- gated first by :func:`assert_test_role`,
-   which is the mirror image of ``tx1_geneeffect_data.assert_training_role``:
+2. **Guard the held-out-only path deliberately.**
+   :func:`assert_test_role` is the mirror image of
+   ``tx1_geneeffect_data.assert_training_role``:
    it raises unless ``role`` IS the frozen test role, so this module can
    never be accidentally pointed at a train/validation line and silently
    produce an inference row for a line that was never supposed to need one.
@@ -47,6 +44,7 @@ line into the single ``tx1_3b_st`` table
 from __future__ import annotations
 
 import logging
+import warnings
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -58,22 +56,24 @@ from aivc_model.tx1_embed_cache import load_line_cache
 from aivc_model.tx1_fewshot_calibration import DEFAULT_ALPHA, make_predictions_long
 from aivc_model.tx1_geneeffect_data import TEST_ROLE
 from aivc_model.tx1_geneeffect_eval import DEFAULT_PRIMARY_METHOD, K_SCHEDULE
-from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead
+from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead, moment_pool
 from aivc_model.tx1_geneeffect_train import (
-    LineExamples,
+    LineData,
+    PooledLineExamples,
     compute_line_features_and_predictions,
 )
 from aivc_model.tx1_predicted_response import (
+    ARM_HVG,
     ARM_TX1,
     ForwardOnlyStateModel,
-    generate_predicted_response_for_line,
+    generate_predicted_response,
     resolve_genes_against_vocabulary,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 __all__ = [
-    "assemble_test_line_examples",
+    "assemble_test_line_features",
     "assert_test_role",
     "build_test_line_predictions",
     "build_tx1_3b_st_predictions",
@@ -108,7 +108,7 @@ def assert_test_role(role: str, model_id: str) -> None:
         )
 
 
-def assemble_test_line_examples(
+def assemble_test_line_features(
     model_id: str,
     role: str,
     model: ForwardOnlyStateModel,
@@ -117,12 +117,13 @@ def assemble_test_line_examples(
     slice_df: pd.DataFrame,
     gene_effect: pd.Series,
     *,
+    moments: int,
     cell_set_len: int,
     seed: int,
     batch_lookup: Mapping[str, int] | None = None,
     device: torch.device | str = "cpu",
-) -> LineExamples:
-    """Build one held-out line's full-slice-coverage :class:`LineExamples`.
+) -> PooledLineExamples:
+    """Stream and pool one held-out line without retaining raw responses.
 
     Forwards ST live, gene by gene, via
     ``tx1_predicted_response.generate_predicted_response_for_line(...,
@@ -181,32 +182,55 @@ def assemble_test_line_examples(
         gene_symbols, model.perturbations
     )
 
-    response_bags = tuple(
-        generate_predicted_response_for_line(
-            tx1_cache_dir,
-            model_id,
-            role,
+    embeddings, hvg_matrix, _obs = load_line_cache(tx1_cache_dir, model_id)
+    if arm not in {ARM_TX1, ARM_HVG}:
+        raise ValueError(f"unknown arm {arm!r}")
+    basal_view = np.asarray(
+        embeddings if arm == ARM_TX1 else hvg_matrix, dtype=np.float32
+    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="The given NumPy array is not writable"
+        )
+        basal_tensor = torch.from_numpy(basal_view)
+    pooled_basal = moment_pool(basal_tensor, moments=moments)
+    batch_labels = np.full(basal_view.shape[0], model_id, dtype=object)
+    pooled_responses: list[torch.Tensor] = []
+    response_dim: int | None = None
+    for gene_index, gene in enumerate(resolved_symbols, start=1):
+        response = generate_predicted_response(
             model,
+            basal_view,
             gene,
-            arm=arm,
             cell_set_len=cell_set_len,
             seed=seed,
+            batch_labels=batch_labels,
             batch_lookup=batch_lookup,
             device=device,
-            require_training_role=False,
         )
-        for gene in resolved_symbols
+        response_dim = int(response.shape[-1])
+        pooled_responses.append(moment_pool(response, moments=moments))
+        del response
+        if gene_index % 50 == 0 or gene_index == len(resolved_symbols):
+            _LOGGER.info(
+                "streamed held-out %s/%s: %d/%d genes",
+                model_id,
+                arm,
+                gene_index,
+                len(resolved_symbols),
+            )
+    pooled_response_matrix = torch.stack(pooled_responses, dim=0)
+    features = torch.cat(
+        [
+            pooled_response_matrix,
+            pooled_basal.unsqueeze(0).expand(len(depmap_columns), -1),
+        ],
+        dim=1,
     )
     targets = torch.as_tensor(
         [float(gene_effect.get(column, float("nan"))) for column in depmap_columns],
         dtype=torch.float32,
     )
-    embeddings, hvg_matrix, _obs = load_line_cache(tx1_cache_dir, model_id)
-    basal_view = np.asarray(
-        embeddings if arm == ARM_TX1 else hvg_matrix, dtype=np.float32
-    )
-    basal_bag = torch.tensor(basal_view, dtype=torch.float32)
-
     _LOGGER.info(
         "assembled held-out line %s (arm=%s): %d slice genes, %d finite "
         "GeneEffect targets",
@@ -215,20 +239,22 @@ def assemble_test_line_examples(
         len(depmap_columns),
         int(torch.isfinite(targets).sum()),
     )
-    return LineExamples(
+    return PooledLineExamples(
         model_id=str(model_id),
         role=str(role),
         arm=str(arm),
-        basal_bag=basal_bag,
         genes=tuple(depmap_columns),
-        response_bags=response_bags,
+        features=features,
         targets=targets,
+        response_dim=int(response_dim),
+        basal_dim=int(basal_view.shape[-1]),
+        moments=int(moments),
     )
 
 
 def build_test_line_predictions(
     head: Tx1GeneEffectHead,
-    line: LineExamples,
+    line: LineData,
     panels_for_line: pd.DataFrame,
     k_schedule: Sequence[int],
     *,
@@ -284,7 +310,7 @@ def build_test_line_predictions(
 
 def build_tx1_3b_st_predictions(
     head: Tx1GeneEffectHead,
-    lines: Sequence[LineExamples],
+    lines: Sequence[LineData],
     panels: pd.DataFrame,
     *,
     k_schedule: Sequence[int] = K_SCHEDULE,

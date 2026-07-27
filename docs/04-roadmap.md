@@ -11,9 +11,9 @@ a few-shot cross-cell-line GeneEffect backbone** — an accurate, context-condit
 single-gene predictor that both bridges depend on, pursued as the Phase 3
 backbone-transfer exit and reported as backbone transfer, not as an SL claim
 (§1.1, §5). T2's own Phase A (data-audit/manifest freeze) and Phase B (Tx1-3B
-basal embeddings) are **complete**; Phase C (ST response model) is code-complete
-with a training run in progress and no checkpoint yet; Phase D (rebuilt hybrid
-head) is partially built and its training runner is under construction — no
+basal embeddings) and Phase C (ST response model, both arms) are **complete**;
+Phase D (rebuilt hybrid head) is code-complete with both arm training runs in
+progress and no raw predicted-response disk cache — no
 Phase 3 result exists. Formal SOTA reproduction, Bridge B, and any pairwise
 cross-cell-line result remain not started.
 **Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**
@@ -77,11 +77,10 @@ GeneEffect backbone**. It runs independently of the Feng-axis reproduction
   task-data-held-out transfer (test lines are inside the Tx1 encoder's Tahoe
   pretraining), not cross-cell-line SL. Phase A (data audit/manifest freeze) and
   Phase B (Tx1-3B basal embeddings, verified for all 42 manifest lines) are
-  **complete**; Phase C (ST response model) is code-complete and dry-run-validated
-  on real data for both arms, but **no ST checkpoint has been produced** and a
-  training run is in progress; Phase D (rebuilt hybrid head) is **partially
-  built** — the head, moment pooling, losses, few-shot calibrator, and evaluator
-  exist, but the runner that trains the head is under construction. No result
+  **complete**; Phase C (ST response model) is complete for both arms; Phase D
+  (rebuilt hybrid head) is code-complete, streams raw responses directly into
+  moment pooling without a disk cache, and has both arm training runs in
+  progress. No result
   exists yet. Concrete architecture:
   [`specs/2026-07-23-tx1-st-geneeffect-backbone-design.md`](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)
   (Tx1-3B-conditioned ST + rebuilt hybrid head, HVG-ST encoder-unseen control).

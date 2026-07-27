@@ -1,11 +1,11 @@
 """Phase D Task 3: assembly, checkpoint, and provenance I/O (sibling of
 :mod:`aivc_model.tx1_geneeffect_train`).
 
-The I/O half of Task 3's split: wires Task 1's role-aware line selector
-(``tx1_geneeffect_data``) and Task 2's forward-only predicted-response cache
-(``tx1_predicted_response``, ``tx1_predicted_response_cache``) into
-:class:`~aivc_model.tx1_geneeffect_train.LineExamples`, then saves a trained
-head's checkpoint and its provenance record. Split out of
+The I/O half of Task 3's split streams Task 2's forward-only predicted
+responses directly into moment pooling, retaining only compact
+:class:`~aivc_model.tx1_geneeffect_train.PooledLineExamples`. It never writes
+or reads a Phase D predicted-response cache. It also saves the trained head's
+checkpoint and provenance record. Split out of
 ``tx1_geneeffect_train.py`` the same way Phase B split ``tx1_basal.py``
 (build) from ``tx1_embed_cache.py`` (cache) and Phase D Task 2 split
 ``tx1_predicted_response.py`` from ``tx1_predicted_response_cache.py`` --
@@ -23,7 +23,9 @@ did not match what selection actually used.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+import logging
+import warnings
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Mapping
 
@@ -34,59 +36,42 @@ import torch
 from aivc_model.gene_splits import sha256_file
 from aivc_model.tx1_embed_cache import load_line_cache
 from aivc_model.tx1_geneeffect_data import assert_training_role, build_line_role_split
-from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead
-from aivc_model.tx1_geneeffect_train import LineExamples, TrainingConfig, TrainingResult
-from aivc_model.tx1_predicted_response import ARM_HVG, ARM_TX1
-from aivc_model.tx1_predicted_response_cache import load_predicted_response_cache
+from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead, moment_pool
+from aivc_model.tx1_geneeffect_train import (
+    PooledLineExamples,
+    TrainingConfig,
+    TrainingResult,
+)
+from aivc_model.tx1_predicted_response import (
+    ARM_HVG,
+    ARM_TX1,
+    ForwardOnlyStateModel,
+    generate_predicted_response,
+)
 
 _VALID_ARMS = frozenset({ARM_TX1, ARM_HVG})
+_LOGGER = logging.getLogger(__name__)
 
 
-def assemble_line_examples(
+def assemble_line_features(
     model_id: str,
     role: str,
     arm: str,
     tx1_cache_dir: Path,
-    predicted_response_cache_dir: Path,
-    fingerprint: str,
     gene_effect: pd.Series,
-) -> LineExamples:
-    """Build one line's :class:`LineExamples` from Phase B/Task 2 caches.
+    model: ForwardOnlyStateModel,
+    *,
+    moments: int,
+    cell_set_len: int,
+    seed: int,
+    batch_lookup: Mapping[str, int] | None = None,
+    device: torch.device | str = "cpu",
+) -> PooledLineExamples:
+    """Generate and pool one line gene-by-gene without a response cache.
 
-    Checks ``role`` via ``assert_training_role`` (D6) *before* touching any
-    cache, so a ``test``-role line never triggers even a read. The gene
-    panel actually trained on is the intersection of ``gene_effect``'s
-    finite-valued genes and whatever genes the predicted-response cache
-    actually has for this line/arm/fingerprint -- both are expected to
-    already agree in a correctly configured run, but this function does not
-    assume that and takes the intersection defensively rather than raising
-    on a mismatch it can safely just not train on.
-
-    Args:
-        model_id: ACH model id.
-        role: This line's manifest ``role`` value.
-        arm: ``"tx1_arm"`` (basal Tx1 embeddings) or ``"hvg_arm"`` (basal HVG
-            matrix) -- selects which of ``load_line_cache``'s two arrays is
-            this line's basal bag.
-        tx1_cache_dir: Root of the Phase B basal-embedding cache.
-        predicted_response_cache_dir: Root of the Task 2 (D11) predicted-
-            response cache.
-        fingerprint: The D11 fingerprint the predicted-response cache entry
-            must match (see ``tx1_predicted_response_cache.
-            predicted_response_fingerprint``).
-        gene_effect: DepMap GeneEffect targets for this line, indexed by
-            gene symbol (the same symbol space the predicted-response cache
-            keys its genes by -- i.e. already alias-resolved against the ST
-            vocabulary by the caller, mirroring
-            ``tx1_predicted_response.resolve_genes_against_vocabulary``).
-
-    Returns:
-        This line's :class:`LineExamples`.
-
-    Raises:
-        ValueError: ``role`` is not an admissible training role, ``arm`` is
-            unrecognized, or no gene has both a cached response and a
-            finite target.
+    Only the Phase B basal cache is read. Each raw predicted-response tensor
+    is reduced to moments immediately, then released before the next gene.
+    No Phase D tensor is read from or written to disk.
     """
     assert_training_role(role, model_id)
     if arm not in _VALID_ARMS:
@@ -95,56 +80,88 @@ def assemble_line_examples(
     embeddings, hvg_matrix, _obs = load_line_cache(tx1_cache_dir, model_id)
     raw_basal_view = embeddings if arm == ARM_TX1 else hvg_matrix
     basal_view = np.asarray(raw_basal_view, dtype=np.float32)
-    responses = load_predicted_response_cache(
-        predicted_response_cache_dir, model_id, arm, fingerprint
-    )
-
     finite_targets = gene_effect[gene_effect.notna()]
-    genes = sorted(str(gene) for gene in finite_targets.index if str(gene) in responses)
+    genes = sorted(str(gene) for gene in finite_targets.index)
     if not genes:
-        raise ValueError(
-            f"line {model_id}: no gene has both a cached predicted response "
-            "and a finite GeneEffect target; cannot build training examples"
+        raise ValueError(f"line {model_id}: no finite GeneEffect target; cannot train")
+
+    # Phase B arrays are read-only mmaps. Zero-copy is essential here (a Tx1
+    # line can be tens of GB); moment_pool only reads the tensor.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="The given NumPy array is not writable"
         )
-    # `torch.tensor` (not `as_tensor`) deliberately: both `responses[gene]`
-    # and `basal_view` may be views onto `load_predicted_response_cache`'s/
-    # `load_line_cache`'s memory-mapped, read-only arrays. A zero-copy
-    # `as_tensor` would silently retain a non-writable, mmap-backed tensor
-    # for the lifetime of this `LineExamples` (a PyTorch UserWarning, and a
-    # latent footgun if anything ever tried to write into it); an owned
-    # copy is a one-time, per-line cost and removes both risks.
-    response_bags = tuple(
-        torch.tensor(np.asarray(responses[gene]), dtype=torch.float32) for gene in genes
+        basal_tensor = torch.from_numpy(basal_view)
+    pooled_basal = moment_pool(basal_tensor, moments=moments)
+    batch_labels = np.full(basal_view.shape[0], model_id, dtype=object)
+    pooled_responses: list[torch.Tensor] = []
+    response_dim: int | None = None
+    _LOGGER.info(
+        "streaming Phase D features for %s/%s: %d genes", model_id, arm, len(genes)
+    )
+    for gene_index, gene in enumerate(genes, start=1):
+        response = generate_predicted_response(
+            model,
+            basal_view,
+            gene,
+            cell_set_len=cell_set_len,
+            seed=seed,
+            batch_labels=batch_labels,
+            batch_lookup=batch_lookup,
+            device=device,
+        )
+        response_dim = int(response.shape[-1])
+        pooled_responses.append(moment_pool(response, moments=moments))
+        del response
+        if gene_index % 50 == 0 or gene_index == len(genes):
+            _LOGGER.info(
+                "streamed %s/%s: %d/%d genes",
+                model_id,
+                arm,
+                gene_index,
+                len(genes),
+            )
+    pooled_response_matrix = torch.stack(pooled_responses, dim=0)
+    features = torch.cat(
+        [
+            pooled_response_matrix,
+            pooled_basal.unsqueeze(0).expand(len(genes), -1),
+        ],
+        dim=1,
     )
     targets = torch.as_tensor(
         [float(finite_targets[gene]) for gene in genes], dtype=torch.float32
     )
-    basal_bag = torch.tensor(basal_view, dtype=torch.float32)
-    return LineExamples(
+    return PooledLineExamples(
         model_id=str(model_id),
         role=str(role),
         arm=str(arm),
-        basal_bag=basal_bag,
         genes=tuple(genes),
-        response_bags=response_bags,
+        features=features,
         targets=targets,
+        response_dim=int(response_dim),
+        basal_dim=int(basal_view.shape[-1]),
+        moments=int(moments),
     )
 
 
-def assemble_split_examples(
+def assemble_split_features(
     manifest: pd.DataFrame,
     validation_registration: Mapping[str, object],
     *,
     arm: str,
     tx1_cache_dir: Path,
-    predicted_response_cache_dir: Path,
-    fingerprint_by_line: Mapping[str, str],
     gene_effect_by_line: Mapping[str, pd.Series],
-) -> tuple[list[LineExamples], list[LineExamples]]:
-    """Build ``(train_lines, validation_lines)`` via Task 1's own split.
+    model: ForwardOnlyStateModel,
+    moments: int,
+    cell_set_len: int,
+    seed: int,
+    device: torch.device | str = "cpu",
+) -> tuple[list[PooledLineExamples], list[PooledLineExamples]]:
+    """Stream and pool train/validation features via Task 1's own split.
 
     Calls ``tx1_geneeffect_data.build_line_role_split`` -- never re-derives
-    the 28/5/9 split -- then calls :func:`assemble_line_examples` once per
+    the 28/5/9 split -- then calls :func:`assemble_line_features` once per
     admitted line: the 28 training lines (24 ``train_head`` + 4 anchors) and
     the 5 validation lines. The 9 frozen ``test`` lines never appear in
     either returned list, by construction of ``build_line_role_split``.
@@ -157,20 +174,8 @@ def assemble_split_examples(
             ``tx1_geneeffect_data.load_validation_line_registration``.
         arm: ``"tx1_arm"`` or ``"hvg_arm"``.
         tx1_cache_dir: Root of the Phase B basal-embedding cache.
-        predicted_response_cache_dir: Root of the Task 2 predicted-response
-            cache.
-        fingerprint_by_line: ``model_id -> fingerprint`` (D11). One shared
-            string is NOT correct here: ``tx1_predicted_response_cache.
-            predicted_response_fingerprint`` bakes ``model_id`` into the hash
-            (by design -- it is belt-and-suspenders against a caller pairing
-            the wrong line's cache entry), so every line's real fingerprint
-            differs. Task 5 found this the first time this function was
-            wired to a real multi-line run: a single shared ``fingerprint``
-            string (this parameter's shape prior to that fix) can only ever
-            match the ONE line whose real fingerprint happens to equal it,
-            and raises a stale-cache ``ValueError`` for every other line.
         gene_effect_by_line: ``model_id -> gene_effect`` Series (see
-            :func:`assemble_line_examples`), covering every training and
+            :func:`assemble_line_features`), covering every training and
             validation line.
 
     Returns:
@@ -181,15 +186,18 @@ def assemble_split_examples(
         str(row.model_id): str(row.role) for row in manifest.itertuples(index=False)
     }
 
-    def _assemble(model_id: str) -> LineExamples:
-        return assemble_line_examples(
+    def _assemble(model_id: str) -> PooledLineExamples:
+        return assemble_line_features(
             model_id,
             role_by_id[model_id],
             arm,
             tx1_cache_dir,
-            predicted_response_cache_dir,
-            fingerprint_by_line[model_id],
             gene_effect_by_line[model_id],
+            model,
+            moments=moments,
+            cell_set_len=cell_set_len,
+            seed=seed,
+            device=device,
         )
 
     train_lines = [_assemble(model_id) for model_id in split.train_model_ids]
@@ -279,6 +287,7 @@ class Tx1GeneEffectProvenance:
     arm: str
     config: Mapping[str, object]
     history: tuple[Mapping[str, float], ...]
+    response_generation: Mapping[str, object] = field(default_factory=dict)
 
 
 def _phase_b_line_hashes(phase_b_manifest_path: Path, model_id: str) -> dict[str, str]:
@@ -325,6 +334,7 @@ def build_provenance(
     arm: str,
     config: TrainingConfig,
     result: TrainingResult,
+    response_generation: Mapping[str, object] | None = None,
 ) -> Tx1GeneEffectProvenance:
     """Assemble the provenance record for one
     ``tx1_geneeffect_train.train_tx1_geneeffect_head`` run.
@@ -373,6 +383,7 @@ def build_provenance(
             }
             for entry in result.history
         ),
+        response_generation=dict(response_generation or {}),
     )
 
 
@@ -390,8 +401,8 @@ def write_provenance(provenance: Tx1GeneEffectProvenance, path: Path) -> Path:
 
 __all__ = [
     "Tx1GeneEffectProvenance",
-    "assemble_line_examples",
-    "assemble_split_examples",
+    "assemble_line_features",
+    "assemble_split_features",
     "build_provenance",
     "load_checkpoint",
     "save_checkpoint",

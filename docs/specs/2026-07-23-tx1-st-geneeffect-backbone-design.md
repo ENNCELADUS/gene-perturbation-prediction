@@ -9,12 +9,11 @@ slice narrowed from 589 to **587** genes after a coverage measurement found
 any of the four anchor libraries (`CRIPTO`/`HEMK2` were kept — they resolve
 under their current HGNC symbols `TDGF1`/`N6AMT1`); see §6. **Phase B** (Tx1-3B
 basal embeddings) is **complete** — verified for all 42 manifest lines. **Phase
-C** (ST response model) is code-complete and dry-run-validated on real data for
-both arms, but **no ST checkpoint has been produced**; a training run is in
-progress. **Phase D** (rebuilt hybrid head) is **partially built**: the head,
-moment pooling, rank/correlation + variance-matching losses, few-shot
-calibrator, and evaluator exist, but the runner that trains the head does not
-yet. No listed step has produced a result; no number in this document is a
+C** (ST response model) is **complete** for both arms, with best/final
+checkpoints produced. **Phase D** (rebuilt hybrid head) is code-complete and
+both arm runs are in progress. Raw predicted responses are generated and
+moment-pooled in the same process, one ST window at a time, and are never cached
+to disk. No listed step has produced a result; no number in this document is a
 result. Line counts (49 Tahoe DMSO lines, 38 with DepMap) are audited-from-disk
 facts, not model results.
 **Authority:** [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
@@ -258,20 +257,20 @@ optionally warm-starting the transformer body — since no released Tx1-input ST
 checkpoint exists. Trains on K562+HCT116+Jurkat+HepG2 observed KO responses,
 `output_space=gene`. Both arms are dry-run-clean on real HPC data (ST consuming
 2560-d Tx1 embeddings in the Tx1 arm and 2000-d HVG in the matched control arm,
-both emitting gene space). **No ST checkpoint has been produced.** A training
-run is in progress. **Exit not yet met:** ST checkpoints (Tx1 and HVG arms).
+both emitting gene space). Both arm checkpoints were produced. **Exit met:** ST
+checkpoints (Tx1 and HVG arms).
 
-**Phase D — rebuilt hybrid head. Partially built.** The head, moment pooling,
+**Phase D — rebuilt hybrid head. Code-complete; execution in progress.** The head, moment pooling,
 the rank/correlation + variance-matching losses, the few-shot calibrator, and
 the evaluator already exist. The line-role selector (28 train / 5 validation /
 9 test), the derived validation-line registration, the DepMap GeneEffect
-loader, the forward-only ST loader, and the fingerprinted predicted-response
-cache are built. **The runner that trains the head — driving those existing
-components end to end on GeneEffect across the four Perturb-seq anchors and
+loader, forward-only ST loader, and training runner are built. The runner drives
+those components end to end on GeneEffect across the four Perturb-seq anchors and
 the 24 Tahoe train-only lines using predicted response uniformly, selecting
 over the 5 validation lines, with the HVG-ST control run through the identical
-head and data — does not exist yet and is under construction.** **Exit not
-met:** trained heads for both encoder arms.
+head and data. It streams each predicted response directly into moment pooling,
+with no Phase D raw-response cache on disk. Both arm runs are in progress.
+**Exit not met:** trained heads for both encoder arms.
 
 **Phase E — few-shot calibration.** Implement the per-line affine/low-rank (or
 head-only) calibration and the k-schedule. **Exit:** k-shot adapter. Not

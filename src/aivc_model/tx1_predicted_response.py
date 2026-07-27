@@ -392,16 +392,35 @@ def generate_predicted_response(
     control_input = np.asarray(control_input, dtype=np.float32)
     n_cells = int(control_input.shape[0])
     chunk_indices = _chunk_control_cell_indices(n_cells, cell_set_len, seed)
-    control_chunks = tuple(
-        torch.as_tensor(control_input[indices], dtype=torch.float32, device=device)
-        for indices in chunk_indices
-    )
     batch_chunks = _batch_index_chunks(
         batch_labels, batch_lookup, chunk_indices, device
     )
+    response: torch.Tensor | None = None
+    write_offset = 0
     with torch.no_grad():
-        outputs = model.predict_response_chunks(control_chunks, gene, batch_chunks)
-        response = torch.cat(outputs, dim=0)[:n_cells]
+        for indices, batch_chunk in zip(chunk_indices, batch_chunks, strict=True):
+            control_chunk = torch.as_tensor(
+                control_input[indices], dtype=torch.float32, device=device
+            )
+            outputs = model.predict_response_chunks(
+                (control_chunk,), gene, (batch_chunk,)
+            )
+            output_chunk = outputs[0].detach().cpu()
+            if response is None:
+                response = torch.empty(
+                    (n_cells, int(output_chunk.shape[-1])), dtype=output_chunk.dtype
+                )
+            valid_rows = min(int(output_chunk.shape[0]), n_cells - write_offset)
+            response[write_offset : write_offset + valid_rows].copy_(
+                output_chunk[:valid_rows]
+            )
+            write_offset += valid_rows
+            del control_chunk, outputs, output_chunk
+    if response is None or write_offset != n_cells:
+        raise RuntimeError(
+            f"incomplete response generation for {gene}: "
+            f"wrote {write_offset}/{n_cells} rows"
+        )
     # Always return CPU: `device` is only where the (expensive) forward pass
     # itself runs. Every caller today (the disk cache writer, and Phase D's
     # CPU-resident Tx1GeneEffectHead training/inference) expects a CPU
@@ -410,7 +429,7 @@ def generate_predicted_response(
     # a device-mismatch error against the CPU-resident head or basal bag, or
     # (worse) silently succeeds only when everything happens to already be
     # on the same device.
-    return response.detach().cpu()
+    return response
 
 
 def _batch_index_chunks(

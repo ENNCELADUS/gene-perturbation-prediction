@@ -24,8 +24,17 @@ import pytest
 import torch
 
 from aivc_model.gene_splits import sha256_file
+from aivc_model.model import (
+    LinearMockStateModel,
+    PerturbationVectorAdapter,
+    StateForwardAdapter,
+)
 from aivc_model.tx1_basal import load_line_manifest
-from aivc_model.tx1_embed_cache import EMBEDDING_WIDTH, write_line_cache
+from aivc_model.tx1_embed_cache import (
+    EMBEDDING_WIDTH,
+    load_line_cache,
+    write_line_cache,
+)
 from aivc_model.tx1_geneeffect_data import (
     TEST_ROLE,
     TRAIN_HEAD_ROLE,
@@ -38,6 +47,7 @@ from aivc_model.tx1_geneeffect_train import (
     SELECTION_METRIC_NAME,
     EpochMetrics,
     LineExamples,
+    PooledLineExamples,
     TrainingConfig,
     compute_line_features_and_predictions,
     train_tx1_geneeffect_head,
@@ -49,15 +59,19 @@ from aivc_model.tx1_geneeffect_train import (
 )
 from aivc_model.tx1_geneeffect_train_io import (
     Tx1GeneEffectProvenance,
-    assemble_line_examples,
-    assemble_split_examples,
+    assemble_line_features,
+    assemble_split_features,
     build_provenance,
     load_checkpoint,
     save_checkpoint,
     write_provenance,
 )
-from aivc_model.tx1_predicted_response import ARM_HVG, ARM_TX1
-from aivc_model.tx1_predicted_response_cache import write_predicted_response_cache
+from aivc_model.tx1_predicted_response import (
+    ARM_HVG,
+    ARM_TX1,
+    ForwardOnlyStateModel,
+    generate_predicted_response,
+)
 from conftest import tx1_manifest_row as _manifest_row
 from conftest import write_tx1_cache_run_manifest as _write_cache_run_manifest
 from conftest import write_tx1_line_manifest as _write_manifest
@@ -404,23 +418,28 @@ def test_train_tx1_geneeffect_head_selection_matches_recorded_history() -> None:
     assert result.validation_model_ids == ("ACH-V",)
 
 
-# --- assemble_line_examples (I/O) --------------------------------------------
+# --- streaming assembly (I/O) -------------------------------------------------
 
 
-def test_assemble_line_examples_rejects_test_role_before_touching_any_cache(
+def test_assemble_line_features_rejects_test_role_before_touching_cache(
     tmp_path: Path,
 ) -> None:
     # Deliberately non-existent cache directories: if the role guard did not
     # fire first, this would raise FileNotFoundError instead.
     with pytest.raises(ValueError, match="refusing to admit"):
-        assemble_line_examples(
+        assemble_line_features(
             "ACH-TEST-1",
             TEST_ROLE,
-            ARM_TX1,
+            ARM_HVG,
             tmp_path / "no_such_tx1_cache",
-            tmp_path / "no_such_predicted_cache",
-            "fp",
             pd.Series({"G1": 0.1}),
+            ForwardOnlyStateModel(
+                StateForwardAdapter(LinearMockStateModel(2, 3, 2)),
+                PerturbationVectorAdapter(["G1"], {}, 2),
+            ),
+            moments=2,
+            cell_set_len=2,
+            seed=0,
         )
 
 
@@ -437,80 +456,99 @@ def _write_basal_cache(tx1_cache_dir: Path, model_id: str, n_cells: int = 4) -> 
     )
 
 
-def test_assemble_line_examples_builds_expected_bags_and_intersects_genes(
+def test_assemble_line_features_matches_raw_pooling_and_writes_no_cache(
     tmp_path: Path,
 ) -> None:
     tx1_cache_dir = tmp_path / "tx1_cache"
     _write_basal_cache(tx1_cache_dir, "ACH-1", n_cells=4)
 
-    predicted_cache_dir = tmp_path / "predicted_cache"
-    responses = {
-        "G1": np.random.default_rng(2).normal(size=(5, 3)).astype(np.float32),
-        "G2": np.random.default_rng(3).normal(size=(5, 3)).astype(np.float32),
-        "G3": np.random.default_rng(4).normal(size=(5, 3)).astype(np.float32),
-    }
-    write_predicted_response_cache(
-        predicted_cache_dir, "ACH-1", ARM_TX1, "fp", responses
+    model = ForwardOnlyStateModel(
+        StateForwardAdapter(LinearMockStateModel(2, 3, 2)),
+        PerturbationVectorAdapter(["G1", "G2"], {}, 2),
     )
-
-    # G3 has a cached response but no finite target -> excluded. G4 has a
-    # target but no cached response -> excluded. Only G1/G2 have both.
-    gene_effect = pd.Series({"G1": 0.5, "G2": -1.0, "G3": np.nan, "G4": 2.0})
-
-    line = assemble_line_examples(
+    gene_effect = pd.Series({"G1": 0.5, "G2": -1.0})
+    line = assemble_line_features(
         "ACH-1",
         TRAIN_HEAD_ROLE,
-        ARM_TX1,
+        ARM_HVG,
         tx1_cache_dir,
-        predicted_cache_dir,
-        "fp",
         gene_effect,
+        model,
+        moments=2,
+        cell_set_len=3,
+        seed=0,
     )
 
+    assert isinstance(line, PooledLineExamples)
     assert line.genes == ("G1", "G2")
-    assert line.basal_bag.shape == (4, EMBEDDING_WIDTH)
-    assert len(line.response_bags) == 2
-    assert line.response_bags[0].shape == (5, 3)
+    assert line.features.shape == (2, (3 + 2) * 2)
     assert torch.allclose(line.targets, torch.tensor([0.5, -1.0]))
+    assert not (tmp_path / "predicted_cache").exists()
+
+    _embeddings, hvg, _obs = load_line_cache(tx1_cache_dir, "ACH-1")
+    basal = np.asarray(hvg, dtype=np.float32)
+    raw = LineExamples(
+        model_id="ACH-1",
+        role=TRAIN_HEAD_ROLE,
+        arm=ARM_HVG,
+        basal_bag=torch.from_numpy(basal.copy()),
+        genes=("G1", "G2"),
+        response_bags=tuple(
+            generate_predicted_response(
+                model,
+                basal,
+                gene,
+                cell_set_len=3,
+                seed=0,
+                batch_labels=np.full(len(basal), "ACH-1", dtype=object),
+            )
+            for gene in ("G1", "G2")
+        ),
+        targets=line.targets,
+    )
+    assert torch.equal(line.features, _line_pooled_features(raw, moments=2))
 
 
-def test_assemble_line_examples_raises_when_no_gene_has_both(tmp_path: Path) -> None:
+def test_assemble_line_features_raises_without_finite_targets(tmp_path: Path) -> None:
     tx1_cache_dir = tmp_path / "tx1_cache"
     _write_basal_cache(tx1_cache_dir, "ACH-1")
-    predicted_cache_dir = tmp_path / "predicted_cache"
-    write_predicted_response_cache(
-        predicted_cache_dir,
-        "ACH-1",
-        ARM_TX1,
-        "fp",
-        {"G1": np.zeros((2, 3), dtype=np.float32)},
+    gene_effect = pd.Series({"G1": np.nan})
+    model = ForwardOnlyStateModel(
+        StateForwardAdapter(LinearMockStateModel(2, 3, 2)),
+        PerturbationVectorAdapter(["G1"], {}, 2),
     )
-    gene_effect = pd.Series({"G2": 1.0})  # no overlap with the cached G1
 
-    with pytest.raises(ValueError, match="no gene has"):
-        assemble_line_examples(
+    with pytest.raises(ValueError, match="no finite"):
+        assemble_line_features(
             "ACH-1",
             TRAIN_HEAD_ROLE,
-            ARM_TX1,
+            ARM_HVG,
             tx1_cache_dir,
-            predicted_cache_dir,
-            "fp",
             gene_effect,
+            model,
+            moments=2,
+            cell_set_len=2,
+            seed=0,
         )
 
 
-def test_assemble_line_examples_rejects_unknown_arm(tmp_path: Path) -> None:
+def test_assemble_line_features_rejects_unknown_arm(tmp_path: Path) -> None:
     tx1_cache_dir = tmp_path / "tx1_cache"
     _write_basal_cache(tx1_cache_dir, "ACH-1")
     with pytest.raises(ValueError, match="unknown arm"):
-        assemble_line_examples(
+        assemble_line_features(
             "ACH-1",
             TRAIN_HEAD_ROLE,
             "bogus_arm",
             tx1_cache_dir,
-            tmp_path / "predicted_cache",
-            "fp",
             pd.Series({"G1": 0.1}),
+            ForwardOnlyStateModel(
+                StateForwardAdapter(LinearMockStateModel(2, 3, 2)),
+                PerturbationVectorAdapter(["G1"], {}, 2),
+            ),
+            moments=2,
+            cell_set_len=2,
+            seed=0,
         )
 
 
@@ -551,10 +589,8 @@ def test_assemble_split_examples_wires_to_task1_selector_and_skips_test_line(
     split = build_line_role_split(manifest, registration)
 
     tx1_cache_dir = tmp_path / "tx1_cache"
-    predicted_cache_dir = tmp_path / "predicted_cache"
     genes = ["G1", "G2"]
     gene_effect_by_line: dict[str, pd.Series] = {}
-    fingerprint_by_line: dict[str, str] = {}
     line_arrays: dict[str, dict] = {}
     for row in manifest.itertuples(index=False):
         model_id = str(row.model_id)
@@ -562,32 +598,23 @@ def test_assemble_split_examples_wires_to_task1_selector_and_skips_test_line(
             continue  # deliberately never write a cache for the held-out line
         arrays = _write_basal_cache(tx1_cache_dir, model_id)
         line_arrays[model_id] = arrays
-        responses = {
-            gene: np.random.default_rng(hash((model_id, gene)) % (2**31))
-            .normal(size=(5, 3))
-            .astype(np.float32)
-            for gene in genes
-        }
-        # Deliberately a DIFFERENT literal per line (not the real
-        # sha256-based fingerprint, since these are hand-built synthetic
-        # bytes) -- this is the property `fingerprint_by_line` exists to
-        # carry: a real run's per-model_id fingerprint always differs.
-        fingerprint = f"fp-{model_id}"
-        fingerprint_by_line[model_id] = fingerprint
-        write_predicted_response_cache(
-            predicted_cache_dir, model_id, ARM_TX1, fingerprint, responses
-        )
         gene_effect_by_line[model_id] = pd.Series({"G1": 0.5, "G2": -0.2})
     _write_cache_run_manifest(tx1_cache_dir, line_arrays, ["H1", "H2"])
 
-    train_lines, validation_lines = assemble_split_examples(
+    model = ForwardOnlyStateModel(
+        StateForwardAdapter(LinearMockStateModel(EMBEDDING_WIDTH, 3, 2)),
+        PerturbationVectorAdapter(genes, {}, 2),
+    )
+    train_lines, validation_lines = assemble_split_features(
         manifest,
         registration,
         arm=ARM_TX1,
         tx1_cache_dir=tx1_cache_dir,
-        predicted_response_cache_dir=predicted_cache_dir,
-        fingerprint_by_line=fingerprint_by_line,
         gene_effect_by_line=gene_effect_by_line,
+        model=model,
+        moments=2,
+        cell_set_len=3,
+        seed=0,
     )
 
     assert {line.model_id for line in train_lines} == set(split.train_model_ids)
@@ -673,6 +700,12 @@ def test_build_provenance_records_all_hashes_and_true_selection_metric(
         arm=ARM_TX1,
         config=config,
         result=result,
+        response_generation={
+            "response_generation_seed": 11,
+            "cell_set_len": 64,
+            "gene_vocabulary_sha256": "vocab-hash",
+            "gene_panel_sha256": "panel-hash",
+        },
     )
 
     assert provenance.st_checkpoint_sha256 == sha256_file(checkpoint_path)
@@ -687,6 +720,8 @@ def test_build_provenance_records_all_hashes_and_true_selection_metric(
         result.best_validation_metric
     )
     assert provenance.best_epoch == result.best_epoch
+    assert provenance.response_generation["response_generation_seed"] == 11
+    assert provenance.response_generation["cell_set_len"] == 64
     assert provenance.phase_b_cache_manifest_hashes["ACH-A"] == {
         "embeddings_sha256": "hash-ACH-A-emb",
         "hvg_sha256": "hash-ACH-A-hvg",
@@ -757,29 +792,28 @@ def test_write_provenance_round_trips_through_json(tmp_path: Path) -> None:
 # --- ARM_HVG sanity: both arms are the identical head/data shape (D7) -------
 
 
-def test_assemble_line_examples_supports_hvg_arm(tmp_path: Path) -> None:
+def test_assemble_line_features_supports_hvg_arm(tmp_path: Path) -> None:
     tx1_cache_dir = tmp_path / "tx1_cache"
     _write_basal_cache(tx1_cache_dir, "ACH-1", n_cells=6)
-    predicted_cache_dir = tmp_path / "predicted_cache"
-    write_predicted_response_cache(
-        predicted_cache_dir,
-        "ACH-1",
-        ARM_HVG,
-        "fp",
-        {"G1": np.zeros((3, 2), dtype=np.float32)},
-    )
     gene_effect = pd.Series({"G1": 0.3})
+    model = ForwardOnlyStateModel(
+        StateForwardAdapter(LinearMockStateModel(2, 2, 2)),
+        PerturbationVectorAdapter(["G1"], {}, 2),
+    )
 
-    line = assemble_line_examples(
+    line = assemble_line_features(
         "ACH-1",
         TRAIN_HEAD_ROLE,
         ARM_HVG,
         tx1_cache_dir,
-        predicted_cache_dir,
-        "fp",
         gene_effect,
+        model,
+        moments=2,
+        cell_set_len=4,
+        seed=0,
     )
 
     assert line.arm == ARM_HVG
     # The HVG matrix's own width (2), not EMBEDDING_WIDTH.
-    assert line.basal_bag.shape == (6, 2)
+    assert line.basal_dim == 2
+    assert line.features.shape == (1, 8)

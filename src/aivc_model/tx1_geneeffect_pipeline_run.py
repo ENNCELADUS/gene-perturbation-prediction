@@ -2,26 +2,18 @@
 :mod:`aivc_model.tx1_geneeffect_pipeline` (split out purely for CLAUDE.md's
 600-line-per-file rule; that module owns the config schema and every
 ``--dry-run`` check, this one owns the chain ``--dry-run`` deliberately never
-reaches: ST construction/checkpoint loading, predicted-response generation +
-caching, head training, and Phase F table emission).
+reaches: ST construction/checkpoint loading, streaming response pooling, head
+training, and Phase F table emission).
 
 Two things this module resolves that no earlier Phase D task did:
 
-1. **Per-line predicted-response cache fingerprints.** Task 2's
-   ``predicted_response_fingerprint`` bakes ``model_id`` into its hash (by
-   design -- belt-and-suspenders against a caller pairing the wrong line's
-   cache entry), so every line's real fingerprint differs. Wiring a real
-   multi-line run surfaced that ``tx1_geneeffect_train_io.
-   assemble_split_examples`` had never been exercised against that variance
-   (its own test used one hand-typed literal fingerprint for every synthetic
-   line) -- fixed in this task to take ``fingerprint_by_line: Mapping[str,
-   str]`` instead of one shared string. :func:`warm_predicted_response_cache`
-   is the function that computes and reuses those per-line fingerprints for
-   real.
+1. **Bounded-memory same-process execution.** Each ST response is moment-
+   pooled immediately; the raw per-cell tensor is discarded before the next
+   gene. No Phase D predicted-response tensor is persisted to disk.
 2. **DepMap-to-ST-vocabulary gene-key translation.** ``load_depmap_gene_effect``
    (Task 1) indexes columns by ``depmap_column`` (e.g. ``"ACLY (47)"``);
-   ``assemble_line_examples`` (Task 3) expects ``gene_effect`` indexed by the
-   ST-vocabulary gene SYMBOL the predicted-response cache keys its genes by
+   ``assemble_line_features`` (Task 3) expects ``gene_effect`` indexed by the
+   ST-vocabulary gene SYMBOL used for response generation
    (post :data:`~aivc_model.tx1_predicted_response.SLICE_SYMBOL_ALIASES`
    resolution). :func:`build_training_gene_effect_by_line` is that
    translation, built once from the frozen slice's own
@@ -73,6 +65,7 @@ from typing import Mapping, Sequence
 import pandas as pd
 import torch
 
+from aivc_model.gene_splits import sha256_file
 from aivc_model.tx1_embed_cache import verify_cache
 from aivc_model.tx1_geneeffect_data import LineRoleSplit, load_depmap_gene_effect
 from aivc_model.tx1_geneeffect_eval import (
@@ -90,12 +83,12 @@ from aivc_model.tx1_geneeffect_pipeline import (
     verify_gene_vocabulary_authenticity,
 )
 from aivc_model.tx1_geneeffect_predict import (
-    assemble_test_line_examples,
-    build_tx1_3b_st_predictions,
+    assemble_test_line_features,
+    build_test_line_predictions,
 )
 from aivc_model.tx1_geneeffect_train import TrainingConfig, train_tx1_geneeffect_head
 from aivc_model.tx1_geneeffect_train_io import (
-    assemble_split_examples,
+    assemble_split_features,
     build_provenance,
     save_checkpoint,
     write_provenance,
@@ -104,14 +97,8 @@ from aivc_model.tx1_predicted_response import (
     SLICE_SYMBOL_ALIASES,
     ForwardOnlyStateModel,
     construct_forward_only_model,
-    generate_predicted_response_for_line,
     load_forward_only_checkpoint,
     resolve_device,
-)
-from aivc_model.tx1_predicted_response_cache import (
-    load_predicted_response_cache,
-    predicted_response_fingerprint,
-    write_predicted_response_cache,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -121,7 +108,6 @@ __all__ = [
     "build_training_gene_effect_by_line",
     "emit_test_predictions",
     "run_training_pipeline",
-    "warm_predicted_response_cache",
 ]
 
 
@@ -178,7 +164,7 @@ def build_training_gene_effect_by_line(
     depmap_frame: pd.DataFrame, slice_df: pd.DataFrame
 ) -> dict[str, pd.Series]:
     """Translate DepMap's ``depmap_column``-indexed matrix into the
-    ST-vocabulary-symbol-indexed Series ``assemble_line_examples`` expects.
+    ST-vocabulary-symbol-indexed Series ``assemble_line_features`` expects.
 
     Built once from the frozen slice's own ``gene_symbol``/``depmap_column``
     pairing (with :data:`SLICE_SYMBOL_ALIASES` applied), not per line.
@@ -197,83 +183,6 @@ def build_training_gene_effect_by_line(
         )
         for model_id in depmap_frame.index
     }
-
-
-def warm_predicted_response_cache(
-    model: ForwardOnlyStateModel,
-    tx1_cache_dir: Path,
-    predicted_response_cache_dir: Path,
-    model_id: str,
-    role: str,
-    genes: Sequence[str],
-    vocabulary_genes: Sequence[str],
-    arm: str,
-    cell_set_len: int,
-    seed: int,
-    st_checkpoint_path: Path,
-    phase_b_manifest_path: Path,
-    *,
-    device: torch.device | str = "cpu",
-) -> str:
-    """Ensure ``model_id``/``arm``'s predicted-response cache entry is fresh
-    (D11); return its fingerprint (for
-    ``tx1_geneeffect_train_io.assemble_split_examples``'s
-    ``fingerprint_by_line``).
-
-    Reuses an existing cache entry when its fingerprint already matches;
-    otherwise forwards ST for every gene and writes a fresh entry. Never
-    partially reuses a stale entry (D11).
-
-    Args:
-        vocabulary_genes: The full, ordered gene vocabulary ``model`` was
-            constructed with -- folded into the cache fingerprint (P1-4) so
-            a reordered vocabulary cannot silently reuse another
-            construction's cached responses.
-        device: Where to run ST's forward pass (P1-5); ``model`` must
-            already be on this device (see :func:`run_training_pipeline`).
-    """
-    fingerprint = predicted_response_fingerprint(
-        st_checkpoint_path=st_checkpoint_path,
-        phase_b_manifest_path=phase_b_manifest_path,
-        model_id=model_id,
-        genes=genes,
-        vocabulary_genes=vocabulary_genes,
-        seed=seed,
-        arm=arm,
-        cell_set_len=cell_set_len,
-    )
-    try:
-        load_predicted_response_cache(
-            predicted_response_cache_dir, model_id, arm, fingerprint
-        )
-        _LOGGER.info("predicted-response cache hit for %s/%s", model_id, arm)
-        return fingerprint
-    except (FileNotFoundError, ValueError) as exc:
-        _LOGGER.info(
-            "predicted-response cache miss for %s/%s (%s); regenerating",
-            model_id,
-            arm,
-            exc,
-        )
-    responses = {
-        gene: generate_predicted_response_for_line(
-            tx1_cache_dir,
-            model_id,
-            role,
-            model,
-            gene,
-            arm=arm,
-            cell_set_len=cell_set_len,
-            seed=seed,
-            device=device,
-            require_training_role=True,
-        )
-        for gene in genes
-    }
-    write_predicted_response_cache(
-        predicted_response_cache_dir, model_id, arm, fingerprint, responses
-    )
-    return fingerprint
 
 
 def _ensure_fresh_run_dir(resolved_run_dir: Path) -> None:
@@ -309,7 +218,6 @@ def run_training_pipeline(
     line_manifest_path: Path,
     phase_a_dir: Path,
     tx1_cache_dir: Path,
-    predicted_response_cache_dir: Path,
     depmap_gene_effect_path: Path,
     run_dir: Path | None = None,
     emit_test_predictions_flag: bool = True,
@@ -339,17 +247,13 @@ def run_training_pipeline(
     manifest, registration, split = validate_roles(
         line_manifest_path, config.validation_lines_path
     )
-    role_by_id = {
-        str(row.model_id): str(row.role) for row in manifest.itertuples(index=False)
-    }
-
     # P1-2: authenticate the frozen Phase-A registration/slice/panels before
     # trusting anything read from phase_a_dir below.
     verify_artifact_hashes(Path(phase_a_dir))
 
     # P1-1: the Phase B exit criterion ("verified embedding caches") --
     # unrestricted (no only_lines), and run before `load_line_cache` is
-    # ever reached (deep inside `assemble_split_examples`/
+    # ever reached (deep inside `assemble_split_features`/
     # `emit_test_predictions`). `validate_widths` above only cross-checks
     # ONE manifest entry's recorded shape; it is not a substitute.
     cache_report = verify_cache(
@@ -366,7 +270,7 @@ def run_training_pipeline(
         (Path(phase_a_dir) / "phase_a_registration.json").read_text()
     )
     slice_df = load_slice(Path(phase_a_dir) / "differentially_essential_slice.csv")
-    resolved_genes = validate_gene_coverage(slice_df, config.state.gene_vocabulary_path)
+    validate_gene_coverage(slice_df, config.state.gene_vocabulary_path)
     vocabulary_genes = json.loads(Path(config.state.gene_vocabulary_path).read_text())
 
     # P1-3: authenticate state.gene_vocabulary_path against Phase C's own
@@ -396,33 +300,17 @@ def run_training_pipeline(
     gene_effect_by_line = build_training_gene_effect_by_line(depmap_frame, slice_df)
 
     phase_b_manifest_path = Path(tx1_cache_dir) / "manifest.json"
-    fingerprint_by_line = {
-        model_id: warm_predicted_response_cache(
-            model,
-            tx1_cache_dir,
-            predicted_response_cache_dir,
-            model_id,
-            role_by_id[model_id],
-            resolved_genes,
-            vocabulary_genes,
-            config.arm,
-            config.state.cell_set_len,
-            config.state.response_generation_seed,
-            config.state.st_checkpoint_path,
-            phase_b_manifest_path,
-            device=device,
-        )
-        for model_id in train_and_validation_ids
-    }
-
-    train_lines, validation_lines = assemble_split_examples(
+    train_lines, validation_lines = assemble_split_features(
         manifest,
         registration,
         arm=config.arm,
         tx1_cache_dir=tx1_cache_dir,
-        predicted_response_cache_dir=predicted_response_cache_dir,
-        fingerprint_by_line=fingerprint_by_line,
         gene_effect_by_line=gene_effect_by_line,
+        model=model,
+        moments=config.training.moments,
+        cell_set_len=config.state.cell_set_len,
+        seed=config.state.response_generation_seed,
+        device=device,
     )
 
     training_config = TrainingConfig(
@@ -445,6 +333,20 @@ def run_training_pipeline(
         arm=config.arm,
         config=training_config,
         result=result,
+        response_generation={
+            "response_generation_seed": config.state.response_generation_seed,
+            "cell_set_len": config.state.cell_set_len,
+            "gene_vocabulary_sha256": sha256_file(
+                Path(config.state.gene_vocabulary_path)
+            ),
+            "gene_panel_sha256": sha256_file(
+                Path(phase_a_dir) / "differentially_essential_slice.csv"
+            ),
+            "input_dim": config.state.input_dim,
+            "output_dim": config.state.output_dim,
+            "pert_dim": config.state.pert_dim,
+            "output_space": config.state.output_space,
+        },
     )
     provenance_path = write_provenance(provenance, resolved_run_dir / "provenance.json")
 
@@ -506,8 +408,9 @@ def emit_test_predictions(
         columns=[str(value) for value in slice_df["depmap_column"]],
     )
     panels = load_panels(Path(phase_a_dir) / "k_label_panels.csv")
-    test_lines = [
-        assemble_test_line_examples(
+    frames: list[pd.DataFrame] = []
+    for model_id in split.test_model_ids:
+        line = assemble_test_line_features(
             model_id,
             role_by_id[model_id],
             model,
@@ -515,21 +418,24 @@ def emit_test_predictions(
             tx1_cache_dir,
             slice_df,
             depmap_frame.loc[model_id],
+            moments=config.training.moments,
             cell_set_len=config.state.cell_set_len,
             seed=config.state.response_generation_seed,
             device=device,
         )
-        for model_id in split.test_model_ids
-    ]
-    predictions = build_tx1_3b_st_predictions(
-        head,
-        test_lines,
-        panels,
-        k_schedule=list(config.phase_f.k_schedule),
-        method=config.phase_f.method,
-        alpha=config.phase_f.alpha,
-        residual=config.phase_f.residual,
-    )
+        frames.append(
+            build_test_line_predictions(
+                head,
+                line,
+                panels[panels["model_id"] == model_id],
+                list(config.phase_f.k_schedule),
+                method=config.phase_f.method,
+                alpha=config.phase_f.alpha,
+                residual=config.phase_f.residual,
+            )
+        )
+        del line
+    predictions = pd.concat(frames, ignore_index=True)
     out_path = Path(run_dir) / "tx1_3b_st_predictions.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     predictions.to_csv(out_path, index=False)
