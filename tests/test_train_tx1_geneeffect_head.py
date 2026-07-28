@@ -114,7 +114,7 @@ def test_real_validation_lines_json_satisfies_the_5_line_contract() -> None:
 
 
 def test_both_real_configs_are_byte_identical_except_the_encoder_view() -> None:
-    """D7: objective/training/phase_f must be identical between arms."""
+    """D7: scientific and response-generation settings match between arms."""
     tx1 = load_pipeline_config(_REAL_CONFIG_DIR / "tx1_arm.yaml")
     hvg = load_pipeline_config(_REAL_CONFIG_DIR / "hvg_arm.yaml")
     assert tx1.objective == hvg.objective
@@ -122,6 +122,17 @@ def test_both_real_configs_are_byte_identical_except_the_encoder_view() -> None:
     assert tx1.phase_f == hvg.phase_f
     assert tx1.validation_lines_path == hvg.validation_lines_path
     assert tx1.state.output_dim == hvg.state.output_dim == 2000
+    assert tx1.state.cell_set_len == hvg.state.cell_set_len == 64
+    assert (
+        tx1.state.response_window_macro_batch_size
+        == hvg.state.response_window_macro_batch_size
+        == 64
+    )
+    assert (
+        tx1.state.response_generation_seed
+        == hvg.state.response_generation_seed
+        == 0
+    )
     assert tx1.state.input_dim == EMBEDDING_WIDTH
     assert hvg.state.input_dim != EMBEDDING_WIDTH
 
@@ -143,6 +154,7 @@ def _base_config(**overrides: object) -> Tx1GeneEffectHeadConfig:
         pert_dim=3,
         output_space=None,
         cell_set_len=4,
+        response_window_macro_batch_size=2,
         response_generation_seed=0,
     )
     objective = ObjectiveConfig(lam=1.0, selection_metric=SELECTION_METRIC_NAME)
@@ -194,13 +206,17 @@ def _replace(obj: object, **kwargs: object) -> object:
         ({"arm": "bogus_arm"}, "arm must be one of"),
         ({"state.backend": "gpu_magic"}, "state.backend must be one of"),
         ({"state.input_dim": 0}, "state.input_dim must be positive"),
+        (
+            {"state.response_window_macro_batch_size": 0},
+            "state.response_window_macro_batch_size must be positive",
+        ),
         ({"state.input_dim": 999}, f"requires state.input_dim={EMBEDDING_WIDTH}"),
         ({"objective.lam": -1.0}, "objective.lam must be >= 0"),
         (
             {"objective.selection_metric": "val_c_loss"},
             "objective.selection_metric must equal",
         ),
-        ({"training.moments": 7}, "training.moments must be one of"),
+        ({"training.moments": 1}, "training.moments must equal 2"),
         ({"training.epochs": 0}, "training.epochs must be positive"),
         ({"phase_f.k_schedule": (0, 5, 10)}, "phase_f.k_schedule must equal"),
         ({"phase_f.method": "copy_k562"}, "phase_f.method must equal"),
@@ -243,6 +259,7 @@ state:
   output_dim: 4
   pert_dim: 3
   cell_set_len: 4
+  response_window_macro_batch_size: 2
   response_generation_seed: 0
 objective:
   lam: 1.0
@@ -453,6 +470,7 @@ state:
   pert_dim: {_PERT_DIM}
   output_space: null
   cell_set_len: {_CELL_SET_LEN}
+  response_window_macro_batch_size: 2
   response_generation_seed: 0
 objective:
   lam: 1.0
@@ -627,6 +645,7 @@ state:
   pert_dim: {_PERT_DIM}
   output_space: null
   cell_set_len: {_CELL_SET_LEN}
+  response_window_macro_batch_size: 2
   response_generation_seed: 0
 objective:
   lam: 1.0
@@ -786,6 +805,14 @@ def test_e2e_smoke_line_selection_through_phase_f_table_and_real_validator(
     assert set(provenance["train_model_ids"]) & set(_TEST_LINES) == set()
     assert len(provenance["validation_model_ids"]) == 1
     assert len(provenance["train_model_ids"]) == 3
+    response_generation = provenance["response_generation"]
+    assert response_generation["pooling_reducer_schema"] == (
+        "online_chan_mean_population_variance_v1"
+    )
+    assert response_generation["accumulator_dtype"] == "float32"
+    assert response_generation["pooled_output_dtype"] == "float32"
+    assert response_generation["torch_version"] == str(torch.__version__)
+    assert response_generation["device"] == "cpu"
 
     # Raw predicted responses are streamed into moments and never persisted.
     assert not predicted_cache_dir.exists()
@@ -1146,6 +1173,7 @@ state:
   output_dim: 4
   pert_dim: 3
   cell_set_len: 4
+  response_window_macro_batch_size: 2
   response_generation_seed: 0
   device: cpu
 objective:

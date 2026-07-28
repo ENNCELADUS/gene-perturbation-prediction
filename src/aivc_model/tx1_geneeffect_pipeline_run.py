@@ -309,6 +309,7 @@ def run_training_pipeline(
         model=model,
         moments=config.training.moments,
         cell_set_len=config.state.cell_set_len,
+        window_macro_batch_size=config.state.response_window_macro_batch_size,
         seed=config.state.response_generation_seed,
         device=device,
     )
@@ -336,6 +337,16 @@ def run_training_pipeline(
         response_generation={
             "response_generation_seed": config.state.response_generation_seed,
             "cell_set_len": config.state.cell_set_len,
+            "response_window_macro_batch_size": (
+                config.state.response_window_macro_batch_size
+            ),
+            "pooling_reducer_schema": "online_chan_mean_population_variance_v1",
+            "accumulator_dtype": "float32",
+            "pooled_output_dtype": "float32",
+            "torch_version": str(torch.__version__),
+            "torch_cuda_version": torch.version.cuda,
+            "device": str(device),
+            "allow_tf32": bool(torch.backends.cuda.matmul.allow_tf32),
             "gene_vocabulary_sha256": sha256_file(
                 Path(config.state.gene_vocabulary_path)
             ),
@@ -420,6 +431,7 @@ def emit_test_predictions(
             depmap_frame.loc[model_id],
             moments=config.training.moments,
             cell_set_len=config.state.cell_set_len,
+            window_macro_batch_size=config.state.response_window_macro_batch_size,
             seed=config.state.response_generation_seed,
             device=device,
         )

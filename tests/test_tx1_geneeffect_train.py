@@ -476,6 +476,7 @@ def test_assemble_line_features_matches_raw_pooling_and_writes_no_cache(
         model,
         moments=2,
         cell_set_len=3,
+        window_macro_batch_size=2,
         seed=0,
     )
 
@@ -506,7 +507,9 @@ def test_assemble_line_features_matches_raw_pooling_and_writes_no_cache(
         ),
         targets=line.targets,
     )
-    assert torch.equal(line.features, _line_pooled_features(raw, moments=2))
+    assert torch.allclose(
+        line.features, _line_pooled_features(raw, moments=2), atol=1e-6, rtol=1e-5
+    )
 
 
 def test_assemble_line_features_raises_without_finite_targets(tmp_path: Path) -> None:

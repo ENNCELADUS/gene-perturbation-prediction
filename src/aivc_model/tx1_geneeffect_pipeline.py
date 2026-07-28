@@ -60,7 +60,6 @@ _LOGGER = logging.getLogger(__name__)
 
 _VALID_ARMS = frozenset({ARM_TX1, ARM_HVG})
 _VALID_BACKENDS = frozenset({"linear_mock", "state_checkpoint"})
-_VALID_MOMENTS = frozenset({1, 2, 3, 4})
 
 __all__ = [
     "ObjectiveConfig",
@@ -99,6 +98,7 @@ class StateArmConfig:
     pert_dim: int
     output_space: str | None
     cell_set_len: int
+    response_window_macro_batch_size: int
     response_generation_seed: int
     #: "auto" (default) resolves to CUDA when available, else CPU
     #: (aivc_model.tx1_predicted_response.resolve_device); P1-5.
@@ -192,6 +192,9 @@ def load_pipeline_config(path: Path) -> Tx1GeneEffectHeadConfig:
         pert_dim=int(_require(state_raw, "pert_dim", "state")),
         output_space=state_raw.get("output_space"),
         cell_set_len=int(_require(state_raw, "cell_set_len", "state")),
+        response_window_macro_batch_size=int(
+            _require(state_raw, "response_window_macro_batch_size", "state")
+        ),
         response_generation_seed=int(
             _require(state_raw, "response_generation_seed", "state")
         ),
@@ -270,6 +273,7 @@ def validate_config_shape(
         ("output_dim", state.output_dim),
         ("pert_dim", state.pert_dim),
         ("cell_set_len", state.cell_set_len),
+        ("response_window_macro_batch_size", state.response_window_macro_batch_size),
     ):
         if value <= 0:
             raise ValueError(f"state.{field_name} must be positive; got {value}")
@@ -291,10 +295,10 @@ def validate_config_shape(
     training = config.training
     if training.hidden <= 0:
         raise ValueError(f"training.hidden must be positive; got {training.hidden}")
-    if training.moments not in _VALID_MOMENTS:
+    if training.moments != 2:
         raise ValueError(
-            f"training.moments must be one of {sorted(_VALID_MOMENTS)}; got "
-            f"{training.moments}"
+            "training.moments must equal 2 for the fixed online mean plus "
+            f"population-variance reducer; got {training.moments}"
         )
     if training.learning_rate <= 0:
         raise ValueError(

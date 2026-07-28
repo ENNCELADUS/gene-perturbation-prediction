@@ -12,9 +12,8 @@
 # training/phase_f here must be mirrored there.
 #
 # Launched via scripts/train_tx1_geneeffect_head.py (see that file's own
-# docstring for the exact invocation). This wave (Phase D) produces code and
-# checkpoints, not numbers (D8) -- no GPU training or real run was performed
-# while authoring this config; --dry-run is the only mode exercised locally.
+# docstring for the exact invocation). GPU macro-batch probes are engineering
+# evidence only; no Phase D model-quality result exists yet (D8).
 
 # Which of Task 2's two forward-only ST arms this config trains
 # (tx1_predicted_response.ARM_TX1/ARM_HVG) -- selects which cached basal
@@ -59,11 +58,8 @@ state:
   # train.run_id (tx1_st_geneeffect_phase_c_tx1_arm) and this repo's own
   # results/experiments/<exp>/runs/<run_id>/models/best/pytorch_model.bin
   # convention (see the frozen exp05 checkpoint path for the same shape).
-  # NOTE: as of authoring this config, Phase C's tx1_arm run has not yet
-  # produced this file (Phase C is a separate, currently-running wave task,
-  # per this wave's own hard boundary against launching anything remote) --
-  # --dry-run's check_paths=True will correctly fail against this path until
-  # that run completes. This is expected, not a defect in this config.
+  # Phase C produced this checkpoint; --dry-run authenticates the path and
+  # its ordered perturbation vocabulary before any Phase D forward.
   st_checkpoint_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_tx1_arm/models/best/pytorch_model.bin
   # Sizes/construction-initializes PerturbationVectorAdapter before Phase C's
   # checkpoint overwrites every value; same file both Phase C arm configs use.
@@ -95,6 +91,9 @@ state:
   # train.cell_set_len) -- StateForwardAdapter.forward_chunks rejects any
   # other chunk size for a loaded checkpoint.
   cell_set_len: 64
+  # Exp05 throughput pattern: concatenate 64 independent 64-cell windows in
+  # one STATE forward. Both arms use the same value; no response is cached.
+  response_window_macro_batch_size: 64
   # Seed for the deterministic padding-resample that fills a basal-cell
   # count not evenly divisible by cell_set_len
   # (tx1_predicted_response._chunk_control_cell_indices). Phase D streams raw

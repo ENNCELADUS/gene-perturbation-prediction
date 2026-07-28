@@ -31,6 +31,7 @@ from aivc_model.tx1_predicted_response import (
     UnknownPerturbationGeneError,
     _chunk_control_cell_indices,
     construct_forward_only_model,
+    generate_pooled_predicted_response,
     generate_predicted_response,
     generate_predicted_response_for_line,
     load_forward_only_checkpoint,
@@ -265,7 +266,7 @@ def test_generate_predicted_response_shape_and_no_gradient() -> None:
     assert response.device == torch.device("cpu")
 
 
-def test_generate_predicted_response_forwards_one_window_at_a_time(
+def test_generate_predicted_response_macro_batches_windows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     model = _forward_only_model()
@@ -286,11 +287,54 @@ def test_generate_predicted_response_forwards_one_window_at_a_time(
         np.zeros((13, _INPUT_DIM), dtype=np.float32),
         "G1",
         cell_set_len=4,
+        window_macro_batch_size=3,
         seed=0,
     )
 
     assert response.shape == (13, _OUTPUT_DIM)
-    assert observed_chunk_counts == [1, 1, 1, 1]
+    assert observed_chunk_counts == [3, 1]
+
+
+def test_pooled_predicted_response_matches_unbatched_reference() -> None:
+    model = _forward_only_model()
+    control_input = np.random.default_rng(8).normal(
+        size=(13, _INPUT_DIM)
+    ).astype(np.float32)
+    reference = generate_predicted_response(
+        model,
+        control_input,
+        "G1",
+        cell_set_len=4,
+        window_macro_batch_size=1,
+        seed=3,
+    )
+
+    pooled, response_dim = generate_pooled_predicted_response(
+        model,
+        control_input,
+        "G1",
+        cell_set_len=4,
+        window_macro_batch_size=3,
+        seed=3,
+    )
+
+    expected = torch.cat(
+        [reference.mean(dim=0), reference.var(dim=0, unbiased=False)]
+    )
+    assert response_dim == _OUTPUT_DIM
+    assert torch.allclose(pooled, expected, atol=1e-6, rtol=1e-5)
+
+
+def test_pooled_predicted_response_rejects_invalid_macro_batch_size() -> None:
+    with pytest.raises(ValueError, match="window_macro_batch_size"):
+        generate_pooled_predicted_response(
+            _forward_only_model(),
+            np.zeros((5, _INPUT_DIM), dtype=np.float32),
+            "G1",
+            cell_set_len=4,
+            window_macro_batch_size=0,
+            seed=0,
+        )
 
 
 def test_generate_predicted_response_raises_named_error_not_keyerror() -> None:

@@ -12,8 +12,8 @@ single-gene predictor that both bridges depend on, pursued as the Phase 3
 backbone-transfer exit and reported as backbone transfer, not as an SL claim
 (§1.1, §5). T2's own Phase A (data-audit/manifest freeze) and Phase B (Tx1-3B
 basal embeddings) and Phase C (ST response model, both arms) are **complete**;
-Phase D (rebuilt hybrid head) is code-complete with both arm training runs in
-progress and no raw predicted-response disk cache — no
+Phase D (rebuilt hybrid head) is being macro-batched for relaunch after the
+initial serial-window runs were stopped, with no Phase D intermediate cache — no
 Phase 3 result exists. Formal SOTA reproduction, Bridge B, and any pairwise
 cross-cell-line result remain not started.
 **Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**

@@ -46,7 +46,7 @@ from aivc_model.tx1_predicted_response import (
     ARM_HVG,
     ARM_TX1,
     ForwardOnlyStateModel,
-    generate_predicted_response,
+    generate_pooled_predicted_response,
 )
 
 _VALID_ARMS = frozenset({ARM_TX1, ARM_HVG})
@@ -64,6 +64,7 @@ def assemble_line_features(
     moments: int,
     cell_set_len: int,
     seed: int,
+    window_macro_batch_size: int = 1,
     batch_lookup: Mapping[str, int] | None = None,
     device: torch.device | str = "cpu",
 ) -> PooledLineExamples:
@@ -76,6 +77,8 @@ def assemble_line_features(
     assert_training_role(role, model_id)
     if arm not in _VALID_ARMS:
         raise ValueError(f"unknown arm {arm!r}; expected one of {sorted(_VALID_ARMS)}")
+    if moments != 2:
+        raise ValueError("streaming Phase D pooling requires moments=2")
 
     embeddings, hvg_matrix, _obs = load_line_cache(tx1_cache_dir, model_id)
     raw_basal_view = embeddings if arm == ARM_TX1 else hvg_matrix
@@ -100,19 +103,18 @@ def assemble_line_features(
         "streaming Phase D features for %s/%s: %d genes", model_id, arm, len(genes)
     )
     for gene_index, gene in enumerate(genes, start=1):
-        response = generate_predicted_response(
+        pooled_response, response_dim = generate_pooled_predicted_response(
             model,
             basal_view,
             gene,
             cell_set_len=cell_set_len,
+            window_macro_batch_size=window_macro_batch_size,
             seed=seed,
             batch_labels=batch_labels,
             batch_lookup=batch_lookup,
             device=device,
         )
-        response_dim = int(response.shape[-1])
-        pooled_responses.append(moment_pool(response, moments=moments))
-        del response
+        pooled_responses.append(pooled_response)
         if gene_index % 50 == 0 or gene_index == len(genes):
             _LOGGER.info(
                 "streamed %s/%s: %d/%d genes",
@@ -156,6 +158,7 @@ def assemble_split_features(
     moments: int,
     cell_set_len: int,
     seed: int,
+    window_macro_batch_size: int = 1,
     device: torch.device | str = "cpu",
 ) -> tuple[list[PooledLineExamples], list[PooledLineExamples]]:
     """Stream and pool train/validation features via Task 1's own split.
@@ -197,6 +200,7 @@ def assemble_split_features(
             moments=moments,
             cell_set_len=cell_set_len,
             seed=seed,
+            window_macro_batch_size=window_macro_batch_size,
             device=device,
         )
 
@@ -294,11 +298,8 @@ def _phase_b_line_hashes(phase_b_manifest_path: Path, model_id: str) -> dict[str
     """Read one line's recorded embeddings/HVG hashes from Phase B's
     cache-root ``manifest.json``.
 
-    Mirrors, independently (not by import, since
-    ``tx1_predicted_response_cache._phase_b_line_hashes`` is module-private),
-    the exact same read Task 2's cache fingerprint performs -- so this
-    provenance record's hashes come from the identical source of truth
-    Task 2's own staleness check already relies on.
+    Reads the Phase B manifest directly so the Phase D provenance record binds
+    every input array used by the no-cache response-generation path.
 
     Raises:
         ValueError: ``model_id`` is not recorded, or its entry is missing
