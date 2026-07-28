@@ -66,7 +66,7 @@ from aivc_model.tx1_predicted_response import (
     ARM_HVG,
     ARM_TX1,
     ForwardOnlyStateModel,
-    generate_predicted_response,
+    generate_pooled_predicted_response,
     resolve_genes_against_vocabulary,
 )
 
@@ -120,25 +120,16 @@ def assemble_test_line_features(
     moments: int,
     cell_set_len: int,
     seed: int,
+    window_macro_batch_size: int = 1,
     batch_lookup: Mapping[str, int] | None = None,
     device: torch.device | str = "cpu",
 ) -> PooledLineExamples:
     """Stream and pool one held-out line without retaining raw responses.
 
-    Forwards ST live, gene by gene, via
-    ``tx1_predicted_response.generate_predicted_response_for_line(...,
-    require_training_role=False)`` -- Task 2's explicit held-out-line
-    opt-out -- rather than reading Task 2/3's predicted-response CACHE
-    (populated only for the 28/5 training-role lines). ``require_training_role
-    =False`` is passed explicitly and only after :func:`assert_test_role`
-    passes, so this is never a silent bypass of D6.
-
-    Reloading this line's basal cache once per gene (one call per gene to
-    ``generate_predicted_response_for_line``, which itself calls
-    ``load_line_cache``) is a deliberate simplicity-over-micro-efficiency
-    choice: it keeps every gene's forward call routed through Task 2's own
-    tested, role-guarded entry point rather than partially reimplementing
-    it here to save a handful of memory-mapped reads.
+    After :func:`assert_test_role` passes, the Phase B basal view is loaded
+    once. Each gene is forwarded live through the same no-cache, window-
+    macro-batched online reducer used for training-role lines. Raw responses
+    and pooled features are never persisted.
 
     Args:
         model_id: ACH model id (one of the 9 frozen held-out test lines).
@@ -176,6 +167,8 @@ def assemble_test_line_features(
             slice or the vocabulary has drifted since amendment.
     """
     assert_test_role(role, model_id)
+    if moments != 2:
+        raise ValueError("streaming Phase F pooling requires moments=2")
     depmap_columns = [str(value) for value in slice_df["depmap_column"]]
     gene_symbols = [str(value) for value in slice_df["gene_symbol"]]
     resolved_symbols = resolve_genes_against_vocabulary(
@@ -198,19 +191,18 @@ def assemble_test_line_features(
     pooled_responses: list[torch.Tensor] = []
     response_dim: int | None = None
     for gene_index, gene in enumerate(resolved_symbols, start=1):
-        response = generate_predicted_response(
+        pooled_response, response_dim = generate_pooled_predicted_response(
             model,
             basal_view,
             gene,
             cell_set_len=cell_set_len,
+            window_macro_batch_size=window_macro_batch_size,
             seed=seed,
             batch_labels=batch_labels,
             batch_lookup=batch_lookup,
             device=device,
         )
-        response_dim = int(response.shape[-1])
-        pooled_responses.append(moment_pool(response, moments=moments))
-        del response
+        pooled_responses.append(pooled_response)
         if gene_index % 50 == 0 or gene_index == len(resolved_symbols):
             _LOGGER.info(
                 "streamed held-out %s/%s: %d/%d genes",

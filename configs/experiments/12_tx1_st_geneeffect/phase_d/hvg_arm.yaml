@@ -9,10 +9,8 @@
 # is NOT optional and NOT a stub; any change to objective/training/phase_f
 # in tx1_arm.yaml must be mirrored here.
 #
-# Launched via scripts/train_tx1_geneeffect_head.py. This wave (Phase D)
-# produces code and checkpoints, not numbers (D8) -- no GPU training or real
-# run was performed while authoring this config; --dry-run is the only mode
-# exercised locally.
+# Launched via scripts/train_tx1_geneeffect_head.py. GPU macro-batch probes are
+# engineering evidence only; no Phase D model-quality result exists yet (D8).
 
 arm: hvg_arm
 
@@ -35,9 +33,8 @@ state:
   # Phase C's TRAINED state_adapter/perturbations weights for the HVG-arm run
   # -- a DIFFERENT trained checkpoint from tx1_arm.yaml's (matches
   # phase_c/hvg_arm.yaml's train.run_id,
-  # tx1_st_geneeffect_phase_c_hvg_arm). Same not-yet-produced-by-Phase-C
-  # caveat as tx1_arm.yaml: --dry-run's check_paths=True will correctly fail
-  # here until that run completes.
+  # tx1_st_geneeffect_phase_c_hvg_arm). Phase C produced this checkpoint;
+  # --dry-run authenticates it before any Phase D forward.
   st_checkpoint_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/models/best/pytorch_model.bin
   known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
   # Same authenticated-vocabulary mechanism as tx1_arm.yaml (see that file's
@@ -59,6 +56,9 @@ state:
   pert_dim: 2024
   output_space: gene
   cell_set_len: 64
+  # Identical to tx1_arm: 64 windows per STATE forward, with online moments
+  # and no Phase D intermediate cache.
+  response_window_macro_batch_size: 64
   # Same value as tx1_arm.yaml -- D7 requires identical data, and this seed
   # only affects the deterministic padding-resample, not which view is used.
   response_generation_seed: 0

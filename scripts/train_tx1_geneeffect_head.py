@@ -4,7 +4,7 @@
 Wires Phase D Tasks 1-4 into one runnable chain for a single arm
 (``tx1_arm`` or ``hvg_arm``, D7 -- both run the identical head and data,
 differing only in which basal/ST-input view a config selects): line
-selection -> forward-only ST + immediate moment pooling -> head
+selection -> window-macro-batched forward-only ST + online moment pooling -> head
 training -> (optionally) the Phase F ``tx1_3b_st`` predictions table for the
 9 frozen held-out lines.
 
@@ -39,7 +39,8 @@ nothing)::
         --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv \\
         --phase-a-dir results/phase_a_tx1_20260724 \\
         --tx1-cache-dir data/tx1_basal_embeddings/v1 \\
-        --depmap-gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \\
+        --depmap-gene-effect \\
+        data/sl_dependency_v0/raw/depmap_26q1/CRISPRGeneEffect.csv \\
         --dry-run
 
 Invocation (real training; single-process -- head training itself is small
@@ -50,7 +51,14 @@ enough for one GPU, unlike Phase C's ST training)::
         --line-manifest results/phase_a_tx1_20260724/cell_line_manifest.csv \\
         --phase-a-dir results/phase_a_tx1_20260724 \\
         --tx1-cache-dir data/tx1_basal_embeddings/v1 \\
-        --depmap-gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+        --depmap-gene-effect \\
+        data/sl_dependency_v0/raw/depmap_26q1/CRISPRGeneEffect.csv
+
+Run both attribution arms concurrently on separate GPUs with
+``scripts/run_phase_d_parallel.sh``. Each arm remains a single process; the
+expensive STATE call macro-batches independent windows according to the shared
+``response_window_macro_batch_size`` config. No Phase D intermediate response
+or pooled-feature cache is created.
 """
 
 from __future__ import annotations

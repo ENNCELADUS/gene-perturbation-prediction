@@ -16,10 +16,9 @@ raises outside its own run; ``bridge_a.py:load_bridge_a_context`` loads the
 reporting convention (this repo's dominant failure mode is a silent
 ``strict=False`` partial load that leaves weights randomly initialized).
 
-It also generates the predicted-response bag for one (line, gene) pair. The
-fingerprinted predicted-response cache (Global Constraint D11) is the sibling
-module :mod:`aivc_model.tx1_predicted_response_cache`, split out the same way
-Phase B split ``tx1_basal.py`` (build) from ``tx1_embed_cache.py`` (cache).
+It also generates the predicted-response bag for one (line, gene) pair and
+provides the no-cache online mean-plus-population-variance reducer used by the
+formal Phase D/Phase F pipeline.
 """
 
 from __future__ import annotations
@@ -350,6 +349,7 @@ def generate_predicted_response(
     gene: str,
     *,
     cell_set_len: int,
+    window_macro_batch_size: int = 1,
     seed: int,
     batch_labels: np.ndarray | None = None,
     batch_lookup: Mapping[str, int] | None = None,
@@ -363,9 +363,9 @@ def generate_predicted_response(
     :class:`UnknownPerturbationGeneError`, never a bare ``KeyError``), so
     this is safe to call without pre-resolving. ``seed`` is the deterministic
     padding-resample seed (see :func:`_chunk_control_cell_indices`) and is
-    part of the D11 cache fingerprint, since it changes which cells get
-    duplicated into the final window and therefore the output for those
-    rows. ``batch_labels`` are optional raw per-cell batch labels (this
+    recorded in provenance, since it changes which cells get duplicated into
+    the final window and therefore the output for those rows. ``batch_labels``
+    are optional raw per-cell batch labels (this
     codebase keys basal control cells by ``model_id`` --
     ``tx1_response_data.py:603-625``); ``None`` omits ``batch`` entirely.
 
@@ -374,8 +374,7 @@ def generate_predicted_response(
     (``model.to(device)``; not repeated per call here, since this function
     is invoked once per gene). The returned tensor is always moved back to
     CPU regardless of ``device`` (below), so every downstream consumer
-    (disk caching, the CPU-resident ``Tx1GeneEffectHead``) stays
-    device-oblivious exactly as it was before this fix.
+    (including legacy diagnostic callers) stays device-oblivious.
 
     Returns:
         The predicted response, shape ``(n_basal_cells, response_dim)`` --
@@ -392,44 +391,155 @@ def generate_predicted_response(
     control_input = np.asarray(control_input, dtype=np.float32)
     n_cells = int(control_input.shape[0])
     chunk_indices = _chunk_control_cell_indices(n_cells, cell_set_len, seed)
+    if window_macro_batch_size < 1:
+        raise ValueError("window_macro_batch_size must be at least 1")
     batch_chunks = _batch_index_chunks(
         batch_labels, batch_lookup, chunk_indices, device
     )
     response: torch.Tensor | None = None
     write_offset = 0
     with torch.no_grad():
-        for indices, batch_chunk in zip(chunk_indices, batch_chunks, strict=True):
-            control_chunk = torch.as_tensor(
-                control_input[indices], dtype=torch.float32, device=device
+        for macro_start in range(0, len(chunk_indices), window_macro_batch_size):
+            macro_indices = chunk_indices[
+                macro_start : macro_start + window_macro_batch_size
+            ]
+            macro_batch_chunks = batch_chunks[
+                macro_start : macro_start + window_macro_batch_size
+            ]
+            control_chunks = tuple(
+                torch.as_tensor(
+                    control_input[indices], dtype=torch.float32, device=device
+                )
+                for indices in macro_indices
             )
             outputs = model.predict_response_chunks(
-                (control_chunk,), gene, (batch_chunk,)
+                control_chunks, gene, macro_batch_chunks
             )
-            output_chunk = outputs[0].detach().cpu()
-            if response is None:
-                response = torch.empty(
-                    (n_cells, int(output_chunk.shape[-1])), dtype=output_chunk.dtype
+            if len(outputs) != len(macro_indices):
+                raise RuntimeError(
+                    f"model returned {len(outputs)} chunks for "
+                    f"{len(macro_indices)} inputs"
                 )
-            valid_rows = min(int(output_chunk.shape[0]), n_cells - write_offset)
-            response[write_offset : write_offset + valid_rows].copy_(
-                output_chunk[:valid_rows]
-            )
-            write_offset += valid_rows
-            del control_chunk, outputs, output_chunk
+            for output_chunk_device in outputs:
+                output_chunk = output_chunk_device.detach().cpu()
+                if response is None:
+                    response = torch.empty(
+                        (n_cells, int(output_chunk.shape[-1])),
+                        dtype=output_chunk.dtype,
+                    )
+                valid_rows = min(int(output_chunk.shape[0]), n_cells - write_offset)
+                response[write_offset : write_offset + valid_rows].copy_(
+                    output_chunk[:valid_rows]
+                )
+                write_offset += valid_rows
+            del control_chunks, outputs
     if response is None or write_offset != n_cells:
         raise RuntimeError(
             f"incomplete response generation for {gene}: "
             f"wrote {write_offset}/{n_cells} rows"
         )
     # Always return CPU: `device` is only where the (expensive) forward pass
-    # itself runs. Every caller today (the disk cache writer, and Phase D's
-    # CPU-resident Tx1GeneEffectHead training/inference) expects a CPU
+    # itself runs. Legacy bag-level callers expect a CPU
     # tensor; without this, a non-CPU `device` would silently leave GPU
     # tensors flowing into `LineExamples`/`moment_pool`, which either raises
     # a device-mismatch error against the CPU-resident head or basal bag, or
     # (worse) silently succeeds only when everything happens to already be
     # on the same device.
     return response
+
+
+def generate_pooled_predicted_response(
+    model: ForwardOnlyStateModel,
+    control_input: np.ndarray,
+    gene: str,
+    *,
+    cell_set_len: int,
+    window_macro_batch_size: int,
+    seed: int,
+    batch_labels: np.ndarray | None = None,
+    batch_lookup: Mapping[str, int] | None = None,
+    device: torch.device | str = "cpu",
+) -> tuple[torch.Tensor, int]:
+    """Macro-batch STATE windows and return mean plus population variance.
+
+    The reduction is performed online on the forward device. Only the compact
+    pooled feature is copied to CPU; no full predicted-response bag is retained
+    or written to disk. Padding rows from the final cell window are excluded.
+    """
+    if gene not in vocabulary_genes(model.perturbations):
+        raise UnknownPerturbationGeneError(
+            f"gene {gene!r} is outside the ST perturbation vocabulary"
+        )
+    if window_macro_batch_size < 1:
+        raise ValueError("window_macro_batch_size must be at least 1")
+    control_input = np.asarray(control_input, dtype=np.float32)
+    n_cells = int(control_input.shape[0])
+    chunk_indices = _chunk_control_cell_indices(n_cells, cell_set_len, seed)
+    batch_chunks = _batch_index_chunks(
+        batch_labels, batch_lookup, chunk_indices, device
+    )
+    running_mean: torch.Tensor | None = None
+    running_m2: torch.Tensor | None = None
+    seen = 0
+    response_dim: int | None = None
+    with torch.no_grad():
+        for macro_start in range(0, len(chunk_indices), window_macro_batch_size):
+            macro_indices = chunk_indices[
+                macro_start : macro_start + window_macro_batch_size
+            ]
+            macro_batch_chunks = batch_chunks[
+                macro_start : macro_start + window_macro_batch_size
+            ]
+            control_chunks = tuple(
+                torch.as_tensor(
+                    control_input[indices], dtype=torch.float32, device=device
+                )
+                for indices in macro_indices
+            )
+            outputs = model.predict_response_chunks(
+                control_chunks, gene, macro_batch_chunks
+            )
+            if len(outputs) != len(macro_indices):
+                raise RuntimeError(
+                    f"model returned {len(outputs)} chunks for "
+                    f"{len(macro_indices)} inputs"
+                )
+            valid_parts: list[torch.Tensor] = []
+            for output in outputs:
+                valid_rows = min(int(output.shape[0]), n_cells - seen)
+                if valid_rows > 0:
+                    valid_parts.append(output[:valid_rows].detach().float())
+                    seen += valid_rows
+            macro_output = torch.cat(valid_parts, dim=0)
+            macro_var, macro_mean = torch.var_mean(
+                macro_output, dim=0, unbiased=False
+            )
+            macro_count = int(macro_output.shape[0])
+            response_dim = int(macro_output.shape[-1])
+            if running_mean is None:
+                running_mean = macro_mean
+                running_m2 = macro_var * macro_count
+            else:
+                assert running_m2 is not None
+                total = seen
+                previous = total - macro_count
+                delta = macro_mean - running_mean
+                running_mean = running_mean + delta * (macro_count / total)
+                running_m2 = (
+                    running_m2
+                    + macro_var * macro_count
+                    + delta.square() * (previous * macro_count / total)
+                )
+            del control_chunks, outputs, valid_parts, macro_output
+    if running_mean is None or running_m2 is None or seen != n_cells:
+        raise RuntimeError(
+            f"incomplete pooled response generation for {gene}: "
+            f"saw {seen}/{n_cells} rows"
+        )
+    variance = (running_m2 / seen).clamp_min(0.0)
+    pooled = torch.cat([running_mean, variance], dim=0).detach().cpu()
+    assert response_dim is not None
+    return pooled, response_dim
 
 
 def _batch_index_chunks(
@@ -509,6 +619,7 @@ __all__ = [
     "UnknownPerturbationGeneError",
     "construct_forward_only_model",
     "generate_predicted_response",
+    "generate_pooled_predicted_response",
     "generate_predicted_response_for_line",
     "load_forward_only_checkpoint",
     "resolve_device",

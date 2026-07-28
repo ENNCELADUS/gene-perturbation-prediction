@@ -10,8 +10,9 @@ mechanism paused for redesign) · **T2 few-shot cross-cell-line GeneEffect backb
 now the active near-term development focus, execution under way**: Phase A
 (data-audit/manifest freeze, amended 2026-07-26) and Phase B (Tx1-3B basal
 embeddings) **complete**; Phase C (ST response model) **complete** for both
-arms; Phase D (rebuilt hybrid head) code-complete with both arm training runs
-in progress and no raw predicted-response disk cache; no Phase 3 result yet ·
+arms; Phase D (rebuilt hybrid head) is being macro-batched for relaunch after
+the initial serial-window runs were stopped, with no Phase D intermediate cache;
+no Phase 3 result yet ·
 SOTA reproduction and contextual SL model not yet complete.
 **Goal:** build a virtual-cell SL discovery model that competes with the Feng2024
 SOTA for genes withheld from SL-pair/graph training and separately generalizes to
@@ -70,7 +71,7 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | Reproduce SLMGAE, KR4SL, KG4SL and best official comparator | Pending. |
 | Context-free composition score `q(a,b)` | Not started. |
 | Multi-cell-line data-role audit | Not started. |
-| Multi-cell-line virtual-cell backbone | **Active focus, execution under way.** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); fixed 28 train / 5 validation / 9 test split over Tahoe DMSO-basal DepMap lines plus the 4 Perturb-seq anchors (validation drawn only from the non-anchor training pool). Phase A + Phase B complete; Phase C complete for both arms; Phase D code-complete with both arm training runs in progress and no raw predicted-response disk cache. No Phase 3 result yet. |
+| Multi-cell-line virtual-cell backbone | **Active focus, optimized relaunch pending.** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); fixed 28 train / 5 validation / 9 test split over Tahoe DMSO-basal DepMap lines plus the 4 Perturb-seq anchors (validation drawn only from the non-anchor training pool). Phase A + Phase B complete; Phase C complete for both arms; Phase D is being converted from serial-window inference to window macro-batching with online moments and no intermediate cache. No Phase 3 result yet. |
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
 | Context-conditioned Bridge A / Bridge B | Not started; the K562 Bridge A **mechanism** was tested and is negative (see measured-GI row). |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
@@ -93,8 +94,8 @@ gene marginals, cell-line identity, and direct context-free transfer.
   nearest-line / lineage-only / CCLE-bulk / pseudobulk-basal baselines with a
   few-shot curve (single-gene backbone transfer, task-data-held-out, not
   cross-cell-line SL). Phase A (amended 2026-07-26) and Phase B are complete;
-  Phase C is complete for both arms; Phase D is code-complete and both arm
-  training runs are in progress without a raw predicted-response disk cache;
+  Phase C is complete for both arms; Phase D's initial serial-window runs were
+  stopped and an uncached window-macro-batched runner is being validated;
   [design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md).
 - [ ] Freeze and verify the official Feng2024 folds, labels, candidates, and
   `cal_metrics` contract.

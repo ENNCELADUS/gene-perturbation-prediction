@@ -10,10 +10,11 @@ any of the four anchor libraries (`CRIPTO`/`HEMK2` were kept — they resolve
 under their current HGNC symbols `TDGF1`/`N6AMT1`); see §6. **Phase B** (Tx1-3B
 basal embeddings) is **complete** — verified for all 42 manifest lines. **Phase
 C** (ST response model) is **complete** for both arms, with best/final
-checkpoints produced. **Phase D** (rebuilt hybrid head) is code-complete and
-both arm runs are in progress. Raw predicted responses are generated and
-moment-pooled in the same process, one ST window at a time, and are never cached
-to disk. No listed step has produced a result; no number in this document is a
+checkpoints produced. **Phase D** (rebuilt hybrid head) is being optimized for
+relaunch after the initial serial-window runs were stopped. Raw predicted
+responses are generated in same-process macro-batches of independent ST windows
+and reduced online to mean plus population variance; neither raw responses nor
+pooled features are cached to disk. No listed step has produced a result; no number in this document is a
 result. Line counts (49 Tahoe DMSO lines, 38 with DepMap) are audited-from-disk
 facts, not model results.
 **Authority:** [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
@@ -260,7 +261,7 @@ checkpoint exists. Trains on K562+HCT116+Jurkat+HepG2 observed KO responses,
 both emitting gene space). Both arm checkpoints were produced. **Exit met:** ST
 checkpoints (Tx1 and HVG arms).
 
-**Phase D — rebuilt hybrid head. Code-complete; execution in progress.** The head, moment pooling,
+**Phase D — rebuilt hybrid head. Parallelization in progress.** The head, moment pooling,
 the rank/correlation + variance-matching losses, the few-shot calibrator, and
 the evaluator already exist. The line-role selector (28 train / 5 validation /
 9 test), the derived validation-line registration, the DepMap GeneEffect
@@ -268,8 +269,19 @@ loader, forward-only ST loader, and training runner are built. The runner drives
 those components end to end on GeneEffect across the four Perturb-seq anchors and
 the 24 Tahoe train-only lines using predicted response uniformly, selecting
 over the 5 validation lines, with the HVG-ST control run through the identical
-head and data. It streams each predicted response directly into moment pooling,
-with no Phase D raw-response cache on disk. Both arm runs are in progress.
+head and data. It macro-batches independent 64-cell ST windows, then reduces
+each gene's response online to mean plus population variance. No raw response
+or pooled feature is cached. The initial serial-window arm runs were stopped;
+optimized single-line GPU probes gate relaunch.
+
+The relaunch gate uses training-role lines only and fixes one global
+`response_window_macro_batch_size=64` for both arms. Against the K=1 fp32
+reference, each arm must satisfy
+`max_abs_diff <= 1e-5 * max(1, reference_max_abs)` on pooled features, achieve
+at least 5x per-gene throughput, keep peak allocated memory below 80% of the
+card, and sustain at least 40% SM utilization. The probe must run under the
+same PyTorch/STATE/CUDA environment as the formal launch; test-role lines and
+GeneEffect labels are not read while choosing or validating K.
 **Exit not met:** trained heads for both encoder arms.
 
 **Phase E — few-shot calibration.** Implement the per-line affine/low-rank (or
