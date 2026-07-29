@@ -297,9 +297,9 @@ def test_generate_predicted_response_macro_batches_windows(
 
 def test_pooled_predicted_response_matches_unbatched_reference() -> None:
     model = _forward_only_model()
-    control_input = np.random.default_rng(8).normal(
-        size=(13, _INPUT_DIM)
-    ).astype(np.float32)
+    control_input = (
+        np.random.default_rng(8).normal(size=(13, _INPUT_DIM)).astype(np.float32)
+    )
     reference = generate_predicted_response(
         model,
         control_input,
@@ -318,11 +318,39 @@ def test_pooled_predicted_response_matches_unbatched_reference() -> None:
         seed=3,
     )
 
-    expected = torch.cat(
-        [reference.mean(dim=0), reference.var(dim=0, unbiased=False)]
-    )
+    expected = torch.cat([reference.mean(dim=0), reference.var(dim=0, unbiased=False)])
     assert response_dim == _OUTPUT_DIM
     assert torch.allclose(pooled, expected, atol=1e-6, rtol=1e-5)
+
+
+def test_pooled_predicted_response_reuses_resident_control_tensor() -> None:
+    model = _forward_only_model()
+    control_input = torch.from_numpy(
+        np.random.default_rng(18).normal(size=(13, _INPUT_DIM)).astype(np.float32)
+    )
+
+    from_tensor, tensor_dim = generate_pooled_predicted_response(
+        model,
+        control_input,
+        "G1",
+        cell_set_len=4,
+        window_macro_batch_size=3,
+        seed=3,
+        device=control_input.device,
+    )
+    from_numpy, numpy_dim = generate_pooled_predicted_response(
+        model,
+        control_input.numpy(),
+        "G1",
+        cell_set_len=4,
+        window_macro_batch_size=3,
+        seed=3,
+        device=control_input.device,
+    )
+
+    assert tensor_dim == numpy_dim == _OUTPUT_DIM
+    assert from_tensor.device == control_input.device
+    assert torch.allclose(from_tensor, from_numpy, atol=1e-6, rtol=1e-5)
 
 
 def test_pooled_predicted_response_rejects_invalid_macro_batch_size() -> None:

@@ -41,7 +41,6 @@ only against synthetic fixtures.
 
 from __future__ import annotations
 
-import copy
 import logging
 from dataclasses import dataclass
 from typing import Final, Sequence
@@ -374,6 +373,8 @@ def train_tx1_geneeffect_head(
     train_lines: Sequence[LineData],
     validation_lines: Sequence[LineData],
     config: TrainingConfig = TrainingConfig(),
+    *,
+    device: torch.device | str = "cpu",
 ) -> tuple[Tx1GeneEffectHead, TrainingResult]:
     """Train ``Tx1GeneEffectHead`` over ``train_lines``, selecting on
     ``validation_lines``.
@@ -391,6 +392,9 @@ def train_tx1_geneeffect_head(
             sorted internally for determinism).
         validation_lines: The 5 validation lines' examples.
         config: Hyperparameters.
+        device: Device for the compact pooled features and trainable MLP head.
+            The frozen STATE forward is outside this function; only the head
+            participates in autograd.
 
     Returns:
         ``(head, result)``: ``head`` has the epoch-``result.best_epoch``
@@ -413,13 +417,14 @@ def train_tx1_geneeffect_head(
     _assert_examples_admissible(train_lines, validation_lines)
     response_dim, basal_dim = _infer_and_validate_dims(train_lines, validation_lines)
 
+    resolved_device = torch.device(device)
     torch.manual_seed(int(config.seed))
     head = Tx1GeneEffectHead(
         response_dim=response_dim,
         basal_dim=basal_dim,
         hidden=config.hidden,
         moments=config.moments,
-    )
+    ).to(resolved_device)
     optimizer = torch.optim.Adam(head.parameters(), lr=config.learning_rate)
 
     ordered_train = sorted(train_lines, key=lambda line: line.model_id)
@@ -431,20 +436,37 @@ def train_tx1_geneeffect_head(
     # tensor reduction hundreds of times (at the configured epoch count) for
     # no different result. See `_precompute_pooled_features`'s own docstring
     # for why this cannot change any value, only when it is computed.
-    train_features = _precompute_pooled_features(ordered_train, config.moments)
-    validation_features = _precompute_pooled_features(
-        ordered_validation, config.moments
-    )
+    train_features = {
+        model_id: features.to(resolved_device)
+        for model_id, features in _precompute_pooled_features(
+            ordered_train, config.moments
+        ).items()
+    }
+    validation_features = {
+        model_id: features.to(resolved_device)
+        for model_id, features in _precompute_pooled_features(
+            ordered_validation, config.moments
+        ).items()
+    }
+    train_targets = {
+        line.model_id: line.targets.to(resolved_device) for line in ordered_train
+    }
+    validation_targets = {
+        line.model_id: line.targets.to(resolved_device) for line in ordered_validation
+    }
 
     history: list[EpochMetrics] = []
-    epoch_states: dict[int, dict[str, torch.Tensor]] = {}
+    best_entry: EpochMetrics | None = None
+    best_state: dict[str, torch.Tensor] | None = None
     for epoch in range(config.epochs):
         head.train()
         train_losses: list[float] = []
         for line in ordered_train:
             optimizer.zero_grad()
             predictions = head.net(train_features[line.model_id]).squeeze(-1)
-            loss = rank_variance_loss(predictions, line.targets, lam=config.lam)
+            loss = rank_variance_loss(
+                predictions, train_targets[line.model_id], lam=config.lam
+            )
             loss.backward()
             optimizer.step()
             train_losses.append(float(loss.detach()))
@@ -454,35 +476,45 @@ def train_tx1_geneeffect_head(
         with torch.no_grad():
             for line in ordered_validation:
                 predictions = head.net(validation_features[line.model_id]).squeeze(-1)
-                loss = rank_variance_loss(predictions, line.targets, lam=config.lam)
+                loss = rank_variance_loss(
+                    predictions,
+                    validation_targets[line.model_id],
+                    lam=config.lam,
+                )
                 validation_losses.append(float(loss))
 
-        history.append(
-            EpochMetrics(
-                epoch=epoch,
-                train_loss=float(np.mean(train_losses)),
-                validation_loss=float(np.mean(validation_losses)),
-            )
+        entry = EpochMetrics(
+            epoch=epoch,
+            train_loss=float(np.mean(train_losses)),
+            validation_loss=float(np.mean(validation_losses)),
         )
-        epoch_states[epoch] = copy.deepcopy(head.state_dict())
+        history.append(entry)
+        if best_entry is None or entry.validation_loss < best_entry.validation_loss:
+            best_entry = entry
+            best_state = {
+                key: value.detach().cpu().clone()
+                for key, value in head.state_dict().items()
+            }
 
-    best_entry = _select_best_epoch(history)
-    head.load_state_dict(epoch_states[best_entry.epoch])
+    selected_entry = _select_best_epoch(history)
+    assert best_entry == selected_entry
+    assert best_state is not None
+    head.load_state_dict(best_state)
     head.eval()
 
     _LOGGER.info(
         "tx1_geneeffect_head training complete: selected epoch %d/%d "
         "(%s=%.6f) over %d train / %d validation lines",
-        best_entry.epoch,
+        selected_entry.epoch,
         config.epochs - 1,
         SELECTION_METRIC_NAME,
-        best_entry.validation_loss,
+        selected_entry.validation_loss,
         len(ordered_train),
         len(ordered_validation),
     )
     result = TrainingResult(
-        best_epoch=best_entry.epoch,
-        best_validation_metric=best_entry.validation_loss,
+        best_epoch=selected_entry.epoch,
+        best_validation_metric=selected_entry.validation_loss,
         selection_metric=SELECTION_METRIC_NAME,
         history=tuple(history),
         train_model_ids=tuple(line.model_id for line in ordered_train),

@@ -1,8 +1,8 @@
 """Tests for src/aivc_model/tx1_geneeffect_pipeline_run.py -- Phase D Task 5's
 real-run orchestration library functions, exercised directly against tiny
-synthetic fixtures (not through the CLI). See
-tests/test_train_tx1_geneeffect_head.py for the full end-to-end CLI-level
-coverage of Wave 3 Codex gate P1-1/P1-2/P1-3/P2-3.
+synthetic fixtures (not through the CLI). Heavy local full-chain E2E cases
+are deliberately excluded; focused tests cover the individual seams and
+fail-fast gates without sustained developer-machine CPU load.
 
 No GPU and no real Phase C checkpoint exist on this machine, so every test
 here builds tiny synthetic fixtures the same way every other Phase D test

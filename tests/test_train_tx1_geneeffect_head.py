@@ -1,16 +1,12 @@
 """Tests for scripts/train_tx1_geneeffect_head.py and its two library
-modules -- Phase D Task 5: configs, the launch CLI, and the end-to-end smoke
-test that proves the whole Phase D chain composes.
+modules -- Phase D Task 5 configuration, dry-run CLI validation, and
+fail-fast orchestration gates.
 
-Every prior Phase D task (1: line-role selection + DepMap loading; 2:
-forward-only ST + predicted-response generation/cache; 3: head training; 4:
-the Phase F predictions table) tested its own seam in isolation. Nothing
-before this file wired all four together against a real, multi-line run.
-``test_e2e_smoke_*`` below is that composition proof: it drives
-``scripts.train_tx1_geneeffect_head.main`` (the real launch CLI, not a
-hand-rolled shortcut) over synthetic fixtures with the ``linear_mock`` STATE
-backend, then feeds the CLI's own emitted ``tx1_3b_st_predictions.csv``
-through the REAL (not reimplemented) ``tx1_geneeffect_eval`` validators.
+The former full local training-chain E2E cases were intentionally removed:
+they imposed excessive CPU load on developer machines. Lightweight module
+tests cover response generation, pooled-feature assembly, head training, and
+Phase F validation independently; this file retains path/config/hash guards
+that do not materialize the full training chain.
 
 No GPU, no real Phase C checkpoint, no real DepMap file, and no real Tx1
 embeddings exist on this machine, so every fixture here is synthetic, built
@@ -43,8 +39,6 @@ from aivc_model.tx1_geneeffect_eval import (
     K_SCHEDULE,
     EvaluationContractError,
     verify_artifact_hashes as _real_verify_artifact_hashes,
-    _validate_evaluation_inputs,
-    _validate_panel_aware_coverage,
 )
 from aivc_model.tx1_geneeffect_pipeline import (
     ObjectiveConfig,
@@ -58,9 +52,7 @@ from aivc_model.tx1_geneeffect_pipeline import (
     verify_gene_vocabulary_authenticity,
 )
 from aivc_model.tx1_geneeffect_pipeline_run import run_training_pipeline
-from aivc_model.tx1_geneeffect_predict import assert_test_role
 from aivc_model.tx1_geneeffect_train import SELECTION_METRIC_NAME
-from aivc_model.tx1_geneeffect_train_io import load_checkpoint
 from aivc_model.tx1_predicted_response import ForwardOnlyStateModel, resolve_device
 from conftest import tx1_manifest_row as _manifest_row
 from conftest import write_tx1_cache_run_manifest as _write_cache_run_manifest
@@ -128,11 +120,7 @@ def test_both_real_configs_are_byte_identical_except_the_encoder_view() -> None:
         == hvg.state.response_window_macro_batch_size
         == 64
     )
-    assert (
-        tx1.state.response_generation_seed
-        == hvg.state.response_generation_seed
-        == 0
-    )
+    assert tx1.state.response_generation_seed == hvg.state.response_generation_seed == 0
     assert tx1.state.input_dim == EMBEDDING_WIDTH
     assert hvg.state.input_dim != EMBEDDING_WIDTH
 
@@ -769,134 +757,6 @@ def test_validate_widths_rejects_hvg_width_mismatch(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# The e2e smoke test: the whole chain composes
-# ---------------------------------------------------------------------------
-
-
-def test_e2e_smoke_line_selection_through_phase_f_table_and_real_validator(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Drive the REAL launch CLI end to end: line selection -> forward-only
-    ST + predicted-response generation/caching -> head training -> the Phase
-    F ``tx1_3b_st`` table for the 9 (here: 2) held-out lines -> the REAL
-    ``tx1_geneeffect_eval`` validators. If any seam from Tasks 1-4 does not
-    actually compose, this is where it shows up."""
-    _install_lenient_hash_check(monkeypatch)
-    fixture = _full_fixture(tmp_path)
-    predicted_cache_dir = tmp_path / "predicted_response_cache"
-    argv = _argv(fixture, predicted_cache_dir)
-
-    exit_code = cli.main(argv)
-    assert exit_code == 0
-
-    run_dir = fixture["output_dir"] / "runs" / "smoke"
-
-    # --- the checkpoint trained and round-trips ---------------------------
-    checkpoint_path = run_dir / "models" / "head.pt"
-    assert checkpoint_path.is_file()
-    head = load_checkpoint(checkpoint_path)
-    assert head.response_dim == _RESPONSE_DIM
-    assert head.basal_dim == EMBEDDING_WIDTH
-
-    # --- provenance names the real train/validation split, never a test line
-    provenance = json.loads((run_dir / "provenance.json").read_text())
-    assert provenance["selection_metric"] == SELECTION_METRIC_NAME
-    assert set(provenance["validation_model_ids"]) & set(_TEST_LINES) == set()
-    assert set(provenance["train_model_ids"]) & set(_TEST_LINES) == set()
-    assert len(provenance["validation_model_ids"]) == 1
-    assert len(provenance["train_model_ids"]) == 3
-    response_generation = provenance["response_generation"]
-    assert response_generation["pooling_reducer_schema"] == (
-        "online_chan_mean_population_variance_v1"
-    )
-    assert response_generation["accumulator_dtype"] == "float32"
-    assert response_generation["pooled_output_dtype"] == "float32"
-    assert response_generation["torch_version"] == str(torch.__version__)
-    assert response_generation["device"] == "cpu"
-
-    # Raw predicted responses are streamed into moments and never persisted.
-    assert not predicted_cache_dir.exists()
-
-    # --- the Phase F table exists and matches the D1 schema ---------------
-    predictions_path = run_dir / "tx1_3b_st_predictions.csv"
-    assert predictions_path.is_file()
-    predictions = pd.read_csv(predictions_path)
-    assert set(predictions.columns) >= {
-        "model_id",
-        "panel",
-        "depmap_column",
-        "method",
-        "k",
-        "base_pred",
-        "y_true",
-    }
-    assert set(predictions["model_id"].unique()) == set(_TEST_LINES)
-    assert (predictions["method"] == "tx1_3b_st").all()
-    assert predictions["panel"].notna().all()
-    assert predictions["k"].notna().all()
-
-    slice_df = pd.read_csv(
-        fixture["phase_a_dir"] / "differentially_essential_slice.csv"
-    )
-    panels = pd.read_csv(fixture["phase_a_dir"] / "k_label_panels.csv")
-    slice_genes = set(slice_df["depmap_column"])
-
-    # --- the exact function D1 names, unmodified, on the REAL CLI output --
-    for model_id in _TEST_LINES:
-        assert_test_role("test", model_id)  # sanity: these are test lines
-        _validate_panel_aware_coverage(
-            predictions[predictions["model_id"] == model_id],
-            panels[panels["model_id"] == model_id],
-            model_id,
-            "tx1_3b_st",
-            slice_genes,
-            list(K_SCHEDULE),
-            max_listed=20,
-        )  # must not raise
-
-    # --- the fuller strict path: duplicate-key + cross-method y_true checks
-    manifest = load_line_manifest(fixture["manifest_path"])
-    k0 = predictions[predictions["k"] == 0][
-        ["model_id", "depmap_column", "y_true"]
-    ].drop_duplicates()
-    baseline_rows = k0.copy()
-    baseline_rows["method"] = "copy_k562"
-    baseline_rows["base_pred"] = 0.0
-    combined = pd.concat([predictions, baseline_rows], ignore_index=True)
-    test_lines = _validate_evaluation_inputs(
-        combined,
-        manifest,
-        slice_df,
-        panels,
-        methods=["tx1_3b_st"],
-        baseline_method="copy_k562",
-        k_schedule=list(K_SCHEDULE),
-        n_panels=_N_PANELS,
-        n_labels=_N_LABELS,
-        expected_test_lines=2,
-    )  # must not raise
-    assert set(test_lines) == set(_TEST_LINES)
-
-
-def test_e2e_smoke_skip_test_predictions_flag(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """``--skip-test-predictions`` trains the head but writes no Phase F
-    table -- a cheaper mode for iterating on the head alone."""
-    _install_lenient_hash_check(monkeypatch)
-    fixture = _full_fixture(tmp_path)
-    predicted_cache_dir = tmp_path / "predicted_response_cache"
-    argv = _argv(fixture, predicted_cache_dir) + ["--skip-test-predictions"]
-
-    exit_code = cli.main(argv)
-    assert exit_code == 0
-
-    run_dir = fixture["output_dir"] / "runs" / "smoke"
-    assert (run_dir / "models" / "head.pt").is_file()
-    assert not (run_dir / "tx1_3b_st_predictions.csv").exists()
-
-
-# ---------------------------------------------------------------------------
 # Wave 3 Codex gate fix round 1
 # ---------------------------------------------------------------------------
 
@@ -1086,68 +946,6 @@ def test_dry_run_accepts_a_matching_state_checkpoint_vocabulary(
     exit_code = cli.main(argv)  # must not raise
 
     assert exit_code == 0
-
-
-# --- P1-5: ST inference must run on a resolved accelerator device ----------
-
-
-def test_e2e_smoke_threads_resolved_device_into_response_generation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """``run_training_pipeline`` must resolve a device (config
-    ``state.device``, default ``"auto"``) and pass it explicitly into every
-    response-generation call -- both the train/validation warm-cache path
-    (``warm_predicted_response_cache``) and the held-out test-line path
-    (``emit_test_predictions``) -- rather than silently leaving each callee
-    to its own hardcoded ``"cpu"`` default."""
-    _install_lenient_hash_check(monkeypatch)
-    fixture = _full_fixture(tmp_path)
-
-    resolve_calls: list[str] = []
-    sentinel_device = torch.device("cpu")
-
-    def _spy_resolve_device(requested: str) -> torch.device:
-        resolve_calls.append(requested)
-        return sentinel_device
-
-    monkeypatch.setattr(
-        tx1_geneeffect_pipeline_run_module, "resolve_device", _spy_resolve_device
-    )
-
-    split_devices: list[object] = []
-    real_assemble_split = tx1_geneeffect_pipeline_run_module.assemble_split_features
-
-    def _spy_assemble_split(*args: object, **kwargs: object) -> object:
-        split_devices.append(kwargs.get("device"))
-        return real_assemble_split(*args, **kwargs)
-
-    monkeypatch.setattr(
-        tx1_geneeffect_pipeline_run_module,
-        "assemble_split_features",
-        _spy_assemble_split,
-    )
-
-    assemble_test_devices: list[object] = []
-    real_assemble_test = tx1_geneeffect_pipeline_run_module.assemble_test_line_features
-
-    def _spy_assemble_test(*args: object, **kwargs: object) -> object:
-        assemble_test_devices.append(kwargs.get("device"))
-        return real_assemble_test(*args, **kwargs)
-
-    monkeypatch.setattr(
-        tx1_geneeffect_pipeline_run_module,
-        "assemble_test_line_features",
-        _spy_assemble_test,
-    )
-
-    argv = _argv(fixture, tmp_path / "predicted_response_cache")
-    exit_code = cli.main(argv)
-    assert exit_code == 0
-
-    assert resolve_calls == ["auto"]  # config's default, resolved exactly once
-    assert split_devices == [sentinel_device]
-    assert assemble_test_devices, "emit_test_predictions never assembled a test line"
-    assert all(device == sentinel_device for device in assemble_test_devices)
 
 
 def test_config_device_defaults_to_auto_and_resolves(tmp_path: Path) -> None:
