@@ -23,6 +23,7 @@ import pandas as pd
 import pytest
 import torch
 
+import aivc_model.tx1_geneeffect_train_io as tx1_geneeffect_train_io_module
 from aivc_model.gene_splits import sha256_file
 from aivc_model.model import (
     LinearMockStateModel,
@@ -150,6 +151,25 @@ def test_train_tx1_geneeffect_head_drives_loss_down() -> None:
     final_loss = result.history[-1].train_loss
     assert final_loss < initial_loss * 0.5
     assert min(entry.train_loss for entry in result.history) < 0.5
+
+
+def test_train_tx1_geneeffect_head_runs_on_requested_device() -> None:
+    train_line = _make_line_examples(
+        "ACH-TRAIN", TRAIN_HEAD_ROLE, n_genes=4, response_dim=2, basal_dim=2, seed=51
+    )
+    validation = _make_line_examples(
+        "ACH-VAL", TRAIN_HEAD_ROLE, n_genes=4, response_dim=2, basal_dim=2, seed=52
+    )
+
+    head, result = train_tx1_geneeffect_head(
+        [train_line],
+        [validation],
+        TrainingConfig(hidden=8, epochs=1),
+        device=torch.device("cpu"),
+    )
+
+    assert next(head.parameters()).device == torch.device("cpu")
+    assert len(result.history) == 1
 
 
 def test_train_tx1_geneeffect_head_requires_nonempty_lines() -> None:
@@ -510,6 +530,44 @@ def test_assemble_line_features_matches_raw_pooling_and_writes_no_cache(
     assert torch.allclose(
         line.features, _line_pooled_features(raw, moments=2), atol=1e-6, rtol=1e-5
     )
+
+
+def test_assemble_line_features_keeps_compact_features_on_forward_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tx1_cache_dir = tmp_path / "tx1_cache"
+    _write_basal_cache(tx1_cache_dir, "ACH-1", n_cells=4)
+    model = ForwardOnlyStateModel(
+        StateForwardAdapter(LinearMockStateModel(2, 3, 2)),
+        PerturbationVectorAdapter(["G1"], {}, 2),
+    )
+    requested_device = torch.device("meta")
+
+    def _pooled_on_requested_device(*args: object, **kwargs: object):
+        assert kwargs["device"] == requested_device
+        return torch.zeros(6, device=requested_device), 3
+
+    monkeypatch.setattr(
+        tx1_geneeffect_train_io_module,
+        "generate_pooled_predicted_response",
+        _pooled_on_requested_device,
+    )
+
+    line = assemble_line_features(
+        "ACH-1",
+        TRAIN_HEAD_ROLE,
+        ARM_HVG,
+        tx1_cache_dir,
+        pd.Series({"G1": 0.5}),
+        model,
+        moments=2,
+        cell_set_len=2,
+        seed=0,
+        device=requested_device,
+    )
+
+    assert line.features.device == requested_device
+    assert line.targets.device == requested_device
 
 
 def test_assemble_line_features_raises_without_finite_targets(tmp_path: Path) -> None:

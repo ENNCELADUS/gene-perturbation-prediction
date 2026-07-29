@@ -323,7 +323,10 @@ def run_training_pipeline(
         seed=config.training.seed,
     )
     head, result = train_tx1_geneeffect_head(
-        train_lines, validation_lines, training_config
+        train_lines,
+        validation_lines,
+        training_config,
+        device=device,
     )
 
     checkpoint_path = save_checkpoint(head, resolved_run_dir / "models" / "head.pt")
@@ -346,6 +349,7 @@ def run_training_pipeline(
             "torch_version": str(torch.__version__),
             "torch_cuda_version": torch.version.cuda,
             "device": str(device),
+            "head_training_device": str(device),
             "allow_tf32": bool(torch.backends.cuda.matmul.allow_tf32),
             "gene_vocabulary_sha256": sha256_file(
                 Path(config.state.gene_vocabulary_path)

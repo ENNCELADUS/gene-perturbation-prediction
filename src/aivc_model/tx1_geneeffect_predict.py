@@ -181,11 +181,12 @@ def assemble_test_line_features(
     basal_view = np.asarray(
         embeddings if arm == ARM_TX1 else hvg_matrix, dtype=np.float32
     )
+    resolved_device = torch.device(device)
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", message="The given NumPy array is not writable"
         )
-        basal_tensor = torch.from_numpy(basal_view)
+        basal_tensor = torch.from_numpy(basal_view).to(resolved_device)
     pooled_basal = moment_pool(basal_tensor, moments=moments)
     batch_labels = np.full(basal_view.shape[0], model_id, dtype=object)
     pooled_responses: list[torch.Tensor] = []
@@ -193,14 +194,14 @@ def assemble_test_line_features(
     for gene_index, gene in enumerate(resolved_symbols, start=1):
         pooled_response, response_dim = generate_pooled_predicted_response(
             model,
-            basal_view,
+            basal_tensor,
             gene,
             cell_set_len=cell_set_len,
             window_macro_batch_size=window_macro_batch_size,
             seed=seed,
             batch_labels=batch_labels,
             batch_lookup=batch_lookup,
-            device=device,
+            device=resolved_device,
         )
         pooled_responses.append(pooled_response)
         if gene_index % 50 == 0 or gene_index == len(resolved_symbols):
@@ -211,6 +212,7 @@ def assemble_test_line_features(
                 gene_index,
                 len(resolved_symbols),
             )
+    del basal_tensor
     pooled_response_matrix = torch.stack(pooled_responses, dim=0)
     features = torch.cat(
         [
@@ -222,6 +224,7 @@ def assemble_test_line_features(
     targets = torch.as_tensor(
         [float(gene_effect.get(column, float("nan"))) for column in depmap_columns],
         dtype=torch.float32,
+        device=resolved_device,
     )
     _LOGGER.info(
         "assembled held-out line %s (arm=%s): %d slice genes, %d finite "
@@ -289,9 +292,9 @@ def build_test_line_predictions(
     return make_predictions_long(
         model_id=line.model_id,
         genes=np.array(line.genes),
-        features=features.numpy(),
-        base_pred=predictions.numpy(),
-        y_true=line.targets.numpy(),
+        features=features.detach().cpu().numpy(),
+        base_pred=predictions.detach().cpu().numpy(),
+        y_true=line.targets.detach().cpu().numpy(),
         panels_for_line=panels_for_line,
         k_schedule=list(k_schedule),
         method=method,

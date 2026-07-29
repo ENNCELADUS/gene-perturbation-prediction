@@ -88,13 +88,15 @@ def assemble_line_features(
     if not genes:
         raise ValueError(f"line {model_id}: no finite GeneEffect target; cannot train")
 
-    # Phase B arrays are read-only mmaps. Zero-copy is essential here (a Tx1
-    # line can be tens of GB); moment_pool only reads the tensor.
+    resolved_device = torch.device(device)
+    # Phase B arrays are read-only mmaps. Keep the mmap zero-copy on CPU, then
+    # move one line at a time for GPU moment pooling; only the compact pooled
+    # vector survives after this function returns.
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", message="The given NumPy array is not writable"
         )
-        basal_tensor = torch.from_numpy(basal_view)
+        basal_tensor = torch.from_numpy(basal_view).to(resolved_device)
     pooled_basal = moment_pool(basal_tensor, moments=moments)
     batch_labels = np.full(basal_view.shape[0], model_id, dtype=object)
     pooled_responses: list[torch.Tensor] = []
@@ -105,14 +107,14 @@ def assemble_line_features(
     for gene_index, gene in enumerate(genes, start=1):
         pooled_response, response_dim = generate_pooled_predicted_response(
             model,
-            basal_view,
+            basal_tensor,
             gene,
             cell_set_len=cell_set_len,
             window_macro_batch_size=window_macro_batch_size,
             seed=seed,
             batch_labels=batch_labels,
             batch_lookup=batch_lookup,
-            device=device,
+            device=resolved_device,
         )
         pooled_responses.append(pooled_response)
         if gene_index % 50 == 0 or gene_index == len(genes):
@@ -123,6 +125,7 @@ def assemble_line_features(
                 gene_index,
                 len(genes),
             )
+    del basal_tensor
     pooled_response_matrix = torch.stack(pooled_responses, dim=0)
     features = torch.cat(
         [
@@ -132,7 +135,9 @@ def assemble_line_features(
         dim=1,
     )
     targets = torch.as_tensor(
-        [float(finite_targets[gene]) for gene in genes], dtype=torch.float32
+        [float(finite_targets[gene]) for gene in genes],
+        dtype=torch.float32,
+        device=resolved_device,
     )
     return PooledLineExamples(
         model_id=str(model_id),
@@ -234,7 +239,9 @@ def save_checkpoint(head: Tx1GeneEffectHead, path: Path) -> Path:
         ``path``.
     """
     payload = {
-        "state_dict": head.state_dict(),
+        "state_dict": {
+            key: value.detach().cpu() for key, value in head.state_dict().items()
+        },
         "response_dim": int(head.response_dim),
         "basal_dim": int(head.basal_dim),
         "moments": int(head.moments),

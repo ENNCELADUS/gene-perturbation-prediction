@@ -450,7 +450,7 @@ def generate_predicted_response(
 
 def generate_pooled_predicted_response(
     model: ForwardOnlyStateModel,
-    control_input: np.ndarray,
+    control_input: np.ndarray | torch.Tensor,
     gene: str,
     *,
     cell_set_len: int,
@@ -462,9 +462,10 @@ def generate_pooled_predicted_response(
 ) -> tuple[torch.Tensor, int]:
     """Macro-batch STATE windows and return mean plus population variance.
 
-    The reduction is performed online on the forward device. Only the compact
-    pooled feature is copied to CPU; no full predicted-response bag is retained
-    or written to disk. Padding rows from the final cell window are excluded.
+    The reduction is performed online on the forward device and the compact
+    pooled feature remains on that device for the GPU-resident GeneEffect head.
+    No full predicted-response bag is retained or written to disk. Padding rows
+    from the final cell window are excluded.
     """
     if gene not in vocabulary_genes(model.perturbations):
         raise UnknownPerturbationGeneError(
@@ -472,8 +473,15 @@ def generate_pooled_predicted_response(
         )
     if window_macro_batch_size < 1:
         raise ValueError("window_macro_batch_size must be at least 1")
-    control_input = np.asarray(control_input, dtype=np.float32)
-    n_cells = int(control_input.shape[0])
+    resolved_device = torch.device(device)
+    if isinstance(control_input, torch.Tensor):
+        resident_control = control_input.to(device=resolved_device, dtype=torch.float32)
+        n_cells = int(resident_control.shape[0])
+        cpu_control: np.ndarray | None = None
+    else:
+        resident_control = None
+        cpu_control = np.asarray(control_input, dtype=np.float32)
+        n_cells = int(cpu_control.shape[0])
     chunk_indices = _chunk_control_cell_indices(n_cells, cell_set_len, seed)
     batch_chunks = _batch_index_chunks(
         batch_labels, batch_lookup, chunk_indices, device
@@ -490,12 +498,34 @@ def generate_pooled_predicted_response(
             macro_batch_chunks = batch_chunks[
                 macro_start : macro_start + window_macro_batch_size
             ]
-            control_chunks = tuple(
-                torch.as_tensor(
-                    control_input[indices], dtype=torch.float32, device=device
+            if resident_control is None:
+                assert cpu_control is not None
+                control_chunks = tuple(
+                    torch.as_tensor(
+                        cpu_control[indices],
+                        dtype=torch.float32,
+                        device=resolved_device,
+                    )
+                    for indices in macro_indices
                 )
-                for indices in macro_indices
-            )
+            else:
+                control_chunks_list: list[torch.Tensor] = []
+                for indices in macro_indices:
+                    start = int(indices[0])
+                    valid_rows = min(cell_set_len, n_cells - start)
+                    chunk = resident_control[start : start + valid_rows]
+                    if valid_rows < cell_set_len:
+                        padding_indices = torch.as_tensor(
+                            indices[valid_rows:],
+                            dtype=torch.long,
+                            device=resolved_device,
+                        )
+                        chunk = torch.cat(
+                            [chunk, resident_control.index_select(0, padding_indices)],
+                            dim=0,
+                        )
+                    control_chunks_list.append(chunk)
+                control_chunks = tuple(control_chunks_list)
             outputs = model.predict_response_chunks(
                 control_chunks, gene, macro_batch_chunks
             )
@@ -511,9 +541,7 @@ def generate_pooled_predicted_response(
                     valid_parts.append(output[:valid_rows].detach().float())
                     seen += valid_rows
             macro_output = torch.cat(valid_parts, dim=0)
-            macro_var, macro_mean = torch.var_mean(
-                macro_output, dim=0, unbiased=False
-            )
+            macro_var, macro_mean = torch.var_mean(macro_output, dim=0, unbiased=False)
             macro_count = int(macro_output.shape[0])
             response_dim = int(macro_output.shape[-1])
             if running_mean is None:
@@ -537,7 +565,7 @@ def generate_pooled_predicted_response(
             f"saw {seen}/{n_cells} rows"
         )
     variance = (running_m2 / seen).clamp_min(0.0)
-    pooled = torch.cat([running_mean, variance], dim=0).detach().cpu()
+    pooled = torch.cat([running_mean, variance], dim=0).detach()
     assert response_dim is not None
     return pooled, response_dim
 
