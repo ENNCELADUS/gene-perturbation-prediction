@@ -217,15 +217,11 @@ def assemble_split_features(
 def _hidden_width(head: Tx1GeneEffectHead) -> int:
     """Recover the MLP trunk's hidden width from the head itself.
 
-    ``Tx1GeneEffectHead`` does not store ``hidden`` as an attribute (only
-    ``response_dim``/``basal_dim``/``moments``); it is only reflected in
-    ``net[0]``'s output width. Reading it back from the object itself
-    (rather than requiring the caller to pass ``config.hidden`` again)
-    keeps the checkpoint payload self-describing from a single source of
-    truth.
+    Reading it from the object itself rather than asking the caller to pass
+    ``config.hidden`` again keeps the checkpoint payload self-describing from
+    a single source of truth for both fusion architectures.
     """
-    first_linear = head.net[0]
-    return int(first_linear.out_features)
+    return int(head.hidden)
 
 
 def save_checkpoint(head: Tx1GeneEffectHead, path: Path) -> Path:
@@ -246,6 +242,8 @@ def save_checkpoint(head: Tx1GeneEffectHead, path: Path) -> Path:
         "basal_dim": int(head.basal_dim),
         "moments": int(head.moments),
         "hidden": _hidden_width(head),
+        "fusion": str(head.fusion),
+        "projection_dim": int(head.projection_dim),
     }
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -257,7 +255,7 @@ def load_checkpoint(path: Path) -> Tx1GeneEffectHead:
     """Load a checkpoint written by :func:`save_checkpoint`.
 
     ``weights_only=False`` is deliberate: this checkpoint is this module's
-    own trusted output (a dict of tensors plus four plain ints), not an
+    own trusted output (a dict of tensors plus constructor metadata), not an
     externally sourced/adversarial file.
 
     Returns:
@@ -265,11 +263,18 @@ def load_checkpoint(path: Path) -> Tx1GeneEffectHead:
         saved weights loaded.
     """
     payload = torch.load(Path(path), map_location="cpu", weights_only=False)
+    fusion = str(payload.get("fusion", "concat_mlp"))
+    if fusion != "concat_mlp" and "projection_dim" not in payload:
+        raise ValueError(
+            "interaction head checkpoint is missing required projection_dim"
+        )
     head = Tx1GeneEffectHead(
         response_dim=int(payload["response_dim"]),
         basal_dim=int(payload["basal_dim"]),
         hidden=int(payload["hidden"]),
         moments=int(payload["moments"]),
+        fusion=fusion,
+        projection_dim=int(payload.get("projection_dim", payload["hidden"])),
     )
     head.load_state_dict(payload["state_dict"])
     head.eval()

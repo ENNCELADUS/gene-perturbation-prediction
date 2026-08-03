@@ -43,7 +43,11 @@ from aivc_model.tx1_geneeffect_data import (
     build_line_role_split,
     generate_validation_line_registration,
 )
-from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead, rank_variance_loss
+from aivc_model.tx1_geneeffect_head import (
+    FUSION_INTERACTION_RESIDUAL,
+    Tx1GeneEffectHead,
+    rank_variance_loss,
+)
 from aivc_model.tx1_geneeffect_train import (
     SELECTION_METRIC_NAME,
     EpochMetrics,
@@ -170,6 +174,28 @@ def test_train_tx1_geneeffect_head_runs_on_requested_device() -> None:
 
     assert next(head.parameters()).device == torch.device("cpu")
     assert len(result.history) == 1
+
+
+def test_train_tx1_geneeffect_head_wires_interaction_architecture() -> None:
+    train_line = _make_line_examples(
+        "ACH-TRAIN", TRAIN_HEAD_ROLE, n_genes=8, response_dim=4, basal_dim=3, seed=61
+    )
+    validation = _make_line_examples(
+        "ACH-VAL", TRAIN_HEAD_ROLE, n_genes=8, response_dim=4, basal_dim=3, seed=62
+    )
+    head, result = train_tx1_geneeffect_head(
+        [train_line],
+        [validation],
+        TrainingConfig(
+            hidden=16,
+            epochs=5,
+            fusion=FUSION_INTERACTION_RESIDUAL,
+            projection_dim=8,
+        ),
+    )
+    assert head.fusion == FUSION_INTERACTION_RESIDUAL
+    assert head.projection_dim == 8
+    assert all(np.isfinite(entry.validation_loss) for entry in result.history)
 
 
 def test_train_tx1_geneeffect_head_requires_nonempty_lines() -> None:
@@ -708,6 +734,56 @@ def test_save_and_load_checkpoint_round_trip(tmp_path: Path) -> None:
     assert loaded.response_dim == head.response_dim
     assert loaded.basal_dim == head.basal_dim
     assert loaded.moments == head.moments
+
+
+def test_interaction_checkpoint_round_trip_records_architecture(tmp_path: Path) -> None:
+    head = Tx1GeneEffectHead(
+        response_dim=3,
+        basal_dim=2,
+        hidden=8,
+        moments=2,
+        fusion=FUSION_INTERACTION_RESIDUAL,
+        projection_dim=4,
+    )
+    checkpoint_path = save_checkpoint(head, tmp_path / "interaction.pt")
+    loaded = load_checkpoint(checkpoint_path)
+    pooled = torch.randn(6, 10)
+    assert loaded.fusion == FUSION_INTERACTION_RESIDUAL
+    assert loaded.projection_dim == 4
+    assert torch.equal(head.forward_pooled(pooled), loaded.forward_pooled(pooled))
+
+
+def test_legacy_concat_checkpoint_without_architecture_fields_loads(
+    tmp_path: Path,
+) -> None:
+    head = Tx1GeneEffectHead(response_dim=3, basal_dim=2, hidden=8, moments=2)
+    checkpoint_path = save_checkpoint(head, tmp_path / "legacy.pt")
+    payload = torch.load(checkpoint_path, weights_only=False)
+    payload.pop("fusion")
+    payload.pop("projection_dim")
+    torch.save(payload, checkpoint_path)
+    loaded = load_checkpoint(checkpoint_path)
+    pooled = torch.randn(6, 10)
+    assert loaded.fusion == "concat_mlp"
+    assert torch.equal(head.forward_pooled(pooled), loaded.forward_pooled(pooled))
+
+
+def test_interaction_checkpoint_missing_projection_dim_is_rejected(
+    tmp_path: Path,
+) -> None:
+    head = Tx1GeneEffectHead(
+        response_dim=3,
+        basal_dim=2,
+        hidden=8,
+        fusion=FUSION_INTERACTION_RESIDUAL,
+        projection_dim=4,
+    )
+    checkpoint_path = save_checkpoint(head, tmp_path / "broken.pt")
+    payload = torch.load(checkpoint_path, weights_only=False)
+    payload.pop("projection_dim")
+    torch.save(payload, checkpoint_path)
+    with pytest.raises(ValueError, match="projection_dim"):
+        load_checkpoint(checkpoint_path)
 
 
 # --- provenance ---------------------------------------------------------------

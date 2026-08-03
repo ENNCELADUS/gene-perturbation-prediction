@@ -71,6 +71,8 @@ objective:
 
 training:
   # D7: byte-identical to tx1_arm.yaml.
+  fusion: concat_mlp
+  projection_dim: 128
   hidden: 256
   moments: 2
   learning_rate: 0.001

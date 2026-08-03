@@ -118,6 +118,8 @@ objective:
   selection_metric: val_rank_variance_loss
 
 training:
+  fusion: concat_mlp
+  projection_dim: 128
   # Tx1GeneEffectHead's own MLP-trunk default width (tx1_geneeffect_head.py).
   hidden: 256
   # moment_pool's moment count (mean + variance); matches the head's default.

@@ -48,6 +48,7 @@ from aivc_model.tx1_geneeffect_eval import (
     K_SCHEDULE,
     load_slice,
 )
+from aivc_model.tx1_geneeffect_head import VALID_FUSIONS
 from aivc_model.tx1_geneeffect_train import SELECTION_METRIC_NAME
 from aivc_model.tx1_predicted_response import (
     ARM_HVG,
@@ -122,6 +123,8 @@ class TrainingArmConfig:
     learning_rate: float
     epochs: int
     seed: int
+    fusion: str
+    projection_dim: int
 
 
 @dataclass(frozen=True)
@@ -216,6 +219,8 @@ def load_pipeline_config(path: Path) -> Tx1GeneEffectHeadConfig:
         learning_rate=float(_require(training_raw, "learning_rate", "training")),
         epochs=int(_require(training_raw, "epochs", "training")),
         seed=int(_require(training_raw, "seed", "training")),
+        fusion=str(_require(training_raw, "fusion", "training")),
+        projection_dim=int(_require(training_raw, "projection_dim", "training")),
     )
     phase_f = PhaseFConfig(
         k_schedule=tuple(
@@ -295,6 +300,15 @@ def validate_config_shape(
     training = config.training
     if training.hidden <= 0:
         raise ValueError(f"training.hidden must be positive; got {training.hidden}")
+    if training.fusion not in VALID_FUSIONS:
+        raise ValueError(
+            f"training.fusion must be one of {sorted(VALID_FUSIONS)}; "
+            f"got {training.fusion!r}"
+        )
+    if training.projection_dim <= 0:
+        raise ValueError(
+            f"training.projection_dim must be positive; got {training.projection_dim}"
+        )
     if training.moments != 2:
         raise ValueError(
             "training.moments must equal 2 for the fixed online mean plus "
