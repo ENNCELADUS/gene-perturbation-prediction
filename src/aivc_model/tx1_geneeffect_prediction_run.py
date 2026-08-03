@@ -16,7 +16,7 @@ from aivc_model.tx1_geneeffect_eval import (
     load_slice,
     verify_artifact_hashes,
 )
-from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead
+from aivc_model.tx1_geneeffect_head import FUSION_CONCAT_MLP, Tx1GeneEffectHead
 from aivc_model.tx1_geneeffect_pipeline import (
     Tx1GeneEffectHeadConfig,
     validate_config_shape,
@@ -82,10 +82,16 @@ def load_and_verify_head_provenance(
         "learning_rate": config.training.learning_rate,
         "epochs": config.training.epochs,
         "seed": config.training.seed,
+        "fusion": config.training.fusion,
+        "projection_dim": config.training.projection_dim,
         "selection_metric": config.objective.selection_metric,
         "st_checkpoint_sha256": sha256_file(config.state.st_checkpoint_path),
         "depmap_gene_effect_sha256": sha256_file(depmap_gene_effect_path),
     }
+    actual_fusion = provenance_config.get("fusion", FUSION_CONCAT_MLP)
+    actual_projection_dim = provenance_config.get("projection_dim")
+    if actual_projection_dim is None and actual_fusion == FUSION_CONCAT_MLP:
+        actual_projection_dim = config.training.projection_dim
     actual = {
         "arm": provenance.get("arm"),
         "moments": provenance_config.get("moments"),
@@ -94,11 +100,11 @@ def load_and_verify_head_provenance(
         "learning_rate": provenance_config.get("learning_rate"),
         "epochs": provenance_config.get("epochs"),
         "seed": provenance_config.get("seed"),
+        "fusion": actual_fusion,
+        "projection_dim": actual_projection_dim,
         "selection_metric": provenance.get("selection_metric"),
         "st_checkpoint_sha256": provenance.get("st_checkpoint_sha256"),
-        "depmap_gene_effect_sha256": provenance.get(
-            "depmap_gene_effect_sha256"
-        ),
+        "depmap_gene_effect_sha256": provenance.get("depmap_gene_effect_sha256"),
     }
     for key, expected_value in expected.items():
         if actual[key] != expected_value:
@@ -107,11 +113,21 @@ def load_and_verify_head_provenance(
                 f"{actual[key]!r} vs {expected_value!r}"
             )
 
-    actual_head_hidden = int(head.net[0].out_features)
-    if head.moments != expected["moments"] or actual_head_hidden != expected["hidden"]:
+    actual_head_hidden = int(head.hidden)
+    if (
+        head.moments != expected["moments"]
+        or actual_head_hidden != expected["hidden"]
+        or head.fusion != expected["fusion"]
+        or (
+            head.fusion != FUSION_CONCAT_MLP
+            and head.projection_dim != expected["projection_dim"]
+        )
+    ):
         raise ValueError(
             "Phase-D head architecture does not match provenance/config: "
-            f"moments={head.moments}, hidden={actual_head_hidden}"
+            f"moments={head.moments}, hidden={actual_head_hidden}, "
+            f"fusion={head.fusion}"
+            f", projection_dim={head.projection_dim}"
         )
     return provenance_path, provenance
 
@@ -126,8 +142,11 @@ def run_prediction_pipeline(
     tx1_cache_dir: Path,
     depmap_gene_effect_path: Path,
     run_dir: Path,
+    diagnostic_reason: str = "post_hoc_adapter_after_test_opening",
 ) -> dict[str, Path]:
     """Run diagnostic inference with existing Phase-C/D checkpoints only."""
+    if not str(diagnostic_reason).strip():
+        raise ValueError("diagnostic_reason must be non-empty")
     resolved_run_dir = Path(run_dir)
     _ensure_fresh_run_dir(resolved_run_dir)
     actual_head_sha256 = verify_expected_head_sha256(
@@ -199,7 +218,7 @@ def run_prediction_pipeline(
         json.dumps(
             {
                 "formal": False,
-                "reason": "post_hoc_adapter_after_test_opening",
+                "reason": str(diagnostic_reason),
                 "transductive_features": True,
                 "calibration": {
                     "schema": CALIBRATION_SCHEMA,

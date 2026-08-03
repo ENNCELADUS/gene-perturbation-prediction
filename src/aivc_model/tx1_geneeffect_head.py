@@ -107,20 +107,84 @@ def moment_pool(
     return torch.cat(parts, dim=0)
 
 
+FUSION_CONCAT_MLP = "concat_mlp"
+FUSION_INTERACTION_RESIDUAL = "interaction_residual"
+VALID_FUSIONS = frozenset({FUSION_CONCAT_MLP, FUSION_INTERACTION_RESIDUAL})
+
+
+class InteractionResidualNet(nn.Module):
+    """Project response/context separately, then model explicit interactions."""
+
+    def __init__(
+        self,
+        response_width: int,
+        basal_width: int,
+        projection_dim: int,
+        hidden: int,
+    ) -> None:
+        super().__init__()
+        self.response_width = int(response_width)
+        self.basal_width = int(basal_width)
+        self.projection_dim = int(projection_dim)
+        self.response_projection = nn.Sequential(
+            nn.Linear(self.response_width, self.projection_dim),
+            nn.LayerNorm(self.projection_dim),
+            nn.GELU(),
+        )
+        self.context_projection = nn.Sequential(
+            nn.Linear(self.basal_width, self.projection_dim),
+            nn.LayerNorm(self.projection_dim),
+            nn.GELU(),
+        )
+        self.context_gate = nn.Linear(self.projection_dim, self.projection_dim * 2)
+        self.response_score = nn.Linear(self.projection_dim, 1)
+        self.interaction_score = nn.Sequential(
+            nn.Linear(self.projection_dim * 2, hidden),
+            nn.LayerNorm(hidden),
+            nn.GELU(),
+            nn.Linear(hidden, 1),
+        )
+
+    def forward(self, pooled: torch.Tensor) -> torch.Tensor:
+        """Predict from concatenated response/basal moment summaries."""
+        expected_width = self.response_width + self.basal_width
+        if pooled.shape[-1] != expected_width:
+            raise ValueError(
+                f"pooled feature width must be {expected_width}, got {pooled.shape[-1]}"
+            )
+        response, basal = torch.split(
+            pooled, [self.response_width, self.basal_width], dim=-1
+        )
+        response_latent = self.response_projection(response)
+        context_latent = self.context_projection(basal)
+        gamma, beta = self.context_gate(context_latent).chunk(2, dim=-1)
+        conditioned = response_latent * (1.0 + torch.tanh(gamma)) + beta
+        interaction = torch.cat(
+            [conditioned - context_latent, conditioned * context_latent], dim=-1
+        )
+        return self.response_score(response_latent) + self.interaction_score(
+            interaction
+        )
+
+
 class Tx1GeneEffectHead(nn.Module):
     """Basal-conditioned, permutation-invariant GeneEffect readout head.
 
     Supersedes ``TrainableDiagonalGMM`` + ``MLPHead`` (``response.py`` /
     ``model.py``). The head moment-pools the predicted-response bag and the
-    basal (control) bag independently, concatenates the two summaries, and
-    passes them through an MLP to a scalar. There is no trainable GMM and no
-    line-ID input: the only cell-line signal available to the head is the
-    basal-bag moment summary, which is defined for any unseen line.
+    basal (control) bag independently, then applies either the historical
+    plain-concatenation MLP or an explicit context-interaction residual
+    fusion. There is no trainable GMM and no line-ID input: the only cell-line
+    signal available to the head is the basal-bag moment summary, which is
+    defined for any unseen line.
 
     Attributes:
         response_dim: Feature width of a single response-bag row.
         basal_dim: Feature width of a single basal-bag row.
         moments: Number of moments computed per bag (see :func:`moment_pool`).
+        hidden: Output-trunk width.
+        fusion: Configured fusion architecture.
+        projection_dim: Common interaction projection width.
     """
 
     def __init__(
@@ -129,6 +193,8 @@ class Tx1GeneEffectHead(nn.Module):
         basal_dim: int,
         hidden: int = 256,
         moments: int = 2,
+        fusion: str = FUSION_CONCAT_MLP,
+        projection_dim: int | None = None,
     ) -> None:
         """Initialize the head.
 
@@ -140,21 +206,50 @@ class Tx1GeneEffectHead(nn.Module):
             hidden: Hidden width of the MLP trunk.
             moments: Moment count forwarded to :func:`moment_pool` for both
                 bags (see that docstring for the moments -> width mapping).
+            fusion: ``concat_mlp`` for the historical plain concatenation
+                head, or ``interaction_residual`` for separate projections,
+                FiLM conditioning, and explicit difference/product features.
+            projection_dim: Common response/context width for the interaction
+                head. Defaults to ``hidden`` for direct API compatibility.
         """
         super().__init__()
         self.response_dim = int(response_dim)
         self.basal_dim = int(basal_dim)
         self.moments = int(moments)
-        pooled_dim = self.response_dim * self.moments + self.basal_dim * self.moments
-        self.net = nn.Sequential(
-            nn.Linear(pooled_dim, hidden),
-            nn.LayerNorm(hidden),
-            nn.GELU(),
-            nn.Linear(hidden, hidden),
-            nn.LayerNorm(hidden),
-            nn.GELU(),
-            nn.Linear(hidden, 1),
-        )
+        self.hidden = int(hidden)
+        self.projection_dim = int(hidden if projection_dim is None else projection_dim)
+        if self.projection_dim <= 0:
+            raise ValueError(
+                f"projection_dim must be positive, got {self.projection_dim}"
+            )
+        self.fusion = str(fusion)
+        if self.fusion not in VALID_FUSIONS:
+            raise ValueError(
+                f"fusion must be one of {sorted(VALID_FUSIONS)}, got {self.fusion!r}"
+            )
+        response_width = self.response_dim * self.moments
+        basal_width = self.basal_dim * self.moments
+        if self.fusion == FUSION_CONCAT_MLP:
+            self.net: nn.Module = nn.Sequential(
+                nn.Linear(response_width + basal_width, self.hidden),
+                nn.LayerNorm(self.hidden),
+                nn.GELU(),
+                nn.Linear(self.hidden, self.hidden),
+                nn.LayerNorm(self.hidden),
+                nn.GELU(),
+                nn.Linear(self.hidden, 1),
+            )
+        else:
+            self.net = InteractionResidualNet(
+                response_width=response_width,
+                basal_width=basal_width,
+                projection_dim=self.projection_dim,
+                hidden=self.hidden,
+            )
+
+    def forward_pooled(self, pooled: torch.Tensor) -> torch.Tensor:
+        """Predict from precomputed response+basal moment summaries."""
+        return self.net(pooled).squeeze(-1)
 
     def forward(
         self,
@@ -176,7 +271,7 @@ class Tx1GeneEffectHead(nn.Module):
         pooled_response = moment_pool(response_bag, moments=self.moments)
         pooled_basal = moment_pool(basal_bag, moments=self.moments)
         pooled = torch.cat([pooled_response, pooled_basal], dim=0)
-        return self.net(pooled).squeeze(-1)
+        return self.forward_pooled(pooled)
 
     def forward_batch(
         self,

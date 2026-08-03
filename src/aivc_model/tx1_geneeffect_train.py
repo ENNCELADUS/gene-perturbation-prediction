@@ -50,6 +50,7 @@ import torch
 
 from aivc_model.tx1_geneeffect_data import assert_training_role
 from aivc_model.tx1_geneeffect_head import (
+    FUSION_CONCAT_MLP,
     Tx1GeneEffectHead,
     moment_pool,
     rank_variance_loss,
@@ -208,7 +209,7 @@ def compute_line_features_and_predictions(
             features = line.features
         else:
             features = _line_pooled_features(line, head.moments)
-        predictions = head.net(features).squeeze(-1)
+        predictions = head.forward_pooled(features)
     return features, predictions
 
 
@@ -307,6 +308,12 @@ class TrainingConfig:
         learning_rate: Adam learning rate.
         epochs: Number of full passes over ``train_lines``.
         seed: Seed for ``torch.manual_seed`` (head weight initialization).
+        fusion: Head fusion architecture; ``concat_mlp`` preserves the
+            historical baseline and ``interaction_residual`` is the
+            context-interaction candidate.
+        projection_dim: Common response/context projection width for the
+            interaction head. ``None`` preserves direct-call compatibility
+            by using ``hidden``.
     """
 
     hidden: int = 256
@@ -315,6 +322,8 @@ class TrainingConfig:
     learning_rate: float = 1e-3
     epochs: int = 200
     seed: int = 0
+    fusion: str = FUSION_CONCAT_MLP
+    projection_dim: int | None = None
 
 
 @dataclass(frozen=True)
@@ -424,6 +433,8 @@ def train_tx1_geneeffect_head(
         basal_dim=basal_dim,
         hidden=config.hidden,
         moments=config.moments,
+        fusion=config.fusion,
+        projection_dim=config.projection_dim,
     ).to(resolved_device)
     optimizer = torch.optim.Adam(head.parameters(), lr=config.learning_rate)
 
@@ -463,7 +474,7 @@ def train_tx1_geneeffect_head(
         train_losses: list[float] = []
         for line in ordered_train:
             optimizer.zero_grad()
-            predictions = head.net(train_features[line.model_id]).squeeze(-1)
+            predictions = head.forward_pooled(train_features[line.model_id])
             loss = rank_variance_loss(
                 predictions, train_targets[line.model_id], lam=config.lam
             )
@@ -475,7 +486,7 @@ def train_tx1_geneeffect_head(
         validation_losses: list[float] = []
         with torch.no_grad():
             for line in ordered_validation:
-                predictions = head.net(validation_features[line.model_id]).squeeze(-1)
+                predictions = head.forward_pooled(validation_features[line.model_id])
                 loss = rank_variance_loss(
                     predictions,
                     validation_targets[line.model_id],

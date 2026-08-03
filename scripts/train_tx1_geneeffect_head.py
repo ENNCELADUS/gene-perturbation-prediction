@@ -135,6 +135,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "predictions table for the 9 held-out lines."
         ),
     )
+    parser.add_argument(
+        "--diagnostic-reason",
+        default="post_hoc_adapter_after_test_opening",
+        help="Reason recorded in prediction-only formal:false manifest.",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args(argv)
 
@@ -181,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
             tx1_cache_dir=args.tx1_cache_dir,
             depmap_gene_effect_path=args.depmap_gene_effect,
             run_dir=args.run_dir,
+            diagnostic_reason=args.diagnostic_reason,
         )
         print(json.dumps({key: str(value) for key, value in outputs.items()}, indent=2))
         return 0

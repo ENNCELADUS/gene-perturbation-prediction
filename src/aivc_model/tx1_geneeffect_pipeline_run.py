@@ -321,6 +321,8 @@ def run_training_pipeline(
         learning_rate=config.training.learning_rate,
         epochs=config.training.epochs,
         seed=config.training.seed,
+        fusion=config.training.fusion,
+        projection_dim=config.training.projection_dim,
     )
     head, result = train_tx1_geneeffect_head(
         train_lines,

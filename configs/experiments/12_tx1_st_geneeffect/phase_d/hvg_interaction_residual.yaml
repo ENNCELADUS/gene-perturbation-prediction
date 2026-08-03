@@ -1,0 +1,41 @@
+arm: hvg_arm
+
+run:
+  run_id: tx1_st_geneeffect_phase_d_hvg_interaction_residual_v1
+  output_dir: results/experiments/12_tx1_st_geneeffect/phase_d
+
+data:
+  validation_lines_path: configs/experiments/12_tx1_st_geneeffect/phase_d/validation_lines.json
+
+state:
+  backend: state_checkpoint
+  hparams_checkpoint_path: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
+  st_checkpoint_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/models/best/pytorch_model.bin
+  known_perturbation_vectors: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/pert_onehot_map.pt
+  gene_vocabulary_path: results/experiments/12_tx1_st_geneeffect/phase_c/runs/tx1_st_geneeffect_phase_c_hvg_arm/models/best/gene_vocabulary.json
+  input_dim: 2000
+  output_dim: 2000
+  pert_dim: 2024
+  output_space: gene
+  cell_set_len: 64
+  response_window_macro_batch_size: 64
+  response_generation_seed: 0
+
+objective:
+  lam: 1.0
+  selection_metric: val_rank_variance_loss
+
+training:
+  fusion: interaction_residual
+  projection_dim: 128
+  hidden: 256
+  moments: 2
+  learning_rate: 0.001
+  epochs: 200
+  seed: 0
+
+phase_f:
+  k_schedule: [0, 5, 10, 25, 50]
+  method: tx1_3b_st
+  alpha: 1.0
+  residual: true

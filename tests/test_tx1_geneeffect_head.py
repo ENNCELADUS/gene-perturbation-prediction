@@ -6,9 +6,11 @@ losses, and the anti-collapse property that motivates replacing MSE.
 """
 
 import torch
+from torch import nn
 import torch.nn.functional as F
 
 from aivc_model.tx1_geneeffect_head import (
+    FUSION_INTERACTION_RESIDUAL,
     Tx1GeneEffectHead,
     correlation_loss,
     moment_pool,
@@ -103,6 +105,94 @@ def test_moment_pool_empty_after_masking_raises() -> None:
 def _make_head(moments: int = 2) -> Tx1GeneEffectHead:
     torch.manual_seed(0)
     return Tx1GeneEffectHead(response_dim=16, basal_dim=12, hidden=32, moments=moments)
+
+
+def _make_interaction_head() -> Tx1GeneEffectHead:
+    torch.manual_seed(0)
+    return Tx1GeneEffectHead(
+        response_dim=16,
+        basal_dim=12,
+        hidden=32,
+        moments=2,
+        fusion=FUSION_INTERACTION_RESIDUAL,
+        projection_dim=8,
+    )
+
+
+def test_concat_head_preserves_historical_initialization_and_output() -> None:
+    torch.manual_seed(4)
+    head = Tx1GeneEffectHead(response_dim=3, basal_dim=2, hidden=7, moments=2)
+    torch.manual_seed(4)
+    historical = nn.Sequential(
+        nn.Linear(10, 7),
+        nn.LayerNorm(7),
+        nn.GELU(),
+        nn.Linear(7, 7),
+        nn.LayerNorm(7),
+        nn.GELU(),
+        nn.Linear(7, 1),
+    )
+    pooled = torch.randn(5, 10)
+    assert torch.equal(head.forward_pooled(pooled), historical(pooled).squeeze(-1))
+
+
+def test_interaction_forward_matches_forward_pooled_and_is_permutation_invariant() -> (
+    None
+):
+    head = _make_interaction_head()
+    response = torch.randn(10, 16)
+    basal = torch.randn(7, 12)
+    pooled = torch.cat([moment_pool(response), moment_pool(basal)])
+    expected = head.forward_pooled(pooled)
+    assert torch.allclose(head(response, basal), expected)
+    assert torch.allclose(head(response.flip(0), basal.flip(0)), expected, atol=1e-6)
+
+
+def test_interaction_context_and_parameter_gradients() -> None:
+    head = _make_interaction_head()
+    response = torch.randn(10, 16)
+    basal_a = torch.randn(7, 12)
+    basal_b = basal_a + 2.0
+    score_a = head(response, basal_a)
+    score_b = head(response, basal_b)
+    assert not torch.allclose(score_a, score_b)
+    (score_a + score_b).backward()
+    for parameter in head.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+
+
+def test_interaction_candidate_has_fewer_parameters_than_concat_at_real_widths() -> (
+    None
+):
+    for basal_dim in (2560, 2000):
+        concat = Tx1GeneEffectHead(2000, basal_dim, hidden=256, moments=2)
+        interaction = Tx1GeneEffectHead(
+            2000,
+            basal_dim,
+            hidden=256,
+            moments=2,
+            fusion=FUSION_INTERACTION_RESIDUAL,
+            projection_dim=128,
+        )
+        assert sum(p.numel() for p in interaction.parameters()) < sum(
+            p.numel() for p in concat.parameters()
+        )
+
+
+def test_interaction_head_rejects_nonpositive_projection_dim() -> None:
+    for projection_dim in (0, -1):
+        try:
+            Tx1GeneEffectHead(
+                3,
+                2,
+                fusion=FUSION_INTERACTION_RESIDUAL,
+                projection_dim=projection_dim,
+            )
+        except ValueError as error:
+            assert "projection_dim" in str(error)
+        else:
+            raise AssertionError("expected nonpositive projection_dim rejection")
 
 
 def test_head_forward_returns_finite_scalar() -> None:

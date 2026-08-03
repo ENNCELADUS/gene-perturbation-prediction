@@ -64,7 +64,12 @@ from conftest import write_tx1_cache_run_manifest as _write_cache_run_manifest
 from conftest import write_tx1_line_manifest as _write_manifest
 
 _REAL_CONFIG_DIR = Path("configs/experiments/12_tx1_st_geneeffect/phase_d")
-_REAL_CONFIGS = ("tx1_arm.yaml", "hvg_arm.yaml")
+_REAL_CONFIGS = (
+    "tx1_arm.yaml",
+    "hvg_arm.yaml",
+    "tx1_interaction_residual.yaml",
+    "hvg_interaction_residual.yaml",
+)
 
 _RESPONSE_DIM = 4
 _PERT_DIM = 3
@@ -111,6 +116,8 @@ def test_prediction_only_cli_never_dispatches_training(
             str(checkpoint),
             "--expected-head-sha256",
             "expected-digest",
+            "--diagnostic-reason",
+            "post_hoc_head_redesign_after_test_opening",
         ]
     )
 
@@ -119,6 +126,7 @@ def test_prediction_only_cli_never_dispatches_training(
     assert captured["head_checkpoint_path"] == checkpoint
     assert captured["expected_head_sha256"] == "expected-digest"
     assert captured["run_dir"] == run_dir
+    assert captured["diagnostic_reason"] == "post_hoc_head_redesign_after_test_opening"
 
 
 def test_prediction_only_cli_requires_expected_head_digest(
@@ -199,6 +207,35 @@ def test_both_real_configs_are_byte_identical_except_the_encoder_view() -> None:
     assert hvg.state.input_dim != EMBEDDING_WIDTH
 
 
+def test_interaction_configs_match_and_preserve_concat_baselines() -> None:
+    baseline_tx1 = load_pipeline_config(_REAL_CONFIG_DIR / "tx1_arm.yaml")
+    baseline_hvg = load_pipeline_config(_REAL_CONFIG_DIR / "hvg_arm.yaml")
+    candidate_tx1 = load_pipeline_config(
+        _REAL_CONFIG_DIR / "tx1_interaction_residual.yaml"
+    )
+    candidate_hvg = load_pipeline_config(
+        _REAL_CONFIG_DIR / "hvg_interaction_residual.yaml"
+    )
+    assert baseline_tx1.training.fusion == baseline_hvg.training.fusion == "concat_mlp"
+    assert candidate_tx1.objective == candidate_hvg.objective
+    assert candidate_tx1.training == candidate_hvg.training
+    assert candidate_tx1.phase_f == candidate_hvg.phase_f
+    assert candidate_tx1.validation_lines_path == candidate_hvg.validation_lines_path
+    assert candidate_tx1.training.fusion == "interaction_residual"
+    assert candidate_tx1.training.projection_dim == 128
+    for candidate, baseline in (
+        (candidate_tx1, baseline_tx1),
+        (candidate_hvg, baseline_hvg),
+    ):
+        assert candidate.objective == baseline.objective
+        assert candidate.phase_f == baseline.phase_f
+        assert candidate.training.hidden == baseline.training.hidden
+        assert candidate.training.moments == baseline.training.moments
+        assert candidate.training.learning_rate == baseline.training.learning_rate
+        assert candidate.training.epochs == baseline.training.epochs
+        assert candidate.training.seed == baseline.training.seed
+
+
 # ---------------------------------------------------------------------------
 # validate_config_shape: named rejections
 # ---------------------------------------------------------------------------
@@ -221,7 +258,13 @@ def _base_config(**overrides: object) -> Tx1GeneEffectHeadConfig:
     )
     objective = ObjectiveConfig(lam=1.0, selection_metric=SELECTION_METRIC_NAME)
     training = TrainingArmConfig(
-        hidden=8, moments=2, learning_rate=0.01, epochs=2, seed=0
+        hidden=8,
+        moments=2,
+        learning_rate=0.01,
+        epochs=2,
+        seed=0,
+        fusion="concat_mlp",
+        projection_dim=8,
     )
     phase_f = PhaseFConfig(
         k_schedule=tuple(K_SCHEDULE), method="tx1_3b_st", alpha=1.0, residual=True
@@ -272,6 +315,8 @@ def _write_prediction_only_provenance_fixture(
         basal_dim=config.state.input_dim,
         hidden=config.training.hidden,
         moments=config.training.moments,
+        fusion=config.training.fusion,
+        projection_dim=config.training.projection_dim,
     )
     provenance: dict[str, object] = {
         "arm": config.arm,
@@ -282,6 +327,8 @@ def _write_prediction_only_provenance_fixture(
             "learning_rate": config.training.learning_rate,
             "epochs": config.training.epochs,
             "seed": config.training.seed,
+            "fusion": config.training.fusion,
+            "projection_dim": config.training.projection_dim,
         },
         "selection_metric": config.objective.selection_metric,
         "st_checkpoint_sha256": sha256_file(st_checkpoint),
@@ -310,6 +357,8 @@ def _write_prediction_only_provenance_fixture(
         ("config.learning_rate", 99.0),
         ("config.epochs", 99),
         ("config.seed", 99),
+        ("config.fusion", "interaction_residual"),
+        ("config.projection_dim", 99),
         ("selection_metric", "wrong"),
         ("st_checkpoint_sha256", "wrong"),
         ("depmap_gene_effect_sha256", "wrong"),
@@ -337,6 +386,51 @@ def test_prediction_only_rejects_head_architecture_mismatch(tmp_path: Path) -> N
     )
     with pytest.raises(ValueError, match="head architecture"):
         load_and_verify_head_provenance(config, checkpoint, depmap, wrong_head)
+
+
+def test_prediction_only_rejects_interaction_provenance_without_projection_dim(
+    tmp_path: Path,
+) -> None:
+    st_checkpoint = tmp_path / "st.bin"
+    depmap = tmp_path / "depmap.csv"
+    st_checkpoint.write_bytes(b"st")
+    depmap.write_bytes(b"depmap")
+    config = _base_config(
+        **{
+            "state.st_checkpoint_path": st_checkpoint,
+            "training.fusion": "interaction_residual",
+            "training.projection_dim": 4,
+        }
+    )
+    head = Tx1GeneEffectHead(
+        response_dim=config.state.output_dim,
+        basal_dim=config.state.input_dim,
+        hidden=config.training.hidden,
+        moments=config.training.moments,
+        fusion=config.training.fusion,
+        projection_dim=config.training.projection_dim,
+    )
+    checkpoint = tmp_path / "run" / "models" / "head.pt"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"head")
+    provenance = {
+        "arm": config.arm,
+        "config": {
+            "moments": config.training.moments,
+            "hidden": config.training.hidden,
+            "lam": config.objective.lam,
+            "learning_rate": config.training.learning_rate,
+            "epochs": config.training.epochs,
+            "seed": config.training.seed,
+            "fusion": config.training.fusion,
+        },
+        "selection_metric": config.objective.selection_metric,
+        "st_checkpoint_sha256": sha256_file(st_checkpoint),
+        "depmap_gene_effect_sha256": sha256_file(depmap),
+    }
+    (checkpoint.parent.parent / "provenance.json").write_text(json.dumps(provenance))
+    with pytest.raises(ValueError, match="projection_dim"):
+        load_and_verify_head_provenance(config, checkpoint, depmap, head)
 
 
 def test_prediction_only_rejects_unpinned_head_bytes(tmp_path: Path) -> None:
@@ -369,6 +463,11 @@ def _replace(obj: object, **kwargs: object) -> object:
             "objective.selection_metric must equal",
         ),
         ({"training.moments": 1}, "training.moments must equal 2"),
+        ({"training.fusion": "plain_concat"}, "training.fusion must be one of"),
+        (
+            {"training.projection_dim": 0},
+            "training.projection_dim must be positive",
+        ),
         ({"training.epochs": 0}, "training.epochs must be positive"),
         ({"phase_f.k_schedule": (0, 5, 10)}, "phase_f.k_schedule must equal"),
         ({"phase_f.method": "copy_k562"}, "phase_f.method must equal"),
@@ -417,6 +516,8 @@ objective:
   lam: 1.0
   selection_metric: {SELECTION_METRIC_NAME}
 training:
+  fusion: concat_mlp
+  projection_dim: 8
   hidden: 8
   moments: 2
   learning_rate: 0.05
@@ -628,6 +729,8 @@ objective:
   lam: 1.0
   selection_metric: {SELECTION_METRIC_NAME}
 training:
+  fusion: concat_mlp
+  projection_dim: 8
   hidden: 8
   moments: 2
   learning_rate: 0.05
@@ -803,6 +906,8 @@ objective:
   lam: 1.0
   selection_metric: {SELECTION_METRIC_NAME}
 training:
+  fusion: concat_mlp
+  projection_dim: 8
   hidden: 8
   moments: 2
   learning_rate: 0.05
@@ -1142,6 +1247,8 @@ objective:
   lam: 1.0
   selection_metric: {SELECTION_METRIC_NAME}
 training:
+  fusion: concat_mlp
+  projection_dim: 8
   hidden: 8
   moments: 2
   learning_rate: 0.05
