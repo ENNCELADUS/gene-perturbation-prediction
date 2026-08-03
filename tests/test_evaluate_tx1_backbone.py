@@ -168,6 +168,88 @@ def _install_lenient_hash_check(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _write_prediction_manifest(
+    path: pathlib.Path,
+    predictions_path: pathlib.Path,
+    *,
+    formal: bool,
+    reason: str = "post_hoc_adapter_after_test_opening",
+) -> pathlib.Path:
+    path.write_text(
+        json.dumps(
+            {
+                "formal": formal,
+                "reason": reason,
+                "predictions_sha256": hashlib.sha256(
+                    predictions_path.read_bytes()
+                ).hexdigest(),
+            }
+        )
+    )
+    return path
+
+
+def test_prediction_manifest_hash_mismatch_fails_closed(
+    tmp_path: pathlib.Path,
+) -> None:
+    phase_a_dir, predictions_path = _write_fixture(tmp_path)
+    prediction_manifest = tmp_path / "prediction_manifest.json"
+    prediction_manifest.write_text(
+        json.dumps(
+            {
+                "formal": False,
+                "reason": "post_hoc",
+                "predictions_sha256": "wrong",
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="prediction manifest SHA-256 mismatch"):
+        evaluate_tx1_backbone.main(
+            [
+                "--predictions",
+                str(predictions_path),
+                "--prediction-manifest",
+                str(prediction_manifest),
+                "--phase-a-dir",
+                str(phase_a_dir),
+                "--out-dir",
+                str(tmp_path / "out"),
+            ]
+        )
+
+
+def test_nonformal_prediction_manifest_forces_diagnostic_verdict(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_lenient_hash_check(monkeypatch)
+    phase_a_dir, predictions_path = _write_fixture(tmp_path)
+    prediction_manifest = _write_prediction_manifest(
+        tmp_path / "prediction_manifest.json",
+        predictions_path,
+        formal=False,
+    )
+    out_dir = tmp_path / "out_manifest_diagnostic"
+
+    exit_code = evaluate_tx1_backbone.main(
+        [
+            "--predictions",
+            str(predictions_path),
+            "--prediction-manifest",
+            str(prediction_manifest),
+            "--phase-a-dir",
+            str(phase_a_dir),
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+
+    verdict = json.loads((out_dir / "verdict_diagnostic.json").read_text())
+    assert verdict["formal"] is False
+    assert "post_hoc_adapter_after_test_opening" in verdict["reason"]
+    assert not (out_dir / "verdict.json").exists()
+    assert exit_code == 2
+
+
 def test_strict_run_writes_formal_verdict_json(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

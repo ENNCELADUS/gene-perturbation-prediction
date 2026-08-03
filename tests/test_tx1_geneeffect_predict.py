@@ -280,15 +280,14 @@ def test_features_reach_ridge_calibrator_at_expected_width() -> None:
     expected_width = (response_dim + basal_dim) * moments
     assert features.shape == (6, expected_width)
 
-    # Fit a ridge calibrator directly on this exact matrix: the calibrator's
-    # weight vector width must equal the full pooled-feature width, not a
-    # scalar -- proving `features` (not merely `base_pred`) is what the
-    # calibrator actually consumes.
+    # The reducer still consumes the complete pooled-feature vector, while
+    # the supervised ridge only receives a k-compatible low-dimensional view.
     calibrator = fit_ridge_calibration(
         features_labeled=features[:2].numpy(),
         y_labeled=line.targets[:2].numpy(),
     )
-    assert calibrator.weights.shape == (expected_width,)
+    assert calibrator.feature_reducer.input_dim == expected_width
+    assert calibrator.weights.shape == (1,)
 
 
 # ---------------------------------------------------------------------------

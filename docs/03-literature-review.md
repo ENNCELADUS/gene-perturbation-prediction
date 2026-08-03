@@ -104,6 +104,19 @@ Lead the contribution with the **mechanism and mechanistic validation**, not "gr
 - **CILANTRO-SL** — reproduce/compare on the official general benchmark if feasible; at minimum differentiate head-to-head.
 - **SLMGAE, KR4SL, KG4SL** — reproduce under the identical official Feng2024 `cal_metrics` harness; prior K562-filtered reproductions are ablations, not substitutes.
 
-## 8. Key references (bibkeys → why cited)
+## 8. Internal evidence update: T2 Phase F gate
+
+The registered nine-line Phase F test was opened on 2026-07-29. Tx1-3B-ST
+failed the k=10 single-gene GeneEffect backbone-transfer gate against
+copy-K562 + 10 labels (`Delta rho = -0.0048`, line-bootstrap 95% CI
+`[-0.0941, 0.0769]`, registered `rho_min = 0.05`). The HVG-ST attribution
+control was also negative as a diagnostic (`Delta rho = 0.0326`, 95% CI
+`[-0.0602, 0.1181]`). Both arms deteriorated as k increased; Tx1's k=0 output
+variance was close to target variance, so constant-output collapse does not
+explain the failed adapted gate. This is binding single-gene component evidence,
+not pairwise SL or measured-GI evidence. The full report is
+[`results/tx1-hvg-geneeffect-phase-f.md`](results/tx1-hvg-geneeffect-phase-f.md).
+
+## 9. Key references (bibkeys → why cited)
 
 `feng2024benchmarking` (benchmark + protocol) · `wang2022synlethdb` / `gokbag2023slkb` (labels; ground-truth instability) · `hao2021slmgae` (real cold-start bar) · `zhang2023kr4sl` (Feng-flagged CV3 leader) · `wang2021kg4sl` (named-but-weak north-star) · `long2021gcatsl`, `cai2020ddgcn`, `zhu2023slgnn`, `huang2019grsmf`, `liu2020sl2mf`, `nsf4sl2022`, `liu2022pilsl` (roster) · `dekegel2021paralog` / `flister2025paralog` (feature-based inductive; context-specificity) · **`hua2026cilantrosl`** (closest prior art) · `esm4sl2025` (ESM2-for-SL precedent) · `llmzeroshot2026` (cheap inductive alt) · `adduri2025state` (backbone) · `gandhi2025tahoex1`, `wang2026xcell` (Bridge-A near-misses) · `roohani2023gears` (Bridge-B ancestor) · `chen2024genepert` (mandatory ablation) · `yu2025perturbnet` (ESM-driven precedent) · `ahlmanneltze2025linearbaselines`, `vinastorne2025systema`, `wei2026scperturbench` (synergy-underestimation caveat) · `horlbeck2018landscape`, `norman2019manifolds`, `adamson2016upr` (measured epistasis) · `zamanighomi2019gemini` (ψ precedent) · `chiu2021deepdep`, `szalai2019cvs`, `benfatto2021paris` (dependency/co-dependency) · `zaheer2017deepsets`, `jeong2026scmild` (set learning). Full annotated lists in the four slice files.

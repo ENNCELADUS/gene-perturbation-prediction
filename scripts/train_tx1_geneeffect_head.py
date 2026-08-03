@@ -85,6 +85,9 @@ from aivc_model.tx1_geneeffect_pipeline import (  # noqa: E402
     load_pipeline_config,
 )
 from aivc_model.tx1_geneeffect_pipeline_run import run_training_pipeline  # noqa: E402
+from aivc_model.tx1_geneeffect_prediction_run import (  # noqa: E402
+    run_prediction_pipeline,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,6 +113,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Output dir; defaults to <run.output_dir>/runs/<run.run_id>.",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--prediction-only-head-checkpoint",
+        type=Path,
+        default=None,
+        help=(
+            "Load an existing Phase-D head and emit fresh held-out predictions; "
+            "never trains ST or the GeneEffect head. Requires --run-dir."
+        ),
+    )
+    parser.add_argument(
+        "--expected-head-sha256",
+        default=None,
+        help="Required digest pin for --prediction-only-head-checkpoint.",
+    )
     parser.add_argument(
         "--skip-test-predictions",
         action="store_true",
@@ -147,6 +164,31 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
+
+    if args.prediction_only_head_checkpoint is not None:
+        if args.run_dir is None:
+            raise ValueError("--prediction-only-head-checkpoint requires --run-dir")
+        if args.expected_head_sha256 is None:
+            raise ValueError(
+                "--prediction-only-head-checkpoint requires --expected-head-sha256"
+            )
+        outputs = run_prediction_pipeline(
+            config,
+            head_checkpoint_path=args.prediction_only_head_checkpoint,
+            expected_head_sha256=args.expected_head_sha256,
+            line_manifest_path=args.line_manifest,
+            phase_a_dir=args.phase_a_dir,
+            tx1_cache_dir=args.tx1_cache_dir,
+            depmap_gene_effect_path=args.depmap_gene_effect,
+            run_dir=args.run_dir,
+        )
+        print(json.dumps({key: str(value) for key, value in outputs.items()}, indent=2))
+        return 0
+
+    if args.expected_head_sha256 is not None:
+        raise ValueError(
+            "--expected-head-sha256 requires --prediction-only-head-checkpoint"
+        )
 
     outputs = run_training_pipeline(
         config,
