@@ -1,68 +1,10 @@
-"""Per-line few-shot RE-RANKING calibration ("Phase E") for the T2 Tx1 head.
+"""Low-dimensional per-line few-shot re-ranking for the T2 Tx1 head.
 
-Frozen spec §4 ("Few-shot adaptation"): a light per-line calibration fit on
-``k`` labeled genes of a held-out cell line, scored on the remaining
-DISJOINT genes of that line, with no full-model fine-tune.
-
-Why this module exists (and why ``affine_kshot_calibrate`` in
-``tx1_geneeffect_eval.py`` cannot do this job)
---------------------------------------------------------------------------
-The per-line metric is Spearman rank correlation, which is invariant to any
-monotone-increasing transform of the predictions. A scalar-affine map,
-``y = a + b * base_pred``, is monotone in ``base_pred`` whenever ``b > 0``
-(and reverses ranks uniformly whenever ``b < 0``) — either way it cannot
-change *which* genes are ranked above which others. So fitting ``a`` and
-``b`` on k labeled genes and applying the same map to all genes is INERT
-for Spearman: it can only leave the score unchanged (or flip its sign),
-never improve it. That is by design in ``tx1_geneeffect_eval.py`` — the
-affine seam is a deliberately weak reference calibrator for baselines.
-
-To move the Spearman curve, an adapter must RE-RANK genes, and re-ranking
-requires information the scalar ``base_pred`` does not carry: a per-gene
-FEATURE VECTOR ``Φ[g, :]`` (e.g. moment-pooled response/basal summaries, or
-any other per-gene representation available at inference time). Given such
-features, a (regularized) linear/ridge fit on the k labeled genes can
-reorder genes relative to ``base_pred`` alone, because different genes with
-the same scalar ``base_pred`` can have different feature vectors and hence
-different adapted scores.
-
-This module implements exactly that: closed-form ridge regression from
-per-gene features (optionally on the RESIDUAL of ``base_pred``) fit on k
-labeled genes, applied to all genes. See ``calibrate_line`` for the
-high-level per-line entry point and the module docstring section
-"Phase-F integration" below for how this feeds the evaluator.
-
-Phase-F integration
---------------------------------------------------------------------------
-``tx1_geneeffect_eval.py`` scores a tidy long-format predictions table with
-one ``base_pred`` scalar per (line, gene, method) row, and applies its
-pluggable ``KShotCalibrator`` seam (``affine_kshot_calibrate`` by default)
-identically to every method in that table, including the k=0 baseline
-column. That seam only ever sees the scalar ``base_pred`` — it has no
-access to per-gene features, so it is structurally incapable of
-re-ranking. The integration decision is:
-
-* Baselines (``copy_k562``, ``cross_line_mean``, ``nearest_line``,
-  ``lineage_only``, ``ccle_bulk``, ``pseudobulk_basal``) do not have
-  per-gene feature vectors defined in the same feature space as the T2
-  head, and are scored with Phase F's affine ``"+k"`` seam unchanged. That
-  seam is provably inert for them too, which is expected and correct: it
-  is a smoke test that the k-shot machinery does not spuriously help a
-  method that has no re-ranking mechanism.
-* The method under test (``tx1_3b_st``) does its few-shot re-ranking HERE,
-  upstream of Phase F, using :func:`calibrate_line` on the head's per-gene
-  moment-pooled features. The resulting already-adapted scalar is written
-  into the ``base_pred`` column of the method's rows in the predictions
-  table for a given k, and Phase F's ``per_line_metric``/``evaluate`` is
-  then run with ``calibrate=lambda base_pred, y_true, label_mask:
-  base_pred`` (an identity calibrator) for that method's rows, since the
-  re-ranking already happened. Concretely, for each held-out line and each
-  frozen panel/k, call :func:`calibrate_line` once per panel with that
-  panel's label_mask, and place the returned per-gene vector as the
-  method's ``base_pred`` for that (line, panel, k) before Phase F computes
-  ``panel_spearman`` on the panel's scored (non-label) genes. See
-  :func:`make_predictions_long` for a helper that assembles that
-  per-(line, panel, k) predictions frame directly.
+The adapter fits a label-free PCA view once from all gene features in a held-out
+line, then fits a bounded residual ridge on each panel's k labeled genes.  It is
+post-hoc and transductive because the test lines have already been opened; its
+reruns are diagnostic, never formal.  ``make_predictions_long`` emits the
+already-adapted panel/k scores consumed by the unchanged Phase-F evaluator.
 """
 
 from __future__ import annotations
@@ -72,6 +14,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +34,18 @@ _STD_EPS: float = 1e-8
 #: line-specific k-shot fits).
 DEFAULT_ALPHA: float = 1.0
 
+#: Maximum number of unsupervised per-line principal components exposed to
+#: the supervised k-shot ridge.  The actual fit uses at most ``k_finite // 2``
+#: components, so the supervised problem is always low-dimensional relative
+#: to the labels available to it.
+DEFAULT_MAX_COMPONENTS: int = 8
+
+#: Provenance label for the post-hoc diagnostic adapter implemented here.
+CALIBRATION_SCHEMA: str = "per_line_transductive_pca_residual_ridge_v1"
+
+#: Human-readable form of the supervised dimension cap recorded in manifests.
+CALIBRATION_DIMENSION_RULE: str = "min(max_components, floor(k_finite / 2))"
+
 #: Minimum finite labeled genes required to fit a ridge calibrator. Held-out
 #: lines are NOT completeness-guaranteed (the differential slice was frozen
 #: on TRAINING lines), so a k-shot panel can land on a gene with a missing
@@ -107,18 +62,96 @@ class InsufficientFiniteLabelsError(ValueError):
 
 
 @dataclass(frozen=True)
+class FeatureReducer:
+    """Label-free, deterministic PCA reducer fit once per held-out line."""
+
+    feature_mean: np.ndarray = field(repr=False)
+    feature_std: np.ndarray = field(repr=False)
+    standardized_mean: np.ndarray = field(repr=False)
+    components: np.ndarray = field(repr=False)
+    component_std: np.ndarray = field(repr=False)
+
+    @property
+    def input_dim(self) -> int:
+        """Raw pooled-feature width."""
+        return int(self.feature_mean.shape[0])
+
+    @property
+    def output_dim(self) -> int:
+        """Maximum reduced width available to a k-shot fit."""
+        return int(self.components.shape[0])
+
+    def transform(self, features: np.ndarray) -> np.ndarray:
+        """Project raw features into standardized, label-free PCA scores."""
+        features = np.asarray(features, dtype=float)
+        if features.ndim != 2 or features.shape[1] != self.input_dim:
+            raise ValueError(
+                "features must be 2-D with "
+                f"{self.input_dim} columns, got shape {features.shape}"
+            )
+        standardized = (features - self.feature_mean) / self.feature_std
+        standardized = standardized - self.standardized_mean
+        return (standardized @ self.components.T) / self.component_std
+
+
+def fit_feature_reducer(
+    features_reference: np.ndarray,
+    max_components: int = DEFAULT_MAX_COMPONENTS,
+) -> FeatureReducer:
+    """Fit a PCA reducer from features only, without consulting labels.
+
+    Non-finite rows are excluded using feature values alone.  In the Phase-E
+    path ``features_reference`` is the full per-line gene matrix, so this
+    representation is fitted once before any panel labels are selected.
+    """
+    features_reference = np.asarray(features_reference, dtype=float)
+    if features_reference.ndim != 2:
+        raise ValueError(
+            "features_reference must be 2-D, got "
+            f"{features_reference.shape}"
+        )
+    if max_components < 1:
+        raise ValueError(f"max_components must be >= 1, got {max_components}")
+    finite_rows = np.all(np.isfinite(features_reference), axis=1)
+    finite_features = features_reference[finite_rows]
+    if finite_features.shape[0] < 2 or finite_features.shape[1] < 1:
+        raise ValueError("feature reducer requires at least two finite rows")
+
+    feature_mean = finite_features.mean(axis=0)
+    feature_std = np.maximum(finite_features.std(axis=0, ddof=0), _STD_EPS)
+    standardized = (finite_features - feature_mean) / feature_std
+    n_components = min(
+        int(max_components),
+        standardized.shape[0] - 1,
+        standardized.shape[1],
+    )
+    pca = PCA(n_components=n_components, svd_solver="randomized", random_state=0)
+    pca.fit(standardized)
+    component_std = np.maximum(
+        np.sqrt(np.asarray(pca.explained_variance_, dtype=float)), _STD_EPS
+    )
+    return FeatureReducer(
+        feature_mean=feature_mean,
+        feature_std=feature_std,
+        standardized_mean=np.asarray(pca.mean_, dtype=float),
+        components=np.asarray(pca.components_, dtype=float),
+        component_std=component_std,
+    )
+
+
+@dataclass(frozen=True)
 class RidgeCalibrator:
     """A fitted per-line closed-form ridge calibrator.
 
     Attributes:
-        weights: Ridge coefficients on STANDARDIZED features, shape (F,).
+        weights: Ridge coefficients on reduced PCA scores, shape (D,), where
+            ``D <= min(DEFAULT_MAX_COMPONENTS, k_finite // 2)``.
         intercept: Ridge intercept (fit on the standardized-feature,
             possibly-residual target).
-        feature_mean: Per-feature mean used to standardize, shape (F,),
-            computed from the k labeled genes only.
-        feature_std: Per-feature standard deviation used to standardize
-            (floored at :data:`_STD_EPS`), shape (F,), computed from the k
-            labeled genes only.
+        feature_reducer: Label-free PCA reducer fitted from the reference
+            feature population, normally all genes of the held-out line.
+        reduced_mean: Per-fit mean of the selected PCA scores, used to keep
+            the ridge intercept unpenalized without rescaling each component.
         residual: If True, :meth:`apply` adds the ridge prediction to the
             supplied ``base_pred_all`` (residual-correction mode); if
             False, the ridge prediction is used directly as the adapted
@@ -129,8 +162,8 @@ class RidgeCalibrator:
 
     weights: np.ndarray = field(repr=False)
     intercept: float
-    feature_mean: np.ndarray = field(repr=False)
-    feature_std: np.ndarray = field(repr=False)
+    feature_reducer: FeatureReducer = field(repr=False)
+    reduced_mean: np.ndarray = field(repr=False)
     residual: bool
     alpha: float
 
@@ -159,16 +192,20 @@ class RidgeCalibrator:
                 ``base_pred_all`` is not supplied.
         """
         features_all = np.asarray(features_all, dtype=float)
-        if features_all.ndim != 2 or features_all.shape[1] != self.weights.shape[0]:
+        if (
+            features_all.ndim != 2
+            or features_all.shape[1] != self.feature_reducer.input_dim
+        ):
             msg = (
                 "features_all must be 2-D with "
-                f"{self.weights.shape[0]} columns, got shape "
+                f"{self.feature_reducer.input_dim} columns, got shape "
                 f"{features_all.shape}"
             )
             raise ValueError(msg)
 
-        standardized = (features_all - self.feature_mean) / self.feature_std
-        ridge_out = standardized @ self.weights + self.intercept
+        reduced = self.feature_reducer.transform(features_all)[:, : self.weights.size]
+        reduced = reduced - self.reduced_mean
+        ridge_out = reduced @ self.weights + self.intercept
 
         if not self.residual:
             return ridge_out
@@ -191,13 +228,15 @@ def fit_ridge_calibration(
     y_labeled: np.ndarray,
     alpha: float = DEFAULT_ALPHA,
     base_pred_labeled: np.ndarray | None = None,
+    feature_reducer: FeatureReducer | None = None,
+    max_components: int = DEFAULT_MAX_COMPONENTS,
 ) -> RidgeCalibrator:
     """Fit a closed-form ridge calibrator on k labeled genes.
 
-    Standardizes ``features_labeled`` using the labeled set's own mean/std
-    (the only statistics available at k-shot time for a held-out line),
-    then solves ridge regression with an unpenalized intercept:
-    ``target = intercept + standardized_features @ weights``, minimizing
+    Projects features through a label-free PCA reducer, then solves ridge
+    regression with an unpenalized intercept.  The supervised fit receives
+    at most ``min(max_components, k_finite // 2)`` dimensions, preventing the
+    former thousands-of-features-from-at-most-50-labels interpolation path.
     ``||target - intercept - Z @ weights||^2 + alpha * ||weights||^2``.
 
     If ``base_pred_labeled`` is given, ``target = y_labeled -
@@ -212,6 +251,10 @@ def fit_ridge_calibration(
             Must be >= 0.
         base_pred_labeled: Optional base scalar predictions for the same k
             genes, shape (k,); enables residual-correction mode.
+        feature_reducer: Optional reducer already fit from the full unlabeled
+            per-line feature matrix. If omitted, a reducer is fit from the
+            supplied feature rows without reading targets.
+        max_components: Hard cap on PCA dimensions exposed to ridge.
 
     Returns:
         A fitted :class:`RidgeCalibrator`.
@@ -238,6 +281,8 @@ def fit_ridge_calibration(
         raise ValueError(msg)
     if alpha < 0:
         raise ValueError(f"alpha must be >= 0, got {alpha}")
+    if max_components < 1:
+        raise ValueError(f"max_components must be >= 1, got {max_components}")
 
     residual_mode = base_pred_labeled is not None
     if residual_mode:
@@ -275,10 +320,24 @@ def fit_ridge_calibration(
         features_labeled = features_labeled[finite_mask]
         target = target[finite_mask]
 
-    feature_mean = features_labeled.mean(axis=0)
-    feature_std = features_labeled.std(axis=0, ddof=0)
-    feature_std = np.maximum(feature_std, _STD_EPS)
-    standardized = (features_labeled - feature_mean) / feature_std
+    if feature_reducer is None:
+        feature_reducer = fit_feature_reducer(
+            features_labeled[np.all(np.isfinite(features_labeled), axis=1)],
+            max_components=max_components,
+        )
+    elif feature_reducer.input_dim != n_features:
+        raise ValueError(
+            "feature_reducer input width does not match features_labeled: "
+            f"{feature_reducer.input_dim} vs {n_features}"
+        )
+    n_components = min(
+        feature_reducer.output_dim,
+        int(max_components),
+        max(1, n_finite // 2),
+    )
+    reduced = feature_reducer.transform(features_labeled)[:, :n_components]
+    reduced_mean = reduced.mean(axis=0)
+    reduced = reduced - reduced_mean
 
     # Center the target so the intercept is simply its mean and the ridge
     # penalty only shrinks the (standardized-feature) slope weights, not
@@ -291,14 +350,14 @@ def fit_ridge_calibration(
     # raises LinAlgError. lstsq is always well-defined (returns the min-norm
     # least-squares solution) and agrees with solve whenever the system is
     # actually well-posed (alpha > 0, or alpha=0 with a full-rank Gram).
-    gram = standardized.T @ standardized + alpha * np.eye(n_features)
-    weights, *_ = np.linalg.lstsq(gram, standardized.T @ target_centered, rcond=None)
+    gram = reduced.T @ reduced + alpha * np.eye(n_components)
+    weights, *_ = np.linalg.lstsq(gram, reduced.T @ target_centered, rcond=None)
 
     return RidgeCalibrator(
         weights=weights,
         intercept=float(target_mean),
-        feature_mean=feature_mean,
-        feature_std=feature_std,
+        feature_reducer=feature_reducer,
+        reduced_mean=reduced_mean,
         residual=residual_mode,
         alpha=float(alpha),
     )
@@ -312,6 +371,8 @@ def calibrate_line(
     k: int,
     alpha: float = DEFAULT_ALPHA,
     residual: bool = True,
+    feature_reducer: FeatureReducer | None = None,
+    max_components: int = DEFAULT_MAX_COMPONENTS,
 ) -> np.ndarray:
     """High-level per-line few-shot calibration entry point.
 
@@ -342,6 +403,9 @@ def calibrate_line(
         residual: If True (default), fit/apply a residual correction on
             top of ``base_pred``; if False, the ridge output replaces
             ``base_pred`` entirely.
+        feature_reducer: Label-free reducer fit from all genes in this line.
+            If omitted, it is fit from ``features`` without reading labels.
+        max_components: Hard cap on reduced dimensions exposed to ridge.
 
     Returns:
         Adapted per-gene predictions for all G genes, shape (G,). Entries
@@ -375,6 +439,9 @@ def calibrate_line(
     if k == 0:
         return base_pred.copy()
 
+    if feature_reducer is None:
+        feature_reducer = fit_feature_reducer(features, max_components)
+
     label_indices = np.flatnonzero(label_mask)
     if k > label_indices.size:
         msg = f"k={k} exceeds available labeled genes ({label_indices.size})"
@@ -387,6 +454,8 @@ def calibrate_line(
             y_labeled=y_true[fit_indices],
             alpha=alpha,
             base_pred_labeled=base_pred[fit_indices] if residual else None,
+            feature_reducer=feature_reducer,
+            max_components=max_components,
         )
     except InsufficientFiniteLabelsError as exc:
         _LOGGER.warning(
@@ -456,6 +525,11 @@ def make_predictions_long(
         ``scored_mask = ~label_mask`` convention.
     """
     genes = np.asarray(genes)
+    feature_reducer = (
+        fit_feature_reducer(features, DEFAULT_MAX_COMPONENTS)
+        if any(k > 0 for k in k_schedule)
+        else None
+    )
     rows: list[dict[str, object]] = []
     panel_ids = sorted(panels_for_line["panel"].unique())
     for panel_id in panel_ids:
@@ -473,7 +547,15 @@ def make_predictions_long(
                 else (np.zeros(genes.shape[0], dtype=bool))
             )
             adapted = calibrate_line(
-                features, base_pred, y_true, label_mask, k, alpha, residual
+                features,
+                base_pred,
+                y_true,
+                label_mask,
+                k,
+                alpha,
+                residual,
+                feature_reducer,
+                DEFAULT_MAX_COMPONENTS,
             )
             for gene, pred, truth in zip(genes, adapted, y_true):
                 rows.append(

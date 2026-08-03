@@ -18,9 +18,11 @@ from scipy.stats import spearmanr
 
 from aivc_model.tx1_geneeffect_eval import affine_kshot_calibrate
 from aivc_model.tx1_fewshot_calibration import (
+    DEFAULT_MAX_COMPONENTS,
     MIN_FINITE_LABELS,
     InsufficientFiniteLabelsError,
     calibrate_line,
+    fit_feature_reducer,
     fit_ridge_calibration,
     make_predictions_long,
 )
@@ -133,14 +135,25 @@ def test_larger_alpha_shrinks_weights_toward_zero() -> None:
     assert np.linalg.norm(high.weights) < np.linalg.norm(low.weights)
 
 
-def test_ridge_does_not_blow_up_when_k_less_than_features() -> None:
-    # k=3 labeled genes, F=8 features: the labeled-gene Gram matrix alone
-    # (features_labeled.T @ features_labeled) is rank-deficient, but the
-    # ridge penalty keeps the closed-form solve well posed.
-    features, _, y_true = _mis_ranking_fixture(n_genes=20, n_features=8, seed=5)
-    calibrator = fit_ridge_calibration(features[:3], y_true[:3], alpha=1.0)
+def test_high_dimensional_features_have_no_high_dimensional_fit_path() -> None:
+    rng = np.random.default_rng(5)
+    features = rng.normal(size=(80, 4000))
+    y_true = rng.normal(size=80)
+    k = 10
+    reducer = fit_feature_reducer(features)
+    calibrator = fit_ridge_calibration(
+        features[:k],
+        y_true[:k],
+        alpha=1.0,
+        feature_reducer=reducer,
+    )
+
+    assert reducer.input_dim == 4000
+    assert reducer.output_dim == DEFAULT_MAX_COMPONENTS
+    assert calibrator.weights.shape == (k // 2,)
     assert np.all(np.isfinite(calibrator.weights))
     assert np.linalg.norm(calibrator.weights) < 1e3
+    assert calibrator.apply(features).shape == (80,)
 
 
 # ---------------------------------------------------------------------------
@@ -311,30 +324,44 @@ def test_calibrate_line_alpha_zero_rank_deficient_returns_finite_predictions() -
     assert np.all(np.isfinite(result))
 
 
-def test_fit_ridge_calibration_well_posed_matches_manual_solve() -> None:
-    """The lstsq-based fix must not change the well-posed-system solution.
-
-    With F <= k (a full-rank Gram), ``np.linalg.lstsq`` and
-    ``np.linalg.solve`` solve the same well-posed normal equations and must
-    agree numerically, for both a regularized (alpha>0) and an
-    unregularized-but-well-posed (alpha=0) fit.
-    """
+def test_fit_ridge_calibration_matches_reduced_manual_solve() -> None:
+    """The closed form is solved in the bounded, label-free PCA space."""
     features, _, y_true = _mis_ranking_fixture(n_genes=40, n_features=3, seed=22)
     features_labeled = features[:20]
     y_labeled = y_true[:20]
+    reducer = fit_feature_reducer(features)
 
     for alpha in (0.0, 1.0):
-        calibrator = fit_ridge_calibration(features_labeled, y_labeled, alpha=alpha)
+        calibrator = fit_ridge_calibration(
+            features_labeled,
+            y_labeled,
+            alpha=alpha,
+            feature_reducer=reducer,
+        )
 
-        feature_mean = features_labeled.mean(axis=0)
-        feature_std = np.maximum(features_labeled.std(axis=0, ddof=0), 1e-8)
-        standardized = (features_labeled - feature_mean) / feature_std
+        reduced = reducer.transform(features_labeled)[:, : calibrator.weights.size]
+        reduced = reduced - reduced.mean(axis=0)
         target_centered = y_labeled - y_labeled.mean()
-        n_features = features_labeled.shape[1]
-        gram = standardized.T @ standardized + alpha * np.eye(n_features)
-        expected_weights = np.linalg.solve(gram, standardized.T @ target_centered)
+        gram = reduced.T @ reduced + alpha * np.eye(calibrator.weights.size)
+        expected_weights = np.linalg.solve(gram, reduced.T @ target_centered)
 
         assert np.allclose(calibrator.weights, expected_weights, atol=1e-6), alpha
+
+
+def test_feature_reducer_is_label_free_and_deterministic() -> None:
+    features, _, y_true = _mis_ranking_fixture(n_genes=100, n_features=20, seed=35)
+    first = fit_feature_reducer(features)
+    second = fit_feature_reducer(features)
+
+    corrupted_y = y_true.copy()
+    corrupted_y[50:] += 10_000.0
+    del corrupted_y  # labels are deliberately never accepted by the reducer API
+
+    assert np.array_equal(first.feature_mean, second.feature_mean)
+    assert np.array_equal(first.feature_std, second.feature_std)
+    assert np.array_equal(first.standardized_mean, second.standardized_mean)
+    assert np.array_equal(first.components, second.components)
+    assert np.array_equal(first.transform(features), second.transform(features))
 
 
 def test_calibrate_line_rejects_k_exceeding_available_labels() -> None:

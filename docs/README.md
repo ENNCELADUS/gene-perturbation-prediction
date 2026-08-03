@@ -7,12 +7,12 @@ K562 backbone established · first HCT116 frozen-backbone transport audit closed
 negative · Horlbeck K562 GI acquired and coverage-audited · T1 K562
 Bridge-A-vs-Horlbeck mechanism kill-test completed **negative** (composition
 mechanism paused for redesign) · **T2 few-shot cross-cell-line GeneEffect backbone
-now the active near-term development focus, execution under way**: Phase A
-(data-audit/manifest freeze, amended 2026-07-26) and Phase B (Tx1-3B basal
-embeddings) **complete**; Phase C (ST response model) **complete** for both
-arms; Phase D (rebuilt hybrid head) is being macro-batched for relaunch after
-the initial serial-window runs were stopped, with no Phase D intermediate cache;
-no Phase 3 result yet ·
+registered primary gate completed negative**: both Phase D arms and their
+nine-line Phase F evaluation are complete; at k=10 Tx1-3B-ST did not improve
+over copy-K562 (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`), while the
+HVG-ST attribution control was also negative as a diagnostic. T2 is paused for
+redesign; the remaining baseline ladder is closeout work, not a new gate
+opportunity ([result](results/tx1-hvg-geneeffect-phase-f.md)) ·
 SOTA reproduction and contextual SL model not yet complete.
 **Goal:** build a virtual-cell SL discovery model that competes with the Feng2024
 SOTA for genes withheld from SL-pair/graph training and separately generalizes to
@@ -71,7 +71,7 @@ gene marginals, cell-line identity, and direct context-free transfer.
 | Reproduce SLMGAE, KR4SL, KG4SL and best official comparator | Pending. |
 | Context-free composition score `q(a,b)` | Not started. |
 | Multi-cell-line data-role audit | Not started. |
-| Multi-cell-line virtual-cell backbone | **Active focus, optimized relaunch pending.** Few-shot cross-cell-line GeneEffect backbone `F(X_c, c, g)`: Tx1-3B-conditioned ST + rebuilt hybrid head ([design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)); fixed 28 train / 5 validation / 9 test split over Tahoe DMSO-basal DepMap lines plus the 4 Perturb-seq anchors (validation drawn only from the non-anchor training pool). Phase A + Phase B complete; Phase C complete for both arms; Phase D is being converted from serial-window inference to window macro-batching with online moments and no intermediate cache. No Phase 3 result yet. |
+| Multi-cell-line virtual-cell backbone | **Registered primary gate completed; negative.** Tx1-3B-conditioned ST + rebuilt hybrid head failed to beat copy-K562 + 10 labels over the fixed 9-line test (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`); HVG-ST was also negative as a diagnostic. Phase A-D and the primary Phase F gate are complete; T2 is paused for redesign and the remaining baseline ladder is closeout work ([result](results/tx1-hvg-geneeffect-phase-f.md)). |
 | HCT116 frozen K562-backbone transport | **Completed; negative.** No independent HCT116 GeneEffect signal; [closeout](results/exp05-hct116-frozen-backbone-transport.md). |
 | Context-conditioned Bridge A / Bridge B | Not started; the K562 Bridge A **mechanism** was tested and is negative (see measured-GI row). |
 | Held-out-cell-line SL evaluation | Not started; requires eligible pairwise labels. |
@@ -84,7 +84,7 @@ gene marginals, cell-line identity, and direct context-free transfer.
   AUROC(s_A -> strong-SL) approximately 0.52, below the single-gene floor). The
   composition mechanism is paused for redesign and not extended across contexts;
   [result](results/exp05-bridge-a-horlbeck-kill-test.md).
-- [ ] **T2 (active focus, execution under way)** — build the few-shot
+- [ ] **T2 (registered primary gate completed negative; closeout pending)** — the few-shot
   cross-cell-line GeneEffect backbone `F(X_c, c, g)`: fixed 28 train / 5
   validation / 9 test split (four CRISPRi Perturb-seq lines plus 24 Tahoe
   DMSO-basal∩DepMap lines train; 5 more Tahoe lines, lineage-stratified and
@@ -93,10 +93,11 @@ gene marginals, cell-line identity, and direct context-free transfer.
   the differentially-essential slice (587 genes) against copy-K562 / mean /
   nearest-line / lineage-only / CCLE-bulk / pseudobulk-basal baselines with a
   few-shot curve (single-gene backbone transfer, task-data-held-out, not
-  cross-cell-line SL). Phase A (amended 2026-07-26) and Phase B are complete;
-  Phase C is complete for both arms; Phase D's initial serial-window runs were
-  stopped and an uncached window-macro-batched runner is being validated;
-  [design](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md).
+  cross-cell-line SL). Phase A-D are complete. The registered k=10 Tx1 gate
+  failed against copy-K562, and the HVG control was also negative as a
+  diagnostic. The nine test lines are opened and binding; T2 is paused for
+  redesign. Complete the remaining baseline ladder only as closeout evidence;
+  [result](results/tx1-hvg-geneeffect-phase-f.md).
 - [ ] Freeze and verify the official Feng2024 folds, labels, candidates, and
   `cal_metrics` contract.
 - [ ] Reproduce the strong SOTA under that identical official harness.

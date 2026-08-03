@@ -6,16 +6,15 @@ mechanism kill-test, has completed and is negative**: the composed frozen backbo
 does not recover measured K562 epistasis (|Spearman| < 0.01; AUROC(s_A -> strong-SL)
 approximately 0.52), so the composition mechanism is paused for redesign and not
 extended across contexts ([result](results/exp05-bridge-a-horlbeck-kill-test.md)).
-With composition paused, the active near-term development focus is **T2, sharpened:
-a few-shot cross-cell-line GeneEffect backbone** — an accurate, context-conditioned
-single-gene predictor that both bridges depend on, pursued as the Phase 3
-backbone-transfer exit and reported as backbone transfer, not as an SL claim
-(§1.1, §5). T2's own Phase A (data-audit/manifest freeze) and Phase B (Tx1-3B
-basal embeddings) and Phase C (ST response model, both arms) are **complete**;
-Phase D (rebuilt hybrid head) is being macro-batched for relaunch after the
-initial serial-window runs were stopped, with no Phase D intermediate cache — no
-Phase 3 result exists. Formal SOTA reproduction, Bridge B, and any pairwise
-cross-cell-line result remain not started.
+T2, the few-shot cross-cell-line GeneEffect backbone, has now completed its
+registered primary gate with a **negative** result: at k=10 Tx1-3B-ST did not
+improve over copy-K562 (`Delta rho = -0.0048`, 95% CI
+`[-0.0941, 0.0769]`), and the HVG-ST attribution control was also negative as a
+diagnostic. Phase A-D and the primary Phase F evaluation are complete; the nine
+test lines are opened and binding, so T2 is paused for redesign. The remaining
+baseline ladder is closeout evidence, not a new gate opportunity
+([result](results/tx1-hvg-geneeffect-phase-f.md)). Formal SOTA reproduction,
+Bridge B, and any pairwise cross-cell-line result remain not started.
 **Contract:** [`01-blueprint.md`](01-blueprint.md) · **Acceptance criteria:**
 [`02-acceptance-criteria.md`](02-acceptance-criteria.md) · **Related work:**
 [`03-literature-review.md`](03-literature-review.md)
@@ -34,13 +33,14 @@ mechanistic validation context. It is not the final target population. Work does
 not advance to a stronger claim merely because an earlier dataset is unavailable;
 the corresponding claim remains not evaluable.
 
-### 1.1 Immediate execution order (updated 2026-07-23)
+### 1.1 Immediate execution order (updated 2026-07-29)
 
-T1 (below) has completed and is negative, pausing the composition mechanism; the
-near-term work is now a single track — **T2, the few-shot cross-cell-line
-GeneEffect backbone**. It runs independently of the Feng-axis reproduction
-(Phases 1–2), opens no untouched held-out cell-line labels, and yields no formal
-`02` verdict before its Phase 0 registrations are frozen. Concrete design:
+T1 and the registered T2 primary gate have both completed negative, pausing the
+current composition mechanism and the current few-shot GeneEffect backbone for
+redesign. T2 closeout must finish the remaining baseline ladder without treating
+it as a new gate opportunity; any redesigned formal model needs a newly frozen
+untouched cohort because the present nine test lines are opened. The independent
+Feng-axis reproduction (Phases 1-2) remains pending. Concrete T2 design:
 [`specs/2026-07-23-tx1-st-geneeffect-backbone-design.md`](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md).
 
 - **T1 — K562 mechanism kill-test (completed 2026-07-22; negative).** Composed the
@@ -56,8 +56,9 @@ GeneEffect backbone**. It runs independently of the Feng-axis reproduction
   composition mechanism is **paused for redesign and not extended across contexts**.
   Development diagnostic, not the MECHANISTIC verdict (§9 and `02` §6). Result:
   [`results/exp05-bridge-a-horlbeck-kill-test.md`](results/exp05-bridge-a-horlbeck-kill-test.md).
-- **T2 — few-shot cross-cell-line GeneEffect backbone (active near-term focus;
-  execution under way).** Build `F(X_c, c, g) -> GeneEffect`: a context-conditioned
+- **T2 — few-shot cross-cell-line GeneEffect backbone (registered primary gate
+  completed 2026-07-29; negative; closeout pending).** Built
+  `F(X_c, c, g) -> GeneEffect`: a context-conditioned
   single-gene predictor that predicts DepMap GeneEffect for cancer lines seen only
   through their basal single-cell state — not Feng2024, which has no cell-type axis
   — and (b) adapts to a held-out line from a few of its own labels (k-shot line
@@ -75,13 +76,14 @@ GeneEffect backbone**. It runs independently of the Feng-axis reproduction
   pseudobulk-basal regression, with a few-shot curve (accuracy vs. k held-out-line
   labels). This is the Phase 3 single-gene backbone-transfer exit, reported as
   task-data-held-out transfer (test lines are inside the Tx1 encoder's Tahoe
-  pretraining), not cross-cell-line SL. Phase A (data audit/manifest freeze) and
-  Phase B (Tx1-3B basal embeddings, verified for all 42 manifest lines) are
-  **complete**; Phase C (ST response model) is complete for both arms; Phase D
-  (rebuilt hybrid head) is code-complete, streams raw responses directly into
-  moment pooling without a disk cache, and has both arm training runs in
-  progress. No result
-  exists yet. Concrete architecture:
+  pretraining), not cross-cell-line SL. Phase A-D and the registered Tx1 primary
+  Phase F gate are **complete**. Tx1 failed the k=10 gate against copy-K562;
+  HVG-ST was also negative as a diagnostic. The nine test lines are opened and
+  binding, and T2 is paused for redesign. Cross-line mean, nearest-line,
+  lineage-only, CCLE-bulk, and pseudobulk-basal remain to be run only as baseline
+  closeout. Result:
+  [`results/tx1-hvg-geneeffect-phase-f.md`](results/tx1-hvg-geneeffect-phase-f.md).
+  Concrete architecture:
   [`specs/2026-07-23-tx1-st-geneeffect-backbone-design.md`](specs/2026-07-23-tx1-st-geneeffect-backbone-design.md)
   (Tx1-3B-conditioned ST + rebuilt hybrid head, HVG-ST encoder-unseen control).
 

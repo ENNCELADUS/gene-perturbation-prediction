@@ -25,6 +25,7 @@ import json
 import logging
 from pathlib import Path
 
+from aivc_model.gene_splits import sha256_file
 from aivc_model.tx1_geneeffect_eval import (
     DEFAULT_BASELINE_METHOD,
     DEFAULT_PRIMARY_METHOD,
@@ -57,6 +58,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         required=True,
         help="Path to a tidy predictions CSV or parquet file.",
+    )
+    parser.add_argument(
+        "--prediction-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Optional prediction-only manifest. Its predictions digest is "
+            "verified, and formal:false forces a diagnostic verdict."
+        ),
     )
     parser.add_argument(
         "--phase-a-dir",
@@ -152,7 +162,10 @@ def _override_reasons(
 
 
 def _diagnostic_reason(
-    allow_partial: bool, skip_hash_check: bool, override_reasons: list[str]
+    allow_partial: bool,
+    skip_hash_check: bool,
+    override_reasons: list[str],
+    prediction_manifest_reason: str | None = None,
 ) -> str | None:
     """Build the diagnostic-downgrade reason string for the verdict.
 
@@ -173,6 +186,11 @@ def _diagnostic_reason(
         bypassed.append("artifact hash verification bypassed")
     if override_reasons:
         bypassed.append(f"non-frozen overrides: {', '.join(override_reasons)}")
+    if prediction_manifest_reason is not None:
+        bypassed.append(
+            "prediction manifest declares formal:false: "
+            f"{prediction_manifest_reason}"
+        )
     if not bypassed:
         return None
     return f"partial/diagnostic run ({'; '.join(bypassed)})"
@@ -205,6 +223,26 @@ def main(argv: list[str] | None = None) -> int:
         level=args.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
 
+    prediction_manifest_reason: str | None = None
+    if args.prediction_manifest is not None:
+        prediction_manifest = json.loads(args.prediction_manifest.read_text())
+        if not isinstance(prediction_manifest, dict):
+            raise ValueError("prediction manifest must be a JSON object")
+        expected_predictions_sha = prediction_manifest.get("predictions_sha256")
+        actual_predictions_sha = sha256_file(args.predictions)
+        if expected_predictions_sha != actual_predictions_sha:
+            raise ValueError(
+                "prediction manifest SHA-256 mismatch: "
+                f"{expected_predictions_sha!r} vs {actual_predictions_sha!r}"
+            )
+        manifest_formal = prediction_manifest.get("formal")
+        if not isinstance(manifest_formal, bool):
+            raise ValueError("prediction manifest formal field must be boolean")
+        if not manifest_formal:
+            prediction_manifest_reason = str(
+                prediction_manifest.get("reason", "unspecified")
+            )
+
     override_reasons = _override_reasons(
         args.rho_min,
         args.gate_k,
@@ -213,7 +251,12 @@ def main(argv: list[str] | None = None) -> int:
         args.baseline_method,
         args.expected_test_lines,
     )
-    is_diagnostic = args.allow_partial or args.skip_hash_check or bool(override_reasons)
+    is_diagnostic = (
+        args.allow_partial
+        or args.skip_hash_check
+        or bool(override_reasons)
+        or prediction_manifest_reason is not None
+    )
     # Hash verification is an integrity check independent of coverage: only
     # --skip-hash-check bypasses it. --allow-partial bypasses contract
     # validation (coverage/schedule) but must still confirm the artifacts are
@@ -221,7 +264,10 @@ def main(argv: list[str] | None = None) -> int:
     run_hash_check = not args.skip_hash_check
     strict = not args.allow_partial
     reason = _diagnostic_reason(
-        args.allow_partial, args.skip_hash_check, override_reasons
+        args.allow_partial,
+        args.skip_hash_check,
+        override_reasons,
+        prediction_manifest_reason,
     )
 
     if run_hash_check:

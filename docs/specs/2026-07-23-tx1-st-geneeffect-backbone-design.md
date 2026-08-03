@@ -1,7 +1,8 @@
 # Design: Tx1-conditioned ST GeneEffect backbone (few-shot, cross-cell-line)
 
-**Status:** design approved 2026-07-23; test-set re-scoped 2026-07-23; execution
-under way, no result yet. Concrete architecture for roadmap **T2 / Phase 3** (the
+**Status:** design approved 2026-07-23; test-set re-scoped 2026-07-23; registered
+primary gate completed negative 2026-07-29. Concrete architecture for roadmap
+**T2 / Phase 3** (the
 few-shot cross-cell-line GeneEffect backbone). **Phase A** (data audit, manifest
 freeze) is **complete**, and was amended 2026-07-26: the differentially-essential
 slice narrowed from 589 to **587** genes after a coverage measurement found
@@ -10,13 +11,13 @@ any of the four anchor libraries (`CRIPTO`/`HEMK2` were kept — they resolve
 under their current HGNC symbols `TDGF1`/`N6AMT1`); see §6. **Phase B** (Tx1-3B
 basal embeddings) is **complete** — verified for all 42 manifest lines. **Phase
 C** (ST response model) is **complete** for both arms, with best/final
-checkpoints produced. **Phase D** (rebuilt hybrid head) is being optimized for
-relaunch after the initial serial-window runs were stopped. Raw predicted
+checkpoints produced. **Phase D** (rebuilt hybrid head) and both arm test
+prediction tables are **complete**. Raw predicted
 responses are generated in same-process macro-batches of independent ST windows
 and reduced online to mean plus population variance; neither raw responses nor
-pooled features are cached to disk. No listed step has produced a result; no number in this document is a
-result. Line counts (49 Tahoe DMSO lines, 38 with DepMap) are audited-from-disk
-facts, not model results.
+pooled features are cached to disk. The registered Phase F k=10 Tx1 gate is
+negative; see the [result report](../results/tx1-hvg-geneeffect-phase-f.md).
+Line counts (49 Tahoe DMSO lines, 38 with DepMap) are audited-from-disk facts.
 **Authority:** [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
 [`../02-acceptance-criteria.md`](../02-acceptance-criteria.md) (frozen bar) govern;
 [`../04-roadmap.md`](../04-roadmap.md) §1.1/§5 is the phase plan this refines; it
@@ -261,7 +262,7 @@ checkpoint exists. Trains on K562+HCT116+Jurkat+HepG2 observed KO responses,
 both emitting gene space). Both arm checkpoints were produced. **Exit met:** ST
 checkpoints (Tx1 and HVG arms).
 
-**Phase D — rebuilt hybrid head. Parallelization in progress.** The head, moment pooling,
+**Phase D — rebuilt hybrid head. Complete.** The head, moment pooling,
 the rank/correlation + variance-matching losses, the few-shot calibrator, and
 the evaluator already exist. The line-role selector (28 train / 5 validation /
 9 test), the derived validation-line registration, the DepMap GeneEffect
@@ -274,7 +275,7 @@ each gene's response online to mean plus population variance. No raw response
 or pooled feature is cached. The initial serial-window arm runs were stopped;
 optimized single-line GPU probes gate relaunch.
 
-The relaunch gate uses training-role lines only and fixes one global
+The relaunch gate used training-role lines only and fixed one global
 `response_window_macro_batch_size=64` for both arms. Against the K=1 fp32
 reference, each arm must satisfy
 `max_abs_diff <= 1e-5 * max(1, reference_max_abs)` on pooled features, achieve
@@ -282,18 +283,21 @@ at least 5x per-gene throughput, keep peak allocated memory below 80% of the
 card, and sustain at least 40% SM utilization. The probe must run under the
 same PyTorch/STATE/CUDA environment as the formal launch; test-role lines and
 GeneEffect labels are not read while choosing or validating K.
-**Exit not met:** trained heads for both encoder arms.
+**Exit met:** trained heads and complete nine-line prediction tables for both
+encoder arms.
 
-**Phase E — few-shot calibration.** Implement the per-line affine/low-rank (or
-head-only) calibration and the k-schedule. **Exit:** k-shot adapter. Not
-started.
+**Phase E — few-shot calibration. Complete for the evaluated protocol.** The
+per-line ridge-residual candidate calibration and affine copy-K562 calibration
+were applied over the frozen k-schedule. **Exit met:** k-shot prediction tables.
 
-**Phase F — evaluation.** Score Tx1-3B-ST and HVG-ST on the 9 held-out test
-lines on the differentially-essential slice against all baselines; the k=10
+**Phase F — evaluation. Registered primary gate completed negative; baseline
+closeout incomplete.** Tx1-3B-ST and HVG-ST were scored on the 9 held-out test
+lines on the differentially-essential slice against copy-K562; the k=10
 population gate, per-line CIs, k=0 stress point, few-shot curve, and
-variance-preservation check. Write `../results/<slug>.md` only after it runs.
-Not started. **Exit:** a Phase-3
-backbone-transfer verdict (positive or negative), status synced across the vault.
+variance-preservation check. Tx1 failed the registered k=10 gate against
+copy-K562; HVG-ST was also negative as a diagnostic. The remaining registered
+baseline ladder is not yet materialized. **Exit not fully met:** primary verdict
+and report exist, but all-baseline closeout remains pending.
 
 ## 7. Claim boundaries and risks
 

@@ -40,6 +40,7 @@ from aivc_model.tx1_geneeffect_eval import (
     EvaluationContractError,
     verify_artifact_hashes as _real_verify_artifact_hashes,
 )
+from aivc_model.tx1_geneeffect_head import Tx1GeneEffectHead
 from aivc_model.tx1_geneeffect_pipeline import (
     ObjectiveConfig,
     PhaseFConfig,
@@ -52,6 +53,10 @@ from aivc_model.tx1_geneeffect_pipeline import (
     verify_gene_vocabulary_authenticity,
 )
 from aivc_model.tx1_geneeffect_pipeline_run import run_training_pipeline
+from aivc_model.tx1_geneeffect_prediction_run import (
+    load_and_verify_head_provenance,
+    verify_expected_head_sha256,
+)
 from aivc_model.tx1_geneeffect_train import SELECTION_METRIC_NAME
 from aivc_model.tx1_predicted_response import ForwardOnlyStateModel, resolve_device
 from conftest import tx1_manifest_row as _manifest_row
@@ -68,6 +73,75 @@ _N_PLAIN_GENES = 50
 _N_LABELS = 50
 _N_PANELS = 2
 _TEST_LINES = ("ACH-T1", "ACH-T2")
+
+
+def test_prediction_only_cli_never_dispatches_training(
+    monkeypatch, tmp_path: Path
+) -> None:
+    config = object()
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(cli, "load_pipeline_config", lambda _path: config)
+
+    def fake_prediction_pipeline(received_config, **kwargs):
+        captured["config"] = received_config
+        captured.update(kwargs)
+        return {"predictions": tmp_path / "predictions.csv"}
+
+    monkeypatch.setattr(cli, "run_prediction_pipeline", fake_prediction_pipeline)
+
+    def fail_training(*_args, **_kwargs):
+        raise AssertionError("prediction-only CLI dispatched training")
+
+    monkeypatch.setattr(cli, "run_training_pipeline", fail_training)
+    checkpoint = tmp_path / "head.pt"
+    run_dir = tmp_path / "diagnostic"
+    exit_code = cli.main(
+        [
+            "--config",
+            str(tmp_path / "config.yaml"),
+            "--line-manifest",
+            str(tmp_path / "lines.csv"),
+            "--tx1-cache-dir",
+            str(tmp_path / "cache"),
+            "--depmap-gene-effect",
+            str(tmp_path / "gene_effect.csv"),
+            "--run-dir",
+            str(run_dir),
+            "--prediction-only-head-checkpoint",
+            str(checkpoint),
+            "--expected-head-sha256",
+            "expected-digest",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["config"] is config
+    assert captured["head_checkpoint_path"] == checkpoint
+    assert captured["expected_head_sha256"] == "expected-digest"
+    assert captured["run_dir"] == run_dir
+
+
+def test_prediction_only_cli_requires_expected_head_digest(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(cli, "load_pipeline_config", lambda _path: object())
+    with pytest.raises(ValueError, match="requires --expected-head-sha256"):
+        cli.main(
+            [
+                "--config",
+                str(tmp_path / "config.yaml"),
+                "--line-manifest",
+                str(tmp_path / "lines.csv"),
+                "--tx1-cache-dir",
+                str(tmp_path / "cache"),
+                "--depmap-gene-effect",
+                str(tmp_path / "gene_effect.csv"),
+                "--run-dir",
+                str(tmp_path / "diagnostic"),
+                "--prediction-only-head-checkpoint",
+                str(tmp_path / "head.pt"),
+            ]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +254,96 @@ def _base_config(**overrides: object) -> Tx1GeneEffectHeadConfig:
         else:
             config = _replace(config, **{key: value})
     return config
+
+
+def _write_prediction_only_provenance_fixture(
+    tmp_path: Path, **overrides: object
+) -> tuple[Tx1GeneEffectHeadConfig, Path, Path, Tx1GeneEffectHead]:
+    st_checkpoint = tmp_path / "st.bin"
+    depmap = tmp_path / "depmap.csv"
+    st_checkpoint.write_bytes(b"st-checkpoint")
+    depmap.write_bytes(b"depmap")
+    head_checkpoint = tmp_path / "run" / "models" / "head.pt"
+    head_checkpoint.parent.mkdir(parents=True)
+    head_checkpoint.write_bytes(b"head")
+    config = _base_config(**{"state.st_checkpoint_path": st_checkpoint})
+    head = Tx1GeneEffectHead(
+        response_dim=config.state.output_dim,
+        basal_dim=config.state.input_dim,
+        hidden=config.training.hidden,
+        moments=config.training.moments,
+    )
+    provenance: dict[str, object] = {
+        "arm": config.arm,
+        "config": {
+            "moments": config.training.moments,
+            "hidden": config.training.hidden,
+            "lam": config.objective.lam,
+            "learning_rate": config.training.learning_rate,
+            "epochs": config.training.epochs,
+            "seed": config.training.seed,
+        },
+        "selection_metric": config.objective.selection_metric,
+        "st_checkpoint_sha256": sha256_file(st_checkpoint),
+        "depmap_gene_effect_sha256": sha256_file(depmap),
+    }
+    for key, value in overrides.items():
+        if key.startswith("config."):
+            provenance_config = provenance["config"]
+            assert isinstance(provenance_config, dict)
+            provenance_config[key[7:]] = value
+        else:
+            provenance[key] = value
+    (head_checkpoint.parent.parent / "provenance.json").write_text(
+        json.dumps(provenance)
+    )
+    return config, head_checkpoint, depmap, head
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("arm", "wrong_arm"),
+        ("config.moments", 99),
+        ("config.hidden", 99),
+        ("config.lam", 99.0),
+        ("config.learning_rate", 99.0),
+        ("config.epochs", 99),
+        ("config.seed", 99),
+        ("selection_metric", "wrong"),
+        ("st_checkpoint_sha256", "wrong"),
+        ("depmap_gene_effect_sha256", "wrong"),
+    ],
+)
+def test_prediction_only_rejects_phase_d_provenance_mismatch(
+    tmp_path: Path, key: str, value: object
+) -> None:
+    config, checkpoint, depmap, head = _write_prediction_only_provenance_fixture(
+        tmp_path, **{key: value}
+    )
+    with pytest.raises(ValueError, match="provenance mismatch"):
+        load_and_verify_head_provenance(config, checkpoint, depmap, head)
+
+
+def test_prediction_only_rejects_head_architecture_mismatch(tmp_path: Path) -> None:
+    config, checkpoint, depmap, _head = _write_prediction_only_provenance_fixture(
+        tmp_path
+    )
+    wrong_head = Tx1GeneEffectHead(
+        response_dim=config.state.output_dim,
+        basal_dim=config.state.input_dim,
+        hidden=config.training.hidden + 1,
+        moments=config.training.moments,
+    )
+    with pytest.raises(ValueError, match="head architecture"):
+        load_and_verify_head_provenance(config, checkpoint, depmap, wrong_head)
+
+
+def test_prediction_only_rejects_unpinned_head_bytes(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "head.pt"
+    checkpoint.write_bytes(b"actual-head")
+    with pytest.raises(ValueError, match="head SHA-256 mismatch"):
+        verify_expected_head_sha256(checkpoint, "wrong-digest")
 
 
 def _replace(obj: object, **kwargs: object) -> object:
