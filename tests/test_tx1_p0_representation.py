@@ -267,13 +267,36 @@ def test_fit_outer_fold_caps_pca_and_has_no_held_label_argument() -> None:
     assert result.ridge.shape == (3,)
 
 
+def test_outer_fold_drops_constants_using_outer_train_only() -> None:
+    result = fit_outer_fold(
+        np.asarray([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0]]),
+        np.asarray([[-1.0, 0.0], [-0.5, 0.4], [-0.2, 0.9]]),
+        np.asarray([1.5, 99.0]),
+        np.asarray([-0.6, 0.3]),
+    )
+
+    assert result.dropped_constant_feature_count == 1
+
+
+def test_outer_fold_rejects_all_constant_features() -> None:
+    with pytest.raises(ValueError, match="no non-constant features"):
+        fit_outer_fold(
+            np.ones((3, 2)),
+            np.asarray([[-1.0, 0.0], [-0.5, 0.4], [-0.2, 0.9]]),
+            np.asarray([9.0, 8.0]),
+            np.asarray([-0.6, 0.3]),
+        )
+
+
 def test_shuffled_context_control_is_deterministic(tmp_path: Path) -> None:
     features, labels, _, _, _ = _load_synthetic(tmp_path)
+    features["constant"] = 1.0
 
     first = audit_representation(features, labels, shuffle_seed=41)
     second = audit_representation(features, labels, shuffle_seed=41)
 
     assert first == second
+    assert {row["dropped_constant_feature_count"] for row in first["per_line"]} == {1}
     control = first["negative_control"]
     assert "shuffled_macro_delta_rho" in control
     if first["summary"]["ridge"]["macro_delta_rho"] <= 0:
@@ -350,7 +373,7 @@ def test_representation_rejects_test_or_anchor_id(tmp_path: Path) -> None:
         )
 
 
-def test_representation_rejects_missing_nonfinite_and_constant_features(
+def test_representation_rejects_nonfinite_but_allows_constant_features(
     tmp_path: Path,
 ) -> None:
     _, representation_path, _ = _write_inputs(tmp_path)
@@ -365,8 +388,8 @@ def test_representation_rejects_missing_nonfinite_and_constant_features(
 
     frame["feature_a"] = np.arange(5, dtype=float)
     frame.to_csv(representation_path, index=False)
-    with pytest.raises(ValueError, match="constant feature"):
-        load_representation(representation_path, model_ids)
+    loaded = load_representation(representation_path, model_ids)
+    assert loaded["constant"].eq(1.0).all()
 
 
 def test_gene_effect_fails_closed_on_missing_or_different_gene_universe(
