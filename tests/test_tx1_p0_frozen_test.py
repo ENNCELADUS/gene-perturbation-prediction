@@ -10,6 +10,9 @@ import pandas as pd
 import pytest
 
 from aivc_model.tx1_p0_frozen_test import (
+    EXPECTED_CACHE_MANIFEST_SHA256,
+    EXPECTED_COMPARATORS,
+    EXPECTED_TX1_MODEL_SHA256,
     build_frozen_predictions,
     evaluate_predictions,
     sha256_file,
@@ -89,7 +92,7 @@ def test_prediction_phase_uses_only_train_labels(
     )
     monkeypatch.setattr(
         "aivc_model.tx1_p0_frozen_test._load_comparator",
-        lambda path, output_method, **kwargs: pd.DataFrame(
+        lambda path, manifest_path, output_method, **kwargs: pd.DataFrame(
             [
                 {
                     "model_id": model_id,
@@ -133,6 +136,11 @@ def test_prediction_phase_uses_only_train_labels(
     }
     for path in comparator_paths.values():
         path.write_text("placeholder\n", encoding="utf-8")
+    comparator_manifest_paths = {
+        name: tmp_path / f"{name}_manifest.json" for name in comparator_paths
+    }
+    for path in comparator_manifest_paths.values():
+        path.write_text("{}\n", encoding="utf-8")
 
     predictions, metadata = build_frozen_predictions(
         phase_a_dir=phase_a,
@@ -143,6 +151,7 @@ def test_prediction_phase_uses_only_train_labels(
         representation_paths={"tx1": representation},
         cache_arrays={"tx1": ("embeddings.npy", "feature")},
         comparator_paths=comparator_paths,
+        comparator_manifest_paths=comparator_manifest_paths,
     )
 
     assert observed_ids == train_ids
@@ -176,6 +185,17 @@ def test_evaluation_rejects_invalid_predictions_before_opening_labels(
             {
                 "protocol_id": "tx1_geneeffect_p0_frozen_test_v1",
                 "test_labels_accessed": False,
+                "formal": False,
+                "post_hoc": True,
+                "prediction_first": True,
+                "n_train_lines": 29,
+                "n_test_lines": 9,
+                "n_genes": 587,
+                "config": {
+                    "pca_components": 8,
+                    "ridge_alpha": 1.0,
+                    "shuffle_seed": 20260804,
+                },
                 "predictions_sha256": sha256_file(prediction_path),
                 "input_sha256": {
                     "manifest": sha256_file(manifest_path),
@@ -184,6 +204,25 @@ def test_evaluation_rejects_invalid_predictions_before_opening_labels(
                     "raw_gene_effect": sha256_file(gene_effect_path),
                 },
                 "exposure": {"sha256": "ledger"},
+                "comparators": {
+                    name: {
+                        "predictions_sha256": contract["predictions_sha256"],
+                        "manifest_sha256": contract["manifest_sha256"],
+                        "head_checkpoint_sha256": contract["head_sha256"],
+                        "reason": contract["reason"],
+                    }
+                    for name, contract in EXPECTED_COMPARATORS.items()
+                },
+                "cache_manifest": {
+                    "sha256": EXPECTED_CACHE_MANIFEST_SHA256,
+                    "tx1_source_manifest": {
+                        "model_label": "tahoe_x1_3b",
+                        "status": "verified",
+                        "files": {
+                            "model.safetensors": {"sha256": EXPECTED_TX1_MODEL_SHA256}
+                        },
+                    },
+                },
             }
         ),
         encoding="utf-8",

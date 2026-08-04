@@ -28,6 +28,8 @@ def parse_args() -> argparse.Namespace:
     predict.add_argument("--hvg-context", type=Path, required=True)
     predict.add_argument("--previous-tx1", type=Path, required=True)
     predict.add_argument("--previous-hvg", type=Path, required=True)
+    predict.add_argument("--previous-tx1-manifest", type=Path, required=True)
+    predict.add_argument("--previous-hvg-manifest", type=Path, required=True)
     predict.add_argument("--output-dir", type=Path, required=True)
     evaluate = subparsers.add_parser("evaluate")
     evaluate.add_argument("--prediction-dir", type=Path, required=True)
@@ -58,6 +60,10 @@ def main() -> int:
             comparator_paths={
                 "previous_hvg": args.previous_hvg,
                 "previous_tx1": args.previous_tx1,
+            },
+            comparator_manifest_paths={
+                "previous_hvg": args.previous_hvg_manifest,
+                "previous_tx1": args.previous_tx1_manifest,
             },
         )
         write_predictions(predictions, metadata, args.output_dir)
