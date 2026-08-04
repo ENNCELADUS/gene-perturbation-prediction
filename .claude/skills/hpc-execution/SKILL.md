@@ -12,7 +12,7 @@ Author code locally so it can be reviewed, then rsync and run remotely.
 ## Connection
 
 ```bash
-ssh root@10.15.171.204 -p 30838      # key-based, non-interactive
+ssh root@10.15.171.204 -p 30310      # key-based, non-interactive
 ```
 Repo + data live at `/2023533015/VCC_Project` (full clone). The sandboxed Bash
 tool reaches it; rsync/ssh may need `dangerouslyDisableSandbox: true`.
