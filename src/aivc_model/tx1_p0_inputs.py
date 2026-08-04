@@ -311,6 +311,13 @@ def build_p0_inputs(
         "formal": False,
         "development_only": True,
         "test_lines_excluded": True,
+        "cache_access": {
+            "integrity_preflight_scope": "all frozen manifest lines",
+            "test_array_values_integrity_read": True,
+            "pooled_representation_scope": "role=train_head only",
+            "test_array_values_used_for_representation": False,
+            "test_labels_accessed": False,
+        },
         "target_role": TRAIN_ROLE,
         "n_lines": EXPECTED_LINE_COUNT,
         "n_genes": EXPECTED_GENE_COUNT,
