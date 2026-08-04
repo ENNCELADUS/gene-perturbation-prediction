@@ -126,7 +126,9 @@ def test_materializes_only_train_head_labels_prior_and_mean_context(
     assert result.copy_k562_prior.shape == (587, 2)
     first = result.line_context.set_index("model_id").loc["ACH-H0000"]
     assert first["tx1_mean_0000"] == pytest.approx(1.0)
+    assert first["tx1_std_0000"] == pytest.approx(1.0)
     assert first["hvg_mean_0000"] == pytest.approx(2.0)
+    assert first["hvg_std_0000"] == pytest.approx(2.0)
     assert first["expression__E1"] == pytest.approx(0.0)
     assert result.provenance["formal"] is False
     assert result.provenance["test_lines_excluded"] is True
@@ -182,6 +184,34 @@ def test_expression_requires_complete_train_head_coverage(tmp_path: Path) -> Non
         build_p0_inputs(**paths)
 
 
+def test_expression_supports_depmap_default_model_schema(tmp_path: Path) -> None:
+    paths = _fixture(tmp_path)
+    train_ids = [f"ACH-H{index:04d}" for index in range(29)]
+    expression = pd.DataFrame(
+        {
+            "Unnamed: 0": np.arange(29),
+            "SequencingID": [f"SEQ-{index}" for index in range(29)],
+            "ModelID": train_ids,
+            "IsDefaultEntryForModel": True,
+            "E1 (1)": np.arange(29, dtype=float),
+            "E2 (2)": np.arange(29, dtype=float) + 0.5,
+        }
+    )
+    expression.to_csv(paths["expression_path"], index=False)
+    registration_path = paths["phase_a_dir"] / "phase_a_registration.json"
+    registration = json.loads(registration_path.read_text())
+    registration["sources"]["depmap_omics_expression"]["sha256"] = _sha(
+        paths["expression_path"]
+    )
+    registration_path.write_text(json.dumps(registration))
+
+    result = build_p0_inputs(**paths)
+
+    assert result.line_context["expression__E1 (1)"].tolist() == pytest.approx(
+        np.arange(29, dtype=float)
+    )
+
+
 def test_writes_deterministic_atomic_artifacts(tmp_path: Path) -> None:
     paths = _fixture(tmp_path)
     first = build_p0_inputs(**paths)
@@ -198,6 +228,10 @@ def test_writes_deterministic_atomic_artifacts(tmp_path: Path) -> None:
         "line_context.csv",
         "tx1_context.csv",
         "hvg_context.csv",
+        "tx1_moments_context.csv",
+        "hvg_moments_context.csv",
+        "ccle_expression_context.csv",
+        "multiview_context.csv",
     }
     tx1 = pd.read_csv(output / "tx1_context.csv")
     hvg = pd.read_csv(output / "hvg_context.csv")
@@ -208,6 +242,10 @@ def test_writes_deterministic_atomic_artifacts(tmp_path: Path) -> None:
         "tx1_mean_0002",
     ]
     assert hvg.columns.tolist() == ["model_id", "hvg_mean_0000", "hvg_mean_0001"]
+    tx1_moments = pd.read_csv(output / "tx1_moments_context.csv")
+    hvg_moments = pd.read_csv(output / "hvg_moments_context.csv")
+    assert tx1_moments.shape[1] == 1 + 2 * 3
+    assert hvg_moments.shape[1] == 1 + 2 * 2
     assert tx1["model_id"].tolist() == hvg["model_id"].tolist()
     with pytest.raises(FileExistsError):
         write_p0_inputs(first, output)
