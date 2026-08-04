@@ -18,7 +18,6 @@ from aivc_model.tx1_p0_representation import run_audit
 
 PROTOCOL_ID = "tx1_geneeffect_p1_distribution_context_v1"
 EXPECTED_REPRESENTATIONS = {
-    "ccle_expression": "ccle_expression_context.csv",
     "hvg_mean": "hvg_context.csv",
     "hvg_moments": "hvg_moments_context.csv",
     "multiview": "multiview_context.csv",
@@ -40,6 +39,10 @@ def _load_policy(path: Path) -> dict[str, object]:
     expected = {
         "protocol_id": PROTOCOL_ID,
         "formal": False,
+        "ccle_bulk_control": {
+            "status": "coverage_incomplete_not_run",
+            "excluded_missing_model_id": "ACH-001039",
+        },
         "test_lines_excluded": True,
         "selection": "none_fixed_ablation",
         "pca_components": 8,
@@ -102,7 +105,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--gene-effect", type=Path, required=True)
     parser.add_argument("--cache-root", type=Path, required=True)
-    parser.add_argument("--expression", type=Path, required=True)
+    parser.add_argument("--expression", type=Path)
     parser.add_argument("--validation-plan", type=Path, required=True)
     parser.add_argument("--validation-policy", type=Path, required=True)
     parser.add_argument("--p1-policy", type=Path, required=True)
@@ -147,10 +150,26 @@ def main() -> int:
             ridge_alpha=float(policy["ridge_alpha"]),
             shuffle_seed=int(policy["shuffle_seed"]),
         )
+        audit_metadata = audit.get("metadata")
+        if not isinstance(audit_metadata, dict):
+            raise ValueError("representation audit metadata is malformed")
+        input_provenance_path = inputs_dir / "provenance.json"
+        audit_metadata.update(
+            {
+                "tx1_frozen_cache_accessed": True,
+                "representation_constructed_in_same_pipeline": True,
+                "representation_fit_provenance_verified": True,
+                "test_context_integrity_read": True,
+                "test_context_used_for_representation_fit": False,
+                "test_labels_accessed": False,
+                "input_provenance_sha256": _sha256(input_provenance_path),
+            }
+        )
         payload = {
             **audit,
             "protocol_id": PROTOCOL_ID,
             "p1_policy_sha256": _sha256(args.p1_policy),
+            "input_provenance_sha256": _sha256(input_provenance_path),
             "paired_comparisons": _paired_comparisons(audit),
             "claim_scope": "train_head outer-LOLO diagnostic only",
         }

@@ -187,7 +187,7 @@ def test_expression_requires_complete_train_head_coverage(tmp_path: Path) -> Non
 def test_expression_supports_depmap_default_model_schema(tmp_path: Path) -> None:
     paths = _fixture(tmp_path)
     train_ids = [f"ACH-H{index:04d}" for index in range(29)]
-    expression = pd.DataFrame(
+    defaults = pd.DataFrame(
         {
             "Unnamed: 0": np.arange(29),
             "SequencingID": [f"SEQ-{index}" for index in range(29)],
@@ -196,6 +196,17 @@ def test_expression_supports_depmap_default_model_schema(tmp_path: Path) -> None
             "E1 (1)": np.arange(29, dtype=float),
             "E2 (2)": np.arange(29, dtype=float) + 0.5,
         }
+    )
+    non_default_before = defaults.iloc[[0]].copy()
+    non_default_before["SequencingID"] = "SEQ-non-default-before"
+    non_default_before["IsDefaultEntryForModel"] = False
+    non_default_before[["E1 (1)", "E2 (2)"]] = 999.0
+    non_default_after = defaults.iloc[[0]].copy()
+    non_default_after["SequencingID"] = "SEQ-non-default-after"
+    non_default_after["IsDefaultEntryForModel"] = False
+    non_default_after[["E1 (1)", "E2 (2)"]] = -999.0
+    expression = pd.concat(
+        [non_default_before, defaults, non_default_after], ignore_index=True
     )
     expression.to_csv(paths["expression_path"], index=False)
     registration_path = paths["phase_a_dir"] / "phase_a_registration.json"
@@ -210,6 +221,28 @@ def test_expression_supports_depmap_default_model_schema(tmp_path: Path) -> None
     assert result.line_context["expression__E1 (1)"].tolist() == pytest.approx(
         np.arange(29, dtype=float)
     )
+
+
+def test_expression_rejects_duplicate_default_rows(tmp_path: Path) -> None:
+    paths = _fixture(tmp_path)
+    train_ids = [f"ACH-H{index:04d}" for index in range(29)]
+    expression = pd.DataFrame(
+        {
+            "ModelID": [*train_ids, train_ids[0]],
+            "IsDefaultEntryForModel": True,
+            "E1 (1)": np.arange(30, dtype=float),
+        }
+    )
+    expression.to_csv(paths["expression_path"], index=False)
+    registration_path = paths["phase_a_dir"] / "phase_a_registration.json"
+    registration = json.loads(registration_path.read_text())
+    registration["sources"]["depmap_omics_expression"]["sha256"] = _sha(
+        paths["expression_path"]
+    )
+    registration_path.write_text(json.dumps(registration))
+
+    with pytest.raises(ValueError, match="duplicate default ModelID"):
+        build_p0_inputs(**paths)
 
 
 def test_writes_deterministic_atomic_artifacts(tmp_path: Path) -> None:

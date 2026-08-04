@@ -1,9 +1,12 @@
 {
   "formal": false,
+  "ccle_bulk_control": {
+    "excluded_missing_model_id": "ACH-001039",
+    "status": "coverage_incomplete_not_run"
+  },
   "pca_components": 8,
   "protocol_id": "tx1_geneeffect_p1_distribution_context_v1",
   "representations": {
-    "ccle_expression": "ccle_expression_context.csv",
     "hvg_mean": "hvg_context.csv",
     "hvg_moments": "hvg_moments_context.csv",
     "multiview": "multiview_context.csv",
