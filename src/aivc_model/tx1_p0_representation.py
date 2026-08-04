@@ -1,5 +1,4 @@
 """Diagnostic P0 outer-LOO audit of precomputed cell-line representations.
-
 The audit never accesses the Tx1 cache and is not synthetic-lethality evidence.
 """
 
@@ -45,6 +44,7 @@ class OuterFoldPredictions:
     shuffled_ridge: np.ndarray
     nearest_neighbor_index: int
     pca_components: int
+    dropped_constant_feature_count: int
 
 
 @dataclass(frozen=True)
@@ -191,13 +191,6 @@ def load_representation(path: Path, model_ids: Sequence[str]) -> pd.DataFrame:
     values = numeric.to_numpy(dtype=float)
     if not np.isfinite(values).all():
         raise ValueError("representation features must all be finite numeric values")
-    constant = [
-        str(column)
-        for column in numeric.columns
-        if numeric[column].nunique(dropna=False) <= 1
-    ]
-    if constant:
-        raise ValueError(f"representation has constant feature columns: {constant}")
     return numeric
 
 
@@ -316,6 +309,11 @@ def fit_outer_fold(
         raise ValueError("ridge_alpha must be finite and non-negative")
     if len(train_context) < 2:
         raise ValueError("outer training requires at least two source lines")
+    keep = np.var(train_context, axis=0) > 0.0
+    if not np.any(keep):
+        raise ValueError("outer training representation has no non-constant features")
+    train_context = train_context[:, keep]
+    held_context = np.asarray(held_context)[keep]
     scaler = StandardScaler()
     scaled_train = scaler.fit_transform(train_context)
     scaled_held = scaler.transform(np.asarray(held_context).reshape(1, -1))
@@ -345,6 +343,7 @@ def fit_outer_fold(
         shuffled_ridge=shuffled_prediction,
         nearest_neighbor_index=nearest_index,
         pca_components=width,
+        dropped_constant_feature_count=int(np.count_nonzero(~keep)),
     )
 
 
@@ -430,6 +429,7 @@ def audit_representation(
         )
         baseline_rho = _spearman(fold_prior, y[held_index])
         train_ids = np.asarray(fold.train_model_ids, dtype=object)
+        dropped_count = predictions.dropped_constant_feature_count
         row: dict[str, object] = {
             "model_id": str(model_id),
             "k": 0,
@@ -438,6 +438,7 @@ def audit_representation(
                 train_ids[predictions.nearest_neighbor_index]
             ),
             "pca_components": predictions.pca_components,
+            "dropped_constant_feature_count": dropped_count,
         }
         for prefix, prediction in (
             ("nearest_neighbor", predictions.nearest_neighbor),
