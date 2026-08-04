@@ -23,6 +23,12 @@ PREDICTION_PROTOCOL = "tx1_geneeffect_p0_frozen_test_v1"
 FROZEN_PCA_COMPONENTS = 8
 FROZEN_RIDGE_ALPHA = 1.0
 FROZEN_SHUFFLE_SEED = 20260804
+EXPECTED_CACHE_MANIFEST_SHA256 = (
+    "ac06f60bbc0b9045571d00f10a80f50a7bdd86c54dcc6fd09e6571a343981927"
+)
+EXPECTED_TX1_MODEL_SHA256 = (
+    "424911f1d7425001db3dc6792193ce6470b6b15ab7ec10a35267cc27bd46634c"
+)
 EXPECTED_METHODS = {
     "copy_k562",
     "train_gene_mean",
@@ -36,14 +42,32 @@ EXPECTED_METHODS = {
     "previous_tx1",
 }
 EXPECTED_COMPARATORS = {
-    "previous_hvg": (
-        "hvg_st",
-        "aee95e55226fc9beba74c6bbb9419dc84a5f8de3e2165ec44789ba33d68b1b56",
-    ),
-    "previous_tx1": (
-        "tx1_3b_st",
-        "bbcb1ad2c83d40f053987de63daffef44a204a0f113198750fc53e4ee71695c0",
-    ),
+    "previous_hvg": {
+        "method": "hvg_st",
+        "predictions_sha256": (
+            "aee95e55226fc9beba74c6bbb9419dc84a5f8de3e2165ec44789ba33d68b1b56"
+        ),
+        "manifest_sha256": (
+            "e167f53ecfc42afdb7a28aad1dce6f9aaa12445ad13fdfe6405439436c28ba89"
+        ),
+        "head_sha256": (
+            "626a2a6abfbfd8a77c35806b8508d9cd765c7488dfcdb5292a0ed92eb3b6fa9e"
+        ),
+        "reason": "post_hoc_head_redesign_after_test_opening",
+    },
+    "previous_tx1": {
+        "method": "tx1_3b_st",
+        "predictions_sha256": (
+            "bbcb1ad2c83d40f053987de63daffef44a204a0f113198750fc53e4ee71695c0"
+        ),
+        "manifest_sha256": (
+            "856896d4f268ea20f299db50897bd59310953ff907d6c325ee834e2d4f2cb080"
+        ),
+        "head_sha256": (
+            "d16daa7db1583bdb1820cb56133f15098cf0f9a95491b1022b2cfe73f0f3f9bc"
+        ),
+        "reason": "post_hoc_adapter_after_test_opening",
+    },
 }
 
 
@@ -121,6 +145,7 @@ def _validate_exposure_ledger(path: Path, test_ids: list[str]) -> dict[str, str]
 
 def _load_comparator(
     path: Path,
+    manifest_path: Path,
     *,
     output_method: str,
     source_method: str,
@@ -130,6 +155,20 @@ def _load_comparator(
 ) -> pd.DataFrame:
     if sha256_file(path) != expected_sha256:
         raise ValueError(f"{output_method}: comparator SHA256 mismatch")
+    contract = EXPECTED_COMPARATORS[output_method]
+    if sha256_file(manifest_path) != contract["manifest_sha256"]:
+        raise ValueError(f"{output_method}: comparator manifest SHA256 mismatch")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    required_manifest = {
+        "formal": False,
+        "mode": "diagnostic_prediction_only",
+        "predictions_sha256": expected_sha256,
+        "head_checkpoint_sha256": contract["head_sha256"],
+        "expected_head_checkpoint_sha256": contract["head_sha256"],
+        "reason": contract["reason"],
+    }
+    if any(manifest.get(key) != value for key, value in required_manifest.items()):
+        raise ValueError(f"{output_method}: comparator manifest semantics differ")
     frame = pd.read_csv(
         path,
         usecols=["model_id", "depmap_column", "method", "k", "panel", "base_pred"],
@@ -179,6 +218,7 @@ def build_frozen_predictions(
     representation_paths: Mapping[str, Path],
     cache_arrays: Mapping[str, tuple[str, str]],
     comparator_paths: Mapping[str, Path],
+    comparator_manifest_paths: Mapping[str, Path],
     pca_components: int = FROZEN_PCA_COMPONENTS,
     ridge_alpha: float = FROZEN_RIDGE_ALPHA,
     shuffle_seed: int = FROZEN_SHUFFLE_SEED,
@@ -284,21 +324,29 @@ def build_frozen_predictions(
             "dropped_constant_feature_count_by_test_line": dropped,
         }
 
-    if set(comparator_paths) != set(EXPECTED_COMPARATORS):
+    if set(comparator_paths) != set(EXPECTED_COMPARATORS) or set(
+        comparator_manifest_paths
+    ) != set(EXPECTED_COMPARATORS):
         raise ValueError("both frozen previous-model comparators are required")
-    comparator_hashes: dict[str, str] = {}
+    comparator_metadata: dict[str, object] = {}
     for name in sorted(comparator_paths):
-        source_method, expected_sha = EXPECTED_COMPARATORS[name]
+        contract = EXPECTED_COMPARATORS[name]
         comparator = _load_comparator(
             comparator_paths[name],
+            comparator_manifest_paths[name],
             output_method=name,
-            source_method=source_method,
-            expected_sha256=expected_sha,
+            source_method=str(contract["method"]),
+            expected_sha256=str(contract["predictions_sha256"]),
             test_ids=test_ids,
             slice_frame=slice_frame,
         )
         rows.extend(comparator.to_dict(orient="records"))
-        comparator_hashes[name] = sha256_file(comparator_paths[name])
+        comparator_metadata[name] = {
+            "predictions_sha256": sha256_file(comparator_paths[name]),
+            "manifest_sha256": sha256_file(comparator_manifest_paths[name]),
+            "head_checkpoint_sha256": contract["head_sha256"],
+            "reason": contract["reason"],
+        }
 
     predictions = pd.DataFrame(rows).sort_values(
         ["model_id", "method", "gene_symbol"], kind="stable"
@@ -323,7 +371,7 @@ def build_frozen_predictions(
             "shuffle_seed": shuffle_seed,
         },
         "representations": representation_metadata,
-        "comparators": comparator_hashes,
+        "comparators": comparator_metadata,
         "exposure": exposure,
         "input_sha256": {
             "manifest": sha256_file(manifest_path),
@@ -418,6 +466,52 @@ def evaluate_predictions(
         raise ValueError("unexpected frozen-test prediction protocol")
     if metadata.get("test_labels_accessed") is not False:
         raise ValueError("prediction manifest does not attest label-free prediction")
+    expected_semantics = {
+        "formal": False,
+        "post_hoc": True,
+        "prediction_first": True,
+        "n_train_lines": 29,
+        "n_test_lines": 9,
+        "n_genes": 587,
+        "config": {
+            "pca_components": FROZEN_PCA_COMPONENTS,
+            "ridge_alpha": FROZEN_RIDGE_ALPHA,
+            "shuffle_seed": FROZEN_SHUFFLE_SEED,
+        },
+    }
+    if any(metadata.get(key) != value for key, value in expected_semantics.items()):
+        raise ValueError("prediction manifest semantics differ from frozen contract")
+    recorded_comparators = metadata.get("comparators")
+    if not isinstance(recorded_comparators, Mapping):
+        raise ValueError("prediction manifest comparator provenance is missing")
+    for name, contract in EXPECTED_COMPARATORS.items():
+        recorded = recorded_comparators.get(name)
+        if not isinstance(recorded, Mapping) or any(
+            recorded.get(key) != value
+            for key, value in {
+                "predictions_sha256": contract["predictions_sha256"],
+                "manifest_sha256": contract["manifest_sha256"],
+                "head_checkpoint_sha256": contract["head_sha256"],
+                "reason": contract["reason"],
+            }.items()
+        ):
+            raise ValueError(f"prediction manifest {name} provenance differs")
+    cache_manifest = metadata.get("cache_manifest")
+    if (
+        not isinstance(cache_manifest, Mapping)
+        or cache_manifest.get("sha256") != EXPECTED_CACHE_MANIFEST_SHA256
+    ):
+        raise ValueError("prediction cache-manifest provenance differs")
+    tx1_source = cache_manifest.get("tx1_source_manifest")
+    if (
+        not isinstance(tx1_source, Mapping)
+        or tx1_source.get("model_label") != "tahoe_x1_3b"
+        or tx1_source.get("status") != "verified"
+        or not isinstance(tx1_source.get("files"), Mapping)
+        or tx1_source["files"].get("model.safetensors", {}).get("sha256")
+        != EXPECTED_TX1_MODEL_SHA256
+    ):
+        raise ValueError("prediction Tx1 source/checkpoint provenance differs")
     if sha256_file(prediction_path) != metadata.get("predictions_sha256"):
         raise ValueError("prediction artifact SHA256 mismatch")
     train, slice_frame, registration = _load_authorities(phase_a_dir, manifest_path)
@@ -464,21 +558,17 @@ def evaluate_predictions(
         raise ValueError("prediction artifact has incomplete frozen coverage")
     if not np.isfinite(pd.to_numeric(predictions["base_pred"], errors="coerce")).all():
         raise ValueError("prediction artifact contains non-finite values")
-    frozen_pairs = set(
+    gene_by_column = dict(
         zip(
-            slice_frame["gene_symbol"].astype(str),
             slice_frame["depmap_column"].astype(str),
+            slice_frame["gene_symbol"].astype(str),
             strict=True,
         )
     )
-    observed_pairs = set(
-        zip(
-            predictions["gene_symbol"].astype(str),
-            predictions["depmap_column"].astype(str),
-            strict=True,
-        )
-    )
-    if observed_pairs != frozen_pairs:
+    expected_symbols = predictions["depmap_column"].astype(str).map(gene_by_column)
+    if expected_symbols.isna().any() or not expected_symbols.equals(
+        predictions["gene_symbol"].astype(str)
+    ):
         raise ValueError("prediction artifact gene mapping differs from Phase A")
     truth = _load_test_truth(raw_gene_effect_path, test_ids, slice_frame)
     baseline = "copy_k562"
