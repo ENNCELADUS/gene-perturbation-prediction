@@ -136,6 +136,8 @@ def test_driver_writes_atomic_provenance(
     assert payload["metadata"]["test_context_integrity_read"] is True
     assert payload["metadata"]["test_context_used_for_representation_fit"] is False
     assert payload["metadata"]["test_labels_accessed"] is False
+    assert payload["metadata"]["shared_prior_fit_provenance_verified"] is True
+    assert payload["metadata"]["shared_prior_model_id"] == "ACH-000551"
     assert payload["input_provenance_sha256"]
     assert not list(tmp_path.glob(".run.tmp-*"))
 

@@ -159,10 +159,17 @@ def main() -> int:
                 "tx1_frozen_cache_accessed": True,
                 "representation_constructed_in_same_pipeline": True,
                 "representation_fit_provenance_verified": True,
+                "shared_prior_fit_provenance_verified": True,
+                "shared_prior_source_provenance_verified": True,
+                "shared_prior_model_id": "ACH-000551",
                 "test_context_integrity_read": True,
                 "test_context_used_for_representation_fit": False,
                 "test_labels_accessed": False,
                 "input_provenance_sha256": _sha256(input_provenance_path),
+                "provenance_limit": (
+                    "full-cache integrity preflight reads test arrays; test array "
+                    "values and test labels are excluded from representation fit"
+                ),
             }
         )
         payload = {
