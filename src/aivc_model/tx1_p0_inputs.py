@@ -180,9 +180,14 @@ def _pool_cache(
             expected_widths = widths
         elif widths != expected_widths:
             raise ValueError(f"line {model_id}: cache widths differ across lines")
-        embedding_mean = np.asarray(embeddings, dtype=np.float64).mean(axis=0)
-        hvg_mean = np.asarray(hvg, dtype=np.float64).mean(axis=0)
-        if not np.isfinite(embedding_mean).all() or not np.isfinite(hvg_mean).all():
+        embedding_values = np.asarray(embeddings, dtype=np.float64)
+        hvg_values = np.asarray(hvg, dtype=np.float64)
+        embedding_mean = embedding_values.mean(axis=0)
+        embedding_std = embedding_values.std(axis=0)
+        hvg_mean = hvg_values.mean(axis=0)
+        hvg_std = hvg_values.std(axis=0)
+        pooled = (embedding_mean, embedding_std, hvg_mean, hvg_std)
+        if not all(np.isfinite(values).all() for values in pooled):
             raise ValueError(f"line {model_id}: pooled cache context is non-finite")
         row: dict[str, object] = {"model_id": model_id}
         row.update(
@@ -193,6 +198,12 @@ def _pool_cache(
         )
         row.update(
             {f"hvg_mean_{i:04d}": float(value) for i, value in enumerate(hvg_mean)}
+        )
+        row.update(
+            {f"tx1_std_{i:04d}": float(value) for i, value in enumerate(embedding_std)}
+        )
+        row.update(
+            {f"hvg_std_{i:04d}": float(value) for i, value in enumerate(hvg_std)}
         )
         rows.append(row)
         hashes[model_id] = {
@@ -212,7 +223,42 @@ def _add_expression(
     expected = str(source["sha256"])
     if _sha256(path) != expected:
         raise ValueError("expression CSV SHA256 differs from Phase-A registration")
-    expression = pd.read_csv(path, index_col=0)
+    header = pd.read_csv(path, nrows=0)
+    if "ModelID" in header.columns:
+        gene_columns = [
+            str(column)
+            for column in header.columns
+            if str(column).endswith(")") and " (" in str(column)
+        ]
+        if not gene_columns:
+            raise ValueError("expression CSV has no DepMap gene columns")
+        row_index = pd.read_csv(path, usecols=["ModelID", "IsDefaultEntryForModel"])
+        default = (
+            row_index["IsDefaultEntryForModel"]
+            .astype(str)
+            .str.lower()
+            .isin({"true", "1"})
+        )
+        positions = {
+            str(model_id): index
+            for index, model_id in row_index.loc[default, "ModelID"].items()
+        }
+        if len(positions) != int(default.sum()):
+            raise ValueError("expression CSV has duplicate default ModelID rows")
+        missing = sorted(set(train_ids) - set(positions))
+        if missing:
+            raise ValueError(
+                "expression CSV must contain every train_head model_id once"
+            )
+        selected_positions = {positions[model_id] for model_id in train_ids}
+        expression = pd.read_csv(
+            path,
+            usecols=["ModelID", *gene_columns],
+            index_col="ModelID",
+            skiprows=lambda row: row != 0 and row - 1 not in selected_positions,
+        )
+    else:
+        expression = pd.read_csv(path, index_col=0)
     expression.index = expression.index.astype(str)
     if expression.index.duplicated().any() or not set(train_ids).issubset(
         expression.index
@@ -272,10 +318,12 @@ def build_p0_inputs(
         "input_sha256": dict(sorted(inputs.items())),
         "cache_array_sha256": cache_hashes,
         "context": {
-            "pooling": "per-line arithmetic mean over cells",
+            "pooling": "per-line featurewise mean and population std over cells",
             "label_free": True,
             "tx1_width": sum(column.startswith("tx1_mean_") for column in context),
             "hvg_width": sum(column.startswith("hvg_mean_") for column in context),
+            "tx1_std_width": sum(column.startswith("tx1_std_") for column in context),
+            "hvg_std_width": sum(column.startswith("hvg_std_") for column in context),
             "expression_width": sum(
                 column.startswith("expression__") for column in context
             ),
@@ -299,13 +347,35 @@ def write_p0_inputs(result: P0InputsResult, output_dir: Path) -> None:
         hvg_columns = [
             column for column in result.line_context if column.startswith("hvg_mean_")
         ]
+        tx1_std_columns = [
+            column for column in result.line_context if column.startswith("tx1_std_")
+        ]
+        hvg_std_columns = [
+            column for column in result.line_context if column.startswith("hvg_std_")
+        ]
+        expression_columns = [
+            column
+            for column in result.line_context
+            if column.startswith("expression__")
+        ]
         outputs = {
             "gene_effect_long.csv": result.gene_effect_long,
             "copy_k562_prior.csv": result.copy_k562_prior,
             "line_context.csv": result.line_context,
             "tx1_context.csv": result.line_context[["model_id", *tx1_columns]],
             "hvg_context.csv": result.line_context[["model_id", *hvg_columns]],
+            "tx1_moments_context.csv": result.line_context[
+                ["model_id", *tx1_columns, *tx1_std_columns]
+            ],
+            "hvg_moments_context.csv": result.line_context[
+                ["model_id", *hvg_columns, *hvg_std_columns]
+            ],
+            "multiview_context.csv": result.line_context,
         }
+        if expression_columns:
+            outputs["ccle_expression_context.csv"] = result.line_context[
+                ["model_id", *expression_columns]
+            ]
         output_hashes: dict[str, str] = {}
         for filename, frame in outputs.items():
             path = temporary / filename

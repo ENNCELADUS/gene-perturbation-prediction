@@ -1,0 +1,17 @@
+{
+  "formal": false,
+  "pca_components": 8,
+  "protocol_id": "tx1_geneeffect_p1_distribution_context_v1",
+  "representations": {
+    "ccle_expression": "ccle_expression_context.csv",
+    "hvg_mean": "hvg_context.csv",
+    "hvg_moments": "hvg_moments_context.csv",
+    "multiview": "multiview_context.csv",
+    "tx1_mean": "tx1_context.csv",
+    "tx1_moments": "tx1_moments_context.csv"
+  },
+  "ridge_alpha": 1.0,
+  "selection": "none_fixed_ablation",
+  "shuffle_seed": 20260804,
+  "test_lines_excluded": true
+}
