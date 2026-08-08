@@ -1,29 +1,37 @@
-# CLAUDE.md
-
-Guidance for Claude Code and Codex working in this repository.
+# CLAUDE.md — guidance for Claude Code and Codex in this repository
 
 ## What this is
 
-Research code for **generalizable synthetic-lethality discovery by virtual-cell
-composition**: rank SL gene pairs for genes withheld from SL-pair/graph training (vs.
-SLMGAE / KR4SL on the Feng2024 benchmark), and separately transfer a context-conditioned
-score to cell lines excluded from training. **No SL graph in the feature path.** `docs/`
-is the authority, not this file — start at `docs/README.md`. Role: careful junior
-engineer; **Plan → Confirm → Code**.
+Research code for **generalizable synthetic-lethality discovery by virtual-cell composition**: rank SL gene pairs for genes withheld from
+SL-pair/graph training (vs. SLMGAE / KR4SL), and separately transfer a context-conditioned score to cell lines excluded from training.
+**No SL graph in the feature path.** `docs/` is the authority, not this file — start at `docs/README.md`. Role: careful junior engineer;
+**Plan → Confirm → Code**.
+
+**State:** T1 (K562 Bridge-A vs Horlbeck mechanism) and the registered T2 gate (few-shot cross-cell-line GeneEffect) both **completed
+negative** and are paused for redesign — their nine test lines are opened and binding. Active work is **R1**, the DepMap GeneEffect
+*residual* ladder (`residual_target.py`, `residual_ladder.py`, `scripts/run_r1_residual_ladder.py`), plus the unsplit
+`sl_context_screen_v1` pair × cell-line table. Feng2024 SOTA reproduction is still not started.
+
+## Engineering rules
+
+- No backward compatibility. Remove obsolete paths; no compatibility layers, fallbacks, migrations, or stopgaps to replace later.
+- Simplest implementation that fully meets the current requirement — no speculative abstraction, config, or indirection. Keep components
+  modular and concerns separated.
+- Grow in layers: smallest end-to-end version first, each capability on top of something that already works. Never trade a working product
+  for unfinished complexity.
+- Prefer established libraries over reimplementation; lean on dependencies already here and check their docs and types first.
+- Python 3.11+, strict type hints, absolute imports, Google-style docstrings, `logging` not `print`, no hardcoded paths/thresholds, no bare
+  `except`, Conventional Commits. Files stay <600 lines — several hot ones exceed that 5×; the rule binds new code.
 
 ## Skills — load before touching the area
 
-| Skill | Load before |
-|---|---|
-| `research-vault` | editing `docs/`, writing a claim, recording a result |
-| `tx1-cache` | `tx1_basal.py`, `tx1_embed_cache.py`, `tx1_geneeffect_eval.py`, `build_tx1_basal_embeddings.py` |
-| `benchmark-harness` | `data/SL_benchmark/` splits, SL metrics, `vcc-dep-baseline`, `models:`/`selection:` configs |
-| `hpc-execution` | anything needing GPU, GWPS h5ad, ESM2, Tx1-3B, or the frozen exp05 checkpoint |
+`research-vault` (editing `docs/`, writing a claim or a result) · `tx1-cache` (`tx1_basal.py`, `tx1_embed_cache.py`,
+`tx1_geneeffect_eval.py`, `build_tx1_basal_embeddings.py`) · `benchmark-harness` (`data/SL_benchmark/` splits, SL metrics,
+`vcc-dep-baseline`, `models:`/`selection:` configs) · `hpc-execution` (GPU, GWPS h5ad, ESM2, Tx1-3B, frozen exp05 checkpoint).
 
 ## After each implementation wave
 
-**You run the review, not the user.** Background it to a file and read the findings
-when it finishes — output runs to ~200 KB, so never let it land in context:
+**You run the review, not the user.** Output runs to ~200 KB — background it to a file and read the findings when it finishes.
 
 ```bash
 CH=<scratch>/codex-home; mkdir -p "$CH"; cp ~/.codex/auth.json "$CH/"
@@ -31,92 +39,61 @@ printf 'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "high"\napproval_policy 
 CODEX_HOME="$CH" codex review --base <WAVE_BASE_SHA> > <wave>-review.txt 2>&1
 ```
 
-`/codex:review` is `disable-model-invocation`, but that blocks only the slash command
-— the `codex` CLI beneath it is yours to run.
+The **clean `CODEX_HOME`** is load-bearing: `-c 'mcp_servers={}'` merges instead of replacing, so `~/.codex/config.toml`'s `[mcp_servers.*]`
+survive it and the review hangs on `gitnexus/detect_changes` with zero output growth (verified 2026-07-25; it killed three reviews). That
+home also carries model and effort, so no `-c` flags. `review` accepts only `--base/--scope/--model/--cwd`; `--effort` is not a flag and a
+stray value is parsed as focus text and rejected. `/codex:review` is `disable-model-invocation` — that blocks the slash command, not the CLI.
 
-**`-c 'mcp_servers={}'` does NOT disable MCP** — `-c` merges into the config, so the
-`[mcp_servers.*]` sub-tables in `~/.codex/config.toml` survive it. Verified 2026-07-25:
-a review launched with that override still started `gitnexus/detect_changes` and hung
-there with zero output growth, which is the same failure that killed two Phase B
-reviews. A clean `CODEX_HOME` (no `[mcp_servers]` table at all) is the fix; it also
-carries model and effort, so no `-c` flags are needed. `--effort` is not a valid flag
-either — `review` takes only `--base/--scope/--model/--cwd`, and a stray value is
-parsed as focus text, which is rejected.
+## Environment and testing
 
-## Environment
-
-- The six `src/` packages look peer-level but are not: **`aivc_model/` (exp05 → exp12 Tx1)
-  is the active backbone — new work goes there**; the rest are benchmark, features, and
-  baselines. Most entrypoints need gitignored assets, so "it imports" ≠ "it runs here".
-- `.superpowers/sdd/` is gitignored but holds the **live plan and execution ledger**;
-  `docs/specs/` holds the tracked designs.
-- **`AGENTS.md` is a symlink to `CLAUDE.md`** — edit `CLAUDE.md` only. **`.codex/` is a
-  current, tracked Codex setup** — `config.toml`, five agents under `agents/`, five
-  mirrored skills under `skills/`, and `AGENTS.md`, which is up to date and supplements
-  the root guide. Keep the two trees in sync; don't treat `.codex/` as leftovers.
-- Prefix every Python/pytest/ruff call with `uv run`. A global `rtk hook claude` hook
-  **rewrites Bash output** (`ruff check .` prints `[]`) — call `.venv/bin/ruff` for real output.
-- `uv sync` installs the `dev` group only (`scib`/`datasets` absent). A new `src/<pkg>/` is
-  invisible until added to `[tool.hatch.build.targets.wheel] packages`. `arc-state` is
-  pinned to a **git commit** — STATE API changes are a deliberate bump.
-
-## Testing
-
-- **No pytest config**: no testpaths, no addopts, **no markers** (`-m` does nothing).
-  Imports resolve only via the editable `.pth` — always `uv run python -m pytest` **from
-  the repo root**.
-- **`tests/conftest.py` is load-bearing**: it sets `PYTORCH_ENABLE_MPS_FALLBACK` and
-  `OMP_NUM_THREADS` *before* torch imports, imports xgboost first, and covers
-  the whole suite. **Running a test file directly segfaults.** Reuse its fixtures.
-- **The suite is not green** — baseline it first; don't assume a failure is yours. Tests
-  also **skip silently** on missing gitignored data or `accelerate`, so a green run may
-  have covered far less than it looks.
-- `ruff format .` rewrites two dozen unrelated files — **format only what you touched**;
-  and with `E,W,F` only, **import order is not enforced**, so don't "fix" imports.
+- The five `src/` packages look peer-level but are not: **`aivc_model/` (exp05 → exp12 Tx1 → R1) is the active backbone — new work goes
+  there**; the rest are benchmark, features, baselines. Most entrypoints need gitignored assets, so "it imports" ≠ "it runs here".
+- `.superpowers/sdd/` is gitignored but holds the **live plan and execution ledger** (its `progress.md` lags the code); `docs/specs/` holds
+  the tracked designs. **`AGENTS.md` is a symlink to `CLAUDE.md`** — edit `CLAUDE.md` only. **`.codex/` is a current, tracked Codex setup**
+  (`config.toml`, five agents, four mirrored skills, its own supplementary `AGENTS.md`) — keep both trees in sync.
+- Prefix every Python/pytest/ruff call with `uv run`. A global `rtk hook claude` hook **rewrites Bash output** (`ruff check .` prints `[]`)
+  — call `.venv/bin/ruff` for real output. `uv sync` installs the `dev` group only (`scib`/`datasets` absent); a new `src/<pkg>/` is
+  invisible until added to `[tool.hatch.build.targets.wheel] packages`; `arc-state` is pinned to a **git commit** (bumps are deliberate).
+- **No pytest config**: no testpaths, no addopts, **no markers** (`-m` does nothing). Imports resolve only via the editable `.pth` — always
+  `uv run python -m pytest` **from the repo root**. **`tests/conftest.py` is load-bearing**: it sets `PYTORCH_ENABLE_MPS_FALLBACK` and
+  `OMP_NUM_THREADS` *before* torch imports, imports xgboost first, and covers the whole suite — **a test file run directly segfaults**.
+- **The suite is not green** — baseline it first; a failure may not be yours. Tests **skip silently** on missing gitignored data or
+  `accelerate`. `ruff format .` rewrites two dozen unrelated files — **format only what you touched**; with `E,W,F` only, **import order is
+  not enforced**, so don't "fix" imports.
 
 ## Silent failures — the dominant risk
 
-Warnings and defaults are preferred over exceptions here, so mistakes usually produce a
-complete-looking **wrong artifact** rather than an error.
+Warnings and defaults are preferred over exceptions, so mistakes usually produce a complete-looking **wrong artifact**, not an error.
 
-- **Config loading does no schema validation** — every field is `.get(key, default)`, so a
-  **misspelled YAML key silently takes the default**. All exp05 config dataclasses live in
-  the `@dataclass(frozen=True)` block atop `prepare.py`; add fields there, not locally.
-  `_path_or_none` is truthiness-based, so `checkpoint_path: ""` silently **disables** the
-  feature; unset `data.state_embed_key` falls back to `adata.X`, not `obsm`.
-- **STATE loads with `strict=False`** (`model.py`) — missing weights load silently. Copy
-  the Tx1 `validate_load_result` pattern instead.
-- `--skip-hash-check` / `--allow-partial` / any off-contract threshold downgrade an
-  evaluation to `formal:false` **and still exit 0** — never report such a run as formal.
-  The Tx1 cache separately zero-fills missing genes, reuses stale cells, and skips
-  completeness checks on a sharded verify. Load `tx1-cache`.
+- **Config loading does no schema validation** — every field is `.get(key, default)`, so a **misspelled YAML key silently takes the
+  default**. All exp05 config dataclasses live in the `@dataclass(frozen=True)` block atop `prepare.py`; add fields there, not locally.
+  `_path_or_none` is truthiness-based, so `checkpoint_path: ""` silently **disables** the feature; unset `data.state_embed_key` falls back
+  to `adata.X`, not `obsm`. **STATE loads with `strict=False`** (`model.py`) — copy the Tx1 `validate_load_result` pattern instead.
+- `--skip-hash-check` / `--allow-partial` / any off-contract threshold downgrade an evaluation to `formal:false` **and still exit 0** —
+  never report such a run as formal. The Tx1 cache separately zero-fills missing genes, reuses stale cells, and skips completeness checks
+  on a sharded verify.
+- **R1 residuals: never center a *prediction* on a fold-fit gene mean.** `mu_hat_g^(-c)` is an exact affine function of the held-out label, so
+  `constant_g - mu_hat_g^(-c)` scores per-gene Spearman `+1.0` by construction. Targets use `mu_hat`, predictions the fold-independent `mu_bar`.
 
 ## Data
 
-**Every dataset has a card in `docs/data/` — read it before using the file.** Several are
-not what their names suggest: `jost_replogle_dual_sgrna` is knockdown efficacy, **not
-epistasis**; the two Replogle h5ads differ by one word (`essential`/`gwps`) but have
-different gene panels; Horlbeck's field is `gi_score`, **not** `gamma`, and **negative = SL**;
-X-Atlas/Orion HCT116 is **no longer** untouched. **Never join cell lines on name** — DepMap
-rows are ACH ModelIDs and its `CellLineName` is `K-562` while code says `K562`. Large
-artifacts are gitignored except the hash-pinned `results/phase_a_tx1_20260724/` contract.
+**Every dataset has a card in `docs/data/` — read it before using the file.** Several are not what their names suggest:
+`jost_replogle_dual_sgrna` is knockdown efficacy, **not epistasis**; the two Replogle h5ads differ by one word (`essential`/`gwps`) but have
+different gene panels; Horlbeck's field is `gi_score`, **not** `gamma`, and **negative = SL**; X-Atlas/Orion HCT116 is **no longer**
+untouched; `sl_context_screen_v1` is **unsplit** with screened-non-hit negatives — not universal non-SL, and no CV folds. **Never join cell
+lines on name** — DepMap rows are ACH ModelIDs and its `CellLineName` is `K-562` while code says `K562`. Large artifacts are gitignored
+except the hash-pinned `results/phase_a_tx1_20260724/` contract.
 
 ## Claim discipline
 
-Full gates in `docs/02-acceptance-criteria.md` §7-8; **load `research-vault` before writing
-any result.** The four broken most easily —
+Full gates in `docs/02-acceptance-criteria.md` §7-8. The four broken most easily —
 
-- **Never claim SL from single-gene essentiality** — an explicit interaction null is
-  required: `interaction = joint - psi(singles)`; declare `psi`. DepMap GeneEffect is a
-  relative growth-rate effect: single-gene, never a double-knockout quantity.
-- **Name the generalization axis.** CV2/CV3 test unseen *genes*, not unseen cell lines;
-  CV1 is diagnostic. Cross-cell-line claims need untouched line splits.
-- **A pan-essentiality lift is not an SL result**; **a benchmark rank is not a mechanism**;
-  K562 mechanism ≠ multi-cell-line mechanism; Norman CRISPRa is auxiliary only.
-- **A single-fold or test-fold-selected result is not a result.** 5-fold mean ± spread.
+- **Never claim SL from single-gene essentiality** — an explicit interaction null is required: `interaction = joint - psi(singles)`; declare
+  `psi`. DepMap GeneEffect is a relative growth-rate effect: single-gene, never a double-knockout quantity.
+- **Name the generalization axis.** CV2/CV3 test unseen *genes*, not unseen cell lines; CV1 is diagnostic. Cross-cell-line claims need
+  untouched line splits. **A single-fold or test-fold-selected result is not a result** — 5-fold mean ± spread.
+- **A pan-essentiality lift is not an SL result**; **a benchmark rank is not a mechanism**; K562 mechanism ≠ multi-cell-line mechanism;
+  Norman CRISPRa is auxiliary only.
+- **Raw GeneEffect scores are inflated by `mu_g`** (`Var(mu_g) >> Var(delta)`): a context-blind per-gene mean already wins most of it, so
+  context claims are residual-only.
 
-## Code style
-
-Python 3.11+, strict type hints, absolute imports, Google-style docstrings, `logging` not
-`print`, no hardcoded paths/thresholds, no bare `except`, Conventional Commits. Files
-should stay <600 lines — several hot ones already exceed that 5×; the rule binds new code.
