@@ -14,14 +14,20 @@ negative** and are paused for redesign — their nine test lines are opened and 
 
 ## Engineering rules
 
-- No backward compatibility. Remove obsolete paths; no compatibility layers, fallbacks, migrations, or stopgaps to replace later.
-- Simplest implementation that fully meets the current requirement — no speculative abstraction, config, or indirection. Keep components
-  modular and concerns separated.
-- Grow in layers: smallest end-to-end version first, each capability on top of something that already works. Never trade a working product
-  for unfinished complexity.
-- Prefer established libraries over reimplementation; lean on dependencies already here and check their docs and types first.
-- Python 3.11+, strict type hints, absolute imports, Google-style docstrings, `logging` not `print`, no hardcoded paths/thresholds, no bare
-  `except`, Conventional Commits. Files stay <600 lines — several hot ones exceed that 5×; the rule binds new code.
+- Keep documents clean and concise: replacement edits must preserve the line count or reduce it; never increase it.
+- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility
+  layers, fallbacks, or migrations.
+- Choose the simplest implementation that fully meets the current requirement. Avoid speculative
+  abstraction, configuration, and indirection.
+- Grow the system in layers: start from the smallest version that works end to end, and add each
+  capability on top of something that already works. Never trade a working product for unfinished
+  complexity.
+- Keep components modular and concerns clearly separated.
+- Prefer established, well-maintained libraries when they reduce complexity or improve reliability.
+  Do not reimplement common functionality without a clear reason.
+- Lean on the dependencies already in the project before writing your own implementation or adding
+  packages; check a library's docs and types before assuming it lacks a capability.
+- Make architectural decisions for the long term. No stopgap meant to be replaced later.
 
 ## Skills — load before touching the area
 
@@ -96,4 +102,3 @@ Full gates in `docs/02-acceptance-criteria.md` §7-8. The four broken most easil
   Norman CRISPRa is auxiliary only.
 - **Raw GeneEffect scores are inflated by `mu_g`** (`Var(mu_g) >> Var(delta)`): a context-blind per-gene mean already wins most of it, so
   context claims are residual-only.
-
