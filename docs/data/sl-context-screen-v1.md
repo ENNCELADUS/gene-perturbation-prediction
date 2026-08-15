@@ -1,5 +1,11 @@
 # SL Context Screen Benchmark v1
 
+**Status:** historical. Superseded by [`sl-context-screen-v2.md`](sl-context-screen-v2.md),
+which adds row provenance and the published split. v1 lacks both, and three of its
+properties — duplicate screens exploded into separate context names, a single-gene anchor
+in A549, and contexts with zero positives — are why v2 exists. The v1 artifact stays on disk
+and is not rebuilt or edited.
+
 ## Role
 
 This is an **unsplit pair–cell-line label table** derived only from

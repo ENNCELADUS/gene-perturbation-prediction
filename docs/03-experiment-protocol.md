@@ -1,62 +1,122 @@
-# Experiment Protocol: STATE GeneEffect to SLIdR Benchmark
+# Experiment Protocol: Context-Conditioned SL Benchmark
 
-**Status:** fixed exploratory named-context protocol; no test results have been
-inspected under this split.
+**Status:** not started. The benchmark rebuild in §2 is a prerequisite; no split is frozen,
+no head is fitted, and no model has run under this protocol. Supersedes the STATE-to-SLIdR
+protocol, which is withdrawn — SLIdR was never implemented, so no code is retired with it.
+**Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
+executable form and may not relax it.
 
 ## 1. Objective
 
-Evaluate a two-stage pipeline on cell lines excluded from model fitting and
-checkpoint selection:
+Evaluate the three-stage pipeline of `01` §1 on cell lines excluded from every fitting and
+selection step:
 
 ```text
-basal single-cell state + gene
-  -> STATE-based GeneEffect prediction
-  -> train-free SLIdR
-  -> context-matched SL pair ranking
+basal single cells + perturbation gene
+  -> predicted post-perturbation cells   (Perturb-seq supervision)
+  -> predicted DepMap GeneEffect         (mu + delta heads)
+  -> pair score in a held-out context    (trained SL head)
 ```
 
-The benchmark answers two separate questions:
+Two questions, answered separately. Does the backbone predict held-out-context GeneEffect
+residuals? And does a pair score built from predicted profiles rank experimental SL hits in
+a context the model never saw? GeneEffect is a single-gene quantity; only the second stage
+is scored against pair labels.
 
-1. Does the backbone predict held-out-cell-line GeneEffect?
-2. When predicted GeneEffect replaces measured GeneEffect in SLIdR, does the
-   resulting ranking recover experimental SL hits in the same held-out line?
+## 2. Prerequisite: Benchmark v2
 
-GeneEffect is a single-gene fitness quantity, not an SL label. Only the second
-stage is evaluated against pairwise SL labels.
+### 2.1 Defects in v1 that force the rebuild
 
-This is a new split, not a continuation of the historical 28/5/9 Tx1
-GeneEffect registration. A549 was previously available to the GeneEffect head,
-and seven lines previously used as test lines now enter training. Consequently,
-all GeneEffect-head fitting and checkpoint selection must be rerun under this
-protocol. Existing heads or selected checkpoints from the historical split are
-inadmissible. A response-model checkpoint may be reused only if its provenance
-shows that it was fitted exclusively on the four anchors in Section 2.2 and did
-not use A549 or HT29 data.
+Each was computed directly from `derived/context_screen_v1/sl_context_pairs.csv`.
 
-## 2. Data Contract
+- **Duplicate screens.** K562/JURKAT share 9,219 rows (100% of JURKAT, Jaccard 0.772) and
+  HELA/PC9 share 2,523 rows (100% of PC9, Jaccard 0.983), both at label agreement exactly
+  1.0000. These rows carry `source_n_evidence == 2, source_row_count == 1`: one aggregated
+  source row reported "tested in 2 lines, unanimous" and the builder copied its single label
+  to both contexts. 97.9% of the 11,999 cross-context recurring pairs are this artifact.
+- **Degenerate anchor in A549.** All 392 A549 positives contain TRA2A and no A549 row
+  containing TRA2A is negative, so `1[TRA2A in {a,b}]` scores AUPR 1.0 on that context.
+- **Missing positives in repeated patterns.** Nine contexts carry 933–941 negatives and zero
+  positives (GI1, HS936T, HS944T, HSC5, IPC298, PATU8988S, PK1, MEL202, MELJUSO); five carry
+  exactly 684 negatives and zero positives (A427, CAL27, CAL33, MCF10A, MCF7); THP1 carries
+  1,332 positives and zero negatives. Identical counts across unrelated lineages indicate a
+  filter or explosion artifact rather than biology.
 
-### 2.1 Basal input and GeneEffect target
+### 2.2 Build
 
-- Tahoe lines use their Tahoe-100M DMSO cells as basal single-cell input.
-- K562, HCT116, Jurkat, and HepG2 use non-targeting/control Perturb-seq cells as
-  basal input.
-- GeneEffect supervision and evaluation use one frozen DepMap 26Q1
-  `CRISPRGeneEffect.csv` release and ModelID-based joins.
-- The source inventory is
-  `../results/phase_a_tx1_20260724/cell_line_manifest.csv`. The split below
-  supersedes that file's historical `role` column but not its identity, basal
-  source, or coverage fields.
+Re-run `scripts/build_sl_context_benchmark.py` against `sl_integrated_pairs.csv` with two
+changes, writing to `derived/context_screen_v2/`. Do not overwrite v1.
 
-Every train, validation, and test line in this protocol has both a basal input
-and DepMap GeneEffect. The Tx1 encoder was pretrained on Tahoe-100M and therefore
-has known pretraining exposure to the Tahoe test lines. Their GeneEffect and SL
-labels remain task-held-out; results must be described with this pretraining
-exposure qualifier.
+1. **Emit `source_row_id`** for every exploded row. This links contexts exploded from one
+   aggregate row. It **cannot** link separate rows produced by the same underlying screen —
+   the source carries no study or evidence identifier — so it is used only to keep duplicate
+   contexts on the same side of the split. No independence claim rests on it.
+2. **Audit every filter** in the v1 preprocessing contract for rows and per-context positives
+   removed: `sources == screen`, `evidence_types == experimental_screen`, `conflict == 0`,
+   the all-evidence-unanimous rule, `n_evidence == n_cell_lines == n_context_tokens`, and the
+   atomic-context token rule. Publish a per-filter, per-context drop table and account
+   specifically for the zero-positive contexts above.
 
-### 2.2 Perturb-seq supervision
+### 2.3 Published split
 
-The STATE response model is trained only on the four genetic-perturbation
-anchors:
+The split ships as a `split` column in the dataset, with the canonical copy at the **tracked**
+path `configs/benchmarks/context_screen_v2_split.json` — `/data/` is gitignored in full, so a
+manifest written only under `derived/` is neither distributed nor independently verifiable.
+The dataset copy is a convenience mirror; the tracked file is the authority, and a mismatch
+is a hard error.
+
+Membership is decided once, by this rule:
+
+- a context is **eligible** with at least 50 positives and 50 negatives;
+- a context is **executable** if it has DepMap GeneEffect and basal single-cell input;
+- **only executable contexts enter the benchmark at all** — train, validation and test alike.
+  Arm A needs a predicted profile for every context it touches, so an eligible-but-
+  non-executable context is unusable on any side, not just on test;
+- the four response anchors (K562, HCT116, Jurkat, HepG2) are **pinned to train**. They
+  supply the only Perturb-seq supervision, so placing one in test would contradict §8's
+  requirement that test contexts be absent from response training;
+- contexts sharing a `source_row_id` group stay on the same side.
+
+Assignment is deterministic, not discretionary: sort the remaining executable context groups
+by ModelID, then allocate to test, validation and train in that order under counts fixed in
+the manifest before any context's difficulty is examined. Record the sort key, the counts,
+and the resulting assignment in the tracked file.
+
+HELA can never be executable: it has neither a 26Q1 GeneEffect target nor a compatible basal
+single-cell input, and the §3.5 acquisitions supply basal cells, not GeneEffect. RPE1 and
+HAP1 DepMap-CRISPR membership must be **verified, not assumed**. HAP1's v1 counts (56,994
+positives against 20 negatives) fail the eligibility rule.
+
+Publish per-context statistics beside the split: class counts, prior, distinct genes
+appearing in positives, and the top gene's share of positives — the last is where the A549
+degeneracy becomes visible to anyone using the benchmark.
+
+### 2.4 Deliverables, frozen before any model run
+
+```text
+configs/benchmarks/context_screen_v2_split.json    TRACKED — the canonical split
+derived/context_screen_v2/sl_context_pairs.csv     with source_row_id and split
+derived/context_screen_v2/filter_audit.csv         per-filter, per-context drops
+derived/context_screen_v2/context_statistics.csv
+derived/context_screen_v2/manifest.json            source and output hashes
+```
+
+Everything under `derived/` is gitignored; only the split manifest is tracked.
+
+Write `data/sl-context-screen-v2.md` as the card; mark the v1 card historical.
+
+## 3. Data Contract
+
+### 3.1 Basal input
+
+Tahoe lines use their Tahoe-100M DMSO cells. K562, HCT116, Jurkat and HepG2 use
+non-targeting Perturb-seq control cells. The source inventory is
+`../results/phase_a_tx1_20260724/cell_line_manifest.csv` (42 lines); the v2 split supersedes
+its `role` column but not its identity, basal-source, or coverage fields.
+
+### 3.2 Perturb-seq supervision
+
+The response module trains only on genetic-perturbation anchors:
 
 | ModelID | Cell line | Basal control |
 | --- | --- | --- |
@@ -65,242 +125,173 @@ anchors:
 | ACH-000995 | Jurkat | non-targeting Perturb-seq cells |
 | ACH-000739 | HepG2 | non-targeting Perturb-seq cells |
 
-The initial benchmark does not add public Perturb-seq datasets beyond the
-already curated anchor inputs. In particular, no A549 or HT29 perturbation data
-may enter response-model training.
+No perturbation data from any test context may enter response training.
 
-### 2.3 SL labels
+### 3.3 Dependency supervision
 
-The sole pair-label source is:
+One frozen DepMap 26Q1 `CRISPRGeneEffect.csv` release, joined by ModelID. Targets are
+$\mu^{tr}$ and $\delta$ as defined in `01` §4, with $\mu^{tr}$ fit on train-side contexts
+only and genes needing at least three training observations.
 
-```text
-data/SL_Benchmark_Formal/sl_integrated_pairs.csv
-```
+### 3.4 SL labels
 
-Use the preprocessing contract in
-[`data/sl-context-screen-v1.md`](data/sl-context-screen-v1.md) and the generated
-`derived/context_screen_v1/sl_context_pairs.csv`. Only the A549 and HT29 rows are
-test labels. Labels from Feng2024, Horlbeck K562/Jurkat, DepMap co-dependency, or
-any other source are not merged into this evaluation.
+`derived/context_screen_v2/` is the sole pair-label source. Feng2024, Horlbeck, DepMap
+co-dependency and every other label set stay out. The negative class is an experimental
+screen non-hit in the named context, not a universal non-SL assertion, and context
+assignment remains `silver_inferred`.
 
-The negative class is an experimental screen non-hit in the named context, not
-a universal non-SL assertion. The context assignments remain
-`silver_inferred` as documented in the dataset card.
+### 3.5 Required acquisitions
 
-Before SLIdR eligibility filtering, A549 contains 392 positive and 1,701
-negative labeled pairs; HT29 contains 235 positive and 7,412 negative labeled
-pairs. These full-table counts describe the source label surface, not the final
-SLIdR evaluation universe.
+Basal single-cell expression is missing for most eligible contexts. Of the ten that clear
+v1's permissive `>= 10/10` gate, only K562, Jurkat, A549 and HT29 appear in the 42-line
+manifest. Acquire basal cells for the remainder before freezing the split, and record the
+source and accession per context in the v2 card. RPE1 is the strongest candidate: Replogle
+2022's essential-genome RPE1 arm is a genetic Perturb-seq dataset, so it could serve as both
+a fifth response anchor and a large SL context.
 
-## 3. Fixed Cell-Line Split
+## 4. Backbone Training
 
-The split unit is the cell line. No GeneEffect or SL label from a validation or
-test line may be used to fit the response model or GeneEffect head.
+**Stage 1.** Fit the response module on the four anchors under $L_{\text{resp}}$ alone
+(mean-delta MSE plus energy distance). Record its converged response metrics.
 
-| Role | Cell lines | Use |
-| --- | ---: | --- |
-| Train | 35 | fit the backbone only |
-| Validation | 5 | select one checkpoint |
-| Test | 2 | final GeneEffect and SL evaluation |
+**Stage 2.** Unfreeze and optimize $L_{\text{resp}} + \lambda_{\text{dep}} L_{\text{dep}}$
+over the anchors and the train-side dependency contexts. $L_{\text{resp}}$ remains active as
+an anchor. **Report response metrics before and after Stage 2 in the same table.** If they
+collapse, $\lambda_{\text{dep}}$ is misconfigured and the run is not finished.
 
-### 3.1 Training lines
+**Selection.** Validation contexts from `split_manifest.json` select the checkpoint and all
+hyperparameters ($\beta$, $\lambda_{\text{dep}}$, architecture widths). They are never
+promoted into training. $\alpha$ is additionally frozen against a numeric $\hat y$-vs-$y$
+calibration band on GeneEffect-only validation **before any SL label is read** — it may
+never be tuned on SL performance, because inflating $\alpha$ degrades $\psi$ and flatters
+the model against its own baseline.
 
-The GeneEffect head uses 31 Tahoe lines plus the four Perturb-seq anchors. The
-response module receives genetic Perturb-seq supervision only from the four
-anchors.
+Declare $G_{\text{var}}$, the delta-variance gene set, from train-side contexts before any
+run: state the rule, the resulting gene count, and the exclusion of genes with fewer than
+five non-missing training observations.
 
-| ModelID | Cell line | ModelID | Cell line |
-| --- | --- | --- | --- |
-| ACH-000178 | Hs 766T | ACH-000348 | RPMI-7951 |
-| ACH-000389 | H4 | ACH-000496 | NCI-H1792 |
-| ACH-000790 | SHP-77 | ACH-000793 | KATO III |
-| ACH-000890 | SW 1271 | ACH-000950 | LoVo |
-| ACH-000120 | CHP-212 | ACH-000138 | CFPAC-1 |
-| ACH-000139 | Panc 03.27 | ACH-000148 | Hs 578T |
-| ACH-000164 | PANC-1 | ACH-000222 | AsPC-1 |
-| ACH-000311 | NCI-H2122 | ACH-000396 | J82 |
-| ACH-000437 | SW 1088 | ACH-000493 | SNU-423 |
-| ACH-000521 | NCI-H2030 | ACH-000558 | A-172 |
-| ACH-000580 | C32 | ACH-000757 | A427 |
-| ACH-000861 | HOP-62 | ACH-000900 | NCI-H23 |
-| ACH-000916 | NCI-H1573 | ACH-000932 | SNU-1 |
-| ACH-000957 | LS 180 | ACH-000958 | SW48 |
-| ACH-000997 | HCT-15 | ACH-001039 | COLO 205 |
-| ACH-001333 | C-33 A | ACH-000551 | K562 |
-| ACH-000971 | HCT116 | ACH-000995 | Jurkat |
-| ACH-000739 | HepG2 |  |  |
+## 5. Out-of-Fold Feature Generation
 
-### 3.2 Validation lines
+Arm A requires that every backbone-derived block of an **SL training** row — the profile,
+the target-context values, and $\hat\mu$ — come from a single model that excluded that row's
+context group and refit $\mu^{tr}$ without it. Partition the train-side SL contexts into
+inner groups and fit one model per group under the finally selected hyperparameters; models
+from the hyperparameter search are not reused, since they need not share those settings.
 
-These five Tahoe lines are reused from the frozen validation registration at
-`../configs/experiments/12_tx1_st_geneeffect/phase_d/validation_lines.json`:
+The feature standardizer is fit only on complete out-of-fold vectors. Mixing an in-sample
+profile block with an out-of-fold context block inside one vector is prohibited: it would
+make training rows and test rows come from different distributions and then fit the scaler
+on the mixture. There is no non-out-of-fold fallback for Arm A.
 
-| ModelID | Cell line | Lineage |
+## 6. SL Head
+
+Stage 3 minimizes BCE over train-side SL contexts, **context-balanced** so each contributes
+equally, with positives and negatives reweighted inside each context. Without this, one
+context dominates: RPE1 alone is 90,520 of 127,323 v1 eligible rows.
+
+Feature construction follows `01` §3 exactly — 24 dimensions, all swap-invariant, with
+$\psi_{\text{add}}$ excluded because it duplicates the `yhat_ac + yhat_bc` feature and would
+make the C2 baseline non-independent of the context block. Reuse the summary-statistic
+pattern at `src/sl_profile_baseline/features.py:103-139`, not the raw-profile form at
+`:165-171`. **Do not reuse `sl_profile_baseline/data.py:90-92` or `features.py:84`** — both
+zero-fill uncovered genes, the same silent-failure pattern as `selectivity.py:224`. Mask
+explicitly instead. Arm A has no missingness; in Arm B a pair with a missing profile leaves
+the common universe rather than being zero-filled.
+
+Three arms on one identical pair universe: **Arm A** out-of-fold predicted, **Arm B**
+measured DepMap over the same `C_ref` columns, and **Arm B-full** measured over all DepMap
+columns as the honest ceiling.
+
+## 7. Metrics and Baselines
+
+Metrics carry the number of the stage in §4 that they score. **Stage 1** reports the
+response metrics before and after Stage 2 training, per §4.
+
+**Stage 2** uses two surfaces. A dependency split over `C_dep`, disjoint from the SL
+contexts and holding out at least eight, carries the per-gene across-context Spearman on the
+residual over $G_{\text{var}}$ — the axis the redesign is justified by, and the one R1's
+ladder baselines. The SL test contexts carry per-context cross-gene Spearman only; it is
+reportable and cannot support a context claim.
+
+**Stage 3** reports AUPR per test context and the macro, both as $\text{AUPR}-\text{prior}$.
+AUROC is secondary. Coverage and post-filter class counts precede every performance number.
+Stratify each AUPR by whether both, one, or neither endpoint appeared in SL training.
+Uncertainty uses a two-way dyadic bootstrap over both endpoints, 2,000 replicates, per
+context; a one-way anchor-gene bootstrap is invalid because pairs have two endpoints.
+
+Baselines, all reported as per-context lift, none permitted to remove a context after its
+result is seen:
+
+| ID | Baseline | Shortcut removed |
 | --- | --- | --- |
-| ACH-000463 | NCI-H460 | Lung |
-| ACH-000601 | MIA PaCa-2 | Pancreas |
-| ACH-000853 | NCI-H661 | Lung |
-| ACH-000943 | RKO | Bowel |
-| ACH-001190 | SK-MEL-2 | Skin |
+| C1 | pair identity / train-context label frequency | pair memorization |
+| C1b | anchor-gene frequency, `max(r_a, r_b)` | gene-level memorization C1 misses |
+| C2 | `psi` alone, predicted **and** measured | ranking that is only the null |
+| C3 | the `muhat` block alone | pan-essentiality |
+| C5 | R1's best residual predictor replacing the backbone | a backbone beating no simple prior |
+| C6 | matched context-ablated head | a context claim with no context information |
+| C4 | Arm B, Arm B-full | reference only, never a bar |
 
-Validation GeneEffect selects exactly one checkpoint. Validation is not used to
-fit SLIdR thresholds or to select a favorable SL result.
+C1 is a lift, not an absolute bar. On v1 it reached AUPR 1.0000 on JURKAT, HELA and PC9 and
+0.506 macro against a 0.083 prior, so an absolute bar would void every run; §2.3 handles
+those contexts through the split instead.
 
-### 3.3 Test lines
+**C6** is an identically trained head on the 21 context-invariant dimensions with the three
+context dimensions ablated, plus fixed deterministic context derangements and a permutation
+null. Declare the minimum per-context incremental $\text{AUPR}-\text{prior}$ attributable to
+the context block before reading any test label. Statistical distinguishability alone does
+not clear it, and below it no context claim is licensed at any absolute AUPR.
 
-| ModelID | Benchmark context | Lineage | Stage-1 GeneEffect | Stage-2 SL |
-| --- | --- | --- | --- | --- |
-| ACH-000681 | A549 | Lung | evaluate | evaluate |
-| ACH-000552 | HT29 | Bowel | evaluate | evaluate |
-
-HeLa is excluded because it has neither a 26Q1 GeneEffect target nor a compatible
-basal single-cell input in the frozen STATE/Tahoe manifest. PC9 and RPE1 are also
-outside this protocol.
-
-## 4. Backbone Training and Checkpoint Selection
-
-1. Fit the STATE response module on the four Perturb-seq anchors.
-2. Fit the GeneEffect head on the 31 Tahoe training lines and four anchors using
-   basal input and training-line GeneEffect only.
-3. At each checkpoint, predict GeneEffect for all five validation lines without
-   adaptation.
-4. Select the single checkpoint with the best validation-line macro mean of
-   per-line residual Spearman correlation. Residuals subtract the training-line
-   gene mean from both prediction and target; the gene mean is computed without
-   validation or test labels.
-5. Freeze the checkpoint and all preprocessing, gene filters, missing-value
-   rules, and SLIdR parameters before generating A549 or HT29 predictions.
-
-The frozen checkpoint generates GeneEffect predictions for all 42 lines in the
-split, not only the two test lines. These predictions form the cohort matrix
-required by SLIdR. No measured validation/test GeneEffect is substituted into
-the primary predicted-GeneEffect matrix.
-
-Raw GeneEffect Spearman, MAE, and RMSE may be monitored as secondary validation
-metrics, but they do not override the residual-Spearman checkpoint rule.
-
-## 5. Stage-1 Test: GeneEffect Prediction
-
-Run the frozen checkpoint once on A549 and HT29. For each line, evaluate over the
-prespecified intersection of model-output genes and non-missing 26Q1 GeneEffect
-genes.
-
-**Primary metric:** per-line residual Spearman correlation, using gene means
-computed from training lines only.
-
-**Secondary metrics:** raw Spearman correlation, MAE, RMSE, and predicted-versus-
-observed variance ratio. Report A549 and HT29 separately and their unweighted
-macro mean. Do not tune, calibrate, or select genes using either test line's
-GeneEffect values.
-
-## 6. Stage-2 Test: Train-Free SLIdR
-
-SLIdR consumes the frozen GeneEffect predictions together with frozen DepMap
-mutation/copy-number inputs. It is not trained on the SL label table.
-
-The two target-line cohorts are fixed to the basal-covered lines below:
-
-- **Lung:** NCI-H1792, SHP-77, SW 1271, NCI-H2122, NCI-H2030, A427,
-  HOP-62, NCI-H23, NCI-H1573, NCI-H460, NCI-H661, and A549.
-- **Bowel:** LoVo, LS 180, SW48, HCT-15, COLO 205, HCT116, RKO, and HT29.
-
-Every cohort member must have basal input, a frozen GeneEffect prediction,
-mutation/copy-number calls, and the partner gene in the common gene universe.
-For a driver direction to be scoreable, its lineage cohort must contain at
-least three altered and three reference lines under the frozen alteration rule.
-
-For each target line:
-
-1. Use the target's mutation/copy-number state only to determine which endpoint
-   of an unordered pair is an eligible natural driver.
-2. Compute the directional driver-to-partner SLIdR score from the target's
-   lineage cohort. The alteration thresholds, multiple-testing rule, and score
-   orientation must be frozen before test scoring.
-3. If neither endpoint is an eligible driver, mark the pair `unscored`; do not
-   impute a score. If both directions are eligible, retain both directional
-   scores and use the better-ranked direction as the pair score under one frozen
-   rule.
-4. Report eligible-pair coverage before reporting ranking performance.
-
-Pair eligibility is fixed before either GeneEffect arm is scored. It depends
-only on the target alteration state, the three-versus-three cohort-size rule,
-gene-name mapping, and availability in both frozen GeneEffect matrices. No
-predicted or measured GeneEffect value, essentiality threshold, or SL label may
-change this common pair universe.
-
-This filtered set is declared the **mutation-gated SLIdR sub-benchmark**. It is
-not treated as performance on the full unordered context-screen table. Report
-the post-gating positive and negative counts alongside the source counts in
-Section 2.3. If either test line retains fewer than 10 positives or 10 negatives,
-its Stage-2 result is `not evaluable`; it may not be rescued by pooling the two
-lines or by relaxing the gate after labels are inspected.
-
-Two SLIdR inputs are then evaluated on this identical eligible pair set:
-
-- **Primary:** predicted GeneEffect from the frozen STATE backbone.
-- **Oracle diagnostic:** measured 26Q1 GeneEffect. This measures the loss caused
-  by the GeneEffect prediction stage and is not a deployable result.
-
-The SLIdR implementation is train-free, but its thresholds and filtering choices
-are still hyperparameters. They must be copied from one declared implementation
-or fixed without consulting A549/HT29 SL labels.
-
-## 7. SL Metrics and Controls
-
-The primary SL metric is AUPR computed separately for A549 and HT29 over scored
-pairs. AUROC is secondary. Report the unweighted two-line macro mean only as a
-descriptive summary; two lines do not support a population-level cross-cell-line
-claim.
-
-Also report:
-
-- number and fraction of SL-label pairs eligible for SLIdR scoring;
-- positive/negative counts among eligible pairs;
-- predicted-GeneEffect SLIdR minus measured-GeneEffect SLIdR performance;
-- a context-blind pair-score baseline evaluated on the same pair universe; and
-- a mutation/copy-number-only baseline evaluated on the same eligible pairs.
-
-Because the current SL table has no retained same-pair label reversals across
-contexts, this benchmark tests transfer to named held-out contexts but cannot by
-itself demonstrate recovery of context-dependent label reversal.
-
-SLIdR estimates a directional, mutation-gated cohort association rather than a
-target-specific virtual double-knockout interaction. Therefore this protocol can
-support a named-context mutation-gated dependency-ranking result, but it does
-not by itself satisfy the explicit pair-interaction or measured-GI mechanism
-claim in [`01-blueprint.md`](01-blueprint.md).
+Report $A-B$ both in full and restricted to the context block; only the restricted form
+isolates out-of-sample GeneEffect cost, since 21 of 24 dimensions are context-invariant in
+both arms.
 
 ## 8. Leakage Rules
 
-- A549 and HT29 are absent from response-model fitting, GeneEffect-head fitting,
-  checkpoint selection, calibration, feature selection, and threshold tuning.
-- Validation lines select the backbone checkpoint only; they are never promoted
-  into training after selection.
-- Test GeneEffect may be read only by the Stage-1 evaluator and the explicitly
-  labeled measured-GeneEffect oracle.
-- Test SL labels may be read only by the final Stage-2 evaluator.
-- Cell lines are joined by DepMap ModelID, never by informal name alone.
-- Unknown or missing SLIdR scores are not converted to negatives.
-- All test metrics are reported for both lines; neither line may be dropped after
-  inspecting its result.
+- Test contexts are absent from response training, dependency training, $\mu^{tr}$, SL-head
+  training, hyperparameter and checkpoint selection, standardizer fitting, calibration and
+  thresholding.
+- Validation contexts select only; they are never promoted into training.
+- Join contexts by DepMap ModelID through a checked-in `context -> ModelID` map. Fail loudly
+  on an unmapped context rather than dropping it. Never join on informal name — DepMap's
+  `CellLineName` for K562 is `K-562`.
+- Fit the standardizer, any calibrator, and any threshold inside the training side only.
+  **Per-context z-scoring of $\hat y$ is forbidden**: it consumes the test context's own
+  distribution and erases the quantity under test.
+- One common, label-independent pair universe across arms. Missing scores stay missing,
+  never imputed to zero and never counted as negatives.
+- Report every test context. None may be dropped after its result is inspected.
+- Qualify every result with the Tx1 Tahoe-100M pretraining exposure.
 
-## 9. Required Outputs
+## 9. Compute Contract
 
-One benchmark run must preserve:
+The dominant cost is not backbone fitting but materializing $\hat\delta_{g,c}$ for every
+benchmark gene across every `C_ref` context, once per inner model — order
+`genes x contexts x cells-per-bag` Tx1-3B forward passes, with backbone-specific caches
+(`tx1_predicted_response_cache.py`, `tx1_response_gene_bags_cache.py`) rebuilt each time.
+Pin the bag size, the cell-sampling seed, and the cache layout, and record a measured
+GPU-hour estimate for one inner model before launching the full set. If the total is
+infeasible, that must surface before the first run, not after.
+
+Report per run: the number of response contexts, total response cells, and Stage-1 and
+Stage-2 $L_{\text{resp}}$.
+
+## 10. Required Outputs
 
 ```text
-split_manifest.json
+split_manifest.json          copy of the tracked configs/benchmarks/ file, with its hash
 checkpoint_selection.json
 geneeffect_predictions.csv
 geneeffect_metrics.json
-slidr_scores.csv
-slidr_metrics.json
+sl_features.parquet
+sl_scores.csv
+sl_metrics.json
 run_manifest.json
 ```
 
-The run manifest records the git commit, input and checkpoint hashes, DepMap
-release, exact line lists, gene universe, SLIdR configuration, and random seeds.
-`slidr_scores.csv` records target ModelID, canonical pair, eligible direction(s),
-predicted-GeneEffect score, measured-GeneEffect oracle score, label, and every
-exclusion reason. Planned metrics are not results; results enter `docs/results/`
-only after the frozen run completes.
+`run_manifest.json` records the git commit, input and checkpoint hashes, the DepMap release,
+exact context lists, the gene universe, $G_{\text{var}}$, all hyperparameters with the
+surface each was selected on, the $\alpha$ calibration band, and seeds. `sl_scores.csv`
+records context ModelID, canonical pair, arm, score, label, endpoint-seen stratum, and every
+exclusion reason. Planned metrics are not results; a claim enters `results/` only after the
+frozen run completes and its integrity checks pass.

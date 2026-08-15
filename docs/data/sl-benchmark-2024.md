@@ -1,5 +1,12 @@
 # SL_benchmark 2024 Synthetic-Lethality Benchmark
 
+**Status:** historical. [`../01-blueprint.md`](../01-blueprint.md) drops the Feng2024
+benchmark; the active benchmark is [`sl-context-screen-v2.md`](sl-context-screen-v2.md),
+whose generalization axis is the cell line rather than the unseen gene. Nothing here is a
+current target: no CV1/CV2/CV3 run, no `cal_metrics` reproduction, and no SLMGAE/KR4SL/KG4SL
+comparison is planned. The files remain on disk as prior evidence and as the source of the
+cold-start numbers quoted in [`../02-literature-review.md`](../02-literature-review.md) §1.
+
 ## Role
 
 Primary general synthetic-lethality pair benchmark for comparison with the
