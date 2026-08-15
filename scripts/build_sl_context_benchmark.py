@@ -20,9 +20,11 @@ import pandas as pd
 
 LOGGER = logging.getLogger(__name__)
 INPUT_PATH = Path("data/SL_Benchmark_Formal/sl_integrated_pairs.csv")
-DEFAULT_OUTPUT_DIR = Path("data/SL_Benchmark_Formal/derived/context_screen_v1")
+DEFAULT_OUTPUT_DIR = Path("data/SL_Benchmark_Formal/derived/context_screen_v2")
 BENCHMARK_FILENAME = "sl_context_pairs.csv"
 CONTEXT_FILENAME = "context_inventory.csv"
+AUDIT_FILENAME = "filter_audit.csv"
+STATISTICS_FILENAME = "context_statistics.csv"
 MANIFEST_FILENAME = "manifest.json"
 
 ALLOWED_GENE_STATUSES = frozenset({"approved", "updated"})
@@ -31,6 +33,9 @@ EXCLUDED_CONTEXTS = frozenset(
     {
         "FULLBASAL",
         "MESC",
+        # str(NaN).upper() matches the atomic-token pattern, so guard it here
+        # rather than only at the tokenizer that happens to check for it.
+        "NAN",
         "MULTIPLE",
         "PAN-CANCER",
         "PAN_CANCER",
@@ -113,26 +118,46 @@ def _normalise_context(value: object) -> str | None:
     return context
 
 
-def _selection_masks(frame: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-    common = (
-        frame["qc_flag"].isna()
-        & frame["has_human_evidence"].eq(True)
-        & frame["organisms"].eq("human")
-        & frame["gene_a_status"].isin(ALLOWED_GENE_STATUSES)
-        & frame["gene_b_status"].isin(ALLOWED_GENE_STATUSES)
-        & frame["conflict"].eq(0)
-        & frame["sources"].eq("screen")
-        & frame["evidence_types"].eq("experimental_screen")
-    )
-    positive = (
-        frame["label"].eq("positive")
-        & frame["label_tier"].eq("experimental")
-        & frame["is_sl"].eq(True)
-        & frame["ep"].eq(True)
-        & frame["n_pos"].eq(frame["n_evidence"])
+def _common_conditions(frame: pd.DataFrame) -> dict[str, pd.Series]:
+    """Named row-eligibility conditions, kept separable so they can be audited."""
+    return {
+        "qc_flag_empty": frame["qc_flag"].isna(),
+        "has_human_evidence": frame["has_human_evidence"].eq(True),
+        "organisms_human": frame["organisms"].eq("human"),
+        "gene_status_approved_or_updated": frame["gene_a_status"].isin(
+            ALLOWED_GENE_STATUSES
+        )
+        & frame["gene_b_status"].isin(ALLOWED_GENE_STATUSES),
+        "conflict_zero": frame["conflict"].eq(0),
+        "sources_screen_only": frame["sources"].eq("screen"),
+        "evidence_experimental_screen_only": frame["evidence_types"].eq(
+            "experimental_screen"
+        ),
+    }
+
+
+def _positive_conditions(frame: pd.DataFrame) -> dict[str, pd.Series]:
+    return {
+        "label_positive": frame["label"].eq("positive"),
+        "tier_experimental": frame["label_tier"].eq("experimental"),
+        "is_sl_true": frame["is_sl"].eq(True),
+        "ep_true": frame["ep"].eq(True),
+        "all_evidence_positive": frame["n_pos"].eq(frame["n_evidence"])
         & frame["n_neg"].eq(0)
-        & frame["n_unl"].eq(0)
-    )
+        & frame["n_unl"].eq(0),
+    }
+
+
+def _all_true(masks: Iterable[pd.Series], index: pd.Index) -> pd.Series:
+    combined = pd.Series(True, index=index)
+    for mask in masks:
+        combined &= mask
+    return combined
+
+
+def _selection_masks(frame: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    common = _all_true(_common_conditions(frame).values(), frame.index)
+    positive = _all_true(_positive_conditions(frame).values(), frame.index)
     negative = (
         frame["label"].eq("negative")
         & frame["label_tier"].eq("experimental_negative")
@@ -144,6 +169,41 @@ def _selection_masks(frame: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return common & positive, common & negative
 
 
+def audit_positive_losses(frame: pd.DataFrame) -> pd.DataFrame:
+    """Count, per context and per condition, positive-labelled rows the filter drops.
+
+    Each condition is evaluated independently rather than cumulatively, so a
+    context that loses all of its positives can be traced to the single rule
+    responsible instead of to whichever rule happens to run first.
+    """
+    labelled = frame.loc[frame["label"].eq("positive")]
+    if labelled.empty:
+        return pd.DataFrame(columns=["context", "condition", "positives_dropped"])
+
+    tokens = labelled["cell_lines"].map(
+        lambda value: [
+            normalised
+            for token in str(value).split(";")
+            if (normalised := _normalise_context(token)) is not None
+        ]
+    )
+    conditions = {**_common_conditions(labelled), **_positive_conditions(labelled)}
+    counts: dict[tuple[str, str], int] = {}
+    for name, mask in conditions.items():
+        failing = tokens.loc[~mask]
+        for context_list in failing:
+            for context in context_list:
+                counts[(context, name)] = counts.get((context, name), 0) + 1
+    if not counts:
+        return pd.DataFrame(columns=["context", "condition", "positives_dropped"])
+    return pd.DataFrame(
+        [
+            {"context": context, "condition": name, "positives_dropped": value}
+            for (context, name), value in counts.items()
+        ]
+    )
+
+
 def select_atomic_rows(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
     """Select and explode defensible pair-context rows from one raw chunk."""
     missing = REQUIRED_COLUMNS - set(frame.columns)
@@ -153,6 +213,11 @@ def select_atomic_rows(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int
 
     positive, negative = _selection_masks(frame)
     selected = frame.loc[positive | negative].copy()
+    # Chunked reads keep a running index, so this is the global raw-CSV row number.
+    # It links contexts exploded from one aggregate row; it cannot link separate
+    # rows produced by the same underlying screen, because the source carries no
+    # study or evidence identifier.
+    selected["source_row_id"] = selected.index.astype("int64")
     stats = {
         "raw_rows": int(len(frame)),
         "quality_label_rows": int(len(selected)),
@@ -228,6 +293,7 @@ def select_atomic_rows(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int
         "pair_is_ordered",
         "label_confidence",
         "context_assignment",
+        "source_row_id",
         "source_n_evidence",
         "source_row_min_fdr",
     ]
@@ -325,6 +391,7 @@ def finalise_benchmark(
             "pair_is_ordered",
             "label_confidence",
             "context_assignment",
+            "source_row_id",
             "source_n_evidence",
             "source_row_count",
             "source_row_min_fdr",
@@ -360,6 +427,49 @@ def finalise_benchmark(
     return benchmark, inventory, stats
 
 
+def context_statistics(benchmark: pd.DataFrame) -> pd.DataFrame:
+    """Per-context properties a benchmark user must see before trusting a context.
+
+    Positive-anchor concentration is the load-bearing column: a context whose
+    positives all share one gene has a single-gene indicator as its label
+    function, which no row count reveals.
+    """
+    multi_context = _multi_context_rows(benchmark)
+    rows: list[dict[str, Any]] = []
+    for context, frame in benchmark.groupby("context", sort=True):
+        positives = frame.loc[frame["sl_label"].eq(1)]
+        genes = pd.concat([positives["gene_a"], positives["gene_b"]], ignore_index=True)
+        gene_counts = genes.value_counts()
+        n_positive = int(len(positives))
+        shared = frame.loc[frame["source_row_id"].isin(multi_context)]
+        rows.append(
+            {
+                "context": context,
+                "n_positive": n_positive,
+                "n_negative": int((frame["sl_label"] == 0).sum()),
+                "n_pairs": int(len(frame)),
+                "positive_prior": round(n_positive / len(frame), 6),
+                "n_distinct_positive_genes": int(gene_counts.size),
+                "top_positive_gene": (
+                    str(gene_counts.index[0]) if gene_counts.size else ""
+                ),
+                "top_positive_gene_share": (
+                    round(float(gene_counts.iloc[0]) / n_positive, 6)
+                    if n_positive
+                    else 0.0
+                ),
+                "n_rows_sharing_source_row_with_other_context": int(len(shared)),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _multi_context_rows(benchmark: pd.DataFrame) -> set[int]:
+    """Source rows exploded into more than one retained context."""
+    spread = benchmark.groupby("source_row_id")["context"].nunique()
+    return set(spread[spread > 1].index)
+
+
 def _manifest(
     output_dir: Path,
     min_class_count: int,
@@ -369,7 +479,7 @@ def _manifest(
     benchmark_path = output_dir / BENCHMARK_FILENAME
     context_path = output_dir / CONTEXT_FILENAME
     return {
-        "schema_version": "sl-context-screen-v1",
+        "schema_version": "sl-context-screen-v2",
         "input": {
             "path": str(INPUT_PATH),
             "sha256": _sha256(INPUT_PATH),
@@ -378,6 +488,21 @@ def _manifest(
         "outputs": {
             BENCHMARK_FILENAME: _sha256(benchmark_path),
             CONTEXT_FILENAME: _sha256(context_path),
+            AUDIT_FILENAME: _sha256(output_dir / AUDIT_FILENAME),
+            STATISTICS_FILENAME: _sha256(output_dir / STATISTICS_FILENAME),
+        },
+        "provenance": {
+            "source_row_id": (
+                "global raw-CSV row number; links contexts exploded from one "
+                "aggregate row. It cannot link separate rows from the same "
+                "experimental screen — the source has no study or evidence ID, so "
+                "no independence claim may rest on it."
+            ),
+            "split": (
+                "not assigned by this build; the split requires executability "
+                "(DepMap GeneEffect and basal single-cell input) per context and is "
+                "published separately at configs/benchmarks/"
+            ),
         },
         "selection": {
             "human_gene_mapping": (
@@ -429,6 +554,7 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
         raise ValueError("chunksize must be at least 1")
 
     atomic_frames: list[pd.DataFrame] = []
+    audit_frames: list[pd.DataFrame] = []
     chunk_stats: list[dict[str, int]] = []
     for chunk in pd.read_csv(
         INPUT_PATH,
@@ -440,15 +566,31 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
         chunk_stats.append(stats)
         if not atomic.empty:
             atomic_frames.append(atomic)
+        audit = audit_positive_losses(chunk)
+        if not audit.empty:
+            audit_frames.append(audit)
     if not atomic_frames:
         raise ValueError("No rows passed raw-table selection")
 
     benchmark, inventory, final_stats = finalise_benchmark(
         pd.concat(atomic_frames, ignore_index=True), min_class_count
     )
+    audit = (
+        pd.concat(audit_frames, ignore_index=True)
+        .groupby(["context", "condition"], as_index=False)["positives_dropped"]
+        .sum()
+        .sort_values(
+            ["positives_dropped", "context", "condition"], ascending=[False, True, True]
+        )
+        if audit_frames
+        else pd.DataFrame(columns=["context", "condition", "positives_dropped"])
+    )
+    statistics = context_statistics(benchmark)
     output_dir.mkdir(parents=True, exist_ok=True)
     benchmark.to_csv(output_dir / BENCHMARK_FILENAME, index=False)
     inventory.to_csv(output_dir / CONTEXT_FILENAME, index=False)
+    audit.to_csv(output_dir / AUDIT_FILENAME, index=False)
+    statistics.to_csv(output_dir / STATISTICS_FILENAME, index=False)
     manifest = _manifest(
         output_dir,
         min_class_count,

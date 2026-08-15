@@ -1,8 +1,13 @@
 # SL Context Screen Benchmark v2
 
-**Status:** specified, **not built**. No v2 artifact exists on disk. This card is the build
-contract required by [`../03-experiment-protocol.md`](../03-experiment-protocol.md) §2; the
-measured numbers below are v1 statistics that motivate the rebuild, not v2 results.
+**Status:** step 1 **built** 2026-08-15 on the HPC; step 2 (the split) not started. The
+table, provenance column, filter audit and context statistics exist under
+`derived/context_screen_v2/`; no split is assigned and no model has run. Built from input
+SHA-256 `6dd7a6a4b2837d40…`, which matches the Mac copy byte for byte.
+
+The build reproduces v1's counts exactly — 184,962 rows, 172,838 unique pairs, 15,694 genes,
+10 retained contexts, 11,999 multi-context pairs, 0 cross-context label changes — so v2 is
+v1 plus provenance and audits, not a different label set.
 
 ## Role
 
@@ -36,7 +41,9 @@ does not carry study identifiers.
 Three properties of v1. The first two were computed from `sl_context_pairs.csv`; the third
 comes from `context_inventory.csv`, because `sl_context_pairs.csv` holds only the ten
 contexts that passed the `>= 10/10` gate and therefore cannot show a zero-positive context
-at all. The rebuild must record the exact artifact hash and query behind each figure.
+at all. **v2 now measures all three as published columns** — see
+`context_statistics.csv` and `filter_audit.csv` — so they are properties a benchmark user
+reads off the artifact rather than findings buried in a review.
 
 **Duplicate screens.** K562/JURKAT share 9,219 rows — 100% of JURKAT, Jaccard 0.772 — and
 HELA/PC9 share 2,523 rows — 100% of PC9, Jaccard 0.983 — both at label agreement exactly
@@ -50,6 +57,18 @@ split that separates them holds out nothing.
 containing TRA2A is negative, so the indicator `1[TRA2A in {a,b}]` scores AUPR 1.0 on that
 context. Positive-anchor concentration varies widely across contexts and must be published
 so users can see it rather than discover it.
+
+**v2 measurements.** `context_statistics.csv` confirms and quantifies all three. A549's
+`top_positive_gene_share` is exactly **1.000000** (TRA2A), with PC9 at 0.533 and HELA at
+0.421 (both SORT1). `n_rows_sharing_source_row_with_other_context` is **9,219 of 9,219** for
+JURKAT and **2,523 of 2,523** for PC9 — every row in each context is exploded from a source
+row shared with another context — against 2,530 of 2,566 for HELA and 9,229 of 11,939 for
+K562. `filter_audit.csv` attributes the missing positives overwhelmingly to
+`all_evidence_positive`, the unanimity rule, and secondarily to `conflict_zero`: a source
+row whose evidence is mixed across its cell lines is discarded whole, so every context named
+in it loses its positives. Because the source records no per-context outcome, relaxing
+unanimity could not say which context earned the hit — those positives are unrecoverable,
+not merely filtered.
 
 **Missing positives in repeated patterns** (from `context_inventory.csv`). Nine contexts
 carry 933–941 negatives and zero
@@ -110,18 +129,28 @@ a prerequisite, and each acquired context records its source and accession here.
 
 ## Generated Files
 
+Part 0 runs in two steps. **Step 1**, `scripts/build_sl_context_benchmark.py`, emits the
+table with provenance and the two audit files. **Step 2** assigns the split, which needs
+per-context executability (DepMap GeneEffect and basal input) that step 1 knows nothing
+about; it writes the tracked manifest and mirrors a `split` column back into the table.
+
 ```text
-configs/benchmarks/context_screen_v2_split.json   TRACKED — canonical split
+configs/benchmarks/context_screen_v2_split.json   TRACKED — canonical split (step 2)
 
 data/SL_Benchmark_Formal/derived/context_screen_v2/
-  sl_context_pairs.csv        + source_row_id, + split (mirror)
-  filter_audit.csv
+  sl_context_pairs.csv        + source_row_id  (+ split after step 2)
+  context_inventory.csv
+  filter_audit.csv            positives dropped, per context per condition
   context_statistics.csv      class counts, prior, distinct positive genes, top-gene share
   manifest.json               source and output hashes, filter rules, row counts
 ```
 
 Everything under `derived/` is gitignored; only the split manifest is tracked. All must be
 frozen before any model run.
+
+`filter_audit.csv` evaluates each condition **independently**, not cumulatively, so a
+context that loses all of its positives can be traced to the single rule responsible rather
+than to whichever rule happens to run first.
 
 ## Scope and Cautions
 

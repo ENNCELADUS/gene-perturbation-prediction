@@ -4,6 +4,8 @@ import pandas as pd
 import pytest
 
 from scripts.build_sl_context_benchmark import (
+    audit_positive_losses,
+    context_statistics,
     finalise_benchmark,
     select_atomic_rows,
 )
@@ -56,6 +58,7 @@ def _atomic_row(
     context: str,
     label: int,
     min_fdr: float,
+    source_row_id: int = 0,
 ) -> dict[str, object]:
     gene_a, gene_b = pair_id.split("|")
     return {
@@ -71,6 +74,7 @@ def _atomic_row(
         "pair_is_ordered": False,
         "label_confidence": "silver_inferred",
         "context_assignment": "unanimous_row_evidence_count_match",
+        "source_row_id": source_row_id,
         "source_n_evidence": 1,
         "source_row_min_fdr": min_fdr,
     }
@@ -149,3 +153,66 @@ def test_finalise_excludes_pair_context_label_conflicts_and_weak_contexts() -> N
 def test_finalise_rejects_nonpositive_minimum() -> None:
     with pytest.raises(ValueError, match="at least 1"):
         finalise_benchmark(pd.DataFrame({"pair_id": ["A|B"]}), 0)
+
+
+def test_source_row_id_is_the_global_raw_row_and_survives_explosion() -> None:
+    frame = pd.DataFrame(
+        [_row(cell_lines="RPE1;K562", n_cell_lines=2, n_evidence=2, n_pos=2)],
+        index=[41_237],
+    )
+
+    selected, _ = select_atomic_rows(frame)
+
+    # Both contexts came from one aggregate row, so they share its id — this is
+    # the coupling that must keep them on the same side of a split.
+    assert selected["source_row_id"].tolist() == [41_237, 41_237]
+
+
+def test_audit_attributes_dropped_positives_to_the_responsible_condition() -> None:
+    frame = pd.DataFrame(
+        [
+            _row(cell_lines="MCF7", sources="screen;literature"),
+            _row(cell_lines="MCF7", sources="screen;literature"),
+            _row(cell_lines="GI1", conflict=1),
+            _row(cell_lines="RPE1"),
+        ]
+    )
+
+    audit = audit_positive_losses(frame).set_index(["context", "condition"])
+
+    assert audit.loc[("MCF7", "sources_screen_only"), "positives_dropped"] == 2
+    assert audit.loc[("GI1", "conflict_zero"), "positives_dropped"] == 1
+    assert ("RPE1", "conflict_zero") not in audit.index
+
+
+def test_missing_cell_lines_do_not_become_a_nan_context() -> None:
+    # str(NaN).upper() == "NAN", which matches the atomic-token pattern.
+    frame = pd.DataFrame([_row(cell_lines=float("nan"), conflict=1)])
+
+    audit = audit_positive_losses(frame)
+    selected, _ = select_atomic_rows(pd.DataFrame([_row(cell_lines=float("nan"))]))
+
+    assert "NAN" not in set(audit["context"])
+    assert selected.empty
+
+
+def test_context_statistics_expose_a_single_gene_label_function() -> None:
+    benchmark = pd.DataFrame(
+        [
+            _atomic_row("BAIT|X", "A549", 1, 0.01, source_row_id=1),
+            _atomic_row("BAIT|Y", "A549", 1, 0.01, source_row_id=2),
+            _atomic_row("P|Q", "A549", 0, 0.01, source_row_id=3),
+            _atomic_row("M|N", "K562", 1, 0.01, source_row_id=4),
+            _atomic_row("R|S", "K562", 0, 0.01, source_row_id=4),
+        ]
+    )
+
+    stats = context_statistics(benchmark).set_index("context")
+
+    # Every A549 positive contains BAIT, so its label function is an indicator.
+    assert stats.loc["A549", "top_positive_gene"] == "BAIT"
+    assert stats.loc["A549", "top_positive_gene_share"] == 1.0
+    assert stats.loc["K562", "top_positive_gene_share"] == 1.0
+    assert stats.loc["A549", "n_distinct_positive_genes"] == 3
+    assert stats.loc["A549", "positive_prior"] == pytest.approx(2 / 3)
+    assert stats.loc["A549", "n_rows_sharing_source_row_with_other_context"] == 0
