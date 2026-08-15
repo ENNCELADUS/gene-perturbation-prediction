@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the development-only Tx1 GeneEffect P0 source-line baseline ladder."""
+"""Run the Tx1 GeneEffect P0 source-line baseline ladder."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     write_p0_baseline_artifacts(result, args.out_dir)
     _LOGGER.info(
-        "Wrote development-only P0 results for %d lines and %d genes to %s",
+        "Wrote P0 results for %d lines and %d genes to %s",
         result.summary["n_lines"],
         result.summary["n_genes"],
         args.out_dir,

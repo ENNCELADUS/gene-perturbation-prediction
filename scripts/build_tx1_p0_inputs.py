@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize authenticated development-only Tx1 P0 baseline inputs."""
+"""Materialize authenticated Tx1 P0 baseline inputs."""
 
 from __future__ import annotations
 

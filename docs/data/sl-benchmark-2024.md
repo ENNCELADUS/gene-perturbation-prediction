@@ -11,7 +11,7 @@ cold-start numbers quoted in [`../02-literature-review.md`](../02-literature-rev
 
 Primary general synthetic-lethality pair benchmark for comparison with the
 Feng2024 SOTA model zoo. Use the official 9,845-gene CV1/CV2/CV3 caches and metric
-implementation for the formal context-agnostic score `q(a,b)`.
+implementation for the context-agnostic score `q(a,b)`.
 
 This is not a DepMap GeneEffect regression dataset and not a single-cell
 perturbation dataset. The supervised object is an undirected gene pair:
@@ -131,7 +131,7 @@ It also evaluates three negative sampling methods:
 
 For this project, `Exp` and `Dep` need leakage warnings whenever model features or
 context supervision also use DepMap expression or dependency information. The
-primary formal comparison is therefore `Rand` 1:1; the other regimes are declared
+primary comparison is therefore `Rand` 1:1; the other regimes are declared
 sensitivity analyses.
 
 ## Metrics
@@ -158,10 +158,10 @@ average precision over hits found in the top `k`.
 
 ## How to Use in This Project
 
-Use this benchmark as the formal general pair-label target and SOTA comparison,
+Use this benchmark as the general pair-label target and SOTA comparison,
 not as a replacement for cell-line-resolved SL/GI evaluation.
 
-Recommended formal route:
+Recommended route:
 
 ```text
 official SL_benchmark data_split pair cache
@@ -207,7 +207,7 @@ anchor_observed_response_features
 ```
 
 Retain that K562 `dependency_only` row as a prior floor, but do not let its gene
-coverage redefine the formal pair universe. The general benchmark ladder must
+coverage redefine the pair universe. The general benchmark ladder must
 also include gene-marginal/context-free controls that can score the full official
 universe under the same folds.
 
@@ -296,7 +296,7 @@ negative: 165865
 ```
 
 This filtered dataset is K562-mappable by DepMap gene coverage. It is an ablation
-and prior-baseline surface, not the formal general benchmark and not a
+and prior-baseline surface, not the general benchmark and not a
 cell-line-specific K562 SL assay unless a real `*_cell_k562.pkl` split is available
 and verified.
 

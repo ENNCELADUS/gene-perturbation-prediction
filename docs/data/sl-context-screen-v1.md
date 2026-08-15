@@ -68,7 +68,7 @@ Accordingly, every output row is marked `label_confidence=silver_inferred`.
 After explosion, any canonical pair–context key with both labels is removed.
 Duplicate same-label keys are collapsed. A context enters the pair-classification
 candidate table only when it has at least 10 positive and 10 negative pairs. This
-is a permissive preprocessing threshold, not proof of formal benchmark or ranking
+is a permissive preprocessing threshold, not proof of benchmark or ranking
 eligibility. The context inventory also reports unique genes and genes appearing
 with both labels so later task design can audit anchor coverage.
 
@@ -100,7 +100,7 @@ Feng-alignment decisions, and row counts.
 
 - This table is a candidate input for designing a context-conditioned benchmark,
   subject to the context-level counts and inferred context assignment above. The
-  included contexts have not yet passed a formal ranking-candidate-universe,
+  included contexts have not yet passed a ranking-candidate-universe,
   batch-confounding, power, or prospective evaluation gate.
 - In the v1 build, 11,999 pairs occur in more than one retained context, but no
   retained pair changes label across contexts. The table therefore supports

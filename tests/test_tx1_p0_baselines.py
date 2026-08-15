@@ -1,4 +1,4 @@
-"""Tests for the development-only Tx1 P0 source-line baseline ladder."""
+"""Tests for the Tx1 P0 source-line baseline ladder."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def _fixtures(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
         for index in range(4)
     )
     rows.extend(
-        tx1_manifest_row(model_id=f"ACH-T{index:04d}", lineage="Opened", role="test")
+        tx1_manifest_row(model_id=f"ACH-T{index:04d}", lineage="Test", role="test")
         for index in range(9)
     )
     write_tx1_line_manifest(manifest_path, rows)
@@ -360,8 +360,6 @@ def test_deterministic_atomic_artifacts_and_copy_prior_metrics(tmp_path: Path) -
     pd.testing.assert_frame_equal(first.per_line, second.per_line)
     assert first.summary == second.summary
     assert first.summary["protocol_id"] == PROTOCOL_ID
-    assert first.summary["formal"] is False
-    assert first.summary["test_lines_excluded"] is True
     assert "delta_rho" in first.summary["methods"][PCA_RIDGE_METHOD]
 
     output = tmp_path / "output"

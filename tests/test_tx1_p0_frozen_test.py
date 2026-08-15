@@ -1,4 +1,4 @@
-"""Tests for the prediction-first P0 frozen-test diagnostic."""
+"""Tests for the prediction-first P0 frozen-test evaluation."""
 
 from __future__ import annotations
 
@@ -13,11 +13,63 @@ from aivc_model.tx1_p0_frozen_test import (
     EXPECTED_CACHE_MANIFEST_SHA256,
     EXPECTED_COMPARATORS,
     EXPECTED_TX1_MODEL_SHA256,
+    _load_comparator,
     build_frozen_predictions,
     evaluate_predictions,
     sha256_file,
 )
 from aivc_model.tx1_p0_representation import OuterFoldPredictions
+
+
+def test_comparator_manifest_mode_is_not_a_runtime_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    predictions_path = tmp_path / "predictions.csv"
+    pd.DataFrame(
+        {
+            "model_id": ["TEST"],
+            "depmap_column": ["A (1)"],
+            "method": ["source"],
+            "k": [0],
+            "panel": [0],
+            "base_pred": [0.5],
+        }
+    ).to_csv(predictions_path, index=False)
+    predictions_sha = sha256_file(predictions_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "mode": "legacy",
+                "predictions_sha256": predictions_sha,
+                "head_checkpoint_sha256": "head",
+                "expected_head_checkpoint_sha256": "head",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(
+        EXPECTED_COMPARATORS,
+        "previous",
+        {
+            "manifest_sha256": sha256_file(manifest_path),
+            "head_sha256": "head",
+        },
+    )
+
+    loaded = _load_comparator(
+        predictions_path,
+        manifest_path,
+        output_method="previous",
+        source_method="source",
+        expected_sha256=predictions_sha,
+        test_ids=["TEST"],
+        slice_frame=pd.DataFrame(
+            {"depmap_column": ["A (1)"], "gene_symbol": ["A"]}
+        ),
+    )
+
+    assert loaded["method"].tolist() == ["previous"]
 
 
 def test_prediction_phase_uses_only_train_labels(
@@ -156,11 +208,10 @@ def test_prediction_phase_uses_only_train_labels(
 
     assert observed_ids == train_ids
     assert not set(test_ids).intersection(observed_ids)
-    assert metadata["test_labels_accessed"] is False
     assert len(predictions) == 9 * 3 * 7
 
 
-def test_evaluation_rejects_invalid_predictions_before_opening_labels(
+def test_evaluation_rejects_invalid_predictions_before_loading_labels(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     phase_a = tmp_path / "phase_a"
@@ -184,9 +235,6 @@ def test_evaluation_rejects_invalid_predictions_before_opening_labels(
         json.dumps(
             {
                 "protocol_id": "tx1_geneeffect_p0_frozen_test_v1",
-                "test_labels_accessed": False,
-                "formal": False,
-                "post_hoc": True,
                 "prediction_first": True,
                 "n_train_lines": 29,
                 "n_test_lines": 9,
@@ -209,7 +257,6 @@ def test_evaluation_rejects_invalid_predictions_before_opening_labels(
                         "predictions_sha256": contract["predictions_sha256"],
                         "manifest_sha256": contract["manifest_sha256"],
                         "head_checkpoint_sha256": contract["head_sha256"],
-                        "reason": contract["reason"],
                     }
                     for name, contract in EXPECTED_COMPARATORS.items()
                 },
@@ -245,7 +292,7 @@ def test_evaluation_rejects_invalid_predictions_before_opening_labels(
     )
     monkeypatch.setattr(
         "aivc_model.tx1_p0_frozen_test._load_test_truth",
-        lambda *args: pytest.fail("test labels opened before structure checks"),
+        lambda *args: pytest.fail("test labels loaded before structure checks"),
     )
     monkeypatch.setattr(
         "aivc_model.tx1_p0_frozen_test._validate_exposure_ledger",

@@ -123,7 +123,6 @@ def _build(
     tmp_path: Path,
     *,
     manifest_path: Path | None = None,
-    opened_test_ids: set[str] | list[str] | None = None,
     evidence_path: Path | None = None,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     manifest = manifest_path or _write_manifest(tmp_path)
@@ -132,15 +131,8 @@ def _build(
         manifest,
         validation_plan_path=_write_validation_plan(tmp_path, manifest, policy),
         validation_policy_path=policy,
-        opened_test_ids=_opened_test_ids()
-        if opened_test_ids is None
-        else opened_test_ids,
         evidence_path=evidence_path,
     )
-
-
-def _opened_test_ids() -> set[str]:
-    return {row["model_id"] for row in _manifest_rows() if row["role"] == "test"}
 
 
 def _evidence_row(**overrides: str) -> dict[str, str]:
@@ -162,17 +154,8 @@ def test_conservative_manifest_mapping_and_roles(tmp_path: Path) -> None:
     assert indexed.loc["ACH-T", "pretraining_exact_context_status"] == "known_present"
     assert indexed.loc["ACH-H", "pretraining_exact_context_status"] == "verified_absent"
     assert indexed.loc["ACH-A", "pretraining_exact_context_status"] == "unknown"
-    assert indexed.loc["ACH-T", "geneeffect_label_role"] == "opened_binding_historical"
-    assert indexed.loc["ACH-H", "geneeffect_label_role"] == "development_head"
-    assert (
-        indexed.loc["ACH-A", "geneeffect_label_role"]
-        == "development_response_and_head"
-    )
     assert set(ledger["geneeffect_label_status"]) == {"label_source_present"}
-    assert set(ledger["formal_eligibility"]) == {"ineligible"}
     assert summary["protocol_id"] == PROTOCOL_ID
-    assert summary["formal"] is False
-    assert summary["test_lines_excluded"] is True
 
 
 def test_unknown_stays_unknown_without_explicit_evidence(tmp_path: Path) -> None:
@@ -191,17 +174,10 @@ def test_explicit_evidence_may_resolve_unknown(tmp_path: Path) -> None:
     assert anchor["pretraining_exact_context_status"] == "verified_absent"
 
 
-def test_every_test_line_requires_explicit_opened_id(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="explicit opened-test evidence"):
-        _build(tmp_path, opened_test_ids=set())
-
-
 @pytest.mark.parametrize(
     ("override", "error"),
     [
         ({"protocol_id": "wrong"}, "contract metadata"),
-        ({"formal": True}, "contract metadata"),
-        ({"test_lines_excluded": False}, "exclude opened test lines"),
         (
             {"input": {"cell_line_manifest_sha256": "0" * 64}},
             "input SHA256",
@@ -221,7 +197,6 @@ def test_validation_plan_is_strictly_bound_to_manifest_and_protocol(
             manifest,
             validation_plan_path=validation_plan,
             validation_policy_path=policy,
-            opened_test_ids=_opened_test_ids(),
         )
 
 
@@ -244,13 +219,7 @@ def test_policy_rejects_coherently_altered_manifest_and_plan(tmp_path: Path) -> 
             manifest,
             validation_plan_path=plan,
             validation_policy_path=policy,
-            opened_test_ids=_opened_test_ids(),
         )
-
-
-def test_opened_id_must_belong_to_test_role(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="not role=test"):
-        _build(tmp_path, opened_test_ids={"ACH-T", "ACH-H"})
 
 
 @pytest.mark.parametrize(
@@ -331,11 +300,7 @@ def test_known_manifest_status_cannot_be_overridden(tmp_path: Path) -> None:
 def test_outputs_are_deterministic_and_summary_counts_statuses(tmp_path: Path) -> None:
     manifest = _write_manifest(tmp_path, list(reversed(_manifest_rows())))
     first_ledger, first_summary = _build(tmp_path, manifest_path=manifest)
-    second_ledger, second_summary = _build(
-        tmp_path,
-        manifest_path=manifest,
-        opened_test_ids=sorted(_opened_test_ids()),
-    )
+    second_ledger, second_summary = _build(tmp_path, manifest_path=manifest)
     first_csv, first_json = tmp_path / "first.csv", tmp_path / "first.json"
     second_csv, second_json = tmp_path / "second.csv", tmp_path / "second.json"
     write_exposure_ledger(
@@ -359,7 +324,6 @@ def test_outputs_are_deterministic_and_summary_counts_statuses(tmp_path: Path) -
     )
     parsed = json.loads(first_json.read_text())
     assert parsed["input_sha256"]["manifest"]
-    assert parsed["input_sha256"]["opened_test_ids"]
     assert parsed["status_counts"]["pretraining_exact_context_status"] == {
         "known_present": 37,
         "unknown": 4,

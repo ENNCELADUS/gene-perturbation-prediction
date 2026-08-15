@@ -1,7 +1,7 @@
-"""Build an unsplit cell-line-conditioned SL benchmark from the formal raw table.
+"""Build the cell-line-conditioned SL benchmark from the integrated raw table.
 
-The production CLI intentionally has one fixed input.  It does not read the
-previously derived high-quality table or any Horlbeck/Feng benchmark artifact.
+The integrated CSV is the only pair-label input. The tracked split contract
+supplies context identities and executable-data evidence, never extra labels.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ CONTEXT_FILENAME = "context_inventory.csv"
 AUDIT_FILENAME = "filter_audit.csv"
 STATISTICS_FILENAME = "context_statistics.csv"
 MANIFEST_FILENAME = "manifest.json"
+SPLIT_MANIFEST_PATH = Path("configs/benchmarks/context_screen_v2_split.json")
 
 ALLOWED_GENE_STATUSES = frozenset({"approved", "updated"})
 ATOMIC_CONTEXT_RE = re.compile(r"^[A-Z0-9]+$")
@@ -73,7 +74,7 @@ REQUIRED_COLUMNS = frozenset(
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Build an unsplit pair-context benchmark using only "
+            "Build the split pair-context benchmark using only "
             "data/SL_Benchmark_Formal/sl_integrated_pairs.csv."
         )
     )
@@ -104,6 +105,66 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def validate_split_evidence(contract: dict[str, Any]) -> None:
+    """Fail closed if the files declaring contexts executable have drifted."""
+    evidence = contract["executable_evidence"]
+    paths: dict[str, Path] = {}
+    for name, specification in evidence.items():
+        path = Path(specification["path"])
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        if _sha256(path) != specification["sha256"]:
+            raise ValueError(f"Executable-evidence hash mismatch: {path}")
+        paths[name] = path
+
+    contexts = contract["contexts"]
+    for context, specification in contexts.items():
+        if _normalise_context(specification["canonical_name"]) != context:
+            raise ValueError(f"Label context identity mismatch for {context}")
+    expected_model_ids = {
+        specification["model_id"] for specification in contexts.values()
+    }
+    basal = pd.read_csv(paths["basal_manifest"])
+    if basal["model_id"].duplicated().any():
+        raise ValueError("Basal manifest contains duplicate ModelIDs")
+    basal = basal.set_index("model_id")
+    missing_basal = expected_model_ids - set(basal.index)
+    if missing_basal:
+        raise ValueError(f"Split contexts missing basal input: {sorted(missing_basal)}")
+    for context, specification in contexts.items():
+        model_id = specification["model_id"]
+        if str(basal.loc[model_id, "basal_source"]) != specification["basal_source"]:
+            raise ValueError(f"Basal source mismatch for {context}")
+        if (
+            str(basal.loc[model_id, "cellosaurus_id"])
+            != specification["cellosaurus_id"]
+        ):
+            raise ValueError(f"Cellosaurus identity mismatch for {context}")
+
+    model_metadata = pd.read_csv(paths["model_metadata"]).set_index("ModelID")
+    missing_metadata = expected_model_ids - set(model_metadata.index)
+    if missing_metadata:
+        raise ValueError(
+            f"Split contexts missing model metadata: {sorted(missing_metadata)}"
+        )
+    for context, specification in contexts.items():
+        model_id = specification["model_id"]
+        if (
+            str(model_metadata.loc[model_id, "StrippedCellLineName"])
+            != specification["canonical_name"]
+        ):
+            raise ValueError(f"DepMap identity mismatch for {context}")
+
+    gene_effect_ids = set(
+        pd.read_csv(paths["gene_effect"], usecols=[0]).iloc[:, 0].astype(str)
+    )
+    missing_gene_effect = expected_model_ids - gene_effect_ids
+    if missing_gene_effect:
+        raise ValueError(
+            f"Split contexts missing GeneEffect rows: {sorted(missing_gene_effect)}"
+        )
 
 
 def _normalise_context(value: object) -> str | None:
@@ -470,11 +531,158 @@ def _multi_context_rows(benchmark: pd.DataFrame) -> set[int]:
     return set(spread[spread > 1].index)
 
 
+def apply_context_split(
+    benchmark: pd.DataFrame, contract: dict[str, Any]
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Assign contexts, then remove complete source rows crossing split sides."""
+    if contract.get("schema_version") != "sl-context-screen-v2-split-v1":
+        raise ValueError("Unsupported context split schema")
+
+    eligibility = contract["eligibility"]
+    min_positive = int(eligibility["minimum_positive_rows"])
+    min_negative = int(eligibility["minimum_negative_rows"])
+    context_specs = contract["contexts"]
+    pinned_train = set(contract["pinned_train_contexts"])
+    allocation = contract["allocation_counts"]
+
+    label_counts = benchmark.groupby("context")["sl_label"].agg(
+        n_positive="sum", n_pairs="size"
+    )
+    label_counts["n_negative"] = label_counts["n_pairs"] - label_counts["n_positive"]
+    eligible = set(
+        label_counts.index[
+            label_counts["n_positive"].ge(min_positive)
+            & label_counts["n_negative"].ge(min_negative)
+        ]
+    )
+    configured = set(context_specs)
+    missing = configured - set(benchmark["context"])
+    if missing:
+        raise ValueError(f"Split contexts absent from benchmark: {sorted(missing)}")
+    ineligible = configured - eligible
+    if ineligible:
+        raise ValueError(
+            f"Configured split contexts are ineligible: {sorted(ineligible)}"
+        )
+    if not pinned_train <= configured:
+        raise ValueError("Pinned train contexts must be configured and executable")
+    response_anchors = {
+        context
+        for context, specification in context_specs.items()
+        if specification["response_anchor"]
+    }
+    if response_anchors != pinned_train:
+        raise ValueError("Pinned train contexts must equal configured response anchors")
+
+    model_ids = {
+        context: str(spec["model_id"]) for context, spec in context_specs.items()
+    }
+    if len(set(model_ids.values())) != len(model_ids):
+        raise ValueError("Split context ModelIDs must be unique")
+    remaining = sorted(configured - pinned_train, key=model_ids.__getitem__)
+    n_test = int(allocation["test"])
+    n_validation = int(allocation["validation"])
+    if n_test < 1 or n_validation < 1 or n_test + n_validation > len(remaining):
+        raise ValueError("Split allocation cannot produce train, validation, and test")
+
+    assignments = {context: "train" for context in pinned_train}
+    assignments.update({context: "test" for context in remaining[:n_test]})
+    assignments.update(
+        {context: "validation" for context in remaining[n_test : n_test + n_validation]}
+    )
+    assignments.update(
+        {context: "train" for context in remaining[n_test + n_validation :]}
+    )
+    if assignments != contract["assignments"]:
+        raise ValueError("Published assignments do not match the deterministic rule")
+
+    selected = benchmark.loc[benchmark["context"].isin(configured)].copy()
+    selected["model_id"] = selected["context"].map(model_ids)
+    selected["split"] = selected["context"].map(assignments)
+    split_counts = selected.groupby("source_row_id")["split"].nunique()
+    crossing_source_rows = set(split_counts.index[split_counts > 1])
+    dropped = selected.loc[selected["source_row_id"].isin(crossing_source_rows)]
+    selected = selected.loc[
+        ~selected["source_row_id"].isin(crossing_source_rows)
+    ].copy()
+    if (selected.groupby("source_row_id")["split"].nunique() > 1).any():
+        raise AssertionError("A source row remains on more than one split side")
+
+    post_counts = (
+        selected.groupby("context")["sl_label"]
+        .agg(n_positive="sum", n_pairs="size")
+        .reindex(sorted(configured), fill_value=0)
+    )
+    post_counts["n_negative"] = post_counts["n_pairs"] - post_counts["n_positive"]
+    post_ineligible = post_counts.index[
+        post_counts["n_positive"].lt(min_positive)
+        | post_counts["n_negative"].lt(min_negative)
+    ]
+    if len(post_ineligible):
+        raise ValueError(
+            "Row-level leakage removal made contexts ineligible: "
+            f"{sorted(post_ineligible)}"
+        )
+
+    columns = list(selected.columns)
+    columns.remove("model_id")
+    columns.remove("split")
+    context_index = columns.index("context") + 1
+    columns[context_index:context_index] = ["model_id", "split"]
+    selected = (
+        selected[columns]
+        .sort_values(
+            ["split", "context", "pair_id", "sl_label"],
+            ascending=[True, True, True, False],
+        )
+        .reset_index(drop=True)
+    )
+    pair_split_counts = selected.groupby("pair_id")["split"].nunique()
+    crossing_pairs = int((pair_split_counts > 1).sum())
+    if crossing_pairs:
+        raise ValueError(f"Canonical pairs cross split sides: {crossing_pairs}")
+    dropped_by_context = {
+        context: {
+            "positive": int((frame["sl_label"] == 1).sum()),
+            "negative": int((frame["sl_label"] == 0).sum()),
+            "total": int(len(frame)),
+        }
+        for context, frame in dropped.groupby("context", sort=True)
+    }
+    retained_by_context = {
+        context: {
+            "model_id": model_ids[context],
+            "split": assignments[context],
+            "positive": int(frame["sl_label"].sum()),
+            "negative": int((frame["sl_label"] == 0).sum()),
+            "total": int(len(frame)),
+        }
+        for context, frame in selected.groupby("context", sort=True)
+    }
+    stats = {
+        "assignment_order": remaining,
+        "assignments": assignments,
+        "cross_split_source_rows_dropped": int(len(crossing_source_rows)),
+        "rows_dropped": int(len(dropped)),
+        "rows_dropped_by_context": dropped_by_context,
+        "retained_by_context": retained_by_context,
+        "retained_rows": int(len(selected)),
+        "retained_unique_pairs": int(selected["pair_id"].nunique()),
+        "retained_unique_genes": int(
+            len(set(selected["gene_a"]) | set(selected["gene_b"]))
+        ),
+        "source_rows_crossing_splits_after_filter": 0,
+        "pairs_crossing_splits_after_filter": 0,
+    }
+    return selected, stats
+
+
 def _manifest(
     output_dir: Path,
     min_class_count: int,
     selection_stats: dict[str, int],
-    final_stats: dict[str, int],
+    pre_split_stats: dict[str, int],
+    split_stats: dict[str, Any],
 ) -> dict[str, Any]:
     benchmark_path = output_dir / BENCHMARK_FILENAME
     context_path = output_dir / CONTEXT_FILENAME
@@ -499,9 +707,8 @@ def _manifest(
                 "no independence claim may rest on it."
             ),
             "split": (
-                "not assigned by this build; the split requires executability "
-                "(DepMap GeneEffect and basal single-cell input) per context and is "
-                "published separately at configs/benchmarks/"
+                "context assignment comes from the tracked split manifest; complete "
+                "source rows crossing assignment sides are removed from every side"
             ),
         },
         "selection": {
@@ -521,7 +728,7 @@ def _manifest(
             "minimum_positive_and_negative_rows_per_context": min_class_count,
             "negative_sampling": "none; retain experimentally screened non-hits",
             "class_balancing": "none",
-            "cv_or_train_validation_test_split": "none",
+            "cv_or_train_validation_test_split": str(SPLIT_MANIFEST_PATH),
         },
         "feng2024_alignment": {
             "doi": "10.1038/s41467-024-52900-7",
@@ -534,7 +741,7 @@ def _manifest(
             "not_adopted": [
                 "direct reads from SynLethDB or Horlbeck/Feng artifacts",
                 "random/expression/dependency negative sampling",
-                "CV1/CV2/CV3 or train/validation/test splits",
+                "Feng2024 CV1/CV2/CV3 split definitions",
             ],
         },
         "provenance_limit": (
@@ -542,7 +749,26 @@ def _manifest(
             "study identifiers to independently audit every upstream dataset lineage."
         ),
         "selection_counts": selection_stats,
-        "final_counts": final_stats,
+        "pre_split_counts": pre_split_stats,
+        "split": {
+            "manifest_path": str(SPLIT_MANIFEST_PATH),
+            "manifest_sha256": _sha256(SPLIT_MANIFEST_PATH),
+            **split_stats,
+        },
+        "final_counts": {
+            "benchmark_rows": split_stats["retained_rows"],
+            "benchmark_unique_pairs": split_stats["retained_unique_pairs"],
+            "benchmark_unique_genes": split_stats["retained_unique_genes"],
+            "included_contexts": len(split_stats["retained_by_context"]),
+            "benchmark_positive_rows": sum(
+                values["positive"]
+                for values in split_stats["retained_by_context"].values()
+            ),
+            "benchmark_negative_rows": sum(
+                values["negative"]
+                for values in split_stats["retained_by_context"].values()
+            ),
+        },
     }
 
 
@@ -552,6 +778,22 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
         raise FileNotFoundError(INPUT_PATH)
     if chunksize < 1:
         raise ValueError("chunksize must be at least 1")
+    if not SPLIT_MANIFEST_PATH.is_file():
+        raise FileNotFoundError(SPLIT_MANIFEST_PATH)
+    split_contract = json.loads(SPLIT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    label_input = split_contract["label_input"]
+    if (
+        Path(label_input["path"]) != INPUT_PATH
+        or _sha256(INPUT_PATH) != label_input["sha256"]
+    ):
+        raise ValueError(
+            "Canonical split label input does not match the tracked contract"
+        )
+    if min_class_count != int(split_contract["pre_split_min_class_count"]):
+        raise ValueError(
+            "Pre-split minimum class count does not match the tracked contract"
+        )
+    validate_split_evidence(split_contract)
 
     atomic_frames: list[pd.DataFrame] = []
     audit_frames: list[pd.DataFrame] = []
@@ -572,9 +814,25 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
     if not atomic_frames:
         raise ValueError("No rows passed raw-table selection")
 
-    benchmark, inventory, final_stats = finalise_benchmark(
+    benchmark, inventory, pre_split_stats = finalise_benchmark(
         pd.concat(atomic_frames, ignore_index=True), min_class_count
     )
+    benchmark, split_stats = apply_context_split(benchmark, split_contract)
+    inventory = inventory.rename(
+        columns={
+            "included_in_pair_classification_table": "passed_pre_split_min_class_gate"
+        }
+    )
+    inventory["included_in_pair_classification_table"] = inventory["context"].isin(
+        split_stats["retained_by_context"]
+    )
+    inventory["model_id"] = inventory["context"].map(
+        {
+            context: specification["model_id"]
+            for context, specification in split_contract["contexts"].items()
+        }
+    )
+    inventory["split"] = inventory["context"].map(split_contract["assignments"])
     audit = (
         pd.concat(audit_frames, ignore_index=True)
         .groupby(["context", "condition"], as_index=False)["positives_dropped"]
@@ -586,6 +844,19 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
         else pd.DataFrame(columns=["context", "condition", "positives_dropped"])
     )
     statistics = context_statistics(benchmark)
+    statistics.insert(
+        1,
+        "model_id",
+        statistics["context"].map(
+            {
+                context: spec["model_id"]
+                for context, spec in split_contract["contexts"].items()
+            }
+        ),
+    )
+    statistics.insert(
+        2, "split", statistics["context"].map(split_contract["assignments"])
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     benchmark.to_csv(output_dir / BENCHMARK_FILENAME, index=False)
     inventory.to_csv(output_dir / CONTEXT_FILENAME, index=False)
@@ -595,7 +866,8 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
         output_dir,
         min_class_count,
         _sum_stats(chunk_stats),
-        final_stats,
+        pre_split_stats,
+        split_stats,
     )
     (output_dir / MANIFEST_FILENAME).write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"

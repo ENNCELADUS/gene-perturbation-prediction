@@ -134,7 +134,6 @@ state_feature_ablation:
     - state_token_hidden_gmm_ridge
   arm_details:
     observed_scvi128_gmm_ridge_anchor:
-      role: diagnostic_only
       input: observed_replogle_b
       representation: fold_local_scvi128
     state_output_scvi128_gmm_ridge:

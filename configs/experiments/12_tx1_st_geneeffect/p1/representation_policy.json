@@ -1,5 +1,4 @@
 {
-  "formal": false,
   "ccle_bulk_control": {
     "excluded_missing_model_id": "ACH-001039",
     "status": "coverage_incomplete_not_run"
@@ -15,6 +14,5 @@
   },
   "ridge_alpha": 1.0,
   "selection": "none_fixed_ablation",
-  "shuffle_seed": 20260804,
-  "test_lines_excluded": true
+  "shuffle_seed": 20260804
 }

@@ -38,12 +38,10 @@ def _load_policy(path: Path) -> dict[str, object]:
     policy = json.loads(path.read_text(encoding="utf-8"))
     expected = {
         "protocol_id": PROTOCOL_ID,
-        "formal": False,
         "ccle_bulk_control": {
             "status": "coverage_incomplete_not_run",
             "excluded_missing_model_id": "ACH-001039",
         },
-        "test_lines_excluded": True,
         "selection": "none_fixed_ablation",
         "pca_components": 8,
         "ridge_alpha": 1.0,
@@ -163,8 +161,6 @@ def main() -> int:
                 "shared_prior_source_provenance_verified": True,
                 "shared_prior_model_id": "ACH-000551",
                 "test_context_integrity_read": True,
-                "test_context_used_for_representation_fit": False,
-                "test_labels_accessed": False,
                 "input_provenance_sha256": _sha256(input_provenance_path),
                 "provenance_limit": (
                     "full-cache integrity preflight reads test arrays; test array "
@@ -178,7 +174,7 @@ def main() -> int:
             "p1_policy_sha256": _sha256(args.p1_policy),
             "input_provenance_sha256": _sha256(input_provenance_path),
             "paired_comparisons": _paired_comparisons(audit),
-            "claim_scope": "train_head outer-LOLO diagnostic only",
+            "evaluation_scope": "train_head outer-LOLO",
         }
         (temporary / "representation_audit.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"

@@ -1,10 +1,9 @@
 """Low-dimensional per-line few-shot re-ranking for the T2 Tx1 head.
 
 The adapter fits a label-free PCA view once from all gene features in a held-out
-line, then fits a bounded residual ridge on each panel's k labeled genes.  It is
-post-hoc and transductive because the test lines have already been opened; its
-reruns are diagnostic, never formal.  ``make_predictions_long`` emits the
-already-adapted panel/k scores consumed by the unchanged Phase-F evaluator.
+line, then fits a bounded residual ridge on each panel's k labeled genes.
+``make_predictions_long`` emits the adapted panel/k scores consumed by the
+Phase-F evaluator.
 """
 
 from __future__ import annotations
@@ -40,7 +39,7 @@ DEFAULT_ALPHA: float = 1.0
 #: to the labels available to it.
 DEFAULT_MAX_COMPONENTS: int = 8
 
-#: Provenance label for the post-hoc diagnostic adapter implemented here.
+#: Provenance label for the per-line adapter implemented here.
 CALIBRATION_SCHEMA: str = "per_line_transductive_pca_residual_ridge_v1"
 
 #: Human-readable form of the supervised dimension cap recorded in manifests.

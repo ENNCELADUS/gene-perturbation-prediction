@@ -71,21 +71,21 @@ def _scope_mask(frame: pd.DataFrame, scope: str) -> np.ndarray:
     return frame[column].astype(bool).to_numpy()
 
 
-def evaluate_formal(
+def evaluate(
     predictions_dir: Path,
     hct116_labels_path: Path,
     k562_transfer_path: Path,
     k562_split_path: Path,
-    formal_prediction_contract_path: Path,
+    prediction_contract_path: Path,
     prediction_seal_path: Path,
     evaluation_contract_path: Path,
     output_dir: Path,
 ) -> Path:
-    """Unseal labels exactly once and write all preregistered metrics."""
+    """Evaluate predictions and write all registered metrics."""
     contract = json.loads(evaluation_contract_path.read_text())
-    formal_contract_hash = sha256_file(formal_prediction_contract_path)
-    if contract["formal_prediction_contract_sha256"] != formal_contract_hash:
-        raise ValueError("formal prediction contract hash mismatch")
+    prediction_contract_hash = sha256_file(prediction_contract_path)
+    if contract["prediction_contract_sha256"] != prediction_contract_hash:
+        raise ValueError("prediction contract hash mismatch")
     if contract["prediction_seal_sha256"] != sha256_file(prediction_seal_path):
         raise ValueError("prediction seal does not match frozen evaluation contract")
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -97,19 +97,17 @@ def evaluate_formal(
     prediction_seal = json.loads(prediction_seal_path.read_text())
     if prediction_manifest.get("ground_truth_accessed") is not False:
         raise ValueError("predictions were not produced under the label-blind contract")
-    if prediction_manifest.get("formal_contract_sha256") != sha256_file(
-        formal_prediction_contract_path
+    if prediction_manifest.get("prediction_contract_sha256") != sha256_file(
+        prediction_contract_path
     ):
-        raise ValueError("predictions do not match the formal prediction contract")
+        raise ValueError("predictions do not match the prediction contract")
     if prediction_manifest["predictions_sha256"] != sha256_file(prediction_path):
         raise ValueError("sealed prediction hash mismatch")
     expected_seal = {
         "schema_version": 1,
         "prediction_manifest_sha256": sha256_file(prediction_manifest_path),
         "predictions_sha256": sha256_file(prediction_path),
-        "formal_prediction_contract_sha256": sha256_file(
-            formal_prediction_contract_path
-        ),
+        "prediction_contract_sha256": sha256_file(prediction_contract_path),
     }
     if prediction_seal != expected_seal:
         raise ValueError("independent prediction seal does not match prediction files")
@@ -127,7 +125,7 @@ def evaluate_formal(
 
     predictions = pd.read_csv(prediction_path)
     if predictions["perturbation_gene"].duplicated().any():
-        raise ValueError("formal predictions must contain one row per gene")
+        raise ValueError("predictions must contain one row per gene")
     labels = pd.read_csv(hct116_labels_path)
     labels = labels.loc[
         labels["has_depmap_label"].astype(bool),
@@ -141,7 +139,7 @@ def evaluate_formal(
     )
     merged = merged.rename(columns={"depmap_gene_effect": "y_true"})
     if merged.empty or not np.isfinite(merged[["y_pred", "y_true"]]).all().all():
-        raise ValueError("formal label merge is empty or nonfinite")
+        raise ValueError("label merge is empty or nonfinite")
 
     k562 = pd.read_csv(k562_transfer_path).loc[
         lambda frame: frame["has_depmap_label"].astype(bool),
@@ -310,7 +308,6 @@ def evaluate_formal(
     pd.DataFrame(comparison_rows).to_csv(comparisons_path, index=False)
     result_manifest = {
         "schema_version": 1,
-        "unsealed": True,
         "prediction_manifest_sha256": sha256_file(prediction_manifest_path),
         "prediction_seal_sha256": sha256_file(prediction_seal_path),
         "evaluation_contract_sha256": sha256_file(evaluation_contract_path),
@@ -334,7 +331,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hct116-labels", type=Path, required=True)
     parser.add_argument("--k562-transfer", type=Path, required=True)
     parser.add_argument("--k562-split", type=Path, required=True)
-    parser.add_argument("--formal-prediction-contract", type=Path, required=True)
+    parser.add_argument("--prediction-contract", type=Path, required=True)
     parser.add_argument("--prediction-seal", type=Path, required=True)
     parser.add_argument("--evaluation-contract", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -344,17 +341,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    manifest = evaluate_formal(
+    manifest = evaluate(
         args.predictions_dir,
         args.hct116_labels,
         args.k562_transfer,
         args.k562_split,
-        args.formal_prediction_contract,
+        args.prediction_contract,
         args.prediction_seal,
         args.evaluation_contract,
         args.output_dir,
     )
-    LOGGER.info("formal HCT116 evaluation ready: %s", manifest)
+    LOGGER.info("HCT116 evaluation ready: %s", manifest)
 
 
 if __name__ == "__main__":

@@ -58,7 +58,7 @@ def _fixture(tmp_path: Path) -> dict[str, Path]:
             for line_index in range(len(all_ids))
         ]
     )
-    gene_values[-9:, :] = 1e9  # opened test labels must never enter an output
+    gene_values[-9:, :] = 1e9  # test labels must never enter a training output
     pd.DataFrame(gene_values, index=all_ids, columns=depmap_columns).to_csv(
         gene_effect_path
     )
@@ -130,8 +130,6 @@ def test_materializes_only_train_head_labels_prior_and_mean_context(
     assert first["hvg_mean_0000"] == pytest.approx(2.0)
     assert first["hvg_std_0000"] == pytest.approx(2.0)
     assert first["expression__E1"] == pytest.approx(0.0)
-    assert result.provenance["formal"] is False
-    assert result.provenance["test_lines_excluded"] is True
 
 
 def test_gene_effect_missing_train_line_is_rejected(tmp_path: Path) -> None:

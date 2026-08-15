@@ -24,7 +24,7 @@ def test_exp05_config_matches_current_padded_ddp_contract() -> None:
     assert config["train"]["learning_rate"] == 0.000025
     assert config["train"]["state_learning_rate"] == 0.0000025
     assert config["train"]["max_grad_norm"] == 1.0
-    assert config["train"]["run_id"] == "exp05_formal_padded_eval_v1"
+    assert config["train"]["run_id"] == "exp05_padded_eval_v1"
     assert "freeze_state" not in config["train"]
     assert config["loss"]["occupancy_weight"] == 0.1
     assert config["loss"]["gmm_nll_weight"] == 0.01

@@ -307,7 +307,7 @@ def _panel_aware_rho(
     ]
     # Defensive no-op: _validate_no_duplicate_prediction_keys (Finding 3)
     # already guarantees no (model_id, method, panel, k, depmap_column)
-    # duplicates for a formally validated run.
+    # duplicates for a contract-validated run.
     rows = rows.drop_duplicates("depmap_column").set_index("depmap_column")
     if rows.empty:
         return float("nan")
@@ -397,7 +397,7 @@ def per_line_metric(
     if not panel_aware:
         # Defensive no-op: _validate_no_duplicate_prediction_keys (Finding 3)
         # already guarantees no (model_id, method, depmap_column) duplicates
-        # for a formally validated run.
+        # for a contract-validated run.
         preds = preds_for_line.drop_duplicates("depmap_column").set_index(
             "depmap_column"
         )
@@ -871,7 +871,7 @@ def _validate_evaluation_inputs(
     y_true_tol: float = 1e-8,
     expected_test_lines: int | None = None,
 ) -> list[str]:
-    """Enforce frozen-contract invariants before a formal gate verdict.
+    """Enforce frozen-contract invariants before a gate verdict.
 
     Closes ways a silent evaluator could pass the gate on a different
     estimator than the registered one: a changed inferential line sample,
@@ -1024,7 +1024,7 @@ def evaluate(
                 bootstrapped macro-mean paired difference and its 95% CI.
             "gate": Dict ``{rho_min, k, method, baseline_method, macro_mean,
                 ci_lo, ci_hi, passes}`` for ``primary_method`` at ``gate_k``.
-        strict: When True (the default, required for a formal verdict),
+        strict: When True (the default),
             validate the frozen-contract invariants and raise
             ``EvaluationContractError`` on any violation before scoring.
     """
@@ -1115,7 +1115,7 @@ _REGISTERED_ARTIFACT_FILES: dict[str, str] = {
 #: its recorded hash in the registration file would pass (self-consistency,
 #: not identity with the frozen registration).
 FROZEN_REGISTRATION_SHA256: str = (
-    "63c8262305c219ca6ca9e749f30523239c5fad63f21dda609620350ad182ab6c"
+    "02afe8b49b4bef87aec3c86580f8373d78e24f8a35b41a794aef8ef50b64dc31"
 )
 
 
@@ -1127,7 +1127,7 @@ def verify_artifact_hashes(
 
     A same-shaped but silently modified manifest/slice/panels file would
     otherwise pass every other check in this module and still produce a
-    ``formal: true`` verdict. This closes that gap by recomputing each
+    gate verdict. This closes that gap by recomputing each
     file's SHA-256 and comparing it to the value recorded at Phase-A freeze
     time in ``phase_a_registration.json``.
 

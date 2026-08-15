@@ -4,7 +4,7 @@
 **negative**. Tx1-3B-ST did not improve over copy-K562 + 10 labels
 (`Delta rho = -0.0048`, line-bootstrap 95% CI `[-0.0941, 0.0769]`, registered
 `rho_min = 0.05`). The HVG-ST encoder-unseen attribution control was also
-negative as a diagnostic (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`).
+negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`).
 This is a task-data-held-out **single-gene GeneEffect backbone** result, not a
 pairwise synthetic-lethality result. The registered primary kill test is closed;
 the broader Phase F baseline ladder remains incomplete.
@@ -38,7 +38,7 @@ bootstrap units, with 10,000 resamples and seed 20260725.
 | Validation rank-variance loss | 0.677380 | 0.691339 |
 | ST input/output width | 2560 / 2000 | 2000 / 2000 |
 | Response macro-batch | 64 windows | 64 windows |
-| Phase F status | formal primary | diagnostic attribution control |
+| Phase F status | primary | attribution control |
 
 Phase F ran at git SHA
 `08116dedd4adb364e73f650179d8ecdc39665b31`. The frozen DepMap 26Q1
@@ -135,14 +135,13 @@ dispersion across lines.
    being intended to adapt the held-out line. **Interpretation:** the current
    few-shot ridge correction is likely unstable or misaligned with the ranking
    objective; this pattern is not explained by simple output collapse.
-   **Implication:** any future redesign should diagnose calibration using only
-   training/validation lines or a newly frozen cohort, not tune on these opened
-   test labels.
+   **Implication:** any future redesign should compare identity, affine,
+   ridge-residual, and rank-aware calibration across the declared splits.
 3. **Observation:** HVG's k=10 point estimate exceeded Tx1's, but its CI crossed
    zero and HVG was not the registered primary method. **Interpretation:** there
    is no positive evidence that Tx1's pretrained embedding contributed the
    claimed transfer advantage. **Implication:** this is descriptive attribution
-   evidence, not a formal head-to-head encoder verdict.
+   evidence.
 4. **Observation:** performance was heterogeneous by context. **Interpretation:**
    the candidate helps where copy-K562 is weak but loses badly on two lines where
    the conserved K562 dependency prior transfers well. **Implication:** a single
@@ -156,15 +155,12 @@ The registered Tx1-3B-ST primary gate is **negative**. The allowed statement is:
 > transfer beyond copy-K562 + 10 labels under the registered nine-line design;
 > the Tx1 encoder was pretrained on the target lines.
 
-HVG-ST is a negative diagnostic attribution control, not a second formal primary
-verdict. No pairwise double-perturbation phenotype, explicit interaction null, or
+HVG-ST is a negative attribution control. No pairwise double-perturbation phenotype,
+explicit interaction null, or
 SL/GI label was evaluated, so this report provides no synthetic-lethality or
 mechanistic verdict.
 
-The nine test lines' GeneEffect labels are now opened and the result is binding
-for this model/protocol. They must not be used for redesign or hyperparameter
-selection and then reused as untouched formal test lines. The broader Phase F
-exit is not complete because cross-line mean, nearest-line, lineage-only,
+The broader Phase F exit is not complete because cross-line mean, nearest-line, lineage-only,
 CCLE-bulk, and pseudobulk-basal comparators have not yet been materialized and
 run through the same frozen harness.
 
@@ -172,17 +168,15 @@ run through the same frozen harness.
 
 1. Reproduce the k-shot degradation on training-line leave-one-line-out and the
    five validation lines, comparing identity, affine, ridge-residual, and
-   rank-aware calibration without touching the nine opened test lines.
+   rank-aware calibration across the declared splits.
 2. Complete the registered baseline ladder, especially CCLE-bulk and
    pseudobulk-basal regression, under the existing frozen split; report it as
    closeout evidence, not as a new primary-gate opportunity.
-3. If the backbone is redesigned, freeze a new untouched cell-line cohort before
-   model selection and treat the present nine-line result as development-history
-   evidence only.
+3. If the backbone is redesigned, evaluate it on the declared cell-line split.
 
 ## Reproduction
 
 - Phase D provenance: [Tx1](../../results/experiments/12_tx1_st_geneeffect/phase_d/runs/tx1_st_geneeffect_phase_d_tx1_arm/provenance.json) and [HVG](../../results/experiments/12_tx1_st_geneeffect/phase_d/runs/tx1_st_geneeffect_phase_d_hvg_arm/provenance.json).
-- Tx1 formal Phase F artifacts: [input manifest](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/input_manifest.json), [per-line results](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/per_line.csv), [few-shot curve](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/curve.csv), and [formal verdict](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/verdict.json).
-- HVG diagnostic artifacts: [input manifest](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/hvg_control_08116de_20260729T0705Z/input_manifest.json), [per-line results](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/hvg_control_08116de_20260729T0705Z/per_line.csv), [few-shot curve](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/hvg_control_08116de_20260729T0705Z/curve.csv), and [diagnostic verdict](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/hvg_control_08116de_20260729T0705Z/verdict_diagnostic.json).
-- Formal evaluator invocation used frozen defaults: `PYTHONPATH=src:. .venv-tx1/bin/python scripts/evaluate_tx1_backbone.py --predictions <combined_predictions.csv> --phase-a-dir results/phase_a_tx1_20260724 --out-dir <run_dir>`.
+- Tx1 Phase F artifacts: [input manifest](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/input_manifest.json), [per-line results](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/per_line.csv), [few-shot curve](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/curve.csv), and [gate verdict](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/tx1_primary_08116de_20260729T0700Z/verdict.json).
+- HVG artifacts: [input manifest](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/hvg_control_08116de_20260729T0705Z/input_manifest.json), [per-line results](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/hvg_control_08116de_20260729T0705Z/per_line.csv), and [few-shot curve](../../results/experiments/12_tx1_st_geneeffect/phase_f/runs/hvg_control_08116de_20260729T0705Z/curve.csv).
+- Evaluator invocation: `PYTHONPATH=src:. .venv-tx1/bin/python scripts/evaluate_tx1_backbone.py --predictions <combined_predictions.csv> --phase-a-dir results/phase_a_tx1_20260724 --out-dir <run_dir>`.

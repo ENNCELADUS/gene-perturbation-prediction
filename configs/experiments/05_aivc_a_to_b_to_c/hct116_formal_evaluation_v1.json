@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "formal_prediction_contract_sha256": "808934e89f2e4c98b3b28d652547d612a40c78599e833a3ff8183e2eb718ca7a",
-  "prediction_seal_sha256": "ebf741dfff450dc5a1ece144a12fc3268d976b3be3e365833e0261d4ee6f5d06",
+  "prediction_contract_sha256": "808934e89f2e4c98b3b28d652547d612a40c78599e833a3ff8183e2eb718ca7a",
+  "prediction_seal_sha256": "96e0a0e31f25d9787a1c05368fdaab3737c2c082f4fe64b07aba162ceb221584",
   "hct116_label_table_sha256": "558bd6a0e775a1d0f354488c45cd5a54dc292c8ea7fd364d338ebd639125a5c2",
   "k562_transfer_table_sha256": "9569be745495169fe4a584aac70ade94fda10f0b994aa256af9436cc1b906931",
   "primary_scope": "e_shared_train",

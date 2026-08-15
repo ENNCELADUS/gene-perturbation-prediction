@@ -474,8 +474,8 @@ def freeze(args: argparse.Namespace) -> dict[str, object]:
             ),
             "adapter_freeze_boundary": (
                 "adapter architecture and hyperparameters are selected using "
-                "training lines only in Phase E and hashed before any held-out "
-                "GeneEffect label is opened; all methods use the same panels"
+                "training lines only in Phase E and hashed; all methods use "
+                "the same panels"
             ),
         },
         "rho_min": rho_min,

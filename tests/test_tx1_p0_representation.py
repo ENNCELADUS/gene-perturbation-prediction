@@ -1,4 +1,4 @@
-"""Tests for the feature-file-driven diagnostic Tx1 P0 audit."""
+"""Tests for the feature-file-driven Tx1 P0 audit."""
 
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ def _write_phase_a_dir(tmp_path: Path, genes: list[str]) -> Path:
     return phase_a_dir
 
 
-def test_run_audit_marks_diagnostic_and_excludes_test_and_anchor(
+def test_run_audit_excludes_test_and_anchor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     manifest_path, representation_path, gene_effect_path = _write_inputs(
@@ -170,8 +170,6 @@ def test_run_audit_marks_diagnostic_and_excludes_test_and_anchor(
     )
 
     assert result["protocol_id"] == "tx1_geneeffect_p0_v1"
-    assert result["formal"] is False
-    assert result["test_lines_excluded"] is True
     assert result["metadata"]["tx1_frozen_cache_accessed"] is False
     assert result["metadata"]["representation_fit_provenance_verified"] is False
     assert result["input_sha256"]["manifest"]

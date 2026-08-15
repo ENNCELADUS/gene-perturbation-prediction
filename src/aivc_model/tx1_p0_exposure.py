@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Final, Iterable, Mapping
+from typing import Final, Mapping
 
 import pandas as pd
 
@@ -47,11 +47,6 @@ _EVIDENCE_COLUMNS: Final[frozenset[str]] = frozenset(
         "model_selection_exposure_status",
     }
 )
-_ROLE_TO_LABEL_ROLE: Final[Mapping[str, str]] = {
-    "test": "opened_binding_historical",
-    "train_head": "development_head",
-    "train_response_and_head": "development_response_and_head",
-}
 _MANIFEST_PRETRAINING_MAP: Final[Mapping[str, str]] = {
     "known_present": "known_present",
     "verified_absent": "verified_absent",
@@ -66,11 +61,8 @@ _LEDGER_COLUMNS: Final[tuple[str, ...]] = (
     "role",
     "basal_source",
     "pretraining_exact_context_status",
-    "geneeffect_label_role",
     "geneeffect_label_status",
     "model_selection_exposure_status",
-    "formal_eligibility",
-    "formal_eligibility_reason",
 )
 
 
@@ -83,27 +75,11 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def read_opened_test_ids(path: Path) -> frozenset[str]:
-    """Read a UTF-8 file containing one explicitly opened test ModelID per line."""
-    values = [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    duplicates = sorted(
-        model_id for model_id, count in Counter(values).items() if count > 1
-    )
-    if duplicates:
-        raise ValueError(f"opened test IDs contain duplicates: {duplicates}")
-    return frozenset(values)
-
-
 def build_exposure_ledger(
     manifest_path: Path,
     *,
     validation_plan_path: Path,
     validation_policy_path: Path,
-    opened_test_ids: Iterable[str],
     evidence_path: Path | None = None,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     """Build a deterministic exposure ledger and summary.
@@ -117,7 +93,6 @@ def build_exposure_ledger(
         manifest_path: Frozen Tx1 cell-line manifest CSV.
         validation_plan_path: Nested-validation JSON bound to the manifest.
         validation_policy_path: Registered authority for manifest and folds.
-        opened_test_ids: Explicitly declared historical test ModelIDs.
         evidence_path: Optional CSV containing per-line status evidence.
 
     Returns:
@@ -130,7 +105,6 @@ def build_exposure_ledger(
     manifest, _ = load_manifest(manifest_path, policy)
     _validate_manifest(manifest)
     _validate_validation_plan(validation_plan_path, manifest, policy)
-    opened = _validate_opened_test_ids(manifest, opened_test_ids)
     evidence = _read_evidence(evidence_path, manifest)
 
     records: list[dict[str, object]] = []
@@ -161,13 +135,6 @@ def build_exposure_ledger(
                 field="model_selection_exposure_status",
             )
 
-        reasons = [
-            "opened_binding_historical" if role == "test" else "development_role"
-        ]
-        if pretraining == "known_present":
-            reasons.append("pretraining_exact_context_known_present")
-        elif pretraining == "unknown":
-            reasons.append("pretraining_exact_context_unknown")
         records.append(
             {
                 "protocol_id": PROTOCOL_ID,
@@ -177,11 +144,8 @@ def build_exposure_ledger(
                 "role": role,
                 "basal_source": str(row.basal_source),
                 "pretraining_exact_context_status": pretraining,
-                "geneeffect_label_role": _ROLE_TO_LABEL_ROLE[role],
                 "geneeffect_label_status": label_status,
                 "model_selection_exposure_status": model_selection,
-                "formal_eligibility": "ineligible",
-                "formal_eligibility_reason": "|".join(reasons),
             }
         )
 
@@ -193,14 +157,8 @@ def build_exposure_ledger(
     }
     if evidence_path is not None:
         input_sha256["evidence"] = sha256_file(evidence_path)
-    opened_digest = hashlib.sha256(
-        ("\n".join(sorted(opened)) + "\n").encode("utf-8")
-    ).hexdigest()
-    input_sha256["opened_test_ids"] = opened_digest
     summary: dict[str, object] = {
         "protocol_id": PROTOCOL_ID,
-        "formal": False,
-        "test_lines_excluded": True,
         "n_lines": len(ledger),
         "n_test_lines": int((ledger["role"] == "test").sum()),
         "input_sha256": input_sha256,
@@ -208,10 +166,8 @@ def build_exposure_ledger(
             field: dict(sorted(Counter(ledger[field].astype(str)).items()))
             for field in (
                 "pretraining_exact_context_status",
-                "geneeffect_label_role",
                 "geneeffect_label_status",
                 "model_selection_exposure_status",
-                "formal_eligibility",
             )
         },
     }
@@ -294,31 +250,6 @@ def _validate_validation_plan(
 ) -> None:
     payload = _read_json_object(path, label="validation plan")
     validate_nested_validation(payload, manifest, policy)
-
-
-def _validate_opened_test_ids(
-    manifest: pd.DataFrame, opened_test_ids: Iterable[str]
-) -> frozenset[str]:
-    values = [str(value).strip() for value in opened_test_ids]
-    if any(not value for value in values):
-        raise ValueError("opened test IDs must be non-empty")
-    duplicates = sorted(
-        model_id for model_id, count in Counter(values).items() if count > 1
-    )
-    if duplicates:
-        raise ValueError(f"opened test IDs contain duplicates: {duplicates}")
-    opened = frozenset(values)
-    test_ids = frozenset(manifest.loc[manifest["role"] == "test", "model_id"])
-    non_test = sorted(opened - test_ids)
-    if non_test:
-        raise ValueError(f"opened test IDs are not role=test: {non_test}")
-    missing = sorted(test_ids - opened)
-    if missing:
-        raise ValueError(
-            "every role=test line requires explicit opened-test evidence; "
-            f"missing: {missing}"
-        )
-    return opened
 
 
 def _read_evidence(path: Path | None, manifest: pd.DataFrame) -> pd.DataFrame:

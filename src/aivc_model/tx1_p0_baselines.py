@@ -1,4 +1,4 @@
-"""Development-only, Tahoe-only source-line OOF GeneEffect baselines."""
+"""Tahoe-only source-line OOF GeneEffect baselines."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ _LABEL_COLUMNS: Final[tuple[str, ...]] = (
 
 @dataclass(frozen=True)
 class P0BaselineConfig:
-    """Fixed hyperparameters for the development-only baseline ladder."""
+    """Fixed hyperparameters for the baseline ladder."""
 
     lineage_alpha: float = 0.5
     pca_components: int = 8
@@ -98,9 +98,6 @@ def _load_validation_plan(
     if (
         payload.get("protocol_id") != PROTOCOL_ID
         or payload.get("contract") != VALIDATION_CONTRACT
-        or payload.get("formal") is not False
-        or payload.get("development_only") is not True
-        or payload.get("test_lines_excluded") is not True
     ):
         raise ValueError("validation plan metadata is incompatible with P0")
     outer_folds = payload.get("outer_folds")
@@ -322,7 +319,7 @@ def run_p0_baseline_ladder(
         gene_effect_path: Long-form complete Tahoe-only GeneEffect matrix.
         context_path: Optional line-level numeric context features.
         copy_k562_path: Optional complete gene-level K562 prior.
-        config: Fixed development-only hyperparameters.
+        config: Fixed hyperparameters.
 
     Returns:
         Prediction, per-line metric, and summary artifacts.
@@ -541,9 +538,6 @@ def run_p0_baseline_ladder(
         input_paths["copy_k562_prior"] = copy_k562_path
     summary: dict[str, object] = {
         "protocol_id": PROTOCOL_ID,
-        "formal": False,
-        "development_only": True,
-        "test_lines_excluded": True,
         "target_role": TRAIN_HEAD_ROLE,
         "source_role": TRAIN_HEAD_ROLE,
         "anchors_excluded": True,

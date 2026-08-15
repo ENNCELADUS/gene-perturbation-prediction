@@ -2,9 +2,8 @@
 
 **Status:** unified K562 gene-pool fixed split implemented; X-Atlas/Orion HCT116
 was downloaded on the experiment HPC and its one-shot frozen-backbone audit is
-complete and negative. HCT116 may now be assigned to GeneEffect component
-training or development, but it is no longer eligible as an untouched external
-test line.
+complete and negative. HCT116 may be assigned to GeneEffect component training,
+development, or evaluation.
 
 ## Role contract
 
@@ -53,7 +52,7 @@ Generated, gitignored data products:
 
 | Dataset | Perturbation/readout | Decision | Reason |
 | --- | --- | --- | --- |
-| X-Atlas/Orion HCT116 | Genome-wide CRISPRi Perturb-seq | Development-eligible after completed audit | The sealed single-gene audit is complete and negative. Its opened GeneEffect labels may now support a declared training/development role, but HCT116 cannot again serve as an untouched test. See the [closeout](../results/exp05-hct116-frozen-backbone-transport.md). |
+| X-Atlas/Orion HCT116 | Genome-wide CRISPRi Perturb-seq | Available after completed audit | The single-gene audit is complete and negative; HCT116 may support a declared training, development, or evaluation role. See the [closeout](../results/exp05-hct116-frozen-backbone-transport.md). |
 | X-Atlas/Orion HEK293T | Genome-wide CRISPRi Perturb-seq | Exclude from current target | DepMap Public 26Q1 has no corresponding HEK293T GeneEffect row locally |
 | PRISM Repurposing | Small-molecule viability | Exclude | Drug conditions are not perturbation-gene conditions; drug-target assignment would change the supervision contract |
 | Tahoe-100M / sci-Plex | Small-molecule transcriptomics | Exclude | Chemical perturbations cannot be directly labeled with target-gene GeneEffect |
@@ -69,9 +68,8 @@ Primary sources:
 The completed audit used 109 raw HCT116 parquet files on the experiment HPC,
 sample-matched Non-Targeting controls, and an Ensembl/token-aligned 2,000-feature
 cache. Its overlap table maps HCT116 `ACH-000971` GeneEffect without merging
-HCT116 and K562 rows by gene. The formal result covers 3,982 label-matched genes;
+HCT116 and K562 rows by gene. The result covers 3,982 label-matched genes;
 full provenance and metrics are recorded in the
-[`closeout`](../results/exp05-hct116-frozen-backbone-transport.md). Its opened
-GeneEffect labels may be used in a declared GeneEffect component
-training/development role; the completed audit and its negative result remain
-unchanged.
+[`closeout`](../results/exp05-hct116-frozen-backbone-transport.md). HCT116 may be
+used in a declared GeneEffect component role; the completed audit and its
+negative result remain unchanged.
