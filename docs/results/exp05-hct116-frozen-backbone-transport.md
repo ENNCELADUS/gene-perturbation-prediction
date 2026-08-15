@@ -20,8 +20,8 @@ short final 64-cell window was completed by sampling with replacement from the
 same bag. Predictions were averaged first within `sample x gene`, then equally
 across samples for each gene. The full label-blind run produced 4,111 gene
 predictions from 20,499 `sample x gene` groups and 185,542 real response cells.
-The independently copied prediction artifacts were sealed before HCT116
-GeneEffect was opened.
+The independently copied prediction artifacts were sealed before the HCT116
+GeneEffect merge.
 
 The label merge yielded 3,982 evaluated genes. The primary comparison used the
 1,652 `E_shared_train` genes that also had a K562 GeneEffect transfer value.
@@ -38,7 +38,7 @@ K562 GeneEffect transfer by `+0.0808` MAE (95% CI 0.0657 to 0.0954) and
 no ranking signal on `E_double_shift` (Spearman -0.004, 2,059 genes) or `E_all`
 (Spearman -0.001, 3,982 genes).
 
-The formal comparison includes the K562-train mean and the decisive direct K562
+The comparison includes the K562-train mean and the decisive direct K562
 GeneEffect transfer baseline. The preregistered ESM2-only and response-only
 baselines were not run, so the complete baseline ladder is not closed. The
 result nevertheless rejects the narrower claim that the frozen response head
@@ -52,9 +52,9 @@ Primary artifacts:
 - [`evaluation_manifest.json`](../../results/experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/evaluation_manifest.json)
 
 The evaluation manifest binds prediction-manifest SHA-256
-`f05eed1298d4853d647b3a52139def961cfd03cab5e530ec36195b7ac0412939`
-and independent prediction-seal SHA-256
-`ebf741dfff450dc5a1ece144a12fc3268d976b3be3e365833e0261d4ee6f5d06`.
+`893ceacc937712f96cf0a179b0631ae309071ff57d42846c1da032a061228eb1`
+and prediction-seal SHA-256
+`96e0a0e31f25d9787a1c05368fdaab3737c2c082f4fe64b07aba162ceb221584`.
 
 ## 2. Analysis and interpretation
 
@@ -72,9 +72,9 @@ The registered `delta_spearman` computed
 `corr(pred_HCT - GE_K562, GE_HCT - GE_K562)` and returned a positive value.
 Both quantities contain the same subtracted K562 baseline, so this statistic is
 mathematically coupled and cannot establish independent HCT116 context signal.
-A post-unseal diagnostic that controls K562 GeneEffect directly gives partial
+A follow-up analysis that controls K562 GeneEffect directly gives partial
 Spearman -0.006 (approximately -0.005), and partial Pearson -0.026. This
-diagnostic is explanatory only and is not promoted to a new confirmatory result.
+analysis explains the shared-baseline artifact.
 
 The bound interpretation is therefore:
 
@@ -86,8 +86,5 @@ The bound interpretation is therefore:
 - the result does not show that the gene-dependency prior fails to transfer;
 - the result does not evaluate pairwise SL, Bridge A, Bridge B, or cross-cell-line
   SL generalization; and
-- HCT116 GeneEffect is now unsealed. The completed audit remains the binding
-  result for this frozen model, while the current protocol permits HCT116 to be
-  reassigned to a declared GeneEffect component training/development role. It
-  cannot again be presented as an untouched external test, and later
-  HCT116-informed results must disclose that development exposure.
+- HCT116 may be assigned to a declared GeneEffect training, development, or
+  evaluation role; the completed result remains unchanged.

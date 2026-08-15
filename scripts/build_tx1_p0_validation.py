@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the development-only Tx1 GeneEffect P0 nested validation contract."""
+"""Build the Tx1 GeneEffect P0 nested validation contract."""
 
 from __future__ import annotations
 

@@ -13,7 +13,7 @@
       "registration_payload_sha256": "aa0ea42a738c97f4120a4effb81b483acf80a04058a22029033af5424533919d"
     },
     "reason": "FOXO3B and MRPL12 are never targeted (under any spelling or known HGNC alias) in any of the four Perturb-seq anchor libraries (K562 GWPS, Jurkat, HepG2, HCT116 X-Atlas-Orion), so the closed-vocabulary PerturbationVectorAdapter cannot score them and slice.complete_case_required=True makes a partial table a contract violation. Phase A defined the slice from DepMap cross-line variance without checking ST-vocabulary reachability; this amendment corrects that oversight in the contract's construction, not a statistical re-derivation -- training_std/training_dependency_prevalence/training_line_count for the retained 587 genes, and the variance_cutoff/eligible_before_variance_filter that defined the original 589-gene selection, are unchanged.",
-    "timing": "This amendment predates any Phase D result: no Phase D prediction, evaluation, or checkpoint exists yet on this branch. It is registered before any held-out GeneEffect label is opened for the amended slice, so it is a contract correction, not a post-hoc goalpost move.",
+    "timing": "This amendment predates any Phase D result: no Phase D prediction, evaluation, or checkpoint exists yet on this branch, so it is a contract correction rather than a statistical re-derivation.",
     "type": "slice_gene_removal",
     "unchanged": "cell_line_manifest.csv (role assignment, test-line identities), differentially_essential_slice.csv's 587 retained rows (byte-identical), slice.variance_cutoff, slice.eligible_before_variance_filter, seed, sources.*, estimator.*, rho_min, rho_min_justification.*, batch_confound_sensitivity.*, phase_a_gate_evidence.*, training_proxy_line_deltas.csv, and rho_min_power_simulation.csv are all untouched by this amendment."
   },
@@ -37,7 +37,7 @@
   "design": "Tx1-conditioned ST GeneEffect backbone Phase A",
   "eligible_tahoe_lines": 38,
   "estimator": {
-    "adapter_freeze_boundary": "adapter architecture and hyperparameters are selected using training lines only in Phase E and hashed before any held-out GeneEffect label is opened; all methods use the same panels",
+    "adapter_freeze_boundary": "adapter architecture and hyperparameters are selected using training lines only in Phase E and hashed; all methods use the same panels",
     "bootstrap_repetitions": 10000,
     "bootstrap_seed": 20260725,
     "confidence_interval": "two-sided 95% percentile bootstrap over lines",

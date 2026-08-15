@@ -8,9 +8,9 @@ SL-pair/graph training (vs. SLMGAE / KR4SL), and separately transfer a context-c
 **Plan → Confirm → Code**.
 
 **State:** T1 (K562 Bridge-A vs Horlbeck mechanism) and the registered T2 gate (few-shot cross-cell-line GeneEffect) both **completed
-negative** and are paused for redesign — their nine test lines are opened and binding. Active work is **R1**, the DepMap GeneEffect
-*residual* ladder (`residual_target.py`, `residual_ladder.py`, `scripts/run_r1_residual_ladder.py`), plus the unsplit
-`sl_context_screen_v1` pair × cell-line table. Feng2024 SOTA reproduction is still not started.
+negative** and are paused for redesign. Active work is **R1**, the DepMap GeneEffect
+*residual* ladder (`residual_target.py`, `residual_ladder.py`, `scripts/run_r1_residual_ladder.py`), plus the split
+`context_screen_v2` pair × cell-line table. Feng2024 SOTA reproduction is still not started.
 
 ## Engineering rules
 
@@ -75,8 +75,7 @@ Warnings and defaults are preferred over exceptions, so mistakes usually produce
   default**. All exp05 config dataclasses live in the `@dataclass(frozen=True)` block atop `prepare.py`; add fields there, not locally.
   `_path_or_none` is truthiness-based, so `checkpoint_path: ""` silently **disables** the feature; unset `data.state_embed_key` falls back
   to `adata.X`, not `obsm`. **STATE loads with `strict=False`** (`model.py`) — copy the Tx1 `validate_load_result` pattern instead.
-- `--skip-hash-check` / `--allow-partial` / any off-contract threshold downgrade an evaluation to `formal:false` **and still exit 0** —
-  never report such a run as formal. The Tx1 cache separately zero-fills missing genes, reuses stale cells, and skips completeness checks
+- The Tx1 gate evaluator always verifies registered artifact hashes and full coverage. The Tx1 cache separately zero-fills missing genes, reuses stale cells, and skips completeness checks
   on a sharded verify.
 - **R1 residuals: never center a *prediction* on a fold-fit gene mean.** `mu_hat_g^(-c)` is an exact affine function of the held-out label, so
   `constant_g - mu_hat_g^(-c)` scores per-gene Spearman `+1.0` by construction. Targets use `mu_hat`, predictions the fold-independent `mu_bar`.
@@ -85,8 +84,8 @@ Warnings and defaults are preferred over exceptions, so mistakes usually produce
 
 **Every dataset has a card in `docs/data/` — read it before using the file.** Several are not what their names suggest:
 `jost_replogle_dual_sgrna` is knockdown efficacy, **not epistasis**; the two Replogle h5ads differ by one word (`essential`/`gwps`) but have
-different gene panels; Horlbeck's field is `gi_score`, **not** `gamma`, and **negative = SL**; X-Atlas/Orion HCT116 is **no longer**
-untouched; `sl_context_screen_v1` is **unsplit** with screened-non-hit negatives — not universal non-SL, and no CV folds. **Never join cell
+different gene panels; Horlbeck's field is `gi_score`, **not** `gamma`, and **negative = SL**; `sl_context_screen_v1` is **unsplit** with
+screened-non-hit negatives — not universal non-SL, and no CV folds. **Never join cell
 lines on name** — DepMap rows are ACH ModelIDs and its `CellLineName` is `K-562` while code says `K562`. Large artifacts are gitignored
 except the hash-pinned `results/phase_a_tx1_20260724/` contract.
 
@@ -96,8 +95,8 @@ Full gates in `docs/02-acceptance-criteria.md` §7-8. The four broken most easil
 
 - **Never claim SL from single-gene essentiality** — an explicit interaction null is required: `interaction = joint - psi(singles)`; declare
   `psi`. DepMap GeneEffect is a relative growth-rate effect: single-gene, never a double-knockout quantity.
-- **Name the generalization axis.** CV2/CV3 test unseen *genes*, not unseen cell lines; CV1 is diagnostic. Cross-cell-line claims need
-  untouched line splits. **A single-fold or test-fold-selected result is not a result** — 5-fold mean ± spread.
+- **Name the generalization axis.** CV2/CV3 test unseen *genes*, not unseen cell lines; CV1 tests seen genes. Cross-cell-line claims need
+  context splits. **A single-fold or test-fold-selected result is not a result** — 5-fold mean ± spread.
 - **A pan-essentiality lift is not an SL result**; **a benchmark rank is not a mechanism**; K562 mechanism ≠ multi-cell-line mechanism;
   Norman CRISPRa is auxiliary only.
 - **Raw GeneEffect scores are inflated by `mu_g`** (`Var(mu_g) >> Var(delta)`): a context-blind per-gene mean already wins most of it, so

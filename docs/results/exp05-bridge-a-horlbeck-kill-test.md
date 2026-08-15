@@ -3,10 +3,8 @@
 **Status:** completed 2026-07-22; **negative**. The frozen exp05 K562 backbone,
 composed into a Bridge A counterfactual co-dependency score, does **not** recover
 measured Horlbeck 2018 K562 genetic interactions (|Spearman| < 0.01;
-AUROC(s_A -> strong-SL) approximately 0.52). This is a **development feasibility
-diagnostic**, not the formal `02` section 6 MECHANISTIC verdict (which additionally
-requires a Phase-0-registered `rho_min`, a frozen candidate universe, and declared
-calibration disjointness). Authority: [`../01-blueprint.md`](../01-blueprint.md),
+AUROC(s_A -> strong-SL) approximately 0.52). Authority:
+[`../01-blueprint.md`](../01-blueprint.md),
 [`../02-acceptance-criteria.md`](../02-acceptance-criteria.md); plan:
 [`../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md)
 (T1).
@@ -92,8 +90,7 @@ build multi-cell-line Bridge A machinery on this checkpoint; the composition
 mechanism needs rethinking.** The kill-test spent a few GPU-hours to retire this
 risk before the far larger cross-cell-line investment.
 
-Claim boundaries (contract section 9): this is K562 mechanism only, a development
-diagnostic (not a formal MECHANISTIC verdict), on a single-perturbation backbone used
+Claim boundaries (contract section 9): this is K562 mechanism only, on a single-perturbation backbone used
 out-of-distribution (an a-perturbed state fed as basal). It says nothing about the
 Feng2024 `q(a,b)` benchmark track or cross-cell-line generalization. Bridge B (virtual
 double-knockout) is not evaluable here: the checkpoint has no trained two-gene

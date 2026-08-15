@@ -124,7 +124,7 @@ def predict_cache(
     control_panel_size: int = 4096,
     random_seed: int = 42,
     k562_split_manifest: Path | None = None,
-    formal_contract_path: Path | None = None,
+    prediction_contract_path: Path | None = None,
 ) -> Path:
     """Predict one label-free GeneEffect value per sample/perturbation group."""
     manifest = json.loads((cache_dir / "manifest.json").read_text())
@@ -133,9 +133,9 @@ def predict_cache(
         raise ValueError("HCT116 cache must be label-blind")
     if chunk_size < 1 or control_panel_size < 1:
         raise ValueError("chunk_size and control_panel_size must be positive")
-    formal_contract: dict[str, object] | None = None
-    if formal_contract_path is not None:
-        formal_contract = json.loads(formal_contract_path.read_text())
+    prediction_contract: dict[str, object] | None = None
+    if prediction_contract_path is not None:
+        prediction_contract = json.loads(prediction_contract_path.read_text())
         expected_contract = {
             "schema_version": 2,
             "chunk_size": chunk_size,
@@ -153,10 +153,12 @@ def predict_cache(
                 else None
             ),
         }
-        if formal_contract != expected_contract:
-            raise ValueError("runtime inputs do not match the frozen formal contract")
+        if prediction_contract != expected_contract:
+            raise ValueError("runtime inputs do not match the prediction contract")
         if manifest["parameters"]["max_cells_per_group"] is not None:
-            raise ValueError("formal prediction requires an uncapped response cache")
+            raise ValueError(
+                "registered prediction requires an uncapped response cache"
+            )
     expected_checkpoint = manifest["sources"]["frozen_checkpoint"]
     if sha256_file(checkpoint_path) != expected_checkpoint:
         raise ValueError("checkpoint hash does not match cache authority")
@@ -227,8 +229,8 @@ def predict_cache(
             )
         )
         split_sha256 = sha256_file(k562_split_manifest)
-    elif formal_contract is not None:
-        raise ValueError("formal prediction requires the frozen K562 split manifest")
+    elif prediction_contract is not None:
+        raise ValueError("registered prediction requires the K562 split manifest")
     control_latents: dict[str, torch.Tensor] = {}
     sample_gene_rows: list[dict[str, object]] = []
     with torch.inference_mode():
@@ -316,9 +318,9 @@ def predict_cache(
         "control_panel_size": control_panel_size,
         "random_seed": random_seed,
         "k562_split_manifest_sha256": split_sha256,
-        "formal_contract_sha256": (
-            sha256_file(formal_contract_path)
-            if formal_contract_path is not None
+        "prediction_contract_sha256": (
+            sha256_file(prediction_contract_path)
+            if prediction_contract_path is not None
             else None
         ),
         "sample_gene_predictions_sha256": sha256_file(sample_gene_predictions_path),
@@ -342,7 +344,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--control-panel-size", type=int, default=4096)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--k562-split-manifest", type=Path)
-    parser.add_argument("--formal-contract", type=Path)
+    parser.add_argument("--prediction-contract", type=Path)
     return parser.parse_args()
 
 
@@ -359,7 +361,7 @@ def main() -> None:
         control_panel_size=args.control_panel_size,
         random_seed=args.random_seed,
         k562_split_manifest=args.k562_split_manifest,
-        formal_contract_path=args.formal_contract,
+        prediction_contract_path=args.prediction_contract,
     )
     LOGGER.info("label-blind predictions ready: %s", manifest)
 

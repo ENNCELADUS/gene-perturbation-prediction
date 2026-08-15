@@ -171,15 +171,10 @@ def _install_lenient_hash_check(monkeypatch: pytest.MonkeyPatch) -> None:
 def _write_prediction_manifest(
     path: pathlib.Path,
     predictions_path: pathlib.Path,
-    *,
-    formal: bool,
-    reason: str = "post_hoc_adapter_after_test_opening",
 ) -> pathlib.Path:
     path.write_text(
         json.dumps(
             {
-                "formal": formal,
-                "reason": reason,
                 "predictions_sha256": hashlib.sha256(
                     predictions_path.read_bytes()
                 ).hexdigest(),
@@ -197,8 +192,6 @@ def test_prediction_manifest_hash_mismatch_fails_closed(
     prediction_manifest.write_text(
         json.dumps(
             {
-                "formal": False,
-                "reason": "post_hoc",
                 "predictions_sha256": "wrong",
             }
         )
@@ -218,7 +211,7 @@ def test_prediction_manifest_hash_mismatch_fails_closed(
         )
 
 
-def test_nonformal_prediction_manifest_forces_diagnostic_verdict(
+def test_prediction_manifest_hash_match_is_accepted(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install_lenient_hash_check(monkeypatch)
@@ -226,9 +219,8 @@ def test_nonformal_prediction_manifest_forces_diagnostic_verdict(
     prediction_manifest = _write_prediction_manifest(
         tmp_path / "prediction_manifest.json",
         predictions_path,
-        formal=False,
     )
-    out_dir = tmp_path / "out_manifest_diagnostic"
+    out_dir = tmp_path / "out_manifest"
 
     exit_code = evaluate_tx1_backbone.main(
         [
@@ -243,21 +235,16 @@ def test_nonformal_prediction_manifest_forces_diagnostic_verdict(
         ]
     )
 
-    verdict = json.loads((out_dir / "verdict_diagnostic.json").read_text())
-    assert verdict["formal"] is False
-    assert "post_hoc_adapter_after_test_opening" in verdict["reason"]
-    assert not (out_dir / "verdict.json").exists()
-    assert exit_code == 2
+    verdict = json.loads((out_dir / "verdict.json").read_text())
+    assert "formal" not in verdict
+    assert "claim_status" not in verdict
+    assert exit_code in (0, 1)
 
 
-def test_strict_run_writes_formal_verdict_json(
+def test_strict_run_writes_verdict_json(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Default (strict) run writes verdict.json with formal=true.
-
-    Finding 1 regression: a clean default run (no override, no bypass flag)
-    must stay formal.
-    """
+    """Default strict run writes verdict.json."""
     _install_lenient_hash_check(monkeypatch)
     phase_a_dir, predictions_path = _write_fixture(tmp_path)
     out_dir = tmp_path / "out_strict"
@@ -275,48 +262,10 @@ def test_strict_run_writes_formal_verdict_json(
 
     verdict_path = out_dir / "verdict.json"
     assert verdict_path.exists()
-    assert not (out_dir / "verdict_diagnostic.json").exists()
     verdict = json.loads(verdict_path.read_text())
-    assert verdict["formal"] is True
+    assert "formal" not in verdict
     assert "reason" not in verdict
-    assert exit_code in (0, 1)  # a formal gate verdict, never the diagnostic 2
-
-
-def test_allow_partial_writes_diagnostic_verdict_not_formal(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog
-) -> None:
-    """--allow-partial writes verdict_diagnostic.json, never verdict.json."""
-    _install_lenient_hash_check(
-        monkeypatch
-    )  # hash check now runs under --allow-partial
-    phase_a_dir, predictions_path = _write_fixture(tmp_path)
-    out_dir = tmp_path / "out_partial"
-
-    with caplog.at_level("WARNING", logger=evaluate_tx1_backbone._LOGGER.name):
-        exit_code = evaluate_tx1_backbone.main(
-            [
-                "--predictions",
-                str(predictions_path),
-                "--phase-a-dir",
-                str(phase_a_dir),
-                "--out-dir",
-                str(out_dir),
-                "--allow-partial",
-            ]
-        )
-
-    diagnostic_path = out_dir / "verdict_diagnostic.json"
-    assert diagnostic_path.exists()
-    assert not (out_dir / "verdict.json").exists()
-    verdict = json.loads(diagnostic_path.read_text())
-    assert verdict["formal"] is False
-    assert verdict["reason"] == "partial/diagnostic run (contract validation bypassed)"
-    assert exit_code == 2  # distinct from the 0/1 formal gate exit codes
-    assert any(
-        "PARTIAL" in record.message or "diagnostic" in record.message.lower()
-        for record in caplog.records
-        if record.levelname == "WARNING"
-    )
+    assert exit_code in (0, 1)
 
 
 def test_strict_run_fails_closed_on_tampered_artifact(
@@ -324,8 +273,8 @@ def test_strict_run_fails_closed_on_tampered_artifact(
 ) -> None:
     """Finding 3 regression: a strict run must verify frozen artifact hashes.
 
-    A same-shaped but modified manifest file must never reach a formal
-    ``formal: true`` verdict; ``main()`` must raise before any scoring. Uses
+    A same-shaped but modified manifest file must never reach a verdict;
+    ``main()`` must raise before any scoring. Uses
     the lenient registration-identity patch (Finding 2 is tested directly
     elsewhere) so this isolates the per-artifact hash comparison the
     tampered manifest is meant to trip.
@@ -350,132 +299,21 @@ def test_strict_run_fails_closed_on_tampered_artifact(
     assert not out_dir.exists()  # failed before any output was written
 
 
-def test_skip_hash_check_writes_diagnostic_verdict_not_formal(
-    tmp_path: pathlib.Path,
-) -> None:
-    """--skip-hash-check downgrades to diagnostic, like --allow-partial.
-
-    Tampering the artifact must not block a run that explicitly opts out of
-    the hash check, but the resulting verdict must never claim formal:true.
-    """
-    phase_a_dir, predictions_path = _write_fixture(tmp_path)
-    out_dir = tmp_path / "out_skip_hash"
-    manifest_path = phase_a_dir / "cell_line_manifest.csv"
-    manifest_path.write_text(manifest_path.read_text() + "\n# tampered\n")
-
-    exit_code = evaluate_tx1_backbone.main(
-        [
-            "--predictions",
-            str(predictions_path),
-            "--phase-a-dir",
-            str(phase_a_dir),
-            "--out-dir",
-            str(out_dir),
-            "--skip-hash-check",
-        ]
-    )
-
-    diagnostic_path = out_dir / "verdict_diagnostic.json"
-    assert diagnostic_path.exists()
-    assert not (out_dir / "verdict.json").exists()
-    verdict = json.loads(diagnostic_path.read_text())
-    assert verdict["formal"] is False
-    assert verdict["reason"] == (
-        "partial/diagnostic run (artifact hash verification bypassed)"
-    )
-    assert exit_code == 2
-
-
-def test_allow_partial_still_verifies_artifact_hashes(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """--allow-partial bypasses contract validation only, NOT the hash check.
-
-    Hash verification is an independent integrity check gated solely by
-    --skip-hash-check; a tampered artifact must still fail-closed under
-    --allow-partial (T2 review round-3 finding).
-    """
-    _install_lenient_hash_check(monkeypatch)
-    phase_a_dir, predictions_path = _write_fixture(tmp_path)
-    out_dir = tmp_path / "out_partial_tampered"
-    manifest_path = phase_a_dir / "cell_line_manifest.csv"
-    manifest_path.write_text(manifest_path.read_text() + "\n# tampered\n")
-
-    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
-        evaluate_tx1_backbone.main(
-            [
-                "--predictions",
-                str(predictions_path),
-                "--phase-a-dir",
-                str(phase_a_dir),
-                "--out-dir",
-                str(out_dir),
-                "--allow-partial",
-            ]
+@pytest.mark.parametrize(
+    "removed_args",
+    [
+        ["--allow-partial"],
+        ["--skip-hash-check"],
+        ["--rho-min", "0.1"],
+        ["--gate-k", "5"],
+        ["--k-schedule", "0", "5"],
+        ["--primary-method", "candidate"],
+        ["--baseline-method", "baseline"],
+        ["--expected-test-lines", "0"],
+    ],
+)
+def test_removed_contract_bypasses_are_rejected(removed_args: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        evaluate_tx1_backbone.parse_args(
+            ["--predictions", "predictions.csv", "--out-dir", "out", *removed_args]
         )
-    assert not out_dir.exists()
-
-
-def test_cli_override_forces_diagnostic_mode(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Finding 1 regression: a non-frozen CLI override forces diagnostic mode.
-
-    Passing --rho-min (a frozen Phase-A constant) must downgrade the run to
-    diagnostic even though every artifact is valid and neither
-    --allow-partial nor --skip-hash-check was passed: a CLI override must
-    never be able to relabel a run as formal.
-    """
-    _install_lenient_hash_check(monkeypatch)
-    phase_a_dir, predictions_path = _write_fixture(tmp_path)
-    out_dir = tmp_path / "out_override"
-
-    exit_code = evaluate_tx1_backbone.main(
-        [
-            "--predictions",
-            str(predictions_path),
-            "--phase-a-dir",
-            str(phase_a_dir),
-            "--out-dir",
-            str(out_dir),
-            "--rho-min",
-            "0.1",
-        ]
-    )
-
-    diagnostic_path = out_dir / "verdict_diagnostic.json"
-    assert diagnostic_path.exists()
-    assert not (out_dir / "verdict.json").exists()
-    verdict = json.loads(diagnostic_path.read_text())
-    assert verdict["formal"] is False
-    assert verdict["reason"] == "partial/diagnostic run (non-frozen overrides: rho_min)"
-    assert exit_code == 2  # distinct from the 0/1 formal gate exit codes
-
-
-def test_cli_override_does_not_bypass_hash_check(tmp_path: pathlib.Path) -> None:
-    """Finding 1 regression: a non-frozen override still runs the hash check.
-
-    Per the mode matrix, ``run_hash_check = not skip_hash_check`` -- an
-    override alone does not disable it. Uses the REAL (unpatched)
-    ``verify_artifact_hashes``, so this synthetic
-    fixture's registration can never match the pinned
-    ``FROZEN_REGISTRATION_SHA256`` anchor, and the override path must still
-    raise rather than silently reaching a diagnostic verdict.
-    """
-    phase_a_dir, predictions_path = _write_fixture(tmp_path)
-    out_dir = tmp_path / "out_override_hash"
-
-    with pytest.raises(EvaluationContractError, match="SHA-256 mismatch"):
-        evaluate_tx1_backbone.main(
-            [
-                "--predictions",
-                str(predictions_path),
-                "--phase-a-dir",
-                str(phase_a_dir),
-                "--out-dir",
-                str(out_dir),
-                "--rho-min",
-                "0.1",
-            ]
-        )
-    assert not out_dir.exists()  # failed before any output was written

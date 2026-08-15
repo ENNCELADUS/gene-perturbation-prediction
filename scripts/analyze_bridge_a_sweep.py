@@ -8,7 +8,7 @@ score ``s_a_seed_mean`` should rank synthetic-lethal pairs high. Horlbeck
 * equivalently Spearman(s_A, -gi_score) POSITIVE;
 * AUROC(s_A -> is_strong_sl) should be > 0.5.
 
-This is a development kill-test diagnostic, NOT a formal MECHANISTIC verdict.
+This is a development kill-test analysis.
 """
 
 from __future__ import annotations

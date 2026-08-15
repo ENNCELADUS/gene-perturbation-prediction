@@ -1,0 +1,72 @@
+{
+  "allocation_counts": {
+    "test": 1,
+    "validation": 1
+  },
+  "assignments": {
+    "A549": "validation",
+    "HT29": "test",
+    "JURKAT": "train",
+    "K562": "train"
+  },
+  "contexts": {
+    "A549": {
+      "basal_source": "Tahoe-100M DMSO",
+      "canonical_name": "A549",
+      "cellosaurus_id": "CVCL_0023",
+      "model_id": "ACH-000681",
+      "response_anchor": false
+    },
+    "HT29": {
+      "basal_source": "Tahoe-100M DMSO",
+      "canonical_name": "HT29",
+      "cellosaurus_id": "CVCL_0320",
+      "model_id": "ACH-000552",
+      "response_anchor": false
+    },
+    "JURKAT": {
+      "basal_source": "Perturb-seq non-targeting control",
+      "canonical_name": "JURKAT",
+      "cellosaurus_id": "CVCL_0065",
+      "model_id": "ACH-000995",
+      "response_anchor": true
+    },
+    "K562": {
+      "basal_source": "Perturb-seq non-targeting control",
+      "canonical_name": "K562",
+      "cellosaurus_id": "CVCL_0004",
+      "model_id": "ACH-000551",
+      "response_anchor": true
+    }
+  },
+  "eligibility": {
+    "minimum_negative_rows": 50,
+    "minimum_positive_rows": 50
+  },
+  "executable_evidence": {
+    "basal_manifest": {
+      "path": "results/phase_a_tx1_20260724/cell_line_manifest.csv",
+      "sha256": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297"
+    },
+    "gene_effect": {
+      "path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
+      "sha256": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e"
+    },
+    "model_metadata": {
+      "path": "data/sl_dependency_v0/raw/depmap/Model.csv",
+      "sha256": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8"
+    }
+  },
+  "label_input": {
+    "path": "data/SL_Benchmark_Formal/sl_integrated_pairs.csv",
+    "sha256": "6dd7a6a4b2837d409af46eaba3ae5a69b4a2d62d988617a917b063eb6ec9e81a"
+  },
+  "pinned_train_contexts": [
+    "JURKAT",
+    "K562"
+  ],
+  "row_group_policy": "After context assignment, drop every complete source_row_id group that appears on more than one split side; do not force whole contexts onto one side.",
+  "schema_version": "sl-context-screen-v2-split-v1",
+  "pre_split_min_class_count": 10,
+  "sort_key": "DepMap ModelID ascending; after pinned train contexts, allocate test then validation then train"
+}

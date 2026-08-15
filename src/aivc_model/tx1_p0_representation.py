@@ -1,4 +1,4 @@
-"""Diagnostic P0 outer-LOO audit of precomputed cell-line representations.
+"""P0 outer-LOO audit of precomputed cell-line representations.
 The audit never accesses the Tx1 cache and is not synthetic-lethality evidence.
 """
 
@@ -378,7 +378,7 @@ def audit_representation(
     ridge_alpha: float = 1.0,
     shuffle_seed: int = 20260804,
 ) -> dict[str, object]:
-    """Run strict outer-LOO transfer and label-associated geometry diagnostic."""
+    """Run strict outer-LOO transfer and label-associated geometry analysis."""
     if list(features.index) != list(gene_effect.index):
         raise ValueError("representation and GeneEffect model_id order must match")
     x = features.to_numpy(dtype=float)
@@ -477,8 +477,7 @@ def audit_representation(
             "retained_gain_ratio": retained_ratio,
             "retained_gain_ratio_reason": retained_reason,
         },
-        "geometry_diagnostic": {
-            "diagnostic_only": True,
+        "geometry_analysis": {
             "representation_space": "raw",
             "label_distance_space": (
                 "GeneEffect residual profiles; pairwise distances are invariant "
@@ -546,10 +545,7 @@ def run_audit(
         )
     return {
         "protocol_id": PROTOCOL_ID,
-        "formal": False,
-        "test_lines_excluded": True,
         "anchors_excluded": True,
-        "development_only": True,
         "outer_validation": "strict leave-one-source-line-out",
         "target_role": TRAIN_HEAD_ROLE,
         "metadata": {
@@ -561,7 +557,6 @@ def run_audit(
             "tx1_frozen_cache_accessed": False,
             "tx1_layer_extraction_performed": False,
             "phase_a_contract_modified": False,
-            "geometry_is_diagnostic": True,
             "representation_fit_provenance_verified": False,
             "shared_prior_fit_provenance_verified": prior is None,
             "provenance_limit": (

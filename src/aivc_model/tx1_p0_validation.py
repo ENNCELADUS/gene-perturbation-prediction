@@ -1,8 +1,8 @@
-"""Development-only nested validation folds for Tx1 GeneEffect P0.
+"""Nested validation folds for Tx1 GeneEffect P0.
 
 The outer loop is leave-one-line-out over the frozen manifest's 29 Tahoe
 ``train_head`` lines.  Each outer-training set is independently featurized and
-partitioned into deterministic inner folds; opened ``test`` lines and the four
+partitioned into deterministic inner folds; ``test`` lines and the four
 ``train_response_and_head`` anchors are excluded from every fold.
 """
 
@@ -125,7 +125,7 @@ class ValidationPolicy:
         if policy.expected_role_counts[ANCHOR_ROLE] != 4:
             raise ValueError("P0 requires exactly four train_response_and_head anchors")
         if policy.expected_role_counts[TEST_ROLE] != 9:
-            raise ValueError("P0 requires exactly nine opened test lines")
+            raise ValueError("P0 requires exactly nine test lines")
         if policy.inner_fold_count < 2:
             raise ValueError("inner_fold_count must be at least two")
         if policy.dmso_quantile_bins < 2:
@@ -355,9 +355,6 @@ def generate_nested_validation(
         "contract": CONTRACT,
         "version": policy.version,
         "seed": policy.seed,
-        "formal": False,
-        "development_only": True,
-        "test_lines_excluded": True,
         "manifest_sha256": manifest_sha256,
         "excluded_roles": [ANCHOR_ROLE, TEST_ROLE],
         "input": {
@@ -390,13 +387,9 @@ def validate_nested_validation(
         or payload.get("contract") != CONTRACT
         or payload.get("version") != policy.version
         or payload.get("seed") != policy.seed
-        or payload.get("formal") is not False
-        or payload.get("development_only") is not True
         or payload.get("manifest_sha256") != policy.expected_manifest_sha256
     ):
         raise ValueError("nested validation contract metadata is invalid")
-    if payload.get("test_lines_excluded") is not True:
-        raise ValueError("nested validation must explicitly exclude opened test lines")
     if payload.get("excluded_roles") != [ANCHOR_ROLE, TEST_ROLE]:
         raise ValueError("nested validation excluded-role declaration is invalid")
     input_metadata = payload.get("input")

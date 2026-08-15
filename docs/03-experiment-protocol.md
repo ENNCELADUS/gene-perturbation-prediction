@@ -1,9 +1,7 @@
 # Experiment Protocol: Context-Conditioned SL Benchmark
 
-**Status:** §2 step 1 done — `context_screen_v2` built on the HPC 2026-08-15 with provenance,
-filter audit and context statistics, reproducing v1's counts exactly. The split (§2.3) is
-unassigned, no head is fitted, no model has run. Supersedes the withdrawn STATE-to-SLIdR
-protocol; SLIdR was never implemented, so no code retires with it.
+**Status:** `context_screen_v2` and its row-level split were built 2026-08-15; no model has
+run. The filter audit remains incomplete. Supersedes the withdrawn STATE-to-SLIdR protocol.
 **Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
 executable form and may not relax it.
 
@@ -48,10 +46,10 @@ Each was computed directly from `derived/context_screen_v1/sl_context_pairs.csv`
 Re-run `scripts/build_sl_context_benchmark.py` against `sl_integrated_pairs.csv` with two
 changes, writing to `derived/context_screen_v2/`. Do not overwrite v1.
 
-1. **Emit `source_row_id`** for every exploded row. This links contexts exploded from one
-   aggregate row. It **cannot** link separate rows produced by the same underlying screen —
-   the source carries no study or evidence identifier — so it is used only to keep duplicate
-   contexts on the same side of the split. No independence claim rests on it.
+1. **Emit `source_row_id`** for every exploded row. It links contexts exploded from one
+   aggregate row but cannot link separate records from the same screen. After context
+   assignment, remove every complete source-row group crossing split sides; never force
+   whole contexts together transitively. No independence claim rests on this identifier.
 2. **Audit every filter** in the v1 preprocessing contract for rows and per-context positives
    removed: `sources == screen`, `evidence_types == experimental_screen`, `conflict == 0`,
    the all-evidence-unanimous rule, `n_evidence == n_cell_lines == n_context_tokens`, and the
@@ -73,19 +71,18 @@ Membership is decided once, by this rule:
 - **only executable contexts enter the benchmark at all** — train, validation and test alike.
   Arm A needs a predicted profile for every context it touches, so an eligible-but-
   non-executable context is unusable on any side, not just on test;
-- the four response anchors (K562, HCT116, Jurkat, HepG2) are **pinned to train**. They
-  supply the only Perturb-seq supervision, so placing one in test would contradict §8's
-  requirement that test contexts be absent from response training;
-- contexts sharing a `source_row_id` group stay on the same side.
+- response anchors present in the label table are **pinned to train**;
+- after context assignment, every `source_row_id` spanning multiple sides is removed in full
+  from every side. Same-side shared rows remain; contexts are not transitively grouped.
 
-Assignment is deterministic, not discretionary: sort the remaining executable context groups
-by ModelID, then allocate to test, validation and train in that order under counts fixed in
-the manifest before any context's difficulty is examined. Record the sort key, the counts,
-and the resulting assignment in the tracked file.
+The tracked manifest fixes one test and one validation context. Sorting non-anchor executable
+contexts by ModelID assigns HT29 (`ACH-000552`) to test and A549 (`ACH-000681`) to validation;
+K562 and JURKAT are train. Removing 86 crossing source groups deletes 172 rows. Retained
+positive/negative counts are train 1,763/19,392, validation 392/1,618 and test 234/7,327;
+no source row or canonical pair crosses sides afterward.
 
-HELA can never be executable: it has neither a 26Q1 GeneEffect target nor a compatible basal
-single-cell input, and the §3.5 acquisitions supply basal cells, not GeneEffect. RPE1 and
-HAP1 DepMap-CRISPR membership must be **verified, not assumed**. HAP1's v1 counts (56,994
+HELA has neither a 26Q1 GeneEffect target nor compatible basal input. RPE1 and HAP1
+DepMap-CRISPR membership must be **verified, not assumed**. HAP1's v1 counts (56,994
 positives against 20 negatives) fail the eligibility rule.
 
 Publish per-context statistics beside the split: class counts, prior, distinct genes
@@ -140,14 +137,11 @@ co-dependency and every other label set stay out. The negative class is an exper
 screen non-hit in the named context, not a universal non-SL assertion, and context
 assignment remains `silver_inferred`.
 
-### 3.5 Required acquisitions
+### 3.5 Future expansion
 
-Basal single-cell expression is missing for most eligible contexts. Of the ten that clear
-v1's permissive `>= 10/10` gate, only K562, Jurkat, A549 and HT29 appear in the 42-line
-manifest. Acquire basal cells for the remainder before freezing the split, and record the
-source and accession per context in the v2 card. RPE1 is the strongest candidate: Replogle
-2022's essential-genome RPE1 arm is a genetic Perturb-seq dataset, so it could serve as both
-a fifth response anchor and a large SL context.
+The fixed v2 split uses the four currently executable label contexts. Adding another context
+changes the benchmark and requires a new version, not an in-place v2 edit. RPE1 is the
+strongest future candidate if DepMap membership and basal compatibility are verified.
 
 ## 4. Backbone Training
 
@@ -159,7 +153,8 @@ over the anchors and the train-side dependency contexts. $L_{\text{resp}}$ remai
 an anchor. **Report response metrics before and after Stage 2 in the same table.** If they
 collapse, $\lambda_{\text{dep}}$ is misconfigured and the run is not finished.
 
-**Selection.** Validation contexts from `split_manifest.json` select the checkpoint and all
+**Selection.** Validation contexts from `configs/benchmarks/context_screen_v2_split.json`
+select the checkpoint and all
 hyperparameters ($\beta$, $\lambda_{\text{dep}}$, architecture widths). They are never
 promoted into training. $\alpha$ is additionally frozen against a numeric $\hat y$-vs-$y$
 calibration band on GeneEffect-only validation **before any SL label is read** — it may
@@ -279,7 +274,7 @@ Stage-2 $L_{\text{resp}}$.
 ## 10. Required Outputs
 
 ```text
-split_manifest.json          copy of the tracked configs/benchmarks/ file, with its hash
+context_screen_v2_split.json copy of the tracked split file, with its hash
 checkpoint_selection.json
 geneeffect_predictions.csv
 geneeffect_metrics.json

@@ -1,4 +1,4 @@
-"""Prediction-only Phase-D checkpoint reuse for post-hoc diagnostics."""
+"""Prediction-only Phase-D checkpoint reuse."""
 
 from __future__ import annotations
 
@@ -142,11 +142,8 @@ def run_prediction_pipeline(
     tx1_cache_dir: Path,
     depmap_gene_effect_path: Path,
     run_dir: Path,
-    diagnostic_reason: str = "post_hoc_adapter_after_test_opening",
 ) -> dict[str, Path]:
-    """Run diagnostic inference with existing Phase-C/D checkpoints only."""
-    if not str(diagnostic_reason).strip():
-        raise ValueError("diagnostic_reason must be non-empty")
+    """Run inference with existing Phase-C/D checkpoints only."""
     resolved_run_dir = Path(run_dir)
     _ensure_fresh_run_dir(resolved_run_dir)
     actual_head_sha256 = verify_expected_head_sha256(
@@ -217,8 +214,6 @@ def run_prediction_pipeline(
     manifest_path.write_text(
         json.dumps(
             {
-                "formal": False,
-                "reason": str(diagnostic_reason),
                 "transductive_features": True,
                 "calibration": {
                     "schema": CALIBRATION_SCHEMA,
@@ -226,7 +221,7 @@ def run_prediction_pipeline(
                     "dimension_rule": CALIBRATION_DIMENSION_RULE,
                     "reducer_scope": "all_genes_within_each_held_out_line",
                 },
-                "mode": "diagnostic_prediction_only",
+                "mode": "prediction_only",
                 "head_checkpoint": str(head_checkpoint_path),
                 "head_checkpoint_sha256": actual_head_sha256,
                 "expected_head_checkpoint_sha256": expected_head_sha256,

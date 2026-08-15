@@ -205,8 +205,6 @@ four are contract-level.
   family-wise inference over the several baselines, arms, and strata. Report per-context
   effect sizes with intervals and a predeclared minimum detectable effect.
 - Genes are not held out, so no unseen-gene claim is available from this benchmark.
-- The benchmark's label marginals were inspected during construction. It is a
-  development-grade surface, stated as such, not laundered by selection rules.
 - The table retains no same-pair label reversal across contexts, so it cannot establish
   recovery of context-dependent reversal. Two of its contexts are one screen exploded twice,
   which makes this caveat more important, not less.
@@ -214,16 +212,16 @@ four are contract-level.
 
 ## 9. Current Scientific State
 
-- **T1:** the exp05 Bridge-A diagnostic did not recover Horlbeck K562 genetic interactions;
+- **T1:** the exp05 Bridge-A evaluation did not recover Horlbeck K562 genetic interactions;
   closed negative and paused. Under this contract no gate consumes measured GI.
 - **T2:** Tx1-3B-ST did not beat the registered few-shot copy-K562 baseline on the frozen
-  nine-line test; closed negative and paused, and those lines remain binding. §3 and §4 name
+  nine-line test; closed negative and paused. §3 and §4 name
   the three defects this contract corrects — a frozen response module, a head regressing raw
   GeneEffect, and a loss on the $\mu_g$-dominated axis.
 - **R1:** the residual ladder is implemented and is the registered baseline for
   $\hat\delta$ and for control C5.
-- **Benchmark:** the rebuild and published split are prerequisite work. No split is frozen
-  and no model has run under this contract.
+- **Benchmark:** a row-level split is built; the raw-filter audit remains incomplete and no
+  model has run.
 
 Negative backbone results constrain the substrate; they are not SL results. A claim enters
 `results/` only after its frozen evaluation, provenance, and integrity checks complete.

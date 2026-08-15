@@ -1,167 +1,110 @@
 # SL Context Screen Benchmark v2
 
-**Status:** step 1 **built** 2026-08-15 on the HPC; step 2 (the split) not started. The
-table, provenance column, filter audit and context statistics exist under
-`derived/context_screen_v2/`; no split is assigned and no model has run. Built from input
-SHA-256 `6dd7a6a4b2837d40…`, which matches the Mac copy byte for byte.
+**Status:** row-level context split built 2026-08-15; no model has run. The raw-filter audit
+remains incomplete.
 
-The build reproduces v1's counts exactly — 184,962 rows, 172,838 unique pairs, 15,694 genes,
-10 retained contexts, 11,999 multi-context pairs, 0 cross-context label changes — so v2 is
-v1 plus provenance and audits, not a different label set.
+The pre-split v2 surface reproduces v1 exactly: 184,962 rows, 172,838 unique pairs,
+15,694 genes, 10 contexts, 11,999 multi-context pairs and 0 cross-context label changes.
+After executable-context selection and row-level leakage removal, the published table has
+30,726 rows, 21,507 pairs, 3,101 genes and four contexts.
 
 ## Role
 
-The pair–cell-line label table for the context-conditioned SL benchmark, and the **authority
-for the published train/val/test split**. The supervised object is unchanged from v1:
+The sole pair-label table and split authority for context-conditioned SL ranking:
 
 ```text
 (gene_a, gene_b, cell_line) -> experimental screen hit/non-hit
 ```
 
-The negative class is an experimentally screened non-hit in the named context. It is
-stronger than a randomly sampled unknown pair and must not be described as universal
-biological non-SL.
+The negative class is a screened non-hit in the named context, not universal biological
+non-SL. v2 adds raw-row provenance, audits and a fixed context split to v1; it does not
+change any retained v1 label.
 
-v2 differs from [`sl-context-screen-v1.md`](sl-context-screen-v1.md) in exactly two ways: it
-carries row provenance, and it carries the split. Do not overwrite v1.
+## Inputs and Provenance
 
-## Sole Input
+The only pair-label input is:
 
 ```text
 data/SL_Benchmark_Formal/sl_integrated_pairs.csv
 ```
 
-No other label source is merged — not Feng2024, not Horlbeck, not DepMap co-dependency. The
-input SHA-256 is recorded in the generated manifest. As with v1, the sole-input claim is
-about the direct build dependency, not a complete upstream-lineage audit: the integrated CSV
-does not carry study identifiers.
+No Feng2024, Horlbeck or DepMap co-dependency labels are merged. The generated manifest
+records its SHA-256. `source_row_id` is the zero-based raw CSV row index and links contexts
+exploded from one aggregate row. It cannot link separate records from the same experiment,
+because the source carries no study or evidence identifier.
 
-## Why v1 Is Rebuilt
+Executable contexts are locked by [`../../configs/benchmarks/context_screen_v2_split.json`](../../configs/benchmarks/context_screen_v2_split.json),
+which records DepMap ModelIDs, basal sources and hashes for the 26Q1 GeneEffect file and
+42-line basal manifest. Contexts are never joined by informal name.
 
-Three properties of v1. The first two were computed from `sl_context_pairs.csv`; the third
-comes from `context_inventory.csv`, because `sl_context_pairs.csv` holds only the ten
-contexts that passed the `>= 10/10` gate and therefore cannot show a zero-positive context
-at all. **v2 now measures all three as published columns** — see
-`context_statistics.csv` and `filter_audit.csv` — so they are properties a benchmark user
-reads off the artifact rather than findings buried in a review.
+## Construction
 
-**Duplicate screens.** K562/JURKAT share 9,219 rows — 100% of JURKAT, Jaccard 0.772 — and
-HELA/PC9 share 2,523 rows — 100% of PC9, Jaccard 0.983 — both at label agreement exactly
-1.0000. These rows carry `source_n_evidence == 2, source_row_count == 1`: one aggregated
-source row reported "tested in 2 lines, unanimous" and the builder copied its single label
-to each exploded context. **97.9% of v1's 11,999 cross-context recurring pairs are this
-artifact.** Consequence: those context names are not independent evaluation units, and a
-split that separates them holds out nothing.
+`scripts/build_sl_context_benchmark.py`:
 
-**A degenerate anchor in A549.** All 392 A549 positives contain TRA2A, and no A549 row
-containing TRA2A is negative, so the indicator `1[TRA2A in {a,b}]` scores AUPR 1.0 on that
-context. Positive-anchor concentration varies widely across contexts and must be published
-so users can see it rather than discover it.
+1. retains human experimental-screen rows with approved/updated endpoints and unanimous
+   positive or negative evidence;
+2. canonicalizes unordered gene pairs, explodes identifiable contexts, removes conflicting
+   pair-context keys and retains pre-split contexts with at least 10 rows in each class;
+3. requires at least 50 positives and 50 negatives for a split context and keeps only
+   contexts with both DepMap GeneEffect and basal single-cell input;
+4. pins response anchors to train, sorts other contexts by ModelID, then allocates one test
+   and one validation context;
+5. removes every complete `source_row_id` group appearing on more than one split side.
 
-**v2 measurements.** `context_statistics.csv` confirms and quantifies all three. A549's
-`top_positive_gene_share` is exactly **1.000000** (TRA2A), with PC9 at 0.533 and HELA at
-0.421 (both SORT1). `n_rows_sharing_source_row_with_other_context` is **9,219 of 9,219** for
-JURKAT and **2,523 of 2,523** for PC9 — every row in each context is exploded from a source
-row shared with another context — against 2,530 of 2,566 for HELA and 9,229 of 11,939 for
-K562. `filter_audit.csv` attributes the missing positives overwhelmingly to
-`all_evidence_positive`, the unanimity rule, and secondarily to `conflict_zero`: a source
-row whose evidence is mixed across its cell lines is discarded whole, so every context named
-in it loses its positives. Because the source records no per-context outcome, relaxing
-unanimity could not say which context earned the hit — those positives are unrecoverable,
-not merely filtered.
+The last rule is row-level: it prevents source-row leakage without transitively forcing
+whole contexts onto one side. Same-side shared rows remain visible and are reported.
 
-**Missing positives in repeated patterns** (from `context_inventory.csv`). Nine contexts
-carry 933–941 negatives and zero
-positives (GI1, HS936T, HS944T, HSC5, IPC298, PATU8988S, PK1, MEL202, MELJUSO); five carry
-exactly 684 negatives and zero positives (A427, CAL27, CAL33, MCF10A, MCF7); THP1 carries
-1,332 positives and zero negatives. Identical counts across unrelated lineages indicate a
-filter or explosion artifact rather than biology.
+## Published Split
 
-## Build Contract
+| Split | Context | ModelID | Positive | Negative | Total |
+| --- | --- | --- | ---: | ---: | ---: |
+| train | K562 | ACH-000551 | 1,668 | 10,268 | 11,936 |
+| train | JURKAT | ACH-000995 | 95 | 9,124 | 9,219 |
+| validation | A549 | ACH-000681 | 392 | 1,618 | 2,010 |
+| test | HT29 | ACH-000552 | 234 | 7,327 | 7,561 |
 
-Re-run `scripts/build_sl_context_benchmark.py` into `derived/context_screen_v2/`, adding:
+K562 and JURKAT are response anchors and therefore train. Sorting the remaining ModelIDs
+places HT29 (`ACH-000552`) in test and A549 (`ACH-000681`) in validation. The split removes
+86 crossing source groups: 172 rows total (A549 83 negatives; HT29 85 negatives and one
+positive; K562 two negatives and one positive). After removal, zero source rows and zero
+canonical pairs cross split sides.
 
-1. **`source_row_id`** on every exploded row. This links contexts exploded from one
-   aggregate source row. It **cannot** link separate rows produced by the same underlying
-   experimental screen, because the source carries no study or evidence identifier. It is
-   therefore used for one purpose only — keeping duplicated contexts on the same side of the
-   split — and no independence claim may rest on it.
-2. **A per-filter, per-context drop audit** covering `sources == screen`,
-   `evidence_types == experimental_screen`, `conflict == 0`, the all-evidence-unanimous rule,
-   `n_evidence == n_cell_lines == n_context_tokens`, and the atomic-context token rule.
-   The audit must specifically account for the zero-positive contexts above.
+## Published Audits
 
-The v1 preprocessing contract otherwise carries over unchanged, including canonical
-unordered pairs, the removal of any pair–context key holding both labels, and
-`context_assignment=unanimous_row_evidence_count_match` with every row marked
-`label_confidence=silver_inferred`. No class balancing or negative sampling is applied; the
-natural imbalance is part of the dataset.
+Before the split, K562/JURKAT share 9,219 source rows and HELA/PC9 share 2,523; both pairs
+have label agreement 1.0. In the final table all 9,219 JURKAT rows still share a source row
+with K562, but both contexts are train.
 
-## The Published Split
+A549 remains degenerate: all 392 positives contain TRA2A and no A549 negative does, so
+`1[TRA2A in {a,b}]` has AUPR 1.0. HT29's top positive gene is CDK6 at 0.299 of positives.
 
-The split ships as a `split` column in the table, but its **canonical, tracked** copy is
-`configs/benchmarks/context_screen_v2_split.json`. `/data/` is gitignored in full, so a
-manifest living only beside the CSV would be neither distributed nor verifiable; the
-in-dataset column is a mirror and a mismatch is a hard error. It is constructed once by this
-rule and no experiment may redefine it:
-
-- a context is **eligible** with at least 50 positives and at least 50 negatives;
-- a context is **executable** if it has DepMap GeneEffect and basal single-cell input;
-- **only executable contexts enter the benchmark on any side.** Arm A must predict a profile
-  for every context it touches, so an eligible-but-non-executable context is unusable in
-  train and validation just as it is in test;
-- the four Perturb-seq anchors (K562, HCT116, Jurkat, HepG2) are **pinned to train**, since
-  they carry the only response supervision;
-- contexts sharing a `source_row_id` group stay on the same side;
-- assignment is deterministic: sort remaining executable groups by ModelID and allocate to
-  test, validation and train under counts fixed in the manifest before any context's
-  difficulty is inspected.
-
-HELA can never be executable: it has neither a 26Q1 GeneEffect target nor a compatible basal
-input, and the planned acquisitions supply basal cells, not GeneEffect. RPE1 and HAP1
-DepMap-CRISPR membership must be verified, not assumed. On v1 counts HAP1 fails eligibility
-outright (56,994 positives against 20 negatives).
-
-Of the ten contexts clearing v1's permissive `>= 10/10` preprocessing gate, only **K562,
-Jurkat, A549 and HT29** appear in the 42-line basal manifest at
-`results/phase_a_tx1_20260724/cell_line_manifest.csv`. Basal acquisition for the remainder is
-a prerequisite, and each acquired context records its source and accession here.
+`filter_audit.csv` contains independent, overlapping failure counts. They identify which
+conditions fail but are not additive causal attribution. It currently omits per-context
+losses for `n_evidence == n_cell_lines == token_count` and atomic-context rejection; the
+manifest reports 829 count-mismatch rows and 6,832 invalid tokens only in aggregate.
 
 ## Generated Files
 
-Part 0 runs in two steps. **Step 1**, `scripts/build_sl_context_benchmark.py`, emits the
-table with provenance and the two audit files. **Step 2** assigns the split, which needs
-per-context executability (DepMap GeneEffect and basal input) that step 1 knows nothing
-about; it writes the tracked manifest and mirrors a `split` column back into the table.
-
 ```text
-configs/benchmarks/context_screen_v2_split.json   TRACKED — canonical split (step 2)
+configs/benchmarks/context_screen_v2_split.json   tracked split authority
 
 data/SL_Benchmark_Formal/derived/context_screen_v2/
-  sl_context_pairs.csv        + source_row_id  (+ split after step 2)
-  context_inventory.csv
-  filter_audit.csv            positives dropped, per context per condition
-  context_statistics.csv      class counts, prior, distinct positive genes, top-gene share
-  manifest.json               source and output hashes, filter rules, row counts
+  sl_context_pairs.csv        final rows with model_id, split and source_row_id
+  context_inventory.csv       pre-split context eligibility
+  filter_audit.csv            independent per-context positive failure counts
+  context_statistics.csv      final class, prior and positive-anchor statistics
+  manifest.json               input/output/config hashes and split audit
 ```
 
-Everything under `derived/` is gitignored; only the split manifest is tracked. All must be
-frozen before any model run.
-
-`filter_audit.csv` evaluates each condition **independently**, not cumulatively, so a
-context that loses all of its positives can be traced to the single rule responsible rather
-than to whichever rule happens to run first.
+Everything under `derived/` is gitignored. The tracked split manifest and dataset `split`
+column must agree exactly.
 
 ## Scope and Cautions
 
-- **The label marginals of this table have been inspected.** Eligibility thresholds and the
-  known degeneracies above were derived after looking at v1 counts. This is a
-  development-grade surface, declared as such in [`../01-blueprint.md`](../01-blueprint.md)
-  §8, not laundered by additional selection rules.
-- No retained pair changes label across contexts, so the table cannot evaluate recovery of
-  context-dependent label reversal. The duplicate-screen finding makes this caveat stronger,
-  not weaker.
-- Contexts remain extremely imbalanced and the priors span roughly an eighteen-fold range.
-  Use AUPR minus prior and context-macro aggregation; never infer quality from AUROC alone.
-- Do not join contexts to omics or dependency data by informal cell-line name. Use the
-  checked-in `context -> ModelID` map and fail loudly on an unmapped context.
+- No pre-split recurring pair changes label across contexts, so v2 cannot test recovery of
+  context-dependent label reversal.
+- Validation is degenerate A549; test is HT29.
+- Priors remain highly imbalanced. Report coverage and class counts first, then per-context
+  AUPR minus prior; AUROC is secondary.
+- `source_row_id` prevents only observable aggregate-row leakage. It cannot establish
+  independence between separate records from the same unidentified source study.

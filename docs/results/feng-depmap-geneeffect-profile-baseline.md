@@ -35,7 +35,7 @@ CV2, and CV3, all five folds, without using an SL graph in the feature path.
   Feng-compatible `aupr` is also emitted, but it is trapezoidal PR-AUC and can be
   approximately 0.74 even for the low-resolution missingness control; it should
   not be interpreted against prevalence like AP. `f1_oracle` maximizes its
-  threshold on the test fold and is diagnostic only.
+  threshold on the test fold and is reported separately.
 
 CV2/CV3 mean genes unseen during Feng SL-pair/graph training. They do **not** mean
 unseen to DepMap: the ground-truth auxiliary GeneEffect profiles for all mapped

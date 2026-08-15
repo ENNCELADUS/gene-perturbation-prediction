@@ -81,13 +81,8 @@ total — the extra five are provenance artifacts). The evaluator defaults to th
 `results/` copy (`scripts/evaluate_tx1_backbone.py:64`) — edit one and they
 desync silently.
 
-These all set `is_diagnostic` (`scripts/evaluate_tx1_backbone.py:216`), which
-downgrades the run to `formal:false` and redirects the output to
-`verdict_diagnostic.json` (`:256-259`) **while still exiting 0** — never present
-such a run as a formal result:
-- `--skip-hash-check`
-- `--allow-partial`
-- any non-frozen threshold override
+The gate evaluator always verifies registered artifact hashes and the full
+evaluation contract before writing `verdict.json`.
 
 **Double calibration.** Emitting Phase-E already-adapted predictions *without*
 `panel`/`k` columns silently re-applies `affine_kshot_calibrate`

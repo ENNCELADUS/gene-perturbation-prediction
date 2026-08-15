@@ -28,8 +28,8 @@ negative** (composition paused); **T2 is the active track**:
   dependencies vary across lines. If the backbone cannot produce line-specific
   GeneEffect on that slice, no context-specific SL is possible. Test it on DepMap.
 
-Neither track opens pairwise labels from an untouched held-out cell line; neither
-is itself the CELL-LINE-GENERALIZATION result.
+Neither track evaluates pairwise labels from a held-out cell line; neither is
+itself the CELL-LINE-GENERALIZATION result.
 
 ## 2. Track 1 — K562 Bridge-A-vs-Horlbeck mechanism kill-test
 
@@ -90,24 +90,24 @@ precisely the hypothesis this kill-test evaluates, not an assumed identity.
   (both genes in the trained pool) is the in-distribution default for a
   frozen-checkpoint test; the broader bound adds pairs whose queried gene is
   outside the exp05 pool — out-of-distribution for the ESM2 perturbation head.
-  Register which bound is the candidate universe before the formal run.
+  Register which bound is the candidate universe before the run.
 - Controls: (i) `Δ` against a generic non-partner-perturbed state (state-shift
   control — the `a`-specific signal must exceed a generic basal shift); (ii)
   observed co-dependency where available; (iii) a GenePert-style linear-on-ESM2
   ablation. `s_A` is symmetric by construction, so a swap-invariance check
   verifies only the implementation, not the science.
 
-### 2.4 Kill-test versus formal verdict
+### 2.4 Kill-test verdict
 
 The immediate run is a **development feasibility diagnostic**: is there rank
 correlation with `gi_score` on covered pairs, in the SL direction, beyond the
 state-shift control? A null here means the interaction mechanism fails in its
 best-supported context — do not extend across contexts before rethinking
-composition. It is **not** a MECHANISTIC verdict: the formal `02` §6
+composition. It is **not** a MECHANISTIC verdict: the `02` §6
 EXISTS/MEANINGFUL result additionally requires a Phase-0-registered `rho_min`, a
 frozen candidate universe, and disjointness from any SL-label calibration
 (trivially satisfiable now, since no calibration exists, but materialized before
-the formal run).
+the run).
 
 This instantiates roadmap Phases 3 (frozen backbone) + 4 (Bridge A) + 7 (K562
 anchor), pulled forward. It is independent of the Feng `q(a,b)` track
@@ -185,8 +185,8 @@ transfer Spearman 0.554 on shared genes).
 ### 3.4 Scope
 
 Single-gene **backbone/component** evidence (roadmap Phase 3 exit), not
-CELL-LINE-GENERALIZATION SL (`02` §4), which still needs pairwise labels in
-untouched lines. On DepMap-only lines only single-gene GeneEffect is testable —
+CELL-LINE-GENERALIZATION SL (`02` §4), which still needs pairwise labels across
+cell lines. On DepMap-only lines only single-gene GeneEffect is testable —
 no perturbation or GI data there. HCT116 is consumed as a *test* line but is
 eligible as a *development/training* line here.
 
@@ -206,9 +206,8 @@ validates the frozen-checkpoint Bridge A directly against Horlbeck.
 T1 has completed and is negative, pausing the composition mechanism; T2 is now the
 active track, run independently of the Feng-axis reproduction (Phases 1–2). T2
 gates context-specific GeneEffect — a precondition for any future context-specific
-SL, and the substrate a redesigned composition would compose. It touches no
-untouched held-out cell-line SL labels and produces no formal `02` verdict until
-its Phase-0 registrations are frozen. Results enter `../results/<slug>.md` only
+SL, and the substrate a redesigned composition would compose. Results enter
+`../results/<slug>.md` only
 after each analysis runs.
 
 ## 6. Claim boundaries

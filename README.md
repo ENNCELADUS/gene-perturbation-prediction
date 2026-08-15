@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-08-15):** Active direction — **context-conditioned synthetic-lethality ranking**. The research contract has been reformulated as a formal ML task: basal single cells plus a perturbation gene produce a predicted response, a gene-mean / context-residual GeneEffect decomposition, and a trained pair head scored on cell lines held out of every fitting and selection step. The Feng2024 benchmark and the train-free SLIdR stage are **dropped**; the benchmark is now the context-conditioned screen table, rebuilt as `context_screen_v2` on 2026-08-15 with row provenance and a filter audit. Its published split is the remaining prerequisite. T1 (Bridge-A vs Horlbeck), T2 (few-shot cross-cell-line GeneEffect, `Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`), and the HCT116 transport audit are all closed negative and remain binding single-gene evidence, **not** SL results. No model has run under the new contract. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
+> **Status (2026-08-15):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` now has a row-level split: K562/JURKAT train, A549 validation and HT29 test; 86 cross-side source groups were removed in full. The raw-filter audit remains incomplete, and no model has run. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
 
 The central question of the active direction:
 
@@ -32,11 +32,11 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 ## *Latest News* 🔥
 
-- **[2026/08]** **Contract reformulated as a formal ML task.** The program drops Feng2024 and the train-free SLIdR stage, and adopts a single generalization axis — the cell line. The backbone now forms an explicit perturbation delta, conditions on ESM-2 gene identity, and splits GeneEffect into a context-blind gene mean and a context residual trained on the across-context axis; the response module is fine-tuned jointly rather than frozen. A trained pair head scores unordered pairs from the predicted residual profile against a declared null baseline. Benchmark rebuild and published split are prerequisites. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
-- **[2026/07]** **T2 registered primary gate completed — negative.** On the frozen 28 train / 5 validation / 9 test GeneEffect split and 587-gene slice, Tx1-3B-ST failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). HVG-ST was also negative as a diagnostic (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. This is binding single-gene backbone evidence, not cross-cell-line SL; T2 is paused for redesign and the remaining baseline ladder is closeout work. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).
-- **[2026/07]** **K562 Bridge-A-vs-Horlbeck mechanism kill-test completed — negative.** The frozen exp05 backbone composed into a symmetrized counterfactual co-dependency score does not recover measured Horlbeck K562 genetic interactions over the 83,028 exp05-covered pairs (|Spearman| < 0.01; AUROC(s_A → strong-SL) ≈ 0.52, below the single-gene floor; no dose-response), across both pooler reference conventions. Per the kill-test rule the composition mechanism is **paused for redesign and not extended across cell lines**. Development diagnostic, not a formal MECHANISTIC verdict. [`Result`](docs/results/exp05-bridge-a-horlbeck-kill-test.md).
+- **[2026/08]** **Context split built.** K562/JURKAT are train, A549 validation and HT29 test; cross-side source rows are removed. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
+- **[2026/07]** **T2 registered primary gate completed — negative.** On the frozen 28 train / 5 validation / 9 test GeneEffect split and 587-gene slice, Tx1-3B-ST failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). HVG-ST was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. T2 is paused for redesign and the remaining baseline ladder is closeout work. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).
+- **[2026/07]** **K562 Bridge-A-vs-Horlbeck mechanism kill-test completed — negative.** The frozen exp05 backbone composed into a symmetrized counterfactual co-dependency score does not recover measured Horlbeck K562 genetic interactions over the 83,028 exp05-covered pairs (|Spearman| < 0.01; AUROC(s_A → strong-SL) ≈ 0.52, below the single-gene floor; no dose-response), across both pooler reference conventions. Per the kill-test rule the composition mechanism is **paused for redesign and not extended across cell lines**. [`Result`](docs/results/exp05-bridge-a-horlbeck-kill-test.md).
 - **[2026/07]** Horlbeck 2018 K562 fitness-GI map acquired and coverage-audited (448 genes, 100,128 pairs; 83,028 exp05-covered), and an execution plan set: two parallel development tracks — a **K562 Bridge-A-vs-Horlbeck mechanism kill-test** on the frozen exp05 backbone, and **DepMap cross-cell-line GeneEffect** transfer (single-gene backbone, not cross-cell-line SL). Neither opens held-out-cell-line SL labels.
-- **[2026/07]** Formal HCT116 frozen-backbone audit closed negative: direct K562 GeneEffect transfer remained strong (Spearman 0.554), but the response head collapsed and added no independent HCT116 signal. This is single-gene backbone evidence, not cross-cell-line SL. [`Closeout`](docs/results/exp05-hct116-frozen-backbone-transport.md).
+- **[2026/07]** HCT116 frozen-backbone audit closed negative: direct K562 GeneEffect transfer remained strong (Spearman 0.554), but the response head collapsed and added no independent HCT116 signal. This is single-gene backbone evidence, not cross-cell-line SL. [`Closeout`](docs/results/exp05-hct116-frozen-backbone-transport.md).
 - **[2026/07]** Research contract expanded from a K562-only formulation to a **general SL discovery model**. Feng2024 CV2/CV3 test genes withheld from SL-pair/graph training; held-out-cell-line splits separately test unseen contexts. K562 remains the current backbone and one mechanistic anchor.
 - **[2026/07]** Two composition bridges — counterfactual co-dependency and virtual double knockout — were specified against SLMGAE/KR4SL and measured GI. Both were retired by the 2026/08 reformulation; neither is an active target.
 - **[2026/06]** Stage 3 SL pair benchmark adapter and dependency-only baseline shipped (`src/sl_benchmark_baseline/`); official-metric CV1/CV2/CV3 rerun completed.
@@ -77,7 +77,7 @@ uv run python -m pytest
 
 ## Research Framing
 
-> **Status:** contract, literature boundary, and executable protocol established under the reformulated task. The benchmark rebuild and its published split are prerequisite work; basal single-cell input is still missing for most eligible contexts. T1, T2, and the HCT116 transport audit are closed negative. No model has run under this contract. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
+> **Status:** contract, protocol and row-level split are built; the raw-filter audit remains incomplete. No model has run. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
 
 ```text
 Given a cancer cell line described only by its basal single-cell transcriptome —
@@ -93,7 +93,7 @@ The generalization axis is the **cell line**. Graph and knowledge-graph SL predi
 
 The full contract — task definition, objective, split, controls, and claim boundaries — lives in the research vault, not here:
 
-- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract: formal task, objective, evaluation, and claim boundaries.
+- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract: task, objective, evaluation, and claim boundaries.
 - [`docs/02-literature-review.md`](docs/02-literature-review.md) — related work and the novelty boundary.
 - [`docs/03-experiment-protocol.md`](docs/03-experiment-protocol.md) — the executable protocol and its prerequisites.
 - [`docs/data/`](docs/data/) — one card per dataset. Read the card before using the file.
@@ -235,12 +235,12 @@ the **transcriptomic response → single-gene GeneEffect** edge.
 
 Headline numbers from the implemented baselines. These are the **floor and baselines** for the active composition direction (see [Research Framing](#research-framing)) — the dependency-only SL floor and the observed-transcriptome result the composition must beat, plus the single-gene forward-model signal it builds on. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
-### HCT116 Frozen-K562-Backbone Transport (formal one-shot audit, 2026-07-21)
+### HCT116 Frozen-K562-Backbone Transport (one-shot audit, 2026-07-21)
 
 On the 1,652-gene primary cohort, direct K562 GeneEffect transfer retained
 Spearman **0.554**, while the frozen response head reached **-0.001** with a
 collapsed prediction standard deviation of 0.059 versus 0.409 for HCT116
-GeneEffect. A post-unseal diagnostic controlling for K562 GeneEffect gave
+GeneEffect. A follow-up analysis controlling for K562 GeneEffect gave
 partial Spearman about -0.005. The failed path is HCT116 observed response through the frozen K562
 fitness head; this is not a pairwise SL or cross-cell-line SL result. Full
 protocol, metrics, and interpretation: [`docs/results/exp05-hct116-frozen-backbone-transport.md`](docs/results/exp05-hct116-frozen-backbone-transport.md).
@@ -273,7 +273,7 @@ The degree-probe control (Model C) scores highest on CV1 — a reminder that pai
 | TCGA / patient omics | Disease context | Future biomarker framing only; not evidence of cell-line or patient generalization under the current protocol. |
 | LINCS L1000 / Tahoe-100M | Later extensions | Bulk or drug perturbation expansion once the gene-perturbation task is stable. |
 
-> **Data rules**: Prioritize CRISPRi or knockout Perturb-seq for DepMap alignment. K562 is the current backbone, not the target scope. Cross-cell-line claims require untouched cell lines with pairwise SL/GI labels; single-gene GeneEffect transfer is insufficient. Norman CRISPRa is auxiliary, and DepMap labels are population-level fitness readouts, not single-cell death.
+> **Data rules**: Prioritize CRISPRi or knockout Perturb-seq for DepMap alignment. K562 is the current backbone, not the target scope. Cross-cell-line claims require context-specific pairwise SL/GI labels; single-gene GeneEffect transfer is insufficient. Norman CRISPRa is auxiliary, and DepMap labels are population-level fitness readouts, not single-cell death.
 
 ## Documentation
 

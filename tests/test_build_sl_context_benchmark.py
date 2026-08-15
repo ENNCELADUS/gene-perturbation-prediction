@@ -1,14 +1,38 @@
 from __future__ import annotations
 
+import hashlib
+
 import pandas as pd
 import pytest
 
+import scripts.build_sl_context_benchmark as benchmark_builder
 from scripts.build_sl_context_benchmark import (
+    apply_context_split,
     audit_positive_losses,
     context_statistics,
     finalise_benchmark,
     select_atomic_rows,
+    validate_split_evidence,
 )
+
+
+def test_generated_manifest_does_not_encode_claim_policy(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(benchmark_builder, "_sha256", lambda _path: "0" * 64)
+    manifest = benchmark_builder._manifest(
+        tmp_path,
+        min_class_count=10,
+        selection_stats={},
+        pre_split_stats={},
+        split_stats={
+            "retained_rows": 0,
+            "retained_unique_pairs": 0,
+            "retained_unique_genes": 0,
+            "retained_by_context": {},
+        },
+    )
+
+    assert "formal" not in manifest["split"]
+    assert "claim_status" not in manifest["split"]
 
 
 def _row(**updates: object) -> dict[str, object]:
@@ -163,9 +187,169 @@ def test_source_row_id_is_the_global_raw_row_and_survives_explosion() -> None:
 
     selected, _ = select_atomic_rows(frame)
 
-    # Both contexts came from one aggregate row, so they share its id — this is
-    # the coupling that must keep them on the same side of a split.
+    # Both contexts came from one aggregate row, so they share its id. If their
+    # contexts land on different split sides, the complete row is removed.
     assert selected["source_row_id"].tolist() == [41_237, 41_237]
+
+
+def _split_contract() -> dict[str, object]:
+    return {
+        "schema_version": "sl-context-screen-v2-split-v1",
+        "eligibility": {"minimum_positive_rows": 1, "minimum_negative_rows": 1},
+        "contexts": {
+            "TRAIN": {"model_id": "ACH-000003", "response_anchor": True},
+            "VALID": {"model_id": "ACH-000002", "response_anchor": False},
+            "TEST": {"model_id": "ACH-000001", "response_anchor": False},
+        },
+        "pinned_train_contexts": ["TRAIN"],
+        "allocation_counts": {"test": 1, "validation": 1},
+        "assignments": {"TRAIN": "train", "TEST": "test", "VALID": "validation"},
+    }
+
+
+def test_context_split_drops_source_rows_crossing_assignment_sides() -> None:
+    rows = pd.DataFrame(
+        [
+            _atomic_row("A|B", "TRAIN", 1, 0.01, source_row_id=1),
+            _atomic_row("C|D", "VALID", 1, 0.01, source_row_id=1),
+            _atomic_row("E|F", "TRAIN", 1, 0.01, source_row_id=2),
+            _atomic_row("G|H", "TRAIN", 0, 0.01, source_row_id=3),
+            _atomic_row("I|J", "VALID", 1, 0.01, source_row_id=4),
+            _atomic_row("K|L", "VALID", 0, 0.01, source_row_id=5),
+            _atomic_row("M|N", "TEST", 1, 0.01, source_row_id=6),
+            _atomic_row("O|P", "TEST", 0, 0.01, source_row_id=7),
+        ]
+    )
+
+    split, stats = apply_context_split(rows, _split_contract())
+
+    assert set(split["source_row_id"]) == {2, 3, 4, 5, 6, 7}
+    assert split.groupby("source_row_id")["split"].nunique().max() == 1
+    assert stats["cross_split_source_rows_dropped"] == 1
+    assert stats["rows_dropped"] == 2
+    assert stats["pairs_crossing_splits_after_filter"] == 0
+
+
+def test_context_split_rejects_assignment_not_implied_by_model_id_order() -> None:
+    contract = _split_contract()
+    contract["assignments"] = {
+        "TRAIN": "train",
+        "TEST": "validation",
+        "VALID": "test",
+    }
+    rows = pd.DataFrame(
+        [
+            _atomic_row("A|B", context, 1, 0.01, source_row_id=offset)
+            for offset, context in enumerate(["TRAIN", "VALID", "TEST"], start=1)
+        ]
+        + [
+            _atomic_row("C|D", context, 0, 0.01, source_row_id=offset)
+            for offset, context in enumerate(["TRAIN", "VALID", "TEST"], start=4)
+        ]
+    )
+
+    with pytest.raises(ValueError, match="deterministic rule"):
+        apply_context_split(rows, contract)
+
+    anchor_mismatch = _split_contract()
+    anchor_mismatch["contexts"]["TRAIN"]["response_anchor"] = False
+    with pytest.raises(ValueError, match="response anchors"):
+        apply_context_split(rows, anchor_mismatch)
+
+
+def test_context_split_rejects_a_context_removed_in_full() -> None:
+    rows = pd.DataFrame(
+        [
+            _atomic_row("A|B", "TRAIN", 1, 0.01, source_row_id=1),
+            _atomic_row("C|D", "TEST", 1, 0.01, source_row_id=1),
+            _atomic_row("E|F", "TRAIN", 0, 0.01, source_row_id=2),
+            _atomic_row("G|H", "TEST", 0, 0.01, source_row_id=2),
+            _atomic_row("I|J", "VALID", 1, 0.01, source_row_id=3),
+            _atomic_row("K|L", "VALID", 0, 0.01, source_row_id=4),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="made contexts ineligible"):
+        apply_context_split(rows, _split_contract())
+
+
+def test_context_split_rejects_pairs_crossing_on_distinct_source_rows() -> None:
+    rows = pd.DataFrame(
+        [
+            _atomic_row("A|B", "TRAIN", 1, 0.01, source_row_id=1),
+            _atomic_row("C|D", "TRAIN", 0, 0.01, source_row_id=2),
+            _atomic_row("E|F", "VALID", 1, 0.01, source_row_id=3),
+            _atomic_row("G|H", "VALID", 0, 0.01, source_row_id=4),
+            _atomic_row("A|B", "TEST", 1, 0.01, source_row_id=5),
+            _atomic_row("I|J", "TEST", 0, 0.01, source_row_id=6),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="Canonical pairs cross"):
+        apply_context_split(rows, _split_contract())
+
+
+def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
+    basal_path = tmp_path / "basal.csv"
+    gene_effect_path = tmp_path / "gene_effect.csv"
+    model_path = tmp_path / "model.csv"
+    pd.DataFrame(
+        {
+            "model_id": ["ACH-1"],
+            "basal_source": ["controls"],
+            "cellosaurus_id": ["CVCL_0001"],
+        }
+    ).to_csv(basal_path, index=False)
+    pd.DataFrame({"ModelID": ["ACH-1"], "GENE": [-0.5]}).to_csv(
+        gene_effect_path, index=False
+    )
+    pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["CELL"]}).to_csv(
+        model_path, index=False
+    )
+
+    def digest(path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    contract = {
+        "contexts": {
+            "CELL": {
+                "model_id": "ACH-1",
+                "basal_source": "controls",
+                "cellosaurus_id": "CVCL_0001",
+                "canonical_name": "CELL",
+            }
+        },
+        "executable_evidence": {
+            "basal_manifest": {"path": str(basal_path), "sha256": digest(basal_path)},
+            "gene_effect": {
+                "path": str(gene_effect_path),
+                "sha256": digest(gene_effect_path),
+            },
+            "model_metadata": {
+                "path": str(model_path),
+                "sha256": digest(model_path),
+            },
+        },
+    }
+
+    validate_split_evidence(contract)
+    contract["contexts"] = {"OTHER": contract["contexts"].pop("CELL")}
+    with pytest.raises(ValueError, match="Label context identity mismatch"):
+        validate_split_evidence(contract)
+    contract["contexts"] = {"CELL": contract["contexts"].pop("OTHER")}
+    pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["WRONG"]}).to_csv(
+        model_path, index=False
+    )
+    contract["executable_evidence"]["model_metadata"]["sha256"] = digest(model_path)
+    with pytest.raises(ValueError, match="DepMap identity mismatch"):
+        validate_split_evidence(contract)
+    pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["CELL"]}).to_csv(
+        model_path, index=False
+    )
+    contract["executable_evidence"]["model_metadata"]["sha256"] = digest(model_path)
+    contract["executable_evidence"]["gene_effect"]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="hash mismatch"):
+        validate_split_evidence(contract)
 
 
 def test_audit_attributes_dropped_positives_to_the_responsible_condition() -> None:

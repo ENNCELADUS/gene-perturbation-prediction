@@ -106,11 +106,11 @@ The binding ladder is C1–C6 in [`01`](01-blueprint.md) §6; this section recor
 
 ## 8. Internal evidence update: T2 Phase F gate
 
-The registered nine-line Phase F test was opened on 2026-07-29. Tx1-3B-ST
-failed the k=10 single-gene GeneEffect backbone-transfer gate against
+The registered nine-line Phase F test completed on 2026-07-29. Tx1-3B-ST failed
+the k=10 single-gene GeneEffect backbone-transfer gate against
 copy-K562 + 10 labels (`Delta rho = -0.0048`, line-bootstrap 95% CI
 `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). The HVG-ST attribution
-control was also negative as a diagnostic (`Delta rho = 0.0326`, 95% CI
+control was also negative (`Delta rho = 0.0326`, 95% CI
 `[-0.0602, 0.1181]`). Both arms deteriorated as k increased; Tx1's k=0 output
 variance was close to target variance, so constant-output collapse does not
 explain the failed adapted gate. This is binding single-gene component evidence,

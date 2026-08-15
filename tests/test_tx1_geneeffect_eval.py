@@ -976,7 +976,7 @@ def test_evaluate_rejects_manifest_with_wrong_expected_count() -> None:
     broken = Fixture(manifest, fixture.slice_df, panels, preds)
     # A self-consistent 8-line sample validates without a pinned count...
     _evaluate_default(broken)
-    # ...but a formal run pinned to the registered 9 rejects it.
+    # ...but a run pinned to the registered 9 rejects it.
     with pytest.raises(EvaluationContractError, match="Expected 9"):
         _evaluate_default(broken, expected_test_lines=9)
 

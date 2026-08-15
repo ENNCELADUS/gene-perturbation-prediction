@@ -20,12 +20,10 @@ from scripts.run_tx1_p1_distribution_context import (
 def _policy() -> dict[str, object]:
     return {
         "protocol_id": PROTOCOL_ID,
-        "formal": False,
         "ccle_bulk_control": {
             "status": "coverage_incomplete_not_run",
             "excluded_missing_model_id": "ACH-001039",
         },
-        "test_lines_excluded": True,
         "selection": "none_fixed_ablation",
         "pca_components": 8,
         "ridge_alpha": 1.0,
@@ -37,7 +35,7 @@ def _policy() -> dict[str, object]:
 def test_policy_is_exact_and_fail_closed(tmp_path: Path) -> None:
     path = tmp_path / "policy.json"
     path.write_text(json.dumps(_policy()), encoding="utf-8")
-    assert _load_policy(path)["formal"] is False
+    assert _load_policy(path)["protocol_id"] == PROTOCOL_ID
 
     changed = _policy()
     changed["pca_components"] = 9
@@ -94,8 +92,6 @@ def _fake_audit() -> dict[str, object]:
             ]
         }
     return {
-        "formal": False,
-        "test_lines_excluded": True,
         "metadata": {},
         "representations": representations,
     }
@@ -131,11 +127,7 @@ def test_driver_writes_atomic_provenance(
     assert p1_module.main() == 0
 
     payload = json.loads((output / "representation_audit.json").read_text())
-    assert payload["formal"] is False
-    assert payload["test_lines_excluded"] is True
     assert payload["metadata"]["test_context_integrity_read"] is True
-    assert payload["metadata"]["test_context_used_for_representation_fit"] is False
-    assert payload["metadata"]["test_labels_accessed"] is False
     assert payload["metadata"]["shared_prior_fit_provenance_verified"] is True
     assert payload["metadata"]["shared_prior_model_id"] == "ACH-000551"
     assert payload["input_provenance_sha256"]

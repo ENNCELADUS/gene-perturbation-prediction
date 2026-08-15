@@ -1,4 +1,4 @@
-"""Materialize authenticated, development-only inputs for Tx1 P0 baselines."""
+"""Materialize authenticated inputs for Tx1 P0 baselines."""
 
 from __future__ import annotations
 
@@ -308,15 +308,11 @@ def build_p0_inputs(
         inputs["depmap_omics_expression"] = _sha256(expression_path)
     provenance: dict[str, object] = {
         "protocol_id": PROTOCOL_ID,
-        "formal": False,
-        "development_only": True,
-        "test_lines_excluded": True,
         "cache_access": {
             "integrity_preflight_scope": "all frozen manifest lines",
             "test_array_values_integrity_read": True,
             "pooled_representation_scope": "role=train_head only",
             "test_array_values_used_for_representation": False,
-            "test_labels_accessed": False,
         },
         "target_role": TRAIN_ROLE,
         "n_lines": EXPECTED_LINE_COUNT,

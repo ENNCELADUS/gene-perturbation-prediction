@@ -99,7 +99,7 @@ def test_prediction_only_cli_never_dispatches_training(
 
     monkeypatch.setattr(cli, "run_training_pipeline", fail_training)
     checkpoint = tmp_path / "head.pt"
-    run_dir = tmp_path / "diagnostic"
+    run_dir = tmp_path / "prediction"
     exit_code = cli.main(
         [
             "--config",
@@ -116,8 +116,6 @@ def test_prediction_only_cli_never_dispatches_training(
             str(checkpoint),
             "--expected-head-sha256",
             "expected-digest",
-            "--diagnostic-reason",
-            "post_hoc_head_redesign_after_test_opening",
         ]
     )
 
@@ -126,7 +124,6 @@ def test_prediction_only_cli_never_dispatches_training(
     assert captured["head_checkpoint_path"] == checkpoint
     assert captured["expected_head_sha256"] == "expected-digest"
     assert captured["run_dir"] == run_dir
-    assert captured["diagnostic_reason"] == "post_hoc_head_redesign_after_test_opening"
 
 
 def test_prediction_only_cli_requires_expected_head_digest(
@@ -145,7 +142,7 @@ def test_prediction_only_cli_requires_expected_head_digest(
                 "--depmap-gene-effect",
                 str(tmp_path / "gene_effect.csv"),
                 "--run-dir",
-                str(tmp_path / "diagnostic"),
+                str(tmp_path / "prediction"),
                 "--prediction-only-head-checkpoint",
                 str(tmp_path / "head.pt"),
             ]

@@ -1,4 +1,4 @@
-"""Tests for development-only Tx1 P0 nested validation folds."""
+"""Tests for Tx1 P0 nested validation folds."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _manifest() -> pd.DataFrame:
         )
     for index in range(9):
         rows.append(
-            _manifest_row(model_id=f"ACH-T{index:04d}", lineage="Opened", role="test")
+            _manifest_row(model_id=f"ACH-T{index:04d}", lineage="Test", role="test")
         )
     return pd.DataFrame(rows)
 
@@ -82,7 +82,7 @@ def _generate(
     return payload, loaded, policy
 
 
-def test_generation_is_deterministic_and_marks_diagnostic_contract(
+def test_generation_is_deterministic_and_records_contract(
     tmp_path: Path,
 ) -> None:
     first, _, _ = _generate(tmp_path)
@@ -93,9 +93,6 @@ def test_generation_is_deterministic_and_marks_diagnostic_contract(
 
     assert first == second
     assert first["protocol_id"] == PROTOCOL_ID
-    assert first["formal"] is False
-    assert first["development_only"] is True
-    assert first["test_lines_excluded"] is True
     assert first["manifest_sha256"] == sha256_file(tmp_path / "manifest.csv")
     first_fold = first["outer_folds"][0]  # type: ignore[index]
     assert first_fold["held_out"] == first_fold["outer_validation_model_ids"][0]

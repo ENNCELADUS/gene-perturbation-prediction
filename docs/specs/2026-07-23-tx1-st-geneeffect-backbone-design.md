@@ -36,7 +36,7 @@ slice. This is the **Phase 3 single-gene backbone-transfer exit**, reported as
 **task-data-held-out cross-line GeneEffect transfer** (the lead encoder is
 pretrained on the target lines; see §7) — **not** an SL result, **not** a
 cross-cell-line SL claim (roadmap §5; `02` §4), and **not** an unseen-context
-claim. It opens no pairwise labels from any untouched cell line.
+claim. It evaluates no pairwise cell-line labels.
 
 Motivation: the composition mechanism (Bridge A) is paused after a negative
 kill-test, and the frozen K562 response-to-GeneEffect head did not transfer to
@@ -199,7 +199,7 @@ not just copy-K562. Registered k-schedule: **{0, 5, 10, 25, 50}**.
   differentially-essential slice has a **line-level bootstrap 95% CI (cell lines as
   the inferential units) excluding zero** in the SL direction, clearing the
   registered `rho_min`. Failing that pauses the direction. `rho_min`, the
-  k-schedule, the slice, and the estimator are registered before the formal run and
+  k-schedule, the slice, and the estimator are registered before the run and
   are not revisable to fit a result.
 - **Baselines:** copy-K562(+k), cross-line mean, nearest-line transfer,
   lineage-only, **CCLE-bulk→GeneEffect regression** (DepMap OmicsExpression), and
@@ -281,7 +281,7 @@ reference, each arm must satisfy
 `max_abs_diff <= 1e-5 * max(1, reference_max_abs)` on pooled features, achieve
 at least 5x per-gene throughput, keep peak allocated memory below 80% of the
 card, and sustain at least 40% SM utilization. The probe must run under the
-same PyTorch/STATE/CUDA environment as the formal launch; test-role lines and
+same PyTorch/STATE/CUDA environment as the launch; test-role lines and
 GeneEffect labels are not read while choosing or validating K.
 **Exit met:** trained heads and complete nine-line prediction tables for both
 encoder arms.

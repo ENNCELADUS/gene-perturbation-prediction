@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run prediction-first P0 diagnostics on the already-opened test cohort."""
+"""Run prediction-first P0 evaluation on the test cohort."""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ def main() -> int:
     args.output_dir.mkdir(parents=True)
     per_line.to_csv(args.output_dir / "per_line.csv", index=False)
     summary.to_csv(args.output_dir / "summary.csv", index=False)
-    (args.output_dir / "verdict_diagnostic.json").write_text(
+    (args.output_dir / "verdict.json").write_text(
         json.dumps(verdict, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return 0

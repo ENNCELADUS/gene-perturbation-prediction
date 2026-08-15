@@ -38,7 +38,7 @@ under `.agents/skills/` and should provide a `SKILL.md` entry point.
   parallel work and delegation reduces coordination cost.
 - Give each editing agent an explicit ownership boundary. Agents share the same
   worktree and must preserve unrelated or concurrent changes.
-- Keep remote SSH, scheduler, long-running experiment, and formal-artifact state
+- Keep remote SSH, scheduler, long-running experiment, and artifact state
   operations with the parent agent unless the user explicitly requests otherwise.
 - The parent agent owns orchestration, final decisions, integration, and the
   evidence-backed final report.
@@ -62,8 +62,8 @@ under `.agents/skills/` and should provide a `SKILL.md` entry point.
 - Keep single-gene GeneEffect evidence separate from pairwise SL or measured
   genetic-interaction evidence.
 - Name the generalization axis: CV2/CV3 hold out genes, not cell lines; cross-line
-  claims require untouched cell-line splits.
-- Treat off-contract flags, partial artifacts, and skipped hash or completeness
-  checks as non-formal even when the command exits successfully.
+  claims require cell-line splits.
+- Record off-contract flags, partial artifacts, and skipped hash or completeness
+  checks with the run invocation.
 - Distinguish engineering completion from scientific success, and require the
   registered multi-fold evidence before reporting a benchmark result.

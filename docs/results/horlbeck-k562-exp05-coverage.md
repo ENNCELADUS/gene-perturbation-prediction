@@ -30,5 +30,5 @@ are in the [dataset card](../data/horlbeck-2018-k562-gi.md).
 
 The K562 measured-GI test has substantial pair coverage and is not blocked by
 gross Replogle-vocabulary absence. This does not by itself establish estimator
-power: the formal test still needs a frozen candidate universe, effect-size and
+power: the test still needs a frozen candidate universe, effect-size and
 uncertainty criteria, and gene/pair separation from any calibration labels.

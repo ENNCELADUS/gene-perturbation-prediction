@@ -18,7 +18,7 @@ reporting convention (this repo's dominant failure mode is a silent
 
 It also generates the predicted-response bag for one (line, gene) pair and
 provides the no-cache online mean-plus-population-variance reducer used by the
-formal Phase D/Phase F pipeline.
+Phase D/Phase F pipeline.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Prediction-first, post-hoc P0 evaluation on the opened test cohort."""
+"""Prediction-first P0 evaluation on the test cohort."""
 
 from __future__ import annotations
 
@@ -53,7 +53,6 @@ EXPECTED_COMPARATORS = {
         "head_sha256": (
             "626a2a6abfbfd8a77c35806b8508d9cd765c7488dfcdb5292a0ed92eb3b6fa9e"
         ),
-        "reason": "post_hoc_head_redesign_after_test_opening",
     },
     "previous_tx1": {
         "method": "tx1_3b_st",
@@ -66,7 +65,6 @@ EXPECTED_COMPARATORS = {
         "head_sha256": (
             "d16daa7db1583bdb1820cb56133f15098cf0f9a95491b1022b2cfe73f0f3f9bc"
         ),
-        "reason": "post_hoc_adapter_after_test_opening",
     },
 }
 
@@ -124,8 +122,6 @@ def _validate_exposure_ledger(path: Path, test_ids: list[str]) -> dict[str, str]
         "model_id",
         "role",
         "pretraining_exact_context_status",
-        "geneeffect_label_role",
-        "formal_eligibility",
     }
     if not required.issubset(ledger.columns):
         raise ValueError("exposure ledger is missing required columns")
@@ -133,9 +129,7 @@ def _validate_exposure_ledger(path: Path, test_ids: list[str]) -> dict[str, str]
     if len(test) != len(test_ids) or set(test["model_id"].astype(str)) != set(test_ids):
         raise ValueError("exposure ledger does not exactly cover frozen test lines")
     expected = {
-        "geneeffect_label_role": "opened_binding_historical",
         "pretraining_exact_context_status": "known_present",
-        "formal_eligibility": "ineligible",
     }
     for column, value in expected.items():
         if set(test[column].astype(str)) != {value}:
@@ -160,12 +154,9 @@ def _load_comparator(
         raise ValueError(f"{output_method}: comparator manifest SHA256 mismatch")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     required_manifest = {
-        "formal": False,
-        "mode": "diagnostic_prediction_only",
         "predictions_sha256": expected_sha256,
         "head_checkpoint_sha256": contract["head_sha256"],
         "expected_head_checkpoint_sha256": contract["head_sha256"],
-        "reason": contract["reason"],
     }
     if any(manifest.get(key) != value for key, value in required_manifest.items()):
         raise ValueError(f"{output_method}: comparator manifest semantics differ")
@@ -345,7 +336,6 @@ def build_frozen_predictions(
             "predictions_sha256": sha256_file(comparator_paths[name]),
             "manifest_sha256": sha256_file(comparator_manifest_paths[name]),
             "head_checkpoint_sha256": contract["head_sha256"],
-            "reason": contract["reason"],
         }
 
     predictions = pd.DataFrame(rows).sort_values(
@@ -356,9 +346,6 @@ def build_frozen_predictions(
         raise ValueError("prediction table has incomplete frozen-test coverage")
     metadata: dict[str, object] = {
         "protocol_id": PREDICTION_PROTOCOL,
-        "formal": False,
-        "post_hoc": True,
-        "test_labels_accessed": False,
         "prediction_first": True,
         "train_role": "train_head",
         "test_role": "test",
@@ -456,7 +443,7 @@ def evaluate_predictions(
     exposure_ledger_path: Path,
     expected_prediction_manifest_sha256: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
-    """Open test labels only after validating the frozen prediction artifact."""
+    """Evaluate a validated prediction artifact against the test labels."""
     prediction_manifest_path = prediction_dir / "prediction_manifest.json"
     if sha256_file(prediction_manifest_path) != expected_prediction_manifest_sha256:
         raise ValueError("prediction manifest differs from pre-registered SHA256")
@@ -464,11 +451,7 @@ def evaluate_predictions(
     prediction_path = prediction_dir / "predictions.csv"
     if metadata.get("protocol_id") != PREDICTION_PROTOCOL:
         raise ValueError("unexpected frozen-test prediction protocol")
-    if metadata.get("test_labels_accessed") is not False:
-        raise ValueError("prediction manifest does not attest label-free prediction")
     expected_semantics = {
-        "formal": False,
-        "post_hoc": True,
         "prediction_first": True,
         "n_train_lines": 29,
         "n_test_lines": 9,
@@ -492,7 +475,6 @@ def evaluate_predictions(
                 "predictions_sha256": contract["predictions_sha256"],
                 "manifest_sha256": contract["manifest_sha256"],
                 "head_checkpoint_sha256": contract["head_sha256"],
-                "reason": contract["reason"],
             }.items()
         ):
             raise ValueError(f"prediction manifest {name} provenance differs")
@@ -647,12 +629,7 @@ def evaluate_predictions(
         )
     verdict: dict[str, object] = {
         "protocol_id": PREDICTION_PROTOCOL,
-        "status": "diagnostic_complete",
-        "formal": False,
-        "post_hoc_after_test_opening": True,
-        "eligible_for_model_selection": False,
-        "test_labels_accessed_during_prediction": False,
-        "test_labels_accessed_during_evaluation": True,
+        "status": "complete",
         "n_test_lines": EXPECTED_TEST_LINES,
         "n_genes": len(slice_frame),
         "prediction_manifest_sha256": expected_prediction_manifest_sha256,

@@ -441,7 +441,7 @@ def test_exp05_config_satisfies_current_locked_preflight_contract() -> None:
     assert config.gmm.covariance_floor == 0.0001
     assert config.gmm.init_scale == 0.02
     assert config.gmm.trainable is True
-    assert config.train.run_id == "exp05_formal_padded_eval_v1"
+    assert config.train.run_id == "exp05_padded_eval_v1"
     assert config.train.gene_batch_size == 4
     assert config.train.required_world_size == 4
     assert config.train.learning_rate == 0.000025
@@ -1301,7 +1301,7 @@ def test_esm2_state_pert_dim_mismatch_fails_closed() -> None:
         train_module._effective_state_pert_dim(state, 2024)
 
 
-def test_outer_test_responses_cannot_be_opened() -> None:
+def test_outer_test_responses_cannot_be_loaded_for_training() -> None:
     bags = replace(
         _toy_bags(),
         access_recorder=GeneAccessRecorder(FoldSpec(0, ("A",), ("C",), ("B", "D"))),
@@ -1331,7 +1331,7 @@ def test_audited_training_never_uses_unrestricted_outer_test_response_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def forbidden(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("formal exp05 must not evaluate outer-test responses")
+        raise AssertionError("exp05 training must not evaluate outer-test responses")
 
     monkeypatch.setattr(SealedGeneBags, "open", forbidden)
 

@@ -22,7 +22,7 @@ pairs. **Swapping 2 and 3 silently trains on the test set.** Correct usage to
 copy: `load_feng_fold` in `src/sl_profile_baseline/data.py:50-57`,
 `scripts/build_k562_sl_benchmark.py:150`.
 
-The **unsuffixed** file (`CV2_1.npy`) is the `Rand` set — the only formal
+The **unsuffixed** file (`CV2_1.npy`) is the `Rand` set — the primary
 comparison. The `_Exp` / `_Dep` variants are DepMap-expression/dependency-informed
 negatives; pairing them with any DepMap-derived feature is **leakage**
 (`docs/data/sl-benchmark-2024.md:125-128`).
