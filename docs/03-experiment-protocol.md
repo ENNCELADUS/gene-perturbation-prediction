@@ -1,8 +1,9 @@
 # Experiment Protocol: Context-Conditioned SL Benchmark
 
-**Status:** not started. The benchmark rebuild in §2 is a prerequisite; no split is frozen,
-no head is fitted, and no model has run under this protocol. Supersedes the STATE-to-SLIdR
-protocol, which is withdrawn — SLIdR was never implemented, so no code is retired with it.
+**Status:** §2 step 1 done — `context_screen_v2` built on the HPC 2026-08-15 with provenance,
+filter audit and context statistics, reproducing v1's counts exactly. The split (§2.3) is
+unassigned, no head is fitted, no model has run. Supersedes the withdrawn STATE-to-SLIdR
+protocol; SLIdR was never implemented, so no code retires with it.
 **Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
 executable form and may not relax it.
 
@@ -101,9 +102,8 @@ derived/context_screen_v2/context_statistics.csv
 derived/context_screen_v2/manifest.json            source and output hashes
 ```
 
-Everything under `derived/` is gitignored; only the split manifest is tracked.
-
-Write `data/sl-context-screen-v2.md` as the card; mark the v1 card historical.
+Everything under `derived/` is gitignored; only the split manifest is tracked. Write
+`data/sl-context-screen-v2.md` as the card and mark the v1 card historical.
 
 ## 3. Data Contract
 
