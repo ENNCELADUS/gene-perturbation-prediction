@@ -1,281 +1,229 @@
-# Research Blueprint: Generalizable Synthetic-Lethality Discovery by Virtual-Cell Composition
+# Research Blueprint: Context-Conditioned Synthetic-Lethality Ranking
 
-**Status:** established. This is the research contract — locked.
-**Type:** research direction and claim boundaries. **Not** an implementation spec.
-**Scope note:** this contract defines the active program. Prior evidence remains
-under `docs/archive/`, `ideaspark_run/`, and `docs/results/`; those artifacts do
-not define the current scope.
-**Companions:** [`02-acceptance-criteria.md`](02-acceptance-criteria.md) (what
-counts as passing) · [`03-literature-review.md`](03-literature-review.md) (related
-work) · [`04-roadmap.md`](04-roadmap.md) (execution order).
+**Status:** active research contract. Supersedes the Feng2024 two-axis formulation and the
+train-free SLIdR stage; neither is part of this program. T1 and T2 closed negative and are
+paused. No result exists under this contract.
+**Companions:** [`02-literature-review.md`](02-literature-review.md) fixes the prior-art
+boundary · [`03-experiment-protocol.md`](03-experiment-protocol.md) is the executable
+protocol · [`data/sl-context-screen-v2.md`](data/sl-context-screen-v2.md) is the benchmark.
 
-## 1. The Problem
+## 1. Task
+
+Given a cancer cell line described only by its **basal single-cell transcriptome** — no
+CRISPR screen and no SL screen in that line — rank unordered gene pairs by the probability
+that the pair is an experimental synthetic-lethal hit there. The generalization axis is the
+**cell line**; genes are not held out, and §8 states what that forbids.
 
 ```text
-Discover synthetic-lethal gene pairs that generalize to genes withheld from
-SL-pair/graph training and to cancer cell lines not used to fit or select the
-model.
+basal cells + perturbation gene
+  -> predicted post-perturbation cells     supervised on 4 Perturb-seq lines
+  -> predicted DepMap GeneEffect           supervised on many lines
+  -> pair score in a held-out line         supervised on screen labels
 ```
 
-Synthetic lethality (SL) is a pairwise and context-dependent fitness
-interaction: disrupting either gene alone can be tolerated while disrupting both
-is selectively deleterious in a particular cellular background. The candidate
-space is too large for exhaustive screening, so the operational task is
-**candidate prioritization for experimental follow-up**.
+Predicted expression is a supervised intermediate, not a deliverable: it is scored only
+where Perturb-seq exists and elsewhere receives gradient only through the dependency loss.
 
-This program builds a general SL discovery model with two distinct evaluation
-requirements:
-
-1. **Benchmark-general gene-pair discovery.** Compare against the Feng et al.
-   2024 model zoo on the official, SynLethDB-derived 9,845-gene benchmark. CV2 and
-   CV3 test generalization to genes withheld from SL-pair/graph training.
-2. **Cross-cell-line SL generalization.** Learn a context-conditioned score
-   `s(a,b | c)` and evaluate it on cancer cell lines excluded from all model
-   fitting and selection.
-
-These requirements are complementary, not interchangeable. The main Feng2024
-benchmark is not cell-line-specific and therefore cannot, by itself, establish
-cross-cell-line generalization. Conversely, a result on one held-out cell line
-does not establish competitive performance against the general SL-prediction
-SOTA.
-
-## 2. Premise, Gap, and Contribution
-
-**Premise established locally.** Post-perturbation transcriptomic response carries
-signal about single-gene fitness. The current exp05 forward model
-(`src/aivc_model/`) maps a control state and gene identity to a predicted response
-and then to DepMap GeneEffect. Its current implementation and evidence are K562
-based; they are an initial backbone, not the scope of the SL problem.
-
-**Gap.** Single-gene GeneEffect is not SL. It has no double-knockout quantity and
-cannot identify an interaction merely by combining the two marginal
-essentialities. A valid SL model must emit an explicit pairwise interaction and
-must distinguish a general pair prior from a cell-line-specific effect.
-
-**Contribution.** Compose a perturbation-response-trained virtual cell into a
-pairwise interaction through an explicit non-interaction null, then test whether
-that interaction:
-
-- beats strong SL-prediction SOTA on the official Feng2024 cold-start splits;
-- transfers across held-out cell lines when conditioned on cellular context;
-- survives controls for pan-essentiality and context-free pair priors; and
-- corresponds to measured genetic interactions rather than only curated labels.
-
-Graph-free inductive reach is a design property, not the novelty claim.
-CILANTRO-SL, RFM-SL, PARIS, and ESM4SL already occupy parts of that space. The
-defensible methodological claim is the **perturbation-response-trained
-composition, explicit interaction null, and context-resolved mechanistic
-validation**.
-
-## 3. Objects and Definitions
+## 2. Notation and Data
 
 | Symbol | Meaning |
 | --- | --- |
-| $\mathcal{G}_F$ | The official Feng2024 9,845-gene benchmark universe. It is not a K562-specific assay. |
-| $\mathcal{C}$ | Cancer cell-line contexts available for model development or held-out evaluation. |
-| $q(a,b)$ | Context-agnostic SL pair score used for the Feng2024 benchmark. Swap-invariant. |
-| $s(a,b\mid c)$ | Cell-line-conditioned SL score. Swap-invariant in $a,b$, but allowed to vary with $c$. |
-| $F(X_c,g)$ | Virtual-cell forward model: control state from cell line $c$ plus perturbation gene $g$ to a predicted response. |
-| $h_C(F(X_c,g))$ | Predicted single-gene GeneEffect or other declared fitness readout in context $c$. |
-| $\psi$ | Explicit non-interaction null, such as additive or min/HSA, against which a joint effect is measured. |
-| $D_{ab}$ | Feng2024/SynLethDB-derived pair label. A curated benchmark label, not a cell-line-specific SL measurement. |
-| $Y_{ab,c}^{GI}$ | Measured genetic-interaction quantity for pair $(a,b)$ in cell line $c$. |
+| $\mathcal{G}$, $e_g$ | perturbable gene universe; ESM-2 gene embedding, defined for every gene including unscreened ones |
+| $X_c=\{x_c^{(i)}\}_{i=1}^{M_c}$ | basal control single cells for context $c$ |
+| $\mathcal{C}_{\text{resp}}$ | contexts with genetic Perturb-seq (K562, HCT116, Jurkat, HepG2) |
+| $\mathcal{C}_{\text{dep}}$ | contexts with basal cells **and** DepMap GeneEffect |
+| $\mathcal{C}_{\text{sl}}$ | contexts with screen pair labels, split train/val/test |
+| $\mathcal{C}_{\text{ref}}=\mathcal{C}_{\text{dep}}\setminus\mathcal{C}_{\text{sl}}$ | profile cohort; never an SL context |
+| $y_{g,c}$ | DepMap 26Q1 GeneEffect; a single-gene relative growth-rate effect |
+| $D_{a,b,c}\in\{0,1\}$ | experimental screen hit / non-hit for $(a,b)$ in context $c$ |
 
-**GeneEffect boundary.** DepMap GeneEffect is a single-gene relative growth-rate
-effect under a population-dynamics model. It is not a single-cell death label,
-not a double-knockout observation, and not itself an SL label.
+Supervision is a pyramid: four contexts teach what a perturbation *does*, tens what it
+*costs*, and the SL contexts carry pair labels. GeneEffect is neither a double-knockout
+measurement nor an SL label. Backbone parameters are $\omega$, dependency heads
+$\theta_\mu,\theta_\delta$, SL head $\theta$; indices run $(\text{gene},\text{context})$;
+superscripts $tr$ and $te$ denote the train and test side of the published split; and $\rho$
+is Pearson correlation.
 
-### 3.1 What each evaluation establishes
+## 3. Model
 
-| Evaluation | Establishes | Does not establish |
+With pooling $\Pi(B)=[\operatorname{mean}(B),\operatorname{var}(B)]$ over a cell bag $B$:
+
+```text
+z_c            = Pi(X_c)                          context vector
+Yhat_{c,g}     = { F_omega(x_c^(i), e_g) }        predicted perturbed cells
+Delta_{g,c}    = Pi(Yhat_{c,g}) - z_c             perturbation-induced change
+muhat_g        = h_mu(e_g)                        context-blind gene mean
+deltahat_{g,c} = h_delta(Delta_{g,c}, e_g, z_c)   context residual
+yhat_{g,c}     = muhat_g + deltahat_{g,c}
+```
+
+The $\mu/\delta$ split is load-bearing. Because
+$\operatorname{Var}_g(\mu_g)\gg\operatorname{Var}_c(\delta_{g,c})$, one head regressing raw
+GeneEffect is optimized almost entirely by the context-blind term, and a model with
+$\hat\delta\approx 0$ still posts a strong raw correlation. The SL head consumes the
+$\hat\delta$ profile over $\mathcal{C}_{\text{ref}}$, summarized per gene by nine frozen
+statistics $\Sigma$: mean; population standard deviation; the quantiles at
+$0.10,0.25,0.50,0.75,0.90$; and the fractions of the profile below $-0.5$ and below $-1.0$.
+Those constants are part of the contract, not an implementation detail — leaving them to
+code lets two conforming implementations build different inputs.
+
+```text
+prof_g     = Sigma( ( deltahat_{g,c'} )_{c' in C_ref} )
+
+phi(a,b|c) = [ prof_a + prof_b , |prof_a - prof_b| ,        18  invariant
+               rho(deltahat_{a,.}, deltahat_{b,.}) ,         1  invariant
+               yhat_ac + yhat_bc , |yhat_ac - yhat_bc| ,     2  context
+               psi_min(yhat_ac, yhat_bc) ,                   1  context
+               muhat_a + muhat_b , |muhat_a - muhat_b| ]     2  invariant
+
+s(a,b|c)   = sigmoid( f_theta( phi(a,b|c) ) )
+```
+
+Twenty-four dimensions, three of which vary with $c$; every block is invariant under
+$a\leftrightarrow b$. Supplying $(\hat\delta,\hat\mu)$ rather than $(\hat y,\hat\mu)$ is an
+invertible reparametrization, used because co-dependency lives in the centered profile and
+because it makes the pan-essentiality block separately ablatable.
+$\psi_{\min}=\min(\hat y_{a,c},\hat y_{b,c})$ is the declared non-interaction null (HSA;
+GeneEffect is negative-is-lethal). Score orientation is frozen before any test label: $s$ is
+positive-is-SL, so $\psi$ used as a ranking score is negated.
+
+## 4. Objective
+
+Fit the gene mean on train-side contexts only, with at least three observations per gene:
+
+```text
+mu_g^tr     = mean_{c in C_dep^tr} y_{g,c}
+delta_{g,c} = y_{g,c} - mu_g^tr
+
+L_mu    = Huber(muhat_g, mu_g^tr) + alpha * [ 1 - Pearson_g(muhat, mu^tr) ]
+L_delta = Huber_{g,c}(deltahat, delta)
+          + beta * mean_{g in Gvar} [ 1 - Pearson_c(deltahat_{g,.}, delta_{g,.}) ]
+L_dep   = L_mu + L_delta
+
+Stage 1:  min_omega                        L_resp                    on C_resp
+Stage 2:  min_{omega,theta_mu,theta_delta} L_resp + lam_dep * L_dep  on C_resp u C_dep^tr
+Stage 3:  min_theta                        BCE( s , D )              on C_sl^tr
+```
+
+$L_{\text{resp}}$ matches predicted and observed cell bags by mean-delta MSE plus energy
+distance; no cell-to-cell correspondence exists, so the loss is distributional. It stays on
+in Stage 2 as an anchor, and response metrics are reported before and after Stage 2 — a
+collapse means $\lambda_{\text{dep}}$ is wrong, not that the run finished.
+$G_{\text{var}}$ is a pre-declared delta-variance gene set fit on train-side contexts;
+without it the scale-free Pearson term gives a gene whose true $\delta$ is replicate noise
+the same gradient as a genuinely context-dependent one. Stage 3 is context-balanced, each
+training context contributing equally.
+
+$\alpha$ is frozen on GeneEffect-only validation against a declared calibration band
+**before any SL label is read**. Its Pearson term is shift- and scale-invariant, so $\alpha$
+can otherwise buy correlation at the cost of scale — and that error lands entirely in
+$\hat y$, hence in $\psi$, flattering the model by degrading its own baseline. Because
+$\mu^{tr}$ uses train-side contexts only, it is not an affine function of any test label, so
+the fold-fit-mean artifact that manufactures per-gene Spearman $+1$ cannot arise.
+
+## 5. Split and Arms
+
+One fixed split, published inside the benchmark and never redefined by a run. Test contexts
+are absent from response training, dependency training, $\mu^{tr}$, SL-head training,
+hyperparameter and checkpoint selection, standardizer fitting, calibration, and
+thresholding. Every backbone-derived block of an SL training row — profile, target-context
+values, and $\hat\mu$ — comes from a single model that excluded that row's context group and
+refit $\mu^{tr}$ without it; mixing in-sample and out-of-fold blocks inside one feature
+vector, then fitting a standardizer on the mixture, is prohibited.
+
+- **Arm A, primary:** out-of-fold predicted profiles in, predicted profiles out.
+- **Arm B, oracle:** measured DepMap profiles on the same $\mathcal{C}_{\text{ref}}$ columns.
+- **Arm B-full, reference:** measured profiles over all DepMap columns — the honest ceiling.
+
+Report $A-B$ restricted to the context block alongside the full $A-B$; only the restricted
+form isolates out-of-sample GeneEffect cost, since 21 of 24 dimensions are context-invariant
+in both arms.
+
+## 6. Evaluation Contract
+
+Metrics are numbered by the stage they score, matching §4. **Stage 1** reports the response
+metrics before and after Stage 2 training.
+
+**Stage 2** needs two surfaces, because per-gene Spearman across contexts is undefined on a
+single test context. A dependency split over $\mathcal{C}_{\text{dep}}$, disjoint from the
+SL contexts and holding out at least eight, carries the per-gene across-context Spearman on
+the residual over $G_{\text{var}}$; R1's ladder is its registered baseline. The SL test
+contexts carry per-context cross-gene Spearman only, which cannot support a context claim.
+
+**Stage 3** reports AUPR per test context and the macro, both as $\text{AUPR}-\text{prior}$,
+because context priors span an eighteen-fold range and a macro of raw AUPRs measures
+prevalence. AUROC is secondary. Coverage and class counts precede any performance number,
+and every AUPR is stratified by whether both, one, or neither endpoint was seen in SL
+training — only the "neither" stratum supports an inductive claim. Uncertainty uses a
+two-way dyadic bootstrap over both endpoints; pairs have no unique anchor gene, so a one-way
+bootstrap would ignore dependence through the other endpoint.
+
+Baselines, reported as per-context lift, never used to drop a context after the fact:
+
+| ID | Baseline | Shortcut it removes |
 | --- | --- | --- |
-| Feng2024 CV1 | Pair-holdout diagnostic and topology sensitivity | Unseen-gene or cell-line generalization |
-| Feng2024 CV2/CV3 | Semi-cold/complete-cold generalization to unseen genes | Cross-cell-line generalization |
-| Held-out-cell-line evaluation | Transfer of `s(a,b | c)` to unseen cellular contexts | Competitive SOTA performance unless run against the same eligible baselines |
-| Measured-GI evaluation | Correspondence with an observed interaction in the assayed context | Multi-cell-line mechanistic generality outside the assayed contexts |
+| C1 | pair identity / train-context label frequency | pair memorization |
+| C1b | anchor-gene frequency $\max(r_a,r_b)$, for $r_g$ gene $g$'s positive rate over training contexts | gene-level memorization C1 misses |
+| C2 | $\psi$ alone, predicted **and** measured | ranking that is only the null |
+| C3 | the $\hat\mu$ block alone | pan-essentiality |
+| C5 | R1's best residual predictor replacing the backbone | a backbone beating no simple prior |
+| C6 | **matched context-ablated head** | a context claim with no context information |
+| C4 | Arm B and Arm B-full | reference only, never a bar |
 
-## 4. Model and Composition Mechanism
+**C6 is load-bearing.** C1, C1b, C2 and C3 each remove one shortcut, so a model can win on
+the 21 invariant dimensions, beat every individual baseline, and still carry no context
+information. C6 is an identically trained head on the invariant dimensions with the three
+context dimensions ablated, plus fixed context derangements and a permutation null. A
+minimum per-context incremental $\text{AUPR}-\text{prior}$ attributable to the context block
+is declared before any test label is read; distinguishability alone is not enough, and below
+that margin no context claim is licensed whatever the absolute AUPR.
 
-The model has a context-free pair component and a context-conditioned interaction
-component:
+## 7. Leakage and Integrity
 
-$$
-s(a,b\mid c) = q(a,b) + \Delta_c(a,b).
-$$
+Operational rules live in [`03-experiment-protocol.md`](03-experiment-protocol.md); these
+four are contract-level.
 
-This decomposition is an evaluation guard, not an assumption that both terms are
-nonzero. `q(a,b)` supports the official Feng2024 comparison. Before contextual
-fitting, a final `q` artifact is built by a prespecified all-admissible-data retrain
-or fixed fold ensemble using train-only-selected hyperparameters — never by
-choosing the best test fold — and then frozen. `Δ_c(a,b)` must add
-held-out-cell-line information beyond that fixed pair prior; joint fitting that
-can move arbitrary signal between the two terms is inadmissible.
-
-The SL graph may provide training labels for an explicitly reported calibrated
-head, but it may not construct model features. Pure zero-shot composition and any
-label-calibrated version are always reported separately.
-
-### 4.1 Bridge A — counterfactual co-dependency
-
-In cell line $c$, simulate loss of $a$ and ask whether $b$ becomes more essential:
-
-$$
-s_A(a,b\mid c) = \tfrac{1}{2}\left[
-(\hat c_{b,c}-\hat c_{b\mid a,c}) +
-(\hat c_{a,c}-\hat c_{a\mid b,c})
-\right].
-$$
-
-The bridge uses single-gene fitness supervision but requires sequential
-perturbation composition. It is an extrapolation until validated against measured
-interactions.
-
-### 4.2 Bridge B — virtual double knockout
-
-Predict joint fitness and subtract an explicit null:
-
-$$
-s_B(a,b\mid c) =
-\psi(\hat c_{a,c},\hat c_{b,c}) - \hat c_{ab,c},
-$$
-
-oriented so that joint-worse-than-null gives a larger SL score. Both additive and
-min/HSA nulls are evaluated. Deep perturbation models often compress synergy, so
-the virtual double-knockout is not presumed to work; simple linear/additive
-ablations are mandatory.
-
-### 4.3 From contextual scores to the Feng2024 score
-
-The official benchmark has no verified cell-line label. A Feng2024 submission
-therefore uses a declared context-agnostic score `q(a,b)`. If it aggregates
-context-conditioned predictions, the aggregation rule and the cell lines used
-must be fixed from training data only and applied identically to every fold. It
-must not be described as a cell-line-specific prediction.
-
-## 5. Hypotheses
-
-### H1 — benchmark competitiveness
-
-> On Feng2024 CV2 and CV3, `q(a,b)` improves per-anchor ranking over the best
-> reproduced eligible SOTA and the dependency-only floor.
-
-### H2 — cross-cell-line generalization
-
-> On cell lines excluded from training and model selection, `s(a,b | c)` improves
-> SL ranking over both direct transfer of `q(a,b)` and the strongest eligible
-> context-free/context-only baselines.
-
-Pooling held-out cell lines cannot rescue a failure on an individual line. Every
-prespecified eligible held-out line is binding. Evidence on a small set of named
-lines supports transfer to those lines; a population-level cross-cell-line claim
-additionally requires a powered analysis that treats cell lines as inferential
-units.
-
-### H3 — pair and context specificity
-
-> The gain remains after removing pan-essential pairs and cannot be reproduced by
-> gene marginals, cell-line identity, lineage, or a context-free pair prior alone.
-
-### H4 — mechanistic correspondence
-
-> The composed interaction score correlates with measured continuous genetic
-> interactions in the same cell-line context.
-
-The K562 arm of Horlbeck 2018 and the small Adamson UPR set can test the mechanism
-in K562. They cannot alone establish multi-cell-line generality. A stronger claim
-additionally requires at least one eligible non-K562 measured-GI context; the
-Horlbeck Jurkat arm is a candidate subject to a data/provenance audit.
-
-## 6. Success Contract
-
-Numeric and statistical rules live in
-[`02-acceptance-criteria.md`](02-acceptance-criteria.md). At contract level:
-
-1. **Feng2024 SOTA comparison:** reproduce SLMGAE and KR4SL, plus the relevant
-   official model ladder, under the unmodified official benchmark splits and
-   metrics. CV2/CV3 are primary; CV1 is diagnostic.
-2. **Held-out-cell-line transfer:** train on multiple cell lines and evaluate on
-   cell lines excluded from fitting, preprocessing decisions, calibration, and
-   threshold selection. Audit task-data and available foundation-checkpoint
-   pretraining provenance separately.
-3. **Pair/context controls:** report non-pan-essential results and ablate the
-   context-free pair prior, gene marginals, and context-only features.
-4. **Mechanistic validation:** compare the interaction residual with measured GI
-   in the matching cell line, with calibration and evaluation pairs disjoint.
-5. **Integrity:** use train-only selection, fixed manifests, five official folds
-   for Feng2024, and uncertainty intervals appropriate to anchors and cell lines.
-
-## 7. Scope and Non-Goals
-
-**Fixed scope:** a general SL partner-discovery model, evaluated first against the
-official Feng2024 benchmark and then for transfer to held-out cancer cell lines.
-K562 is the first implemented perturbation/fitness context and a mechanistic anchor,
-not the target population.
-
-**Non-goals:**
-
-- claiming cross-cell-line generalization from Feng2024 CV2/CV3;
-- calling a K562-mappable Feng subset a K562 SL assay;
-- treating GeneEffect, essentiality, or a benchmark label as measured SL;
-- using the SL graph to construct features;
-- using held-out cell-line labels for preprocessing, checkpoint selection,
-  calibration, or threshold tuning;
-- treating randomly sampled unknown pairs as confirmed non-SL;
-- aligning CRISPRa response data to knockout labels without a modality caveat;
-- making patient or clinical-generalization claims without a separate protocol.
+- Join contexts by DepMap ModelID through a checked-in map and fail loudly on an unmapped
+  context. Never join on informal name — DepMap calls K562 `K-562`.
+- Fit standardizer, calibrator, and thresholds on train-side data only. Per-context
+  z-scoring of $\hat y$ is forbidden: it uses the test context's own distribution and erases
+  the quantity under test.
+- Use one common, label-independent pair universe for both arms. Missing scores stay
+  missing — never imputed to zero, never counted as negatives.
+- Qualify every held-out-context result with the Tx1 Tahoe-100M pretraining exposure.
+  Task-label holdout is not representation-pretraining holdout.
 
 ## 8. Claim Boundaries
 
-- **Benchmark generalization and cell-line generalization are different axes.**
-  Always name which axis was tested.
-- **CV2/CV3 support unseen-gene claims only.** CV1 is a degree-gameable diagnostic.
-- **“Unseen gene” means unseen to SL-pair/graph training unless otherwise
-  qualified.** Report exposure to response data, GeneEffect, pretrained
-  representations, and other auxiliary inputs separately.
-- **A held-out-cell-line claim requires a cell line absent from all fitting and
-  selection decisions.** A frozen K562-to-HCT116 single-gene GeneEffect audit is
-  useful backbone evidence but is not pairwise SL generalization.
-- **Candidate prioritization is not target validation.** Feng2024 labels are
-  curated and Rand negatives are unconfirmed.
-- **An explicit interaction is required.** Never infer SL from two single-gene
-  essentiality scores alone.
-- **A pan-essentiality lift is not an SL result.** The non-pan-essential slice is
-  binding.
-- **A benchmark rank is not a mechanism.** Mechanistic claims require matched,
-  measured GI.
-- **Measured GI is context-specific.** K562 correspondence does not prove
-  non-K562 correspondence.
-- **The virtual double knockout is an extrapolation.** It must beat simple
-  additive/linear ablations before the machinery is credited.
-- **A single fold or test-selected checkpoint is not a result.**
+- Single-gene essentiality is not synthetic lethality; a pan-essentiality lift is not an SL
+  result.
+- **No result is described as an interaction.** A classifier taking $\psi$ as one of
+  twenty-four inputs predicts no joint outcome and defines no $\text{joint}-\psi$ residual;
+  the model-minus-$\psi$ gap is incremental label ranking. An interaction claim needs a joint
+  or measured genetic-interaction quantity, which this contract does not supply.
+- **No significance claim across contexts.** One split with few test contexts admits no valid
+  family-wise inference over the several baselines, arms, and strata. Report per-context
+  effect sizes with intervals and a predeclared minimum detectable effect.
+- Genes are not held out, so no unseen-gene claim is available from this benchmark.
+- The benchmark's label marginals were inspected during construction. It is a
+  development-grade surface, stated as such, not laundered by selection rules.
+- The table retains no same-pair label reversal across contexts, so it cannot establish
+  recovery of context-dependent reversal. Two of its contexts are one screen exploded twice,
+  which makes this caveat more important, not less.
+- Candidate prioritization is not experimental target validation.
 
-## 9. Locked Decisions
+## 9. Current Scientific State
 
-Changing any item below changes the research program.
+- **T1:** the exp05 Bridge-A diagnostic did not recover Horlbeck K562 genetic interactions;
+  closed negative and paused. Under this contract no gate consumes measured GI.
+- **T2:** Tx1-3B-ST did not beat the registered few-shot copy-K562 baseline on the frozen
+  nine-line test; closed negative and paused, and those lines remain binding. §3 and §4 name
+  the three defects this contract corrects — a frozen response module, a head regressing raw
+  GeneEffect, and a loss on the $\mu_g$-dominated axis.
+- **R1:** the residual ladder is implemented and is the registered baseline for
+  $\hat\delta$ and for control C5.
+- **Benchmark:** the rebuild and published split are prerequisite work. No split is frozen
+  and no model has run under this contract.
 
-1. **The task is general SL discovery, not K562-only prediction.** Learn a
-   context-agnostic `q(a,b)` and a cell-line-conditioned `s(a,b | c)`.
-2. **The first comparison is the official Feng2024 benchmark.** Its main
-   9,845-gene pair labels are not K562-specific.
-3. **Gene and cell-line generalization are evaluated separately.** CV2/CV3 test
-   unseen genes; held-out-cell-line splits test unseen contexts.
-4. **K562 is an initial backbone and validation context, not the program scope.**
-5. **The mechanism is an explicit pairwise interaction.** Single-gene GeneEffect
-   remains a floor and source of supervision, never the SL definition.
-6. **Bridge A and Bridge B are compared head-to-head**, with declared
-   non-interaction nulls and simple baselines.
-7. **The SL graph never enters feature construction.** Any label-calibrated head
-   is separated from zero-shot composition.
-8. **The final context-free `q(a,b)` is frozen before contextual fitting.** It is
-   retrained on all admissible calibration data or formed by a prespecified fold
-   ensemble after train-only hyperparameter selection; no test-fold checkpoint is
-   selected. The same artifact is the transfer baseline for every held-out line.
-9. **The Feng2024 SOTA bar is set by reproduced strong methods**, centered on
-   SLMGAE and KR4SL; KG4SL remains a reference rather than the assumed leader.
-10. **Cross-cell-line claims require untouched held-out cell lines** and must beat
-   context-free transfer baselines per line.
-11. **The win must survive non-pan-essential and context-specificity controls.**
-12. **Measured epistasis is the mechanistic anchor.** K562 data support only a
-    K562 mechanistic claim; a multi-cell-line mechanistic claim needs non-K562 evidence.
-13. **Acceptance criteria are frozen before formal evaluation** and cannot move
-    to fit a result.
+Negative backbone results constrain the substrate; they are not SL results. A claim enters
+`results/` only after its frozen evaluation, provenance, and integrity checks complete.
