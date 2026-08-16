@@ -1,0 +1,75 @@
+{
+  "contexts": [
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/tahoe_100m_dmso/summary.json",
+      "artifact_sha256": "8e407943e3b0a40c4246c21c4c91b4adf4ba59101f33a57c3a9e5c3898b73224",
+      "artifact_status": "source_registered",
+      "basal_source": "Tahoe-100M DMSO",
+      "canonical_name": "A549",
+      "cellosaurus_id": "CVCL_0023",
+      "context": "A549",
+      "model_id": "ACH-000681"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/tahoe_100m_dmso/summary.json",
+      "artifact_sha256": "8e407943e3b0a40c4246c21c4c91b4adf4ba59101f33a57c3a9e5c3898b73224",
+      "artifact_status": "source_registered",
+      "basal_source": "Tahoe-100M DMSO",
+      "canonical_name": "HT29",
+      "cellosaurus_id": "CVCL_0320",
+      "context": "HT29",
+      "model_id": "ACH-000552"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/nadig_2025/jurkat_raw_singlecell_01.h5ad",
+      "artifact_sha256": "ffbe15f2c8f7ffcfd7b0ba9e6937d4ebc2d03b0179fa8234648a59bcb82c04a3",
+      "artifact_status": "source_registered",
+      "basal_source": "Perturb-seq non-targeting control",
+      "canonical_name": "JURKAT",
+      "cellosaurus_id": "CVCL_0065",
+      "context": "JURKAT",
+      "model_id": "ACH-000995"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/replogle/K562_gwps_raw_singlecell_01.h5ad",
+      "artifact_sha256": "b697ef7fedcec2972ec334608f86f2a29cb25e70c81b6725195f4cda60a9de2c",
+      "artifact_status": "source_registered",
+      "basal_source": "Perturb-seq non-targeting control",
+      "canonical_name": "K562",
+      "cellosaurus_id": "CVCL_0004",
+      "context": "K562",
+      "model_id": "ACH-000551"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/context_basal_candidates/ovcar8/reconstructed/counts/ovcar8_published_1454_tx1_raw_counts.h5ad",
+      "artifact_sha256": "e13ccce057257154161700e3923eb55a21c2f1ce3b91fdb7468f1afb702432f5",
+      "artifact_status": "tx1_contract_verified",
+      "basal_source": "GSE150864 untreated raw UMI reconstruction",
+      "canonical_name": "OVCAR8",
+      "cellosaurus_id": "CVCL_1629",
+      "context": "OVCAR8",
+      "model_id": "ACH-000696"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/context_basal_candidates/22rv1/EH9602_AR_drug.h5",
+      "artifact_sha256": "447ac180120c8991a2adfec537a29fc798768b1ebe7297b70429395e442622e0",
+      "artifact_status": "source_registered",
+      "basal_source": "scMultiome 22Rv1-DMSO raw counts",
+      "canonical_name": "22RV1",
+      "cellosaurus_id": "CVCL_1045",
+      "context": "22RV1",
+      "model_id": "ACH-000956"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/context_basal_candidates/hap1/GSM4634377_HAP1_filtered_feature_bc_matrix.h5",
+      "artifact_sha256": "6f1171971897f962190f81e807a56c85aa08c69f3211361100f2ec2c57221ffa",
+      "artifact_status": "source_registered",
+      "basal_source": "GSE153108 HAP1 basal raw counts",
+      "canonical_name": "HAP1",
+      "cellosaurus_id": "CVCL_Y019",
+      "context": "HAP1",
+      "model_id": "ACH-002475"
+    }
+  ],
+  "schema_version": "sl-context-basal-registry-v1"
+}
