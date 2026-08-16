@@ -1,7 +1,7 @@
 """Build the cell-line-conditioned SL benchmark from the integrated raw table.
 
 The integrated CSV is the only pair-label input. The tracked split contract
-supplies context identities and executable-data evidence, never extra labels.
+supplies context identities and registered-data evidence, never extra labels.
 """
 
 from __future__ import annotations
@@ -108,40 +108,78 @@ def _sha256(path: Path) -> str:
 
 
 def validate_split_evidence(contract: dict[str, Any]) -> None:
-    """Fail closed if the files declaring contexts executable have drifted."""
-    evidence = contract["executable_evidence"]
+    """Fail closed if the files registering split contexts have drifted."""
+    evidence = contract["registration_evidence"]
     paths: dict[str, Path] = {}
     for name, specification in evidence.items():
         path = Path(specification["path"])
         if not path.is_file():
             raise FileNotFoundError(path)
         if _sha256(path) != specification["sha256"]:
-            raise ValueError(f"Executable-evidence hash mismatch: {path}")
+            raise ValueError(f"Registration-evidence hash mismatch: {path}")
         paths[name] = path
 
     contexts = contract["contexts"]
     for context, specification in contexts.items():
         if _normalise_context(specification["canonical_name"]) != context:
             raise ValueError(f"Label context identity mismatch for {context}")
+        scope = specification.get("evaluation_scope")
+        if scope not in {"sl_and_gene_effect", "sl_only"}:
+            raise ValueError(f"Unsupported evaluation scope for {context}")
+        if scope == "sl_only" and contract["assignments"].get(context) != "test":
+            raise ValueError(f"SL-only context must be assigned to test: {context}")
+        if not str(specification.get("screen_cluster", "")).strip():
+            raise ValueError(f"Missing screen cluster for {context}")
     expected_model_ids = {
         specification["model_id"] for specification in contexts.values()
     }
-    basal = pd.read_csv(paths["basal_manifest"])
-    if basal["model_id"].duplicated().any():
-        raise ValueError("Basal manifest contains duplicate ModelIDs")
-    basal = basal.set_index("model_id")
-    missing_basal = expected_model_ids - set(basal.index)
-    if missing_basal:
-        raise ValueError(f"Split contexts missing basal input: {sorted(missing_basal)}")
+    basal_payload = json.loads(paths["basal_registry"].read_text(encoding="utf-8"))
+    if basal_payload.get("schema_version") != "sl-context-basal-registry-v1":
+        raise ValueError("Unsupported basal registry schema")
+    basal = pd.DataFrame(basal_payload["contexts"], dtype=str)
+    required_basal_columns = {
+        "context",
+        "model_id",
+        "canonical_name",
+        "cellosaurus_id",
+        "basal_source",
+        "artifact_path",
+        "artifact_sha256",
+        "artifact_status",
+    }
+    missing_columns = required_basal_columns - set(basal.columns)
+    if missing_columns:
+        raise ValueError(f"Basal registry missing columns: {sorted(missing_columns)}")
+    if basal["context"].duplicated().any() or basal["model_id"].duplicated().any():
+        raise ValueError("Basal registry contains duplicate contexts or ModelIDs")
+    registered_contexts = set(basal["context"])
+    if registered_contexts != set(contexts):
+        raise ValueError("Basal registry contexts must exactly match split contexts")
+    basal = basal.set_index("context")
+    artifact_hashes: dict[Path, str] = {}
     for context, specification in contexts.items():
-        model_id = specification["model_id"]
-        if str(basal.loc[model_id, "basal_source"]) != specification["basal_source"]:
-            raise ValueError(f"Basal source mismatch for {context}")
-        if (
-            str(basal.loc[model_id, "cellosaurus_id"])
-            != specification["cellosaurus_id"]
-        ):
-            raise ValueError(f"Cellosaurus identity mismatch for {context}")
+        row = basal.loc[context]
+        for field in ("model_id", "canonical_name", "cellosaurus_id", "basal_source"):
+            if str(row[field]) != specification[field]:
+                raise ValueError(f"Basal registry {field} mismatch for {context}")
+        artifact_path = Path(str(row["artifact_path"]))
+        if not artifact_path.is_file():
+            raise FileNotFoundError(artifact_path)
+        if artifact_path not in artifact_hashes:
+            artifact_hashes[artifact_path] = _sha256(artifact_path)
+        actual_hash = artifact_hashes[artifact_path]
+        if actual_hash != str(row["artifact_sha256"]):
+            raise ValueError(f"Basal artifact hash mismatch for {context}")
+        artifact_status = str(row["artifact_status"]).strip()
+        if artifact_status not in {"source_registered", "tx1_contract_verified"}:
+            raise ValueError(f"Unsupported basal artifact status for {context}")
+        if artifact_status == "tx1_contract_verified":
+            provenance_path = Path(str(row.get("provenance_path", "")))
+            provenance_hash = str(row.get("provenance_sha256", ""))
+            if not provenance_path.is_file():
+                raise FileNotFoundError(provenance_path)
+            if _sha256(provenance_path) != provenance_hash:
+                raise ValueError(f"Basal provenance hash mismatch for {context}")
 
     model_metadata = pd.read_csv(paths["model_metadata"]).set_index("ModelID")
     missing_metadata = expected_model_ids - set(model_metadata.index)
@@ -160,10 +198,25 @@ def validate_split_evidence(contract: dict[str, Any]) -> None:
     gene_effect_ids = set(
         pd.read_csv(paths["gene_effect"], usecols=[0]).iloc[:, 0].astype(str)
     )
-    missing_gene_effect = expected_model_ids - gene_effect_ids
+    required_gene_effect = {
+        specification["model_id"]
+        for specification in contexts.values()
+        if specification["evaluation_scope"] == "sl_and_gene_effect"
+    }
+    missing_gene_effect = required_gene_effect - gene_effect_ids
     if missing_gene_effect:
         raise ValueError(
             f"Split contexts missing GeneEffect rows: {sorted(missing_gene_effect)}"
+        )
+    unexpected_gene_effect = {
+        specification["model_id"]
+        for specification in contexts.values()
+        if specification["evaluation_scope"] == "sl_only"
+    } & gene_effect_ids
+    if unexpected_gene_effect:
+        raise ValueError(
+            "SL-only contexts unexpectedly have GeneEffect rows: "
+            f"{sorted(unexpected_gene_effect)}"
         )
 
 
@@ -535,37 +588,21 @@ def apply_context_split(
     benchmark: pd.DataFrame, contract: dict[str, Any]
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Assign contexts, then remove complete source rows crossing split sides."""
-    if contract.get("schema_version") != "sl-context-screen-v2-split-v1":
+    if contract.get("schema_version") != "sl-context-screen-v2-split-v4":
         raise ValueError("Unsupported context split schema")
 
-    eligibility = contract["eligibility"]
-    min_positive = int(eligibility["minimum_positive_rows"])
-    min_negative = int(eligibility["minimum_negative_rows"])
+    post_filter_min_class_count = int(contract["post_filter_min_class_count"])
+    if post_filter_min_class_count < 1:
+        raise ValueError("Post-filter minimum class count must be at least 1")
     context_specs = contract["contexts"]
     pinned_train = set(contract["pinned_train_contexts"])
-    allocation = contract["allocation_counts"]
 
-    label_counts = benchmark.groupby("context")["sl_label"].agg(
-        n_positive="sum", n_pairs="size"
-    )
-    label_counts["n_negative"] = label_counts["n_pairs"] - label_counts["n_positive"]
-    eligible = set(
-        label_counts.index[
-            label_counts["n_positive"].ge(min_positive)
-            & label_counts["n_negative"].ge(min_negative)
-        ]
-    )
     configured = set(context_specs)
     missing = configured - set(benchmark["context"])
     if missing:
         raise ValueError(f"Split contexts absent from benchmark: {sorted(missing)}")
-    ineligible = configured - eligible
-    if ineligible:
-        raise ValueError(
-            f"Configured split contexts are ineligible: {sorted(ineligible)}"
-        )
     if not pinned_train <= configured:
-        raise ValueError("Pinned train contexts must be configured and executable")
+        raise ValueError("Pinned train contexts must be configured and registered")
     response_anchors = {
         context
         for context, specification in context_specs.items()
@@ -577,28 +614,28 @@ def apply_context_split(
     model_ids = {
         context: str(spec["model_id"]) for context, spec in context_specs.items()
     }
+    evaluation_scopes = {
+        context: str(spec["evaluation_scope"])
+        for context, spec in context_specs.items()
+    }
+    screen_clusters = {
+        context: str(spec["screen_cluster"]) for context, spec in context_specs.items()
+    }
     if len(set(model_ids.values())) != len(model_ids):
         raise ValueError("Split context ModelIDs must be unique")
-    remaining = sorted(configured - pinned_train, key=model_ids.__getitem__)
-    n_test = int(allocation["test"])
-    n_validation = int(allocation["validation"])
-    if n_test < 1 or n_validation < 1 or n_test + n_validation > len(remaining):
-        raise ValueError("Split allocation cannot produce train, validation, and test")
-
-    assignments = {context: "train" for context in pinned_train}
-    assignments.update({context: "test" for context in remaining[:n_test]})
-    assignments.update(
-        {context: "validation" for context in remaining[n_test : n_test + n_validation]}
-    )
-    assignments.update(
-        {context: "train" for context in remaining[n_test + n_validation :]}
-    )
-    if assignments != contract["assignments"]:
-        raise ValueError("Published assignments do not match the deterministic rule")
+    assignments = contract["assignments"]
+    if set(assignments) != configured:
+        raise ValueError("Published assignments must exactly match configured contexts")
+    if set(assignments.values()) != {"train", "validation", "test"}:
+        raise ValueError("Split must contain train, validation, and test contexts")
+    if any(assignments[context] != "train" for context in pinned_train):
+        raise ValueError("Pinned train contexts must be assigned to train")
 
     selected = benchmark.loc[benchmark["context"].isin(configured)].copy()
     selected["model_id"] = selected["context"].map(model_ids)
     selected["split"] = selected["context"].map(assignments)
+    selected["evaluation_scope"] = selected["context"].map(evaluation_scopes)
+    selected["screen_cluster"] = selected["context"].map(screen_clusters)
     split_counts = selected.groupby("source_row_id")["split"].nunique()
     crossing_source_rows = set(split_counts.index[split_counts > 1])
     dropped = selected.loc[selected["source_row_id"].isin(crossing_source_rows)]
@@ -615,20 +652,27 @@ def apply_context_split(
     )
     post_counts["n_negative"] = post_counts["n_pairs"] - post_counts["n_positive"]
     post_ineligible = post_counts.index[
-        post_counts["n_positive"].lt(min_positive)
-        | post_counts["n_negative"].lt(min_negative)
+        post_counts["n_positive"].lt(post_filter_min_class_count)
+        | post_counts["n_negative"].lt(post_filter_min_class_count)
     ]
     if len(post_ineligible):
         raise ValueError(
-            "Row-level leakage removal made contexts ineligible: "
+            "Row-level leakage removal erased a context or class: "
             f"{sorted(post_ineligible)}"
         )
 
     columns = list(selected.columns)
     columns.remove("model_id")
     columns.remove("split")
+    columns.remove("evaluation_scope")
+    columns.remove("screen_cluster")
     context_index = columns.index("context") + 1
-    columns[context_index:context_index] = ["model_id", "split"]
+    columns[context_index:context_index] = [
+        "model_id",
+        "split",
+        "evaluation_scope",
+        "screen_cluster",
+    ]
     selected = (
         selected[columns]
         .sort_values(
@@ -653,6 +697,8 @@ def apply_context_split(
         context: {
             "model_id": model_ids[context],
             "split": assignments[context],
+            "evaluation_scope": evaluation_scopes[context],
+            "screen_cluster": screen_clusters[context],
             "positive": int(frame["sl_label"].sum()),
             "negative": int((frame["sl_label"] == 0).sum()),
             "total": int(len(frame)),
@@ -660,7 +706,6 @@ def apply_context_split(
         for context, frame in selected.groupby("context", sort=True)
     }
     stats = {
-        "assignment_order": remaining,
         "assignments": assignments,
         "cross_split_source_rows_dropped": int(len(crossing_source_rows)),
         "rows_dropped": int(len(dropped)),
@@ -700,6 +745,10 @@ def _manifest(
             STATISTICS_FILENAME: _sha256(output_dir / STATISTICS_FILENAME),
         },
         "provenance": {
+            "builder": {
+                "path": "scripts/build_sl_context_benchmark.py",
+                "sha256": _sha256(Path("scripts/build_sl_context_benchmark.py")),
+            },
             "source_row_id": (
                 "global raw-CSV row number; links contexts exploded from one "
                 "aggregate row. It cannot link separate rows from the same "

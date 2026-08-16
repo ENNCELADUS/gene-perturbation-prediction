@@ -48,7 +48,9 @@
       "canonical_name": "OVCAR8",
       "cellosaurus_id": "CVCL_1629",
       "context": "OVCAR8",
-      "model_id": "ACH-000696"
+      "model_id": "ACH-000696",
+      "provenance_path": "data/sl_dependency_v0/raw/context_basal_candidates/ovcar8/reconstructed/counts/OVCAR8_RECONSTRUCTION_PROVENANCE.json",
+      "provenance_sha256": "6607c6daaa28803094090dbe8c171c7f0c9bb7db3d1647a7a4b7a42be8b73987"
     },
     {
       "artifact_path": "data/sl_dependency_v0/raw/context_basal_candidates/22rv1/EH9602_AR_drug.h5",
@@ -69,6 +71,30 @@
       "cellosaurus_id": "CVCL_Y019",
       "context": "HAP1",
       "model_id": "ACH-002475"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/context_basal_candidates/pc9/formal/pc9_untreated_tx1_raw_counts.h5ad",
+      "artifact_sha256": "424975a86468cd55bf66e6eea7db2fb938766c06caca018daff0f1533b47b946",
+      "artifact_status": "tx1_contract_verified",
+      "basal_source": "GSE162045 untreated 0-hour raw counts",
+      "canonical_name": "PC9",
+      "cellosaurus_id": "CVCL_B260",
+      "context": "PC9",
+      "model_id": "ACH-000779",
+      "provenance_path": "data/sl_dependency_v0/raw/context_basal_candidates/pc9/formal/pc9_formal_provenance.json",
+      "provenance_sha256": "7b451cadc6067942c8b006dd2d0ca14a094b667d88cece31974294b79baaca7a"
+    },
+    {
+      "artifact_path": "data/sl_dependency_v0/raw/context_basal_candidates/hela/formal/hela_720_tx1_raw_counts.h5ad",
+      "artifact_sha256": "50231980683227001289e4074cdea94d69b7ea7815109badbda69929436b3b49",
+      "artifact_status": "tx1_contract_verified",
+      "basal_source": "GSE129447 HeLa-CCL2 processed raw integer counts",
+      "canonical_name": "HELA",
+      "cellosaurus_id": "CVCL_0030",
+      "context": "HELA",
+      "model_id": "ACH-001086",
+      "provenance_path": "data/sl_dependency_v0/raw/context_basal_candidates/hela/formal/hela_formal_provenance.json",
+      "provenance_sha256": "544b0d030d4804bb90991d4f49b39696e089c70f357de1528e5b16e51c749629"
     }
   ],
   "schema_version": "sl-context-basal-registry-v1"

@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-08-15):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` now has a row-level split: K562/JURKAT train, A549 validation and HT29 test; 86 cross-side source groups were removed in full. The raw-filter audit remains incomplete, and no model has run. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
+> **Status (2026-08-16):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
 
 The central question of the active direction:
 
@@ -32,7 +32,7 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 ## *Latest News* 🔥
 
-- **[2026/08]** **Context split built.** K562/JURKAT are train, A549 validation and HT29 test; cross-side source rows are removed. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
+- **[2026/08]** **Nine-context split built.** K562/JURKAT/OVCAR8/HAP1/HT29 are train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only, with cross-side source rows and pairs isolated. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
 - **[2026/07]** **T2 registered primary gate completed — negative.** On the frozen 28 train / 5 validation / 9 test GeneEffect split and 587-gene slice, Tx1-3B-ST failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). HVG-ST was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. T2 is paused for redesign and the remaining baseline ladder is closeout work. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).
 - **[2026/07]** **K562 Bridge-A-vs-Horlbeck mechanism kill-test completed — negative.** The frozen exp05 backbone composed into a symmetrized counterfactual co-dependency score does not recover measured Horlbeck K562 genetic interactions over the 83,028 exp05-covered pairs (|Spearman| < 0.01; AUROC(s_A → strong-SL) ≈ 0.52, below the single-gene floor; no dose-response), across both pooler reference conventions. Per the kill-test rule the composition mechanism is **paused for redesign and not extended across cell lines**. [`Result`](docs/results/exp05-bridge-a-horlbeck-kill-test.md).
 - **[2026/07]** Horlbeck 2018 K562 fitness-GI map acquired and coverage-audited (448 genes, 100,128 pairs; 83,028 exp05-covered), and an execution plan set: two parallel development tracks — a **K562 Bridge-A-vs-Horlbeck mechanism kill-test** on the frozen exp05 backbone, and **DepMap cross-cell-line GeneEffect** transfer (single-gene backbone, not cross-cell-line SL). Neither opens held-out-cell-line SL labels.

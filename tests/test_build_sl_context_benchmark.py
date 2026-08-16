@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
 import pandas as pd
 import pytest
@@ -33,6 +34,7 @@ def test_generated_manifest_does_not_encode_claim_policy(monkeypatch, tmp_path) 
 
     assert "formal" not in manifest["split"]
     assert "claim_status" not in manifest["split"]
+    assert manifest["provenance"]["builder"]["sha256"] == "0" * 64
 
 
 def _row(**updates: object) -> dict[str, object]:
@@ -194,15 +196,29 @@ def test_source_row_id_is_the_global_raw_row_and_survives_explosion() -> None:
 
 def _split_contract() -> dict[str, object]:
     return {
-        "schema_version": "sl-context-screen-v2-split-v1",
-        "eligibility": {"minimum_positive_rows": 1, "minimum_negative_rows": 1},
+        "schema_version": "sl-context-screen-v2-split-v4",
+        "post_filter_min_class_count": 1,
         "contexts": {
-            "TRAIN": {"model_id": "ACH-000003", "response_anchor": True},
-            "VALID": {"model_id": "ACH-000002", "response_anchor": False},
-            "TEST": {"model_id": "ACH-000001", "response_anchor": False},
+            "TRAIN": {
+                "model_id": "ACH-000003",
+                "response_anchor": True,
+                "evaluation_scope": "sl_and_gene_effect",
+                "screen_cluster": "TRAIN",
+            },
+            "VALID": {
+                "model_id": "ACH-000002",
+                "response_anchor": False,
+                "evaluation_scope": "sl_and_gene_effect",
+                "screen_cluster": "VALID",
+            },
+            "TEST": {
+                "model_id": "ACH-000001",
+                "response_anchor": False,
+                "evaluation_scope": "sl_and_gene_effect",
+                "screen_cluster": "TEST",
+            },
         },
         "pinned_train_contexts": ["TRAIN"],
-        "allocation_counts": {"test": 1, "validation": 1},
         "assignments": {"TRAIN": "train", "TEST": "test", "VALID": "validation"},
     }
 
@@ -225,17 +241,27 @@ def test_context_split_drops_source_rows_crossing_assignment_sides() -> None:
 
     assert set(split["source_row_id"]) == {2, 3, 4, 5, 6, 7}
     assert split.groupby("source_row_id")["split"].nunique().max() == 1
+    assert set(split["evaluation_scope"]) == {"sl_and_gene_effect"}
+    assert set(split["screen_cluster"]) == {"TRAIN", "VALID", "TEST"}
     assert stats["cross_split_source_rows_dropped"] == 1
     assert stats["rows_dropped"] == 2
     assert stats["pairs_crossing_splits_after_filter"] == 0
 
 
-def test_context_split_rejects_assignment_not_implied_by_model_id_order() -> None:
+def test_context_split_rejects_nonpositive_post_filter_minimum() -> None:
+    contract = _split_contract()
+    contract["post_filter_min_class_count"] = 0
+
+    with pytest.raises(ValueError, match="must be at least 1"):
+        apply_context_split(pd.DataFrame(), contract)
+
+
+def test_context_split_rejects_assignment_without_all_three_sides() -> None:
     contract = _split_contract()
     contract["assignments"] = {
         "TRAIN": "train",
-        "TEST": "validation",
-        "VALID": "test",
+        "TEST": "train",
+        "VALID": "validation",
     }
     rows = pd.DataFrame(
         [
@@ -248,7 +274,7 @@ def test_context_split_rejects_assignment_not_implied_by_model_id_order() -> Non
         ]
     )
 
-    with pytest.raises(ValueError, match="deterministic rule"):
+    with pytest.raises(ValueError, match="train, validation, and test"):
         apply_context_split(rows, contract)
 
     anchor_mismatch = _split_contract()
@@ -269,7 +295,24 @@ def test_context_split_rejects_a_context_removed_in_full() -> None:
         ]
     )
 
-    with pytest.raises(ValueError, match="made contexts ineligible"):
+    with pytest.raises(ValueError, match="erased a context or class"):
+        apply_context_split(rows, _split_contract())
+
+
+def test_context_split_rejects_a_class_removed_in_full() -> None:
+    rows = pd.DataFrame(
+        [
+            _atomic_row("A|B", "TRAIN", 1, 0.01, source_row_id=1),
+            _atomic_row("C|D", "TEST", 1, 0.01, source_row_id=1),
+            _atomic_row("E|F", "TRAIN", 0, 0.01, source_row_id=2),
+            _atomic_row("G|H", "VALID", 1, 0.01, source_row_id=3),
+            _atomic_row("I|J", "VALID", 0, 0.01, source_row_id=4),
+            _atomic_row("K|L", "TEST", 1, 0.01, source_row_id=5),
+            _atomic_row("M|N", "TEST", 0, 0.01, source_row_id=6),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="erased a context or class"):
         apply_context_split(rows, _split_contract())
 
 
@@ -290,25 +333,40 @@ def test_context_split_rejects_pairs_crossing_on_distinct_source_rows() -> None:
 
 
 def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
-    basal_path = tmp_path / "basal.csv"
+    basal_path = tmp_path / "basal.json"
+    artifact_path = tmp_path / "basal.h5ad"
     gene_effect_path = tmp_path / "gene_effect.csv"
     model_path = tmp_path / "model.csv"
-    pd.DataFrame(
-        {
-            "model_id": ["ACH-1"],
-            "basal_source": ["controls"],
-            "cellosaurus_id": ["CVCL_0001"],
-        }
-    ).to_csv(basal_path, index=False)
+    artifact_path.write_bytes(b"basal")
+
+    def digest(path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    basal_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "sl-context-basal-registry-v1",
+                "contexts": [
+                    {
+                        "context": "CELL",
+                        "model_id": "ACH-1",
+                        "canonical_name": "CELL",
+                        "basal_source": "controls",
+                        "cellosaurus_id": "CVCL_0001",
+                        "artifact_path": str(artifact_path),
+                        "artifact_sha256": digest(artifact_path),
+                        "artifact_status": "source_registered",
+                    }
+                ],
+            }
+        )
+    )
     pd.DataFrame({"ModelID": ["ACH-1"], "GENE": [-0.5]}).to_csv(
         gene_effect_path, index=False
     )
     pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["CELL"]}).to_csv(
         model_path, index=False
     )
-
-    def digest(path) -> str:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
 
     contract = {
         "contexts": {
@@ -317,10 +375,13 @@ def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
                 "basal_source": "controls",
                 "cellosaurus_id": "CVCL_0001",
                 "canonical_name": "CELL",
+                "evaluation_scope": "sl_and_gene_effect",
+                "screen_cluster": "CELL",
             }
         },
-        "executable_evidence": {
-            "basal_manifest": {"path": str(basal_path), "sha256": digest(basal_path)},
+        "assignments": {"CELL": "train"},
+        "registration_evidence": {
+            "basal_registry": {"path": str(basal_path), "sha256": digest(basal_path)},
             "gene_effect": {
                 "path": str(gene_effect_path),
                 "sha256": digest(gene_effect_path),
@@ -337,18 +398,118 @@ def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
     with pytest.raises(ValueError, match="Label context identity mismatch"):
         validate_split_evidence(contract)
     contract["contexts"] = {"CELL": contract["contexts"].pop("OTHER")}
+    contract["assignments"] = {"CELL": "train"}
     pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["WRONG"]}).to_csv(
         model_path, index=False
     )
-    contract["executable_evidence"]["model_metadata"]["sha256"] = digest(model_path)
+    contract["registration_evidence"]["model_metadata"]["sha256"] = digest(model_path)
     with pytest.raises(ValueError, match="DepMap identity mismatch"):
         validate_split_evidence(contract)
     pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["CELL"]}).to_csv(
         model_path, index=False
     )
-    contract["executable_evidence"]["model_metadata"]["sha256"] = digest(model_path)
-    contract["executable_evidence"]["gene_effect"]["sha256"] = "0" * 64
+    contract["registration_evidence"]["model_metadata"]["sha256"] = digest(model_path)
+    artifact_path.write_bytes(b"drifted")
+    with pytest.raises(ValueError, match="Basal artifact hash mismatch"):
+        validate_split_evidence(contract)
+    artifact_path.write_bytes(b"basal")
+    basal_payload = json.loads(basal_path.read_text())
+    basal_payload["contexts"][0]["artifact_status"] = "typo"
+    basal_path.write_text(json.dumps(basal_payload))
+    contract["registration_evidence"]["basal_registry"]["sha256"] = digest(basal_path)
+    with pytest.raises(ValueError, match="Unsupported basal artifact status"):
+        validate_split_evidence(contract)
+    basal_payload["contexts"][0]["artifact_status"] = "source_registered"
+    basal_path.write_text(json.dumps(basal_payload))
+    contract["registration_evidence"]["basal_registry"]["sha256"] = digest(basal_path)
+    contract["registration_evidence"]["gene_effect"]["sha256"] = "0" * 64
     with pytest.raises(ValueError, match="hash mismatch"):
+        validate_split_evidence(contract)
+
+
+def test_split_evidence_allows_gene_effect_absence_only_for_sl_only_test(
+    tmp_path,
+) -> None:
+    basal_path = tmp_path / "basal.json"
+    artifact_path = tmp_path / "basal.h5ad"
+    provenance_path = tmp_path / "provenance.json"
+    gene_effect_path = tmp_path / "gene_effect.csv"
+    model_path = tmp_path / "model.csv"
+    artifact_path.write_bytes(b"basal")
+    provenance_path.write_text("{}")
+
+    def digest(path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    basal_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "sl-context-basal-registry-v1",
+                "contexts": [
+                    {
+                        "context": "CELL",
+                        "model_id": "ACH-1",
+                        "canonical_name": "CELL",
+                        "basal_source": "controls",
+                        "cellosaurus_id": "CVCL_0001",
+                        "artifact_path": str(artifact_path),
+                        "artifact_sha256": digest(artifact_path),
+                        "artifact_status": "tx1_contract_verified",
+                        "provenance_path": str(provenance_path),
+                        "provenance_sha256": digest(provenance_path),
+                    }
+                ],
+            }
+        )
+    )
+    pd.DataFrame({"ModelID": [], "GENE": []}).to_csv(gene_effect_path, index=False)
+    pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["CELL"]}).to_csv(
+        model_path, index=False
+    )
+    contract = {
+        "contexts": {
+            "CELL": {
+                "model_id": "ACH-1",
+                "canonical_name": "CELL",
+                "basal_source": "controls",
+                "cellosaurus_id": "CVCL_0001",
+                "evaluation_scope": "sl_only",
+                "screen_cluster": "CELL",
+            }
+        },
+        "assignments": {"CELL": "test"},
+        "registration_evidence": {
+            "basal_registry": {"path": str(basal_path), "sha256": digest(basal_path)},
+            "gene_effect": {
+                "path": str(gene_effect_path),
+                "sha256": digest(gene_effect_path),
+            },
+            "model_metadata": {
+                "path": str(model_path),
+                "sha256": digest(model_path),
+            },
+        },
+    }
+
+    validate_split_evidence(contract)
+    provenance_path.write_text('{"drifted": true}')
+    with pytest.raises(ValueError, match="Basal provenance hash mismatch"):
+        validate_split_evidence(contract)
+    provenance_path.write_text("{}")
+    pd.DataFrame({"ModelID": ["ACH-1"], "GENE": [-0.5]}).to_csv(
+        gene_effect_path, index=False
+    )
+    contract["registration_evidence"]["gene_effect"]["sha256"] = digest(
+        gene_effect_path
+    )
+    with pytest.raises(ValueError, match="unexpectedly have GeneEffect rows"):
+        validate_split_evidence(contract)
+    pd.DataFrame({"ModelID": [], "GENE": []}).to_csv(gene_effect_path, index=False)
+    contract["registration_evidence"]["gene_effect"]["sha256"] = digest(
+        gene_effect_path
+    )
+    contract["assignments"]["CELL"] = "train"
+    with pytest.raises(ValueError, match="SL-only context must be assigned to test"):
         validate_split_evidence(contract)
 
 

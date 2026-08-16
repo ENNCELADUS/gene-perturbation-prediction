@@ -1,6 +1,6 @@
 # Experiment Protocol: Context-Conditioned SL Benchmark
 
-**Status:** `context_screen_v2` and its row-level split were built 2026-08-15; no model has
+**Status:** `context_screen_v2` and its row-level split were built 2026-08-16; no model has
 run. The filter audit remains incomplete. Supersedes the withdrawn STATE-to-SLIdR protocol.
 **Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
 executable form and may not relax it.
@@ -17,8 +17,8 @@ basal single cells + perturbation gene
   -> pair score in a held-out context    (trained SL head)
 ```
 
-Two questions, answered separately. Does the backbone predict held-out-context GeneEffect
-residuals? And does a pair score built from predicted profiles rank experimental SL hits in
+Two questions, answered separately. Where labels exist, does the backbone predict held-out-
+context GeneEffect residuals? And does a pair score built from predicted profiles rank experimental SL hits in
 a context the model never saw? GeneEffect is a single-gene quantity; only the second stage
 is scored against pair labels.
 
@@ -66,24 +66,23 @@ is a hard error.
 
 Membership is decided once, by this rule:
 
-- a context is **eligible** with at least 50 positives and 50 negatives;
-- a context is **executable** if it has DepMap GeneEffect and basal single-cell input;
-- **only executable contexts enter the benchmark at all** — train, validation and test alike.
-  Arm A needs a predicted profile for every context it touches, so an eligible-but-
-  non-executable context is unusable on any side, not just on test;
+- **eligibility** requires the pre-split 10/10 gate, not 50/50; after leakage both classes must remain, and small counts are power warnings;
+- a context is **registered** if it has hash-pinned basal metadata; train and validation
+  additionally require GeneEffect, while an explicit SL-only registration is test-only;
+- **only registered contexts enter the benchmark at all**. Tx1 verification is a separate pre-run gate; SL-only test contexts support pair labels but not GeneEffect metrics;
 - response anchors present in the label table are **pinned to train**;
 - after context assignment, every `source_row_id` spanning multiple sides is removed in full
   from every side. Same-side shared rows remain; contexts are not transitively grouped.
 
-The tracked manifest fixes one test and one validation context. Sorting non-anchor executable
-contexts by ModelID assigns HT29 (`ACH-000552`) to test and A549 (`ACH-000681`) to validation;
-K562 and JURKAT are train. Removing 86 crossing source groups deletes 172 rows. Retained
-positive/negative counts are train 1,763/19,392, validation 392/1,618 and test 234/7,327;
-no source row or canonical pair crosses sides afterward.
+The tracked manifest explicitly assigns K562, JURKAT, OVCAR8, HAP1 and HT29 to train;
+A549 to validation; and 22RV1, PC9 and HELA to test. Removing 128 crossing source groups
+deletes 359 rows. Retained positive/negative counts are train 59,081/27,379, validation
+392/1,581 and test 342/5,308; no source row or canonical pair crosses sides afterward.
 
-HELA has neither a 26Q1 GeneEffect target nor compatible basal input. RPE1 and HAP1
-DepMap-CRISPR membership must be **verified, not assumed**. HAP1's v1 counts (56,994
-positives against 20 negatives) fail the eligibility rule.
+PC9 and HELA are Tx1-contract-verified SL-only test contexts: their ModelIDs are absent
+from pinned 26Q1 GeneEffect, so no residual metric is reported for them. HAP1 (20 negatives)
+and 22RV1 (38 positives) are low-power. RPE1 is excluded because parental single cells do
+not exactly match a DepMap subclone and the exact SS48 model has only bulk expression.
 
 Publish per-context statistics beside the split: class counts, prior, distinct genes
 appearing in positives, and the top gene's share of positives — the last is where the A549
@@ -93,23 +92,23 @@ degeneracy becomes visible to anyone using the benchmark.
 
 ```text
 configs/benchmarks/context_screen_v2_split.json    TRACKED — the canonical split
+configs/benchmarks/context_screen_v2_basal_registry.json  TRACKED basal artifacts
 derived/context_screen_v2/sl_context_pairs.csv     with source_row_id and split
-derived/context_screen_v2/filter_audit.csv         per-filter, per-context drops
-derived/context_screen_v2/context_statistics.csv
+derived/context_screen_v2/filter_audit.csv + context_statistics.csv
 derived/context_screen_v2/manifest.json            source and output hashes
 ```
 
-Everything under `derived/` is gitignored; only the split manifest is tracked. Write
-`data/sl-context-screen-v2.md` as the card and mark the v1 card historical.
+Everything under `derived/` is gitignored; the split and basal registry are tracked. Write
+`data/sl-context-screen.md` as the single card for this dataset.
 
 ## 3. Data Contract
 
 ### 3.1 Basal input
 
 Tahoe lines use their Tahoe-100M DMSO cells. K562, HCT116, Jurkat and HepG2 use
-non-targeting Perturb-seq control cells. The source inventory is
-`../results/phase_a_tx1_20260724/cell_line_manifest.csv` (42 lines); the v2 split supersedes
-its `role` column but not its identity, basal-source, or coverage fields.
+non-targeting Perturb-seq control cells. Split-context identity, source artifact path and
+SHA-256 are frozen in `../configs/benchmarks/context_screen_v2_basal_registry.json`;
+registry membership does not by itself certify a Tx1-ready matrix.
 
 ### 3.2 Perturb-seq supervision
 
@@ -139,9 +138,9 @@ assignment remains `silver_inferred`.
 
 ### 3.5 Future expansion
 
-The fixed v2 split uses the four currently executable label contexts. Adding another context
-changes the benchmark and requires a new version, not an in-place v2 edit. RPE1 is the
-strongest future candidate if DepMap membership and basal compatibility are verified.
+The fixed v2 split uses nine registered label contexts. Because no model has run, this
+registry expansion replaces v2 in place; after the first model run, any membership change
+requires a new benchmark version. RPE1 remains excluded for exact-model basal mismatch.
 
 ## 4. Backbone Training
 
@@ -182,7 +181,7 @@ on the mixture. There is no non-out-of-fold fallback for Arm A.
 
 Stage 3 minimizes BCE over train-side SL contexts, **context-balanced** so each contributes
 equally, with positives and negatives reweighted inside each context. Without this, one
-context dominates: RPE1 alone is 90,520 of 127,323 v1 eligible rows.
+context dominates: HAP1 alone is 57,013 of 86,460 current train rows and has only 20 negatives.
 
 Feature construction follows `01` §3 exactly — 24 dimensions, all swap-invariant, with
 $\psi_{\text{add}}$ excluded because it duplicates the `yhat_ac + yhat_bc` feature and would
@@ -205,12 +204,13 @@ response metrics before and after Stage 2 training, per §4.
 **Stage 2** uses two surfaces. A dependency split over `C_dep`, disjoint from the SL
 contexts and holding out at least eight, carries the per-gene across-context Spearman on the
 residual over $G_{\text{var}}$ — the axis the redesign is justified by, and the one R1's
-ladder baselines. The SL test contexts carry per-context cross-gene Spearman only; it is
+ladder baselines. GeneEffect-covered SL test contexts carry per-context cross-gene Spearman; it is
 reportable and cannot support a context claim.
 
 **Stage 3** reports AUPR per test context and the macro, both as $\text{AUPR}-\text{prior}$.
 AUROC is secondary. Coverage and post-filter class counts precede every performance number.
 Stratify each AUPR by whether both, one, or neither endpoint appeared in SL training.
+The de-duplicated diagnostic macro weights observable label clusters: PC9/HELA share one cluster but retain separate scores.
 Uncertainty uses a two-way dyadic bootstrap over both endpoints, 2,000 replicates, per
 context; a one-way anchor-gene bootstrap is invalid because pairs have two endpoints.
 

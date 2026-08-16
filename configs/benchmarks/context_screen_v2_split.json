@@ -1,52 +1,102 @@
 {
-  "allocation_counts": {
-    "test": 1,
-    "validation": 1
-  },
   "assignments": {
+    "22RV1": "test",
     "A549": "validation",
-    "HT29": "test",
+    "HAP1": "train",
+    "HELA": "test",
+    "HT29": "train",
     "JURKAT": "train",
-    "K562": "train"
+    "K562": "train",
+    "OVCAR8": "train",
+    "PC9": "test"
   },
   "contexts": {
+    "22RV1": {
+      "basal_source": "scMultiome 22Rv1-DMSO raw counts",
+      "canonical_name": "22RV1",
+      "cellosaurus_id": "CVCL_1045",
+      "evaluation_scope": "sl_and_gene_effect",
+      "model_id": "ACH-000956",
+      "response_anchor": false,
+      "screen_cluster": "22RV1"
+    },
     "A549": {
       "basal_source": "Tahoe-100M DMSO",
       "canonical_name": "A549",
       "cellosaurus_id": "CVCL_0023",
+      "evaluation_scope": "sl_and_gene_effect",
       "model_id": "ACH-000681",
-      "response_anchor": false
+      "response_anchor": false,
+      "screen_cluster": "A549"
+    },
+    "HAP1": {
+      "basal_source": "GSE153108 HAP1 basal raw counts",
+      "canonical_name": "HAP1",
+      "cellosaurus_id": "CVCL_Y019",
+      "evaluation_scope": "sl_and_gene_effect",
+      "model_id": "ACH-002475",
+      "response_anchor": false,
+      "screen_cluster": "HAP1"
+    },
+    "HELA": {
+      "basal_source": "GSE129447 HeLa-CCL2 processed raw integer counts",
+      "canonical_name": "HELA",
+      "cellosaurus_id": "CVCL_0030",
+      "evaluation_scope": "sl_only",
+      "model_id": "ACH-001086",
+      "response_anchor": false,
+      "screen_cluster": "HELA_PC9_AGGREGATE"
     },
     "HT29": {
       "basal_source": "Tahoe-100M DMSO",
       "canonical_name": "HT29",
       "cellosaurus_id": "CVCL_0320",
+      "evaluation_scope": "sl_and_gene_effect",
       "model_id": "ACH-000552",
-      "response_anchor": false
+      "response_anchor": false,
+      "screen_cluster": "HT29"
     },
     "JURKAT": {
       "basal_source": "Perturb-seq non-targeting control",
       "canonical_name": "JURKAT",
       "cellosaurus_id": "CVCL_0065",
+      "evaluation_scope": "sl_and_gene_effect",
       "model_id": "ACH-000995",
-      "response_anchor": true
+      "response_anchor": true,
+      "screen_cluster": "JURKAT_K562_AGGREGATE"
     },
     "K562": {
       "basal_source": "Perturb-seq non-targeting control",
       "canonical_name": "K562",
       "cellosaurus_id": "CVCL_0004",
+      "evaluation_scope": "sl_and_gene_effect",
       "model_id": "ACH-000551",
-      "response_anchor": true
+      "response_anchor": true,
+      "screen_cluster": "JURKAT_K562_AGGREGATE"
+    },
+    "OVCAR8": {
+      "basal_source": "GSE150864 untreated raw UMI reconstruction",
+      "canonical_name": "OVCAR8",
+      "cellosaurus_id": "CVCL_1629",
+      "evaluation_scope": "sl_and_gene_effect",
+      "model_id": "ACH-000696",
+      "response_anchor": false,
+      "screen_cluster": "OVCAR8"
+    },
+    "PC9": {
+      "basal_source": "GSE162045 untreated 0-hour raw counts",
+      "canonical_name": "PC9",
+      "cellosaurus_id": "CVCL_B260",
+      "evaluation_scope": "sl_only",
+      "model_id": "ACH-000779",
+      "response_anchor": false,
+      "screen_cluster": "HELA_PC9_AGGREGATE"
     }
   },
-  "eligibility": {
-    "minimum_negative_rows": 50,
-    "minimum_positive_rows": 50
-  },
-  "executable_evidence": {
-    "basal_manifest": {
-      "path": "results/phase_a_tx1_20260724/cell_line_manifest.csv",
-      "sha256": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297"
+  "registration_evidence": {
+    "basal_registry": {
+      "path": "configs/benchmarks/context_screen_v2_basal_registry.json",
+      "sha256": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47"
     },
     "gene_effect": {
       "path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
@@ -65,8 +115,9 @@
     "JURKAT",
     "K562"
   ],
+  "post_filter_min_class_count": 1,
   "row_group_policy": "After context assignment, drop every complete source_row_id group that appears on more than one split side; do not force whole contexts onto one side.",
-  "schema_version": "sl-context-screen-v2-split-v1",
+  "schema_version": "sl-context-screen-v2-split-v4",
   "pre_split_min_class_count": 10,
-  "sort_key": "DepMap ModelID ascending; after pinned train contexts, allocate test then validation then train"
+  "assignment_policy": "Explicit registered context assignments; SL-only contexts are permitted only on the test side"
 }
