@@ -5,7 +5,7 @@ train-free SLIdR stage; neither is part of this program. T1 and T2 closed negati
 paused. No result exists under this contract.
 **Companions:** [`02-literature-review.md`](02-literature-review.md) fixes the prior-art
 boundary · [`03-experiment-protocol.md`](03-experiment-protocol.md) is the executable
-protocol · [`data/sl-context-screen-v2.md`](data/sl-context-screen-v2.md) is the benchmark.
+protocol · [`data/sl-context-screen.md`](data/sl-context-screen.md) is the benchmark.
 
 ## 1. Task
 
@@ -144,17 +144,17 @@ in both arms.
 Metrics are numbered by the stage they score, matching §4. **Stage 1** reports the response
 metrics before and after Stage 2 training.
 
-**Stage 2** needs two surfaces, because per-gene Spearman across contexts is undefined on a
-single test context. A dependency split over $\mathcal{C}_{\text{dep}}$, disjoint from the
+**Stage 2** needs two surfaces: only one SL test context has GeneEffect; a dependency split over $\mathcal{C}_{\text{dep}}$, disjoint from the
 SL contexts and holding out at least eight, carries the per-gene across-context Spearman on
-the residual over $G_{\text{var}}$; R1's ladder is its registered baseline. The SL test
-contexts carry per-context cross-gene Spearman only, which cannot support a context claim.
+the residual over $G_{\text{var}}$; R1's ladder is its registered baseline. GeneEffect-covered
+SL test contexts carry per-context cross-gene Spearman only, which cannot support a context claim.
 
-**Stage 3** reports AUPR per test context and the macro, both as $\text{AUPR}-\text{prior}$,
-because context priors span an eighteen-fold range and a macro of raw AUPRs measures
-prevalence. AUROC is secondary. Coverage and class counts precede any performance number,
-and every AUPR is stratified by whether both, one, or neither endpoint was seen in SL
-training — only the "neither" stratum supports an inductive claim. Uncertainty uses a
+**Stage 3** reports AUPR per test context and macro $\text{AUPR}-\text{prior}$ because raw
+AUPR macros measure the eighteen-fold prior range. AUROC is secondary; coverage and class
+counts come first. The de-duplicated diagnostic macro weights observable aggregate-label
+clusters: PC9/HELA are one cluster but retain separate scores. Stratify every AUPR by
+whether both, one, or neither endpoint was seen in SL training — only "neither" supports
+an inductive claim. Uncertainty uses a
 two-way dyadic bootstrap over both endpoints; pairs have no unique anchor gene, so a one-way
 bootstrap would ignore dependence through the other endpoint.
 
