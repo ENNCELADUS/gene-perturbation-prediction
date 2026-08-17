@@ -1,6 +1,7 @@
 # Cell-Line GeneEffect Benchmark
 
-**Status:** One fixed pre-run split; no model result has been produced.
+**Status:** One fixed pre-run split; no model result has been produced. Protocol:
+[`../04-exp13-geneeffect-residual-protocol.md`](../04-exp13-geneeffect-residual-protocol.md).
 
 ## Fixed split
 
@@ -21,7 +22,10 @@ DepMap 26Q1 GeneEffect covers 224 of 226 members. PC9 (`ACH-000779`) and HeLa
 cannot contribute supervised loss. Train therefore has 172 members and 170 labeled
 contexts. Raw UMI, registered basal and processed CPM input semantics remain recorded
 per row at the available source level; `registered_basal` is not a numeric matrix
-semantic. Resolve and register actual representations before unified model fitting.
+semantic. **Open question:** 152 of the 179 new-atlas lines are `kinker_sccle`
+`processed_cpm` (19/27 test, 23/27 val); whether the Tx1-X1 collator produces a trustworthy
+embedding from CPM rather than raw counts is unresolved — protocol §6 names the three
+admissible branches and rules out "swap only `z_c`" as a fallback.
 
 The split JSON is the sole membership authority. Fit residual targets, normalization,
 feature transforms and all model parameters on train only; validation selects the

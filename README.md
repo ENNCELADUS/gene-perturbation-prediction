@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-08-16):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
+> **Status (2026-08-17):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. In parallel, **Exp13's** 226-line cell-line GeneEffect residual benchmark has a written, scope-closed contract (Phase 1) superseding T2; no code or run exists yet. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md) · [`Exp13 protocol`](docs/04-exp13-geneeffect-residual-protocol.md).
 
 The central question of the active direction:
 
@@ -32,6 +32,12 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 ## *Latest News* 🔥
 
+- **[2026/08]** **Exp13 contract (Phase 1) written.** The 226-line cell-line GeneEffect
+  residual benchmark gets a scope-closed protocol — a corrected `Delta` typing fix in `01`
+  §3, a five-block residual composition, and a pre-registered Stage 0 open question over
+  Kinker CPM lines' Tx1 embedding validity. `docs/results/tx1-hvg-geneeffect-phase-f.md`
+  (T2) is marked superseded, not deleted. [`Contract`](docs/01-blueprint.md) ·
+  [`Exp13 protocol`](docs/04-exp13-geneeffect-residual-protocol.md).
 - **[2026/08]** **Nine-context split built.** K562/JURKAT/OVCAR8/HAP1/HT29 are train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only, with cross-side source rows and pairs isolated. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
 - **[2026/07]** **T2 registered primary gate completed — negative.** On the frozen 28 train / 5 validation / 9 test GeneEffect split and 587-gene slice, Tx1-3B-ST failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). HVG-ST was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. T2 is paused for redesign and the remaining baseline ladder is closeout work. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).
 - **[2026/07]** **K562 Bridge-A-vs-Horlbeck mechanism kill-test completed — negative.** The frozen exp05 backbone composed into a symmetrized counterfactual co-dependency score does not recover measured Horlbeck K562 genetic interactions over the 83,028 exp05-covered pairs (|Spearman| < 0.01; AUROC(s_A → strong-SL) ≈ 0.52, below the single-gene floor; no dose-response), across both pooler reference conventions. Per the kill-test rule the composition mechanism is **paused for redesign and not extended across cell lines**. [`Result`](docs/results/exp05-bridge-a-horlbeck-kill-test.md).
@@ -95,7 +101,8 @@ The full contract — task definition, objective, split, controls, and claim bou
 
 - [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract: task, objective, evaluation, and claim boundaries.
 - [`docs/02-literature-review.md`](docs/02-literature-review.md) — related work and the novelty boundary.
-- [`docs/03-experiment-protocol.md`](docs/03-experiment-protocol.md) — the executable protocol and its prerequisites.
+- [`docs/03-experiment-protocol.md`](docs/03-experiment-protocol.md) — the SL-pair executable protocol and its prerequisites.
+- [`docs/04-exp13-geneeffect-residual-protocol.md`](docs/04-exp13-geneeffect-residual-protocol.md) — the scope-closed GeneEffect residual protocol.
 - [`docs/data/`](docs/data/) — one card per dataset. Read the card before using the file.
 
 ### Prior Program (Retired as Roadmap, Kept as Evidence)
