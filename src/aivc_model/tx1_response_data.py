@@ -56,7 +56,7 @@ from scipy import sparse
 from scipy.sparse import csr_matrix
 
 from aivc_model.gwps_cache import sha256_strings
-from aivc_model.prepare import GeneBags, resolve_state_gene_order
+from aivc_model.state_core import GeneBags, resolve_state_gene_order
 from aivc_model.tx1_basal import (
     _require_ensembl_source,
     build_perturbseq_response_adata,

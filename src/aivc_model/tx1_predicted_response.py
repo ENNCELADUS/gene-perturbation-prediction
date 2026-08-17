@@ -33,8 +33,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from aivc_model.model import PerturbationVectorAdapter, StateForwardAdapter
-from aivc_model.prepare import encode_batch_labels, load_perturbation_vectors
+from aivc_model.model import PerturbationVectorAdapter
+from aivc_model.prepare import load_perturbation_vectors
+from aivc_model.state_core import StateForwardAdapter, encode_batch_labels
 from aivc_model.state_warm_start import build_warm_started_state_model
 from aivc_model.tx1_embed_cache import load_line_cache
 from aivc_model.tx1_geneeffect_data import assert_training_role
