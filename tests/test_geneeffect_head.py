@@ -4,9 +4,11 @@ Organized around the two pieces the module exists to provide, per
 ``merry-mapping-comet.md``:
 
 1. An axis-aware training loss (:func:`per_gene_rank_variance_loss`) that
-   correlates per gene along the context axis, unlike
+   correlates per gene along the context axis, unlike the retired
    ``tx1_geneeffect_head.rank_variance_loss`` (flattens to ``[B]``, one
-   Pearson over mixed genes/contexts). The critical test
+   Pearson over mixed genes/contexts; inlined below as
+   ``_flattened_rank_variance_loss`` since that module is scheduled for
+   deletion). The critical test
    (``test_per_gene_loss_disagrees_with_flattened_loss_when_mu_g_dominates``)
    constructs a batch where a shared per-gene offset makes the flattened loss
    look good while the true per-context signal is uncorrelated -- exactly
@@ -31,11 +33,32 @@ from aivc_model.geneeffect_head import (
     macro_per_gene_spearman,
     per_gene_rank_variance_loss,
 )
-from aivc_model.tx1_geneeffect_head import rank_variance_loss
 
 # ---------------------------------------------------------------------------
 # per_gene_rank_variance_loss
 # ---------------------------------------------------------------------------
+
+
+def _flattened_rank_variance_loss(
+    pred: torch.Tensor, target: torch.Tensor, lam: float = 1.0
+) -> torch.Tensor:
+    """Local copy of the retired ``tx1_geneeffect_head.rank_variance_loss``:
+    flattens ``[n_genes, n_contexts]`` to ``[B]`` and computes ONE Pearson
+    correlation over mixed genes/contexts -- exactly the failure mode B2
+    (``per_gene_rank_variance_loss``) exists to fix. Inlined, not imported,
+    because ``tx1_geneeffect_head.py`` is scheduled for deletion and this
+    disagreement is the regression evidence for B2, not a tested unit."""
+    std_eps = 1e-6
+    pred = pred.reshape(-1)
+    target = target.reshape(-1).to(device=pred.device, dtype=pred.dtype)
+    pred_centered = pred - pred.mean()
+    target_centered = target - target.mean()
+    covariance = (pred_centered * target_centered).mean()
+    pred_std = (pred_centered.square().mean() + std_eps).sqrt()
+    target_std = (target_centered.square().mean() + std_eps).sqrt()
+    corr_term = 1.0 - covariance / (pred_std * target_std)
+    var_term = (pred.std(unbiased=False) - target.std(unbiased=False)).square()
+    return corr_term + float(lam) * var_term
 
 
 def _hand_reference(pred: torch.Tensor, target: torch.Tensor, lam: float) -> float:
@@ -89,7 +112,9 @@ def test_per_gene_loss_disagrees_with_flattened_loss_when_mu_g_dominates() -> No
     target = gene_offset + 0.02 * torch.randn(n_genes, n_contexts)
     pred = gene_offset + 0.02 * torch.randn(n_genes, n_contexts)
 
-    flattened = rank_variance_loss(pred.reshape(-1), target.reshape(-1), lam=1.0)
+    flattened = _flattened_rank_variance_loss(
+        pred.reshape(-1), target.reshape(-1), lam=1.0
+    )
     per_gene = per_gene_rank_variance_loss(pred, target, lam=1.0)
 
     # Flattened: dominated by the shared offset -> near-perfect correlation.

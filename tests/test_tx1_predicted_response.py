@@ -1,13 +1,15 @@
 """Tests for src/aivc_model/tx1_predicted_response.py and its sibling
-src/aivc_model/tx1_predicted_response_cache.py -- Phase D Task 2: the
-forward-only ST loader, predicted-response generation, and the fingerprinted
-predicted-response cache (Global Constraint D11).
+src/aivc_model/tx1_predicted_response_cache.py -- the forward-only ST loader,
+predicted-response generation, and the fingerprinted predicted-response cache
+(Global Constraint D11).
 
-No GPU and no real Phase C checkpoint exist on this machine, so every test
+No GPU and no real trained checkpoint exist on this machine, so every test
 builds tiny synthetic fixtures in ``tmp_path``: a ``LinearMockStateModel``
-standing in for STATE, a hand-built ``PerturbationVectorAdapter``, a fake
-flat ``AivcModel``-shaped checkpoint state dict, and a fake Tx1 embedding
-cache (written via ``tx1_embed_cache.write_line_cache``, never real Tx1
+standing in for STATE, a hand-built ``Esm2PerturbationAdapter`` (``p_g =
+A_phi(E_ESM2(protein(g)))``, ``01-blueprint.md`` §3 -- the retired one-hot
+``state_onehot`` tokenizer is not exercised here), a fake flat
+``AivcModel``-shaped checkpoint state dict, and a fake Tx1 embedding cache
+(written via ``tx1_embed_cache.write_line_cache``, never real Tx1
 inference). Nothing here is allowed to skip silently.
 """
 
@@ -22,7 +24,13 @@ import pytest
 import torch
 from torch import nn
 
-from aivc_model.model import LinearMockStateModel, PerturbationVectorAdapter
+from aivc_model.gene_embeddings import Esm2EmbeddingTable
+from aivc_model.residual_ladder import FixedSplit
+from aivc_model.state_core import (
+    Esm2PerturbationAdapter,
+    LinearMockStateModel,
+    StateForwardAdapter,
+)
 from aivc_model.tx1_embed_cache import EMBEDDING_WIDTH, write_line_cache
 from aivc_model.tx1_predicted_response import (
     ARM_HVG,
@@ -48,19 +56,33 @@ from aivc_model.tx1_predicted_response_cache import (
 _INPUT_DIM = 6
 _OUTPUT_DIM = 4
 _PERT_DIM = 3
+_ESM_DIM = 5
 _GENES = ["G1", "G2"]
+
+
+def _esm2_table(genes: list[str] | None = None) -> Esm2EmbeddingTable:
+    """A tiny ESM2 embedding table resolving every gene in ``genes``."""
+    rng = np.random.default_rng(0)
+    resolved = list(genes or _GENES)
+    return Esm2EmbeddingTable(
+        dim=_ESM_DIM,
+        vectors_by_symbol={
+            gene: rng.normal(size=_ESM_DIM).astype(np.float32) for gene in resolved
+        },
+    )
 
 
 def _forward_only_model(
     genes: list[str] | None = None, input_dim: int = _INPUT_DIM
 ) -> ForwardOnlyStateModel:
     """A small, freshly initialized ST + perturbation-adapter model for tests."""
-    from aivc_model.model import StateForwardAdapter
-
     state_model = LinearMockStateModel(input_dim, _OUTPUT_DIM, _PERT_DIM)
-    known_vectors = {"G1": np.ones(_PERT_DIM, dtype=np.float32)}
-    perturbations = PerturbationVectorAdapter(
-        list(genes or _GENES), known_vectors, _PERT_DIM
+    resolved_genes = list(genes or _GENES)
+    perturbations = Esm2PerturbationAdapter(
+        resolved_genes,
+        _esm2_table(resolved_genes),
+        adapter_hidden=4,
+        pert_dim=_PERT_DIM,
     )
     return ForwardOnlyStateModel(StateForwardAdapter(state_model), perturbations)
 
@@ -108,7 +130,7 @@ def test_load_forward_only_checkpoint_restores_keys_and_reports_dropped(
 def test_load_forward_only_checkpoint_raises_on_missing_key(tmp_path: Path) -> None:
     source = _forward_only_model()
     checkpoint = _fake_full_checkpoint(source)
-    del checkpoint["perturbations.known_matrix"]
+    del checkpoint["perturbations.esm_matrix"]
     checkpoint_path = tmp_path / "pytorch_model.bin"
     torch.save(checkpoint, checkpoint_path)
 
@@ -158,6 +180,16 @@ class _FakeStateModel(nn.Module):
         self.project_out = nn.Linear(hidden_dim, output_dim)
 
 
+def _write_esm2_npz(path: Path, genes: list[str]) -> Path:
+    """Write a small resolved-for-every-gene ESM2 ``.npz`` fixture."""
+    rng = np.random.default_rng(1)
+    symbols = np.array(genes, dtype=object)
+    vectors = rng.normal(size=(len(genes), _ESM_DIM)).astype(np.float32)
+    resolved = np.ones(len(genes), dtype=bool)
+    np.savez(path, symbols=symbols, vectors=vectors, resolved=resolved)
+    return path
+
+
 def test_construct_forward_only_model_builds_expected_architecture(
     tmp_path: Path,
 ) -> None:
@@ -177,6 +209,7 @@ def test_construct_forward_only_model_builds_expected_architecture(
         },
         checkpoint_path,
     )
+    esm2_path = _write_esm2_npz(tmp_path / "esm2.npz", _GENES)
 
     model = construct_forward_only_model(
         model_cls=_FakeStateModel,
@@ -185,13 +218,50 @@ def test_construct_forward_only_model_builds_expected_architecture(
         output_dim=_OUTPUT_DIM,
         pert_dim=_PERT_DIM,
         genes=_GENES,
-        known_perturbation_vectors=None,
+        esm2_embeddings_path=esm2_path,
+        esm2_adapter_hidden=4,
     )
 
     assert isinstance(model, ForwardOnlyStateModel)
     assert model.state_adapter.state_model.basal_encoder.in_features == _INPUT_DIM
-    assert isinstance(model.perturbations, PerturbationVectorAdapter)
+    assert isinstance(model.perturbations, Esm2PerturbationAdapter)
     assert model.perturbations.genes == _GENES
+
+
+def test_construct_forward_only_model_raises_loudly_on_unresolved_gene(
+    tmp_path: Path,
+) -> None:
+    """Gene-vocabulary resolution must fail loudly, never zero-fill or skip."""
+    reference = _FakeStateModel(
+        input_dim=_INPUT_DIM, hidden_dim=5, output_dim=_OUTPUT_DIM, pert_dim=_PERT_DIM
+    )
+    checkpoint_path = tmp_path / "reference.ckpt"
+    torch.save(
+        {
+            "hyper_parameters": {
+                "input_dim": _INPUT_DIM,
+                "hidden_dim": 5,
+                "output_dim": _OUTPUT_DIM,
+                "pert_dim": _PERT_DIM,
+            },
+            "state_dict": reference.state_dict(),
+        },
+        checkpoint_path,
+    )
+    # Only resolves "G1" -- "G2" is requested but missing from the table.
+    esm2_path = _write_esm2_npz(tmp_path / "esm2.npz", ["G1"])
+
+    with pytest.raises(ValueError, match="G2"):
+        construct_forward_only_model(
+            model_cls=_FakeStateModel,
+            hparams_checkpoint_path=checkpoint_path,
+            input_dim=_INPUT_DIM,
+            output_dim=_OUTPUT_DIM,
+            pert_dim=_PERT_DIM,
+            genes=_GENES,
+            esm2_embeddings_path=esm2_path,
+            esm2_adapter_hidden=4,
+        )
 
 
 # --- gene-vocabulary pre-filtering --------------------------------------------
@@ -405,7 +475,13 @@ def test_chunk_control_cell_indices_is_deterministic_given_seed() -> None:
         assert np.array_equal(chunk_a, chunk_b)
 
 
-# --- per-line generation and the training-role guard --------------------------
+# --- per-line generation and the fit-eligibility guard ------------------------
+#
+# ``cell_line_geneeffect_226_split`` is the membership authority (replaces the
+# retired Phase-A train_head/test role column): ACH-TRAIN is a labeled train
+# member, ACH-TEST is a test (inference-only) member.
+
+_LINE_SPLIT = FixedSplit(train=("ACH-TRAIN",), val=(), test=("ACH-TEST",))
 
 
 def _write_fake_line_cache(cache_dir: Path, model_id: str, n_cells: int) -> None:
@@ -422,18 +498,38 @@ def _write_fake_line_cache(cache_dir: Path, model_id: str, n_cells: int) -> None
     )
 
 
-def test_generate_predicted_response_for_line_rejects_test_role_by_default(
+def test_generate_predicted_response_for_line_rejects_non_train_line_by_default(
     tmp_path: Path,
 ) -> None:
     cache_dir = tmp_path / "tx1_cache"
     _write_fake_line_cache(cache_dir, "ACH-TEST", n_cells=5)
     model = _forward_only_model()
 
-    with pytest.raises(ValueError, match="test"):
+    with pytest.raises(ValueError, match="not a labeled train member"):
         generate_predicted_response_for_line(
             cache_dir,
             "ACH-TEST",
-            "test",
+            model,
+            "G1",
+            arm=ARM_TX1,
+            cell_set_len=4,
+            seed=0,
+            split=_LINE_SPLIT,
+        )
+
+
+def test_generate_predicted_response_for_line_requires_split_when_checked(
+    tmp_path: Path,
+) -> None:
+    """The leakage case: omitting `split` must not silently skip the guard."""
+    cache_dir = tmp_path / "tx1_cache"
+    _write_fake_line_cache(cache_dir, "ACH-TRAIN", n_cells=5)
+    model = _forward_only_model()
+
+    with pytest.raises(ValueError, match="require_fit_eligible"):
+        generate_predicted_response_for_line(
+            cache_dir,
+            "ACH-TRAIN",
             model,
             "G1",
             arm=ARM_TX1,
@@ -452,18 +548,17 @@ def test_generate_predicted_response_for_line_allows_explicit_opt_out(
     response = generate_predicted_response_for_line(
         cache_dir,
         "ACH-TEST",
-        "test",
         model,
         "G1",
         arm=ARM_TX1,
         cell_set_len=4,
         seed=0,
-        require_training_role=False,
+        require_fit_eligible=False,
     )
     assert response.shape == (5, _OUTPUT_DIM)
 
 
-def test_generate_predicted_response_for_line_admits_training_role(
+def test_generate_predicted_response_for_line_admits_train_line(
     tmp_path: Path,
 ) -> None:
     cache_dir = tmp_path / "tx1_cache"
@@ -473,12 +568,12 @@ def test_generate_predicted_response_for_line_admits_training_role(
     response = generate_predicted_response_for_line(
         cache_dir,
         "ACH-TRAIN",
-        "train_head",
         model,
         "G1",
         arm=ARM_TX1,
         cell_set_len=4,
         seed=0,
+        split=_LINE_SPLIT,
     )
     assert response.shape == (5, _OUTPUT_DIM)
 
@@ -491,8 +586,6 @@ def test_generate_predicted_response_for_line_hvg_arm_uses_hvg_matrix(
     hvg_model = _forward_only_model()
     # HVG arm's basal input width is the HVG matrix width (3), not
     # EMBEDDING_WIDTH -- swap in a state model matching that input width.
-    from aivc_model.model import StateForwardAdapter
-
     hvg_model.state_adapter = StateForwardAdapter(
         LinearMockStateModel(3, _OUTPUT_DIM, _PERT_DIM)
     )
@@ -500,12 +593,12 @@ def test_generate_predicted_response_for_line_hvg_arm_uses_hvg_matrix(
     response = generate_predicted_response_for_line(
         cache_dir,
         "ACH-TRAIN",
-        "train_head",
         hvg_model,
         "G1",
         arm=ARM_HVG,
         cell_set_len=4,
         seed=0,
+        split=_LINE_SPLIT,
     )
     assert response.shape == (5, _OUTPUT_DIM)
 
@@ -521,12 +614,12 @@ def test_generate_predicted_response_for_line_rejects_unknown_arm(
         generate_predicted_response_for_line(
             cache_dir,
             "ACH-TRAIN",
-            "train_head",
             model,
             "G1",
             arm="bogus_arm",
             cell_set_len=4,
             seed=0,
+            split=_LINE_SPLIT,
         )
 
 
@@ -733,13 +826,18 @@ def test_slice_symbol_aliases_resolve_by_default() -> None:
     to 585/587 and fail Phase F's coverage validator *after* a training run.
     The pairs are measured (task-0-coverage.md §2), not assumed.
     """
-    adapter = PerturbationVectorAdapter(["TDGF1", "N6AMT1", "ACLY"], {}, 4)
+    genes = ["TDGF1", "N6AMT1", "ACLY"]
+    adapter = Esm2PerturbationAdapter(
+        genes, _esm2_table(genes), adapter_hidden=4, pert_dim=4
+    )
     resolved = resolve_genes_against_vocabulary(["CRIPTO", "HEMK2", "ACLY"], adapter)
     assert resolved == ("TDGF1", "N6AMT1", "ACLY")
 
 
 def test_explicit_empty_alias_map_disables_aliasing() -> None:
     """Passing {} means 'no aliases', distinct from passing None."""
-    adapter = PerturbationVectorAdapter(["TDGF1"], {}, 4)
+    adapter = Esm2PerturbationAdapter(
+        ["TDGF1"], _esm2_table(["TDGF1"]), adapter_hidden=4, pert_dim=4
+    )
     with pytest.raises(UnknownPerturbationGeneError, match="CRIPTO"):
         resolve_genes_against_vocabulary(["CRIPTO"], adapter, alias_map={})

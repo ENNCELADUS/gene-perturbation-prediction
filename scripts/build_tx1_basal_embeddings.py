@@ -59,7 +59,7 @@ import pandas as pd  # noqa: E402
 import torch  # noqa: E402
 
 from aivc_model.gene_splits import sha256_file  # noqa: E402
-from aivc_model.gwps_cache import sha256_strings  # noqa: E402
+from aivc_model.state_core import sha256_strings  # noqa: E402
 from aivc_model.tx1_basal import load_line_manifest  # noqa: E402
 from aivc_model.tx1_embed_cache import (  # noqa: E402
     MODEL_LABEL,
