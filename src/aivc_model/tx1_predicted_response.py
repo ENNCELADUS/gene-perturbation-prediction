@@ -33,12 +33,16 @@ import numpy as np
 import torch
 from torch import nn
 
-from aivc_model.model import PerturbationVectorAdapter
-from aivc_model.prepare import load_perturbation_vectors
-from aivc_model.state_core import StateForwardAdapter, encode_batch_labels
+from aivc_model.benchmark_split import assert_fit_eligible
+from aivc_model.gene_embeddings import load_esm2_embeddings
+from aivc_model.residual_ladder import FixedSplit
+from aivc_model.state_core import (
+    Esm2PerturbationAdapter,
+    StateForwardAdapter,
+    encode_batch_labels,
+)
 from aivc_model.state_warm_start import build_warm_started_state_model
 from aivc_model.tx1_embed_cache import load_line_cache
-from aivc_model.tx1_geneeffect_data import assert_training_role
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -78,9 +82,9 @@ SLICE_SYMBOL_ALIASES: Final[Mapping[str, str]] = MappingProxyType(
 class UnknownPerturbationGeneError(ValueError):
     """A requested gene is outside the ST perturbation vocabulary.
 
-    Raised instead of letting ``PerturbationVectorAdapter.forward``'s bare
-    ``KeyError`` (``model.py:291-294``) surface from deep inside a
-    forward-pass loop.
+    Raised instead of letting ``Esm2PerturbationAdapter.forward``'s bare
+    ``KeyError`` (``state_core.py``) surface from deep inside a forward-pass
+    loop.
     """
 
 
@@ -136,31 +140,44 @@ def construct_forward_only_model(
     output_dim: int,
     pert_dim: int,
     genes: Sequence[str],
-    known_perturbation_vectors: Path | None,
+    esm2_embeddings_path: Path,
+    esm2_adapter_hidden: int = 512,
     output_space: str | None = None,
     emit_checkpoint_output: bool = False,
 ) -> ForwardOnlyStateModel:
-    """Build a fresh ST + ``PerturbationVectorAdapter`` pair, ready to warm-load.
+    """Build a fresh ST + ``Esm2PerturbationAdapter`` pair, ready to warm-load.
 
     Reuses ``build_warm_started_state_model`` to construct ST from
     ``hparams_checkpoint_path`` (the RELEASED ST checkpoint's architecture
-    hparams, not Phase C's own trained ``pytorch_model.bin``), self-warm-
-    started from that same file (harmless: every ``state_adapter.*`` weight
-    is overwritten by :func:`load_forward_only_checkpoint` next). Only
-    ``gene_tokenizer: state_onehot`` is supported (the only tokenizer either
-    Phase C arm config uses).
+    hparams, not a Phase C arm's own trained ``pytorch_model.bin``), self-
+    warm-started from that same file (harmless: every ``state_adapter.*``
+    weight is overwritten by :func:`load_forward_only_checkpoint` next).
+    ``p_g = A_phi(E_ESM2(protein(g)))`` (``01-blueprint.md`` §3): the K562
+    one-hot ``state_onehot`` tokenizer is retired, so this always builds an
+    :class:`~aivc_model.state_core.Esm2PerturbationAdapter`.
 
-    ``genes`` must be the exact vocabulary, in the exact order, Phase C's
-    checkpoint was trained with: :class:`PerturbationVectorAdapter` keys its
-    trainable "missing" parameters by construction-time list position, not
-    gene identity, so a different order/vocabulary silently loads the WRONG
-    gene's vector into each slot once the checkpoint loads.
-    ``known_perturbation_vectors`` only sizes/construction-initializes the
-    adapter -- every value is overwritten next.
+    ``Esm2PerturbationAdapter`` looks its per-gene vector up by symbol, not
+    construction-time list position, so (unlike the retired one-hot adapter)
+    a different ``genes`` order cannot silently bind the WRONG gene's vector
+    into a slot. It still fails loudly and immediately, at construction, if
+    ``esm2_embeddings_path`` is missing a vector for any requested gene --
+    never a zero vector, never a silently dropped gene.
+
+    Args:
+        esm2_embeddings_path: Precomputed ESM2 ``.npz`` (``keys`` ``symbols``/
+            ``vectors``/``resolved``, see :func:`~aivc_model.gene_embeddings.
+            load_esm2_embeddings`); must resolve every gene in ``genes``.
+        esm2_adapter_hidden: Hidden width of the ESM2 -> STATE pert-space
+            adapter MLP (``PertAdapter``, 1280 -> ``esm2_adapter_hidden`` ->
+            ``pert_dim``).
 
     Returns:
         A :class:`ForwardOnlyStateModel` with freshly constructed (not yet
-        Phase-C-trained) weights.
+        trained) weights.
+
+    Raises:
+        ValueError: ``esm2_embeddings_path`` has no vector for one or more
+            genes in ``genes``.
     """
     model, _self_warm_start_report = build_warm_started_state_model(
         model_cls=model_cls,
@@ -172,8 +189,13 @@ def construct_forward_only_model(
         output_space=output_space,
         emit_checkpoint_output=emit_checkpoint_output,
     )
-    known_vectors = load_perturbation_vectors(known_perturbation_vectors)
-    perturbations = PerturbationVectorAdapter(list(genes), known_vectors, int(pert_dim))
+    esm2_table = load_esm2_embeddings(esm2_embeddings_path)
+    perturbations = Esm2PerturbationAdapter(
+        list(genes),
+        esm2_table,
+        adapter_hidden=esm2_adapter_hidden,
+        pert_dim=int(pert_dim),
+    )
     return ForwardOnlyStateModel(StateForwardAdapter(model), perturbations)
 
 
@@ -230,8 +252,8 @@ def _is_expected_drop(key: str) -> bool:
 def vocabulary_genes(perturbations: nn.Module) -> frozenset[str]:
     """Return the closed gene set a perturbation adapter can forward.
 
-    Works for both ``PerturbationVectorAdapter`` and
-    ``Esm2PerturbationAdapter`` -- both expose a ``genes`` attribute.
+    Works for any adapter exposing a ``genes`` attribute (currently only
+    ``Esm2PerturbationAdapter``).
     """
     genes = getattr(perturbations, "genes", None)
     if genes is None:
@@ -250,8 +272,8 @@ def resolve_genes_against_vocabulary(
 ) -> tuple[str, ...]:
     """Resolve requested genes to ST-vocabulary keys, or raise a named error.
 
-    ``PerturbationVectorAdapter.forward`` is a closed, exact-string dict
-    lookup with no fallback: a gene outside its vocabulary raises a bare
+    ``Esm2PerturbationAdapter.forward`` is a closed, exact-string dict lookup
+    with no fallback: a gene outside its vocabulary raises a bare
     ``KeyError`` with no context. This pre-filters the whole requested list
     and raises :class:`UnknownPerturbationGeneError` naming every missing
     gene, instead of failing on whichever comes up first deep inside a loop.
@@ -260,7 +282,8 @@ def resolve_genes_against_vocabulary(
     ``CRIPTO``/``HEMK2`` are perturbed under current HGNC symbols
     ``TDGF1``/``N6AMT1`` in every anchor -- see ``task-0-coverage.md`` §2).
     No case-folding is performed -- membership is an exact string match,
-    matching ``PerturbationVectorAdapter``'s own lookup.
+    matching ``Esm2PerturbationAdapter``'s own lookup (case-normalized to
+    upper-case internally, see ``state_core.py``).
 
     Raises:
         UnknownPerturbationGeneError: One or more requested genes (after
@@ -591,35 +614,50 @@ def _batch_index_chunks(
 def generate_predicted_response_for_line(
     tx1_cache_dir: Path,
     model_id: str,
-    role: str,
     model: ForwardOnlyStateModel,
     gene: str,
     *,
     arm: str,
     cell_set_len: int,
     seed: int,
+    split: FixedSplit | None = None,
     batch_lookup: Mapping[str, int] | None = None,
     device: torch.device | str = "cpu",
-    require_training_role: bool = True,
+    require_fit_eligible: bool = True,
 ) -> torch.Tensor:
     """Load one line's cached basal view and forward ST for one gene.
 
     ``arm`` selects which of ``load_line_cache``'s two arrays feeds ST's
     input (``tx1_arm`` -> Tx1 embeddings, ``hvg_arm`` -> HVG matrix).
-    ``require_training_role`` (default ``True``) calls ``assert_training_role``
-    first, refusing a ``test``-role line (D6 -- reaching model *training*
-    with one is a Critical defect). Phase F/Task 4's held-out-line
-    *inference* is the one legitimate caller that must pass ``False`` --
-    an explicit, auditable opt-out, since ``verify_cache``/``load_line_cache``
-    are role-agnostic and serve every line including the 9 held-out ones.
+    ``require_fit_eligible`` (default ``True``) calls
+    ``benchmark_split.assert_fit_eligible`` against ``split`` (the
+    ``cell_line_geneeffect_226_split`` membership authority) first, refusing
+    a ``val``/``test``/``unlabeled_train`` line -- reaching model *training*
+    with one is a Critical defect. A held-out line's *inference* is the one
+    legitimate caller that must pass ``require_fit_eligible=False`` -- an
+    explicit, auditable opt-out, since ``verify_cache``/``load_line_cache``
+    are membership-agnostic and serve every line, including val/test.
+
+    Args:
+        split: The loaded ``cell_line_geneeffect_226_split`` membership
+            authority (:func:`~aivc_model.benchmark_split.
+            load_geneeffect_226_split`). Required whenever
+            ``require_fit_eligible`` is ``True``.
 
     Raises:
-        ValueError: ``require_training_role`` is ``True`` and ``role`` is not
-            an admissible training role, or ``arm`` is not recognized.
+        ValueError: ``require_fit_eligible`` is ``True`` and ``split`` is
+            ``None`` or ``model_id`` is not a labeled train member, or
+            ``arm`` is not recognized.
         UnknownPerturbationGeneError: ``gene`` is outside the ST vocabulary.
     """
-    if require_training_role:
-        assert_training_role(role, model_id)
+    if require_fit_eligible:
+        if split is None:
+            raise ValueError(
+                "require_fit_eligible=True requires `split` (the "
+                "cell_line_geneeffect_226_split membership authority); pass "
+                "require_fit_eligible=False for inference-only val/test calls"
+            )
+        assert_fit_eligible(model_id, split)
     embeddings, hvg_matrix, _obs = load_line_cache(tx1_cache_dir, model_id)
     if arm == ARM_TX1:
         basal_view = np.asarray(embeddings, dtype=np.float32)

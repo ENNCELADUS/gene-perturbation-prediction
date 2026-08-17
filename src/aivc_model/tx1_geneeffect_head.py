@@ -4,9 +4,10 @@ Frozen spec §2.2 ("Readout") replaces the K562-fit ``TrainableDiagonalGMM``
 pooler (``response.py``) plus the MSE-trained ``MLPHead`` (``model.py``) with
 three pieces, all in this module:
 
-1. :func:`moment_pool` — a permutation-invariant moment pool (mean/variance,
-   optionally higher moments) over a per-cell response bag. No trainable
-   parameters, unlike ``TrainableDiagonalGMM``.
+1. :func:`~aivc_model.geneeffect_head.moment_pool` (moved to
+   ``geneeffect_head.py``, re-exported here) — a permutation-invariant moment
+   pool (mean/variance, optionally higher moments) over a per-cell response
+   bag. No trainable parameters, unlike ``TrainableDiagonalGMM``.
 2. :class:`Tx1GeneEffectHead` — an MLP head conditioned on the moment-pooled
    predicted-response bag *and* a moment-pooled summary of the cell line's
    basal (control) cell embeddings. There is no line-ID input anywhere, so
@@ -30,81 +31,25 @@ import logging
 import torch
 from torch import nn
 
+from aivc_model.geneeffect_head import moment_pool
+
 _LOGGER = logging.getLogger(__name__)
 
 #: Numerical floor added to standard deviations before dividing, to keep
 #: correlation/variance losses finite for near-constant inputs.
 _STD_EPS: float = 1e-6
 
-
-def moment_pool(
-    bag: torch.Tensor,
-    mask: torch.Tensor | None = None,
-    moments: int = 2,
-) -> torch.Tensor:
-    """Pool a per-cell bag into a permutation-invariant moment summary.
-
-    Args:
-        bag: Per-cell tensor of shape ``[N, D]`` (cells, feature dim).
-        mask: Optional boolean or 0/1 tensor of shape ``[N]``. Rows where
-            ``mask`` is falsy are excluded from every moment (padded rows).
-            If ``None``, every row is used.
-        moments: Number of moments to compute, in order:
-            1 -> mean only, shape ``[D]``.
-            2 (default) -> concat(mean, variance), shape ``[2D]``. Variance
-                is the population (biased, ``unbiased=False``) variance,
-                matching ``TrainableDiagonalGMM`` (``response.py``).
-            3 -> adds the standard deviation, shape ``[3D]``.
-            4 -> adds the (Fisher, population) skewness, shape ``[4D]``.
-            Higher moments are not implemented; callers needing kurtosis or
-            beyond should extend this function rather than call it with
-            ``moments > 4``. The default of 2 (mean + variance) is the
-            minimal pair that can express both a per-line location shift
-            and a spread — matching the frozen spec's "mean + variance,
-            optionally higher moments" and mirroring the mean/variance pair
-            already used inside ``TrainableDiagonalGMM.forward``.
-
-    Returns:
-        A 1-D tensor of length ``D * moments``, invariant to row order of
-        ``bag`` (and, when masked, invariant to the order/placement of the
-        masked-out padding rows).
-
-    Raises:
-        ValueError: If ``moments`` is not in ``{1, 2, 3, 4}``, if ``bag`` is
-            not 2-D, or if every row is masked out (empty bag).
-    """
-    if bag.dim() != 2:
-        msg = f"bag must be 2-D [N, D], got shape {tuple(bag.shape)}"
-        raise ValueError(msg)
-    if moments not in (1, 2, 3, 4):
-        msg = f"moments must be one of {{1, 2, 3, 4}}, got {moments}"
-        raise ValueError(msg)
-
-    if mask is not None:
-        keep = mask.to(dtype=torch.bool, device=bag.device)
-        if not bool(keep.any()):
-            msg = "moment_pool received an empty bag (mask excludes all rows)"
-            raise ValueError(msg)
-        bag = bag[keep]
-
-    n_rows = bag.shape[0]
-    if n_rows == 0:
-        msg = "moment_pool received an empty bag (0 rows)"
-        raise ValueError(msg)
-
-    mean = bag.mean(dim=0)
-    parts = [mean]
-    if moments >= 2:
-        centered = bag - mean.unsqueeze(0)
-        variance = centered.square().mean(dim=0)
-        parts.append(variance)
-    if moments >= 3:
-        std = (variance + _STD_EPS).sqrt()
-        parts.append(std)
-    if moments >= 4:
-        skew = (centered.pow(3).mean(dim=0)) / (std.pow(3) + _STD_EPS)
-        parts.append(skew)
-    return torch.cat(parts, dim=0)
+__all__ = [
+    "moment_pool",
+    "FUSION_CONCAT_MLP",
+    "FUSION_INTERACTION_RESIDUAL",
+    "VALID_FUSIONS",
+    "InteractionResidualNet",
+    "Tx1GeneEffectHead",
+    "correlation_loss",
+    "variance_matching_loss",
+    "rank_variance_loss",
+]
 
 
 FUSION_CONCAT_MLP = "concat_mlp"

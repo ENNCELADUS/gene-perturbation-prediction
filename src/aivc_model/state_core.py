@@ -11,6 +11,7 @@ them from this module rather than redefining them.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import hashlib
 import pickle
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,16 @@ from torch import nn
 
 from aivc_model.gene_embeddings import Esm2EmbeddingTable, PertAdapter
 from aivc_model.gene_splits import GeneAccessRecorder
+
+
+def sha256_strings(values: np.ndarray) -> str:
+    """Hash an ordered string array without ambiguous concatenation."""
+    digest = hashlib.sha256()
+    for value in np.asarray(values).astype(str):
+        encoded = value.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
 
 
 class LinearMockStateModel(nn.Module):

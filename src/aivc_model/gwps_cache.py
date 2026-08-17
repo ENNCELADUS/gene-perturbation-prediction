@@ -28,6 +28,7 @@ from aivc_model.prepare import (
     _load_metadata,
     resolve_state_gene_order,
 )
+from aivc_model.state_core import sha256_strings
 
 _SCHEMA_VERSION = 3
 _STATE_FEATURE_COUNT = 2000
@@ -66,16 +67,6 @@ def file_signature(path: Path) -> dict[str, object]:
         "size": int(stat.st_size),
         "mtime_ns": int(stat.st_mtime_ns),
     }
-
-
-def sha256_strings(values: np.ndarray) -> str:
-    """Hash an ordered string array without ambiguous concatenation."""
-    digest = hashlib.sha256()
-    for value in np.asarray(values).astype(str):
-        encoded = value.encode("utf-8")
-        digest.update(len(encoded).to_bytes(8, "big"))
-        digest.update(encoded)
-    return digest.hexdigest()
 
 
 def sidecar_signature(model_dir: Path, basename: str) -> dict[str, str] | None:
@@ -645,8 +636,7 @@ def _load_array(path: Path) -> np.ndarray:
 def _array_manifest(cache_dir: Path) -> dict[str, dict[str, object]]:
     """Bind every completed array without materializing memory-mapped payloads."""
     return {
-        filename: _array_metadata(cache_dir / filename)
-        for filename in _ARRAY_FILENAMES
+        filename: _array_metadata(cache_dir / filename) for filename in _ARRAY_FILENAMES
     }
 
 
@@ -773,13 +763,18 @@ def _validate_array_structure(
         raise ValueError("GWPS cache control batches must match control cells")
     if features.shape != (contract.state_dim,):
         raise ValueError("GWPS cache features must match the STATE dimension")
-    if fills.shape != (contract.state_dim,) or fills.dtype.kind not in {
-        "b",
-        "i",
-        "u",
-        "f",
-        "c",
-    } or not np.isfinite(fills).all():
+    if (
+        fills.shape != (contract.state_dim,)
+        or fills.dtype.kind
+        not in {
+            "b",
+            "i",
+            "u",
+            "f",
+            "c",
+        }
+        or not np.isfinite(fills).all()
+    ):
         raise ValueError(
             "GWPS cache feature fill values must match the finite STATE dimension"
         )

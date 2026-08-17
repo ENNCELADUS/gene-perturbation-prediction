@@ -27,8 +27,7 @@ from scipy import sparse
 from scipy.sparse import csr_matrix
 
 from aivc_model.gene_splits import sha256_file
-from aivc_model.gwps_cache import sha256_strings
-from aivc_model.state_core import resolve_state_gene_order
+from aivc_model.state_core import resolve_state_gene_order, sha256_strings
 from aivc_model.tx1_basal import (
     build_perturbseq_basal_adata,
     build_tahoe_basal_adata,
