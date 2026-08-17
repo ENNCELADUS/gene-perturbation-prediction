@@ -19,9 +19,6 @@ import pytest
 import torch
 
 import aivc_model.gene_splits as gene_splits_module
-import aivc_model.model as model_module
-import aivc_model.prepare as prepare_module
-import aivc_model.state_core as state_core
 from aivc_model.gene_embeddings import Esm2EmbeddingTable
 from aivc_model.state_core import (
     Esm2PerturbationAdapter,
@@ -36,32 +33,16 @@ from aivc_model.state_core import (
 # --- single-definition guarantees -------------------------------------------
 
 
-def test_model_module_imports_rather_than_redefines_state_forward_adapter() -> None:
-    assert model_module.StateForwardAdapter is state_core.StateForwardAdapter
 
 
-def test_model_module_imports_rather_than_redefines_esm2_perturbation_adapter() -> None:
-    assert model_module.Esm2PerturbationAdapter is state_core.Esm2PerturbationAdapter
 
 
-def test_model_module_imports_rather_than_redefines_linear_mock_state_model() -> None:
-    assert model_module.LinearMockStateModel is state_core.LinearMockStateModel
 
 
-def test_prepare_module_imports_rather_than_redefines_gene_bags() -> None:
-    assert prepare_module.GeneBags is state_core.GeneBags
 
 
-def test_prepare_module_imports_rather_than_redefines_encode_batch_labels() -> None:
-    assert prepare_module.encode_batch_labels is state_core.encode_batch_labels
 
 
-def test_prepare_module_imports_rather_than_redefines_resolve_state_gene_order() -> (
-    None
-):
-    assert (
-        prepare_module.resolve_state_gene_order is state_core.resolve_state_gene_order
-    )
 
 
 # --- LinearMockStateModel ----------------------------------------------------

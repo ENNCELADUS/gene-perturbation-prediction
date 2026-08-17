@@ -51,12 +51,11 @@ from scripts.build_tx1_basal_embeddings import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_PHASE_B_PERTURBSEQ_SOURCE_CONFIG = (
+_PERTURBSEQ_SOURCE_CONFIG = (
     _REPO_ROOT
     / "configs"
     / "experiments"
-    / "12_tx1_st_geneeffect"
-    / "phase_b"
+    / "13_geneeffect_226"
     / "perturbseq_sources.json"
 )
 _FROZEN_LINE_MANIFEST = (
@@ -1398,7 +1397,7 @@ def test_load_perturbseq_source_config_unknown_source_type_raises(
         _load_perturbseq_source_config(config_path)
 
 
-def test_shipped_phase_b_perturbseq_source_config_names_the_4_anchor_lines() -> None:
+def test_shipped_perturbseq_source_config_names_the_4_anchor_lines() -> None:
     """The committed ``perturbseq_sources.json`` must parse and must name
     exactly the frozen manifest's 4 non-Tahoe (``basal_source ==
     "Perturb-seq non-targeting control"``) lines -- neither more nor
@@ -1411,7 +1410,7 @@ def test_shipped_phase_b_perturbseq_source_config_names_the_4_anchor_lines() -> 
             "model_id",
         ].astype(str)
     )
-    sources = _load_perturbseq_source_config(_PHASE_B_PERTURBSEQ_SOURCE_CONFIG)
+    sources = _load_perturbseq_source_config(_PERTURBSEQ_SOURCE_CONFIG)
     assert set(sources) == expected
     assert isinstance(sources["ACH-000971"], XatlasOrionSource)
     for model_id in expected - {"ACH-000971"}:

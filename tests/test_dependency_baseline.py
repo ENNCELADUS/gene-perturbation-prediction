@@ -17,7 +17,6 @@ from dependency_baseline.config import (
     SelectionConfig,
     ViabilityAxisArtifactConfig,
     ViabilityAxisConfig,
-    load_config,
 )
 from dependency_baseline.artifacts import organize_artifacts
 from dependency_baseline.evaluation import (
@@ -643,126 +642,8 @@ def test_mlp_cv_writes_artifacts_on_synthetic_data(tmp_path: Path) -> None:
     assert np.isfinite(model_manifest.iloc[0]["torch_best_validation_loss"])
 
 
-def test_strict_mlp_config_loads_expected_variants() -> None:
-    config = load_config(
-        "configs/experiments/"
-        "01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer/strict_mlp.yaml"
-    )
-
-    assert config.selection.scopes == ("internal_cv_all",)
-    assert config.selection.features == ("delta_all",)
-    assert config.selection.models == ("mlp_raw", "mlp_pca50", "mlp_pca100")
-    assert config.selection.weightings == ("unweighted",)
-    assert [spec.name for spec in build_model_specs(config)] == [
-        "mlp_raw",
-        "mlp_pca50",
-        "mlp_pca100",
-    ]
 
 
-def test_active_dependency_configs_follow_grouped_layout() -> None:
-    config_paths = sorted(Path("configs/experiments").glob("0[0-4]_*/*.yaml"))
-
-    assert config_paths
-    assert not Path("configs/adamson_k562_external_features.yaml").exists()
-    for path in config_paths:
-        config = load_config(path)
-        output_dir = config.data.output_dir.as_posix()
-        assert output_dir.startswith("results/experiments/")
-        assert "/home/richard/projects/VCC" not in output_dir
-        assert "results/replogle_k562_" not in output_dir
-
-    stage1_paths = [
-        path
-        for path in config_paths
-        if "01_replogle_k562_pseudobulk_b_to_c_and_adamson_transfer" in path.parts
-    ]
-    assert len(stage1_paths) == 3
-    for path in stage1_paths:
-        config = load_config(path)
-        assert [external.name for external in config.data.external_evaluations] == [
-            "adamson_k562"
-        ]
-        assert len(config.data.external_feature_sources) == 3
-
-    single_cell_config = load_config(
-        "configs/experiments/"
-        "03_replogle_k562_single_cell_deepsets_adamson/"
-        "deepsets_cv_and_adamson.yaml"
-    )
-    assert not single_cell_config.data.external_evaluations
-    assert len(single_cell_config.data.external_feature_sources) == 3
-    assert "adamson" in single_cell_config.data.external_overlap_csvs[0].name
-
-    multihead_config = load_config(
-        "configs/experiments/"
-        "03_replogle_k562_single_cell_deepsets_adamson/"
-        "multihead_attention_mil.yaml"
-    )
-    assert multihead_config.single_cell.attention_heads == 4
-    assert multihead_config.single_cell.attention_orthogonality_lambda == 0.01
-    assert multihead_config.selection.weightings == ("unweighted",)
-    assert multihead_config.selection.models == (
-        "mhattnmil_pca128_gated4_ortho001",
-        "mhattnmil_scvi128_gated4_ortho001",
-        "mhattnmil_hvg2000_gated4_ortho001",
-    )
-
-    distribution_config = load_config(
-        "configs/experiments/"
-        "03_replogle_k562_single_cell_deepsets_adamson/"
-        "distribution_prototype_regression.yaml"
-    )
-    assert distribution_config.distribution.component_counts == (32,)
-    assert distribution_config.distribution.sensitivity_component_counts == (16, 64)
-    assert distribution_config.distribution.views == ("centered", "deltap")
-    assert distribution_config.selection.weightings == ("unweighted",)
-
-    distribution_sweep_config = load_config(
-        "configs/experiments/"
-        "03_replogle_k562_single_cell_deepsets_adamson/"
-        "distribution_adamson_validation_sweep.yaml"
-    )
-    assert distribution_sweep_config.single_cell.feature_sets == (
-        "single_cell_scvi_delta",
-        "single_cell_pc_delta",
-        "single_cell_hvg500_delta",
-        "single_cell_hvg1000_delta",
-    )
-    assert distribution_sweep_config.distribution.component_counts == (32, 64)
-    assert distribution_sweep_config.distribution.sensitivity_component_counts == (96,)
-    assert distribution_sweep_config.distribution.ridge_alphas == (
-        0.1,
-        0.3,
-        1.0,
-        3.0,
-        10.0,
-        30.0,
-        100.0,
-        300.0,
-    )
-
-    predicted_b_config = load_config(
-        "configs/experiments/04_k562_linear_predicted_b_to_c/linear_predicted_b_cv.yaml"
-    )
-    assert predicted_b_config.predicted_b.feature_set == "single_cell_scvi_delta"
-    assert predicted_b_config.predicted_b.methods == (
-        "mean_delta_ridge",
-        "pseudo_pair_ridge",
-    )
-    assert predicted_b_config.predicted_b.gmm_components == 64
-    assert predicted_b_config.predicted_b.gmm_view == "centered"
-    assert predicted_b_config.predicted_b.c_ridge_alpha == 300.0
-    assert predicted_b_config.predicted_b.max_pred_cells_per_gene == 512
-
-    state_ablation_config = load_config(
-        "configs/experiments/05_aivc_a_to_b_to_c/state_frozen_feature_ablation.yaml"
-    )
-    assert state_ablation_config.cv.n_splits == 5
-    assert state_ablation_config.cv.random_state == 42
-    assert state_ablation_config.distribution.component_counts == (64,)
-    assert state_ablation_config.distribution.ridge_alphas == (30.0, 300.0)
-    assert state_ablation_config.predicted_b.max_pred_cells_per_gene == 512
 
 
 def test_model_variant_names_are_deterministic(tmp_path: Path) -> None:

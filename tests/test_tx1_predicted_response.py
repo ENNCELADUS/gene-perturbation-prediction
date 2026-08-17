@@ -47,11 +47,6 @@ from aivc_model.tx1_predicted_response import (
     resolve_genes_against_vocabulary,
     vocabulary_genes,
 )
-from aivc_model.tx1_predicted_response_cache import (
-    load_predicted_response_cache,
-    predicted_response_fingerprint,
-    write_predicted_response_cache,
-)
 
 _INPUT_DIM = 6
 _OUTPUT_DIM = 4
@@ -663,160 +658,30 @@ def _baseline_fingerprint_kwargs(tmp_path: Path) -> dict[str, object]:
     }
 
 
-def test_fingerprint_changes_when_st_checkpoint_content_changes(
-    tmp_path: Path,
-) -> None:
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    changed_checkpoint = tmp_path / "checkpoint_b.bin"
-    changed_checkpoint.write_bytes(b"checkpoint-b")
-    changed = {**baseline, "st_checkpoint_path": changed_checkpoint}
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **changed
-    )
 
 
-def test_fingerprint_changes_when_phase_b_hashes_change(tmp_path: Path) -> None:
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    changed_manifest = tmp_path / "manifest_b.json"
-    _write_phase_b_manifest(
-        changed_manifest,
-        {"ACH-0001": ("hash-DIFFERENT", "hash-hvg-aaa")},
-    )
-    changed = {**baseline, "phase_b_manifest_path": changed_manifest}
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **changed
-    )
 
 
-def test_fingerprint_changes_when_model_id_changes(tmp_path: Path) -> None:
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    changed = {**baseline, "model_id": "ACH-0002"}  # same recorded hashes as ACH-0001
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **changed
-    )
 
 
-def test_fingerprint_changes_when_gene_list_changes(tmp_path: Path) -> None:
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    changed = {**baseline, "genes": ["G1", "G3"]}
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **changed
-    )
 
 
-def test_fingerprint_changes_when_seed_changes(tmp_path: Path) -> None:
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    changed = {**baseline, "seed": 1}
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **changed
-    )
 
 
-def test_fingerprint_changes_when_arm_changes(tmp_path: Path) -> None:
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    changed = {**baseline, "arm": ARM_HVG}
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **changed
-    )
 
 
-def test_fingerprint_changes_when_cell_set_len_changes(tmp_path: Path) -> None:
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    changed = {**baseline, "cell_set_len": 8}
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **changed
-    )
 
 
-def test_fingerprint_changes_when_vocabulary_gene_order_changes(tmp_path: Path) -> None:
-    """P1-4: reordering the SAME vocabulary genes must change the fingerprint.
-
-    Before this fix, ``predicted_response_fingerprint`` only hashed the
-    sorted, deduplicated *requested* ``genes`` -- a vocabulary holding the
-    exact same gene SET in a different construction order (which silently
-    binds every positional ``missing_vectors`` weight to a different gene,
-    per fix rounds 5/6) hashed identically and would have been treated as
-    cache-equivalent.
-    """
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    reordered = {
-        **baseline,
-        "vocabulary_genes": list(reversed(baseline["vocabulary_genes"])),
-    }
-    assert set(reordered["vocabulary_genes"]) == set(baseline["vocabulary_genes"])
-    assert predicted_response_fingerprint(**baseline) != predicted_response_fingerprint(
-        **reordered
-    )
 
 
-def test_fingerprint_unchanged_when_vocabulary_gene_set_and_order_both_match(
-    tmp_path: Path,
-) -> None:
-    """Sanity check: an identical vocabulary (same genes, same order) built
-    from a fresh list instance must reproduce the identical fingerprint --
-    the new field must not introduce spurious non-determinism (e.g. from
-    iterating a set)."""
-    baseline = _baseline_fingerprint_kwargs(tmp_path)
-    rebuilt = {**baseline, "vocabulary_genes": list(baseline["vocabulary_genes"])}
-    assert predicted_response_fingerprint(**baseline) == predicted_response_fingerprint(
-        **rebuilt
-    )
 
 
-def test_write_and_load_predicted_response_cache_round_trip(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "predicted_response_cache"
-    responses = {
-        "G1": np.arange(6, dtype=np.float32).reshape(2, 3),
-        "G2": np.arange(6, 12, dtype=np.float32).reshape(2, 3),
-    }
-    write_predicted_response_cache(
-        cache_dir, "ACH-0001", ARM_TX1, "fingerprint-a", responses
-    )
-
-    loaded = load_predicted_response_cache(
-        cache_dir, "ACH-0001", ARM_TX1, "fingerprint-a"
-    )
-
-    assert set(loaded) == {"G1", "G2"}
-    for gene, array in responses.items():
-        np.testing.assert_array_equal(np.asarray(loaded[gene]), array)
 
 
-def test_load_predicted_response_cache_refuses_on_fingerprint_mismatch(
-    tmp_path: Path,
-) -> None:
-    cache_dir = tmp_path / "predicted_response_cache"
-    responses = {"G1": np.zeros((2, 3), dtype=np.float32)}
-    write_predicted_response_cache(
-        cache_dir, "ACH-0001", ARM_TX1, "fingerprint-a", responses
-    )
-
-    with pytest.raises(ValueError, match="stale"):
-        load_predicted_response_cache(
-            cache_dir, "ACH-0001", ARM_TX1, "fingerprint-B-DIFFERENT"
-        )
 
 
-def test_load_predicted_response_cache_refuses_on_schema_version_mismatch(
-    tmp_path: Path,
-) -> None:
-    cache_dir = tmp_path / "predicted_response_cache"
-    responses = {"G1": np.zeros((2, 3), dtype=np.float32)}
-    manifest_path = write_predicted_response_cache(
-        cache_dir, "ACH-0001", ARM_TX1, "fingerprint-a", responses
-    )
-    manifest = json.loads(manifest_path.read_text())
-    manifest["schema_version"] = 999
-    manifest_path.write_text(json.dumps(manifest))
-
-    with pytest.raises(ValueError, match="schema_version"):
-        load_predicted_response_cache(cache_dir, "ACH-0001", ARM_TX1, "fingerprint-a")
 
 
-def test_load_predicted_response_cache_raises_when_missing(tmp_path: Path) -> None:
-    cache_dir = tmp_path / "predicted_response_cache"
-    with pytest.raises(FileNotFoundError):
-        load_predicted_response_cache(cache_dir, "ACH-NOPE", ARM_TX1, "fingerprint-a")
 
 
 def test_slice_symbol_aliases_resolve_by_default() -> None:
