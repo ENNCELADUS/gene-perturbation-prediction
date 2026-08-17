@@ -3,7 +3,9 @@
 **Status:** `context_screen_v2` and its row-level split were built 2026-08-16; no model has
 run. The filter audit remains incomplete. Supersedes the withdrawn STATE-to-SLIdR protocol.
 **Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
-executable form and may not relax it.
+executable form and may not relax it. **Companion:**
+[`04-exp13-geneeffect-residual-protocol.md`](04-exp13-geneeffect-residual-protocol.md) is the
+separate, scope-closed GeneEffect residual protocol this document's §7 defers to.
 
 ## 1. Objective
 
@@ -201,11 +203,11 @@ columns as the honest ceiling.
 Metrics carry the number of the stage in §4 that they score. **Stage 1** reports the
 response metrics before and after Stage 2 training, per §4.
 
-**Stage 2** uses two surfaces. A dependency split over `C_dep`, disjoint from the SL
-contexts and holding out at least eight, carries the per-gene across-context Spearman on the
-residual over $G_{\text{var}}$ — the axis the redesign is justified by, and the one R1's
-ladder baselines. GeneEffect-covered SL test contexts carry per-context cross-gene Spearman; it is
-reportable and cannot support a context claim.
+**Stage 2** uses two surfaces. The held-out per-gene across-context Spearman on the
+GeneEffect residual is reported against Exp13, the single registered GeneEffect benchmark
+(`04-exp13-geneeffect-residual-protocol.md`) — this document defines no second, ad hoc
+dependency split for the same quantity. GeneEffect-covered SL test contexts carry
+per-context cross-gene Spearman; it is reportable and cannot support a context claim.
 
 **Stage 3** reports AUPR per test context and the macro, both as $\text{AUPR}-\text{prior}$.
 AUROC is secondary. Coverage and post-filter class counts precede every performance number.

@@ -4,8 +4,10 @@
 train-free SLIdR stage; neither is part of this program. T1 and T2 closed negative and are
 paused. No result exists under this contract.
 **Companions:** [`02-literature-review.md`](02-literature-review.md) fixes the prior-art
-boundary · [`03-experiment-protocol.md`](03-experiment-protocol.md) is the executable
-protocol · [`data/sl-context-screen.md`](data/sl-context-screen.md) is the benchmark.
+boundary · [`03-experiment-protocol.md`](03-experiment-protocol.md) is the SL-pair executable
+protocol · [`04-exp13-geneeffect-residual-protocol.md`](04-exp13-geneeffect-residual-protocol.md)
+is the scope-closed GeneEffect residual protocol · [`data/sl-context-screen.md`](data/sl-context-screen.md)
+and [`data/cell-line-geneeffect-226.md`](data/cell-line-geneeffect-226.md) are the benchmarks.
 
 ## 1. Task
 
@@ -49,18 +51,31 @@ is Pearson correlation.
 With pooling $\Pi(B)=[\operatorname{mean}(B),\operatorname{var}(B)]$ over a cell bag $B$:
 
 ```text
-z_c            = Pi(X_c)                          context vector
-Yhat_{c,g}     = { F_omega(x_c^(i), e_g) }        predicted perturbed cells
-Delta_{g,c}    = Pi(Yhat_{c,g}) - z_c             perturbation-induced change
+z_c            = Pi(X_c)                          context vector, F_omega INPUT space
+B_c            = {b_c^(i)}                        basal cells in F_omega's OUTPUT space
+Bhat_{c,g}     = { F_omega(x_c^(i), e_g) }        predicted perturbed cells, output space
+Delta_{g,c}    = Pi(Bhat_{c,g}) - Pi(B_c)         output-space change; never mixed with z_c
+s_{g,c}        = online dispersion statistics of Bhat_{c,g} against B_c
+q_sc_{g,c}     = single-cell basal statistics of gene g in context c
 muhat_g        = h_mu(e_g)                        context-blind gene mean
-deltahat_{g,c} = h_delta(Delta_{g,c}, e_g, z_c)   context residual
+deltahat_{g,c} = h_delta(Delta_{g,c}, s_{g,c}, q_sc_{g,c}, e_g, z_c)   5-block residual
 yhat_{g,c}     = muhat_g + deltahat_{g,c}
 ```
+
+**Amendment (2026-08-17).** The prior single-symbol form, `Delta_{g,c} = Pi(Bhat_{c,g}) -
+z_c`, is ill-typed whenever $F_\omega$'s input and output widths differ: $z_c$ pools the
+*input* space, $\hat B_{c,g}$ the *output* space (Tx1-3B 2560-d in vs. ST 2000-d out —
+`configs/experiments/12_tx1_st_geneeffect/phase_c/tx1_arm.yaml`, `input_dim: 2560`,
+`output_dim: 2000`). $B_c$, the basal bag re-expressed in output space, is the fix; $s_{g,c}$
+and $q_{sc,g,c}$ are two further declared blocks a composition may hand $h_\delta$.
 
 The $\mu/\delta$ split is load-bearing. Because
 $\operatorname{Var}_g(\mu_g)\gg\operatorname{Var}_c(\delta_{g,c})$, one head regressing raw
 GeneEffect is optimized almost entirely by the context-blind term, and a model with
-$\hat\delta\approx 0$ still posts a strong raw correlation. The SL head consumes the
+$\hat\delta\approx 0$ still posts a strong raw correlation. $\hat\mu_g$ collapses to
+$\mu_g^{tr}$, no learned $h_\mu$, whenever a benchmark declares every scored gene
+GeneEffect-covered by construction (Exp13 does; see `04-exp13-geneeffect-residual-protocol.md`).
+The SL head consumes the
 $\hat\delta$ profile over $\mathcal{C}_{\text{ref}}$, summarized per gene by nine frozen
 statistics $\Sigma$: mean; population standard deviation; the quantiles at
 $0.10,0.25,0.50,0.75,0.90$; and the fractions of the profile below $-0.5$ and below $-1.0$.
@@ -209,19 +224,26 @@ four are contract-level.
   recovery of context-dependent reversal. Two of its contexts are one screen exploded twice,
   which makes this caveat more important, not less.
 - Candidate prioritization is not experimental target validation.
+- **Exp13 is scope-closed.** The 226-line cell-line GeneEffect residual benchmark
+  (`data/cell-line-geneeffect-226.md`, protocol `04-exp13-geneeffect-residual-protocol.md`) is
+  not evidence for cross-context SL. Reusing its single frozen backbone pass for an SL
+  held-out-context claim needs an out-of-fold backbone per inner group, per
+  [`03-experiment-protocol.md`](03-experiment-protocol.md) §5, which Exp13 does not build; the
+  226 split and `context_screen_v2` never substitute for each other.
 
 ## 9. Current Scientific State
 
 - **T1:** the exp05 Bridge-A evaluation did not recover Horlbeck K562 genetic interactions;
   closed negative and paused. Under this contract no gate consumes measured GI.
 - **T2:** Tx1-3B-ST did not beat the registered few-shot copy-K562 baseline on the frozen
-  nine-line test; closed negative and paused. §3 and §4 name
-  the three defects this contract corrects — a frozen response module, a head regressing raw
-  GeneEffect, and a loss on the $\mu_g$-dominated axis.
+  nine-line test; closed negative and paused, superseded by Exp13's corrected composition
+  (below). T2 ran under the pre-amendment §3, whose Delta-typing defect this amendment fixes.
 - **R1:** the residual ladder is implemented and is the registered baseline for
   $\hat\delta$ and for control C5.
-- **Benchmark:** a row-level split is built; the raw-filter audit remains incomplete and no
-  model has run.
+- **Benchmark:** the `context_screen_v2` row-level SL split is built; its raw-filter audit
+  remains incomplete and no model has run.
+- **Exp13:** the 226-line GeneEffect residual benchmark contract is written (`04-exp13-
+  geneeffect-residual-protocol.md`); no run has started. Scope-closed per §8.
 
 Negative backbone results constrain the substrate; they are not SL results. A claim enters
 `results/` only after its frozen evaluation, provenance, and integrity checks complete.
