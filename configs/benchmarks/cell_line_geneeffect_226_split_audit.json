@@ -1,0 +1,121 @@
+{
+  "atlas_original_model_id_overlap": 0,
+  "cohort_counts": {
+    "new_cell_line_atlas_179": {
+      "test": 27,
+      "train": 125,
+      "val": 27
+    },
+    "original_context_47": {
+      "test": 0,
+      "train": 47,
+      "val": 0
+    }
+  },
+  "counts": {
+    "test": 27,
+    "train": 172,
+    "val": 27
+  },
+  "geneeffect": {
+    "available_model_ids": 224,
+    "common_genes_train_ge5_val_ge3_test_ge3": 17931,
+    "missing_model_ids": [
+      "ACH-000779",
+      "ACH-001086"
+    ],
+    "slices": {
+      "test": {
+        "geneeffect_lines": 27,
+        "genes_with_any_finite": 18513,
+        "membership_lines": 27
+      },
+      "train": {
+        "geneeffect_lines": 170,
+        "genes_with_any_finite": 18531,
+        "membership_lines": 172
+      },
+      "val": {
+        "geneeffect_lines": 27,
+        "genes_with_any_finite": 18435,
+        "membership_lines": 27
+      }
+    },
+    "train_genes_with_at_least_5_finite": 18288
+  },
+  "input_sha256": {
+    "atlas_manifest": "12ac575e1deea1e8343fa05c04b4bd590c39534d004a682a1d0ba297055b8a37",
+    "basal_registry": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47",
+    "builder_script": "e7103114cfb2a158bdbe7db997befd5613dbc5cefdad8963ba6e457b60bd10dc",
+    "depmap_model": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8",
+    "geneeffect": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e",
+    "phase_a_manifest": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297",
+    "selection_audit": "7b1ebf963f4897972439e2c337a0bac7d25f40d9f27adf64a9de1b04496a719b"
+  },
+  "optimizer_for_179_partition": {
+    "deterministic_tie_break_seed": 20260816,
+    "method": "scipy.optimize.milp",
+    "objective": "global minimum source_by_lineage_L1_deviation",
+    "primary_objective": 15.657894736842104,
+    "primary_optimal": true
+  },
+  "original_contexts_all_train": true,
+  "output_sha256": {
+    "csv": "942e8278b165fe95866801c9563550728e260d9f2f2000104b6fabe0fbb94bfa",
+    "json": "1c91d3a821f50bb5aadfb9fac86b889311e194380c64b484463c1f437c41ed72"
+  },
+  "patient_group_cross_split": 0,
+  "schema_version": "cell-line-geneeffect-226-split-audit-v1",
+  "selection_provenance": {
+    "evidence_sha256": {
+      "context_basal_registry": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47",
+      "depmap_gene_effect": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e",
+      "depmap_model": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8",
+      "kinker_pool_composition": "7f71f3d7223a9d92ed51c810fafc0e150dd5be0b362e0e3f49f973b949ee62b0",
+      "phase_a_manifest": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297"
+    },
+    "excluded_model_ids": 47,
+    "gene_effect_model_ids": 1208,
+    "multi_model_patient_groups": {
+      "PT-8CE6ah": [
+        "ACH-000248",
+        "ACH-000017"
+      ],
+      "PT-viJKnw": [
+        "ACH-000028",
+        "ACH-000019"
+      ]
+    },
+    "same_patient_as_excluded": [
+      "ACH-001061"
+    ],
+    "schema_version": "cell-line-atlas-179-selection-audit-v1",
+    "selected_excluded_overlap": [],
+    "selected_model_ids": 179,
+    "selected_patient_ids": 177,
+    "source_counts": {
+      "breast_cell_line_atlas": 14,
+      "ccla_omix005191": 13,
+      "kinker_sccle": 152
+    },
+    "status": "verified_against_local_26q1_and_exclusion_manifests"
+  },
+  "source_targets_for_179_partition": {
+    "test": {
+      "breast_cell_line_atlas": 4,
+      "ccla_omix005191": 4,
+      "kinker_sccle": 19
+    },
+    "train": {
+      "breast_cell_line_atlas": 8,
+      "ccla_omix005191": 7,
+      "kinker_sccle": 110
+    },
+    "val": {
+      "breast_cell_line_atlas": 2,
+      "ccla_omix005191": 2,
+      "kinker_sccle": 23
+    }
+  },
+  "status": "verified_unified_split"
+}
