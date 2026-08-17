@@ -102,9 +102,18 @@ def _write_context_csv(
 
 
 def _write_split_json(
-    path: Path, train: list[str], val: list[str], test: list[str]
+    path: Path,
+    train: list[str],
+    val: list[str],
+    test: list[str],
+    unlabeled_train: list[str] | None = None,
 ) -> Path:
-    payload = {"train": train, "val": val, "test": test}
+    payload = {
+        "train": train,
+        "val": val,
+        "test": test,
+        "unlabeled_train": unlabeled_train or [],
+    }
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
@@ -542,6 +551,8 @@ def test_fixed_split_evaluates_val_and_test_slices(tmp_path: Path) -> None:
     assert summary["outer"] == "fixed"
     assert set(summary["slices"]) == {"val", "test"}
     assert summary["split"]["train"] == train
+    assert summary["split"]["supervised_train"] == train
+    assert summary["split"]["unlabeled_train"] == []
     assert summary["split"]["val"] == val
     assert summary["split"]["test"] == test
     assert summary["slices"]["val"]["n_lines_evaluated"] == len(val)
@@ -594,6 +605,61 @@ def test_fixed_split_train_never_enters_val_fit(tmp_path: Path) -> None:
     # any leakage from the outlier val label would pull mu_hat toward it
     # and shrink this residual well below 49 in magnitude.
     assert (val_gene_mean["residual"] <= -48.0).all()
+
+
+def test_fixed_split_keeps_unlabeled_train_members_out_of_supervised_fit(
+    tmp_path: Path,
+) -> None:
+    """Unlabeled train membership is allowed but never becomes a label donor."""
+    lines = [f"L{i}" for i in range(7)]
+    genes = [f"G{i}" for i in range(12)]
+    labels = _labels_no_signal(lines, genes, seed=4)
+    unlabeled = "PC9_NO_GENEEFFECT"
+    train, val, test = [*lines[:5], unlabeled], [lines[5]], [lines[6]]
+    signal = {line: float(i) for i, line in enumerate([*lines, unlabeled])}
+    context_csv = _write_context_csv(
+        tmp_path / "ctx.csv", [*lines, unlabeled], {"signal": signal}
+    )
+    split_json = _write_split_json(
+        tmp_path / "split.json", train, val, test, [unlabeled]
+    )
+
+    out_dir = _run_cli(
+        tmp_path,
+        labels,
+        context_paths={"ctx": context_csv},
+        outer="fixed",
+        split_json=split_json,
+    )
+    summary = json.loads((out_dir / "summary.json").read_text())
+    assert summary["split"]["train"] == train
+    assert summary["split"]["supervised_train"] == lines[:5]
+    assert summary["split"]["unlabeled_train"] == [unlabeled]
+    predictions = pd.read_csv(out_dir / "predictions.csv")
+    assert unlabeled not in set(predictions["model_id"])
+    assert predictions["residual_prediction"].notna().all()
+
+
+def test_fixed_split_rejects_unlabeled_validation(tmp_path: Path) -> None:
+    """Only train may contain a context without GeneEffect labels."""
+    labels = _labels_no_signal(_BASE_LINES, _BASE_GENES)
+    split_json = _write_split_json(
+        tmp_path / "split.json", _BASE_LINES[:5], ["UNKNOWN_VAL"], [_BASE_LINES[5]]
+    )
+    with pytest.raises(ValueError, match="split 'val' has unknown model_id"):
+        _run_cli(tmp_path, labels, outer="fixed", split_json=split_json)
+
+
+def test_fixed_split_rejects_undeclared_unknown_train(tmp_path: Path) -> None:
+    labels = _labels_no_signal(_BASE_LINES, _BASE_GENES)
+    split_json = _write_split_json(
+        tmp_path / "split.json",
+        [*_BASE_LINES[:5], "TYPO"],
+        [_BASE_LINES[5]],
+        [],
+    )
+    with pytest.raises(ValueError, match="does not match declared unlabeled_train"):
+        _run_cli(tmp_path, labels, outer="fixed", split_json=split_json)
 
 
 # --- No forbidden provenance/exposure apparatus in the plain JSON output --

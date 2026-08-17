@@ -46,6 +46,8 @@ wheels/
 *.zip
 *.parquet
 *.pkl
+# Frozen benchmark membership is a small provenance manifest, not a data dump.
+!configs/benchmarks/cell_line_geneeffect_226_split.csv
 # Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
 !docs/report/tables/*.csv
 # Frozen Phase-A T2 evaluation contract (small, hash-pinned source-of-truth; the

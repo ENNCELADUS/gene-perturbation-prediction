@@ -146,7 +146,19 @@ def _load_split(path: Path) -> FixedSplit:
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise ValueError(f"split JSON {path}: {key!r} must be a list of strings")
         parts[key] = tuple(value)
-    return FixedSplit(train=parts["train"], val=parts["val"], test=parts["test"])
+    unlabeled = payload.get("unlabeled_train", [])
+    if not isinstance(unlabeled, list) or not all(
+        isinstance(value, str) for value in unlabeled
+    ):
+        raise ValueError(
+            f"split JSON {path}: 'unlabeled_train' must be a list of strings"
+        )
+    return FixedSplit(
+        train=parts["train"],
+        val=parts["val"],
+        test=parts["test"],
+        unlabeled_train=tuple(unlabeled),
+    )
 
 
 def _write_outputs(result: R1Result, out_dir: Path) -> None:

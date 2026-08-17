@@ -1,0 +1,40 @@
+{
+  "manifest_path": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/cell_line_atlas_179/manifest/cell_line_atlas_179_manifest.csv",
+  "gene_metadata_path": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/tahoe_100m_metadata/gene_metadata.parquet",
+  "gene_metadata_ensembl_column": "ensembl_id",
+  "gene_metadata_symbol_column": "gene_symbol",
+  "gene_metadata_token_column": "token_id",
+  "minimum_token_id": 3,
+  "tx1_vocab_path": "/2023533015/VCC_Project/data/models/tahoe_x1_3b/3b-model/vocab.json",
+  "tx1_model_dir": "/2023533015/VCC_Project/data/models/tahoe_x1_3b/3b-model",
+  "run_tx1_loader_probe": true,
+  "tx1_loader_probe_max_length": 2048,
+  "state_model_dir": "/2023533015/VCC_Project/model/checkpoints/state/ST-HVG-Replogle/fewshot/k562",
+  "expected_lines": 27,
+  "expected_matrix_semantics": "raw_umi_counts",
+  "sources": {
+    "breast_cell_line_atlas": {
+      "kind": "matrix_market_genes_by_cells",
+      "matrix_path": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/cell_line_atlas_179/sources/breast_cell_line_atlas/matrix.mtx.gz",
+      "features_path": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/cell_line_atlas_179/sources/breast_cell_line_atlas/features.tsv.gz",
+      "feature_column": 0,
+      "barcodes_path": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/cell_line_atlas_179/sources/breast_cell_line_atlas/barcodes.tsv.gz",
+      "barcode_column": 0,
+      "selected_cells_path": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/cell_line_atlas_179/derived/breast_cell_line_atlas/selected_cells.tsv",
+      "selected_model_id_column": "model_id",
+      "selected_cell_id_column": "cell_id",
+      "selected_matrix_column": "matrix_file",
+      "gene_id_kind": "ensembl"
+    },
+    "ccla_omix005191": {
+      "kind": "wide_tsv_genes_by_cells",
+      "source_root": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/cell_line_atlas_179/sources/ccla_omix005191",
+      "feature_id_column": "ID",
+      "selected_cells_path": "/2023533015/VCC_Project/data/sl_dependency_v0/raw/cell_line_atlas_179/derived/ccla_omix005191/selected_cells.tsv",
+      "selected_model_id_column": "model_id",
+      "selected_cell_id_column": "cell_id",
+      "selected_matrix_column": "matrix_file",
+      "gene_id_kind": "symbol"
+    }
+  }
+}

@@ -99,11 +99,13 @@ class FixedSplit:
         train: Lines mu_hat/mu_bar and every context method are fit on.
         val: Lines evaluated as the "val" slice (may be empty).
         test: Lines evaluated as the "test" slice (may be empty).
+        unlabeled_train: Declared train members without GeneEffect supervision.
     """
 
     train: tuple[str, ...]
     val: tuple[str, ...]
     test: tuple[str, ...]
+    unlabeled_train: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -485,10 +487,15 @@ def _run_eval(
     return rows
 
 
-def _validate_split(labels: pd.DataFrame, split: FixedSplit) -> None:
-    """Raise ValueError if ``split`` is malformed against ``labels``."""
+def _validate_split(labels: pd.DataFrame, split: FixedSplit) -> tuple[str, ...]:
+    """Validate ``split`` and return its supervised train subset.
+
+    Train membership may include contexts without GeneEffect labels. They remain
+    registered train contexts but are excluded from every supervised fit and
+    label-donor set. Validation and test must be fully labeled.
+    """
     known = set(labels["model_id"])
-    for name, ids in (("train", split.train), ("val", split.val), ("test", split.test)):
+    for name, ids in (("val", split.val), ("test", split.test)):
         unknown = sorted(set(ids) - known)
         if unknown:
             raise ValueError(f"split {name!r} has unknown model_id(s): {unknown}")
@@ -502,8 +509,25 @@ def _validate_split(labels: pd.DataFrame, split: FixedSplit) -> None:
         raise ValueError(f"split partitions overlap: {bad}")
     if not split.train:
         raise ValueError("split 'train' must be non-empty")
+    declared_unlabeled = set(split.unlabeled_train)
+    outside_train = sorted(declared_unlabeled - set(split.train))
+    if outside_train:
+        raise ValueError(
+            f"split 'unlabeled_train' contains non-train model_id(s): {outside_train}"
+        )
+    unknown_train = set(split.train) - known
+    if unknown_train != declared_unlabeled:
+        raise ValueError(
+            "split train label coverage does not match declared unlabeled_train: "
+            f"unknown={sorted(unknown_train)}, "
+            f"declared={sorted(declared_unlabeled)}"
+        )
+    supervised_train = tuple(model_id for model_id in split.train if model_id in known)
+    if not supervised_train:
+        raise ValueError("split 'train' has no GeneEffect-labeled model_id")
     if not split.val and not split.test:
         raise ValueError("split must have at least one of 'val' or 'test' to evaluate")
+    return supervised_train
 
 
 def run_r1_ladder(
@@ -555,13 +579,17 @@ def run_r1_ladder(
     else:
         if split is None:
             raise ValueError("outer='fixed' requires a split")
-        _validate_split(labels, split)
-        mu_bar = fit_gene_means(labels, split.train, min_lines=min_lines)
+        supervised_train = _validate_split(labels, split)
+        mu_bar = fit_gene_means(labels, supervised_train, min_lines=min_lines)
         slice_specs = {}
         if split.val:
-            slice_specs[VAL_SLICE] = [(list(split.train), held) for held in split.val]
+            slice_specs[VAL_SLICE] = [
+                (list(supervised_train), held) for held in split.val
+            ]
         if split.test:
-            slice_specs[TEST_SLICE] = [(list(split.train), held) for held in split.test]
+            slice_specs[TEST_SLICE] = [
+                (list(supervised_train), held) for held in split.test
+            ]
 
     all_rows: list[dict] = []
     effective_components: dict[str, dict[str, set[int]]] = {}
@@ -747,6 +775,12 @@ def _summarize(
     if outer == "fixed" and split is not None:
         summary["split"] = {
             "train": list(split.train),
+            "supervised_train": [
+                model_id
+                for model_id in split.train
+                if model_id not in set(split.unlabeled_train)
+            ],
+            "unlabeled_train": list(split.unlabeled_train),
             "val": list(split.val),
             "test": list(split.test),
         }
