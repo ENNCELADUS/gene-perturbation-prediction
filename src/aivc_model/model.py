@@ -16,8 +16,12 @@ from torch.distributed.nn.functional import all_gather as _differentiable_all_ga
 from torch import nn
 import torch.nn.functional as F
 
-from aivc_model.gene_embeddings import Esm2EmbeddingTable, PertAdapter
 from aivc_model.response import ResponseEncoder, TrainableDiagonalGMM
+from aivc_model.state_core import (
+    Esm2PerturbationAdapter,
+    LinearMockStateModel,
+    StateForwardAdapter,
+)
 from aivc_model.state_warm_start import (
     _suppress_checkpoint_output,
     build_warm_started_state_model,
@@ -51,190 +55,6 @@ class LossWeights:
     pred_rank_tau: float = 0.25
     pred_rank_pair_margin: float = 0.0
     pred_rank_pair_weight_clip: float = 2.0
-
-
-class LinearMockStateModel(nn.Module):
-    """Small STATE-shaped model for tests and smoke runs without a checkpoint."""
-
-    def __init__(self, input_dim: int, output_dim: int, pert_dim: int) -> None:
-        super().__init__()
-        self.input_dim = int(input_dim)
-        self.output_dim = int(output_dim)
-        self.pert_dim = int(pert_dim)
-        self.net = nn.Sequential(
-            nn.Linear(self.input_dim + self.pert_dim, 32),
-            nn.GELU(),
-            nn.Linear(32, self.output_dim),
-        )
-
-    def forward(
-        self,
-        batch: dict[str, torch.Tensor],
-        padded: bool = False,
-    ) -> torch.Tensor:
-        del padded
-        basal = batch["ctrl_cell_emb"]
-        pert = batch["pert_emb"]
-        return self.net(torch.cat([basal, pert], dim=1))
-
-
-def _flatten_state_output(output: object) -> torch.Tensor | None:
-    if not isinstance(output, torch.Tensor):
-        return None
-    if output.dim() == 3 and output.shape[0] == 1:
-        output = output.squeeze(0)
-    if output.dim() > 2:
-        output = output.reshape(-1, output.shape[-1])
-    return output
-
-
-class StateForwardAdapter(nn.Module):
-    """Thin wrapper around an ArcInstitute STATE transition model."""
-
-    def __init__(self, state_model: nn.Module) -> None:
-        super().__init__()
-        self.state_model = state_model
-        self._last_token_features: torch.Tensor | None = None
-
-    @property
-    def last_token_features(self) -> torch.Tensor | None:
-        """Return token hidden features captured from the most recent forward."""
-        return self._last_token_features
-
-    def forward(
-        self,
-        control_cells: torch.Tensor,
-        perturbation: torch.Tensor,
-        gene: str,
-        batch_indices: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        """Run one unpadded condition for frozen-feature extraction."""
-        return self._forward_state(
-            control_cells,
-            perturbation,
-            gene,
-            batch_indices,
-            padded=False,
-        )
-
-    def forward_chunks(
-        self,
-        control_chunks: tuple[torch.Tensor, ...],
-        perturbation: torch.Tensor,
-        gene: str,
-        batch_index_chunks: tuple[torch.Tensor | None, ...],
-    ) -> tuple[torch.Tensor, ...]:
-        """Run equal-size condition chunks as independent STATE sequences."""
-        if len(control_chunks) != len(batch_index_chunks):
-            raise ValueError("control and batch-index chunks must have equal length")
-        if not control_chunks:
-            raise ValueError("at least one STATE condition chunk is required")
-        chunk_sizes = tuple(int(chunk.shape[0]) for chunk in control_chunks)
-        sentence_len = getattr(self.state_model, "cell_sentence_len", None)
-        if len(set(chunk_sizes)) != 1 or (
-            sentence_len is not None and chunk_sizes[0] != sentence_len
-        ):
-            raise ValueError(
-                "STATE chunks must all equal the configured cell_sentence_len"
-            )
-        control_cells = torch.cat(control_chunks, dim=0)
-        batch_indices = _concat_optional_batch_indices(
-            batch_index_chunks,
-            chunk_sizes,
-            control_cells.device,
-        )
-        output = self._forward_state(
-            control_cells,
-            perturbation,
-            gene,
-            batch_indices,
-            padded=True,
-        )
-        return tuple(output.split(chunk_sizes, dim=0))
-
-    def _forward_state(
-        self,
-        control_cells: torch.Tensor,
-        perturbation: torch.Tensor,
-        gene: str,
-        batch_indices: torch.Tensor | None,
-        *,
-        padded: bool,
-    ) -> torch.Tensor:
-        self._last_token_features = None
-        if hasattr(self.state_model, "_token_features"):
-            try:
-                setattr(self.state_model, "_token_features", None)
-            except AttributeError:
-                pass
-        pert = perturbation.unsqueeze(0).expand(control_cells.shape[0], -1)
-        batch: dict[str, Any] = {
-            "ctrl_cell_emb": control_cells,
-            "pert_emb": pert,
-            "pert_name": [gene] * int(control_cells.shape[0]),
-        }
-        if batch_indices is not None:
-            batch["batch"] = batch_indices.to(control_cells.device)
-        elif getattr(self.state_model, "batch_encoder", None) is not None:
-            batch["batch"] = torch.zeros(
-                control_cells.shape[0],
-                dtype=torch.long,
-                device=control_cells.device,
-            )
-        if hasattr(self.state_model, "predict_step"):
-            try:
-                output = self.state_model.predict_step(
-                    batch,
-                    batch_idx=0,
-                    padded=padded,
-                )
-            except TypeError:
-                output = self.state_model.predict_step(batch, 0)
-        else:
-            try:
-                output = self.state_model(batch, padded=padded)
-            except TypeError:
-                output = self.state_model(batch)
-        if isinstance(output, dict):
-            output = output["preds"]
-        if isinstance(output, tuple):
-            output = output[0]
-        token_features = getattr(self.state_model, "_token_features", None)
-        if (
-            not padded
-            and isinstance(token_features, torch.Tensor)
-            and token_features.dim() == 3
-            and token_features.shape[0] != 1
-        ):
-            msg = "STATE token features must have batch dimension 1 when unpadded"
-            raise ValueError(msg)
-        self._last_token_features = _flatten_state_output(token_features)
-        if output.dim() == 3 and output.shape[0] == 1:
-            output = output.squeeze(0)
-        if output.dim() > 2:
-            output = output.reshape(-1, output.shape[-1])
-        return output
-
-
-def _concat_optional_batch_indices(
-    batch_index_chunks: tuple[torch.Tensor | None, ...],
-    chunk_sizes: tuple[int, ...],
-    device: torch.device,
-) -> torch.Tensor | None:
-    if all(batch_indices is None for batch_indices in batch_index_chunks):
-        return None
-    return torch.cat(
-        tuple(
-            batch_indices.to(device)
-            if batch_indices is not None
-            else torch.zeros(size, dtype=torch.long, device=device)
-            for batch_indices, size in zip(
-                batch_index_chunks,
-                chunk_sizes,
-                strict=True,
-            )
-        )
-    )
 
 
 class PerturbationVectorAdapter(nn.Module):
@@ -296,39 +116,6 @@ class PerturbationVectorAdapter(nn.Module):
     def has_known_vector(self, gene: str) -> bool:
         """Return whether a gene used a loaded perturbation vector."""
         return gene in self._known_genes and gene not in self._missing_param_keys
-
-
-class Esm2PerturbationAdapter(nn.Module):
-    """Map fixed per-gene ESM-2 vectors to STATE perturbation vectors."""
-
-    def __init__(
-        self,
-        genes: list[str],
-        table: Esm2EmbeddingTable,
-        adapter_hidden: int,
-        pert_dim: int,
-    ) -> None:
-        super().__init__()
-        self.genes = [str(gene).upper() for gene in genes]
-        missing = [gene for gene in self.genes if gene not in table.vectors_by_symbol]
-        if missing:
-            raise ValueError(f"Unresolved ESM-2 genes: {missing[:10]}")
-        matrix = np.vstack([table.vectors_by_symbol[gene] for gene in self.genes])
-        self._gene_to_index = {gene: index for index, gene in enumerate(self.genes)}
-        self.register_buffer("esm_matrix", torch.as_tensor(matrix, dtype=torch.float32))
-        self.adapter = PertAdapter(table.dim, int(adapter_hidden), int(pert_dim))
-
-    def forward(self, gene: str) -> torch.Tensor:
-        index = self._gene_to_index[str(gene).upper()]
-        return self.adapter(self.esm_matrix[index].unsqueeze(0)).squeeze(0)
-
-    def has_embedding(self, gene: str) -> bool:
-        """Return whether the adapter contains an ESM-2 vector for ``gene``."""
-        return str(gene).upper() in self._gene_to_index
-
-    def has_known_vector(self, gene: str) -> bool:
-        """Compatibility alias for prediction artifact metadata."""
-        return self.has_embedding(gene)
 
 
 class ExpressionToLatentProjector(nn.Module):
