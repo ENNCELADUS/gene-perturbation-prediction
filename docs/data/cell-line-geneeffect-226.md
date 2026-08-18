@@ -22,10 +22,10 @@ DepMap 26Q1 GeneEffect covers 224 of 226 members. PC9 (`ACH-000779`) and HeLa
 cannot contribute supervised loss. Train therefore has 172 members and 170 labeled
 contexts. Raw UMI, registered basal and processed CPM input semantics remain recorded
 per row at the available source level; `registered_basal` is not a numeric matrix
-semantic. **Open question:** 152 of the 179 new-atlas lines are `kinker_sccle`
-`processed_cpm` (19/27 test, 23/27 val); whether the Tx1-X1 collator produces a trustworthy
-embedding from CPM rather than raw counts is unresolved — protocol §6 names the three
-admissible branches and rules out "swap only `z_c`" as a fallback.
+semantic. **Resolved 2026-08-18:** the 152 `kinker_sccle` lines were published as
+`processed_cpm`, and Tx1 does not read CPM like the counts underneath it (the shift survives
+pooling; [result](../results/exp13-stage0-tx1-input-representation.md)). Raw UMI counts from
+SCP542 now back all 152 lines — protocol §6, branch 1. Membership is unchanged.
 
 The split JSON is the sole membership authority. Fit residual targets, normalization,
 feature transforms and all model parameters on train only; validation selects the

@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-08-18):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. In parallel, **Exp13's** 226-line cell-line GeneEffect residual benchmark has a written, scope-closed contract superseding T2: the residual head, the fit guard and the frozen split exist, Stage 0 is open, and no run has started. Every earlier GeneEffect path has been removed. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md) · [`Exp13 protocol`](docs/04-exp13-geneeffect-residual-protocol.md).
+> **Status (2026-08-18):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. In parallel, **Exp13's** 226-line cell-line GeneEffect residual benchmark has a written, scope-closed contract superseding T2: the residual head, the fit guard and the frozen split exist, Stage 0 is **closed** (Tx1 does not read CPM like raw counts, so the 152 Kinker lines were rebuilt from SCP542 UMI counts), and no training run has started. Every earlier GeneEffect path has been removed. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md) · [`Exp13 protocol`](docs/04-exp13-geneeffect-residual-protocol.md).
 
 The central question of the active direction:
 
@@ -32,6 +32,7 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 ## *Latest News* 🔥
 
+- **[2026/08]** **Exp13 Stage 0 closed — Tx1 does not read CPM like raw counts.** Measured per-cell cosine 0.92–0.95 against the raw encode, and unlike gene-subsampling noise the shift survives pooling to the per-line mean (0.972–0.987), so the 152 Kinker `processed_cpm` lines were rebuilt from SCP542 raw UMI counts. Also found: the collator subsamples genes with an unseeded `randperm` above 2048 detected genes, so runs must pin a collator seed. [`Result`](docs/results/exp13-stage0-tx1-input-representation.md) · [`Protocol §6`](docs/04-exp13-geneeffect-residual-protocol.md).
 - **[2026/08]** **Legacy GeneEffect stack removed.** The exp05 training stack, Bridge-A, and the Tx1 Phase A–F tree — three overlapping implementations of one task, all closed negative — were deleted; `src/aivc_model/` drops from 49 files to 17, leaving the Exp13 residual head, the fit guard, the residual ladder and the Tx1 basal path. Registered negatives stay in [`docs/results/`](docs/results/); git history holds the implementations.
 - **[2026/08]** **Exp13 contract (Phase 1) written.** The 226-line cell-line GeneEffect
   residual benchmark gets a scope-closed protocol — a corrected `Delta` typing fix in `01`

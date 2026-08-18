@@ -242,8 +242,10 @@ four are contract-level.
   $\hat\delta$ and for control C5.
 - **Benchmark:** the `context_screen_v2` row-level SL split is built; its raw-filter audit
   remains incomplete and no model has run.
-- **Exp13:** the 226-line GeneEffect residual benchmark contract is written (`04-exp13-
-  geneeffect-residual-protocol.md`); no run has started. Scope-closed per §8.
+- **Exp13:** the 226-line GeneEffect residual contract is written and its Stage 0 input
+  question is closed — Tx1 does not read CPM like raw counts, so the 152 Kinker lines were
+  rebuilt from SCP542 UMI counts (`results/exp13-stage0-tx1-input-representation.md`). No
+  training run has started. Scope-closed per §8.
 
 Negative backbone results constrain the substrate; they are not SL results. A claim enters
 `results/` only after its frozen evaluation, provenance, and integrity checks complete.
