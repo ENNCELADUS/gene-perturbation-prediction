@@ -66,7 +66,16 @@ def esm2_resolvable_genes(path: Path) -> set[str]:
     turning into a silent partial run.
     """
     payload = np.load(path, allow_pickle=True)
-    return {str(symbol).upper() for symbol in payload["symbols"]}
+    symbols = np.asarray(payload["symbols"], dtype=object)
+    # The table carries a row per requested symbol but flags which ones ESM2
+    # actually embedded; ``load_esm2_embeddings`` drops the rest, so counting
+    # them here would hand the adapter genes it will raise on.
+    resolved = np.asarray(payload["resolved"], dtype=bool)
+    return {
+        str(symbol).upper()
+        for symbol, ok in zip(symbols, resolved, strict=True)
+        if bool(ok)
+    }
 
 
 def load_split(path: Path) -> FixedSplit:
