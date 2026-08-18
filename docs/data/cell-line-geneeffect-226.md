@@ -1,7 +1,7 @@
 # Cell-Line GeneEffect Benchmark
 
 **Status:** One fixed pre-run split; no model result has been produced. Protocol:
-[`../04-exp13-geneeffect-residual-protocol.md`](../04-exp13-geneeffect-residual-protocol.md).
+[`../specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](../specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
 
 ## Fixed split
 

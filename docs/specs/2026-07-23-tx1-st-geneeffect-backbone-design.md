@@ -2,7 +2,7 @@
 
 **Status:** retired record — the registered primary gate completed negative 2026-07-29,
 this design's implementation was deleted at `873c99c`, and
-[Exp13](../04-exp13-geneeffect-residual-protocol.md) supersedes it. Concrete architecture for roadmap
+[Exp13](../specs/2026-08-17-exp13-geneeffect-residual-protocol.md) supersedes it. Concrete architecture for roadmap
 **T2 / Phase 3** (the
 few-shot cross-cell-line GeneEffect backbone). **Phase A** (data audit, manifest
 freeze) is **complete**, and was amended 2026-07-26: the differentially-essential

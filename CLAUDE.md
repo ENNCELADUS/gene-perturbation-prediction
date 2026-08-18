@@ -9,7 +9,7 @@ SL-pair/graph training (vs. SLMGAE / KR4SL), and separately transfer a context-c
 
 **State:** T1 (K562 Bridge-A vs Horlbeck mechanism) and T2 (few-shot cross-cell-line GeneEffect) both **completed negative**; their
 implementations — the exp05 stack, Bridge-A, the Tx1 Phase A–F tree — were **deleted at `873c99c`**, surviving in git history and `docs/results/`
-only. Active work is **Exp13**, the 226-line cell-line GeneEffect *residual* benchmark (`docs/04-exp13-geneeffect-residual-protocol.md`): contract
+only. Active work is **Exp13**, the 226-line cell-line GeneEffect *residual* benchmark (`docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`): contract
 written, Stage 0 open, **no run started**. The `context_screen_v2` SL split is built and unrun. Feng2024 SOTA reproduction is not started.
 
 ## Engineering rules

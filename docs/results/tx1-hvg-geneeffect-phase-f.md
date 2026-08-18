@@ -8,7 +8,7 @@ negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`).
 This is a task-data-held-out **single-gene GeneEffect backbone** result, not a
 pairwise synthetic-lethality result. The registered primary kill test is closed;
 the broader Phase F baseline ladder remains incomplete.
-**Superseded (2026-08-17):** Exp13 (`../04-exp13-geneeffect-residual-protocol.md`) replaces
+**Superseded (2026-08-17):** Exp13 (`../specs/2026-08-17-exp13-geneeffect-residual-protocol.md`) replaces
 this design with the corrected five-block composition (`01-blueprint.md` §3 amendment) on the
 226-line benchmark. The numbers below remain registered evidence and are not revised.
 

@@ -4,7 +4,7 @@
 run. The filter audit remains incomplete. Supersedes the withdrawn STATE-to-SLIdR protocol.
 **Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
 executable form and may not relax it. **Companion:**
-[`04-exp13-geneeffect-residual-protocol.md`](04-exp13-geneeffect-residual-protocol.md) is the
+[`specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](specs/2026-08-17-exp13-geneeffect-residual-protocol.md) is the
 separate, scope-closed GeneEffect residual protocol this document's §7 defers to.
 
 ## 1. Objective
@@ -205,7 +205,7 @@ response metrics before and after Stage 2 training, per §4.
 
 **Stage 2** uses two surfaces. The held-out per-gene across-context Spearman on the
 GeneEffect residual is reported against Exp13, the single registered GeneEffect benchmark
-(`04-exp13-geneeffect-residual-protocol.md`) — this document defines no second, ad hoc
+(`specs/2026-08-17-exp13-geneeffect-residual-protocol.md`) — this document defines no second, ad hoc
 dependency split for the same quantity. GeneEffect-covered SL test contexts carry
 per-context cross-gene Spearman; it is reportable and cannot support a context claim.
 

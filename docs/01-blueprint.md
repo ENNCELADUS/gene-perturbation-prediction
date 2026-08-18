@@ -5,7 +5,7 @@ train-free SLIdR stage; neither is part of this program. T1 and T2 closed negati
 paused. No result exists under this contract.
 **Companions:** [`02-literature-review.md`](02-literature-review.md) fixes the prior-art
 boundary · [`03-experiment-protocol.md`](03-experiment-protocol.md) is the SL-pair executable
-protocol · [`04-exp13-geneeffect-residual-protocol.md`](04-exp13-geneeffect-residual-protocol.md)
+protocol · [`specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](specs/2026-08-17-exp13-geneeffect-residual-protocol.md)
 is the scope-closed GeneEffect residual protocol · [`data/sl-context-screen.md`](data/sl-context-screen.md)
 and [`data/cell-line-geneeffect-226.md`](data/cell-line-geneeffect-226.md) are the benchmarks.
 
@@ -65,7 +65,7 @@ yhat_{g,c}     = muhat_g + deltahat_{g,c}
 **Amendment (2026-08-17).** The prior single-symbol form, `Delta_{g,c} = Pi(Bhat_{c,g}) -
 z_c`, is ill-typed whenever $F_\omega$'s input and output widths differ: $z_c$ pools the
 *input* space, $\hat B_{c,g}$ the *output* space (Tx1-3B 2560-d in vs. ST 2000-d out —
-[`04-exp13-geneeffect-residual-protocol.md`](04-exp13-geneeffect-residual-protocol.md) §4).
+[`specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](specs/2026-08-17-exp13-geneeffect-residual-protocol.md) §4).
 $B_c$, the basal bag re-expressed in output space, is the fix; $s_{g,c}$
 and $q_{sc,g,c}$ are two further declared blocks a composition may hand $h_\delta$.
 
@@ -74,7 +74,7 @@ $\operatorname{Var}_g(\mu_g)\gg\operatorname{Var}_c(\delta_{g,c})$, one head reg
 GeneEffect is optimized almost entirely by the context-blind term, and a model with
 $\hat\delta\approx 0$ still posts a strong raw correlation. $\hat\mu_g$ collapses to
 $\mu_g^{tr}$, no learned $h_\mu$, whenever a benchmark declares every scored gene
-GeneEffect-covered by construction (Exp13 does; see `04-exp13-geneeffect-residual-protocol.md`).
+GeneEffect-covered by construction (Exp13 does; see `specs/2026-08-17-exp13-geneeffect-residual-protocol.md`).
 The SL head consumes the
 $\hat\delta$ profile over $\mathcal{C}_{\text{ref}}$, summarized per gene by nine frozen
 statistics $\Sigma$: mean; population standard deviation; the quantiles at
@@ -225,7 +225,7 @@ four are contract-level.
   which makes this caveat more important, not less.
 - Candidate prioritization is not experimental target validation.
 - **Exp13 is scope-closed.** The 226-line cell-line GeneEffect residual benchmark
-  (`data/cell-line-geneeffect-226.md`, protocol `04-exp13-geneeffect-residual-protocol.md`) is
+  (`data/cell-line-geneeffect-226.md`, protocol `specs/2026-08-17-exp13-geneeffect-residual-protocol.md`) is
   not evidence for cross-context SL. Reusing its single frozen backbone pass for an SL
   held-out-context claim needs an out-of-fold backbone per inner group, per
   [`03-experiment-protocol.md`](03-experiment-protocol.md) §5, which Exp13 does not build; the

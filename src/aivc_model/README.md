@@ -3,7 +3,7 @@
 This package is the Exp13 GeneEffect residual path plus the Tx1 basal/response
 machinery it runs on. Keep it narrow and easy to review. The contract is
 [`docs/01-blueprint.md`](../../docs/01-blueprint.md) §3-4; the executable protocol is
-[`docs/04-exp13-geneeffect-residual-protocol.md`](../../docs/04-exp13-geneeffect-residual-protocol.md).
+[`docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](../../docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
 
 ## File Roles
 
