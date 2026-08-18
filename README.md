@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-08-17):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. In parallel, **Exp13's** 226-line cell-line GeneEffect residual benchmark has a written, scope-closed contract (Phase 1) superseding T2; no code or run exists yet. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md) · [`Exp13 protocol`](docs/04-exp13-geneeffect-residual-protocol.md).
+> **Status (2026-08-18):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. In parallel, **Exp13's** 226-line cell-line GeneEffect residual benchmark has a written, scope-closed contract superseding T2: the residual head, the fit guard and the frozen split exist, Stage 0 is open, and no run has started. Every earlier GeneEffect path has been removed. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md) · [`Exp13 protocol`](docs/04-exp13-geneeffect-residual-protocol.md).
 
 The central question of the active direction:
 
@@ -32,6 +32,7 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 ## *Latest News* 🔥
 
+- **[2026/08]** **Legacy GeneEffect stack removed.** The exp05 training stack, Bridge-A, and the Tx1 Phase A–F tree — three overlapping implementations of one task, all closed negative — were deleted; `src/aivc_model/` drops from 49 files to 17, leaving the Exp13 residual head, the fit guard, the residual ladder and the Tx1 basal path. Registered negatives stay in [`docs/results/`](docs/results/); git history holds the implementations.
 - **[2026/08]** **Exp13 contract (Phase 1) written.** The 226-line cell-line GeneEffect
   residual benchmark gets a scope-closed protocol — a corrected `Delta` typing fix in `01`
   §3, a five-block residual composition, and a pre-registered Stage 0 open question over
@@ -79,7 +80,7 @@ uv run python -m pytest
 
 > **Prerequisites**: Python 3.11–3.12 and [`uv`](https://docs.astral.sh/uv/). Running the full pipeline additionally requires Perturb-seq `*.h5ad` files and DepMap labels, which are **not** committed to git (see [Data Sources](#data-sources-and-roles)).
 >
-> **Need more options?** See [Installation](#installation) below for detailed setup, optional dependency groups, and the AIVC STATE exception.
+> **Need more options?** See [Installation](#installation) below for detailed setup, optional dependency groups, and the `aivc_model` exception.
 
 ## Research Framing
 
@@ -116,7 +117,7 @@ cell line + perturbation gene
     → context-specific target ranking
 ```
 
-That staged program is **retired as the roadmap**. Its exp08/exp08b implementation has been removed; the remaining dependency, exp05 forward-model, SL-benchmark, and DDGCN code supports active work and retained baselines. Historical results remain **prior evidence** for the new direction — see [Results](#results) and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
+That staged program is **retired as the roadmap**. Its exp08/exp08b implementation was removed, and the exp05 forward-model stack followed in 2026/08 after T1 and T2 closed negative; the remaining dependency, SL-benchmark, and DDGCN code supports active work and retained baselines. Historical results remain **prior evidence** for the new direction — see [Results](#results) and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
 ## Installation
 
@@ -157,21 +158,20 @@ uv run vcc-dep-baseline --help
 
 Subcommands: `build-features`, `build-cell-bags`, `build-external-cell-bags`, `build-external-features`, `run-cv`, `run-single-cell-cv`, `evaluate-single-cell-external`, `run-distribution-cv`, `evaluate-distribution-external`, `run-predicted-b-cv`, `fit-final`, `summarize`, `organize-artifacts`, `viability-axis-report`. Most runner subcommands accept `--resume` and repeatable selection flags (`--scope`, `--feature-set`, `--model`, `--fold`, `--weighting`).
 
-### The AIVC STATE Exception
+### The `aivc_model` Exception
 
-Experiment 05 (AIVC STATE forward model) is **not** part of the CLI. Run it as a direct module:
+`src/aivc_model/` — the Exp13 GeneEffect residual path — is **not** part of the CLI. Its entrypoints are scripts:
 
 ```bash
-# Direct training
-uv run python src/aivc_model/train.py \
-  --config configs/experiments/05_aivc_a_to_b_to_c/state_hf_hvg_replogle_k562_ranknet_freeze_state.yaml
+# R1 residual baseline ladder on DepMap GeneEffect
+uv run python scripts/run_r1_residual_ladder.py --labels <geneeffect_long.csv> \
+  --split-json configs/benchmarks/cell_line_geneeffect_226_split.json --out-dir <run_dir>
 
-# Slurm wrapper (accelerate launch, 4 GPUs)
-bash scripts/state.sh
+# Rebuild the frozen Exp13 226-line benchmark split
+uv run python scripts/build_cell_line_geneeffect_226_split.py --help
 
-# Frozen-STATE feature ablation
-uv run python src/aivc_model/state_feature_ablation.py \
-  --config configs/experiments/05_aivc_a_to_b_to_c/state_frozen_feature_ablation.yaml
+# Tx1-3B basal embedding cache (GPU only; see docs/04 and the hpc-execution skill)
+PYTHONPATH=src:. .venv-tx1/bin/python scripts/build_tx1_basal_embeddings.py --help
 ```
 
 > Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored. The pipeline requires Perturb-seq and DepMap data you supply locally.
@@ -211,8 +211,8 @@ the **transcriptomic response → single-gene GeneEffect** edge.
                    model manifests, top-k candidates, resume state)
 
    ┌─────────────────────────────────────────────────────────────────┐
-   │ FORWARD MODEL (Exp 05, src/aivc_model/ — direct module, not CLI) │
-   │  basal state + perturbation → STATE A→B→C → B_hat → C predictor  │
+   │ EXP13 RESIDUAL (src/aivc_model/ — scripts, not the CLI)         │
+   │  basal cells + perturbation → Delta → mu_g + delta_hat(g, c)    │
    └─────────────────────────────────────────────────────────────────┘
 
    ┌─────────────────────────────────────────────────────────────────┐
@@ -226,7 +226,7 @@ the **transcriptomic response → single-gene GeneEffect** edge.
 | Module | Role |
 | --- | --- |
 | `src/dependency_baseline/` | Multi-track CV pipeline: `features.py`, `datasets.py`, `models.py`, `cell_bags.py`, `single_cell.py`, `distribution.py`, `predicted_b.py`, `evaluation.py`. |
-| `src/aivc_model/` | AIVC STATE A→B→C forward model (`model.py`, `prepare.py`, `train.py`) plus frozen-STATE feature ablation. |
+| `src/aivc_model/` | Exp13 GeneEffect residual path (`geneeffect_head.py`, `benchmark_split.py`, `residual_{target,ladder,metrics}.py`) plus the Tx1 basal → embedding → response modules and forward-only STATE loading. |
 | `src/sl_benchmark_baseline/` | Dependency-only SL pair baseline with official-metric evaluator. |
 | `config.py` | Frozen dataclasses loaded from YAML; `SelectionConfig` narrows scopes/features/models/folds at runtime. |
 | `artifacts.py` | `ArtifactStore` — incremental parquet writes, checkpoints, run manifests, resume state. |

@@ -1,16 +1,14 @@
 # Plan: K562 Mechanism Kill-Test and GeneEffect Cross-Cell-Type Generalization
 
-**Status:** T1 completed 2026-07-22 and is **negative** (composition mechanism
-paused; [result](../results/exp05-bridge-a-horlbeck-kill-test.md)). T2 is the
-active near-term track, **sharpened 2026-07-23 to a few-shot cross-cell-line
-GeneEffect backbone**; its concrete architecture, data split, and current
-per-phase execution status are tracked in
-[design](2026-07-23-tx1-st-geneeffect-backbone-design.md) §3/§6, which
-supersedes the abstract sketch in §3 below.
-Authority: [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
-[`../02-acceptance-criteria.md`](../02-acceptance-criteria.md) (frozen bar) govern;
-[`../04-roadmap.md`](../04-roadmap.md) is the tracked phase plan this refines (see
-its §1.1). A local model-boundary design note is kept at
+**Status:** retired record. T1 completed 2026-07-22 **negative** (composition
+mechanism paused; [result](../results/exp05-bridge-a-horlbeck-kill-test.md)) and
+T2's few-shot cross-cell-line GeneEffect gate completed 2026-07-29 **negative**
+([result](../results/tx1-hvg-geneeffect-phase-f.md)); the implementation of both
+was deleted at `873c99c`. The live GeneEffect track is
+[`../04-exp13-geneeffect-residual-protocol.md`](../04-exp13-geneeffect-residual-protocol.md).
+Authority: [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) governs;
+its §7-8 carry the leakage rules and claim bars this plan was written against.
+A local model-boundary design note is kept at
 `docs/superpowers/specs/2026-07-17-virtual-cell-sl-composition-design.md`.
 
 ## 1. Objective and first principles

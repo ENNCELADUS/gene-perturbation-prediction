@@ -1,9 +1,9 @@
 # Exp05 Fixed Split and Cell-Line Data Roles
 
-**Status:** unified K562 gene-pool fixed split implemented; X-Atlas/Orion HCT116
-was downloaded on the experiment HPC and its one-shot frozen-backbone audit is
-complete and negative. HCT116 may be assigned to GeneEffect component training,
-development, or evaluation.
+**Status:** retired. The exp05 implementation — the builder, the config, and the
+training stack this card described — was deleted at `873c99c` after T1/T2 closed
+negative; the gitignored split artifacts, the completed HCT116 audit, and the
+external-dataset decisions below remain as evidence. Exp13 uses its own split.
 
 ## Role contract
 
@@ -30,18 +30,12 @@ The pool combines Replogle with the three local Adamson CRISPRi h5ads and exact
 single-gene conditions from the local Dixit CRISPR-KO h5ad. Each condition is
 mapped to the K-562 DepMap model `ACH-000551`; combination and intergenic
 conditions are excluded. Overlapping targets pool their response cells, while
-only the three genuinely Replogle-unseen targets expand the gene universe. The
-runtime configuration is
-[`state_esm2_gwps_fixed.yaml`](../../configs/experiments/05_aivc_a_to_b_to_c/state_esm2_gwps_fixed.yaml).
+only the three genuinely Replogle-unseen targets expand the gene universe. Its
+runtime config (`state_esm2_gwps_fixed.yaml`) and builder
+(`scripts/assemble_exp05_fixed_datasets.py`) were deleted at `873c99c`; git
+history holds both, and nothing in the tree rebuilds these artifacts today.
 
-Build command:
-
-```bash
-uv run python scripts/assemble_exp05_fixed_datasets.py \
-  --predictions-csv results/experiments/05_aivc_a_to_b_to_c/runs/<audited-run>/artifacts/predictions.csv
-```
-
-Generated, gitignored data products:
+Previously generated, gitignored data products:
 
 - `data/sl_dependency_v0/interim/k562_non_replogle_depmap_overlap.csv`
 - `data/sl_dependency_v0/interim/k562_non_replogle_depmap_overlap.csv.sha256`

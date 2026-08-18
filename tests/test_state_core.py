@@ -2,9 +2,9 @@
 
 Covers construction/behavior of each moved symbol (``LinearMockStateModel``,
 ``StateForwardAdapter``, ``Esm2PerturbationAdapter``, ``GeneBags``,
-``encode_batch_labels``, ``resolve_state_gene_order``) and asserts that
-``model.py``/``prepare.py`` import -- rather than redefine -- them, so there
-is exactly one definition of each.
+``encode_batch_labels``, ``resolve_state_gene_order``), which this module is
+now the only definition of: the exp05 ``model.py``/``prepare.py`` they were
+lifted out of were deleted at ``873c99c``.
 """
 
 from __future__ import annotations
@@ -28,21 +28,6 @@ from aivc_model.state_core import (
     encode_batch_labels,
     resolve_state_gene_order,
 )
-
-
-# --- single-definition guarantees -------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # --- LinearMockStateModel ----------------------------------------------------

@@ -1,7 +1,8 @@
 # Design: Tx1-conditioned ST GeneEffect backbone (few-shot, cross-cell-line)
 
-**Status:** design approved 2026-07-23; test-set re-scoped 2026-07-23; registered
-primary gate completed negative 2026-07-29. Concrete architecture for roadmap
+**Status:** retired record — the registered primary gate completed negative 2026-07-29,
+this design's implementation was deleted at `873c99c`, and
+[Exp13](../04-exp13-geneeffect-residual-protocol.md) supersedes it. Concrete architecture for roadmap
 **T2 / Phase 3** (the
 few-shot cross-cell-line GeneEffect backbone). **Phase A** (data audit, manifest
 freeze) is **complete**, and was amended 2026-07-26: the differentially-essential
@@ -18,10 +19,9 @@ and reduced online to mean plus population variance; neither raw responses nor
 pooled features are cached to disk. The registered Phase F k=10 Tx1 gate is
 negative; see the [result report](../results/tx1-hvg-geneeffect-phase-f.md).
 Line counts (49 Tahoe DMSO lines, 38 with DepMap) are audited-from-disk facts.
-**Authority:** [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) and
-[`../02-acceptance-criteria.md`](../02-acceptance-criteria.md) (frozen bar) govern;
-[`../04-roadmap.md`](../04-roadmap.md) §1.1/§5 is the phase plan this refines; it
-supersedes the abstract T2 sketch in
+**Authority:** [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) governs;
+its §7-8 carry the leakage rules and claim bars this design was written against.
+It supersedes the abstract T2 sketch in
 [`2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md)
 §3 with a concrete model.
 

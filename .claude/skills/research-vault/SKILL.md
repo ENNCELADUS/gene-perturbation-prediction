@@ -1,6 +1,6 @@
 ---
 name: research-vault
-description: Use when reading, citing, or editing anything under docs/ — the research vault. Covers authority ordering, the 01/02 freeze rule, how to register a new result in docs/results/, and the three-file status sync. Invoke before writing any research claim, result note, roadmap edit, or status line.
+description: Use when reading, citing, or editing anything under docs/ — the research vault. Covers authority ordering, the 01 freeze rule, how to register a new result in docs/results/, and the status sync. Invoke before writing any research claim, result note, protocol edit, or status line.
 ---
 
 # Research vault discipline
@@ -11,12 +11,16 @@ the commit log. If code and vault disagree, the vault wins and the code is the b
 ## Authority ordering
 
 ```
-01-blueprint.md          contract           (frozen)
-  > 02-acceptance-criteria.md  claim bars   (frozen)
-    > 03-literature-review.md  related work
-      > 04-roadmap.md          plan
-        > docs/results/*.md    evidence
+01-blueprint.md              contract + claim bars   (frozen)
+  > 02-literature-review.md  related work, novelty boundary
+    > 03-experiment-protocol.md            SL-pair protocol
+      04-exp13-geneeffect-residual-protocol.md   GeneEffect residual protocol
+        > docs/results/*.md  evidence
 ```
+
+`03` and `04` are peers: `03` §7 defers its dependency-residual metric to `04`, which is
+**scope-closed** — a GeneEffect number is never SL evidence (`01` §8). A protocol makes
+`01` executable; it never relaxes it.
 
 **When two documents conflict, flag it to the user — never resolve it unilaterally.**
 A conflict between `01` and anything else is a research-program question, not a
@@ -24,16 +28,16 @@ refactor.
 
 ## Freeze rule
 
-`01-blueprint.md` and `02-acceptance-criteria.md` are frozen. Change them by
-editing **in place** — never by writing a new file, never by appending a
-"revision" or "v2" section. `01` §9 Locked Decisions are settled; changing one is
-a change of research program. Ask first.
+`01-blueprint.md` is frozen. Change it **in place** — never a new file, never an
+appended "revision" or "v2" section. Its §3 amendment is the model: one in-place,
+dated paragraph restating the corrected quantity. Changing §7 (leakage) or §8 (claim
+boundaries) is a change of research program. Ask first.
 
 ## The vault is a snapshot, not a changelog
 
 It states what is true **now**. Do not add revision histories, "what we got wrong"
 sections, or superseded-claim logs — git holds that. Correct a wrong statement by
-replacing it.
+replacing it. A retired design keeps one `**Status:** retired` line and its result link.
 
 ## Style
 
@@ -46,37 +50,33 @@ with its own scoped `CLAUDE.md` and different rules — do not apply these there
 A planned number is not a number. **Results enter the vault only after the
 analysis actually runs.**
 
-1. Run the analysis. Keep the run artifacts (config, seeds, commit SHA, per-fold
-   outputs) — `docs/04-roadmap.md:294-308` lists the required artifact set.
-2. Check admissibility **before** opening the result: all nine INTEGRITY gates in
-   `docs/02-acceptance-criteria.md:201-225`. Any gate that fails downgrades or
-   disqualifies the result; it does not become a caveat.
-3. Look up the allowed verdict wording in the verdict table,
-   `docs/02-acceptance-criteria.md:226-247`. Do not invent verdict language — the
-   table is exhaustive, and composite verdicts inherit the *most restrictive*
-   checkpoint-exposure qualifier.
-4. Write `docs/results/<slug>.md` using the de-facto section order visible in
-   existing notes: **Status / What was tested / Method and provenance / Result /
-   Interpretation / Verdict and scope / Reproduction**.
-5. A new gate or a re-run gets a new section in `03-literature-review.md`.
+1. Run the analysis. Keep the artifacts the protocol's "Required Outputs" section
+   lists (`03` §10, `04` §10): config, seeds, commit SHA, per-fold outputs, hashes.
+2. Check admissibility **before** opening the result: the leakage and integrity
+   rules in `01` §7, plus the protocol's own leakage section (`03` §8, `04` §9).
+   A failed rule downgrades or disqualifies the result; it does not become a caveat.
+3. State the verdict in the vocabulary the contract already uses — negative, paused,
+   closed, scope-closed, reportable-but-not-claimable — and carry the most restrictive
+   qualifier, including Tx1 Tahoe-100M pretraining exposure (`01` §7).
+4. Write `docs/results/<slug>.md` in the de-facto section order: **Status / What was
+   tested / Method and provenance / Result / Interpretation / Verdict and scope /
+   Reproduction**. Name the commit the code ran at — several notes now cite deleted scripts.
+5. A new gate or a re-run gets a new section in `02-literature-review.md` §8.
 6. Sync status (below).
 
-Negative results are first-class. `docs/results/` already holds closed-negative
-audits; record them with the same rigor.
+Negative results are first-class: `docs/results/` holds closed-negative audits already.
 
-## Three-file status sync
+## Status sync
 
-`**Status:**` lines must agree across exactly three files:
+`**Status:**` lines must agree across the root `README.md` (status blockquote *and* news
+list), `docs/01-blueprint.md` (header line and §9 Current Scientific State), and whichever
+protocol changed (`03` or `04`).
 
-- `docs/README.md`
-- `docs/04-roadmap.md`
-- root `README.md`
-
-**No script or hook checks this.** After any status-changing edit, read all three
+**No script or hook checks this.** After any status-changing edit, read all of them
 and reconcile by hand. This is the single most frequently broken vault rule.
 
 ## Do not edit
 
-`ideaspark_run/` and `docs/archive/` are the retired program's evidence memos.
-They are prior evidence, not a roadmap to execute, and they are never edited.
-`MANIFEST.md` is a stale auto-generated stub — do not hand-maintain it.
+`ideaspark_run/` and `docs/archive/` are the retired program's evidence memos — prior
+evidence, not a roadmap, never edited. `docs/superpowers/` is gitignored local scratch,
+and `MANIFEST.md` is a stale auto-generated stub — do not hand-maintain it.

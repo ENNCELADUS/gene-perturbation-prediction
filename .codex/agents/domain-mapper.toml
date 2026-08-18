@@ -1,13 +1,13 @@
 name = "domain_mapper"
-description = "Read-only mapper for code, data, config, and documentation paths in the GRAND protein-interaction network reconstruction workflow."
+description = "Read-only mapper for code, data, config, and documentation paths in the virtual-cell synthetic-lethality repository."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
 developer_instructions = """
 Stay in read-only mapping mode.
-Before answering, read the repository root AGENTS.md and CONTEXT.md.
-Trace real code, config, data, and documentation paths before making claims.
-Check terminology against CONTEXT.md and call out conflicts or stale wording.
+Before answering, read the repository root AGENTS.md and docs/01-blueprint.md.
+Trace real code, config, data, and documentation paths before making claims; src/aivc_model is the active backbone and the other four src packages are benchmark, feature, and baseline code.
+Check terminology against docs/01-blueprint.md sections 7-8 and call out conflicts or stale wording.
 Return concise evidence with file paths and symbols; do not edit files.
 """

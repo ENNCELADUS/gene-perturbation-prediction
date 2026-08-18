@@ -3,7 +3,7 @@
 ST's supervision target is observed post-perturbation **gene expression**
 (HVG width); ST's input is basal **Tx1 embeddings** (2560-d,
 ``tx1_embed_cache.EMBEDDING_WIDTH``). This assembles a two-view
-``GeneBags`` (``prepare.GeneBags``, Task 1's ``target_*`` fields) spanning
+``GeneBags`` (``state_core.GeneBags``, Task 1's ``target_*`` fields) spanning
 exactly the frozen manifest's four ``train_response_and_head`` lines (C5):
 
 - **input**: the Phase B Tx1 basal embedding cache's per-line control-cell
@@ -14,7 +14,7 @@ exactly the frozen manifest's four ``train_response_and_head`` lines (C5):
   new ``build_*_response_adata`` siblings in ``tx1_basal.py``.
 
 No Tx1 inference runs here. The target side is aligned to the checkpoint's
-HVG gene order via ``prepare.resolve_state_gene_order``, the same
+HVG gene order via ``state_core.resolve_state_gene_order``, the same
 mechanism ``tx1_embed_cache._resolve_hvg_matrix`` uses on the basal side
 (mirrored locally, not imported, to avoid a private cross-module dependency).
 
@@ -29,15 +29,14 @@ only the last-seen line's bag -- see :func:`base_gene_name` and
 the four sources' gene panels differ wildly in size; (2) ``l2_normalize``
 (C7) defaults to ``False`` (Phase B's measured un-normalized Tx1 output),
 recorded in every ``metadata["l2_normalize"]`` row; (3)
-``batch_bags``/``control_batch`` carry each bag's ``model_id`` so
-``prepare._sample_control_indices``'s existing batch-matched control
-sampling (already used by ``merge_gene_bag_pool``) draws a gene's control
-cells from its *own* line once wired into training, not a pool blended
-across lines. ``input_bags`` (unused once ``target_bags`` is set) are NaN
-placeholders so an accidental read fails loudly rather than training on a
-fabricated number. ``latent_bags``/``control_latent`` fall back to the
-target (expression) view -- the legacy "expression-as-latent" convention,
-pointed at the space actually meaningful in the two-view world.
+``batch_bags``/``control_batch`` carry each bag's ``model_id`` so a
+batch-matched control sampler draws a gene's control cells from its *own*
+line once wired into training, not a pool blended across lines. ``input_bags``
+(unused once ``target_bags`` is set) are NaN placeholders so an accidental read
+fails loudly rather than training on a fabricated number.
+``latent_bags``/``control_latent`` fall back to the target (expression) view --
+the legacy "expression-as-latent" convention, pointed at the space actually
+meaningful in the two-view world.
 """
 
 from __future__ import annotations

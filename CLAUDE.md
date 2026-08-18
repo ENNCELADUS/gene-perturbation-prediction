@@ -4,13 +4,13 @@
 
 Research code for **generalizable synthetic-lethality discovery by virtual-cell composition**: rank SL gene pairs for genes withheld from
 SL-pair/graph training (vs. SLMGAE / KR4SL), and separately transfer a context-conditioned score to cell lines excluded from training.
-**No SL graph in the feature path.** `docs/` is the authority, not this file — start at `docs/README.md`. Role: careful junior engineer;
+**No SL graph in the feature path.** `docs/` is the authority, not this file — start at `docs/01-blueprint.md`. Role: careful junior engineer;
 **Plan → Confirm → Code**.
 
-**State:** T1 (K562 Bridge-A vs Horlbeck mechanism) and the registered T2 gate (few-shot cross-cell-line GeneEffect) both **completed
-negative** and are paused for redesign. Active work is **R1**, the DepMap GeneEffect
-*residual* ladder (`residual_target.py`, `residual_ladder.py`, `scripts/run_r1_residual_ladder.py`), plus the split
-`context_screen_v2` pair × cell-line table. Feng2024 SOTA reproduction is still not started.
+**State:** T1 (K562 Bridge-A vs Horlbeck mechanism) and T2 (few-shot cross-cell-line GeneEffect) both **completed negative**; their
+implementations — the exp05 stack, Bridge-A, the Tx1 Phase A–F tree — were **deleted at `873c99c`**, surviving in git history and `docs/results/`
+only. Active work is **Exp13**, the 226-line cell-line GeneEffect *residual* benchmark (`docs/04-exp13-geneeffect-residual-protocol.md`): contract
+written, Stage 0 open, **no run started**. The `context_screen_v2` SL split is built and unrun. Feng2024 SOTA reproduction is not started.
 
 ## Engineering rules
 
@@ -32,8 +32,8 @@ negative** and are paused for redesign. Active work is **R1**, the DepMap GeneEf
 ## Skills — load before touching the area
 
 `research-vault` (editing `docs/`, writing a claim or a result) · `tx1-cache` (`tx1_basal.py`, `tx1_embed_cache.py`,
-`tx1_geneeffect_eval.py`, `build_tx1_basal_embeddings.py`) · `benchmark-harness` (`data/SL_benchmark/` splits, SL metrics,
-`vcc-dep-baseline`, `models:`/`selection:` configs) · `hpc-execution` (GPU, GWPS h5ad, ESM2, Tx1-3B, frozen exp05 checkpoint).
+`build_tx1_basal_embeddings.py`) · `benchmark-harness` (`data/SL_benchmark/` splits, SL metrics, `vcc-dep-baseline`, the
+`models:`/`selection:` config pattern) · `hpc-execution` (GPU, GWPS h5ad, ESM2, Tx1-3B, ST checkpoints).
 
 ## After each implementation wave
 
@@ -52,32 +52,32 @@ stray value is parsed as focus text and rejected. `/codex:review` is `disable-mo
 
 ## Environment and testing
 
-- The five `src/` packages look peer-level but are not: **`aivc_model/` (exp05 → exp12 Tx1 → R1) is the active backbone — new work goes
-  there**; the rest are benchmark, features, baselines. Most entrypoints need gitignored assets, so "it imports" ≠ "it runs here".
+- The five `src/` packages look peer-level but are not: **`aivc_model/` is the active backbone — new work goes there**; it holds the Exp13
+  head, split guard and residual ladder, the Tx1 basal→embedding→response path, and forward-only STATE loading. The rest are benchmark,
+  features, baselines. Most entrypoints need gitignored assets, so "it imports" ≠ "it runs here".
 - `.superpowers/sdd/` is gitignored but holds the **live plan and execution ledger** (its `progress.md` lags the code); `docs/specs/` holds
-  the tracked designs. **`AGENTS.md` is a symlink to `CLAUDE.md`** — edit `CLAUDE.md` only. **`.codex/` is a current, tracked Codex setup**
-  (`config.toml`, five agents, four mirrored skills, its own supplementary `AGENTS.md`) — keep both trees in sync.
+  the tracked designs, both now describing retired T1/T2 work. **`AGENTS.md` is a symlink to `CLAUDE.md`** — edit `CLAUDE.md` only, and keep
+  the tracked **`.codex/`** Codex setup (`config.toml`, five agents, four mirrored skills, its own `AGENTS.md`) in sync with it.
 - Prefix every Python/pytest/ruff call with `uv run`. A global `rtk hook claude` hook **rewrites Bash output** (`ruff check .` prints `[]`)
   — call `.venv/bin/ruff` for real output. `uv sync` installs the `dev` group only (`scib`/`datasets` absent); a new `src/<pkg>/` is
   invisible until added to `[tool.hatch.build.targets.wheel] packages`; `arc-state` is pinned to a **git commit** (bumps are deliberate).
 - **No pytest config**: no testpaths, no addopts, **no markers** (`-m` does nothing). Imports resolve only via the editable `.pth` — always
   `uv run python -m pytest` **from the repo root**. **`tests/conftest.py` is load-bearing**: it sets `PYTORCH_ENABLE_MPS_FALLBACK` and
   `OMP_NUM_THREADS` *before* torch imports, imports xgboost first, and covers the whole suite — **a test file run directly segfaults**.
-- **The suite is not green** — baseline it first; a failure may not be yours. Tests **skip silently** on missing gitignored data or
-  `accelerate`. `ruff format .` rewrites two dozen unrelated files — **format only what you touched**; with `E,W,F` only, **import order is
-  not enforced**, so don't "fix" imports.
+- **The suite is green at `873c99c`** (497 passed, ~25 s); baseline it anyway, and note tests **skip silently** on missing gitignored data or
+  `accelerate`. `ruff format .` rewrites two dozen unrelated files — **format only what you touched**; import order is **not** enforced (`E,W,F`).
 
 ## Silent failures — the dominant risk
 
 Warnings and defaults are preferred over exceptions, so mistakes usually produce a complete-looking **wrong artifact**, not an error.
 
-- **Config loading does no schema validation** — every field is `.get(key, default)`, so a **misspelled YAML key silently takes the
-  default**. All exp05 config dataclasses live in the `@dataclass(frozen=True)` block atop `prepare.py`; add fields there, not locally.
-  `_path_or_none` is truthiness-based, so `checkpoint_path: ""` silently **disables** the feature; unset `data.state_embed_key` falls back
-  to `adata.X`, not `obsm`. **STATE loads with `strict=False`** (`model.py`) — copy the Tx1 `validate_load_result` pattern instead.
-- The Tx1 gate evaluator always verifies registered artifact hashes and full coverage. The Tx1 cache separately zero-fills missing genes, reuses stale cells, and skips completeness checks
-  on a sharded verify.
-- **R1 residuals: never center a *prediction* on a fold-fit gene mean.** `mu_hat_g^(-c)` is an exact affine function of the held-out label, so
+- **`dependency_baseline` config loading does no schema validation** — every field is `.get(key, default)`, so a **misspelled YAML key silently
+  takes the default**; `ddgcn/config.py:81` and `sl_profile_baseline/config.py:73` *raise* instead. Exp13 has no YAML — CLI flags plus frozen dataclasses.
+- The Tx1 cache zero-fills missing genes, reuses stale cells when the provenance sidecar is absent, and skips completeness checks on a sharded
+  verify. The T2 evaluator that hash-pinned the Phase-A contract is gone; the surviving pin is `PINNED_SHA256` in the Exp13 split builder.
+- **Checkpoint loads must be validated.** Every surviving loader mirrors `validate_load_result` (`scripts/verify_tx1_obsm_width.py:97`) — see
+  `state_warm_start.py`, `tx1_predicted_response.py`. A bare `load_state_dict(..., strict=False)` silently leaves weights randomly initialized.
+- **Residuals: never center a *prediction* on a fold-fit gene mean.** `mu_hat_g^(-c)` is an exact affine function of the held-out label, so
   `constant_g - mu_hat_g^(-c)` scores per-gene Spearman `+1.0` by construction. Targets use `mu_hat`, predictions the fold-independent `mu_bar`.
 
 ## Data
@@ -85,16 +85,17 @@ Warnings and defaults are preferred over exceptions, so mistakes usually produce
 **Every dataset has a card in `docs/data/` — read it before using the file.** Several are not what their names suggest:
 `jost_replogle_dual_sgrna` is knockdown efficacy, **not epistasis**; the two Replogle h5ads differ by one word (`essential`/`gwps`) but have
 different gene panels; Horlbeck's field is `gi_score`, **not** `gamma`, and **negative = SL**; `sl_context_screen_v1` is **unsplit** with
-screened-non-hit negatives — not universal non-SL, and no CV folds. **Never join cell
-lines on name** — DepMap rows are ACH ModelIDs and its `CellLineName` is `K-562` while code says `K562`. Large artifacts are gitignored
-except the hash-pinned `results/phase_a_tx1_20260724/` contract.
+screened-non-hit negatives — not universal non-SL, and no CV folds. **Never join cell lines on name** — DepMap rows are ACH ModelIDs and its
+`CellLineName` is `K-562` while code says `K562`. `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority for
+Exp13, guarded by `benchmark_split.assert_fit_eligible`. Large artifacts are gitignored except the tracked `configs/benchmarks/` splits and the four
+`results/phase_a_tx1_20260724/` files — of which only `cell_line_manifest.csv` is still SHA-256-pinned (by the Exp13 split builder, which **raises**).
 
 ## Claim discipline
 
-Full gates in `docs/02-acceptance-criteria.md` §7-8. The four broken most easily —
+Full gates in `docs/01-blueprint.md` §7-8. The four broken most easily —
 
-- **Never claim SL from single-gene essentiality** — an explicit interaction null is required: `interaction = joint - psi(singles)`; declare
-  `psi`. DepMap GeneEffect is a relative growth-rate effect: single-gene, never a double-knockout quantity.
+- **Never claim SL from single-gene essentiality** — an explicit interaction null is required: `interaction = joint - psi(singles)`; declare `psi`.
+  DepMap GeneEffect is single-gene, never a double-knockout quantity. **Exp13 is scope-closed** (`01` §8): never SL evidence, never `context_screen_v2`.
 - **Name the generalization axis.** CV2/CV3 test unseen *genes*, not unseen cell lines; CV1 tests seen genes. Cross-cell-line claims need
   context splits. **A single-fold or test-fold-selected result is not a result** — 5-fold mean ± spread.
 - **A pan-essentiality lift is not an SL result**; **a benchmark rank is not a mechanism**; K562 mechanism ≠ multi-cell-line mechanism;

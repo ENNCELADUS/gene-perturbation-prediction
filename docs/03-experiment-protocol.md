@@ -264,8 +264,8 @@ both arms.
 
 The dominant cost is not backbone fitting but materializing $\hat\delta_{g,c}$ for every
 benchmark gene across every `C_ref` context, once per inner model — order
-`genes x contexts x cells-per-bag` Tx1-3B forward passes, with backbone-specific caches
-(`tx1_predicted_response_cache.py`, `tx1_response_gene_bags_cache.py`) rebuilt each time.
+`genes x contexts x cells-per-bag` ST forward passes over the once-built, model-independent
+Tx1 basal embedding cache; predicted responses are reduced online and never cached to disk.
 Pin the bag size, the cell-sampling seed, and the cache layout, and record a measured
 GPU-hour estimate for one inner model before launching the full set. If the total is
 infeasible, that must surface before the first run, not after.

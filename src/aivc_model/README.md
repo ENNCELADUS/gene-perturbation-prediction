@@ -1,139 +1,82 @@
-# AIVC Model Implementation Notes
+# `aivc_model` Implementation Notes
 
-This directory is the self-contained implementation surface for the AIVC model
-integration path. Keep it narrow and easy to review.
+This package is the Exp13 GeneEffect residual path plus the Tx1 basal/response
+machinery it runs on. Keep it narrow and easy to review. The contract is
+[`docs/01-blueprint.md`](../../docs/01-blueprint.md) §3-4; the executable protocol is
+[`docs/04-exp13-geneeffect-residual-protocol.md`](../../docs/04-exp13-geneeffect-residual-protocol.md).
 
 ## File Roles
 
-- `prepare.py`: configuration parsing, data loading, split construction, local
-  artifact loading, and data-contract helpers.
-- `model.py`: torch modules, external model adapters, feature layers, and loss
-  assembly.
-- `train.py`: the single training entrypoint and minimal CSV/artifact writing.
+**Exp13 residual path**
 
-Do not add extra modules unless one of these files becomes unreviewable.
+- `benchmark_split.py`: the 226-line membership authority and `assert_fit_eligible`,
+  the hard guard every fitting path must call.
+- `residual_target.py`: train-only `mu_hat_g` and the residual target. Pure pandas.
+- `residual_ladder.py` / `residual_metrics.py`: the R1 baseline ladder and the
+  per-gene across-line metric axis it and the head are both scored on.
+- `geneeffect_head.py`: the axis-aware loss and the five-block `h_delta` readout.
+
+**Tx1 / STATE substrate**
+
+- `tx1_basal.py`: per-cell-line basal AnnData assembly from Tahoe, X-Atlas-Orion,
+  and Perturb-seq h5ad sources; `tx1_response_streaming.py` bounds its memory.
+- `tx1_embed_cache.py`: the Tx1-3B basal embedding cache — writer, reader, verifier.
+- `tx1_response_data.py` + `tx1_response_gene_bags_cache.py`: observed-response
+  `GeneBags` assembly and its fingerprinted cache.
+- `tx1_predicted_response.py`: forward-only ST loading and predicted-response
+  generation.
+- `state_core.py`: the single definition of the STATE/gene-bag primitives
+  (`GeneBags`, `StateForwardAdapter`, `Esm2PerturbationAdapter`, …).
+- `state_warm_start.py`: shape-filtered warm start for Arc STATE checkpoints.
+- `gene_embeddings.py`: precomputed ESM2 per-gene embeddings and the adapter.
+- `gene_splits.py`: gene-universe outer-fold manifests.
+
+Do not add a module unless an existing one becomes unreviewable.
 
 ## Edit Rules
 
-- Keep changes local to this directory plus the matching experiment config and
-  tests.
-- Do not change `prepare.py` unless the data, split, checkpoint, or metric input
-  contract is intentionally changing.
-- Do not add a separate package, environment, CLI family, or artifact system.
-- Do not hardcode data paths, checkpoint paths, dimensions, thresholds, or run
-  settings in Python; put them in YAML config.
-- Keep output writing simple: per-epoch training CSV, final test metrics CSV, and
-  analysis-only files under `artifacts/`.
+- Keep changes local to this directory plus the matching script and tests.
+- Do not weaken `benchmark_split.assert_fit_eligible`, and never fit anything —
+  normalization, projection, hyperparameters, donors — on a `val`, `test`, or
+  `unlabeled_train` line.
+- Never center a *prediction* on a fold-fit gene mean; see `residual_ladder.py`'s
+  module docstring for why that scores per-gene Spearman `+1.0` by construction.
+- Validate every checkpoint load (`validate_load_result` pattern). A bare
+  `strict=False` load reports success with randomly initialized weights.
+- Do not preserve backward compatibility: delete obsolete paths rather than
+  adding fallbacks.
+- Do not hardcode data paths, checkpoint paths, dimensions, or thresholds; take
+  them from CLI arguments or the frozen split JSON.
 
 ## Local Assets
 
-Large local model files belong under gitignored checkpoint directories, not in
-Git. Download commands should be explicit and user-triggered; training code must
-not silently fetch remote weights.
-
-Expected local checkpoint paths should be configured in YAML. If a checkpoint
-path is missing or incompatible, fail early instead of falling back to random
-initialization.
+Large model files and caches belong under gitignored directories, not in Git.
+Download commands are explicit and user-triggered; code must never silently fetch
+remote weights. If a checkpoint path is missing or incompatible, fail early
+instead of falling back to random initialization.
 
 ## Runtime
 
-Run through the project `uv` environment:
+There is no CLI and no training loop in this package. Entrypoints are scripts,
+run through the project `uv` environment:
 
 ```bash
-uv run python src/aivc_model/train.py --config <config.yaml>
+uv run python scripts/run_r1_residual_ladder.py --labels <geneeffect_long.csv> \
+  --split-json configs/benchmarks/cell_line_geneeffect_226_split.json --out-dir <run_dir>
+uv run python scripts/build_cell_line_geneeffect_226_split.py --help
 ```
 
-For multi-GPU DDP training, launch the same entrypoint with Accelerate:
-
-```bash
-uv run accelerate launch src/aivc_model/train.py --config <config.yaml>
-```
-
-On Slurm, use `srun` around the Accelerate launch so the job allocation and the
-Python process topology agree:
-
-```bash
-srun uv run --locked --no-sync --offline accelerate launch --num_processes 4 src/aivc_model/train.py --config <config.yaml>
-```
-
-The training loop uses `Accelerator` for rank/device setup, model wrapping,
-gradient synchronization, distributed gene-index sharding, and rank0-only CSV,
-artifact, and checkpoint writes.
-AIVC keeps one perturbation gene bag as the biological training unit, but the
-runtime can optimize multiple genes per rank per optimizer step with
-`train.gene_batch_size`. The local optimizer batch is
-`gene_batch_size` genes/rank/step, and the global DDP batch is
-`num_processes * gene_batch_size` genes/step. Gene losses are summed inside the
-local optimizer step through a single DDP-wrapped `model(...)` forward. DDP
-loaders pad each split to even rank step counts; eval padding is forwarded for
-synchronization but excluded from metrics and prediction artifacts. Metric and
-prediction collection uses fixed-shape tensor collectives, not Python object
-gather. Accelerate DDP is configured with unused-parameter detection for sparse
-per-gene perturbation-vector parameters.
-
-Validation and final evaluation reuse the training STATE window path: a fixed,
-batch-stratified representative control panel is cached on each device, split
-into 64-cell windows, and forwarded with `padded=True` in configurable window
-macro-batches. Observed B is never a downstream input; it is used only as the
-target of a separately reported generation MSE. Checkpoint selection minimizes
-prediction-only `val_c_loss`; Spearman, Pearson, and RMSE remain diagnostics.
-
-The current Replogle K562 STATE experiment uses `data.state_embed_key: X_hvg`,
-`train.cell_set_len: 64`, `train.gene_batch_size: 4`, and a scaled
-`train.learning_rate: 0.000025` because the four local gene losses are summed
-before backward. The `state` block only selects and locates the forward model
-and perturbation vectors; embedding selection and cell-set length are controlled
-by `data.state_embed_key` and `train.cell_set_len`.
-
-Training can cache source expression tensors and encoded batch labels on CUDA
-to reduce repeated NumPy slice-to-tensor conversion in the observed target
-chunk path. The cache is guarded by `train.input_tensor_cache_max_gib`, defaults
-to `24.0`, and falls back to the uncached path on CPU, non-positive caps, or
-estimated cache sizes above the cap.
-
-When `projector.teacher: scvi`, the rank0 teacher fit configures Lightning
-quietly for this internal preprocessing step: set `scvi_num_workers` explicitly
-for cluster runs. The Replogle STATE config uses `4` to avoid large fork storms
-during scVI preprocessing; `null` auto-selects a Slurm-aware value capped at 8.
-`scvi_disable_lightning_logger: true` disables Lightning experiment logger setup,
-and `scvi_suppress_slurm_warning: true` filters Lightning's irrelevant `srun`
-warning when the surrounding job is launched by Accelerate.
-`train.float32_matmul_precision: high` sets PyTorch matmul precision before
-CUDA/scVI training to avoid Tensor Core performance warnings.
-
-scVI teacher latents are materialized before the AIVC epoch loop. Rank0 launches
-an isolated cache-only subprocess for this preprocessing stage: distributed
-environment variables are removed and `CUDA_VISIBLE_DEVICES` is narrowed to one
-GPU, while the later AIVC training stage still uses the requested Accelerate
-ranks. Rank0 writes a validated run-local cache under
-`artifacts/scvi_teacher_latents/`; other ranks poll that cache for up to 24 hours
-and only enter the DDP training barrier after metadata validation succeeds. The
-cache is reused only when its metadata matches the current primary genes,
-external-test identity, feature names, latent dimension, seed, and teacher
-settings. During a cache miss, rank0 loads the saved teacher once and logs
-projection progress every 50 genes.
-
-The ridge expression-to-latent projector and fixed GMM featureizer also use
-run-local metadata caches under `artifacts/ridge_projector_fit/` and
-`artifacts/fixed_gmm_fit/`. These caches are reused only when train genes,
-config, seed, input shapes, and input digests match the current run.
-
-After dependency or lockfile changes, run:
-
-```bash
-uv sync
-```
+GPU work (Tx1-3B encoding, ST forward passes) runs on the HPC under `.venv-tx1`
+with `PYTHONPATH=src:.` — see the `hpc-execution` skill and `docs/04` §5.
 
 ## Verification
 
-For focused changes, run:
-
 ```bash
-uv run ruff check src/aivc_model tests/test_aivc_model.py
-uv run ruff format --check src/aivc_model tests/test_aivc_model.py
-uv run python -m pytest tests/test_aivc_model.py
+uv run python -m pytest tests/test_geneeffect_head.py tests/test_benchmark_split.py \
+  tests/test_residual_target.py tests/test_residual_metrics.py tests/test_state_core.py
 ```
 
-Full data/checkpoint runs are local/remote experiment jobs and should not be
-required for small implementation edits unless the changed contract cannot be
-validated synthetically.
+Always run pytest from the repository root: `tests/conftest.py` sets torch
+environment variables before import and a test file run directly segfaults.
+Full data or checkpoint runs are local/remote experiment jobs, not a requirement
+for small implementation edits.

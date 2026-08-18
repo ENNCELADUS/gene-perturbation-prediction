@@ -19,11 +19,11 @@ max_threads = 6
 max_depth = 1
 
 [agents.domain_mapper]
-description = "Read-only mapper for code, data, config, and documentation paths in the GRAND protein-interaction network reconstruction workflow."
+description = "Read-only mapper for code, data, config, and documentation paths in the virtual-cell synthetic-lethality repository."
 config_file = "agents/domain-mapper.toml"
 
 [agents.experiment_planner]
-description = "Read-only planner for experiment, config, and verification designs around GRAND PRING, pairwise, TCCIG, and topology-evaluation constraints."
+description = "Read-only planner for experiment, config, and verification designs across the Exp13 GeneEffect residual benchmark and the context_screen_v2 SL split."
 config_file = "agents/experiment-planner.toml"
 
 [agents.implementation_worker]
@@ -31,11 +31,11 @@ description = "Scoped implementation worker for assigned code or config changes 
 config_file = "agents/implementation-worker.toml"
 
 [agents.reviewer]
-description = "Reviewer focused on correctness, leakage, data contracts, security, and missing tests."
+description = "Reviewer focused on correctness, leakage, silent defaults, data contracts, and missing tests."
 config_file = "agents/reviewer.toml"
 
 [agents.docs_guard]
-description = "Read-only documentation guard for README, design docs, experiment docs, topology docs, and CONTEXT terminology alignment."
+description = "Read-only documentation guard for the docs/ research vault, README, and agent instruction files."
 config_file = "agents/docs-guard.toml"
 
 model = "gpt-5.6-sol"

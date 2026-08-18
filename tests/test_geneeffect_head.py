@@ -1,14 +1,13 @@
 """Tests for :mod:`aivc_model.geneeffect_head` (Exp13 B2 + Phase 6 head).
 
-Organized around the two pieces the module exists to provide, per
-``merry-mapping-comet.md``:
+Organized around the two pieces the module exists to provide:
 
 1. An axis-aware training loss (:func:`per_gene_rank_variance_loss`) that
    correlates per gene along the context axis, unlike the retired
    ``tx1_geneeffect_head.rank_variance_loss`` (flattens to ``[B]``, one
    Pearson over mixed genes/contexts; inlined below as
-   ``_flattened_rank_variance_loss`` since that module is scheduled for
-   deletion). The critical test
+   ``_flattened_rank_variance_loss`` since that module was deleted at
+   ``873c99c``). The critical test
    (``test_per_gene_loss_disagrees_with_flattened_loss_when_mu_g_dominates``)
    constructs a batch where a shared per-gene offset makes the flattened loss
    look good while the true per-context signal is uncorrelated -- exactly
@@ -46,7 +45,7 @@ def _flattened_rank_variance_loss(
     flattens ``[n_genes, n_contexts]`` to ``[B]`` and computes ONE Pearson
     correlation over mixed genes/contexts -- exactly the failure mode B2
     (``per_gene_rank_variance_loss``) exists to fix. Inlined, not imported,
-    because ``tx1_geneeffect_head.py`` is scheduled for deletion and this
+    because ``tx1_geneeffect_head.py`` was deleted at ``873c99c`` and this
     disagreement is the regression evidence for B2, not a tested unit."""
     std_eps = 1e-6
     pred = pred.reshape(-1)
