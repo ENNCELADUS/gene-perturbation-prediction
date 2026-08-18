@@ -33,7 +33,7 @@ def test_assert_fit_eligible_accepts_labeled_train_member() -> None:
 
 def test_assert_fit_eligible_rejects_unlabeled_train_member() -> None:
     """PC9/HeLa are train members but have no GeneEffect label -- excluded
-    from every supervised fit (docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md §2)."""
+    from every supervised fit (the Exp13 spec under docs/specs/, §2)."""
     with pytest.raises(ValueError, match="unlabeled_train"):
         assert_fit_eligible("ACH-PC9", _SPLIT)
 
