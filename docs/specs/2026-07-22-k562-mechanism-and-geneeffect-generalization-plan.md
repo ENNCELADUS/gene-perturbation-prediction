@@ -5,7 +5,7 @@ mechanism paused; [result](../results/exp05-bridge-a-horlbeck-kill-test.md)) and
 T2's few-shot cross-cell-line GeneEffect gate completed 2026-07-29 **negative**
 ([result](../results/tx1-hvg-geneeffect-phase-f.md)); the implementation of both
 was deleted at `873c99c`. The live GeneEffect track is
-[`../04-exp13-geneeffect-residual-protocol.md`](../04-exp13-geneeffect-residual-protocol.md).
+[`../specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](../specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
 Authority: [`../01-blueprint.md`](../01-blueprint.md) (frozen contract) governs;
 its §7-8 carry the leakage rules and claim bars this plan was written against.
 A local model-boundary design note is kept at

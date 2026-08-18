@@ -1,7 +1,7 @@
 """The Exp13 226-line membership authority: the hard fit/train admission guard.
 
 ``cell_line_geneeffect_226_split`` (``configs/benchmarks/
-cell_line_geneeffect_226_split.json``, ``docs/04-exp13-geneeffect-residual-protocol.md``
+cell_line_geneeffect_226_split.json``, ``docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md``
 §2, ``docs/data/cell-line-geneeffect-226.md``) is the sole membership authority for
 Exp13 -- 172 train / 27 val / 27 test lines, with PC9 (``ACH-000779``) and HeLa
 (``ACH-001086``) declared ``unlabeled_train`` members excluded from every supervised

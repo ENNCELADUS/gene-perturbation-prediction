@@ -2,7 +2,7 @@
 
 **Status:** completed 2026-08-18. Tx1-3B does **not** read a CPM row like the raw counts
 underneath it; the shift is systematic and survives pooling. Branch 1 of
-[`../04-exp13-geneeffect-residual-protocol.md`](../04-exp13-geneeffect-residual-protocol.md)
+[`../specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](../specs/2026-08-17-exp13-geneeffect-residual-protocol.md)
 §6 was taken and executed: raw UMI counts now exist for all 152 Kinker lines. Authority:
 [`../01-blueprint.md`](../01-blueprint.md) §7-8. This is a substrate measurement, not an SL
 or a dependency result.

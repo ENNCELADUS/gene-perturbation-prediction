@@ -33,7 +33,7 @@ def test_assert_fit_eligible_accepts_labeled_train_member() -> None:
 
 def test_assert_fit_eligible_rejects_unlabeled_train_member() -> None:
     """PC9/HeLa are train members but have no GeneEffect label -- excluded
-    from every supervised fit (docs/04-exp13-geneeffect-residual-protocol.md §2)."""
+    from every supervised fit (docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md §2)."""
     with pytest.raises(ValueError, match="unlabeled_train"):
         assert_fit_eligible("ACH-PC9", _SPLIT)
 
@@ -93,7 +93,7 @@ def test_load_geneeffect_226_split_defaults_unlabeled_train_to_empty(
 
 def test_load_geneeffect_226_split_against_the_real_tracked_file() -> None:
     """The actual tracked split file must load and satisfy the documented shape
-    (172 train / 27 val / 27 test, PC9 + HeLa unlabeled) -- docs/04-exp13-
+    (172 train / 27 val / 27 test, PC9 + HeLa unlabeled) -- docs/specs/2026-08-17-exp13-
     geneeffect-residual-protocol.md §2."""
     repo_root = Path(__file__).resolve().parents[1]
     split_path = (

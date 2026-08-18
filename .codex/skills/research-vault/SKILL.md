@@ -13,14 +13,14 @@ the commit log. If code and vault disagree, the vault wins and the code is the b
 ```
 01-blueprint.md              contract + claim bars   (frozen)
   > 02-literature-review.md  related work, novelty boundary
-    > 03-experiment-protocol.md            SL-pair protocol
-      04-exp13-geneeffect-residual-protocol.md   GeneEffect residual protocol
-        > docs/results/*.md  evidence
+    > 03-experiment-protocol.md  the SL-pair protocol
+      > docs/specs/*.md          tracked designs, incl. the Exp13 GeneEffect residual spec
+        > docs/results/*.md      evidence
 ```
 
-`03` and `04` are peers: `03` §7 defers its dependency-residual metric to `04`, which is
-**scope-closed** — a GeneEffect number is never SL evidence (`01` §8). A protocol makes
-`01` executable; it never relaxes it.
+`03` §7 defers its dependency-residual metric to the Exp13 spec, which is **scope-closed** —
+a GeneEffect number is never SL evidence (`01` §8). A protocol or spec makes `01`
+executable; it never relaxes it.
 
 **When two documents conflict, flag it to the user — never resolve it unilaterally.**
 A conflict between `01` and anything else is a research-program question, not a

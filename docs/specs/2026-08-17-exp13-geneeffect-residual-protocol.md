@@ -1,14 +1,14 @@
 # Experiment Protocol: Exp13 Cell-Line GeneEffect Residual Benchmark
 
 **Status:** contract written 2026-08-17; Stage 0 completed 2026-08-18 (§6 closed by branch 1,
-[result](results/exp13-stage0-tx1-input-representation.md)). The residual head exists and the
+[result](../results/exp13-stage0-tx1-input-representation.md)). The residual head exists and the
 152 Kinker lines now have raw UMI counts; no Stage 1-2 artifact exists, no training has run.
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
-**Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
+**Authority:** [`01-blueprint.md`](../01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**
-[`03-experiment-protocol.md`](03-experiment-protocol.md) is the SL-pair protocol; its §7
+[`03-experiment-protocol.md`](../03-experiment-protocol.md) is the SL-pair protocol; its §7
 defers its dependency-residual metric to this document. **Benchmark:**
-[`data/cell-line-geneeffect-226.md`](data/cell-line-geneeffect-226.md).
+[`data/cell-line-geneeffect-226.md`](../data/cell-line-geneeffect-226.md).
 
 ## Scope statement (binding)
 
@@ -17,9 +17,9 @@ evidence for cross-context synthetic lethality.** The single frozen backbone pas
 document registers is valid only under this contract. Any later SL held-out-context reuse
 would require every SL val/test context excluded from both dependency fitting and
 feature-model fitting — an out-of-fold backbone per inner group, per
-[`03-experiment-protocol.md`](03-experiment-protocol.md) §5 — which this protocol does not
+[`03-experiment-protocol.md`](../03-experiment-protocol.md) §5 — which this protocol does not
 build. This benchmark (`cell_line_geneeffect_226_split`) and `context_screen_v2` never
-substitute for each other; see [`01-blueprint.md`](01-blueprint.md) §8.
+substitute for each other; see [`01-blueprint.md`](../01-blueprint.md) §8.
 
 ## 1. Objective
 
@@ -93,7 +93,7 @@ $h_\delta$ directly. `Delta` is 4000-d (2 × 2000, mean+var); `z_c` is 5120-d (2
 val lines), so $x_c=E_{\text{Tx1}}(r_c)$ depended on whether the collator reads a CPM row like
 the counts underneath it. **It does not:** per-cell cosine 0.92-0.95 against the raw encode,
 and — unlike gene-subsampling noise, which pools away to 0.9997 — the shift survives pooling
-to the per-line mean at 0.972-0.987 ([result](results/exp13-stage0-tx1-input-representation.md)).
+to the per-line mean at 0.972-0.987 ([result](../results/exp13-stage0-tx1-input-representation.md)).
 "Swap only $z_c$" was never a fallback: ST consumes the embedding as its Stage-1 *input* (§4),
 so an untrustworthy one voids a line's whole forward pass, not one feature block.
 

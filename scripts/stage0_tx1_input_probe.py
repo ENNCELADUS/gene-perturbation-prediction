@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stage 0 probe: does Tx1 read CPM input the same way it reads raw counts?
 
-``docs/04-exp13-geneeffect-residual-protocol.md`` §6 registers one open
+``docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`` §6 registers one open
 question: 152 of the 179 new-atlas lines are Kinker ``processed_cpm``, and
 $x_c = E_{Tx1}(r_c)$ is only trustworthy if the encoder treats a
 CPM-normalized row the way it treats the raw counts underneath it. §6 rules
