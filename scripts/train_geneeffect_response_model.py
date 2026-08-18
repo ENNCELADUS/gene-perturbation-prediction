@@ -57,6 +57,18 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def esm2_resolvable_genes(path: Path) -> set[str]:
+    """Symbols the ESM2 table can actually embed.
+
+    The adapter raises on an unresolved gene rather than zero-filling it, so
+    the caller must restrict the gene set up front. Doing it here -- and
+    recording what was dropped -- keeps that restriction declared instead of
+    turning into a silent partial run.
+    """
+    payload = np.load(path, allow_pickle=True)
+    return {str(symbol).upper() for symbol in payload["symbols"]}
+
+
 def load_split(path: Path) -> FixedSplit:
     """Load the frozen 226-line split as the fit-eligibility authority."""
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -154,6 +166,30 @@ def main(argv: list[str] | None = None) -> int:
         len(control_by_line),
     )
 
+    resolvable = esm2_resolvable_genes(args.esm2_embeddings)
+    wanted = {b["gene"] for b in batches}
+    unresolved = sorted(wanted - resolvable)
+    drop_fraction = len(unresolved) / len(wanted) if wanted else 0.0
+    if drop_fraction > args.max_esm2_drop_fraction:
+        raise ValueError(
+            f"{len(unresolved)}/{len(wanted)} perturbation genes "
+            f"({drop_fraction:.1%}) have no ESM2 embedding, above the "
+            f"{args.max_esm2_drop_fraction:.1%} gate -- this usually means the "
+            "wrong --esm2-embeddings file, not a coverage shortfall"
+        )
+    if unresolved:
+        _LOGGER.info(
+            "dropping %d/%d perturbation genes with no ESM2 embedding (%.1f%%)",
+            len(unresolved),
+            len(wanted),
+            100 * drop_fraction,
+        )
+        train_batches = [b for b in train_batches if b["gene"] in resolvable]
+        heldout_batches = [b for b in heldout_batches if b["gene"] in resolvable]
+        batches = [b for b in batches if b["gene"] in resolvable]
+        if not train_batches or not heldout_batches:
+            raise ValueError("ESM2 filtering emptied the train or held-out set")
+
     model = construct_forward_only_model(
         model_cls=_state_model_cls(),
         hparams_checkpoint_path=args.state_checkpoint,
@@ -203,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
                 "heldout_fraction": args.heldout_fraction,
                 "heldout_genes": {k: sorted(v) for k, v in heldout.items()},
                 "anchor_lines": sorted(control_by_line),
+                "esm2_unresolved_genes": unresolved,
+                "esm2_drop_fraction": drop_fraction,
                 "n_train_batches": len(train_batches),
                 "n_heldout_batches": len(heldout_batches),
                 "input_dim": int(bags.input_dim),
@@ -246,6 +284,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--response-cache-dir", type=Path, default=None)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--pert-dim", type=int, default=2024)
+    parser.add_argument("--max-esm2-drop-fraction", type=float, default=0.10)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--max-bag", type=int, default=128)
