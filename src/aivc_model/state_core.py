@@ -1,11 +1,9 @@
 """Canonical home for STATE/gene-bag primitives shared across the Tx1 tree.
 
-``model.py`` and ``prepare.py`` are scheduled for deletion once the Exp13
-composition model lands (see the exp13 plan, Phase 8). The symbols below are
-still needed by surviving modules (``tx1_embed_cache.py``,
-``tx1_response_data.py``, ``tx1_predicted_response.py``) and by CPU tests, so
-they live here as the single definition; ``model.py``/``prepare.py`` import
-them from this module rather than redefining them.
+These symbols were lifted out of the exp05 ``model.py``/``prepare.py`` before
+those modules were deleted at ``873c99c``. They are the single definition,
+used by ``tx1_embed_cache.py``, ``tx1_response_data.py``,
+``tx1_predicted_response.py`` and the CPU tests; nothing redefines them.
 """
 
 from __future__ import annotations

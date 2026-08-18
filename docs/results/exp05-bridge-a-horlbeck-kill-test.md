@@ -4,8 +4,7 @@
 composed into a Bridge A counterfactual co-dependency score, does **not** recover
 measured Horlbeck 2018 K562 genetic interactions (|Spearman| < 0.01;
 AUROC(s_A -> strong-SL) approximately 0.52). Authority:
-[`../01-blueprint.md`](../01-blueprint.md),
-[`../02-acceptance-criteria.md`](../02-acceptance-criteria.md); plan:
+[`../01-blueprint.md`](../01-blueprint.md) §7-8; plan:
 [`../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md)
 (T1).
 
@@ -100,6 +99,8 @@ operator.
 
 Universe: `uv run python scripts/lock_bridge_a_universe.py`. Sweep:
 `scripts/bridge_a_forward.py --genes <408 universe genes> --seeds 41 42 43
---reference-convention both`. Correlation: `scripts/analyze_bridge_a_sweep.py`.
+--reference-convention both`. Correlation: `scripts/analyze_bridge_a_sweep.py`. All
+three, and the exp05 backbone they load, were deleted at `873c99c`: check out
+`a7e2c91` to re-run.
 Universe provenance (manifest `candidate_universe_manifest.json`): input SHA-256
 esm2_npz `b2f2b813...`, pairs_csv `8cc5d6eb...`, pool_csv `c33dbe6c...`.

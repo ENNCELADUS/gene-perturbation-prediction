@@ -110,9 +110,9 @@ uv run python -m sl_profile_baseline \
   --config configs/experiments/11_feng_depmap_geneeffect_profiles/depmap_profile_cv.yaml
 ```
 
-Configuration:
-[`../../configs/experiments/11_feng_depmap_geneeffect_profiles/depmap_profile_cv.yaml`](../../configs/experiments/11_feng_depmap_geneeffect_profiles/depmap_profile_cv.yaml).
-Implementation: [`../../src/sl_profile_baseline/`](../../src/sl_profile_baseline/).
+Configuration: `configs/experiments/11_feng_depmap_geneeffect_profiles/depmap_profile_cv.yaml`,
+deleted at `873c99c` — check out `a7e2c91` to re-run.
+Implementation: [`../../src/sl_profile_baseline/`](../../src/sl_profile_baseline/) (still present).
 Gitignored outputs:
 [`../../results/experiments/11_feng_depmap_geneeffect_profiles/run/`](../../results/experiments/11_feng_depmap_geneeffect_profiles/run/).
 The manifest records the resolved configuration, DepMap and source SHA-256 hashes,

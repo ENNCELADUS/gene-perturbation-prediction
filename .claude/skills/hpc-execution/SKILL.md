@@ -1,12 +1,12 @@
 ---
 name: hpc-execution
-description: Use when a task needs GPU, the Replogle GWPS h5ad, ESM2 embeddings, Tx1-3B weights, or the frozen exp05 checkpoint — none of which exist on the local Mac. Covers the SSH host and its changing port, which venv to use, PYTHONPATH, GPU selection, which datasets are absent remotely, and the shard/verify protocol.
+description: Use when a task needs GPU, the Replogle GWPS h5ad, ESM2 embeddings, Tx1-3B weights, or the Phase-C ST checkpoint — none of which exist on the local Mac. Covers the SSH host and its changing port, which venv to use, PYTHONPATH, GPU selection, which datasets are absent remotely, and the shard/verify protocol.
 ---
 
 # Running jobs on the HPC
 
 Data-heavy and GPU work does **not** run on the local Mac — it lacks the Replogle
-GWPS h5ad, the ESM2 npz, the Tx1-3B weights, and the frozen exp05 checkpoint.
+GWPS h5ad, the ESM2 npz, the Tx1-3B weights, and the ST checkpoints.
 Author code locally so it can be reviewed, then rsync and run remotely.
 
 ## Connection
@@ -30,7 +30,7 @@ nor `data/SL_Benchmark_Formal/` (1.0 GB, holding the 946 MB `sl_integrated_pairs
 and the v1 `context_screen_v1/` build) exists remotely, so anything touching SL pair
 labels runs locally or needs an explicit transfer first. Verified present:
 `data/models/tahoe_x1_3b`, `data/esm2/*.npz`, the Replogle and Adamson h5ads under
-`data/sl_dependency_v0/raw/`, and the frozen exp05 checkpoint. Disk is not a
+`data/sl_dependency_v0/raw/`, and the ST checkpoints. Disk is not a
 constraint — 953 TB free.
 
 ## Pick the right venv — there are three, and they are not interchangeable
@@ -61,8 +61,8 @@ nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu \
 export CUDA_VISIBLE_DEVICES=<freest>
 ```
 
-Keep the footprint small and **do not disturb other processes**. Bridge A runs in
-~750 MiB; if a job wants far more than expected, stop and re-check the config.
+Keep the footprint small and **do not disturb other processes**. Measure one small
+line first; if a job wants far more memory than expected, stop and re-check the config.
 
 ## Standard pass
 
@@ -83,8 +83,8 @@ nothing about whether the cache as a whole is complete.
 
 - Shards built before commit `62eae43` exit nonzero benignly — check the status
   payload, not just the exit code.
-- The frozen exp05 checkpoint is
-  `results/experiments/05_aivc_a_to_b_to_c/runs/exp05_fixed_k562_pool_v1/models/best/pytorch_model.bin`
-  (SHA-256 `48097722…`). Verify the hash before trusting a run built on it.
+- A forward-only ST pass needs **two** checkpoints staged: the *released* ST checkpoint
+  (architecture hparams, via `construct_forward_only_model`) **and** the Phase-C
+  `pytorch_model.bin` that overwrites it — staging only Phase-C fails at construction.
 - Full command lines and what has actually been run live in `.superpowers/sdd/`
   (gitignored, local only): `phase-b-plan.md` and `progress.md`.

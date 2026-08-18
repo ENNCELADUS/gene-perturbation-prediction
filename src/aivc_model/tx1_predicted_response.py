@@ -7,13 +7,11 @@ they never touch these) plus ``response_encoder``/``response_pooler``/
 ``c_head``/``control_expression_mean`` (the GMM/MLP head Phase D replaces --
 see ``.superpowers/sdd/phase-d/discovery-b-data-labels.md`` §2).
 
-No existing loader restores just the ST+perturbations half:
-``train.py:_load_authorized_model_checkpoint`` is fold-authority-gated and
-raises outside its own run; ``bridge_a.py:load_bridge_a_context`` loads the
-*whole* model, head included. This module is that missing loader, following
-``bridge_a.py``'s plain-``torch.load`` pattern and
-``scripts/verify_tx1_obsm_width.py::validate_load_result``'s honest-load-
-reporting convention (this repo's dominant failure mode is a silent
+The exp05 loaders that could have restored it were either fold-authority-gated
+or loaded the *whole* model, head included, and all of them were deleted at
+``873c99c``. This module is the surviving loader: a plain ``torch.load``
+following ``scripts/verify_tx1_obsm_width.py::validate_load_result``'s
+honest-load-reporting convention (this repo's dominant failure mode is a silent
 ``strict=False`` partial load that leaves weights randomly initialized).
 
 It also generates the predicted-response bag for one (line, gene) pair and
@@ -316,7 +314,7 @@ def _chunk_control_cell_indices(
     identical size, so a cell count not evenly divisible by ``cell_set_len``
     needs its final window padded. Padding resamples (with replacement,
     deterministically from ``seed``) from the same line's own basal cells,
-    mirroring ``prepare.make_cell_set_chunks``'s ``pad_short`` behavior. The
+    mirroring the retired ``make_cell_set_chunks``'s ``pad_short`` behavior. The
     padded rows only satisfy ST's fixed-window-size contract --
     :func:`generate_predicted_response` trims the output back to ``n_cells``.
     """

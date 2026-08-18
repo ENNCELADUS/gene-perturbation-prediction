@@ -19,7 +19,7 @@ pos, neg = np.load(path, allow_pickle=True)   # whole array is (2, 4, 5)
 Verified on `CV2_1.npy`: slots 0/1 hold 9845² adjacency matrices (object-wrapped),
 slot 2 fold 0 is `(23770, 2)` train pairs, slot 3 fold 0 is `(10964, 2)` test
 pairs. **Swapping 2 and 3 silently trains on the test set.** Correct usage to
-copy: `load_feng_fold` in `src/sl_profile_baseline/data.py:50-57`,
+copy: `load_feng_fold` in `src/sl_profile_baseline/data.py:48-55`,
 `scripts/build_k562_sl_benchmark.py:150`.
 
 The **unsuffixed** file (`CV2_1.npy`) is the `Rand` set — the primary
@@ -85,10 +85,10 @@ build-cell-bags       → run-single-cell-cv    → evaluate-single-cell-externa
 - `run-cv --features` silently falls back to a legacy path
   (`artifacts.py:418-423`).
 
-## Config ladder (`configs/experiments/`) — dependency_baseline only
+## Config ladder — `dependency_baseline` only
 
-This is the `models:` / `selection:` pattern, and it applies to experiments
-01–04 and 11 only. **exp05 / exp12 (`aivc_model`) do not use it.**
+The `models:` / `selection:` pattern lives in `dependency_baseline/models.py`; its experiment
+YAMLs (01–04, 11) were deleted at `873c99c` — a new run authors its own. **`aivc_model` differs.**
 
 - `selection.models` is a set intersection over *generated* spec names
   (`models.py:349-357`). **A typo is silently dropped — no error** — and can

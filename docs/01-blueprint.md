@@ -65,8 +65,8 @@ yhat_{g,c}     = muhat_g + deltahat_{g,c}
 **Amendment (2026-08-17).** The prior single-symbol form, `Delta_{g,c} = Pi(Bhat_{c,g}) -
 z_c`, is ill-typed whenever $F_\omega$'s input and output widths differ: $z_c$ pools the
 *input* space, $\hat B_{c,g}$ the *output* space (Tx1-3B 2560-d in vs. ST 2000-d out —
-`configs/experiments/12_tx1_st_geneeffect/phase_c/tx1_arm.yaml`, `input_dim: 2560`,
-`output_dim: 2000`). $B_c$, the basal bag re-expressed in output space, is the fix; $s_{g,c}$
+[`04-exp13-geneeffect-residual-protocol.md`](04-exp13-geneeffect-residual-protocol.md) §4).
+$B_c$, the basal bag re-expressed in output space, is the fix; $s_{g,c}$
 and $q_{sc,g,c}$ are two further declared blocks a composition may hand $h_\delta$.
 
 The $\mu/\delta$ split is load-bearing. Because

@@ -7,7 +7,7 @@ and gitignored. This is the versioned record of the numbers the blueprint cites.
 
 ## exp02 — Replogle K562 viability-axis audit
 
-Config: [`configs/experiments/02_replogle_k562_viability_axis_audit/`](../../configs/experiments/02_replogle_k562_viability_axis_audit/)
+Config: `configs/experiments/02_replogle_k562_viability_axis_audit/`, deleted at `873c99c` (check out `a7e2c91`)
 
 **Task.** Test whether the Replogle K562 pseudobulk B→C signal (perturbation delta
 expression → DepMap K562 CRISPR GeneEffect) mostly learns a generic cell-death /

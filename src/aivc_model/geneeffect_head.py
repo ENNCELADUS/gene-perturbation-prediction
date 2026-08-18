@@ -1,19 +1,19 @@
 """Exp13 GeneEffect residual head: axis-aware loss + five-block ``h_delta``.
 
-Blocker B2 (``merry-mapping-comet.md``): ``tx1_geneeffect_head.rank_variance_loss``
-``reshape(-1)``s a batch to ``[B]`` and computes one Pearson correlation over
-mixed genes and cell-line contexts. The 226-line benchmark's primary metric is
-macro **per-gene Spearman across cell lines** (``residual_metrics.py``), so
+Blocker B2: the retired ``tx1_geneeffect_head.rank_variance_loss`` (deleted
+at ``873c99c``) ``reshape(-1)``s a batch to ``[B]`` and computes one Pearson
+correlation over mixed genes and cell-line contexts. The 226-line benchmark's
+primary metric is macro **per-gene Spearman across cell lines**
+(``residual_metrics.py``), so
 that flattened objective can score well while the per-gene axis is near-zero
 whenever the per-gene main effect ``mu_g`` (large, shared between ``pred`` and
 ``target``) dominates a small per-context signal -- exactly the failure mode
 ``residual_metrics.py``'s module docstring documents for the raw-GeneEffect
-per-line axis. :func:`per_gene_rank_variance_loss` fixes this by computing
-:func:`~aivc_model.tx1_geneeffect_head.correlation_loss` and
-:func:`~aivc_model.tx1_geneeffect_head.variance_matching_loss` **per gene,
-along the context axis**, then macro-averaging over genes -- mirroring
-:func:`aivc_model.residual_metrics.per_gene_spearman`'s axis choice, not
-``rank_variance_loss``'s.
+per-line axis. :func:`per_gene_rank_variance_loss` fixes this by computing that
+correlation term and its variance-matching partner **per gene, along the context
+axis**, then macro-averaging over genes -- mirroring
+:func:`aivc_model.residual_metrics.per_gene_spearman`'s axis choice, not the
+flattened one.
 
 This module also implements the Phase 6 five-block ``h_delta`` readout
 (:class:`GeneEffectResidualHead`): ``delta_hat(g, c) = h_delta(Delta_proj,
@@ -43,7 +43,7 @@ from torch import nn
 from aivc_model.residual_metrics import per_gene_spearman
 
 #: Numerical floor added to per-gene standard deviations before dividing,
-#: matching ``tx1_geneeffect_head._STD_EPS`` -- keeps a per-gene correlation
+#: matching the retired ``tx1_geneeffect_head._STD_EPS`` -- keeps a per-gene correlation
 #: finite (not NaN) when a *prediction* row collapses to (near-)constant.
 _STD_EPS: float = 1e-6
 
@@ -78,7 +78,7 @@ def moment_pool(
 ) -> torch.Tensor:
     """Pool a per-cell bag into a permutation-invariant moment summary.
 
-    ``Pi = [mean, var]`` (``01-blueprint.md`` §3, ``merry-mapping-comet.md``
+    ``Pi = [mean, var]`` (``01-blueprint.md`` §3, the Exp13 plan
     Target architecture): the default ``moments=2`` is exactly the pair used
     to build ``z_c = Pi({x_c^(i)})`` and ``Delta_{g,c} = Pi(B_hat_{c,g}) -
     Pi({b_c^(i)})``.
@@ -169,14 +169,13 @@ def per_gene_rank_variance_loss(
     target: torch.Tensor,
     lam: float = 1.0,
 ) -> PerGeneRankVarianceLoss:
-    """Axis-aware replacement for ``tx1_geneeffect_head.rank_variance_loss``.
+    """Axis-aware replacement for the retired ``rank_variance_loss``.
 
-    ``rank_variance_loss`` flattens its ``[B]`` inputs to one Pearson
-    correlation over whatever the batch happens to mix (genes, contexts, or
-    both). This function instead requires ``pred``/``target`` shaped
-    ``[n_genes, n_contexts]`` and computes
-    :func:`~aivc_model.tx1_geneeffect_head.correlation_loss` and
-    :func:`~aivc_model.tx1_geneeffect_head.variance_matching_loss`
+    That loss flattened its ``[B]`` inputs to one Pearson correlation over
+    whatever the batch happened to mix (genes, contexts, or both). This
+    function instead requires ``pred``/``target`` shaped
+    ``[n_genes, n_contexts]`` and computes the correlation and
+    variance-matching terms
     independently **per row (gene), along the context axis (dim=-1)**, then
     macro-averages the per-gene combined loss over genes -- the same axis
     choice as :func:`aivc_model.residual_metrics.per_gene_spearman`, so the
@@ -351,7 +350,7 @@ def macro_per_gene_spearman(
 
 @dataclass(frozen=True)
 class GeneEffectFeatureDims:
-    """Per-block feature widths (target architecture, ``merry-mapping-comet.md``).
+    """Per-block feature widths (target architecture, per the Exp13 plan).
 
     Attributes:
         delta_proj: ``Delta_{g,c}`` projected 4000 -> this width by a fixed
@@ -418,7 +417,7 @@ class GeneEffectResidualHead(nn.Module):
     """MLP predicting ``delta_hat(g, c)`` from up to five feature blocks.
 
     ``delta_hat_{g,c} = h_delta(Delta_proj, s, q_sc, e_g, z_c)``
-    (``merry-mapping-comet.md``, Target architecture). Every block is gated
+    (the Exp13 plan, Target architecture). Every block is gated
     by :class:`GeneEffectBlockConfig`; a disabled block's tensor argument to
     :meth:`forward` must be ``None`` and contributes nothing to the input
     width or the parameter count -- each of the five ablations is therefore
