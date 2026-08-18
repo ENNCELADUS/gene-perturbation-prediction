@@ -1,7 +1,8 @@
 # Experiment Protocol: Exp13 Cell-Line GeneEffect Residual Benchmark
 
-**Status:** contract written 2026-08-17. The residual head and its axis-aware objective exist
-(`src/aivc_model/geneeffect_head.py`); no Stage 0-2 artifact exists and no run has started.
+**Status:** contract written 2026-08-17; Stage 0 completed 2026-08-18 (§6 closed by branch 1,
+[result](results/exp13-stage0-tx1-input-representation.md)). The residual head exists and the
+152 Kinker lines now have raw UMI counts; no Stage 1-2 artifact exists, no training has run.
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
 **Authority:** [`01-blueprint.md`](01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**
@@ -79,26 +80,30 @@ $h_\delta$ directly. `Delta` is 4000-d (2 × 2000, mean+var); `z_c` is 5120-d (2
   assert its numeric value ahead of that freeze. Unprojected interpretables kept alongside:
   $\lVert\Delta_{\text{mean}}\rVert$, cosine to the basal mean, and `Delta` at $g$'s own HVG
   index (own-gene shift) when $g$ is in the panel.
+- **Collator seed.** `max_length: 2048` with `sampling: true` means `_sample` draws genes by
+  unseeded `torch.randperm`, and most basal cells exceed 2048 detected genes. Seed before
+  every forward pass and record it in `run_manifest.json`, as the cell order is pinned above;
+  seeding makes the encode bit-identical (§6).
 - **Coverage bits.** `q_sc` available, `g` in the HVG panel, own-gene shift available —
   explicit masks, nothing zero-filled.
 
-## 6. Stage 0 — Open Question (Tx1 Input Representation)
+## 6. Stage 0 — Tx1 Input Representation (closed, branch 1)
 
-152 of the 179 new-atlas lines are Kinker `processed_cpm` (`kinker_sccle`; 19/27 test lines,
-23/27 val lines — `configs/benchmarks/cell_line_geneeffect_226_split.csv`, cross-tabulated
-against `_split_audit.json: source_targets_for_179_partition`). For these lines,
-$x_c=E_{\text{Tx1}}(r_c)$ depends on an unresolved fact: what the Tahoe-X1 collator does with
-a CPM-normalized, not raw-count, input. **"Swap only $z_c$" is not a valid fallback** — ST
-consumes the Tx1 embedding as its Stage-1 *input* (§4), not only as the separately-pooled
-context summary, so an untrustworthy Tx1 embedding voids the whole ST forward pass for that
-line, not one feature block. The only admissible branches, resolved by Stage 0 before Stage 1
-trains on any line from this cohort:
+152 of the 179 new-atlas lines were published as Kinker `processed_cpm` (19/27 test, 23/27
+val lines), so $x_c=E_{\text{Tx1}}(r_c)$ depended on whether the collator reads a CPM row like
+the counts underneath it. **It does not:** per-cell cosine 0.92-0.95 against the raw encode,
+and — unlike gene-subsampling noise, which pools away to 0.9997 — the shift survives pooling
+to the per-line mean at 0.972-0.987 ([result](results/exp13-stage0-tx1-input-representation.md)).
+"Swap only $z_c$" was never a fallback: ST consumes the embedding as its Stage-1 *input* (§4),
+so an untrustworthy one voids a line's whole forward pass, not one feature block.
 
-1. Obtain raw counts for the 152 Kinker lines.
-2. Switch to a uniform HVG-ST arm — HVG input **and** HVG `Delta` space for all 226 lines, no
-   Tx1 anywhere.
-3. Re-version the benchmark to the Tx1-available subset (a new split, not an edit to this
-   one).
+**Branch 1 is taken.** SCP542 publishes `UMIcount_data.txt`, raw pre-QC UMI counts covering
+all 40,670 selected cells and all 152 lines, with cell-line identity in the file.
+`scripts/prepare_kinker_umi_h5ad.py` ingests it to per-line h5ads passing
+`assert_tx1_input_contract` (0 non-integer values in 151,986,988 nonzeros; 40,670/40,670 line
+labels reconciled against the CPM-derived selection). Split membership is unchanged — only the
+numeric source moved — and the frozen line manifest, whose hash the split builder pins, is not
+edited. The CPM artifacts stay the comparison arm and must not re-enter the Tx1 path.
 
 ## 7. Stage 1 Freeze Thresholds
 
