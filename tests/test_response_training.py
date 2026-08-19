@@ -175,3 +175,42 @@ def test_evaluate_reports_the_basal_copy_floor() -> None:
     assert report["improvement_over_basal_copy"] > 0
     assert "ACH-000551" in report["per_line_model_loss"]
     assert np.isfinite(report["model_loss"])
+
+
+class _WindowedModel(nn.Module):
+    """Test double enforcing ST's fixed-window contract."""
+
+    def __init__(self, dim: int, window: int) -> None:
+        super().__init__()
+        self.shift = nn.Parameter(torch.zeros(dim))
+        self.cell_sentence_len = window
+
+    def predict_response_chunks(self, chunks, gene, batch_index_chunks):
+        for chunk in chunks:
+            if chunk.shape[0] != self.cell_sentence_len:
+                raise ValueError("STATE chunks must all equal cell_sentence_len")
+        return tuple(chunk + self.shift for chunk in chunks)
+
+
+def test_predict_bag_pads_and_trims_to_the_window() -> None:
+    """A bag that is not a multiple of the window must still forward.
+
+    Training only worked before because max_bag happened to equal the window;
+    evaluation passed whole control bags and crashed on exactly this.
+    """
+    from aivc_model.response_training import predict_bag
+
+    model = _WindowedModel(3, window=8)
+    out = predict_bag(model, _bag(21, 3), "G0", seed=0)
+    assert out.shape == (21, 3)
+
+
+def test_evaluate_handles_bags_that_do_not_divide_the_window() -> None:
+    model = _WindowedModel(3, window=8)
+    batches = _batches()
+    for batch in batches:
+        batch["control"] = _bag(21, 3)
+        batch["control_target"] = batch["control"]
+        batch["observed"] = batch["control"] + 1.5
+    report = evaluate_response_model(model, batches)
+    assert np.isfinite(report["model_loss"])
