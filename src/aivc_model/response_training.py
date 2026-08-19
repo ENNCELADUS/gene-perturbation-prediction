@@ -182,16 +182,31 @@ def predict_bag(
 
     # Resolve the window through the DDP wrapper's ``.module``: reading an
     # attribute needs the inner module, while the FORWARD below must still go
-    # through the wrapper so gradients all-reduce. Without this, a multi-rank
-    # run finds no window, silently takes the single-chunk path below, and
-    # dies in ``forward_chunks`` on unequal chunk sizes.
+    # through the wrapper so gradients all-reduce.
     inner = getattr(model, "module", model)
     adapter = getattr(inner, "state_adapter", None)
-    window = getattr(adapter, "cell_sentence_len", None) or getattr(
-        inner, "cell_sentence_len", None
+    # Read the window off ``state_model`` -- the object
+    # ``StateForwardAdapter.forward_chunks`` reads it from. The adapter
+    # carries no ``cell_sentence_len`` of its own, so looking for one there
+    # resolves to None on every real model, and the fallback below then
+    # silently sent a whole bag through as one chunk. Reading it from the
+    # same object that checks it means the two cannot disagree.
+    state_model = getattr(adapter, "state_model", None)
+    window = (
+        getattr(state_model, "cell_sentence_len", None)
+        or getattr(adapter, "cell_sentence_len", None)
+        or getattr(inner, "cell_sentence_len", None)
     )
+    if adapter is not None and not window:
+        raise ValueError(
+            "the ST adapter declares no cell_sentence_len; refusing to fall "
+            "back to a single chunk. forward_chunks rejects that, and the "
+            "silent fallback is what disguised a missing attribute as a "
+            "chunk-size bug."
+        )
     if not window:
-        # A model with no fixed-window contract (test doubles) takes one chunk.
+        # Only a genuine test double -- no state adapter at all -- may take
+        # the single-chunk path.
         return torch.cat(tuple(model((control,), gene, (None,))), dim=0)
     n_cells = int(control.shape[0])
     index_chunks = _chunk_control_cell_indices(n_cells, int(window), seed)

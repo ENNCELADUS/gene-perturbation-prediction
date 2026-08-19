@@ -606,3 +606,75 @@ def test_forward_only_state_model_exposes_forward() -> None:
     from aivc_model.tx1_predicted_response import ForwardOnlyStateModel
 
     assert "forward" in vars(ForwardOnlyStateModel)
+
+
+class _RealShapedAdapter(nn.Module):
+    """Mirrors StateForwardAdapter: holds state_model, declares NO window itself."""
+
+    def __init__(self, state_model: nn.Module) -> None:
+        super().__init__()
+        self.state_model = state_model
+
+
+class _RealShapedModel(nn.Module):
+    """Mirrors ForwardOnlyStateModel: the window lives at
+    ``state_adapter.state_model.cell_sentence_len``, two levels down.
+
+    Every earlier double put ``cell_sentence_len`` directly on the model,
+    which is why they all passed while the real model failed.
+    """
+
+    def __init__(self, dim: int, window: int) -> None:
+        super().__init__()
+        self.shift = nn.Parameter(torch.zeros(dim))
+        inner = nn.Module()
+        inner.cell_sentence_len = window
+        self.state_adapter = _RealShapedAdapter(inner)
+
+    def forward(self, chunks, gene, batch_index_chunks):
+        window = self.state_adapter.state_model.cell_sentence_len
+        for chunk in chunks:
+            if chunk.shape[0] != window:
+                raise ValueError(
+                    "STATE chunks must all equal the configured cell_sentence_len"
+                )
+        return tuple(chunk + self.shift for chunk in chunks)
+
+
+def test_predict_bag_reads_the_window_from_state_model() -> None:
+    """Regression: the window lives on state_model, not on the adapter.
+
+    StateForwardAdapter has only ``state_model``; it declares no
+    ``cell_sentence_len``. Looking for one on the adapter resolved to None on
+    every real model, so predict_bag fell through to its single-chunk path
+    and handed a whole bag to a model expecting fixed windows. That is the
+    ValueError the first multi-rank run died on.
+    """
+    model = _RealShapedModel(dim=3, window=4)
+    from aivc_model.response_training import predict_bag
+
+    out = predict_bag(model, _bag(10, 3), "G", seed=0)
+    assert out.shape == (10, 3)
+
+
+def test_predict_bag_through_ddp_wrapper_with_real_shape() -> None:
+    """The same, behind a forward-only wrapper -- the actual failing case."""
+    wrapped = _ForwardOnlyProxy(_RealShapedModel(dim=3, window=4))
+    from aivc_model.response_training import predict_bag
+
+    out = predict_bag(wrapped, _bag(10, 3), "G", seed=0)
+    assert out.shape == (10, 3)
+
+
+def test_predict_bag_refuses_a_windowless_adapter() -> None:
+    """A real adapter with no resolvable window must raise, not fall back.
+
+    The silent fallback is what turned a missing attribute into a confusing
+    chunk-size error thrown from deep inside forward_chunks.
+    """
+    model = _RealShapedModel(dim=3, window=4)
+    del model.state_adapter.state_model.cell_sentence_len
+    from aivc_model.response_training import predict_bag
+
+    with pytest.raises(ValueError, match="cell_sentence_len"):
+        predict_bag(model, _bag(10, 3), "G", seed=0)
