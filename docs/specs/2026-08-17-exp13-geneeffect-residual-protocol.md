@@ -1,8 +1,8 @@
 # Experiment Protocol: Exp13 Cell-Line GeneEffect Residual Benchmark
 
 **Status:** contract written 2026-08-17; Stage 0 completed 2026-08-18 (§6 closed by branch 1,
-[result](../results/exp13-stage0-tx1-input-representation.md)). The residual head exists and the
-152 Kinker lines now have raw UMI counts; no Stage 1-2 artifact exists, no training has run.
+[result](../results/exp13-stage0-tx1-input-representation.md)). The residual head and the Stage 1
+trainer exist; §7's two margins are still `null`, so no run has started and no Stage 1-2 artifact exists.
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
 **Authority:** [`01-blueprint.md`](../01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**

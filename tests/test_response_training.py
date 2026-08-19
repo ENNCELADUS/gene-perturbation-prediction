@@ -1,23 +1,37 @@
-"""Tests for the Stage 1 response-model training objective.
+"""Tests for the Stage 1 response-model training objective and trainer.
 
 The loss is the part worth testing hard: it is distributional, so the usual
 "does it go down" check cannot distinguish a model that matches the mean
 while collapsing spread -- exactly the failure the retired backbone showed.
 These cover each term's discriminating behavior, the per-line held-out gene
-split, and that training actually moves the module it is handed.
+split, the DDP even-step sharding invariants, held-out validation reduction,
+best-checkpoint selection with early stopping, and that training actually
+moves the module it is handed.
 """
 
 from __future__ import annotations
 
+import json
+
+from accelerate import Accelerator
 import numpy as np
 import pytest
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 
 from aivc_model.response_training import (
+    SELECTION_METRIC_NAME,
     ResponseLoss,
     ResponseLossWeights,
     TrainingConfig,
+    _GeneIndexDataset,
+    _is_better_metric,
+    _pad_gene_indices,
+    _per_anchor_mean_from_gathered,
+    _run_train_epoch,
+    _select_best_epoch,
+    _validate_anchor_weights,
     energy_distance,
     evaluate_response_model,
     mean_delta_mse,
@@ -33,7 +47,7 @@ class _ShiftModel(nn.Module):
         super().__init__()
         self.shift = nn.Parameter(torch.zeros(dim))
 
-    def predict_response_chunks(self, chunks, gene, batch_index_chunks):
+    def forward(self, chunks, gene, batch_index_chunks):
         return tuple(chunk + self.shift for chunk in chunks)
 
 
@@ -124,17 +138,58 @@ def test_heldout_split_rejects_a_line_too_small_to_hold_out() -> None:
         split_heldout_genes({"L": ["A", "B"]}, fraction=0.2, seed=1)
 
 
-# --- training loop ------------------------------------------------------
+# --- TrainingConfig validation -------------------------------------------
 
 
-def _batches(dim: int = 3, n: int = 4) -> list[dict]:
+def test_training_config_rejects_a_sub_one_max_epochs() -> None:
+    with pytest.raises(ValueError, match="max_epochs must be >= 1"):
+        TrainingConfig(max_epochs=0)
+
+
+def test_training_config_rejects_a_sub_one_patience() -> None:
+    with pytest.raises(ValueError, match="patience must be >= 1"):
+        TrainingConfig(patience=0)
+
+
+def test_training_config_rejects_a_too_small_max_bag() -> None:
+    with pytest.raises(ValueError, match="max_bag must be >= 2"):
+        TrainingConfig(max_bag=1)
+
+
+# --- even-step DDP sharding -----------------------------------------------
+
+
+def test_pad_gene_indices_pads_to_a_multiple_of_world_size() -> None:
+    padded, is_padding = _pad_gene_indices(np.arange(5), world_size=3)
+    assert len(padded) % 3 == 0
+    assert len(padded) == len(is_padding)
+    # Real indices are untouched and come first; padding repeats real data,
+    # never invents an empty/zero record.
+    assert list(padded[:5]) == [0, 1, 2, 3, 4]
+    assert not any(is_padding[:5])
+    assert all(is_padding[5:])
+    assert set(padded[5:]) <= set(padded[:5])
+
+
+def test_pad_gene_indices_is_a_noop_when_already_even() -> None:
+    padded, is_padding = _pad_gene_indices(np.arange(6), world_size=3)
+    assert list(padded) == [0, 1, 2, 3, 4, 5]
+    assert not is_padding.any()
+
+
+def test_pad_gene_indices_rejects_an_empty_index_array() -> None:
+    with pytest.raises(ValueError, match="no batches to shard"):
+        _pad_gene_indices(np.array([], dtype=np.int64), world_size=2)
+
+
+def _batches(dim: int = 3, n: int = 4, model_id: str = "ACH-000551") -> list[dict]:
     out = []
     for index in range(n):
         control = _bag(16, dim)
         out.append(
             {
                 "gene": f"G{index}",
-                "model_id": "ACH-000551",
+                "model_id": model_id,
                 "control": control,
                 "control_target": control,
                 "observed": control + 1.5,
@@ -143,32 +198,324 @@ def _batches(dim: int = 3, n: int = 4) -> list[dict]:
     return out
 
 
-def test_training_reduces_the_loss_and_updates_the_module() -> None:
+def test_a_padded_training_step_backpropagates_exactly_zero_gradient() -> None:
+    """A padded step must run the full forward/backward, not be skipped.
+
+    Skipping it would desync ranks under ``static_graph=True``; instead its
+    loss is multiplied by zero before backward. Isolating a single padded
+    step lets us check both halves directly: the gradient exists (so the
+    backward genuinely ran) and it is exactly zero (so it did not move the
+    model).
+    """
+    model = _ShiftModel(3)
+    records = _batches(n=1)
+    accelerator = Accelerator(cpu=True)
+    loader = accelerator.prepare(
+        DataLoader(_GeneIndexDataset(np.array([0]), np.array([True])), batch_size=1)
+    )
+    optimizer = accelerator.prepare(torch.optim.AdamW(model.parameters(), lr=0.0))
+    config = TrainingConfig(max_bag=16, log_every=0)
+    generator = torch.Generator().manual_seed(config.seed)
+
+    with pytest.raises(ValueError, match="no non-padding training steps"):
+        _run_train_epoch(
+            model,
+            loader,
+            records,
+            optimizer,
+            ResponseLoss(),
+            config,
+            accelerator,
+            generator,
+            epoch=0,
+        )
+    assert model.shift.grad is not None
+    assert torch.allclose(model.shift.grad, torch.zeros_like(model.shift.grad))
+
+
+def test_every_rank_step_count_includes_padding_and_matches_loader_length() -> None:
+    """Padding equalizes total step count -- the property DDP needs."""
+    model = _ShiftModel(3)
+    records = _batches(n=1)
+    accelerator = Accelerator(cpu=True)
+    loader = accelerator.prepare(
+        DataLoader(
+            _GeneIndexDataset(np.array([0, 0, 0]), np.array([False, True, True])),
+            batch_size=1,
+        )
+    )
+    optimizer = accelerator.prepare(torch.optim.AdamW(model.parameters(), lr=0.0))
+    config = TrainingConfig(max_bag=16, log_every=0)
+    generator = torch.Generator().manual_seed(config.seed)
+
+    metrics, local_steps = _run_train_epoch(
+        model,
+        loader,
+        records,
+        optimizer,
+        ResponseLoss(),
+        config,
+        accelerator,
+        generator,
+        epoch=0,
+    )
+    assert local_steps == 3
+    # The two padded duplicates never enter the reported mean.
+    single_metrics, single_steps = _run_train_epoch(
+        model,
+        accelerator.prepare(
+            DataLoader(
+                _GeneIndexDataset(np.array([0]), np.array([False])), batch_size=1
+            )
+        ),
+        records,
+        optimizer,
+        ResponseLoss(),
+        config,
+        accelerator,
+        torch.Generator().manual_seed(config.seed),
+        epoch=0,
+    )
+    assert single_steps == 1
+    assert metrics == pytest.approx(single_metrics)
+
+
+# --- held-out per-anchor reduction ----------------------------------------
+
+
+def test_gathered_sum_and_count_differs_from_mean_of_per_rank_means() -> None:
+    """Sum-then-divide is required; averaging per-rank means is wrong.
+
+    Rank 0 holds one held-out example at loss 10; rank 1 holds three at loss
+    0. The correct pooled mean weights by count (10 / 4); naively averaging
+    each rank's own mean (10 and 0) gives 5 -- a different, wrong answer
+    whenever ranks carry unequal held-out counts, which even-step padding
+    does nothing to prevent.
+    """
+    sum_matrix = torch.tensor([[10.0], [0.0]])
+    count_matrix = torch.tensor([[1.0], [3.0]])
+    correct = _per_anchor_mean_from_gathered(sum_matrix, count_matrix)
+    naive_mean_of_means = (sum_matrix / count_matrix).mean(dim=0)
+    assert float(correct[0]) == pytest.approx(2.5)
+    assert float(naive_mean_of_means[0]) == pytest.approx(5.0)
+    assert float(correct[0]) != pytest.approx(float(naive_mean_of_means[0]))
+
+
+# --- selection helpers ------------------------------------------------
+
+
+def test_is_better_metric_rejects_a_non_finite_candidate() -> None:
+    assert _is_better_metric(float("nan"), 1.0, mode="min") is False
+
+
+def test_is_better_metric_accepts_any_finite_value_over_a_non_finite_incumbent() -> (
+    None
+):
+    """The NaN-handling bug that once froze checkpoint selection at epoch 1."""
+    assert _is_better_metric(1e9, float("nan"), mode="min") is True
+
+
+def test_is_better_metric_compares_normally_once_both_sides_are_finite() -> None:
+    assert _is_better_metric(0.5, 1.0, mode="min") is True
+    assert _is_better_metric(1.5, 1.0, mode="min") is False
+
+
+def test_is_better_metric_rejects_an_unknown_mode() -> None:
+    with pytest.raises(ValueError, match="unknown selection mode"):
+        _is_better_metric(1.0, 2.0, mode="sideways")
+
+
+def test_select_best_epoch_picks_the_minimum_and_keeps_the_earliest_tie() -> None:
+    history = [
+        {"epoch": 0, SELECTION_METRIC_NAME: 2.0},
+        {"epoch": 1, SELECTION_METRIC_NAME: 1.0},
+        {"epoch": 2, SELECTION_METRIC_NAME: 1.0},
+    ]
+    assert _select_best_epoch(history)["epoch"] == 1
+
+
+def test_select_best_epoch_skips_non_finite_entries() -> None:
+    history = [
+        {"epoch": 0, SELECTION_METRIC_NAME: float("nan")},
+        {"epoch": 1, SELECTION_METRIC_NAME: 3.0},
+    ]
+    assert _select_best_epoch(history)["epoch"] == 1
+
+
+def test_select_best_epoch_rejects_an_empty_history() -> None:
+    with pytest.raises(ValueError, match="non-empty"):
+        _select_best_epoch([])
+
+
+def test_select_best_epoch_rejects_an_all_non_finite_history() -> None:
+    with pytest.raises(ValueError, match="no epoch produced a finite"):
+        _select_best_epoch([{"epoch": 0, SELECTION_METRIC_NAME: float("nan")}])
+
+
+# --- anchor_weights validation --------------------------------------------
+
+
+def test_validate_anchor_weights_rejects_weights_not_summing_to_one() -> None:
+    with pytest.raises(ValueError, match="must sum to 1"):
+        _validate_anchor_weights({"A": 0.4, "B": 0.4}, _batches(n=1, model_id="A"))
+
+
+def test_validate_anchor_weights_rejects_an_unknown_heldout_model_id() -> None:
+    with pytest.raises(ValueError, match="absent from anchor_weights"):
+        _validate_anchor_weights({"A": 1.0}, _batches(n=1, model_id="B"))
+
+
+def test_validate_anchor_weights_rejects_a_weighted_anchor_with_no_heldout_batch() -> (
+    None
+):
+    with pytest.raises(ValueError, match="no held-out batch"):
+        _validate_anchor_weights({"A": 0.5, "B": 0.5}, _batches(n=1, model_id="A"))
+
+
+def test_validate_anchor_weights_allows_a_zero_weight_anchor_with_no_batch() -> None:
+    _validate_anchor_weights({"A": 1.0, "B": 0.0}, _batches(n=1, model_id="A"))
+
+
+# --- training loop ------------------------------------------------------
+
+
+def test_training_reduces_the_loss_and_updates_the_module(tmp_path) -> None:
     model = _ShiftModel(3)
     before = model.shift.detach().clone()
     report = train_response_model(
         model,
-        _batches(),
-        config=TrainingConfig(epochs=6, learning_rate=0.2, max_bag=16, log_every=0),
+        _batches(n=6),
+        _batches(n=3),
+        anchor_weights={"ACH-000551": 1.0},
+        out_dir=tmp_path,
+        config=TrainingConfig(
+            max_epochs=6, patience=6, learning_rate=0.2, max_bag=16, log_every=0
+        ),
     )
-    losses = [epoch["loss"] for epoch in report["epochs"]]
+    losses = [epoch["train_loss"] for epoch in report["epochs"]]
     assert losses[-1] < losses[0]
     assert not torch.allclose(before, model.shift.detach())
 
 
-def test_training_rejects_an_empty_batch_list() -> None:
+def test_training_rejects_an_empty_train_batch_list(tmp_path) -> None:
     with pytest.raises(ValueError, match="no response batches"):
-        train_response_model(_ShiftModel(3), [])
+        train_response_model(
+            _ShiftModel(3),
+            [],
+            _batches(n=1),
+            anchor_weights={"ACH-000551": 1.0},
+            out_dir=tmp_path,
+        )
 
 
-def test_evaluate_reports_the_basal_copy_floor() -> None:
+def test_training_rejects_an_empty_heldout_batch_list(tmp_path) -> None:
+    with pytest.raises(ValueError, match="no held-out response batches"):
+        train_response_model(
+            _ShiftModel(3),
+            _batches(n=1),
+            [],
+            anchor_weights={"ACH-000551": 1.0},
+            out_dir=tmp_path,
+        )
+
+
+def test_training_report_has_the_documented_keys(tmp_path) -> None:
+    report = train_response_model(
+        _ShiftModel(3),
+        _batches(n=4),
+        _batches(n=2),
+        anchor_weights={"ACH-000551": 1.0},
+        out_dir=tmp_path,
+        config=TrainingConfig(max_epochs=3, patience=3, max_bag=16, log_every=0),
+    )
+    assert {
+        "epochs",
+        "best_epoch",
+        "best_metric_value",
+        "selection_metric",
+        "stopped_early",
+        "stopped_at_epoch",
+        "n_train_batches",
+        "n_heldout_batches",
+        "world_size",
+        "config",
+    } <= set(report)
+    assert report["selection_metric"] == SELECTION_METRIC_NAME
+    assert report["n_train_batches"] == 4
+    assert report["n_heldout_batches"] == 2
+    assert report["world_size"] == 1
+    assert report["config"]["max_epochs"] == 3
+    epoch_row = report["epochs"][0]
+    assert SELECTION_METRIC_NAME in epoch_row
+    assert "heldout_ACH-000551_loss" in epoch_row
+
+
+def test_training_writes_the_train_log_and_both_checkpoints(tmp_path) -> None:
+    train_response_model(
+        _ShiftModel(3),
+        _batches(n=4),
+        _batches(n=2),
+        anchor_weights={"ACH-000551": 1.0},
+        out_dir=tmp_path,
+        config=TrainingConfig(max_epochs=3, patience=3, max_bag=16, log_every=0),
+    )
+    assert (tmp_path / "train_log.csv").exists()
+    for kind in ("best", "final"):
+        checkpoint_dir = tmp_path / kind
+        assert (checkpoint_dir / "pytorch_model.bin").exists()
+        metadata = json.loads((checkpoint_dir / "metadata.json").read_text())
+        assert metadata["checkpoint_kind"] == kind
+        assert metadata["selection_metric"] == SELECTION_METRIC_NAME
+        assert metadata["selection_mode"] == "min"
+        assert np.isfinite(metadata["metric_value"])
+    final_metadata = json.loads((tmp_path / "final" / "metadata.json").read_text())
+    assert "best_metric_value" in final_metadata
+    assert "stopped_early" in final_metadata
+    assert "patience" in final_metadata
+
+
+def test_early_stopping_triggers_once_patience_is_exhausted(tmp_path) -> None:
+    """A frozen model's held-out loss never improves after epoch 0."""
+    report = train_response_model(
+        _ShiftModel(3),
+        _batches(n=4),
+        _batches(n=2),
+        anchor_weights={"ACH-000551": 1.0},
+        out_dir=tmp_path,
+        config=TrainingConfig(
+            max_epochs=10, patience=2, learning_rate=0.0, max_bag=16, log_every=0
+        ),
+    )
+    assert report["stopped_early"] is True
+    assert report["best_epoch"] == 0
+    assert report["stopped_at_epoch"] == 2
+    assert len(report["epochs"]) == 3
+
+
+def test_anchor_weights_error_propagates_from_train_response_model(tmp_path) -> None:
+    with pytest.raises(ValueError, match="no held-out batch"):
+        train_response_model(
+            _ShiftModel(3),
+            _batches(n=2, model_id="A"),
+            _batches(n=2, model_id="A"),
+            anchor_weights={"A": 0.5, "B": 0.5},
+            out_dir=tmp_path,
+        )
+
+
+def test_evaluate_reports_the_basal_copy_floor(tmp_path) -> None:
     """A trained shift must beat 'nothing happens', and the report must say so."""
     model = _ShiftModel(3)
     batches = _batches()
     train_response_model(
         model,
         batches,
-        config=TrainingConfig(epochs=8, learning_rate=0.2, max_bag=16, log_every=0),
+        _batches(n=2),
+        anchor_weights={"ACH-000551": 1.0},
+        out_dir=tmp_path,
+        config=TrainingConfig(
+            max_epochs=8, patience=8, learning_rate=0.2, max_bag=16, log_every=0
+        ),
     )
     report = evaluate_response_model(model, batches)
     assert report["basal_copy_loss"] > report["model_loss"]
@@ -185,7 +532,7 @@ class _WindowedModel(nn.Module):
         self.shift = nn.Parameter(torch.zeros(dim))
         self.cell_sentence_len = window
 
-    def predict_response_chunks(self, chunks, gene, batch_index_chunks):
+    def forward(self, chunks, gene, batch_index_chunks):
         for chunk in chunks:
             if chunk.shape[0] != self.cell_sentence_len:
                 raise ValueError("STATE chunks must all equal cell_sentence_len")
@@ -214,3 +561,48 @@ def test_evaluate_handles_bags_that_do_not_divide_the_window() -> None:
         batch["observed"] = batch["control"] + 1.5
     report = evaluate_response_model(model, batches)
     assert np.isfinite(report["model_loss"])
+
+
+class _ForwardOnlyProxy(nn.Module):
+    """Stand-in for ``DistributedDataParallel``: proxies ONLY ``forward``.
+
+    DDP wraps the module and forwards ``__call__`` to the inner module's
+    ``forward``; it does not expose the inner module's other methods. A
+    trainer that reached for a custom method by name would raise
+    ``AttributeError`` here, exactly as it would on a real multi-rank run.
+    """
+
+    def __init__(self, module: nn.Module) -> None:
+        super().__init__()
+        # DDP exposes the wrapped module as ``.module``; mirror that name so
+        # attribute lookups (e.g. the ST window) resolve the same way.
+        self.module = module
+
+    def forward(self, *args, **kwargs):
+        return self.module(*args, **kwargs)
+
+
+def test_predict_bag_works_through_a_forward_only_wrapper() -> None:
+    """Regression: DDP proxies only ``forward``.
+
+    ``accelerator.prepare`` wraps the model in ``DistributedDataParallel``
+    for any multi-rank launch. Calling ``predict_response_chunks`` on that
+    wrapper raises ``AttributeError`` on the first training batch, so the
+    whole point of the DDP support would fail at run time while every
+    single-process test still passed.
+    """
+    inner = _WindowedModel(dim=3, window=4)
+    wrapped = _ForwardOnlyProxy(inner)
+    assert not hasattr(wrapped, "predict_response_chunks")
+    control = _bag(6, 3)
+    from aivc_model.response_training import predict_bag
+
+    out = predict_bag(wrapped, control, "G", seed=0)
+    assert out.shape == (6, 3)
+
+
+def test_forward_only_state_model_exposes_forward() -> None:
+    """The real module must route training through ``forward``, not a method."""
+    from aivc_model.tx1_predicted_response import ForwardOnlyStateModel
+
+    assert "forward" in vars(ForwardOnlyStateModel)
