@@ -97,22 +97,18 @@ class Stage1FreezeThresholds:
     min_improvement_over_null_shuffle: float | None
 
     def __post_init__(self) -> None:
-        if self.min_improvement_over_basal_copy is None:
-            raise ValueError(
-                "min_improvement_over_basal_copy is null: Stage 1 freeze thresholds "
-                "must be pre-registered before training starts (spec §7, 'Stage 1 "
-                "Freeze Thresholds') -- fill in the margin in "
-                "configs/experiments/13_geneeffect_226/stage1_response.yaml before "
-                "running Stage 1."
-            )
-        if self.min_improvement_over_null_shuffle is None:
-            raise ValueError(
-                "min_improvement_over_null_shuffle is null: Stage 1 freeze thresholds "
-                "must be pre-registered before training starts (spec §7, 'Stage 1 "
-                "Freeze Thresholds') -- fill in the margin in "
-                "configs/experiments/13_geneeffect_226/stage1_response.yaml before "
-                "running Stage 1."
-            )
+        # A null margin no longer blocks the run: the key must still be
+        # present, but leaving it unset means "not pre-registered", and the
+        # run proceeds ungated. What a null must never do is read as a pass --
+        # `gate_is_preregistered` is False, and the run's freeze_gate payload
+        # records `evaluated: false` rather than a verdict it did not earn.
+        for name in (
+            "min_improvement_over_basal_copy",
+            "min_improvement_over_null_shuffle",
+        ):
+            value = getattr(self, name)
+            if value is not None and float(value) < 0:
+                raise ValueError(f"{name} must be >= 0 when set, got {value}")
         weights = dict(self.anchor_weights)
         if not weights:
             raise ValueError("anchor_weights must be non-empty")
@@ -126,6 +122,18 @@ class Stage1FreezeThresholds:
         if not self.required_anchor_metrics:
             raise ValueError("required_anchor_metrics must be non-empty")
 
+    @property
+    def gate_is_preregistered(self) -> bool:
+        """Whether both §7 margins were declared before the run.
+
+        False means the run is ungated: its metrics are still computed and
+        reported, but no §7 pass can be claimed from them.
+        """
+        return (
+            self.min_improvement_over_basal_copy is not None
+            and self.min_improvement_over_null_shuffle is not None
+        )
+
 
 @dataclass(frozen=True)
 class Stage1Config:
@@ -136,6 +144,11 @@ class Stage1Config:
     source_path: Path
     source_sha256: str
 
+    @property
+    def gate_is_preregistered(self) -> bool:
+        """Whether this run is §7-gated; delegates to the thresholds."""
+        return self.thresholds.gate_is_preregistered
+
     def freeze_thresholds_payload(self) -> dict[str, Any]:
         """The JSON-ready payload for ``stage1_freeze_thresholds.json`` (spec §10)."""
         t = self.thresholds
@@ -144,6 +157,7 @@ class Stage1Config:
             "required_anchor_metrics": list(t.required_anchor_metrics),
             "min_improvement_over_basal_copy": t.min_improvement_over_basal_copy,
             "min_improvement_over_null_shuffle": t.min_improvement_over_null_shuffle,
+            "gate_is_preregistered": self.gate_is_preregistered,
             "source_path": str(self.source_path),
             "source_sha256": self.source_sha256,
         }

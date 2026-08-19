@@ -49,21 +49,56 @@ VALID_YAML = VALID_TRAIN_BLOCK + VALID_THRESHOLDS_BLOCK
 
 
 def _write(tmp_path: Path, text: str) -> Path:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     p = tmp_path / "c.yaml"
     p.write_text(text)
     return p
 
 
-def test_tracked_yaml_train_block_is_well_formed_but_null_margins_raise() -> None:
+def test_tracked_yaml_loads_ungated_with_null_margins() -> None:
+    """Null margins load and run, but must never read as a pre-registered gate.
+
+    The margins are optional by decision: an unset one means the run is
+    ungated, not that it is blocked. What must hold is that nothing
+    downstream can mistake "not evaluated" for "passed", so
+    ``gate_is_preregistered`` is False and both margins stay None.
+    """
     from aivc_model.stage1_config import load_stage1_config
 
-    with pytest.raises(ValueError) as exc_info:
-        load_stage1_config(TRACKED_YAML)
-    message = str(exc_info.value)
-    assert "min_improvement_over_basal_copy" in message or (
-        "min_improvement_over_null_shuffle" in message
+    cfg = load_stage1_config(TRACKED_YAML)
+    assert cfg.thresholds.min_improvement_over_basal_copy is None
+    assert cfg.thresholds.min_improvement_over_null_shuffle is None
+    assert cfg.gate_is_preregistered is False
+    assert cfg.train.max_epochs >= 1
+
+
+def test_gate_is_preregistered_only_when_both_margins_are_set(
+    tmp_path: Path,
+) -> None:
+    """One margin alone is not a pre-registration."""
+    from aivc_model.stage1_config import load_stage1_config
+
+    both = load_stage1_config(_write(tmp_path / "a", VALID_YAML))
+    assert both.gate_is_preregistered is True
+
+    half = VALID_YAML.replace(
+        "min_improvement_over_null_shuffle: 0.1",
+        "min_improvement_over_null_shuffle: null",
     )
-    assert "§7" in message
+    assert (
+        load_stage1_config(_write(tmp_path / "b", half)).gate_is_preregistered is False
+    )
+
+
+def test_negative_margin_raises(tmp_path: Path) -> None:
+    """A margin may be absent, but a negative one is incoherent."""
+    from aivc_model.stage1_config import load_stage1_config
+
+    bad = VALID_YAML.replace(
+        "min_improvement_over_basal_copy: 0.05", "min_improvement_over_basal_copy: -1.0"
+    )
+    with pytest.raises(ValueError, match="min_improvement_over_basal_copy"):
+        load_stage1_config(_write(tmp_path / "c", bad))
 
 
 def test_valid_config_loads(tmp_path: Path) -> None:

@@ -170,8 +170,8 @@ def _evaluate_freeze_gate(
     null_shuffle = float(metrics["null_shuffle_loss"])
     basal_margin = basal - model_loss
     null_margin = null_shuffle - model_loss
-    required_basal = float(stage1.thresholds.min_improvement_over_basal_copy)
-    required_null = float(stage1.thresholds.min_improvement_over_null_shuffle)
+    required_basal = stage1.thresholds.min_improvement_over_basal_copy
+    required_null = stage1.thresholds.min_improvement_over_null_shuffle
     missing = [
         name
         for name in stage1.thresholds.required_anchor_metrics
@@ -182,8 +182,23 @@ def _evaluate_freeze_gate(
             f"required_anchor_metrics names unknown metrics {missing}; "
             "this trainer reports mean_delta_mse and energy_distance"
         )
+    evaluated = stage1.gate_is_preregistered
+    passed = (
+        basal_margin >= float(required_basal) and null_margin >= float(required_null)
+        if evaluated
+        else None
+    )
     return {
-        "passed": basal_margin >= required_basal and null_margin >= required_null,
+        # `evaluated: false` with `passed: null` is the whole point: an
+        # ungated run must not leave an artifact a later reader mistakes for
+        # a cleared gate. The margins are still measured and reported.
+        "evaluated": evaluated,
+        "passed": passed,
+        "reason": (
+            None
+            if evaluated
+            else "margins were not pre-registered; run is ungated (spec §7)"
+        ),
         "improvement_over_basal_copy": basal_margin,
         "min_improvement_over_basal_copy": required_basal,
         "improvement_over_null_shuffle": null_margin,
@@ -442,12 +457,24 @@ def main(argv: list[str] | None = None) -> int:
     # metrics and freeze" the spec rules out.
     gate = _evaluate_freeze_gate(metrics, stage1)
     metrics["freeze_gate"] = gate
-    _LOGGER.info(
-        "freeze gate: %s (basal-copy margin %.6f vs required %.6f)",
-        "PASS" if gate["passed"] else "FAIL",
-        gate["improvement_over_basal_copy"],
-        gate["min_improvement_over_basal_copy"],
-    )
+    if gate["evaluated"]:
+        _LOGGER.info(
+            "freeze gate: %s (basal-copy margin %.6f vs required %.6f; "
+            "null-shuffle margin %.6f vs required %.6f)",
+            "PASS" if gate["passed"] else "FAIL",
+            gate["improvement_over_basal_copy"],
+            gate["min_improvement_over_basal_copy"],
+            gate["improvement_over_null_shuffle"],
+            gate["min_improvement_over_null_shuffle"],
+        )
+    else:
+        _LOGGER.warning(
+            "freeze gate NOT EVALUATED -- no margins were pre-registered. "
+            "Measured margins: basal-copy %.6f, null-shuffle %.6f. This run "
+            "cannot be reported as clearing spec §7.",
+            gate["improvement_over_basal_copy"],
+            gate["improvement_over_null_shuffle"],
+        )
     (args.out_dir / "heldout_metrics.json").write_text(
         json.dumps(metrics, indent=2) + "\n"
     )
