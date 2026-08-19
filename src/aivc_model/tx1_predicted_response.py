@@ -114,6 +114,26 @@ class ForwardOnlyStateModel(nn.Module):
         self.state_adapter = state_adapter
         self.perturbations = perturbations
 
+    def forward(
+        self,
+        control_chunks: tuple[torch.Tensor, ...],
+        gene: str,
+        batch_index_chunks: tuple[torch.Tensor | None, ...],
+    ) -> tuple[torch.Tensor, ...]:
+        """The training entry point, delegating to
+        :meth:`predict_response_chunks`.
+
+        Training must call the module, not the method: under DDP,
+        ``accelerator.prepare`` wraps this in ``DistributedDataParallel``,
+        which proxies only ``forward``. Reaching for
+        ``predict_response_chunks`` on the wrapper raises ``AttributeError``,
+        and unwrapping to dodge that would skip the gradient all-reduce
+        entirely -- a silently un-synchronized multi-rank run. Going through
+        ``forward`` also puts the call inside Accelerate's autocast context,
+        so the ``--mixed_precision`` the launcher passes is actually applied.
+        """
+        return self.predict_response_chunks(control_chunks, gene, batch_index_chunks)
+
     def predict_response_chunks(
         self,
         control_chunks: tuple[torch.Tensor, ...],

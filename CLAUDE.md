@@ -72,7 +72,7 @@ stray value is parsed as focus text and rejected. `/codex:review` is `disable-mo
 Warnings and defaults are preferred over exceptions, so mistakes usually produce a complete-looking **wrong artifact**, not an error.
 
 - **`dependency_baseline` config loading does no schema validation** — every field is `.get(key, default)`, so a **misspelled YAML key silently
-  takes the default**; `ddgcn/config.py:81` and `sl_profile_baseline/config.py:73` *raise* instead. Exp13 has no YAML — CLI flags plus frozen dataclasses.
+  takes the default**; `ddgcn/config.py:81`, `sl_profile_baseline/config.py:73` and Exp13's `stage1_config.py` *raise* instead.
 - The Tx1 cache zero-fills missing genes, reuses stale cells when the provenance sidecar is absent, and skips completeness checks on a sharded
   verify. The T2 evaluator that hash-pinned the Phase-A contract is gone; the surviving pin is `PINNED_SHA256` in the Exp13 split builder.
 - **Checkpoint loads must be validated.** Every surviving loader mirrors `validate_load_result` (`scripts/verify_tx1_obsm_width.py:97`) — see
