@@ -221,6 +221,15 @@ def main(argv: list[str] | None = None) -> int:
     history = train_response_model(
         model, train_batches, config=config, loss_fn=loss_fn, device=args.device
     )
+    # Persist before scoring. Evaluation is cheap relative to training but can
+    # still raise, and a metrics failure must not discard hours of fitting.
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), args.out_dir / "response_model.pt")
+    (args.out_dir / "training_history.json").write_text(
+        json.dumps(history, indent=2, default=str) + "\n"
+    )
+    _LOGGER.info("checkpoint saved before evaluation")
+
     metrics = evaluate_response_model(
         model, heldout_batches, loss_fn=loss_fn, device=args.device
     )
@@ -230,11 +239,6 @@ def main(argv: list[str] | None = None) -> int:
         metrics["basal_copy_loss"],
     )
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), args.out_dir / "response_model.pt")
-    (args.out_dir / "training_history.json").write_text(
-        json.dumps(history, indent=2, default=str) + "\n"
-    )
     (args.out_dir / "heldout_metrics.json").write_text(
         json.dumps(metrics, indent=2) + "\n"
     )

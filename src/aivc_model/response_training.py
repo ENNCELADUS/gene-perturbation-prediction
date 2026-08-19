@@ -50,6 +50,7 @@ __all__ = [
     "basal_copy_baseline_loss",
     "TrainingConfig",
     "train_response_model",
+    "predict_bag",
 ]
 
 
@@ -142,6 +143,39 @@ def energy_distance(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
     within_left = torch.cdist(left, left).mean()
     within_right = torch.cdist(right, right).mean()
     return 2.0 * cross - within_left - within_right
+
+
+def predict_bag(
+    model: nn.Module, control: torch.Tensor, gene: str, *, seed: int
+) -> torch.Tensor:
+    """Forward one control bag through ST in fixed-size windows.
+
+    ``StateForwardAdapter`` requires every chunk to be exactly
+    ``cell_sentence_len``; a bag that is not a multiple of it must be padded
+    by resampling and the output trimmed back. Training happened to satisfy
+    this only because ``max_bag`` equalled the window size, which is
+    accidental -- routing both training and evaluation through this helper
+    makes the contract explicit rather than a coincidence of configuration.
+    """
+    from aivc_model.tx1_predicted_response import _chunk_control_cell_indices
+
+    adapter = getattr(model, "state_adapter", None)
+    window = getattr(adapter, "cell_sentence_len", None) or getattr(
+        model, "cell_sentence_len", None
+    )
+    if not window:
+        # A model with no fixed-window contract (test doubles) takes one chunk.
+        return torch.cat(
+            tuple(model.predict_response_chunks((control,), gene, (None,))), dim=0
+        )
+    n_cells = int(control.shape[0])
+    index_chunks = _chunk_control_cell_indices(n_cells, int(window), seed)
+    chunks = tuple(
+        control[torch.as_tensor(idx, dtype=torch.long, device=control.device)]
+        for idx in index_chunks
+    )
+    predicted = model.predict_response_chunks(chunks, gene, tuple(None for _ in chunks))
+    return torch.cat(tuple(predicted), dim=0)[:n_cells]
 
 
 def split_heldout_genes(
@@ -291,10 +325,9 @@ def train_response_model(
             observed = _subsample(observed, config.max_bag, generator)
             control = _subsample(control, config.max_bag, generator)
 
-            predicted = model.predict_response_chunks(
-                (control,), str(batch["gene"]), (None,)
+            predicted = predict_bag(
+                model, control, str(batch["gene"]), seed=config.seed
             )
-            predicted = torch.cat(tuple(predicted), dim=0)
             loss, parts = loss_fn(predicted, observed, control_target.mean(dim=0))
 
             optimizer.zero_grad(set_to_none=True)
@@ -347,8 +380,7 @@ def evaluate_response_model(
             batch["control_target"], dtype=torch.float32
         ).to(device)
         control_mean = control_target.mean(dim=0)
-        chunks = model.predict_response_chunks((control,), str(batch["gene"]), (None,))
-        predicted = torch.cat(tuple(chunks), dim=0)
+        predicted = predict_bag(model, control, str(batch["gene"]), seed=0)
         loss, _ = loss_fn(predicted, observed, control_mean)
         model_losses.append(float(loss))
         floor_losses.append(
