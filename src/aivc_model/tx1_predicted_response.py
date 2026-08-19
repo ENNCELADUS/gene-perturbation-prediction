@@ -117,7 +117,7 @@ class ForwardOnlyStateModel(nn.Module):
     def forward(
         self,
         control_chunks: tuple[torch.Tensor, ...],
-        gene: str,
+        gene: str | tuple[str, ...],
         batch_index_chunks: tuple[torch.Tensor | None, ...],
     ) -> tuple[torch.Tensor, ...]:
         """The training entry point, delegating to
@@ -132,7 +132,23 @@ class ForwardOnlyStateModel(nn.Module):
         ``forward`` also puts the call inside Accelerate's autocast context,
         so the ``--mixed_precision`` the launcher passes is actually applied.
         """
-        return self.predict_response_chunks(control_chunks, gene, batch_index_chunks)
+        if isinstance(gene, str):
+            return self.predict_response_chunks(
+                control_chunks, gene, batch_index_chunks
+            )
+        if len(control_chunks) != len(gene):
+            raise ValueError("one gene is required per STATE condition chunk")
+        if hasattr(self.perturbations, "forward_many"):
+            perturbation_batch = self.perturbations.forward_many(gene)
+            perturbations = tuple(perturbation_batch.unbind(0))
+        else:
+            perturbations = tuple(self.perturbations(name) for name in gene)
+        return self.state_adapter.forward_condition_chunks(
+            control_chunks,
+            perturbations,
+            gene,
+            batch_index_chunks,
+        )
 
     def predict_response_chunks(
         self,

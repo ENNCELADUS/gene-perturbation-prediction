@@ -15,6 +15,7 @@ train:
   learning_rate: 0.0001
   weight_decay: 0.01
   max_bag: 128
+  gene_batch_size: 32
   grad_clip: 1.0
   train_seed: 20260818
   collator_seed: 20260818
@@ -109,6 +110,7 @@ def test_valid_config_loads(tmp_path: Path) -> None:
     assert cfg.train.max_epochs == 50
     assert cfg.train.patience == 5
     assert cfg.train.float32_matmul_precision == "high"
+    assert cfg.train.gene_batch_size == 32
     assert cfg.train.total_cells_per_line is None
     assert dict(cfg.thresholds.anchor_weights) == {
         "ACH-000551": 0.25,
@@ -197,6 +199,15 @@ def test_max_bag_of_one_raises(tmp_path: Path) -> None:
     bad_train = VALID_TRAIN_BLOCK.replace("max_bag: 128", "max_bag: 1")
     p = _write(tmp_path, bad_train + VALID_THRESHOLDS_BLOCK)
     with pytest.raises(ValueError, match="max_bag"):
+        load_stage1_config(p)
+
+
+def test_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
+    from aivc_model.stage1_config import load_stage1_config
+
+    bad_train = VALID_TRAIN_BLOCK.replace("gene_batch_size: 32", "gene_batch_size: 0")
+    p = _write(tmp_path, bad_train + VALID_THRESHOLDS_BLOCK)
+    with pytest.raises(ValueError, match="gene_batch_size"):
         load_stage1_config(p)
 
 

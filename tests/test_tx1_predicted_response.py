@@ -96,6 +96,18 @@ def _fake_full_checkpoint(model: ForwardOnlyStateModel) -> dict[str, torch.Tenso
     return checkpoint
 
 
+def test_forward_only_model_batches_distinct_gene_conditions() -> None:
+    model = _forward_only_model()
+    outputs = model(
+        (torch.zeros(2, _INPUT_DIM), torch.ones(2, _INPUT_DIM)),
+        ("G1", "G2"),
+        (None, None),
+    )
+
+    assert len(outputs) == 2
+    assert all(output.shape == (2, _OUTPUT_DIM) for output in outputs)
+
+
 def test_load_forward_only_checkpoint_restores_keys_and_reports_dropped(
     tmp_path: Path,
 ) -> None:
