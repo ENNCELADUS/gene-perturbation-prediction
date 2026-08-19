@@ -135,10 +135,9 @@ class ResponseLoss(nn.Module):
         mean_term = mean_delta_mse(predicted, observed, control_mean)
         parts = {"mean_delta_mse": mean_term}
         total = self.weights.mean_delta * mean_term
-        if self.weights.energy:
-            energy_term = energy_distance(predicted, observed)
-            parts["energy_distance"] = energy_term
-            total = total + self.weights.energy * energy_term
+        energy_term = energy_distance(predicted, observed)
+        parts["energy_distance"] = energy_term
+        total = total + self.weights.energy * energy_term
         parts["loss"] = total
         return total, parts
 
@@ -321,10 +320,9 @@ def basal_copy_baseline_loss(
 ) -> float:
     """``L_resp`` of predicting "nothing happens" -- the control cells verbatim.
 
-    The Stage 1 freeze thresholds require beating this by a declared margin
-    (Exp13 spec §7). It is the honest floor: a model that ignores the
-    perturbation entirely still scores here, so any improvement over it is
-    the only part attributable to perturbation modeling.
+    It is the honest floor: a model that ignores the perturbation entirely
+    still scores here, so any improvement over it is the only part
+    attributable to perturbation modeling.
     """
     with torch.no_grad():
         loss, _ = loss_fn(control, observed, control_mean)
@@ -550,7 +548,12 @@ def _heldout_model_losses(
     records: Sequence[Mapping[str, object]],
     loss_fn: ResponseLoss,
     device: torch.device,
-) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+) -> tuple[
+    list[torch.Tensor],
+    list[dict[str, torch.Tensor]],
+    list[torch.Tensor],
+    list[torch.Tensor],
+]:
     """Return model losses and source tensors from one batched STATE forward.
 
     Shared by in-loop validation and the post-hoc evaluator so their model
@@ -572,6 +575,7 @@ def _heldout_model_losses(
         model, controls, [str(record["gene"]) for record in records], seed=0
     )
     losses: list[torch.Tensor] = []
+    parts_by_record: list[dict[str, torch.Tensor]] = []
     for pred, obs, control_target in zip(
         predicted, observed, control_targets, strict=True
     ):
@@ -579,9 +583,10 @@ def _heldout_model_losses(
         # bf16; the three cdist calls are numerically fragile in reduced precision.
         observed_f = obs.float()
         control_mean = control_target.mean(dim=0).float()
-        loss, _ = loss_fn.tensor_parts(pred.float(), observed_f, control_mean)
+        loss, parts = loss_fn.tensor_parts(pred.float(), observed_f, control_mean)
         losses.append(loss)
-    return losses, observed, control_targets
+        parts_by_record.append(parts)
+    return losses, parts_by_record, observed, control_targets
 
 
 def _score_heldout_records(
@@ -589,21 +594,28 @@ def _score_heldout_records(
     records: Sequence[Mapping[str, object]],
     loss_fn: ResponseLoss,
     device: torch.device,
-) -> list[tuple[str, float, float]]:
+) -> list[tuple[str, float, float, dict[str, float]]]:
     """Score held-out records and their basal-copy floors."""
-    losses, observed, control_targets = _heldout_model_losses(
+    losses, parts_by_record, observed, control_targets = _heldout_model_losses(
         model, records, loss_fn, device
     )
-    scored: list[tuple[str, float, float]] = []
-    for record, loss, obs, control_target in zip(
-        records, losses, observed, control_targets, strict=True
+    scored: list[tuple[str, float, float, dict[str, float]]] = []
+    for record, loss, parts, obs, control_target in zip(
+        records, losses, parts_by_record, observed, control_targets, strict=True
     ):
         observed_f = obs.float()
         control_mean = control_target.mean(dim=0).float()
         floor = basal_copy_baseline_loss(
             observed_f, control_target.float(), control_mean, loss_fn
         )
-        scored.append((str(record["model_id"]), float(loss), floor))
+        scored.append(
+            (
+                str(record["model_id"]),
+                float(loss),
+                floor,
+                {name: float(value) for name, value in parts.items()},
+            )
+        )
     return scored
 
 
@@ -612,7 +624,7 @@ def _score_heldout_batch(
     record: Mapping[str, object],
     loss_fn: ResponseLoss,
     device: torch.device,
-) -> tuple[str, float, float]:
+) -> tuple[str, float, float, dict[str, float]]:
     """Score one held-out record through the shared batched path."""
     return _score_heldout_records(model, [record], loss_fn, device)[0]
 
@@ -891,7 +903,7 @@ def _run_validation_epoch(
         for batch in loader:
             padding = [bool(value) for value in batch["is_padding"].tolist()]
             step_records = [records[int(index)] for index in batch["index"].tolist()]
-            model_losses, _observed, _control_targets = _heldout_model_losses(
+            model_losses, _parts, _observed, _control_targets = _heldout_model_losses(
                 model, step_records, loss_fn, accelerator.device
             )
             for record, model_loss, is_padding in zip(
@@ -1134,9 +1146,9 @@ def evaluate_response_model(
 ) -> dict[str, object]:
     """Score ``model`` against the basal-copy floor and a null shuffle.
 
-    Reporting both floors is the point: Exp13 spec §7 gates Stage 1 on
-    beating a basal-copy prediction AND a null shuffle by declared margins,
-    and a loss number alone cannot show either. Uses
+    Reporting both floors and the registered per-anchor response metrics makes
+    the held-out behavior auditable; a total loss alone cannot show either.
+    Uses
     :func:`_score_heldout_batch`, the same per-batch scoring the in-loop
     training validation uses, so the two paths cannot drift apart.
 
@@ -1156,13 +1168,17 @@ def evaluate_response_model(
     model_losses: list[float] = []
     floor_losses: list[float] = []
     per_line: dict[str, list[float]] = {}
+    per_anchor_parts: dict[str, dict[str, list[float]]] = {}
     for batch in records:
-        model_id, model_loss, floor_loss = _score_heldout_batch(
+        model_id, model_loss, floor_loss, parts = _score_heldout_batch(
             model, batch, loss_fn, device
         )
         model_losses.append(model_loss)
         floor_losses.append(floor_loss)
         per_line.setdefault(model_id, []).append(model_loss)
+        anchor_parts = per_anchor_parts.setdefault(model_id, {})
+        for name in ("mean_delta_mse", "energy_distance"):
+            anchor_parts.setdefault(name, []).append(parts[name])
 
     shuffled_losses = [
         _score_heldout_batch(model, record, loss_fn, device)[1]
@@ -1181,4 +1197,8 @@ def evaluate_response_model(
             np.mean(shuffled_losses) - np.mean(model_losses)
         ),
         "per_line_model_loss": {k: float(np.mean(v)) for k, v in per_line.items()},
+        "per_anchor_metrics": {
+            model_id: {name: float(np.mean(values)) for name, values in parts.items()}
+            for model_id, parts in per_anchor_parts.items()
+        },
     }

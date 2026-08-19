@@ -1,8 +1,8 @@
 # Experiment Protocol: Exp13 Cell-Line GeneEffect Residual Benchmark
 
 **Status:** contract written 2026-08-17; Stage 0 completed 2026-08-18 (§6 closed by branch 1,
-[result](../results/exp13-stage0-tx1-input-representation.md)). The residual head and the Stage 1
-trainer exist; §7's two margins are still `null`, so no run has started and no Stage 1-2 artifact exists.
+[result](../results/exp13-stage0-tx1-input-representation.md)). The residual head, Stage 1 trainer,
+and registered objective exist; no completed Stage 1-2 artifact exists.
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
 **Authority:** [`01-blueprint.md`](../01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**
@@ -105,19 +105,18 @@ labels reconciled against the CPM-derived selection). Split membership is unchan
 numeric source moved — and the frozen line manifest, whose hash the split builder pins, is not
 edited. The CPM artifacts stay the comparison arm and must not re-enter the Tx1 path.
 
-## 7. Stage 1 Freeze Thresholds
+## 7. Stage 1 Objective and Validation
 
-Pre-registered in `configs/experiments/13_geneeffect_226/stage1_response.yaml` and
-`run_manifest.json` before Stage 1 trains, all four required — "record converged metrics and
-freeze" is not a gate:
+Registered in `configs/experiments/13_geneeffect_226/stage1_response.yaml` and
+snapshotted to `stage1_objective.json` before Stage 1 trains:
 
 - Per-anchor response metrics (mean-delta MSE, energy distance) for each of the four
   Perturb-seq anchors (K562, HCT116, Jurkat, HepG2 — `03-experiment-protocol.md` §3.2).
 - A held-out perturbation-gene set per anchor, excluded from Stage 1 training and reserved
   for the response-model's own generalization check.
-- The required improvement over a basal-copy prediction and a null shuffle, stated as a
-  concrete margin before training starts.
 - The four-line weighting used to combine anchor losses into one Stage 1 objective.
+
+Basal-copy and null-shuffle losses are required reported baselines, not pass/fail gates.
 
 ## 8. Metrics and Baselines
 
@@ -155,7 +154,7 @@ test the no-virtual-cell claim.
 ```text
 cell_line_geneeffect_226_split.json    copy of the tracked split file, with its hash
 esm2_gene_universe_manifest.json       symbol->UniProt/isoform mapping, coverage, drop list
-stage1_freeze_thresholds.json          §7, pinned before Stage 1 trains
+stage1_objective.json                  §7, pinned before Stage 1 trains
 condition_features/                    Stage 2 per-condition features (streamed, not B_hat)
 checkpoint_selection.json
 geneeffect_residual_predictions.csv

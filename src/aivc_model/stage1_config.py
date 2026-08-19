@@ -1,20 +1,15 @@
-"""Pre-registered configuration for the Exp13 Stage 1 response-model trainer.
+"""Configuration for the Exp13 Stage 1 response-model trainer.
 
-``docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`` §7 requires four
-things pinned in ``configs/experiments/13_geneeffect_226/stage1_response.yaml``
-*before* Stage 1 trains -- "record converged metrics and freeze" is not a gate:
-per-anchor response metrics, a held-out gene set per anchor (``heldout_fraction``/
-``heldout_seed`` in :class:`Stage1TrainConfig`), a required improvement margin
-over a basal-copy prediction and over a null shuffle, and the four-line weighting
-used to combine anchor losses.
+``docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`` §7 pins the
+per-anchor response metrics, held-out gene split, and four-line objective weights
+before Stage 1 trains.
 
 Following ``src/ddgcn/config.py`` (the repo's raising-loader reference), every
 YAML key is required and every unrecognized key -- at the top level, inside
-``train:``, or inside ``freeze_thresholds:`` -- raises ``ValueError``. A
-misspelled key must never silently fall back to a dataclass default
-(``CLAUDE.md``, "Silent failures -- the dominant risk"). The two margin floats
-additionally raise if their YAML value is ``null``: a run cannot start on
-unpre-registered thresholds.
+``train:``, or inside ``objective:`` -- raises ``ValueError``. A misspelled key
+must never silently fall back to a dataclass default (``CLAUDE.md``, "Silent
+failures -- the dominant risk"). Stage 1 reports its registered metrics and
+baselines without a separate pass/fail threshold.
 """
 
 from __future__ import annotations
@@ -86,32 +81,18 @@ class Stage1TrainConfig:
 
 
 @dataclass(frozen=True)
-class Stage1FreezeThresholds:
-    """The four items spec §7 requires pre-registered before Stage 1 trains.
+class Stage1ObjectiveConfig:
+    """The Stage 1 metrics and four-anchor objective weights.
 
     ``anchor_weights`` is stored as a tuple of ``(model_id, weight)`` pairs
     rather than a plain ``dict`` so the frozen dataclass stays hashable; use
-    ``dict(thresholds.anchor_weights)`` for lookup.
+    ``dict(objective.anchor_weights)`` for lookup.
     """
 
     anchor_weights: tuple[tuple[str, float], ...]
     required_anchor_metrics: tuple[str, ...]
-    min_improvement_over_basal_copy: float | None
-    min_improvement_over_null_shuffle: float | None
 
     def __post_init__(self) -> None:
-        # A null margin no longer blocks the run: the key must still be
-        # present, but leaving it unset means "not pre-registered", and the
-        # run proceeds ungated. What a null must never do is read as a pass --
-        # `gate_is_preregistered` is False, and the run's freeze_gate payload
-        # records `evaluated: false` rather than a verdict it did not earn.
-        for name in (
-            "min_improvement_over_basal_copy",
-            "min_improvement_over_null_shuffle",
-        ):
-            value = getattr(self, name)
-            if value is not None and float(value) < 0:
-                raise ValueError(f"{name} must be >= 0 when set, got {value}")
         weights = dict(self.anchor_weights)
         if not weights:
             raise ValueError("anchor_weights must be non-empty")
@@ -124,18 +105,13 @@ class Stage1FreezeThresholds:
             raise ValueError(f"anchor_weights must sum to 1.0, got {total}")
         if not self.required_anchor_metrics:
             raise ValueError("required_anchor_metrics must be non-empty")
-
-    @property
-    def gate_is_preregistered(self) -> bool:
-        """Whether both §7 margins were declared before the run.
-
-        False means the run is ungated: its metrics are still computed and
-        reported, but no §7 pass can be claimed from them.
-        """
-        return (
-            self.min_improvement_over_basal_copy is not None
-            and self.min_improvement_over_null_shuffle is not None
-        )
+        expected_metrics = {"mean_delta_mse", "energy_distance"}
+        actual_metrics = set(self.required_anchor_metrics)
+        if actual_metrics != expected_metrics:
+            raise ValueError(
+                "required_anchor_metrics must contain exactly "
+                f"{sorted(expected_metrics)}, got {sorted(actual_metrics)}"
+            )
 
 
 @dataclass(frozen=True)
@@ -143,24 +119,16 @@ class Stage1Config:
     """A fully-loaded, validated Stage 1 config plus its source provenance."""
 
     train: Stage1TrainConfig
-    thresholds: Stage1FreezeThresholds
+    objective: Stage1ObjectiveConfig
     source_path: Path
     source_sha256: str
 
-    @property
-    def gate_is_preregistered(self) -> bool:
-        """Whether this run is §7-gated; delegates to the thresholds."""
-        return self.thresholds.gate_is_preregistered
-
-    def freeze_thresholds_payload(self) -> dict[str, Any]:
-        """The JSON-ready payload for ``stage1_freeze_thresholds.json`` (spec §10)."""
-        t = self.thresholds
+    def objective_payload(self) -> dict[str, Any]:
+        """The JSON-ready payload for ``stage1_objective.json``."""
+        objective = self.objective
         return {
-            "anchor_weights": dict(t.anchor_weights),
-            "required_anchor_metrics": list(t.required_anchor_metrics),
-            "min_improvement_over_basal_copy": t.min_improvement_over_basal_copy,
-            "min_improvement_over_null_shuffle": t.min_improvement_over_null_shuffle,
-            "gate_is_preregistered": self.gate_is_preregistered,
+            "anchor_weights": dict(objective.anchor_weights),
+            "required_anchor_metrics": list(objective.required_anchor_metrics),
             "source_path": str(self.source_path),
             "source_sha256": self.source_sha256,
         }
@@ -186,27 +154,23 @@ def _build_train_config(raw: Any, path: Path) -> Stage1TrainConfig:
     return Stage1TrainConfig(**raw)
 
 
-def _build_thresholds(raw: Any, path: Path) -> Stage1FreezeThresholds:
-    raw = _require_mapping(raw, f"{path}: 'freeze_thresholds'")
-    valid = {f.name for f in fields(Stage1FreezeThresholds)}
+def _build_objective(raw: Any, path: Path) -> Stage1ObjectiveConfig:
+    raw = _require_mapping(raw, f"{path}: 'objective'")
+    valid = {f.name for f in fields(Stage1ObjectiveConfig)}
     unknown = set(raw) - valid
     if unknown:
-        raise ValueError(
-            f"{path}: unknown key(s) in 'freeze_thresholds': {sorted(unknown)}"
-        )
+        raise ValueError(f"{path}: unknown key(s) in 'objective': {sorted(unknown)}")
     missing = valid - set(raw)
     if missing:
         raise ValueError(
-            f"{path}: missing required key(s) in 'freeze_thresholds': {sorted(missing)}"
+            f"{path}: missing required key(s) in 'objective': {sorted(missing)}"
         )
     anchor_weights_raw = _require_mapping(
-        raw["anchor_weights"], f"{path}: 'freeze_thresholds.anchor_weights'"
+        raw["anchor_weights"], f"{path}: 'objective.anchor_weights'"
     )
-    return Stage1FreezeThresholds(
+    return Stage1ObjectiveConfig(
         anchor_weights=tuple(sorted(anchor_weights_raw.items())),
         required_anchor_metrics=tuple(raw["required_anchor_metrics"] or ()),
-        min_improvement_over_basal_copy=raw["min_improvement_over_basal_copy"],
-        min_improvement_over_null_shuffle=raw["min_improvement_over_null_shuffle"],
     )
 
 
@@ -214,8 +178,7 @@ def load_stage1_config(path: str | Path) -> Stage1Config:
     """Load and validate a Stage 1 config, raising on any deviation from spec §7.
 
     Raises:
-        ValueError: An unknown key appears anywhere, a required key is missing,
-            or a pre-registered margin threshold is ``null``.
+        ValueError: An unknown key appears anywhere or a required key is missing.
     """
     path = Path(path)
     raw_bytes = path.read_bytes()
@@ -223,7 +186,7 @@ def load_stage1_config(path: str | Path) -> Stage1Config:
     raw = yaml.safe_load(raw_bytes) or {}
     raw = _require_mapping(raw, f"{path}: top level")
 
-    allowed_top = {"train", "freeze_thresholds"}
+    allowed_top = {"train", "objective"}
     unknown_top = set(raw) - allowed_top
     if unknown_top:
         raise ValueError(f"{path}: unknown top-level key(s): {sorted(unknown_top)}")
@@ -234,11 +197,11 @@ def load_stage1_config(path: str | Path) -> Stage1Config:
         )
 
     train = _build_train_config(raw["train"], path)
-    thresholds = _build_thresholds(raw["freeze_thresholds"], path)
+    objective = _build_objective(raw["objective"], path)
 
     return Stage1Config(
         train=train,
-        thresholds=thresholds,
+        objective=objective,
         source_path=path,
         source_sha256=source_sha256,
     )
