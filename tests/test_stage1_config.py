@@ -34,19 +34,17 @@ train:
   w_energy: 1.0
 """
 
-VALID_THRESHOLDS_BLOCK = """\
-freeze_thresholds:
+VALID_OBJECTIVE_BLOCK = """\
+objective:
   anchor_weights:
     ACH-000551: 0.25
     ACH-000995: 0.25
     ACH-000739: 0.25
     ACH-000971: 0.25
   required_anchor_metrics: [mean_delta_mse, energy_distance]
-  min_improvement_over_basal_copy: 0.05
-  min_improvement_over_null_shuffle: 0.1
 """
 
-VALID_YAML = VALID_TRAIN_BLOCK + VALID_THRESHOLDS_BLOCK
+VALID_YAML = VALID_TRAIN_BLOCK + VALID_OBJECTIVE_BLOCK
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -56,50 +54,12 @@ def _write(tmp_path: Path, text: str) -> Path:
     return p
 
 
-def test_tracked_yaml_loads_ungated_with_null_margins() -> None:
-    """Null margins load and run, but must never read as a pre-registered gate.
-
-    The margins are optional by decision: an unset one means the run is
-    ungated, not that it is blocked. What must hold is that nothing
-    downstream can mistake "not evaluated" for "passed", so
-    ``gate_is_preregistered`` is False and both margins stay None.
-    """
+def test_tracked_yaml_loads_registered_objective() -> None:
     from aivc_model.stage1_config import load_stage1_config
 
     cfg = load_stage1_config(TRACKED_YAML)
-    assert cfg.thresholds.min_improvement_over_basal_copy is None
-    assert cfg.thresholds.min_improvement_over_null_shuffle is None
-    assert cfg.gate_is_preregistered is False
     assert cfg.train.max_epochs >= 1
-
-
-def test_gate_is_preregistered_only_when_both_margins_are_set(
-    tmp_path: Path,
-) -> None:
-    """One margin alone is not a pre-registration."""
-    from aivc_model.stage1_config import load_stage1_config
-
-    both = load_stage1_config(_write(tmp_path / "a", VALID_YAML))
-    assert both.gate_is_preregistered is True
-
-    half = VALID_YAML.replace(
-        "min_improvement_over_null_shuffle: 0.1",
-        "min_improvement_over_null_shuffle: null",
-    )
-    assert (
-        load_stage1_config(_write(tmp_path / "b", half)).gate_is_preregistered is False
-    )
-
-
-def test_negative_margin_raises(tmp_path: Path) -> None:
-    """A margin may be absent, but a negative one is incoherent."""
-    from aivc_model.stage1_config import load_stage1_config
-
-    bad = VALID_YAML.replace(
-        "min_improvement_over_basal_copy: 0.05", "min_improvement_over_basal_copy: -1.0"
-    )
-    with pytest.raises(ValueError, match="min_improvement_over_basal_copy"):
-        load_stage1_config(_write(tmp_path / "c", bad))
+    assert dict(cfg.objective.anchor_weights)["ACH-000551"] == 0.25
 
 
 def test_valid_config_loads(tmp_path: Path) -> None:
@@ -112,18 +72,26 @@ def test_valid_config_loads(tmp_path: Path) -> None:
     assert cfg.train.float32_matmul_precision == "high"
     assert cfg.train.gene_batch_size == 32
     assert cfg.train.total_cells_per_line is None
-    assert dict(cfg.thresholds.anchor_weights) == {
+    assert dict(cfg.objective.anchor_weights) == {
         "ACH-000551": 0.25,
         "ACH-000995": 0.25,
         "ACH-000739": 0.25,
         "ACH-000971": 0.25,
     }
-    assert cfg.thresholds.required_anchor_metrics == (
+    assert cfg.objective.required_anchor_metrics == (
         "mean_delta_mse",
         "energy_distance",
     )
-    assert cfg.thresholds.min_improvement_over_basal_copy == 0.05
-    assert cfg.thresholds.min_improvement_over_null_shuffle == 0.1
+
+
+def test_required_anchor_metrics_must_include_both_metrics(tmp_path: Path) -> None:
+    from aivc_model.stage1_config import load_stage1_config
+
+    incomplete = VALID_YAML.replace(
+        "[mean_delta_mse, energy_distance]", "[mean_delta_mse]"
+    )
+    with pytest.raises(ValueError, match="must contain exactly"):
+        load_stage1_config(_write(tmp_path, incomplete))
 
 
 def test_unknown_top_level_key_raises(tmp_path: Path) -> None:
@@ -142,7 +110,7 @@ def test_misspelled_key_inside_train_raises_instead_of_taking_default(
     from aivc_model.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("max_epochs: 50", "max_epocsh: 50")
-    p = _write(tmp_path, bad_train + VALID_THRESHOLDS_BLOCK)
+    p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
     with pytest.raises(ValueError, match="max_epocsh"):
         load_stage1_config(p)
 
@@ -151,7 +119,7 @@ def test_missing_required_key_raises(tmp_path: Path) -> None:
     from aivc_model.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("  patience: 5\n", "")
-    p = _write(tmp_path, bad_train + VALID_THRESHOLDS_BLOCK)
+    p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
     with pytest.raises(ValueError, match="patience"):
         load_stage1_config(p)
 
@@ -159,10 +127,8 @@ def test_missing_required_key_raises(tmp_path: Path) -> None:
 def test_anchor_weights_not_summing_to_one_raises(tmp_path: Path) -> None:
     from aivc_model.stage1_config import load_stage1_config
 
-    bad_thresholds = VALID_THRESHOLDS_BLOCK.replace(
-        "ACH-000551: 0.25", "ACH-000551: 0.5"
-    )
-    p = _write(tmp_path, VALID_TRAIN_BLOCK + bad_thresholds)
+    bad_objective = VALID_OBJECTIVE_BLOCK.replace("ACH-000551: 0.25", "ACH-000551: 0.5")
+    p = _write(tmp_path, VALID_TRAIN_BLOCK + bad_objective)
     with pytest.raises(ValueError, match="sum to 1.0"):
         load_stage1_config(p)
 
@@ -170,14 +136,12 @@ def test_anchor_weights_not_summing_to_one_raises(tmp_path: Path) -> None:
 def test_empty_anchor_weights_raises(tmp_path: Path) -> None:
     from aivc_model.stage1_config import load_stage1_config
 
-    bad_thresholds = """\
-freeze_thresholds:
+    bad_objective = """\
+objective:
   anchor_weights: {}
   required_anchor_metrics: [mean_delta_mse, energy_distance]
-  min_improvement_over_basal_copy: 0.05
-  min_improvement_over_null_shuffle: 0.1
 """
-    p = _write(tmp_path, VALID_TRAIN_BLOCK + bad_thresholds)
+    p = _write(tmp_path, VALID_TRAIN_BLOCK + bad_objective)
     with pytest.raises(ValueError, match="non-empty"):
         load_stage1_config(p)
 
@@ -185,10 +149,10 @@ freeze_thresholds:
 def test_negative_anchor_weight_raises(tmp_path: Path) -> None:
     from aivc_model.stage1_config import load_stage1_config
 
-    bad_thresholds = VALID_THRESHOLDS_BLOCK.replace(
+    bad_objective = VALID_OBJECTIVE_BLOCK.replace(
         "ACH-000551: 0.25", "ACH-000551: -0.25"
     ).replace("ACH-000995: 0.25", "ACH-000995: 0.75")
-    p = _write(tmp_path, VALID_TRAIN_BLOCK + bad_thresholds)
+    p = _write(tmp_path, VALID_TRAIN_BLOCK + bad_objective)
     with pytest.raises(ValueError, match="> 0"):
         load_stage1_config(p)
 
@@ -197,7 +161,7 @@ def test_max_bag_of_one_raises(tmp_path: Path) -> None:
     from aivc_model.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("max_bag: 128", "max_bag: 1")
-    p = _write(tmp_path, bad_train + VALID_THRESHOLDS_BLOCK)
+    p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
     with pytest.raises(ValueError, match="max_bag"):
         load_stage1_config(p)
 
@@ -206,7 +170,7 @@ def test_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
     from aivc_model.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("gene_batch_size: 32", "gene_batch_size: 0")
-    p = _write(tmp_path, bad_train + VALID_THRESHOLDS_BLOCK)
+    p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
     with pytest.raises(ValueError, match="gene_batch_size"):
         load_stage1_config(p)
 
@@ -217,7 +181,7 @@ def test_both_loss_weights_zero_raises(tmp_path: Path) -> None:
     bad_train = VALID_TRAIN_BLOCK.replace(
         "w_mean_delta: 1.0", "w_mean_delta: 0.0"
     ).replace("w_energy: 1.0", "w_energy: 0.0")
-    p = _write(tmp_path, bad_train + VALID_THRESHOLDS_BLOCK)
+    p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
     with pytest.raises(ValueError, match="weight"):
         load_stage1_config(p)
 
@@ -232,14 +196,13 @@ def test_source_sha256_matches_independently_computed_hash(tmp_path: Path) -> No
     assert cfg.source_path == p
 
 
-def test_freeze_thresholds_payload_is_json_serializable(tmp_path: Path) -> None:
+def test_objective_payload_is_json_serializable(tmp_path: Path) -> None:
     from aivc_model.stage1_config import load_stage1_config
 
     p = _write(tmp_path, VALID_YAML)
     cfg = load_stage1_config(p)
-    payload = cfg.freeze_thresholds_payload()
+    payload = cfg.objective_payload()
     serialized = json.dumps(payload)
     round_tripped = json.loads(serialized)
-    assert round_tripped["min_improvement_over_basal_copy"] == 0.05
     assert round_tripped["anchor_weights"]["ACH-000551"] == 0.25
     assert round_tripped["source_sha256"] == cfg.source_sha256

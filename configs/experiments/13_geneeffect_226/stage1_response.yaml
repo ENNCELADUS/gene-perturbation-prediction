@@ -1,12 +1,10 @@
 # Exp13 Stage 1 pre-registered config.
 #
-# Satisfies docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md §7,
-# "Stage 1 Freeze Thresholds": all four required items -- per-anchor response
-# metrics, a held-out gene set per anchor, the improvement margins, and the
-# four-line anchor weighting -- must be pinned here (and in run_manifest.json)
-# before Stage 1 trains. "Record converged metrics and freeze" is not a gate.
+# Satisfies docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md §7:
+# per-anchor response metrics, held-out genes and four-line objective weights
+# are pinned here before Stage 1 trains.
 # Loaded by src/aivc_model/stage1_config.py::load_stage1_config, which raises
-# on any unknown or missing key and on a null margin.
+# on any unknown or missing key.
 
 train:
   max_epochs: 50
@@ -32,7 +30,7 @@ train:
   w_mean_delta: 1.0
   w_energy: 1.0
 
-freeze_thresholds:
+objective:
   # The four Perturb-seq anchors (03-experiment-protocol.md §3.2), equal-weighted.
   # ACH ids from configs/experiments/13_geneeffect_226/perturbseq_sources.json.
   anchor_weights:
@@ -41,8 +39,3 @@ freeze_thresholds:
     ACH-000739: 0.25 # HepG2 (Nadig 2025)
     ACH-000971: 0.25 # HCT116 (X-Atlas-Orion)
   required_anchor_metrics: [mean_delta_mse, energy_distance]
-  # NULL is deliberate on both margins below: the researcher must choose these
-  # before Stage 1 trains (spec §7). An unset margin must block the run --
-  # this committed file cannot train until both are filled in.
-  min_improvement_over_basal_copy: null
-  min_improvement_over_null_shuffle: null

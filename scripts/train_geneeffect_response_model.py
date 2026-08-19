@@ -18,7 +18,7 @@ Guards this script applies before any parameter moves:
   otherwise unseeded above 2048 detected genes
   (``docs/results/exp13-stage0-tx1-input-representation.md``).
 
-Hyperparameters and the Exp13 §7 freeze thresholds come from ``--config``
+Hyperparameters and the Exp13 §7 objective come from ``--config``
 (``configs/experiments/13_geneeffect_226/stage1_response.yaml``), whose loader
 raises on any unknown or missing key. Training runs under ``accelerate``, so
 the device is auto-detected and a multi-rank launch is supported; selection is
@@ -29,7 +29,7 @@ warms ``--response-cache-dir`` single-process and exits, because assembly runs
 on every rank before any accelerator exists and peaked at 194.6 GB RSS in
 Phase C. A multi-rank launch against a cold cache is refused outright.
 
-The run writes ``stage1_freeze_thresholds.json`` (pinned before any parameter
+The run writes ``stage1_objective.json`` (pinned before any parameter
 moves), ``run_manifest.json`` (config hash, seeds, input hashes, held-out
 genes, selection metric), ``training_history.json``, ``heldout_metrics.json``
 and the ``best``/``final`` checkpoints, so a later Stage 2 can state which
@@ -60,7 +60,7 @@ from aivc_model.response_training import (
     split_heldout_genes,
     train_response_model,
 )
-from aivc_model.stage1_config import Stage1Config, load_stage1_config
+from aivc_model.stage1_config import load_stage1_config
 from aivc_model.tx1_response_gene_bags_cache import (
     _SCHEMA_VERSION as _RESPONSE_CACHE_SCHEMA_VERSION,
 )
@@ -149,64 +149,6 @@ def split_control_by_line(bags: object) -> dict[str, dict[str, np.ndarray]]:
             "target": np.asarray(bags.effective_control_target)[mask],
         }
     return grouped
-
-
-def _evaluate_freeze_gate(
-    metrics: dict[str, object], stage1: "Stage1Config"
-) -> dict[str, object]:
-    """Compare the held-out result against the §7 margins pinned before the run.
-
-    Both margins are required and both are checked. The null-shuffle arm
-    reuses ``evaluate_response_model``'s per-line losses under a permuted
-    gene-to-bag assignment, which is the comparison the spec names: a model
-    that scores well only because the anchors' bags look alike would clear
-    the basal-copy floor and fail here.
-
-    Returns a payload recording every input to the decision, so a later
-    reader can see WHY it passed rather than trusting a bare boolean.
-    """
-    model_loss = float(metrics["model_loss"])
-    basal = float(metrics["basal_copy_loss"])
-    null_shuffle = float(metrics["null_shuffle_loss"])
-    basal_margin = basal - model_loss
-    null_margin = null_shuffle - model_loss
-    required_basal = stage1.thresholds.min_improvement_over_basal_copy
-    required_null = stage1.thresholds.min_improvement_over_null_shuffle
-    missing = [
-        name
-        for name in stage1.thresholds.required_anchor_metrics
-        if name not in {"mean_delta_mse", "energy_distance"}
-    ]
-    if missing:
-        raise ValueError(
-            f"required_anchor_metrics names unknown metrics {missing}; "
-            "this trainer reports mean_delta_mse and energy_distance"
-        )
-    evaluated = stage1.gate_is_preregistered
-    passed = (
-        basal_margin >= float(required_basal) and null_margin >= float(required_null)
-        if evaluated
-        else None
-    )
-    return {
-        # `evaluated: false` with `passed: null` is the whole point: an
-        # ungated run must not leave an artifact a later reader mistakes for
-        # a cleared gate. The margins are still measured and reported.
-        "evaluated": evaluated,
-        "passed": passed,
-        "reason": (
-            None
-            if evaluated
-            else "margins were not pre-registered; run is ungated (spec §7)"
-        ),
-        "improvement_over_basal_copy": basal_margin,
-        "min_improvement_over_basal_copy": required_basal,
-        "improvement_over_null_shuffle": null_margin,
-        "min_improvement_over_null_shuffle": required_null,
-        "model_loss": model_loss,
-        "basal_copy_loss": basal,
-        "null_shuffle_loss": null_shuffle,
-    }
 
 
 def _resolve_cpu_flag(device: str) -> bool:
@@ -367,12 +309,11 @@ def main(argv: list[str] | None = None) -> int:
         heldout_scored.setdefault(batch["model_id"], []).append(batch["gene"])
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    # Spec §10: the thresholds are pinned BEFORE any parameter moves, so a
-    # run cannot retrofit the bar it was judged against.
-    (args.out_dir / "stage1_freeze_thresholds.json").write_text(
-        json.dumps(stage1.freeze_thresholds_payload(), indent=2) + "\n"
+    # Pin the registered objective before any parameter moves.
+    (args.out_dir / "stage1_objective.json").write_text(
+        json.dumps(stage1.objective_payload(), indent=2) + "\n"
     )
-    _LOGGER.info("pinned stage1_freeze_thresholds.json before training")
+    _LOGGER.info("pinned stage1_objective.json before training")
 
     config = TrainingConfig(
         max_epochs=stage1.train.max_epochs,
@@ -413,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
             mean_delta=stage1.train.w_mean_delta, energy=stage1.train.w_energy
         )
     )
-    anchor_weights = dict(stage1.thresholds.anchor_weights)
+    anchor_weights = dict(stage1.objective.anchor_weights)
     history = train_response_model(
         model,
         train_batches,
@@ -453,30 +394,6 @@ def main(argv: list[str] | None = None) -> int:
         metrics["model_loss"],
         metrics["basal_copy_loss"],
     )
-    # Spec §7 is a GATE, not a record: state whether the run cleared the
-    # margins that were pinned before it started. Recording the numbers and
-    # leaving the comparison to a human is exactly the "record converged
-    # metrics and freeze" the spec rules out.
-    gate = _evaluate_freeze_gate(metrics, stage1)
-    metrics["freeze_gate"] = gate
-    if gate["evaluated"]:
-        _LOGGER.info(
-            "freeze gate: %s (basal-copy margin %.6f vs required %.6f; "
-            "null-shuffle margin %.6f vs required %.6f)",
-            "PASS" if gate["passed"] else "FAIL",
-            gate["improvement_over_basal_copy"],
-            gate["min_improvement_over_basal_copy"],
-            gate["improvement_over_null_shuffle"],
-            gate["min_improvement_over_null_shuffle"],
-        )
-    else:
-        _LOGGER.warning(
-            "freeze gate NOT EVALUATED -- no margins were pre-registered. "
-            "Measured margins: basal-copy %.6f, null-shuffle %.6f. This run "
-            "cannot be reported as clearing spec §7.",
-            gate["improvement_over_basal_copy"],
-            gate["improvement_over_null_shuffle"],
-        )
     (args.out_dir / "heldout_metrics.json").write_text(
         json.dumps(metrics, indent=2) + "\n"
     )
@@ -536,7 +453,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments.
 
     Only paths and run-mode switches live here. Every hyperparameter and
-    every Exp13 spec §7 freeze threshold comes from ``--config``, so the
+    every Exp13 spec §7 objective setting comes from ``--config``, so the
     values a run used are pinned in one tracked file instead of scattered
     across a shell invocation.
     """

@@ -606,6 +606,14 @@ def test_evaluate_reports_the_basal_copy_floor(tmp_path) -> None:
     assert report["basal_copy_loss"] > report["model_loss"]
     assert report["improvement_over_basal_copy"] > 0
     assert "ACH-000551" in report["per_line_model_loss"]
+    assert set(report["per_anchor_metrics"]["ACH-000551"]) == {
+        "mean_delta_mse",
+        "energy_distance",
+    }
+    assert all(
+        np.isfinite(value)
+        for value in report["per_anchor_metrics"]["ACH-000551"].values()
+    )
     assert np.isfinite(report["model_loss"])
 
 
