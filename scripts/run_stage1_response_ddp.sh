@@ -52,11 +52,11 @@
 #   TX1_CACHE_DIR          Tx1 basal embedding cache
 #                         (default: data/tx1_basal_embeddings/v1)
 #   STATE_MODEL_DIR        Released ST checkpoint dir (var_dims.pkl source)
-#                         (default: data/state_checkpoints/ST-HVG-Replogle/fewshot/k562)
+#                         (default: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562)
 #   STATE_CHECKPOINT       Released ST checkpoint file (architecture hparams)
-#                         (default: $STATE_MODEL_DIR/checkpoint.ckpt)
+#                         (default: $STATE_MODEL_DIR/checkpoints/final.ckpt)
 #   ESM2_EMBEDDINGS        Precomputed ESM2 embeddings .npz
-#                         (default: data/esm2/k562_gwps_depmap_esm2_650M.npz)
+#                         (default: data/esm2/exp13_anchor_union_esm2_650M.npz)
 #   PERTURBSEQ_SOURCES     Perturb-seq source manifest
 #                         (default: configs/experiments/13_geneeffect_226/perturbseq_sources.json)
 #   OUT_DIR                Checkpoint/metrics/manifest output dir
@@ -95,9 +95,9 @@ CONFIG_PATH="${CONFIG_PATH:-configs/experiments/13_geneeffect_226/stage1_respons
 SPLIT_JSON="${SPLIT_JSON:-configs/benchmarks/cell_line_geneeffect_226_split.json}"
 CELL_LINE_MANIFEST="${CELL_LINE_MANIFEST:-results/phase_a_tx1_20260724/cell_line_manifest.csv}"
 TX1_CACHE_DIR="${TX1_CACHE_DIR:-data/tx1_basal_embeddings/v1}"
-STATE_MODEL_DIR="${STATE_MODEL_DIR:-data/state_checkpoints/ST-HVG-Replogle/fewshot/k562}"
-STATE_CHECKPOINT="${STATE_CHECKPOINT:-$STATE_MODEL_DIR/checkpoint.ckpt}"
-ESM2_EMBEDDINGS="${ESM2_EMBEDDINGS:-data/esm2/k562_gwps_depmap_esm2_650M.npz}"
+STATE_MODEL_DIR="${STATE_MODEL_DIR:-model/checkpoints/state/ST-HVG-Replogle/fewshot/k562}"
+STATE_CHECKPOINT="${STATE_CHECKPOINT:-$STATE_MODEL_DIR/checkpoints/final.ckpt}"
+ESM2_EMBEDDINGS="${ESM2_EMBEDDINGS:-data/esm2/exp13_anchor_union_esm2_650M.npz}"
 PERTURBSEQ_SOURCES="${PERTURBSEQ_SOURCES:-configs/experiments/13_geneeffect_226/perturbseq_sources.json}"
 OUT_DIR="${OUT_DIR:-results/experiments/13_geneeffect_226/stage1_response}"
 
@@ -110,10 +110,19 @@ if ! test -x "$PYTHON_BIN"; then
        "-- see the hpc-execution skill's venv table." >&2
   exit 1
 fi
-if ! test -x "$ACCELERATE_BIN"; then
-  echo "ERROR: ACCELERATE_BIN ($ACCELERATE_BIN) is not an executable." \
-       "Expected inside .venv-tx1 alongside PYTHON_BIN -- see the" \
-       "hpc-execution skill's venv table." >&2
+# The console script is NOT present in .venv-tx1 (verified 2026-08-19: the
+# `accelerate` package imports fine at 1.13.0, but no bin/accelerate entry
+# point was installed). Prefer the binary when it exists, otherwise drive the
+# same launcher through `-m accelerate.commands.launch`, which is the same
+# entry point the console script wraps.
+if test -x "$ACCELERATE_BIN"; then
+  _LAUNCH=("$PYTHON_BIN" "$ACCELERATE_BIN" launch)
+elif "$PYTHON_BIN" -c "import accelerate.commands.launch" 2> /dev/null; then
+  _LAUNCH=("$PYTHON_BIN" -m accelerate.commands.launch)
+else
+  echo "ERROR: neither ACCELERATE_BIN ($ACCELERATE_BIN) nor the" \
+       "accelerate.commands.launch module is available under $PYTHON_BIN." \
+       "Stage 1 is Tx1 work -- see the hpc-execution skill's venv table." >&2
   exit 1
 fi
 
@@ -164,7 +173,7 @@ else
 fi
 
 echo "=== phase 2: accelerate launch, num_processes=${NUM_PROCESSES} ==="
-"$PYTHON_BIN" "$ACCELERATE_BIN" launch \
+"${_LAUNCH[@]}" \
   --num_processes "$NUM_PROCESSES" \
   --num_machines 1 \
   --mixed_precision bf16 \
