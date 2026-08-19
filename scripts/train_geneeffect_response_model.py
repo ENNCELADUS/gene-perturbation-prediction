@@ -315,8 +315,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     assert stage1 is not None  # guarded above
-    torch.manual_seed(stage1.train.collator_seed)
-
     from aivc_model.tx1_predicted_response import construct_forward_only_model
 
     batches = build_batches(bags, control_by_line)
@@ -382,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         learning_rate=stage1.train.learning_rate,
         weight_decay=stage1.train.weight_decay,
         max_bag=stage1.train.max_bag,
+        gene_batch_size=stage1.train.gene_batch_size,
         grad_clip=stage1.train.grad_clip,
         seed=stage1.train.train_seed,
         log_every=stage1.train.log_every,
@@ -390,11 +389,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     accelerator = make_accelerator(config, cpu=_resolve_cpu_flag(args.device))
     require_distinct_devices(accelerator)
+    rank_seed = stage1.train.collator_seed + accelerator.process_index
+    torch.manual_seed(rank_seed)
     if stage1.train.float32_matmul_precision is not None:
         torch.set_float32_matmul_precision(stage1.train.float32_matmul_precision)
     logging.getLogger().setLevel(
         args.log_level if accelerator.is_main_process else "WARNING"
     )
+    _LOGGER.info("rank %d model/dropout seed %d", accelerator.process_index, rank_seed)
 
     model = construct_forward_only_model(
         model_cls=_state_model_cls(),

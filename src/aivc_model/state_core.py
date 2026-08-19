@@ -106,8 +106,29 @@ class StateForwardAdapter(nn.Module):
         batch_index_chunks: tuple[torch.Tensor | None, ...],
     ) -> tuple[torch.Tensor, ...]:
         """Run equal-size condition chunks as independent STATE sequences."""
+        return self.forward_condition_chunks(
+            control_chunks,
+            tuple(perturbation for _ in control_chunks),
+            tuple(gene for _ in control_chunks),
+            batch_index_chunks,
+        )
+
+    def forward_condition_chunks(
+        self,
+        control_chunks: tuple[torch.Tensor, ...],
+        perturbations: tuple[torch.Tensor, ...],
+        genes: tuple[str, ...],
+        batch_index_chunks: tuple[torch.Tensor | None, ...],
+    ) -> tuple[torch.Tensor, ...]:
+        """Run multiple gene conditions in one padded STATE forward pass."""
         if len(control_chunks) != len(batch_index_chunks):
             raise ValueError("control and batch-index chunks must have equal length")
+        if len(control_chunks) != len(perturbations) or len(control_chunks) != len(
+            genes
+        ):
+            raise ValueError(
+                "control, perturbation, gene, and batch-index chunks must align"
+            )
         if not control_chunks:
             raise ValueError("at least one STATE condition chunk is required")
         chunk_sizes = tuple(int(chunk.shape[0]) for chunk in control_chunks)
@@ -124,10 +145,22 @@ class StateForwardAdapter(nn.Module):
             chunk_sizes,
             control_cells.device,
         )
-        output = self._forward_state(
+        perturbation_cells = torch.cat(
+            tuple(
+                perturbation.unsqueeze(0).expand(size, -1)
+                for perturbation, size in zip(perturbations, chunk_sizes, strict=True)
+            ),
+            dim=0,
+        )
+        gene_cells = [
+            gene
+            for gene, size in zip(genes, chunk_sizes, strict=True)
+            for _ in range(size)
+        ]
+        output = self._forward_state_prepared(
             control_cells,
-            perturbation,
-            gene,
+            perturbation_cells,
+            gene_cells,
             batch_indices,
             padded=True,
         )
@@ -142,17 +175,36 @@ class StateForwardAdapter(nn.Module):
         *,
         padded: bool,
     ) -> torch.Tensor:
+        perturbation_cells = perturbation.unsqueeze(0).expand(
+            control_cells.shape[0], -1
+        )
+        return self._forward_state_prepared(
+            control_cells,
+            perturbation_cells,
+            [gene] * int(control_cells.shape[0]),
+            batch_indices,
+            padded=padded,
+        )
+
+    def _forward_state_prepared(
+        self,
+        control_cells: torch.Tensor,
+        perturbation_cells: torch.Tensor,
+        gene_cells: list[str],
+        batch_indices: torch.Tensor | None,
+        *,
+        padded: bool,
+    ) -> torch.Tensor:
         self._last_token_features = None
         if hasattr(self.state_model, "_token_features"):
             try:
                 setattr(self.state_model, "_token_features", None)
             except AttributeError:
                 pass
-        pert = perturbation.unsqueeze(0).expand(control_cells.shape[0], -1)
         batch: dict[str, Any] = {
             "ctrl_cell_emb": control_cells,
-            "pert_emb": pert,
-            "pert_name": [gene] * int(control_cells.shape[0]),
+            "pert_emb": perturbation_cells,
+            "pert_name": gene_cells,
         }
         if batch_indices is not None:
             batch["batch"] = batch_indices.to(control_cells.device)
@@ -239,8 +291,16 @@ class Esm2PerturbationAdapter(nn.Module):
         self.adapter = PertAdapter(table.dim, int(adapter_hidden), int(pert_dim))
 
     def forward(self, gene: str) -> torch.Tensor:
-        index = self._gene_to_index[str(gene).upper()]
-        return self.adapter(self.esm_matrix[index].unsqueeze(0)).squeeze(0)
+        return self.forward_many([gene])[0]
+
+    def forward_many(self, genes: list[str] | tuple[str, ...]) -> torch.Tensor:
+        """Map multiple genes through one adapter call."""
+        indices = torch.as_tensor(
+            [self._gene_to_index[str(gene).upper()] for gene in genes],
+            dtype=torch.long,
+            device=self.esm_matrix.device,
+        )
+        return self.adapter(self.esm_matrix.index_select(0, indices))
 
     def has_embedding(self, gene: str) -> bool:
         """Return whether the adapter contains an ESM-2 vector for ``gene``."""

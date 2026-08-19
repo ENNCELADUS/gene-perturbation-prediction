@@ -29,12 +29,14 @@ from aivc_model.response_training import (
     _is_better_metric,
     _pad_gene_indices,
     _per_anchor_mean_from_gathered,
+    _record_objective_weights,
     _run_train_epoch,
     _select_best_epoch,
     _validate_anchor_weights,
     energy_distance,
     evaluate_response_model,
     mean_delta_mse,
+    predict_bags,
     split_heldout_genes,
     train_response_model,
 )
@@ -156,6 +158,11 @@ def test_training_config_rejects_a_too_small_max_bag() -> None:
         TrainingConfig(max_bag=1)
 
 
+def test_training_config_rejects_a_sub_one_gene_batch_size() -> None:
+    with pytest.raises(ValueError, match="gene_batch_size"):
+        TrainingConfig(gene_batch_size=0)
+
+
 # --- even-step DDP sharding -----------------------------------------------
 
 
@@ -175,6 +182,13 @@ def test_pad_gene_indices_is_a_noop_when_already_even() -> None:
     padded, is_padding = _pad_gene_indices(np.arange(6), world_size=3)
     assert list(padded) == [0, 1, 2, 3, 4, 5]
     assert not is_padding.any()
+
+
+def test_pad_gene_indices_fills_complete_batches_on_every_rank() -> None:
+    padded, is_padding = _pad_gene_indices(np.arange(10), world_size=2, batch_size=4)
+    assert len(padded) == 16
+    assert len(padded) % (2 * 4) == 0
+    assert int(is_padding.sum()) == 6
 
 
 def test_pad_gene_indices_rejects_an_empty_index_array() -> None:
@@ -280,6 +294,67 @@ def test_every_rank_step_count_includes_padding_and_matches_loader_length() -> N
     assert metrics == pytest.approx(single_metrics)
 
 
+def test_train_epoch_uses_one_optimizer_step_per_gene_batch() -> None:
+    model = _ShiftModel(3)
+    records = _batches(n=4)
+    accelerator = Accelerator(cpu=True)
+    loader = accelerator.prepare(
+        DataLoader(
+            _GeneIndexDataset(np.arange(4), np.zeros(4, dtype=bool)),
+            batch_size=2,
+        )
+    )
+    optimizer = accelerator.prepare(torch.optim.AdamW(model.parameters(), lr=0.0))
+    config = TrainingConfig(max_bag=16, gene_batch_size=2, log_every=0)
+
+    metrics, local_steps = _run_train_epoch(
+        model,
+        loader,
+        records,
+        optimizer,
+        ResponseLoss(),
+        config,
+        accelerator,
+        torch.Generator().manual_seed(config.seed),
+        epoch=0,
+    )
+
+    assert local_steps == 2
+    assert np.isfinite(metrics["loss"])
+
+
+def test_mixed_padding_does_not_attenuate_the_real_record_gradient() -> None:
+    records = _batches(n=1)
+
+    def gradient(indices: np.ndarray, padding: np.ndarray) -> torch.Tensor:
+        model = _ShiftModel(3)
+        accelerator = Accelerator(cpu=True)
+        loader = accelerator.prepare(
+            DataLoader(_GeneIndexDataset(indices, padding), batch_size=len(indices))
+        )
+        optimizer = accelerator.prepare(
+            torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.0)
+        )
+        config = TrainingConfig(max_bag=16, gene_batch_size=len(indices), log_every=0)
+        _run_train_epoch(
+            model,
+            loader,
+            records,
+            optimizer,
+            ResponseLoss(),
+            config,
+            accelerator,
+            torch.Generator().manual_seed(config.seed),
+            epoch=0,
+        )
+        assert model.shift.grad is not None
+        return model.shift.grad.detach().clone()
+
+    real_only = gradient(np.array([0]), np.array([False]))
+    real_plus_padding = gradient(np.array([0, 0]), np.array([False, True]))
+    assert torch.allclose(real_only, real_plus_padding)
+
+
 # --- held-out per-anchor reduction ----------------------------------------
 
 
@@ -374,6 +449,16 @@ def test_validate_anchor_weights_rejects_a_weighted_anchor_with_no_heldout_batch
 
 def test_validate_anchor_weights_allows_a_zero_weight_anchor_with_no_batch() -> None:
     _validate_anchor_weights({"A": 1.0, "B": 0.0}, _batches(n=1, model_id="A"))
+
+
+def test_record_weights_make_anchor_means_contribute_declared_weights() -> None:
+    records = _batches(n=1, model_id="A") + _batches(n=3, model_id="B")
+    weights = _record_objective_weights(records, {"A": 0.5, "B": 0.5})
+
+    assert weights == pytest.approx([2.0, 2.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0])
+    losses = [10.0, 0.0, 0.0, 0.0]
+    objective = np.mean([loss * weight for loss, weight in zip(losses, weights)])
+    assert objective == pytest.approx(5.0)
 
 
 # --- training loop ------------------------------------------------------
@@ -550,6 +635,29 @@ def test_predict_bag_pads_and_trims_to_the_window() -> None:
     model = _WindowedModel(3, window=8)
     out = predict_bag(model, _bag(21, 3), "G0", seed=0)
     assert out.shape == (21, 3)
+
+
+def test_predict_bags_combines_conditions_in_one_model_forward() -> None:
+    class CountingWindowedModel(_WindowedModel):
+        def __init__(self) -> None:
+            super().__init__(dim=3, window=8)
+            self.forward_calls = 0
+
+        def forward(self, chunks, gene, batch_index_chunks):
+            self.forward_calls += 1
+            assert tuple(gene) == ("G1", "G1", "G2")
+            return super().forward(chunks, gene, batch_index_chunks)
+
+    model = CountingWindowedModel()
+    outputs = predict_bags(
+        model,
+        [_bag(10, 3), _bag(6, 3)],
+        ["G1", "G2"],
+        seed=0,
+    )
+
+    assert model.forward_calls == 1
+    assert [tuple(output.shape) for output in outputs] == [(10, 3), (6, 3)]
 
 
 def test_evaluate_handles_bags_that_do_not_divide_the_window() -> None:

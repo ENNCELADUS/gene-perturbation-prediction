@@ -43,6 +43,7 @@ class Stage1TrainConfig:
     learning_rate: float = 1e-4
     weight_decay: float = 0.01
     max_bag: int = 128
+    gene_batch_size: int = 32
     grad_clip: float = 1.0
     train_seed: int = 20260818
     collator_seed: int = 20260818
@@ -69,6 +70,8 @@ class Stage1TrainConfig:
             raise ValueError(
                 "max_bag must be >= 2 -- a distributional loss needs >= 2 cells"
             )
+        if self.gene_batch_size < 1:
+            raise ValueError("gene_batch_size must be >= 1")
         if not 0 < self.heldout_fraction < 1:
             raise ValueError("heldout_fraction must be in (0, 1)")
         if self.w_mean_delta < 0 or self.w_energy < 0:

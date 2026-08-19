@@ -88,6 +88,34 @@ def test_state_forward_adapter_forward_chunks_uses_predict_step_batch_schema() -
     assert torch.isfinite(output).all()
 
 
+def test_state_forward_adapter_batches_distinct_gene_conditions() -> None:
+    class RecordingState(torch.nn.Module):
+        cell_sentence_len = 2
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.seen: dict[str, object] = {}
+
+        def predict_step(self, batch, batch_idx, padded):
+            self.seen = {"batch": batch, "batch_idx": batch_idx, "padded": padded}
+            return {"preds": batch["ctrl_cell_emb"] + batch["pert_emb"]}
+
+    state = RecordingState()
+    adapter = StateForwardAdapter(state)
+    outputs = adapter.forward_condition_chunks(
+        (torch.zeros(2, 2), torch.ones(2, 2)),
+        (torch.tensor([1.0, 0.0]), torch.tensor([0.0, 2.0])),
+        ("G1", "G2"),
+        (None, None),
+    )
+
+    assert len(outputs) == 2
+    assert torch.equal(outputs[0], torch.tensor([[1.0, 0.0], [1.0, 0.0]]))
+    assert torch.equal(outputs[1], torch.tensor([[1.0, 3.0], [1.0, 3.0]]))
+    assert state.seen["batch"]["pert_name"] == ["G1", "G1", "G2", "G2"]
+    assert state.seen["padded"] is True
+
+
 def test_state_forward_adapter_forward_runs_unpadded_single_condition() -> None:
     state = LinearMockStateModel(input_dim=2, output_dim=3, pert_dim=2)
     adapter = StateForwardAdapter(state)
@@ -118,6 +146,7 @@ def test_esm2_perturbation_adapter_maps_all_genes_through_one_network() -> None:
 
     assert adapter("KNOWN").shape == (2,)
     assert adapter("HELDOUT").shape == (2,)
+    assert adapter.forward_many(["KNOWN", "HELDOUT"]).shape == (2, 2)
     assert adapter.has_embedding("known")
     assert adapter.has_known_vector("HELDOUT")
 

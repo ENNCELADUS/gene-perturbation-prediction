@@ -120,14 +120,26 @@ class ResponseLoss(nn.Module):
             ``(loss, parts)`` where ``parts`` carries the detached terms for
             logging.
         """
+        total, tensor_parts = self.tensor_parts(predicted, observed, control_mean)
+        return total, {
+            name: float(value.detach()) for name, value in tensor_parts.items()
+        }
+
+    def tensor_parts(
+        self,
+        predicted: torch.Tensor,
+        observed: torch.Tensor,
+        control_mean: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        """Return tensor-valued terms without synchronizing CUDA to Python."""
         mean_term = mean_delta_mse(predicted, observed, control_mean)
-        parts = {"mean_delta_mse": float(mean_term.detach())}
+        parts = {"mean_delta_mse": mean_term}
         total = self.weights.mean_delta * mean_term
         if self.weights.energy:
             energy_term = energy_distance(predicted, observed)
-            parts["energy_distance"] = float(energy_term.detach())
+            parts["energy_distance"] = energy_term
             total = total + self.weights.energy * energy_term
-        parts["loss"] = float(total.detach())
+        parts["loss"] = total
         return total, parts
 
 
@@ -166,31 +178,10 @@ def energy_distance(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
     return 2.0 * cross - within_left - within_right
 
 
-def predict_bag(
-    model: nn.Module, control: torch.Tensor, gene: str, *, seed: int
-) -> torch.Tensor:
-    """Forward one control bag through ST in fixed-size windows.
-
-    ``StateForwardAdapter`` requires every chunk to be exactly
-    ``cell_sentence_len``; a bag that is not a multiple of it must be padded
-    by resampling and the output trimmed back. Training happened to satisfy
-    this only because ``max_bag`` equalled the window size, which is
-    accidental -- routing both training and evaluation through this helper
-    makes the contract explicit rather than a coincidence of configuration.
-    """
-    from aivc_model.tx1_predicted_response import _chunk_control_cell_indices
-
-    # Resolve the window through the DDP wrapper's ``.module``: reading an
-    # attribute needs the inner module, while the FORWARD below must still go
-    # through the wrapper so gradients all-reduce.
+def _state_window(model: nn.Module) -> int | None:
+    """Resolve STATE's fixed sentence length through an optional DDP wrapper."""
     inner = getattr(model, "module", model)
     adapter = getattr(inner, "state_adapter", None)
-    # Read the window off ``state_model`` -- the object
-    # ``StateForwardAdapter.forward_chunks`` reads it from. The adapter
-    # carries no ``cell_sentence_len`` of its own, so looking for one there
-    # resolves to None on every real model, and the fallback below then
-    # silently sent a whole bag through as one chunk. Reading it from the
-    # same object that checks it means the two cannot disagree.
     state_model = getattr(adapter, "state_model", None)
     window = (
         getattr(state_model, "cell_sentence_len", None)
@@ -204,20 +195,76 @@ def predict_bag(
             "silent fallback is what disguised a missing attribute as a "
             "chunk-size bug."
         )
+    return int(window) if window else None
+
+
+def predict_bags(
+    model: nn.Module,
+    controls: Sequence[torch.Tensor],
+    genes: Sequence[str],
+    *,
+    seed: int,
+) -> tuple[torch.Tensor, ...]:
+    """Forward multiple gene conditions through one padded STATE call.
+
+    ``StateForwardAdapter`` requires every chunk to be exactly
+    ``cell_sentence_len``; a bag that is not a multiple of it must be padded
+    by resampling and the output trimmed back. Training happened to satisfy
+    this only because ``max_bag`` equalled the window size, which is
+    accidental -- routing both training and evaluation through this helper
+    makes the contract explicit rather than a coincidence of configuration.
+    """
+    from aivc_model.tx1_predicted_response import _chunk_control_cell_indices
+
+    if len(controls) != len(genes):
+        raise ValueError("controls and genes must have equal length")
+    if not controls:
+        return ()
+    window = _state_window(model)
     if not window:
         # Only a genuine test double -- no state adapter at all -- may take
         # the single-chunk path.
-        return torch.cat(tuple(model((control,), gene, (None,))), dim=0)
-    n_cells = int(control.shape[0])
-    index_chunks = _chunk_control_cell_indices(n_cells, int(window), seed)
-    chunks = tuple(
-        control[torch.as_tensor(idx, dtype=torch.long, device=control.device)]
-        for idx in index_chunks
-    )
+        return tuple(
+            model(tuple(controls), tuple(genes), tuple(None for _ in controls))
+        )
+
+    chunks: list[torch.Tensor] = []
+    chunk_genes: list[str] = []
+    chunks_per_control: list[int] = []
+    cell_counts: list[int] = []
+    for control, gene in zip(controls, genes, strict=True):
+        n_cells = int(control.shape[0])
+        index_chunks = _chunk_control_cell_indices(n_cells, window, seed)
+        condition_chunks = [
+            control[torch.as_tensor(idx, dtype=torch.long, device=control.device)]
+            for idx in index_chunks
+        ]
+        chunks.extend(condition_chunks)
+        chunk_genes.extend(str(gene) for _ in condition_chunks)
+        chunks_per_control.append(len(condition_chunks))
+        cell_counts.append(n_cells)
     # Call the module, never the bound method: a DDP-wrapped model proxies
     # only ``forward``, and unwrapping would skip the gradient all-reduce.
-    predicted = model(chunks, gene, tuple(None for _ in chunks))
-    return torch.cat(tuple(predicted), dim=0)[:n_cells]
+    predicted_chunks = tuple(
+        model(tuple(chunks), tuple(chunk_genes), tuple(None for _ in chunks))
+    )
+    if len(predicted_chunks) != len(chunks):
+        raise ValueError("STATE returned a different number of chunks than supplied")
+    predicted: list[torch.Tensor] = []
+    offset = 0
+    for n_chunks, n_cells in zip(chunks_per_control, cell_counts, strict=True):
+        predicted.append(
+            torch.cat(predicted_chunks[offset : offset + n_chunks], dim=0)[:n_cells]
+        )
+        offset += n_chunks
+    return tuple(predicted)
+
+
+def predict_bag(
+    model: nn.Module, control: torch.Tensor, gene: str, *, seed: int
+) -> torch.Tensor:
+    """Forward one bag through the same vectorized path used by training."""
+    return predict_bags(model, [control], [gene], seed=seed)[0]
 
 
 def split_heldout_genes(
@@ -299,6 +346,7 @@ class TrainingConfig:
     learning_rate: float = 1e-4
     weight_decay: float = 0.01
     max_bag: int = 128
+    gene_batch_size: int = 1
     grad_clip: float = 1.0
     seed: int = 20260818
     log_every: int = 50
@@ -312,6 +360,8 @@ class TrainingConfig:
             raise ValueError("patience must be >= 1")
         if self.max_bag < 2:
             raise ValueError("max_bag must be >= 2 for a distributional loss")
+        if self.gene_batch_size < 1:
+            raise ValueError("gene_batch_size must be >= 1")
 
 
 def _subsample(
@@ -376,9 +426,9 @@ class _GeneIndexDataset(Dataset):
 
 
 def _pad_gene_indices(
-    indices: np.ndarray, *, world_size: int
+    indices: np.ndarray, *, world_size: int, batch_size: int = 1
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Pad ``indices`` to a multiple of ``world_size`` by repeating entries.
+    """Pad indices to full equal-size batches on every DDP rank.
 
     Every DDP rank must take the same number of optimizer steps per epoch
     (``static_graph=True`` requires every rank to run the identical sequence
@@ -393,14 +443,17 @@ def _pad_gene_indices(
     """
     if world_size < 1:
         raise ValueError("world_size must be at least 1")
+    if batch_size < 1:
+        raise ValueError("batch_size must be at least 1")
     normalized = np.asarray(indices, dtype=np.int64)
     if len(normalized) == 0:
         raise ValueError("no batches to shard")
     is_padding = np.zeros(len(normalized), dtype=bool)
-    remainder = len(normalized) % world_size
+    divisor = world_size * batch_size
+    remainder = len(normalized) % divisor
     if remainder == 0:
         return normalized, is_padding
-    pad_count = world_size - remainder
+    pad_count = divisor - remainder
     repeats = int(math.ceil(pad_count / len(normalized)))
     padding = np.tile(normalized, repeats)[:pad_count]
     return (
@@ -410,17 +463,24 @@ def _pad_gene_indices(
 
 
 def _shard_loader(
-    n_records: int, *, accelerator: Accelerator, seed: int, shuffle: bool
+    n_records: int,
+    *,
+    accelerator: Accelerator,
+    seed: int,
+    shuffle: bool,
+    batch_size: int,
 ) -> DataLoader:
     """Build the even-step-sharded, ``accelerator``-prepared index loader."""
     padded_indices, is_padding = _pad_gene_indices(
-        np.arange(n_records), world_size=accelerator.num_processes
+        np.arange(n_records),
+        world_size=accelerator.num_processes,
+        batch_size=batch_size,
     )
     generator = torch.Generator()
     generator.manual_seed(seed)
     loader = DataLoader(
         _GeneIndexDataset(padded_indices, is_padding),
-        batch_size=1,
+        batch_size=batch_size,
         shuffle=shuffle,
         generator=generator if shuffle else None,
     )
@@ -455,39 +515,106 @@ def _validate_anchor_weights(
             )
 
 
+def _record_objective_weights(
+    records: Sequence[Mapping[str, object]],
+    anchor_weights: Mapping[str, float],
+) -> list[float]:
+    """Weight records so their mean equals the weighted mean of anchor means."""
+    counts: dict[str, int] = {}
+    for record in records:
+        model_id = str(record["model_id"])
+        if model_id not in anchor_weights:
+            raise ValueError(
+                f"training batch names model_id {model_id!r}, "
+                "absent from anchor_weights"
+            )
+        counts[model_id] = counts.get(model_id, 0) + 1
+    missing = [
+        model_id
+        for model_id, weight in anchor_weights.items()
+        if weight > 0 and model_id not in counts
+    ]
+    if missing:
+        raise ValueError(f"weighted anchor(s) have no training batch: {missing}")
+    n_records = len(records)
+    return [
+        float(anchor_weights[str(record["model_id"])])
+        * n_records
+        / counts[str(record["model_id"])]
+        for record in records
+    ]
+
+
+def _heldout_model_losses(
+    model: nn.Module,
+    records: Sequence[Mapping[str, object]],
+    loss_fn: ResponseLoss,
+    device: torch.device,
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    """Return model losses and source tensors from one batched STATE forward.
+
+    Shared by in-loop validation and the post-hoc evaluator so their model
+    scoring cannot drift. Must be called under ``torch.no_grad()``.
+    """
+    controls = [
+        torch.as_tensor(record["control"], dtype=torch.float32, device=device)
+        for record in records
+    ]
+    observed = [
+        torch.as_tensor(record["observed"], dtype=torch.float32, device=device)
+        for record in records
+    ]
+    control_targets = [
+        torch.as_tensor(record["control_target"], dtype=torch.float32, device=device)
+        for record in records
+    ]
+    predicted = predict_bags(
+        model, controls, [str(record["gene"]) for record in records], seed=0
+    )
+    losses: list[torch.Tensor] = []
+    for pred, obs, control_target in zip(
+        predicted, observed, control_targets, strict=True
+    ):
+        # The launcher passes `--mixed_precision bf16`, so predictions may be
+        # bf16; the three cdist calls are numerically fragile in reduced precision.
+        observed_f = obs.float()
+        control_mean = control_target.mean(dim=0).float()
+        loss, _ = loss_fn.tensor_parts(pred.float(), observed_f, control_mean)
+        losses.append(loss)
+    return losses, observed, control_targets
+
+
+def _score_heldout_records(
+    model: nn.Module,
+    records: Sequence[Mapping[str, object]],
+    loss_fn: ResponseLoss,
+    device: torch.device,
+) -> list[tuple[str, float, float]]:
+    """Score held-out records and their basal-copy floors."""
+    losses, observed, control_targets = _heldout_model_losses(
+        model, records, loss_fn, device
+    )
+    scored: list[tuple[str, float, float]] = []
+    for record, loss, obs, control_target in zip(
+        records, losses, observed, control_targets, strict=True
+    ):
+        observed_f = obs.float()
+        control_mean = control_target.mean(dim=0).float()
+        floor = basal_copy_baseline_loss(
+            observed_f, control_target.float(), control_mean, loss_fn
+        )
+        scored.append((str(record["model_id"]), float(loss), floor))
+    return scored
+
+
 def _score_heldout_batch(
     model: nn.Module,
     record: Mapping[str, object],
     loss_fn: ResponseLoss,
     device: torch.device,
 ) -> tuple[str, float, float]:
-    """Score one held-out (gene, line) batch: model loss and basal-copy floor.
-
-    Shared by the per-epoch in-loop validation and the post-hoc
-    :func:`evaluate_response_model` report so the two scoring paths cannot
-    drift apart. Must be called under ``torch.no_grad()``.
-    """
-    control = torch.as_tensor(record["control"], dtype=torch.float32).to(device)
-    observed = torch.as_tensor(record["observed"], dtype=torch.float32).to(device)
-    control_target = torch.as_tensor(record["control_target"], dtype=torch.float32).to(
-        device
-    )
-    predicted = predict_bag(model, control, str(record["gene"]), seed=0)
-    # The launcher passes `--mixed_precision bf16`, so `predicted` may be
-    # bf16; energy_distance's three torch.cdist calls are numerically
-    # fragile in reduced precision, so force fp32 immediately before scoring.
-    predicted_f = predicted.float()
-    observed_f = observed.float()
-    control_mean = control_target.mean(dim=0).float()
-    loss, _ = loss_fn(predicted_f, observed_f, control_mean)
-    # The floor is the control cells in the OUTPUT space (`control_target`),
-    # not `control`: the latter is the 2560-d Tx1 basal embedding, while
-    # `observed` and `control_mean` live in the ~2000-d HVG space, so feeding
-    # it to the loss is a dimension mismatch, not a conservative baseline.
-    floor = basal_copy_baseline_loss(
-        observed_f, control_target.float(), control_mean, loss_fn
-    )
-    return str(record["model_id"]), float(loss), floor
+    """Score one held-out record through the shared batched path."""
+    return _score_heldout_records(model, [record], loss_fn, device)[0]
 
 
 def _per_anchor_mean_from_gathered(
@@ -590,6 +717,7 @@ def _run_train_epoch(
     generator: torch.Generator,
     *,
     epoch: int,
+    record_weights: Sequence[float] | None = None,
 ) -> tuple[dict[str, float], int]:
     """Run one training epoch; returns (mean loss terms, local step count).
 
@@ -599,7 +727,12 @@ def _run_train_epoch(
     since it duplicates a real record and would otherwise double-count it.
     """
     model.train()
-    totals: dict[str, list[float]] = {}
+    if record_weights is None:
+        record_weights = [1.0] * len(records)
+    if len(record_weights) != len(records):
+        raise ValueError("record_weights must align with records")
+    totals: dict[str, torch.Tensor] = {}
+    real_record_count = 0
     local_steps = 0
     progress = tqdm(
         loader,
@@ -607,31 +740,76 @@ def _run_train_epoch(
         disable=not accelerator.is_main_process,
     )
     for step, batch in enumerate(progress):
-        index = int(batch["index"][0])
-        is_padding = bool(batch["is_padding"][0])
-        record = records[index]
-        control = torch.as_tensor(
-            record["control"], dtype=torch.float32, device=accelerator.device
-        )
-        observed = torch.as_tensor(
-            record["observed"], dtype=torch.float32, device=accelerator.device
-        )
-        control_target = torch.as_tensor(
-            record["control_target"], dtype=torch.float32, device=accelerator.device
-        )
-        observed = _subsample(observed, config.max_bag, generator)
-        control = _subsample(control, config.max_bag, generator)
+        indices = [int(index) for index in batch["index"].tolist()]
+        padding = [bool(value) for value in batch["is_padding"].tolist()]
+        step_records = [records[index] for index in indices]
+        step_weights = [float(record_weights[index]) for index in indices]
+        controls = [
+            _subsample(
+                torch.as_tensor(
+                    record["control"],
+                    dtype=torch.float32,
+                    device=accelerator.device,
+                ),
+                config.max_bag,
+                generator,
+            )
+            for record in step_records
+        ]
+        observed = [
+            _subsample(
+                torch.as_tensor(
+                    record["observed"],
+                    dtype=torch.float32,
+                    device=accelerator.device,
+                ),
+                config.max_bag,
+                generator,
+            )
+            for record in step_records
+        ]
+        control_targets = [
+            torch.as_tensor(
+                record["control_target"],
+                dtype=torch.float32,
+                device=accelerator.device,
+            )
+            for record in step_records
+        ]
 
-        predicted = predict_bag(model, control, str(record["gene"]), seed=config.seed)
-        # The launcher passes `--mixed_precision bf16`, so `predicted` may be
-        # bf16; energy_distance's three torch.cdist calls are numerically
-        # fragile in reduced precision, so force fp32 immediately before
-        # scoring.
-        predicted_f = predicted.float()
-        observed_f = observed.float()
-        control_mean = control_target.mean(dim=0).float()
-        loss, parts = loss_fn(predicted_f, observed_f, control_mean)
-        backward_loss = loss * 0.0 if is_padding else loss
+        predicted = predict_bags(
+            model,
+            controls,
+            [str(record["gene"]) for record in step_records],
+            seed=config.seed,
+        )
+        backward_terms: list[torch.Tensor] = []
+        step_parts: list[dict[str, torch.Tensor]] = []
+        for pred, obs, control_target, is_padding, objective_weight in zip(
+            predicted,
+            observed,
+            control_targets,
+            padding,
+            step_weights,
+            strict=True,
+        ):
+            # cdist is numerically fragile in reduced precision, so score in fp32.
+            loss, parts = loss_fn.tensor_parts(
+                pred.float(), obs.float(), control_target.mean(dim=0).float()
+            )
+            backward_terms.append(loss * 0.0 if is_padding else loss * objective_weight)
+            step_parts.append(parts)
+        local_real_count = torch.tensor(
+            sum(not is_padding for is_padding in padding),
+            dtype=torch.float32,
+            device=accelerator.device,
+        )
+        global_real_count = accelerator.reduce(local_real_count, reduction="sum")
+        backward_loss = (
+            torch.stack(backward_terms).sum()
+            * accelerator.num_processes
+            / global_real_count.clamp_min(1.0)
+        )
 
         optimizer.zero_grad(set_to_none=True)
         accelerator.backward(backward_loss)
@@ -640,17 +818,29 @@ def _run_train_epoch(
         optimizer.step()
         local_steps += 1
 
-        if not is_padding:
+        for record, parts, is_padding, objective_weight in zip(
+            step_records, step_parts, padding, step_weights, strict=True
+        ):
+            if is_padding:
+                continue
             for key, value in parts.items():
-                totals.setdefault(key, []).append(value)
-            if config.log_every and step % config.log_every == 0:
-                _LOGGER.info(
-                    "epoch %d step %d gene %s loss %.6f",
-                    epoch,
-                    step,
-                    record["gene"],
-                    parts["loss"],
-                )
+                if key not in totals:
+                    totals[key] = torch.zeros((), device=accelerator.device)
+                totals[key] += value.detach() * objective_weight
+            real_record_count += 1
+        if config.log_every and step % config.log_every == 0:
+            real_genes = [
+                str(record["gene"])
+                for record, is_padding in zip(step_records, padding, strict=True)
+                if not is_padding
+            ]
+            _LOGGER.info(
+                "epoch %d optimizer_step %d genes %s mean_loss %.6f",
+                epoch,
+                step,
+                ",".join(real_genes[:3]),
+                float(backward_loss.detach()),
+            )
     if not totals:
         raise ValueError("epoch produced no non-padding training steps")
     # Each rank's loader holds only its own shard, so a local mean would
@@ -660,13 +850,10 @@ def _run_train_epoch(
     # sums and counts and divide once, never averaging per-rank means, which
     # would misweight ranks holding different record counts.
     keys = sorted(totals)
-    local_sums = torch.tensor(
-        [float(np.sum(totals[key])) for key in keys],
-        device=accelerator.device,
-        dtype=torch.float32,
-    )
-    local_counts = torch.tensor(
-        [float(len(totals[key])) for key in keys],
+    local_sums = torch.stack([totals[key].float() for key in keys])
+    local_counts = torch.full(
+        (len(keys),),
+        float(real_record_count),
         device=accelerator.device,
         dtype=torch.float32,
     )
@@ -702,15 +889,20 @@ def _run_validation_epoch(
     local_count = torch.zeros(len(anchor_ids), device=accelerator.device)
     with torch.no_grad():
         for batch in loader:
-            if bool(batch["is_padding"][0]):
-                continue
-            record = records[int(batch["index"][0])]
-            model_id, model_loss, _floor = _score_heldout_batch(
-                model, record, loss_fn, accelerator.device
+            padding = [bool(value) for value in batch["is_padding"].tolist()]
+            step_records = [records[int(index)] for index in batch["index"].tolist()]
+            model_losses, _observed, _control_targets = _heldout_model_losses(
+                model, step_records, loss_fn, accelerator.device
             )
-            position = anchor_index[model_id]
-            local_sum[position] += model_loss
-            local_count[position] += 1.0
+            for record, model_loss, is_padding in zip(
+                step_records, model_losses, padding, strict=True
+            ):
+                if is_padding:
+                    continue
+                model_id = str(record["model_id"])
+                position = anchor_index[model_id]
+                local_sum[position] += model_loss.detach()
+                local_count[position] += 1.0
     gathered_sum = accelerator.gather(local_sum.unsqueeze(0))
     gathered_count = accelerator.gather(local_count.unsqueeze(0))
     per_anchor_mean = _per_anchor_mean_from_gathered(gathered_sum, gathered_count)
@@ -778,6 +970,7 @@ def train_response_model(
     if not heldout_records:
         raise ValueError("no held-out response batches were supplied")
     _validate_anchor_weights(anchor_weights, heldout_records)
+    record_weights = _record_objective_weights(train_records, anchor_weights)
 
     model = accelerator.prepare(model)
     optimizer = accelerator.prepare(
@@ -788,10 +981,18 @@ def train_response_model(
         )
     )
     train_loader = _shard_loader(
-        len(train_records), accelerator=accelerator, seed=config.seed, shuffle=True
+        len(train_records),
+        accelerator=accelerator,
+        seed=config.seed,
+        shuffle=True,
+        batch_size=config.gene_batch_size,
     )
     heldout_loader = _shard_loader(
-        len(heldout_records), accelerator=accelerator, seed=config.seed, shuffle=False
+        len(heldout_records),
+        accelerator=accelerator,
+        seed=config.seed,
+        shuffle=False,
+        batch_size=config.gene_batch_size,
     )
     generator = torch.Generator().manual_seed(config.seed)
 
@@ -816,6 +1017,7 @@ def train_response_model(
             accelerator,
             generator,
             epoch=epoch,
+            record_weights=record_weights,
         )
         assert_all_ranks_stepped(accelerator, local_steps)
         per_anchor, selection_value = _run_validation_epoch(
