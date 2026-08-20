@@ -345,6 +345,7 @@ class TrainingConfig:
     weight_decay: float = 0.01
     max_bag: int = 128
     gene_batch_size: int = 1
+    validation_gene_batch_size: int = 1
     grad_clip: float = 1.0
     seed: int = 20260818
     log_every: int = 50
@@ -360,6 +361,8 @@ class TrainingConfig:
             raise ValueError("max_bag must be >= 2 for a distributional loss")
         if self.gene_batch_size < 1:
             raise ValueError("gene_batch_size must be >= 1")
+        if self.validation_gene_batch_size < 1:
+            raise ValueError("validation_gene_batch_size must be >= 1")
 
 
 def _subsample(
@@ -513,6 +516,23 @@ def _validate_anchor_weights(
             )
 
 
+def _validate_fixed_control_bags(
+    records: Sequence[Mapping[str, object]], max_bag: int
+) -> None:
+    """Fail closed unless every basal/control view is the fixed protocol bag."""
+    for record in records:
+        label = f"{record.get('gene', '?')}@{record.get('model_id', '?')}"
+        control_rows = len(record["control"])  # type: ignore[arg-type]
+        target_rows = len(record["control_target"])  # type: ignore[arg-type]
+        if control_rows != max_bag or target_rows != max_bag:
+            raise ValueError(
+                f"{label}: fixed control bag must contain exactly {max_bag} cells "
+                f"(control={control_rows}, control_target={target_rows})"
+            )
+        if len(record["observed"]) < 1:  # type: ignore[arg-type]
+            raise ValueError(f"{label}: observed response bag has no cells")
+
+
 def _record_objective_weights(
     records: Sequence[Mapping[str, object]],
     anchor_weights: Mapping[str, float],
@@ -548,6 +568,8 @@ def _heldout_model_losses(
     records: Sequence[Mapping[str, object]],
     loss_fn: ResponseLoss,
     device: torch.device,
+    *,
+    max_bag: int | None = None,
 ) -> tuple[
     list[torch.Tensor],
     list[dict[str, torch.Tensor]],
@@ -559,14 +581,16 @@ def _heldout_model_losses(
     Shared by in-loop validation and the post-hoc evaluator so their model
     scoring cannot drift. Must be called under ``torch.no_grad()``.
     """
+    if max_bag is not None:
+        _validate_fixed_control_bags(records, max_bag)
     controls = [
         torch.as_tensor(record["control"], dtype=torch.float32, device=device)
         for record in records
     ]
-    observed = [
-        torch.as_tensor(record["observed"], dtype=torch.float32, device=device)
-        for record in records
-    ]
+    observed = []
+    for record in records:
+        bag = torch.as_tensor(record["observed"], dtype=torch.float32, device=device)
+        observed.append(bag[:max_bag] if max_bag is not None else bag)
     control_targets = [
         torch.as_tensor(record["control_target"], dtype=torch.float32, device=device)
         for record in records
@@ -594,10 +618,12 @@ def _score_heldout_records(
     records: Sequence[Mapping[str, object]],
     loss_fn: ResponseLoss,
     device: torch.device,
+    *,
+    max_bag: int | None = None,
 ) -> list[tuple[str, float, float, dict[str, float]]]:
     """Score held-out records and their basal-copy floors."""
     losses, parts_by_record, observed, control_targets = _heldout_model_losses(
-        model, records, loss_fn, device
+        model, records, loss_fn, device, max_bag=max_bag
     )
     scored: list[tuple[str, float, float, dict[str, float]]] = []
     for record, loss, parts, obs, control_target in zip(
@@ -624,9 +650,11 @@ def _score_heldout_batch(
     record: Mapping[str, object],
     loss_fn: ResponseLoss,
     device: torch.device,
+    *,
+    max_bag: int | None = None,
 ) -> tuple[str, float, float, dict[str, float]]:
     """Score one held-out record through the shared batched path."""
-    return _score_heldout_records(model, [record], loss_fn, device)[0]
+    return _score_heldout_records(model, [record], loss_fn, device, max_bag=max_bag)[0]
 
 
 def _per_anchor_mean_from_gathered(
@@ -884,6 +912,7 @@ def _run_validation_epoch(
     loss_fn: ResponseLoss,
     anchor_weights: Mapping[str, float],
     accelerator: Accelerator,
+    max_bag: int,
 ) -> tuple[dict[str, float], float]:
     """Score held-out ``records``; returns (per-anchor loss, selection value).
 
@@ -904,7 +933,11 @@ def _run_validation_epoch(
             padding = [bool(value) for value in batch["is_padding"].tolist()]
             step_records = [records[int(index)] for index in batch["index"].tolist()]
             model_losses, _parts, _observed, _control_targets = _heldout_model_losses(
-                model, step_records, loss_fn, accelerator.device
+                model,
+                step_records,
+                loss_fn,
+                accelerator.device,
+                max_bag=max_bag,
             )
             for record, model_loss, is_padding in zip(
                 step_records, model_losses, padding, strict=True
@@ -982,6 +1015,8 @@ def train_response_model(
     if not heldout_records:
         raise ValueError("no held-out response batches were supplied")
     _validate_anchor_weights(anchor_weights, heldout_records)
+    _validate_fixed_control_bags(train_records, config.max_bag)
+    _validate_fixed_control_bags(heldout_records, config.max_bag)
     record_weights = _record_objective_weights(train_records, anchor_weights)
 
     model = accelerator.prepare(model)
@@ -1004,7 +1039,7 @@ def train_response_model(
         accelerator=accelerator,
         seed=config.seed,
         shuffle=False,
-        batch_size=config.gene_batch_size,
+        batch_size=config.validation_gene_batch_size,
     )
     generator = torch.Generator().manual_seed(config.seed)
 
@@ -1033,7 +1068,13 @@ def train_response_model(
         )
         assert_all_ranks_stepped(accelerator, local_steps)
         per_anchor, selection_value = _run_validation_epoch(
-            model, heldout_loader, heldout_records, loss_fn, anchor_weights, accelerator
+            model,
+            heldout_loader,
+            heldout_records,
+            loss_fn,
+            anchor_weights,
+            accelerator,
+            config.max_bag,
         )
         row: dict[str, object] = {
             "epoch": epoch,
@@ -1143,6 +1184,7 @@ def evaluate_response_model(
     loss_fn: ResponseLoss | None = None,
     device: torch.device | str = "cpu",
     null_shuffle_seed: int = 0,
+    max_bag: int | None = None,
 ) -> dict[str, object]:
     """Score ``model`` against the basal-copy floor and a null shuffle.
 
@@ -1171,7 +1213,7 @@ def evaluate_response_model(
     per_anchor_parts: dict[str, dict[str, list[float]]] = {}
     for batch in records:
         model_id, model_loss, floor_loss, parts = _score_heldout_batch(
-            model, batch, loss_fn, device
+            model, batch, loss_fn, device, max_bag=max_bag
         )
         model_losses.append(model_loss)
         floor_losses.append(floor_loss)
@@ -1181,7 +1223,7 @@ def evaluate_response_model(
             anchor_parts.setdefault(name, []).append(parts[name])
 
     shuffled_losses = [
-        _score_heldout_batch(model, record, loss_fn, device)[1]
+        _score_heldout_batch(model, record, loss_fn, device, max_bag=max_bag)[1]
         for record in _null_shuffle_records(records, null_shuffle_seed)
     ]
     return {

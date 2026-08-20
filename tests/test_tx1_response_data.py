@@ -384,6 +384,75 @@ def test_assemble_two_line_shapes_and_per_gene_bag_lengths(tmp_path: Path) -> No
     assert np.isnan(bags.y).all()  # response-only container carries no labels
 
 
+def test_fixed_control_bags_are_deterministic_and_audited(tmp_path: Path) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    kwargs = {
+        "cell_line_manifest_path": fixture.manifest_path,
+        "tx1_cache_dir": fixture.cache_dir,
+        "hvg_state_model_dir": fixture.hvg_dir,
+        "perturbseq_sources_path": fixture.sources_path,
+        "control_cells_per_line": 3,
+        "l2_normalize": False,
+    }
+
+    first = assemble_train_response_gene_bags(**kwargs)
+    second = assemble_train_response_gene_bags(**kwargs)
+
+    np.testing.assert_array_equal(first.control_input, second.control_input)
+    assert first.control_input.shape == (6, EMBEDDING_WIDTH)
+    assert set(first.metadata["control_sampled_cells"]) == {3}
+    assert set(
+        first.metadata.loc[
+            first.metadata["model_id"] == "ACH-A", "control_distinct_cells"
+        ]
+    ) == {5}
+    assert set(
+        first.metadata.loc[
+            first.metadata["model_id"] == "ACH-B", "control_distinct_cells"
+        ]
+    ) == {4}
+    assert set(first.metadata["control_padding_fraction"]) == {0.0}
+
+
+def test_fixed_control_bags_pad_only_after_every_distinct_cell(tmp_path: Path) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    bags = assemble_train_response_gene_bags(
+        cell_line_manifest_path=fixture.manifest_path,
+        tx1_cache_dir=fixture.cache_dir,
+        hvg_state_model_dir=fixture.hvg_dir,
+        perturbseq_sources_path=fixture.sources_path,
+        control_cells_per_line=6,
+        l2_normalize=False,
+    )
+
+    assert bags.control_input.shape == (12, EMBEDDING_WIDTH)
+    for model_id, distinct_count in (("ACH-A", 5), ("ACH-B", 4)):
+        sampled = bags.control_input[bags.control_batch == model_id]
+        expected = fixture.control_embeddings[model_id]
+        assert len(sampled) == 6
+        assert {tuple(row) for row in sampled[:distinct_count]} == {
+            tuple(row) for row in expected
+        }
+    expected_padding = {"ACH-A": 1.0 / 6.0, "ACH-B": 2.0 / 6.0}
+    for model_id, padding_fraction in expected_padding.items():
+        actual = bags.metadata.loc[
+            bags.metadata["model_id"] == model_id, "control_padding_fraction"
+        ].iloc[0]
+        assert actual == pytest.approx(padding_fraction)
+
+
+def test_fixed_control_bags_reject_a_non_positive_size(tmp_path: Path) -> None:
+    fixture = _build_two_line_fixture(tmp_path)
+    with pytest.raises(ValueError, match="control_cells_per_line"):
+        assemble_train_response_gene_bags(
+            cell_line_manifest_path=fixture.manifest_path,
+            tx1_cache_dir=fixture.cache_dir,
+            hvg_state_model_dir=fixture.hvg_dir,
+            perturbseq_sources_path=fixture.sources_path,
+            control_cells_per_line=0,
+        )
+
+
 def test_assemble_provenance_columns_present_and_correct(tmp_path: Path) -> None:
     fixture = _build_two_line_fixture(tmp_path)
     bags = assemble_train_response_gene_bags(

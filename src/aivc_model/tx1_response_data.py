@@ -41,6 +41,7 @@ meaningful in the two-view world.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import resource
@@ -151,6 +152,8 @@ class _ControlView(NamedTuple):
     control_target: np.ndarray
     control_batch: np.ndarray
     control_cell_type: np.ndarray
+    n_distinct_control: int
+    padding_fraction: float
 
 
 class _ResolvedResponseSources(NamedTuple):
@@ -210,6 +213,7 @@ def assemble_train_response_gene_bags(
     genes: Sequence[str] | None = None,
     max_cells_per_gene: int | None = None,
     total_cells_per_line: int | None = None,
+    control_cells_per_line: int | None = None,
     response_cache_dir: Path | None = None,
     seed: int = 42,
 ) -> GeneBags:
@@ -240,6 +244,10 @@ def assemble_train_response_gene_bags(
             multiplied by a genome-scale gene count). ``None`` (the
             default) applies no total cap; this repo does not choose a
             value here.
+        control_cells_per_line: Fixed basal-cell count per line. Cells are
+            ordered by ``sha256(model_id + "|" + cell_barcode)`` and truncated,
+            or deterministically repeated after every distinct cell is used
+            once when the line is smaller than the requested count.
         response_cache_dir: Optional directory for the fingerprinted,
             arm-independent response-TARGET cache (fix-round-3, Fix 2 --
             see ``tx1_response_gene_bags_cache``). ``None`` (the default)
@@ -289,6 +297,7 @@ def assemble_train_response_gene_bags(
             str(row.cell_line_name),
             tx1_cache_dir,
             resolved.checkpoint_gene_order,
+            control_cells_per_line,
         )
         for row in resolved.selected.itertuples(index=False)
     ]
@@ -835,15 +844,42 @@ def _build_gene_bags_for_line(
     )
 
 
+def _fixed_control_indices(
+    model_id: str, cell_ids: Sequence[str], n_cells: int
+) -> tuple[np.ndarray, float]:
+    """Return the protocol-fixed basal-cell indices and padding fraction."""
+    if n_cells < 1:
+        raise ValueError("control_cells_per_line must be >= 1")
+    normalized = [str(cell_id) for cell_id in cell_ids]
+    if not normalized:
+        raise ValueError(f"line {model_id}: control cache has no cells")
+    if len(set(normalized)) != len(normalized):
+        raise ValueError(f"line {model_id}: control cache cell ids are not unique")
+    ordered = np.asarray(
+        sorted(
+            range(len(normalized)),
+            key=lambda index: hashlib.sha256(
+                f"{model_id}|{normalized[index]}".encode()
+            ).hexdigest(),
+        ),
+        dtype=np.int64,
+    )
+    if len(ordered) >= n_cells:
+        return ordered[:n_cells], 0.0
+    selected = np.resize(ordered, n_cells)
+    return selected, float((n_cells - len(ordered)) / n_cells)
+
+
 def _line_control_view(
     model_id: str,
     cell_line_name: str,
     tx1_cache_dir: Path,
     checkpoint_gene_order: np.ndarray,
+    control_cells_per_line: int | None,
 ) -> _ControlView:
     """Read one cached control-cell Tx1/HVG view (already checkpoint-ordered)."""
     try:
-        embeddings, hvg_matrix, _obs = load_line_cache(tx1_cache_dir, model_id)
+        embeddings, hvg_matrix, obs = load_line_cache(tx1_cache_dir, model_id)
     except (FileNotFoundError, OSError) as exc:
         raise ValueError(
             f"line {model_id}: no usable Tx1 embedding cache found under "
@@ -854,10 +890,30 @@ def _line_control_view(
     width = len(checkpoint_gene_order)
     _assert_width(model_id, "cache embeddings", control_input.shape[1], EMBEDDING_WIDTH)
     _assert_width(model_id, "cache hvg", control_target.shape[1], width)
+    n_distinct_control = control_input.shape[0]
+    if len(obs) != n_distinct_control:
+        raise ValueError(
+            f"line {model_id}: control cache row mismatch: "
+            f"arrays={n_distinct_control}, obs={len(obs)}"
+        )
+    padding_fraction = 0.0
+    if control_cells_per_line is not None:
+        indices, padding_fraction = _fixed_control_indices(
+            model_id, obs.index.astype(str).tolist(), control_cells_per_line
+        )
+        control_input = control_input[indices]
+        control_target = control_target[indices]
     n_control = control_input.shape[0]
     control_batch = np.full(n_control, model_id, dtype=object)
     control_cell_type = np.full(n_control, cell_line_name, dtype=object)
-    return _ControlView(control_input, control_target, control_batch, control_cell_type)
+    return _ControlView(
+        control_input,
+        control_target,
+        control_batch,
+        control_cell_type,
+        n_distinct_control,
+        padding_fraction,
+    )
 
 
 def _build_line_gene_bags(
@@ -1101,6 +1157,16 @@ def _combine(
     target_dim = int(control_target.shape[1])
     metadata = pd.DataFrame(metadata_rows)
     metadata["l2_normalize"] = bool(l2_normalize)
+    control_audit = {str(view.control_batch[0]): view for view in control_views}
+    metadata["control_distinct_cells"] = metadata["model_id"].map(
+        lambda model_id: control_audit[str(model_id)].n_distinct_control
+    )
+    metadata["control_sampled_cells"] = metadata["model_id"].map(
+        lambda model_id: len(control_audit[str(model_id)].control_input)
+    )
+    metadata["control_padding_fraction"] = metadata["model_id"].map(
+        lambda model_id: control_audit[str(model_id)].padding_fraction
+    )
     return GeneBags(
         genes=np.asarray(genes, dtype=object),
         y=np.full(len(genes), np.nan, dtype=np.float32),

@@ -238,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         perturbseq_sources_path=args.perturbseq_sources,
         max_cells_per_gene=max_cells_per_gene,
         total_cells_per_line=total_cells_per_line,
+        control_cells_per_line=stage1.train.max_bag if stage1 else 128,
         response_cache_dir=args.response_cache_dir,
         seed=data_seed,
     )
@@ -322,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
         weight_decay=stage1.train.weight_decay,
         max_bag=stage1.train.max_bag,
         gene_batch_size=stage1.train.gene_batch_size,
+        validation_gene_batch_size=stage1.train.validation_gene_batch_size,
         grad_clip=stage1.train.grad_clip,
         seed=stage1.train.train_seed,
         log_every=stage1.train.log_every,
@@ -387,7 +389,11 @@ def main(argv: list[str] | None = None) -> int:
         load_result,
     )
     metrics = evaluate_response_model(
-        selected, heldout_batches, loss_fn=loss_fn, device=accelerator.device
+        selected,
+        heldout_batches,
+        loss_fn=loss_fn,
+        device=accelerator.device,
+        max_bag=stage1.train.max_bag,
     )
     _LOGGER.info(
         "held-out loss %.6f vs basal-copy floor %.6f",
@@ -410,6 +416,24 @@ def main(argv: list[str] | None = None) -> int:
                 "heldout_genes": {k: sorted(v) for k, v in heldout_scored.items()},
                 "anchor_lines": sorted(control_by_line),
                 "anchor_weights": anchor_weights,
+                "control_sampling": {
+                    model_id: {
+                        "distinct_count": int(
+                            bags.metadata.loc[
+                                bags.metadata["model_id"] == model_id,
+                                "control_distinct_cells",
+                            ].iloc[0]
+                        ),
+                        "sampled_count": int(len(control_by_line[model_id]["input"])),
+                        "padding_fraction": float(
+                            bags.metadata.loc[
+                                bags.metadata["model_id"] == model_id,
+                                "control_padding_fraction",
+                            ].iloc[0]
+                        ),
+                    }
+                    for model_id in sorted(control_by_line)
+                },
                 "esm2_unresolved_genes": unresolved,
                 "esm2_drop_fraction": drop_fraction,
                 "n_train_batches": len(train_batches),
