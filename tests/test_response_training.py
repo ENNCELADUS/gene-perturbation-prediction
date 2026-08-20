@@ -26,6 +26,7 @@ from aivc_model.response_training import (
     ResponseLossWeights,
     TrainingConfig,
     _GeneIndexDataset,
+    _heldout_model_losses,
     _is_better_metric,
     _pad_gene_indices,
     _per_anchor_mean_from_gathered,
@@ -161,6 +162,11 @@ def test_training_config_rejects_a_too_small_max_bag() -> None:
 def test_training_config_rejects_a_sub_one_gene_batch_size() -> None:
     with pytest.raises(ValueError, match="gene_batch_size"):
         TrainingConfig(gene_batch_size=0)
+
+
+def test_training_config_rejects_a_sub_one_validation_gene_batch_size() -> None:
+    with pytest.raises(ValueError, match="validation_gene_batch_size"):
+        TrainingConfig(validation_gene_batch_size=0)
 
 
 # --- even-step DDP sharding -----------------------------------------------
@@ -482,6 +488,71 @@ def test_training_reduces_the_loss_and_updates_the_module(tmp_path) -> None:
     assert not torch.allclose(before, model.shift.detach())
 
 
+def test_validation_uses_its_own_gene_batch_size(tmp_path) -> None:
+    class RecordingShiftModel(_ShiftModel):
+        def __init__(self, dim: int) -> None:
+            super().__init__(dim)
+            self.condition_counts: list[int] = []
+
+        def forward(self, chunks, gene, batch_index_chunks):
+            self.condition_counts.append(len(gene))
+            return super().forward(chunks, gene, batch_index_chunks)
+
+    model = RecordingShiftModel(3)
+    train_response_model(
+        model,
+        _batches(n=4),
+        _batches(n=4),
+        anchor_weights={"ACH-000551": 1.0},
+        out_dir=tmp_path,
+        config=TrainingConfig(
+            max_epochs=1,
+            patience=1,
+            max_bag=16,
+            gene_batch_size=4,
+            validation_gene_batch_size=1,
+            log_every=0,
+        ),
+    )
+
+    assert model.condition_counts == [4, 1, 1, 1, 1]
+
+
+def test_validation_losses_are_identical_for_batch_one_and_batch_many() -> None:
+    model = _ShiftModel(3)
+    records = _batches(n=4)
+    loss_fn = ResponseLoss()
+    batched = _heldout_model_losses(
+        model, records, loss_fn, torch.device("cpu"), max_bag=16
+    )[0]
+    separate = [
+        _heldout_model_losses(
+            model, [record], loss_fn, torch.device("cpu"), max_bag=16
+        )[0][0]
+        for record in records
+    ]
+
+    assert [float(loss.detach()) for loss in batched] == pytest.approx(
+        [float(loss.detach()) for loss in separate]
+    )
+
+
+def test_training_rejects_a_non_fixed_control_bag_before_fitting(tmp_path) -> None:
+    heldout = _batches(n=1)
+    heldout[0]["control"] = _bag(17, 3)
+    heldout[0]["control_target"] = heldout[0]["control"]
+
+    with pytest.raises(ValueError, match="fixed control bag must contain exactly 16"):
+        train_response_model(
+            _ShiftModel(3),
+            _batches(n=1),
+            heldout,
+            anchor_weights={"ACH-000551": 1.0},
+            out_dir=tmp_path,
+            config=TrainingConfig(max_epochs=1, max_bag=16),
+        )
+
+
 def test_training_rejects_an_empty_train_batch_list(tmp_path) -> None:
     with pytest.raises(ValueError, match="no response batches"):
         train_response_model(
@@ -677,6 +748,20 @@ def test_evaluate_handles_bags_that_do_not_divide_the_window() -> None:
         batch["observed"] = batch["control"] + 1.5
     report = evaluate_response_model(model, batches)
     assert np.isfinite(report["model_loss"])
+
+
+def test_evaluate_caps_observed_bags_at_the_protocol_size() -> None:
+    model = _ShiftModel(3)
+    oversized = _batches(n=2)
+    for batch in oversized:
+        batch["observed"] = _bag(21, 3, offset=1.5)
+    trimmed = [{**batch, "observed": batch["observed"][:16]} for batch in oversized]
+
+    actual = evaluate_response_model(model, oversized, max_bag=16)
+    expected = evaluate_response_model(model, trimmed, max_bag=16)
+
+    assert actual["model_loss"] == pytest.approx(expected["model_loss"])
+    assert actual["null_shuffle_loss"] == pytest.approx(expected["null_shuffle_loss"])
 
 
 class _ForwardOnlyProxy(nn.Module):

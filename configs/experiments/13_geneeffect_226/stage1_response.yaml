@@ -13,6 +13,7 @@ train:
   weight_decay: 0.01
   max_bag: 128
   gene_batch_size: 32
+  validation_gene_batch_size: 1
   grad_clip: 1.0
   train_seed: 20260818
   collator_seed: 20260818

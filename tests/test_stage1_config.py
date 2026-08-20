@@ -16,6 +16,7 @@ train:
   weight_decay: 0.01
   max_bag: 128
   gene_batch_size: 32
+  validation_gene_batch_size: 1
   grad_clip: 1.0
   train_seed: 20260818
   collator_seed: 20260818
@@ -71,6 +72,7 @@ def test_valid_config_loads(tmp_path: Path) -> None:
     assert cfg.train.patience == 5
     assert cfg.train.float32_matmul_precision == "high"
     assert cfg.train.gene_batch_size == 32
+    assert cfg.train.validation_gene_batch_size == 1
     assert cfg.train.total_cells_per_line is None
     assert dict(cfg.objective.anchor_weights) == {
         "ACH-000551": 0.25,
@@ -172,6 +174,17 @@ def test_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
     bad_train = VALID_TRAIN_BLOCK.replace("gene_batch_size: 32", "gene_batch_size: 0")
     p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
     with pytest.raises(ValueError, match="gene_batch_size"):
+        load_stage1_config(p)
+
+
+def test_validation_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
+    from aivc_model.stage1_config import load_stage1_config
+
+    bad_train = VALID_TRAIN_BLOCK.replace(
+        "validation_gene_batch_size: 1", "validation_gene_batch_size: 0"
+    )
+    p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
+    with pytest.raises(ValueError, match="validation_gene_batch_size"):
         load_stage1_config(p)
 
 
