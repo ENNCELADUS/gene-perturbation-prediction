@@ -110,9 +110,11 @@ def _obs(n_cells: int) -> pd.DataFrame:
     )
 
 
-def _write_registry_h5ad(path: Path, *, value: int = 1) -> None:
+def _write_registry_h5ad(
+    path: Path, *, value: int = 1, dtype: np.dtype = np.dtype(np.int32)
+) -> None:
     ad.AnnData(
-        X=np.asarray([[value, 0], [0, value], [value, value]], dtype=np.int32),
+        X=np.asarray([[value, 0], [0, value], [value, value]], dtype=dtype),
         obs=pd.DataFrame(
             {"model_id": ["ACH-A"] * 3},
             index=["cell-c", "cell-a", "cell-b"],
@@ -125,6 +127,34 @@ def _write_registry_h5ad(path: Path, *, value: int = 1) -> None:
             index=["one", "two"],
         ),
     ).write_h5ad(path)
+
+
+def test_registry_uint16_counts_are_promoted_before_encoding(tmp_path: Path) -> None:
+    source = tmp_path / "ACH-A.h5ad"
+    _write_registry_h5ad(source, dtype=np.dtype(np.uint16))
+    registry = pd.DataFrame(
+        {
+            "source_path": [str(source)],
+            "source_kind": ["h5ad"],
+            "matrix_semantics": ["raw_umi_counts"],
+        },
+        index=pd.Index(["ACH-A"], name="model_id"),
+    )
+    state_dir = _write_var_dims(tmp_path / "state", ["GENE1", "GENE2"])
+    observed_dtypes: list[np.dtype] = []
+
+    def encoder(adata: ad.AnnData) -> np.ndarray:
+        observed_dtypes.append(adata.X.dtype)
+        return np.zeros((adata.n_obs, EMBEDDING_WIDTH), dtype=np.float32)
+
+    embed_registry_lines(
+        registry,
+        tmp_path / "cache",
+        encoder=encoder,
+        hvg_state_model_dir=state_dir,
+        var_ensembl_col="gene_id",
+    )
+    assert observed_dtypes == [np.dtype(np.float32)]
 
 
 class _CountingEncoder:
