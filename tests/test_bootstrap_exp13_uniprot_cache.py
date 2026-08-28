@@ -40,7 +40,7 @@ def test_build_cache_resolves_primary_sequence_and_explicit_alias(
     pd.DataFrame(
         {
             "Entry": ["P1", "P2", "P3", "P4"],
-            "Gene Names (primary)": ["DIRECT", "NEW", "OTHER", "DIRECT"],
+            "Gene Names (primary)": ["DIRECT", "NEW", "OTHER", "OTHER2"],
             "Sequence": ["MA", "MB", "MB", "MX"],
         }
     ).to_csv(tmp_path / "sequences.tsv", sep="\t", index=False)
@@ -48,11 +48,11 @@ def test_build_cache_resolves_primary_sequence_and_explicit_alias(
         {
             "Entry": ["P1", "P2", "P3", "P4"],
             "Entry Name": ["D_HUMAN", "N_HUMAN", "O_HUMAN", "DX_HUMAN"],
-            "Gene Names (primary)": ["DIRECT", "NEW", "OTHER", "DIRECT"],
+            "Gene Names (primary)": ["DIRECT", "NEW", "OTHER", "OTHER2"],
         }
     ).to_csv(tmp_path / "identities.tsv", sep="\t", index=False)
     (tmp_path / "legacy.json").write_text(
-        json.dumps({"DIRECT": "MA", "OLD": "MB", "AMBIG": "MB"})
+        json.dumps({"OLD": "MB", "AMBIG": "MB"})
     )
     (tmp_path / "aliases.json").write_text(
         json.dumps({"OLD": "P3", "AMBIG": "P2"})

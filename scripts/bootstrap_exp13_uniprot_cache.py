@@ -178,6 +178,8 @@ def build_cache(
                 for candidate in candidates
                 if sequence_by_accession[candidate] == legacy_sequence
             ]
+            if len(candidates) == 1:
+                matches = candidates
             if len(matches) != 1:
                 raise ValueError(
                     f"symbol {symbol} requires an explicit accession alias; "
