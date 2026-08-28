@@ -1591,6 +1591,18 @@ def _resolve_hvg_matrix(
         from ``adata`` and zero-filled.
     """
     checkpoint_names = load_hvg_gene_order(hvg_state_model_dir)
+    if gene_symbol_col == "auto":
+        candidates = [
+            name
+            for name in ("gene_symbol", "gene_symbols", "gene_name")
+            if name in adata.var.columns
+        ]
+        if len(candidates) != 1:
+            raise ValueError(
+                "basal AnnData var must contain exactly one recognized HVG symbol "
+                f"column in auto mode, found {candidates}"
+            )
+        gene_symbol_col = candidates[0]
     if gene_symbol_col not in adata.var.columns:
         raise ValueError(
             f"basal AnnData var is missing HVG symbol column {gene_symbol_col!r}"
