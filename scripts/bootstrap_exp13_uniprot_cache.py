@@ -152,10 +152,13 @@ def build_cache(
     legacy = {key.upper(): value for key, value in legacy.items()}
     aliases = json.loads(aliases_json.read_text(encoding="utf-8"))
     if not isinstance(aliases, dict) or not all(
-        isinstance(key, str) and isinstance(value, str)
+        isinstance(key, str)
+        and isinstance(value, dict)
+        and set(value) == {"accession", "primary_symbol", "sequence_sha256"}
+        and all(isinstance(field, str) for field in value.values())
         for key, value in aliases.items()
     ):
-        raise ValueError("accession aliases must be a string mapping")
+        raise ValueError("accession aliases have invalid identity records")
     aliases = {key.upper(): value for key, value in aliases.items()}
 
     accessions_by_sequence: dict[str, list[str]] = {}
@@ -166,9 +169,8 @@ def build_cache(
     for symbol in symbols:
         legacy_sequence = legacy.get(symbol)
         if symbol in aliases:
-            if not legacy_sequence:
-                raise ValueError(f"symbol {symbol}: alias lacks a legacy sequence")
-            accession = aliases[symbol]
+            alias = aliases[symbol]
+            accession = alias["accession"]
         else:
             candidates = primary_accessions.get(symbol)
             if candidates is None:
@@ -195,7 +197,20 @@ def build_cache(
             != sequence_symbol_by_accession[accession]
         ):
             raise ValueError(f"symbol {symbol}: reviewed source identity mismatch")
-        if symbol in aliases and sequence_by_accession[accession] != legacy_sequence:
+        if symbol in aliases and (
+            sequence_symbol_by_accession[accession] != alias["primary_symbol"].upper()
+        ):
+            raise ValueError(f"symbol {symbol}: alias primary symbol mismatch")
+        sequence_sha256 = hashlib.sha256(
+            sequence_by_accession[accession].encode("utf-8")
+        ).hexdigest()
+        if symbol in aliases and sequence_sha256 != alias["sequence_sha256"]:
+            raise ValueError(f"symbol {symbol}: alias sequence SHA-256 mismatch")
+        if (
+            symbol in aliases
+            and legacy_sequence
+            and sequence_by_accession[accession] != legacy_sequence
+        ):
             raise ValueError(
                 f"symbol {symbol}: accession sequence differs from legacy cache"
             )

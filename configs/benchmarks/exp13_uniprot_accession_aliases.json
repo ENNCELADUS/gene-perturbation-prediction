@@ -1,6 +1,22 @@
 {
-  "GPR89A": "B7ZAQ6",
-  "GPR89B": "P0CG08",
-  "H3C4": "P68431",
-  "TMEM262": "E9PQX1"
+  "GPR89A": {
+    "accession": "B7ZAQ6",
+    "primary_symbol": "GPHRA",
+    "sequence_sha256": "00170e66146791f9baeb3a7aa19aed407ccfde16e32bb2fa0ad451b0045c91fc"
+  },
+  "GPR89B": {
+    "accession": "P0CG08",
+    "primary_symbol": "GPHRB",
+    "sequence_sha256": "00170e66146791f9baeb3a7aa19aed407ccfde16e32bb2fa0ad451b0045c91fc"
+  },
+  "H3C4": {
+    "accession": "P68431",
+    "primary_symbol": "H3C1; H3C2; H3C3; H3C4; H3C6; H3C7; H3C8; H3C10; H3C11; H3C12",
+    "sequence_sha256": "1fb6acc65c96cc143b2f8a65b5a89da2d19b99d5e8bfbd8d5d81d4ad38ce4e72"
+  },
+  "TMEM262": {
+    "accession": "E9PQX1",
+    "primary_symbol": "CATSPERH",
+    "sequence_sha256": "84f03fc623111a51bb3009f4ca37992d8ba98493dcece712dba59957b6c45520"
+  }
 }
