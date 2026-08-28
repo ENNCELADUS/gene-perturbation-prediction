@@ -143,3 +143,48 @@ def test_build_cache_rejects_valid_alias_with_wrong_sequence(tmp_path: Path) -> 
             source_manifest=source_manifest,
             output=tmp_path / "cache.json",
         )
+
+
+def test_build_cache_rejects_unique_direct_with_conflicting_legacy(
+    tmp_path: Path,
+) -> None:
+    pd.DataFrame({"gene_symbol": ["DIRECT"]}).to_csv(
+        tmp_path / "union.csv", index=False
+    )
+    pd.DataFrame(
+        {
+            "Entry": ["P1"],
+            "Gene Names (primary)": ["DIRECT"],
+            "Sequence": ["MA"],
+        }
+    ).to_csv(tmp_path / "sequences.tsv", sep="\t", index=False)
+    pd.DataFrame(
+        {
+            "Entry": ["P1"],
+            "Entry Name": ["D_HUMAN"],
+            "Gene Names (primary)": ["DIRECT"],
+        }
+    ).to_csv(tmp_path / "identities.tsv", sep="\t", index=False)
+    (tmp_path / "legacy.json").write_text(json.dumps({"DIRECT": "MX"}))
+    (tmp_path / "aliases.json").write_text("{}")
+    source_manifest = _write_source_manifest(
+        tmp_path,
+        {
+            "union_csv": tmp_path / "union.csv",
+            "sequence_tsv": tmp_path / "sequences.tsv",
+            "identity_tsv": tmp_path / "identities.tsv",
+            "legacy_cache": tmp_path / "legacy.json",
+            "aliases_json": tmp_path / "aliases.json",
+        },
+    )
+
+    with pytest.raises(ValueError, match="requires an explicit accession alias"):
+        build_cache(
+            union_csv=tmp_path / "union.csv",
+            sequence_tsv=tmp_path / "sequences.tsv",
+            identity_tsv=tmp_path / "identities.tsv",
+            legacy_cache=tmp_path / "legacy.json",
+            aliases_json=tmp_path / "aliases.json",
+            source_manifest=source_manifest,
+            output=tmp_path / "cache.json",
+        )
