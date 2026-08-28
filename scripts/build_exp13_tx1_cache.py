@@ -143,7 +143,7 @@ def parse_args() -> argparse.Namespace:
         default=Path("results/phase_a_tx1_20260724/phase_a_registration.json"),
     )
     parser.add_argument("--var-ensembl-col")
-    parser.add_argument("--hvg-gene-symbol-col", default="gene_symbol")
+    parser.add_argument("--hvg-gene-symbol-col", default="auto")
     parser.add_argument("--max-cells-per-line", type=int, default=128)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=32)
