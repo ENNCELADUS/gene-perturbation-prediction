@@ -15,6 +15,49 @@ import pandas as pd
 
 SCHEMA_VERSION = "uniprot-sequence-cache-v2"
 ISOFORM_POLICY = "canonical_reviewed_top_hit"
+SOURCE_SCHEMA_VERSION = "exp13-uniprot-offline-sources-v1"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _authenticate_sources(
+    source_manifest: Path, artifacts: dict[str, Path]
+) -> dict[str, object]:
+    payload = json.loads(source_manifest.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("offline source manifest must be an object")
+    if payload.get("schema_version") != SOURCE_SCHEMA_VERSION:
+        raise ValueError("offline source manifest schema mismatch")
+    if payload.get("reviewed") is not True or payload.get("taxonomy_id") != 9606:
+        raise ValueError("offline source manifest must bind reviewed human UniProt")
+    if payload.get("uniprot_query") != "reviewed:true AND organism_id:9606":
+        raise ValueError("offline source manifest UniProt query mismatch")
+    expected = payload.get("artifacts")
+    if not isinstance(expected, dict) or set(expected) != set(artifacts):
+        raise ValueError("offline source manifest artifact membership mismatch")
+    observed_hashes: dict[str, str] = {}
+    for name, path in artifacts.items():
+        record = expected.get(name)
+        if not isinstance(record, dict) or not isinstance(record.get("sha256"), str):
+            raise ValueError(f"offline source manifest lacks {name} SHA-256")
+        observed = _sha256_file(path)
+        if observed != record["sha256"]:
+            raise ValueError(f"offline source artifact SHA-256 mismatch: {name}")
+        observed_hashes[name] = observed
+    return {
+        "schema_version": SOURCE_SCHEMA_VERSION,
+        "manifest_sha256": _sha256_file(source_manifest),
+        "reviewed": True,
+        "taxonomy_id": 9606,
+        "uniprot_query": "reviewed:true AND organism_id:9606",
+        "artifact_sha256": observed_hashes,
+    }
 
 
 def _atomic_write_json(path: Path, payload: object) -> None:
@@ -34,6 +77,7 @@ def build_cache(
     identity_tsv: Path,
     legacy_cache: Path,
     aliases_json: Path,
+    source_manifest: Path,
     output: Path,
 ) -> dict[str, object]:
     if output.exists():
@@ -45,6 +89,16 @@ def build_cache(
     )
     if not symbols or len(symbols) != len(set(symbols)):
         raise ValueError("union gene symbols must be non-empty and unique")
+    source_provenance = _authenticate_sources(
+        source_manifest,
+        {
+            "union_csv": union_csv,
+            "sequence_tsv": sequence_tsv,
+            "identity_tsv": identity_tsv,
+            "legacy_cache": legacy_cache,
+            "aliases_json": aliases_json,
+        },
+    )
 
     sequences = pd.read_csv(sequence_tsv, sep="\t")
     required_sequence = {"Entry", "Gene Names (primary)", "Sequence"}
@@ -65,6 +119,9 @@ def build_cache(
     identities = identities.dropna(subset=["Entry", "Entry Name"]).copy()
     identities["Entry"] = identities["Entry"].astype(str)
     identities["Entry Name"] = identities["Entry Name"].astype(str)
+    identities["Gene Names (primary)"] = (
+        identities["Gene Names (primary)"].astype(str).str.upper()
+    )
     if identities["Entry"].duplicated().any():
         raise ValueError("reviewed identity TSV has duplicate accessions")
 
@@ -74,6 +131,12 @@ def build_cache(
     entry_id_by_accession = (
         identities.set_index("Entry")["Entry Name"].astype(str).to_dict()
     )
+    identity_symbol_by_accession = identities.set_index("Entry")[
+        "Gene Names (primary)"
+    ].to_dict()
+    sequence_symbol_by_accession = sequences.set_index("Entry")[
+        "Gene Names (primary)"
+    ].to_dict()
     primary_accessions: dict[str, list[str]] = {}
     for accession, symbol in sequences[["Entry", "Gene Names (primary)"]].itertuples(
         index=False, name=None
@@ -102,9 +165,9 @@ def build_cache(
     resolved: dict[str, str] = {}
     for symbol in symbols:
         legacy_sequence = legacy.get(symbol)
-        if not legacy_sequence:
-            raise ValueError(f"symbol {symbol}: legacy sequence is missing")
         if symbol in aliases:
+            if not legacy_sequence:
+                raise ValueError(f"symbol {symbol}: alias lacks a legacy sequence")
             accession = aliases[symbol]
         else:
             candidates = primary_accessions.get(symbol)
@@ -125,7 +188,12 @@ def build_cache(
             raise ValueError(f"symbol {symbol}: accession lacks reviewed sequence")
         if accession not in entry_id_by_accession:
             raise ValueError(f"symbol {symbol}: accession lacks reviewed entry ID")
-        if sequence_by_accession[accession] != legacy_sequence:
+        if (
+            identity_symbol_by_accession[accession]
+            != sequence_symbol_by_accession[accession]
+        ):
+            raise ValueError(f"symbol {symbol}: reviewed source identity mismatch")
+        if symbol in aliases and sequence_by_accession[accession] != legacy_sequence:
             raise ValueError(
                 f"symbol {symbol}: accession sequence differs from legacy cache"
             )
@@ -144,7 +212,11 @@ def build_cache(
         }
         for symbol, accession in resolved.items()
     }
-    payload = {"schema_version": SCHEMA_VERSION, "records": records}
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "source_provenance": source_provenance,
+        "records": records,
+    }
     _atomic_write_json(output, payload)
     return {
         "status": "built",
@@ -162,6 +234,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--identity-tsv", type=Path, required=True)
     parser.add_argument("--legacy-cache", type=Path, required=True)
     parser.add_argument("--aliases-json", type=Path, required=True)
+    parser.add_argument("--source-manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args(argv)
 
