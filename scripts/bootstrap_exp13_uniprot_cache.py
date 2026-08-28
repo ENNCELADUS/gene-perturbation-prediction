@@ -180,7 +180,7 @@ def build_cache(
                 for candidate in candidates
                 if sequence_by_accession[candidate] == legacy_sequence
             ]
-            if len(candidates) == 1:
+            if len(candidates) == 1 and legacy_sequence is None:
                 matches = candidates
             if len(matches) != 1:
                 raise ValueError(
