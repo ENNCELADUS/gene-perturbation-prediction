@@ -27,6 +27,9 @@ SPLIT_SCHEMA_VERSION: Final = "cell-line-geneeffect-226-split-v1"
 PINNED_SPLIT_SHA256: Final = (
     "1c91d3a821f50bb5aadfb9fac86b889311e194380c64b484463c1f437c41ed72"
 )
+PINNED_COPY_PRIOR_SHA256: Final = (
+    "b9a20999cdfdf94fd88f004d0d661e3e6d3c3214b9f8ed1b1ad9a0c276d3f785"
+)
 _REGISTRY_COLUMNS: Final = (
     "model_id",
     "source_path",

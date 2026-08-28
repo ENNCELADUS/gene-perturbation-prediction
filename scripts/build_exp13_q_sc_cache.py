@@ -18,6 +18,7 @@ import pandas as pd
 from aivc_model.esm2_provenance import load_and_authenticate_esm2_provenance
 from aivc_model.gene_embeddings import load_esm2_embeddings
 from aivc_model.geneeffect_data import (
+    PINNED_COPY_PRIOR_SHA256,
     build_q_sc_shards,
     build_scored_universe,
     load_exp13_split,
@@ -138,8 +139,9 @@ def build_or_verify_q_sc_cache(
         (labels["model_id"] == "ACH-000551") & labels["gene_effect"].notna()
     ]
     copy_symbols = tuple(copy_prior["gene_symbol"].astype(str))
-    if copy_symbols != tuple(donor["gene_symbol"].astype(str)) or not np.array_equal(
-        copy_values.to_numpy(dtype=float), donor["gene_effect"].to_numpy(dtype=float)
+    if (
+        copy_symbols != tuple(donor["gene_symbol"].astype(str))
+        or _sha256(copy_prior_path) != PINNED_COPY_PRIOR_SHA256
     ):
         raise ValueError("copy-prior CSV does not match the pinned K562 donor row")
     universe = restrict_scored_universe_to_copy_prior(universe, copy_symbols)

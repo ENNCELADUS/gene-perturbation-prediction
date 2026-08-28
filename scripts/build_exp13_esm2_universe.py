@@ -20,6 +20,7 @@ import torch
 
 from aivc_model.geneeffect_data import (
     Exp13Split,
+    PINNED_COPY_PRIOR_SHA256,
     load_exp13_split,
     load_geneeffect_long,
 )
@@ -211,11 +212,8 @@ def load_authenticated_copy_prior_symbols(
     donor = labels.loc[
         (labels["model_id"] == "ACH-000551") & labels["gene_effect"].notna()
     ]
-    if symbols != tuple(donor["gene_symbol"].astype(str)) or not np.allclose(
-        values.to_numpy(dtype=float),
-        donor["gene_effect"].to_numpy(dtype=float),
-        rtol=0.0,
-        atol=1e-12,
+    if symbols != tuple(donor["gene_symbol"].astype(str)) or (
+        _sha256(copy_prior_path) != PINNED_COPY_PRIOR_SHA256
     ):
         raise ValueError("copy-prior CSV does not match pinned K562 donor row")
     if output_record.get("gene_symbols_sha256") != _symbols_sha256(symbols):

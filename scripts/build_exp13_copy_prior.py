@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from aivc_model.geneeffect_data import (
+    PINNED_COPY_PRIOR_SHA256,
     PINNED_SPLIT_SHA256,
     load_exp13_split,
     parse_gene_symbol,
@@ -117,6 +118,10 @@ def materialize_copy_prior(
     try:
         output.to_csv(temporary_output, index=False)
         output_sha256 = _sha256(temporary_output)
+        if output_sha256 != PINNED_COPY_PRIOR_SHA256:
+            raise ValueError(
+                "materialized copy-prior does not match the pinned artifact SHA-256"
+            )
         manifest: dict[str, object] = {
             "schema_version": SCHEMA_VERSION,
             "donor": {

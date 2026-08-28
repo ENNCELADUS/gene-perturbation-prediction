@@ -134,14 +134,23 @@ def _inputs(tmp_path: Path) -> dict[str, Path]:
     }
 
 
+def _patch_pinned_inputs(
+    monkeypatch: pytest.MonkeyPatch, paths: dict[str, Path]
+) -> None:
+    monkeypatch.setattr(
+        cli, "PINNED_GENE_EFFECT_SHA256", cli._sha256(paths["gene_effect"])
+    )
+    monkeypatch.setattr(
+        cli, "PINNED_COPY_PRIOR_SHA256", cli._sha256(paths["copy_prior"])
+    )
+
+
 def test_builds_then_unrestricted_verifies_coverage_qualified_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _inputs(tmp_path)
     monkeypatch.setattr(cli, "load_exp13_split", lambda _: _split())
-    monkeypatch.setattr(
-        cli, "PINNED_GENE_EFFECT_SHA256", cli._sha256(paths["gene_effect"])
-    )
+    _patch_pinned_inputs(monkeypatch, paths)
     monkeypatch.setattr(
         cli,
         "load_and_authenticate_esm2_provenance",
@@ -182,14 +191,50 @@ def test_builds_then_unrestricted_verifies_coverage_qualified_cache(
     assert report["verification"]["lines_present"] == len(_split().all_model_ids)
 
 
+def test_rejects_authenticated_copy_prior_csv_roundtrip_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _inputs(tmp_path)
+    _patch_pinned_inputs(monkeypatch, paths)
+    copy_prior = pd.read_csv(paths["copy_prior"])
+    copy_prior.loc[copy_prior["gene_symbol"] == "A", "gene_effect"] = 4e-16
+    copy_prior.to_csv(paths["copy_prior"], index=False)
+    copy_manifest = json.loads(paths["copy_prior_manifest"].read_text())
+    copy_manifest["output"]["sha256"] = cli._sha256(paths["copy_prior"])
+    paths["copy_prior_manifest"].write_text(json.dumps(copy_manifest))
+    universe = json.loads(paths["esm2_universe"].read_text())
+    universe["input_sha256"]["copy_prior"] = cli._sha256(paths["copy_prior"])
+    universe["input_sha256"]["copy_prior_manifest"] = cli._sha256(
+        paths["copy_prior_manifest"]
+    )
+    paths["esm2_universe"].write_text(json.dumps(universe))
+    monkeypatch.setattr(cli, "load_exp13_split", lambda _: _split())
+    monkeypatch.setattr(
+        cli,
+        "load_and_authenticate_esm2_provenance",
+        lambda *args, **kwargs: {"authenticated": True},
+    )
+
+    with pytest.raises(ValueError, match="pinned K562 donor row"):
+        cli.build_or_verify_q_sc_cache(
+            split_path=paths["split"],
+            gene_effect_path=paths["gene_effect"],
+            esm2_path=paths["esm2"],
+            esm2_universe_manifest_path=paths["esm2_universe"],
+            esm2_provenance_manifest_path=paths["esm2_provenance"],
+            copy_prior_path=paths["copy_prior"],
+            copy_prior_manifest_path=paths["copy_prior_manifest"],
+            registry_path=paths["registry"],
+            output_dir=paths["output"],
+        )
+
+
 def test_verify_only_never_builds_and_detects_extra_shard(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _inputs(tmp_path)
     monkeypatch.setattr(cli, "load_exp13_split", lambda _: _split())
-    monkeypatch.setattr(
-        cli, "PINNED_GENE_EFFECT_SHA256", cli._sha256(paths["gene_effect"])
-    )
+    _patch_pinned_inputs(monkeypatch, paths)
     monkeypatch.setattr(
         cli,
         "load_and_authenticate_esm2_provenance",
@@ -300,9 +345,7 @@ def test_rejects_tampered_final_universe_provenance(
 ) -> None:
     paths = _inputs(tmp_path)
     monkeypatch.setattr(cli, "load_exp13_split", lambda _: _split())
-    monkeypatch.setattr(
-        cli, "PINNED_GENE_EFFECT_SHA256", cli._sha256(paths["gene_effect"])
-    )
+    _patch_pinned_inputs(monkeypatch, paths)
     monkeypatch.setattr(
         cli,
         "load_and_authenticate_esm2_provenance",
