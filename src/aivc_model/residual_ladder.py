@@ -73,7 +73,7 @@ from aivc_model.residual_metrics import (
     bootstrap_delta,
     score_predictions,
 )
-from aivc_model.residual_target import ResidualTargets, fit_gene_means, to_matrix
+from aivc_model.residual_target import ResidualTargets, fit_gene_means
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -259,6 +259,174 @@ def _prepare_fold_context(
     return train_scaled, held_scaled, feature_columns
 
 
+def _prepare_fixed_context(
+    view: pd.DataFrame,
+    train_ids: list[str],
+    eval_ids: list[str],
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Fit one train-only scaler and transform every fixed-split eval line."""
+    feature_columns = list(view.columns)
+    train_raw = view.loc[train_ids, feature_columns].to_numpy(dtype=float)
+    spread = train_raw.max(axis=0) - train_raw.min(axis=0)
+    keep = spread > _FEATURE_CONSTANT_EPS
+    if not keep.any():
+        _LOGGER.warning("fixed split: no non-constant context features")
+        return None
+    train_raw = train_raw[:, keep]
+    eval_raw = view.loc[eval_ids, feature_columns].to_numpy(dtype=float)[:, keep]
+    scaler = StandardScaler().fit(train_raw)
+    train_scaled = scaler.transform(train_raw)
+    eval_scaled = scaler.transform(eval_raw)
+    if not np.isfinite(train_scaled).all() or not np.isfinite(eval_scaled).all():
+        raise ValueError("non-finite standardized context in fixed split")
+    return train_scaled, eval_scaled
+
+
+def _run_fixed_evals(
+    labels: pd.DataFrame,
+    train_lines: Sequence[str],
+    eval_specs: Sequence[tuple[str, str]],
+    mu_bar: pd.Series,
+    context_views: Mapping[str, pd.DataFrame],
+    copy_prior: pd.Series | None,
+    config: _LadderConfig,
+    effective_components: dict[str, dict[str, set[int]]],
+) -> list[dict]:
+    """Fit each fixed-split baseline once and batch-predict val plus test."""
+    rt = _build_fold_targets(labels, train_lines, config.min_lines)
+    train_ids = list(train_lines)
+    eval_ids = [held_out_id for _slice_name, held_out_id in eval_specs]
+    held_by_id = {
+        model_id: frame.set_index("gene_symbol")
+        for model_id, frame in rt.long.loc[
+            rt.long["model_id"].isin(eval_ids)
+        ].groupby("model_id", sort=False)
+    }
+    missing_labels = sorted(set(eval_ids) - set(held_by_id))
+    if missing_labels:
+        raise ValueError(f"fixed split has no surviving labels for {missing_labels}")
+
+    rows: list[dict] = []
+    for slice_name, held_out_id in eval_specs:
+        rows.extend(_gene_mean_rows(slice_name, rt, held_out_id))
+        if copy_prior is not None:
+            rows.extend(
+                _copy_prior_rows(slice_name, rt, held_out_id, copy_prior, mu_bar)
+            )
+
+    train_label_rows = rt.long.loc[rt.long["model_id"].isin(train_ids)]
+    train_by_gene = {
+        gene: frame.set_index("model_id")[["gene_effect", "residual"]]
+        for gene, frame in train_label_rows.groupby("gene_symbol", sort=False)
+    }
+    eval_row_by_id = {model_id: index for index, model_id in enumerate(eval_ids)}
+
+    for view_name, view in context_views.items():
+        view_ids = set(view.index)
+        missing_eval = sorted(set(eval_ids) - view_ids)
+        if missing_eval:
+            raise ValueError(
+                f"context view {view_name!r} lacks fixed-split eval rows: "
+                f"{missing_eval}"
+            )
+        context_train_ids = [model_id for model_id in train_ids if model_id in view_ids]
+        if len(context_train_ids) < _MIN_TRAIN_LINES_FOR_CONTEXT:
+            raise ValueError(
+                f"context view {view_name!r} has too few fixed-split train rows"
+            )
+        prepared = _prepare_fixed_context(view, context_train_ids, eval_ids)
+        if prepared is None:
+            continue
+        train_scaled, eval_scaled = prepared
+        context_row_by_id = {
+            model_id: index for index, model_id in enumerate(context_train_ids)
+        }
+
+        distances = np.linalg.norm(
+            eval_scaled[:, np.newaxis, :] - train_scaled[np.newaxis, :, :], axis=2
+        )
+        donor_orders = np.argsort(distances, axis=1, kind="stable")
+        nearest_method = _view_method_name(NEAREST_LINE, view_name)
+        for slice_name, held_out_id in eval_specs:
+            held = held_by_id[held_out_id]
+            donor_order = donor_orders[eval_row_by_id[held_out_id]]
+            for gene in held.index:
+                gene_train = train_by_gene[gene]
+                donor_id = next(
+                    (
+                        context_train_ids[index]
+                        for index in donor_order
+                        if context_train_ids[index] in gene_train.index
+                    ),
+                    None,
+                )
+                if donor_id is None:
+                    raise ValueError(
+                        f"nearest_line[{view_name}]: no labeled train donor for {gene}"
+                    )
+                prediction = float(gene_train.loc[donor_id, "gene_effect"]) - float(
+                    mu_bar.loc[gene]
+                )
+                rows.append(
+                    _row(
+                        slice_name,
+                        held_out_id,
+                        nearest_method,
+                        held,
+                        gene,
+                        prediction,
+                    )
+                )
+
+        n_train, n_features = train_scaled.shape
+        n_components = min(config.pca_components, n_train - 1, n_features)
+        if n_components < 1:
+            continue
+        pca = PCA(n_components=n_components, svd_solver="full").fit(train_scaled)
+        train_pcs = pca.transform(train_scaled)
+        eval_pcs = pca.transform(eval_scaled)
+        ridge_method = _view_method_name(CONTEXT_PCA_RIDGE, view_name)
+        eval_genes = set().union(*(set(held.index) for held in held_by_id.values()))
+        for gene in rt.gene_mean.index:
+            if gene not in eval_genes:
+                continue
+            gene_rows = train_by_gene[gene]
+            gene_rows = gene_rows.loc[gene_rows.index.isin(context_row_by_id)]
+            if len(gene_rows) < _MIN_TRAIN_LINES_FOR_CONTEXT:
+                raise ValueError(
+                    f"context_pca_ridge[{view_name}]: gene {gene} has fewer than "
+                    f"{_MIN_TRAIN_LINES_FOR_CONTEXT} labeled context-train lines"
+                )
+            indices = [
+                context_row_by_id[model_id] for model_id in gene_rows.index
+            ]
+            targets = gene_rows["residual"].to_numpy(dtype=float)
+            ridge = Ridge(alpha=config.ridge_alpha).fit(train_pcs[indices], targets)
+            gene_predictions = np.asarray(ridge.predict(eval_pcs), dtype=float)
+            if not np.isfinite(gene_predictions).all():
+                raise ValueError(
+                    f"invalid fixed-split ridge prediction: {view_name}/{gene}"
+                )
+            for slice_name, held_out_id in eval_specs:
+                held = held_by_id[held_out_id]
+                if gene in held.index:
+                    rows.append(
+                        _row(
+                            slice_name,
+                            held_out_id,
+                            ridge_method,
+                            held,
+                            gene,
+                            gene_predictions[eval_row_by_id[held_out_id]],
+                        )
+                    )
+        for slice_name, _held_out_id in eval_specs:
+            effective_components.setdefault(slice_name, {}).setdefault(
+                view_name, set()
+            ).add(n_components)
+    return rows
+
+
 def _nearest_line_rows(
     slice_name: str,
     rt: ResidualTargets,
@@ -269,16 +437,40 @@ def _nearest_line_rows(
     held_scaled: np.ndarray,
     mu_bar: pd.Series,
 ) -> list[dict]:
-    """nearest_line rows: delta_hat = y_neighbor - mu_bar_g (fold-independent)."""
+    """Use the nearest context among the labeled donors for each held gene."""
     distances = np.linalg.norm(train_scaled - held_scaled, axis=1)
-    nearest_id = fold_train_ids[int(np.argmin(distances))]
     held = rt.long.loc[rt.long["model_id"] == held_out_id].set_index("gene_symbol")
-    nearest_raw = rt.long.loc[rt.long["model_id"] == nearest_id]
-    nearest_raw = nearest_raw.set_index("gene_symbol")
-    genes = held.index.intersection(nearest_raw.index).intersection(mu_bar.index)
-    delta = nearest_raw.loc[genes, "gene_effect"] - mu_bar.loc[genes]
+    train_labels = rt.long.loc[rt.long["model_id"].isin(fold_train_ids)].set_index(
+        ["model_id", "gene_symbol"]
+    )
     method = _view_method_name(NEAREST_LINE, view_name)
-    return [_row(slice_name, held_out_id, method, held, g, delta.loc[g]) for g in genes]
+    rows: list[dict] = []
+    for gene in held.index:
+        if gene not in mu_bar.index:
+            raise ValueError(f"nearest_line[{view_name}]: missing mu_bar for {gene}")
+        donor_indices = [
+            index
+            for index, model_id in enumerate(fold_train_ids)
+            if (model_id, gene) in train_labels.index
+        ]
+        if not donor_indices:
+            raise ValueError(
+                f"nearest_line[{view_name}]: no labeled train donor for {gene}"
+            )
+        nearest_index = min(donor_indices, key=lambda index: distances[index])
+        nearest_id = fold_train_ids[nearest_index]
+        neighbor_effect = float(train_labels.loc[(nearest_id, gene), "gene_effect"])
+        rows.append(
+            _row(
+                slice_name,
+                held_out_id,
+                method,
+                held,
+                gene,
+                neighbor_effect - float(mu_bar.loc[gene]),
+            )
+        )
+    return rows
 
 
 def _context_pca_ridge_rows(
@@ -312,29 +504,32 @@ def _context_pca_ridge_rows(
     if not np.isfinite(train_pcs).all() or not np.isfinite(held_pcs).all():
         raise ValueError(f"context PCA is degenerate for line {held_out_id}")
 
-    gene_order = rt.gene_mean.index
-    fold_train_rows = rt.long.loc[rt.long["model_id"].isin(fold_train_ids)]
-    wide = to_matrix(
-        fold_train_rows[["model_id", "gene_symbol", "residual"]], "residual"
-    ).reindex(index=gene_order, columns=fold_train_ids)
-    if wide.isna().any().any():
-        raise ValueError(f"incomplete residual matrix: {held_out_id}/{view_name}")
-    train_residual = wide.to_numpy(dtype=float).T  # (n_train_lines, n_genes)
-
-    ridge = Ridge(alpha=config.ridge_alpha).fit(train_pcs, train_residual)
-    prediction = np.asarray(ridge.predict(held_pcs), dtype=float).reshape(-1)
-    ok = prediction.shape[0] == len(gene_order) and np.isfinite(prediction).all()
-    if not ok:
-        raise ValueError(f"invalid ridge prediction: {held_out_id}/{view_name}")
-    pred_by_gene = dict(zip(gene_order, prediction, strict=True))
-
     held = rt.long.loc[rt.long["model_id"] == held_out_id].set_index("gene_symbol")
-    genes_present = [g for g in gene_order if g in held.index]
+    gene_order = [gene for gene in rt.gene_mean.index if gene in held.index]
+    fold_train_rows = rt.long.loc[rt.long["model_id"].isin(fold_train_ids)]
     method = _view_method_name(CONTEXT_PCA_RIDGE, view_name)
-    rows = [
-        _row(slice_name, held_out_id, method, held, g, pred_by_gene[g])
-        for g in genes_present
-    ]
+    row_by_model_id = {model_id: index for index, model_id in enumerate(fold_train_ids)}
+    rows: list[dict] = []
+    for gene in gene_order:
+        gene_rows = fold_train_rows.loc[
+            fold_train_rows["gene_symbol"] == gene,
+            ["model_id", "residual"],
+        ]
+        gene_rows = gene_rows.loc[gene_rows["model_id"].isin(row_by_model_id)]
+        if len(gene_rows) < _MIN_TRAIN_LINES_FOR_CONTEXT:
+            raise ValueError(
+                f"context_pca_ridge[{view_name}]: gene {gene} has fewer than "
+                f"{_MIN_TRAIN_LINES_FOR_CONTEXT} labeled context-train lines"
+            )
+        indices = [row_by_model_id[model_id] for model_id in gene_rows["model_id"]]
+        targets = gene_rows["residual"].to_numpy(dtype=float)
+        ridge = Ridge(alpha=config.ridge_alpha).fit(train_pcs[indices], targets)
+        prediction = float(np.asarray(ridge.predict(held_pcs)).reshape(-1)[0])
+        if not np.isfinite(prediction):
+            raise ValueError(
+                f"invalid ridge prediction: {held_out_id}/{view_name}/{gene}"
+            )
+        rows.append(_row(slice_name, held_out_id, method, held, gene, prediction))
     return rows, n_components
 
 
@@ -566,6 +761,7 @@ def run_r1_ladder(
     config = _LadderConfig(pca_components, ridge_alpha, min_lines)
 
     slice_specs: dict[str, list[tuple[list[str], str]]]
+    fixed_train_lines: tuple[str, ...] | None = None
     if outer == "lolo":
         lines = sorted(labels["model_id"].unique())
         if len(lines) < 3:
@@ -580,6 +776,7 @@ def run_r1_ladder(
         if split is None:
             raise ValueError("outer='fixed' requires a split")
         supervised_train = _validate_split(labels, split)
+        fixed_train_lines = supervised_train
         mu_bar = fit_gene_means(labels, supervised_train, min_lines=min_lines)
         slice_specs = {}
         if split.val:
@@ -591,25 +788,42 @@ def run_r1_ladder(
                 (list(supervised_train), held) for held in split.test
             ]
 
-    all_rows: list[dict] = []
     effective_components: dict[str, dict[str, set[int]]] = {}
-    for slice_name, evals in slice_specs.items():
-        components_this_slice: dict[str, set[int]] = {}
-        for train_lines, held_out_id in evals:
-            all_rows.extend(
-                _run_eval(
-                    labels,
-                    train_lines,
-                    held_out_id,
-                    slice_name,
-                    mu_bar,
-                    context_views,
-                    copy_prior,
-                    config,
-                    components_this_slice,
+    if fixed_train_lines is not None:
+        eval_specs = [
+            (slice_name, held_out_id)
+            for slice_name, evals in slice_specs.items()
+            for _train_lines, held_out_id in evals
+        ]
+        all_rows = _run_fixed_evals(
+            labels,
+            fixed_train_lines,
+            eval_specs,
+            mu_bar,
+            context_views,
+            copy_prior,
+            config,
+            effective_components,
+        )
+    else:
+        all_rows = []
+        for slice_name, evals in slice_specs.items():
+            components_this_slice: dict[str, set[int]] = {}
+            for train_lines, held_out_id in evals:
+                all_rows.extend(
+                    _run_eval(
+                        labels,
+                        train_lines,
+                        held_out_id,
+                        slice_name,
+                        mu_bar,
+                        context_views,
+                        copy_prior,
+                        config,
+                        components_this_slice,
+                    )
                 )
-            )
-        effective_components[slice_name] = components_this_slice
+            effective_components[slice_name] = components_this_slice
 
     if not all_rows:
         raise ValueError("R1 ladder produced no predictions; check inputs")
@@ -621,10 +835,53 @@ def run_r1_ladder(
     )
     if predictions.duplicated(["slice", "method", "model_id", "gene_symbol"]).any():
         raise ValueError("internal error: duplicate prediction keys")
+    _validate_exact_method_coverage(predictions, context_views, copy_prior)
 
     return _summarize(
         predictions, effective_components, config, seed, context_views, outer, split
     )
+
+
+def _validate_exact_method_coverage(
+    predictions: pd.DataFrame,
+    context_views: Mapping[str, pd.DataFrame],
+    copy_prior: pd.Series | None,
+) -> None:
+    """Require every configured baseline on the same observable truth keys."""
+    expected_methods = {GENE_MEAN}
+    if copy_prior is not None:
+        expected_methods.add(COPY_PRIOR)
+    for view_name in context_views:
+        expected_methods.add(_view_method_name(NEAREST_LINE, view_name))
+        expected_methods.add(_view_method_name(CONTEXT_PCA_RIDGE, view_name))
+
+    key_columns = ["slice", "model_id", "gene_symbol"]
+    truth_keys = set(
+        predictions.loc[predictions["method"] == GENE_MEAN, key_columns].itertuples(
+            index=False, name=None
+        )
+    )
+    actual_methods = set(predictions["method"])
+    missing_methods = sorted(expected_methods - actual_methods)
+    unexpected_methods = sorted(actual_methods - expected_methods)
+    if missing_methods or unexpected_methods:
+        raise ValueError(
+            "baseline method set mismatch: "
+            f"missing={missing_methods}, unexpected={unexpected_methods}"
+        )
+    for method in sorted(expected_methods):
+        method_keys = set(
+            predictions.loc[predictions["method"] == method, key_columns].itertuples(
+                index=False, name=None
+            )
+        )
+        if method_keys != truth_keys:
+            missing = sorted(truth_keys - method_keys)
+            extra = sorted(method_keys - truth_keys)
+            raise ValueError(
+                f"{method}: evaluated-key coverage differs from common truth mask: "
+                f"missing={missing[:10]}, extra={extra[:10]}"
+            )
 
 
 def _method_entry(score: ResidualScore, seed: int) -> dict[str, object]:

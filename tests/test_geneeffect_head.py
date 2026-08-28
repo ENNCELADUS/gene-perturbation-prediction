@@ -30,6 +30,7 @@ from aivc_model.geneeffect_head import (
     GeneEffectFeatureDims,
     GeneEffectResidualHead,
     macro_per_gene_spearman,
+    masked_geneeffect_residual_loss,
     per_gene_rank_variance_loss,
 )
 
@@ -209,6 +210,142 @@ def test_per_gene_loss_axis_invariance_to_per_gene_constant_shift() -> None:
     shifted = per_gene_rank_variance_loss(pred, target + shift, lam=1.0)
     assert shifted.loss.item() == pytest.approx(baseline.loss.item(), abs=1e-4)
     assert shifted.n_genes_excluded == baseline.n_genes_excluded
+
+
+# ---------------------------------------------------------------------------
+# masked_geneeffect_residual_loss
+# ---------------------------------------------------------------------------
+
+
+def test_masked_residual_loss_uses_only_labeled_pairs_and_uneven_coverage() -> None:
+    pred = torch.tensor([[0.0, 2.0, 4.0, 99.0], [3.0, 2.0, 1.0, -99.0]])
+    target = torch.tensor(
+        [[0.0, 1.0, 2.0, float("nan")], [3.0, 2.0, 1.0, float("nan")]]
+    )
+    label_mask = torch.tensor([[True, True, True, False], [True, True, True, False]])
+    result = masked_geneeffect_residual_loss(
+        pred, target, label_mask, torch.tensor([True, True])
+    )
+
+    # Four exact/unit-error pairs plus one error of 2: Huber sum=2 over 6.
+    assert result.huber.item() == pytest.approx(1.0 / 3.0)
+    assert result.pearson.item() == pytest.approx(0.0, abs=1e-6)
+    assert result.total.item() == pytest.approx(1.0 / 3.0, abs=1e-6)
+    assert result.n_valid_pairs == 6
+    assert result.n_genes_scored == 2
+    assert result.n_genes_excluded == 0
+
+
+def test_masked_residual_loss_excludes_constant_target_but_scores_constant_pred() -> (
+    None
+):
+    pred = torch.tensor(
+        [[4.0, 4.0, 4.0, 4.0], [0.0, 1.0, 2.0, 3.0]], requires_grad=True
+    )
+    target = torch.tensor([[0.0, 1.0, 2.0, 3.0], [7.0, 7.0, 7.0, 7.0]])
+    mask = torch.ones_like(target, dtype=torch.bool)
+    result = masked_geneeffect_residual_loss(
+        pred, target, mask, torch.tensor([True, True]), beta=1.0
+    )
+
+    assert result.n_genes_scored == 1
+    assert result.n_genes_excluded == 1
+    assert result.pearson.item() == pytest.approx(1.0)
+    assert torch.isfinite(result.total)
+    result.total.backward()
+    assert pred.grad is not None
+    assert torch.isfinite(pred.grad).all()
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_masked_residual_loss_constant_prediction_is_finite_in_low_precision(
+    dtype: torch.dtype,
+) -> None:
+    pred = torch.full((1, 4), 4.0, dtype=dtype, requires_grad=True)
+    target = torch.tensor([[0.0, 1.0, 2.0, 3.0]], dtype=torch.float32)
+    result = masked_geneeffect_residual_loss(
+        pred,
+        target,
+        torch.ones_like(target, dtype=torch.bool),
+        torch.tensor([True]),
+    )
+    assert result.pearson.dtype == torch.float32
+    assert result.pearson.item() == pytest.approx(1.0)
+    result.total.backward()
+    assert pred.grad is not None
+    assert torch.isfinite(pred.grad).all()
+
+
+def test_masked_residual_loss_macro_averages_genes_not_pairs() -> None:
+    # Gene 0 has six perfectly aligned labels; gene 1 has only three labels
+    # and is perfectly reversed. Macro Pearson loss is therefore (0 + 2)/2.
+    target = torch.tensor(
+        [
+            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            [0.0, 1.0, 2.0, float("nan"), float("nan"), float("nan")],
+        ]
+    )
+    pred = torch.tensor(
+        [[0.0, 1.0, 2.0, 3.0, 4.0, 5.0], [2.0, 1.0, 0.0, 20.0, 20.0, 20.0]]
+    )
+    label_mask = torch.isfinite(target)
+    result = masked_geneeffect_residual_loss(
+        pred, target, label_mask, torch.tensor([True, True]), beta=1.0
+    )
+    flattened_corr = torch.corrcoef(
+        torch.stack([pred[label_mask], target[label_mask]])
+    )[0, 1]
+
+    assert result.pearson.item() == pytest.approx(1.0, abs=1e-6)
+    assert (1.0 - flattened_corr).item() != pytest.approx(result.pearson.item())
+
+
+def test_masked_residual_loss_excludes_too_few_labels_and_fails_empty_reductions() -> (
+    None
+):
+    pred = torch.randn(2, 4)
+    target = torch.tensor(
+        [[0.0, 1.0, float("nan"), float("nan")], [0.0, 1.0, 2.0, 3.0]]
+    )
+    label_mask = torch.isfinite(target)
+    result = masked_geneeffect_residual_loss(
+        pred, target, label_mask, torch.tensor([True, True])
+    )
+    assert result.n_genes_scored == 1
+    assert result.n_genes_excluded == 1
+
+    with pytest.raises(ValueError, match="no valid Huber pairs"):
+        masked_geneeffect_residual_loss(
+            pred, target, torch.zeros_like(label_mask), torch.tensor([True, True])
+        )
+    with pytest.raises(ValueError, match="no scorable Pearson genes"):
+        masked_geneeffect_residual_loss(
+            pred, target, label_mask, torch.tensor([True, False])
+        )
+
+
+def test_masked_residual_loss_rejects_bad_shapes_masks_and_labeled_nan() -> None:
+    pred = torch.randn(2, 4)
+    target = torch.randn(2, 4)
+    labels = torch.ones(2, 4, dtype=torch.bool)
+    g_var = torch.ones(2, dtype=torch.bool)
+    with pytest.raises(ValueError, match="2-D"):
+        masked_geneeffect_residual_loss(pred.flatten(), target.flatten(), labels, g_var)
+    with pytest.raises(ValueError, match="label_mask"):
+        masked_geneeffect_residual_loss(pred, target, labels.float(), g_var)
+    with pytest.raises(ValueError, match="g_var_mask"):
+        masked_geneeffect_residual_loss(pred, target, labels, g_var[:, None])
+    bad_target = target.clone()
+    bad_target[0, 0] = float("nan")
+    with pytest.raises(ValueError, match="finite"):
+        masked_geneeffect_residual_loss(pred, bad_target, labels, g_var)
+
+
+def test_formal_feature_dimension_defaults() -> None:
+    dims = GeneEffectFeatureDims()
+    assert dims == GeneEffectFeatureDims(
+        delta_proj=256, s=6, q_sc=3, e_g=1280, z_c=5120
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -115,11 +115,10 @@ L_delta = Huber_{g,c}(deltahat, delta)
           + beta * mean_{g in Gvar} [ 1 - Pearson_c(deltahat_{g,.}, delta_{g,.}) ]
 L_dep   = L_mu + L_delta
 
-Stage 1:  min_omega                        L_resp                    on C_resp
-Stage 2:  min_{omega,theta_mu,theta_delta} L_resp + lam_dep * L_dep  on C_resp u C_dep^tr
-Stage 3:  min_theta                        BCE( s , D )              on C_sl^tr
+Stage 1:   min_omega                        L_resp                    on C_resp
+Stage 2:   warm theta_delta with omega frozen; then min L_resp + lam_dep * L_dep
+Stage 3:   min_theta                        BCE( s , D )              on C_sl^tr
 ```
-
 $L_{\text{resp}}$ matches predicted and observed cell bags by mean-delta MSE plus energy
 distance; no cell-to-cell correspondence exists, so the loss is distributional. It stays on
 in Stage 2 as an anchor, and response metrics are reported before and after Stage 2 — a
@@ -127,7 +126,8 @@ collapse means $\lambda_{\text{dep}}$ is wrong, not that the run finished.
 $G_{\text{var}}$ is a pre-declared delta-variance gene set fit on train-side contexts;
 without it the scale-free Pearson term gives a gene whose true $\delta$ is replicate noise
 the same gradient as a genuinely context-dependent one. Stage 3 is context-balanced, each
-training context contributing equally.
+training context contributing equally. Exp13 warmup uses a frozen/eval Stage 1 backbone and
+streamed features, then unfreezes STATE/ESM adapters; one seed is not a scientific multi-seed claim.
 
 $\alpha$ is frozen on GeneEffect-only validation against a declared calibration band
 **before any SL label is read**. Its Pearson term is shift- and scale-invariant, so $\alpha$

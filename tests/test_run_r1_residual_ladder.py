@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import aivc_model.residual_ladder as residual_ladder
 from aivc_model.residual_ladder import (
     COPY_PRIOR,
     GENE_MEAN,
@@ -638,6 +639,160 @@ def test_fixed_split_keeps_unlabeled_train_members_out_of_supervised_fit(
     predictions = pd.read_csv(out_dir / "predictions.csv")
     assert unlabeled not in set(predictions["model_id"])
     assert predictions["residual_prediction"].notna().all()
+
+
+def test_fixed_split_sparse_train_labels_keep_exact_baseline_coverage(
+    tmp_path: Path,
+) -> None:
+    """Sparse train labels fit per gene without changing the evaluation mask."""
+    train = [f"L{i}" for i in range(6)]
+    val, test = ["V0"], ["T0"]
+    genes = ["G0", "G1", "G2"]
+    missing_train_pair = {"G0": "L0", "G1": "L1", "G2": "L2"}
+    context_value = {
+        "L0": 0.0,
+        "L1": 1.0,
+        "L2": 2.0,
+        "L3": 3.0,
+        "L4": 4.0,
+        "L5": 5.0,
+        "V0": 0.1,
+        "T0": 4.9,
+    }
+    rows = []
+    for line in [*train, *val, *test]:
+        for gene_index, gene in enumerate(genes):
+            if line == missing_train_pair.get(gene):
+                continue
+            rows.append(
+                {
+                    "model_id": line,
+                    "gene_symbol": gene,
+                    "gene_effect": -1.0
+                    + gene_index
+                    + 0.25 * context_value[line],
+                }
+            )
+    labels = pd.DataFrame(rows)
+    context_csv = _write_context_csv(
+        tmp_path / "ctx.csv",
+        [*train, *val, *test],
+        {"signal": context_value},
+    )
+    prior_csv = _write_prior_csv(tmp_path / "prior.csv", genes)
+    split_json = _write_split_json(tmp_path / "split.json", train, val, test)
+
+    out_dir = _run_cli(
+        tmp_path,
+        labels,
+        context_paths={"ctx": context_csv},
+        prior_path=prior_csv,
+        outer="fixed",
+        split_json=split_json,
+    )
+    predictions = pd.read_csv(out_dir / "predictions.csv")
+    expected_methods = {
+        GENE_MEAN,
+        COPY_PRIOR,
+        "nearest_line[ctx]",
+        "context_pca_ridge[ctx]",
+    }
+    truth_keys = set(
+        predictions.loc[
+            predictions["method"] == GENE_MEAN,
+            ["slice", "model_id", "gene_symbol"],
+        ].itertuples(index=False, name=None)
+    )
+    assert set(predictions["method"]) == expected_methods
+    for method in expected_methods:
+        method_keys = set(
+            predictions.loc[
+                predictions["method"] == method,
+                ["slice", "model_id", "gene_symbol"],
+            ].itertuples(index=False, name=None)
+        )
+        assert method_keys == truth_keys
+
+    train_g0 = labels.loc[
+        labels["model_id"].isin(train) & (labels["gene_symbol"] == "G0")
+    ]
+    expected = float(
+        train_g0.loc[train_g0["model_id"] == "L1", "gene_effect"].iloc[0]
+        - train_g0["gene_effect"].mean()
+    )
+    actual = predictions.loc[
+        (predictions["slice"] == "val")
+        & (predictions["model_id"] == "V0")
+        & (predictions["gene_symbol"] == "G0")
+        & (predictions["method"] == "nearest_line[ctx]"),
+        "residual_prediction",
+    ].item()
+    assert actual == pytest.approx(expected)
+
+
+def test_fixed_split_fits_one_pca_per_view_and_one_ridge_per_gene(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fit count scales with genes, not evaluated-line by gene products."""
+    train = [f"L{i}" for i in range(8)]
+    val = ["V0", "V1", "V2"]
+    test = ["T0", "T1"]
+    lines = [*train, *val, *test]
+    genes = [f"G{i}" for i in range(20)]
+    labels = _labels_no_signal(lines, genes)
+    signal = {model_id: float(index) for index, model_id in enumerate(lines)}
+    context_csv = _write_context_csv(
+        tmp_path / "ctx.csv", lines, {"signal": signal}
+    )
+    split_json = _write_split_json(tmp_path / "split.json", train, val, test)
+    fit_counts = {"pca": 0, "ridge": 0}
+    original_pca_fit = residual_ladder.PCA.fit
+    original_ridge_fit = residual_ladder.Ridge.fit
+
+    def counted_pca_fit(self, *args, **kwargs):
+        fit_counts["pca"] += 1
+        return original_pca_fit(self, *args, **kwargs)
+
+    def counted_ridge_fit(self, *args, **kwargs):
+        fit_counts["ridge"] += 1
+        return original_ridge_fit(self, *args, **kwargs)
+
+    monkeypatch.setattr(residual_ladder.PCA, "fit", counted_pca_fit)
+    monkeypatch.setattr(residual_ladder.Ridge, "fit", counted_ridge_fit)
+
+    out_dir = _run_cli(
+        tmp_path,
+        labels,
+        context_paths={"ctx": context_csv},
+        outer="fixed",
+        split_json=split_json,
+    )
+
+    assert fit_counts == {"pca": 1, "ridge": len(genes)}
+    predictions = pd.read_csv(out_dir / "predictions.csv")
+    assert len(predictions) == 3 * (len(val) + len(test)) * len(genes)
+
+
+def test_fixed_split_fails_when_copy_prior_cannot_cover_truth_mask(
+    tmp_path: Path,
+) -> None:
+    """A configured baseline may not silently evaluate fewer gene-line keys."""
+    lines = [f"L{i}" for i in range(7)]
+    genes = ["G0", "G1"]
+    labels = _labels_no_signal(lines, genes)
+    split_json = _write_split_json(
+        tmp_path / "split.json", lines[:5], [lines[5]], [lines[6]]
+    )
+    incomplete_prior = _write_prior_csv(tmp_path / "prior.csv", ["G0"])
+
+    with pytest.raises(ValueError, match="evaluated-key coverage differs"):
+        _run_cli(
+            tmp_path,
+            labels,
+            prior_path=incomplete_prior,
+            outer="fixed",
+            split_json=split_json,
+        )
 
 
 def test_fixed_split_rejects_unlabeled_validation(tmp_path: Path) -> None:

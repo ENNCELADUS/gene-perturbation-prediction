@@ -10,6 +10,8 @@ Tests cover:
 from __future__ import annotations
 
 import importlib
+import hashlib
+import json
 import logging
 import sys
 import types
@@ -19,11 +21,13 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from aivc_model.gene_embeddings import (
     Esm2EmbeddingTable,
     require_complete_esm_coverage,
 )
+from aivc_model.esm2_provenance import load_and_authenticate_esm2_provenance
 
 # ---------------------------------------------------------------------------
 # Lazy import: stub out heavy optional imports before loading the script
@@ -82,6 +86,77 @@ class _NullContext:
 MOD = _import_module()
 
 
+def _record(sequence: str = "MSEQ"):
+    return MOD.UniProtSequenceRecord(
+        primary_accession="P04637",
+        entry_id="P53_HUMAN",
+        isoform_identifier="P04637",
+        isoform_policy=MOD.ISOFORM_POLICY,
+        sequence=sequence,
+    )
+
+
+class _UniProtResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+    def __enter__(self) -> "_UniProtResponse":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+    def read(self) -> bytes:
+        return json.dumps(self.payload).encode()
+
+
+def _uniprot_hit(*, symbol: str = "TP53", reviewed: bool = True) -> dict[str, object]:
+    return {
+        "primaryAccession": "P04637",
+        "uniProtkbId": "P53_HUMAN",
+        "entryType": (
+            MOD.REVIEWED_ENTRY_TYPE if reviewed else "UniProtKB unreviewed (TrEMBL)"
+        ),
+        "genes": [{"geneName": {"value": symbol}}],
+        "uniProtKBCrossReferences": [{"database": "GeneID", "id": "7157"}],
+        "sequence": {"value": "MSEQ"},
+    }
+
+
+def test_fetch_sequence_uses_exact_symbol_and_validates_returned_identity() -> None:
+    with patch.object(
+        MOD.urllib.request,
+        "urlopen",
+        return_value=_UniProtResponse({"results": [_uniprot_hit()]}),
+    ) as request:
+        assert MOD.fetch_sequence("TP53") == _record()
+    assert "gene_exact%3ATP53" in request.call_args.args[0]
+
+    for hit in (
+        _uniprot_hit(symbol="TP53BP1"),
+        _uniprot_hit(reviewed=False),
+    ):
+        with patch.object(
+            MOD.urllib.request,
+            "urlopen",
+            return_value=_UniProtResponse({"results": [hit]}),
+        ):
+            assert MOD.fetch_sequence("TP53") is None
+
+
+def test_fetch_sequence_validates_requested_gene_id() -> None:
+    hit = _uniprot_hit()
+    hit["uniProtKBCrossReferences"] = [
+        {"database": "GeneID", "id": "9999"}
+    ]
+    with patch.object(
+        MOD.urllib.request,
+        "urlopen",
+        return_value=_UniProtResponse({"results": [hit]}),
+    ):
+        assert MOD.fetch_sequence("TP53", "7157") is None
+
+
 # ---------------------------------------------------------------------------
 # FIX 1 — corrupt JSON cache recovery
 # ---------------------------------------------------------------------------
@@ -98,13 +173,13 @@ def test_corrupt_cache_logs_warning_and_recovers(
     cache = tmp_path / "cache.json"
     cache.write_text('{"BRCA1": "MPIGSKERP', encoding="utf-8")  # truncated JSON
 
-    with patch.object(MOD, "fetch_sequence", return_value="MSEQ") as mock_fetch:
+    with patch.object(MOD, "fetch_sequence", return_value=_record()) as mock_fetch:
         with caplog.at_level(logging.WARNING, logger="precompute_esm2"):
             result = MOD.load_or_fetch_sequences(["PTEN"], cache)
 
     # Should have fallen back and fetched the symbol.
     assert "PTEN" in result
-    assert result["PTEN"] == "MSEQ"
+    assert result["PTEN"] == _record()
     mock_fetch.assert_called_once_with("PTEN")
 
     # A warning must have been emitted about the corrupt cache.
@@ -121,13 +196,26 @@ def test_load_or_fetch_sequences_uses_identifier_for_missing_symbol(
     tmp_path: Path,
 ) -> None:
     cache = tmp_path / "cache.json"
-    with patch.object(MOD, "fetch_sequence", return_value="MSEQ") as mock_fetch:
+    with patch.object(MOD, "fetch_sequence", return_value=_record()) as mock_fetch:
         result = MOD.load_or_fetch_sequences(
             ["PTEN"], cache, identifiers={"PTEN": "5728"}
         )
 
-    assert result == {"PTEN": "MSEQ"}
+    assert result == {"PTEN": _record()}
     mock_fetch.assert_called_once_with("PTEN", "5728")
+
+
+def test_legacy_sequence_cache_requires_explicit_refetch(tmp_path: Path) -> None:
+    cache = tmp_path / "cache.json"
+    cache.write_text('{"PTEN":"MSEQ"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="--refetch-legacy-cache"):
+        MOD.load_or_fetch_sequences(["PTEN"], cache)
+    with patch.object(MOD, "fetch_sequence", return_value=_record()) as fetch:
+        records = MOD.load_or_fetch_sequences(
+            ["PTEN"], cache, refetch_legacy_cache=True
+        )
+    assert records == {"PTEN": _record()}
+    fetch.assert_called_once_with("PTEN")
 
 
 def test_identifiers_from_csv_normalizes_integer_ids(tmp_path: Path) -> None:
@@ -336,6 +424,11 @@ def _run_asset_cli(
     csv = tmp_path / "genes.csv"
     pd.DataFrame({"perturbation_gene": ["A", "B", "C"]}).to_csv(csv, index=False)
     output = tmp_path / "esm2.npz"
+    sequence_cache = tmp_path / "sequences.json"
+    sequence_cache.write_text(
+        json.dumps({symbol: "M" for symbol in ("A", "B", "C")}),
+        encoding="utf-8",
+    )
     argv = [
         "precompute_esm2_embeddings.py",
         "--benchmark-csv",
@@ -345,7 +438,7 @@ def _run_asset_cli(
         "--out",
         str(output),
         "--seq-cache",
-        str(tmp_path / "sequences.json"),
+        str(sequence_cache),
     ]
     if strict:
         argv.append("--require-complete-coverage")
@@ -353,7 +446,7 @@ def _run_asset_cli(
     monkeypatch.setattr(
         MOD,
         "load_or_fetch_sequences",
-        lambda symbols, cache: {symbol: "M" for symbol in symbols},
+        lambda symbols, cache, **kwargs: {symbol: _record("M") for symbol in symbols},
     )
     monkeypatch.setattr(
         MOD,
@@ -361,6 +454,13 @@ def _run_asset_cli(
         lambda *args, **kwargs: (
             np.ones((3, 4), dtype=np.float32),
             resolved,
+            {
+                "model_class": "tests.TinyModel",
+                "model_state_sha256": "1" * 64,
+                "model_config_sha256": "3" * 64,
+                "tokenizer_class": "tests.TinyTokenizer",
+                "tokenizer_vocabulary_config_sha256": "2" * 64,
+            },
         ),
     )
     MOD.main()
@@ -404,3 +504,178 @@ def test_strict_asset_writes_when_coverage_is_complete(
     with np.load(output, allow_pickle=True) as payload:
         assert payload["symbols"].tolist() == ["A", "B", "C"]
         assert int(payload["resolved"].sum()) == 3
+    sidecar = json.loads(
+        output.with_suffix(".npz.provenance.json").read_text(encoding="utf-8")
+    )
+    assert sidecar["embedding_artifact"]["sha256"] == hashlib.sha256(
+        output.read_bytes()
+    ).hexdigest()
+    assert list(sidecar["sequence_source"]["sequence_sha256_by_symbol"]) == [
+        "A",
+        "B",
+        "C",
+    ]
+
+
+def test_model_state_hash_binds_sorted_names_shapes_dtypes_and_bytes() -> None:
+    first = torch.nn.Module()
+    first.register_parameter(
+        "weight", torch.nn.Parameter(torch.tensor([[1.0, 2.0]], dtype=torch.float32))
+    )
+    second = torch.nn.Module()
+    second.register_parameter(
+        "weight", torch.nn.Parameter(torch.tensor([[1.0, 3.0]], dtype=torch.float32))
+    )
+    assert MOD.hash_model_state(first) == MOD.hash_model_state(first)
+    assert MOD.hash_model_state(first) != MOD.hash_model_state(second)
+
+
+def test_tokenizer_hash_binds_vocabulary_and_configuration() -> None:
+    class TinyTokenizer:
+        model_max_length = 1024
+        special_tokens_map = {"cls_token": "<cls>"}
+
+        def __init__(self, vocab: dict[str, int]) -> None:
+            self._vocab = vocab
+            self.init_kwargs = {"do_lower_case": False}
+
+        def get_vocab(self) -> dict[str, int]:
+            return self._vocab
+
+    first = TinyTokenizer({"A": 0, "B": 1})
+    second = TinyTokenizer({"A": 0, "B": 2})
+    assert MOD.hash_tokenizer_vocabulary_config(first) != (
+        MOD.hash_tokenizer_vocabulary_config(second)
+    )
+
+
+def test_provenance_rejects_tampered_vectors_model_hash_and_sequence_mapping(
+    tmp_path: Path,
+) -> None:
+    benchmark = tmp_path / "genes.csv"
+    benchmark.write_text("gene_symbol\nA\n", encoding="utf-8")
+    cache = tmp_path / "sequences.json"
+    cache.write_text('{"A":"MSEQ"}', encoding="utf-8")
+    npz = tmp_path / "esm2.npz"
+    sidecar = tmp_path / "esm2.provenance.json"
+    mapping_json = tmp_path / "esm2.mapping.json"
+    mapping_csv = tmp_path / "esm2.mapping.csv"
+    MOD.write_embedding_with_provenance(
+        npz,
+        sidecar,
+        symbols=["A"],
+        vectors=np.ones((1, 4), dtype=np.float32),
+        resolved=np.ones(1, dtype=bool),
+        sequences={"A": "MSEQ"},
+        uniprot_records={"A": _record()},
+        sequence_cache=cache,
+        mapping_json_output=mapping_json,
+        mapping_csv_output=mapping_csv,
+        benchmark_csv=benchmark,
+        symbol_columns=("gene_symbol",),
+        requested_model_id="tiny-esm2",
+        runtime_identity={
+            "model_class": "tests.TinyModel",
+            "model_state_sha256": "1" * 64,
+            "model_config_sha256": "3" * 64,
+            "tokenizer_class": "tests.TinyTokenizer",
+            "tokenizer_vocabulary_config_sha256": "2" * 64,
+        },
+    )
+    pristine_npz = npz.read_bytes()
+    pristine_sidecar = sidecar.read_text(encoding="utf-8")
+    pristine_mapping = mapping_json.read_text(encoding="utf-8")
+
+    mapping_payload = json.loads(pristine_mapping)
+    mapping_payload["records"][0]["primary_accession"] = "TAMPERED"
+    mapping_json.write_text(json.dumps(mapping_payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="mapping artifact SHA256 mismatch"):
+        load_and_authenticate_esm2_provenance(
+            sidecar,
+            npz,
+            mapping_json_path=mapping_json,
+            mapping_csv_path=mapping_csv,
+        )
+    mapping_json.write_text(pristine_mapping, encoding="utf-8")
+    mapping_payload = json.loads(pristine_mapping)
+    mapping_payload["records"][0]["sequence_sha256"] = "4" * 64
+    mapping_json.write_text(json.dumps(mapping_payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="mapping artifact SHA256 mismatch"):
+        load_and_authenticate_esm2_provenance(
+            sidecar,
+            npz,
+            mapping_json_path=mapping_json,
+            mapping_csv_path=mapping_csv,
+        )
+    mapping_json.write_text(pristine_mapping, encoding="utf-8")
+
+    np.savez(
+        npz,
+        symbols=np.asarray(["A"], dtype=object),
+        vectors=np.zeros((1, 4), dtype=np.float32),
+        resolved=np.ones(1, dtype=bool),
+    )
+    with pytest.raises(ValueError, match="sha256 mismatch"):
+        load_and_authenticate_esm2_provenance(
+            sidecar,
+            npz,
+            mapping_json_path=mapping_json,
+            mapping_csv_path=mapping_csv,
+        )
+
+    npz.write_bytes(pristine_npz)
+    payload = json.loads(pristine_sidecar)
+    payload["loaded_model"]["state_sha256"] = "tampered"
+    sidecar.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="loaded_model hash"):
+        load_and_authenticate_esm2_provenance(
+            sidecar,
+            npz,
+            mapping_json_path=mapping_json,
+            mapping_csv_path=mapping_csv,
+        )
+
+    payload = json.loads(pristine_sidecar)
+    payload["sequence_source"]["sequence_sha256_by_symbol"] = {"B": "3" * 64}
+    sidecar.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="sequence mapping membership"):
+        load_and_authenticate_esm2_provenance(
+            sidecar,
+            npz,
+            mapping_json_path=mapping_json,
+            mapping_csv_path=mapping_csv,
+        )
+
+
+def test_writer_rejects_identity_for_unresolved_symbol_before_publish(
+    tmp_path: Path,
+) -> None:
+    benchmark = tmp_path / "genes.csv"
+    benchmark.write_text("gene_symbol\nA\n", encoding="utf-8")
+    cache = tmp_path / "sequences.json"
+    cache.write_text("{}", encoding="utf-8")
+    output = tmp_path / "esm2.npz"
+    with pytest.raises(ValueError, match="exact membership"):
+        MOD.write_embedding_with_provenance(
+            output,
+            tmp_path / "esm2.provenance.json",
+            symbols=["A"],
+            vectors=np.ones((1, 4), dtype=np.float32),
+            resolved=np.zeros(1, dtype=bool),
+            sequences={"A": "MSEQ"},
+            uniprot_records={"A": _record()},
+            sequence_cache=cache,
+            mapping_json_output=tmp_path / "esm2.mapping.json",
+            mapping_csv_output=tmp_path / "esm2.mapping.csv",
+            benchmark_csv=benchmark,
+            symbol_columns=("gene_symbol",),
+            requested_model_id="tiny-esm2",
+            runtime_identity={
+                "model_class": "tests.TinyModel",
+                "model_state_sha256": "1" * 64,
+                "model_config_sha256": "3" * 64,
+                "tokenizer_class": "tests.TinyTokenizer",
+                "tokenizer_vocabulary_config_sha256": "2" * 64,
+            },
+        )
+    assert not output.exists()

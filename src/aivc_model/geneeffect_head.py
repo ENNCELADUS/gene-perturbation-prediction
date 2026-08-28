@@ -33,12 +33,14 @@ I/O, no provenance machinery, no GPU assumptions, no training loop -- see
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import NamedTuple, Sequence
 
 import pandas as pd
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from aivc_model.residual_metrics import per_gene_spearman
 
@@ -58,6 +60,8 @@ __all__ = [
     "moment_pool",
     "per_gene_rank_variance_loss",
     "PerGeneRankVarianceLoss",
+    "masked_geneeffect_residual_loss",
+    "MaskedGeneEffectLoss",
     "macro_per_gene_spearman",
     "MacroPerGeneSpearman",
     "GeneEffectFeatureDims",
@@ -254,6 +258,146 @@ def per_gene_rank_variance_loss(
     )
 
 
+class MaskedGeneEffectLoss(NamedTuple):
+    """Result of :func:`masked_geneeffect_residual_loss`.
+
+    ``pearson`` is the macro-averaged Pearson loss ``1 - r``, not the
+    correlation itself. Gene counts refer only to genes selected by
+    ``g_var_mask``; non-selected genes still contribute valid pairs to
+    ``huber``.
+    """
+
+    total: torch.Tensor
+    huber: torch.Tensor
+    pearson: torch.Tensor
+    n_valid_pairs: int
+    n_genes_scored: int
+    n_genes_excluded: int
+
+
+def masked_geneeffect_residual_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    label_mask: torch.Tensor,
+    g_var_mask: torch.Tensor,
+    huber_delta: float = 1.0,
+    beta: float = 1.0,
+) -> MaskedGeneEffectLoss:
+    """Compute the formal masked Stage-2 GeneEffect residual objective.
+
+    Huber loss is averaged over every labeled ``(gene, context)`` pair.
+    Pearson loss is computed independently along the context axis for each
+    gene selected by ``g_var_mask``, then macro-averaged. Selected genes with
+    fewer than three labeled contexts or a (near-)constant target are
+    excluded from the Pearson mean. A constant prediction is retained and
+    receives a finite unit Pearson penalty rather than being dropped.
+
+    Missing targets may be non-finite only where ``label_mask`` is false.
+    The function fails closed rather than returning a manufactured zero or
+    NaN when either the Huber or Pearson reduction would be empty.
+
+    Args:
+        pred: Residual predictions, shape ``[n_genes, n_contexts]``.
+        target: Residual targets with the same shape as ``pred``.
+        label_mask: Boolean mask with the same shape; true marks a labeled
+            pair that must have finite ``pred`` and ``target`` values.
+        g_var_mask: Boolean mask of shape ``[n_genes]`` selecting genes for
+            the macro Pearson term.
+        huber_delta: Positive transition point for Huber loss.
+        beta: Non-negative weight on the macro Pearson loss.
+
+    Returns:
+        A :class:`MaskedGeneEffectLoss` containing the total and both
+        component losses plus valid-pair and Pearson gene counts.
+
+    Raises:
+        ValueError: On invalid shapes or masks, invalid hyperparameters,
+            non-finite labeled values, no labeled pairs, or no scorable
+            ``g_var_mask`` gene.
+    """
+    if pred.dim() != 2 or tuple(pred.shape) != tuple(target.shape):
+        raise ValueError(
+            "pred and target must both be 2-D [n_genes, n_contexts] of equal "
+            f"shape; got pred={tuple(pred.shape)}, target={tuple(target.shape)}"
+        )
+    if tuple(label_mask.shape) != tuple(pred.shape) or label_mask.dtype != torch.bool:
+        raise ValueError(
+            "label_mask must be boolean with the same shape as pred; got "
+            f"shape={tuple(label_mask.shape)}, dtype={label_mask.dtype}"
+        )
+    if tuple(g_var_mask.shape) != (pred.shape[0],) or g_var_mask.dtype != torch.bool:
+        raise ValueError(
+            "g_var_mask must be boolean with shape [n_genes]; got "
+            f"shape={tuple(g_var_mask.shape)}, dtype={g_var_mask.dtype}"
+        )
+    if not pred.is_floating_point():
+        raise ValueError(f"pred must have a floating dtype, got {pred.dtype}")
+    if not math.isfinite(huber_delta) or huber_delta <= 0:
+        raise ValueError(f"huber_delta must be finite and positive, got {huber_delta}")
+    if not math.isfinite(beta) or beta < 0:
+        raise ValueError(f"beta must be finite and non-negative, got {beta}")
+
+    target = target.to(device=pred.device)
+    label_mask = label_mask.to(device=pred.device)
+    g_var_mask = g_var_mask.to(device=pred.device)
+    compute_dtype = (
+        torch.float32 if pred.dtype in (torch.float16, torch.bfloat16) else pred.dtype
+    )
+    work_pred = pred.to(dtype=compute_dtype)
+    work_target = target.to(dtype=compute_dtype)
+    n_valid_pairs = int(label_mask.sum().item())
+    if n_valid_pairs == 0:
+        raise ValueError("masked_geneeffect_residual_loss: no valid Huber pairs")
+    if (
+        not torch.isfinite(work_pred[label_mask]).all()
+        or not torch.isfinite(work_target[label_mask]).all()
+    ):
+        raise ValueError("pred and target must be finite at every labeled pair")
+
+    huber = F.huber_loss(
+        work_pred[label_mask],
+        work_target[label_mask],
+        reduction="mean",
+        delta=float(huber_delta),
+    )
+
+    pearson_losses: list[torch.Tensor] = []
+    n_selected = int(g_var_mask.sum().item())
+    for gene_index in torch.nonzero(g_var_mask, as_tuple=False).flatten().tolist():
+        valid = label_mask[gene_index]
+        if int(valid.sum().item()) < 3:
+            continue
+        pred_gene = work_pred[gene_index, valid]
+        target_gene = work_target[gene_index, valid]
+        pred_centered = pred_gene - pred_gene.mean()
+        target_centered = target_gene - target_gene.mean()
+        target_std = target_centered.square().mean().sqrt()
+        if float(target_std.detach()) <= _CONSTANT_TARGET_STD_EPS:
+            continue
+        pred_std = (pred_centered.square().mean() + _STD_EPS).sqrt()
+        covariance = (pred_centered * target_centered).mean()
+        correlation = covariance / (pred_std * target_std)
+        pearson_losses.append(1.0 - correlation)
+
+    n_genes_scored = len(pearson_losses)
+    n_genes_excluded = n_selected - n_genes_scored
+    if n_genes_scored == 0:
+        raise ValueError(
+            "masked_geneeffect_residual_loss: no scorable Pearson genes "
+            "(need a G_var gene with at least 3 valid, non-constant targets)"
+        )
+    pearson = torch.stack(pearson_losses).mean()
+    total = huber + float(beta) * pearson
+    return MaskedGeneEffectLoss(
+        total=total,
+        huber=huber,
+        pearson=pearson,
+        n_valid_pairs=n_valid_pairs,
+        n_genes_scored=n_genes_scored,
+        n_genes_excluded=n_genes_excluded,
+    )
+
+
 # ---------------------------------------------------------------------------
 # B2: selection/reporting metric (reuses residual_metrics, does not
 # reimplement its NaN/undefined-correlation handling)
@@ -356,22 +500,20 @@ class GeneEffectFeatureDims:
         delta_proj: ``Delta_{g,c}`` projected 4000 -> this width by a fixed
             seeded random projection (computed upstream; this module only
             consumes the result).
-        s: Distribution statistics + unprojected interpretables (energy
-            distance to the basal bag, cross-cell dispersion, fraction
-            beyond threshold, ``||Delta_mean||``, cosine to basal mean, and
-            the own-gene HVG-index shift as the last channel).
+        s: Six distribution statistics and unprojected interpretables, with
+            the own-gene HVG-index shift as the last channel.
         q_sc: ``[mean expr, fraction expressing, expr variance]`` of gene
             ``g`` in line ``c``, from basal single cells.
         e_g: ESM2 protein embedding width.
-        z_c: Reduced Tx1 basal-context embedding width (PCs fit on train
-            lines only, upstream of this module).
+        z_c: Raw moment-pooled Tx1 basal-context width (mean + variance of
+            the 2560-d embedding); no PCA is applied.
     """
 
     delta_proj: int = 256
-    s: int = 20
+    s: int = 6
     q_sc: int = 3
     e_g: int = 1280
-    z_c: int = 128
+    z_c: int = 5120
 
     def __post_init__(self) -> None:
         for name in ("delta_proj", "s", "q_sc", "e_g", "z_c"):

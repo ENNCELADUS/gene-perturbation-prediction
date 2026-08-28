@@ -149,6 +149,8 @@ def test_esm2_perturbation_adapter_maps_all_genes_through_one_network() -> None:
     assert adapter.forward_many(["KNOWN", "HELDOUT"]).shape == (2, 2)
     assert adapter.has_embedding("known")
     assert adapter.has_known_vector("HELDOUT")
+    assert "esm_matrix" not in adapter.state_dict()
+    assert adapter.state_dict()["gene_vocabulary_sha256"].shape == (32,)
 
 
 def test_esm2_perturbation_adapter_raises_on_unresolved_gene_no_zero_fill() -> None:

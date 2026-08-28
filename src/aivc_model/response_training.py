@@ -197,6 +197,39 @@ def _state_window(model: nn.Module) -> int | None:
     return int(window) if window else None
 
 
+def _cuda_rng_devices(
+    model: nn.Module, controls: Sequence[torch.Tensor]
+) -> tuple[int, ...]:
+    """Return CUDA devices whose RNG a STATE forward may consume."""
+    devices: set[int] = set()
+    tensors = [*controls, *model.parameters(), *model.buffers()]
+    for tensor in tensors:
+        if tensor.device.type == "cuda":
+            devices.add(
+                torch.cuda.current_device()
+                if tensor.device.index is None
+                else tensor.device.index
+            )
+    return tuple(sorted(devices))
+
+
+def _seeded_model_forward(
+    model: nn.Module,
+    chunks: Sequence[torch.Tensor],
+    genes: Sequence[str],
+    *,
+    seed: int,
+) -> tuple[torch.Tensor, ...]:
+    """Run STATE with a private, deterministic CPU/CUDA torch RNG stream."""
+    cuda_devices = _cuda_rng_devices(model, chunks)
+    with torch.random.fork_rng(devices=list(cuda_devices)):
+        torch.random.default_generator.manual_seed(seed)
+        for device_index in cuda_devices:
+            with torch.cuda.device(device_index):
+                torch.cuda.manual_seed(seed)
+        return tuple(model(tuple(chunks), tuple(genes), tuple(None for _ in chunks)))
+
+
 def predict_bags(
     model: nn.Module,
     controls: Sequence[torch.Tensor],
@@ -208,10 +241,13 @@ def predict_bags(
 
     ``StateForwardAdapter`` requires every chunk to be exactly
     ``cell_sentence_len``; a bag that is not a multiple of it must be padded
-    by resampling and the output trimmed back. Training happened to satisfy
-    this only because ``max_bag`` equalled the window size, which is
-    accidental -- routing both training and evaluation through this helper
-    makes the contract explicit rather than a coincidence of configuration.
+    by resampling and the output trimmed back. The caller's ``seed`` governs
+    two independent deterministic streams: NumPy chooses padding indices and
+    a forked torch RNG governs stochastic STATE collator/model operations.
+    The fork restores the caller's CPU and participating CUDA RNG states after
+    the forward. Training happened to satisfy the window contract only because
+    ``max_bag`` equalled the window size, which is accidental -- routing both
+    training and evaluation through this helper makes the contract explicit.
     """
     from aivc_model.tx1_predicted_response import _chunk_control_cell_indices
 
@@ -223,8 +259,11 @@ def predict_bags(
     if not window:
         # Only a genuine test double -- no state adapter at all -- may take
         # the single-chunk path.
-        return tuple(
-            model(tuple(controls), tuple(genes), tuple(None for _ in controls))
+        return _seeded_model_forward(
+            model,
+            controls,
+            genes,
+            seed=seed,
         )
 
     chunks: list[torch.Tensor] = []
@@ -242,10 +281,15 @@ def predict_bags(
         chunk_genes.extend(str(gene) for _ in condition_chunks)
         chunks_per_control.append(len(condition_chunks))
         cell_counts.append(n_cells)
-    # Call the module, never the bound method: a DDP-wrapped model proxies
-    # only ``forward``, and unwrapping would skip the gradient all-reduce.
-    predicted_chunks = tuple(
-        model(tuple(chunks), tuple(chunk_genes), tuple(None for _ in chunks))
+    # The padding-index and model-forward streams intentionally share the
+    # caller's pinned seed, but live in NumPy and a private torch RNG fork,
+    # respectively. Call the module, never the bound method: a DDP-wrapped
+    # model proxies only ``forward``, and unwrapping would skip all-reduce.
+    predicted_chunks = _seeded_model_forward(
+        model,
+        chunks,
+        chunk_genes,
+        seed=seed,
     )
     if len(predicted_chunks) != len(chunks):
         raise ValueError("STATE returned a different number of chunks than supplied")
