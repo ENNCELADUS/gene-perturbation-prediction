@@ -1607,6 +1607,36 @@ def _resolve_hvg_matrix(
         raise ValueError(
             f"basal AnnData var is missing HVG symbol column {gene_symbol_col!r}"
         )
+    symbols = adata.var[gene_symbol_col].astype(str).to_numpy()
+    if len(set(symbols)) != len(symbols):
+        ordered_symbols = tuple(dict.fromkeys(symbols))
+        symbol_index = {symbol: index for index, symbol in enumerate(ordered_symbols)}
+        if sparse.issparse(adata.X):
+            columns = np.asarray([symbol_index[symbol] for symbol in symbols])
+            mapper = sparse.csr_matrix(
+                (
+                    np.ones(len(symbols), dtype=np.float32),
+                    (np.arange(len(symbols)), columns),
+                ),
+                shape=(len(symbols), len(ordered_symbols)),
+            )
+            collapsed_x = adata.X @ mapper
+        else:
+            source = np.asarray(adata.X)
+            collapsed_x = np.zeros(
+                (adata.n_obs, len(ordered_symbols)), dtype=source.dtype
+            )
+            for source_column, symbol in enumerate(symbols):
+                collapsed_x[:, symbol_index[symbol]] += source[:, source_column]
+        adata = ad.AnnData(
+            X=collapsed_x,
+            obs=adata.obs.copy(),
+            var=pd.DataFrame({gene_symbol_col: ordered_symbols}, index=ordered_symbols),
+        )
+        _LOGGER.warning(
+            "line: collapsed %d duplicate gene-symbol columns by summing raw counts",
+            len(symbols) - len(ordered_symbols),
+        )
     source_symbols = set(adata.var[gene_symbol_col].astype(str))
     missing = [name for name in checkpoint_names if name not in source_symbols]
     padded = _pad_missing_genes(adata, missing, gene_symbol_col) if missing else adata
