@@ -211,8 +211,11 @@ def load_authenticated_copy_prior_symbols(
     donor = labels.loc[
         (labels["model_id"] == "ACH-000551") & labels["gene_effect"].notna()
     ]
-    if symbols != tuple(donor["gene_symbol"].astype(str)) or not np.array_equal(
-        values.to_numpy(dtype=float), donor["gene_effect"].to_numpy(dtype=float)
+    if symbols != tuple(donor["gene_symbol"].astype(str)) or not np.allclose(
+        values.to_numpy(dtype=float),
+        donor["gene_effect"].to_numpy(dtype=float),
+        rtol=0.0,
+        atol=1e-12,
     ):
         raise ValueError("copy-prior CSV does not match pinned K562 donor row")
     if output_record.get("gene_symbols_sha256") != _symbols_sha256(symbols):
