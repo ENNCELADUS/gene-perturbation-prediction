@@ -287,7 +287,18 @@ class Esm2PerturbationAdapter(nn.Module):
             raise ValueError(f"Unresolved ESM-2 genes: {missing[:10]}")
         matrix = np.vstack([table.vectors_by_symbol[gene] for gene in self.genes])
         self._gene_to_index = {gene: index for index, gene in enumerate(self.genes)}
-        self.register_buffer("esm_matrix", torch.as_tensor(matrix, dtype=torch.float32))
+        vocabulary_digest = bytes.fromhex(
+            sha256_strings(np.asarray(self.genes, dtype=object))
+        )
+        self.register_buffer(
+            "gene_vocabulary_sha256",
+            torch.as_tensor(list(vocabulary_digest), dtype=torch.uint8),
+        )
+        self.register_buffer(
+            "esm_matrix",
+            torch.as_tensor(matrix, dtype=torch.float32),
+            persistent=False,
+        )
         self.adapter = PertAdapter(table.dim, int(adapter_hidden), int(pert_dim))
 
     def forward(self, gene: str) -> torch.Tensor:

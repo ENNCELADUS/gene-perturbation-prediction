@@ -11,6 +11,7 @@ encoder is wired in ``scripts/build_tx1_basal_embeddings.py``.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import pickle
@@ -29,6 +30,7 @@ from scipy.sparse import csr_matrix
 from aivc_model.gene_splits import sha256_file
 from aivc_model.state_core import resolve_state_gene_order, sha256_strings
 from aivc_model.tx1_basal import (
+    assert_tx1_input_contract,
     build_perturbseq_basal_adata,
     build_tahoe_basal_adata,
     build_xatlas_orion_basal_adata,
@@ -47,6 +49,12 @@ REJECTED_MODEL_LABEL: Final[str] = "tx-70m-merged"
 
 _SCHEMA_VERSION: Final[int] = 1
 _UNIT_NORM_ATOL: Final[float] = 1e-3
+PINNED_TX1_REGISTRATION_SHA256: Final[str] = (
+    "02afe8b49b4bef87aec3c86580f8373d78e24f8a35b41a794aef8ef50b64dc31"
+)
+_TX1_MODEL_FILES: Final[frozenset[str]] = frozenset(
+    {"collator_config.yml", "model.safetensors", "model_config.yml", "vocab.json"}
+)
 
 #: Per-line sidecar recording the HVG gene-order hash a line's ``hvg.npy``
 #: was written against (Critical 2). Not part of the ``arrays`` metadata
@@ -62,6 +70,7 @@ _HVG_GENE_ORDER_FILENAME: Final[str] = "hvg_gene_order.json"
 #: before this check existed, not as a mismatch -- see
 #: :func:`_cached_sample_signature_matches`.
 _SAMPLE_PROVENANCE_FILENAME: Final[str] = "sample_provenance.json"
+_SOURCE_PROVENANCE_FILENAME: Final[str] = "source_provenance.json"
 
 #: Basal-source enum values, as documented in the frozen Phase-A manifest
 #: contract (Global Constraint 1). Duplicated as literals rather than
@@ -123,6 +132,65 @@ class XatlasOrionSource:
 PerturbseqSourceConfig = PerturbseqSource | XatlasOrionSource
 
 
+def authenticate_tx1_registration(
+    registration_path: Path,
+) -> tuple[dict[str, object], str]:
+    """Return the only authorized Tx1 source manifest for Stage 2."""
+    registration_path = Path(registration_path)
+    registration_sha256 = sha256_file(registration_path)
+    if registration_sha256 != PINNED_TX1_REGISTRATION_SHA256:
+        raise ValueError(
+            "Tx1 Phase-A registration SHA-256 mismatch: "
+            f"{registration_sha256} != {PINNED_TX1_REGISTRATION_SHA256}"
+        )
+    try:
+        registration = json.loads(registration_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Tx1 Phase-A registration is unreadable: {exc}") from exc
+    if not isinstance(registration, dict):
+        raise ValueError("Tx1 Phase-A registration root must be an object")
+    artifacts = registration.get("artifacts")
+    evidence = registration.get("phase_a_gate_evidence")
+    if not isinstance(artifacts, dict) or not isinstance(evidence, dict):
+        raise ValueError("Tx1 Phase-A registration is missing authority records")
+    source_manifest = evidence.get("tx1_source_manifest")
+    if not isinstance(source_manifest, dict):
+        raise ValueError("Tx1 Phase-A registration has no embedded source manifest")
+    canonical = json.dumps(source_manifest, indent=2, sort_keys=True) + "\n"
+    source_manifest_sha256 = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    if artifacts.get("tx1_source_manifest_sha256") != source_manifest_sha256:
+        raise ValueError("embedded Tx1 source manifest SHA-256 authority mismatch")
+    if (
+        source_manifest.get("status") != "verified"
+        or source_manifest.get("model_label") != MODEL_LABEL
+        or source_manifest.get("rejected_label") != REJECTED_MODEL_LABEL
+        or source_manifest.get("expected_obsm_width") != EMBEDDING_WIDTH
+        or source_manifest.get("model_repo") != "tahoebio/Tahoe-x1"
+        or source_manifest.get("model_subdirectory") != "3b-model"
+    ):
+        raise ValueError("embedded Tx1 source manifest semantics are invalid")
+    revision = source_manifest.get("model_revision")
+    files = source_manifest.get("files")
+    if (
+        not isinstance(revision, str)
+        or len(revision) != 40
+        or any(character not in "0123456789abcdef" for character in revision)
+        or not isinstance(files, dict)
+        or set(files) != _TX1_MODEL_FILES
+    ):
+        raise ValueError("embedded Tx1 checkpoint identity is invalid")
+    for filename, record in files.items():
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("bytes"), int)
+            or record["bytes"] <= 0
+            or not isinstance(record.get("sha256"), str)
+            or len(record["sha256"]) != 64
+        ):
+            raise ValueError(f"embedded Tx1 file identity is invalid: {filename}")
+    return dict(source_manifest), source_manifest_sha256
+
+
 # --- cache writer -----------------------------------------------------------
 
 
@@ -135,6 +203,7 @@ def write_line_cache(
     *,
     hvg_gene_order: Sequence[str] | np.ndarray,
     sample_signature: Mapping[str, object] | None = None,
+    source_signature: Mapping[str, object] | None = None,
 ) -> dict[str, dict[str, object]]:
     """Validate and atomically write one line's embedding + HVG cache.
 
@@ -182,6 +251,10 @@ def write_line_cache(
         if sample_signature is not None:
             (tmp_dir / _SAMPLE_PROVENANCE_FILENAME).write_text(
                 json.dumps(dict(sample_signature), sort_keys=True) + "\n"
+            )
+        if source_signature is not None:
+            (tmp_dir / _SOURCE_PROVENANCE_FILENAME).write_text(
+                json.dumps(dict(source_signature), sort_keys=True) + "\n"
             )
         metadata = _line_dir_array_metadata(tmp_dir)
         final_dir = cache_dir / model_id
@@ -460,6 +533,10 @@ def verify_cache(
     *,
     frozen_manifest_path: Path | None = None,
     only_lines: Sequence[str] | None = None,
+    expected_model_ids: Sequence[str] | None = None,
+    expected_source_sha256: Mapping[str, str] | None = None,
+    expected_matrix_semantics: str | None = None,
+    expected_tx1_source_manifest: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Verify every embedding cache under ``cache_dir`` against its manifest.
 
@@ -507,12 +584,36 @@ def verify_cache(
             unweakened. A caller running the 4-GPU ``--only-line`` sharding
             workflow must still run one final unrestricted (or
             ``--verify-only``) pass to certify the whole cache.
+        expected_model_ids: Explicit complete cache membership contract. This
+            supports Exp13 caches whose line list does not use the legacy
+            frozen Phase-A manifest schema. It must be a non-empty sequence of
+            unique, non-empty strings and cannot be combined with
+            ``frozen_manifest_path``. With ``only_lines``, each requested line
+            must belong to this contract, but the check remains per-shard.
 
     Returns:
         A report with ``status`` (``"verified"`` or ``"failed"``),
         ``model_label``, ``lines_expected``, ``lines_present``, and
         ``discrepancies`` (empty iff ``status == "verified"``).
     """
+    if expected_model_ids is not None and frozen_manifest_path is not None:
+        raise ValueError(
+            "expected_model_ids cannot be combined with frozen_manifest_path"
+        )
+    explicit_expected_ids = _validate_expected_model_ids(expected_model_ids)
+    source_hashes = _validate_expected_source_sha256(expected_source_sha256)
+    if source_hashes is not None:
+        if explicit_expected_ids is None:
+            raise ValueError("expected_source_sha256 requires expected_model_ids")
+        if set(source_hashes) != explicit_expected_ids:
+            raise ValueError(
+                "expected_source_sha256 keys must exactly match expected_model_ids"
+            )
+        if not expected_matrix_semantics:
+            raise ValueError(
+                "expected_matrix_semantics is required with expected_source_sha256"
+            )
+
     cache_dir = Path(cache_dir)
     manifest_path = cache_dir / "manifest.json"
     if not manifest_path.is_file():
@@ -523,15 +624,37 @@ def verify_cache(
         return _failed_report(cache_dir, [f"run manifest is not valid JSON: {exc}"])
 
     discrepancies = _manifest_contract_discrepancies(manifest)
+    if expected_tx1_source_manifest is not None and manifest.get(
+        "tx1_source_manifest"
+    ) != dict(expected_tx1_source_manifest):
+        discrepancies.append(
+            "run manifest Tx1 source identity differs from pinned registration"
+        )
     lines = manifest.get("lines") if isinstance(manifest, dict) else None
     if not isinstance(lines, dict) or not lines:
         discrepancies.append("run manifest has no recorded lines")
         return _failed_report(cache_dir, discrepancies)
 
     scope_ids = set(only_lines) if only_lines is not None else None
-    discrepancies.extend(
-        _frozen_manifest_discrepancies(manifest, lines, frozen_manifest_path, scope_ids)
-    )
+    if explicit_expected_ids is None:
+        discrepancies.extend(
+            _frozen_manifest_discrepancies(
+                manifest, lines, frozen_manifest_path, scope_ids
+            )
+        )
+    else:
+        discrepancies.extend(
+            _expected_model_id_discrepancies(lines, explicit_expected_ids, scope_ids)
+        )
+    if source_hashes is not None:
+        discrepancies.extend(
+            _source_binding_discrepancies(
+                lines,
+                source_hashes,
+                str(expected_matrix_semantics),
+                scope_ids,
+            )
+        )
     scoped_lines = (
         {model_id: entry for model_id, entry in lines.items() if model_id in scope_ids}
         if scope_ids is not None
@@ -544,14 +667,24 @@ def verify_cache(
         for entry in cache_dir.iterdir()
         if entry.is_dir() and not entry.name.startswith(".")
     }
-    expected_ids = scope_ids if scope_ids is not None else set(lines)
-    for missing_id in sorted(expected_ids - set(lines)):
-        discrepancies.append(
-            f"line {missing_id}: requested via --only-line but missing from "
-            "run manifest.json lines"
-        )
-    check_ids = expected_ids & set(lines)
-    for missing_id in sorted(check_ids - present_dirs):
+    expected_ids = (
+        scope_ids
+        if scope_ids is not None
+        else explicit_expected_ids
+        if explicit_expected_ids is not None
+        else set(lines)
+    )
+    if scope_ids is not None:
+        for missing_id in sorted(expected_ids - set(lines)):
+            discrepancies.append(
+                f"line {missing_id}: requested via --only-line but missing from "
+                "run manifest.json lines"
+            )
+    check_ids = scope_ids & set(lines) if scope_ids is not None else set(lines)
+    directory_required_ids = (
+        check_ids if scope_ids is not None else expected_ids | set(lines)
+    )
+    for missing_id in sorted(directory_required_ids - present_dirs):
         discrepancies.append(f"line {missing_id}: directory missing from cache_dir")
     if scope_ids is None:
         for extra_id in sorted(present_dirs - expected_ids):
@@ -565,14 +698,130 @@ def verify_cache(
     lines_present = (
         len(present_dirs) if scope_ids is None else len(check_ids & present_dirs)
     )
+    tx1_source_manifest = manifest.get("tx1_source_manifest")
+    tx1_source_manifest_sha256 = (
+        hashlib.sha256(
+            (json.dumps(tx1_source_manifest, indent=2, sort_keys=True) + "\n").encode()
+        ).hexdigest()
+        if isinstance(tx1_source_manifest, dict)
+        else None
+    )
     return {
         "status": status,
         "cache_dir": str(cache_dir),
+        "manifest_sha256": sha256_file(manifest_path),
+        "tx1_source_manifest_sha256": tx1_source_manifest_sha256,
         "model_label": manifest.get("model_label"),
         "lines_expected": len(expected_ids),
         "lines_present": lines_present,
+        "line_artifact_sha256": {
+            str(model_id): {
+                str(name): str(metadata["sha256"])
+                for name, metadata in sorted(entry.get("arrays", {}).items())
+                if isinstance(metadata, dict) and "sha256" in metadata
+            }
+            for model_id, entry in sorted(scoped_lines.items())
+            if isinstance(entry, dict)
+        },
         "discrepancies": discrepancies,
     }
+
+
+def _validate_expected_model_ids(
+    expected_model_ids: Sequence[str] | None,
+) -> set[str] | None:
+    if expected_model_ids is None:
+        return None
+    if isinstance(expected_model_ids, str) or not expected_model_ids:
+        raise ValueError("expected_model_ids must be a non-empty sequence")
+    if any(
+        not isinstance(model_id, str) or not model_id for model_id in expected_model_ids
+    ):
+        raise ValueError("expected_model_ids must contain only non-empty strings")
+    expected_ids = set(expected_model_ids)
+    if len(expected_ids) != len(expected_model_ids):
+        raise ValueError("expected_model_ids must contain unique values")
+    return expected_ids
+
+
+def _validate_expected_source_sha256(
+    expected: Mapping[str, str] | None,
+) -> dict[str, str] | None:
+    if expected is None:
+        return None
+    if not isinstance(expected, Mapping) or not expected:
+        raise ValueError("expected_source_sha256 must be a non-empty mapping")
+    result = {str(model_id): str(digest) for model_id, digest in expected.items()}
+    invalid = [
+        model_id
+        for model_id, digest in result.items()
+        if not model_id
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ]
+    if invalid:
+        raise ValueError(
+            "expected_source_sha256 must map non-empty ModelIDs to lowercase "
+            f"SHA-256 hex digests; invalid={sorted(invalid)}"
+        )
+    return result
+
+
+def _source_binding_discrepancies(
+    lines: Mapping[str, object],
+    expected_hashes: Mapping[str, str],
+    expected_semantics: str,
+    scope_ids: set[str] | None,
+) -> list[str]:
+    model_ids = (
+        set(expected_hashes) if scope_ids is None else scope_ids & set(expected_hashes)
+    )
+    problems: list[str] = []
+    for model_id in sorted(model_ids & set(lines)):
+        entry = lines[model_id]
+        if not isinstance(entry, dict):
+            problems.append(f"line {model_id}: manifest line entry is malformed")
+            continue
+        if entry.get("model_id") != model_id:
+            problems.append(f"line {model_id}: manifest ModelID binding mismatch")
+        if entry.get("source_sha256") != expected_hashes[model_id]:
+            problems.append(f"line {model_id}: registry source SHA-256 mismatch")
+        if entry.get("matrix_semantics") != expected_semantics:
+            problems.append(f"line {model_id}: matrix semantics mismatch")
+        if entry.get("source_provenance") != {
+            "model_id": model_id,
+            "source_sha256": expected_hashes[model_id],
+            "matrix_semantics": expected_semantics,
+        }:
+            problems.append(f"line {model_id}: source provenance is missing or stale")
+        sample = entry.get("sample_provenance")
+        if not isinstance(sample, dict) or not sample.get("cell_ids_sha256"):
+            problems.append(f"line {model_id}: sample provenance is missing")
+    return problems
+
+
+def _expected_model_id_discrepancies(
+    lines: Mapping[str, object],
+    expected_ids: set[str],
+    scope_ids: set[str] | None,
+) -> list[str]:
+    if scope_ids is not None:
+        return [
+            f"line {model_id}: requested via --only-line but absent from "
+            "expected_model_ids"
+            for model_id in sorted(scope_ids - expected_ids)
+        ]
+    problems = [
+        f"line {model_id}: expected by expected_model_ids but was never embedded "
+        "(missing from run manifest.json lines)"
+        for model_id in sorted(expected_ids - set(lines))
+    ]
+    problems.extend(
+        f"line {model_id}: present in run manifest.json lines but absent from "
+        "expected_model_ids (out-of-contract line)"
+        for model_id in sorted(set(lines) - expected_ids)
+    )
+    return problems
 
 
 def _manifest_contract_discrepancies(manifest: object) -> list[str]:
@@ -714,6 +963,12 @@ def _verify_line(cache_dir: Path, model_id: str, expected_entry: object) -> list
         expected_entry.get("arrays"), dict
     ):
         return [f"line {model_id}: run manifest has no array metadata"]
+    if set(expected_entry["arrays"]) != {
+        "embeddings.npy",
+        "hvg.npy",
+        "obs.parquet",
+    }:
+        return [f"line {model_id}: manifest array membership is invalid"]
     line_dir = cache_dir / model_id
     problems: list[str] = []
     shapes: dict[str, tuple[int, ...]] = {}
@@ -742,6 +997,21 @@ def _verify_line(cache_dir: Path, model_id: str, expected_entry: object) -> list
     problems.extend(
         _n_cells_agreement_discrepancy(model_id, expected_entry, row_counts)
     )
+    for filename, field in (
+        (_SAMPLE_PROVENANCE_FILENAME, "sample_provenance"),
+        (_SOURCE_PROVENANCE_FILENAME, "source_provenance"),
+    ):
+        expected_sidecar = expected_entry.get(field)
+        if expected_sidecar is None:
+            continue
+        sidecar_path = line_dir / filename
+        try:
+            observed_sidecar = json.loads(sidecar_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            problems.append(f"line {model_id}: {filename} is unreadable: {exc}")
+            continue
+        if observed_sidecar != expected_sidecar:
+            problems.append(f"line {model_id}: {filename} disagrees with manifest")
     return problems
 
 
@@ -866,6 +1136,183 @@ def embed_lines(
             perturbseq_sources=sources,
         )
     return line_entries
+
+
+def embed_registry_lines(
+    registry: pd.DataFrame,
+    cache_dir: Path,
+    *,
+    encoder: EncoderFn,
+    hvg_state_model_dir: Path,
+    var_ensembl_col: str,
+    hvg_gene_symbol_col: str = "gene_symbol",
+    max_cells_per_line: int | None = None,
+    seed: int = 0,
+    only_lines: Sequence[str] | None = None,
+) -> dict[str, dict[str, object]]:
+    """Build Tx1 caches directly from the Exp13 raw-UMI source registry."""
+    if registry.index.name != "model_id" or not registry.index.is_unique:
+        raise ValueError("registry must be uniquely indexed by model_id")
+    required = {"source_path", "source_kind", "matrix_semantics"}
+    missing = sorted(required - set(registry.columns))
+    if missing:
+        raise ValueError(f"registry is missing columns: {missing}")
+    restrict = set(only_lines) if only_lines is not None else None
+    if restrict is not None:
+        unknown = sorted(restrict - set(registry.index.astype(str)))
+        if unknown:
+            raise ValueError(f"only_lines contains unknown ModelIDs: {unknown}")
+    entries: dict[str, dict[str, object]] = {}
+    for model_id, row in registry.iterrows():
+        model_id = str(model_id)
+        if restrict is not None and model_id not in restrict:
+            continue
+        if str(row["source_kind"]) != "h5ad":
+            raise ValueError(f"line {model_id}: registry source_kind must be h5ad")
+        semantics = str(row["matrix_semantics"])
+        if semantics != "raw_umi_counts":
+            raise ValueError(
+                f"line {model_id}: registry matrix_semantics must be raw_umi_counts"
+            )
+        source_path = Path(str(row["source_path"]))
+        source_sha256 = sha256_file(source_path)
+        adata, sample_signature = _load_registry_basal_adata(
+            source_path,
+            model_id=model_id,
+            var_ensembl_col=var_ensembl_col,
+            max_cells=max_cells_per_line,
+            seed=seed,
+        )
+        if sha256_file(source_path) != source_sha256:
+            raise ValueError(f"line {model_id}: registry source changed while reading")
+        hvg_matrix, hvg_gene_order, fill_rate = _resolve_hvg_matrix(
+            adata, hvg_state_model_dir, hvg_gene_symbol_col
+        )
+        source_signature = {
+            "model_id": model_id,
+            "source_sha256": source_sha256,
+            "matrix_semantics": semantics,
+        }
+        if _is_cached(
+            cache_dir,
+            model_id,
+            hvg_gene_order=hvg_gene_order,
+            sample_signature=sample_signature,
+            source_signature=source_signature,
+        ):
+            _LOGGER.info("line %s: bound cache already exists", model_id)
+            embeddings, _, _ = load_line_cache(cache_dir, model_id)
+            arrays = _line_dir_array_metadata(Path(cache_dir) / model_id)
+        else:
+            embeddings = np.asarray(encoder(adata), dtype=np.float32)
+            if sha256_file(source_path) != source_sha256:
+                raise ValueError(
+                    f"line {model_id}: registry source changed during encoding"
+                )
+            arrays = write_line_cache(
+                cache_dir,
+                model_id,
+                embeddings,
+                hvg_matrix,
+                adata.obs,
+                hvg_gene_order=hvg_gene_order,
+                sample_signature=sample_signature,
+                source_signature=source_signature,
+            )
+        entries[model_id] = {
+            "model_id": model_id,
+            "source_sha256": source_sha256,
+            "matrix_semantics": semantics,
+            "sample_provenance": sample_signature,
+            "source_provenance": source_signature,
+            "arrays": arrays,
+            "norm_stats": embedding_norm_stats(np.asarray(embeddings)),
+            "n_cells": int(adata.n_obs),
+            "hvg_fill_rate": fill_rate,
+            "hvg_gene_order_sha256": _hvg_gene_order_signature(hvg_gene_order)[
+                "sha256"
+            ],
+        }
+    return entries
+
+
+def _load_registry_basal_adata(
+    source_path: Path,
+    *,
+    model_id: str,
+    var_ensembl_col: str,
+    max_cells: int | None,
+    seed: int,
+) -> tuple[ad.AnnData, dict[str, object]]:
+    backed = ad.read_h5ad(source_path, backed="r")
+    try:
+        if "model_id" not in backed.obs.columns:
+            raise ValueError(f"line {model_id}: source obs is missing model_id")
+        observed_ids = set(backed.obs["model_id"].astype(str))
+        if observed_ids != {model_id}:
+            raise ValueError(
+                f"line {model_id}: source obs ModelIDs are {sorted(observed_ids)}"
+            )
+        if var_ensembl_col in backed.var.columns:
+            ensembl_ids = backed.var[var_ensembl_col].astype(str).to_numpy()
+        elif backed.var.index.name == var_ensembl_col:
+            ensembl_ids = backed.var.index.astype(str).to_numpy()
+        else:
+            raise ValueError(
+                f"line {model_id}: source var has no {var_ensembl_col!r} column/index"
+            )
+        cell_ids = backed.obs_names.astype(str).to_numpy()
+        if not len(cell_ids):
+            raise ValueError(f"line {model_id}: source contains no cells")
+        if len(set(cell_ids)) != len(cell_ids):
+            raise ValueError(f"line {model_id}: source cell identities are not unique")
+        if len(set(ensembl_ids)) != len(ensembl_ids):
+            raise ValueError(f"line {model_id}: source Ensembl IDs are not unique")
+        selected = _stable_registry_indices(cell_ids, model_id, max_cells, seed)
+        materialized = backed[selected, :].to_memory()
+    finally:
+        backed.file.close()
+    materialized.var.index = ensembl_ids
+    materialized.var["ensembl_id"] = ensembl_ids
+    materialized.obs["model_id"] = model_id
+    if "cell_type" not in materialized.obs.columns:
+        materialized.obs["cell_type"] = model_id
+    data = (
+        materialized.X.data
+        if sparse.issparse(materialized.X)
+        else np.asarray(materialized.X).ravel()
+    )
+    if data.size and not np.equal(data, np.floor(data)).all():
+        raise ValueError(
+            f"line {model_id}: source matrix is not raw integer UMI counts"
+        )
+    assert_tx1_input_contract(materialized)
+    selected_ids = materialized.obs_names.astype(str).to_numpy()
+    signature = _sample_provenance_signature(
+        materialized.obs, seed=seed, max_cells_per_line=max_cells
+    )
+    signature["selection_algorithm"] = "sha256_model_id_cell_id_v1"
+    signature["selected_cell_ids"] = selected_ids.tolist()
+    return materialized, signature
+
+
+def _stable_registry_indices(
+    cell_ids: np.ndarray,
+    model_id: str,
+    max_cells: int | None,
+    seed: int,
+) -> np.ndarray:
+    if max_cells is None or max_cells >= len(cell_ids):
+        return np.arange(len(cell_ids), dtype=np.int64)
+    if max_cells <= 0:
+        raise ValueError("max_cells_per_line must be positive")
+    ranked = sorted(
+        range(len(cell_ids)),
+        key=lambda index: hashlib.sha256(
+            f"{seed}\0{model_id}\0{cell_ids[index]}".encode()
+        ).digest(),
+    )[:max_cells]
+    return np.asarray(sorted(ranked), dtype=np.int64)
 
 
 def _embed_one_line(
@@ -1007,6 +1454,7 @@ def _is_cached(
     *,
     hvg_gene_order: Sequence[str] | np.ndarray,
     sample_signature: Mapping[str, object] | None = None,
+    source_signature: Mapping[str, object] | None = None,
 ) -> bool:
     """Check whether a line's on-disk cache is complete, valid, and current.
 
@@ -1053,7 +1501,9 @@ def _is_cached(
         return False
     if not _cached_hvg_gene_order_matches(cache_dir, model_id, hvg_gene_order):
         return False
-    return _cached_sample_signature_matches(cache_dir, model_id, sample_signature)
+    return _cached_sample_signature_matches(
+        cache_dir, model_id, sample_signature
+    ) and _cached_source_signature_matches(cache_dir, model_id, source_signature)
 
 
 def _cached_hvg_gene_order_matches(
@@ -1097,6 +1547,21 @@ def _cached_sample_signature_matches(
     sidecar_path = Path(cache_dir) / model_id / _SAMPLE_PROVENANCE_FILENAME
     if not sidecar_path.is_file():
         return True  # legacy cache, written before this sidecar existed
+    try:
+        recorded = json.loads(sidecar_path.read_text())
+    except json.JSONDecodeError:
+        return False
+    return recorded == dict(expected)
+
+
+def _cached_source_signature_matches(
+    cache_dir: Path, model_id: str, expected: Mapping[str, object] | None
+) -> bool:
+    if expected is None:
+        return True
+    sidecar_path = Path(cache_dir) / model_id / _SOURCE_PROVENANCE_FILENAME
+    if not sidecar_path.is_file():
+        return False
     try:
         recorded = json.loads(sidecar_path.read_text())
     except json.JSONDecodeError:
@@ -1198,6 +1663,7 @@ def _parquet_metadata(path: Path) -> dict[str, object]:
 __all__ = [
     "EMBEDDING_WIDTH",
     "MODEL_LABEL",
+    "PINNED_TX1_REGISTRATION_SHA256",
     "REJECTED_MODEL_LABEL",
     "EncoderFn",
     "PerturbseqSource",
@@ -1210,4 +1676,6 @@ __all__ = [
     "load_hvg_gene_order",
     "verify_cache",
     "embed_lines",
+    "embed_registry_lines",
+    "authenticate_tx1_registration",
 ]

@@ -39,6 +39,10 @@ from aivc_model.state_core import (
     StateForwardAdapter,
     encode_batch_labels,
 )
+from aivc_model.stage1_artifact import (
+    Stage1ArtifactLoadReport,
+    load_stage1_artifact,
+)
 from aivc_model.state_warm_start import build_warm_started_state_model
 from aivc_model.tx1_embed_cache import load_line_cache
 
@@ -233,14 +237,72 @@ def construct_forward_only_model(
     return ForwardOnlyStateModel(StateForwardAdapter(model), perturbations)
 
 
+def construct_stage2_model_from_stage1_artifact(
+    *,
+    model_cls: type[nn.Module],
+    checkpoint_path: Path,
+    manifest_path: Path,
+    hparams_checkpoint_path: Path,
+    input_dim: int,
+    output_dim: int,
+    pert_dim: int,
+    target_genes: Sequence[str],
+    stage1_esm_embeddings_path: Path,
+    target_esm_embeddings_path: Path,
+    target_esm_artifact_sha256: str,
+    run_manifest_path: Path,
+    checkpoint_metadata_path: Path,
+    stage1_objective_path: Path,
+    compatibility_code_paths: Mapping[str, Path],
+    config_paths: Mapping[str, Path],
+    source_paths: Mapping[str, Path],
+    trainable: bool,
+    esm2_adapter_hidden: int = 512,
+    output_space: str | None = None,
+    emit_checkpoint_output: bool = False,
+) -> tuple[ForwardOnlyStateModel, Stage1ArtifactLoadReport]:
+    """Build a target-universe model and strictly restore a sealed Stage 1."""
+    model = construct_forward_only_model(
+        model_cls=model_cls,
+        hparams_checkpoint_path=hparams_checkpoint_path,
+        input_dim=input_dim,
+        output_dim=output_dim,
+        pert_dim=pert_dim,
+        genes=target_genes,
+        esm2_embeddings_path=target_esm_embeddings_path,
+        esm2_adapter_hidden=esm2_adapter_hidden,
+        output_space=output_space,
+        emit_checkpoint_output=emit_checkpoint_output,
+    )
+    report = load_stage1_artifact(
+        model,
+        checkpoint_path=checkpoint_path,
+        manifest_path=manifest_path,
+        esm2_embeddings_path=stage1_esm_embeddings_path,
+        target_esm_embeddings_path=target_esm_embeddings_path,
+        target_esm_artifact_sha256=target_esm_artifact_sha256,
+        state_hparams_path=hparams_checkpoint_path,
+        run_manifest_path=run_manifest_path,
+        checkpoint_metadata_path=checkpoint_metadata_path,
+        stage1_objective_path=stage1_objective_path,
+        compatibility_code_paths=compatibility_code_paths,
+        config_paths=config_paths,
+        source_paths=source_paths,
+        trainable=trainable,
+    )
+    return model, report
+
+
 def load_forward_only_checkpoint(
     model: ForwardOnlyStateModel, checkpoint_path: Path
 ) -> ForwardOnlyLoadReport:
     """Load Phase C's trained ``state_adapter``/``perturbations`` weights only.
 
-    ``checkpoint_path`` is the flat ``AivcModel.state_dict()`` Phase C's
-    ``_save_model_checkpoint`` wrote (a raw ``torch.save``, not a nested
-    Lightning checkpoint). Loads with ``strict=False`` and validates like
+    ``checkpoint_path`` is a flat, buffer-free ``AivcModel.state_dict()``
+    (a raw ``torch.save``, not a nested Lightning checkpoint). The legacy
+    Phase C checkpoint persists ``perturbations.esm_matrix`` and must instead
+    go through the sealed-artifact loader, which authenticates it before
+    dropping it. This helper loads with ``strict=False`` and validates like
     ``validate_load_result``: a missing destination weight or a disallowed
     unexpected key (outside the known GMM/MLP-head drop list) both raise --
     a partial load must never be silent. Sets ``eval()`` and freezes every
@@ -254,12 +316,29 @@ def load_forward_only_checkpoint(
     checkpoint_state = torch.load(
         checkpoint_path, map_location="cpu", weights_only=True
     )
+    if {
+        "perturbations.esm_matrix",
+        "perturbations.gene_vocabulary_sha256",
+    } & set(checkpoint_state):
+        raise ValueError(
+            "Authenticated perturbation vocabulary requires a sealed Stage-1 "
+            "artifact; "
+            "use construct_stage2_model_from_stage1_artifact"
+        )
     result = model.load_state_dict(checkpoint_state, strict=False)
-    missing = sorted(result.missing_keys)
+    missing = sorted(
+        key
+        for key in result.missing_keys
+        if key != "perturbations.gene_vocabulary_sha256"
+    )
     unexpected = sorted(result.unexpected_keys)
     dropped = sorted(key for key in unexpected if _is_expected_drop(key))
     disallowed = sorted(set(unexpected) - set(dropped))
-    loaded = sorted(set(model.state_dict()) - set(missing))
+    loaded = sorted(
+        key
+        for key in model.state_dict()
+        if key != "perturbations.gene_vocabulary_sha256" and key not in missing
+    )
     if missing or disallowed or not loaded:
         raise ValueError(
             f"Incomplete forward-only ST checkpoint load from {checkpoint_path}: "
@@ -719,10 +798,10 @@ __all__ = [
     "ForwardOnlyStateModel",
     "UnknownPerturbationGeneError",
     "construct_forward_only_model",
+    "construct_stage2_model_from_stage1_artifact",
     "generate_predicted_response",
     "generate_pooled_predicted_response",
     "generate_predicted_response_for_line",
-    "load_forward_only_checkpoint",
     "resolve_device",
     "resolve_genes_against_vocabulary",
     "vocabulary_genes",

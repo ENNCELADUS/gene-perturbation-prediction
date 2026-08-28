@@ -1,8 +1,8 @@
 # Experiment Protocol: Exp13 Cell-Line GeneEffect Residual Benchmark
 
-**Status:** contract written 2026-08-17; Stage 0 completed 2026-08-18 (§6 closed by branch 1,
-[result](../results/exp13-stage0-tx1-input-representation.md)). The residual head, Stage 1 trainer,
-and registered objective exist; no completed Stage 1-2 artifact exists.
+**Status:** Stage 0 and the formal Stage 1 response run are complete. The strict two-phase Stage 2
+implementation exists, but no Stage 2 result exists: its 226-line Tx1/q_sc/raw-UMI inputs,
+target-universe ESM2, registered copy-prior, and Stage 1 compatibility/input manifest must pass preflight; that manifest records incomplete historical training lineage.
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
 **Authority:** [`01-blueprint.md`](../01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**
@@ -39,16 +39,16 @@ model, and nearest-label donor fit (170 labeled train lines). Val and test are f
 
 ## 3. Scored Gene Universe
 
-The scored universe is **GeneEffect train/val/test coverage ∩ ESM2-resolvable**, frozen
-before Stage 2. GeneEffect coverage alone (≥5 finite train, ≥3 finite val, ≥3 finite test
-observations) is 17,931 genes
-(`configs/benchmarks/cell_line_geneeffect_226_split_audit.json:
-common_genes_train_ge5_val_ge3_test_ge3`); this is the **pre-ESM2 upper bound**, not the
-final universe. The symbol → UniProt/isoform mapping is pinned once, following the existing
-`--require-complete-coverage` gate and top-reviewed-hit query convention
-(`scripts/precompute_esm2_embeddings.py`), caching to `data/esm2/symbol_to_sequence.json`. A
-gene unresolvable by ESM2 after the pass starts is dropped from the frozen universe manifest,
-never dropped retroactively from an already-scored run.
+The scored universe is **GeneEffect train/val/test coverage ∩ finite train-side K562 copy-prior
+coverage ∩ ESM2-resolvable**, frozen before Stage 2 and shared by every model and baseline.
+GeneEffect coverage alone (≥5 finite train, ≥3 finite val, ≥3 finite test observations) is
+17,931 genes (`configs/benchmarks/cell_line_geneeffect_226_split_audit.json:
+common_genes_train_ge5_val_ge3_test_ge3`), the **pre-prior/pre-ESM2 upper bound**, not the final
+universe. The copy prior is pinned donor `ACH-000551`; its missing values are globally dropped,
+never filled or method-specific. Symbol → UniProt/isoform mapping follows the existing
+`--require-complete-coverage` gate and top-reviewed-hit convention
+(`scripts/precompute_esm2_embeddings.py`), caching to `data/esm2/symbol_to_sequence.json`. A gene
+unresolvable by ESM2 is dropped before freeze, never retroactively from an already-scored run.
 
 ## 4. Model
 
@@ -60,6 +60,8 @@ embedding (2560-d) as $F_\omega$ input, ST-checkpoint HVG panel (2000-d) as $B_c
 space, ESM2 adapter $p_g=A_\phi(E_{\text{ESM2}}(\text{protein}(g)))$ (1280-d → 2024-d) as
 $F_\omega$'s perturbation input, with $e_g$ the raw 1280-d ESM2 embedding supplied to
 $h_\delta$ directly. `Delta` is 4000-d (2 × 2000, mean+var); `z_c` is 5120-d (2 × 2560).
+Training freezes Stage 1 in eval mode to warm $h_\delta$ on streamed features, then unfreezes
+STATE/ESM adapters for $L_{resp}+\lambda_{dep}L_{dep}$; masked Huber uses $\delta=1$, Pearson $\beta=1$, and $\lambda_{dep}$ is the clipped median gradient-norm ratio on eight train batches.
 
 ## 5. Sampling and Features
 
@@ -75,9 +77,8 @@ $h_\delta$ directly. `Delta` is 4000-d (2 × 2000, mean+var); `z_c` is 5120-d (2
 - **`q_sc_{g,c}`.** Mean expression, fraction expressing, expression variance of gene $g$ in
   context $c$, from basal single cells only.
 - **Projection.** `Delta` (4000-d) is projected to 256-d by one fixed, seeded sparse random
-  projection with no fit step (so no train/test asymmetry). The seed is drawn once before
-  Stage 2 begins, pinned in `run_manifest.json`, and never redrawn; this document does not
-  assert its numeric value ahead of that freeze. Unprojected interpretables kept alongside:
+  projection with no fit step (so no train/test asymmetry). Seed `20260828` is pinned before
+  Stage 2 and never redrawn. Unprojected interpretables kept alongside:
   $\lVert\Delta_{\text{mean}}\rVert$, cosine to the basal mean, and `Delta` at $g$'s own HVG
   index (own-gene shift) when $g$ is in the panel.
 - **Collator seed.** `max_length: 2048` with `sampling: true` means `_sample` draws genes by
@@ -132,10 +133,9 @@ construction (`residual_ladder.py:7`), so its per-gene Spearman across lines is 
 report it as **"not evaluable / constant prediction"** with its coverage count, never as a
 score of 0.
 
-Five retraining ablations, one per feature block. **The virtual-cell ablation removes
-`{Delta_proj, s_{g,c}, own-gene shift}` together** — dropping `Delta_proj` alone leaves
-ST-derived signal in the model through `s_{g,c}` and the own-gene shift feature, and does not
-test the no-virtual-cell claim.
+This bring-up runs the full five-block model for one seed only: no ablation and no multi-seed
+scientific claim. Any later virtual-cell ablation must jointly remove
+`{Delta_proj, s_{g,c}, own-gene shift}`; dropping `Delta_proj` alone is not that test.
 
 ## 9. Leakage and Integrity
 
@@ -158,7 +158,7 @@ stage1_objective.json                  §7, pinned before Stage 1 trains
 condition_features/                    Stage 2 per-condition features (streamed, not B_hat)
 checkpoint_selection.json
 geneeffect_residual_predictions.csv
-geneeffect_residual_metrics.json       primary + per-line + five ablations + baselines
+geneeffect_residual_metrics.json       primary + per-line + response before/after + baselines
 run_manifest.json                      commit, checkpoint/ESM2/DepMap hashes, seeds, M_c,
                                         cell_set_len, projection seed, gene universe
 ```

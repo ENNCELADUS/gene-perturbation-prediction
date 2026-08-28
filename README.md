@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-08-18):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` has a nine-context row-level split: K562/JURKAT/OVCAR8/HAP1/HT29 train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only. The raw-filter audit remains incomplete, and no model has run. In parallel, **Exp13's** 226-line cell-line GeneEffect residual benchmark has a written, scope-closed contract superseding T2: the residual head, the fit guard and the frozen split exist, Stage 0 is **closed** (Tx1 does not read CPM like raw counts, so the 152 Kinker lines were rebuilt from SCP542 UMI counts), and no training run has started. Every earlier GeneEffect path has been removed. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md) · [`Exp13 protocol`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
+> **Status (2026-08-28):** Active direction — **context-conditioned synthetic-lethality ranking**. `context_screen_v2` is built but unrun. In parallel, scope-closed **Exp13** has completed Stage 0 and the formal Stage 1 response run; its compatibility/input seal explicitly records incomplete historical training lineage, while streamed five-block features, frozen-head warmup, and joint Stage 2 tuning are implemented. No Stage 2 result exists: formal training remains blocked until the exact 226-line Tx1/q_sc/raw-UMI inputs, target-universe ESM2, registered copy-prior, and Stage 1 compatibility/input manifest pass preflight. GeneEffect remains single-gene dependency prediction, never SL evidence. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md) · [`Exp13 protocol`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
 
 The central question of the active direction:
 
@@ -34,11 +34,11 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 - **[2026/08]** **Exp13 Stage 0 closed — Tx1 does not read CPM like raw counts.** Measured per-cell cosine 0.92–0.95 against the raw encode, and unlike gene-subsampling noise the shift survives pooling to the per-line mean (0.972–0.987), so the 152 Kinker `processed_cpm` lines were rebuilt from SCP542 raw UMI counts. Also found: the collator subsamples genes with an unseeded `randperm` above 2048 detected genes, so runs must pin a collator seed. [`Result`](docs/results/exp13-stage0-tx1-input-representation.md) · [`Protocol §6`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
 - **[2026/08]** **Legacy GeneEffect stack removed.** The exp05 training stack, Bridge-A, and the Tx1 Phase A–F tree — three overlapping implementations of one task, all closed negative — were deleted; `src/aivc_model/` drops from 49 files to 17, leaving the Exp13 residual head, the fit guard, the residual ladder and the Tx1 basal path. Registered negatives stay in [`docs/results/`](docs/results/); git history holds the implementations.
-- **[2026/08]** **Exp13 contract (Phase 1) written.** The 226-line cell-line GeneEffect
-  residual benchmark gets a scope-closed protocol — a corrected `Delta` typing fix in `01`
-  §3, a five-block residual composition, and a pre-registered Stage 0 open question over
-  Kinker CPM lines' Tx1 embedding validity. `docs/results/tx1-hvg-geneeffect-phase-f.md`
-  (T2) is marked superseded, not deleted. [`Contract`](docs/01-blueprint.md) ·
+- **[2026/08]** **Exp13 Stage 1 complete; Stage 2 implementation ready for asset preflight.**
+  The formal four-anchor response run selected epoch 32. Stage 2 authenticates its checkpoint and recorded inputs,
+  streams authenticated five-block features, warms the head with the backbone frozen/eval,
+  then jointly tunes STATE/ESM adapters with the response anchor retained. No Stage 2 run or
+  but its manifest marks historical training-data/code lineage incomplete. No Stage 2 run or scientific claim exists until all 226 contexts and terminal artifacts verify. [`Contract`](docs/01-blueprint.md) ·
   [`Exp13 protocol`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
 - **[2026/08]** **Nine-context split built.** K562/JURKAT/OVCAR8/HAP1/HT29 are train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only, with cross-side source rows and pairs isolated. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
 - **[2026/07]** **T2 registered primary gate completed — negative.** On the frozen 28 train / 5 validation / 9 test GeneEffect split and 587-gene slice, Tx1-3B-ST failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). HVG-ST was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. T2 is paused for redesign and the remaining baseline ladder is closeout work. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).

@@ -703,6 +703,25 @@ class _WindowedModel(nn.Module):
         return tuple(chunk + self.shift for chunk in chunks)
 
 
+class _RandpermWindowedModel(nn.Module):
+    """Mirrors STATE collator randomness on each chunk's own device."""
+
+    def __init__(self, window: int) -> None:
+        super().__init__()
+        self.cell_sentence_len = window
+
+    def forward(self, chunks, gene, batch_index_chunks):
+        return tuple(
+            chunk[
+                torch.randperm(
+                    chunk.shape[0],
+                    device=chunk.device,
+                )
+            ]
+            for chunk in chunks
+        )
+
+
 def test_predict_bag_pads_and_trims_to_the_window() -> None:
     """A bag that is not a multiple of the window must still forward.
 
@@ -737,6 +756,59 @@ def test_predict_bags_combines_conditions_in_one_model_forward() -> None:
 
     assert model.forward_calls == 1
     assert [tuple(output.shape) for output in outputs] == [(10, 3), (6, 3)]
+
+
+def test_predict_bags_seed_controls_randperm_despite_ambient_rng_changes() -> None:
+    model = _RandpermWindowedModel(window=8)
+    control = torch.arange(30, dtype=torch.float32).reshape(10, 3)
+
+    torch.manual_seed(11)
+    torch.rand(5)
+    first = predict_bags(model, [control], ["G"], seed=73)[0]
+    torch.manual_seed(999)
+    torch.rand(17)
+    second = predict_bags(model, [control], ["G"], seed=73)[0]
+
+    torch.testing.assert_close(first, second)
+
+
+def test_predict_bags_different_seeds_can_change_padding_and_randperm() -> None:
+    model = _RandpermWindowedModel(window=8)
+    control = torch.arange(30, dtype=torch.float32).reshape(10, 3)
+
+    first = predict_bags(model, [control], ["G"], seed=73)[0]
+    second = predict_bags(model, [control], ["G"], seed=74)[0]
+
+    assert not torch.equal(first, second)
+
+
+def test_predict_bags_preserves_caller_cpu_rng_state() -> None:
+    model = _RandpermWindowedModel(window=8)
+    control = torch.arange(30, dtype=torch.float32).reshape(10, 3)
+    torch.manual_seed(241)
+    state_before = torch.random.get_rng_state().clone()
+
+    predict_bags(model, [control], ["G"], seed=73)
+
+    assert torch.equal(torch.random.get_rng_state(), state_before)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_predict_bags_seeds_and_restores_cuda_rng() -> None:
+    device = torch.device("cuda", 0)
+    model = _RandpermWindowedModel(window=8).to(device)
+    control = torch.arange(30, dtype=torch.float32, device=device).reshape(10, 3)
+    torch.cuda.manual_seed(241)
+    state_before = torch.cuda.get_rng_state(device).clone()
+
+    first = predict_bags(model, [control], ["G"], seed=73)[0]
+    state_after = torch.cuda.get_rng_state(device)
+    torch.cuda.manual_seed(999)
+    torch.rand(17, device=device)
+    second = predict_bags(model, [control], ["G"], seed=73)[0]
+
+    torch.testing.assert_close(first, second)
+    assert torch.equal(state_after, state_before)
 
 
 def test_evaluate_handles_bags_that_do_not_divide_the_window() -> None:

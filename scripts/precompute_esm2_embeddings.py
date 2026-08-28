@@ -22,12 +22,18 @@ For exp05, require all canonical genes before writing the asset:
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
+import io
 import json
 import logging
+import os
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Any, NamedTuple
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -38,9 +44,107 @@ from aivc_model.gene_embeddings import (
     Esm2EmbeddingTable,
     require_complete_esm_coverage,
 )
+from aivc_model.esm2_provenance import (
+    SCHEMA_VERSION as PROVENANCE_SCHEMA_VERSION,
+    build_embedding_artifact_record,
+    sequence_sha256_by_symbol,
+    sha256_file,
+)
 
 logger = logging.getLogger("precompute_esm2")
 UNIPROT_URL = "https://rest.uniprot.org/uniprotkb/search"
+SEQUENCE_CACHE_SCHEMA = "uniprot-sequence-cache-v2"
+UNIPROT_MAPPING_SCHEMA = "esm2-uniprot-mapping-v1"
+ISOFORM_POLICY = "canonical_reviewed_top_hit"
+REVIEWED_ENTRY_TYPE = "UniProtKB reviewed (Swiss-Prot)"
+
+
+class UniProtSequenceRecord(NamedTuple):
+    primary_accession: str
+    entry_id: str
+    isoform_identifier: str
+    isoform_policy: str
+    sequence: str
+
+    @property
+    def sequence_sha256(self) -> str:
+        return hashlib.sha256(self.sequence.encode("utf-8")).hexdigest()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _canonical_json_value(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_json_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonical_json_value(item) for item in value]
+    return str(value)
+
+
+def hash_model_state(model: object) -> str:
+    """Hash sorted parameter/buffer names, dtypes, shapes, and exact bytes."""
+    digest = hashlib.sha256()
+    state = model.state_dict()
+    for name in sorted(state):
+        tensor = state[name].detach().cpu().contiguous()
+        metadata = json.dumps(
+            {
+                "name": name,
+                "dtype": str(tensor.dtype),
+                "shape": list(tensor.shape),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest.update(len(metadata).to_bytes(8, "big"))
+        digest.update(metadata)
+        raw = tensor.view(torch.uint8).numpy().tobytes(order="C")
+        digest.update(len(raw).to_bytes(8, "big"))
+        digest.update(raw)
+    return digest.hexdigest()
+
+
+def hash_tokenizer_vocabulary_config(tokenizer: object) -> str:
+    """Hash the loaded tokenizer vocabulary and effective configuration."""
+    payload = {
+        "class": f"{type(tokenizer).__module__}.{type(tokenizer).__qualname__}",
+        "vocabulary": tokenizer.get_vocab(),
+        "init_kwargs": getattr(tokenizer, "init_kwargs", {}),
+        "special_tokens_map": getattr(tokenizer, "special_tokens_map", {}),
+        "model_max_length": getattr(tokenizer, "model_max_length", None),
+    }
+    encoded = json.dumps(
+        _canonical_json_value(payload),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def hash_model_config(model: object) -> str:
+    """Hash the effective configuration of the loaded model instance."""
+    config = model.config.to_dict()
+    encoded = json.dumps(
+        _canonical_json_value(config),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def symbols_from_csv(csv_path: Path, symbol_columns: tuple[str, ...]) -> list[str]:
@@ -65,8 +169,10 @@ def universe_symbols(benchmark_csv: Path) -> list[str]:
     return symbols_from_csv(benchmark_csv, ("gene_a_symbol", "gene_b_symbol"))
 
 
-def fetch_sequence(symbol: str, identifier: str | None = None) -> str | None:
-    """Return the canonical human protein sequence for a gene symbol, or None.
+def fetch_sequence(
+    symbol: str, identifier: str | None = None
+) -> UniProtSequenceRecord | None:
+    """Return the reviewed canonical UniProt record for a gene symbol.
 
     Queries UniProt REST for the top reviewed human hit. On any network
     error, logs a warning and returns ``None``.
@@ -77,25 +183,72 @@ def fetch_sequence(symbol: str, identifier: str | None = None) -> str | None:
     Returns:
         Amino-acid sequence string, or ``None`` if not found or on error.
     """
-    gene_query = f"xref:GeneID-{identifier}" if identifier else f"gene:{symbol}"
+    gene_query = (
+        f"xref:GeneID-{identifier}" if identifier else f"gene_exact:{symbol}"
+    )
     query = f"({gene_query}) AND (organism_id:9606) AND (reviewed:true)"
-    params = urllib.parse.urlencode({"query": query, "format": "fasta", "size": 1})
+    params = urllib.parse.urlencode({"query": query, "format": "json", "size": 1})
     url = f"{UNIPROT_URL}?{params}"
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:
-            text = resp.read().decode("utf-8")
+            payload = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:  # noqa: BLE001 - network best-effort, logged
         logger.warning("fetch failed for %s: %s", symbol, exc)
         return None
-    lines = [ln for ln in text.splitlines() if ln and not ln.startswith(">")]
-    return "".join(lines) or None
+    results = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(results, list) or not results:
+        return None
+    hit = results[0]
+    if not isinstance(hit, dict):
+        return None
+    genes = hit.get("genes")
+    primary_gene = None
+    if isinstance(genes, list) and genes and isinstance(genes[0], dict):
+        gene_name = genes[0].get("geneName")
+        if isinstance(gene_name, dict):
+            primary_gene = gene_name.get("value")
+    if primary_gene != symbol or hit.get("entryType") != REVIEWED_ENTRY_TYPE:
+        logger.warning("UniProt identity mismatch for %s", symbol)
+        return None
+    if identifier is not None:
+        cross_references = hit.get("uniProtKBCrossReferences")
+        has_gene_id = isinstance(cross_references, list) and any(
+            isinstance(reference, dict)
+            and reference.get("database") == "GeneID"
+            and str(reference.get("id")) == identifier
+            for reference in cross_references
+        )
+        if not has_gene_id:
+            logger.warning("UniProt GeneID mismatch for %s", symbol)
+            return None
+    accession = hit.get("primaryAccession")
+    entry_id = hit.get("uniProtkbId")
+    sequence_record = hit.get("sequence")
+    sequence = (
+        sequence_record.get("value") if isinstance(sequence_record, dict) else None
+    )
+    if not all(
+        isinstance(value, str) and value
+        for value in (accession, entry_id, sequence)
+    ):
+        logger.warning("incomplete UniProt identity for %s", symbol)
+        return None
+    return UniProtSequenceRecord(
+        primary_accession=accession,
+        entry_id=entry_id,
+        isoform_identifier=accession,
+        isoform_policy=ISOFORM_POLICY,
+        sequence=sequence,
+    )
 
 
 def load_or_fetch_sequences(
     symbols: list[str],
     cache: Path,
     identifiers: dict[str, str] | None = None,
-) -> dict[str, str]:
+    *,
+    refetch_legacy_cache: bool = False,
+) -> dict[str, UniProtSequenceRecord]:
     """Load cached symbol→sequence map; fetch missing symbols from UniProt.
 
     Writes incrementally to ``cache`` every 100 new symbols.
@@ -107,31 +260,96 @@ def load_or_fetch_sequences(
     Returns:
         Mapping from upper-case symbol to amino-acid sequence.
     """
-    seqs: dict[str, str] = {}
+    records: dict[str, UniProtSequenceRecord] = {}
     if cache.exists():
         try:
-            seqs = json.loads(cache.read_text())
+            payload = json.loads(cache.read_text())
         except json.JSONDecodeError:
             logger.warning("corrupt JSON cache at %s; starting fresh", cache)
-            seqs = {}
+            payload = None
+        if (
+            isinstance(payload, dict)
+            and payload.get("schema_version") == SEQUENCE_CACHE_SCHEMA
+        ):
+            raw_records = payload.get("records")
+            if not isinstance(raw_records, dict):
+                raise ValueError("UniProt sequence cache records must be a mapping")
+            for symbol, raw in raw_records.items():
+                if not isinstance(raw, dict):
+                    raise ValueError(f"invalid UniProt cache record for {symbol}")
+                identity_values = (
+                    raw.get("primary_accession"),
+                    raw.get("entry_id"),
+                    raw.get("isoform_identifier"),
+                    raw.get("isoform_policy"),
+                    raw.get("sequence"),
+                )
+                if not all(
+                    isinstance(value, str) and value for value in identity_values
+                ):
+                    raise ValueError(f"incomplete UniProt cache record for {symbol}")
+                record = UniProtSequenceRecord(
+                    primary_accession=raw.get("primary_accession"),
+                    entry_id=raw.get("entry_id"),
+                    isoform_identifier=raw.get("isoform_identifier"),
+                    isoform_policy=raw.get("isoform_policy"),
+                    sequence=raw.get("sequence"),
+                )
+                if (
+                    record.isoform_policy != ISOFORM_POLICY
+                    or record.isoform_identifier != record.primary_accession
+                ):
+                    raise ValueError(f"unsupported UniProt isoform record for {symbol}")
+                if record.sequence_sha256 != raw.get("sequence_sha256"):
+                    raise ValueError(f"cached sequence SHA-256 mismatch for {symbol}")
+                records[str(symbol)] = record
+        elif isinstance(payload, dict) and all(
+            isinstance(value, str) for value in payload.values()
+        ):
+            if not refetch_legacy_cache:
+                raise ValueError(
+                    "legacy sequence-only cache lacks UniProt accessions; rerun with "
+                    "--refetch-legacy-cache to refetch authoritative records"
+                )
+            logger.warning("discarding legacy sequence-only cache and refetching")
+        elif payload is not None:
+            raise ValueError("unsupported UniProt sequence cache schema")
+
+    def write_cache() -> None:
+        _atomic_write_text(
+            cache,
+            json.dumps(
+                {
+                    "schema_version": SEQUENCE_CACHE_SCHEMA,
+                    "records": {
+                        symbol: {
+                            **record._asdict(),
+                            "sequence_sha256": record.sequence_sha256,
+                        }
+                        for symbol, record in sorted(records.items())
+                    },
+                },
+                sort_keys=True,
+            ),
+        )
+
     for i, symbol in enumerate(symbols):
-        if symbol in seqs:
+        if symbol in records:
             continue
         identifier = identifiers.get(symbol) if identifiers is not None else None
-        seq = (
+        record = (
             fetch_sequence(symbol, identifier)
             if identifier is not None
             else fetch_sequence(symbol)
         )
-        if seq:
-            seqs[symbol] = seq
-            if len(seqs) % 100 == 0:
-                cache.parent.mkdir(parents=True, exist_ok=True)
-                cache.write_text(json.dumps(seqs))
-                logger.info("resolved %d/%d sequences", len(seqs), len(symbols))
+        if record:
+            records[symbol] = record
+            if len(records) % 100 == 0:
+                write_cache()
+                logger.info("resolved %d/%d sequences", len(records), len(symbols))
         time.sleep(0.1)  # be polite to UniProt
-    cache.write_text(json.dumps(seqs))
-    return seqs
+    write_cache()
+    return records
 
 
 def identifiers_from_csv(
@@ -247,7 +465,7 @@ def embed_sequences(
     model_name: str,
     cache_dir: Path | None = None,
     local_files_only: bool = False,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, dict[str, str]]:
     """Embed resolved sequences with ESM2; unresolved rows stay zero.
 
     Args:
@@ -259,8 +477,9 @@ def embed_sequences(
             the local Hugging Face cache.
 
     Returns:
-        A tuple ``(vectors, resolved)`` where ``vectors`` has shape
-        ``(n_gene, hidden_size)`` and ``resolved`` is a boolean array.
+        ``(vectors, resolved, runtime_identity)`` where ``vectors`` has shape
+        ``(n_gene, hidden_size)``, ``resolved`` is a boolean array, and the
+        identity record hashes the actual loaded model and tokenizer.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     from_pretrained_kwargs = {
@@ -271,9 +490,19 @@ def embed_sequences(
         key: value for key, value in from_pretrained_kwargs.items() if value is not None
     }
     tokenizer = EsmTokenizer.from_pretrained(model_name, **from_pretrained_kwargs)
-    model = (
-        EsmModel.from_pretrained(model_name, **from_pretrained_kwargs).to(device).eval()
-    )
+    model = EsmModel.from_pretrained(model_name, **from_pretrained_kwargs)
+    runtime_identity = {
+        "model_class": f"{type(model).__module__}.{type(model).__qualname__}",
+        "model_state_sha256": hash_model_state(model),
+        "model_config_sha256": hash_model_config(model),
+        "tokenizer_class": (
+            f"{type(tokenizer).__module__}.{type(tokenizer).__qualname__}"
+        ),
+        "tokenizer_vocabulary_config_sha256": (
+            hash_tokenizer_vocabulary_config(tokenizer)
+        ),
+    }
+    model = model.to(device).eval()
     dim = model.config.hidden_size
     vectors = np.zeros((len(symbols), dim), dtype=np.float32)
     resolved = np.zeros(len(symbols), dtype=bool)
@@ -294,7 +523,127 @@ def embed_sequences(
             resolved[row] = True
             if row % 200 == 0:
                 logger.info("embedded %d/%d", row, len(symbols))
-    return vectors, resolved
+    return vectors, resolved, runtime_identity
+
+
+def write_embedding_with_provenance(
+    output: Path,
+    provenance_output: Path,
+    *,
+    symbols: list[str],
+    vectors: np.ndarray,
+    resolved: np.ndarray,
+    sequences: dict[str, str],
+    uniprot_records: dict[str, UniProtSequenceRecord],
+    sequence_cache: Path,
+    mapping_json_output: Path,
+    mapping_csv_output: Path,
+    benchmark_csv: Path,
+    symbol_columns: tuple[str, ...],
+    requested_model_id: str,
+    runtime_identity: dict[str, str],
+) -> dict[str, object]:
+    """Atomically publish an embedding table and its authenticated sidecar."""
+    outputs = (output, provenance_output, mapping_json_output, mapping_csv_output)
+    if len({path.resolve() for path in outputs}) != len(outputs):
+        raise ValueError("embedding, provenance, and mapping outputs must be distinct")
+    if resolved.shape != (len(symbols),):
+        raise ValueError("resolved mask must align with symbols")
+    resolved_symbols = {
+        symbol
+        for symbol, is_resolved in zip(symbols, resolved, strict=True)
+        if bool(is_resolved)
+    }
+    if set(sequences) != resolved_symbols or set(uniprot_records) != resolved_symbols:
+        raise ValueError(
+            "resolved mask, sequences, and UniProt records must have exact membership"
+        )
+    for symbol in resolved_symbols:
+        if sequences[symbol] != uniprot_records[symbol].sequence:
+            raise ValueError(f"sequence differs from UniProt record for {symbol}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(f".{output.name}.{uuid.uuid4().hex}.npz")
+    try:
+        np.savez(
+            temporary,
+            symbols=np.asarray(symbols, dtype=object),
+            vectors=vectors,
+            resolved=resolved,
+        )
+        os.replace(temporary, output)
+    finally:
+        temporary.unlink(missing_ok=True)
+    artifact = build_embedding_artifact_record(output)
+    mapping_records = []
+    for symbol in symbols:
+        record = uniprot_records.get(symbol)
+        if symbol in resolved_symbols and record is None:
+            raise ValueError(f"resolved symbol lacks UniProt identity: {symbol}")
+        mapping_records.append(
+            {
+                "gene_symbol": symbol,
+                "resolved": symbol in resolved_symbols,
+                "primary_accession": (
+                    record.primary_accession if record is not None else None
+                ),
+                "entry_id": record.entry_id if record is not None else None,
+                "isoform_identifier": (
+                    record.isoform_identifier if record is not None else None
+                ),
+                "isoform_policy": record.isoform_policy if record is not None else None,
+                "sequence_sha256": (
+                    record.sequence_sha256 if record is not None else None
+                ),
+            }
+        )
+    mapping_payload = {
+        "schema_version": UNIPROT_MAPPING_SCHEMA,
+        "records": mapping_records,
+    }
+    _atomic_write_text(
+        mapping_json_output,
+        json.dumps(mapping_payload, indent=2, sort_keys=True) + "\n",
+    )
+    csv_buffer = io.StringIO(newline="")
+    fieldnames = list(mapping_records[0]) if mapping_records else ["gene_symbol"]
+    writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(mapping_records)
+    _atomic_write_text(mapping_csv_output, csv_buffer.getvalue())
+    manifest: dict[str, object] = {
+        "schema_version": PROVENANCE_SCHEMA_VERSION,
+        "requested_model_id": requested_model_id,
+        "loaded_model": {
+            "class": runtime_identity["model_class"],
+            "state_sha256": runtime_identity["model_state_sha256"],
+            "config_sha256": runtime_identity["model_config_sha256"],
+        },
+        "tokenizer": {
+            "class": runtime_identity["tokenizer_class"],
+            "vocabulary_config_sha256": runtime_identity[
+                "tokenizer_vocabulary_config_sha256"
+            ],
+        },
+        "sequence_source": {
+            "benchmark_csv_path": str(benchmark_csv),
+            "benchmark_csv_sha256": sha256_file(benchmark_csv),
+            "symbol_columns": list(symbol_columns),
+            "sequence_cache_path": str(sequence_cache),
+            "sequence_cache_sha256": sha256_file(sequence_cache),
+            "sequence_sha256_by_symbol": sequence_sha256_by_symbol(
+                symbols, sequences
+            ),
+            "uniprot_mapping_json_path": str(mapping_json_output),
+            "uniprot_mapping_json_sha256": sha256_file(mapping_json_output),
+            "uniprot_mapping_csv_path": str(mapping_csv_output),
+            "uniprot_mapping_csv_sha256": sha256_file(mapping_csv_output),
+        },
+        "embedding_artifact": artifact,
+    }
+    _atomic_write_text(
+        provenance_output, json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    )
+    return manifest
 
 
 def main() -> None:
@@ -329,11 +678,26 @@ def main() -> None:
         help="Output .npz path.",
     )
     parser.add_argument(
+        "--provenance-out",
+        type=Path,
+        default=None,
+        help=(
+            "Atomic provenance sidecar. Defaults to <out>.provenance.json."
+        ),
+    )
+    parser.add_argument(
         "--seq-cache",
         type=Path,
         required=True,
         help="JSON cache for symbol→sequence (incremental, reuse across runs).",
     )
+    parser.add_argument(
+        "--refetch-legacy-cache",
+        action="store_true",
+        help="Discard a legacy sequence-only cache and refetch UniProt identities.",
+    )
+    parser.add_argument("--mapping-json-out", type=Path, default=None)
+    parser.add_argument("--mapping-csv-out", type=Path, default=None)
     parser.add_argument(
         "--model",
         default="facebook/esm2_t33_650M_UR50D",
@@ -374,12 +738,22 @@ def main() -> None:
         identifiers = identifiers_from_csv(
             args.benchmark_csv, symbol_columns[0], args.id_column
         )
-    seqs = (
-        load_or_fetch_sequences(symbols, args.seq_cache, identifiers)
+    records = (
+        load_or_fetch_sequences(
+            symbols,
+            args.seq_cache,
+            identifiers,
+            refetch_legacy_cache=args.refetch_legacy_cache,
+        )
         if identifiers is not None
-        else load_or_fetch_sequences(symbols, args.seq_cache)
+        else load_or_fetch_sequences(
+            symbols,
+            args.seq_cache,
+            refetch_legacy_cache=args.refetch_legacy_cache,
+        )
     )
-    vectors, resolved = embed_sequences(
+    seqs = {symbol: record.sequence for symbol, record in records.items()}
+    vectors, resolved, runtime_identity = embed_sequences(
         symbols,
         seqs,
         args.model,
@@ -390,15 +764,37 @@ def main() -> None:
         require_complete_asset_coverage(symbols, vectors, resolved)
     else:
         check_resolution(resolved, n_symbols=len(symbols))
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(
+    provenance_out = args.provenance_out or args.out.with_suffix(
+        args.out.suffix + ".provenance.json"
+    )
+    mapping_json_out = args.mapping_json_out or args.out.with_suffix(
+        args.out.suffix + ".uniprot_mapping.json"
+    )
+    mapping_csv_out = args.mapping_csv_out or args.out.with_suffix(
+        args.out.suffix + ".uniprot_mapping.csv"
+    )
+    write_embedding_with_provenance(
         args.out,
-        symbols=np.array(symbols, dtype=object),
+        provenance_out,
+        symbols=symbols,
         vectors=vectors,
         resolved=resolved,
+        sequences=seqs,
+        uniprot_records=records,
+        sequence_cache=args.seq_cache,
+        mapping_json_output=mapping_json_out,
+        mapping_csv_output=mapping_csv_out,
+        benchmark_csv=args.benchmark_csv,
+        symbol_columns=symbol_columns,
+        requested_model_id=args.model,
+        runtime_identity=runtime_identity,
     )
     logger.info(
-        "wrote %s (%d resolved / %d)", args.out, int(resolved.sum()), len(symbols)
+        "wrote %s and %s (%d resolved / %d)",
+        args.out,
+        provenance_out,
+        int(resolved.sum()),
+        len(symbols),
     )
 
 

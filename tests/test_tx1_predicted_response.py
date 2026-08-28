@@ -89,6 +89,7 @@ def _fake_full_checkpoint(model: ForwardOnlyStateModel) -> dict[str, torch.Tenso
     """A flat state dict shaped like Phase C's real ``AivcModel.state_dict()``:
     the model's own real keys plus fake dropped-head keys."""
     checkpoint = dict(model.state_dict())
+    checkpoint.pop("perturbations.gene_vocabulary_sha256")
     checkpoint["response_encoder.linear.weight"] = torch.zeros(2, 2)
     checkpoint["response_pooler.means"] = torch.zeros(2, 2)
     checkpoint["c_head.net.0.weight"] = torch.zeros(2, 2)
@@ -119,7 +120,11 @@ def test_load_forward_only_checkpoint_restores_keys_and_reports_dropped(
     destination = _forward_only_model()  # freshly initialized -- different weights
     report = load_forward_only_checkpoint(destination, checkpoint_path)
 
-    assert sorted(report.loaded_keys) == sorted(source.state_dict().keys())
+    assert sorted(report.loaded_keys) == sorted(
+        key
+        for key in source.state_dict()
+        if key != "perturbations.gene_vocabulary_sha256"
+    )
     assert sorted(report.dropped_keys) == sorted(
         [
             "response_encoder.linear.weight",
@@ -137,11 +142,24 @@ def test_load_forward_only_checkpoint_restores_keys_and_reports_dropped(
 def test_load_forward_only_checkpoint_raises_on_missing_key(tmp_path: Path) -> None:
     source = _forward_only_model()
     checkpoint = _fake_full_checkpoint(source)
-    del checkpoint["perturbations.esm_matrix"]
+    del checkpoint["perturbations.adapter.net.0.weight"]
     checkpoint_path = tmp_path / "pytorch_model.bin"
     torch.save(checkpoint, checkpoint_path)
 
     with pytest.raises(ValueError, match="missing"):
+        load_forward_only_checkpoint(_forward_only_model(), checkpoint_path)
+
+
+def test_load_forward_only_checkpoint_rejects_unsealed_legacy_matrix(
+    tmp_path: Path,
+) -> None:
+    source = _forward_only_model()
+    checkpoint = _fake_full_checkpoint(source)
+    checkpoint["perturbations.esm_matrix"] = source.perturbations.esm_matrix
+    checkpoint_path = tmp_path / "pytorch_model.bin"
+    torch.save(checkpoint, checkpoint_path)
+
+    with pytest.raises(ValueError, match="requires a sealed Stage-1 artifact"):
         load_forward_only_checkpoint(_forward_only_model(), checkpoint_path)
 
 

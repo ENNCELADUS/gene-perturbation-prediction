@@ -16,6 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
@@ -30,7 +31,9 @@ from aivc_model.tx1_embed_cache import (
     REJECTED_MODEL_LABEL,
     PerturbseqSource,
     XatlasOrionSource,
+    authenticate_tx1_registration,
     embed_lines,
+    embed_registry_lines,
     embedding_norm_stats,
     load_hvg_gene_order,
     load_line_cache,
@@ -61,8 +64,29 @@ _PERTURBSEQ_SOURCE_CONFIG = (
 _FROZEN_LINE_MANIFEST = (
     _REPO_ROOT / "results" / "phase_a_tx1_20260724" / "cell_line_manifest.csv"
 )
+_TX1_REGISTRATION = (
+    _REPO_ROOT / "results" / "phase_a_tx1_20260724" / "phase_a_registration.json"
+)
 
 # --- shared fixtures --------------------------------------------------------
+
+
+def test_registered_tx1_authority_is_pinned_and_rejects_tamper(tmp_path: Path) -> None:
+    source_manifest, manifest_sha256 = authenticate_tx1_registration(_TX1_REGISTRATION)
+    assert source_manifest["model_label"] == MODEL_LABEL
+    assert source_manifest["expected_obsm_width"] == EMBEDDING_WIDTH
+    assert manifest_sha256 == (
+        "10516bb0f42c2280f8b529455c1bb4a727a7e859e9c88b70aed71a37a793300c"
+    )
+
+    tampered = json.loads(_TX1_REGISTRATION.read_text())
+    tampered["phase_a_gate_evidence"]["tx1_source_manifest"]["model_revision"] = (
+        "0" * 40
+    )
+    tampered_path = tmp_path / "registration.json"
+    tampered_path.write_text(json.dumps(tampered, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="registration SHA-256 mismatch"):
+        authenticate_tx1_registration(tampered_path)
 
 
 def _write_var_dims(model_dir: Path, gene_names: list[str]) -> Path:
@@ -84,6 +108,23 @@ def _obs(n_cells: int) -> pd.DataFrame:
         {"cell_type": ["LineA"] * n_cells},
         index=[f"cell{index}" for index in range(n_cells)],
     )
+
+
+def _write_registry_h5ad(path: Path, *, value: int = 1) -> None:
+    ad.AnnData(
+        X=np.asarray([[value, 0], [0, value], [value, value]], dtype=np.int32),
+        obs=pd.DataFrame(
+            {"model_id": ["ACH-A"] * 3},
+            index=["cell-c", "cell-a", "cell-b"],
+        ),
+        var=pd.DataFrame(
+            {
+                "gene_id": ["ENSG000001", "ENSG000002"],
+                "gene_symbol": ["GENE1", "GENE2"],
+            },
+            index=["one", "two"],
+        ),
+    ).write_h5ad(path)
 
 
 class _CountingEncoder:
@@ -448,6 +489,85 @@ def test_verify_cache_verified_on_good_cache(tmp_path: Path) -> None:
     assert report["discrepancies"] == []
     assert report["lines_expected"] == 2
     assert report["lines_present"] == 2
+    assert report["manifest_sha256"] == sha256_file(cache_dir / "manifest.json")
+    assert set(report["line_artifact_sha256"]) == {"ACH-A", "ACH-B"}
+
+
+def test_verify_cache_verified_with_explicit_expected_model_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    monkeypatch.setattr(
+        tx1_embed_cache_module,
+        "load_line_manifest",
+        lambda path: pytest.fail("explicit membership must not load legacy schema"),
+    )
+    report = verify_cache(cache_dir, expected_model_ids=["ACH-A", "ACH-B"])
+    assert report["status"] == "verified"
+    assert report["discrepancies"] == []
+    assert report["lines_expected"] == 2
+    assert report["lines_present"] == 2
+
+
+def test_verify_cache_explicit_expected_model_ids_rejects_missing_line(
+    tmp_path: Path,
+) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    report = verify_cache(
+        cache_dir, expected_model_ids=["ACH-A", "ACH-B", "ACH-MISSING"]
+    )
+    assert report["status"] == "failed"
+    assert any(
+        "ACH-MISSING" in discrepancy and "run manifest" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+    assert any(
+        "ACH-MISSING" in discrepancy and "directory missing" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+
+
+def test_verify_cache_explicit_expected_model_ids_rejects_extra_line(
+    tmp_path: Path,
+) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    report = verify_cache(cache_dir, expected_model_ids=["ACH-A"])
+    assert report["status"] == "failed"
+    assert any(
+        "ACH-B" in discrepancy and "out-of-contract" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+    assert any(
+        "ACH-B" in discrepancy and "directory not recorded" in discrepancy
+        for discrepancy in report["discrepancies"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("expected_model_ids", "message"),
+    [
+        ([], "non-empty sequence"),
+        (["ACH-A", "ACH-A"], "unique"),
+        ([""], "non-empty strings"),
+        (["ACH-A", 1], "non-empty strings"),
+    ],
+)
+def test_verify_cache_rejects_invalid_expected_model_ids(
+    tmp_path: Path, expected_model_ids: list[object], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        verify_cache(tmp_path / "cache", expected_model_ids=expected_model_ids)
+
+
+def test_verify_cache_rejects_explicit_ids_with_frozen_manifest(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="cannot be combined"):
+        verify_cache(
+            tmp_path / "cache",
+            frozen_manifest_path=tmp_path / "frozen.csv",
+            expected_model_ids=["ACH-A"],
+        )
 
 
 def test_verify_cache_failed_missing_manifest(tmp_path: Path) -> None:
@@ -707,6 +827,107 @@ def test_load_hvg_gene_order_reads_var_dims(tmp_path: Path) -> None:
 
 
 # --- embed_lines: orchestration ----------------------------------------
+
+
+def test_registry_cache_binds_source_bytes_and_invalidates_resume(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "ACH-A.h5ad"
+    _write_registry_h5ad(source)
+    registry = pd.DataFrame(
+        {
+            "source_path": [str(source)],
+            "source_kind": ["h5ad"],
+            "matrix_semantics": ["raw_umi_counts"],
+        },
+        index=pd.Index(["ACH-A"], name="model_id"),
+    )
+    state_dir = _write_var_dims(tmp_path / "state", ["GENE1", "GENE2"])
+    cache_dir = tmp_path / "cache"
+    encoder = _CountingEncoder()
+    entries = embed_registry_lines(
+        registry,
+        cache_dir,
+        encoder=encoder,
+        hvg_state_model_dir=state_dir,
+        var_ensembl_col="gene_id",
+        max_cells_per_line=2,
+        seed=7,
+    )
+    source_hash = sha256_file(source)
+    entry = entries["ACH-A"]
+    assert entry["model_id"] == "ACH-A"
+    assert entry["source_sha256"] == source_hash
+    assert entry["matrix_semantics"] == "raw_umi_counts"
+    assert entry["sample_provenance"]["selection_algorithm"] == (
+        "sha256_model_id_cell_id_v1"
+    )
+    assert len(entry["sample_provenance"]["selected_cell_ids"]) == 2
+    write_run_manifest(
+        cache_dir,
+        model_label=MODEL_LABEL,
+        source_manifest={"files": {"weights": {"sha256": "a" * 64}}},
+        line_entries=entries,
+        config_snapshot={},
+    )
+    report = verify_cache(
+        cache_dir,
+        expected_model_ids=["ACH-A"],
+        expected_source_sha256={"ACH-A": source_hash},
+        expected_matrix_semantics="raw_umi_counts",
+    )
+    assert report["status"] == "verified", report["discrepancies"]
+    registered_source, _ = authenticate_tx1_registration(_TX1_REGISTRATION)
+    self_attested = verify_cache(
+        cache_dir,
+        expected_model_ids=["ACH-A"],
+        expected_source_sha256={"ACH-A": source_hash},
+        expected_matrix_semantics="raw_umi_counts",
+        expected_tx1_source_manifest=registered_source,
+    )
+    assert self_attested["status"] == "failed"
+    assert any(
+        "differs from pinned registration" in item
+        for item in self_attested["discrepancies"]
+    )
+
+    _write_registry_h5ad(source, value=2)
+    mutated_hash = sha256_file(source)
+    stale = verify_cache(
+        cache_dir,
+        expected_model_ids=["ACH-A"],
+        expected_source_sha256={"ACH-A": mutated_hash},
+        expected_matrix_semantics="raw_umi_counts",
+    )
+    assert stale["status"] == "failed"
+    assert "registry source SHA-256 mismatch" in stale["discrepancies"][0]
+
+    updated = embed_registry_lines(
+        registry,
+        cache_dir,
+        encoder=encoder,
+        hvg_state_model_dir=state_dir,
+        var_ensembl_col="gene_id",
+        max_cells_per_line=2,
+        seed=7,
+    )
+    assert encoder.call_count == 2
+    assert updated["ACH-A"]["source_sha256"] == mutated_hash
+
+
+def test_source_bound_verifier_rejects_same_id_legacy_cache(tmp_path: Path) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    report = verify_cache(
+        cache_dir,
+        expected_model_ids=["ACH-A", "ACH-B"],
+        expected_source_sha256={"ACH-A": "a" * 64, "ACH-B": "b" * 64},
+        expected_matrix_semantics="raw_umi_counts",
+    )
+    assert report["status"] == "failed"
+    assert any("source SHA-256 mismatch" in item for item in report["discrepancies"])
+    assert any(
+        "sample provenance is missing" in item for item in report["discrepancies"]
+    )
 
 
 def test_embed_lines_builds_tahoe_lines_and_records_hvg_fill_rate(
@@ -1511,6 +1732,42 @@ def test_verify_cache_only_lines_still_rejects_out_of_contract_request(
     assert report["status"] == "failed"
     assert any(
         "ACH-NOT-IN-CONTRACT" in discrepancy for discrepancy in report["discrepancies"]
+    )
+
+
+def test_verify_cache_explicit_expected_ids_only_lines_is_shard_check(
+    tmp_path: Path,
+) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    shutil.rmtree(cache_dir / "ACH-B")
+    manifest_path = cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["lines"]["ACH-B"]
+    manifest_path.write_text(json.dumps(manifest))
+
+    report = verify_cache(
+        cache_dir,
+        only_lines=["ACH-A"],
+        expected_model_ids=["ACH-A", "ACH-B"],
+    )
+    assert report["status"] == "verified", report["discrepancies"]
+    assert report["lines_expected"] == 1
+    assert report["lines_present"] == 1
+
+
+def test_verify_cache_explicit_expected_ids_rejects_invalid_only_line(
+    tmp_path: Path,
+) -> None:
+    cache_dir = _build_good_cache(tmp_path)
+    report = verify_cache(
+        cache_dir,
+        only_lines=["ACH-NOT-IN-CONTRACT"],
+        expected_model_ids=["ACH-A", "ACH-B"],
+    )
+    assert report["status"] == "failed"
+    assert any(
+        "ACH-NOT-IN-CONTRACT" in discrepancy and "expected_model_ids" in discrepancy
+        for discrepancy in report["discrepancies"]
     )
 
 
