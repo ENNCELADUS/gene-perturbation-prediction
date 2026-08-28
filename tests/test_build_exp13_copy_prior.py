@@ -42,6 +42,12 @@ def _materialized(
 ) -> tuple[Path, Path, Path]:
     source = _source(tmp_path / "CRISPRGeneEffect.csv")
     monkeypatch.setattr(builder, "PINNED_GENE_EFFECT_SHA256", _sha256(source))
+    expected_output = (
+        "gene_symbol,gene_effect\nTP53,-0.5\nMYC,-1.25\n".encode("utf-8")
+    )
+    expected_output_sha256 = hashlib.sha256(expected_output).hexdigest()
+    monkeypatch.setattr(builder, "PINNED_COPY_PRIOR_SHA256", expected_output_sha256)
+    monkeypatch.setattr(runner, "PINNED_COPY_PRIOR_SHA256", expected_output_sha256)
     output = tmp_path / "copy_prior.csv"
     manifest = tmp_path / "copy_prior_manifest.json"
     builder.materialize_copy_prior(source, SPLIT_PATH, output, manifest)
@@ -108,6 +114,17 @@ def test_materializer_rejects_wrong_depmap_source(
     source = _source(tmp_path / "CRISPRGeneEffect.csv")
     monkeypatch.setattr(builder, "PINNED_GENE_EFFECT_SHA256", "0" * 64)
     with pytest.raises(ValueError, match="GeneEffect SHA-256 mismatch"):
+        builder.materialize_copy_prior(
+            source, SPLIT_PATH, tmp_path / "prior.csv", tmp_path / "manifest.json"
+        )
+
+
+def test_materializer_rejects_unpinned_output_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _source(tmp_path / "CRISPRGeneEffect.csv")
+    monkeypatch.setattr(builder, "PINNED_GENE_EFFECT_SHA256", _sha256(source))
+    with pytest.raises(ValueError, match="pinned artifact SHA-256"):
         builder.materialize_copy_prior(
             source, SPLIT_PATH, tmp_path / "prior.csv", tmp_path / "manifest.json"
         )

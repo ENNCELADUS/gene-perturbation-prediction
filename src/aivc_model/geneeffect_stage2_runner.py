@@ -30,6 +30,7 @@ from accelerate import Accelerator
 from aivc_model.gene_embeddings import load_esm2_embeddings
 from aivc_model.esm2_provenance import load_and_authenticate_esm2_provenance
 from aivc_model.geneeffect_data import (
+    PINNED_COPY_PRIOR_SHA256,
     PINNED_SPLIT_SHA256,
     RAW_UMI_SEMANTICS,
     build_g_var,
@@ -706,9 +707,9 @@ def _authenticate_copy_prior(
         raise ValueError("copy-prior donor labels contain duplicate gene symbols")
     finite_donor = donor_rows.loc[donor_rows["gene_effect"].notna()]
     expected_symbols = tuple(finite_donor["gene_symbol"].astype(str))
-    expected_values = finite_donor["gene_effect"].to_numpy(dtype=float)
-    if symbols != expected_symbols or not np.array_equal(
-        copy_values.to_numpy(dtype=float), expected_values
+    if (
+        symbols != expected_symbols
+        or actual_output_sha256 != PINNED_COPY_PRIOR_SHA256
     ):
         raise ValueError("copy-prior CSV does not exactly match the pinned donor row")
     if source_count != len(donor_rows) or dropped_count != int(
