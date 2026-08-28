@@ -1,0 +1,25 @@
+{
+  "schema_version": "exp13-uniprot-offline-sources-v1",
+  "reviewed": true,
+  "taxonomy_id": 9606,
+  "uniprot_query": "reviewed:true AND organism_id:9606",
+  "artifacts": {
+    "aliases_json": {
+      "sha256": "965c9042c25230de68a31ae23888e02a455224583048062562463a2ea1813f6f"
+    },
+    "identity_tsv": {
+      "fields": ["accession", "id", "gene_primary"],
+      "sha256": "0b86f1a90ae46eb1efb02dc8068adf929316ecf73059e1ea83a411efcad2d37a"
+    },
+    "legacy_cache": {
+      "sha256": "8f680424dc2a49660b67c903b95d2fb76af848ac21a8f8c71da642da3f063f08"
+    },
+    "sequence_tsv": {
+      "fields": ["accession", "gene_primary", "sequence"],
+      "sha256": "568c58ba8666937e89690f159ccdbea7a6bdf1308b81f41f04893d512f8aa8cb"
+    },
+    "union_csv": {
+      "sha256": "2dfc8553582ddbcfbade2f807a173bcc07e775b83b457ffca9f89a8b32e4a4c8"
+    }
+  }
+}
