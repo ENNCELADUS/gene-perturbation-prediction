@@ -74,15 +74,11 @@ def build_cache(
     entry_id_by_accession = (
         identities.set_index("Entry")["Entry Name"].astype(str).to_dict()
     )
-    primary_accession: dict[str, str] = {}
+    primary_accessions: dict[str, list[str]] = {}
     for accession, symbol in sequences[["Entry", "Gene Names (primary)"]].itertuples(
         index=False, name=None
     ):
-        if symbol in primary_accession:
-            raise ValueError(
-                f"reviewed sequence TSV has duplicate primary symbol: {symbol}"
-            )
-        primary_accession[symbol] = accession
+        primary_accessions.setdefault(symbol, []).append(accession)
 
     legacy = json.loads(legacy_cache.read_text(encoding="utf-8"))
     if not isinstance(legacy, dict) or not all(
@@ -107,14 +103,21 @@ def build_cache(
     for symbol in symbols:
         if symbol in aliases:
             accession = aliases[symbol]
-        elif symbol in primary_accession:
-            accession = primary_accession[symbol]
         else:
-            matches = accessions_by_sequence.get(legacy.get(symbol, ""), [])
+            candidates = primary_accessions.get(symbol)
+            if candidates is None:
+                candidates = accessions_by_sequence.get(legacy.get(symbol, ""), [])
+            matches = [
+                candidate
+                for candidate in candidates
+                if sequence_by_accession[candidate] == legacy.get(symbol)
+            ]
+            if len(candidates) == 1:
+                matches = candidates
             if len(matches) != 1:
                 raise ValueError(
                     f"symbol {symbol} requires an explicit accession alias; "
-                    f"sequence matches={matches}"
+                    f"candidates={candidates}, sequence matches={matches}"
                 )
             accession = matches[0]
         if accession not in sequence_by_accession:
