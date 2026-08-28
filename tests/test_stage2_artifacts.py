@@ -188,7 +188,9 @@ def _write_response_lineage(root: Path) -> tuple[str, str]:
     return str(payload["lineage_sha256"]), stage2_artifacts.sha256_file(path)
 
 
-def _write_full_runner_artifacts(layout: Stage2RunLayout) -> None:
+def _write_full_runner_artifacts(
+    layout: Stage2RunLayout, *, world_size: int = 4
+) -> None:
     root = layout.root
     warmup_checkpoint = root / "warmup/training/best/head.pt"
     joint_checkpoint = root / "joint/training/best/e2e_state.pt"
@@ -274,10 +276,10 @@ def _write_full_runner_artifacts(layout: Stage2RunLayout) -> None:
     mu_sha = mu_digest.hexdigest()
     response_lineage_sha, response_lineage_artifact_sha = _write_response_lineage(root)
     distributed_runtime = {
-        "world_size": 4,
+        "world_size": world_size,
         "mixed_precision": "bf16",
         "conditions_per_rank": 256,
-        "global_conditions_per_step": 1024,
+        "global_conditions_per_step": 256 * world_size,
         "rank_topology": [
             {
                 "rank": rank,
@@ -286,7 +288,7 @@ def _write_full_runner_artifacts(layout: Stage2RunLayout) -> None:
                 "device_name": "NVIDIA H20",
                 "hostname": "hpc",
             }
-            for rank in range(4)
+            for rank in range(world_size)
         ],
     }
     cache_identities = {
@@ -483,7 +485,7 @@ def _write_full_runner_artifacts(layout: Stage2RunLayout) -> None:
     for name, payload in {
         "config_snapshot.json": {
             "source_sha256": config_sha,
-            "distributed": {"world_size": 4, "mixed_precision": "bf16"},
+            "distributed": {"mixed_precision": "bf16"},
             "joint": {"conditions_per_rank": 256},
         },
         "stage1_model_manifest.json": {
@@ -739,9 +741,12 @@ def test_failure_marker_preserves_partial_outputs(tmp_path: Path) -> None:
         mark_complete(layout, run_id="r", required_outputs=())
 
 
-def test_default_completion_verifies_full_runner_contract(tmp_path: Path) -> None:
+@pytest.mark.parametrize("world_size", [2, 4])
+def test_default_completion_verifies_full_runner_contract(
+    tmp_path: Path, world_size: int
+) -> None:
     layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
+    _write_full_runner_artifacts(layout, world_size=world_size)
     complete = mark_complete(layout, run_id="formal")
     assert complete["stage2_code_sha256"] == stage2_runtime_code_sha256()
     assert verify_complete_run(layout.root)["status"] == "complete"

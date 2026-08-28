@@ -416,26 +416,28 @@ def _verify_distributed_runtime(value: object) -> Mapping[str, object]:
         "rank_topology",
     }:
         raise ValueError("distributed_runtime fields mismatch")
+    world_size = runtime.get("world_size")
+    conditions_per_rank = runtime.get("conditions_per_rank")
     if (
-        runtime.get("world_size") != 4
+        world_size not in {2, 4}
         or runtime.get("mixed_precision") != "bf16"
-        or runtime.get("conditions_per_rank") != 256
-        or runtime.get("global_conditions_per_step") != 1024
+        or conditions_per_rank != 256
+        or runtime.get("global_conditions_per_step") != world_size * conditions_per_rank
     ):
         raise ValueError("distributed_runtime formal topology mismatch")
     topology = runtime.get("rank_topology")
-    if not isinstance(topology, list) or len(topology) != 4:
-        raise ValueError("distributed_runtime must contain four rank records")
+    if not isinstance(topology, list) or len(topology) != world_size:
+        raise ValueError("distributed_runtime rank record count mismatch")
     required = {"rank", "local_rank", "device", "device_name", "hostname"}
     if any(
         not isinstance(record, dict) or set(record) != required for record in topology
     ):
         raise ValueError("distributed_runtime rank record fields mismatch")
-    if [record["rank"] for record in topology] != list(range(4)):
-        raise ValueError("distributed_runtime ranks must be ordered 0..3")
+    if [record["rank"] for record in topology] != list(range(world_size)):
+        raise ValueError("distributed_runtime ranks must be ordered and complete")
     local_ranks = [record["local_rank"] for record in topology]
     devices = [record["device"] for record in topology]
-    if set(local_ranks) != set(range(4)) or len(set(devices)) != 4:
+    if set(local_ranks) != set(range(world_size)) or len(set(devices)) != world_size:
         raise ValueError("distributed_runtime local ranks/devices must be unique")
     if any(
         not isinstance(record["device"], str)
@@ -1415,7 +1417,7 @@ def _verify_runner_contract(root: Path) -> None:
         config.get("distributed"), "config_snapshot.distributed"
     )
     joint_config = _require_mapping(config.get("joint"), "config_snapshot.joint")
-    if distributed_config != {"world_size": 4, "mixed_precision": "bf16"}:
+    if distributed_config != {"mixed_precision": "bf16"}:
         raise ValueError("config snapshot distributed contract mismatch")
     if joint_config.get("conditions_per_rank") != 256:
         raise ValueError("config snapshot conditions_per_rank mismatch")

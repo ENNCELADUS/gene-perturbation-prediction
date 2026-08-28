@@ -151,12 +151,12 @@ def load_exp13_split(path: Path) -> Exp13Split:
 
 
 def parse_gene_symbol(column: object) -> str:
-    """Parse DepMap's ``SYMBOL (EntrezID)`` header without guessing aliases."""
+    """Parse and normalize DepMap's ``SYMBOL (EntrezID)`` header."""
     text = str(column).strip()
     match = _GENE_EFFECT_COLUMN_RE.fullmatch(text)
     if match is None:
         raise ValueError(f"invalid DepMap GeneEffect column: {text!r}")
-    return match.group("symbol")
+    return match.group("symbol").upper()
 
 
 def load_geneeffect_long(path: Path, split: Exp13Split) -> pd.DataFrame:

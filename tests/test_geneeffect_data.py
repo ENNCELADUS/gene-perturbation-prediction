@@ -81,6 +81,7 @@ def test_load_tracked_split_and_reject_membership_change(tmp_path: Path) -> None
 
 def test_geneeffect_symbol_parsing_and_duplicate_rejection(tmp_path: Path) -> None:
     assert parse_gene_symbol("TP53 (7157)") == "TP53"
+    assert parse_gene_symbol("C10orf105 (118812)") == "C10ORF105"
     for malformed in ("TP53", "TP53 (legacy) (7157)", "TP53  (7157)"):
         with pytest.raises(ValueError, match="invalid"):
             parse_gene_symbol(malformed)
@@ -89,7 +90,7 @@ def test_geneeffect_symbol_parsing_and_duplicate_rejection(tmp_path: Path) -> No
     frame = pd.DataFrame(
         [[1.0, 2.0]] * 11,
         index=[*split.supervised_train, *split.val, *split.test],
-        columns=["TP53 (7157)", "TP53 (9999)"],
+        columns=["TP53 (7157)", "tp53 (9999)"],
     )
     path = tmp_path / "geneeffect.csv"
     frame.to_csv(path)

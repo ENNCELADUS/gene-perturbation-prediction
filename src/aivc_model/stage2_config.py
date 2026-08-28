@@ -127,12 +127,11 @@ class Stage2JointConfig:
 
 @dataclass(frozen=True)
 class Stage2DistributedConfig:
-    world_size: int
     mixed_precision: str
 
     def __post_init__(self) -> None:
-        if (self.world_size, self.mixed_precision) != (4, "bf16"):
-            raise ValueError("distributed settings must be world_size=4, bf16")
+        if self.mixed_precision != "bf16":
+            raise ValueError("distributed mixed_precision must be bf16")
 
 
 @dataclass(frozen=True)

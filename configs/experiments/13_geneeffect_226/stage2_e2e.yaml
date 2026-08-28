@@ -43,7 +43,6 @@ joint:
   patience: 2
 
 distributed:
-  world_size: 4
   mixed_precision: bf16
 
 lambda_calibration:

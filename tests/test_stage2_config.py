@@ -30,7 +30,6 @@ def test_tracked_config_loads_frozen_plan() -> None:
     assert config.features.context_dim == 5120
     assert config.seeds.projection == 20260828
     assert config.joint.genes_per_batch * config.joint.contexts_per_gene == 256
-    assert config.distributed.world_size == 4
     assert config.distributed.mixed_precision == "bf16"
     assert config.run_scope.ablations == ()
 
@@ -78,15 +77,17 @@ def test_batch_product_invariant_raises(tmp_path: Path) -> None:
         load_stage2_config(_write(tmp_path, raw))
 
 
-@pytest.mark.parametrize(
-    ("key", "value"), (("world_size", 1), ("mixed_precision", "fp16"))
-)
-def test_formal_distributed_contract_is_frozen(
-    tmp_path: Path, key: str, value: object
-) -> None:
+def test_formal_distributed_precision_is_frozen(tmp_path: Path) -> None:
     raw = _raw()
-    raw["distributed"][key] = value
-    with pytest.raises(ValueError, match="distributed settings"):
+    raw["distributed"]["mixed_precision"] = "fp16"
+    with pytest.raises(ValueError, match="mixed_precision"):
+        load_stage2_config(_write(tmp_path, raw))
+
+
+def test_world_size_is_runtime_detected_not_configured(tmp_path: Path) -> None:
+    raw = _raw()
+    raw["distributed"]["world_size"] = 4
+    with pytest.raises(ValueError, match="world_size"):
         load_stage2_config(_write(tmp_path, raw))
 
 
