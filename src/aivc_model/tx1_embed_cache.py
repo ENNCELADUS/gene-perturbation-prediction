@@ -71,6 +71,7 @@ _HVG_GENE_ORDER_FILENAME: Final[str] = "hvg_gene_order.json"
 #: :func:`_cached_sample_signature_matches`.
 _SAMPLE_PROVENANCE_FILENAME: Final[str] = "sample_provenance.json"
 _SOURCE_PROVENANCE_FILENAME: Final[str] = "source_provenance.json"
+_REGISTRY_INPUT_TRANSFORM: Final[str] = "raw_umi_float32_v1"
 
 #: Basal-source enum values, as documented in the frozen Phase-A manifest
 #: contract (Global Constraint 1). Duplicated as literals rather than
@@ -792,6 +793,7 @@ def _source_binding_discrepancies(
             "model_id": model_id,
             "source_sha256": expected_hashes[model_id],
             "matrix_semantics": expected_semantics,
+            "input_transform": _REGISTRY_INPUT_TRANSFORM,
         }:
             problems.append(f"line {model_id}: source provenance is missing or stale")
         sample = entry.get("sample_provenance")
@@ -1192,6 +1194,7 @@ def embed_registry_lines(
             "model_id": model_id,
             "source_sha256": source_sha256,
             "matrix_semantics": semantics,
+            "input_transform": _REGISTRY_INPUT_TRANSFORM,
         }
         if _is_cached(
             cache_dir,

@@ -889,6 +889,7 @@ def test_registry_cache_binds_source_bytes_and_invalidates_resume(
     assert entry["model_id"] == "ACH-A"
     assert entry["source_sha256"] == source_hash
     assert entry["matrix_semantics"] == "raw_umi_counts"
+    assert entry["source_provenance"]["input_transform"] == "raw_umi_float32_v1"
     assert entry["sample_provenance"]["selection_algorithm"] == (
         "sha256_model_id_cell_id_v1"
     )
@@ -921,6 +922,24 @@ def test_registry_cache_binds_source_bytes_and_invalidates_resume(
         for item in self_attested["discrepancies"]
     )
 
+    source_sidecar = cache_dir / "ACH-A" / "source_provenance.json"
+    legacy_provenance = json.loads(source_sidecar.read_text())
+    legacy_provenance.pop("input_transform")
+    source_sidecar.write_text(json.dumps(legacy_provenance))
+    refreshed = embed_registry_lines(
+        registry,
+        cache_dir,
+        encoder=encoder,
+        hvg_state_model_dir=state_dir,
+        var_ensembl_col="gene_id",
+        max_cells_per_line=2,
+        seed=7,
+    )
+    assert encoder.call_count == 2
+    assert refreshed["ACH-A"]["source_provenance"]["input_transform"] == (
+        "raw_umi_float32_v1"
+    )
+
     _write_registry_h5ad(source, value=2)
     mutated_hash = sha256_file(source)
     stale = verify_cache(
@@ -941,7 +960,7 @@ def test_registry_cache_binds_source_bytes_and_invalidates_resume(
         max_cells_per_line=2,
         seed=7,
     )
-    assert encoder.call_count == 2
+    assert encoder.call_count == 3
     assert updated["ACH-A"]["source_sha256"] == mutated_hash
 
 
