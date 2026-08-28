@@ -1146,6 +1146,22 @@ def test_resolve_hvg_matrix_auto_detects_one_recognized_symbol_column(
     assert fill_rate == 0.0
 
 
+def test_resolve_hvg_matrix_sums_duplicate_raw_count_symbols(tmp_path: Path) -> None:
+    adata = ad.AnnData(
+        X=np.asarray([[1.0, 2.0, 4.0]], dtype=np.float32),
+        var=pd.DataFrame({"gene_symbols": ["G0", "G0", "G1"]}),
+    )
+    hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["G0", "G1"])
+
+    matrix, names, fill_rate = tx1_embed_cache_module._resolve_hvg_matrix(
+        adata, hvg_dir, "auto"
+    )
+
+    np.testing.assert_array_equal(matrix, np.asarray([[3.0, 4.0]]))
+    np.testing.assert_array_equal(names, np.asarray(["G0", "G1"]))
+    assert fill_rate == 0.0
+
+
 def test_embed_lines_only_lines_filters(tmp_path: Path) -> None:
     shard_dir, gene_metadata_path = _tahoe_shard_fixture(tmp_path)
     hvg_dir = _write_var_dims(tmp_path / "hvg_state", ["GENE3"])
