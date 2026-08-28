@@ -1286,6 +1286,10 @@ def _load_registry_basal_adata(
         raise ValueError(
             f"line {model_id}: source matrix is not raw integer UMI counts"
         )
+    if sparse.issparse(materialized.X):
+        materialized.X = materialized.X.astype(np.float32, copy=False)
+    else:
+        materialized.X = np.asarray(materialized.X, dtype=np.float32)
     assert_tx1_input_contract(materialized)
     selected_ids = materialized.obs_names.astype(str).to_numpy()
     signature = _sample_provenance_signature(
