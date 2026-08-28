@@ -10,6 +10,14 @@ import pytest
 from scripts.bootstrap_exp13_uniprot_cache import build_cache
 
 
+def _alias(accession: str, primary_symbol: str, sequence: str) -> dict[str, str]:
+    return {
+        "accession": accession,
+        "primary_symbol": primary_symbol,
+        "sequence_sha256": hashlib.sha256(sequence.encode()).hexdigest(),
+    }
+
+
 def _write_source_manifest(tmp_path: Path, artifacts: dict[str, Path]) -> Path:
     manifest = tmp_path / "sources.json"
     manifest.write_text(
@@ -55,7 +63,12 @@ def test_build_cache_resolves_primary_sequence_and_explicit_alias(
         json.dumps({"OLD": "MB", "AMBIG": "MB"})
     )
     (tmp_path / "aliases.json").write_text(
-        json.dumps({"OLD": "P3", "AMBIG": "P2"})
+        json.dumps(
+            {
+                "OLD": _alias("P3", "OTHER", "MB"),
+                "AMBIG": _alias("P2", "NEW", "MB"),
+            }
+        )
     )
     source_manifest = _write_source_manifest(
         tmp_path,
@@ -106,7 +119,9 @@ def test_build_cache_rejects_valid_alias_with_wrong_sequence(tmp_path: Path) -> 
         }
     ).to_csv(tmp_path / "identities.tsv", sep="\t", index=False)
     (tmp_path / "legacy.json").write_text(json.dumps({"OLD": "MB"}))
-    (tmp_path / "aliases.json").write_text(json.dumps({"OLD": "P3"}))
+    (tmp_path / "aliases.json").write_text(
+        json.dumps({"OLD": _alias("P3", "OTHER", "MB")})
+    )
     source_manifest = _write_source_manifest(
         tmp_path,
         {
@@ -118,7 +133,7 @@ def test_build_cache_rejects_valid_alias_with_wrong_sequence(tmp_path: Path) -> 
         },
     )
 
-    with pytest.raises(ValueError, match="differs from legacy cache"):
+    with pytest.raises(ValueError, match="sequence SHA-256 mismatch"):
         build_cache(
             union_csv=tmp_path / "union.csv",
             sequence_tsv=tmp_path / "sequences.tsv",
