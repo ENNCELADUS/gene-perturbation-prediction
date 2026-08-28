@@ -205,6 +205,51 @@ def test_load_or_fetch_sequences_uses_identifier_for_missing_symbol(
     mock_fetch.assert_called_once_with("PTEN", "5728")
 
 
+def test_read_only_sequence_cache_is_complete_and_byte_preserved(
+    tmp_path: Path,
+) -> None:
+    cache = tmp_path / "cache.json"
+    record = _record("MSEQ")
+    cache.write_text(
+        json.dumps(
+            {
+                "schema_version": MOD.SEQUENCE_CACHE_SCHEMA,
+                "source_provenance": {"manifest_sha256": "a" * 64},
+                "records": {
+                    "PTEN": {
+                        **record._asdict(),
+                        "sequence_sha256": record.sequence_sha256,
+                    }
+                },
+            },
+            sort_keys=True,
+        )
+    )
+    before = cache.read_bytes()
+
+    with patch.object(MOD, "fetch_sequence") as fetch:
+        records = MOD.load_or_fetch_sequences(["PTEN"], cache, read_only=True)
+
+    assert records == {"PTEN": record}
+    assert cache.read_bytes() == before
+    fetch.assert_not_called()
+
+
+def test_read_only_sequence_cache_rejects_missing_symbol(tmp_path: Path) -> None:
+    cache = tmp_path / "cache.json"
+    cache.write_text(
+        json.dumps({"schema_version": MOD.SEQUENCE_CACHE_SCHEMA, "records": {}})
+    )
+    before = cache.read_bytes()
+
+    with patch.object(MOD, "fetch_sequence") as fetch:
+        with pytest.raises(ValueError, match="read-only.*incomplete"):
+            MOD.load_or_fetch_sequences(["PTEN"], cache, read_only=True)
+
+    assert cache.read_bytes() == before
+    fetch.assert_not_called()
+
+
 def test_legacy_sequence_cache_requires_explicit_refetch(tmp_path: Path) -> None:
     cache = tmp_path / "cache.json"
     cache.write_text('{"PTEN":"MSEQ"}', encoding="utf-8")

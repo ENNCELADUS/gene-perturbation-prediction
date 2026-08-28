@@ -248,6 +248,7 @@ def load_or_fetch_sequences(
     identifiers: dict[str, str] | None = None,
     *,
     refetch_legacy_cache: bool = False,
+    read_only: bool = False,
 ) -> dict[str, UniProtSequenceRecord]:
     """Load cached symbol→sequence map; fetch missing symbols from UniProt.
 
@@ -314,6 +315,15 @@ def load_or_fetch_sequences(
             logger.warning("discarding legacy sequence-only cache and refetching")
         elif payload is not None:
             raise ValueError("unsupported UniProt sequence cache schema")
+
+    missing_symbols = [symbol for symbol in symbols if symbol not in records]
+    if read_only:
+        if missing_symbols:
+            raise ValueError(
+                "read-only UniProt sequence cache is incomplete: "
+                f"{len(missing_symbols)} missing symbols"
+            )
+        return records
 
     def write_cache() -> None:
         _atomic_write_text(
@@ -696,6 +706,11 @@ def main() -> None:
         action="store_true",
         help="Discard a legacy sequence-only cache and refetch UniProt identities.",
     )
+    parser.add_argument(
+        "--sequence-cache-read-only",
+        action="store_true",
+        help="Require a complete sequence cache and never fetch or rewrite it.",
+    )
     parser.add_argument("--mapping-json-out", type=Path, default=None)
     parser.add_argument("--mapping-csv-out", type=Path, default=None)
     parser.add_argument(
@@ -744,12 +759,14 @@ def main() -> None:
             args.seq_cache,
             identifiers,
             refetch_legacy_cache=args.refetch_legacy_cache,
+            read_only=args.sequence_cache_read_only,
         )
         if identifiers is not None
         else load_or_fetch_sequences(
             symbols,
             args.seq_cache,
             refetch_legacy_cache=args.refetch_legacy_cache,
+            read_only=args.sequence_cache_read_only,
         )
     )
     seqs = {symbol: record.sequence for symbol, record in records.items()}
