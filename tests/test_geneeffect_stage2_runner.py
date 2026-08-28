@@ -17,10 +17,12 @@ from aivc_model.geneeffect_stage2_runner import (
     authenticate_stage1_seal,
     build_dependency_batch_factories,
     build_frozen_feature_store,
+    load_stage2_bundle_spec,
     preflight_stage2,
     run_registered_baselines,
     run_full_stage2,
     _authenticated_target_esm2_sha256,
+    _formal_distributed_runtime,
 )
 from aivc_model.stage1_artifact import Stage1ArtifactManifest, sha256_file
 from aivc_model.stage2_artifacts import Stage2RunLayout
@@ -31,6 +33,51 @@ def _write(path: Path, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def test_bundle_accepts_absolute_seal_for_relative_stage1_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(repo)
+    stage1_config = _write(
+        repo / "configs/experiments/13_geneeffect_226/stage1_response.yaml", "x: 1\n"
+    )
+    stage1_esm = _write(repo / "data/esm2/stage1.npz", "esm")
+    cell_manifest = _write(repo / "results/cell_line_manifest.csv", "model_id\n")
+    perturbseq = _write(repo / "configs/perturbseq_sources.json", "{}")
+    compatibility = _write(repo / "src/compatibility.py", "pass\n")
+    source = _write(repo / "configs/source.json", "{}")
+    state_model_dir = repo / "model/state"
+    response_cache = repo / "data/response_cache"
+    state_model_dir.mkdir(parents=True)
+    response_cache.mkdir(parents=True)
+    config = SimpleNamespace(
+        paths=SimpleNamespace(
+            stage1_config=stage1_config.relative_to(repo),
+            stage1_esm_embeddings=stage1_esm.relative_to(repo),
+            cell_line_manifest=cell_manifest.relative_to(repo),
+            state_model_dir=state_model_dir.relative_to(repo),
+            perturbseq_sources=perturbseq.relative_to(repo),
+            response_cache=response_cache.relative_to(repo),
+        )
+    )
+    bundle_path = _write(
+        repo / "results/stage2_bundle.json",
+        json.dumps(
+            {
+                "schema_version": "exp13-stage2-bundle-v1",
+                "compatibility_code_paths": {"compatibility": str(compatibility)},
+                "config_paths": {"stage1_response": str(stage1_config)},
+                "source_paths": {"source": str(source)},
+            }
+        ),
+    )
+
+    bundle = load_stage2_bundle_spec(bundle_path, config)
+
+    assert bundle.stage1_config.resolve() == stage1_config.resolve()
 
 
 def _sealed_stage1(tmp_path: Path) -> tuple[SimpleNamespace, Stage1ArtifactManifest]:
@@ -504,7 +551,7 @@ def test_full_run_records_failure_without_completion(
         seeds=SimpleNamespace(train=7, collator=8, projection=9),
         features=SimpleNamespace(cells_per_context=128, cell_set_len=64),
         joint=SimpleNamespace(conditions_per_rank=256),
-        distributed=SimpleNamespace(world_size=4, mixed_precision="bf16"),
+        distributed=SimpleNamespace(mixed_precision="bf16"),
         snapshot=lambda: {"config": "snapshot"},
     )
     state = Stage2Preflight(
@@ -705,7 +752,7 @@ def test_full_run_rejects_nonformal_topology_before_preflight(
 
     config = SimpleNamespace(
         source_sha256="a" * 64,
-        distributed=SimpleNamespace(world_size=4, mixed_precision="bf16"),
+        distributed=SimpleNamespace(mixed_precision="bf16"),
         joint=SimpleNamespace(conditions_per_rank=256),
     )
     monkeypatch.setenv("WORLD_SIZE", "1")
@@ -721,7 +768,7 @@ def test_full_run_rejects_nonformal_topology_before_preflight(
         lambda *args: (_ for _ in ()).throw(AssertionError("preflight must not run")),
     )
 
-    with pytest.raises(RuntimeError, match="WORLD_SIZE|requires 4 ranks"):
+    with pytest.raises(RuntimeError, match="2- or 4-rank"):
         run_full_stage2(
             tmp_path / "config.yaml",
             tmp_path / "provenance.json",
@@ -729,20 +776,21 @@ def test_full_run_rejects_nonformal_topology_before_preflight(
         )
 
 
-def test_formal_runtime_records_exact_four_rank_topology(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("world_size", [2, 4])
+def test_formal_runtime_records_auto_detected_topology(
+    monkeypatch: pytest.MonkeyPatch, world_size: int
 ) -> None:
     import aivc_model.geneeffect_stage2_runner as runner
 
     accelerator = SimpleNamespace(
-        num_processes=4,
-        process_index=2,
-        local_process_index=2,
+        num_processes=world_size,
+        process_index=world_size - 1,
+        local_process_index=world_size - 1,
         mixed_precision="bf16",
-        device=torch.device("cuda:2"),
+        device=torch.device(f"cuda:{world_size - 1}"),
     )
     config = SimpleNamespace(
-        distributed=SimpleNamespace(world_size=4, mixed_precision="bf16"),
+        distributed=SimpleNamespace(mixed_precision="bf16"),
         joint=SimpleNamespace(conditions_per_rank=256),
     )
     topology = [
@@ -753,16 +801,16 @@ def test_formal_runtime_records_exact_four_rank_topology(
             "device_name": "NVIDIA H20",
             "hostname": "hpc",
         }
-        for rank in range(4)
+        for rank in range(world_size)
     ]
-    monkeypatch.setenv("WORLD_SIZE", "4")
-    monkeypatch.setenv("RANK", "2")
-    monkeypatch.setenv("LOCAL_RANK", "2")
+    monkeypatch.setenv("WORLD_SIZE", str(world_size))
+    monkeypatch.setenv("RANK", str(world_size - 1))
+    monkeypatch.setenv("LOCAL_RANK", str(world_size - 1))
     monkeypatch.setattr(torch.cuda, "get_device_name", lambda device: "NVIDIA H20")
     monkeypatch.setattr(runner.socket, "gethostname", lambda: "hpc")
 
     def gather(output: list[object | None], local: object) -> None:
-        assert local == topology[2]
+        assert local == topology[world_size - 1]
         output[:] = topology
 
     monkeypatch.setattr(torch.distributed, "all_gather_object", gather)
@@ -770,12 +818,20 @@ def test_formal_runtime_records_exact_four_rank_topology(
     runtime = runner._formal_distributed_runtime(accelerator, config)
 
     assert runtime == {
-        "world_size": 4,
+        "world_size": world_size,
         "mixed_precision": "bf16",
         "conditions_per_rank": 256,
-        "global_conditions_per_step": 1024,
+        "global_conditions_per_step": 256 * world_size,
         "rank_topology": topology,
     }
+
+
+def test_formal_runtime_rejects_unregistered_auto_detected_world_size() -> None:
+    accelerator = SimpleNamespace(num_processes=3)
+    config = SimpleNamespace()
+
+    with pytest.raises(RuntimeError, match="2- or 4-rank"):
+        _formal_distributed_runtime(accelerator, config)
 
 
 def test_state_window_must_match_configured_cell_set_len() -> None:

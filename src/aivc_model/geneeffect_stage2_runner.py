@@ -114,8 +114,12 @@ def _create_accelerator(mixed_precision: str) -> Accelerator:
 def _formal_distributed_runtime(
     accelerator: Accelerator, config: Stage2Config
 ) -> Mapping[str, object]:
-    """Fail closed unless Accelerate and launcher env match the frozen topology."""
-    expected_world = config.distributed.world_size
+    """Fail closed unless the launcher and auto-detected topology agree."""
+    expected_world = int(accelerator.num_processes)
+    if expected_world not in {2, 4}:
+        raise RuntimeError(
+            "formal Stage 2 requires an auto-detected 2- or 4-rank launch"
+        )
     expected_precision = config.distributed.mixed_precision
     environment: dict[str, int] = {}
     for name in ("WORLD_SIZE", "RANK", "LOCAL_RANK"):
@@ -138,11 +142,6 @@ def _formal_distributed_runtime(
             f"launcher env does not match Accelerator state: {environment} != "
             f"{expected_local}"
         )
-    if accelerator.num_processes != expected_world:
-        raise RuntimeError(
-            f"formal Stage 2 requires {expected_world} ranks, got "
-            f"{accelerator.num_processes}"
-        )
     if accelerator.mixed_precision != expected_precision:
         raise RuntimeError(
             "Accelerator mixed precision does not match the frozen config: "
@@ -163,7 +162,9 @@ def _formal_distributed_runtime(
         raise RuntimeError("distributed topology did not gather every rank record")
     topology = sorted(gathered, key=lambda item: int(item["rank"]))  # type: ignore[index]
     if [int(item["rank"]) for item in topology] != list(range(expected_world)):  # type: ignore[index]
-        raise RuntimeError("distributed topology ranks are not exactly 0..3")
+        raise RuntimeError(
+            f"distributed topology ranks are not exactly 0..{expected_world - 1}"
+        )
     for field in ("local_rank", "device"):
         values = [item[field] for item in topology]  # type: ignore[index]
         if len(set(values)) != expected_world:
@@ -481,7 +482,8 @@ def load_stage2_bundle_spec(path: Path, config: Stage2Config) -> Stage2BundleSpe
     ):
         for name, asset in paths.items():
             _require_file(asset, f"bundle {group_name}:{name}")
-    if bundle.stage1_config not in set(bundle.config_paths.values()):
+    sealed_config_paths = {asset.resolve() for asset in bundle.config_paths.values()}
+    if bundle.stage1_config.resolve() not in sealed_config_paths:
         raise ValueError("bundle config_paths must include stage1_config")
     return bundle
 
