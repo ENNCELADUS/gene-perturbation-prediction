@@ -66,7 +66,15 @@ def _vector_digest(vector: torch.Tensor) -> str:
 def reconstruct_stage1_gene_vocabulary(
     checkpoint_path: Path, esm2_embeddings_path: Path
 ) -> tuple[str, ...]:
-    """Recover legacy checkpoint row identities by exact vector matching."""
+    """Recover the unique sorted legacy vocabulary by exact vector matching.
+
+    Stage 1 constructed its adapter with ``sorted({gene ...})``.  Some symbols
+    in the historical ESM table are aliases with byte-identical vectors, so a
+    row-local uniqueness rule is too strict (for example ``AARS``/``AARS1``).
+    Resolve those aliases only when the complete checkpoint admits exactly one
+    strictly increasing symbol sequence.  This preserves the historical sort
+    contract without guessing when multiple vocabularies remain possible.
+    """
     state = _load_flat_tensor_state(checkpoint_path)
     legacy = state.get(_LEGACY_ESM_KEY)
     if legacy is None:
@@ -90,21 +98,76 @@ def reconstruct_stage1_gene_vocabulary(
         candidates_by_digest.setdefault(_vector_digest(tensor), []).append(
             (symbol, tensor)
         )
-    genes: list[str] = []
+    candidates_by_row: list[tuple[str, ...]] = []
     for row_index, row in enumerate(actual):
-        matches = [
-            symbol
-            for symbol, vector in candidates_by_digest.get(_vector_digest(row), ())
-            if vector.shape == row.shape and torch.equal(vector, row)
-        ]
-        if len(matches) != 1:
-            raise ValueError(
-                "Legacy ESM row must match exactly one resolved Stage-1 ESM vector: "
-                f"row={row_index}, matches={matches[:10]}, count={len(matches)}"
+        matches = tuple(
+            sorted(
+                symbol
+                for symbol, vector in candidates_by_digest.get(
+                    _vector_digest(row), ()
+                )
+                if vector.shape == row.shape and torch.equal(vector, row)
             )
-        genes.append(matches[0])
-    if len(set(genes)) != len(genes):
-        raise ValueError("Legacy ESM matrix resolves to duplicate gene identities")
+        )
+        if not matches:
+            raise ValueError(
+                "Legacy ESM row must match at least one resolved Stage-1 ESM "
+                f"vector exactly: row={row_index}"
+            )
+        candidates_by_row.append(matches)
+
+    # Dynamic programming counts compatible sorted paths, capped at two
+    # because the only distinction needed is unique versus ambiguous.  A path
+    # with total count one also has a unique predecessor at every row, which
+    # makes exact backtracking possible without retaining full paths.
+    path_counts: dict[str, int] = {}
+    predecessors: list[dict[str, str | None]] = []
+    for row_index, candidates in enumerate(candidates_by_row):
+        current_counts: dict[str, int] = {}
+        current_predecessors: dict[str, str | None] = {}
+        for symbol in candidates:
+            if row_index == 0:
+                current_counts[symbol] = 1
+                current_predecessors[symbol] = None
+                continue
+            compatible = [
+                (previous, count)
+                for previous, count in path_counts.items()
+                if previous < symbol
+            ]
+            count = min(2, sum(value for _, value in compatible))
+            if count == 0:
+                continue
+            current_counts[symbol] = count
+            if count == 1:
+                current_predecessors[symbol] = compatible[0][0]
+        if not current_counts:
+            raise ValueError(
+                "Legacy ESM rows admit no strictly sorted exact gene "
+                f"vocabulary at row={row_index}, candidates={list(candidates)}"
+            )
+        path_counts = current_counts
+        predecessors.append(current_predecessors)
+
+    solution_count = min(2, sum(path_counts.values()))
+    if solution_count != 1:
+        raise ValueError(
+            "Legacy ESM rows do not identify a unique strictly sorted exact "
+            f"gene vocabulary: solution_count={solution_count}"
+        )
+    symbol = next(
+        candidate for candidate, count in path_counts.items() if count == 1
+    )
+    genes = [symbol]
+    for row_index in range(len(predecessors) - 1, 0, -1):
+        previous = predecessors[row_index][symbol]
+        if previous is None:  # pragma: no cover - guarded by unique path count
+            raise RuntimeError("unique vocabulary path lost its predecessor")
+        genes.append(previous)
+        symbol = previous
+    genes.reverse()
+    if not all(left < right for left, right in zip(genes, genes[1:], strict=False)):
+        raise RuntimeError("recovered Stage-1 vocabulary is not strictly sorted")
     return tuple(genes)
 
 

@@ -163,11 +163,11 @@ def test_seal_refuses_to_overwrite_either_output(tmp_path: Path) -> None:
 def test_seal_rejects_row_that_only_matches_by_shape(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path, matrix=np.asarray([[1.0, 2.001]], dtype=np.float32))
 
-    with pytest.raises(ValueError, match="match exactly one"):
+    with pytest.raises(ValueError, match="match at least one"):
         _run(fixture, dry_run=True)
 
 
-def test_seal_rejects_ambiguous_exact_vector_identity(tmp_path: Path) -> None:
+def test_seal_rejects_globally_ambiguous_exact_vector_identity(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     with np.load(fixture["esm"], allow_pickle=True) as payload:
         symbols = payload["symbols"]
@@ -180,8 +180,38 @@ def test_seal_rejects_ambiguous_exact_vector_identity(tmp_path: Path) -> None:
     manifest["input_sha256"]["esm2_embeddings"] = sha256_file(fixture["esm"])
     run_manifest.write_text(json.dumps(manifest))
 
-    with pytest.raises(ValueError, match="match exactly one"):
+    with pytest.raises(ValueError, match="unique strictly sorted"):
         _run(fixture, dry_run=True)
+
+
+def test_seal_resolves_aliases_when_sorted_vocabulary_is_unique(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    np.savez(
+        fixture["esm"],
+        symbols=np.asarray(["AARS1", "ZZZ", "AARS"], dtype=object),
+        vectors=np.asarray(
+            [[1.0, 2.0], [7.0, 8.0], [1.0, 2.0]], dtype=np.float32
+        ),
+        resolved=np.ones(3, dtype=bool),
+    )
+    torch.save(
+        {
+            "perturbations.esm_matrix": torch.as_tensor(
+                [[1.0, 2.0], [1.0, 2.0], [7.0, 8.0]], dtype=torch.float32
+            )
+        },
+        fixture["run"] / "best" / "pytorch_model.bin",
+    )
+    run_manifest = fixture["run"] / "run_manifest.json"
+    manifest = json.loads(run_manifest.read_text())
+    manifest["input_sha256"]["esm2_embeddings"] = sha256_file(fixture["esm"])
+    run_manifest.write_text(json.dumps(manifest))
+
+    report = _run(fixture, dry_run=True)
+
+    assert report["stage1_genes"] == ["AARS", "AARS1", "ZZZ"]
 
 
 def test_digest_collision_still_requires_exact_vector_match(
@@ -203,5 +233,5 @@ def test_digest_collision_without_exact_match_fails_closed(
     )
     monkeypatch.setattr(seal_cli, "_vector_digest", lambda vector: "collision")
 
-    with pytest.raises(ValueError, match="match exactly one"):
+    with pytest.raises(ValueError, match="match at least one"):
         _run(fixture, dry_run=True)
