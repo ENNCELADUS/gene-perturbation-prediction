@@ -149,6 +149,33 @@ def test_seal_writes_manifest_and_runner_bundle(tmp_path: Path) -> None:
     ]
 
 
+def test_seal_accepts_authenticated_config_recorded_as_relative_path(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    objective_path = fixture["run"] / "stage1_objective.json"
+    objective = json.loads(objective_path.read_text())
+    objective["source_path"] = (
+        "configs/experiments/13_geneeffect_226/stage1_response.yaml"
+    )
+    objective_path.write_text(json.dumps(objective))
+
+    report = _run(fixture, dry_run=True)
+
+    assert report["status"] == "compatibility_inputs_validated"
+
+
+def test_seal_rejects_wrong_recorded_config_path(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    objective_path = fixture["run"] / "stage1_objective.json"
+    objective = json.loads(objective_path.read_text())
+    objective["source_path"] = "configs/experiments/wrong/stage1_response.yaml"
+    objective_path.write_text(json.dumps(objective))
+
+    with pytest.raises(ValueError, match="source_path is not"):
+        _run(fixture, dry_run=True)
+
+
 def test_seal_refuses_to_overwrite_either_output(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     _write(fixture["run"] / "stage2_bundle.json", "existing")
