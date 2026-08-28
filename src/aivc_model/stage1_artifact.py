@@ -457,7 +457,30 @@ def _validate_recorded_training_artifacts(
         raise ValueError("Exactly one sealed config must match the Stage-1 run")
     registered_objective = load_stage1_config(matching_configs[0]).objective_payload()
     recorded_objective = json.loads(stage1_objective_path.read_text(encoding="utf-8"))
-    if recorded_objective != registered_objective:
+    if not isinstance(recorded_objective, dict):
+        raise ValueError("Stage-1 objective must be a JSON object")
+    recorded_source = recorded_objective.get("source_path")
+    if not isinstance(recorded_source, str) or not recorded_source:
+        raise ValueError(
+            "Stage-1 objective does not match the authenticated config: "
+            "source_path is missing"
+        )
+    recorded_path = Path(recorded_source)
+    matching_config = matching_configs[0].resolve()
+    if recorded_path.is_absolute():
+        source_matches = recorded_path.resolve() == matching_config
+    else:
+        source_matches = matching_config.parts[-len(recorded_path.parts) :] == (
+            recorded_path.parts
+        )
+    if not source_matches:
+        raise ValueError(
+            "Stage-1 objective does not match the authenticated config: "
+            "source_path is not authenticated"
+        )
+    normalized_recorded = dict(recorded_objective)
+    normalized_recorded["source_path"] = registered_objective["source_path"]
+    if normalized_recorded != registered_objective:
         raise ValueError("Stage-1 objective does not match the authenticated config")
     source_hashes = set(_hash_paths(source_paths).values())
     for name in ("split_json", "perturbseq_sources"):
