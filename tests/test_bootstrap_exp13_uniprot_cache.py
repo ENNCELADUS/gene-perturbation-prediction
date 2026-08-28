@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from scripts.bootstrap_exp13_uniprot_cache import build_cache
 
@@ -29,7 +30,7 @@ def test_build_cache_resolves_primary_sequence_and_explicit_alias(
         }
     ).to_csv(tmp_path / "identities.tsv", sep="\t", index=False)
     (tmp_path / "legacy.json").write_text(
-        json.dumps({"DIRECT": "MA", "OLD": "MC", "AMBIG": "MB"})
+        json.dumps({"DIRECT": "MA", "OLD": "MB", "AMBIG": "MB"})
     )
     (tmp_path / "aliases.json").write_text(
         json.dumps({"OLD": "P3", "AMBIG": "P2"})
@@ -49,3 +50,35 @@ def test_build_cache_resolves_primary_sequence_and_explicit_alias(
     assert payload["records"]["DIRECT"]["primary_accession"] == "P1"
     assert payload["records"]["OLD"]["primary_accession"] == "P3"
     assert payload["records"]["AMBIG"]["entry_id"] == "N_HUMAN"
+
+
+def test_build_cache_rejects_valid_alias_with_wrong_sequence(tmp_path: Path) -> None:
+    pd.DataFrame({"gene_symbol": ["OLD"]}).to_csv(
+        tmp_path / "union.csv", index=False
+    )
+    pd.DataFrame(
+        {
+            "Entry": ["P2", "P3"],
+            "Gene Names (primary)": ["NEW", "OTHER"],
+            "Sequence": ["MB", "MX"],
+        }
+    ).to_csv(tmp_path / "sequences.tsv", sep="\t", index=False)
+    pd.DataFrame(
+        {
+            "Entry": ["P2", "P3"],
+            "Entry Name": ["N_HUMAN", "O_HUMAN"],
+            "Gene Names (primary)": ["NEW", "OTHER"],
+        }
+    ).to_csv(tmp_path / "identities.tsv", sep="\t", index=False)
+    (tmp_path / "legacy.json").write_text(json.dumps({"OLD": "MB"}))
+    (tmp_path / "aliases.json").write_text(json.dumps({"OLD": "P3"}))
+
+    with pytest.raises(ValueError, match="differs from legacy cache"):
+        build_cache(
+            union_csv=tmp_path / "union.csv",
+            sequence_tsv=tmp_path / "sequences.tsv",
+            identity_tsv=tmp_path / "identities.tsv",
+            legacy_cache=tmp_path / "legacy.json",
+            aliases_json=tmp_path / "aliases.json",
+            output=tmp_path / "cache.json",
+        )

@@ -101,19 +101,20 @@ def build_cache(
 
     resolved: dict[str, str] = {}
     for symbol in symbols:
+        legacy_sequence = legacy.get(symbol)
+        if not legacy_sequence:
+            raise ValueError(f"symbol {symbol}: legacy sequence is missing")
         if symbol in aliases:
             accession = aliases[symbol]
         else:
             candidates = primary_accessions.get(symbol)
             if candidates is None:
-                candidates = accessions_by_sequence.get(legacy.get(symbol, ""), [])
+                candidates = accessions_by_sequence.get(legacy_sequence, [])
             matches = [
                 candidate
                 for candidate in candidates
-                if sequence_by_accession[candidate] == legacy.get(symbol)
+                if sequence_by_accession[candidate] == legacy_sequence
             ]
-            if len(candidates) == 1:
-                matches = candidates
             if len(matches) != 1:
                 raise ValueError(
                     f"symbol {symbol} requires an explicit accession alias; "
@@ -124,6 +125,10 @@ def build_cache(
             raise ValueError(f"symbol {symbol}: accession lacks reviewed sequence")
         if accession not in entry_id_by_accession:
             raise ValueError(f"symbol {symbol}: accession lacks reviewed entry ID")
+        if sequence_by_accession[accession] != legacy_sequence:
+            raise ValueError(
+                f"symbol {symbol}: accession sequence differs from legacy cache"
+            )
         resolved[symbol] = accession
 
     records = {

@@ -20,6 +20,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import sparse
 
 import aivc_model.tx1_embed_cache as tx1_embed_cache_module
 import scripts.build_tx1_basal_embeddings as build_tx1_basal_embeddings_module
@@ -131,7 +132,24 @@ def _write_registry_h5ad(
 
 def test_registry_uint16_counts_are_promoted_before_encoding(tmp_path: Path) -> None:
     source = tmp_path / "ACH-A.h5ad"
-    _write_registry_h5ad(source, dtype=np.dtype(np.uint16))
+    ad.AnnData(
+        X=sparse.csr_matrix(
+            np.asarray(
+                [[40_000, 0], [0, 65_535], [40_000, 65_535]], dtype=np.uint16
+            )
+        ),
+        obs=pd.DataFrame(
+            {"model_id": ["ACH-A"] * 3},
+            index=["cell-c", "cell-a", "cell-b"],
+        ),
+        var=pd.DataFrame(
+            {
+                "gene_id": ["ENSG000001", "ENSG000002"],
+                "gene_symbol": ["GENE1", "GENE2"],
+            },
+            index=["one", "two"],
+        ),
+    ).write_h5ad(source)
     registry = pd.DataFrame(
         {
             "source_path": [str(source)],
@@ -142,9 +160,11 @@ def test_registry_uint16_counts_are_promoted_before_encoding(tmp_path: Path) -> 
     )
     state_dir = _write_var_dims(tmp_path / "state", ["GENE1", "GENE2"])
     observed_dtypes: list[np.dtype] = []
+    observed_values: list[np.ndarray] = []
 
     def encoder(adata: ad.AnnData) -> np.ndarray:
         observed_dtypes.append(adata.X.dtype)
+        observed_values.append(adata.X.toarray())
         return np.zeros((adata.n_obs, EMBEDDING_WIDTH), dtype=np.float32)
 
     embed_registry_lines(
@@ -155,6 +175,10 @@ def test_registry_uint16_counts_are_promoted_before_encoding(tmp_path: Path) -> 
         var_ensembl_col="gene_id",
     )
     assert observed_dtypes == [np.dtype(np.float32)]
+    np.testing.assert_array_equal(
+        observed_values[0],
+        np.asarray([[40_000, 0], [0, 65_535], [40_000, 65_535]], dtype=np.float32),
+    )
 
 
 class _CountingEncoder:
