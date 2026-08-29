@@ -1228,7 +1228,7 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
         seed=stage1.train.data_seed,
         expected_cache_model_ids=state.split.all_model_ids,
     )
-    all_records = _response_records(bags, stage1.objective.anchor_weights)
+    all_records = _response_records(bags, dict(stage1.objective.anchor_weights))
     run_root = state.config.paths.stage1_checkpoint.parent.parent
     run_manifest = json.loads((run_root / "run_manifest.json").read_text())
     heldout_raw = run_manifest.get("heldout_genes")

@@ -25,6 +25,7 @@ from aivc_model.geneeffect_stage2_runner import (
     _formal_distributed_runtime,
 )
 from aivc_model.stage1_artifact import Stage1ArtifactManifest, sha256_file
+from aivc_model.stage1_config import Stage1ObjectiveConfig
 from aivc_model.stage2_artifacts import Stage2RunLayout
 from aivc_model.state_core import sha256_strings
 
@@ -915,8 +916,8 @@ def test_response_assembly_builds_valid_deterministic_batches(
     cache = tmp_path / "response"
     _write(cache / "response_targets" / "manifest.json", "{}")
     bags = SimpleNamespace(
-        genes=("TP53@ACH-000001", "KRAS@ACH-000001"),
-        control_batch=np.asarray(["ACH-000001", "ACH-000001"]),
+        genes=("TP53@ACH-000551", "KRAS@ACH-000551"),
+        control_batch=np.asarray(["ACH-000551", "ACH-000551"]),
         control_input=np.ones((2, 4), dtype=np.float32),
         effective_control_target=np.ones((2, 3), dtype=np.float32),
         effective_target_bags=(
@@ -931,10 +932,13 @@ def test_response_assembly_builds_valid_deterministic_batches(
             max_bag=4,
             data_seed=7,
         ),
-        objective=SimpleNamespace(anchor_weights={"ACH-000001": 2.0}),
+        objective=Stage1ObjectiveConfig(
+            anchor_weights=(("ACH-000001", 0.75), ("ACH-000551", 0.25)),
+            required_anchor_metrics=("energy_distance", "mean_delta_mse"),
+        ),
     )
     state = SimpleNamespace(
-        split=SimpleNamespace(all_model_ids=("ACH-000001", "ACH-000002")),
+        split=SimpleNamespace(all_model_ids=("ACH-000001", "ACH-000551")),
         bundle=SimpleNamespace(
             stage1_config=tmp_path / "stage1.yaml",
             response_cache_dir=cache,
@@ -966,7 +970,7 @@ def test_response_assembly_builds_valid_deterministic_batches(
         tmp_path / "stage1" / "run_manifest.json",
         json.dumps(
             {
-                "heldout_genes": {"ACH-000001": ["KRAS"]},
+                "heldout_genes": {"ACH-000551": ["KRAS"]},
                 "best_metric_value": 0.5,
             }
         ),
@@ -979,12 +983,12 @@ def test_response_assembly_builds_valid_deterministic_batches(
     assert assembly.batch_count == 1
     assert [batch.genes for batch in first] == [batch.genes for batch in second]
     assert [batch.genes for batch in first] == [("TP53",)]
-    assert first[0].objective_weights.item() == 2.0
+    assert first[0].objective_weights.item() == 0.25
     assert [batch.genes for batch in assembly.heldout_batch_factory(0)] == [("KRAS",)]
     assert assembly.before_metrics == {"model_loss": 0.5}
     assert assembly_kwargs["expected_cache_model_ids"] == (
         "ACH-000001",
-        "ACH-000002",
+        "ACH-000551",
     )
 
 
