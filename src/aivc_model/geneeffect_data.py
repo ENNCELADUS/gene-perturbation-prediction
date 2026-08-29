@@ -409,16 +409,36 @@ def compute_q_sc(
     adata: Any,
     requested_symbols: Sequence[str],
     *,
-    gene_symbol_column: str = "gene_symbol",
+    gene_symbol_column: str = "auto",
 ) -> QScFeatures:
     """Compute mean, detected fraction and population variance from raw counts."""
     symbols = _unique_strings(requested_symbols, "requested symbols")
+    if any(symbol != symbol.strip().upper() for symbol in symbols):
+        raise ValueError("requested symbols must use canonical uppercase spelling")
+    if gene_symbol_column == "auto":
+        candidates = [
+            name
+            for name in ("gene_symbol", "gene_symbols", "gene_name")
+            if name in adata.var.columns
+        ]
+        if len(candidates) != 1:
+            raise ValueError(
+                "AnnData var must contain exactly one recognized gene-symbol "
+                f"column in auto mode, found {candidates}"
+            )
+        gene_symbol_column = candidates[0]
     if gene_symbol_column not in adata.var.columns:
         raise ValueError(f"AnnData var is missing {gene_symbol_column!r}")
-    source_symbols = adata.var[gene_symbol_column].astype(str)
-    if source_symbols.duplicated().any():
-        duplicates = sorted(source_symbols[source_symbols.duplicated(False)].unique())
-        raise ValueError(f"AnnData contains duplicate gene symbols: {duplicates[:10]}")
+    raw_source_symbols = adata.var[gene_symbol_column]
+    if raw_source_symbols.isna().any():
+        raise ValueError("AnnData contains missing or empty gene symbols")
+    source_symbols = raw_source_symbols.astype(str).str.strip().str.upper()
+    if source_symbols.eq("").any():
+        raise ValueError("AnnData contains missing or empty gene symbols")
+    if not set(symbols).intersection(source_symbols):
+        raise ValueError(
+            "AnnData gene symbols have zero overlap with requested symbols"
+        )
     if int(adata.X.shape[0]) == 0:
         raise ValueError("AnnData contains no cells")
     if hasattr(adata, "obs") and "model_id" in adata.obs.columns:
@@ -433,14 +453,18 @@ def compute_q_sc(
         or not np.equal(data, np.floor(data)).all()
     ):
         raise ValueError("q_sc requires finite, nonnegative, integer raw UMI counts")
-    positions = {symbol: index for index, symbol in enumerate(source_symbols)}
+    positions: dict[str, list[int]] = {}
+    for index, symbol in enumerate(source_symbols):
+        positions.setdefault(symbol, []).append(index)
     values = np.full((len(symbols), 3), np.nan, dtype=np.float32)
     available = np.zeros(len(symbols), dtype=bool)
     for output_index, symbol in enumerate(symbols):
-        source_index = positions.get(symbol)
-        if source_index is None:
+        source_indices = positions.get(symbol)
+        if source_indices is None:
             continue
-        column = matrix[:, source_index]
+        column = matrix[:, source_indices]
+        if len(source_indices) > 1:
+            column = column.sum(axis=1)
         if sparse.issparse(column):
             column = column.toarray()
         array = np.asarray(column, dtype=np.float64).reshape(-1)
