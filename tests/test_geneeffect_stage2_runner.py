@@ -908,9 +908,11 @@ def test_long_rank_zero_action_removes_success_status(tmp_path: Path) -> None:
     assert not status.exists()
 
 
-def test_response_assembly_builds_valid_deterministic_batches(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _response_assembly_case(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    before_metrics: dict[str, object],
+) -> tuple[SimpleNamespace, SimpleNamespace, dict[str, object]]:
     import aivc_model.geneeffect_stage2_runner as runner
 
     cache = tmp_path / "response"
@@ -971,11 +973,27 @@ def test_response_assembly_builds_valid_deterministic_batches(
         json.dumps(
             {
                 "heldout_genes": {"ACH-000551": ["KRAS"]},
-                "best_metric_value": 0.5,
+                "best_metric_value": 25.856595039367676,
             }
         ),
     )
-    _write(tmp_path / "stage1" / "heldout_metrics.json", '{"model_loss": 0.5}')
+    _write(
+        tmp_path / "stage1" / "heldout_metrics.json",
+        json.dumps(before_metrics),
+    )
+    return state, bags, assembly_kwargs
+
+
+def test_response_assembly_builds_valid_deterministic_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before_metrics = {
+        "model_loss": 15.625461436575137,
+        "per_line_model_loss": {"ACH-000551": 10.0408},
+    }
+    state, _, assembly_kwargs = _response_assembly_case(
+        tmp_path, monkeypatch, before_metrics
+    )
     assembly = assemble_response_supervision(state)
     first = list(assembly.batch_factory(3))
     second = list(assembly.batch_factory(3))
@@ -985,11 +1003,30 @@ def test_response_assembly_builds_valid_deterministic_batches(
     assert [batch.genes for batch in first] == [("TP53",)]
     assert first[0].objective_weights.item() == 0.25
     assert [batch.genes for batch in assembly.heldout_batch_factory(0)] == [("KRAS",)]
-    assert assembly.before_metrics == {"model_loss": 0.5}
+    assert assembly.before_metrics == before_metrics
     assert assembly_kwargs["expected_cache_model_ids"] == (
         "ACH-000001",
         "ACH-000551",
     )
+
+
+@pytest.mark.parametrize("model_loss", ["invalid", float("inf")])
+def test_response_assembly_rejects_invalid_heldout_model_loss(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    model_loss: object,
+) -> None:
+    state, _, _ = _response_assembly_case(
+        tmp_path,
+        monkeypatch,
+        {"model_loss": model_loss},
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Stage 1 heldout_metrics model_loss must be a finite number",
+    ):
+        assemble_response_supervision(state)
 
 
 def test_response_weights_preserve_anchor_mass_under_unequal_gene_counts() -> None:

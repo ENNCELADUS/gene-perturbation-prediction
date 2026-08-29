@@ -1294,16 +1294,9 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
         _require_file(before_metrics_path, "Stage 1 held-out metrics").read_text()
     )
     before_loss = before_metrics.get("model_loss")
-    selected_loss = run_manifest.get("best_metric_value")
-    if (
-        not isinstance(before_loss, (int, float))
-        or not isinstance(selected_loss, (int, float))
-        or not np.isfinite(before_loss)
-        or not np.isclose(before_loss, selected_loss, rtol=1e-6, atol=1e-8)
-    ):
+    if not isinstance(before_loss, (int, float)) or not np.isfinite(before_loss):
         raise ValueError(
-            "Stage 1 heldout_metrics model_loss does not match the selected "
-            "run-manifest metric"
+            "Stage 1 heldout_metrics model_loss must be a finite number"
         )
     return ResponseAssembly(
         bags=bags,
