@@ -176,6 +176,7 @@ def _resolve_response_sources(
     tx1_cache_dir: Path,
     hvg_state_model_dir: Path,
     perturbseq_sources_path: Path,
+    expected_cache_model_ids: Sequence[str] | None = None,
 ) -> _ResolvedResponseSources:
     """Resolve and cross-validate every response-training input except the
     per-line perturbed-cell data itself (see :class:`_ResolvedResponseSources`).
@@ -189,7 +190,11 @@ def _resolve_response_sources(
     manifest = load_line_manifest(cell_line_manifest_path)
     selected = _select_train_response_lines(manifest)
     model_ids = selected["model_id"].astype(str).tolist()
-    _require_verified_cache(tx1_cache_dir, cell_line_manifest_path)
+    _require_verified_cache(
+        tx1_cache_dir,
+        cell_line_manifest_path,
+        expected_model_ids=expected_cache_model_ids,
+    )
     what = f"Tx1 embedding cache entry under {tx1_cache_dir}"
     _require_present(model_ids, _cache_line_ids(tx1_cache_dir), what)
     sources, symbol_cols = _load_perturbseq_sources(perturbseq_sources_path)
@@ -216,6 +221,7 @@ def assemble_train_response_gene_bags(
     control_cells_per_line: int | None = None,
     response_cache_dir: Path | None = None,
     seed: int = 42,
+    expected_cache_model_ids: Sequence[str] | None = None,
 ) -> GeneBags:
     """Assemble a two-view ``GeneBags`` spanning the 4 ST response-training lines.
 
@@ -257,6 +263,9 @@ def assemble_train_response_gene_bags(
             instead of repeating it.
         seed: Seed for the per-gene/total-budget cap's deterministic
             sampling; unused when both caps are ``None``.
+        expected_cache_model_ids: Optional exact cache membership contract.
+            Stage 2 supplies its frozen 226-line split because its cache is a
+            strict superset of the historical response-training manifest.
 
     Returns:
         A two-view ``GeneBags``: ``input_bags``/``control_input`` are Tx1
@@ -276,6 +285,7 @@ def assemble_train_response_gene_bags(
         tx1_cache_dir,
         hvg_state_model_dir,
         perturbseq_sources_path,
+        expected_cache_model_ids,
     )
     for row in resolved.selected.itertuples(index=False):
         _assert_admissible_role(row)
@@ -466,7 +476,12 @@ def _cache_line_ids(tx1_cache_dir: Path) -> set[str]:
     return {entry.name for entry in root.iterdir() if entry.is_dir()}
 
 
-def _require_verified_cache(tx1_cache_dir: Path, frozen_manifest_path: Path) -> None:
+def _require_verified_cache(
+    tx1_cache_dir: Path,
+    frozen_manifest_path: Path,
+    *,
+    expected_model_ids: Sequence[str] | None = None,
+) -> None:
     """Require an unrestricted ``verify_cache`` pass before training reads it (C8).
 
     ``load_line_cache`` (used below, per line) only mmaps whatever bytes are
@@ -482,7 +497,14 @@ def _require_verified_cache(tx1_cache_dir: Path, frozen_manifest_path: Path) -> 
         ValueError: ``verify_cache`` reports anything other than
             ``"verified"``.
     """
-    report = verify_cache(tx1_cache_dir, frozen_manifest_path=frozen_manifest_path)
+    if expected_model_ids is None:
+        report = verify_cache(
+            tx1_cache_dir, frozen_manifest_path=frozen_manifest_path
+        )
+    else:
+        report = verify_cache(
+            tx1_cache_dir, expected_model_ids=tuple(expected_model_ids)
+        )
     if report.get("status") != "verified":
         raise ValueError(
             f"Tx1 embedding cache at {tx1_cache_dir} is not verified; refusing "

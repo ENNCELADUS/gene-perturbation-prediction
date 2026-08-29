@@ -1226,6 +1226,7 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
         control_cells_per_line=stage1.train.max_bag,
         response_cache_dir=state.bundle.response_cache_dir,
         seed=stage1.train.data_seed,
+        expected_cache_model_ids=state.split.all_model_ids,
     )
     all_records = _response_records(bags, stage1.objective.anchor_weights)
     run_root = state.config.paths.stage1_checkpoint.parent.parent
