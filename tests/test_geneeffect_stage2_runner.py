@@ -934,6 +934,7 @@ def test_response_assembly_builds_valid_deterministic_batches(
         objective=SimpleNamespace(anchor_weights={"ACH-000001": 2.0}),
     )
     state = SimpleNamespace(
+        split=SimpleNamespace(all_model_ids=("ACH-000001", "ACH-000002")),
         bundle=SimpleNamespace(
             stage1_config=tmp_path / "stage1.yaml",
             response_cache_dir=cache,
@@ -951,8 +952,14 @@ def test_response_assembly_builds_valid_deterministic_batches(
         ),
     )
     monkeypatch.setattr(runner, "load_stage1_config", lambda path: stage1)
+    assembly_kwargs = {}
+
+    def fake_assemble(**kwargs: object) -> object:
+        assembly_kwargs.update(kwargs)
+        return bags
+
     monkeypatch.setattr(
-        runner, "assemble_train_response_gene_bags", lambda **kwargs: bags
+        runner, "assemble_train_response_gene_bags", fake_assemble
     )
 
     _write(
@@ -975,6 +982,10 @@ def test_response_assembly_builds_valid_deterministic_batches(
     assert first[0].objective_weights.item() == 2.0
     assert [batch.genes for batch in assembly.heldout_batch_factory(0)] == [("KRAS",)]
     assert assembly.before_metrics == {"model_loss": 0.5}
+    assert assembly_kwargs["expected_cache_model_ids"] == (
+        "ACH-000001",
+        "ACH-000002",
+    )
 
 
 def test_response_weights_preserve_anchor_mass_under_unequal_gene_counts() -> None:
