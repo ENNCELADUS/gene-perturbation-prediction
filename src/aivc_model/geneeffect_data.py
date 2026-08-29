@@ -462,8 +462,10 @@ def compute_q_sc(
         source_indices = positions.get(symbol)
         if source_indices is None:
             continue
-        column = matrix[:, source_indices]
-        if len(source_indices) > 1:
+        if len(source_indices) == 1:
+            column = matrix[:, source_indices[0]]
+        else:
+            column = matrix[:, source_indices]
             column = column.sum(axis=1)
         if sparse.issparse(column):
             column = column.toarray()
