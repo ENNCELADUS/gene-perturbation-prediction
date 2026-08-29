@@ -214,6 +214,47 @@ def test_q_sc_raw_counts_and_explicit_unavailable_mask() -> None:
         compute_q_sc(adata, ["A"])
 
 
+def test_q_sc_auto_detects_gene_name_normalizes_and_aggregates_duplicates() -> None:
+    adata = SimpleNamespace(
+        X=sparse.csr_matrix([[1, 2, 4], [3, 4, 5]]),
+        var=pd.DataFrame({"gene_name": ["a", "A", "B"]}),
+    )
+
+    result = compute_q_sc(adata, ["A", "B"])
+
+    np.testing.assert_allclose(result.values, [[5.0, 1.0, 4.0], [4.5, 1.0, 0.25]])
+
+
+def test_q_sc_auto_rejects_ambiguous_or_missing_symbol_columns() -> None:
+    adata = SimpleNamespace(
+        X=sparse.csr_matrix([[1, 2]]),
+        var=pd.DataFrame({"gene_name": ["A", "B"]}),
+    )
+    adata.var["gene_symbol"] = adata.var["gene_name"]
+    with pytest.raises(ValueError, match="exactly one recognized gene-symbol"):
+        compute_q_sc(adata, ["A", "B"])
+    result = compute_q_sc(adata, ["A", "B"], gene_symbol_column="gene_name")
+    np.testing.assert_allclose(result.values[:, 0], [1.0, 2.0])
+
+    adata.var = pd.DataFrame({"ensembl_id": ["ENSG1", "ENSG2"]})
+    with pytest.raises(ValueError, match=r"found \[\]"):
+        compute_q_sc(adata, ["A", "B"])
+
+
+def test_q_sc_rejects_noncanonical_requests_and_zero_source_overlap() -> None:
+    adata = SimpleNamespace(
+        X=sparse.csr_matrix([[1, 2]]),
+        var=pd.DataFrame({"gene_symbols": [" A ", "B"]}),
+    )
+    result = compute_q_sc(adata, ["A", "B"])
+    np.testing.assert_allclose(result.values[:, 0], [1.0, 2.0])
+
+    with pytest.raises(ValueError, match="canonical uppercase"):
+        compute_q_sc(adata, ["a"])
+    with pytest.raises(ValueError, match="zero overlap"):
+        compute_q_sc(adata, ["C"])
+
+
 def test_q_sc_shards_resume_hash_and_unrestricted_verification(tmp_path: Path) -> None:
     source_a = tmp_path / "A.h5ad"
     source_b = tmp_path / "B.h5ad"
