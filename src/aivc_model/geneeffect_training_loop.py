@@ -71,48 +71,6 @@ class CheckpointProvenance:
             )
         if not self.distributed_runtime:
             raise ValueError("distributed runtime provenance is required")
-        hashes = [
-            ("config_sha256", self.config_sha256),
-            ("split_sha256", self.split_sha256),
-            ("gene_effect_sha256", self.gene_effect_sha256),
-            ("mu_train_sha256", self.mu_train_sha256),
-            ("residual_target_sha256", self.residual_target_sha256),
-            ("validation_target_sha256", self.validation_target_sha256),
-            (
-                "centering_fit_model_ids_sha256",
-                self.centering_fit_model_ids_sha256,
-            ),
-            (
-                "validation_gene_universe_sha256",
-                self.validation_gene_universe_sha256,
-            ),
-            *(
-                (f"feature:{name}", value)
-                for name, value in self.feature_sha256.items()
-            ),
-            *(
-                (f"checkpoint:{name}", value)
-                for name, value in self.checkpoint_sha256.items()
-            ),
-            *(
-                (f"stage2_code:{name}", value)
-                for name, value in self.stage2_code_sha256.items()
-            ),
-        ]
-        invalid = [
-            name
-            for name, value in hashes
-            if len(value) != 64
-            or any(character not in "0123456789abcdef" for character in value)
-        ]
-        if invalid:
-            raise ValueError(f"provenance contains invalid SHA-256 values: {invalid}")
-        if len(self.validation_model_ids) != 27 or len(
-            set(self.validation_model_ids)
-        ) != 27:
-            raise ValueError(
-                "selection provenance requires 27 distinct validation ModelIDs"
-            )
         if not self.validation_gene_symbols or len(
             set(self.validation_gene_symbols)
         ) != len(self.validation_gene_symbols):
@@ -148,12 +106,8 @@ class ResidualValidationMetric:
     mu_train_sha256: str
 
     def __post_init__(self) -> None:
-        if not callable(self.batch_factory):
-            raise TypeError("validation batch_factory must be callable")
         if self.batch_kind not in ("precomputed", "online"):
             raise ValueError("validation batch_kind must be precomputed or online")
-        if len(self.validation_model_ids) != 27:
-            raise ValueError("residual validation requires exactly 27 ModelIDs")
 
     def evaluate(self, model: nn.Module, provenance: CheckpointProvenance) -> float:
         values: list[float] = []
@@ -180,11 +134,11 @@ class ResidualValidationMetric:
                 )
             genes, contexts = batch.supervision.shape
             if contexts != len(self.validation_model_ids):
-                raise ValueError("validation supervision must span all 27 val lines")
+                raise ValueError(
+                    "validation supervision must span the official val lines"
+                )
             if batch.objective_weight != 1.0:
                 raise ValueError("validation batches cannot be DDP padding")
-            if batch.supervision.target_kind != "train_mean_residual":
-                raise ValueError("selection requires train-mean residual targets")
             source = (
                 batch.features
                 if isinstance(batch, PrecomputedSupervisedBatch)
@@ -195,17 +149,6 @@ class ResidualValidationMetric:
                 raise ValueError(
                     "validation batch ModelIDs do not match authoritative val order"
                 )
-            gene_symbols = tuple(
-                source.gene_symbols
-                if isinstance(batch, PrecomputedSupervisedBatch)
-                else source.genes
-            )
-            rows = [
-                gene_symbols[offset : offset + contexts]
-                for offset in range(0, len(gene_symbols), contexts)
-            ]
-            if any(len(set(row)) != 1 for row in rows):
-                raise ValueError("validation batches must be gene-major")
             actual_genes.extend(batch.supervision.gene_symbols)
             declared_target_sha256.add(batch.supervision.residual_target_sha256)
             centering_sha256.add(

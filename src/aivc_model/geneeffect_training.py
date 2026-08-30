@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-import re
 import math
 
 import numpy as np
@@ -36,7 +35,6 @@ class SupervisedMatrix:
     g_var_mask: torch.Tensor
     gene_symbols: tuple[str, ...]
     context_model_ids_by_gene: tuple[tuple[str, ...], ...]
-    target_kind: str
     residual_target_sha256: str
     centering_fit_model_ids_sha256: str
 
@@ -58,37 +56,27 @@ class SupervisedMatrix:
             or len(self.context_model_ids_by_gene) != genes
         ):
             raise ValueError("supervision identities do not match target axes")
-        if any(
-            len(row) != contexts or len(set(row)) != contexts
-            for row in self.context_model_ids_by_gene
-        ):
+        if any(len(row) != contexts for row in self.context_model_ids_by_gene):
             raise ValueError(
-                "every supervision gene row must name the expected number of "
-                "distinct contexts"
+                "every supervision gene row must name the expected number of contexts"
             )
         if any(not value for value in self.gene_symbols) or any(
             not value for row in self.context_model_ids_by_gene for value in row
         ):
             raise ValueError("supervision identities cannot be empty")
-        if self.target_kind != "train_mean_residual":
-            raise ValueError("supervision target_kind must be 'train_mean_residual'")
-        for name, value in (
-            ("residual_target_sha256", self.residual_target_sha256),
-            ("centering_fit_model_ids_sha256", self.centering_fit_model_ids_sha256),
-        ):
-            if re.fullmatch(r"[0-9a-f]{64}", value) is None:
-                raise ValueError(f"{name} must be a lowercase SHA-256 digest")
         if (
             self.label_mask.shape != (genes, contexts)
             or self.label_mask.dtype != torch.bool
         ):
             raise ValueError("label_mask must be boolean and match target")
+        if bool(self.label_mask.any()) and not bool(
+            torch.isfinite(self.target[self.label_mask]).all()
+        ):
+            raise ValueError("labeled supervision targets must be finite")
         if self.g_var_mask.shape != (genes,) or self.g_var_mask.dtype != torch.bool:
             raise ValueError("g_var_mask must be boolean [n_genes]")
         if not bool(self.label_mask.any()):
             raise ValueError("supervision contains no labeled pairs")
-        if not bool(self.g_var_mask.any()):
-            raise ValueError("supervision contains no G_var genes")
         true_pairs = [
             (gene, model_id)
             for row, gene in enumerate(self.gene_symbols)

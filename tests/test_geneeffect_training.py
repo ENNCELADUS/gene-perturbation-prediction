@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 from torch import nn
 
+import aivc_model.geneeffect_stage2_runner as runner
 from aivc_model.geneeffect_e2e import PrecomputedFeatureBatch
 from aivc_model.geneeffect_training import (
     PrecomputedSupervisedBatch,
@@ -71,7 +74,6 @@ def _supervision() -> SupervisedMatrix:
         g_var_mask=torch.ones(2, dtype=torch.bool),
         gene_symbols=("G1", "G2"),
         context_model_ids_by_gene=(("C1", "C2", "C3"), ("C1", "C2", "C3")),
-        target_kind="train_mean_residual",
         residual_target_sha256="0" * 64,
         centering_fit_model_ids_sha256="1" * 64,
     )
@@ -149,6 +151,110 @@ def test_repeated_gene_rows_allow_only_masked_padding_duplicates() -> None:
     )
     with pytest.raises(ValueError, match="duplicate labeled"):
         PrecomputedSupervisedBatch(features, duplicate).validate()
+
+
+def test_duplicate_context_ids_are_allowed_only_when_masked() -> None:
+    masked = replace(
+        _supervision(),
+        context_model_ids_by_gene=(("C1", "C2", "C2"), ("C1", "C2", "C3")),
+        label_mask=torch.tensor([[True, True, False], [True, True, True]]),
+    )
+    features = replace(
+        _features(),
+        model_ids=("C1", "C2", "C2", "C1", "C2", "C3"),
+    )
+    PrecomputedSupervisedBatch(features, masked).validate()
+
+    labeled = replace(
+        masked,
+        label_mask=torch.tensor([[True, True, True], [True, True, True]]),
+    )
+    with pytest.raises(ValueError, match="duplicate labeled"):
+        PrecomputedSupervisedBatch(features, labeled).validate()
+
+
+def test_only_labeled_targets_must_be_finite() -> None:
+    masked_nonfinite = replace(
+        _supervision(),
+        target=torch.tensor([[0.0, 1.0, float("nan")], [2.0, 1.0, 0.0]]),
+        label_mask=torch.tensor([[True, True, False], [True, True, True]]),
+    )
+    masked_nonfinite.validate()
+
+    labeled_nonfinite = replace(
+        masked_nonfinite,
+        label_mask=torch.ones(2, 3, dtype=torch.bool),
+    )
+    with pytest.raises(ValueError, match="targets must be finite"):
+        labeled_nonfinite.validate()
+
+
+def test_supervision_allows_batch_without_g_var_gene() -> None:
+    replace(_supervision(), g_var_mask=torch.zeros(2, dtype=torch.bool)).validate()
+
+
+def test_sampler_tail_duplicate_feeds_precomputed_supervision() -> None:
+    context_count = 170
+    data = SimpleNamespace(
+        genes=("G0", "G1"),
+        model_ids=tuple(f"C{index}" for index in range(context_count)),
+        targets=np.arange(2 * context_count, dtype=np.float32).reshape(
+            2, context_count
+        ),
+        label_mask=np.ones((2, context_count), dtype=bool),
+        g_var_mask=np.ones(2, dtype=bool),
+        residual_target_sha256="0" * 64,
+        centering_fit_model_ids_sha256="1" * 64,
+    )
+    config = SimpleNamespace(
+        joint=SimpleNamespace(genes_per_batch=2, contexts_per_gene=32),
+        seeds=SimpleNamespace(train=7),
+    )
+    indices = runner._epoch_batch_indices(data, data.model_ids, config, epoch=0)
+    tail_index = next(
+        batch
+        for batch in indices
+        if any(not all(row.label_mask) for row in batch.rows)
+    )
+    row = next(row for row in tail_index.rows if not all(row.label_mask))
+    assert len(set(row.context_indices)) < len(row.context_indices)
+
+    labeled_pairs: list[tuple[str, str]] = []
+    for index in indices:
+        supervision = runner._supervision_from_index(data, index)
+        gene_symbols = tuple(
+            gene
+            for gene in supervision.gene_symbols
+            for _ in range(supervision.shape[1])
+        )
+        model_ids = tuple(
+            model_id
+            for context_row in supervision.context_model_ids_by_gene
+            for model_id in context_row
+        )
+        pair_count = supervision.pair_count
+        features = PrecomputedFeatureBatch(
+            delta_proj=torch.zeros(pair_count, 256),
+            s=torch.zeros(pair_count, 6),
+            q_sc=torch.zeros(pair_count, 3),
+            e_g=torch.zeros(pair_count, 2),
+            z_c=torch.zeros(pair_count, 3),
+            q_sc_mask=torch.ones(pair_count, dtype=torch.bool),
+            hvg_panel_mask=torch.ones(pair_count, dtype=torch.bool),
+            own_gene_shift_mask=torch.ones(pair_count, dtype=torch.bool),
+            gene_symbols=gene_symbols,
+            model_ids=model_ids,
+        )
+        PrecomputedSupervisedBatch(features, supervision).validate()
+        labeled_pairs.extend(
+            (gene, model_id)
+            for row_index, gene in enumerate(supervision.gene_symbols)
+            for column, model_id in enumerate(
+                supervision.context_model_ids_by_gene[row_index]
+            )
+            if bool(supervision.label_mask[row_index, column])
+        )
+    assert len(labeled_pairs) == len(set(labeled_pairs)) == 2 * context_count
 
 
 def test_lambda_calibration_uses_median_and_clips() -> None:

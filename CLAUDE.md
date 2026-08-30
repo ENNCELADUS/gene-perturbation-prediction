@@ -15,8 +15,8 @@ written, Stage 0 open, **no run started**. The `context_screen_v2` SL split is b
 ## Engineering rules
 
 - Keep documents clean and concise: replacement edits must preserve the line count or reduce it; never increase it.
-- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility
-  layers, fallbacks, or migrations.
+- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
+- Do not validate representation form or self-declared metadata. Every validator must prevent a concrete computation, data-integrity, leakage, or scientific-protocol failure.
 - Choose the simplest implementation that fully meets the current requirement. Avoid speculative
   abstraction, configuration, and indirection.
 - Grow the system in layers: start from the smallest version that works end to end, and add each

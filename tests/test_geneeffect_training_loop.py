@@ -115,7 +115,7 @@ def _validation_ids() -> tuple[str, ...]:
     return tuple(json.loads(split_path.read_bytes())["val"])
 
 
-def _supervision(*, target_kind="train_mean_residual") -> SupervisedMatrix:
+def _supervision() -> SupervisedMatrix:
     target = torch.arange(27, dtype=torch.float32).repeat(2, 1)
     validation_ids = _validation_ids()
     return SupervisedMatrix(
@@ -124,15 +124,12 @@ def _supervision(*, target_kind="train_mean_residual") -> SupervisedMatrix:
         g_var_mask=torch.ones(2, dtype=torch.bool),
         gene_symbols=("G0", "G1"),
         context_model_ids_by_gene=(validation_ids, validation_ids),
-        target_kind=target_kind,
         residual_target_sha256=_target_digest(),
         centering_fit_model_ids_sha256=_provenance().centering_fit_model_ids_sha256,
     )
 
 
-def _precomputed_validation_batch(
-    *, target_kind="train_mean_residual"
-) -> PrecomputedSupervisedBatch:
+def _precomputed_validation_batch() -> PrecomputedSupervisedBatch:
     pairs = 54
     signal = torch.arange(27, dtype=torch.float32).repeat(2).unsqueeze(1)
     model_ids = _validation_ids() * 2
@@ -149,9 +146,7 @@ def _precomputed_validation_batch(
         gene_symbols=gene_symbols,
         model_ids=model_ids,
     )
-    return PrecomputedSupervisedBatch(
-        features, _supervision(target_kind=target_kind)
-    )
+    return PrecomputedSupervisedBatch(features, _supervision())
 
 
 def _online_validation_batch() -> OnlineSupervisedBatch:
@@ -422,22 +417,6 @@ def test_rank_validation_metric_must_be_identical() -> None:
     accelerator = _FakeAccelerator(torch.tensor([0.1, 0.2], dtype=torch.float64))
     with pytest.raises(RuntimeError, match="differs across ranks"):
         loops._metric_across_ranks(0.1, accelerator)  # type: ignore[arg-type]
-
-
-def test_validation_evaluator_rejects_raw_targets_and_wrong_ids() -> None:
-    provenance = _provenance()
-    evaluator = loops.ResidualValidationMetric(
-        batch_factory=lambda: (
-            _precomputed_validation_batch(target_kind="raw_geneeffect"),
-        ),
-        batch_kind="precomputed",
-        validation_model_ids=provenance.validation_model_ids,
-        split_sha256=provenance.split_sha256,
-        gene_effect_sha256=provenance.gene_effect_sha256,
-        mu_train_sha256=provenance.mu_train_sha256,
-    )
-    with pytest.raises(ValueError, match="target_kind"):
-        evaluator.evaluate(_LoopModel(frozen=True), provenance)
 
 
 def test_validation_evaluator_recomputes_targets_and_exact_gene_coverage() -> None:
@@ -722,6 +701,39 @@ def test_centering_provenance_is_recomputed_from_split() -> None:
             _config(),
             replace(provenance, centering_fit_model_ids_sha256="2" * 64),
             _validation(),
+        )
+
+
+def test_validation_contract_uses_official_tuple_not_fixed_count(
+    tmp_path: Path,
+) -> None:
+    split = {"train": ["T0"], "unlabeled_train": [], "val": ["V0", "V1"]}
+    split_path = tmp_path / "split.json"
+    split_bytes = json.dumps(split).encode()
+    split_path.write_bytes(split_bytes)
+    config = _config()
+    config.paths.split = split_path
+    provenance = replace(
+        _provenance(),
+        split_sha256=hashlib.sha256(split_bytes).hexdigest(),
+        centering_fit_model_ids_sha256=hashlib.sha256(b"T0").hexdigest(),
+        validation_model_ids=("V0", "V1"),
+    )
+    metric = loops.ResidualValidationMetric(
+        batch_factory=lambda: (),
+        batch_kind="precomputed",
+        validation_model_ids=("V0", "V1"),
+        split_sha256=provenance.split_sha256,
+        gene_effect_sha256=provenance.gene_effect_sha256,
+        mu_train_sha256=provenance.mu_train_sha256,
+    )
+
+    loops._validate_contract(config, provenance, metric)
+    with pytest.raises(ValueError, match="configured split"):
+        loops._validate_contract(
+            config,
+            replace(provenance, validation_model_ids=("V1", "V0")),
+            metric,
         )
 
 
