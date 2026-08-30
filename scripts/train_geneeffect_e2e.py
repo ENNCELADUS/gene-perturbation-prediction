@@ -13,20 +13,11 @@ from aivc_model.geneeffect_stage2_runner import preflight_stage2, run_full_stage
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument(
-        "--stage1-provenance",
-        type=Path,
-        required=True,
-        help=(
-            "strict JSON maps for compatibility-code/config/source paths in the "
-            "Stage 1 seal"
-        ),
-    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument(
         "--preflight",
         action="store_true",
-        help="authenticate every configured input without writing a run directory",
+        help="validate every configured input without writing a run directory",
     )
     mode.add_argument(
         "--dry-run",
@@ -37,7 +28,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     mode.add_argument(
         "--run-id",
-        help="create a fresh formal run and enter the full training path",
+        help="create a fresh run and enter the full training path",
     )
     return parser.parse_args(argv)
 
@@ -45,7 +36,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.preflight or args.dry_run:
-        state = preflight_stage2(args.config, args.stage1_provenance)
+        state = preflight_stage2(args.config)
         payload = dict(state.report)
         if args.dry_run:
             payload.update(
@@ -57,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
-    run_full_stage2(args.config, args.stage1_provenance, run_id=args.run_id)
+    run_full_stage2(args.config, run_id=args.run_id)
     return 0
 
 

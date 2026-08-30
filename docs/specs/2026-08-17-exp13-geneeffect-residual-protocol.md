@@ -60,8 +60,8 @@ embedding (2560-d) as $F_\omega$ input, ST-checkpoint HVG panel (2000-d) as $B_c
 space, ESM2 adapter $p_g=A_\phi(E_{\text{ESM2}}(\text{protein}(g)))$ (1280-d → 2024-d) as
 $F_\omega$'s perturbation input, with $e_g$ the raw 1280-d ESM2 embedding supplied to
 $h_\delta$ directly. `Delta` is 4000-d (2 × 2000, mean+var); `z_c` is 5120-d (2 × 2560).
-Training freezes Stage 1 in eval mode to warm $h_\delta$ on streamed features, then unfreezes
-STATE/ESM adapters for $L_{resp}+\lambda_{dep}L_{dep}$; masked Huber uses $\delta=1$, Pearson $\beta=1$, and $\lambda_{dep}$ is the clipped median gradient-norm ratio on eight train batches.
+Rank zero writes `condition_features/stage1_frozen`; every launched rank then loads the supervised-train+validation features once into its own device cache.
+Launcher/Accelerator-auto-detected 2- or 4-rank DDP covers frozen/eval-Stage-1 $h_\delta$ warmup and joint tuning after STATE/ESM adapters unfreeze for $L_{resp}+\lambda_{dep}L_{dep}$. `conditions_per_rank` is per rank in both phases where relevant. Masked Huber uses $\delta=1$, Pearson $\beta=1$, and $\lambda_{dep}$ is the clipped median gradient-norm ratio on eight train batches.
 
 ## 5. Sampling and Features
 
@@ -123,8 +123,8 @@ Basal-copy and null-shuffle losses are required reported baselines, not pass/fai
 
 **Primary metric:** macro per-gene Spearman across the 27 test lines, residual-only
 ($\hat\delta$ vs. $\delta=y-\mu^{tr}$); per-line values reported alongside. **Selection**
-(checkpoint, hyperparameters) uses the identical metric on the 27 validation lines; val never
-enters training.
+(checkpoint, hyperparameters) may use the identical metric on the 27 validation lines, but
+validation labels never enter gradient fitting; test labels enter neither fitting nor selection.
 
 Baselines and the model are scored identically by `residual_ladder.py` /
 `residual_metrics.py`: `copy_prior`, `nearest_line`, `context_pca_ridge[z_c]`
@@ -139,8 +139,8 @@ scientific claim. Any later virtual-cell ablation must jointly remove
 
 ## 9. Leakage and Integrity
 
-- Test and validation lines are absent from response training, dependency training,
-  `mu_g^{tr}` fitting, checkpoint/hyperparameter selection, and the projection/PCA fit.
+- Validation and test lines are absent from response/dependency fitting, `mu_g^{tr}` fitting, and projection/PCA fitting.
+  Validation alone may select checkpoints/hyperparameters; test never enters selection.
 - `mu_g^{tr}` is fit on the 170 labeled train lines only, never re-added inside a scored
   quantity, and never centered on a fold that includes the row being predicted (per
   `CLAUDE.md`'s residual-ladder rule).
@@ -155,13 +155,13 @@ scientific claim. Any later virtual-cell ablation must jointly remove
 cell_line_geneeffect_226_split.json    copy of the tracked split file, with its hash
 esm2_gene_universe_manifest.json       symbol->UniProt/isoform mapping, coverage, drop list
 stage1_objective.json                  §7, pinned before Stage 1 trains
-condition_features/                    Stage 2 per-condition features (streamed, not B_hat)
-checkpoint_selection.json
+condition_features/stage1_frozen/      one-time generated warmup features
+warmup/, joint/, checkpoint_selection.json    selected checkpoints, metadata, logs, decisions
 geneeffect_residual_predictions.csv
 geneeffect_residual_metrics.json       primary + per-line + response before/after + baselines
-run_manifest.json                      commit, checkpoint/ESM2/DepMap hashes, seeds, M_c,
-                                        cell_set_len, projection seed, gene universe
+run_manifest.json                      commit, seeds, M_c/cell_set_len, projection/gene universe, DDP settings
+complete.json                          successful terminal run; no failure.json
 ```
 
-Planned metrics are not results; a claim enters `results/` only after the frozen run
-completes and its integrity checks pass.
+Dot-status files and live log output are diagnostic progress only. Completion requires exited workers, `complete.json`, and no `failure.json`.
+Planned metrics are not results; a claim enters `results/` only after the run completes and its checks pass.

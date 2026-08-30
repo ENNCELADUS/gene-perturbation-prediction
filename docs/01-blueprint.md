@@ -126,8 +126,8 @@ collapse means $\lambda_{\text{dep}}$ is wrong, not that the run finished.
 $G_{\text{var}}$ is a pre-declared delta-variance gene set fit on train-side contexts;
 without it the scale-free Pearson term gives a gene whose true $\delta$ is replicate noise
 the same gradient as a genuinely context-dependent one. Stage 3 is context-balanced, each
-training context contributing equally. Exp13 warmup uses a frozen/eval Stage 1 backbone and
-streamed features, then unfreezes STATE/ESM adapters; one seed is not a scientific multi-seed claim.
+training context contributing equally. Exp13 rank zero writes the frozen Stage 1 features; every launched rank loads the supervised-train+validation features once into its device cache.
+Auto-detected 2- or 4-rank DDP covers frozen/eval-backbone head warmup and joint tuning; `conditions_per_rank` applies to each where relevant. One seed is not a multi-seed claim.
 
 $\alpha$ is frozen on GeneEffect-only validation against a declared calibration band
 **before any SL label is read**. Its Pearson term is shift- and scale-invariant, so $\alpha$
@@ -156,8 +156,8 @@ in both arms.
 
 ## 6. Evaluation Contract
 
-Metrics are numbered by the stage they score, matching §4. **Stage 1** reports the response
-metrics before and after Stage 2 training.
+Metrics are numbered by the stage they score, matching §4. **Stage 1** reports response metrics before and after Stage 2 training.
+Validation labels may select Stage 2 checkpoints and hyperparameters but never enter fitting; test labels enter neither fitting nor selection.
 
 **Stage 2** needs two surfaces: only one SL test context has GeneEffect; a dependency split over $\mathcal{C}_{\text{dep}}$, disjoint from the
 SL contexts and holding out at least eight, carries the per-gene across-context Spearman on

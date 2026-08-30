@@ -50,6 +50,9 @@ class _TinyE2E(nn.Module):
     def forward_precomputed(self, features):
         return self.head(features.e_g).squeeze(-1)
 
+    def _standardize(self, features):
+        return {"e_g": features.e_g}
+
 
 def _features() -> PrecomputedFeatureBatch:
     pairs = 6
@@ -103,6 +106,7 @@ def test_warmup_step_updates_only_head() -> None:
         not torch.equal(before, after)
         for before, after in zip(before_head, model.head.parameters(), strict=True)
     )
+    assert model.backbone.training is False
 
 
 def test_flat_feature_alignment_is_enforced() -> None:
@@ -212,9 +216,7 @@ def test_sampler_tail_duplicate_feeds_precomputed_supervision() -> None:
     )
     indices = runner._epoch_batch_indices(data, data.model_ids, config, epoch=0)
     tail_index = next(
-        batch
-        for batch in indices
-        if any(not all(row.label_mask) for row in batch.rows)
+        batch for batch in indices if any(not all(row.label_mask) for row in batch.rows)
     )
     row = next(row for row in tail_index.rows if not all(row.label_mask))
     assert len(set(row.context_indices)) < len(row.context_indices)
@@ -286,16 +288,94 @@ def test_lambda_calibration_rejects_zero_gradient() -> None:
 
 class _MultiRankAccelerator:
     num_processes = 2
+    device = torch.device("cpu")
+
+    def unwrap_model(self, value):
+        return value.module
+
+    def reduce(self, value, reduction):
+        assert reduction == "sum"
+        return value * self.num_processes
+
+    def backward(self, value):
+        value.backward()
+
+    def clip_grad_norm_(self, parameters, limit):
+        return torch.nn.utils.clip_grad_norm_(parameters, limit)
 
 
-def test_warmup_rejects_multi_rank_accelerator() -> None:
+class _PreparedHead(nn.Module):
+    def __init__(self, module: nn.Module) -> None:
+        super().__init__()
+        self.module = module
+
+    def forward(self, *, e_g, **_masks):
+        return self.module(e_g).squeeze(-1)
+
+
+class _PaddingAccelerator(_MultiRankAccelerator):
+    def __init__(self) -> None:
+        self.reductions = iter((torch.tensor([6.0, 2.0]), torch.tensor([3.0, 1.0])))
+
+    def reduce(self, _value, reduction):
+        assert reduction == "sum"
+        return next(self.reductions)
+
+
+def test_warmup_requires_prepared_head_for_multi_rank() -> None:
     model = _TinyE2E()
     model.freeze_backbone()
     optimizer = torch.optim.AdamW(model.head.parameters(), lr=1e-2)
-    with pytest.raises(ValueError, match="single-process"):
+    with pytest.raises(ValueError, match="prepared forward_head"):
         warmup_step(
             model,  # type: ignore[arg-type]
             PrecomputedSupervisedBatch(_features(), _supervision()),
             optimizer,
             accelerator=_MultiRankAccelerator(),  # type: ignore[arg-type]
         )
+
+
+def test_warmup_uses_prepared_head_without_reassigning_model_head() -> None:
+    model = _TinyE2E()
+    model.freeze_backbone()
+    raw_head = model.head
+    forward_head = _PreparedHead(raw_head)
+    optimizer = torch.optim.AdamW(raw_head.parameters(), lr=1e-2)
+    metrics = warmup_step(
+        model,  # type: ignore[arg-type]
+        PrecomputedSupervisedBatch(_features(), _supervision()),
+        optimizer,
+        accelerator=_MultiRankAccelerator(),  # type: ignore[arg-type]
+        forward_head=forward_head,
+    )
+    assert model.head is raw_head
+    assert metrics.n_valid_pairs == 12
+    assert metrics.n_genes_scored == 4
+
+
+def test_warmup_rejects_forward_head_without_multi_rank_accelerator() -> None:
+    model = _TinyE2E()
+    model.freeze_backbone()
+    with pytest.raises(ValueError, match="only valid for multi-rank"):
+        warmup_step(
+            model,  # type: ignore[arg-type]
+            PrecomputedSupervisedBatch(_features(), _supervision()),
+            torch.optim.AdamW(model.head.parameters(), lr=1e-2),
+            forward_head=_PreparedHead(nn.Linear(2, 1)),
+        )
+
+
+def test_warmup_padding_reports_only_remote_real_pairs() -> None:
+    model = _TinyE2E()
+    model.freeze_backbone()
+    forward_head = _PreparedHead(model.head)
+    optimizer = torch.optim.AdamW(model.head.parameters(), lr=1e-2)
+    metrics = warmup_step(
+        model,  # type: ignore[arg-type]
+        PrecomputedSupervisedBatch(_features(), _supervision(), objective_weight=0.0),
+        optimizer,
+        accelerator=_PaddingAccelerator(),  # type: ignore[arg-type]
+        forward_head=forward_head,
+    )
+    assert metrics.n_valid_pairs == 6
+    assert metrics.n_genes_scored == 2

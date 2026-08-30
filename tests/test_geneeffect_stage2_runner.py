@@ -11,12 +11,14 @@ import pytest
 import torch
 
 from aivc_model.geneeffect_stage2_runner import (
+    GeneEffectSupervisionCache,
     ResponseAssembly,
     Stage2Preflight,
     assemble_response_supervision,
     authenticate_stage1_seal,
-    build_dependency_batch_factories,
     build_frozen_feature_store,
+    build_joint_batch_factories,
+    build_warmup_batch_factories,
     load_stage2_bundle_spec,
     preflight_stage2,
     run_registered_baselines,
@@ -48,8 +50,6 @@ def test_bundle_accepts_absolute_seal_for_relative_stage1_config(
     stage1_esm = _write(repo / "data/esm2/stage1.npz", "esm")
     cell_manifest = _write(repo / "results/cell_line_manifest.csv", "model_id\n")
     perturbseq = _write(repo / "configs/perturbseq_sources.json", "{}")
-    compatibility = _write(repo / "src/compatibility.py", "pass\n")
-    source = _write(repo / "configs/source.json", "{}")
     state_model_dir = repo / "model/state"
     response_cache = repo / "data/response_cache"
     state_model_dir.mkdir(parents=True)
@@ -64,19 +64,7 @@ def test_bundle_accepts_absolute_seal_for_relative_stage1_config(
             response_cache=response_cache.relative_to(repo),
         )
     )
-    bundle_path = _write(
-        repo / "results/stage2_bundle.json",
-        json.dumps(
-            {
-                "schema_version": "exp13-stage2-bundle-v1",
-                "compatibility_code_paths": {"compatibility": str(compatibility)},
-                "config_paths": {"stage1_response": str(stage1_config)},
-                "source_paths": {"source": str(source)},
-            }
-        ),
-    )
-
-    bundle = load_stage2_bundle_spec(bundle_path, config)
+    bundle = load_stage2_bundle_spec(config)
 
     assert bundle.stage1_config.resolve() == stage1_config.resolve()
 
@@ -161,14 +149,6 @@ def test_authenticate_stage1_seal_checks_selected_run(tmp_path: Path) -> None:
     )
 
     assert observed == expected
-
-
-def test_authenticate_stage1_seal_rejects_checkpoint_drift(tmp_path: Path) -> None:
-    config, _ = _sealed_stage1(tmp_path)
-    config.paths.stage1_checkpoint.write_text("changed", encoding="utf-8")
-
-    with pytest.raises(ValueError, match="checkpoint SHA-256 mismatch"):
-        authenticate_stage1_seal(config, target_esm_symbols=("TP53", "KRAS"))
 
 
 def test_authenticated_target_esm2_rejects_post_preflight_replacement(
@@ -477,9 +457,9 @@ def test_preflight_loads_contract_and_verifies_both_caches(
     monkeypatch.setattr(runner, "sha256_file", lambda path: "c" * 64)
 
     bundle = SimpleNamespace()
-    monkeypatch.setattr(runner, "load_stage2_bundle_spec", lambda path, value: bundle)
+    monkeypatch.setattr(runner, "load_stage2_bundle_spec", lambda value: bundle)
 
-    result = preflight_stage2(tmp_path / "config.yaml", tmp_path / "provenance.json")
+    result = preflight_stage2(tmp_path / "config.yaml")
 
     assert result.report["status"] == "passed"
     assert result.report["cell_lines"]["total"] == 226
@@ -591,7 +571,7 @@ def test_full_run_records_failure_without_completion(
             },
         },
     )
-    monkeypatch.setattr(runner, "preflight_stage2", lambda path, provenance: state)
+    monkeypatch.setattr(runner, "preflight_stage2", lambda path: state)
     monkeypatch.setattr(runner, "load_stage2_config", lambda path: config)
     monkeypatch.setattr(
         runner,
@@ -646,7 +626,7 @@ def test_full_run_records_failure_without_completion(
     )
 
     with pytest.raises(FileNotFoundError, match="missing basal asset"):
-        run_full_stage2(config_file, tmp_path / "provenance.json", run_id="trial-1")
+        run_full_stage2(config_file, run_id="trial-1")
 
     run_root = output_root / "trial-1"
     assert (run_root / "failure.json").is_file()
@@ -654,11 +634,7 @@ def test_full_run_records_failure_without_completion(
     failure = json.loads((run_root / "failure.json").read_text())
     assert failure["phase"] == "training_assembly"
     manifest = json.loads((run_root / "run_manifest.json").read_text())
-    assert manifest["stage1_training_code_provenance_status"] == "unavailable"
-    assert manifest["stage1_training_data_provenance_status"] == "incomplete"
-    assert manifest["stage1_training_data_provenance_missing_identities"] == [
-        "tx1_basal_cache"
-    ]
+    assert manifest["status"] == "initialized"
 
 
 def test_residual_target_artifact_persists_recomputable_contract(
@@ -729,7 +705,6 @@ def test_full_run_rejects_unsafe_run_id_before_preflight(tmp_path: Path) -> None
     with pytest.raises(ValueError, match="run_id"):
         run_full_stage2(
             tmp_path / "config.yaml",
-            tmp_path / "provenance.json",
             run_id="../escape",
         )
 
@@ -772,7 +747,6 @@ def test_full_run_rejects_nonformal_topology_before_preflight(
     with pytest.raises(RuntimeError, match="2- or 4-rank"):
         run_full_stage2(
             tmp_path / "config.yaml",
-            tmp_path / "provenance.json",
             run_id="trial-1",
         )
 
@@ -964,9 +938,7 @@ def _response_assembly_case(
         assembly_kwargs.update(kwargs)
         return bags
 
-    monkeypatch.setattr(
-        runner, "assemble_train_response_gene_bags", fake_assemble
-    )
+    monkeypatch.setattr(runner, "assemble_train_response_gene_bags", fake_assemble)
 
     _write(
         tmp_path / "stage1" / "run_manifest.json",
@@ -1460,7 +1432,7 @@ def test_registered_baselines_cover_every_required_method() -> None:
     )
 
 
-def test_validation_factories_do_not_materialize_batches_eagerly(
+def test_split_factories_do_not_materialize_batches_eagerly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import aivc_model.geneeffect_stage2_runner as runner
@@ -1471,7 +1443,11 @@ def test_validation_factories_do_not_materialize_batches_eagerly(
     state = SimpleNamespace(
         split=SimpleNamespace(supervised_train=("T1",), val=validation_ids),
         config=SimpleNamespace(
-            joint=SimpleNamespace(genes_per_batch=4),
+            joint=SimpleNamespace(
+                genes_per_batch=8,
+                contexts_per_gene=32,
+                conditions_per_rank=256,
+            ),
             paths=SimpleNamespace(split=split_path, gene_effect=labels_path),
         ),
     )
@@ -1482,14 +1458,148 @@ def test_validation_factories_do_not_materialize_batches_eagerly(
     def fail_if_eager(*args, **kwargs):
         raise AssertionError("validation batch was built eagerly")
 
-    monkeypatch.setattr(runner, "_precomputed_features_from_pairs", fail_if_eager)
     monkeypatch.setattr(runner, "_online_conditions", fail_if_eager)
     monkeypatch.setattr(runner, "_supervision_from_index", fail_if_eager)
 
-    result = build_dependency_batch_factories(state, data, tmp_path / "store")
+    cache = SimpleNamespace(gather=fail_if_eager)
+    supervision_cache = SimpleNamespace(gather=fail_if_eager)
+    _, warmup_metric, _ = build_warmup_batch_factories(
+        state,
+        data,
+        cache,
+        supervision_cache,
+        process_index=0,
+        num_processes=1,
+    )
+    _, _, joint_metric, _ = build_joint_batch_factories(
+        state,
+        data,
+        process_index=0,
+        num_processes=1,
+    )
 
-    assert result[2].batch_kind == "precomputed"
-    assert result[3].batch_kind == "online"
+    assert warmup_metric.batch_kind == "precomputed"
+    assert joint_metric.batch_kind == "online"
+
+
+def test_warmup_factories_gather_device_supervision_without_legacy_transfer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+
+    split_path = _write(tmp_path / "split.json", "{}")
+    labels_path = _write(tmp_path / "labels.csv", "x")
+    train_index = SimpleNamespace(
+        rows=(
+            SimpleNamespace(
+                gene_index=2,
+                context_indices=(2, 0, 2),
+                label_mask=(True, True, False),
+            ),
+            SimpleNamespace(
+                gene_index=0,
+                context_indices=(1, 2, 0),
+                label_mask=(True, False, True),
+            ),
+        ),
+        objective_weight=0.0,
+    )
+    validation_index = SimpleNamespace(
+        rows=(
+            SimpleNamespace(
+                gene_index=1,
+                context_indices=(1, 2),
+                label_mask=(True, True),
+            ),
+        ),
+        objective_weight=1.0,
+    )
+    state = SimpleNamespace(
+        split=SimpleNamespace(supervised_train=("T0",), val=("V0", "V1")),
+        config=SimpleNamespace(
+            joint=SimpleNamespace(genes_per_batch=2),
+            paths=SimpleNamespace(split=split_path, gene_effect=labels_path),
+        ),
+    )
+    data = SimpleNamespace(
+        genes=("G0", "G1", "G2"),
+        model_ids=("T0", "V0", "V1"),
+        targets=np.asarray(
+            [[0.0, 1.0, 2.0], [10.0, 11.0, 12.0], [20.0, 21.0, 22.0]],
+            dtype=np.float32,
+        ),
+        label_mask=np.asarray(
+            [[True, False, False], [True, True, True], [True, True, True]],
+            dtype=bool,
+        ),
+        g_var_mask=np.asarray([False, True, True], dtype=bool),
+        residual_target_sha256="a" * 64,
+        centering_fit_model_ids_sha256="b" * 64,
+        mu_train_sha256="c" * 64,
+    )
+    supervision_cache = GeneEffectSupervisionCache(data, device="cpu")
+    feature_calls: list[tuple[tuple[int, int], ...]] = []
+
+    def gather_features(pairs):
+        feature_calls.append(tuple(pairs))
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        runner, "_epoch_batch_indices", lambda *args, **kwargs: (train_index,)
+    )
+    monkeypatch.setattr(
+        runner,
+        "_validation_batch_indices",
+        lambda *args, **kwargs: (validation_index,),
+    )
+
+    def fail_legacy(*args, **kwargs):
+        raise AssertionError("legacy CPU supervision path was used")
+
+    monkeypatch.setattr(runner, "_supervision_from_index", fail_legacy)
+
+    def fail_transfer(*args, **kwargs):
+        raise AssertionError("per-batch Tensor.to device transfer was used")
+
+    monkeypatch.setattr(torch.Tensor, "to", fail_transfer)
+    train_factory, metric, _ = build_warmup_batch_factories(
+        state,
+        data,
+        SimpleNamespace(gather=gather_features),
+        supervision_cache,
+        process_index=0,
+        num_processes=1,
+    )
+
+    train_batch = next(iter(train_factory(0)))
+    validation_batch = next(iter(metric.batch_factory()))
+
+    assert feature_calls == [
+        ((2, 2), (2, 0), (2, 2), (0, 1), (0, 2), (0, 0)),
+        ((1, 1), (1, 2)),
+    ]
+    assert train_batch.objective_weight == 0.0
+    assert train_batch.supervision.gene_symbols == ("G2", "G0")
+    assert train_batch.supervision.context_model_ids_by_gene == (
+        ("V1", "T0", "V1"),
+        ("V0", "V1", "T0"),
+    )
+    assert torch.equal(
+        train_batch.supervision.target,
+        torch.tensor([[22.0, 20.0, 22.0], [1.0, 2.0, 0.0]]),
+    )
+    assert torch.equal(
+        train_batch.supervision.label_mask,
+        torch.tensor([[True, True, False], [False, False, True]]),
+    )
+    assert torch.equal(train_batch.supervision.g_var_mask, torch.tensor([True, False]))
+    assert validation_batch.supervision.gene_symbols == ("G1",)
+    assert torch.equal(
+        validation_batch.supervision.target, torch.tensor([[11.0, 12.0]])
+    )
+    supervision_cache.close()
+    with pytest.raises(RuntimeError, match="supervision cache is closed"):
+        supervision_cache.gather(train_index)
 
 
 def test_validation_batches_preserve_gene_order_without_g_var_anchors() -> None:
@@ -1504,12 +1614,80 @@ def test_validation_batches_preserve_gene_order_without_g_var_anchors() -> None:
 
     batches = runner._validation_batch_indices(data, ("V0", "V1"), 3)
 
-    assert [row.gene_index for batch in batches for row in batch.rows] == list(
-        range(7)
+    assert [row.gene_index for batch in batches for row in batch.rows] == list(range(7))
+    assert all(row.context_indices == (1, 2) for batch in batches for row in batch.rows)
+
+
+def test_epoch_sharding_uses_explicit_accelerator_topology(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+
+    row = SimpleNamespace(
+        gene_index=0, context_indices=(0, 1, 2), label_mask=(True, True, True)
     )
-    assert all(
-        row.context_indices == (1, 2) for batch in batches for row in batch.rows
+    batches = tuple(
+        SimpleNamespace(rows=(row,), objective_weight=float(index + 1))
+        for index in range(3)
     )
+    monkeypatch.setattr(runner, "build_epoch_batches", lambda *args, **kwargs: batches)
+    calls: list[tuple[int, int]] = []
+
+    def shard(value, *, rank: int, world_size: int):
+        calls.append((rank, world_size))
+        return (value[rank],)
+
+    monkeypatch.setattr(runner, "shard_batches", shard)
+    monkeypatch.setenv("RANK", "99")
+    monkeypatch.setenv("WORLD_SIZE", "100")
+    data = SimpleNamespace(
+        model_ids=("T0", "T1", "T2"),
+        label_mask=np.ones((1, 3), dtype=bool),
+        g_var_mask=np.ones(1, dtype=bool),
+    )
+    config = SimpleNamespace(
+        joint=SimpleNamespace(genes_per_batch=1, contexts_per_gene=3),
+        seeds=SimpleNamespace(train=7),
+    )
+
+    single = runner._epoch_batch_indices(
+        data, data.model_ids, config, 0, process_index=0, num_processes=1
+    )
+    multi = runner._epoch_batch_indices(
+        data, data.model_ids, config, 0, process_index=1, num_processes=2
+    )
+
+    assert [batch.objective_weight for batch in single] == [1.0, 2.0, 3.0]
+    assert [batch.objective_weight for batch in multi] == [2.0]
+    assert calls == [(1, 2)]
+
+
+def test_epoch_sharding_retains_zero_objective_padding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+    from aivc_model.geneeffect_sampler import GeneContextBatchIndex, GeneContextRow
+
+    row = GeneContextRow(
+        gene_index=0, context_indices=(0, 1, 2), label_mask=(True, True, True)
+    )
+    batches = tuple(GeneContextBatchIndex(rows=(row,)) for _ in range(3))
+    monkeypatch.setattr(runner, "build_epoch_batches", lambda *args, **kwargs: batches)
+    data = SimpleNamespace(
+        model_ids=("T0", "T1", "T2"),
+        label_mask=np.ones((1, 3), dtype=bool),
+        g_var_mask=np.ones(1, dtype=bool),
+    )
+    config = SimpleNamespace(
+        joint=SimpleNamespace(genes_per_batch=1, contexts_per_gene=3),
+        seeds=SimpleNamespace(train=7),
+    )
+
+    rank_one = runner._epoch_batch_indices(
+        data, data.model_ids, config, 0, process_index=1, num_processes=2
+    )
+
+    assert [batch.objective_weight for batch in rank_one] == [1.0, 0.0]
 
 
 def test_metric_json_normalizes_undefined_but_rejects_infinity(

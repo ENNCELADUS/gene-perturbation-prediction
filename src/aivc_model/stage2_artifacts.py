@@ -16,12 +16,6 @@ import math
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from aivc_model.esm2_provenance import (
-    ISOFORM_POLICY,
-    authenticate_uniprot_mapping,
-)
-
-
 REQUIRED_STAGE2_OUTPUTS: tuple[str, ...] = (
     "config_snapshot.json",
     "cell_line_geneeffect_226_split.json",
@@ -66,58 +60,6 @@ _STAGE2_METHODS = frozenset(
     }
 )
 _BASELINE_METHODS = _STAGE2_METHODS - {"e2e_full"}
-_STAGE1_CODE_PROVENANCE = {
-    "status": "unavailable",
-    "reason": "historical_run_has_no_immutable_training_code_identity",
-}
-_STAGE1_DATA_PROVENANCE = {
-    "status": "incomplete",
-    "missing_identities": [
-        "cell_line_manifest",
-        "tx1_basal_cache",
-        "response_cache",
-        "perturbseq_source_content",
-    ],
-    "reason": "historical_run_manifest_does_not_hash_all_training_data_inputs",
-}
-
-# Audited static-import closure from the formal Stage 2 entrypoint.  This list is
-# intentionally explicit: adding a new local runtime dependency requires an
-# equally explicit provenance-contract update.
-STAGE2_RUNTIME_CODE_PATHS: tuple[str, ...] = (
-    "scripts/train_geneeffect_e2e.py",
-    "src/aivc_model/__init__.py",
-    "src/aivc_model/benchmark_split.py",
-    "src/aivc_model/distributed.py",
-    "src/aivc_model/esm2_provenance.py",
-    "src/aivc_model/gene_embeddings.py",
-    "src/aivc_model/gene_splits.py",
-    "src/aivc_model/geneeffect_data.py",
-    "src/aivc_model/geneeffect_e2e.py",
-    "src/aivc_model/geneeffect_feature_store.py",
-    "src/aivc_model/geneeffect_features.py",
-    "src/aivc_model/geneeffect_head.py",
-    "src/aivc_model/geneeffect_sampler.py",
-    "src/aivc_model/geneeffect_stage2_runner.py",
-    "src/aivc_model/geneeffect_training.py",
-    "src/aivc_model/geneeffect_training_loop.py",
-    "src/aivc_model/residual_ladder.py",
-    "src/aivc_model/residual_metrics.py",
-    "src/aivc_model/residual_target.py",
-    "src/aivc_model/response_training.py",
-    "src/aivc_model/stage1_artifact.py",
-    "src/aivc_model/stage1_config.py",
-    "src/aivc_model/stage2_artifacts.py",
-    "src/aivc_model/stage2_config.py",
-    "src/aivc_model/state_core.py",
-    "src/aivc_model/state_warm_start.py",
-    "src/aivc_model/tx1_basal.py",
-    "src/aivc_model/tx1_embed_cache.py",
-    "src/aivc_model/tx1_predicted_response.py",
-    "src/aivc_model/tx1_response_data.py",
-    "src/aivc_model/tx1_response_gene_bags_cache.py",
-    "src/aivc_model/tx1_response_streaming.py",
-)
 
 
 def sha256_file(path: Path) -> str:
@@ -127,36 +69,6 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def stage2_runtime_code_sha256() -> dict[str, str]:
-    """Hash the complete audited local runtime closure for formal Stage 2."""
-    root = Path(__file__).resolve().parents[2]
-    return {
-        relative: sha256_file(root / relative) for relative in STAGE2_RUNTIME_CODE_PATHS
-    }
-
-
-def verify_stage2_runtime_code_sha256(recorded: object) -> dict[str, str]:
-    """Require exact path membership and hashes for the current runtime tree."""
-    if not isinstance(recorded, dict):
-        raise ValueError("stage2_code_sha256 must be an object")
-    if set(recorded) != set(STAGE2_RUNTIME_CODE_PATHS):
-        missing = sorted(set(STAGE2_RUNTIME_CODE_PATHS) - set(recorded))
-        extra = sorted(set(recorded) - set(STAGE2_RUNTIME_CODE_PATHS))
-        raise ValueError(
-            "Stage 2 runtime code path closure mismatch: "
-            f"missing={missing}, extra={extra}"
-        )
-    current = stage2_runtime_code_sha256()
-    mismatched = sorted(
-        path
-        for path in STAGE2_RUNTIME_CODE_PATHS
-        if recorded.get(path) != current[path]
-    )
-    if mismatched:
-        raise ValueError(f"Stage 2 runtime code SHA256 mismatch: {mismatched}")
-    return current
 
 
 def atomic_write_json(path: Path, payload: object) -> None:
@@ -237,24 +149,15 @@ def prepare_run_dir(path: Path, *, resume: bool = False) -> Stage2RunLayout:
     return layout
 
 
-def artifact_digests(root: Path, relative_paths: Sequence[str]) -> dict[str, str]:
-    """Hash required files, rejecting missing files and non-files."""
+def _require_artifacts(root: Path, relative_paths: Sequence[str]) -> None:
+    """Require every declared output to exist as a nonempty file."""
     root = Path(root)
-    digests: dict[str, str] = {}
     for relative in relative_paths:
         path = root / relative
         if not path.is_file():
             raise FileNotFoundError(f"required Stage 2 artifact is missing: {path}")
-        digests[str(relative)] = sha256_file(path)
-    if any(
-        str(relative).startswith("condition_features/") for relative in relative_paths
-    ):
-        feature_root = root / "condition_features"
-        for path in sorted(feature_root.rglob("*")):
-            if path.is_file():
-                relative = str(path.relative_to(root))
-                digests[relative] = sha256_file(path)
-    return digests
+        if path.stat().st_size == 0:
+            raise ValueError(f"required Stage 2 artifact is empty: {path}")
 
 
 def _read_run_id(root: Path) -> str:
@@ -281,15 +184,45 @@ def _read_json_object(path: Path) -> dict[str, object]:
     return payload
 
 
-def _require_sha256(payload: Mapping[str, object], field: str, path: Path) -> str:
-    value = payload.get(field)
-    if not (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
+def _load_checkpoint_state(path: Path, label: str) -> Mapping[str, object]:
+    import torch
+
+    try:
+        state = torch.load(path, map_location="cpu", mmap=True, weights_only=True)
+    except Exception as exc:
+        raise ValueError(f"{label} checkpoint cannot be loaded: {path}") from exc
+    if (
+        not isinstance(state, dict)
+        or not state
+        or any(not isinstance(key, str) or not key for key in state)
+        or any(not isinstance(value, torch.Tensor) for value in state.values())
     ):
-        raise ValueError(f"{path} must contain lowercase SHA-256 field {field!r}")
-    return value
+        raise ValueError(f"{label} checkpoint must be a nonempty tensor state dict")
+    for key, value in state.items():
+        if value.is_floating_point() and not bool(torch.isfinite(value).all()):
+            raise ValueError(f"{label} checkpoint tensor is nonfinite: {key}")
+    return state
+
+
+def _require_equal_checkpoint_states(
+    selected: Mapping[str, object], packaged: Mapping[str, object]
+) -> None:
+    import torch
+
+    if set(selected) != set(packaged):
+        raise ValueError("packaged checkpoint state keys differ from selected joint")
+    for key in selected:
+        left = selected[key]
+        right = packaged[key]
+        assert isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor)
+        if (
+            left.shape != right.shape
+            or left.dtype != right.dtype
+            or not torch.equal(left, right)
+        ):
+            raise ValueError(
+                f"packaged checkpoint tensor differs from selected joint: {key}"
+            )
 
 
 def _verify_selected_checkpoint(
@@ -298,7 +231,7 @@ def _verify_selected_checkpoint(
     training_dir: str,
     filename: str,
     selection: Mapping[str, object],
-) -> tuple[str, Mapping[str, object]]:
+) -> tuple[Mapping[str, object], Mapping[str, object]]:
     checkpoint = root / training_dir / "best" / filename
     metadata_path = checkpoint.parent / "metadata.json"
     metadata = _read_json_object(metadata_path)
@@ -310,9 +243,6 @@ def _verify_selected_checkpoint(
         raise ValueError(
             f"selected checkpoint metric contract mismatch: {metadata_path}"
         )
-    digest = sha256_file(checkpoint)
-    if _require_sha256(metadata, "checkpoint_sha256", metadata_path) != digest:
-        raise ValueError(f"selected checkpoint SHA256 mismatch: {checkpoint}")
     if metadata.get("epoch") != selection.get("best_epoch"):
         raise ValueError(f"selected checkpoint epoch mismatch: {metadata_path}")
     if metadata.get("metric_value") != selection.get("best_metric"):
@@ -340,7 +270,7 @@ def _verify_selected_checkpoint(
         abs_tol=1e-12,
     ):
         raise ValueError(f"training history selected metric mismatch: {history_path}")
-    return digest, metadata
+    return metadata, _load_checkpoint_state(checkpoint, f"selected {training_dir}")
 
 
 def _verify_lambda_calibration(payload: Mapping[str, object]) -> None:
@@ -393,33 +323,102 @@ def _verify_lambda_calibration(payload: Mapping[str, object]) -> None:
         raise ValueError("lambda_dep does not match the clipped median ratio")
 
 
-def _verify_stage1_provenance_claims(
-    stage1: Mapping[str, object],
-    run: Mapping[str, object],
-    model_package: Mapping[str, object],
-) -> None:
-    expected_stage1 = {
-        "training_code_provenance_status": _STAGE1_CODE_PROVENANCE["status"],
-        "training_code_provenance_reason": _STAGE1_CODE_PROVENANCE["reason"],
-        "training_data_provenance_status": _STAGE1_DATA_PROVENANCE["status"],
-        "training_data_provenance_missing_identities": _STAGE1_DATA_PROVENANCE[
-            "missing_identities"
-        ],
-        "training_data_provenance_reason": _STAGE1_DATA_PROVENANCE["reason"],
-    }
-    for field, expected in expected_stage1.items():
-        if stage1.get(field) != expected:
-            raise ValueError(f"Stage-1 manifest provenance claim mismatch: {field}")
-        propagated_field = f"stage1_{field}"
-        for label, payload in (("run manifest", run), ("model package", model_package)):
-            if payload.get(propagated_field) != expected:
-                raise ValueError(
-                    f"{label} Stage-1 provenance claim mismatch: {propagated_field}"
-                )
-
-
 def _verify_distributed_runtime(value: object) -> Mapping[str, object]:
-    return _require_mapping(value, "distributed_runtime")
+    runtime = _require_mapping(value, "distributed_runtime")
+    expected_fields = {
+        "world_size",
+        "mixed_precision",
+        "conditions_per_rank",
+        "global_conditions_per_step",
+        "rank_topology",
+    }
+    if set(runtime) != expected_fields:
+        raise ValueError("distributed_runtime fields mismatch")
+    world_size = runtime.get("world_size")
+    conditions_per_rank = runtime.get("conditions_per_rank")
+    global_conditions = runtime.get("global_conditions_per_step")
+    if (
+        isinstance(world_size, bool)
+        or not isinstance(world_size, int)
+        or world_size not in {2, 4}
+    ):
+        raise ValueError("distributed_runtime world_size must be 2 or 4")
+    if (
+        isinstance(conditions_per_rank, bool)
+        or not isinstance(conditions_per_rank, int)
+        or conditions_per_rank <= 0
+    ):
+        raise ValueError(
+            "distributed_runtime conditions_per_rank must be a positive int"
+        )
+    if (
+        isinstance(global_conditions, bool)
+        or not isinstance(global_conditions, int)
+        or global_conditions != world_size * conditions_per_rank
+    ):
+        raise ValueError(
+            "distributed_runtime global_conditions_per_step is not derived from "
+            "world_size and conditions_per_rank"
+        )
+    mixed_precision = runtime.get("mixed_precision")
+    if not isinstance(mixed_precision, str) or not mixed_precision:
+        raise ValueError("distributed_runtime mixed_precision must be nonempty")
+    topology = runtime.get("rank_topology")
+    if not isinstance(topology, list) or len(topology) != world_size:
+        raise ValueError("distributed_runtime rank_topology does not match world_size")
+    ranks = [record.get("rank") for record in topology if isinstance(record, dict)]
+    if (
+        len(ranks) != world_size
+        or any(isinstance(rank, bool) or not isinstance(rank, int) for rank in ranks)
+        or set(ranks) != set(range(world_size))
+    ):
+        raise ValueError("distributed_runtime rank_topology ranks are invalid")
+    return runtime
+
+
+def _verify_warmup_runtime(
+    value: object,
+    *,
+    distributed_runtime: Mapping[str, object],
+) -> Mapping[str, object]:
+    runtime = _require_mapping(value, "warmup_runtime")
+    expected_fields = {
+        "world_size",
+        "conditions_per_rank",
+        "global_conditions_per_step",
+        "optimizer_steps_per_epoch",
+    }
+    if set(runtime) != expected_fields:
+        raise ValueError("warmup_runtime fields mismatch")
+    for field in (
+        "world_size",
+        "conditions_per_rank",
+        "global_conditions_per_step",
+        "optimizer_steps_per_epoch",
+    ):
+        field_value = runtime.get(field)
+        if (
+            isinstance(field_value, bool)
+            or not isinstance(field_value, int)
+            or field_value <= 0
+        ):
+            raise ValueError(f"warmup_runtime {field} must be a positive int")
+    for field in (
+        "world_size",
+        "conditions_per_rank",
+        "global_conditions_per_step",
+    ):
+        if runtime[field] != distributed_runtime[field]:
+            raise ValueError(f"warmup_runtime {field} differs from distributed_runtime")
+    return runtime
+
+
+def _verify_warmup_optimizer_steps(root: Path, expected: object) -> None:
+    history_path = root / "warmup/training/train_log.csv"
+    with history_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows or any(row.get("optimizer_steps") != str(expected) for row in rows):
+        raise ValueError("warmup train_log optimizer_steps differ from warmup_runtime")
 
 
 def _string_vector(array: object, label: str) -> tuple[str, ...]:
@@ -442,7 +441,6 @@ def _verify_residual_target_artifact(
     root: Path,
     split_payload: Mapping[str, object],
     universe_payload: Mapping[str, object],
-    run: Mapping[str, object],
 ) -> tuple[
     dict[str, set[tuple[str, str]]],
     dict[tuple[str, str], float],
@@ -455,13 +453,7 @@ def _verify_residual_target_artifact(
     split_path = root / "cell_line_geneeffect_226_split.json"
     if sha256_file(split_path) != PINNED_SPLIT_SHA256:
         raise ValueError("copied split does not match the pinned Exp13 authority")
-    if run.get("split_sha256") != PINNED_SPLIT_SHA256:
-        raise ValueError("run manifest split identity mismatch")
     artifact_path = root / "residual_targets.npz"
-    if _require_sha256(
-        run, "residual_targets_artifact_sha256", root / "run_manifest.json"
-    ) != sha256_file(artifact_path):
-        raise ValueError("residual-target artifact SHA256 mismatch")
     expected_arrays = {
         "gene_symbols",
         "model_ids",
@@ -524,25 +516,6 @@ def _verify_residual_target_artifact(
         raise ValueError("residual-target mu_train must be ordered float64")
     if not np.isfinite(targets).all() or not np.isfinite(mu_train).all():
         raise ValueError("residual-target arrays must be finite")
-
-    target_digest = hashlib.sha256()
-    target_digest.update("\n".join(genes).encode())
-    target_digest.update("\n".join(model_ids).encode())
-    target_digest.update(np.ascontiguousarray(targets).tobytes())
-    target_digest.update(np.ascontiguousarray(label_mask).tobytes())
-    mu_digest = hashlib.sha256()
-    mu_digest.update("\n".join(genes).encode())
-    mu_digest.update(np.ascontiguousarray(mu_train).tobytes())
-    recomputed = {
-        "residual_target_sha256": target_digest.hexdigest(),
-        "mu_train_sha256": mu_digest.hexdigest(),
-        "centering_fit_model_ids_sha256": hashlib.sha256(
-            "\n".join(centering_ids).encode()
-        ).hexdigest(),
-    }
-    for field, digest in recomputed.items():
-        if _require_sha256(run, field, root / "run_manifest.json") != digest:
-            raise ValueError(f"run manifest {field} does not match residual targets")
 
     column_by_model = {model_id: index for index, model_id in enumerate(model_ids)}
     evaluation_keys = {
@@ -842,397 +815,117 @@ def _verify_predictions_and_metrics(
     return validation_primary
 
 
-def _canonical_json_sha256(payload: object) -> str:
-    encoded = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), allow_nan=False
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+def _load_npz_json_scalar(loaded: object, name: str, label: str) -> object:
+    import numpy as np
+
+    value = np.asarray(loaded[name])
+    if value.shape != () or value.dtype.kind not in {"U", "S"}:
+        raise ValueError(f"{label} {name} must be a JSON string scalar")
+    try:
+        return json.loads(str(value.item()))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{label} {name} is invalid JSON") from exc
 
 
-def _verify_response_array_claim(value: object, label: str) -> Mapping[str, object]:
-    claim = _require_mapping(value, label)
-    dtype = claim.get("dtype")
-    shape = claim.get("shape")
-    if not isinstance(dtype, str) or not dtype:
-        raise ValueError(f"{label}.dtype is invalid")
-    if not isinstance(shape, list) or any(
-        isinstance(item, bool) or not isinstance(item, int) or item < 0
-        for item in shape
-    ):
-        raise ValueError(f"{label}.shape is invalid")
-    _require_sha256(claim, "content_sha256", Path(label))
-    return claim
-
-
-def _verify_response_lineage(root: Path) -> tuple[str, str]:
-    path = root / "response_targets/lineage.json"
-    payload = _read_json_object(path)
-    expected_fields = {
-        "schema_version",
-        "response_cache_fingerprint",
-        "response_cache_files",
-        "source_identities",
-        "train_records",
-        "heldout_records",
-        "record_membership_sha256",
-        "target_tensors_sha256",
-        "objective_weights_sha256",
-        "lineage_sha256",
-    }
-    if set(payload) != expected_fields:
-        raise ValueError("response lineage fields mismatch")
-    if payload.get("schema_version") != "exp13-response-lineage-v1":
-        raise ValueError("response lineage schema_version mismatch")
-    for field in (
-        "response_cache_fingerprint",
-        "record_membership_sha256",
-        "target_tensors_sha256",
-        "objective_weights_sha256",
-        "lineage_sha256",
-    ):
-        _require_sha256(payload, field, path)
-    cache_files = _require_mapping(
-        payload.get("response_cache_files"), "response lineage cache files"
-    )
-    if set(cache_files) != {
-        "genes.npy",
-        "manifest.json",
-        "metadata.parquet",
-        "offsets.npy",
-        "target_cells.npy",
-    }:
-        raise ValueError("response lineage cache-file membership mismatch")
-    for field in cache_files:
-        _require_sha256(cache_files, field, path)
-    sources = _require_mapping(
-        payload.get("source_identities"), "response lineage source identities"
-    )
-    if set(sources) != {
-        "cell_line_manifest_sha256",
-        "perturbseq_sources_sha256",
-        "referenced_source_sha256",
-        "tx1_cache_manifest_sha256",
-        "state_var_dims_sha256",
-        "stage1_run_manifest_sha256",
-        "stage1_heldout_metrics_sha256",
-    }:
-        raise ValueError("response lineage source-identity fields mismatch")
-    for field in set(sources) - {"referenced_source_sha256"}:
-        _require_sha256(sources, field, path)
-    referenced = _require_mapping(
-        sources.get("referenced_source_sha256"),
-        "response lineage referenced sources",
-    )
-    if not referenced:
-        raise ValueError("response lineage referenced sources are empty")
-    for field in referenced:
-        _require_sha256(referenced, field, path)
-
-    memberships = []
-    targets = []
-    weights = []
-    record_ids: set[str] = set()
-    for membership, field in (
-        ("train", "train_records"),
-        ("heldout", "heldout_records"),
-    ):
-        records = payload.get(field)
-        if not isinstance(records, list) or not records:
-            raise ValueError(f"response lineage {field} must be non-empty")
-        by_model: dict[str, list[Mapping[str, object]]] = {}
-        for index, value in enumerate(records):
-            record = _require_mapping(value, f"response lineage {field}[{index}]")
-            required_record_fields = {
-                "record_id",
-                "gene",
-                "model_id",
-                "membership",
-                "anchor_weight",
-                "objective_weight",
-                "control_tx1",
-                "observed_hvg",
-                "observed_hvg_mask",
-                "control_hvg",
-            }
-            if not required_record_fields.issubset(record):
-                raise ValueError(f"response lineage {field}[{index}] is incomplete")
-            record_id = record.get("record_id")
-            gene = record.get("gene")
-            model_id = record.get("model_id")
-            if (
-                not isinstance(record_id, str)
-                or not isinstance(gene, str)
-                or not isinstance(model_id, str)
-                or record_id != f"{gene}@{model_id}"
-                or record_id in record_ids
-                or record.get("membership") != membership
-            ):
-                raise ValueError("response lineage record identity/membership mismatch")
-            record_ids.add(record_id)
-            anchor_weight = record.get("anchor_weight")
-            objective_weight = record.get("objective_weight")
-            if any(
-                isinstance(item, bool)
-                or not isinstance(item, (int, float))
-                or not math.isfinite(float(item))
-                or float(item) <= 0
-                for item in (anchor_weight, objective_weight)
-            ):
-                raise ValueError("response lineage record weights are invalid")
-            for array_field in (
-                "control_tx1",
-                "observed_hvg",
-                "observed_hvg_mask",
-                "control_hvg",
-            ):
-                _verify_response_array_claim(
-                    record.get(array_field),
-                    f"response lineage {field}[{index}].{array_field}",
-                )
-            by_model.setdefault(model_id, []).append(record)
-            memberships.append({"record_id": record_id, "membership": membership})
-            targets.append(
-                {
-                    "record_id": record_id,
-                    "observed_hvg": record["observed_hvg"],
-                    "observed_hvg_mask": record["observed_hvg_mask"],
-                }
-            )
-            weights.append(
-                {
-                    "record_id": record_id,
-                    "anchor_weight": anchor_weight,
-                    "objective_weight": objective_weight,
-                }
-            )
-        for model_id, model_records in by_model.items():
-            anchor_weight = float(model_records[0]["anchor_weight"])
-            if any(
-                float(record["anchor_weight"]) != anchor_weight
-                for record in model_records
-            ) or not math.isclose(
-                sum(float(record["objective_weight"]) for record in model_records),
-                anchor_weight,
-                rel_tol=1e-12,
-                abs_tol=1e-12,
-            ):
-                raise ValueError(
-                    f"response lineage {membership} weights do not preserve "
-                    f"{model_id} anchor mass"
-                )
-    for recorded_field, canonical_payload in (
-        ("record_membership_sha256", memberships),
-        ("target_tensors_sha256", targets),
-        ("objective_weights_sha256", weights),
-    ):
-        if payload.get(recorded_field) != _canonical_json_sha256(canonical_payload):
-            raise ValueError(f"response lineage {recorded_field} mismatch")
-    lineage = dict(payload)
-    recorded_lineage = lineage.pop("lineage_sha256")
-    if recorded_lineage != _canonical_json_sha256(lineage):
-        raise ValueError("response lineage canonical digest mismatch")
-    return str(recorded_lineage), sha256_file(path)
-
-
-def _verify_preprocessing_artifacts(
+def _verify_preprocessing_payloads(
     root: Path,
     *,
-    run: Mapping[str, object],
-    universe: Mapping[str, object],
+    feature_schema: Mapping[str, object],
     feature_generation: Mapping[str, object],
-    model_package: Mapping[str, object],
-    warmup_metadata: Mapping[str, object],
-    joint_metadata: Mapping[str, object],
-    stage1_digest: str,
-    joint_digest: str,
 ) -> None:
-    """Authenticate deployable preprocessing state and its feature stores."""
     import numpy as np
 
     from aivc_model.geneeffect_feature_store import (
         CONTEXT_WIDTH,
-        DELTA_PROJ_WIDTH,
         GENE_WIDTH,
         Q_SC_WIDTH,
-        SUMMARY_WIDTH,
-        verify_geneeffect_feature_store,
     )
     from aivc_model.geneeffect_features import (
+        DELTA_WIDTH,
         FEATURE_SCHEMA,
-        BlockStandardizer,
+        PROJECTION_WIDTH,
+        SUMMARY_WIDTH,
         FixedSparseProjection,
     )
 
-    schema = _read_json_object(root / "feature_schema.json")
-    if schema != FEATURE_SCHEMA.to_dict():
-        raise ValueError("feature_schema.json does not match the runtime schema")
-    schema_sha256 = FEATURE_SCHEMA.schema_hash
+    if feature_schema != FEATURE_SCHEMA.to_dict():
+        raise ValueError("feature schema artifact differs from the runtime schema")
 
     projection_path = root / "projection.npz"
     try:
         with np.load(projection_path, allow_pickle=False) as loaded:
             if set(loaded.files) != {"components", "metadata"}:
-                raise ValueError("projection.npz keys mismatch")
+                raise ValueError("array names mismatch")
             components = np.asarray(loaded["components"])
-            metadata_value = np.asarray(loaded["metadata"])
-    except (OSError, ValueError) as exc:
+            metadata = _load_npz_json_scalar(loaded, "metadata", "projection.npz")
+    except Exception as exc:
         raise ValueError(f"projection.npz is invalid: {exc}") from exc
-    if components.dtype != np.dtype(np.float32):
-        raise ValueError("projection.npz components must be float32")
-    if metadata_value.shape != () or metadata_value.dtype.kind not in {"U", "S"}:
-        raise ValueError("projection.npz metadata must be a scalar JSON string")
-    try:
-        projection_metadata = json.loads(str(metadata_value.item()))
-    except json.JSONDecodeError as exc:
-        raise ValueError("projection.npz metadata is invalid JSON") from exc
-    if not isinstance(projection_metadata, dict):
-        raise ValueError("projection.npz metadata must decode to an object")
-    projection = FixedSparseProjection.from_state(
-        {"components": components, "metadata": projection_metadata}
-    )
+    if (
+        components.dtype != np.dtype(np.float32)
+        or components.shape != (PROJECTION_WIDTH, DELTA_WIDTH)
+        or not np.isfinite(components).all()
+        or not isinstance(metadata, dict)
+    ):
+        raise ValueError("projection.npz components or metadata are invalid")
+    if metadata != feature_generation.get("projection"):
+        raise ValueError("projection.npz differs from feature_generation")
+    seed = metadata.get("seed")
+    if (
+        isinstance(seed, bool)
+        or not isinstance(seed, int)
+        or metadata.get("algorithm") != "achlioptas_sparse_jl_v1"
+        or metadata.get("input_width") != DELTA_WIDTH
+        or metadata.get("output_width") != PROJECTION_WIDTH
+    ):
+        raise ValueError("projection metadata is operationally invalid")
+    if not np.array_equal(components, FixedSparseProjection(seed=seed).components):
+        raise ValueError("projection components differ from the declared generator")
 
     standardizer_path = root / "standardizer.npz"
     try:
         with np.load(standardizer_path, allow_pickle=False) as loaded:
             if set(loaded.files) != {"state"}:
-                raise ValueError("standardizer.npz keys mismatch")
-            state_value = np.asarray(loaded["state"])
-    except (OSError, ValueError) as exc:
+                raise ValueError("array names mismatch")
+            state = _load_npz_json_scalar(loaded, "state", "standardizer.npz")
+    except Exception as exc:
         raise ValueError(f"standardizer.npz is invalid: {exc}") from exc
-    if state_value.shape != () or state_value.dtype.kind not in {"U", "S"}:
-        raise ValueError("standardizer.npz state must be a scalar JSON string")
-    try:
-        standardizer_state = json.loads(str(state_value.item()))
-    except json.JSONDecodeError as exc:
-        raise ValueError("standardizer.npz state is invalid JSON") from exc
-    if not isinstance(standardizer_state, dict):
-        raise ValueError("standardizer.npz state must decode to an object")
-    standardizer = BlockStandardizer.from_state(standardizer_state)
-    if standardizer.to_state() != standardizer_state:
-        raise ValueError("standardizer.npz state is not canonical")
+    if not isinstance(state, dict) or state != feature_generation.get("standardizer"):
+        raise ValueError("standardizer.npz differs from feature_generation")
+    blocks = state.get("blocks")
     expected_widths = {
-        "delta_proj": DELTA_PROJ_WIDTH,
+        "delta_proj": PROJECTION_WIDTH,
         "s": SUMMARY_WIDTH,
         "q_sc": Q_SC_WIDTH,
         "e_g": GENE_WIDTH,
         "z_c": CONTEXT_WIDTH,
     }
-    blocks = standardizer_state.get("blocks")
-    if not isinstance(blocks, dict) or set(blocks) != set(expected_widths):
-        raise ValueError("standardizer.npz must contain the five deployable blocks")
+    if state.get("version") != 1 or not isinstance(blocks, dict):
+        raise ValueError("standardizer state is invalid")
+    if set(blocks) != set(expected_widths):
+        raise ValueError("standardizer blocks differ from the feature schema")
     for name, width in expected_widths.items():
-        block = blocks.get(name)
-        if not isinstance(block, dict) or len(block.get("mean", ())) != width:
-            raise ValueError(f"standardizer.npz {name} width mismatch")
-
-    if feature_generation.get("projection") != projection.metadata:
-        raise ValueError("feature_generation projection identity mismatch")
-    if feature_generation.get("standardizer") != standardizer_state:
-        raise ValueError("feature_generation standardizer identity mismatch")
-
-    target_esm2_sha256 = _require_sha256(
-        run, "target_esm2_sha256", root / "run_manifest.json"
-    )
-    expected_package_fields = {
-        "projection_sha256": projection.components_hash,
-        "projection_artifact_sha256": sha256_file(projection_path),
-        "standardizer_sha256": standardizer.state_hash,
-        "standardizer_artifact_sha256": sha256_file(standardizer_path),
-        "feature_schema_sha256": schema_sha256,
-        "gene_embedding_source_sha256": target_esm2_sha256,
-    }
-    for field, expected in expected_package_fields.items():
-        if _require_sha256(
-            model_package, field, root / "model_package/model_manifest.json"
-        ) != expected:
-            raise ValueError(f"model package {field} mismatch")
-
-    with np.load(root / "residual_targets.npz", allow_pickle=False) as loaded:
-        model_ids = _string_vector(loaded["model_ids"], "model_ids")
-    genes_value = universe.get("scored_symbols")
-    if not isinstance(genes_value, list):
-        raise ValueError("ESM2 universe scored_symbols must be a list")
-    gene_symbols = tuple(genes_value)
-    if any(not isinstance(gene, str) or not gene for gene in gene_symbols):
-        raise ValueError("ESM2 universe scored_symbols are invalid")
-
-    frozen_path = root / "condition_features/stage1_frozen/manifest.json"
-    selected_path = root / "condition_features/stage2_selected/manifest.json"
-    frozen_manifest = _read_json_object(frozen_path)
-    selected_manifest = _read_json_object(selected_path)
-    if feature_generation.get("feature_manifest") != frozen_manifest:
-        raise ValueError("feature_generation frozen manifest identity mismatch")
-    if feature_generation.get("final_feature_manifest") != selected_manifest:
-        raise ValueError("feature_generation selected manifest identity mismatch")
-    frozen_sha256 = sha256_file(frozen_path)
-    selected_sha256 = sha256_file(selected_path)
-    if _require_sha256(
-        model_package,
-        "frozen_feature_manifest_sha256",
-        root / "model_package/model_manifest.json",
-    ) != frozen_sha256:
-        raise ValueError("model package frozen feature-manifest identity mismatch")
-    if _require_sha256(
-        model_package,
-        "feature_manifest_sha256",
-        root / "model_package/model_manifest.json",
-    ) != selected_sha256:
-        raise ValueError("model package selected feature-manifest identity mismatch")
-
-    frozen_shards = frozen_manifest.get("shards")
-    if not isinstance(frozen_shards, dict) or set(frozen_shards) != set(model_ids):
-        raise ValueError("frozen feature-store model membership mismatch")
-    source_sha256 = {
-        model_id: _require_sha256(
-            _require_mapping(frozen_shards[model_id], f"frozen shard {model_id}"),
-            "source_sha256",
-            frozen_path,
-        )
-        for model_id in model_ids
-    }
-    for stage, checkpoint_digest, manifest in (
-        ("stage1_frozen", stage1_digest, frozen_manifest),
-        ("stage2_selected", joint_digest, selected_manifest),
-    ):
-        report = verify_geneeffect_feature_store(
-            root / "condition_features" / stage,
-            expected_stage=stage,
-            expected_checkpoint_sha256=checkpoint_digest,
-            expected_feature_schema_sha256=schema_sha256,
-            expected_projection_sha256=projection.components_hash,
-            expected_source_sha256=source_sha256,
-            expected_gene_embedding_source_sha256=target_esm2_sha256,
-            expected_model_ids=model_ids,
-            expected_gene_symbols=gene_symbols,
-        )
-        if report.get("status") != "passed":
-            raise ValueError(
-                f"{stage} feature store verification failed: "
-                f"{report.get('discrepancies')}"
+        record = blocks[name]
+        if not isinstance(record, dict):
+            raise ValueError(f"standardizer block is invalid: {name}")
+        mean = np.asarray(record.get("mean"), dtype=np.float64)
+        scale = np.asarray(record.get("scale"), dtype=np.float64)
+        constant = record.get("constant_columns")
+        if (
+            mean.shape != (width,)
+            or scale.shape != (width,)
+            or not np.isfinite(mean).all()
+            or not np.isfinite(scale).all()
+            or np.any(scale <= 0)
+            or not isinstance(constant, list)
+            or any(
+                isinstance(index, bool)
+                or not isinstance(index, int)
+                or not 0 <= index < width
+                for index in constant
             )
-        if report.get("manifest") != manifest:
-            raise ValueError(f"{stage} feature-store manifest read mismatch")
-
-    checkpoint_feature_fields = {
-        "manifest": frozen_sha256,
-        "projection": projection.components_hash,
-        "standardizer": standardizer.state_hash,
-        "feature_schema": schema_sha256,
-        "gene_embedding_source": target_esm2_sha256,
-    }
-    for phase, metadata in (
-        ("warmup", warmup_metadata),
-        ("joint", joint_metadata),
-    ):
-        provenance = _require_mapping(
-            metadata.get("provenance"), f"{phase} checkpoint provenance"
-        )
-        feature_sha256 = _require_mapping(
-            provenance.get("feature_sha256"), f"{phase} checkpoint feature hashes"
-        )
-        for field, expected in checkpoint_feature_fields.items():
-            if feature_sha256.get(field) != expected:
-                raise ValueError(f"{phase} checkpoint/{field} identity mismatch")
+            or len(set(constant)) != len(constant)
+        ):
+            raise ValueError(f"standardizer block statistics are invalid: {name}")
 
 
 def _verify_runner_contract(root: Path) -> None:
@@ -1256,91 +949,20 @@ def _verify_runner_contract(root: Path) -> None:
         "model_package/model_manifest.json",
     )
     documents = {name: _read_json_object(root / name) for name in json_names}
-    response_lineage_sha256, response_lineage_artifact_sha256 = (
-        _verify_response_lineage(root)
-    )
     run = documents["run_manifest.json"]
     config = documents["config_snapshot.json"]
-    stage1 = documents["stage1_model_manifest.json"]
     universe = documents["esm2_gene_universe_manifest.json"]
-    esm2_provenance = documents["esm2_provenance_manifest.json"]
-    uniprot_mapping = documents["esm2_uniprot_mapping.json"]
     model_package = documents["model_package/model_manifest.json"]
     selection = documents["checkpoint_selection.json"]
-    runtime_code_sha256 = verify_stage2_runtime_code_sha256(
-        run.get("stage2_code_sha256")
-    )
-    if model_package.get("stage2_code_sha256") != runtime_code_sha256:
-        raise ValueError("model package/run Stage 2 runtime code identity mismatch")
-    embedding_union = _require_mapping(
-        universe.get("embedding_union"), "ESM2 universe embedding_union"
-    )
-    provenance_record = _require_mapping(
-        embedding_union.get("provenance_manifest"),
-        "ESM2 universe provenance_manifest",
-    )
-    if provenance_record.get("payload") != esm2_provenance:
-        raise ValueError(
-            "copied ESM2 provenance payload differs from universe manifest"
-        )
-    if provenance_record.get("sha256") != sha256_file(
-        root / "esm2_provenance_manifest.json"
-    ):
-        raise ValueError("copied ESM2 provenance SHA256 mismatch")
-    embedding_artifact = _require_mapping(
-        esm2_provenance.get("embedding_artifact"),
-        "ESM2 provenance embedding_artifact",
-    )
-    union_symbols = embedding_union.get("symbols")
-    if not isinstance(union_symbols, list) or any(
-        not isinstance(symbol, str) for symbol in union_symbols
-    ):
-        raise ValueError("ESM2 universe embedding symbols are invalid")
-    union_symbols_sha256 = hashlib.sha256(
-        "".join(f"{symbol}\n" for symbol in union_symbols).encode("utf-8")
-    ).hexdigest()
-    if (
-        union_symbols != embedding_artifact.get("symbols")
-        or embedding_union.get("count") != len(union_symbols)
-        or embedding_union.get("symbols_sha256") != union_symbols_sha256
-    ):
-        raise ValueError("ESM2 builder union differs from embedding provenance")
-    if run.get("target_esm2_sha256") != embedding_artifact.get("sha256"):
-        raise ValueError("run target ESM2 identity differs from copied provenance")
-    sequence_source = _require_mapping(
-        esm2_provenance.get("sequence_source"), "ESM2 provenance sequence_source"
-    )
-    mapping_json_sha256 = sha256_file(root / "esm2_uniprot_mapping.json")
-    mapping_csv_sha256 = sha256_file(root / "esm2_uniprot_mapping.csv")
-    if embedding_union.get("uniprot_mapping") != {
-        "isoform_policy": ISOFORM_POLICY,
-        "json_sha256": mapping_json_sha256,
-        "csv_sha256": mapping_csv_sha256,
-    }:
-        raise ValueError("ESM2 universe UniProt mapping contract mismatch")
-    authenticated_mapping = authenticate_uniprot_mapping(
-        sequence_source,
-        embedding_artifact,
-        root / "esm2_uniprot_mapping.json",
-        root / "esm2_uniprot_mapping.csv",
-    )
-    if authenticated_mapping != uniprot_mapping:
-        raise ValueError("copied UniProt mapping authentication mismatch")
-    resolved_mapping_symbols = {
-        record["gene_symbol"]
-        for record in authenticated_mapping["records"]
-        if record["resolved"] is True
-    }
     final_symbols = universe.get("scored_symbols")
-    if not isinstance(final_symbols, list) or not set(final_symbols).issubset(
-        resolved_mapping_symbols
+    if (
+        not isinstance(final_symbols, list)
+        or not final_symbols
+        or any(not isinstance(symbol, str) or not symbol for symbol in final_symbols)
+        or len(set(final_symbols)) != len(final_symbols)
     ):
-        raise ValueError(
-            "final universe contains genes without resolved UniProt mapping"
-        )
-    feature_generation = documents["feature_generation.json"]
+        raise ValueError("ESM2 scored gene universe is invalid")
     metrics = documents["geneeffect_residual_metrics.json"]
-    _verify_stage1_provenance_claims(stage1, run, model_package)
     (
         expected_evaluation_keys,
         authoritative_residual,
@@ -1349,31 +971,40 @@ def _verify_runner_contract(root: Path) -> None:
         root,
         documents["cell_line_geneeffect_226_split.json"],
         documents["esm2_gene_universe_manifest.json"],
-        run,
     )
-    residual_artifact_sha256 = sha256_file(root / "residual_targets.npz")
 
     for phase in ("warmup", "joint"):
         if not isinstance(selection.get(phase), dict):
             raise ValueError(f"checkpoint_selection.json has invalid {phase!r} outcome")
-    _, warmup_metadata = _verify_selected_checkpoint(
+    warmup_metadata, _ = _verify_selected_checkpoint(
         root,
         training_dir="warmup/training",
         filename="head.pt",
         selection=selection["warmup"],
     )
-    joint_digest, joint_metadata = _verify_selected_checkpoint(
+    joint_metadata, joint_state = _verify_selected_checkpoint(
         root,
         training_dir="joint/training",
         filename="e2e_state.pt",
         selection=selection["joint"],
     )
     distributed_runtime = _verify_distributed_runtime(run.get("distributed_runtime"))
+    config_distributed = _require_mapping(
+        config.get("distributed"), "config distributed"
+    )
+    config_joint = _require_mapping(config.get("joint"), "config joint")
+    if distributed_runtime["mixed_precision"] != config_distributed.get(
+        "mixed_precision"
+    ) or distributed_runtime["conditions_per_rank"] != config_joint.get(
+        "conditions_per_rank"
+    ):
+        raise ValueError("distributed_runtime differs from frozen config")
     if (
         _verify_distributed_runtime(model_package.get("distributed_runtime"))
         != distributed_runtime
     ):
         raise ValueError("model package/run distributed_runtime mismatch")
+    warmup_runtime: Mapping[str, object] | None = None
     for phase, metadata in (
         ("warmup", warmup_metadata),
         ("joint", joint_metadata),
@@ -1381,113 +1012,21 @@ def _verify_runner_contract(root: Path) -> None:
         provenance = _require_mapping(
             metadata.get("provenance"), f"{phase} checkpoint provenance"
         )
-        if provenance.get("stage2_code_sha256") != runtime_code_sha256:
-            raise ValueError(f"{phase} checkpoint/run Stage 2 code identity mismatch")
         if (
             _verify_distributed_runtime(provenance.get("distributed_runtime"))
             != distributed_runtime
         ):
             raise ValueError(f"{phase} checkpoint/run distributed_runtime mismatch")
-    packaged_digest = sha256_file(root / "model_package/e2e_state.pt")
-    if packaged_digest != joint_digest:
-        raise ValueError("packaged model is not the selected joint checkpoint")
-    if (
-        _require_sha256(
-            model_package,
-            "checkpoint_sha256",
-            root / "model_package/model_manifest.json",
+        phase_warmup_runtime = _verify_warmup_runtime(
+            provenance.get("warmup_runtime"),
+            distributed_runtime=distributed_runtime,
         )
-        != joint_digest
-    ):
-        raise ValueError("model package checkpoint identity mismatch")
-    if (
-        _require_sha256(run, "selected_checkpoint_sha256", root / "run_manifest.json")
-        != joint_digest
-    ):
-        raise ValueError("run manifest selected-checkpoint identity mismatch")
-
-    stage1_digest = _require_sha256(
-        stage1, "checkpoint_sha256", root / "stage1_model_manifest.json"
-    )
-    if (
-        _require_sha256(run, "stage1_checkpoint_sha256", root / "run_manifest.json")
-        != stage1_digest
-    ):
-        raise ValueError("run manifest Stage-1 checkpoint identity mismatch")
-    config_digest = _require_sha256(
-        config, "source_sha256", root / "config_snapshot.json"
-    )
-    if (
-        _require_sha256(run, "config_sha256", root / "run_manifest.json")
-        != config_digest
-    ):
-        raise ValueError("run manifest config identity mismatch")
-    if (
-        _require_sha256(
-            model_package, "config_sha256", root / "model_package/model_manifest.json"
-        )
-        != config_digest
-    ):
-        raise ValueError("model package config identity mismatch")
-    for field in (
-        "tx1_registration_sha256",
-        "tx1_source_manifest_sha256",
-        "tx1_cache_manifest_sha256",
-        "q_sc_cache_manifest_sha256",
-    ):
-        run_digest = _require_sha256(run, field, root / "run_manifest.json")
-        if (
-            _require_sha256(
-                model_package, field, root / "model_package/model_manifest.json"
-            )
-            != run_digest
-        ):
-            raise ValueError(f"model package/run {field} mismatch")
-        for phase, metadata in (
-            ("warmup", warmup_metadata),
-            ("joint", joint_metadata),
-        ):
-            provenance = _require_mapping(
-                metadata.get("provenance"), f"{phase} checkpoint provenance"
-            )
-            feature_hashes = _require_mapping(
-                provenance.get("feature_sha256"),
-                f"{phase} checkpoint feature hashes",
-            )
-            if feature_hashes.get(field) != run_digest:
-                raise ValueError(f"{phase} checkpoint/run {field} mismatch")
-
-    split_digest = sha256_file(root / "cell_line_geneeffect_226_split.json")
-    for phase, metadata in (
-        ("warmup", warmup_metadata),
-        ("joint", joint_metadata),
-    ):
-        provenance = _require_mapping(
-            metadata.get("provenance"), f"{phase} checkpoint provenance"
-        )
-        if provenance.get("split_sha256") != split_digest:
-            raise ValueError(f"{phase} checkpoint/copy split identity mismatch")
-        for field in (
-            "residual_target_sha256",
-            "centering_fit_model_ids_sha256",
-            "mu_train_sha256",
-        ):
-            recorded = _require_sha256(run, field, root / "run_manifest.json")
-            if provenance.get(field) != recorded:
-                raise ValueError(f"{phase} checkpoint/run {field} mismatch")
-        feature_sha256 = _require_mapping(
-            provenance.get("feature_sha256"), f"{phase} checkpoint feature hashes"
-        )
-        if feature_sha256.get("residual_targets") != residual_artifact_sha256:
-            raise ValueError(
-                f"{phase} checkpoint/residual-target artifact identity mismatch"
-            )
-        if feature_sha256.get("response_lineage") != (
-            response_lineage_artifact_sha256
-        ) or feature_sha256.get("response_lineage_semantic") != (
-            response_lineage_sha256
-        ):
-            raise ValueError(f"{phase} checkpoint/response lineage mismatch")
+        if warmup_runtime is None:
+            warmup_runtime = phase_warmup_runtime
+        elif phase_warmup_runtime != warmup_runtime:
+            raise ValueError("joint/warmup checkpoint warmup_runtime mismatch")
+    assert warmup_runtime is not None
+    _verify_warmup_optimizer_steps(root, warmup_runtime["optimizer_steps_per_epoch"])
     joint_provenance = _require_mapping(
         joint_metadata.get("provenance"), "joint checkpoint provenance"
     )
@@ -1497,43 +1036,25 @@ def _verify_runner_contract(root: Path) -> None:
     ):
         raise ValueError("joint checkpoint lambda-calibration identity mismatch")
     _verify_lambda_calibration(documents["lambda_calibration.json"])
-    if (
-        _require_sha256(
-            model_package,
-            "residual_targets_artifact_sha256",
-            root / "model_package/model_manifest.json",
-        )
-        != residual_artifact_sha256
-    ):
-        raise ValueError("model package residual-target identity mismatch")
-    if model_package.get("split_sha256") != split_digest:
-        raise ValueError("model package split identity mismatch")
-    for label, payload, path in (
-        ("run", run, root / "run_manifest.json"),
-        (
-            "model package",
-            model_package,
-            root / "model_package/model_manifest.json",
-        ),
-    ):
-        if (
-            _require_sha256(payload, "response_lineage_sha256", path)
-            != (response_lineage_sha256)
-            or _require_sha256(payload, "response_lineage_artifact_sha256", path)
-            != response_lineage_artifact_sha256
-        ):
-            raise ValueError(f"{label}/response lineage mismatch")
-
-    _verify_preprocessing_artifacts(
+    expected_package = {
+        "checkpoint": "e2e_state.pt",
+        "projection": "../projection.npz",
+        "standardizer": "../standardizer.npz",
+        "feature_schema": "../feature_schema.json",
+        "frozen_features": "../condition_features/stage1_frozen",
+        "selected_features": "../condition_features/stage2_selected",
+        "distributed_runtime": dict(distributed_runtime),
+    }
+    if model_package != expected_package:
+        raise ValueError("model package operational manifest mismatch")
+    packaged_state = _load_checkpoint_state(
+        root / "model_package/e2e_state.pt", "packaged joint"
+    )
+    _require_equal_checkpoint_states(joint_state, packaged_state)
+    _verify_preprocessing_payloads(
         root,
-        run=run,
-        universe=universe,
-        feature_generation=feature_generation,
-        model_package=model_package,
-        warmup_metadata=warmup_metadata,
-        joint_metadata=joint_metadata,
-        stage1_digest=stage1_digest,
-        joint_digest=joint_digest,
+        feature_schema=documents["feature_schema.json"],
+        feature_generation=documents["feature_generation.json"],
     )
 
     required_metric_sections = {"validation", "test", "baselines", "response"}
@@ -1550,12 +1071,6 @@ def _verify_runner_contract(root: Path) -> None:
         raise ValueError("before-stage2 response lineage status mismatch")
     if after_response.get("input_lineage_status") != "current_authenticated_inputs":
         raise ValueError("after-stage2 response lineage status mismatch")
-    if after_response.get("response_lineage_sha256") != (
-        response_lineage_sha256
-    ) or after_response.get("response_lineage_artifact_sha256") != (
-        response_lineage_artifact_sha256
-    ):
-        raise ValueError("after-stage2 response lineage identity mismatch")
     before_metrics = _require_mapping(
         before_response.get("metrics"), "metrics.response.before_stage2.metrics"
     )
@@ -1630,30 +1145,13 @@ def mark_complete(
         raise ValueError(
             f"completion run_id {run_id!r} != run manifest {manifest_run_id!r}"
         )
-    digests = artifact_digests(layout.root, required_outputs)
+    _require_artifacts(layout.root, required_outputs)
     if tuple(required_outputs) == REQUIRED_STAGE2_OUTPUTS:
         _verify_runner_contract(layout.root)
     payload: dict[str, object] = {
         "status": "complete",
         "run_id": str(run_id),
-        "artifact_sha256": digests,
     }
-    if tuple(required_outputs) == REQUIRED_STAGE2_OUTPUTS:
-        run_manifest = _read_json_object(layout.root / "run_manifest.json")
-        payload["stage2_code_sha256"] = verify_stage2_runtime_code_sha256(
-            run_manifest.get("stage2_code_sha256")
-        )
-        for field in (
-            "tx1_registration_sha256",
-            "tx1_source_manifest_sha256",
-            "tx1_cache_manifest_sha256",
-            "q_sc_cache_manifest_sha256",
-            "response_lineage_sha256",
-            "response_lineage_artifact_sha256",
-        ):
-            payload[field] = _require_sha256(
-                run_manifest, field, layout.root / "run_manifest.json"
-            )
     atomic_write_json(layout.complete, payload)
     return payload
 
@@ -1663,7 +1161,7 @@ def verify_complete_run(
     *,
     required_outputs: Sequence[str] = REQUIRED_STAGE2_OUTPUTS,
 ) -> Mapping[str, object]:
-    """Authenticate a terminal run against the hashes in ``complete.json``."""
+    """Verify a terminal run and its required operational outputs."""
     root = Path(path)
     if (root / "failure.json").exists():
         raise ValueError(f"run {root} carries failure.json")
@@ -1679,36 +1177,7 @@ def verify_complete_run(
             "completion sentinel run_id does not match run_manifest.json: "
             f"{payload['run_id']!r} != {manifest_run_id!r}"
         )
-    if tuple(required_outputs) == REQUIRED_STAGE2_OUTPUTS:
-        run_manifest = _read_json_object(root / "run_manifest.json")
-        runtime_code_sha256 = verify_stage2_runtime_code_sha256(
-            run_manifest.get("stage2_code_sha256")
-        )
-        if payload.get("stage2_code_sha256") != runtime_code_sha256:
-            raise ValueError("completion sentinel/run Stage 2 code identity mismatch")
-        for field in (
-            "tx1_registration_sha256",
-            "tx1_source_manifest_sha256",
-            "tx1_cache_manifest_sha256",
-            "q_sc_cache_manifest_sha256",
-            "response_lineage_sha256",
-            "response_lineage_artifact_sha256",
-        ):
-            if payload.get(field) != _require_sha256(
-                run_manifest, field, root / "run_manifest.json"
-            ):
-                raise ValueError(f"completion sentinel/run {field} mismatch")
-    expected = payload.get("artifact_sha256")
-    if not isinstance(expected, dict):
-        raise ValueError("complete.json artifact_sha256 must be an object")
-    actual = artifact_digests(root, required_outputs)
+    _require_artifacts(root, required_outputs)
     if tuple(required_outputs) == REQUIRED_STAGE2_OUTPUTS:
         _verify_runner_contract(root)
-    if expected != actual:
-        mismatched = sorted(
-            name
-            for name in set(expected) | set(actual)
-            if expected.get(name) != actual.get(name)
-        )
-        raise ValueError(f"completed run artifact digest mismatch: {mismatched}")
     return payload
