@@ -241,27 +241,18 @@ def construct_stage2_model_from_stage1_artifact(
     *,
     model_cls: type[nn.Module],
     checkpoint_path: Path,
-    manifest_path: Path,
     hparams_checkpoint_path: Path,
     input_dim: int,
     output_dim: int,
     pert_dim: int,
     target_genes: Sequence[str],
-    stage1_esm_embeddings_path: Path,
     target_esm_embeddings_path: Path,
-    target_esm_artifact_sha256: str,
-    run_manifest_path: Path,
-    checkpoint_metadata_path: Path,
-    stage1_objective_path: Path,
-    compatibility_code_paths: Mapping[str, Path],
-    config_paths: Mapping[str, Path],
-    source_paths: Mapping[str, Path],
     trainable: bool,
     esm2_adapter_hidden: int = 512,
     output_space: str | None = None,
     emit_checkpoint_output: bool = False,
 ) -> tuple[ForwardOnlyStateModel, Stage1ArtifactLoadReport]:
-    """Build a target-universe model and strictly restore a sealed Stage 1."""
+    """Build a target-universe model and strictly restore Stage 1 weights."""
     model = construct_forward_only_model(
         model_cls=model_cls,
         hparams_checkpoint_path=hparams_checkpoint_path,
@@ -277,17 +268,7 @@ def construct_stage2_model_from_stage1_artifact(
     report = load_stage1_artifact(
         model,
         checkpoint_path=checkpoint_path,
-        manifest_path=manifest_path,
-        esm2_embeddings_path=stage1_esm_embeddings_path,
         target_esm_embeddings_path=target_esm_embeddings_path,
-        target_esm_artifact_sha256=target_esm_artifact_sha256,
-        state_hparams_path=hparams_checkpoint_path,
-        run_manifest_path=run_manifest_path,
-        checkpoint_metadata_path=checkpoint_metadata_path,
-        stage1_objective_path=stage1_objective_path,
-        compatibility_code_paths=compatibility_code_paths,
-        config_paths=config_paths,
-        source_paths=source_paths,
         trainable=trainable,
     )
     return model, report

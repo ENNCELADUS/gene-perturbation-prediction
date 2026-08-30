@@ -36,9 +36,7 @@ def _vectors() -> dict[str, np.ndarray]:
     }
 
 
-def _write_esm(
-    path: Path, genes: tuple[str, ...], *, g2_offset: float = 0.0
-) -> None:
+def _write_esm(path: Path, genes: tuple[str, ...], *, g2_offset: float = 0.0) -> None:
     vectors = _vectors()
     vectors["G2"] = vectors["G2"].copy()
     vectors["G2"][0] += g2_offset
@@ -77,9 +75,7 @@ def _fixture(tmp_path: Path) -> dict[str, object]:
     code = {"state_core.py": _write_text(tmp_path / "code.py", "code")}
     config_path = tmp_path / "config.yaml"
     config_path.write_bytes(
-        Path(
-            "configs/experiments/13_geneeffect_226/stage1_response.yaml"
-        ).read_bytes()
+        Path("configs/experiments/13_geneeffect_226/stage1_response.yaml").read_bytes()
     )
     config = {"stage1.yaml": config_path}
     source = {
@@ -116,15 +112,15 @@ def _fixture(tmp_path: Path) -> dict[str, object]:
                     "state_checkpoint": sha256_file(state_hparams),
                     "esm2_embeddings": sha256_file(esm),
                     "split_json": sha256_file(source["split_json"]),
-                    "perturbseq_sources": sha256_file(
-                        source["perturbseq_sources"]
-                    ),
+                    "perturbseq_sources": sha256_file(source["perturbseq_sources"]),
                 },
             }
         )
     )
     objective = run / "stage1_objective.json"
-    objective.write_text(json.dumps(load_stage1_config(config_path).objective_payload()))
+    objective.write_text(
+        json.dumps(load_stage1_config(config_path).objective_payload())
+    )
     return {
         "esm": esm,
         "target_esm": target_esm,
@@ -161,17 +157,7 @@ def _load(fixture: dict[str, object], model: ForwardOnlyStateModel, *, trainable
     return load_stage1_artifact(
         model,
         checkpoint_path=fixture["checkpoint"],
-        manifest_path=fixture["manifest"],
-        esm2_embeddings_path=fixture["esm"],
         target_esm_embeddings_path=fixture["target_esm"],
-        target_esm_artifact_sha256=sha256_file(fixture["target_esm"]),
-        state_hparams_path=fixture["state_hparams"],
-        run_manifest_path=fixture["run_manifest"],
-        checkpoint_metadata_path=fixture["metadata"],
-        stage1_objective_path=fixture["objective"],
-        compatibility_code_paths=fixture["code"],
-        config_paths=fixture["config"],
-        source_paths=fixture["source"],
         trainable=trainable,
     )
 
@@ -239,24 +225,26 @@ def test_seal_rejects_legacy_matrix_shape_mismatch(tmp_path: Path) -> None:
         _seal(fixture)
 
 
-def test_load_rejects_changed_esm_artifact_even_if_vectors_are_valid(
+def test_load_does_not_gate_on_stage1_esm_provenance(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
     _seal(fixture)
     _write_esm(fixture["esm"], _STAGE1_GENES, g2_offset=0.5)
 
-    with pytest.raises(ValueError, match="ESM-2 SHA256 mismatch"):
-        _load(fixture, _model(_TARGET_GENES), trainable=False)
+    report = _load(fixture, _model(_TARGET_GENES), trainable=False)
+
+    assert report.loaded_keys
 
 
-def test_load_rejects_changed_compatibility_code(tmp_path: Path) -> None:
+def test_load_does_not_gate_on_compatibility_code_provenance(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     _seal(fixture)
     fixture["code"]["state_core.py"].write_text("changed loader code")
 
-    with pytest.raises(ValueError, match="seal/load-time compatibility code"):
-        _load(fixture, _model(_TARGET_GENES), trainable=False)
+    report = _load(fixture, _model(_TARGET_GENES), trainable=False)
+
+    assert report.loaded_keys
 
 
 def test_seal_rejects_objective_not_derived_from_authenticated_config(
@@ -271,15 +259,36 @@ def test_seal_rejects_objective_not_derived_from_authenticated_config(
 
 def test_load_rejects_partial_learned_state(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
-    _seal(fixture)
-    manifest_payload = json.loads(fixture["manifest"].read_text())
     checkpoint = torch.load(fixture["checkpoint"], weights_only=True)
     del checkpoint["perturbations.adapter.net.0.weight"]
     torch.save(checkpoint, fixture["checkpoint"])
-    manifest_payload["checkpoint_sha256"] = sha256_file(fixture["checkpoint"])
-    fixture["manifest"].write_text(json.dumps(manifest_payload))
 
     with pytest.raises(ValueError, match="missing=.*adapter.net.0.weight"):
+        _load(fixture, _model(_TARGET_GENES), trainable=False)
+
+
+def test_load_rejects_learned_state_shape_mismatch(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    checkpoint = torch.load(fixture["checkpoint"], weights_only=True)
+    key = next(
+        name
+        for name, value in checkpoint.items()
+        if name.startswith("state_adapter.") and value.ndim > 0
+    )
+    checkpoint[key] = checkpoint[key].reshape(-1)[:1]
+    torch.save(checkpoint, fixture["checkpoint"])
+
+    with pytest.raises(RuntimeError, match="size mismatch"):
+        _load(fixture, _model(_TARGET_GENES), trainable=False)
+
+
+def test_load_rejects_unexpected_checkpoint_key(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    checkpoint = torch.load(fixture["checkpoint"], weights_only=True)
+    checkpoint["unexpected.weight"] = torch.ones(1)
+    torch.save(checkpoint, fixture["checkpoint"])
+
+    with pytest.raises(ValueError, match="unexpected=.*unexpected.weight"):
         _load(fixture, _model(_TARGET_GENES), trainable=False)
 
 
@@ -289,14 +298,14 @@ def test_load_supports_larger_target_universe_and_explicit_mode(
 ) -> None:
     fixture = _fixture(tmp_path)
     source_model = fixture["source_model"]
-    _seal(fixture)
     destination = _model(_TARGET_GENES)
 
     report = _load(fixture, destination, trainable=trainable)
 
     assert destination.perturbations.genes == list(_TARGET_GENES)
     assert destination.perturbations.esm_matrix.shape == (3, 3)
-    assert report.legacy_esm_matrix_authenticated is True
+    assert report.checkpoint_sha256 == sha256_file(fixture["checkpoint"])
+    assert report.legacy_esm_matrix_dropped is True
     assert report.trainable is trainable
     assert destination.training is trainable
     assert all(
@@ -308,7 +317,7 @@ def test_load_supports_larger_target_universe_and_explicit_mode(
         assert torch.equal(destination.state_dict()[key], value)
 
 
-def test_buffer_free_checkpoint_authenticates_persisted_vocabulary_hash(
+def test_buffer_free_checkpoint_loads_without_legacy_matrix(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
@@ -316,11 +325,9 @@ def test_buffer_free_checkpoint_authenticates_persisted_vocabulary_hash(
     del checkpoint["perturbations.esm_matrix"]
     torch.save(checkpoint, fixture["checkpoint"])
 
-    manifest = _seal(fixture)
     report = _load(fixture, _model(_TARGET_GENES), trainable=False)
 
-    assert manifest.legacy_esm_matrix_sha256 is None
-    assert report.legacy_esm_matrix_authenticated is False
+    assert report.legacy_esm_matrix_dropped is False
 
 
 def test_manifest_rejects_mutated_gene_vocabulary(tmp_path: Path) -> None:

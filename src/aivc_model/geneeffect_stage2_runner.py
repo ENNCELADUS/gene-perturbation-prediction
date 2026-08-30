@@ -67,7 +67,7 @@ from aivc_model.geneeffect_training import (
     SupervisedMatrix,
     response_objective,
 )
-from aivc_model.stage1_artifact import Stage1ArtifactManifest, sha256_file
+from aivc_model.stage1_artifact import sha256_file
 from aivc_model.stage1_config import load_stage1_config
 from aivc_model.stage2_artifacts import (
     Stage2RunLayout,
@@ -320,11 +320,18 @@ class Stage2BundleSpec:
     """Configured paths required to load Stage 1."""
 
     stage1_config: Path
-    stage1_esm_embeddings: Path
     cell_line_manifest: Path
     state_model_dir: Path
     perturbseq_sources: Path
     response_cache_dir: Path
+
+
+@dataclass(frozen=True)
+class Stage1CheckpointSpec:
+    """Runtime inputs needed to restore the selected Stage 1 checkpoint."""
+
+    stage1_genes: tuple[str, ...]
+    checkpoint_sha256: str
 
 
 @dataclass(frozen=True)
@@ -338,7 +345,7 @@ class Stage2Preflight:
     variable_genes: object
     source_registry: object
     copy_prior: pd.Series
-    stage1_manifest: Stage1ArtifactManifest
+    stage1_checkpoint: Stage1CheckpointSpec
     bundle: Stage2BundleSpec
     report: Mapping[str, object]
 
@@ -418,7 +425,6 @@ def load_stage2_bundle_spec(config: Stage2Config) -> Stage2BundleSpec:
     """Collect the Stage 1 paths already declared in the Stage 2 config."""
     bundle = Stage2BundleSpec(
         stage1_config=config.paths.stage1_config,
-        stage1_esm_embeddings=config.paths.stage1_esm_embeddings,
         cell_line_manifest=config.paths.cell_line_manifest,
         state_model_dir=config.paths.state_model_dir,
         perturbseq_sources=config.paths.perturbseq_sources,
@@ -426,7 +432,6 @@ def load_stage2_bundle_spec(config: Stage2Config) -> Stage2BundleSpec:
     )
     for asset, label in (
         (bundle.stage1_config, "Stage 1 config"),
-        (bundle.stage1_esm_embeddings, "Stage 1 ESM2 embeddings"),
         (bundle.cell_line_manifest, "Stage 1 cell-line manifest"),
         (bundle.perturbseq_sources, "Stage 1 perturb-seq sources"),
     ):
@@ -453,60 +458,39 @@ def _require_directory(path: Path, label: str) -> Path:
     return path
 
 
-def authenticate_stage1_seal(
+def load_stage1_checkpoint_spec(
     config: Stage2Config,
     *,
+    universe_manifest: Mapping[str, object],
     target_esm_symbols: tuple[str, ...],
-) -> Stage1ArtifactManifest:
-    """Validate the selected Stage 1 manifest and local run evidence."""
-    manifest_path = _require_file(config.paths.stage1_manifest, "Stage 1 manifest")
+) -> Stage1CheckpointSpec:
+    """Load the Stage 1 vocabulary and observe the selected checkpoint identity."""
     checkpoint_path = _require_file(
         config.paths.stage1_checkpoint, "Stage 1 selected checkpoint"
     )
     _require_file(config.paths.state_hparams, "STATE hparams checkpoint")
-    manifest = Stage1ArtifactManifest.read(manifest_path)
-    run_root = checkpoint_path.parent.parent
-    expected_manifest = run_root / "stage1_model_manifest.json"
-    if manifest_path.resolve() != expected_manifest.resolve():
-        raise ValueError(
-            "Stage 1 manifest must be the seal stored beside its checkpoint run: "
-            f"{expected_manifest}"
-        )
-    run_manifest_path = _require_file(
-        run_root / "run_manifest.json", "Stage 1 run manifest"
-    )
-    metadata_path = _require_file(
-        checkpoint_path.parent / "metadata.json", "Stage 1 best-checkpoint metadata"
-    )
-    _require_file(run_root / "stage1_objective.json", "Stage 1 objective")
-
-    run_payload = json.loads(run_manifest_path.read_text(encoding="utf-8"))
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    comparisons = (
-        (metadata.get("checkpoint_kind"), "best", "checkpoint kind"),
-        (metadata.get("epoch"), run_payload.get("best_epoch"), "best epoch"),
-        (
-            metadata.get("selection_metric"),
-            run_payload.get("selection_metric"),
-            "selection metric",
-        ),
-        (
-            metadata.get("metric_value"),
-            run_payload.get("best_metric_value"),
-            "best metric value",
-        ),
-    )
-    for observed, expected, label in comparisons:
-        if observed != expected:
-            raise ValueError(f"Stage 1 {label} mismatch: {observed!r} != {expected!r}")
+    vocabulary = universe_manifest.get("stage1_vocabulary")
+    raw_genes = vocabulary.get("symbols") if isinstance(vocabulary, Mapping) else None
+    if (
+        not isinstance(raw_genes, list)
+        or not raw_genes
+        or not all(isinstance(gene, str) and gene for gene in raw_genes)
+    ):
+        raise ValueError("ESM2 universe manifest lacks the Stage 1 gene vocabulary")
+    stage1_genes = tuple(gene.upper() for gene in raw_genes)
+    if len(set(stage1_genes)) != len(stage1_genes):
+        raise ValueError("Stage 1 gene vocabulary must be unique")
     target_symbols = set(target_esm_symbols)
-    missing = sorted(set(manifest.stage1_genes) - target_symbols)
+    missing = sorted(set(stage1_genes) - target_symbols)
     if missing:
         raise ValueError(
-            "target-universe ESM2 artifact does not cover sealed Stage 1 genes: "
+            "target-universe ESM2 artifact does not cover Stage 1 genes: "
             f"{missing[:10]}"
         )
-    return manifest
+    return Stage1CheckpointSpec(
+        stage1_genes=stage1_genes,
+        checkpoint_sha256=sha256_file(checkpoint_path),
+    )
 
 
 def _copy_prior_symbols_sha256(symbols: Sequence[str]) -> str:
@@ -808,27 +792,6 @@ def authenticate_target_esm2(
     return universe_manifest, provenance
 
 
-def authenticate_universe_stage1_vocabulary(
-    universe_manifest: Mapping[str, object],
-    stage1_manifest: Stage1ArtifactManifest,
-    stage1_manifest_path: Path,
-) -> None:
-    """Cross-bind the universe builder's Stage1 record to the selected seal."""
-    record = universe_manifest.get("stage1_vocabulary")
-    if not isinstance(record, Mapping):
-        raise ValueError("ESM2 universe manifest lacks Stage1 vocabulary provenance")
-    expected = {
-        "symbols": list(stage1_manifest.stage1_genes),
-        "vocabulary_sha256": stage1_manifest.stage1_gene_vocabulary_sha256,
-        "authentication_kind": "sealed_stage1_manifest",
-        "authentication_source_sha256": sha256_file(stage1_manifest_path),
-        "checkpoint_sha256": stage1_manifest.checkpoint_sha256,
-    }
-    for field, value in expected.items():
-        if record.get(field) != value:
-            raise ValueError(f"ESM2 universe Stage1 {field} mismatch")
-
-
 def _builder_drop_reports(
     coverage_upper_bound: object,
     candidates: object,
@@ -953,14 +916,10 @@ def preflight_stage2(config_path: Path) -> Stage2Preflight:
         raise ValueError(
             f"q_sc cache verification failed: {q_sc_report.get('discrepancies')}"
         )
-    stage1_manifest = authenticate_stage1_seal(
+    stage1_checkpoint = load_stage1_checkpoint_spec(
         config,
+        universe_manifest=universe_manifest,
         target_esm_symbols=esm2_symbols,
-    )
-    authenticate_universe_stage1_vocabulary(
-        universe_manifest,
-        stage1_manifest,
-        config.paths.stage1_manifest,
     )
     report: dict[str, object] = {
         "status": "passed",
@@ -1008,24 +967,10 @@ def preflight_stage2(config_path: Path) -> Stage2Preflight:
         },
         "q_sc_cache": q_sc_report,
         "stage1": {
-            "checkpoint_sha256": stage1_manifest.checkpoint_sha256,
-            "stage1_gene_count": len(stage1_manifest.stage1_genes),
-            "manifest_sha256": sha256_file(config.paths.stage1_manifest),
-            "training_code_provenance_status": (
-                stage1_manifest.training_code_provenance_status
-            ),
-            "training_code_provenance_reason": (
-                stage1_manifest.training_code_provenance_reason
-            ),
-            "training_data_provenance_status": (
-                stage1_manifest.training_data_provenance_status
-            ),
-            "training_data_provenance_missing_identities": list(
-                stage1_manifest.training_data_provenance_missing_identities
-            ),
-            "training_data_provenance_reason": (
-                stage1_manifest.training_data_provenance_reason
-            ),
+            "checkpoint_sha256": stage1_checkpoint.checkpoint_sha256,
+            "checkpoint_identity_status": "observed_not_authenticated",
+            "stage1_gene_count": len(stage1_checkpoint.stage1_genes),
+            "vocabulary_source": "esm2_universe_manifest",
         },
     }
     return Stage2Preflight(
@@ -1036,7 +981,7 @@ def preflight_stage2(config_path: Path) -> Stage2Preflight:
         variable_genes=variable_genes,
         source_registry=registry,
         copy_prior=copy_prior,
-        stage1_manifest=stage1_manifest,
+        stage1_checkpoint=stage1_checkpoint,
         bundle=bundle,
         report=report,
     )
@@ -1217,30 +1162,18 @@ def construct_stage2_backbone(
     )
 
     stage1 = load_stage1_config(state.bundle.stage1_config)
-    run_root = state.config.paths.stage1_checkpoint.parent.parent
     target_genes = tuple(
-        dict.fromkeys((*state.universe.symbols, *state.stage1_manifest.stage1_genes))
+        dict.fromkeys((*state.universe.symbols, *state.stage1_checkpoint.stage1_genes))
     )
-    target_esm2_sha256 = _authenticated_target_esm2_sha256(state)
     return construct_stage2_model_from_stage1_artifact(
         model_cls=model_cls,
         checkpoint_path=state.config.paths.stage1_checkpoint,
-        manifest_path=state.config.paths.stage1_manifest,
         hparams_checkpoint_path=state.config.paths.state_hparams,
         input_dim=int(response.bags.input_dim),
         output_dim=int(response.bags.effective_target_dim),
         pert_dim=stage1.train.pert_dim,
         target_genes=target_genes,
-        stage1_esm_embeddings_path=state.bundle.stage1_esm_embeddings,
         target_esm_embeddings_path=state.config.paths.esm2_embeddings,
-        target_esm_artifact_sha256=target_esm2_sha256,
-        run_manifest_path=run_root / "run_manifest.json",
-        checkpoint_metadata_path=state.config.paths.stage1_checkpoint.parent
-        / "metadata.json",
-        stage1_objective_path=run_root / "stage1_objective.json",
-        compatibility_code_paths=state.bundle.compatibility_code_paths,
-        config_paths=state.bundle.config_paths,
-        source_paths=state.bundle.source_paths,
         trainable=False,
     )
 
@@ -1501,7 +1434,7 @@ def build_frozen_feature_store(
         feature_schema_sha256=FEATURE_SCHEMA.schema_hash,
         projection_sha256=projection.components_hash,
     )
-    checkpoint_hash = checkpoint_sha256 or state.stage1_manifest.checkpoint_sha256
+    checkpoint_hash = checkpoint_sha256 or state.stage1_checkpoint.checkpoint_sha256
     device = next(backbone.parameters()).device
     backbone.eval()
     for model_id in data.model_ids:
@@ -2398,14 +2331,6 @@ def _pin_run_inputs(
         layout.root / "cell_line_geneeffect_226_split.json",
     )
     shutil.copy2(
-        state.config.paths.stage1_manifest,
-        layout.root / "stage1_model_manifest.json",
-    )
-    stage1_objective = (
-        state.config.paths.stage1_checkpoint.parent.parent / "stage1_objective.json"
-    )
-    shutil.copy2(stage1_objective, layout.root / "stage1_objective.json")
-    shutil.copy2(
         state.config.paths.esm2_universe_manifest,
         layout.root / "esm2_gene_universe_manifest.json",
     )
@@ -2796,11 +2721,10 @@ def run_full_stage2(
             lambda: atomic_write_json(
                 layout.root / "backbone_load_report.json",
                 {
+                    "checkpoint_sha256": load_report.checkpoint_sha256,
                     "loaded_keys": list(load_report.loaded_keys),
                     "dropped_keys": list(load_report.dropped_keys),
-                    "legacy_esm_matrix_authenticated": (
-                        load_report.legacy_esm_matrix_authenticated
-                    ),
+                    "legacy_esm_matrix_dropped": load_report.legacy_esm_matrix_dropped,
                     "trainable": load_report.trainable,
                     "response_batch_count": response.batch_count,
                     "backbone_type": type(backbone).__name__,
@@ -2814,7 +2738,13 @@ def run_full_stage2(
             accelerator,
             "generate frozen Stage 1 feature store",
             layout.root / ".stage1_feature_generation_status.json",
-            lambda: build_frozen_feature_store(state, data, backbone, frozen_store),
+            lambda: build_frozen_feature_store(
+                state,
+                data,
+                backbone,
+                frozen_store,
+                checkpoint_sha256=load_report.checkpoint_sha256,
+            ),
         )
         projection = FixedSparseProjection(seed=state.config.seeds.projection)
         _run_rank_zero_long_action(
@@ -2826,7 +2756,7 @@ def run_full_stage2(
                 data,
                 frozen_store,
                 stage="stage1_frozen",
-                checkpoint_sha256=state.stage1_manifest.checkpoint_sha256,
+                checkpoint_sha256=load_report.checkpoint_sha256,
                 projection=projection,
             ),
         )
@@ -3169,12 +3099,13 @@ def run_full_stage2(
 
 
 __all__ = [
+    "Stage1CheckpointSpec",
     "Stage2BundleSpec",
     "Stage2Preflight",
     "ResponseAssembly",
-    "authenticate_stage1_seal",
     "assemble_response_supervision",
     "construct_stage2_backbone",
+    "load_stage1_checkpoint_spec",
     "load_stage2_bundle_spec",
     "preflight_stage2",
     "run_full_stage2",

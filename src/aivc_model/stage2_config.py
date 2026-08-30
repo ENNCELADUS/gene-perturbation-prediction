@@ -192,10 +192,8 @@ class Stage2PathsConfig:
     tx1_registration: Path
     tx1_cache: Path
     q_sc_cache: Path
-    stage1_manifest: Path
     stage1_checkpoint: Path
     stage1_config: Path
-    stage1_esm_embeddings: Path
     esm2_embeddings: Path
     esm2_universe_manifest: Path
     esm2_provenance_manifest: Path
