@@ -2,7 +2,7 @@
 
 **Status:** Stage 0 and the formal Stage 1 response run are complete. The strict two-phase Stage 2
 implementation exists, but no Stage 2 result exists: its 226-line Tx1/q_sc/raw-UMI inputs,
-target-universe ESM2, registered copy-prior, and Stage 1 compatibility/input manifest must pass preflight; that manifest records incomplete historical training lineage.
+target-universe ESM2, registered copy-prior, and selected Stage 1 checkpoint must pass preflight; loading checks model/key compatibility, not provenance hashes, and historical training lineage remains incomplete.
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
 **Authority:** [`01-blueprint.md`](../01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**

@@ -71,10 +71,8 @@ paths:
   tx1_registration: results/phase_a_tx1_20260724/phase_a_registration.json
   tx1_cache: data/tx1_basal_embeddings/v1
   q_sc_cache: results/experiments/13_geneeffect_226/q_sc_cache
-  stage1_manifest: results/experiments/13_geneeffect_226/stage1_response_formal_20260820T1257Z_b256/stage1_model_manifest.json
   stage1_checkpoint: results/experiments/13_geneeffect_226/stage1_response_formal_20260820T1257Z_b256/best/pytorch_model.bin
   stage1_config: configs/experiments/13_geneeffect_226/stage1_response.yaml
-  stage1_esm_embeddings: data/esm2/exp13_anchor_union_esm2_650M.npz
   esm2_embeddings: data/esm2/exp13_gene_universe_esm2_650M.npz
   esm2_universe_manifest: data/esm2/exp13_gene_universe_manifest.json
   esm2_provenance_manifest: data/esm2/exp13_gene_universe_esm2_650M.npz.provenance.json

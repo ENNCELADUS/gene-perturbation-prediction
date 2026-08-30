@@ -15,10 +15,10 @@ from aivc_model.geneeffect_stage2_runner import (
     ResponseAssembly,
     Stage2Preflight,
     assemble_response_supervision,
-    authenticate_stage1_seal,
     build_frozen_feature_store,
     build_joint_batch_factories,
     build_warmup_batch_factories,
+    load_stage1_checkpoint_spec,
     load_stage2_bundle_spec,
     preflight_stage2,
     run_registered_baselines,
@@ -26,10 +26,9 @@ from aivc_model.geneeffect_stage2_runner import (
     _authenticated_target_esm2_sha256,
     _formal_distributed_runtime,
 )
-from aivc_model.stage1_artifact import Stage1ArtifactManifest, sha256_file
+from aivc_model.stage1_artifact import sha256_file
 from aivc_model.stage1_config import Stage1ObjectiveConfig
 from aivc_model.stage2_artifacts import Stage2RunLayout
-from aivc_model.state_core import sha256_strings
 
 
 def _write(path: Path, content: str) -> Path:
@@ -47,7 +46,6 @@ def test_bundle_accepts_absolute_seal_for_relative_stage1_config(
     stage1_config = _write(
         repo / "configs/experiments/13_geneeffect_226/stage1_response.yaml", "x: 1\n"
     )
-    stage1_esm = _write(repo / "data/esm2/stage1.npz", "esm")
     cell_manifest = _write(repo / "results/cell_line_manifest.csv", "model_id\n")
     perturbseq = _write(repo / "configs/perturbseq_sources.json", "{}")
     state_model_dir = repo / "model/state"
@@ -57,7 +55,6 @@ def test_bundle_accepts_absolute_seal_for_relative_stage1_config(
     config = SimpleNamespace(
         paths=SimpleNamespace(
             stage1_config=stage1_config.relative_to(repo),
-            stage1_esm_embeddings=stage1_esm.relative_to(repo),
             cell_line_manifest=cell_manifest.relative_to(repo),
             state_model_dir=state_model_dir.relative_to(repo),
             perturbseq_sources=perturbseq.relative_to(repo),
@@ -69,86 +66,86 @@ def test_bundle_accepts_absolute_seal_for_relative_stage1_config(
     assert bundle.stage1_config.resolve() == stage1_config.resolve()
 
 
-def _sealed_stage1(tmp_path: Path) -> tuple[SimpleNamespace, Stage1ArtifactManifest]:
-    root = tmp_path / "stage1"
-    checkpoint = _write(root / "best" / "pytorch_model.bin", "weights")
+def test_construct_stage2_backbone_uses_minimal_checkpoint_interface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+    import aivc_model.tx1_predicted_response as predicted_response
+
+    checkpoint = _write(tmp_path / "best" / "pytorch_model.bin", "checkpoint")
+    state_hparams = _write(tmp_path / "state.ckpt", "hparams")
+    target_esm = _write(tmp_path / "target_esm.npz", "esm")
+    state = SimpleNamespace(
+        bundle=SimpleNamespace(stage1_config=tmp_path / "stage1.yaml"),
+        config=SimpleNamespace(
+            paths=SimpleNamespace(
+                stage1_checkpoint=checkpoint,
+                state_hparams=state_hparams,
+                esm2_embeddings=target_esm,
+            )
+        ),
+        universe=SimpleNamespace(symbols=("G1", "G2")),
+        stage1_checkpoint=SimpleNamespace(stage1_genes=("G2", "G3")),
+    )
+    response = SimpleNamespace(
+        bags=SimpleNamespace(input_dim=4, effective_target_dim=6)
+    )
+    monkeypatch.setattr(
+        runner,
+        "load_stage1_config",
+        lambda path: SimpleNamespace(train=SimpleNamespace(pert_dim=8)),
+    )
+    captured = {}
+
+    def construct(**kwargs):
+        captured.update(kwargs)
+        return object(), object()
+
+    monkeypatch.setattr(
+        predicted_response, "construct_stage2_model_from_stage1_artifact", construct
+    )
+
+    runner.construct_stage2_backbone(state, response, model_cls=torch.nn.Linear)
+
+    assert captured == {
+        "model_cls": torch.nn.Linear,
+        "checkpoint_path": checkpoint,
+        "hparams_checkpoint_path": state_hparams,
+        "input_dim": 4,
+        "output_dim": 6,
+        "pert_dim": 8,
+        "target_genes": ("G1", "G2", "G3"),
+        "target_esm_embeddings_path": target_esm,
+        "trainable": False,
+    }
+
+
+def test_stage1_checkpoint_spec_uses_runtime_vocabulary_and_observed_identity(
+    tmp_path: Path,
+) -> None:
+    checkpoint = _write(tmp_path / "pytorch_model.bin", "weights")
     state_hparams = _write(tmp_path / "state.ckpt", "state")
-    run_manifest = _write(
-        root / "run_manifest.json",
-        json.dumps(
-            {
-                "best_epoch": 4,
-                "selection_metric": "heldout_loss",
-                "best_metric_value": 0.25,
-                "input_sha256": {
-                    "state_checkpoint": sha256_file(state_hparams),
-                    "esm2_embeddings": "1" * 64,
-                },
-            }
-        ),
-    )
-    metadata = _write(
-        root / "best" / "metadata.json",
-        json.dumps(
-            {
-                "checkpoint_kind": "best",
-                "epoch": 4,
-                "selection_metric": "heldout_loss",
-                "metric_value": 0.25,
-            }
-        ),
-    )
-    objective = _write(root / "stage1_objective.json", "{}")
-    genes = ("TP53", "KRAS")
-    manifest = Stage1ArtifactManifest(
-        schema_version=1,
-        checkpoint_sha256=sha256_file(checkpoint),
-        stage1_genes=genes,
-        stage1_gene_vocabulary_sha256=sha256_strings(genes),
-        esm2_artifact_sha256="1" * 64,
-        state_hparams_sha256=sha256_file(state_hparams),
-        compatibility_code_sha256={"code": "2" * 64},
-        training_code_provenance_status="unavailable",
-        training_code_provenance_reason=(
-            "historical_run_has_no_immutable_training_code_identity"
-        ),
-        training_data_provenance_status="incomplete",
-        training_data_provenance_missing_identities=(
-            "cell_line_manifest",
-            "tx1_basal_cache",
-            "response_cache",
-            "perturbseq_source_content",
-        ),
-        training_data_provenance_reason=(
-            "historical_run_manifest_does_not_hash_all_training_data_inputs"
-        ),
-        config_sha256={"config": "3" * 64},
-        source_sha256={"source": "4" * 64},
-        legacy_esm_matrix_sha256=None,
-        run_manifest_sha256=sha256_file(run_manifest),
-        checkpoint_metadata_sha256=sha256_file(metadata),
-        stage1_objective_sha256=sha256_file(objective),
-    )
-    manifest_path = root / "stage1_model_manifest.json"
-    manifest.write(manifest_path)
     config = SimpleNamespace(
         paths=SimpleNamespace(
-            stage1_manifest=manifest_path,
             stage1_checkpoint=checkpoint,
             state_hparams=state_hparams,
         )
     )
-    return config, manifest
+    universe_manifest = {
+        "stage1_vocabulary": {
+            "symbols": ["TP53", "KRAS"],
+            "checkpoint_sha256": "ignored-declared-identity",
+        }
+    }
 
-
-def test_authenticate_stage1_seal_checks_selected_run(tmp_path: Path) -> None:
-    config, expected = _sealed_stage1(tmp_path)
-
-    observed = authenticate_stage1_seal(
-        config, target_esm_symbols=("TP53", "KRAS", "EGFR")
+    observed = load_stage1_checkpoint_spec(
+        config,
+        universe_manifest=universe_manifest,
+        target_esm_symbols=("TP53", "KRAS", "EGFR"),
     )
 
-    assert observed == expected
+    assert observed.stage1_genes == ("TP53", "KRAS")
+    assert observed.checkpoint_sha256 == sha256_file(checkpoint)
 
 
 def test_authenticated_target_esm2_rejects_post_preflight_replacement(
@@ -177,7 +174,7 @@ def _feature_store_fixture(tmp_path: Path, gene_count: int = 19):
             joint=SimpleNamespace(response_batch_size=4),
             paths=SimpleNamespace(esm2_embeddings=esm2),
         ),
-        stage1_manifest=SimpleNamespace(checkpoint_sha256="b" * 64),
+        stage1_checkpoint=SimpleNamespace(checkpoint_sha256="b" * 64),
         source_registry=pd.DataFrame(
             {"source_path": [str(source)]}, index=pd.Index(model_ids)
         ),
@@ -332,7 +329,6 @@ def test_preflight_loads_contract_and_verifies_both_caches(
             esm2_uniprot_mapping_csv=files["esm2_uniprot_mapping.csv"],
             copy_prior=files["copy_prior.csv"],
             copy_prior_manifest=files["copy_prior_manifest.json"],
-            stage1_manifest=files["registry.csv"],
             tx1_cache=tx1_cache,
             q_sc_cache=q_sc_cache,
         ),
@@ -364,13 +360,6 @@ def test_preflight_loads_contract_and_verifies_both_caches(
     stage1 = SimpleNamespace(
         checkpoint_sha256="b" * 64,
         stage1_genes=("TP53",),
-        training_code_provenance_status="unavailable",
-        training_code_provenance_reason=(
-            "historical_run_has_no_immutable_training_code_identity"
-        ),
-        training_data_provenance_status="incomplete",
-        training_data_provenance_missing_identities=("tx1_basal_cache",),
-        training_data_provenance_reason="historical training data incomplete",
     )
     monkeypatch.setattr(runner, "load_stage2_config", lambda path: config)
     monkeypatch.setattr(runner, "load_exp13_split", lambda path: split)
@@ -450,10 +439,7 @@ def test_preflight_loads_contract_and_verifies_both_caches(
         "verify_q_sc_shards",
         lambda rows, path, symbols: {"status": "passed", "discrepancies": []},
     )
-    monkeypatch.setattr(runner, "authenticate_stage1_seal", lambda *a, **k: stage1)
-    monkeypatch.setattr(
-        runner, "authenticate_universe_stage1_vocabulary", lambda *a, **k: None
-    )
+    monkeypatch.setattr(runner, "load_stage1_checkpoint_spec", lambda *a, **k: stage1)
     monkeypatch.setattr(runner, "sha256_file", lambda path: "c" * 64)
 
     bundle = SimpleNamespace()
@@ -463,10 +449,11 @@ def test_preflight_loads_contract_and_verifies_both_caches(
 
     assert result.report["status"] == "passed"
     assert result.report["cell_lines"]["total"] == 226
-    assert result.report["stage1"]["training_data_provenance_status"] == "incomplete"
-    assert result.report["stage1"]["training_data_provenance_missing_identities"] == [
-        "tx1_basal_cache"
-    ]
+    assert result.report["stage1"]["checkpoint_sha256"] == "b" * 64
+    assert result.report["stage1"]["checkpoint_identity_status"] == (
+        "observed_not_authenticated"
+    )
+    assert result.report["stage1"]["vocabulary_source"] == ("esm2_universe_manifest")
     assert cache_calls == [
         (
             tx1_cache,
@@ -501,9 +488,7 @@ def test_full_run_records_failure_without_completion(
 
     config_file = _write(tmp_path / "config.yaml", "config")
     split_file = _write(tmp_path / "split.json", "{}")
-    stage1_manifest_file = _write(tmp_path / "stage1_model_manifest.json", "{}")
     stage1_checkpoint = _write(tmp_path / "stage1" / "best" / "model.bin", "x")
-    _write(tmp_path / "stage1" / "stage1_objective.json", "{}")
     esm2_file = _write(tmp_path / "esm2.npz", "x")
     esm2_universe_manifest = _write(tmp_path / "esm2_universe_manifest.json", "{}")
     esm2_provenance_manifest = _write(tmp_path / "esm2_provenance_manifest.json", "{}")
@@ -520,7 +505,6 @@ def test_full_run_records_failure_without_completion(
         paths=SimpleNamespace(
             output_root=output_root,
             split=split_file,
-            stage1_manifest=stage1_manifest_file,
             stage1_checkpoint=stage1_checkpoint,
             esm2_embeddings=esm2_file,
             esm2_universe_manifest=esm2_universe_manifest,
@@ -543,15 +527,8 @@ def test_full_run_records_failure_without_completion(
         variable_genes=SimpleNamespace(manifest={"genes": ["TP53"]}),
         source_registry=object(),
         copy_prior=pd.Series({"TP53": 0.0}),
-        stage1_manifest=SimpleNamespace(
+        stage1_checkpoint=SimpleNamespace(
             checkpoint_sha256="b" * 64,
-            training_code_provenance_status="unavailable",
-            training_code_provenance_reason=(
-                "historical_run_has_no_immutable_training_code_identity"
-            ),
-            training_data_provenance_status="incomplete",
-            training_data_provenance_missing_identities=("tx1_basal_cache",),
-            training_data_provenance_reason="historical training data incomplete",
         ),
         bundle=SimpleNamespace(),
         report={
@@ -612,9 +589,10 @@ def test_full_run_records_failure_without_completion(
         lambda state, response: (
             torch.nn.Linear(1, 1),
             SimpleNamespace(
+                checkpoint_sha256="b" * 64,
                 loaded_keys=("state_adapter.weight",),
                 dropped_keys=(),
-                legacy_esm_matrix_authenticated=True,
+                legacy_esm_matrix_dropped=True,
                 trainable=False,
             ),
         ),

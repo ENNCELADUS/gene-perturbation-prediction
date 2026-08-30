@@ -150,22 +150,18 @@ class Stage1ArtifactManifest:
         if actual != self.stage1_gene_vocabulary_sha256:
             raise ValueError("Stage-1 gene vocabulary SHA256 mismatch")
         if (
-            self.training_code_provenance_status
-            != _TRAINING_CODE_PROVENANCE_STATUS
-            or self.training_code_provenance_reason
-            != _TRAINING_CODE_PROVENANCE_REASON
+            self.training_code_provenance_status != _TRAINING_CODE_PROVENANCE_STATUS
+            or self.training_code_provenance_reason != _TRAINING_CODE_PROVENANCE_REASON
         ):
             raise ValueError(
                 "Historical Stage-1 training-code provenance must be recorded as "
                 "unavailable"
             )
         if (
-            self.training_data_provenance_status
-            != _TRAINING_DATA_PROVENANCE_STATUS
+            self.training_data_provenance_status != _TRAINING_DATA_PROVENANCE_STATUS
             or self.training_data_provenance_missing_identities
             != _TRAINING_DATA_PROVENANCE_MISSING_IDENTITIES
-            or self.training_data_provenance_reason
-            != _TRAINING_DATA_PROVENANCE_REASON
+            or self.training_data_provenance_reason != _TRAINING_DATA_PROVENANCE_REASON
         ):
             raise ValueError(
                 "Historical Stage-1 training-data provenance must remain incomplete "
@@ -175,9 +171,10 @@ class Stage1ArtifactManifest:
 
 @dataclass(frozen=True)
 class Stage1ArtifactLoadReport:
+    checkpoint_sha256: str
     loaded_keys: tuple[str, ...]
     dropped_keys: tuple[str, ...]
-    legacy_esm_matrix_authenticated: bool
+    legacy_esm_matrix_dropped: bool
     trainable: bool
 
 
@@ -257,78 +254,13 @@ def load_stage1_artifact(
     model: nn.Module,
     *,
     checkpoint_path: Path,
-    manifest_path: Path,
-    esm2_embeddings_path: Path,
     target_esm_embeddings_path: Path,
-    target_esm_artifact_sha256: str,
-    state_hparams_path: Path,
-    run_manifest_path: Path,
-    checkpoint_metadata_path: Path,
-    stage1_objective_path: Path,
-    compatibility_code_paths: Mapping[str, Path],
-    config_paths: Mapping[str, Path],
-    source_paths: Mapping[str, Path],
     trainable: bool,
 ) -> Stage1ArtifactLoadReport:
-    """Authenticate the sealed inputs and strictly restore learned Stage-1 keys."""
-    manifest = Stage1ArtifactManifest.read(manifest_path)
-    _require_asset_groups(compatibility_code_paths, config_paths, source_paths)
-    _require_hash(checkpoint_path, manifest.checkpoint_sha256, "checkpoint")
-    _require_hash(esm2_embeddings_path, manifest.esm2_artifact_sha256, "ESM-2")
-    _require_hash(
-        target_esm_embeddings_path,
-        target_esm_artifact_sha256,
-        "target-universe ESM-2",
-    )
-    _require_hash(state_hparams_path, manifest.state_hparams_sha256, "STATE hparams")
-    _require_hash(run_manifest_path, manifest.run_manifest_sha256, "run manifest")
-    _require_hash(
-        checkpoint_metadata_path,
-        manifest.checkpoint_metadata_sha256,
-        "checkpoint metadata",
-    )
-    _require_hash(
-        stage1_objective_path,
-        manifest.stage1_objective_sha256,
-        "Stage-1 objective",
-    )
-    _require_hash_maps(
-        compatibility_code_paths,
-        manifest.compatibility_code_sha256,
-        "seal/load-time compatibility code",
-    )
-    _require_hash_maps(config_paths, manifest.config_sha256, "config")
-    _require_hash_maps(source_paths, manifest.source_sha256, "source")
-
-    table = load_esm2_embeddings(esm2_embeddings_path)
+    """Strictly restore learned Stage-1 keys into a compatible target model."""
     target_table = load_esm2_embeddings(target_esm_embeddings_path)
     state = _load_checkpoint_state(checkpoint_path)
-    _validate_recorded_training_artifacts(
-        checkpoint_path=checkpoint_path,
-        checkpoint_metadata_path=checkpoint_metadata_path,
-        run_manifest_path=run_manifest_path,
-        stage1_objective_path=stage1_objective_path,
-        state_hparams_path=state_hparams_path,
-        esm2_embeddings_path=esm2_embeddings_path,
-        config_paths=config_paths,
-        source_paths=source_paths,
-    )
-    _authenticate_checkpoint_vocabulary(state, manifest.stage1_genes)
     legacy = state.get(_LEGACY_ESM_KEY)
-    if manifest.legacy_esm_matrix_sha256 is None:
-        if legacy is not None:
-            raise ValueError("Unsealed legacy perturbations.esm_matrix is not allowed")
-        legacy_authenticated = False
-    else:
-        if legacy is None:
-            raise ValueError("Sealed legacy perturbations.esm_matrix is missing")
-        _authenticate_esm_matrix(
-            legacy, manifest.stage1_genes, table, label="legacy checkpoint"
-        )
-        if _sha256_tensor(legacy) != manifest.legacy_esm_matrix_sha256:
-            raise ValueError("Legacy perturbations.esm_matrix SHA256 mismatch")
-        legacy_authenticated = True
-
     _authenticate_target_matrix(model, target_table)
     expected_state = set(model.state_dict())
     target_fixed = expected_state - {
@@ -363,9 +295,10 @@ def load_stage1_artifact(
     model.train(trainable)
     model.requires_grad_(trainable)
     return Stage1ArtifactLoadReport(
+        checkpoint_sha256=sha256_file(checkpoint_path),
         loaded_keys=tuple(sorted(expected)),
         dropped_keys=tuple(dropped),
-        legacy_esm_matrix_authenticated=legacy_authenticated,
+        legacy_esm_matrix_dropped=legacy is not None,
         trainable=trainable,
     )
 
@@ -390,9 +323,7 @@ def _authenticate_checkpoint_vocabulary(
         )
     if recorded is None:
         return
-    expected = bytes.fromhex(
-        sha256_strings(np.asarray(tuple(genes), dtype=object))
-    )
+    expected = bytes.fromhex(sha256_strings(np.asarray(tuple(genes), dtype=object)))
     actual = bytes(recorded.detach().cpu().to(torch.uint8).tolist())
     if actual != expected:
         raise ValueError("Checkpoint gene-vocabulary SHA256 mismatch")
@@ -558,24 +489,6 @@ def _require_asset_groups(*groups: Mapping[str, Path]) -> None:
 
 def _hash_paths(paths: Mapping[str, Path]) -> dict[str, str]:
     return {name: sha256_file(path) for name, path in sorted(paths.items())}
-
-
-def _require_hash(path: Path, expected: str, label: str) -> None:
-    actual = sha256_file(path)
-    if actual != expected:
-        raise ValueError(f"{label} SHA256 mismatch for {path}")
-
-
-def _require_hash_maps(
-    paths: Mapping[str, Path], expected: Mapping[str, str], label: str
-) -> None:
-    if set(paths) != set(expected):
-        raise ValueError(
-            f"{label} artifact names mismatch: expected={sorted(expected)}, "
-            f"actual={sorted(paths)}"
-        )
-    for name, path in paths.items():
-        _require_hash(path, expected[name], f"{label}:{name}")
 
 
 def _is_expected_drop(key: str) -> bool:
