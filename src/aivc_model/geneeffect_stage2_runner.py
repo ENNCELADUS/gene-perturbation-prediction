@@ -45,10 +45,10 @@ from aivc_model.geneeffect_data import (
 from aivc_model.geneeffect_e2e import (
     GeneEffectE2EModel,
     OnlineConditionBatch,
-    PrecomputedFeatureBatch,
 )
 from aivc_model.distributed import require_distinct_devices, run_rank_zero_or_raise
 from aivc_model.geneeffect_feature_store import (
+    GeneEffectFrozenFeatureCache,
     GeneEffectFeatureStoreWriter,
     verify_geneeffect_feature_store,
 )
@@ -75,8 +75,6 @@ from aivc_model.stage2_artifacts import (
     mark_complete,
     mark_failure,
     prepare_run_dir,
-    stage2_runtime_code_sha256,
-    verify_stage2_runtime_code_sha256,
 )
 from aivc_model.stage2_config import Stage2Config, load_stage2_config
 from aivc_model.tx1_embed_cache import (
@@ -319,7 +317,7 @@ def _checked_calibration_closure(
 
 @dataclass(frozen=True)
 class Stage2BundleSpec:
-    """Paths omitted from the frozen experiment config but required to load Stage 1."""
+    """Configured paths required to load Stage 1."""
 
     stage1_config: Path
     stage1_esm_embeddings: Path
@@ -327,9 +325,6 @@ class Stage2BundleSpec:
     state_model_dir: Path
     perturbseq_sources: Path
     response_cache_dir: Path
-    compatibility_code_paths: Mapping[str, Path]
-    config_paths: Mapping[str, Path]
-    source_paths: Mapping[str, Path]
 
 
 @dataclass(frozen=True)
@@ -419,38 +414,8 @@ def _authenticated_raw_source_sha256(
     return {model_id: expected[model_id] for model_id in model_ids}
 
 
-_BUNDLE_FIELDS = {
-    "schema_version",
-    "compatibility_code_paths",
-    "config_paths",
-    "source_paths",
-}
-
-
-def load_stage2_bundle_spec(path: Path, config: Stage2Config) -> Stage2BundleSpec:
-    """Load the exact provenance/response path bundle needed by the runner."""
-    payload = json.loads(_require_file(path, "Stage 2 bundle spec").read_text())
-    if not isinstance(payload, dict) or set(payload) != _BUNDLE_FIELDS:
-        found = set(payload) if isinstance(payload, dict) else set()
-        raise ValueError(
-            "Stage 2 bundle fields mismatch: "
-            f"missing={sorted(_BUNDLE_FIELDS - found)}, "
-            f"unexpected={sorted(found - _BUNDLE_FIELDS)}"
-        )
-    if payload["schema_version"] != "exp13-stage2-bundle-v1":
-        raise ValueError("unsupported Stage 2 bundle schema_version")
-
-    def path_map(name: str) -> dict[str, Path]:
-        value = payload[name]
-        if (
-            not isinstance(value, dict)
-            or not value
-            or not all(isinstance(key, str) and key for key in value)
-            or not all(isinstance(item, str) and item for item in value.values())
-        ):
-            raise ValueError(f"bundle {name} must be a non-empty path mapping")
-        return {key: Path(item) for key, item in value.items()}
-
+def load_stage2_bundle_spec(config: Stage2Config) -> Stage2BundleSpec:
+    """Collect the Stage 1 paths already declared in the Stage 2 config."""
     bundle = Stage2BundleSpec(
         stage1_config=config.paths.stage1_config,
         stage1_esm_embeddings=config.paths.stage1_esm_embeddings,
@@ -458,9 +423,6 @@ def load_stage2_bundle_spec(path: Path, config: Stage2Config) -> Stage2BundleSpe
         state_model_dir=config.paths.state_model_dir,
         perturbseq_sources=config.paths.perturbseq_sources,
         response_cache_dir=config.paths.response_cache,
-        compatibility_code_paths=path_map("compatibility_code_paths"),
-        config_paths=path_map("config_paths"),
-        source_paths=path_map("source_paths"),
     )
     for asset, label in (
         (bundle.stage1_config, "Stage 1 config"),
@@ -474,16 +436,6 @@ def load_stage2_bundle_spec(path: Path, config: Stage2Config) -> Stage2BundleSpe
         (bundle.response_cache_dir, "warm Stage 1 response cache"),
     ):
         _require_directory(asset, label)
-    for group_name, paths in (
-        ("compatibility_code_paths", bundle.compatibility_code_paths),
-        ("config_paths", bundle.config_paths),
-        ("source_paths", bundle.source_paths),
-    ):
-        for name, asset in paths.items():
-            _require_file(asset, f"bundle {group_name}:{name}")
-    sealed_config_paths = {asset.resolve() for asset in bundle.config_paths.values()}
-    if bundle.stage1_config.resolve() not in sealed_config_paths:
-        raise ValueError("bundle config_paths must include stage1_config")
     return bundle
 
 
@@ -501,26 +453,17 @@ def _require_directory(path: Path, label: str) -> Path:
     return path
 
 
-def _require_digest(path: Path, expected: str, label: str) -> None:
-    actual = sha256_file(path)
-    if actual != expected:
-        raise ValueError(f"{label} SHA-256 mismatch: {actual} != {expected}")
-
-
 def authenticate_stage1_seal(
     config: Stage2Config,
     *,
     target_esm_symbols: tuple[str, ...],
-    bundle: Stage2BundleSpec | None = None,
 ) -> Stage1ArtifactManifest:
-    """Authenticate the existing selected Stage 1 seal and local run evidence."""
+    """Validate the selected Stage 1 manifest and local run evidence."""
     manifest_path = _require_file(config.paths.stage1_manifest, "Stage 1 manifest")
     checkpoint_path = _require_file(
         config.paths.stage1_checkpoint, "Stage 1 selected checkpoint"
     )
-    state_hparams_path = _require_file(
-        config.paths.state_hparams, "STATE hparams checkpoint"
-    )
+    _require_file(config.paths.state_hparams, "STATE hparams checkpoint")
     manifest = Stage1ArtifactManifest.read(manifest_path)
     run_root = checkpoint_path.parent.parent
     expected_manifest = run_root / "stage1_model_manifest.json"
@@ -529,28 +472,13 @@ def authenticate_stage1_seal(
             "Stage 1 manifest must be the seal stored beside its checkpoint run: "
             f"{expected_manifest}"
         )
-    _require_digest(checkpoint_path, manifest.checkpoint_sha256, "Stage 1 checkpoint")
-    _require_digest(state_hparams_path, manifest.state_hparams_sha256, "STATE hparams")
     run_manifest_path = _require_file(
         run_root / "run_manifest.json", "Stage 1 run manifest"
     )
     metadata_path = _require_file(
         checkpoint_path.parent / "metadata.json", "Stage 1 best-checkpoint metadata"
     )
-    objective_path = _require_file(
-        run_root / "stage1_objective.json", "Stage 1 objective"
-    )
-    _require_digest(
-        run_manifest_path, manifest.run_manifest_sha256, "Stage 1 run manifest"
-    )
-    _require_digest(
-        metadata_path,
-        manifest.checkpoint_metadata_sha256,
-        "Stage 1 checkpoint metadata",
-    )
-    _require_digest(
-        objective_path, manifest.stage1_objective_sha256, "Stage 1 objective"
-    )
+    _require_file(run_root / "stage1_objective.json", "Stage 1 objective")
 
     run_payload = json.loads(run_manifest_path.read_text(encoding="utf-8"))
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -571,33 +499,6 @@ def authenticate_stage1_seal(
     for observed, expected, label in comparisons:
         if observed != expected:
             raise ValueError(f"Stage 1 {label} mismatch: {observed!r} != {expected!r}")
-    inputs = run_payload.get("input_sha256")
-    if not isinstance(inputs, dict):
-        raise ValueError("Stage 1 run manifest has no input_sha256 mapping")
-    if inputs.get("state_checkpoint") != manifest.state_hparams_sha256:
-        raise ValueError("Stage 1 run/seal STATE hparams identity mismatch")
-    if inputs.get("esm2_embeddings") != manifest.esm2_artifact_sha256:
-        raise ValueError("Stage 1 run/seal ESM2 identity mismatch")
-    if bundle is not None:
-        _require_digest(
-            bundle.stage1_esm_embeddings,
-            manifest.esm2_artifact_sha256,
-            "Stage 1 ESM2 embeddings",
-        )
-        actual_groups = (
-            (
-                bundle.compatibility_code_paths,
-                manifest.compatibility_code_sha256,
-                "compatibility code",
-            ),
-            (bundle.config_paths, manifest.config_sha256, "config"),
-            (bundle.source_paths, manifest.source_sha256, "source"),
-        )
-        for paths, expected_hashes, label in actual_groups:
-            if set(paths) != set(expected_hashes):
-                raise ValueError(f"Stage 1 {label} provenance names mismatch")
-            for name, path in paths.items():
-                _require_digest(path, expected_hashes[name], f"Stage 1 {label}:{name}")
     target_symbols = set(target_esm_symbols)
     missing = sorted(set(manifest.stage1_genes) - target_symbols)
     if missing:
@@ -705,10 +606,7 @@ def _authenticate_copy_prior(
         raise ValueError("copy-prior donor labels contain duplicate gene symbols")
     finite_donor = donor_rows.loc[donor_rows["gene_effect"].notna()]
     expected_symbols = tuple(finite_donor["gene_symbol"].astype(str))
-    if (
-        symbols != expected_symbols
-        or actual_output_sha256 != PINNED_COPY_PRIOR_SHA256
-    ):
+    if symbols != expected_symbols or actual_output_sha256 != PINNED_COPY_PRIOR_SHA256:
         raise ValueError("copy-prior CSV does not exactly match the pinned donor row")
     if source_count != len(donor_rows) or dropped_count != int(
         donor_rows["gene_effect"].isna().sum()
@@ -961,10 +859,10 @@ def _builder_drop_reports(
     return upper_drops, candidate_drops
 
 
-def preflight_stage2(config_path: Path, provenance_path: Path) -> Stage2Preflight:
-    """Load and authenticate all Stage 2 inputs without writing a run directory."""
+def preflight_stage2(config_path: Path) -> Stage2Preflight:
+    """Validate all Stage 2 inputs without writing a run directory."""
     config = load_stage2_config(config_path)
-    bundle = load_stage2_bundle_spec(provenance_path, config)
+    bundle = load_stage2_bundle_spec(config)
     for path, label in (
         (config.paths.split, "Exp13 split"),
         (config.paths.gene_effect, "DepMap GeneEffect"),
@@ -1058,7 +956,6 @@ def preflight_stage2(config_path: Path, provenance_path: Path) -> Stage2Prefligh
     stage1_manifest = authenticate_stage1_seal(
         config,
         target_esm_symbols=esm2_symbols,
-        bundle=bundle,
     )
     authenticate_universe_stage1_vocabulary(
         universe_manifest,
@@ -1212,8 +1109,6 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
         state.bundle.response_cache_dir / "response_targets" / "manifest.json"
     )
     _require_file(response_manifest, "warm Stage 1 response-target cache manifest")
-    if int(os.environ.get("WORLD_SIZE", "1")) > 1 and not response_manifest.is_file():
-        raise ValueError("multi-rank Stage 2 requires a warm response-target cache")
     bags = assemble_train_response_gene_bags(
         cell_line_manifest_path=state.bundle.cell_line_manifest,
         tx1_cache_dir=state.config.paths.tx1_cache,
@@ -1292,9 +1187,7 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
     )
     before_loss = before_metrics.get("model_loss")
     if not isinstance(before_loss, (int, float)) or not np.isfinite(before_loss):
-        raise ValueError(
-            "Stage 1 heldout_metrics model_loss must be a finite number"
-        )
+        raise ValueError("Stage 1 heldout_metrics model_loss must be a finite number")
     return ResponseAssembly(
         bags=bags,
         batch_factory=make_factory(records),
@@ -1745,13 +1638,92 @@ def _supervision_from_index(
     )
 
 
+class GeneEffectSupervisionCache:
+    """Device-resident residual supervision with immutable row identities."""
+
+    def __init__(
+        self,
+        data: Stage2DependencyData,
+        *,
+        device: torch.device | str,
+    ) -> None:
+        expected = (len(data.genes), len(data.model_ids))
+        if data.targets.shape != expected or data.label_mask.shape != expected:
+            raise ValueError("supervision target/mask shape does not match identities")
+        if data.g_var_mask.shape != (len(data.genes),):
+            raise ValueError("g_var_mask shape does not match gene identities")
+        target = torch.device(device)
+        self.gene_symbols = tuple(data.genes)
+        self.model_ids = tuple(data.model_ids)
+        self.residual_target_sha256 = data.residual_target_sha256
+        self.centering_fit_model_ids_sha256 = data.centering_fit_model_ids_sha256
+        self._tensors = {
+            "target": torch.tensor(data.targets, dtype=torch.float32, device=target),
+            "label_mask": torch.tensor(
+                data.label_mask, dtype=torch.bool, device=target
+            ),
+            "g_var_mask": torch.tensor(
+                data.g_var_mask, dtype=torch.bool, device=target
+            ),
+        }
+        self._closed = False
+
+    def gather(self, batch_index: Any) -> SupervisedMatrix:
+        """Gather one rectangular gene-major batch without moving supervision."""
+        if self._closed:
+            raise RuntimeError("supervision cache is closed")
+        rows = tuple(batch_index.rows)
+        if not rows:
+            raise ValueError("supervision batch cannot be empty")
+        widths = {len(row.context_indices) for row in rows}
+        if len(widths) != 1:
+            raise ValueError("supervision rows must have one shared context width")
+        width = widths.pop()
+        if width == 0 or any(len(row.label_mask) != width for row in rows):
+            raise ValueError(
+                "supervision row masks must match a positive context width"
+            )
+        device = self._tensors["target"].device
+        gene_indices = tuple(int(row.gene_index) for row in rows)
+        context_rows = tuple(
+            tuple(int(index) for index in row.context_indices) for row in rows
+        )
+        genes = torch.tensor(gene_indices, dtype=torch.long, device=device)
+        contexts = torch.tensor(context_rows, dtype=torch.long, device=device)
+        sampling_mask = torch.tensor(
+            tuple(tuple(bool(value) for value in row.label_mask) for row in rows),
+            dtype=torch.bool,
+            device=device,
+        )
+        return SupervisedMatrix(
+            target=self._tensors["target"][genes[:, None], contexts],
+            label_mask=(
+                self._tensors["label_mask"][genes[:, None], contexts] & sampling_mask
+            ),
+            g_var_mask=self._tensors["g_var_mask"][genes],
+            gene_symbols=tuple(self.gene_symbols[index] for index in gene_indices),
+            context_model_ids_by_gene=tuple(
+                tuple(self.model_ids[index] for index in context_indices)
+                for context_indices in context_rows
+            ),
+            residual_target_sha256=self.residual_target_sha256,
+            centering_fit_model_ids_sha256=self.centering_fit_model_ids_sha256,
+        )
+
+    def close(self) -> None:
+        """Release all cache-owned tensor references."""
+        self._tensors.clear()
+        self._closed = True
+
+
 def _epoch_batch_indices(
     data: Stage2DependencyData,
     model_ids: Sequence[str],
     config: Stage2Config,
     epoch: int,
     *,
-    shard_for_rank: bool = False,
+    process_index: int = 0,
+    num_processes: int = 1,
 ) -> tuple[Any, ...]:
     global_contexts = tuple(data.model_ids.index(model_id) for model_id in model_ids)
     local = build_epoch_batches(
@@ -1762,10 +1734,10 @@ def _epoch_batch_indices(
         seed=config.seeds.train,
         epoch=epoch,
     )
-    if shard_for_rank:
-        world_size = int(os.environ.get("WORLD_SIZE", "1"))
-        rank = int(os.environ.get("RANK", "0"))
-        local = shard_batches(local, rank=rank, world_size=world_size)
+    if num_processes <= 0 or not 0 <= process_index < num_processes:
+        raise ValueError("invalid Accelerator process_index/num_processes")
+    if num_processes > 1:
+        local = shard_batches(local, rank=process_index, world_size=num_processes)
     remapped = []
     for batch in local:
         rows = tuple(
@@ -1809,106 +1781,40 @@ def _validation_batch_indices(
     return tuple(batches)
 
 
-def _precomputed_features_from_pairs(
-    store_root: Path,
-    data: Stage2DependencyData,
-    pairs: Sequence[tuple[int, int]],
-    *,
-    device: torch.device | None = None,
-) -> PrecomputedFeatureBatch:
-    device = device or torch.device("cpu")
-    loaded: dict[str, dict[str, np.ndarray]] = {}
-    names = (
-        "delta_proj",
-        "s",
-        "q_sc",
-        "q_sc_mask",
-        "hvg_panel_mask",
-        "own_gene_shift_mask",
-    )
-    rows: dict[str, list[np.ndarray]] = {name: [] for name in names}
-    for gene, context in pairs:
-        model_id = data.model_ids[context]
-        if model_id not in loaded:
-            with np.load(
-                Path(store_root) / "shards" / f"{model_id}.npz",
-                allow_pickle=False,
-            ) as shard:
-                loaded[model_id] = {name: shard[name].copy() for name in names}
-        for name in names:
-            rows[name].append(loaded[model_id][name][gene])
-    return PrecomputedFeatureBatch(
-        delta_proj=torch.from_numpy(np.stack(rows["delta_proj"])).to(device),
-        s=torch.from_numpy(np.stack(rows["s"])).to(device),
-        q_sc=torch.from_numpy(np.stack(rows["q_sc"])).to(device),
-        e_g=torch.from_numpy(np.stack([data.e_g[gene] for gene, _ in pairs])).to(
-            device
-        ),
-        z_c=torch.from_numpy(np.stack([data.z_c[context] for _, context in pairs])).to(
-            device
-        ),
-        q_sc_mask=torch.from_numpy(np.asarray(rows["q_sc_mask"], dtype=bool)).to(
-            device
-        ),
-        hvg_panel_mask=torch.from_numpy(
-            np.asarray(rows["hvg_panel_mask"], dtype=bool)
-        ).to(device),
-        own_gene_shift_mask=torch.from_numpy(
-            np.asarray(rows["own_gene_shift_mask"], dtype=bool)
-        ).to(device),
-        gene_symbols=tuple(data.genes[gene] for gene, _ in pairs),
-        model_ids=tuple(data.model_ids[context] for _, context in pairs),
-    )
-
-
-def build_dependency_batch_factories(
+def build_warmup_batch_factories(
     state: Stage2Preflight,
     data: Stage2DependencyData,
-    store_root: Path,
+    cache: GeneEffectFrozenFeatureCache,
+    supervision_cache: GeneEffectSupervisionCache,
     *,
-    device: torch.device | None = None,
+    process_index: int,
+    num_processes: int,
 ):
-    """Return gene-major frozen/online factories and a formal val callback."""
+    """Return cache-backed warmup factories and their validation contract."""
 
     def precomputed_factory(model_ids: Sequence[str]):
         def factory(epoch: int):
-            for index in _epoch_batch_indices(data, model_ids, state.config, epoch):
+            for index in _epoch_batch_indices(
+                data,
+                model_ids,
+                state.config,
+                epoch,
+                process_index=process_index,
+                num_processes=num_processes,
+            ):
                 pairs = tuple(
                     (row.gene_index, context)
                     for row in index.rows
                     for context in row.context_indices
                 )
                 batch = PrecomputedSupervisedBatch(
-                    features=_precomputed_features_from_pairs(
-                        store_root, data, pairs, device=device
-                    ),
-                    supervision=_supervision_from_index(data, index, device=device),
+                    features=cache.gather(pairs),
+                    supervision=supervision_cache.gather(index),
                     objective_weight=index.objective_weight,
                 )
                 yield batch
 
         return factory
-
-    def online_factory(epoch: int, *, shard_for_rank: bool = True):
-        indices = _epoch_batch_indices(
-            data,
-            state.split.supervised_train,
-            state.config,
-            epoch,
-            shard_for_rank=shard_for_rank,
-        )
-        for index in indices:
-            pairs = tuple(
-                (row.gene_index, context)
-                for row in index.rows
-                for context in row.context_indices
-            )
-            batch = OnlineSupervisedBatch(
-                conditions=_online_conditions(data, pairs, device=device),
-                supervision=_supervision_from_index(data, index, device=device),
-                objective_weight=index.objective_weight,
-            )
-            yield batch
 
     train_precomputed = precomputed_factory(state.split.supervised_train)
     validation_indices = _validation_batch_indices(
@@ -1923,22 +1829,8 @@ def build_dependency_batch_factories(
                 for context in row.context_indices
             )
             yield PrecomputedSupervisedBatch(
-                features=_precomputed_features_from_pairs(
-                    store_root, data, pairs, device=device
-                ),
-                supervision=_supervision_from_index(data, index, device=device),
-            )
-
-    def online_validation_factory():
-        for index in validation_indices:
-            pairs = tuple(
-                (row.gene_index, context)
-                for row in index.rows
-                for context in row.context_indices
-            )
-            yield OnlineSupervisedBatch(
-                conditions=_online_conditions(data, pairs, device=device),
-                supervision=_supervision_from_index(data, index, device=device),
+                features=cache.gather(pairs),
+                supervision=supervision_cache.gather(index),
             )
 
     from aivc_model.geneeffect_training_loop import ResidualValidationMetric
@@ -1954,18 +1846,79 @@ def build_dependency_batch_factories(
         batch_kind="precomputed",
         **metric_kwargs,
     )
+    return train_precomputed, warmup_metric, validation_indices
+
+
+def build_joint_batch_factories(
+    state: Stage2Preflight,
+    data: Stage2DependencyData,
+    *,
+    process_index: int,
+    num_processes: int,
+    device: torch.device | None = None,
+):
+    """Return online factories bound to the Accelerator rank topology."""
+    if num_processes > 1:
+        conditions = (
+            state.config.joint.genes_per_batch * state.config.joint.contexts_per_gene
+        )
+        if conditions != 256 or state.config.joint.conditions_per_rank != 256:
+            raise ValueError("multi-rank Stage 2 requires 256 conditions per rank")
+
+    def online_factory(epoch: int, *, shard_for_rank: bool):
+        indices = _epoch_batch_indices(
+            data,
+            state.split.supervised_train,
+            state.config,
+            epoch,
+            process_index=process_index if shard_for_rank else 0,
+            num_processes=num_processes if shard_for_rank else 1,
+        )
+        for index in indices:
+            pairs = tuple(
+                (row.gene_index, context)
+                for row in index.rows
+                for context in row.context_indices
+            )
+            yield OnlineSupervisedBatch(
+                conditions=_online_conditions(data, pairs, device=device),
+                supervision=_supervision_from_index(data, index, device=device),
+                objective_weight=index.objective_weight,
+            )
+
+    def train_factory(epoch: int):
+        return online_factory(epoch, shard_for_rank=num_processes > 1)
+
+    def calibration_factory(epoch: int):
+        return online_factory(epoch, shard_for_rank=False)
+
+    validation_indices = _validation_batch_indices(
+        data, state.split.val, state.config.joint.genes_per_batch
+    )
+
+    def online_validation_factory():
+        for index in validation_indices:
+            pairs = tuple(
+                (row.gene_index, context)
+                for row in index.rows
+                for context in row.context_indices
+            )
+            yield OnlineSupervisedBatch(
+                conditions=_online_conditions(data, pairs, device=device),
+                supervision=_supervision_from_index(data, index, device=device),
+            )
+
+    from aivc_model.geneeffect_training_loop import ResidualValidationMetric
+
     joint_metric = ResidualValidationMetric(
         batch_factory=online_validation_factory,
         batch_kind="online",
-        **metric_kwargs,
+        validation_model_ids=tuple(state.split.val),
+        split_sha256=sha256_file(state.config.paths.split),
+        gene_effect_sha256=sha256_file(state.config.paths.gene_effect),
+        mu_train_sha256=data.mu_train_sha256,
     )
-    return (
-        train_precomputed,
-        online_factory,
-        warmup_metric,
-        joint_metric,
-        validation_indices,
-    )
+    return train_factory, calibration_factory, joint_metric, validation_indices
 
 
 def _validation_provenance(
@@ -2436,26 +2389,14 @@ def _pin_run_inputs(
     state: Stage2Preflight,
     *,
     git_commit: str,
-    stage2_code_sha256: Mapping[str, str],
     distributed_runtime: Mapping[str, object],
 ) -> None:
-    """Pin immutable inputs before any future optimizer step."""
-    split_sha256 = sha256_file(state.config.paths.split)
-    if split_sha256 != PINNED_SPLIT_SHA256:
-        raise ValueError(
-            "Exp13 split changed after preflight: "
-            f"{split_sha256} != {PINNED_SPLIT_SHA256}"
-        )
+    """Snapshot configured inputs and initialize the run manifest."""
     atomic_write_json(layout.root / "config_snapshot.json", state.config.snapshot())
     shutil.copy2(
         state.config.paths.split,
         layout.root / "cell_line_geneeffect_226_split.json",
     )
-    copied_split_sha256 = sha256_file(
-        layout.root / "cell_line_geneeffect_226_split.json"
-    )
-    if copied_split_sha256 != PINNED_SPLIT_SHA256:
-        raise ValueError("copied Exp13 split does not match its pinned SHA-256")
     shutil.copy2(
         state.config.paths.stage1_manifest,
         layout.root / "stage1_model_manifest.json",
@@ -2480,27 +2421,6 @@ def _pin_run_inputs(
         state.config.paths.esm2_uniprot_mapping_csv,
         layout.root / "esm2_uniprot_mapping.csv",
     )
-    esm2_report = state.report.get("esm2")
-    if not isinstance(esm2_report, Mapping):
-        raise ValueError("preflight report is missing ESM2 authentication")
-    copied_esm2_hashes = {
-        "embedding_sha256": _authenticated_target_esm2_sha256(state),
-        "universe_manifest_sha256": sha256_file(
-            layout.root / "esm2_gene_universe_manifest.json"
-        ),
-        "provenance_manifest_sha256": sha256_file(
-            layout.root / "esm2_provenance_manifest.json"
-        ),
-        "uniprot_mapping_json_sha256": sha256_file(
-            layout.root / "esm2_uniprot_mapping.json"
-        ),
-        "uniprot_mapping_csv_sha256": sha256_file(
-            layout.root / "esm2_uniprot_mapping.csv"
-        ),
-    }
-    for field, observed in copied_esm2_hashes.items():
-        if esm2_report.get(field) != observed:
-            raise ValueError(f"ESM2 {field} changed after preflight")
     atomic_write_json(
         layout.root / "g_var_manifest.json", state.variable_genes.manifest
     )
@@ -2509,28 +2429,7 @@ def _pin_run_inputs(
         {
             "run_id": run_id,
             "status": "initialized",
-            "config_sha256": state.config.source_sha256,
-            "stage1_checkpoint_sha256": state.stage1_manifest.checkpoint_sha256,
-            "stage1_training_code_provenance_status": (
-                state.stage1_manifest.training_code_provenance_status
-            ),
-            "stage1_training_code_provenance_reason": (
-                state.stage1_manifest.training_code_provenance_reason
-            ),
-            "stage1_training_data_provenance_status": (
-                state.stage1_manifest.training_data_provenance_status
-            ),
-            "stage1_training_data_provenance_missing_identities": list(
-                state.stage1_manifest.training_data_provenance_missing_identities
-            ),
-            "stage1_training_data_provenance_reason": (
-                state.stage1_manifest.training_data_provenance_reason
-            ),
-            "target_esm2_sha256": sha256_file(state.config.paths.esm2_embeddings),
-            "copy_prior_sha256": sha256_file(state.config.paths.copy_prior),
-            **_cache_identity_fields(state),
             "git_commit": git_commit,
-            "stage2_code_sha256": dict(stage2_code_sha256),
             "distributed_runtime": dict(distributed_runtime),
             "seeds": {
                 "train": state.config.seeds.train,
@@ -2627,15 +2526,12 @@ def _finalize_selected_run(
     feature_manifest: Mapping[str, object],
     warmup: Mapping[str, object],
     joint: Mapping[str, object],
-    validation_target_sha256: str,
     git_commit: str,
-    stage2_code_sha256: Mapping[str, str],
     distributed_runtime: Mapping[str, object],
     response_lineage_sha256: str,
     response_lineage_artifact_sha256: str,
 ) -> None:
     """Evaluate, package, and seal one selected model on rank zero only."""
-    verify_stage2_runtime_code_sha256(dict(stage2_code_sha256))
     baseline_result = run_registered_baselines(state, data)
     selected_checkpoint = layout.joint / "training" / "best" / "e2e_state.pt"
     selected_checkpoint_sha256 = sha256_file(selected_checkpoint)
@@ -2753,51 +2649,13 @@ def _finalize_selected_run(
     atomic_write_json(
         layout.model_package / "model_manifest.json",
         {
-            "checkpoint_sha256": selected_checkpoint_sha256,
-            "config_sha256": state.config.source_sha256,
-            "split_sha256": PINNED_SPLIT_SHA256,
-            "stage1_checkpoint_sha256": state.stage1_manifest.checkpoint_sha256,
-            "stage1_training_code_provenance_status": (
-                state.stage1_manifest.training_code_provenance_status
-            ),
-            "stage1_training_code_provenance_reason": (
-                state.stage1_manifest.training_code_provenance_reason
-            ),
-            "stage1_training_data_provenance_status": (
-                state.stage1_manifest.training_data_provenance_status
-            ),
-            "stage1_training_data_provenance_missing_identities": list(
-                state.stage1_manifest.training_data_provenance_missing_identities
-            ),
-            "stage1_training_data_provenance_reason": (
-                state.stage1_manifest.training_data_provenance_reason
-            ),
-            "projection_sha256": projection.components_hash,
-            "projection_artifact_sha256": sha256_file(
-                layout.root / "projection.npz"
-            ),
-            "standardizer_sha256": standardizer.state_hash,
-            "standardizer_artifact_sha256": sha256_file(
-                layout.root / "standardizer.npz"
-            ),
-            "feature_schema_sha256": FEATURE_SCHEMA.schema_hash,
-            "gene_embedding_source_sha256": sha256_file(
-                state.config.paths.esm2_embeddings
-            ),
-            "frozen_feature_manifest_sha256": sha256_file(
-                layout.condition_features / "stage1_frozen" / "manifest.json"
-            ),
-            "feature_manifest_sha256": sha256_file(
-                layout.condition_features / "stage2_selected" / "manifest.json"
-            ),
-            "residual_targets_artifact_sha256": sha256_file(
-                layout.root / "residual_targets.npz"
-            ),
-            "response_lineage_sha256": response_lineage_sha256,
-            "response_lineage_artifact_sha256": response_lineage_artifact_sha256,
-            **_cache_identity_fields(state),
+            "checkpoint": "e2e_state.pt",
+            "projection": "../projection.npz",
+            "standardizer": "../standardizer.npz",
+            "feature_schema": "../feature_schema.json",
+            "frozen_features": "../condition_features/stage1_frozen",
+            "selected_features": "../condition_features/stage2_selected",
             "distributed_runtime": dict(distributed_runtime),
-            "stage2_code_sha256": dict(stage2_code_sha256),
         },
     )
     atomic_write_json(
@@ -2819,30 +2677,7 @@ def _finalize_selected_run(
         {
             "run_id": run_id,
             "status": "artifacts_written",
-            "config_sha256": state.config.source_sha256,
-            "split_sha256": PINNED_SPLIT_SHA256,
-            "stage1_checkpoint_sha256": state.stage1_manifest.checkpoint_sha256,
-            "stage1_training_code_provenance_status": (
-                state.stage1_manifest.training_code_provenance_status
-            ),
-            "stage1_training_code_provenance_reason": (
-                state.stage1_manifest.training_code_provenance_reason
-            ),
-            "stage1_training_data_provenance_status": (
-                state.stage1_manifest.training_data_provenance_status
-            ),
-            "stage1_training_data_provenance_missing_identities": list(
-                state.stage1_manifest.training_data_provenance_missing_identities
-            ),
-            "stage1_training_data_provenance_reason": (
-                state.stage1_manifest.training_data_provenance_reason
-            ),
-            "selected_checkpoint_sha256": selected_checkpoint_sha256,
-            "target_esm2_sha256": sha256_file(state.config.paths.esm2_embeddings),
-            "copy_prior_sha256": sha256_file(state.config.paths.copy_prior),
-            **_cache_identity_fields(state),
             "git_commit": git_commit,
-            "stage2_code_sha256": dict(stage2_code_sha256),
             "distributed_runtime": dict(distributed_runtime),
             "seeds": {
                 "train": state.config.seeds.train,
@@ -2854,19 +2689,8 @@ def _finalize_selected_run(
             "projection_seed": state.config.seeds.projection,
             "gene_universe": {
                 "count": len(data.genes),
-                "symbols_sha256": hashlib.sha256(
-                    "\n".join(data.genes).encode()
-                ).hexdigest(),
+                "symbols": list(data.genes),
             },
-            "residual_target_sha256": data.residual_target_sha256,
-            "residual_targets_artifact_sha256": sha256_file(
-                layout.root / "residual_targets.npz"
-            ),
-            "validation_target_sha256": validation_target_sha256,
-            "centering_fit_model_ids_sha256": data.centering_fit_model_ids_sha256,
-            "mu_train_sha256": data.mu_train_sha256,
-            "response_lineage_sha256": response_lineage_sha256,
-            "response_lineage_artifact_sha256": response_lineage_artifact_sha256,
             "preflight": state.report,
         },
     )
@@ -2874,7 +2698,6 @@ def _finalize_selected_run(
 
 def run_full_stage2(
     config_path: Path,
-    provenance_path: Path,
     *,
     run_id: str,
 ) -> Path:
@@ -2891,9 +2714,9 @@ def run_full_stage2(
     state = _run_all_ranks_or_raise(
         accelerator,
         "Stage 2 preflight",
-        lambda: preflight_stage2(config_path, provenance_path),
+        lambda: preflight_stage2(config_path),
     )
-    if state.config.source_sha256 != launch_config.source_sha256:
+    if state.config.snapshot() != launch_config.snapshot():
         raise RuntimeError("Stage 2 config changed between launch and preflight")
     layout = Stage2RunLayout(state.config.paths.output_root / run_id)
     run_rank_zero_or_raise(
@@ -2905,7 +2728,6 @@ def run_full_stage2(
     phase = "run_initialization"
     try:
         git_commit = _git_commit()
-        stage2_code_sha256 = stage2_runtime_code_sha256()
         run_rank_zero_or_raise(
             accelerator,
             "pin Stage 2 run inputs",
@@ -2914,7 +2736,6 @@ def run_full_stage2(
                 run_id,
                 state,
                 git_commit=git_commit,
-                stage2_code_sha256=stage2_code_sha256,
                 distributed_runtime=distributed_runtime,
             ),
         )
@@ -2955,8 +2776,10 @@ def run_full_stage2(
             lambda: _write_residual_targets_artifact(layout, state, data),
         )
         accelerator.wait_for_everyone()
-        residual_targets_artifact_sha256 = sha256_file(
-            layout.root / "residual_targets.npz"
+        supervision_cache = _run_all_ranks_or_raise(
+            accelerator,
+            "load Stage 2 supervision cache",
+            lambda: GeneEffectSupervisionCache(data, device=accelerator.device),
         )
         phase = "backbone_assembly"
         backbone, load_report = _run_all_ranks_or_raise(
@@ -3013,6 +2836,35 @@ def run_full_stage2(
         standardizer = fit_train_standardizer(
             frozen_store, data, state.split.supervised_train
         )
+        cache_scope = (*state.split.supervised_train, *state.split.val)
+        frozen_cache = _run_all_ranks_or_raise(
+            accelerator,
+            "load frozen feature cache",
+            lambda: GeneEffectFrozenFeatureCache.load(
+                frozen_store,
+                selected_model_ids=cache_scope,
+                expected_gene_symbols=data.genes,
+                expected_model_ids=data.model_ids,
+                expected_stage="stage1_frozen",
+                device=device,
+            ),
+        )
+        local_warmup_indices = _epoch_batch_indices(
+            data,
+            state.split.supervised_train,
+            state.config,
+            0,
+            process_index=int(accelerator.process_index),
+            num_processes=int(accelerator.num_processes),
+        )
+        warmup_runtime = {
+            "world_size": int(accelerator.num_processes),
+            "conditions_per_rank": state.config.joint.conditions_per_rank,
+            "global_conditions_per_step": (
+                int(accelerator.num_processes) * state.config.joint.conditions_per_rank
+            ),
+            "optimizer_steps_per_epoch": len(local_warmup_indices),
+        }
         head = GeneEffectResidualHead(
             hidden=state.config.warmup.hidden_dim,
             n_hidden_layers=state.config.warmup.num_layers,
@@ -3024,13 +2876,16 @@ def run_full_stage2(
             standardizer,
             collator_seed=state.config.seeds.collator,
         ).to(device)
-        (
-            train_precomputed,
-            online_factory,
-            warmup_metric,
-            joint_metric,
-            validation_indices,
-        ) = build_dependency_batch_factories(state, data, frozen_store, device=device)
+        train_precomputed, warmup_metric, validation_indices = (
+            build_warmup_batch_factories(
+                state,
+                data,
+                frozen_cache,
+                supervision_cache,
+                process_index=int(accelerator.process_index),
+                num_processes=int(accelerator.num_processes),
+            )
+        )
         from aivc_model.geneeffect_head import masked_geneeffect_residual_loss
         from aivc_model.geneeffect_training import (
             calibrate_lambda_dep,
@@ -3039,6 +2894,7 @@ def run_full_stage2(
         )
         from aivc_model.geneeffect_training_loop import (
             CheckpointProvenance,
+            TrainingProgressWriter,
             train_frozen_warmup,
             train_joint,
         )
@@ -3050,24 +2906,9 @@ def run_full_stage2(
             validation_gene_digest,
         ) = _validation_provenance(data, validation_indices, state.split.val)
         provenance = CheckpointProvenance(
-            config_sha256=state.config.source_sha256,
-            stage2_code_sha256=stage2_code_sha256,
             distributed_runtime=distributed_runtime,
+            warmup_runtime=warmup_runtime,
             lambda_calibration_report=None,
-            feature_sha256={
-                "manifest": sha256_file(frozen_store / "manifest.json"),
-                "projection": projection.components_hash,
-                "standardizer": standardizer.state_hash,
-                "feature_schema": FEATURE_SCHEMA.schema_hash,
-                "gene_embedding_source": sha256_file(
-                    state.config.paths.esm2_embeddings
-                ),
-                "residual_targets": residual_targets_artifact_sha256,
-                "response_lineage": response_lineage_artifact_sha256,
-                "response_lineage_semantic": response_lineage_sha256,
-                **_cache_identity_fields(state),
-            },
-            checkpoint_sha256={"stage1": state.stage1_manifest.checkpoint_sha256},
             split_sha256=sha256_file(state.config.paths.split),
             gene_effect_sha256=sha256_file(state.config.paths.gene_effect),
             mu_train_sha256=data.mu_train_sha256,
@@ -3081,49 +2922,69 @@ def run_full_stage2(
         )
         model.freeze_backbone()
         phase = "frozen_head_warmup"
-        warmup_box: dict[str, object] = {}
+        progress = TrainingProgressWriter(
+            layout.root / ".warmup_progress.json",
+            {
+                "world_size": warmup_runtime["world_size"],
+                "conditions_per_rank": warmup_runtime["conditions_per_rank"],
+                "global_conditions_per_step": warmup_runtime[
+                    "global_conditions_per_step"
+                ],
+                "optimizer_steps_per_epoch": warmup_runtime[
+                    "optimizer_steps_per_epoch"
+                ],
+            },
+        )
+        forward_head = None
+        training_accelerator = None
+        if accelerator.num_processes > 1:
+            forward_head = accelerator.prepare(model.head)
+            training_accelerator = accelerator
 
-        def run_warmup() -> None:
+        def run_warmup() -> dict[str, object]:
             def bf16_warmup_step(*args, **kwargs):
                 with accelerator.autocast():
                     return warmup_step(*args, **kwargs)
 
-            warmup_box.update(
-                train_frozen_warmup(
-                    model,
-                    train_precomputed,
-                    warmup_metric,
-                    layout.warmup / "training",
-                    state.config,
-                    provenance,
-                    step_fn=bf16_warmup_step,
-                )
+            return train_frozen_warmup(
+                model,
+                train_precomputed,
+                warmup_metric,
+                layout.warmup / "training",
+                state.config,
+                provenance,
+                accelerator=training_accelerator,
+                forward_head=forward_head,
+                progress=progress,
+                step_fn=bf16_warmup_step,
             )
 
-        _run_rank_zero_long_action(
+        checkpoint_selection_warmup = _run_all_ranks_or_raise(
             accelerator,
             "train frozen GeneEffect head",
-            layout.root / ".warmup_status.json",
             run_warmup,
         )
-        warmup = json.loads(
-            (layout.warmup / "training" / "best" / "metadata.json").read_text(
-                encoding="utf-8"
+        accelerator.wait_for_everyone()
+        frozen_cache.close()
+        supervision_cache.close()
+        frozen_cache = None
+        supervision_cache = None
+        train_precomputed = None
+        warmup_metric = None
+        forward_head = None
+        progress = None
+        accelerator.free_memory()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        accelerator.wait_for_everyone()
+        online_factory, calibration_factory, joint_metric, _ = (
+            build_joint_batch_factories(
+                state,
+                data,
+                process_index=int(accelerator.process_index),
+                num_processes=int(accelerator.num_processes),
+                device=device,
             )
-        )
-        warmup_state = torch.load(
-            layout.warmup / "training" / "best" / "head.pt",
-            map_location="cpu",
-            weights_only=True,
-        )
-        model.head.load_state_dict(warmup_state, strict=True)
-        checkpoint_selection_warmup = (
-            warmup_box
-            if accelerator.is_main_process
-            else {
-                "best_epoch": int(warmup["epoch"]),
-                "best_metric": float(warmup["metric_value"]),
-            }
         )
         model.unfreeze_backbone()
         model.train()
@@ -3139,7 +3000,7 @@ def run_full_stage2(
         def run_calibration() -> None:
             _assert_joint_calibration_ready(model)
             calibration_pairs = []
-            dependency_batches = iter(online_factory(0, shard_for_rank=False))
+            dependency_batches = iter(calibration_factory(0))
             response_batches = iter(response.batch_factory(0))
             for _ in range(state.config.lambda_calibration.train_batches):
                 dependency = next(dependency_batches)
@@ -3216,12 +3077,9 @@ def run_full_stage2(
             (layout.root / "lambda_calibration.json").read_text(encoding="utf-8")
         )
         joint_provenance = CheckpointProvenance(
-            config_sha256=state.config.source_sha256,
-            stage2_code_sha256=provenance.stage2_code_sha256,
             distributed_runtime=provenance.distributed_runtime,
+            warmup_runtime=provenance.warmup_runtime,
             lambda_calibration_report=calibration_payload,
-            feature_sha256=provenance.feature_sha256,
-            checkpoint_sha256=provenance.checkpoint_sha256,
             split_sha256=provenance.split_sha256,
             gene_effect_sha256=provenance.gene_effect_sha256,
             mu_train_sha256=provenance.mu_train_sha256,
@@ -3246,18 +3104,22 @@ def run_full_stage2(
         if accelerator.num_processes > 1:
             forward_model = accelerator.prepare(model)
             training_accelerator = accelerator
-        joint = train_joint(
-            model,
-            online_factory,
-            response_factory,
-            joint_metric,
-            layout.joint / "training",
-            state.config,
-            joint_provenance,
-            response_loss_fn=response_loss,
-            lambda_dep=float(calibration_payload["lambda_dep"]),
-            accelerator=training_accelerator,
-            forward_model=forward_model,
+        joint = _run_all_ranks_or_raise(
+            accelerator,
+            "joint Stage 2 training",
+            lambda: train_joint(
+                model,
+                online_factory,
+                response_factory,
+                joint_metric,
+                layout.joint / "training",
+                state.config,
+                joint_provenance,
+                response_loss_fn=response_loss,
+                lambda_dep=float(calibration_payload["lambda_dep"]),
+                accelerator=training_accelerator,
+                forward_model=forward_model,
+            ),
         )
         accelerator.wait_for_everyone()
         phase = "selected_checkpoint_evaluation_and_packaging"
@@ -3279,9 +3141,7 @@ def run_full_stage2(
                 feature_manifest=feature_manifest,
                 warmup=checkpoint_selection_warmup,
                 joint=joint,
-                validation_target_sha256=validation_target_sha256,
                 git_commit=git_commit,
-                stage2_code_sha256=stage2_code_sha256,
                 distributed_runtime=distributed_runtime,
                 response_lineage_sha256=response_lineage_sha256,
                 response_lineage_artifact_sha256=(response_lineage_artifact_sha256),

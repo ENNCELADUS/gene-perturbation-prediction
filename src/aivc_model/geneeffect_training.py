@@ -206,6 +206,8 @@ class JointStepMetrics:
     huber: float
     pearson: float
     lambda_dep: float
+    n_valid_pairs: int
+    n_genes_scored: int
 
 
 @dataclass(frozen=True)
@@ -231,6 +233,8 @@ class _DistributedDependencyObjective:
     reported_total: torch.Tensor
     reported_huber: torch.Tensor
     reported_pearson: torch.Tensor
+    n_valid_pairs: int
+    n_genes_scored: int
 
 
 def _loss(
@@ -323,19 +327,40 @@ def warmup_step(
     beta: float = 1.0,
     grad_clip: float | None = None,
     accelerator: Accelerator | None = None,
+    forward_head: nn.Module | None = None,
 ) -> WarmupStepMetrics:
     """Take one head-only optimization step and re-check the freeze invariant."""
     batch.validate()
-    if accelerator is not None and accelerator.num_processes > 1:
+    if forward_head is not None:
+        if accelerator is None or accelerator.num_processes == 1:
+            raise ValueError("forward_head is only valid for multi-rank warmup")
+        if forward_head is model.head:
+            raise ValueError("multi-rank forward_head must be an actual wrapper")
+        if accelerator.unwrap_model(forward_head) is not model.head:
+            raise ValueError("forward_head is not the prepared wrapper of model.head")
+    elif accelerator is not None and accelerator.num_processes > 1:
         raise ValueError(
-            "frozen-head warmup is single-process; do not pass a multi-rank Accelerator"
+            "multi-rank warmup requires the Accelerator-prepared forward_head"
         )
     if not model.backbone_frozen:
         raise ValueError("warmup_step requires a frozen backbone")
     model.train()
+    model.backbone.eval()
+    if forward_head is not None:
+        forward_head.train()
     optimizer.zero_grad(set_to_none=True)
+    if forward_head is None:
+        prediction = model.forward_precomputed(batch.features)
+    else:
+        blocks = model._standardize(batch.features)
+        prediction = forward_head(
+            **blocks,
+            q_sc_mask=batch.features.q_sc_mask,
+            hvg_panel_mask=batch.features.hvg_panel_mask,
+            own_gene_shift_mask=batch.features.own_gene_shift_mask,
+        )
     objective = _loss(
-        model.forward_precomputed(batch.features),
+        prediction,
         batch.supervision,
         huber_delta=huber_delta,
         beta=beta,
@@ -358,8 +383,8 @@ def warmup_step(
         total=float(weighted.reported_total),
         huber=float(weighted.reported_huber),
         pearson=float(weighted.reported_pearson),
-        n_valid_pairs=objective.n_valid_pairs,
-        n_genes_scored=objective.n_genes_scored,
+        n_valid_pairs=weighted.n_valid_pairs,
+        n_genes_scored=weighted.n_genes_scored,
     )
 
 
@@ -424,6 +449,8 @@ def _distributed_dependency_objective(
             reported_total=local.total.detach(),
             reported_huber=local.huber.detach(),
             reported_pearson=local.pearson.detach(),
+            n_valid_pairs=local.n_valid_pairs,
+            n_genes_scored=local.n_genes_scored,
         )
     device = local.total.device
     local_counts = torch.tensor(
@@ -455,6 +482,8 @@ def _distributed_dependency_objective(
         reported_total=reported_huber + float(beta) * reported_pearson,
         reported_huber=reported_huber,
         reported_pearson=reported_pearson,
+        n_valid_pairs=int(global_counts[0].item()),
+        n_genes_scored=int(global_counts[1].item()),
     )
 
 
@@ -573,6 +602,8 @@ def joint_step(
         huber=float(weighted_dependency.reported_huber),
         pearson=float(weighted_dependency.reported_pearson),
         lambda_dep=float(lambda_dep),
+        n_valid_pairs=weighted_dependency.n_valid_pairs,
+        n_genes_scored=weighted_dependency.n_genes_scored,
     )
 
 

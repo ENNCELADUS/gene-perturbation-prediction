@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 import csv
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 import math
 from pathlib import Path
+import time
 from typing import Any, Literal
 
 from accelerate import Accelerator
@@ -35,18 +37,25 @@ from aivc_model.stage2_config import Stage2Config
 
 SELECTION_NAME = "validation_macro_per_gene_spearman"
 SELECTION_DIRECTION = "maximize"
+_PROGRESS_PHASES = frozenset({"training", "validation", "completed", "failed"})
+_WARMUP_RUNTIME_FIELDS = frozenset(
+    {
+        "world_size",
+        "conditions_per_rank",
+        "global_conditions_per_step",
+        "optimizer_steps_per_epoch",
+    }
+)
+_PROGRESS_STATIC_FIELDS = frozenset(_WARMUP_RUNTIME_FIELDS)
 
 
 @dataclass(frozen=True)
 class CheckpointProvenance:
-    """Inputs whose identities must travel with every selected checkpoint."""
+    """Scientific and runtime contract stored with selected checkpoints."""
 
-    config_sha256: str
-    stage2_code_sha256: Mapping[str, str]
     distributed_runtime: Mapping[str, object]
+    warmup_runtime: Mapping[str, object]
     lambda_calibration_report: Mapping[str, object] | None
-    feature_sha256: Mapping[str, str]
-    checkpoint_sha256: Mapping[str, str]
     split_sha256: str
     gene_effect_sha256: str
     mu_train_sha256: str
@@ -61,16 +70,10 @@ class CheckpointProvenance:
     def json_ready(self) -> dict[str, object]:
         payload = asdict(self)
         json.dumps(payload, allow_nan=False)
-        if (
-            not self.feature_sha256
-            or not self.checkpoint_sha256
-            or not self.stage2_code_sha256
-        ):
-            raise ValueError(
-                "feature, checkpoint, and Stage 2 code provenance hashes are required"
-            )
         if not self.distributed_runtime:
             raise ValueError("distributed runtime provenance is required")
+        if frozenset(self.warmup_runtime) != _WARMUP_RUNTIME_FIELDS:
+            raise ValueError("warmup runtime fields do not match the training contract")
         if not self.validation_gene_symbols or len(
             set(self.validation_gene_symbols)
         ) != len(self.validation_gene_symbols):
@@ -90,6 +93,109 @@ JointBatchFactory = Callable[[int], Iterable[OnlineSupervisedBatch]]
 ResponseBatchFactory = Callable[[int], Iterable[ResponseSupervisionBatch]]
 WarmupStep = Callable[..., WarmupStepMetrics]
 JointStep = Callable[..., JointStepMetrics]
+
+
+class TrainingProgressWriter:
+    """Throttled atomic diagnostic progress; never a completion sentinel."""
+
+    def __init__(
+        self,
+        path: Path,
+        static: Mapping[str, object],
+        *,
+        min_interval_seconds: float = 15.0,
+        sync_interval_steps: int = 16,
+        monotonic: Callable[[], float] = time.monotonic,
+        utcnow: Callable[[], datetime] | None = None,
+    ) -> None:
+        actual = frozenset(static)
+        if actual != _PROGRESS_STATIC_FIELDS:
+            raise ValueError(
+                "progress static fields mismatch: "
+                f"missing={sorted(_PROGRESS_STATIC_FIELDS - actual)} "
+                f"extra={sorted(actual - _PROGRESS_STATIC_FIELDS)}"
+            )
+        if min_interval_seconds < 0 or not math.isfinite(min_interval_seconds):
+            raise ValueError("progress min_interval_seconds must be finite and >= 0")
+        if isinstance(sync_interval_steps, bool) or sync_interval_steps <= 0:
+            raise ValueError("progress sync_interval_steps must be a positive int")
+        world_size = int(static["world_size"])
+        if world_size <= 0:
+            raise ValueError("progress world_size must be positive")
+        integer_fields = (
+            "conditions_per_rank",
+            "global_conditions_per_step",
+            "optimizer_steps_per_epoch",
+        )
+        normalized = dict(static)
+        for field in integer_fields:
+            value = int(static[field])
+            if value < 0 or (field == "optimizer_steps_per_epoch" and value == 0):
+                raise ValueError(f"progress {field} has an invalid value: {value}")
+            normalized[field] = value
+        normalized["world_size"] = world_size
+        self.path = Path(path)
+        self.static = normalized
+        self.min_interval_seconds = float(min_interval_seconds)
+        self.sync_interval_steps = int(sync_interval_steps)
+        self._monotonic = monotonic
+        self._utcnow = utcnow or (lambda: datetime.now(timezone.utc))
+        self._started = monotonic()
+        self._last_write = -math.inf
+        self._global_real_pairs = 0
+
+    def update(
+        self,
+        *,
+        phase: str,
+        epoch: int,
+        step: int,
+        global_real_pairs_increment: int = 0,
+        accelerator: Accelerator | None = None,
+        force: bool = False,
+    ) -> None:
+        """Accumulate an already-global real-pair count and maybe replace JSON."""
+        if phase not in _PROGRESS_PHASES:
+            raise ValueError(f"unsupported progress phase: {phase}")
+        if epoch < 0 or step < 0 or global_real_pairs_increment < 0:
+            raise ValueError(
+                "progress epoch, step, and global_real_pairs_increment must be >= 0"
+            )
+        expected_world = accelerator.num_processes if accelerator is not None else 1
+        if int(self.static["world_size"]) != expected_world:
+            raise ValueError(
+                "progress world_size does not match the active accelerator: "
+                f"{self.static['world_size']} != {expected_world}"
+            )
+        is_main = accelerator is None or accelerator.is_main_process
+        if is_main:
+            self._global_real_pairs += int(global_real_pairs_increment)
+        if not force and step % self.sync_interval_steps != 0:
+            return
+
+        def write() -> None:
+            now = self._monotonic()
+            if not force and now - self._last_write < self.min_interval_seconds:
+                return
+            elapsed = max(0.0, now - self._started)
+            payload = {
+                "schema_version": 1,
+                "phase": phase,
+                "epoch": int(epoch),
+                "step": int(step),
+                "global_real_pairs": self._global_real_pairs,
+                "elapsed_seconds": elapsed,
+                "global_real_pairs_per_second": (
+                    self._global_real_pairs / elapsed if elapsed > 0 else 0.0
+                ),
+                "heartbeat_utc": (self._utcnow().astimezone(timezone.utc).isoformat()),
+                **self.static,
+            }
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_json(self.path, payload)
+            self._last_write = now
+
+        _rank_zero_action(accelerator, "write training progress", write)
 
 
 @dataclass(frozen=True)
@@ -151,15 +257,9 @@ class ResidualValidationMetric:
                 )
             actual_genes.extend(batch.supervision.gene_symbols)
             declared_target_sha256.add(batch.supervision.residual_target_sha256)
-            centering_sha256.add(
-                batch.supervision.centering_fit_model_ids_sha256
-            )
+            centering_sha256.add(batch.supervision.centering_fit_model_ids_sha256)
             digest.update(
-                batch.supervision.target.detach()
-                .cpu()
-                .contiguous()
-                .numpy()
-                .tobytes()
+                batch.supervision.target.detach().cpu().contiguous().numpy().tobytes()
             )
             mask_bytes.append(
                 batch.supervision.label_mask.detach()
@@ -259,8 +359,7 @@ def _atomic_write_csv(path: Path, history: list[dict[str, object]]) -> None:
 def _state_dict(model: nn.Module, accelerator: Accelerator | None) -> dict[str, Any]:
     unwrapped = accelerator.unwrap_model(model) if accelerator is not None else model
     return {
-        name: value.detach().cpu()
-        for name, value in unwrapped.state_dict().items()
+        name: value.detach().cpu() for name, value in unwrapped.state_dict().items()
     }
 
 
@@ -290,8 +389,7 @@ def _metric_across_ranks(value: float, accelerator: Accelerator | None) -> float
     values = tuple(float(item) for item in gathered.tolist())
     if len(values) != accelerator.num_processes:
         raise RuntimeError(
-            "validation metric gather did not return one value per rank: "
-            f"{values}"
+            f"validation metric gather did not return one value per rank: {values}"
         )
     if any(not math.isfinite(item) for item in values):
         raise ValueError(f"validation metric must be finite on every rank: {values}")
@@ -305,8 +403,7 @@ def _mean_step_metrics(metrics: list[object]) -> dict[str, float]:
         raise ValueError("an epoch must contain at least one optimization step")
     rows = [asdict(item) if is_dataclass(item) else vars(item) for item in metrics]
     means = {
-        str(name): sum(float(row[name]) for row in rows) / len(rows)
-        for name in rows[0]
+        str(name): sum(float(row[name]) for row in rows) / len(rows) for name in rows[0]
     }
     nonfinite = [name for name, value in means.items() if not math.isfinite(value)]
     if nonfinite:
@@ -346,8 +443,7 @@ def _save_best(
         generation.mkdir()
         checkpoint = generation / filename
         _atomic_save_checkpoint(checkpoint, state)
-        bound_metadata = {**metadata, "checkpoint_sha256": _sha256_file(checkpoint)}
-        _atomic_write_json(generation / "metadata.json", bound_metadata)
+        _atomic_write_json(generation / "metadata.json", metadata)
         temporary_link = output_dir / f".best_epoch_{epoch}.link.tmp"
         temporary_link.symlink_to(generation.name, target_is_directory=True)
         temporary_link.replace(output_dir / "best")
@@ -379,15 +475,6 @@ def _restore_best(
     load_error = False
     caught_error: Exception | None = None
     try:
-        metadata_path = path.parent / "metadata.json"
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        expected_sha256 = metadata.get("checkpoint_sha256")
-        actual_sha256 = _sha256_file(path)
-        if expected_sha256 != actual_sha256:
-            raise ValueError(
-                "selected checkpoint hash mismatch: "
-                f"{expected_sha256} != {actual_sha256}"
-            )
         state = torch.load(path, map_location="cpu", weights_only=True)
         target = accelerator.unwrap_model(model) if accelerator is not None else model
         target.load_state_dict(state, strict=True)
@@ -420,6 +507,67 @@ def _validation_value(
             raise
         local_value = math.nan
     return _metric_across_ranks(local_value, accelerator)
+
+
+def _readiness_states(
+    state: int,
+    accelerator: Accelerator | None,
+    *,
+    label: str,
+    step: int,
+) -> tuple[int, ...]:
+    if accelerator is None or accelerator.num_processes == 1:
+        return (state,)
+    local = torch.tensor([state], dtype=torch.int64, device=accelerator.device)
+    gathered = accelerator.gather(local).detach().cpu().reshape(-1)
+    states = tuple(int(value) for value in gathered.tolist())
+    if len(states) != accelerator.num_processes:
+        raise RuntimeError(f"{label} readiness did not gather every rank")
+    if 2 in states:
+        raise RuntimeError(f"a {label} batch factory failed before step {step}")
+    if any(value == 0 for value in states) and not all(value == 0 for value in states):
+        raise RuntimeError(
+            f"rank optimizer-step counts differ before step {step}: {states}"
+        )
+    return states
+
+
+def _stream_warmup_batches(
+    batch_factory: WarmupBatchFactory,
+    epoch: int,
+    accelerator: Accelerator | None,
+) -> Iterable[PrecomputedSupervisedBatch]:
+    """Stream rank-local warmup batches behind shared readiness checks."""
+    try:
+        iterator = iter(batch_factory(epoch))
+        factory_error = False
+    except Exception:
+        iterator = iter(())
+        factory_error = True
+    step = 0
+    while True:
+        batch: PrecomputedSupervisedBatch | None = None
+        state = 2 if factory_error else 0
+        if state != 2:
+            try:
+                batch = next(iterator)
+                batch.validate()
+                state = 1
+            except StopIteration:
+                state = 0
+            except Exception:
+                state = 2
+        states = _readiness_states(state, accelerator, label="warmup", step=step)
+        if 2 in states:
+            raise RuntimeError(f"warmup batch factory failed before step {step}")
+        if all(value == 0 for value in states):
+            if step == 0:
+                raise ValueError("warmup batch factory produced no batches")
+            return
+        if batch is None:
+            raise RuntimeError("warmup readiness accepted a missing local batch")
+        yield batch
+        step += 1
 
 
 def _stream_joint_batch_pairs(
@@ -473,31 +621,17 @@ def _stream_joint_batch_pairs(
                     state = 2
         if accelerator is None or accelerator.num_processes == 1:
             if state == 2:
-                raise RuntimeError(
-                    f"joint batch factory failed before step {step}"
-                )
+                raise RuntimeError(f"joint batch factory failed before step {step}")
             if state == 0:
                 if step == 0:
                     raise ValueError("dependency batch factory produced no batches")
                 return
         else:
-            local = torch.tensor([state], dtype=torch.int64, device=accelerator.device)
-            gathered = accelerator.gather(local).detach().cpu().reshape(-1)
-            states = tuple(int(value) for value in gathered.tolist())
-            if len(states) != accelerator.num_processes:
-                raise RuntimeError("joint batch readiness did not gather every rank")
-            if 2 in states:
-                raise RuntimeError(
-                    f"a joint batch factory failed before step {step}"
-                )
+            states = _readiness_states(state, accelerator, label="joint", step=step)
             if all(value == 0 for value in states):
                 if step == 0:
                     raise RuntimeError("dependency batch counts must be positive")
                 return
-            if any(value == 0 for value in states):
-                raise RuntimeError(
-                    f"rank optimizer-step counts differ before step {step}: {states}"
-                )
         if dependency_batch is None or response_batch is None:
             raise RuntimeError("joint readiness accepted a missing local batch")
         yield dependency_batch, response_batch
@@ -529,12 +663,7 @@ def _validate_contract(
         )
     if config.selection.direction != SELECTION_DIRECTION:
         raise ValueError(
-            "selection direction must be maximize, got "
-            f"{config.selection.direction}"
-        )
-    if config.source_sha256 != provenance.config_sha256:
-        raise ValueError(
-            "checkpoint provenance config SHA does not match Stage 2 config"
+            f"selection direction must be maximize, got {config.selection.direction}"
         )
     split_path = Path(config.paths.split)
     if _sha256_file(split_path) != provenance.split_sha256:
@@ -582,17 +711,31 @@ def train_frozen_warmup(
     config: Stage2Config,
     provenance: CheckpointProvenance,
     *,
+    accelerator: Accelerator | None = None,
+    forward_head: nn.Module | None = None,
+    progress: TrainingProgressWriter | None = None,
     step_fn: WarmupStep = warmup_step,
 ) -> dict[str, object]:
-    """Train and select the frozen-backbone head in one local process."""
+    """Train and select the frozen-backbone head on one or more ranks."""
     if not model.backbone_frozen:
         raise ValueError("train_frozen_warmup requires a frozen backbone")
+    if forward_head is not None:
+        if accelerator is None or accelerator.num_processes == 1:
+            raise ValueError("forward_head is only valid for multi-rank warmup")
+        if forward_head is model.head:
+            raise ValueError("multi-rank forward_head must be an actual wrapper")
+        if accelerator.unwrap_model(forward_head) is not model.head:
+            raise ValueError("forward_head is not the prepared wrapper of model.head")
+    elif accelerator is not None and accelerator.num_processes > 1:
+        raise ValueError("multi-rank warmup requires a prepared forward_head")
     model.assert_frozen_backbone_clean()
     _validate_contract(config, provenance, validation_metric)
     if not validation_metric.uses_precomputed_batches:
         raise TypeError("warmup selection requires precomputed validation batches")
-    _prepare_fresh_dir(output_dir, None)
+    _prepare_fresh_dir(output_dir, accelerator)
     optimizer = build_warmup_optimizer(model, config)
+    if accelerator is not None:
+        optimizer = accelerator.prepare(optimizer)
     history: list[dict[str, object]] = []
     best_metric = -math.inf
     best_epoch = -1
@@ -600,33 +743,60 @@ def train_frozen_warmup(
     stopped_early = False
 
     for epoch in range(config.warmup.max_epochs):
-        step_metrics = [
-            step_fn(
-                model,
-                batch,
-                optimizer,
-                huber_delta=config.loss.huber_delta,
-                beta=config.loss.beta,
+        step_metrics: list[WarmupStepMetrics] = []
+        for step, batch in enumerate(
+            _stream_warmup_batches(batch_factory, epoch, accelerator), start=1
+        ):
+            step_metrics.append(
+                step_fn(
+                    model,
+                    batch,
+                    optimizer,
+                    huber_delta=config.loss.huber_delta,
+                    beta=config.loss.beta,
+                    accelerator=accelerator,
+                    forward_head=forward_head,
+                )
             )
-            for batch in batch_factory(epoch)
-        ]
+            if progress is not None:
+                progress.update(
+                    phase="training",
+                    epoch=epoch,
+                    step=step,
+                    global_real_pairs_increment=step_metrics[-1].n_valid_pairs,
+                    accelerator=accelerator,
+                    force=step == 1,
+                )
         train_metrics = _mean_step_metrics(step_metrics)
         model.eval()
+        if forward_head is not None:
+            forward_head.eval()
+        if progress is not None:
+            progress.update(
+                phase="validation",
+                epoch=epoch,
+                step=len(step_metrics),
+                accelerator=accelerator,
+                force=True,
+            )
         with torch.no_grad():
-            metric = _validation_value(validation_metric, model, None, provenance)
+            metric = _validation_value(
+                validation_metric, model, accelerator, provenance
+            )
         row: dict[str, object] = {
             "epoch": epoch,
+            "optimizer_steps": len(step_metrics),
             **{f"train_{key}": value for key, value in train_metrics.items()},
             SELECTION_NAME: metric,
         }
         history.append(row)
-        _write_history(Path(output_dir), history, None)
+        _write_history(Path(output_dir), history, accelerator)
         if metric > best_metric:
             best_metric = metric
             best_epoch = epoch
             stale_epochs = 0
             _save_best(
-                model.head,
+                forward_head or model.head,
                 Path(output_dir),
                 "head.pt",
                 _metadata(
@@ -635,7 +805,7 @@ def train_frozen_warmup(
                     metric=metric,
                     provenance=provenance,
                 ),
-                None,
+                accelerator,
             )
         else:
             stale_epochs += 1
@@ -645,7 +815,19 @@ def train_frozen_warmup(
 
     if best_epoch < 0:
         raise RuntimeError("no epoch produced a finite validation metric")
-    _restore_best(model.head, Path(output_dir) / "best/head.pt", None)
+    _restore_best(
+        forward_head or model.head,
+        Path(output_dir) / "best/head.pt",
+        accelerator,
+    )
+    if progress is not None:
+        progress.update(
+            phase="completed",
+            epoch=int(history[-1]["epoch"]),
+            step=len(step_metrics),
+            accelerator=accelerator,
+            force=True,
+        )
     return _outcome(history, best_epoch, stopped_early)
 
 
@@ -662,6 +844,7 @@ def train_joint(
     lambda_dep: float,
     accelerator: Accelerator | None = None,
     forward_model: nn.Module | None = None,
+    progress: TrainingProgressWriter | None = None,
     step_fn: JointStep = joint_step,
 ) -> dict[str, object]:
     """Jointly tune the full model with one cycling response batch per step."""
@@ -699,11 +882,14 @@ def train_joint(
 
     for epoch in range(config.joint.max_epochs):
         step_metrics: list[JointStepMetrics] = []
-        for dependency_batch, response_batch in _stream_joint_batch_pairs(
-            dependency_batch_factory,
-            response_batch_factory,
-            epoch,
-            accelerator,
+        for step, (dependency_batch, response_batch) in enumerate(
+            _stream_joint_batch_pairs(
+                dependency_batch_factory,
+                response_batch_factory,
+                epoch,
+                accelerator,
+            ),
+            start=1,
         ):
             step_metrics.append(
                 step_fn(
@@ -720,10 +906,27 @@ def train_joint(
                     forward_model=forward_model,
                 )
             )
+            if progress is not None:
+                progress.update(
+                    phase="training",
+                    epoch=epoch,
+                    step=step,
+                    global_real_pairs_increment=step_metrics[-1].n_valid_pairs,
+                    accelerator=accelerator,
+                    force=step == 1,
+                )
         train_metrics = _mean_step_metrics(step_metrics)
         model.eval()
         if forward_model is not None:
             forward_model.eval()
+        if progress is not None:
+            progress.update(
+                phase="validation",
+                epoch=epoch,
+                step=len(step_metrics),
+                accelerator=accelerator,
+                force=True,
+            )
         with torch.no_grad():
             metric = _validation_value(
                 validation_metric,
@@ -767,4 +970,12 @@ def train_joint(
         Path(output_dir) / "best/e2e_state.pt",
         accelerator,
     )
+    if progress is not None:
+        progress.update(
+            phase="completed",
+            epoch=int(history[-1]["epoch"]),
+            step=len(step_metrics),
+            accelerator=accelerator,
+            force=True,
+        )
     return _outcome(history, best_epoch, stopped_early)

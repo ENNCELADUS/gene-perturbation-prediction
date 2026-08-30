@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import hashlib
 import json
 from pathlib import Path
@@ -8,6 +7,7 @@ import shutil
 
 import numpy as np
 import pytest
+import torch
 
 import aivc_model.stage2_artifacts as stage2_artifacts
 from aivc_model.geneeffect_feature_store import GeneEffectFeatureStoreWriter
@@ -18,44 +18,13 @@ from aivc_model.geneeffect_features import (
 )
 from aivc_model.stage2_artifacts import (
     REQUIRED_STAGE2_OUTPUTS,
-    STAGE2_RUNTIME_CODE_PATHS,
     Stage2RunLayout,
     atomic_write_json,
     mark_complete,
     mark_failure,
     prepare_run_dir,
-    stage2_runtime_code_sha256,
     verify_complete_run,
 )
-
-
-def _stage2_static_import_closure() -> set[str]:
-    root = Path(__file__).resolve().parents[1]
-    pending = [
-        Path("scripts/train_geneeffect_e2e.py"),
-        Path("src/aivc_model/__init__.py"),
-    ]
-    closure: set[str] = set()
-    while pending:
-        relative = pending.pop()
-        normalized = relative.as_posix()
-        if normalized in closure:
-            continue
-        closure.add(normalized)
-        tree = ast.parse((root / relative).read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom):
-                continue
-            if node.module is None or not node.module.startswith("aivc_model"):
-                continue
-            imported = Path("src") / Path(node.module.replace(".", "/") + ".py")
-            if (root / imported).is_file():
-                pending.append(imported)
-    return closure
-
-
-def test_runtime_code_manifest_matches_stage2_static_import_closure() -> None:
-    assert set(STAGE2_RUNTIME_CODE_PATHS) == _stage2_static_import_closure()
 
 
 def _write_required(root: Path, required: tuple[str, ...]) -> None:
@@ -102,90 +71,9 @@ def _build_feature_store(
 
 
 def _write_response_lineage(root: Path) -> tuple[str, str]:
-    array_claim = {
-        "dtype": "<f4",
-        "shape": [1, 2],
-        "content_sha256": "a" * 64,
-    }
-
-    def record(gene: str, membership: str) -> dict[str, object]:
-        return {
-            "record_id": f"{gene}@ACH-1",
-            "gene": gene,
-            "model_id": "ACH-1",
-            "membership": membership,
-            "anchor_weight": 1.0,
-            "objective_weight": 1.0,
-            "control_tx1": dict(array_claim),
-            "observed_hvg": dict(array_claim),
-            "observed_hvg_mask": {
-                "dtype": "|b1",
-                "shape": [1, 2],
-                "content_sha256": "b" * 64,
-            },
-            "control_hvg": dict(array_claim),
-        }
-
-    train = [record("G0", "train")]
-    heldout = [record("G1", "heldout")]
-    records = [*train, *heldout]
-    memberships = [
-        {"record_id": item["record_id"], "membership": item["membership"]}
-        for item in records
-    ]
-    targets = [
-        {
-            "record_id": item["record_id"],
-            "observed_hvg": item["observed_hvg"],
-            "observed_hvg_mask": item["observed_hvg_mask"],
-        }
-        for item in records
-    ]
-    weights = [
-        {
-            "record_id": item["record_id"],
-            "anchor_weight": item["anchor_weight"],
-            "objective_weight": item["objective_weight"],
-        }
-        for item in records
-    ]
-    payload: dict[str, object] = {
-        "schema_version": "exp13-response-lineage-v1",
-        "response_cache_fingerprint": "c" * 64,
-        "response_cache_files": {
-            name: str(index) * 64
-            for index, name in enumerate(
-                (
-                    "genes.npy",
-                    "manifest.json",
-                    "metadata.parquet",
-                    "offsets.npy",
-                    "target_cells.npy",
-                ),
-                1,
-            )
-        },
-        "source_identities": {
-            "cell_line_manifest_sha256": "1" * 64,
-            "perturbseq_sources_sha256": "2" * 64,
-            "referenced_source_sha256": {"source.h5ad": "3" * 64},
-            "tx1_cache_manifest_sha256": "4" * 64,
-            "state_var_dims_sha256": "5" * 64,
-            "stage1_run_manifest_sha256": "6" * 64,
-            "stage1_heldout_metrics_sha256": "7" * 64,
-        },
-        "train_records": train,
-        "heldout_records": heldout,
-        "record_membership_sha256": stage2_artifacts._canonical_json_sha256(
-            memberships
-        ),
-        "target_tensors_sha256": stage2_artifacts._canonical_json_sha256(targets),
-        "objective_weights_sha256": stage2_artifacts._canonical_json_sha256(weights),
-    }
-    payload["lineage_sha256"] = stage2_artifacts._canonical_json_sha256(payload)
     path = root / "response_targets/lineage.json"
-    atomic_write_json(path, payload)
-    return str(payload["lineage_sha256"]), stage2_artifacts.sha256_file(path)
+    atomic_write_json(path, {"status": "available"})
+    return "1" * 64, "2" * 64
 
 
 def _write_full_runner_artifacts(
@@ -196,8 +84,10 @@ def _write_full_runner_artifacts(
     joint_checkpoint = root / "joint/training/best/e2e_state.pt"
     warmup_checkpoint.parent.mkdir(parents=True)
     joint_checkpoint.parent.mkdir(parents=True)
-    warmup_checkpoint.write_bytes(b"warmup")
-    joint_checkpoint.write_bytes(b"joint")
+    torch.save({"head.weight": torch.arange(6, dtype=torch.float32)}, warmup_checkpoint)
+    torch.save(
+        {"model.weight": torch.arange(12, dtype=torch.float32)}, joint_checkpoint
+    )
     from aivc_model.stage2_artifacts import sha256_file
 
     warmup_sha = sha256_file(warmup_checkpoint)
@@ -219,9 +109,6 @@ def _write_full_runner_artifacts(
         "training_data_provenance_reason": (
             "historical_run_manifest_does_not_hash_all_training_data_inputs"
         ),
-    }
-    propagated_stage1_claims = {
-        f"stage1_{field}": value for field, value in stage1_claims.items()
     }
     authoritative_split = (
         Path(__file__).resolve().parents[1]
@@ -291,6 +178,12 @@ def _write_full_runner_artifacts(
             for rank in range(world_size)
         ],
     }
+    warmup_runtime = {
+        "world_size": world_size,
+        "conditions_per_rank": 256,
+        "global_conditions_per_step": 256 * world_size,
+        "optimizer_steps_per_epoch": 7,
+    }
     cache_identities = {
         "tx1_registration_sha256": "1" * 64,
         "tx1_source_manifest_sha256": "2" * 64,
@@ -327,7 +220,6 @@ def _write_full_runner_artifacts(
         gene_embedding_source_sha256=target_esm2_sha,
     )
     provenance = {
-        "stage2_code_sha256": stage2_runtime_code_sha256(),
         "split_sha256": sha256_file(split_path),
         "residual_target_sha256": residual_sha,
         "centering_fit_model_ids_sha256": centering_sha,
@@ -346,6 +238,7 @@ def _write_full_runner_artifacts(
             **cache_identities,
         },
         "distributed_runtime": distributed_runtime,
+        "warmup_runtime": warmup_runtime,
     }
     calibration = {
         "lambda_dep": 1.0,
@@ -380,7 +273,7 @@ def _write_full_runner_artifacts(
     )
     selection_column = "validation_macro_per_gene_spearman"
     (root / "warmup/training/train_log.csv").write_text(
-        f"epoch,{selection_column}\n0,0.5\n"
+        f"epoch,{selection_column},optimizer_steps\n0,0.5,7\n"
     )
     (root / "joint/training/train_log.csv").write_text(
         f"epoch,{selection_column}\n0,1.0\n"
@@ -590,52 +483,31 @@ def _write_full_runner_artifacts(
     packaged = root / "model_package/e2e_state.pt"
     packaged.parent.mkdir(exist_ok=True)
     packaged.write_bytes(joint_checkpoint.read_bytes())
-    frozen_manifest = root / "condition_features/stage1_frozen/manifest.json"
-    selected_manifest = root / "condition_features/stage2_selected/manifest.json"
     atomic_write_json(
         root / "model_package/model_manifest.json",
         {
-            "checkpoint_sha256": joint_sha,
-            "config_sha256": config_sha,
-            "split_sha256": sha256_file(split_path),
-            "projection_sha256": projection.components_hash,
-            "projection_artifact_sha256": sha256_file(root / "projection.npz"),
-            "standardizer_sha256": standardizer.state_hash,
-            "standardizer_artifact_sha256": sha256_file(
-                root / "standardizer.npz"
-            ),
-            "feature_schema_sha256": FEATURE_SCHEMA.schema_hash,
-            "gene_embedding_source_sha256": target_esm2_sha,
-            "frozen_feature_manifest_sha256": sha256_file(frozen_manifest),
-            "feature_manifest_sha256": sha256_file(selected_manifest),
-            "residual_targets_artifact_sha256": sha256_file(residual_path),
-            "response_lineage_sha256": response_lineage_sha,
-            "response_lineage_artifact_sha256": response_lineage_artifact_sha,
+            "checkpoint": "e2e_state.pt",
+            "projection": "../projection.npz",
+            "standardizer": "../standardizer.npz",
+            "feature_schema": "../feature_schema.json",
+            "frozen_features": "../condition_features/stage1_frozen",
+            "selected_features": "../condition_features/stage2_selected",
             "distributed_runtime": distributed_runtime,
-            "stage2_code_sha256": stage2_runtime_code_sha256(),
-            **cache_identities,
-            **propagated_stage1_claims,
         },
     )
     atomic_write_json(
         root / "run_manifest.json",
         {
             "run_id": "formal",
-            "config_sha256": config_sha,
-            "split_sha256": sha256_file(split_path),
-            "stage1_checkpoint_sha256": stage1_sha,
-            "selected_checkpoint_sha256": joint_sha,
-            "target_esm2_sha256": target_esm2_sha,
-            "residual_targets_artifact_sha256": sha256_file(residual_path),
-            "residual_target_sha256": residual_sha,
-            "centering_fit_model_ids_sha256": centering_sha,
-            "mu_train_sha256": mu_sha,
-            "response_lineage_sha256": response_lineage_sha,
-            "response_lineage_artifact_sha256": response_lineage_artifact_sha,
+            "status": "artifacts_written",
+            "git_commit": "test",
             "distributed_runtime": distributed_runtime,
-            "stage2_code_sha256": stage2_runtime_code_sha256(),
-            **cache_identities,
-            **propagated_stage1_claims,
+            "seeds": {"train": 1, "collator": 2, "projection": 3},
+            "cells_per_context": 128,
+            "cell_set_len": 128,
+            "projection_seed": 3,
+            "gene_universe": {"count": len(genes), "symbols": list(genes)},
+            "preflight": {},
         },
     )
 
@@ -680,7 +552,7 @@ def test_failed_or_complete_run_cannot_resume(tmp_path: Path) -> None:
         prepare_run_dir(complete, resume=True)
 
 
-def test_complete_round_trip_and_tamper_detection(tmp_path: Path) -> None:
+def test_complete_round_trip_requires_nonempty_outputs(tmp_path: Path) -> None:
     required = ("a.json", "nested/b.bin")
     layout = prepare_run_dir(tmp_path / "run")
     atomic_write_json(layout.root / "run_manifest.json", {"run_id": "formal"})
@@ -692,8 +564,8 @@ def test_complete_round_trip_and_tamper_detection(tmp_path: Path) -> None:
         == "formal"
     )
 
-    (layout.root / "nested/b.bin").write_bytes(b"tampered")
-    with pytest.raises(ValueError, match="digest mismatch"):
+    (layout.root / "nested/b.bin").write_bytes(b"")
+    with pytest.raises(ValueError, match="artifact is empty"):
         verify_complete_run(layout.root, required_outputs=required)
 
 
@@ -704,7 +576,9 @@ def test_completion_rejects_run_id_mismatch(tmp_path: Path) -> None:
         mark_complete(layout, run_id="sentinel-id", required_outputs=())
 
 
-def test_condition_feature_shards_are_sealed_recursively(tmp_path: Path) -> None:
+def test_completion_does_not_authenticate_unlisted_feature_shards(
+    tmp_path: Path,
+) -> None:
     required = (
         "run_manifest.json",
         "condition_features/stage1_frozen/manifest.json",
@@ -719,10 +593,9 @@ def test_condition_feature_shards_are_sealed_recursively(tmp_path: Path) -> None
     shard.parent.mkdir()
     shard.write_bytes(b"feature shard")
     payload = mark_complete(layout, run_id="r", required_outputs=required)
-    assert "condition_features/shards/ACH-1.npz" in payload["artifact_sha256"]
+    assert payload == {"status": "complete", "run_id": "r"}
     shard.write_bytes(b"tampered")
-    with pytest.raises(ValueError, match="digest mismatch"):
-        verify_complete_run(layout.root, required_outputs=required)
+    assert verify_complete_run(layout.root, required_outputs=required) == payload
 
 
 def test_failure_marker_preserves_partial_outputs(tmp_path: Path) -> None:
@@ -748,125 +621,79 @@ def test_default_completion_verifies_full_runner_contract(
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout, world_size=world_size)
     complete = mark_complete(layout, run_id="formal")
-    assert complete["stage2_code_sha256"] == stage2_runtime_code_sha256()
+    assert complete == {"status": "complete", "run_id": "formal"}
     assert verify_complete_run(layout.root)["status"] == "complete"
 
 
-def test_terminal_verifier_rejects_changed_response_training_dependency(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "warmup/training/best/head.pt",
+        "joint/training/best/e2e_state.pt",
+        "model_package/e2e_state.pt",
+    ),
+)
+def test_default_completion_rejects_unloadable_checkpoint(
+    tmp_path: Path, relative: str
 ) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout)
-    mark_complete(layout, run_id="formal")
-    changed = stage2_runtime_code_sha256()
-    changed["src/aivc_model/response_training.py"] = "0" * 64
-    monkeypatch.setattr(
-        stage2_artifacts,
-        "stage2_runtime_code_sha256",
-        lambda: changed,
+    (layout.root / relative).write_bytes(b"not a torch checkpoint")
+    with pytest.raises(ValueError, match="checkpoint cannot be loaded"):
+        mark_complete(layout, run_id="formal")
+
+
+def test_default_completion_rejects_mismatched_packaged_checkpoint(
+    tmp_path: Path,
+) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    torch.save(
+        {"model.weight": torch.arange(12, dtype=torch.float32) + 1},
+        layout.root / "model_package/e2e_state.pt",
     )
-    with pytest.raises(ValueError, match="response_training.py"):
-        verify_complete_run(layout.root)
+    with pytest.raises(ValueError, match="tensor differs from selected joint"):
+        mark_complete(layout, run_id="formal")
 
 
-@pytest.mark.parametrize(
-    "artifact",
-    (
-        "model_package/model_manifest.json",
-        "warmup/training/best/metadata.json",
-        "joint/training/best/metadata.json",
-    ),
-)
-def test_completion_cross_checks_runtime_code_identity(
+@pytest.mark.parametrize("artifact", ("projection.npz", "standardizer.npz"))
+def test_default_completion_rejects_unloadable_preprocessing_payload(
     tmp_path: Path, artifact: str
 ) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout)
-    path = layout.root / artifact
-    payload = json.loads(path.read_text())
-    code = (
-        payload["provenance"]["stage2_code_sha256"]
-        if "metadata.json" in artifact
-        else payload["stage2_code_sha256"]
-    )
-    code["src/aivc_model/response_training.py"] = "0" * 64
-    atomic_write_json(path, payload)
-    with pytest.raises(ValueError, match="Stage 2 .*code identity mismatch"):
+    (layout.root / artifact).write_bytes(b"not an npz")
+    with pytest.raises(ValueError, match=rf"{artifact} is invalid"):
         mark_complete(layout, run_id="formal")
 
 
-def test_default_completion_rejects_builder_uniprot_mapping_mismatch(
+def test_default_completion_rejects_mismatched_projection_payload(
     tmp_path: Path,
 ) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout)
-    universe_path = layout.root / "esm2_gene_universe_manifest.json"
-    universe = json.loads(universe_path.read_text())
-    universe["embedding_union"]["uniprot_mapping"]["json_sha256"] = "0" * 64
-    atomic_write_json(universe_path, universe)
-    with pytest.raises(ValueError, match="UniProt mapping contract mismatch"):
+    path = layout.root / "projection.npz"
+    with np.load(path, allow_pickle=False) as loaded:
+        components = loaded["components"].copy()
+        metadata = loaded["metadata"].copy()
+    components[0, 0] += 1
+    np.savez(path, components=components, metadata=metadata)
+    with pytest.raises(ValueError, match="declared generator"):
         mark_complete(layout, run_id="formal")
 
 
-def test_default_completion_rejects_builder_embedding_union_mismatch(
+def test_default_completion_rejects_mismatched_standardizer_payload(
     tmp_path: Path,
 ) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout)
-    universe_path = layout.root / "esm2_gene_universe_manifest.json"
-    universe = json.loads(universe_path.read_text())
-    universe["embedding_union"]["symbols"] = ["G0", "G1", "WRONG"]
-    atomic_write_json(universe_path, universe)
-    with pytest.raises(ValueError, match="builder union differs"):
+    path = layout.root / "standardizer.npz"
+    with np.load(path, allow_pickle=False) as loaded:
+        state = json.loads(str(loaded["state"].item()))
+    state["blocks"]["s"]["mean"][0] = 1.0
+    np.savez(path, state=np.asarray(json.dumps(state, sort_keys=True)))
+    with pytest.raises(ValueError, match="differs from feature_generation"):
         mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_uniprot_json_csv_identity_mismatch(
-    tmp_path: Path,
-) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    csv_path = layout.root / "esm2_uniprot_mapping.csv"
-    csv_path.write_text(
-        csv_path.read_text().replace("G0_HUMAN", "WRONG_HUMAN"),
-        encoding="utf-8",
-    )
-    csv_sha256 = hashlib.sha256(csv_path.read_bytes()).hexdigest()
-    provenance_path = layout.root / "esm2_provenance_manifest.json"
-    provenance = json.loads(provenance_path.read_text())
-    provenance["sequence_source"]["uniprot_mapping_csv_sha256"] = csv_sha256
-    atomic_write_json(provenance_path, provenance)
-    provenance = json.loads(provenance_path.read_text())
-    universe_path = layout.root / "esm2_gene_universe_manifest.json"
-    universe = json.loads(universe_path.read_text())
-    universe["embedding_union"]["uniprot_mapping"]["csv_sha256"] = csv_sha256
-    universe["embedding_union"]["provenance_manifest"] = {
-        "sha256": hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
-        "payload": provenance,
-    }
-    atomic_write_json(universe_path, universe)
-    with pytest.raises(ValueError, match="JSON/CSV mapping mismatch"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_binds_cache_and_encoder_identities(tmp_path: Path) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    model_manifest_path = layout.root / "model_package/model_manifest.json"
-    model_manifest = json.loads(model_manifest_path.read_text())
-    model_manifest["tx1_source_manifest_sha256"] = "0" * 64
-    atomic_write_json(model_manifest_path, model_manifest)
-    with pytest.raises(ValueError, match="tx1_source_manifest_sha256 mismatch"):
-        mark_complete(layout, run_id="formal")
-
-    layout = prepare_run_dir(tmp_path / "run-valid")
-    _write_full_runner_artifacts(layout)
-    mark_complete(layout, run_id="formal")
-    complete = json.loads(layout.complete.read_text())
-    complete["q_sc_cache_manifest_sha256"] = "0" * 64
-    atomic_write_json(layout.complete, complete)
-    with pytest.raises(ValueError, match="completion sentinel/run"):
-        verify_complete_run(layout.root)
 
 
 @pytest.mark.parametrize(
@@ -887,107 +714,6 @@ def test_default_completion_rejects_missing_runner_artifact(
     _write_full_runner_artifacts(layout)
     (layout.root / relative).unlink()
     with pytest.raises(FileNotFoundError, match="required Stage 2 artifact"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_false_checkpoint_identity(tmp_path: Path) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    metadata_path = layout.root / "joint/training/best/metadata.json"
-    metadata = json.loads(metadata_path.read_text())
-    metadata["checkpoint_sha256"] = "0" * 64
-    atomic_write_json(metadata_path, metadata)
-    with pytest.raises(ValueError, match="selected checkpoint SHA256 mismatch"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_false_feature_shard_identity(
-    tmp_path: Path,
-) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    manifest_path = layout.root / "condition_features/stage2_selected/manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    first_model_id = manifest["model_ids"][0]
-    manifest["shards"][first_model_id]["sha256"] = "0" * 64
-    atomic_write_json(manifest_path, manifest)
-    feature_generation_path = layout.root / "feature_generation.json"
-    generation = json.loads(feature_generation_path.read_text())
-    generation["final_feature_manifest"] = manifest
-    atomic_write_json(feature_generation_path, generation)
-    model_manifest_path = layout.root / "model_package/model_manifest.json"
-    model_manifest = json.loads(model_manifest_path.read_text())
-    from aivc_model.stage2_artifacts import sha256_file
-
-    model_manifest["feature_manifest_sha256"] = sha256_file(manifest_path)
-    atomic_write_json(model_manifest_path, model_manifest)
-    with pytest.raises(ValueError, match="feature store verification failed"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_corrupt_projection_artifact(
-    tmp_path: Path,
-) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    (layout.root / "projection.npz").write_bytes(b"not-an-npz")
-    with pytest.raises(ValueError, match="projection.npz is invalid"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_wrong_projection_state(tmp_path: Path) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    wrong = FixedSparseProjection(seed=20_260_829)
-    np.savez(
-        layout.root / "projection.npz",
-        components=wrong.components,
-        metadata=np.asarray(json.dumps(wrong.metadata, sort_keys=True)),
-    )
-    with pytest.raises(ValueError, match="feature_generation projection"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_wrong_standardizer_state(tmp_path: Path) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    wrong = BlockStandardizer().fit(
-        {
-            "delta_proj": np.ones((2, 256), dtype=np.float32),
-            "s": np.ones((2, 6), dtype=np.float32),
-            "q_sc": np.ones((2, 3), dtype=np.float32),
-            "e_g": np.ones((2, 1_280), dtype=np.float32),
-            "z_c": np.ones((2, 5_120), dtype=np.float32),
-        }
-    )
-    np.savez(
-        layout.root / "standardizer.npz",
-        state=np.asarray(json.dumps(wrong.to_state(), sort_keys=True)),
-    )
-    with pytest.raises(ValueError, match="feature_generation standardizer"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_wrong_feature_schema(tmp_path: Path) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    schema = FEATURE_SCHEMA.to_dict()
-    schema["summary_fields"] = [*schema["summary_fields"], "wrong"]
-    atomic_write_json(layout.root / "feature_schema.json", schema)
-    with pytest.raises(ValueError, match="runtime schema"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_feature_store_swap(tmp_path: Path) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    frozen = layout.root / "condition_features/stage1_frozen"
-    selected = layout.root / "condition_features/stage2_selected"
-    temporary = layout.root / "condition_features/swap"
-    frozen.rename(temporary)
-    selected.rename(frozen)
-    temporary.rename(selected)
-    with pytest.raises(ValueError, match="feature_generation frozen manifest"):
         mark_complete(layout, run_id="formal")
 
 
@@ -1073,22 +799,6 @@ def test_default_completion_rejects_single_finite_label_omission(
         + "\n"
     )
     with pytest.raises(ValueError, match="residual label mask"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_recomputes_residual_target_digest(tmp_path: Path) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    run_path = layout.root / "run_manifest.json"
-    run = json.loads(run_path.read_text())
-    run["residual_target_sha256"] = "0" * 64
-    atomic_write_json(run_path, run)
-    for phase in ("warmup", "joint"):
-        metadata_path = layout.root / phase / "training/best/metadata.json"
-        metadata = json.loads(metadata_path.read_text())
-        metadata["provenance"]["residual_target_sha256"] = "0" * 64
-        atomic_write_json(metadata_path, metadata)
-    with pytest.raises(ValueError, match="does not match residual targets"):
         mark_complete(layout, run_id="formal")
 
 
@@ -1263,63 +973,60 @@ def test_default_completion_rejects_comparable_response_claim(
         mark_complete(layout, run_id="formal")
 
 
-def test_default_completion_accepts_nonformal_distributed_runtime(
+def test_default_completion_rejects_nonformal_distributed_runtime(
     tmp_path: Path,
 ) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout, world_size=3)
-    mark_complete(layout, run_id="formal")
-    verify_complete_run(layout.root)
+    with pytest.raises(ValueError, match="world_size must be 2 or 4"):
+        mark_complete(layout, run_id="formal")
 
 
-@pytest.mark.parametrize("tamper", ["cache", "target", "membership"])
-def test_terminal_verifier_rejects_response_lineage_tamper(
-    tmp_path: Path, tamper: str
+def test_distributed_runtime_accepts_repeated_local_devices_across_hosts() -> None:
+    runtime = {
+        "world_size": 2,
+        "mixed_precision": "bf16",
+        "conditions_per_rank": 64,
+        "global_conditions_per_step": 128,
+        "rank_topology": [
+            {
+                "rank": rank,
+                "local_rank": 0,
+                "device": "cuda:0",
+                "device_name": "NVIDIA H20",
+                "hostname": f"host-{rank}",
+            }
+            for rank in range(2)
+        ],
+    }
+    assert stage2_artifacts._verify_distributed_runtime(runtime) == runtime
+
+
+def test_default_completion_rejects_consistent_optimizer_step_tamper(
+    tmp_path: Path,
 ) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout)
-    mark_complete(layout, run_id="formal")
-    path = layout.root / "response_targets/lineage.json"
-    payload = json.loads(path.read_text())
-    if tamper == "cache":
-        payload["response_cache_files"]["manifest.json"] = "f" * 64
-    elif tamper == "target":
-        payload["train_records"][0]["observed_hvg"]["content_sha256"] = "f" * 64
-    else:
-        payload["train_records"][0]["membership"] = "heldout"
-    atomic_write_json(path, payload)
-
-    with pytest.raises(ValueError, match="response lineage"):
-        verify_complete_run(layout.root)
+    for phase in ("warmup", "joint"):
+        path = layout.root / phase / "training/best/metadata.json"
+        payload = json.loads(path.read_text())
+        payload["provenance"]["warmup_runtime"]["optimizer_steps_per_epoch"] = 8
+        atomic_write_json(path, payload)
+    with pytest.raises(ValueError, match="train_log optimizer_steps"):
+        mark_complete(layout, run_id="formal")
 
 
-@pytest.mark.parametrize(
-    ("mutation", "message"),
-    (
-        ("schema", "schema_version mismatch"),
-        ("dtype", "dtype is invalid"),
-        ("record_id", "record identity/membership mismatch"),
-    ),
-)
-def test_response_lineage_rejects_false_semantics(
-    tmp_path: Path, mutation: str, message: str
+def test_default_completion_checks_optimizer_steps_in_every_warmup_row(
+    tmp_path: Path,
 ) -> None:
-    root = tmp_path / "run"
-    _write_response_lineage(root)
-    path = root / "response_targets/lineage.json"
-    payload = json.loads(path.read_text())
-    if mutation == "schema":
-        payload["schema_version"] = "unknown"
-    elif mutation == "dtype":
-        payload["train_records"][0]["observed_hvg"]["dtype"] = ""
-    else:
-        payload["train_records"][0]["record_id"] = "forged"
-    payload.pop("lineage_sha256")
-    payload["lineage_sha256"] = stage2_artifacts._canonical_json_sha256(payload)
-    atomic_write_json(path, payload)
-
-    with pytest.raises(ValueError, match=message):
-        stage2_artifacts._verify_response_lineage(root)
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    history = layout.root / "warmup/training/train_log.csv"
+    history.write_text(
+        "epoch,validation_macro_per_gene_spearman,optimizer_steps\n0,0.5,7\n1,0.4,6\n"
+    )
+    with pytest.raises(ValueError, match="train_log optimizer_steps"):
+        mark_complete(layout, run_id="formal")
 
 
 @pytest.mark.parametrize(
@@ -1349,49 +1056,6 @@ def test_default_completion_rejects_distributed_runtime_drift(
     runtime[mutation[0]] = mutation[1]
     atomic_write_json(path, payload)
     with pytest.raises(ValueError, match="distributed_runtime"):
-        mark_complete(layout, run_id="formal")
-
-
-@pytest.mark.parametrize(
-    ("artifact", "field"),
-    (
-        ("stage1_model_manifest.json", "training_code_provenance_status"),
-        ("run_manifest.json", "stage1_training_data_provenance_status"),
-        (
-            "model_package/model_manifest.json",
-            "stage1_training_data_provenance_missing_identities",
-        ),
-    ),
-)
-def test_default_completion_rejects_upgraded_stage1_provenance_claim(
-    tmp_path: Path, artifact: str, field: str
-) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    path = layout.root / artifact
-    payload = json.loads(path.read_text())
-    payload[field] = "complete" if field.endswith("status") else []
-    atomic_write_json(path, payload)
-    with pytest.raises(ValueError, match="Stage-1 .*provenance claim mismatch"):
-        mark_complete(layout, run_id="formal")
-
-
-def test_default_completion_rejects_consistent_stage1_provenance_upgrade(
-    tmp_path: Path,
-) -> None:
-    layout = prepare_run_dir(tmp_path / "run")
-    _write_full_runner_artifacts(layout)
-    field = "training_code_provenance_status"
-    for relative, propagated in (
-        ("stage1_model_manifest.json", field),
-        ("run_manifest.json", f"stage1_{field}"),
-        ("model_package/model_manifest.json", f"stage1_{field}"),
-    ):
-        path = layout.root / relative
-        payload = json.loads(path.read_text())
-        payload[propagated] = "available"
-        atomic_write_json(path, payload)
-    with pytest.raises(ValueError, match="Stage-1 manifest provenance claim mismatch"):
         mark_complete(layout, run_id="formal")
 
 

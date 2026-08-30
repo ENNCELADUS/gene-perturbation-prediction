@@ -5,6 +5,7 @@ import hashlib
 import math
 from dataclasses import replace
 import gc
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 import weakref
@@ -55,8 +56,6 @@ def _provenance() -> loops.CheckpointProvenance:
     split_bytes = split_path.read_bytes()
     split = json.loads(split_bytes)
     return loops.CheckpointProvenance(
-        config_sha256="a" * 64,
-        stage2_code_sha256={"runner.py": "9" * 64},
         distributed_runtime={
             "world_size": 4,
             "mixed_precision": "bf16",
@@ -73,9 +72,13 @@ def _provenance() -> loops.CheckpointProvenance:
                 for rank in range(4)
             ],
         },
+        warmup_runtime={
+            "world_size": 4,
+            "conditions_per_rank": 256,
+            "global_conditions_per_step": 1024,
+            "optimizer_steps_per_epoch": 3,
+        },
         lambda_calibration_report={"lambda_dep": 0.5, "raw_ratios": [0.5]},
-        feature_sha256={"standardizer.npz": "b" * 64},
-        checkpoint_sha256={"stage1": "c" * 64},
         split_sha256=hashlib.sha256(split_bytes).hexdigest(),
         gene_effect_sha256="e" * 64,
         mu_train_sha256="f" * 64,
@@ -252,7 +255,7 @@ def _joint_step(model, _dependency, response, _optimizer, **_kwargs):
     with torch.no_grad():
         model.head.weight.add_(1.0)
     response.seen += 1
-    return JointStepMetrics(2.0, 1.0, 1.0, 0.5, 0.5, 0.5)
+    return JointStepMetrics(2.0, 1.0, 1.0, 0.5, 0.5, 0.5, 3, 1)
 
 
 class _Response:
@@ -260,6 +263,11 @@ class _Response:
         self.seen = 0
         self.batch_weight = batch_weight
 
+    def validate(self) -> None:
+        pass
+
+
+class _WarmupBatch:
     def validate(self) -> None:
         pass
 
@@ -276,7 +284,7 @@ def test_warmup_restores_earliest_best_and_stops_at_patience(tmp_path: Path) -> 
     model = _LoopModel(frozen=True)
     outcome = loops.train_frozen_warmup(
         model,  # type: ignore[arg-type]
-        lambda _epoch: (object(),),  # type: ignore[return-value]
+        lambda _epoch: (_WarmupBatch(),),  # type: ignore[return-value]
         _validation(),
         tmp_path / "warmup",
         _config(),  # type: ignore[arg-type]
@@ -286,10 +294,9 @@ def test_warmup_restores_earliest_best_and_stops_at_patience(tmp_path: Path) -> 
     assert outcome["best_epoch"] == 1
     assert outcome["stopped_epoch"] == 3
     assert outcome["stopped_early"] is True
+    assert outcome["epochs"][0]["optimizer_steps"] == 1
     assert model.head.weight.item() == pytest.approx(2.0)
-    saved = torch.load(
-        tmp_path / "warmup/best/head.pt", weights_only=True
-    )["weight"]
+    saved = torch.load(tmp_path / "warmup/best/head.pt", weights_only=True)["weight"]
     assert torch.equal(model.head.weight, saved)
 
 
@@ -299,7 +306,7 @@ def test_warmup_refuses_nonfinite_metric(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="finite"):
         loops.train_frozen_warmup(
             model,  # type: ignore[arg-type]
-            lambda _epoch: (object(),),  # type: ignore[return-value]
+            lambda _epoch: (_WarmupBatch(),),  # type: ignore[return-value]
             _validation(),
             tmp_path / "warmup",
             _config(),  # type: ignore[arg-type]
@@ -340,7 +347,7 @@ def test_loop_accepts_precreated_empty_layout_directory(tmp_path: Path) -> None:
     output.mkdir()
     loops.train_frozen_warmup(
         _LoopModel(frozen=True),  # type: ignore[arg-type]
-        lambda _epoch: (object(),),  # type: ignore[return-value]
+        lambda _epoch: (_WarmupBatch(),),  # type: ignore[return-value]
         _validation(),
         output,
         _config(warmup_epochs=1),  # type: ignore[arg-type]
@@ -381,9 +388,9 @@ def test_joint_cycles_response_batches_and_restores_best(tmp_path: Path) -> None
     assert response_factory_calls == 8
     assert len(generated_responses) == 12
     assert sum(response.seen for response in generated_responses) == 12
-    saved = torch.load(
-        tmp_path / "joint/best/e2e_state.pt", weights_only=True
-    )["head.weight"]
+    saved = torch.load(tmp_path / "joint/best/e2e_state.pt", weights_only=True)[
+        "head.weight"
+    ]
     assert torch.equal(model.head.weight, saved)
 
 
@@ -413,6 +420,142 @@ class _PreparedWrapper(nn.Module):
         return self.module(*args, **kwargs)
 
 
+class _GatherTrackingAccelerator:
+    num_processes = 2
+    is_main_process = True
+    device = torch.device("cpu")
+
+    def __init__(self, responses: tuple[torch.Tensor, ...]) -> None:
+        self.responses = list(responses)
+        self.gathered_locals: list[torch.Tensor] = []
+
+    def gather(self, value):
+        self.gathered_locals.append(value.detach().cpu().clone())
+        if not self.responses:
+            raise AssertionError("unexpected post-action gather")
+        return self.responses.pop(0)
+
+    def prepare(self, value):
+        return value
+
+    def unwrap_model(self, value):
+        return getattr(value, "module", value)
+
+    def wait_for_everyone(self) -> None:
+        pass
+
+
+class _ProgressAccelerator:
+    num_processes = 2
+    is_main_process = True
+    device = torch.device("cpu")
+
+
+def test_progress_is_atomic_global_and_excludes_padding(
+    tmp_path: Path, monkeypatch
+) -> None:
+    ticks = iter((10.0, 12.0, 14.0))
+    writer = loops.TrainingProgressWriter(
+        tmp_path / ".warmup_progress.json",
+        {
+            "world_size": 2,
+            "conditions_per_rank": 256,
+            "global_conditions_per_step": 512,
+            "optimizer_steps_per_epoch": 3,
+        },
+        min_interval_seconds=60.0,
+        monotonic=lambda: next(ticks),
+        utcnow=lambda: datetime(2026, 8, 30, tzinfo=timezone.utc),
+    )
+    accelerator = _ProgressAccelerator()
+    synchronized_actions: list[str] = []
+
+    def synchronized(_accelerator, label, action):
+        synchronized_actions.append(label)
+        action()
+
+    monkeypatch.setattr(loops, "run_rank_zero_or_raise", synchronized)
+    writer.update(
+        phase="training",
+        epoch=0,
+        step=1,
+        global_real_pairs_increment=10,
+        accelerator=accelerator,  # type: ignore[arg-type]
+        force=True,
+    )
+    writer.update(
+        phase="validation",
+        epoch=0,
+        step=2,
+        global_real_pairs_increment=0,
+        accelerator=accelerator,  # type: ignore[arg-type]
+        force=True,
+    )
+    payload = json.loads((tmp_path / ".warmup_progress.json").read_text())
+    assert payload == {
+        "schema_version": 1,
+        "phase": "validation",
+        "epoch": 0,
+        "step": 2,
+        "global_real_pairs": 10,
+        "elapsed_seconds": 4.0,
+        "global_real_pairs_per_second": 2.5,
+        "heartbeat_utc": "2026-08-30T00:00:00+00:00",
+        "world_size": 2,
+        "conditions_per_rank": 256,
+        "global_conditions_per_step": 512,
+        "optimizer_steps_per_epoch": 3,
+    }
+    assert not list(tmp_path.glob("*.tmp"))
+    assert synchronized_actions == ["write training progress"] * 2
+
+
+def test_progress_sync_is_not_a_per_step_collective(
+    tmp_path: Path, monkeypatch
+) -> None:
+    ticks = iter((10.0, 12.0))
+    writer = loops.TrainingProgressWriter(
+        tmp_path / ".warmup_progress.json",
+        {
+            "world_size": 2,
+            "conditions_per_rank": 256,
+            "global_conditions_per_step": 512,
+            "optimizer_steps_per_epoch": 2,
+        },
+        min_interval_seconds=0.0,
+        sync_interval_steps=2,
+        monotonic=lambda: next(ticks),
+        utcnow=lambda: datetime(2026, 8, 30, tzinfo=timezone.utc),
+    )
+    accelerator = _ProgressAccelerator()
+    synchronized_actions: list[str] = []
+
+    def synchronized(_accelerator, label, action):
+        synchronized_actions.append(label)
+        action()
+
+    monkeypatch.setattr(loops, "run_rank_zero_or_raise", synchronized)
+    writer.update(
+        phase="training",
+        epoch=0,
+        step=1,
+        global_real_pairs_increment=10,
+        accelerator=accelerator,  # type: ignore[arg-type]
+    )
+    assert synchronized_actions == []
+    writer.update(
+        phase="training",
+        epoch=0,
+        step=2,
+        global_real_pairs_increment=12,
+        accelerator=accelerator,  # type: ignore[arg-type]
+    )
+
+    assert synchronized_actions == ["write training progress"]
+    payload = json.loads((tmp_path / ".warmup_progress.json").read_text())
+    assert payload["global_real_pairs"] == 22
+
+
 def test_rank_validation_metric_must_be_identical() -> None:
     accelerator = _FakeAccelerator(torch.tensor([0.1, 0.2], dtype=torch.float64))
     with pytest.raises(RuntimeError, match="differs across ranks"):
@@ -424,9 +567,7 @@ def test_validation_evaluator_recomputes_targets_and_exact_gene_coverage() -> No
     batch = _precomputed_validation_batch()
     tampered = replace(
         batch,
-        supervision=replace(
-            batch.supervision, target=batch.supervision.target + 100.0
-        ),
+        supervision=replace(batch.supervision, target=batch.supervision.target + 100.0),
     )
     evaluator = loops.ResidualValidationMetric(
         batch_factory=lambda: (tampered,),
@@ -610,14 +751,200 @@ def test_rank_step_counts_must_be_equal(tmp_path: Path, monkeypatch) -> None:
         )
 
 
+def test_warmup_step_failure_stops_before_progress_or_next_readiness(
+    tmp_path: Path, monkeypatch
+) -> None:
+    events: list[str] = []
+    accelerator = _GatherTrackingAccelerator((torch.tensor([1, 1], dtype=torch.int64),))
+    monkeypatch.setattr(
+        loops,
+        "run_rank_zero_or_raise",
+        lambda _accelerator, _label, action: action(),
+    )
+
+    def batch_factory(_epoch):
+        events.append("batch-1")
+        yield _WarmupBatch()
+        events.append("batch-2")
+        yield _WarmupBatch()
+
+    def failing_step(*_args, **_kwargs):
+        events.append("step")
+        raise ValueError("rank-local warmup failure")
+
+    model = _LoopModel(frozen=True)
+    with pytest.raises(ValueError, match="rank-local warmup failure"):
+        loops.train_frozen_warmup(
+            model,  # type: ignore[arg-type]
+            batch_factory,  # type: ignore[arg-type]
+            _validation(),
+            tmp_path / "warmup",
+            _config(warmup_epochs=1),  # type: ignore[arg-type]
+            _provenance(),
+            accelerator=accelerator,  # type: ignore[arg-type]
+            forward_head=_PreparedWrapper(model.head),
+            progress=SimpleNamespace(
+                update=lambda **_kwargs: events.append("progress")
+            ),
+            step_fn=failing_step,
+        )
+
+    assert events == ["batch-1", "step"]
+    assert [value.tolist() for value in accelerator.gathered_locals] == [[1]]
+    assert accelerator.responses == []
+
+
+def test_joint_step_failure_stops_before_progress_or_next_readiness(
+    tmp_path: Path, monkeypatch
+) -> None:
+    events: list[str] = []
+    accelerator = _GatherTrackingAccelerator((torch.tensor([1, 1], dtype=torch.int64),))
+    monkeypatch.setattr(
+        loops,
+        "run_rank_zero_or_raise",
+        lambda _accelerator, _label, action: action(),
+    )
+
+    def dependency_factory(_epoch):
+        events.append("dependency-1")
+        yield _Dependency()
+        events.append("dependency-2")
+        yield _Dependency()
+
+    def response_factory(_epoch):
+        events.append("response-1")
+        yield _Response()
+        events.append("response-2")
+        yield _Response()
+
+    def failing_step(*_args, **_kwargs):
+        events.append("step")
+        raise ValueError("rank-local joint failure")
+
+    model = _LoopModel(frozen=False)
+    with pytest.raises(ValueError, match="rank-local joint failure"):
+        loops.train_joint(
+            model,  # type: ignore[arg-type]
+            dependency_factory,  # type: ignore[arg-type]
+            response_factory,  # type: ignore[arg-type]
+            _validation(online=True),
+            tmp_path / "joint",
+            _config(joint_epochs=1),  # type: ignore[arg-type]
+            _provenance(),
+            response_loss_fn=object(),  # type: ignore[arg-type]
+            lambda_dep=0.5,
+            accelerator=accelerator,  # type: ignore[arg-type]
+            forward_model=_PreparedWrapper(model),
+            progress=SimpleNamespace(
+                update=lambda **_kwargs: events.append("progress")
+            ),
+            step_fn=failing_step,
+        )
+
+    assert events == ["dependency-1", "response-1", "step"]
+    assert [value.tolist() for value in accelerator.gathered_locals] == [[1]]
+    assert accelerator.responses == []
+
+
+def test_successful_steps_do_not_add_post_action_gathers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        loops,
+        "run_rank_zero_or_raise",
+        lambda _accelerator, _label, action: action(),
+    )
+    monkeypatch.setattr(loops, "_validation_value", lambda *_args: 1.0)
+    monkeypatch.setattr(loops, "_write_history", lambda *_args: None)
+    monkeypatch.setattr(loops, "_save_best", lambda *_args: None)
+    monkeypatch.setattr(loops, "_restore_best", lambda *_args: None)
+
+    warmup_events: list[str] = []
+    warmup_accelerator = _GatherTrackingAccelerator(
+        (
+            torch.tensor([1, 1], dtype=torch.int64),
+            torch.tensor([0, 0], dtype=torch.int64),
+        )
+    )
+
+    def warmup_factory(_epoch):
+        warmup_events.append("batch")
+        yield _WarmupBatch()
+        warmup_events.append("factory-end")
+
+    def successful_warmup_step(*args, **kwargs):
+        warmup_events.append("step")
+        return _warmup_step(*args, **kwargs)
+
+    warmup_model = _LoopModel(frozen=True)
+    loops.train_frozen_warmup(
+        warmup_model,  # type: ignore[arg-type]
+        warmup_factory,  # type: ignore[arg-type]
+        _validation(),
+        tmp_path / "warmup-success",
+        _config(warmup_epochs=1),  # type: ignore[arg-type]
+        _provenance(),
+        accelerator=warmup_accelerator,  # type: ignore[arg-type]
+        forward_head=_PreparedWrapper(warmup_model.head),
+        step_fn=successful_warmup_step,
+    )
+    assert warmup_events == ["batch", "step", "factory-end"]
+    assert [value.tolist() for value in warmup_accelerator.gathered_locals] == [
+        [1],
+        [0],
+    ]
+    assert warmup_accelerator.responses == []
+
+    joint_events: list[str] = []
+    joint_accelerator = _GatherTrackingAccelerator(
+        (
+            torch.tensor([1, 1], dtype=torch.int64),
+            torch.tensor([0, 0], dtype=torch.int64),
+        )
+    )
+
+    def dependency_factory(_epoch):
+        joint_events.append("dependency")
+        yield _Dependency()
+        joint_events.append("factory-end")
+
+    def response_factory(_epoch):
+        joint_events.append("response")
+        yield _Response()
+
+    def successful_joint_step(*args, **kwargs):
+        joint_events.append("step")
+        return _joint_step(*args, **kwargs)
+
+    joint_model = _LoopModel(frozen=False)
+    loops.train_joint(
+        joint_model,  # type: ignore[arg-type]
+        dependency_factory,  # type: ignore[arg-type]
+        response_factory,  # type: ignore[arg-type]
+        _validation(online=True),
+        tmp_path / "joint-success",
+        _config(joint_epochs=1),  # type: ignore[arg-type]
+        _provenance(),
+        response_loss_fn=object(),  # type: ignore[arg-type]
+        lambda_dep=0.5,
+        accelerator=joint_accelerator,  # type: ignore[arg-type]
+        forward_model=_PreparedWrapper(joint_model),
+        step_fn=successful_joint_step,
+    )
+    assert joint_events == ["dependency", "response", "step", "factory-end"]
+    assert [value.tolist() for value in joint_accelerator.gathered_locals] == [
+        [1],
+        [0],
+    ]
+    assert joint_accelerator.responses == []
+
+
 def test_rank_batch_validation_failure_enters_preflight_collective() -> None:
     class _Invalid:
         def validate(self):
             raise ValueError("bad shard")
 
-    accelerator = _FakeAccelerator(
-        torch.tensor([2, 1], dtype=torch.int64)
-    )
+    accelerator = _FakeAccelerator(torch.tensor([2, 1], dtype=torch.int64))
     with pytest.raises(RuntimeError, match="factory failed"):
         tuple(
             loops._stream_joint_batch_pairs(
@@ -741,7 +1068,7 @@ def test_checkpoint_and_metadata_are_atomic(tmp_path: Path) -> None:
     model = _LoopModel(frozen=True)
     loops.train_frozen_warmup(
         model,  # type: ignore[arg-type]
-        lambda _epoch: (object(),),  # type: ignore[return-value]
+        lambda _epoch: (_WarmupBatch(),),  # type: ignore[return-value]
         _validation(),
         tmp_path / "warmup",
         _config(warmup_epochs=1),  # type: ignore[arg-type]
@@ -751,10 +1078,7 @@ def test_checkpoint_and_metadata_are_atomic(tmp_path: Path) -> None:
     best = tmp_path / "warmup/best"
     metadata = json.loads((best / "metadata.json").read_text())
     assert metadata["selection_direction"] == "maximize"
-    assert metadata["provenance"]["config_sha256"] == "a" * 64
     assert metadata["provenance"]["lambda_calibration_report"]["lambda_dep"] == 0.5
-    assert len(metadata["checkpoint_sha256"]) == 64
-    checkpoint_bytes = (best / "head.pt").read_bytes()
-    assert metadata["checkpoint_sha256"] == hashlib.sha256(checkpoint_bytes).hexdigest()
+    assert (best / "head.pt").is_file()
     assert best.is_symlink()
     assert not list((tmp_path / "warmup").rglob("*.tmp"))

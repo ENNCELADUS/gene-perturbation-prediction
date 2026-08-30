@@ -678,6 +678,269 @@ class LoadedFeatureBatch:
     features: PrecomputedFeatureBatch
 
 
+class GeneEffectFrozenFeatureCache:
+    """Device-resident feature tensors for an explicit Stage-2 context scope."""
+
+    def __init__(
+        self,
+        *,
+        gene_symbols: tuple[str, ...],
+        model_ids: tuple[str, ...],
+        selected_model_ids: tuple[str, ...],
+        tensors: dict[str, torch.Tensor],
+    ) -> None:
+        self.gene_symbols = gene_symbols
+        self.model_ids = model_ids
+        self.selected_model_ids = selected_model_ids
+        self._context_positions = {
+            self.model_ids.index(model_id): position
+            for position, model_id in enumerate(selected_model_ids)
+        }
+        self._tensors = tensors
+        self._closed = False
+
+    @property
+    def tensor_nbytes(self) -> int:
+        return sum(
+            tensor.numel() * tensor.element_size() for tensor in self._tensors.values()
+        )
+
+    @classmethod
+    def load(
+        cls,
+        root: Path,
+        *,
+        selected_model_ids: Sequence[str],
+        expected_gene_symbols: Sequence[str],
+        expected_model_ids: Sequence[str],
+        expected_stage: str,
+        device: torch.device | str,
+    ) -> GeneEffectFrozenFeatureCache:
+        """Load exactly ``selected_model_ids`` into device-resident tensors."""
+        root = Path(root)
+        genes = _ordered_unique(expected_gene_symbols, "expected_gene_symbols")
+        model_ids = _ordered_unique(expected_model_ids, "expected_model_ids")
+        selected = _ordered_unique(selected_model_ids, "selected_model_ids")
+        unknown = [model_id for model_id in selected if model_id not in model_ids]
+        if unknown:
+            raise ValueError(
+                f"selected_model_ids are outside expected_model_ids: {unknown}"
+            )
+        if expected_stage not in VALID_STAGES:
+            raise ValueError(f"expected_stage must be one of {sorted(VALID_STAGES)}")
+
+        try:
+            manifest = json.loads((root / _MANIFEST_FILE).read_text())
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"feature store manifest is unreadable: {exc}") from exc
+        if not isinstance(manifest, dict):
+            raise ValueError("feature store manifest root must be an object")
+        manifest_models = _ordered_unique(
+            manifest.get("model_ids", ()), "manifest model_ids"
+        )
+        manifest_genes = _ordered_unique(
+            manifest.get("gene_symbols", ()), "manifest gene_symbols"
+        )
+        identity_checks = {
+            "schema_version": (manifest.get("schema_version"), SCHEMA_VERSION),
+            "stage": (manifest.get("stage"), expected_stage),
+            "model order": (manifest_models, model_ids),
+            "gene order": (manifest_genes, genes),
+        }
+        for name, (observed, expected) in identity_checks.items():
+            if observed != expected:
+                raise ValueError(
+                    f"feature store {name} mismatch: expected {expected!r}, "
+                    f"got {observed!r}"
+                )
+        shard_meta = manifest.get("shards")
+        if not isinstance(shard_meta, dict) or set(shard_meta) != set(model_ids):
+            raise ValueError("feature store shard metadata is inconsistent")
+
+        target = torch.device(device)
+        with np.load(root / _GENE_FILE, allow_pickle=False) as loaded:
+            if set(loaded.files) != {"gene_symbols", "e_g", "source_sha256"}:
+                raise ValueError("genes.npz keys mismatch")
+            stored_genes = loaded["gene_symbols"]
+            if (
+                stored_genes.ndim != 1
+                or stored_genes.dtype.kind not in {"U", "S"}
+                or tuple(stored_genes.astype(str).tolist()) != genes
+            ):
+                raise ValueError("genes.npz gene order mismatch")
+            e_g = _float32("e_g", loaded["e_g"], (len(genes), GENE_WIDTH)).copy()
+        with np.load(root / _CONTEXT_FILE, allow_pickle=False) as loaded:
+            if set(loaded.files) != {"model_ids", "z_c"}:
+                raise ValueError("contexts.npz keys mismatch")
+            stored_models = loaded["model_ids"]
+            if (
+                stored_models.ndim != 1
+                or stored_models.dtype.kind not in {"U", "S"}
+                or tuple(stored_models.astype(str).tolist()) != model_ids
+            ):
+                raise ValueError("contexts.npz model order mismatch")
+            z_c = _float32("z_c", loaded["z_c"], (len(model_ids), CONTEXT_WIDTH)).copy()
+
+        context_count = len(selected)
+        gene_count = len(genes)
+        tensors = {
+            "delta_proj": torch.empty(
+                (context_count, gene_count, DELTA_PROJ_WIDTH),
+                dtype=torch.float32,
+                device=target,
+            ),
+            "s": torch.empty(
+                (context_count, gene_count, SUMMARY_WIDTH),
+                dtype=torch.float32,
+                device=target,
+            ),
+            "q_sc": torch.empty(
+                (context_count, gene_count, Q_SC_WIDTH),
+                dtype=torch.float32,
+                device=target,
+            ),
+            "q_sc_mask": torch.empty(
+                (context_count, gene_count), dtype=torch.bool, device=target
+            ),
+            "hvg_panel_mask": torch.empty(
+                (context_count, gene_count), dtype=torch.bool, device=target
+            ),
+            "own_gene_shift_mask": torch.empty(
+                (context_count, gene_count), dtype=torch.bool, device=target
+            ),
+            "e_g": torch.as_tensor(e_g, dtype=torch.float32, device=target),
+            "z_c": torch.as_tensor(
+                z_c[[model_ids.index(model_id) for model_id in selected]],
+                dtype=torch.float32,
+                device=target,
+            ),
+        }
+        checkpoint_hvg_mask: np.ndarray | None = None
+        for position, model_id in enumerate(selected):
+            entry = shard_meta[model_id]
+            expected_path = f"{_SHARD_DIR}/{model_id}.npz"
+            if not isinstance(entry, dict) or entry.get("path") != expected_path:
+                raise ValueError(f"{model_id}: manifest shard path mismatch")
+            path = root / expected_path
+            with np.load(path, allow_pickle=False) as loaded:
+                if set(loaded.files) != _SHARD_ARRAYS:
+                    raise ValueError(f"{model_id}: shard keys mismatch")
+                if _scalar_text(loaded, "model_id") != model_id:
+                    raise ValueError(f"{model_id}: embedded model_id mismatch")
+                shard_genes = loaded["gene_symbols"]
+                if (
+                    shard_genes.ndim != 1
+                    or shard_genes.dtype.kind not in {"U", "S"}
+                    or tuple(shard_genes.astype(str).tolist()) != genes
+                ):
+                    raise ValueError(f"{model_id}: gene order mismatch")
+                arrays = {
+                    "delta_proj": _float32(
+                        "delta_proj",
+                        loaded["delta_proj"],
+                        (gene_count, DELTA_PROJ_WIDTH),
+                    ),
+                    "s": _float32("s", loaded["s"], (gene_count, SUMMARY_WIDTH)),
+                    "q_sc": _float32("q_sc", loaded["q_sc"], (gene_count, Q_SC_WIDTH)),
+                    "q_sc_mask": _boolean("q_sc_mask", loaded["q_sc_mask"], gene_count),
+                    "hvg_panel_mask": _boolean(
+                        "hvg_panel_mask", loaded["hvg_panel_mask"], gene_count
+                    ),
+                    "own_gene_shift_mask": _boolean(
+                        "own_gene_shift_mask",
+                        loaded["own_gene_shift_mask"],
+                        gene_count,
+                    ),
+                }
+                if np.any(arrays["own_gene_shift_mask"] & ~arrays["hvg_panel_mask"]):
+                    raise ValueError(
+                        f"{model_id}: own_gene_shift_mask requires hvg_panel_mask"
+                    )
+                if checkpoint_hvg_mask is None:
+                    checkpoint_hvg_mask = arrays["hvg_panel_mask"].copy()
+                elif not np.array_equal(checkpoint_hvg_mask, arrays["hvg_panel_mask"]):
+                    raise ValueError(
+                        f"{model_id}: hvg_panel_mask differs across selected contexts"
+                    )
+                for name, array in arrays.items():
+                    tensors[name][position].copy_(torch.as_tensor(array, device=target))
+            del arrays
+
+        return cls(
+            gene_symbols=genes,
+            model_ids=model_ids,
+            selected_model_ids=selected,
+            tensors=tensors,
+        )
+
+    def gather(self, pairs: Sequence[tuple[int, int]]) -> PrecomputedFeatureBatch:
+        """Gather arbitrary global-index pairs without changing their order."""
+        if self._closed:
+            raise RuntimeError("frozen feature cache is closed")
+        if isinstance(pairs, (str, bytes)) or not isinstance(pairs, Sequence):
+            raise ValueError("pairs must be a sequence of (gene, context) indices")
+        gene_indices: list[int] = []
+        context_positions: list[int] = []
+        gene_symbols: list[str] = []
+        model_ids: list[str] = []
+        for pair in pairs:
+            if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+                raise ValueError("each pair must contain exactly two indices")
+            gene, context = pair
+            if (
+                isinstance(gene, bool)
+                or isinstance(context, bool)
+                or not isinstance(gene, (int, np.integer))
+                or not isinstance(context, (int, np.integer))
+            ):
+                raise ValueError("pair indices must be integers")
+            gene = int(gene)
+            context = int(context)
+            if gene < 0 or gene >= len(self.gene_symbols):
+                raise IndexError(f"gene index is out of range: {gene}")
+            if context < 0 or context >= len(self.model_ids):
+                raise IndexError(f"context index is out of range: {context}")
+            if context not in self._context_positions:
+                raise ValueError(
+                    f"context is outside the frozen cache scope: "
+                    f"{self.model_ids[context]}"
+                )
+            gene_indices.append(gene)
+            context_positions.append(self._context_positions[context])
+            gene_symbols.append(self.gene_symbols[gene])
+            model_ids.append(self.model_ids[context])
+        device = self._tensors["e_g"].device
+        genes = torch.tensor(gene_indices, dtype=torch.long, device=device)
+        contexts = torch.tensor(context_positions, dtype=torch.long, device=device)
+        features = PrecomputedFeatureBatch(
+            delta_proj=self._tensors["delta_proj"][contexts, genes],
+            s=self._tensors["s"][contexts, genes],
+            q_sc=self._tensors["q_sc"][contexts, genes],
+            e_g=self._tensors["e_g"][genes],
+            z_c=self._tensors["z_c"][contexts],
+            q_sc_mask=self._tensors["q_sc_mask"][contexts, genes],
+            hvg_panel_mask=self._tensors["hvg_panel_mask"][contexts, genes],
+            own_gene_shift_mask=self._tensors["own_gene_shift_mask"][contexts, genes],
+            gene_symbols=tuple(gene_symbols),
+            model_ids=tuple(model_ids),
+        )
+        features.validate()
+        return features
+
+    def close(self) -> None:
+        """Release all cache-owned tensor references."""
+        self._tensors.clear()
+        self._closed = True
+
+    def __enter__(self) -> GeneEffectFrozenFeatureCache:
+        if self._closed:
+            raise RuntimeError("frozen feature cache is closed")
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+
 def load_geneeffect_feature_batch(
     root: Path,
     model_id: str,
