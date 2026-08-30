@@ -387,12 +387,10 @@ def _authenticated_target_esm2_sha256(state: Stage2Preflight) -> str:
     if not isinstance(esm2_report, Mapping):
         raise ValueError("preflight report is missing ESM2 authentication")
     expected = esm2_report.get("embedding_sha256")
-    if not isinstance(expected, str) or len(expected) != 64:
-        raise ValueError("preflight ESM2 embedding SHA256 is malformed")
     observed = sha256_file(state.config.paths.esm2_embeddings)
     if observed != expected:
         raise ValueError("target ESM2 embeddings changed after preflight")
-    return expected
+    return observed
 
 
 def _authenticated_raw_source_sha256(
@@ -1284,7 +1282,6 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
                         [float(row["weight"]) for row in selected], dtype=torch.float32
                     ),
                 )
-                batch.validate()
                 yield batch
 
         return batch_factory
@@ -1380,7 +1377,7 @@ def _paired_sample_indices(
 
 
 def _verify_artifact_hash(path: Path, expected: str, *, label: str) -> None:
-    if len(expected) != 64 or sha256_file(path) != expected:
+    if sha256_file(path) != expected:
         raise ValueError(f"{label} SHA-256 mismatch")
 
 
@@ -1395,7 +1392,7 @@ def _verify_named_artifact_hashes(
         )
 
 
-def _cache_identity_fields(state: Stage2Preflight) -> dict[str, str]:
+def _cache_identity_fields(state: Stage2Preflight) -> dict[str, object]:
     tx1 = state.report.get("tx1_cache")
     q_sc = state.report.get("q_sc_cache")
     registration = state.report.get("tx1_registration")
@@ -1407,13 +1404,6 @@ def _cache_identity_fields(state: Stage2Preflight) -> dict[str, str]:
         "tx1_cache_manifest_sha256": tx1.get("manifest_sha256"),
         "q_sc_cache_manifest_sha256": q_sc.get("manifest_sha256"),
     }
-    if any(
-        not isinstance(value, str)
-        or len(value) != 64
-        or any(character not in "0123456789abcdef" for character in value)
-        for value in fields.values()
-    ):
-        raise ValueError("preflight cache identity SHA-256 fields are invalid")
     return fields
 
 
@@ -1566,7 +1556,7 @@ def _online_conditions(
         dtype=bool,
     )
     indices = tuple(data.hvg_indices.get(gene) for gene in genes)
-    batch = OnlineConditionBatch(
+    return OnlineConditionBatch(
         controls_tx1=tuple(
             torch.from_numpy(data.controls[model]).to(device) for model in model_ids
         ),
@@ -1591,8 +1581,6 @@ def _online_conditions(
             [index is not None for index in indices], device=device
         ),
     )
-    batch.validate()
-    return batch
 
 
 def build_frozen_feature_store(
@@ -1743,7 +1731,7 @@ def _supervision_from_index(
         ],
         dtype=bool,
     )
-    supervision = SupervisedMatrix(
+    return SupervisedMatrix(
         target=torch.from_numpy(targets).to(device),
         label_mask=torch.from_numpy(masks).to(device),
         g_var_mask=torch.from_numpy(data.g_var_mask[list(gene_indices)]).to(device),
@@ -1752,12 +1740,9 @@ def _supervision_from_index(
             tuple(data.model_ids[index] for index in contexts)
             for contexts in context_rows
         ),
-        target_kind="train_mean_residual",
         residual_target_sha256=data.residual_target_sha256,
         centering_fit_model_ids_sha256=data.centering_fit_model_ids_sha256,
     )
-    supervision.validate()
-    return supervision
 
 
 def _epoch_batch_indices(
@@ -1807,17 +1792,9 @@ def _validation_batch_indices(
     contexts = tuple(
         data.model_ids.index(model_id) for model_id in validation_model_ids
     )
-    anchors = [index for index, selected in enumerate(data.g_var_mask) if selected]
-    batch_count = (len(data.genes) + genes_per_batch - 1) // genes_per_batch
-    if len(anchors) < batch_count:
-        raise ValueError("not enough G_var genes to anchor validation batches")
-    chosen = anchors[:batch_count]
-    remaining = [index for index in range(len(data.genes)) if index not in set(chosen)]
     batches = []
-    cursor = 0
-    for anchor in chosen:
-        genes = [anchor, *remaining[cursor : cursor + genes_per_batch - 1]]
-        cursor += genes_per_batch - 1
+    for start in range(0, len(data.genes), genes_per_batch):
+        genes = range(start, min(start + genes_per_batch, len(data.genes)))
         rows = tuple(
             SimpleNamespace(
                 gene_index=gene,
@@ -1829,8 +1806,6 @@ def _validation_batch_indices(
             for gene in genes
         )
         batches.append(SimpleNamespace(rows=rows, objective_weight=1.0))
-    if cursor < len(remaining):
-        raise RuntimeError("validation gene packing left unassigned genes")
     return tuple(batches)
 
 
@@ -1862,7 +1837,7 @@ def _precomputed_features_from_pairs(
                 loaded[model_id] = {name: shard[name].copy() for name in names}
         for name in names:
             rows[name].append(loaded[model_id][name][gene])
-    features = PrecomputedFeatureBatch(
+    return PrecomputedFeatureBatch(
         delta_proj=torch.from_numpy(np.stack(rows["delta_proj"])).to(device),
         s=torch.from_numpy(np.stack(rows["s"])).to(device),
         q_sc=torch.from_numpy(np.stack(rows["q_sc"])).to(device),
@@ -1884,8 +1859,6 @@ def _precomputed_features_from_pairs(
         gene_symbols=tuple(data.genes[gene] for gene, _ in pairs),
         model_ids=tuple(data.model_ids[context] for _, context in pairs),
     )
-    features.validate()
-    return features
 
 
 def build_dependency_batch_factories(
@@ -1912,7 +1885,6 @@ def build_dependency_batch_factories(
                     supervision=_supervision_from_index(data, index, device=device),
                     objective_weight=index.objective_weight,
                 )
-                batch.validate()
                 yield batch
 
         return factory
@@ -1936,7 +1908,6 @@ def build_dependency_batch_factories(
                 supervision=_supervision_from_index(data, index, device=device),
                 objective_weight=index.objective_weight,
             )
-            batch.validate()
             yield batch
 
     train_precomputed = precomputed_factory(state.split.supervised_train)

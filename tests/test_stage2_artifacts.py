@@ -1167,7 +1167,29 @@ def test_default_completion_binds_selected_metric_to_validation(
         mark_complete(layout, run_id="formal")
 
 
-def test_default_completion_validates_lambda_calibration_schema(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("selection_name", "loss"),
+        ("selection_direction", "minimize"),
+    ),
+)
+def test_default_completion_rejects_nonprotocol_checkpoint_selection(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    metadata_path = layout.root / "joint/training/best/metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata[field] = value
+    atomic_write_json(metadata_path, metadata)
+    with pytest.raises(ValueError, match="metric contract mismatch"):
+        mark_complete(layout, run_id="formal")
+
+
+def test_default_completion_requires_eight_lambda_calibration_batches(
+    tmp_path: Path,
+) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout)
     calibration_path = layout.root / "lambda_calibration.json"
@@ -1180,6 +1202,23 @@ def test_default_completion_validates_lambda_calibration_schema(tmp_path: Path) 
     atomic_write_json(metadata_path, metadata)
     with pytest.raises(ValueError, match="must contain 8"):
         mark_complete(layout, run_id="formal")
+
+
+def test_lambda_calibration_rejects_false_ratio_or_lambda() -> None:
+    calibration = {
+        "lambda_dep": 1.0,
+        "raw_ratios": [1.0] * 8,
+        "response_gradient_norms": [2.0] * 8,
+        "dependency_gradient_norms": [2.0] * 8,
+    }
+    calibration["raw_ratios"][0] = 2.0
+    with pytest.raises(ValueError, match="ratios do not match"):
+        stage2_artifacts._verify_lambda_calibration(calibration)
+
+    calibration["raw_ratios"][0] = 1.0
+    calibration["lambda_dep"] = 2.0
+    with pytest.raises(ValueError, match="clipped median ratio"):
+        stage2_artifacts._verify_lambda_calibration(calibration)
 
 
 def test_default_completion_requires_explicit_gene_mean_undefined_status(
@@ -1210,7 +1249,9 @@ def test_default_completion_requires_finite_response_metrics(tmp_path: Path) -> 
         mark_complete(layout, run_id="formal")
 
 
-def test_default_completion_rejects_comparable_response_claim(tmp_path: Path) -> None:
+def test_default_completion_rejects_comparable_response_claim(
+    tmp_path: Path,
+) -> None:
     layout = prepare_run_dir(tmp_path / "run")
     _write_full_runner_artifacts(layout)
     metrics_path = layout.root / "geneeffect_residual_metrics.json"
@@ -1220,6 +1261,15 @@ def test_default_completion_rejects_comparable_response_claim(tmp_path: Path) ->
     atomic_write_json(metrics_path, metrics)
     with pytest.raises(ValueError, match="comparison status mismatch"):
         mark_complete(layout, run_id="formal")
+
+
+def test_default_completion_accepts_nonformal_distributed_runtime(
+    tmp_path: Path,
+) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout, world_size=3)
+    mark_complete(layout, run_id="formal")
+    verify_complete_run(layout.root)
 
 
 @pytest.mark.parametrize("tamper", ["cache", "target", "membership"])
@@ -1241,6 +1291,35 @@ def test_terminal_verifier_rejects_response_lineage_tamper(
 
     with pytest.raises(ValueError, match="response lineage"):
         verify_complete_run(layout.root)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("schema", "schema_version mismatch"),
+        ("dtype", "dtype is invalid"),
+        ("record_id", "record identity/membership mismatch"),
+    ),
+)
+def test_response_lineage_rejects_false_semantics(
+    tmp_path: Path, mutation: str, message: str
+) -> None:
+    root = tmp_path / "run"
+    _write_response_lineage(root)
+    path = root / "response_targets/lineage.json"
+    payload = json.loads(path.read_text())
+    if mutation == "schema":
+        payload["schema_version"] = "unknown"
+    elif mutation == "dtype":
+        payload["train_records"][0]["observed_hvg"]["dtype"] = ""
+    else:
+        payload["train_records"][0]["record_id"] = "forged"
+    payload.pop("lineage_sha256")
+    payload["lineage_sha256"] = stage2_artifacts._canonical_json_sha256(payload)
+    atomic_write_json(path, payload)
+
+    with pytest.raises(ValueError, match=message):
+        stage2_artifacts._verify_response_lineage(root)
 
 
 @pytest.mark.parametrize(
@@ -1294,6 +1373,25 @@ def test_default_completion_rejects_upgraded_stage1_provenance_claim(
     payload[field] = "complete" if field.endswith("status") else []
     atomic_write_json(path, payload)
     with pytest.raises(ValueError, match="Stage-1 .*provenance claim mismatch"):
+        mark_complete(layout, run_id="formal")
+
+
+def test_default_completion_rejects_consistent_stage1_provenance_upgrade(
+    tmp_path: Path,
+) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    field = "training_code_provenance_status"
+    for relative, propagated in (
+        ("stage1_model_manifest.json", field),
+        ("run_manifest.json", f"stage1_{field}"),
+        ("model_package/model_manifest.json", f"stage1_{field}"),
+    ):
+        path = layout.root / relative
+        payload = json.loads(path.read_text())
+        payload[propagated] = "available"
+        atomic_write_json(path, payload)
+    with pytest.raises(ValueError, match="Stage-1 manifest provenance claim mismatch"):
         mark_complete(layout, run_id="formal")
 
 

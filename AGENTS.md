@@ -13,16 +13,15 @@ written, Stage 0 open, **no run started**. The `context_screen_v2` SL split is b
 ## Engineering rules
 
 - Keep documents clean and concise: replacement edits must preserve the line count or reduce it; never increase it.
-- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility
-  layers, fallbacks, or migrations.
+- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
+- Do not validate representation form or self-declared metadata. Every validator must prevent a concrete computation, data-integrity, leakage, or scientific-protocol failure.
 - Choose the simplest implementation that fully meets the current requirement. Avoid speculative
   abstraction, configuration, and indirection.
 - Grow the system in layers: start from the smallest version that works end to end, and add each
   capability on top of something that already works. Never trade a working product for unfinished
   complexity.
 - Keep components modular and concerns clearly separated.
-- Prefer established, well-maintained libraries when they reduce complexity or improve reliability.
-  Do not reimplement common functionality without a clear reason.
+- Prefer established, well-maintained libraries when they reduce complexity or improve reliability; do not reimplement common functionality without a clear reason.
 - Lean on the dependencies already in the project before writing your own implementation or adding
   packages; check a library's docs and types before assuming it lacks a capability.
 - Make architectural decisions for the long term. No stopgap meant to be replaced later.
@@ -39,8 +38,8 @@ written, Stage 0 open, **no run started**. The `context_screen_v2` SL split is b
   head, split guard and residual ladder, the Tx1 basal→embedding→response path, and forward-only STATE loading. The rest are benchmark,
   features, baselines. Most entrypoints need gitignored assets, so "it imports" ≠ "it runs here".
 - `.superpowers/sdd/` is gitignored but holds the **live plan and execution ledger** (its `progress.md` lags the code); `docs/specs/` holds
-  the tracked designs, both now describing retired T1/T2 work. **`AGENTS.md` is a symlink to `CLAUDE.md`** — edit `CLAUDE.md` only, and keep
-  the tracked **`.codex/`** Codex setup (`config.toml`, five agents, four mirrored skills, its own `AGENTS.md`) in sync with it.
+  the tracked designs, both now describing retired T1/T2 work. **`AGENTS.md` and `CLAUDE.md` are independent tracked files**; keep both and
+  the tracked **`.codex/`** Codex setup (`config.toml`, five agents, four mirrored skills, its own `AGENTS.md`) synchronized.
 - Prefix every Python/pytest/ruff call with `uv run`. A global `rtk hook claude` hook **rewrites Bash output** (`ruff check .` prints `[]`)
   — call `.venv/bin/ruff` for real output. `uv sync` installs the `dev` group only (`scib`/`datasets` absent); a new `src/<pkg>/` is
   invisible until added to `[tool.hatch.build.targets.wheel] packages`; `arc-state` is pinned to a **git commit** (bumps are deliberate).

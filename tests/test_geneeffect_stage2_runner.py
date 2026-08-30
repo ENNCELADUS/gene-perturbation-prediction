@@ -1492,6 +1492,26 @@ def test_validation_factories_do_not_materialize_batches_eagerly(
     assert result[3].batch_kind == "online"
 
 
+def test_validation_batches_preserve_gene_order_without_g_var_anchors() -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+
+    data = SimpleNamespace(
+        genes=tuple(f"G{index}" for index in range(7)),
+        model_ids=("T0", "V0", "V1"),
+        label_mask=np.ones((7, 3), dtype=bool),
+        g_var_mask=np.zeros(7, dtype=bool),
+    )
+
+    batches = runner._validation_batch_indices(data, ("V0", "V1"), 3)
+
+    assert [row.gene_index for batch in batches for row in batch.rows] == list(
+        range(7)
+    )
+    assert all(
+        row.context_indices == (1, 2) for batch in batches for row in batch.rows
+    )
+
+
 def test_metric_json_normalizes_undefined_but_rejects_infinity(
     tmp_path: Path,
 ) -> None:
