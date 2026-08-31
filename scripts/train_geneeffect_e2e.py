@@ -30,7 +30,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--run-id",
         help="create a fresh run and enter the full training path",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--reuse-frozen-feature-store",
+        type=Path,
+        help="import an authenticated stage1_frozen store into a fresh run",
+    )
+    args = parser.parse_args(argv)
+    if args.reuse_frozen_feature_store is not None and args.run_id is None:
+        parser.error("--reuse-frozen-feature-store requires --run-id")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,7 +56,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
-    run_full_stage2(args.config, run_id=args.run_id)
+    run_full_stage2(
+        args.config,
+        run_id=args.run_id,
+        reuse_frozen_feature_store=args.reuse_frozen_feature_store,
+    )
     return 0
 
 
