@@ -841,10 +841,35 @@ def test_formal_runtime_records_auto_detected_topology(
     assert runtime == {
         "world_size": world_size,
         "mixed_precision": "bf16",
+        "ddp_static_graph": True,
+        "ddp_find_unused_parameters": False,
         "conditions_per_rank": 256,
         "global_conditions_per_step": 256 * world_size,
         "rank_topology": topology,
     }
+
+
+def test_stage2_accelerator_declares_static_unused_parameter_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+
+    captured: dict[str, object] = {}
+    sentinel = object()
+
+    def accelerator(**kwargs):
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(runner, "Accelerator", accelerator)
+
+    assert runner._create_accelerator("bf16") is sentinel
+    assert captured["mixed_precision"] == "bf16"
+    handlers = captured["kwargs_handlers"]
+    assert isinstance(handlers, list) and len(handlers) == 1
+    handler = handlers[0]
+    assert handler.static_graph is True
+    assert handler.find_unused_parameters is False
 
 
 def test_formal_runtime_rejects_unregistered_auto_detected_world_size() -> None:
