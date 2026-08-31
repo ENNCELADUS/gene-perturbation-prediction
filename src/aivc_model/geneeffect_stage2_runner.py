@@ -26,6 +26,7 @@ import pandas as pd
 import torch
 
 from accelerate import Accelerator
+from accelerate.utils import DistributedDataParallelKwargs
 
 from aivc_model.gene_embeddings import load_esm2_embeddings
 from aivc_model.esm2_provenance import load_and_authenticate_esm2_provenance
@@ -103,11 +104,17 @@ _PINNED_GENE_EFFECT_SHA256 = (
     "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e"
 )
 _ESM2_UNIVERSE_SCHEMA = "exp13-esm2-universes-v2"
+_DDP_STATIC_GRAPH = True
+_DDP_FIND_UNUSED_PARAMETERS = False
 
 
 def _create_accelerator(mixed_precision: str) -> Accelerator:
     """Create the one process coordinator used for the whole Stage 2 run."""
-    return Accelerator(mixed_precision=mixed_precision)
+    ddp = DistributedDataParallelKwargs(
+        static_graph=_DDP_STATIC_GRAPH,
+        find_unused_parameters=_DDP_FIND_UNUSED_PARAMETERS,
+    )
+    return Accelerator(mixed_precision=mixed_precision, kwargs_handlers=[ddp])
 
 
 def _formal_distributed_runtime(
@@ -172,6 +179,8 @@ def _formal_distributed_runtime(
     return {
         "world_size": expected_world,
         "mixed_precision": expected_precision,
+        "ddp_static_graph": _DDP_STATIC_GRAPH,
+        "ddp_find_unused_parameters": _DDP_FIND_UNUSED_PARAMETERS,
         "conditions_per_rank": conditions_per_rank,
         "global_conditions_per_step": expected_world * conditions_per_rank,
         "rank_topology": topology,
