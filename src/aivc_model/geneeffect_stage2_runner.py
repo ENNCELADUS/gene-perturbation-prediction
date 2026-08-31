@@ -272,6 +272,57 @@ def _verify_feature_store_for_run(
     return json.loads((Path(root) / "manifest.json").read_text(encoding="utf-8"))
 
 
+def _import_frozen_feature_store(
+    state: "Stage2Preflight",
+    data: "Stage2DependencyData",
+    source: Path,
+    target: Path,
+    *,
+    artifact_path: Path,
+    checkpoint_sha256: str,
+    projection: FixedSparseProjection,
+) -> None:
+    source = Path(source).resolve()
+    target = Path(target)
+    if source == target.resolve():
+        raise ValueError("reused frozen feature store source and target must differ")
+    if target.exists():
+        raise FileExistsError(f"frozen feature store target already exists: {target}")
+    if not source.is_dir():
+        raise FileNotFoundError(
+            f"reused frozen feature store is not a directory: {source}"
+        )
+    verify_kwargs = {
+        "stage": "stage1_frozen",
+        "checkpoint_sha256": checkpoint_sha256,
+        "projection": projection,
+    }
+    _verify_feature_store_for_run(state, data, source, **verify_kwargs)
+    source_manifest_sha256 = sha256_file(source / "manifest.json")
+    staging = target.with_name(f".{target.name}.import-{os.getpid()}")
+    if staging.exists():
+        raise FileExistsError(f"frozen feature store staging path exists: {staging}")
+    try:
+        shutil.copytree(source, staging, copy_function=os.link)
+        _verify_feature_store_for_run(state, data, staging, **verify_kwargs)
+        if sha256_file(source / "manifest.json") != source_manifest_sha256:
+            raise ValueError("reused frozen feature store changed during import")
+        staging.rename(target)
+    except BaseException:
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise
+    atomic_write_json(
+        artifact_path,
+        {
+            "source_path": str(source),
+            "source_manifest_sha256": source_manifest_sha256,
+            "imported_manifest_sha256": sha256_file(target / "manifest.json"),
+            "method": "hardlink",
+        },
+    )
+
+
 def _assert_configured_state_window(backbone: torch.nn.Module, expected: int) -> None:
     observed = _state_window(backbone)
     if observed != int(expected):
@@ -361,6 +412,7 @@ class ResponseAssembly:
     batch_count: int
     train_records: tuple[Mapping[str, object], ...]
     heldout_records: tuple[Mapping[str, object], ...]
+    dropped_records: tuple[Mapping[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1069,6 +1121,41 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
     all_records = _response_records(bags, dict(stage1.objective.anchor_weights))
     run_root = state.config.paths.stage1_checkpoint.parent.parent
     run_manifest = json.loads((run_root / "run_manifest.json").read_text())
+    sealed_genes = set(state.stage1_checkpoint.stage1_genes)
+    unresolved_raw = run_manifest.get("esm2_unresolved_genes")
+    if (
+        not isinstance(unresolved_raw, list)
+        or any(not isinstance(gene, str) or not gene for gene in unresolved_raw)
+        or len(set(unresolved_raw)) != len(unresolved_raw)
+    ):
+        raise ValueError(
+            "Stage 1 run manifest esm2_unresolved_genes must be unique strings"
+        )
+    unresolved = set(unresolved_raw)
+    dropped_records = tuple(
+        {
+            "record_id": str(row["record_id"]),
+            "gene": str(row["gene"]),
+            "model_id": str(row["model_id"]),
+            "reason": "stage1_esm2_unresolved",
+        }
+        for row in all_records
+        if str(row["gene"]) not in sealed_genes and str(row["gene"]) in unresolved
+    )
+    undeclared = sorted(
+        {
+            str(row["gene"])
+            for row in all_records
+            if str(row["gene"]) not in sealed_genes
+            and str(row["gene"]) not in unresolved
+        }
+    )
+    if undeclared:
+        raise ValueError(
+            "response genes are not in the sealed Stage 1 vocabulary and were not "
+            f"declared ESM2-unresolved: {undeclared[:10]}"
+        )
+    eligible_records = [row for row in all_records if str(row["gene"]) in sealed_genes]
     heldout_raw = run_manifest.get("heldout_genes")
     if not isinstance(heldout_raw, dict):
         raise ValueError("Stage 1 run manifest has no heldout_genes mapping")
@@ -1078,20 +1165,37 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
     }
     records = [
         row
-        for row in all_records
+        for row in eligible_records
         if str(row["gene"]) not in heldout.get(str(row["model_id"]), set())
     ]
     heldout_records = [
         row
-        for row in all_records
+        for row in eligible_records
         if str(row["gene"]) in heldout.get(str(row["model_id"]), set())
     ]
     if (
         not records
         or not heldout_records
-        or len(records) + len(heldout_records) != len(all_records)
+        or len(records) + len(heldout_records) != len(eligible_records)
     ):
         raise ValueError("Stage 1 held-out response partition is empty or incomplete")
+    expected_counts = {
+        "n_train_batches": len(records),
+        "n_heldout_batches": len(heldout_records),
+    }
+    observed_counts = {key: run_manifest.get(key) for key in expected_counts}
+    if any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+        for value in observed_counts.values()
+    ):
+        raise ValueError(
+            "Stage 1 run manifest response record counts must be non-negative integers"
+        )
+    if observed_counts != expected_counts:
+        raise ValueError(
+            "Stage 1 response record counts mismatch: "
+            f"manifest={observed_counts}, assembled={expected_counts}"
+        )
     _normalize_response_weights(records)
     _normalize_response_weights(heldout_records)
     batch_size = state.config.joint.response_batch_size
@@ -1141,6 +1245,7 @@ def assemble_response_supervision(state: Stage2Preflight) -> ResponseAssembly:
         batch_count=(len(records) + batch_size - 1) // batch_size,
         train_records=tuple(records),
         heldout_records=tuple(heldout_records),
+        dropped_records=dropped_records,
     )
 
 
@@ -2181,10 +2286,24 @@ def _write_response_lineage_artifact(
     by_id = {str(row["record_id"]): row for row in all_records}
     if len(by_id) != len(all_records):
         raise ValueError("response record identities are not unique")
+    dropped_records = [dict(row) for row in response.dropped_records]
+    dropped_by_id = {str(row.get("record_id")): row for row in dropped_records}
+    if len(dropped_by_id) != len(dropped_records) or set(dropped_by_id) & set(by_id):
+        raise ValueError("dropped response record identities are not unique")
+    for record_id, row in dropped_by_id.items():
+        if (
+            record_id != f"{row.get('gene')}@{row.get('model_id')}"
+            or row.get("reason") != "stage1_esm2_unresolved"
+        ):
+            raise ValueError(f"dropped response record is malformed: {record_id!r}")
     cached_ids = tuple(str(value) for value in cached_genes.tolist())
-    if len(cached_ids) != len(cached_targets) or set(cached_ids) != set(by_id):
+    if len(cached_ids) != len(cached_targets) or set(cached_ids) != (
+        set(by_id) | set(dropped_by_id)
+    ):
         raise ValueError("response cache and assembled record membership disagree")
     for record_id, cached_target in zip(cached_ids, cached_targets, strict=True):
+        if record_id in dropped_by_id:
+            continue
         assembled = np.asarray(by_id[record_id]["observed_hvg"])
         if (
             assembled.dtype != np.asarray(cached_target).dtype
@@ -2269,6 +2388,8 @@ def _write_response_lineage_artifact(
         "source_identities": sources,
         "train_records": train_claims,
         "heldout_records": heldout_claims,
+        "dropped_records": dropped_records,
+        "dropped_records_sha256": _canonical_json_sha256(dropped_records),
         "record_membership_sha256": _canonical_json_sha256(membership_payload),
         "target_tensors_sha256": _canonical_json_sha256(target_payload),
         "objective_weights_sha256": _canonical_json_sha256(weight_payload),
@@ -2625,6 +2746,7 @@ def run_full_stage2(
     config_path: Path,
     *,
     run_id: str,
+    reuse_frozen_feature_store: Path | None = None,
 ) -> Path:
     """Assemble response supervision, construct Stage 1, and enter Stage 2."""
     if not _RUN_ID_RE.fullmatch(run_id):
@@ -2734,19 +2856,35 @@ def run_full_stage2(
         )
         phase = "frozen_feature_generation"
         frozen_store = layout.condition_features / "stage1_frozen"
-        _run_rank_zero_long_action(
-            accelerator,
-            "generate frozen Stage 1 feature store",
-            layout.root / ".stage1_feature_generation_status.json",
-            lambda: build_frozen_feature_store(
-                state,
-                data,
-                backbone,
-                frozen_store,
-                checkpoint_sha256=load_report.checkpoint_sha256,
-            ),
-        )
         projection = FixedSparseProjection(seed=state.config.seeds.projection)
+        if reuse_frozen_feature_store is None:
+            _run_rank_zero_long_action(
+                accelerator,
+                "generate frozen Stage 1 feature store",
+                layout.root / ".stage1_feature_generation_status.json",
+                lambda: build_frozen_feature_store(
+                    state,
+                    data,
+                    backbone,
+                    frozen_store,
+                    checkpoint_sha256=load_report.checkpoint_sha256,
+                ),
+            )
+        else:
+            _run_rank_zero_long_action(
+                accelerator,
+                "import frozen Stage 1 feature store",
+                layout.root / ".stage1_feature_import_status.json",
+                lambda: _import_frozen_feature_store(
+                    state,
+                    data,
+                    reuse_frozen_feature_store,
+                    frozen_store,
+                    artifact_path=layout.root / "frozen_feature_store_import.json",
+                    checkpoint_sha256=load_report.checkpoint_sha256,
+                    projection=projection,
+                ),
+            )
         _run_rank_zero_long_action(
             accelerator,
             "verify frozen Stage 1 feature store",
@@ -2997,6 +3135,7 @@ def run_full_stage2(
                 },
             )
 
+        phase = "lambda_calibration"
         _run_rank_zero_long_action(
             accelerator,
             "calibrate dependency loss weight",

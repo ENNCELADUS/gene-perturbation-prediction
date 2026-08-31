@@ -278,6 +278,74 @@ def test_frozen_feature_generation_never_claims_post_preflight_source_hash(
     assert not (tmp_path / "features" / "manifest.json").exists()
 
 
+def test_import_frozen_feature_store_verifies_and_hardlinks_atomically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+
+    source = tmp_path / "old" / "condition_features" / "stage1_frozen"
+    source.mkdir(parents=True)
+    _write(source / "manifest.json", '{"stage":"stage1_frozen"}')
+    _write(source / "shard.bin", "feature payload")
+    target = tmp_path / "new" / "condition_features" / "stage1_frozen"
+    target.parent.mkdir(parents=True)
+    artifact = tmp_path / "new" / "frozen_feature_store_import.json"
+    calls: list[Path] = []
+
+    def verify(state, data, root, **kwargs):
+        calls.append(Path(root))
+        return json.loads((Path(root) / "manifest.json").read_text())
+
+    monkeypatch.setattr(runner, "_verify_feature_store_for_run", verify)
+    runner._import_frozen_feature_store(
+        object(),
+        object(),
+        source,
+        target,
+        artifact_path=artifact,
+        checkpoint_sha256="b" * 64,
+        projection=object(),
+    )
+
+    assert calls[0] == source.resolve()
+    assert calls[1].parent == target.parent
+    assert calls[1].name.startswith(".stage1_frozen.import-")
+    assert len(calls) == 2
+    assert (source / "shard.bin").stat().st_ino == (target / "shard.bin").stat().st_ino
+    payload = json.loads(artifact.read_text())
+    assert payload["source_path"] == str(source.resolve())
+    assert payload["method"] == "hardlink"
+    assert payload["source_manifest_sha256"] == sha256_file(source / "manifest.json")
+    assert payload["imported_manifest_sha256"] == sha256_file(target / "manifest.json")
+
+
+def test_stage2_cli_requires_run_id_for_frozen_store_reuse(tmp_path: Path) -> None:
+    from scripts.train_geneeffect_e2e import parse_args
+
+    with pytest.raises(SystemExit):
+        parse_args(
+            [
+                "--config",
+                str(tmp_path / "config.yaml"),
+                "--preflight",
+                "--reuse-frozen-feature-store",
+                str(tmp_path / "old-store"),
+            ]
+        )
+
+    args = parse_args(
+        [
+            "--config",
+            str(tmp_path / "config.yaml"),
+            "--run-id",
+            "retry-1",
+            "--reuse-frozen-feature-store",
+            str(tmp_path / "old-store"),
+        ]
+    )
+    assert args.reuse_frozen_feature_store == tmp_path / "old-store"
+
+
 def test_preflight_loads_contract_and_verifies_both_caches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -893,6 +961,7 @@ def _response_assembly_case(
     )
     state = SimpleNamespace(
         split=SimpleNamespace(all_model_ids=("ACH-000001", "ACH-000551")),
+        stage1_checkpoint=SimpleNamespace(stage1_genes=("TP53", "KRAS")),
         bundle=SimpleNamespace(
             stage1_config=tmp_path / "stage1.yaml",
             response_cache_dir=cache,
@@ -923,6 +992,9 @@ def _response_assembly_case(
         json.dumps(
             {
                 "heldout_genes": {"ACH-000551": ["KRAS"]},
+                "esm2_unresolved_genes": [],
+                "n_train_batches": 1,
+                "n_heldout_batches": 1,
                 "best_metric_value": 25.856595039367676,
             }
         ),
@@ -954,10 +1026,76 @@ def test_response_assembly_builds_valid_deterministic_batches(
     assert first[0].objective_weights.item() == 0.25
     assert [batch.genes for batch in assembly.heldout_batch_factory(0)] == [("KRAS",)]
     assert assembly.before_metrics == before_metrics
+    assert assembly.dropped_records == ()
     assert assembly_kwargs["expected_cache_model_ids"] == (
         "ACH-000001",
         "ACH-000551",
     )
+
+
+def test_response_assembly_drops_only_declared_stage1_unresolved_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state, bags, _ = _response_assembly_case(tmp_path, monkeypatch, {"model_loss": 1.0})
+    bags.genes = (
+        "TP53@ACH-000551",
+        "KRAS@ACH-000551",
+        "ST20-MTHFS@ACH-000551",
+    )
+    bags.effective_target_bags = (
+        np.ones((2, 3), dtype=np.float32),
+        np.full((2, 3), 2.0, dtype=np.float32),
+        np.full((2, 3), 3.0, dtype=np.float32),
+    )
+    manifest_path = tmp_path / "stage1" / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["esm2_unresolved_genes"] = ["ST20-MTHFS"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assembly = assemble_response_supervision(state)
+
+    assert [row["record_id"] for row in assembly.train_records] == ["TP53@ACH-000551"]
+    assert [row["record_id"] for row in assembly.heldout_records] == ["KRAS@ACH-000551"]
+    assert assembly.dropped_records == (
+        {
+            "record_id": "ST20-MTHFS@ACH-000551",
+            "gene": "ST20-MTHFS",
+            "model_id": "ACH-000551",
+            "reason": "stage1_esm2_unresolved",
+        },
+    )
+
+
+def test_response_assembly_rejects_unsealed_undeclared_gene(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state, bags, _ = _response_assembly_case(tmp_path, monkeypatch, {"model_loss": 1.0})
+    bags.genes = (
+        "TP53@ACH-000551",
+        "KRAS@ACH-000551",
+        "UNKNOWN@ACH-000551",
+    )
+    bags.effective_target_bags = (
+        np.ones((2, 3), dtype=np.float32),
+        np.full((2, 3), 2.0, dtype=np.float32),
+        np.full((2, 3), 3.0, dtype=np.float32),
+    )
+
+    with pytest.raises(ValueError, match="not in the sealed Stage 1 vocabulary"):
+        assemble_response_supervision(state)
+
+
+def test_response_assembly_rejects_stage1_record_count_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state, _, _ = _response_assembly_case(tmp_path, monkeypatch, {"model_loss": 1.0})
+    manifest_path = tmp_path / "stage1" / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["n_train_batches"] = 2
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Stage 1 response record counts mismatch"):
+        assemble_response_supervision(state)
 
 
 @pytest.mark.parametrize("model_loss", ["invalid", float("inf")])
