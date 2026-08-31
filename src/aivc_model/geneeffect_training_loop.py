@@ -393,8 +393,8 @@ def _metric_across_ranks(value: float, accelerator: Accelerator | None) -> float
         )
     if any(not math.isfinite(item) for item in values):
         raise ValueError(f"validation metric must be finite on every rank: {values}")
-    if any(item != values[0] for item in values[1:]):
-        raise RuntimeError(f"validation metric differs across ranks: {values}")
+    # Online BF16 validation is redundantly evaluated on each GPU and need not
+    # be bitwise identical.  Rank zero is the canonical checkpoint metric.
     return values[0]
 
 

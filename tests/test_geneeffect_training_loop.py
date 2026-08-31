@@ -556,10 +556,9 @@ def test_progress_sync_is_not_a_per_step_collective(
     assert payload["global_real_pairs"] == 22
 
 
-def test_rank_validation_metric_must_be_identical() -> None:
+def test_rank_validation_metric_uses_rank_zero_canonical_value() -> None:
     accelerator = _FakeAccelerator(torch.tensor([0.1, 0.2], dtype=torch.float64))
-    with pytest.raises(RuntimeError, match="differs across ranks"):
-        loops._metric_across_ranks(0.1, accelerator)  # type: ignore[arg-type]
+    assert loops._metric_across_ranks(0.1, accelerator) == 0.1  # type: ignore[arg-type]
 
 
 def test_validation_evaluator_recomputes_targets_and_exact_gene_coverage() -> None:
