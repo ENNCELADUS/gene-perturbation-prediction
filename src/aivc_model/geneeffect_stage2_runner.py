@@ -2070,7 +2070,7 @@ def run_registered_baselines(state: Stage2Preflight, data: Stage2DependencyData)
         min_lines=state.config.loss.minimum_observations,
         outer="fixed",
         split=FixedSplit(
-            train=tuple(state.split.supervised_train),
+            train=tuple(state.split.train),
             val=tuple(state.split.val),
             test=tuple(state.split.test),
             unlabeled_train=tuple(state.split.unlabeled_train),
@@ -2566,6 +2566,143 @@ def _write_residual_targets_artifact(
     return digest
 
 
+@dataclass(frozen=True)
+class FinalizationRecovery:
+    source_root: Path
+    source_run_id: str
+    checkpoint_sha256: str
+    warmup: Mapping[str, object]
+    joint: Mapping[str, object]
+    calibration: Mapping[str, object]
+    warmup_provenance: Mapping[str, object]
+    joint_provenance: Mapping[str, object]
+
+
+_RECOVERY_ARTIFACTS = (
+    "lambda_calibration.json",
+    "warmup/training/best/head.pt",
+    "warmup/training/best/metadata.json",
+    "warmup/training/train_log.csv",
+    "joint/training/best/e2e_state.pt",
+    "joint/training/best/metadata.json",
+    "joint/training/train_log.csv",
+)
+
+
+def _read_json_mapping(path: Path) -> Mapping[str, object]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"expected a JSON object: {path}")
+    return payload
+
+
+def _recovered_training_outcome(
+    training_dir: Path, *, max_epochs: int
+) -> tuple[Mapping[str, object], Mapping[str, object]]:
+    from aivc_model.geneeffect_training_loop import _outcome
+
+    metadata = _read_json_mapping(training_dir / "best" / "metadata.json")
+    history = pd.read_csv(training_dir / "train_log.csv").to_dict(orient="records")
+    best_epoch = int(metadata["epoch"])
+    outcome = _outcome(history, best_epoch, len(history) < max_epochs)
+    if outcome["best_metric"] != metadata.get("metric_value"):
+        raise ValueError(f"checkpoint/history mismatch: {training_dir}")
+    return outcome, metadata
+
+
+def _authenticate_finalization_recovery(
+    source_root: Path,
+    state: Stage2Preflight,
+    distributed_runtime: Mapping[str, object],
+) -> FinalizationRecovery:
+    source_root = Path(source_root).resolve()
+    if not source_root.is_dir():
+        raise ValueError(f"recovery source is not a directory: {source_root}")
+    if (source_root / "complete.json").exists():
+        raise ValueError("recovery source must not contain complete.json")
+    failure = _read_json_mapping(source_root / "failure.json")
+    if failure.get("phase") != "selected_checkpoint_evaluation_and_packaging":
+        raise ValueError(
+            "recovery source failure phase must be exactly "
+            "'selected_checkpoint_evaluation_and_packaging'"
+        )
+    if _read_json_mapping(source_root / "config_snapshot.json") != (
+        state.config.snapshot()
+    ):
+        raise ValueError("recovery source config identity mismatch")
+    configured_split_sha256 = sha256_file(state.config.paths.split)
+    if (
+        sha256_file(source_root / "cell_line_geneeffect_226_split.json")
+        != configured_split_sha256
+    ):
+        raise ValueError("recovery source split identity mismatch")
+    run_manifest = _read_json_mapping(source_root / "run_manifest.json")
+    source_run_id = run_manifest.get("run_id")
+    if not isinstance(source_run_id, str) or not source_run_id:
+        raise ValueError("recovery source run_id is invalid")
+    if run_manifest.get("distributed_runtime") != dict(distributed_runtime):
+        raise ValueError("recovery source runtime identity mismatch")
+    for relative_path in (
+        *_RECOVERY_ARTIFACTS,
+        "condition_features/stage1_frozen/manifest.json",
+    ):
+        path = source_root / relative_path
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"recovery artifact is missing: {path}")
+    warmup, warmup_metadata = _recovered_training_outcome(
+        source_root / "warmup" / "training",
+        max_epochs=state.config.warmup.max_epochs,
+    )
+    joint, joint_metadata = _recovered_training_outcome(
+        source_root / "joint" / "training",
+        max_epochs=state.config.joint.max_epochs,
+    )
+    calibration = _read_json_mapping(source_root / "lambda_calibration.json")
+    warmup_provenance = warmup_metadata.get("provenance")
+    joint_provenance = joint_metadata.get("provenance")
+    if not isinstance(warmup_provenance, dict) or not isinstance(
+        joint_provenance, dict
+    ):
+        raise ValueError("recovery checkpoint provenance is invalid")
+    if (
+        warmup_metadata.get("checkpoint_kind") != "warmup"
+        or joint_metadata.get("checkpoint_kind") != "e2e"
+    ):
+        raise ValueError("recovery checkpoint kind mismatch")
+    checkpoint = source_root / "joint" / "training" / "best" / "e2e_state.pt"
+    return FinalizationRecovery(
+        source_root=source_root,
+        source_run_id=source_run_id,
+        checkpoint_sha256=sha256_file(checkpoint),
+        warmup=warmup,
+        joint=joint,
+        calibration=calibration,
+        warmup_provenance=warmup_provenance,
+        joint_provenance=joint_provenance,
+    )
+
+
+def _copy_recovery_training_artifacts(
+    recovery: FinalizationRecovery, layout: Stage2RunLayout
+) -> None:
+    for relative_path in _RECOVERY_ARTIFACTS:
+        source = recovery.source_root / relative_path
+        destination = layout.root / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        if sha256_file(destination) != sha256_file(source):
+            raise ValueError(f"recovery artifact copy mismatch: {relative_path}")
+
+
+def _strict_load_recovered_joint_checkpoint(
+    model: GeneEffectE2EModel, checkpoint: Path
+) -> None:
+    state = torch.load(checkpoint, map_location="cpu", weights_only=True)
+    if not isinstance(state, dict) or not state:
+        raise ValueError("recovered joint checkpoint is not a non-empty state dict")
+    model.load_state_dict(state, strict=True)
+
+
 def _finalize_selected_run(
     *,
     layout: Stage2RunLayout,
@@ -2585,6 +2722,7 @@ def _finalize_selected_run(
     distributed_runtime: Mapping[str, object],
     response_lineage_sha256: str,
     response_lineage_artifact_sha256: str,
+    recovery: FinalizationRecovery | None = None,
 ) -> None:
     """Evaluate, package, and seal one selected model on rank zero only."""
     baseline_result = run_registered_baselines(state, data)
@@ -2713,10 +2851,13 @@ def _finalize_selected_run(
             "distributed_runtime": dict(distributed_runtime),
         },
     )
-    atomic_write_json(
-        layout.root / "checkpoint_selection.json",
-        {"warmup": dict(warmup), "joint": dict(joint)},
-    )
+    checkpoint_selection = {"warmup": dict(warmup), "joint": dict(joint)}
+    if recovery is not None:
+        checkpoint_selection["recovered_from"] = {
+            "run_id": recovery.source_run_id,
+            "checkpoint_sha256": recovery.checkpoint_sha256,
+        }
+    atomic_write_json(layout.root / "checkpoint_selection.json", checkpoint_selection)
     atomic_write_json(
         layout.root / "feature_generation.json",
         {
@@ -2756,6 +2897,7 @@ def run_full_stage2(
     *,
     run_id: str,
     reuse_frozen_feature_store: Path | None = None,
+    resume_finalization_from_run: Path | None = None,
 ) -> Path:
     """Assemble response supervision, construct Stage 1, and enter Stage 2."""
     if not _RUN_ID_RE.fullmatch(run_id):
@@ -2775,6 +2917,21 @@ def run_full_stage2(
     if state.config.snapshot() != launch_config.snapshot():
         raise RuntimeError("Stage 2 config changed between launch and preflight")
     layout = Stage2RunLayout(state.config.paths.output_root / run_id)
+    recovery = None
+    if resume_finalization_from_run is not None:
+        if reuse_frozen_feature_store is not None:
+            raise ValueError(
+                "finalization recovery cannot be combined with frozen-store reuse"
+            )
+        recovery = _run_all_ranks_or_raise(
+            accelerator,
+            "authenticate finalization recovery source",
+            lambda: _authenticate_finalization_recovery(
+                resume_finalization_from_run, state, distributed_runtime
+            ),
+        )
+        if recovery.source_root == layout.root.resolve():
+            raise ValueError("finalization recovery requires a fresh run id")
     run_rank_zero_or_raise(
         accelerator,
         "prepare Stage 2 run directory",
@@ -2866,7 +3023,24 @@ def run_full_stage2(
         phase = "frozen_feature_generation"
         frozen_store = layout.condition_features / "stage1_frozen"
         projection = FixedSparseProjection(seed=state.config.seeds.projection)
-        if reuse_frozen_feature_store is None:
+        if recovery is not None:
+            _run_rank_zero_long_action(
+                accelerator,
+                "import recovered frozen Stage 1 feature store",
+                layout.root / ".stage1_feature_import_status.json",
+                lambda: _import_frozen_feature_store(
+                    state,
+                    data,
+                    recovery.source_root
+                    / "condition_features"
+                    / "stage1_frozen",
+                    frozen_store,
+                    artifact_path=layout.root / "frozen_feature_store_import.json",
+                    checkpoint_sha256=load_report.checkpoint_sha256,
+                    projection=projection,
+                ),
+            )
+        elif reuse_frozen_feature_store is None:
             _run_rank_zero_long_action(
                 accelerator,
                 "generate frozen Stage 1 feature store",
@@ -2997,6 +3171,124 @@ def run_full_stage2(
             validation_gene_count=len(validation_genes),
             validation_gene_universe_sha256=validation_gene_digest,
         )
+
+        def calibrated_provenance(
+            calibration_payload: Mapping[str, object],
+        ) -> CheckpointProvenance:
+            return CheckpointProvenance(
+                distributed_runtime=provenance.distributed_runtime,
+                warmup_runtime=provenance.warmup_runtime,
+                lambda_calibration_report=calibration_payload,
+                split_sha256=provenance.split_sha256,
+                gene_effect_sha256=provenance.gene_effect_sha256,
+                mu_train_sha256=provenance.mu_train_sha256,
+                residual_target_sha256=provenance.residual_target_sha256,
+                validation_target_sha256=provenance.validation_target_sha256,
+                centering_fit_model_ids_sha256=(
+                    provenance.centering_fit_model_ids_sha256
+                ),
+                validation_model_ids=provenance.validation_model_ids,
+                validation_gene_symbols=provenance.validation_gene_symbols,
+                validation_gene_count=provenance.validation_gene_count,
+                validation_gene_universe_sha256=(
+                    provenance.validation_gene_universe_sha256
+                ),
+            )
+
+        stage1_config = load_stage1_config(state.bundle.stage1_config)
+        response_loss = ResponseLoss(
+            ResponseLossWeights(
+                mean_delta=stage1_config.train.w_mean_delta,
+                energy=stage1_config.train.w_energy,
+            )
+        )
+
+        def finalize_and_seal(
+            warmup: Mapping[str, object],
+            joint: Mapping[str, object],
+            recovered: FinalizationRecovery | None = None,
+        ) -> None:
+            nonlocal phase
+            phase = "selected_checkpoint_evaluation_and_packaging"
+            _run_rank_zero_long_action(
+                accelerator,
+                "evaluate and package selected Stage 2 model",
+                layout.root / ".finalization_status.json",
+                lambda: _finalize_selected_run(
+                    layout=layout,
+                    run_id=run_id,
+                    state=state,
+                    data=data,
+                    response=response,
+                    model=model,
+                    response_loss=response_loss,
+                    device=device,
+                    projection=projection,
+                    standardizer=standardizer,
+                    feature_manifest=feature_manifest,
+                    warmup=warmup,
+                    joint=joint,
+                    git_commit=git_commit,
+                    distributed_runtime=distributed_runtime,
+                    response_lineage_sha256=response_lineage_sha256,
+                    response_lineage_artifact_sha256=(
+                        response_lineage_artifact_sha256
+                    ),
+                    recovery=recovered,
+                ),
+            )
+            phase = "completion_seal"
+            _run_rank_zero_long_action(
+                accelerator,
+                "seal completed Stage 2 run",
+                layout.root / ".completion_seal_status.json",
+                lambda: mark_complete(layout, run_id=run_id),
+            )
+            _run_all_ranks_or_raise(
+                accelerator,
+                "verify completion sentinel",
+                lambda: _assert_complete_sentinel(layout, run_id),
+            )
+            accelerator.wait_for_everyone()
+
+        if recovery is not None:
+            phase = "finalization_recovery_authentication"
+            joint_provenance = calibrated_provenance(recovery.calibration)
+            expected_warmup = json.loads(json.dumps(provenance.json_ready()))
+            expected_joint = json.loads(json.dumps(joint_provenance.json_ready()))
+            if recovery.warmup_provenance != expected_warmup:
+                raise ValueError(
+                    "recovered warmup checkpoint provenance does not match new run"
+                )
+            if recovery.joint_provenance != expected_joint:
+                raise ValueError(
+                    "recovered joint checkpoint provenance does not match new run"
+                )
+            frozen_cache.close()
+            supervision_cache.close()
+            frozen_cache = None
+            supervision_cache = None
+            train_precomputed = None
+            warmup_metric = None
+            phase = "finalization_recovery_copy"
+            run_rank_zero_or_raise(
+                accelerator,
+                "copy recovered Stage 2 training artifacts",
+                lambda: _copy_recovery_training_artifacts(recovery, layout),
+            )
+            accelerator.wait_for_everyone()
+            phase = "finalization_recovery_checkpoint_load"
+            _run_all_ranks_or_raise(
+                accelerator,
+                "strict-load recovered joint checkpoint",
+                lambda: _strict_load_recovered_joint_checkpoint(
+                    model, layout.joint / "training" / "best" / "e2e_state.pt"
+                ),
+            )
+            model.eval()
+            finalize_and_seal(recovery.warmup, recovery.joint, recovery)
+            return layout.root
+
         model.freeze_backbone()
         phase = "frozen_head_warmup"
         progress = TrainingProgressWriter(
@@ -3066,13 +3358,6 @@ def run_full_stage2(
         model.unfreeze_backbone()
         model.train()
         _assert_joint_calibration_ready(model)
-        stage1_config = load_stage1_config(state.bundle.stage1_config)
-        response_loss = ResponseLoss(
-            ResponseLossWeights(
-                mean_delta=stage1_config.train.w_mean_delta,
-                energy=stage1_config.train.w_energy,
-            )
-        )
 
         def run_calibration() -> None:
             _assert_joint_calibration_ready(model)
@@ -3154,23 +3439,7 @@ def run_full_stage2(
         calibration_payload = json.loads(
             (layout.root / "lambda_calibration.json").read_text(encoding="utf-8")
         )
-        joint_provenance = CheckpointProvenance(
-            distributed_runtime=provenance.distributed_runtime,
-            warmup_runtime=provenance.warmup_runtime,
-            lambda_calibration_report=calibration_payload,
-            split_sha256=provenance.split_sha256,
-            gene_effect_sha256=provenance.gene_effect_sha256,
-            mu_train_sha256=provenance.mu_train_sha256,
-            residual_target_sha256=provenance.residual_target_sha256,
-            validation_target_sha256=provenance.validation_target_sha256,
-            centering_fit_model_ids_sha256=(provenance.centering_fit_model_ids_sha256),
-            validation_model_ids=provenance.validation_model_ids,
-            validation_gene_symbols=provenance.validation_gene_symbols,
-            validation_gene_count=provenance.validation_gene_count,
-            validation_gene_universe_sha256=(
-                provenance.validation_gene_universe_sha256
-            ),
-        )
+        joint_provenance = calibrated_provenance(calibration_payload)
 
         def response_factory(epoch: int):
             for batch in response.batch_factory(epoch):
@@ -3200,44 +3469,7 @@ def run_full_stage2(
             ),
         )
         accelerator.wait_for_everyone()
-        phase = "selected_checkpoint_evaluation_and_packaging"
-        _run_rank_zero_long_action(
-            accelerator,
-            "evaluate and package selected Stage 2 model",
-            layout.root / ".finalization_status.json",
-            lambda: _finalize_selected_run(
-                layout=layout,
-                run_id=run_id,
-                state=state,
-                data=data,
-                response=response,
-                model=model,
-                response_loss=response_loss,
-                device=device,
-                projection=projection,
-                standardizer=standardizer,
-                feature_manifest=feature_manifest,
-                warmup=checkpoint_selection_warmup,
-                joint=joint,
-                git_commit=git_commit,
-                distributed_runtime=distributed_runtime,
-                response_lineage_sha256=response_lineage_sha256,
-                response_lineage_artifact_sha256=(response_lineage_artifact_sha256),
-            ),
-        )
-        phase = "completion_seal"
-        _run_rank_zero_long_action(
-            accelerator,
-            "seal completed Stage 2 run",
-            layout.root / ".completion_seal_status.json",
-            lambda: mark_complete(layout, run_id=run_id),
-        )
-        _run_all_ranks_or_raise(
-            accelerator,
-            "verify completion sentinel",
-            lambda: _assert_complete_sentinel(layout, run_id),
-        )
-        accelerator.wait_for_everyone()
+        finalize_and_seal(checkpoint_selection_warmup, joint)
         return layout.root
     except BaseException as exc:
         if accelerator.is_main_process and not layout.complete.exists():

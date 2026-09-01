@@ -165,6 +165,8 @@ def _write_full_runner_artifacts(
     distributed_runtime = {
         "world_size": world_size,
         "mixed_precision": "bf16",
+        "ddp_static_graph": True,
+        "ddp_find_unused_parameters": False,
         "conditions_per_rank": 256,
         "global_conditions_per_step": 256 * world_size,
         "rank_topology": [
@@ -986,6 +988,8 @@ def test_distributed_runtime_accepts_repeated_local_devices_across_hosts() -> No
     runtime = {
         "world_size": 2,
         "mixed_precision": "bf16",
+        "ddp_static_graph": True,
+        "ddp_find_unused_parameters": False,
         "conditions_per_rank": 64,
         "global_conditions_per_step": 128,
         "rank_topology": [
@@ -1000,6 +1004,17 @@ def test_distributed_runtime_accepts_repeated_local_devices_across_hosts() -> No
         ],
     }
     assert stage2_artifacts._verify_distributed_runtime(runtime) == runtime
+    for field, value in (
+        ("ddp_static_graph", False),
+        ("ddp_find_unused_parameters", True),
+    ):
+        invalid = {**runtime, field: value}
+        with pytest.raises(ValueError, match=field):
+            stage2_artifacts._verify_distributed_runtime(invalid)
+    missing = dict(runtime)
+    missing.pop("ddp_find_unused_parameters")
+    with pytest.raises(ValueError, match="fields mismatch"):
+        stage2_artifacts._verify_distributed_runtime(missing)
 
 
 def test_default_completion_rejects_consistent_optimizer_step_tamper(

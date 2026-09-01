@@ -328,6 +328,8 @@ def _verify_distributed_runtime(value: object) -> Mapping[str, object]:
     expected_fields = {
         "world_size",
         "mixed_precision",
+        "ddp_static_graph",
+        "ddp_find_unused_parameters",
         "conditions_per_rank",
         "global_conditions_per_step",
         "rank_topology",
@@ -363,6 +365,12 @@ def _verify_distributed_runtime(value: object) -> Mapping[str, object]:
     mixed_precision = runtime.get("mixed_precision")
     if not isinstance(mixed_precision, str) or not mixed_precision:
         raise ValueError("distributed_runtime mixed_precision must be nonempty")
+    if runtime.get("ddp_static_graph") is not True:
+        raise ValueError("distributed_runtime ddp_static_graph must be true")
+    if runtime.get("ddp_find_unused_parameters") is not False:
+        raise ValueError(
+            "distributed_runtime ddp_find_unused_parameters must be false"
+        )
     topology = runtime.get("rank_topology")
     if not isinstance(topology, list) or len(topology) != world_size:
         raise ValueError("distributed_runtime rank_topology does not match world_size")
