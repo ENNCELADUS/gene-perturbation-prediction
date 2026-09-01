@@ -35,9 +35,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="import an authenticated stage1_frozen store into a fresh run",
     )
+    parser.add_argument(
+        "--resume-finalization-from-run",
+        type=Path,
+        help=(
+            "create a fresh run from an authenticated failed run's selected "
+            "checkpoint and execute finalization only"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.reuse_frozen_feature_store is not None and args.run_id is None:
         parser.error("--reuse-frozen-feature-store requires --run-id")
+    if args.resume_finalization_from_run is not None and args.run_id is None:
+        parser.error("--resume-finalization-from-run requires --run-id")
+    if (
+        args.resume_finalization_from_run is not None
+        and args.reuse_frozen_feature_store is not None
+    ):
+        parser.error(
+            "--resume-finalization-from-run cannot be combined with "
+            "--reuse-frozen-feature-store"
+        )
     return args
 
 
@@ -60,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         args.config,
         run_id=args.run_id,
         reuse_frozen_feature_store=args.reuse_frozen_feature_store,
+        resume_finalization_from_run=args.resume_finalization_from_run,
     )
     return 0
 

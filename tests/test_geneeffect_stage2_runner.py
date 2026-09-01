@@ -345,6 +345,150 @@ def test_stage2_cli_requires_run_id_for_frozen_store_reuse(tmp_path: Path) -> No
     )
     assert args.reuse_frozen_feature_store == tmp_path / "old-store"
 
+    recovery = tmp_path / "failed-run"
+    args = parse_args(
+        [
+            "--config",
+            str(tmp_path / "config.yaml"),
+            "--run-id",
+            "retry-2",
+            "--resume-finalization-from-run",
+            str(recovery),
+        ]
+    )
+    assert args.resume_finalization_from_run == recovery
+
+
+def _recovery_fixture(tmp_path: Path):
+    split = _write(tmp_path / "split.json", '{"train":["T1"]}')
+    gene_effect = _write(tmp_path / "gene_effect.csv", "model_id,gene\nT1,G1\n")
+    snapshot = {"identity": "formal-config"}
+    config = SimpleNamespace(
+        snapshot=lambda: snapshot,
+        paths=SimpleNamespace(split=split, gene_effect=gene_effect),
+        warmup=SimpleNamespace(max_epochs=3),
+        joint=SimpleNamespace(max_epochs=3),
+    )
+    state = SimpleNamespace(config=config)
+    runtime = {"world_size": 2}
+    source = tmp_path / "failed-run"
+    runner = pytest.importorskip("aivc_model.geneeffect_stage2_runner")
+    runner.atomic_write_json(source / "config_snapshot.json", snapshot)
+    runner.atomic_write_json(
+        source / "failure.json",
+        {"phase": "selected_checkpoint_evaluation_and_packaging"},
+    )
+    runner.atomic_write_json(
+        source / "run_manifest.json",
+        {
+            "run_id": "failed-formal",
+            "distributed_runtime": runtime,
+        },
+    )
+    _write(
+        source / "cell_line_geneeffect_226_split.json", split.read_text()
+    )
+    _write(
+        source / "condition_features/stage1_frozen/manifest.json",
+        '{"stage":"stage1_frozen"}',
+    )
+    calibration = {"lambda_dep": 1.0}
+    runner.atomic_write_json(source / "lambda_calibration.json", calibration)
+    base_provenance = {
+        "runtime": runtime,
+        "split": sha256_file(split),
+        "gene_effect": sha256_file(gene_effect),
+        "lambda_calibration_report": None,
+    }
+    for phase, filename, kind, metric, provenance in (
+        ("warmup", "head.pt", "warmup", 0.1, base_provenance),
+        (
+            "joint",
+            "e2e_state.pt",
+            "e2e",
+            0.2,
+            {**base_provenance, "lambda_calibration_report": calibration},
+        ),
+    ):
+        training = source / phase / "training"
+        _write(training / "best" / filename, f"{phase} checkpoint")
+        runner.atomic_write_json(
+            training / "best" / "metadata.json",
+            {
+                "checkpoint_kind": kind,
+                "epoch": 0,
+                "metric_value": metric,
+                "provenance": provenance,
+            },
+        )
+        _write(
+            training / "train_log.csv",
+            "epoch,validation_macro_per_gene_spearman\n" f"0,{metric}\n",
+        )
+    return runner, source, state, runtime
+
+
+def test_finalization_recovery_authenticates_and_copies_selected_artifacts(
+    tmp_path: Path,
+) -> None:
+    runner, source, state, runtime = _recovery_fixture(tmp_path)
+
+    recovery = runner._authenticate_finalization_recovery(source, state, runtime)
+    layout = Stage2RunLayout(tmp_path / "new-run")
+    layout.root.mkdir()
+    runner._copy_recovery_training_artifacts(recovery, layout)
+
+    assert recovery.source_run_id == "failed-formal"
+    assert recovery.checkpoint_sha256 == sha256_file(
+        source / "joint/training/best/e2e_state.pt"
+    )
+    for relative_path in runner._RECOVERY_ARTIFACTS:
+        assert sha256_file(layout.root / relative_path) == sha256_file(
+            source / relative_path
+        )
+    assert not (source / "complete.json").exists()
+    assert (source / "failure.json").is_file()
+
+
+def test_finalization_recovery_rejects_wrong_source_identity(tmp_path: Path) -> None:
+    runner, source, state, runtime = _recovery_fixture(tmp_path)
+    runner.atomic_write_json(source / "config_snapshot.json", {"identity": "other"})
+
+    with pytest.raises(ValueError, match="config identity mismatch"):
+        runner._authenticate_finalization_recovery(source, state, runtime)
+
+
+def test_finalization_recovery_rejects_wrong_failure_phase(tmp_path: Path) -> None:
+    runner, source, state, runtime = _recovery_fixture(tmp_path)
+    runner.atomic_write_json(
+        source / "failure.json",
+        {"phase": "joint_training", "error_type": "RuntimeError", "error": "x"},
+    )
+
+    with pytest.raises(ValueError, match="failure phase must be exactly"):
+        runner._authenticate_finalization_recovery(source, state, runtime)
+
+
+def test_finalization_recovery_strict_loads_joint_checkpoint(
+    tmp_path: Path,
+) -> None:
+    import aivc_model.geneeffect_stage2_runner as runner
+
+    source = torch.nn.Linear(2, 1)
+    checkpoint = tmp_path / "e2e_state.pt"
+    torch.save(source.state_dict(), checkpoint)
+    target = torch.nn.Linear(2, 1)
+
+    runner._strict_load_recovered_joint_checkpoint(target, checkpoint)
+
+    assert all(
+        torch.equal(source_value, target.state_dict()[name])
+        for name, source_value in source.state_dict().items()
+    )
+    torch.save({"unexpected": torch.ones(1)}, checkpoint)
+    with pytest.raises(RuntimeError, match="state_dict"):
+        runner._strict_load_recovered_joint_checkpoint(target, checkpoint)
+
 
 def test_preflight_loads_contract_and_verifies_both_caches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1523,7 +1667,9 @@ def test_response_batch_device_helper_moves_every_tensor() -> None:
 
 def test_registered_baselines_cover_every_required_method() -> None:
     genes = ("G1", "G2", "G3")
-    train = ("T1", "T2", "T3", "T4")
+    supervised_train = ("T1", "T2", "T3", "T4")
+    unlabeled_train = ("U1",)
+    train = (*supervised_train, *unlabeled_train)
     val = ("V1",)
     test = ("E1",)
     model_ids = (*train, *val, *test)
@@ -1534,16 +1680,18 @@ def test_registered_baselines_cover_every_required_method() -> None:
             "gene_effect": float(line_index + gene_index / 10),
         }
         for line_index, model_id in enumerate(model_ids)
+        if model_id not in unlabeled_train
         for gene_index, gene in enumerate(genes)
     ]
     state = SimpleNamespace(
         residual_data=SimpleNamespace(targets=SimpleNamespace(long=pd.DataFrame(rows))),
         copy_prior=pd.Series({gene: float(index) for index, gene in enumerate(genes)}),
         split=SimpleNamespace(
-            supervised_train=train,
+            train=train,
+            supervised_train=supervised_train,
             val=val,
             test=test,
-            unlabeled_train=(),
+            unlabeled_train=unlabeled_train,
         ),
         config=SimpleNamespace(
             seeds=SimpleNamespace(train=7),
