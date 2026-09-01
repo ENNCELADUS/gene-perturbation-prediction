@@ -401,7 +401,13 @@ def _recovery_fixture(tmp_path: Path):
         "lambda_calibration_report": None,
     }
     for phase, filename, kind, metric, provenance in (
-        ("warmup", "head.pt", "warmup", 0.1, base_provenance),
+        (
+            "warmup",
+            "head.pt",
+            "head",
+            0.028388660158351252,
+            base_provenance,
+        ),
         (
             "joint",
             "e2e_state.pt",

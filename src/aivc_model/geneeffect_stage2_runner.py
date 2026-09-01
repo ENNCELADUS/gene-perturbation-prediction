@@ -2605,7 +2605,17 @@ def _recovered_training_outcome(
     history = pd.read_csv(training_dir / "train_log.csv").to_dict(orient="records")
     best_epoch = int(metadata["epoch"])
     outcome = _outcome(history, best_epoch, len(history) < max_epochs)
-    if outcome["best_metric"] != metadata.get("metric_value"):
+    metric_value = metadata.get("metric_value")
+    if (
+        isinstance(metric_value, bool)
+        or not isinstance(metric_value, (int, float))
+        or not np.isclose(
+            float(outcome["best_metric"]),
+            float(metric_value),
+            rtol=1e-12,
+            atol=1e-15,
+        )
+    ):
         raise ValueError(f"checkpoint/history mismatch: {training_dir}")
     return outcome, metadata
 
@@ -2665,7 +2675,7 @@ def _authenticate_finalization_recovery(
     ):
         raise ValueError("recovery checkpoint provenance is invalid")
     if (
-        warmup_metadata.get("checkpoint_kind") != "warmup"
+        warmup_metadata.get("checkpoint_kind") != "head"
         or joint_metadata.get("checkpoint_kind") != "e2e"
     ):
         raise ValueError("recovery checkpoint kind mismatch")
