@@ -1694,6 +1694,11 @@ def test_registered_baselines_cover_every_required_method() -> None:
         for row in rows
         if row["model_id"] == "T4" and row["gene_symbol"] == "G1"
     )["gene_effect"] = np.nan
+    next(
+        row
+        for row in rows
+        if row["model_id"] == "V1" and row["gene_symbol"] == "G1"
+    )["gene_effect"] = np.nan
     state = SimpleNamespace(
         residual_data=SimpleNamespace(targets=SimpleNamespace(long=pd.DataFrame(rows))),
         copy_prior=pd.Series({gene: float(index) for index, gene in enumerate(genes)}),

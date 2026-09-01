@@ -2056,7 +2056,9 @@ def run_registered_baselines(state: Stage2Preflight, data: Stage2DependencyData)
     labels = state.residual_data.targets.long[
         ["model_id", "gene_symbol", "gene_effect"]
     ]
-    labels = labels.loc[labels["gene_symbol"].isin(data.genes)].copy()
+    labels = labels.loc[
+        labels["gene_symbol"].isin(data.genes) & labels["gene_effect"].notna()
+    ].copy()
     z_c = pd.DataFrame(
         data.z_c,
         index=pd.Index(data.model_ids, name="model_id"),
