@@ -182,6 +182,10 @@ def _build_fold_targets(
             n_dropped,
             min_lines,
         )
+    missing_labels = int(long["gene_effect"].isna().sum())
+    if missing_labels:
+        _LOGGER.warning("dropped %d row(s) without GeneEffect labels", missing_labels)
+        long = long.loc[long["gene_effect"].notna()]
     long = long.copy()
     long["residual"] = long["gene_effect"] - long["gene_mean"]
     long = long[["model_id", "gene_symbol", "gene_effect", "gene_mean", "residual"]]
