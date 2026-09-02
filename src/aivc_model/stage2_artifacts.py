@@ -244,7 +244,22 @@ def _verify_selected_checkpoint(
         )
     if metadata.get("epoch") != selection.get("best_epoch"):
         raise ValueError(f"selected checkpoint epoch mismatch: {metadata_path}")
-    if metadata.get("metric_value") != selection.get("best_metric"):
+    metadata_metric = metadata.get("metric_value")
+    selection_metric = selection.get("best_metric")
+    if (
+        isinstance(metadata_metric, bool)
+        or isinstance(selection_metric, bool)
+        or not isinstance(metadata_metric, (int, float))
+        or not isinstance(selection_metric, (int, float))
+        or not math.isfinite(float(metadata_metric))
+        or not math.isfinite(float(selection_metric))
+        or not math.isclose(
+            float(metadata_metric),
+            float(selection_metric),
+            rel_tol=1e-12,
+            abs_tol=1e-12,
+        )
+    ):
         raise ValueError(f"selected checkpoint metric mismatch: {metadata_path}")
     history_path = root / training_dir / "train_log.csv"
     with history_path.open(newline="", encoding="utf-8") as handle:
@@ -264,7 +279,7 @@ def _verify_selected_checkpoint(
         ) from exc
     if not math.isfinite(history_metric) or not math.isclose(
         history_metric,
-        float(metadata["metric_value"]),
+        float(metadata_metric),
         rel_tol=1e-12,
         abs_tol=1e-12,
     ):
