@@ -19,7 +19,6 @@ from typing import Mapping, Sequence
 REQUIRED_STAGE2_OUTPUTS: tuple[str, ...] = (
     "config_snapshot.json",
     "cell_line_geneeffect_226_split.json",
-    "stage1_model_manifest.json",
     "stage1_objective.json",
     "esm2_gene_universe_manifest.json",
     "esm2_provenance_manifest.json",
@@ -941,7 +940,6 @@ def _verify_runner_contract(root: Path) -> None:
     json_names = (
         "config_snapshot.json",
         "cell_line_geneeffect_226_split.json",
-        "stage1_model_manifest.json",
         "stage1_objective.json",
         "esm2_gene_universe_manifest.json",
         "esm2_provenance_manifest.json",

@@ -627,6 +627,23 @@ def test_default_completion_verifies_full_runner_contract(
     assert verify_complete_run(layout.root)["status"] == "complete"
 
 
+def test_default_completion_does_not_require_retired_stage1_manifest(
+    tmp_path: Path,
+) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    (layout.root / "stage1_model_manifest.json").unlink()
+
+    assert mark_complete(layout, run_id="formal") == {
+        "status": "complete",
+        "run_id": "formal",
+    }
+    assert verify_complete_run(layout.root) == {
+        "status": "complete",
+        "run_id": "formal",
+    }
+
+
 @pytest.mark.parametrize(
     "relative",
     (
