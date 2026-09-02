@@ -921,6 +921,26 @@ def test_default_completion_binds_selected_metric_to_validation(
         mark_complete(layout, run_id="formal")
 
 
+def test_default_completion_allows_bounded_validation_recompute_drift(
+    tmp_path: Path,
+) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    metadata_path = layout.root / "joint/training/best/metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["metric_value"] = 0.99995
+    atomic_write_json(metadata_path, metadata)
+    selection_path = layout.root / "checkpoint_selection.json"
+    selection = json.loads(selection_path.read_text())
+    selection["joint"]["best_metric"] = 0.99995
+    atomic_write_json(selection_path, selection)
+    (layout.root / "joint/training/train_log.csv").write_text(
+        "epoch,validation_macro_per_gene_spearman\n0,0.99995\n"
+    )
+
+    assert mark_complete(layout, run_id="formal")["status"] == "complete"
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
