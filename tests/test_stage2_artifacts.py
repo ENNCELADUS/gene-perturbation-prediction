@@ -644,6 +644,31 @@ def test_default_completion_does_not_require_retired_stage1_manifest(
     }
 
 
+def test_default_completion_accepts_metric_json_roundoff(tmp_path: Path) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    selection_path = layout.root / "checkpoint_selection.json"
+    selection = json.loads(selection_path.read_text())
+    selection["warmup"]["best_metric"] = 0.5000000000000001
+    atomic_write_json(selection_path, selection)
+
+    assert mark_complete(layout, run_id="formal")["status"] == "complete"
+
+
+def test_default_completion_rejects_material_checkpoint_metric_mismatch(
+    tmp_path: Path,
+) -> None:
+    layout = prepare_run_dir(tmp_path / "run")
+    _write_full_runner_artifacts(layout)
+    selection_path = layout.root / "checkpoint_selection.json"
+    selection = json.loads(selection_path.read_text())
+    selection["warmup"]["best_metric"] = 0.51
+    atomic_write_json(selection_path, selection)
+
+    with pytest.raises(ValueError, match="selected checkpoint metric mismatch"):
+        mark_complete(layout, run_id="formal")
+
+
 @pytest.mark.parametrize(
     "relative",
     (
