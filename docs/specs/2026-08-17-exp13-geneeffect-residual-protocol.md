@@ -1,8 +1,8 @@
 # Experiment Protocol: Exp13 Cell-Line GeneEffect Residual Benchmark
 
-**Status:** Stage 0 and the formal Stage 1 response run are complete. The strict two-phase Stage 2
-implementation exists, but no Stage 2 result exists: its 226-line Tx1/q_sc/raw-UMI inputs,
-target-universe ESM2, registered copy-prior, and selected Stage 1 checkpoint must pass preflight; loading checks model/key compatibility, not provenance hashes, and historical training lineage remains incomplete.
+**Status:** Stage 0, the formal Stage 1 response run, and formal Stage 2 are complete.
+The one-seed Stage 2 test is a negative point estimate (0.0225 versus context-PCA 0.0851
+and nearest-line 0.0462); historical Stage 1 training lineage remains incomplete.
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
 **Authority:** [`01-blueprint.md`](../01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**

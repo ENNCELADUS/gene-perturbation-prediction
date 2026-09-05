@@ -2,7 +2,7 @@
 
 **Status:** active research contract. Supersedes the Feng2024 two-axis formulation and the
 train-free SLIdR stage; neither is part of this program. T1 and T2 closed negative and are
-paused. No result exists under this contract.
+paused. No SL result exists; scope-closed Exp13 Stage 2 is a negative point estimate.
 **Companions:** [`02-literature-review.md`](02-literature-review.md) fixes the prior-art
 boundary · [`03-experiment-protocol.md`](03-experiment-protocol.md) is the SL-pair executable
 protocol · [`specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](specs/2026-08-17-exp13-geneeffect-residual-protocol.md)
@@ -242,10 +242,10 @@ four are contract-level.
   $\hat\delta$ and for control C5.
 - **Benchmark:** the `context_screen_v2` row-level SL split is built; its raw-filter audit
   remains incomplete and no model has run.
-- **Exp13:** the 226-line GeneEffect residual contract is written and its Stage 0 input
-  question is closed — Tx1 does not read CPM like raw counts, so the 152 Kinker lines were
-  rebuilt from SCP542 UMI counts (`results/exp13-stage0-tx1-input-representation.md`). No
-  training run has started. Scope-closed per §8.
+- **Exp13:** formal Stage 2 completed on the 226-line GeneEffect residual benchmark.
+  The one-seed model test macro per-gene Spearman was 0.0225, below context-PCA ridge
+  (0.0851) and nearest-line (0.0462); negative point estimate, with no positive context
+  claim and never SL evidence. Scope-closed per §8 (`results/exp13-stage2-full.md`).
 
 Negative backbone results constrain the substrate; they are not SL results. A claim enters
 `results/` only after its frozen evaluation, provenance, and integrity checks complete.
