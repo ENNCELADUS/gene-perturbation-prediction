@@ -21,6 +21,7 @@ A second question was added after reading the collator: the released checkpoint 
 ## Method and provenance
 
 `scripts/stage0_tx1_input_probe.py` at commit `260b4bf`, run under `.venv-tx1` on one H20-3e.
+The historical source now lives at `scripts/historical_data_preparation/stage0_tx1_input_probe.py` (moved 2026-09-05).
 Four arms over the same cells in the same order: `raw`; `cpm` (`raw * 1e6 / library_size`);
 `repeat_seeded`; `repeat_unseeded`. Each seeded arm calls `torch.manual_seed` immediately
 before its forward pass — without that pinning the CPM and subsampling effects are
@@ -89,7 +90,7 @@ PYTHONPATH=src:. .venv-tx1/bin/python scripts/prepare_kinker_umi_h5ad.py \
   --hvg-var-dims <state>/var_dims.pkl --output-dir <processed>/kinker_umi_152
 
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src:. .venv-tx1/bin/python \
-  scripts/stage0_tx1_input_probe.py --adata <processed>/kinker_umi_152/h5ad/ACH-000211.h5ad \
+  -m scripts.historical_data_preparation.stage0_tx1_input_probe --adata <processed>/kinker_umi_152/h5ad/ACH-000211.h5ad \
   --model-dir data/models/tahoe_x1_3b/3b-model --n-cells 256 --batch-size 8 \
   --out-json results/stage0/tx1_input_probe_kinker_ACH-000211.json
 ```

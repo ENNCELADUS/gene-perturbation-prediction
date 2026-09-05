@@ -746,8 +746,13 @@ def _manifest(
         },
         "provenance": {
             "builder": {
-                "path": "scripts/build_sl_context_benchmark.py",
-                "sha256": _sha256(Path("scripts/build_sl_context_benchmark.py")),
+                "path": (
+                    "scripts/historical_data_preparation/build_sl_context_benchmark.py"
+                ),
+                "sha256": _sha256(
+                    Path("scripts/historical_data_preparation")
+                    / "build_sl_context_benchmark.py"
+                ),
             },
             "source_row_id": (
                 "global raw-CSV row number; links contexts exploded from one "

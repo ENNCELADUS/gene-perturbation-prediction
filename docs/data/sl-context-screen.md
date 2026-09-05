@@ -6,7 +6,7 @@ Tx1-contract-verified basal artifacts; they are SL-label-only test contexts beca
 26Q1 GeneEffect file has no row for either ModelID. HAP1/22RV1 remain source-registered only.
 
 This is the only card for this dataset. It supersedes the separate v1 and v2 cards; the v1
-artifact remains on disk unmodified as the pre-provenance snapshot.
+artifact is preserved in the local 2026-09-05 archive as the pre-provenance snapshot.
 
 The pre-split surface has 184,962 rows, 172,838 unique pairs, 15,694 genes, 10 contexts,
 11,999 multi-context pairs and 0 cross-context label changes. After registered-context
@@ -74,7 +74,7 @@ keys are collapsed. No class balancing or negative sampling: natural imbalance i
 
 ## Split Construction
 
-`scripts/build_sl_context_benchmark.py` then:
+`scripts/historical_data_preparation/build_sl_context_benchmark.py` then:
 
 1. retains pre-split contexts with at least 10 rows in each class;
 2. keeps configured contexts with hash-pinned basal metadata; train and validation require
@@ -132,9 +132,9 @@ three matrices; the source omits mitochondrial genes, so mitochondrial QC is una
 
 ## Generated Files
 
-Build: `uv run python scripts/build_sl_context_benchmark.py`.
+Build: `uv run python scripts/historical_data_preparation/build_sl_context_benchmark.py`.
 PC9/HeLa basal build: `scripts/build_pc9_hela_basal.py` on the HPC.
-Historical unsplit v1 remains under `data/SL_Benchmark_Formal/derived/context_screen_v1/` with `sl_context_pairs.csv`, `context_inventory.csv`, and `manifest.json`.
+Historical unsplit v1 is archived under `archive/2026-09-05-inactive-routes/data/SL_Benchmark_Formal/derived/context_screen_v1/` with `sl_context_pairs.csv`, `context_inventory.csv`, and `manifest.json`.
 The pair table has no split/fold; `source_row_min_fdr` is aggregate-row, not per-context. Its inventory reports unique
 genes and genes with both labels; the manifest freezes source/output hashes, filtering rules,
 Feng-alignment decisions and row counts.

@@ -10,30 +10,7 @@ SL-pair/graph training (vs. SLMGAE / KR4SL), and separately transfer a context-c
 **State:** T1 (K562 Bridge-A vs Horlbeck mechanism) and T2 (few-shot cross-cell-line GeneEffect) both **completed negative**; their
 implementations — the exp05 stack, Bridge-A, the Tx1 Phase A–F tree — were **deleted at `873c99c`**, surviving in git history and `docs/results/`
 only. Active work is **Exp13**, the 226-line cell-line GeneEffect *residual* benchmark (`docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`): contract
-written, Stage 0 open, **no run started**. The `context_screen_v2` SL split is built and unrun. Feng2024 SOTA reproduction is not started.
-
-## Engineering rules
-
-- Keep documents clean and concise: replacement edits must preserve the line count or reduce it; never increase it.
-- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
-- Do not validate representation form or self-declared metadata. Every validator must prevent a concrete computation, data-integrity, leakage, or scientific-protocol failure.
-- Choose the simplest implementation that fully meets the current requirement. Avoid speculative
-  abstraction, configuration, and indirection.
-- Grow the system in layers: start from the smallest version that works end to end, and add each
-  capability on top of something that already works. Never trade a working product for unfinished
-  complexity.
-- Keep components modular and concerns clearly separated.
-- Prefer established, well-maintained libraries when they reduce complexity or improve reliability.
-  Do not reimplement common functionality without a clear reason.
-- Lean on the dependencies already in the project before writing your own implementation or adding
-  packages; check a library's docs and types before assuming it lacks a capability.
-- Make architectural decisions for the long term. No stopgap meant to be replaced later.
-
-## Skills — load before touching the area
-
-`research-vault` (editing `docs/`, writing a claim or a result) · `tx1-cache` (`tx1_basal.py`, `tx1_embed_cache.py`,
-`build_tx1_basal_embeddings.py`) · `benchmark-harness` (`data/SL_benchmark/` splits, SL metrics, `vcc-dep-baseline`, the
-`models:`/`selection:` config pattern) · `hpc-execution` (GPU, GWPS h5ad, ESM2, Tx1-3B, ST checkpoints).
+written, Stage 0 open, **no run started**. The `context_screen_v2` SL split is built and unrun. 
 
 ## After each implementation wave
 
