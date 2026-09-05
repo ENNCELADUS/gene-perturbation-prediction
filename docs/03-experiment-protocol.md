@@ -45,7 +45,7 @@ Each was computed directly from `derived/context_screen_v1/sl_context_pairs.csv`
 
 ### 2.2 Build
 
-Re-run `scripts/build_sl_context_benchmark.py` against `sl_integrated_pairs.csv` with two
+Re-run `scripts/historical_data_preparation/build_sl_context_benchmark.py` against `sl_integrated_pairs.csv` with two
 changes, writing to `derived/context_screen_v2/`. Do not overwrite v1.
 
 1. **Emit `source_row_id`** for every exploded row. It links contexts exploded from one

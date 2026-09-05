@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build raw-UMI Kinker h5ads that satisfy the standard Tx1 input contract.
 
-Sibling of ``prepare_kinker_cpm_h5ad.py`` with the contract inverted. That
+Sibling of ``historical_data_preparation/prepare_kinker_cpm_h5ad.py``
+with the contract inverted. That
 script ingests the GEO ``GSE157220_CPM_data.txt.gz`` matrix and deliberately
 marks every artifact ``tx1_raw_count_contract: blocked``, because published
 CPM cannot be reconstructed into counts. Exp13 Stage 0 measured what feeding

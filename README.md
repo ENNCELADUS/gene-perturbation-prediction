@@ -118,7 +118,7 @@ cell line + perturbation gene
     → context-specific target ranking
 ```
 
-That staged program is **retired as the roadmap**. Its exp08/exp08b implementation was removed, and the exp05 forward-model stack followed in 2026/08 after T1 and T2 closed negative; the remaining dependency, SL-benchmark, and DDGCN code supports active work and retained baselines. Historical results remain **prior evidence** for the new direction — see [Results](#results) and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
+That staged program is **retired as the roadmap**. Its exp08/exp08b implementation was removed, and the exp05 forward-model stack followed in 2026/08 after T1 and T2 closed negative; the remaining Tx1/Exp13 code supports the current substrate; dependency, SL-benchmark and DDGCN support files are archived. Historical results remain **prior evidence** for the new direction — see [Results](#results) and [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
 ## Installation
 
@@ -149,19 +149,9 @@ uv run ruff format .         # format
 uv run python -m pytest      # full test suite (synthetic fixtures)
 ```
 
-### Running the Pipeline
+### Current Entrypoints
 
-The normal entrypoint is the `vcc-dep-baseline` CLI:
-
-```bash
-uv run vcc-dep-baseline --help
-```
-
-Subcommands: `build-features`, `build-cell-bags`, `build-external-cell-bags`, `build-external-features`, `run-cv`, `run-single-cell-cv`, `evaluate-single-cell-external`, `run-distribution-cv`, `evaluate-distribution-external`, `run-predicted-b-cv`, `fit-final`, `summarize`, `organize-artifacts`, `viability-axis-report`. Most runner subcommands accept `--resume` and repeatable selection flags (`--scope`, `--feature-set`, `--model`, `--fold`, `--weighting`).
-
-### The `aivc_model` Exception
-
-`src/aivc_model/` — the Exp13 GeneEffect residual path — is **not** part of the CLI. Its entrypoints are scripts:
+`src/aivc_model/` retains the Tx1/Exp13 substrate and R1 baseline. Run its scripts from the repository root. The retired dependency and Feng2024 CLIs are archived locally; see [archive inventory](docs/archive-inventory-2026-09-05.md).
 
 ```bash
 # R1 residual baseline ladder on DepMap GeneEffect
@@ -179,69 +169,17 @@ PYTHONPATH=src:. .venv-tx1/bin/python scripts/build_tx1_basal_embeddings.py --he
 
 ## Architecture
 
-### Conceptual Framing
+- `src/aivc_model/`: Tx1 basal/response machinery, Exp13 residual training and R1 controls.
+- `scripts/`: Exp13 preparation, training and evaluation; see [script inventory](scripts/README.md).
+- `scripts/historical_data_preparation/`: non-Exp13 data preparation and historical diagnostics.
+- `configs/benchmarks/`: fixed split and basal registration authorities.
+- `configs/experiments/13_geneeffect_226/`: retained GeneEffect substrate configuration.
 
-The prior dependency pipeline closes a triangle: two edges (data → response,
-response → dependency) are provided by existing data, and the model focuses on
-the **transcriptomic response → single-gene GeneEffect** edge.
-
-### Pipeline Tracks
-
-```
-                       h5ad + DepMap labels
-                                │
-         ┌──────────────────────┼──────────────────────────┐
-         ▼                      ▼                            ▼
-┌──────────────────┐  ┌──────────────────────┐  ┌────────────────────────┐
-│ TRACK 1          │  │ TRACK 2              │  │ TRACK 3                │
-│ Pseudobulk Delta │  │ Single-Cell Deep Sets│  │ Distribution / Proto   │
-│                  │  │                      │  │                        │
-│ build-features   │  │ build-cell-bags      │  │ run-distribution-cv    │
-│   → features.npz │  │   → bags.npz (PCA)   │  │   (FrozenGMM /         │
-│ run-cv           │  │ run-single-cell-cv   │  │    CloudPred-style)    │
-│   (Repeated      │  │   (DeepSetsRegressor)│  │ GMM occupancy features │
-│    Stratified    │  │ evaluate-single-cell │  │   → Ridge / forest head│
-│    KFold)        │  │   -external (Adamson)│  │ evaluate-distribution  │
-│ fit-final        │  │                      │  │   -external (Adamson)  │
-└────────┬─────────┘  └──────────┬───────────┘  └───────────┬────────────┘
-         │                       │                          │
-         └───────────────────────┴──────────────────────────┘
-                                 │
-                                 ▼
-                  ArtifactStore (fold metrics, predictions,
-                   model manifests, top-k candidates, resume state)
-
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ EXP13 RESIDUAL (src/aivc_model/ — scripts, not the CLI)         │
-   │  basal cells + perturbation → Delta → mu_g + delta_hat(g, c)    │
-   └─────────────────────────────────────────────────────────────────┘
-
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ STAGE 3 SL ADAPTER (src/sl_benchmark_baseline/)                  │
-   │  (gene_a, gene_b) → swap-invariant GeneEffect features → P(SL)   │
-   └─────────────────────────────────────────────────────────────────┘
-```
-
-### Key Components
-
-| Module | Role |
-| --- | --- |
-| `src/dependency_baseline/` | Multi-track CV pipeline: `features.py`, `datasets.py`, `models.py`, `cell_bags.py`, `single_cell.py`, `distribution.py`, `predicted_b.py`, `evaluation.py`. |
-| `src/aivc_model/` | Exp13 GeneEffect residual path (`geneeffect_head.py`, `benchmark_split.py`, `residual_{target,ladder,metrics}.py`) plus the Tx1 basal → embedding → response modules and forward-only STATE loading. |
-| `src/sl_benchmark_baseline/` | Dependency-only SL pair baseline with official-metric evaluator. |
-| `config.py` | Frozen dataclasses loaded from YAML; `SelectionConfig` narrows scopes/features/models/folds at runtime. |
-| `artifacts.py` | `ArtifactStore` — incremental parquet writes, checkpoints, run manifests, resume state. |
-| `metrics.py` | Spearman, Pearson, RMSE, MAE, R² for regression; AUROC, AUPRC, top-k enrichment for ranking. |
-
-### Design Decisions
-
-- **Observed-before-predicted** — Stage 1/2 validate observed response signal before any forward-model dependence, so predicted-transcriptome error is isolated.
-- **Fold-local everything** — In predicted-B and distribution tracks, A→B fitting, featurization, GMM prototypes, and the C head all train on train genes only.
-- **Config-driven runs** — Model ladders, selection filters, predicted-B settings, and viability-axis residualization live in YAML under `configs/experiments/`, grouped by experiment number. The numbered write-ups that used to accompany each experiment are archived locally (gitignored, not tracked in git); see [Documentation](#documentation) for what's actually tracked.
+The context-conditioned SL model has not run. Historical dependency/Feng2024 implementations, matching tests and outputs were moved out of the active directories on 2026-09-05. See [archive inventory](docs/archive-inventory-2026-09-05.md).
 
 ## Results
 
-Headline numbers from the implemented baselines. These are the **floor and baselines** for the active composition direction (see [Research Framing](#research-framing)) — the dependency-only SL floor and the observed-transcriptome result the composition must beat, plus the single-gene forward-model signal it builds on. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
+Historical evidence from retired routes; their raw local outputs and implementations are archived. These numbers are not results of the active context-conditioned SL protocol. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
 
 ### HCT116 Frozen-K562-Backbone Transport (one-shot audit, 2026-07-21)
 
