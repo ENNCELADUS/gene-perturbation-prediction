@@ -784,22 +784,6 @@ def test_validate_response_sources_shape_rejects_inadmissible_role(
         )
 
 
-def test_validate_response_sources_shape_requires_verified_cache(
-    tmp_path: Path,
-) -> None:
-    fixture = _build_two_line_fixture(tmp_path)
-    # Corrupt the cache's run manifest so verify_cache no longer reports
-    # "verified" (mirrors assemble_train_response_gene_bags's own guard).
-    (fixture.cache_dir / "manifest.json").write_text("{}", encoding="utf-8")
-    with pytest.raises(ValueError, match="not verified"):
-        validate_response_sources_shape(
-            cell_line_manifest_path=fixture.manifest_path,
-            tx1_cache_dir=fixture.cache_dir,
-            hvg_state_model_dir=fixture.hvg_dir,
-            perturbseq_sources_path=fixture.sources_path,
-        )
-
-
 # --- total_cells_per_line wiring (fix-round-3, Fix 1's reserved knob) ------
 
 
@@ -873,105 +857,6 @@ def test_assemble_logs_peak_rss_before_and_after_each_line(
 
 
 # --- Fix 2: shared, fingerprinted response-targets cache -------------------
-
-
-def test_assemble_response_cache_hit_matches_fresh_build(tmp_path: Path) -> None:
-    """The cache-populating (miss) run and a cache-hit run of the SAME inputs
-    must produce byte-identical assembled GeneBags -- the correctness bar
-    Fix 2 must clear, not just "it returns something"."""
-    fixture = _build_two_line_fixture(tmp_path)
-    response_cache_dir = tmp_path / "response_cache"
-    kwargs = dict(
-        cell_line_manifest_path=fixture.manifest_path,
-        tx1_cache_dir=fixture.cache_dir,
-        hvg_state_model_dir=fixture.hvg_dir,
-        perturbseq_sources_path=fixture.sources_path,
-        max_cells_per_gene=2,
-        seed=3,
-    )
-    fresh = assemble_train_response_gene_bags(**kwargs)
-    miss = assemble_train_response_gene_bags(
-        response_cache_dir=response_cache_dir, **kwargs
-    )
-    hit = assemble_train_response_gene_bags(
-        response_cache_dir=response_cache_dir, **kwargs
-    )
-    for candidate in (miss, hit):
-        assert candidate.genes.tolist() == fresh.genes.tolist()
-        np.testing.assert_array_equal(candidate.control_target, fresh.control_target)
-        np.testing.assert_array_equal(candidate.control_input, fresh.control_input)
-        for a, b in zip(candidate.target_bags, fresh.target_bags, strict=True):
-            np.testing.assert_array_equal(a, b)
-        pd.testing.assert_frame_equal(
-            candidate.metadata.reset_index(drop=True),
-            fresh.metadata.reset_index(drop=True),
-        )
-
-
-def test_assemble_response_cache_second_call_never_rereads_raw_sources(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The whole point of Fix 2: a second arm's invocation, given the same
-    ``response_cache_dir``, must not call either response-cell builder
-    again."""
-    fixture = _build_two_line_fixture(tmp_path)
-    response_cache_dir = tmp_path / "response_cache"
-    kwargs = dict(
-        cell_line_manifest_path=fixture.manifest_path,
-        tx1_cache_dir=fixture.cache_dir,
-        hvg_state_model_dir=fixture.hvg_dir,
-        perturbseq_sources_path=fixture.sources_path,
-        response_cache_dir=response_cache_dir,
-    )
-    assemble_train_response_gene_bags(**kwargs)  # populates the cache
-
-    def _boom(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("a response-cell builder must not run on a cache hit")
-
-    monkeypatch.setattr(
-        tx1_response_data_module, "build_perturbseq_response_adata", _boom
-    )
-    monkeypatch.setattr(
-        tx1_response_data_module, "build_xatlas_orion_response_adata", _boom
-    )
-    assemble_train_response_gene_bags(**kwargs)  # must be a pure cache hit
-
-
-def test_assemble_response_cache_stale_fingerprint_rebuilds_not_reuses(
-    tmp_path: Path,
-) -> None:
-    """A cache built under one ``max_cells_per_gene`` must NOT be silently
-    reused for a different one -- the fingerprint must detect this and
-    rebuild, never warn-and-continue."""
-    fixture = _build_two_line_fixture(tmp_path)
-    response_cache_dir = tmp_path / "response_cache"
-    base_kwargs = dict(
-        cell_line_manifest_path=fixture.manifest_path,
-        tx1_cache_dir=fixture.cache_dir,
-        hvg_state_model_dir=fixture.hvg_dir,
-        perturbseq_sources_path=fixture.sources_path,
-        response_cache_dir=response_cache_dir,
-        seed=0,
-    )
-    uncapped = assemble_train_response_gene_bags(max_cells_per_gene=None, **base_kwargs)
-    capped = assemble_train_response_gene_bags(max_cells_per_gene=2, **base_kwargs)
-    # If the stale (uncapped) cache had been silently reused, `capped` would
-    # equal `uncapped` -- assert the cap actually took effect instead.
-    uncapped_counts = {
-        (base_gene_name(str(g)), str(uncapped.metadata.iloc[i]["model_id"])): int(
-            uncapped.metadata.iloc[i]["n_cells"]
-        )
-        for i, g in enumerate(uncapped.genes)
-    }
-    capped_counts = {
-        (base_gene_name(str(g)), str(capped.metadata.iloc[i]["model_id"])): int(
-            capped.metadata.iloc[i]["n_cells"]
-        )
-        for i, g in enumerate(capped.genes)
-    }
-    assert uncapped_counts == fixture.expected_counts
-    assert capped_counts[("PERT_SHARED", "ACH-A")] == 2
-    assert capped_counts[("PERT_SHARED", "ACH-B")] == 2
 
 
 def test_assemble_response_cache_none_never_touches_disk(

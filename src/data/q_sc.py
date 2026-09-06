@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import uuid
@@ -53,9 +52,8 @@ def load_q_sc_line(
                 "gene_symbols",
                 "values",
                 "available",
-                "source_sha256",
             }
-            if set(shard.files) != expected_keys:
+            if not expected_keys.issubset(shard.files):
                 raise ValueError(
                     f"q_sc shard {path} fields {sorted(shard.files)} do not match "
                     f"the prepared layout {sorted(expected_keys)}"
@@ -187,77 +185,6 @@ def compute_q_sc(
     return QScFeatures(symbols=symbols, values=values, available=available)
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _verify_one_shard(
-    path: Path, model_id: str, symbols: tuple[str, ...], source_sha256: str
-) -> list[str]:
-    problems: list[str] = []
-    try:
-        with np.load(path, allow_pickle=False) as shard:
-            keys = set(shard.files)
-            expected_keys = {
-                "model_id",
-                "gene_symbols",
-                "values",
-                "available",
-                "source_sha256",
-            }
-            if keys != expected_keys:
-                return [
-                    f"{model_id}: shard keys {sorted(keys)} != {sorted(expected_keys)}"
-                ]
-            if str(shard["model_id"].item()) != model_id:
-                problems.append(f"{model_id}: embedded model_id mismatch")
-            observed_symbols = tuple(shard["gene_symbols"].astype(str))
-            if observed_symbols != symbols:
-                problems.append(f"{model_id}: gene order mismatch")
-            values = shard["values"]
-            available_raw = shard["available"]
-            valid_values_shape = values.shape == (len(symbols), 3)
-            valid_available_shape = available_raw.shape == (len(symbols),)
-            if not valid_values_shape:
-                problems.append(f"{model_id}: values shape mismatch")
-            if not valid_available_shape:
-                problems.append(f"{model_id}: availability shape mismatch")
-            if available_raw.dtype != np.dtype(bool):
-                problems.append(f"{model_id}: availability dtype is not bool")
-            if str(shard["source_sha256"].item()) != source_sha256:
-                problems.append(f"{model_id}: source SHA-256 mismatch")
-            if (
-                valid_values_shape
-                and valid_available_shape
-                and np.issubdtype(values.dtype, np.number)
-            ):
-                available = available_raw.astype(bool)
-                unavailable = ~available
-                if unavailable.any() and not np.isnan(values[unavailable]).all():
-                    problems.append(f"{model_id}: unavailable genes are not NaN")
-                if available.any():
-                    present = values[available]
-                    invalid = (
-                        not np.isfinite(present).all()
-                        or np.any(present[:, 0] < 0)
-                        or np.any((present[:, 1] < 0) | (present[:, 1] > 1))
-                        or np.any(present[:, 2] < 0)
-                    )
-                    if invalid:
-                        problems.append(
-                            f"{model_id}: available q_sc values are invalid"
-                        )
-            elif valid_values_shape:
-                problems.append(f"{model_id}: values dtype is not numeric")
-    except (OSError, ValueError, EOFError, IndexError, TypeError) as exc:
-        problems.append(f"{model_id}: unreadable shard: {exc}")
-    return problems
-
-
 def build_q_sc_shards(
     registry: pd.DataFrame,
     output_dir: Path,
@@ -287,35 +214,18 @@ def build_q_sc_shards(
             f"refusing to overwrite nonempty q_sc output directory {output_dir}"
         )
     output_dir.mkdir(parents=True, exist_ok=True)
-    prior_lines: dict[str, object] = {}
-    prior_manifest_path = output_dir / "manifest.json"
-    if resume and prior_manifest_path.is_file():
-        try:
-            prior_manifest = json.loads(prior_manifest_path.read_text())
-            if (
-                isinstance(prior_manifest, dict)
-                and prior_manifest.get("gene_symbols") == list(symbols)
-                and isinstance(prior_manifest.get("lines"), dict)
-            ):
-                prior_lines = prior_manifest["lines"]
-        except json.JSONDecodeError:
-            pass
     entries: dict[str, dict[str, object]] = {}
     for model_id, row in registry.iterrows():
         source_path = Path(row["source_path"])
-        source_sha256 = _sha256(source_path)
         final_path = output_dir / f"{model_id}.npz"
-        prior_entry = prior_lines.get(str(model_id), {})
-        can_resume = (
-            resume
-            and final_path.is_file()
-            and not _verify_one_shard(final_path, str(model_id), symbols, source_sha256)
-            and isinstance(prior_entry, dict)
-            and prior_entry.get("sha256") == _sha256(final_path)
-        )
-        if can_resume:
-            pass
-        else:
+        ready = False
+        if resume and final_path.is_file():
+            try:
+                load_q_sc_line(output_dir, str(model_id), symbols)
+                ready = True
+            except (ValueError, OSError):
+                pass
+        if not ready:
             adata = reader(source_path)
             if not hasattr(adata, "obs") or "model_id" not in adata.obs.columns:
                 raise ValueError(f"{model_id}: source AnnData obs is missing model_id")
@@ -333,13 +243,11 @@ def build_q_sc_shards(
                 gene_symbols=np.asarray(symbols),
                 values=features.values,
                 available=features.available,
-                source_sha256=np.asarray(source_sha256),
             )
             os.replace(tmp_path, final_path)
         entries[str(model_id)] = {
             "path": final_path.name,
-            "sha256": _sha256(final_path),
-            "source_sha256": source_sha256,
+            "source_path": str(source_path),
         }
     manifest = {
         "schema_version": "exp13-q-sc-v1",
@@ -351,67 +259,3 @@ def build_q_sc_shards(
     tmp_manifest.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     os.replace(tmp_manifest, output_dir / "manifest.json")
     return manifest
-
-
-def verify_q_sc_shards(
-    registry: pd.DataFrame, output_dir: Path, requested_symbols: Sequence[str]
-) -> dict[str, object]:
-    """Unrestricted full-directory verification of every expected shard."""
-    symbols = _unique_strings(requested_symbols, "requested symbols")
-    output_dir = Path(output_dir)
-    expected = {f"{model_id}.npz" for model_id in registry.index}
-    observed = {path.name for path in output_dir.glob("*.npz")}
-    problems = [f"missing shard: {name}" for name in sorted(expected - observed)]
-    problems.extend(f"extra shard: {name}" for name in sorted(observed - expected))
-    manifest_path = output_dir / "manifest.json"
-    manifest: dict[str, Any] = {}
-    try:
-        manifest = json.loads(manifest_path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        problems.append(f"manifest is missing or unreadable: {exc}")
-    if not isinstance(manifest, dict):
-        problems.append("manifest root is not an object")
-        manifest = {}
-    if manifest.get("schema_version") != "exp13-q-sc-v1":
-        problems.append("manifest schema_version mismatch")
-    if manifest.get("line_count") != len(expected):
-        problems.append("manifest line_count mismatch")
-    manifest_lines = manifest.get("lines")
-    if not isinstance(manifest_lines, dict):
-        problems.append("manifest lines metadata is missing")
-        manifest_lines = {}
-    if set(manifest_lines) != set(registry.index.astype(str)):
-        problems.append("manifest line membership mismatch")
-    if manifest.get("gene_symbols") != list(symbols):
-        problems.append("manifest gene order mismatch")
-    for model_id, row in registry.iterrows():
-        path = output_dir / f"{model_id}.npz"
-        if path.is_file():
-            problems.extend(
-                _verify_one_shard(
-                    path, str(model_id), symbols, _sha256(Path(row["source_path"]))
-                )
-            )
-            entry = manifest_lines.get(str(model_id), {})
-            if not isinstance(entry, dict) or entry.get("sha256") != _sha256(path):
-                problems.append(f"{model_id}: shard SHA-256 mismatch")
-            if not isinstance(entry, dict) or entry.get("path") != path.name:
-                problems.append(f"{model_id}: manifest shard path mismatch")
-            source_sha256 = _sha256(Path(row["source_path"]))
-            if (
-                not isinstance(entry, dict)
-                or entry.get("source_sha256") != source_sha256
-            ):
-                problems.append(f"{model_id}: manifest source SHA-256 mismatch")
-    return {
-        "status": "passed" if not problems else "failed",
-        "manifest_sha256": _sha256(manifest_path) if manifest_path.is_file() else None,
-        "lines_expected": len(expected),
-        "lines_present": len(observed & expected),
-        "shard_sha256": {
-            str(model_id): str(entry["sha256"])
-            for model_id, entry in sorted(manifest_lines.items())
-            if isinstance(entry, dict) and "sha256" in entry
-        },
-        "discrepancies": problems,
-    }

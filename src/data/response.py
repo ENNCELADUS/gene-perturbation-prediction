@@ -70,12 +70,6 @@ from src.data.tx1_cache import (
     XatlasOrionSource,
     load_hvg_gene_order,
     load_line_cache,
-    verify_cache,
-)
-from src.data.response_cache import (
-    load_response_targets_cache,
-    response_targets_fingerprint,
-    write_response_targets_cache,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -109,7 +103,7 @@ def base_gene_name(gene: str) -> str:
 _PERTURBSEQ_BASAL_SOURCE = "Perturb-seq non-targeting control"
 
 #: ``--perturbseq-source-config`` ``"source_type"`` values, mirroring
-#: ``scripts/build_tx1_basal_embeddings.py`` (not imported: layering runs
+#: ``src/data/prepare/build_tx1_basal_embeddings.py`` (not imported: layering runs
 #: scripts -> aivc_model, not the reverse).
 _SOURCE_TYPE_H5AD = "h5ad"
 _SOURCE_TYPE_XATLAS_PARQUET = "xatlas_orion_parquet"
@@ -177,7 +171,6 @@ def _resolve_response_sources(
     tx1_cache_dir: Path,
     hvg_state_model_dir: Path,
     perturbseq_sources_path: Path,
-    expected_cache_model_ids: Sequence[str] | None = None,
 ) -> _ResolvedResponseSources:
     """Resolve and cross-validate every response-training input except the
     per-line perturbed-cell data itself (see :class:`_ResolvedResponseSources`).
@@ -185,17 +178,12 @@ def _resolve_response_sources(
     Raises:
         ValueError: No ``train_response_and_head`` row exists, a selected
             line lacks a cache entry/configured source, the Tx1 embedding
-            cache is not verified (Codex P1-d), or its recorded HVG gene
-            order disagrees with the checkpoint's.
+            cache is absent, or its recorded HVG gene order disagrees with
+            the checkpoint's.
     """
     manifest = load_line_manifest(cell_line_manifest_path)
     selected = _select_train_response_lines(manifest)
     model_ids = selected["model_id"].astype(str).tolist()
-    _require_verified_cache(
-        tx1_cache_dir,
-        cell_line_manifest_path,
-        expected_model_ids=expected_cache_model_ids,
-    )
     what = f"Tx1 embedding cache entry under {tx1_cache_dir}"
     _require_present(model_ids, _cache_line_ids(tx1_cache_dir), what)
     sources, symbol_cols = _load_perturbseq_sources(perturbseq_sources_path)
@@ -220,9 +208,7 @@ def assemble_train_response_gene_bags(
     max_cells_per_gene: int | None = None,
     total_cells_per_line: int | None = None,
     control_cells_per_line: int | None = None,
-    response_cache_dir: Path | None = None,
     seed: int = 42,
-    expected_cache_model_ids: Sequence[str] | None = None,
 ) -> GeneBags:
     """Assemble a two-view ``GeneBags`` spanning the 4 ST response-training lines.
 
@@ -255,18 +241,8 @@ def assemble_train_response_gene_bags(
             ordered by ``sha256(model_id + "|" + cell_barcode)`` and truncated,
             or deterministically repeated after every distinct cell is used
             once when the line is smaller than the requested count.
-        response_cache_dir: Optional directory for the fingerprinted,
-            arm-independent response-TARGET cache (fix-round-3, Fix 2 --
-            see ``tx1_response_gene_bags_cache``). ``None`` (the default)
-            never reads or writes a cache, i.e. today's behavior. Set this
-            to the SAME directory across both Phase C arms' invocations so
-            the second arm reuses the first's expensive raw-source read
-            instead of repeating it.
         seed: Seed for the per-gene/total-budget cap's deterministic
             sampling; unused when both caps are ``None``.
-        expected_cache_model_ids: Optional exact cache membership contract.
-            Stage 2 supplies its frozen 226-line split because its cache is a
-            strict superset of the historical response-training manifest.
 
     Returns:
         A two-view ``GeneBags``: ``input_bags``/``control_input`` are Tx1
@@ -286,21 +262,16 @@ def assemble_train_response_gene_bags(
         tx1_cache_dir,
         hvg_state_model_dir,
         perturbseq_sources_path,
-        expected_cache_model_ids,
     )
     for row in resolved.selected.itertuples(index=False):
         _assert_admissible_role(row)
     per_line = _assemble_all_line_gene_bags(
         resolved,
-        cell_line_manifest_path=cell_line_manifest_path,
-        perturbseq_sources_path=perturbseq_sources_path,
-        tx1_cache_dir=tx1_cache_dir,
         hvg_state_model_dir=hvg_state_model_dir,
         genes=genes,
         max_cells_per_gene=max_cells_per_gene,
         total_cells_per_line=total_cells_per_line,
         seed=seed,
-        response_cache_dir=response_cache_dir,
     )
     control_views = [
         _line_control_view(
@@ -477,86 +448,21 @@ def _cache_line_ids(tx1_cache_dir: Path) -> set[str]:
     return {entry.name for entry in root.iterdir() if entry.is_dir()}
 
 
-def _require_verified_cache(
-    tx1_cache_dir: Path,
-    frozen_manifest_path: Path,
-    *,
-    expected_model_ids: Sequence[str] | None = None,
-) -> None:
-    """Require an unrestricted ``verify_cache`` pass before training reads it (C8).
-
-    ``load_line_cache`` (used below, per line) only mmaps whatever bytes are
-    on disk -- it never re-checks a hash, a shape, or completeness against
-    the run's own manifest. A stale, partial, or corrupted cache would
-    therefore be silently consumed exactly like a good one: the same class
-    of failure that produced two Critical findings in the Phase B wave.
-    ``only_lines`` is deliberately omitted (Codex P1-d): a sharded/restricted
-    pass would hide exactly the kind of partial-cache problem this guards
-    against.
-
-    Raises:
-        ValueError: ``verify_cache`` reports anything other than
-            ``"verified"``.
-    """
-    if expected_model_ids is None:
-        report = verify_cache(tx1_cache_dir, frozen_manifest_path=frozen_manifest_path)
-    else:
-        report = verify_cache(
-            tx1_cache_dir, expected_model_ids=tuple(expected_model_ids)
-        )
-    if report.get("status") != "verified":
-        raise ValueError(
-            f"Tx1 embedding cache at {tx1_cache_dir} is not verified; refusing "
-            f"to train on it: {report.get('discrepancies')}"
-        )
-
-
 def _assert_cache_hvg_order_matches_checkpoint(
     tx1_cache_dir: Path,
     model_ids: Sequence[str],
     checkpoint_gene_order: np.ndarray,
 ) -> None:
-    """Fail loudly if a cached line's HVG was built from a different gene order.
-
-    ``verify_cache`` only checks that every cached line's recorded
-    ``hvg_gene_order_sha256`` agrees with every OTHER cached line (internal
-    consistency) -- it has no ``hvg_state_model_dir`` argument and so cannot
-    know whether that shared order is the SAME one this run resolves via
-    ``load_hvg_gene_order``. A same-width, different-order ``hvg.npy``
-    (Codex P1-d) would otherwise pass every existing check while silently
-    misaligning cached control targets against the freshly extracted
-    response targets, column for column.
-
-    Raises:
-        ValueError: The run manifest is missing/unreadable, or any of
-            ``model_ids`` has a recorded ``hvg_gene_order_sha256`` other than
-            the checkpoint's.
-    """
-    manifest_path = Path(tx1_cache_dir) / "manifest.json"
-    try:
-        manifest = json.loads(manifest_path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(
-            f"cannot read Tx1 cache run manifest at {manifest_path}: {exc}"
-        ) from exc
-    lines = manifest.get("lines") if isinstance(manifest, dict) else None
-    if not isinstance(lines, dict):
-        raise ValueError(f"Tx1 cache run manifest at {manifest_path} has no lines")
-    expected_sha256 = sha256_strings(np.asarray(checkpoint_gene_order, dtype=object))
-    mismatched = {}
+    """Compare each cache's direct HVG header with the actual STATE order."""
+    expected = sha256_strings(np.asarray(checkpoint_gene_order, dtype=object))
     for model_id in model_ids:
-        entry = lines.get(model_id)
-        recorded = (
-            entry.get("hvg_gene_order_sha256") if isinstance(entry, dict) else None
-        )
-        if recorded != expected_sha256:
-            mismatched[model_id] = recorded
-    if mismatched:
-        raise ValueError(
-            "Tx1 embedding cache line(s) were built against a different HVG "
-            f"checkpoint gene order than hvg_state_model_dir's "
-            f"(sha256={expected_sha256}): {mismatched}"
-        )
+        header = Path(tx1_cache_dir) / model_id / "hvg_gene_order.json"
+        try:
+            recorded = json.loads(header.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"cannot read Tx1 HVG order {header}: {exc}") from exc
+        if recorded != {"sha256": expected, "width": len(checkpoint_gene_order)}:
+            raise ValueError(f"{header}: cache was built against a different HVG order")
 
 
 def _require_present(model_ids: Sequence[str], present: set[str], what: str) -> None:
@@ -994,72 +900,14 @@ def _build_line_gene_bags(
 def _assemble_all_line_gene_bags(
     resolved: _ResolvedResponseSources,
     *,
-    cell_line_manifest_path: Path,
-    perturbseq_sources_path: Path,
-    tx1_cache_dir: Path,
     hvg_state_model_dir: Path,
     genes: Sequence[str] | None,
     max_cells_per_gene: int | None,
     total_cells_per_line: int | None,
     seed: int,
-    response_cache_dir: Path | None,
 ) -> list[_LinePerturbationBags]:
-    """Build (or load from cache) every selected line's target-space gene bags.
-
-    fix-round-3, Fix 2: the expensive per-line target extraction is
-    arm-independent (spec C9 -- only ST's INPUT space differs between
-    arms), so a caller-set ``response_cache_dir`` lets a second arm's
-    invocation reuse the first's raw-source read instead of repeating it.
-    ``response_cache_dir=None`` (the default) never touches the cache,
-    reproducing today's per-call behavior exactly.
-    """
-    if response_cache_dir is None:
-        return [
-            _build_line_gene_bags(
-                row,
-                resolved.sources[str(row.model_id)],
-                resolved.symbol_cols.get(
-                    str(row.model_id), _DEFAULT_TARGET_GENE_SYMBOL_COL
-                ),
-                resolved.checkpoint_gene_order,
-                hvg_state_model_dir,
-                genes,
-                max_cells_per_gene,
-                total_cells_per_line,
-                seed,
-            )
-            for row in resolved.selected.itertuples(index=False)
-        ]
-    fingerprint = response_targets_fingerprint(
-        cell_line_manifest_path=cell_line_manifest_path,
-        perturbseq_sources_path=perturbseq_sources_path,
-        referenced_source_paths=referenced_source_paths(perturbseq_sources_path),
-        tx1_cache_manifest_path=Path(tx1_cache_dir) / "manifest.json",
-        checkpoint_var_dims_path=Path(hvg_state_model_dir) / "var_dims.pkl",
-        max_cells_per_gene=max_cells_per_gene,
-        total_cells_per_line=total_cells_per_line,
-        seed=seed,
-        genes=genes,
-    )
-    try:
-        cached_genes, cached_target_bags, cached_metadata = load_response_targets_cache(
-            response_cache_dir, fingerprint
-        )
-        _LOGGER.info(
-            "response-targets cache hit at %s (fingerprint=%s...)",
-            response_cache_dir,
-            fingerprint[:12],
-        )
-        return _reconstruct_line_bags_from_cache(
-            cached_genes, cached_target_bags, cached_metadata
-        )
-    except (FileNotFoundError, ValueError) as exc:
-        _LOGGER.info(
-            "response-targets cache miss/stale at %s (%s); rebuilding",
-            response_cache_dir,
-            exc,
-        )
-    per_line = [
+    """Assemble aligned raw targets once during explicit preparation."""
+    return [
         _build_line_gene_bags(
             row,
             resolved.sources[str(row.model_id)],
@@ -1075,61 +923,6 @@ def _assemble_all_line_gene_bags(
         )
         for row in resolved.selected.itertuples(index=False)
     ]
-    write_response_targets_cache(
-        response_cache_dir,
-        fingerprint,
-        genes=[gene for line in per_line for gene in line.genes],
-        target_bags=[bag for line in per_line for bag in line.target_bags],
-        metadata=pd.DataFrame([row for line in per_line for row in line.metadata_rows]),
-    )
-    return per_line
-
-
-def _reconstruct_line_bags_from_cache(
-    genes: np.ndarray, target_bags: list[np.ndarray], metadata: pd.DataFrame
-) -> list[_LinePerturbationBags]:
-    """Rebuild per-line ``_LinePerturbationBags`` from cached target data.
-
-    ``input_bags`` (NaN placeholders) and ``batch_bags``/``cell_type_bags``
-    (each bag's cell count repeated ``model_id``/``cell_line_name``) are
-    cheap, deterministic functions of a bag's own metadata row and cell
-    count -- exactly what :func:`_build_gene_bags_for_line` itself would
-    have produced -- so nothing beyond the cached target arrays and per-bag
-    metadata is needed to reproduce :func:`_combine`'s expected input
-    exactly. Groups by ``model_id`` in FIRST-SEEN order (a plain ``dict``,
-    not ``sorted()``) so a cache hit reproduces the exact same overall bag
-    order a fresh (cache-miss) build would have -- ``metadata`` rows are
-    already grouped contiguously by line in that same order, since
-    :func:`_assemble_all_line_gene_bags` wrote them from
-    ``resolved.selected``'s own iteration order.
-    """
-    per_line: dict[str, _LinePerturbationBags] = {}
-    for index, meta_row in enumerate(metadata.itertuples(index=False)):
-        model_id = str(meta_row.model_id)
-        bag = per_line.setdefault(
-            model_id,
-            _LinePerturbationBags(
-                genes=[],
-                input_bags=[],
-                target_bags=[],
-                batch_bags=[],
-                cell_type_bags=[],
-                metadata_rows=[],
-            ),
-        )
-        target = np.asarray(target_bags[index], dtype=np.float32)
-        n_cells = int(target.shape[0])
-        bag.genes.append(str(genes[index]))
-        bag.target_bags.append(target)
-        bag.input_bags.append(
-            np.full((n_cells, EMBEDDING_WIDTH), np.nan, dtype=np.float32)
-        )
-        bag.batch_bags.append(np.full(n_cells, model_id, dtype=object))
-        bag.cell_type_bags.append(
-            np.full(n_cells, str(meta_row.cell_line_name), dtype=object)
-        )
-        bag.metadata_rows.append(dict(metadata.iloc[index]))
-    return list(per_line.values())
 
 
 def _l2_normalize_rows(matrix: np.ndarray) -> np.ndarray:

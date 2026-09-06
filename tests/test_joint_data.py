@@ -217,7 +217,7 @@ def test_restore_bypasses_fits_raw_builders_and_external_esm2(tmp_path, monkeypa
         (response, ["assemble_train_response_gene_bags"]),
         (
             response_cache,
-            ["response_targets_fingerprint", "write_response_targets_cache"],
+            ["write_response_targets_cache"],
         ),
         (tx1_cache, ["verify_cache", "embed_lines"]),
     ]:
@@ -351,14 +351,12 @@ def test_fresh_opening_does_not_build_or_hash_source_files(tmp_path, monkeypatch
 
     for module, names in [
         (ge, ["load_source_registry"]),
-        (q_sc, ["verify_q_sc_shards", "compute_q_sc"]),
+        (q_sc, ["compute_q_sc"]),
         (response, ["assemble_train_response_gene_bags"]),
         (
             response_cache,
             [
-                "response_targets_fingerprint",
                 "write_response_targets_cache",
-                "sha256_file",
             ],
         ),
         (tx1_cache, ["verify_cache", "embed_lines", "sha256_file"]),

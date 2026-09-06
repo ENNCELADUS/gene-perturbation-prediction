@@ -100,6 +100,13 @@ def _build_tx1_encoder(
     trainer = Trainer(model=model, device="gpu")
 
     def encode(adata: ad.AnnData) -> np.ndarray:
+        # Each line starts the frozen collator from the same explicit seed,
+        # independent of cache hits and earlier encoded lines.
+        import random
+
+        random.seed(0)
+        np.random.seed(0)
+        torch.manual_seed(0)
         genes = adata.var["ensembl_id"].astype(str).tolist()
         gene_ids = np.asarray([vocab[gene] for gene in genes], dtype=int)
         loader = loader_from_adata(

@@ -1,0 +1,52 @@
+seeds: {train: 0, collator: 0, projection: 0}
+train:
+  max_epochs: 50
+  patience: 5
+  dependency_batch_size: 256
+  response_batch_size: 64
+  response_interval: 4
+  response_weight: 1.0
+  state_learning_rate: 0.000001
+  adapter_learning_rate: 0.00001
+  head_learning_rate: 0.0001
+  weight_decay: 0.01
+selection: {metric: val_geneeffect_loss, mode: min}
+precision: bf16
+output_root: outputs/geneeffect_joint
+prepared_root: data/geneeffect_joint/v1
+features:
+  cells_per_context: 128
+  hvg_dim: 2000
+  esm2_dim: 1280
+  variable_gene_min_observations: 5
+  variable_gene_percentile: 75
+model:
+  cell_sentence_len: 64
+  esm2_adapter_hidden: 512
+  head_hidden: 256
+  head_layers: 2
+preparation:
+  response_max_cells_per_gene: 128
+  response_total_cells_per_line: null
+  response_sampling_seed: 42
+  response_holdout_fraction: 0.1
+  response_holdout_seed: 13
+  tx1_batch_size: 32
+  tx1_max_length: 2048
+  var_ensembl_col: ensembl_id
+  hvg_gene_symbol_col: auto
+paths:
+  split: configs/benchmarks/cell_line_geneeffect_226_split.json
+  gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+  source_registry: configs/experiments/13_geneeffect_226/basal_source_registry.csv
+  tx1_registration: configs/benchmarks/provenance/phase_a_tx1_20260724/phase_a_registration.json
+  cell_line_manifest: configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
+  tx1_model_dir: data/models/tahoe_x1_3b/3b-model
+  tx1_cache: data/tx1_basal_embeddings/v1
+  q_sc_cache: results/experiments/13_geneeffect_226/q_sc_cache
+  esm2_embeddings: data/esm2/exp13_gene_universe_esm2_650M.npz
+  common_gene_panel: data/geneeffect_joint/v1/common_gene_panel.csv
+  state_checkpoint: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
+  state_model_dir: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562
+  perturbseq_sources: configs/experiments/13_geneeffect_226/perturbseq_sources.json
+  response_cache: data/exp13_response_cache/v1
