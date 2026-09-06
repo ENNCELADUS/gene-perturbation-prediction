@@ -344,9 +344,10 @@ def test_startup_selects_at_most_32_unique_conditions_per_line(
     class ManyConditions:
         rows = pd.DataFrame({"model_id": ["ACH-A0"] * 40 + ["ACH-A1"] * 10})
 
-        def __init__(self, supplied, split):
+        def __init__(self, supplied, split, *, device):
             assert supplied is inputs
             assert split == "train"
+            assert device == next(model.parameters()).device
 
         def collate(self, indices):
             selected.extend(indices)
