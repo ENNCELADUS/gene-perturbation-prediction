@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 import torch
 
+from src.data.batches import DependencyBatch, ResponseBatch
 from src.data.datasets import (
     DependencyDataset,
     ResponseDataset,
@@ -297,6 +298,23 @@ def test_masks_paired_selection_context_and_device_transfer(tmp_path):
     assert moved_response.model_ids == response.model_ids
     assert moved_response.genes == ("G0",)
     assert moved_response.control_hvg[0].device.type == "meta"
+
+
+def test_collators_do_not_repeat_full_batch_validation(tmp_path, monkeypatch):
+    """Prepared-cache validation must not be repeated in the per-step hot path."""
+    config = make_prepared_fixture(tmp_path)
+    inputs = load_inputs(config)
+
+    def fail_validation(self):
+        raise AssertionError("full batch validation entered the collation hot path")
+
+    monkeypatch.setattr(DependencyBatch, "validate", fail_validation)
+    monkeypatch.setattr(ResponseBatch, "validate", fail_validation)
+
+    dependency = DependencyDataset(inputs, "train")
+    dependency.collate([0, 1])
+    response = ResponseDataset(inputs, holdout=True)
+    response.collate([response.indices[0]])
 
 
 @pytest.mark.parametrize(

@@ -129,7 +129,8 @@ class DependencyDataset(Dataset[int]):
             ),
             valid=torch.ones(len(indices), dtype=torch.bool),
         )
-        batch.validate()
+        # Fixed cache arrays are validated when PreparedInputs is opened.  Calling
+        # validate() here rescans every repeated cell bag on every optimizer step.
         return batch
 
 
@@ -178,7 +179,8 @@ class ResponseDataset(Dataset[int]):
                 for model_id in model_ids
             ),
         )
-        batch.validate()
+        # Response cache construction/opening owns the persisted-data contract;
+        # avoid rescanning the large cell bags on every replay update.
         return batch
 
 
