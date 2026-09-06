@@ -1,6 +1,7 @@
 # Modular GeneEffect training with recurring response supervision
 
-Date: 2026-09-06. Status: design for review; no implementation or new experiment has run.
+Date: 2026-09-06. Status: approved direction, including the owner's validation and
+seed corrections below; implementation planning only, with no new experiment run.
 
 The approved direction is a topology-style repository layout and one joint training
 run that keeps revisiting the four Perturb-seq lines. This document specifies that
@@ -91,7 +92,11 @@ Proposed starting settings, to be assessed on validation rather than treated as 
 | Optimizer / weight decay / gradient clipping | AdamW / 0.01 / 1.0 |
 | Maximum epochs / validation patience | 50 / 5 |
 | Cell bag / STATE window | 128 cells / 64 cells |
-| Training / cell-collation / projection seed | 20260828 |
+| Training / cell-collation / projection seed | 0 / 0 / 0 |
+
+These are the three runtime base seeds. Epoch/rank-specific sampling streams derive
+from base seed 0. Do not change frozen benchmark membership or relabel historical
+input/checkpoint metadata to make old artifacts appear to have been generated with 0.
 
 An epoch is one pass through the dependency loader. Response batches cycle within
 that epoch; both loaders restart from deterministic epoch/rank-specific seeds at the
@@ -118,18 +123,47 @@ skipped on resume because the statistics are already in the checkpoint.
 
 ## 4. Validation, testing and checkpoints
 
-Use one inference/evaluation implementation for validation and test. It loads the
-checkpoint's model and preprocessing state and never refits them. Evaluate GeneEffect
-on all 27 validation lines each epoch; select the highest macro per-gene, across-line
-residual Spearman on the train-derived variable-gene set. Keep the earlier checkpoint
-on exact ties. Non-improvement increments ordinary patience; response diagnostics do
-not defer stopping or disqualify a checkpoint.
+Run validation exactly once at the end of every completed training epoch, over all
+27 validation lines and the fixed held-out response conditions from the four anchors.
+Use evaluation mode and no gradients, with one inference/evaluation implementation
+shared by in-memory validation and checkpoint-based final testing. Neither path refits
+preprocessing. There is no validation-skipping interval or eligibility gate.
 
-Report Huber error, coverage and per-line/per-gene scores alongside the primary
-metric. Undefined correlations remain undefined with their counts. An entirely
-undefined selection metric is an evaluation error, not a score of zero. Evaluate the
-fixed held-out response conditions at initialization and each validation epoch to
-show whether reconstruction deteriorates; this is a diagnostic, not a completion gate.
+Every epoch reports the following in the console summary and `metrics.jsonl`:
+
+| Field | Definition |
+| --- | --- |
+| `val_geneeffect_loss` | Mean Huber loss, delta 1, over all finite labeled validation gene/line pairs |
+| `val_response_mean_delta_mse` | Mean-delta MSE averaged within each response anchor, then equally across the four anchors |
+| `val_response_energy_distance` | Energy distance with the same per-anchor averaging |
+| `val_response_loss` | Sum of the two response loss terms, each with weight 1 |
+| `val_total_loss` | `val_geneeffect_loss + response_weight * val_response_loss` |
+| `val_geneeffect_pearson_macro_per_line` / `val_geneeffect_spearman_macro_per_line` | Correlation across genes on absolute GeneEffect, calculated separately for each validation line and then macro-averaged |
+| `val_residual_pearson_macro_per_gene` / `val_residual_spearman_macro_per_gene` | Correlation across validation lines on residuals, macro-averaged over the train-derived variable-gene set |
+| `val_geneeffect_rmse` / `val_geneeffect_mae` | Errors over the same finite labeled validation pairs |
+| Coverage and per-line/per-gene details | Valid pair counts, scored/undefined correlation counts and the corresponding detailed scores |
+
+`val_total_loss` evaluates both tasks' held-out means together. It is not diluted by
+the response replay interval or presented as an average of the sparse training-step
+totals. Aggregate GeneEffect loss by the total loss sum divided by valid pair count,
+not an unweighted mean of batch/rank means. Remove distributed-sampler padding from
+evaluation counts. Keep response aggregation equally weighted across the four anchors.
+Console/JSONL epoch summaries contain scalar metrics and counts. The evaluator returns
+the detailed tables for exports; those exports are not required completion artifacts.
+
+Early stopping and `best.pt` selection both **minimize `val_geneeffect_loss`**, because
+the downstream goal is accurate GeneEffect prediction. Huber loss on the residual is
+identical to Huber loss on absolute GeneEffect when the same fixed training gene mean
+is added to prediction and target. Neither total loss, response loss nor correlation
+metrics select the checkpoint or gate stopping. A strict decrease saves the new best
+and resets patience; a tie or increase keeps the earlier best and increments patience.
+There is no improvement tolerance or composite selector. A non-finite GeneEffect loss
+or an empty validation set is an evaluation error. Individual undefined correlations
+remain undefined with counts; they do not block selection when GeneEffect loss is valid.
+
+A response-only baseline evaluation before training may establish the initial response
+quality; it is outside the epoch loop and must not cause a second validation pass in
+an epoch. Final testing reports the same loss terms and metrics with `test_` prefixes.
 
 The explicit test command evaluates the chosen checkpoint after selection. It
 produces test predictions, metrics and the selected model's held-out response metrics.
@@ -227,7 +261,7 @@ hpc/run.sh train configs/geneeffect_joint.yaml --run-id <run_id>
 hpc/run.sh train configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/<run_id>/last.pt
 hpc/run.sh test outputs/geneeffect_joint/<run_id>/best.pt
 uv run python -m src.evaluate --checkpoint <best.pt> --split val
-uv run python -m src.baselines.residual --config configs/geneeffect_joint.yaml --split test --out-dir <baseline_dir>
+uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml --split test --out-dir <baseline_dir>
 ```
 
 `prepare` runs the experiment's fixed-input preparation once in a single process;
@@ -285,7 +319,12 @@ purpose is enforcing deleted seals or the retired stage lifecycle. Add focused t
 - Train-only gene means/normalization and exclusion of validation/test from loaders.
 - A small two-process CPU update agreeing with the corresponding single-process
   effective batch for both update types, and correct evaluation row counts.
-- Saving/reloading predictions and epoch-boundary resume preserving the next update.
+- Exactly one validation per completed epoch, all loss/metric fields and correct
+  count-weighted aggregation with uneven evaluation batches.
+- Checkpoint selection and patience following only minimum `val_geneeffect_loss`,
+  including ties and epochs where total loss or correlations improve in the other direction.
+- Saving/reloading predictions and epoch-boundary resume preserving the next update;
+  all three configured base seeds are 0, including the generated projection.
 - Training completion surviving an independent evaluation/export failure, while the
   failed evaluation reports its exception and remains retryable.
 
@@ -296,7 +335,7 @@ measure production throughput/memory and exercise the real training/checkpoint/e
 path before claiming it works at scale. This design does not authorize a launch or new
 scientific conclusion.
 
-The implementation plan should sequence module extraction, the joint trainer and
-evaluator, then command/artifact migration and removal of obsolete paths. Keep each
-increment runnable, but finish with one active training route. Review this design before
-writing that implementation plan, as requested by the brainstorming workflow.
+The implementation plan sequences module extraction, the joint trainer and evaluator,
+then command/artifact migration and removal of obsolete paths. Keep each increment
+runnable, but finish with one active training route. The owner's approval and explicit
+validation/seed corrections above govern the plan.
