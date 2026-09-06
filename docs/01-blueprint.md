@@ -2,11 +2,13 @@
 
 **Status:** active research contract. Supersedes the Feng2024 two-axis formulation and the
 train-free SLIdR stage; neither is part of this program. T1 and T2 closed negative and are
-paused. No SL result exists; scope-closed Exp13 Stage 2 is a negative point estimate.
+paused. No SL result exists; historical Exp13 Stage 2 is a negative point estimate.
+The new joint GeneEffect protocol has no scientific run or result yet.
 **Companions:** [`02-literature-review.md`](02-literature-review.md) fixes the prior-art
 boundary · [`03-experiment-protocol.md`](03-experiment-protocol.md) is the SL-pair executable
-protocol · [`specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](specs/2026-08-17-exp13-geneeffect-residual-protocol.md)
-is the scope-closed GeneEffect residual protocol · [`data/sl-context-screen.md`](data/sl-context-screen.md)
+protocol · [`joint GeneEffect design`](specs/2026-09-06-modular-joint-training-design.md)
+defines current GeneEffect training · [`historical Exp13 protocol`](specs/2026-08-17-exp13-geneeffect-residual-protocol.md)
+records staged runs · [`data/sl-context-screen.md`](data/sl-context-screen.md)
 and [`data/cell-line-geneeffect-226.md`](data/cell-line-geneeffect-226.md) are the benchmarks.
 
 ## 1. Task
@@ -104,6 +106,32 @@ positive-is-SL, so $\psi$ used as a ranking score is negated.
 
 ## 4. Objective
 
+### Current GeneEffect training
+
+The [joint-training design](specs/2026-09-06-modular-joint-training-design.md)
+governs the implemented GeneEffect path on the fixed 226-line split: 170 labeled
+training lines, 27 validation lines and 27 test lines. Tx1 stays frozen; STATE,
+the ESM2 adapter and residual head train together from initialization. Fit one
+gene mean on training lines and predict the residual using Huber loss (delta 1).
+Every fourth optimizer update also uses response supervision from equal numbers
+of conditions from K562, Jurkat, HepG2 and HCT116. The response loss is mean-delta
+MSE plus energy distance. The other updates use GeneEffect regression only.
+
+Validate once at the end of every epoch. Report total loss, GeneEffect loss,
+both response terms, their sum, absolute GeneEffect Pearson/Spearman per line,
+variable-gene residual Pearson/Spearman per gene, RMSE, MAE and coverage.
+**Early stopping and checkpoint selection minimize only `val_geneeffect_loss`.**
+Response and correlation metrics remain scientific diagnostics. Training,
+cell-collation and projection base seeds are 0. No head-only warmup, response
+artifact seal, feature-store stage or gradient-ratio calibration is required.
+
+### Separate SL composition proposal
+
+The following objectives concern the unimplemented SL composition protocol,
+including its predicted gene-mean block and out-of-fold fitting. They do not
+override the fixed-mean joint GeneEffect objective above or authorize using the
+226-line model directly for held-out SL claims.
+
 Fit the gene mean on train-side contexts only, with at least three observations per gene:
 
 ```text
@@ -126,8 +154,7 @@ collapse means $\lambda_{\text{dep}}$ is wrong, not that the run finished.
 $G_{\text{var}}$ is a pre-declared delta-variance gene set fit on train-side contexts;
 without it the scale-free Pearson term gives a gene whose true $\delta$ is replicate noise
 the same gradient as a genuinely context-dependent one. Stage 3 is context-balanced, each
-training context contributing equally. Exp13 rank zero writes the frozen Stage 1 features; every launched rank loads the supervised-train+validation features once into its device cache.
-Auto-detected 2- or 4-rank DDP covers frozen/eval-backbone head warmup and joint tuning; `conditions_per_rank` applies to each where relevant. One seed is not a multi-seed claim.
+training context contributing equally. One seed is not a multi-seed claim.
 
 $\alpha$ is frozen on GeneEffect-only validation against a declared calibration band
 **before any SL label is read**. Its Pearson term is shift- and scale-invariant, so $\alpha$
@@ -242,10 +269,14 @@ four are contract-level.
   $\hat\delta$ and for control C5.
 - **Benchmark:** the `context_screen_v2` row-level SL split is built; its raw-filter audit
   remains incomplete and no model has run.
-- **Exp13:** formal Stage 2 completed on the 226-line GeneEffect residual benchmark.
+- **Historical Exp13:** formal Stage 2 completed on the 226-line GeneEffect residual benchmark.
   The one-seed model test macro per-gene Spearman was 0.0225, below context-PCA ridge
   (0.0851) and nearest-line (0.0462); negative point estimate, with no positive context
-  claim and never SL evidence. Scope-closed per §8 (`results/exp13-stage2-full.md`).
+  claim and never SL evidence. Scope-closed per §8
+  ([result](results/exp13_stage2_full/README.md)).
+- **Joint GeneEffect:** the replacement training protocol revisits the four response
+  anchors throughout training and selects minimum validation GeneEffect loss.
+  No GPU training or scientific evaluation has been run under this protocol.
 
 Negative backbone results constrain the substrate; they are not SL results. A claim enters
-`results/` only after its frozen evaluation, provenance, and integrity checks complete.
+`docs/results/` only after its evaluation completes and the evidence supports it.

@@ -1,0 +1,123 @@
+{
+  "cells": 256,
+  "embedding_width": 2560,
+  "max_length": 2048,
+  "detected_genes": {
+    "min": 1859.0,
+    "median": 2705.5,
+    "max": 4370.0,
+    "over_max_length": 242
+  },
+  "arms": {
+    "cpm_vs_raw": {
+      "all_cells": {
+        "cells": 256,
+        "identical": false,
+        "max_abs_diff": 3.9685888290405273,
+        "cosine_min": 0.8480633497238159,
+        "cosine_mean": 0.9224543571472168,
+        "pooled_mean_cosine": 0.9870827794075012
+      },
+      "wide_cells": {
+        "cells": 242,
+        "identical": false,
+        "max_abs_diff": 3.9685888290405273,
+        "cosine_min": 0.8480633497238159,
+        "cosine_mean": 0.9206411838531494,
+        "pooled_mean_cosine": 0.987436830997467
+      },
+      "narrow_cells": {
+        "cells": 14,
+        "identical": false,
+        "max_abs_diff": 2.7737345695495605,
+        "cosine_min": 0.9308905005455017,
+        "cosine_mean": 0.9537968039512634,
+        "pooled_mean_cosine": 0.972199022769928
+      }
+    },
+    "repeat_seeded_vs_raw": {
+      "all_cells": {
+        "cells": 256,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999998807907104,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 1.0
+      },
+      "wide_cells": {
+        "cells": 242,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999998807907104,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 1.0
+      },
+      "narrow_cells": {
+        "cells": 14,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999998807907104,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 0.9999999403953552
+      }
+    },
+    "repeat_unseeded_vs_raw": {
+      "all_cells": {
+        "cells": 256,
+        "identical": false,
+        "max_abs_diff": 3.7631092071533203,
+        "cosine_min": 0.8788278698921204,
+        "cosine_mean": 0.9483171701431274,
+        "pooled_mean_cosine": 0.9997263550758362
+      },
+      "wide_cells": {
+        "cells": 242,
+        "identical": false,
+        "max_abs_diff": 3.7631092071533203,
+        "cosine_min": 0.8788278698921204,
+        "cosine_mean": 0.9453272819519043,
+        "pooled_mean_cosine": 0.9996982216835022
+      },
+      "narrow_cells": {
+        "cells": 14,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999998807907104,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 0.9999999403953552
+      }
+    }
+  },
+  "source": {
+    "adata": "data/sl_dependency_v0/processed/cell_line_atlas_179/kinker_umi_152/h5ad/ACH-000211.h5ad",
+    "model_dir": "data/models/tahoe_x1_3b/3b-model",
+    "seed": 20260818,
+    "raw_count_audit": {
+      "stored_values": 717659.0,
+      "max_value": 566.0,
+      "noninteger_fraction": 0.0
+    },
+    "checkpoint_load": {
+      "missing_keys": [],
+      "unexpected_keys": [
+        "model.chem_encoder.embedding.weight",
+        "model.chem_encoder.fc.bias",
+        "model.chem_encoder.fc.weight",
+        "model.chem_encoder.norm.bias",
+        "model.chem_encoder.norm.weight",
+        "model.chem_encoder.proj.bias",
+        "model.chem_encoder.proj.weight"
+      ],
+      "allowed_unexpected_keys": [
+        "model.chem_encoder.embedding.weight",
+        "model.chem_encoder.fc.bias",
+        "model.chem_encoder.fc.weight",
+        "model.chem_encoder.norm.bias",
+        "model.chem_encoder.norm.weight",
+        "model.chem_encoder.proj.bias",
+        "model.chem_encoder.proj.weight"
+      ],
+      "complete_backbone_load": true
+    }
+  }
+}

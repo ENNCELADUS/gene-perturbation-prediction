@@ -9,7 +9,6 @@ import pytest
 import torch
 
 from src.training.distributed import (
-    assert_all_ranks_stepped,
     require_distinct_devices,
     run_rank_zero_or_raise,
 )
@@ -24,7 +23,6 @@ class FakeAccelerator:
         device_type: str = "cpu",
         device_index: int | None = None,
         is_main_process: bool = True,
-        gathered: torch.Tensor | None = None,
     ) -> None:
         self.num_processes = num_processes
         self.device = (
@@ -33,11 +31,6 @@ class FakeAccelerator:
             else torch.device(device_type)
         )
         self.is_main_process = is_main_process
-        self._gathered = gathered
-
-    def gather(self, local: torch.Tensor) -> torch.Tensor:
-        assert self._gathered is not None, "test must supply `gathered`"
-        return self._gathered
 
 
 def test_require_distinct_devices_single_process_is_noop(monkeypatch):
@@ -67,11 +60,11 @@ def test_require_distinct_devices_raises_on_non_cuda_rank(monkeypatch):
 
     monkeypatch.setattr(torch.distributed, "all_gather_object", _fake_all_gather_object)
     accelerator = FakeAccelerator(num_processes=2, device_type="cuda", device_index=0)
-    with pytest.raises(RuntimeError, match="CUDA on every rank"):
+    with pytest.raises(RuntimeError, match="CPU on every rank or distinct CUDA"):
         require_distinct_devices(accelerator)
 
 
-def test_require_distinct_devices_memoizes_the_collective(monkeypatch):
+def test_require_distinct_devices_checks_current_assignments(monkeypatch):
     calls = {"count": 0}
 
     def _fake_all_gather_object(object_list: list, obj: object) -> None:
@@ -83,25 +76,27 @@ def test_require_distinct_devices_memoizes_the_collective(monkeypatch):
     accelerator = FakeAccelerator(num_processes=2, device_type="cuda", device_index=0)
     require_distinct_devices(accelerator)
     require_distinct_devices(accelerator)
-    assert calls["count"] == 1
+    assert calls["count"] == 2
 
 
-def test_assert_all_ranks_stepped_raises_on_zero_steps():
-    accelerator = FakeAccelerator(
-        num_processes=2,
-        gathered=torch.tensor([5, 0], dtype=torch.int64),
-    )
-    with pytest.raises(RuntimeError, match="must all be positive"):
-        assert_all_ranks_stepped(accelerator, local_steps=5)
+def test_require_distinct_devices_allows_cpu_gloo_ranks(monkeypatch):
+    def gather(assignments, local):
+        assignments[:] = [("cpu", None), ("cpu", None)]
+
+    monkeypatch.setattr(torch.distributed, "all_gather_object", gather)
+    require_distinct_devices(FakeAccelerator(num_processes=2))
 
 
-def test_assert_all_ranks_stepped_returns_counts():
-    accelerator = FakeAccelerator(
-        num_processes=2,
-        gathered=torch.tensor([5, 3], dtype=torch.int64),
-    )
-    counts = assert_all_ranks_stepped(accelerator, local_steps=5)
-    assert counts == (5, 3)
+def test_remote_rank_failure_is_reported_before_dependent_work(monkeypatch):
+    from src.training.distributed import raise_rank_errors
+
+    def gather(errors, local):
+        assert local is None
+        errors[:] = [None, "ValueError: invalid batch"]
+
+    monkeypatch.setattr(torch.distributed, "all_gather_object", gather)
+    with pytest.raises(RuntimeError, match="invalid batch"):
+        raise_rank_errors(FakeAccelerator(num_processes=2), "batch", None)
 
 
 def test_run_rank_zero_or_raise_reraises_rank_zero_failure():

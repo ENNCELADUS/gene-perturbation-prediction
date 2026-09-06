@@ -1,0 +1,123 @@
+{
+  "cells": 256,
+  "embedding_width": 2560,
+  "max_length": 2048,
+  "detected_genes": {
+    "min": 998.0,
+    "median": 2568.5,
+    "max": 4100.0,
+    "over_max_length": 222
+  },
+  "arms": {
+    "cpm_vs_raw": {
+      "all_cells": {
+        "cells": 256,
+        "identical": false,
+        "max_abs_diff": 4.310197353363037,
+        "cosine_min": 0.8670939803123474,
+        "cosine_mean": 0.9410467147827148,
+        "pooled_mean_cosine": 0.9887994527816772
+      },
+      "wide_cells": {
+        "cells": 222,
+        "identical": false,
+        "max_abs_diff": 4.310197353363037,
+        "cosine_min": 0.8670939803123474,
+        "cosine_mean": 0.9389183521270752,
+        "pooled_mean_cosine": 0.9885030388832092
+      },
+      "narrow_cells": {
+        "cells": 34,
+        "identical": false,
+        "max_abs_diff": 2.8178155422210693,
+        "cosine_min": 0.9003039002418518,
+        "cosine_mean": 0.954943060874939,
+        "pooled_mean_cosine": 0.9793508052825928
+      }
+    },
+    "repeat_seeded_vs_raw": {
+      "all_cells": {
+        "cells": 256,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999998807907104,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 0.9999998807907104
+      },
+      "wide_cells": {
+        "cells": 222,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999999403953552,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 0.9999999403953552
+      },
+      "narrow_cells": {
+        "cells": 34,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999998807907104,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 1.0
+      }
+    },
+    "repeat_unseeded_vs_raw": {
+      "all_cells": {
+        "cells": 256,
+        "identical": false,
+        "max_abs_diff": 3.5969927310943604,
+        "cosine_min": 0.8975828289985657,
+        "cosine_mean": 0.9646389484405518,
+        "pooled_mean_cosine": 0.999824583530426
+      },
+      "wide_cells": {
+        "cells": 222,
+        "identical": false,
+        "max_abs_diff": 3.5969927310943604,
+        "cosine_min": 0.8975828289985657,
+        "cosine_mean": 0.9592233896255493,
+        "pooled_mean_cosine": 0.9997898936271667
+      },
+      "narrow_cells": {
+        "cells": 34,
+        "identical": true,
+        "max_abs_diff": 0.0,
+        "cosine_min": 0.9999998807907104,
+        "cosine_mean": 1.0,
+        "pooled_mean_cosine": 1.0
+      }
+    }
+  },
+  "source": {
+    "adata": "data/sl_dependency_v0/raw/adamson/adamson_2016_pilot.h5ad",
+    "model_dir": "data/models/tahoe_x1_3b/3b-model",
+    "seed": 20260818,
+    "raw_count_audit": {
+      "stored_values": 648059.0,
+      "max_value": 522.0,
+      "noninteger_fraction": 0.0
+    },
+    "checkpoint_load": {
+      "missing_keys": [],
+      "unexpected_keys": [
+        "model.chem_encoder.embedding.weight",
+        "model.chem_encoder.fc.bias",
+        "model.chem_encoder.fc.weight",
+        "model.chem_encoder.norm.bias",
+        "model.chem_encoder.norm.weight",
+        "model.chem_encoder.proj.bias",
+        "model.chem_encoder.proj.weight"
+      ],
+      "allowed_unexpected_keys": [
+        "model.chem_encoder.embedding.weight",
+        "model.chem_encoder.fc.bias",
+        "model.chem_encoder.fc.weight",
+        "model.chem_encoder.norm.bias",
+        "model.chem_encoder.norm.weight",
+        "model.chem_encoder.proj.bias",
+        "model.chem_encoder.proj.weight"
+      ],
+      "complete_backbone_load": true
+    }
+  }
+}

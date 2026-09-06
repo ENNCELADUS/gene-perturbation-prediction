@@ -103,8 +103,8 @@ def base_gene_name(gene: str) -> str:
 _PERTURBSEQ_BASAL_SOURCE = "Perturb-seq non-targeting control"
 
 #: ``--perturbseq-source-config`` ``"source_type"`` values, mirroring
-#: ``src/data/prepare/build_tx1_basal_embeddings.py`` (not imported: layering runs
-#: scripts -> aivc_model, not the reverse).
+#: ``src/data/prepare/build_tx1_basal_embeddings.py``; data loading remains
+#: independent of command-line entry points.
 _SOURCE_TYPE_H5AD = "h5ad"
 _SOURCE_TYPE_XATLAS_PARQUET = "xatlas_orion_parquet"
 _VALID_SOURCE_TYPES = frozenset({_SOURCE_TYPE_H5AD, _SOURCE_TYPE_XATLAS_PARQUET})
@@ -477,8 +477,7 @@ def _load_perturbseq_sources(
 ) -> tuple[dict[str, PerturbseqSourceConfig], dict[str, str]]:
     """Load the per-``model_id`` Perturb-seq source config JSON.
 
-    Mirrors the CLI's own source-config parser (not imported: layering runs
-    scripts -> aivc_model), plus reads each entry's optional
+    Mirrors the preparation CLI's source-config fields, plus each entry's optional
     ``"target_gene_symbol_col"``.
 
     Returns:

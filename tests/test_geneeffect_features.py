@@ -39,12 +39,45 @@ def test_projection_is_deterministic_seeded_round_trippable_and_differentiable()
 
 
 def test_projection_restores_actual_values_and_rejects_nonfinite_state() -> None:
-    state = FixedSparseProjection().to_state()
+    projection = FixedSparseProjection()
+    delta = torch.ones(DELTA_WIDTH)
+    projection.transform(delta)
+    state = projection.to_state()
     state["components"][0][0] = 123.0
-    assert FixedSparseProjection.from_state(state).components[0, 0] == 123.0
+    restored = FixedSparseProjection.from_state(state)
+    assert restored.components[0, 0] == 123.0
+    torch.testing.assert_close(
+        restored.transform(delta), delta @ torch.from_numpy(restored.components).T
+    )
     state["components"][0][0] = float("nan")
     with pytest.raises(ValueError, match="finite"):
         FixedSparseProjection.from_state(state)
+
+
+def test_projection_reuses_device_conversion_across_conditions(monkeypatch) -> None:
+    projection = FixedSparseProjection()
+    as_tensor = torch.as_tensor
+    conversions = []
+
+    def observed_conversion(value, **kwargs):
+        if value is projection.components:
+            conversions.append((kwargs["device"], kwargs["dtype"]))
+        return as_tensor(value, **kwargs)
+
+    monkeypatch.setattr(torch, "as_tensor", observed_conversion)
+    for dtype in (torch.float32, torch.float64, torch.float32, torch.float64):
+        delta = torch.ones(DELTA_WIDTH, dtype=dtype, requires_grad=True)
+        actual = projection.transform(delta)
+        expected = delta @ torch.from_numpy(projection.components).to(dtype).T
+        torch.testing.assert_close(actual, expected)
+        actual.sum().backward()
+        torch.testing.assert_close(
+            delta.grad, torch.from_numpy(projection.components).to(dtype).sum(0)
+        )
+    assert conversions == [
+        (torch.device("cpu"), torch.float32),
+        (torch.device("cpu"), torch.float64),
+    ]
 
 
 def test_condition_features_match_hand_computable_delta_and_summaries() -> None:
@@ -77,7 +110,6 @@ def test_condition_features_match_hand_computable_delta_and_summaries() -> None:
         ]
     )
     assert torch.allclose(result.s.detach(), expected_s, atol=1e-6)
-    assert result.metadata["shift_threshold_basal_l2_p95"] == pytest.approx(1.0)
     assert result.own_gene_shift_mask.item() is True
     (result.delta_proj.sum() + result.s[[0, 1, 3, 4, 5]].sum()).backward()
     assert predicted.grad is not None

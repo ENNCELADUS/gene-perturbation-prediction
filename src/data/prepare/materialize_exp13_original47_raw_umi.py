@@ -588,7 +588,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cell-line-manifest",
         type=Path,
-        default=Path("results/phase_a_tx1_20260724/cell_line_manifest.csv"),
+        default=Path("configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv"),
     )
     parser.add_argument(
         "--perturbseq-sources",

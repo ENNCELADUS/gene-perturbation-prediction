@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 from src.data.geneeffect import ScoredUniverse, restrict_scored_universe_to_copy_prior
 from src.data.prepare import build_exp13_copy_prior as builder
 
@@ -42,7 +41,6 @@ def _materialized(
     expected_output = "gene_symbol,gene_effect\nTP53,-0.5\nMYC,-1.25\n".encode("utf-8")
     expected_output_sha256 = hashlib.sha256(expected_output).hexdigest()
     monkeypatch.setattr(builder, "PINNED_COPY_PRIOR_SHA256", expected_output_sha256)
-    monkeypatch.setattr(runner, "PINNED_COPY_PRIOR_SHA256", expected_output_sha256)
     output = tmp_path / "copy_prior.csv"
     manifest = tmp_path / "copy_prior_manifest.json"
     builder.materialize_copy_prior(source, SPLIT_PATH, output, manifest)
@@ -133,52 +131,6 @@ def test_materializer_rejects_aliased_output_paths(
     output = tmp_path / "copy_prior"
     with pytest.raises(ValueError, match="must be distinct"):
         builder.materialize_copy_prior(source, SPLIT_PATH, output, output)
-
-
-def test_preflight_authentication_rejects_wrong_donor_and_csv_tamper(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    source, output, manifest_path = _materialized(tmp_path, monkeypatch)
-    config = _config(source, output, manifest_path)
-    monkeypatch.setattr(runner, "_PINNED_GENE_EFFECT_SHA256", _sha256(source))
-
-    payload = json.loads(manifest_path.read_text())
-    payload["donor"]["model_id"] = "ACH-000001"
-    manifest_path.write_text(json.dumps(payload))
-    split = SimpleNamespace(train=("ACH-000551",), unlabeled_train=())
-    with pytest.raises(ValueError, match="donor identity"):
-        runner._authenticate_copy_prior(config, split, _labels())
-
-    payload["donor"]["model_id"] = "ACH-000551"
-    manifest_path.write_text(json.dumps(payload))
-    output.write_text(output.read_text().replace("-0.5", "-0.7"))
-    with pytest.raises(ValueError, match="CSV SHA-256 mismatch"):
-        runner._authenticate_copy_prior(config, split, _labels())
-
-    payload["output"]["sha256"] = _sha256(output)
-    manifest_path.write_text(json.dumps(payload))
-    with pytest.raises(ValueError, match="pinned donor row"):
-        runner._authenticate_copy_prior(config, split, _labels())
-
-
-def test_preflight_authentication_rejects_source_manifest_and_unlabeled_donor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    source, output, manifest_path = _materialized(tmp_path, monkeypatch)
-    config = _config(source, output, manifest_path)
-    monkeypatch.setattr(runner, "_PINNED_GENE_EFFECT_SHA256", _sha256(source))
-    payload = json.loads(manifest_path.read_text())
-    payload["source"]["sha256"] = "0" * 64
-    manifest_path.write_text(json.dumps(payload))
-    split = SimpleNamespace(train=("ACH-000551",), unlabeled_train=())
-    with pytest.raises(ValueError, match="source SHA-256 mismatch"):
-        runner._authenticate_copy_prior(config, split, _labels())
-
-    payload["source"]["sha256"] = _sha256(source)
-    manifest_path.write_text(json.dumps(payload))
-    unlabeled = SimpleNamespace(train=("ACH-000551",), unlabeled_train=("ACH-000551",))
-    with pytest.raises(ValueError, match="unlabeled train member"):
-        runner._authenticate_copy_prior(config, unlabeled, _labels())
 
 
 def test_one_universe_gate_drops_copy_prior_missing_for_every_method() -> None:

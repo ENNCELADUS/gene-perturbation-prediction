@@ -135,7 +135,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tx1-registration",
         type=Path,
-        default=Path("results/phase_a_tx1_20260724/phase_a_registration.json"),
+        default=Path("configs/benchmarks/provenance/phase_a_tx1_20260724/phase_a_registration.json"),
     )
     parser.add_argument("--var-ensembl-col")
     parser.add_argument("--hvg-gene-symbol-col", default="auto")

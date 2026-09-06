@@ -146,6 +146,13 @@ requires a new benchmark version. RPE1 remains excluded for exact-model basal mi
 
 ## 4. Backbone Training
 
+This section is the separate, unimplemented SL composition proposal. Current
+standalone GeneEffect training follows the
+[joint-training design](specs/2026-09-06-modular-joint-training-design.md): recurring
+four-anchor response supervision, validation once per epoch, minimum
+`val_geneeffect_loss` selection and training/collation/projection seeds 0. It does
+not supply the out-of-fold models required by §5 or change this SL split.
+
 **Stage 1.** Fit the response module on the four anchors under $L_{\text{resp}}$ alone
 (mean-delta MSE plus energy distance). Record its converged response metrics.
 

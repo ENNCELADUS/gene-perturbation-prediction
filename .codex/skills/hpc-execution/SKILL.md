@@ -1,90 +1,59 @@
 ---
 name: hpc-execution
-description: Use when a task needs GPU, the Replogle GWPS h5ad, ESM2 embeddings, Tx1-3B weights, or the Phase-C ST checkpoint — none of which exist on the local Mac. Covers the SSH host and its changing port, which venv to use, PYTHONPATH, GPU selection, which datasets are absent remotely, and the shard/verify protocol.
+description: Use for authorized GPU preparation, joint GeneEffect training or checkpoint evaluation on the VCC H20 checkout. Inspect the current endpoint and environment; sync code through Git and use hpc/run.sh.
 ---
 
-# Running jobs on the HPC
+# Running VCC jobs on H20
 
-Data-heavy and GPU work does **not** run on the local Mac — it lacks the Replogle
-GWPS h5ad, the ESM2 npz, the Tx1-3B weights, and the ST checkpoints.
-Author code locally so it can be reviewed, then rsync and run remotely.
+The local Mac supports synthetic CPU tests. Real Tx1/STATE work needs the supplied
+model checkpoints, ESM2 table, basal caches and Perturb-seq sources on H20.
+The operator interface and configuration live in `hpc/README.md` and
+`configs/geneeffect_joint.yaml`; the training contract is
+`docs/specs/2026-09-06-modular-joint-training-design.md`.
 
-## Connection
+## Connection and environment
 
-```bash
-ssh root@10.15.171.204 -p 30735      # key-based, non-interactive
-```
+Use the user's current VCC endpoint. Container ports change; historical endpoints
+in result notes are not a connection authority. Before consequential work, inspect
+hostname, checkout, branch/HEAD, visible GPUs, existing processes and the requested
+input paths. The established checkout is `/2023533015/VCC_Project`; verify it on
+the connected container. Preserve unrelated jobs.
 
-**The port changes whenever the container is recreated** — 30310, then 30838, now
-30735 (container `fqa28o3dqluat-0`, verified 2026-08-15); if it fails, ask the user
-rather than scanning. Repo + data live at `/2023533015/VCC_Project`; the sandboxed
-Bash tool reaches it, rsync may need `dangerouslyDisableSandbox: true`. The remote
-clone keeps its own branch and drifts from local `main` — it was on
-`feat/tx1-integrated` @ `e369260` — so `git log -1` there before assuming your code
-is present.
+Sync working code through Git only: commit, push, then pull on the H20 checkout,
+within the user's authorization. Do not rsync/scp/tar working trees.
 
-## What is NOT on the HPC
+`hpc/run.sh` uses `.venv-tx1/bin/python`, or explicit `PYTHON_BIN`. Check that the
+selected interpreter imports Torch, Accelerate, STATE and required input libraries;
+environment names alone do not establish their contents. Run module commands from
+the repository root with the root on Python's import path (`src.*` imports).
 
-The **SL benchmark label trees are Mac-only.** Neither `data/SL_benchmark/` (11 GB)
-nor `data/SL_Benchmark_Formal/` (1.0 GB, holding the 946 MB `sl_integrated_pairs.csv`
-and the v1 `context_screen_v1/` build) exists remotely, so anything touching SL pair
-labels runs locally or needs an explicit transfer first. Verified present:
-`data/models/tahoe_x1_3b`, `data/esm2/*.npz`, the Replogle and Adamson h5ads under
-`data/sl_dependency_v0/raw/`, and the ST checkpoints. Disk is not a
-constraint — 953 TB free.
-
-## Pick the right venv — there are three, and they are not interchangeable
-
-| venv | Contents | Use for |
-|---|---|---|
-| `.venv-tx1` | torch 2.6.0+cu124, `tahoe_x1` | **all Tx1 work** |
-| `.venv-esm2` | torch 2.8+cu128, `state`, anndata, scanpy, lightning | STATE / ESM2 work |
-| `.venv` | no torch | never |
-
-The repo is **not** pip-installed into `.venv-tx1`, and the scripts import
-`scripts.*`, so Tx1 invocations need `PYTHONPATH=src:.` — plain `PYTHONPATH=src`
-fails on `import scripts.…`.
+## Commands
 
 ```bash
-PYTHONPATH=src:. .venv-tx1/bin/python scripts/build_tx1_basal_embeddings.py ...
+hpc/run.sh prepare configs/geneeffect_joint.yaml
+hpc/run.sh train configs/geneeffect_joint.yaml --run-id joint_seed0
+hpc/run.sh train configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/joint_seed0/last.pt
+hpc/run.sh test outputs/geneeffect_joint/joint_seed0/best.pt
 ```
 
-## GPUs — query, never assume
+Preparation runs once in a single process and consumes supplied data/models.
+Training opens fixed caches without rebuilding raw sources on each rank. Training
+uses visible GPUs and respects `CUDA_VISIBLE_DEVICES`; choose batch sizes from
+measured throughput and stability. Do not silently shrink a batch after OOM.
 
-The hardware changes with the container: it has been 4× H20 (97 GB) shared with the
-user's `tciep` project at ~90 GB used and 100% util; as of 2026-08-15 it is **2×
-H20-3e (140 GB), both idle**. Check first, then pin:
+GeneEffect regression runs every update and balanced four-anchor reconstruction
+runs every fourth update. Validate once per epoch, report all loss terms and
+metrics, and select/early-stop on minimum `val_geneeffect_loss`. Training,
+cell-collation and projection base seeds are 0. Resume is at epoch boundaries
+with the same world size. Testing is explicit and does not refit preprocessing.
 
-```bash
-nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu \
-  --format=csv,noheader
-export CUDA_VISIBLE_DEVICES=<freest>
-```
+## Reporting
 
-Keep the footprint small and **do not disturb other processes**. Measure one small
-line first; if a job wants far more memory than expected, stop and re-check the config.
-
-## Standard pass
-
-1. Commit and push locally; check the branch out on the HPC, or rsync to the same
-   relative path.
-2. Run the test suite remotely under the chosen venv — local green does not imply
-   remote green, since torch and extras differ.
-3. Benchmark **one small cell line** before the full run.
-4. Shard the real run with `--only-line`, monitoring long jobs with a poller.
-5. Finish with an **unrestricted** `--verify-only` pass requiring
-   `"status": "verified"`.
-
-**Sharded verification is not full verification.** `verify_cache(only_lines=...)`
-skips the completeness and untracked-directory checks, so a shard exiting 0 says
-nothing about whether the cache as a whole is complete.
-
-## Known gotchas
-
-- Shards built before commit `62eae43` exit nonzero benignly — check the status
-  payload, not just the exit code.
-- A forward-only ST pass needs **two** checkpoints staged: the *released* ST checkpoint
-  (architecture hparams, via `construct_forward_only_model`) **and** the Phase-C
-  `pytorch_model.bin` that overwrites it — staging only Phase-C fails at construction.
-- Full command lines and what has actually been run live in `.superpowers/sdd/`
-  (gitignored, local only): `phase-b-plan.md` and `progress.md`.
+Distinguish launch, running state, completed training and scientific evaluation.
+Inspect the exact requested workers and logs; a launcher PID or GPU utilization
+alone does not prove completion. The joint run uses ordinary `best.pt`, `last.pt`,
+`metrics.jsonl` and separate training/evaluation outcomes in `run.json`.
+An export failure is retryable without retraining and does not erase successful
+training. Historical runs use their historical records; do not manufacture new
+status files or relabel their protocols. No seals or qualification ladder govern
+the new training route.

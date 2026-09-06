@@ -1,7 +1,7 @@
 # Modular GeneEffect training with recurring response supervision
 
 Date: 2026-09-06. Status: approved direction, including the owner's validation and
-seed corrections below; implementation planning only, with no new experiment run.
+seed corrections below; implemented locally, with no new experiment run.
 
 The approved direction is a topology-style repository layout and one joint training
 run that keeps revisiting the four Perturb-seq lines. This document specifies that
@@ -195,8 +195,12 @@ outputs/geneeffect_joint/<run_id>/
   last.pt
   best.pt
   evaluation/
-    test_predictions.parquet
-    test_metrics.json
+    best/test/          # checkpoint name and requested split
+      predictions.parquet
+      metrics.json
+      per_line.csv
+      per_gene.csv
+      response.csv
 ```
 
 `run.json` has separate training and evaluation statuses. A normal trainer exit after

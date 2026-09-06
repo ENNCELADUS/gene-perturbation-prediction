@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
 
 import torch
 
@@ -22,8 +21,6 @@ class FeatureBatch:
     own_gene_shift_mask: torch.Tensor
     gene_symbols: tuple[str, ...]
     model_ids: tuple[str, ...]
-
-    metadata: tuple[Mapping[str, object], ...] = ()
 
     @property
     def batch_size(self) -> int:
@@ -80,13 +77,12 @@ class FeatureBatch:
             ),
             gene_symbols=self.gene_symbols,
             model_ids=self.model_ids,
-            metadata=self.metadata,
         )
 
 
 @dataclass(frozen=True)
 class OnlineConditionBatch:
-    """Inputs for differentiable Stage-2 response-feature generation."""
+    """Inputs for differentiable joint response-feature generation."""
 
     controls_tx1: tuple[torch.Tensor, ...]
     basal_hvg: tuple[torch.Tensor, ...]
@@ -320,5 +316,4 @@ class ResponseForwardBatch:
 class E2EForwardOutput:
     delta_hat: torch.Tensor
     raw_features: FeatureBatch
-    feature_metadata: tuple[Mapping[str, object], ...]
     response_predicted: tuple[torch.Tensor, ...] | None = None
