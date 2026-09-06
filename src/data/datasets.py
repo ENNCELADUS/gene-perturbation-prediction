@@ -114,7 +114,7 @@ class DependencyDataset(Dataset[int]):
             own_gene_hvg_indices=hvg_indices,
             own_gene_shift_available=torch.tensor(
                 [
-                    index is not None and available
+                    index is not None and bool(available)
                     for index, available in zip(hvg_indices, q_available, strict=True)
                 ],
                 dtype=torch.bool,
