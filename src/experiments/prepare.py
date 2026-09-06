@@ -6,9 +6,12 @@ import argparse
 from collections.abc import Mapping, Sequence
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def split_heldout_genes(
@@ -100,7 +103,10 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     from src.data.prepared import load_inputs
     from src.data.q_sc import build_q_sc_shards
     from src.data.response import assemble_train_response_gene_bags
-    from src.data.response_cache import write_response_targets_cache
+    from src.data.response_cache import (
+        normalize_response_symbols,
+        write_response_targets_cache,
+    )
     from src.data.tx1_cache import load_hvg_gene_order
     from src.data.prepare.build_exp13_esm2_universe import (
         build_coverage_universe,
@@ -126,10 +132,13 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         build_coverage_universe(labels, split), tuple(donor)
     )
     registry = load_source_registry(Path(paths["source_registry"]), split)
+    _LOGGER.info("Preparing basal caches for %d cell lines", len(registry))
     encoded = _prepare_tx1(config, registry)
+    _LOGGER.info("Basal caches ready; %d lines newly encoded", len(encoded))
     hvg_order = tuple(
         str(gene) for gene in load_hvg_gene_order(Path(paths["state_model_dir"]))
     )
+    _LOGGER.info("Assembling observed response targets for the four training anchors")
     bags = assemble_train_response_gene_bags(
         cell_line_manifest_path=Path(paths["cell_line_manifest"]),
         tx1_cache_dir=Path(paths["tx1_cache"]),
@@ -160,6 +169,17 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         fraction=settings["response_holdout_fraction"],
         seed=settings["response_holdout_seed"],
     )
+    # Keep the historical split on source identifiers, then canonicalize lookup
+    # keys. Rehashing uppercased names would silently change the fixed holdout.
+    heldout_rows = [
+        str(row.perturbation_gene) in holdout[str(row.model_id)]
+        for row in metadata.itertuples()
+    ]
+    raw_metadata = metadata
+    metadata = normalize_response_symbols(raw_metadata)
+    _LOGGER.info(
+        "Aligning %d response conditions with the supplied ESM2 table", len(metadata)
+    )
     union = write_embedding_union(
         scored_symbols=candidates.symbols,
         response_symbols=tuple(sorted(set(metadata.perturbation_gene))),
@@ -177,9 +197,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         for row in metadata.itertuples()
     ]
     selected = [conditions[i] for i in keep]
-    surviving_holdout = [
-        row for row in selected if row["gene"] in holdout[row["model_id"]]
-    ]
+    surviving_holdout = [conditions[i] for i in keep if heldout_rows[i]]
     for model_id in anchors:
         held = {row["gene"] for row in surviving_holdout if row["model_id"] == model_id}
         train = {row["gene"] for row in selected if row["model_id"] == model_id} - held
@@ -187,13 +205,15 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
             raise ValueError(
                 f"{model_id}: ESM2 filtering emptied response train or fixed holdout"
             )
+    _LOGGER.info("Writing %d ESM2-covered response conditions", len(keep))
     write_response_targets_cache(
         Path(paths["response_cache"]),
         genes=[bags.genes[i] for i in keep],
         target_bags=[bags.effective_target_bags[i] for i in keep],
-        metadata=metadata.iloc[keep].reset_index(drop=True),
+        metadata=raw_metadata.iloc[keep].reset_index(drop=True),
         hvg_order=tuple(bags.target_feature_names),
     )
+    _LOGGER.info("Preparing basal expression summaries for %d genes", len(panel))
     build_q_sc_shards(registry, Path(paths["q_sc_cache"]), panel, resume=True)
     payload = {
         "schema_version": "geneeffect-joint-prepared-v1",
@@ -234,6 +254,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     temporary.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
     os.replace(temporary, destination)
     # Exercise the actual readers, including test-cache shape/order boundaries.
+    _LOGGER.info("Opening the prepared training, validation and test inputs")
     load_inputs(config, include_test=True)
     return destination
 
@@ -244,6 +265,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     from src.experiments.config import load_config
 
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     print(prepare_inputs(load_config(args.config)))
     return 0
 

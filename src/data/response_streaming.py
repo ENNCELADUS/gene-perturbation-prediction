@@ -124,11 +124,13 @@ def drain_gene_reservoirs_to_matrix(
     n_cells_before_budget = sum(len(reservoirs[gene]) for gene in genes_order)
     keep_mask = resolve_total_budget_keep_mask(n_cells_before_budget, total_cells, seed)
 
-    lengths: list[int] = []
+    valid_lengths: list[int] = []
     perturbation_genes: list[str] = []
     barcodes: list[str] = []
     samples: list[str] = []
-    valid_tokens: set[int] = set()
+    metadata_index = metadata.index
+    metadata_token_used = np.zeros(len(metadata_index), dtype=bool)
+    missing_tokens: set[int] = set()
     global_index = 0
     for gene in genes_order:
         for cell in reservoirs[gene]:
@@ -137,29 +139,38 @@ def drain_gene_reservoirs_to_matrix(
                 perturbation_genes.append(gene)
                 barcodes.append(cell[2])
                 samples.append(cell[3])
-                lengths.append(len(cell_genes))
-                valid_tokens.update(int(token) for token in cell_genes.tolist())
+                positions = metadata_index.get_indexer(cell_genes)
+                valid_entries = positions >= 0
+                metadata_token_used[positions[valid_entries]] = True
+                valid_lengths.append(int(valid_entries.sum()))
+                if not valid_entries.all():
+                    missing_tokens.update(
+                        int(token) for token in np.unique(cell_genes[~valid_entries])
+                    )
             global_index += 1
 
-    n_cells = len(lengths)
-    tokens = sorted(token for token in valid_tokens if token in metadata.index)
-    n_dropped = len(valid_tokens) - len(tokens)
+    n_cells = len(valid_lengths)
+    token_lookup = np.sort(
+        np.asarray(metadata_index[metadata_token_used], dtype=np.int64)
+    )
+    n_dropped = len(missing_tokens)
     if n_dropped:
+        n_distinct_tokens = len(token_lookup) + n_dropped
         _LOGGER.warning(
             "dropped %d/%d (%.1f%%) otherwise-valid gene tokens missing from "
             "gene metadata index",
             n_dropped,
-            len(valid_tokens),
-            100.0 * n_dropped / len(valid_tokens),
+            n_distinct_tokens,
+            100.0 * n_dropped / n_distinct_tokens,
         )
-    token_lookup = np.asarray(tokens, dtype=np.int64)
-    total_nnz = int(np.asarray(lengths, dtype=np.int64).sum()) if lengths else 0
-    out_rows = np.empty(total_nnz, dtype=np.int64)
+    indptr = np.empty(n_cells + 1, dtype=np.int64)
+    indptr[0] = 0
+    np.cumsum(valid_lengths, out=indptr[1:])
+    total_nnz = int(indptr[-1])
     out_cols = np.empty(total_nnz, dtype=np.int64)
     out_values = np.empty(total_nnz, dtype=np.float32)
 
     offset = 0
-    row_index = 0
     global_index = 0
     for gene in genes_order:
         bucket = reservoirs[gene]
@@ -182,17 +193,15 @@ def drain_gene_reservoirs_to_matrix(
                 valid_entries = np.zeros(len(cell_genes), dtype=bool)
             n_valid = int(valid_entries.sum())
             if n_valid:
-                out_rows[offset : offset + n_valid] = row_index
                 out_cols[offset : offset + n_valid] = positions_clipped[valid_entries]
                 out_values[offset : offset + n_valid] = cell_values[valid_entries]
             offset += n_valid
-            row_index += 1
 
     matrix = csr_matrix(
-        (out_values[:offset], (out_rows[:offset], out_cols[:offset])),
-        shape=(n_cells, len(tokens)),
+        (out_values, out_cols, indptr), shape=(n_cells, len(token_lookup))
     )
-    var = metadata.loc[tokens, list(metadata_var_columns)].copy()
+    matrix.sum_duplicates()
+    var = metadata.loc[token_lookup, list(metadata_var_columns)].copy()
     var.index = var[metadata_var_columns[0]].astype(str)
     return (
         matrix,
