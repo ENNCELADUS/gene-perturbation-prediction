@@ -112,6 +112,29 @@ def test_state_forward_adapter_batches_distinct_gene_conditions() -> None:
     assert state.seen["padded"] is True
 
 
+def test_state_chunks_share_fp32_output_and_preserve_bfloat16_gradients() -> None:
+    class BfloatState(torch.nn.Module):
+        cell_sentence_len = 2
+
+        def forward(self, batch, padded):
+            return (batch["ctrl_cell_emb"] * 1.3).to(torch.bfloat16)
+
+    control = torch.arange(12, dtype=torch.float32).reshape(6, 2).requires_grad_()
+    reference = control.detach().clone().requires_grad_()
+    outputs = StateForwardAdapter(BfloatState()).forward_condition_chunks(
+        tuple(control.split(2)), (torch.zeros(2),) * 3,
+        ("G1", "G2", "G3"), (None,) * 3,
+    )
+    expected = tuple(x.float() for x in (reference * 1.3).bfloat16().split(2))
+    for actual, target in zip(outputs, expected, strict=True):
+        assert actual.dtype == torch.float32
+        torch.testing.assert_close(actual, target, rtol=0, atol=0)
+    assert len({x.untyped_storage().data_ptr() for x in outputs}) == 1
+    sum(x.square().sum() for x in outputs).backward()
+    sum(x.square().sum() for x in expected).backward()
+    torch.testing.assert_close(control.grad, reference.grad, rtol=0, atol=0)
+
+
 def test_state_forward_adapter_forward_runs_unpadded_single_condition() -> None:
     state = LinearMockStateModel(input_dim=2, output_dim=3, pert_dim=2)
     adapter = StateForwardAdapter(state)

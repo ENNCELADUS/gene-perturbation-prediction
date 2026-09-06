@@ -120,6 +120,10 @@ class StateForwardAdapter(nn.Module):
             batch_indices,
             padded=True,
         )
+        # Features and response losses consume FP32. Convert once before views
+        # are split, avoiding one cast (and backward cast) per condition.
+        if output.dtype in (torch.float16, torch.bfloat16):
+            output = output.float()
         return tuple(output.split(chunk_sizes, dim=0))
 
     def _forward_state(
