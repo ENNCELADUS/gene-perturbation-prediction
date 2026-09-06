@@ -128,8 +128,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     registry = load_source_registry(Path(paths["source_registry"]), split)
     encoded = _prepare_tx1(config, registry)
     hvg_order = tuple(
-        str(gene).strip().upper()
-        for gene in load_hvg_gene_order(Path(paths["state_model_dir"]))
+        str(gene) for gene in load_hvg_gene_order(Path(paths["state_model_dir"]))
     )
     bags = assemble_train_response_gene_bags(
         cell_line_manifest_path=Path(paths["cell_line_manifest"]),

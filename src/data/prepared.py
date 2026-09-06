@@ -105,6 +105,20 @@ def _unique_upper(values: Sequence[object], label: str) -> tuple[str, ...]:
     return result
 
 
+def _unique_exact(values: Sequence[object], label: str) -> tuple[str, ...]:
+    """Validate an ordered feature axis without changing checkpoint spelling."""
+    result = tuple(str(value) for value in values)
+    normalized = tuple(value.strip().upper() for value in result)
+    if not result or any(not value for value in normalized):
+        raise ValueError(f"{label} must contain non-empty genes")
+    duplicates = sorted(
+        value for value, count in Counter(normalized).items() if count > 1
+    )
+    if duplicates:
+        raise ValueError(f"{label} contains duplicates: {duplicates[:10]}")
+    return result
+
+
 def _read_panel(path: Path) -> tuple[str, ...]:
     if not path.is_file():
         raise FileNotFoundError(
@@ -331,14 +345,14 @@ def load_inputs(
             f"{metadata_path}: prepared metadata common gene panel/order "
             "does not match CSV; run `hpc/run.sh prepare <config>`"
         )
-    hvg_order = _unique_upper(metadata["hvg_order"], "prepared HVG order")
+    hvg_order = _unique_exact(metadata["hvg_order"], "prepared HVG order")
     state_model_dir = _path(config, "state_model_dir")
     if not (state_model_dir / "var_dims.pkl").is_file():
         raise FileNotFoundError(
             f"missing STATE gene order {state_model_dir / 'var_dims.pkl'}; "
             "run `hpc/run.sh prepare <config>`"
         )
-    state_hvg_order = _unique_upper(
+    state_hvg_order = _unique_exact(
         load_hvg_gene_order(state_model_dir), "STATE HVG order"
     )
     if hvg_order != state_hvg_order:

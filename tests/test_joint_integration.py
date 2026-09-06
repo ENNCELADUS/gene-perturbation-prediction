@@ -143,7 +143,7 @@ def test_real_raw_preparation_writes_order_and_original_holdout(tmp_path, monkey
     )
     # G2 meets 5/3/3 availability but its missing K562 donor excludes it.
     labels.to_csv(config["paths"]["gene_effect"])
-    hvg = ["G1", "G0", *[f"HVG{i}" for i in range(2, 2000)]]
+    hvg = ["G1", "G0", "C1orf109", *[f"HVG{i}" for i in range(3, 2000)]]
     state = Path(config["paths"]["state_model_dir"])
     state.mkdir()
     (state / "var_dims.pkl").write_bytes(pickle.dumps({"gene_names": hvg}))

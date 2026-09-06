@@ -59,8 +59,13 @@ def open_response_targets_cache(
             f"missing prepared response cache file {missing[0]}; run "
             "`hpc/run.sh prepare <config>`"
         )
-    expected_order = tuple(str(gene).strip().upper() for gene in expected_hvg_order)
-    if not expected_order or len(set(expected_order)) != len(expected_order):
+    expected_order = tuple(str(gene) for gene in expected_hvg_order)
+    normalized_order = tuple(gene.strip().upper() for gene in expected_order)
+    if (
+        not expected_order
+        or any(not gene for gene in normalized_order)
+        or len(set(normalized_order)) != len(normalized_order)
+    ):
         raise ValueError(
             "expected response HVG order must be non-empty and unique"
             "; run `hpc/run.sh prepare <config>`"
@@ -195,8 +200,13 @@ def write_response_targets_cache(
     hvg_order: Sequence[str],
 ) -> Path:
     """Write aligned target arrays and their actual assembled gene order."""
-    hvg_order = tuple(str(gene).strip().upper() for gene in hvg_order)
-    if not hvg_order or len(set(hvg_order)) != len(hvg_order):
+    hvg_order = tuple(str(gene) for gene in hvg_order)
+    normalized_order = tuple(gene.strip().upper() for gene in hvg_order)
+    if (
+        not hvg_order
+        or any(not gene for gene in normalized_order)
+        or len(set(normalized_order)) != len(normalized_order)
+    ):
         raise ValueError("response target hvg_order must contain unique genes")
     n_bags = len(genes)
     if len(target_bags) != n_bags or len(metadata) != n_bags:
