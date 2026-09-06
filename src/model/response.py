@@ -211,19 +211,35 @@ def response_terms(
     """Return FP32 losses per condition; callers perform anchor reduction."""
     if not predicted or len(predicted) != len(batch.genes):
         raise ValueError("response predictions must match a non-empty condition batch")
-    means, energies = [], []
-    for pred, observed, control in zip(
-        predicted, batch.observed_hvg, batch.control_hvg, strict=True
+    groups: dict[tuple, list[int]] = {}
+    for index, (pred, observed, control) in enumerate(
+        zip(predicted, batch.observed_hvg, batch.control_hvg, strict=True)
     ):
-        pred, observed, control = pred.float(), observed.float(), control.float()
         if pred.ndim != 2 or observed.ndim != 2 or control.ndim != 2:
             raise ValueError("response bags must be two-dimensional")
         if not (pred.shape[1] == observed.shape[1] == control.shape[1]):
             raise ValueError("response bag gene widths must match")
         if pred.shape[0] == 0 or observed.shape[0] == 0 or control.shape[0] == 0:
             raise ValueError("response bags must be non-empty")
-        means.append(mean_delta_mse(pred, observed, control.mean(dim=0)))
-        energies.append(energy_distance(pred, observed))
+        shape = (tuple(pred.shape), tuple(observed.shape), tuple(control.shape))
+        groups.setdefault(shape, []).append(index)
+    # Equal-sized bags share distance kernels; keep unequal bags separate and
+    # restore condition order before the caller's balanced-anchor reduction.
+    means, energies = [None] * len(predicted), [None] * len(predicted)
+    for indices in groups.values():
+        pred = torch.stack([predicted[i] for i in indices]).float()
+        observed = torch.stack([batch.observed_hvg[i] for i in indices]).float()
+        control = torch.stack([batch.control_hvg[i] for i in indices]).float()
+        control_mean = control.mean(dim=1)
+        delta_pred = pred.mean(dim=1) - control_mean
+        delta_obs = observed.mean(dim=1) - control_mean
+        mean = (delta_pred - delta_obs).square().mean(dim=1)
+        cross = torch.cdist(pred, observed).mean(dim=(1, 2))
+        within_pred = torch.cdist(pred, pred).mean(dim=(1, 2))
+        within_obs = torch.cdist(observed, observed).mean(dim=(1, 2))
+        energy = 2.0 * cross - within_pred - within_obs
+        for index, m, e in zip(indices, mean.unbind(), energy.unbind(), strict=True):
+            means[index], energies[index] = m, e
     terms = {
         "mean_delta_mse": torch.stack(means),
         "energy_distance": torch.stack(energies),
