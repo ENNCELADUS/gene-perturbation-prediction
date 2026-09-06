@@ -37,14 +37,19 @@ def split_heldout_genes(
 
 
 def _prepare_tx1(config, registry):
-    from src.data.tx1_cache import embed_registry_lines, load_line_cache
+    from src.data.tx1_cache import (
+        embed_registry_lines,
+        load_hvg_gene_order,
+        open_line_cache,
+    )
 
     paths, settings = config["paths"], config["preparation"]
     cache = Path(paths["tx1_cache"])
+    hvg_order = load_hvg_gene_order(Path(paths["state_model_dir"]))
     missing = []
     for model_id in registry.index.astype(str):
         try:
-            load_line_cache(cache, model_id)
+            open_line_cache(cache, model_id, expected_hvg_order=hvg_order)
         except (FileNotFoundError, ValueError, OSError):
             missing.append(model_id)
     if missing:

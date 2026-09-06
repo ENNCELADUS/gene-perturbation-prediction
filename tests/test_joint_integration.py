@@ -304,3 +304,106 @@ def test_baseline_exports_use_current_axes_and_requested_split(tmp_path, monkeyp
     assert math.isfinite(
         result.summary["gene_mean"]["val_geneeffect_pearson_macro_per_line"]
     )
+
+
+@pytest.mark.parametrize(
+    "malformation", ["dtype", "embedding_width", "hvg_width", "hvg_rows", "sidecar"]
+)
+def test_prepare_repairs_invalid_tx1_cache_without_rebuilding_healthy_lines(
+    tmp_path, monkeypatch, malformation
+):
+    import numpy as np
+    from src.data import tx1_cache
+    from src.experiments.prepare import _prepare_tx1
+    from src.model import tx1
+    from test_tx1_embed_cache import _write_registry_h5ad, _write_var_dims
+
+    source = tmp_path / "ACH-A.h5ad"
+    _write_registry_h5ad(source)
+    registry = pd.DataFrame(
+        {
+            "source_path": [str(source)],
+            "source_kind": ["h5ad"],
+            "matrix_semantics": ["raw_umi_counts"],
+        },
+        index=pd.Index(["ACH-A"], name="model_id"),
+    )
+    state_dir = _write_var_dims(tmp_path / "state", ["GENE1", "GENE2"])
+    cache = tmp_path / "cache"
+    config = load_config(Path("configs/geneeffect_joint.yaml"))
+    config["paths"].update(tx1_cache=str(cache), state_model_dir=str(state_dir))
+    config["features"]["cells_per_context"] = 2
+    config["preparation"].update(
+        var_ensembl_col="gene_id", hvg_gene_symbol_col="gene_symbol"
+    )
+    tx1_cache.embed_registry_lines(
+        registry,
+        cache,
+        encoder=lambda adata: np.ones((adata.n_obs, 2560), dtype=np.float32),
+        hvg_state_model_dir=state_dir,
+        var_ensembl_col="gene_id",
+        max_cells_per_line=2,
+        seed=0,
+    )
+    # A second healthy line has no raw file. only_lines must leave it untouched.
+    healthy_dir = cache / "HEALTHY"
+    tx1_cache.write_line_cache(
+        cache,
+        "HEALTHY",
+        np.ones((2, 2560), dtype=np.float32),
+        np.ones((2, 2), dtype=np.float32),
+        pd.DataFrame(index=["h1", "h2"]),
+        hvg_gene_order=["GENE1", "GENE2"],
+    )
+    marker = healthy_dir / "encoder_settings.json"
+    marker.write_text('{"historical": true}')
+    registry.loc["HEALTHY"] = [
+        str(tmp_path / "absent-healthy.h5ad"),
+        "h5ad",
+        "raw_umi_counts",
+    ]
+    line = cache / "ACH-A"
+    if malformation == "dtype":
+        np.save(line / "embeddings.npy", np.ones((2, 2560), dtype=np.float64))
+    elif malformation == "embedding_width":
+        np.save(line / "embeddings.npy", np.ones((2, 1), dtype=np.float32))
+    elif malformation == "hvg_width":
+        np.save(line / "hvg.npy", np.ones((2, 1), dtype=np.float32))
+    elif malformation == "hvg_rows":
+        np.save(line / "hvg.npy", np.ones((1, 2), dtype=np.float32))
+    else:
+        header = json.loads((line / "hvg_gene_order.json").read_text())
+        header["width"] = 1
+        (line / "hvg_gene_order.json").write_text(json.dumps(header))
+    builds, encodes = [], []
+
+    def encoder(adata):
+        encodes.append(set(adata.obs.model_id))
+        return np.full((adata.n_obs, 2560), 7, dtype=np.float32)
+
+    def build(*args):
+        builds.append(args)
+        return encoder, {}
+
+    monkeypatch.setattr(tx1, "_build_tx1_encoder", build)
+    assert _prepare_tx1(config, registry) == ["ACH-A"]
+    assert len(builds) == 1 and encodes == [{"ACH-A"}]
+    embeddings, hvg, obs = tx1_cache.open_line_cache(
+        cache, "ACH-A", expected_hvg_order=["GENE1", "GENE2"]
+    )
+    assert embeddings.dtype == np.float32 and embeddings.shape == (2, 2560)
+    assert hvg.shape == (2, 2) and len(obs) == 2
+    np.testing.assert_array_equal(embeddings, np.full((2, 2560), 7, dtype=np.float32))
+    assert marker.read_text() == '{"historical": true}'
+    assert (
+        json.loads((line / "encoder_settings.json").read_text())["collator_seed"] == 0
+    )
+
+    # All caches now healthy: no encoder construction, source read or raw hash.
+    def forbidden(*args, **kwargs):
+        pytest.fail("healthy Tx1 readiness invoked encoder/raw preparation")
+
+    monkeypatch.setattr(tx1, "_build_tx1_encoder", forbidden)
+    monkeypatch.setattr(tx1_cache, "_load_registry_basal_adata", forbidden)
+    monkeypatch.setattr(tx1_cache, "sha256_file", forbidden)
+    assert _prepare_tx1(config, registry) == []

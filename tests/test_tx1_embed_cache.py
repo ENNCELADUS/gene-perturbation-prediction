@@ -63,10 +63,20 @@ _PERTURBSEQ_SOURCE_CONFIG = (
     / "perturbseq_sources.json"
 )
 _FROZEN_LINE_MANIFEST = (
-    _REPO_ROOT / "results" / "phase_a_tx1_20260724" / "cell_line_manifest.csv"
+    _REPO_ROOT
+    / "configs"
+    / "benchmarks"
+    / "provenance"
+    / "phase_a_tx1_20260724"
+    / "cell_line_manifest.csv"
 )
 _TX1_REGISTRATION = (
-    _REPO_ROOT / "results" / "phase_a_tx1_20260724" / "phase_a_registration.json"
+    _REPO_ROOT
+    / "configs"
+    / "benchmarks"
+    / "provenance"
+    / "phase_a_tx1_20260724"
+    / "phase_a_registration.json"
 )
 
 # --- shared fixtures --------------------------------------------------------

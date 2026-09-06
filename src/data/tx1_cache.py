@@ -663,8 +663,8 @@ def verify_cache(
         cache_dir: Root cache directory.
         frozen_manifest_path: Override for locating the frozen Phase-A line
             manifest (Global Constraint 1's
-            ``results/phase_a_tx1_20260724/cell_line_manifest.csv``). If
-            omitted, it is recovered from this run's own recorded
+            ``configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv``).
+            If omitted, it is recovered from this run's own recorded
             ``manifest.json["config_snapshot"]["line_manifest_path"]``. An
             unlocatable, unloadable, or since-changed (sha256 mismatch)
             frozen manifest is itself a discrepancy -- never silently
@@ -1593,36 +1593,12 @@ def _is_cached(
         Whether the on-disk cache may be trusted and the encoder skipped.
     """
     try:
-        embeddings, hvg_matrix, obs = load_line_cache(cache_dir, model_id)
+        open_line_cache(cache_dir, model_id, expected_hvg_order=hvg_gene_order)
     except (FileNotFoundError, OSError, ValueError, EOFError):
-        return False
-    if embeddings.ndim != 2 or embeddings.shape[1] != EMBEDDING_WIDTH:
-        return False
-    if hvg_matrix.ndim != 2:
-        return False
-    n_cells = embeddings.shape[0]
-    if hvg_matrix.shape[0] != n_cells or len(obs) != n_cells:
-        return False
-    if not _cached_hvg_gene_order_matches(cache_dir, model_id, hvg_gene_order):
         return False
     return _cached_sample_signature_matches(
         cache_dir, model_id, sample_signature
     ) and _cached_source_signature_matches(cache_dir, model_id, source_signature)
-
-
-def _cached_hvg_gene_order_matches(
-    cache_dir: Path, model_id: str, hvg_gene_order: Sequence[str] | np.ndarray
-) -> bool:
-    """Compare the on-disk HVG gene-order sidecar against the resolved order."""
-    sidecar_path = Path(cache_dir) / model_id / _HVG_GENE_ORDER_FILENAME
-    if not sidecar_path.is_file():
-        return False
-    try:
-        recorded = json.loads(sidecar_path.read_text())
-    except json.JSONDecodeError:
-        return False
-    expected = _hvg_gene_order_signature(hvg_gene_order)
-    return isinstance(recorded, dict) and recorded.get("sha256") == expected["sha256"]
 
 
 def _cached_sample_signature_matches(
