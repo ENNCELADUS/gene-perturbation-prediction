@@ -148,7 +148,7 @@ def test_real_raw_preparation_writes_order_and_original_holdout(tmp_path, monkey
     state.mkdir()
     (state / "var_dims.pkl").write_bytes(pickle.dumps({"gene_names": hvg}))
     registry, manifest, sources = [], [], {}
-    response_genes = [f"R{i}" for i in range(20)]
+    response_genes = [f"C{i}orf109" for i in range(20)]
     original_holdout = split_heldout_genes(
         {anchor: response_genes for anchor in anchors}, fraction=0.1, seed=13
     )
@@ -157,12 +157,12 @@ def test_real_raw_preparation_writes_order_and_original_holdout(tmp_path, monkey
         for gene in response_genes
         if all(gene not in held for held in original_holdout.values())
     )
-    esm = ["G0", "G1", "G2", *response_genes]
+    esm = ["G0", "G1", "G2", *[gene.upper() for gene in response_genes]]
     np.savez(
         config["paths"]["esm2_embeddings"],
         symbols=np.asarray(esm),
         vectors=np.ones((len(esm), 3), dtype=np.float32),
-        resolved=np.asarray([gene != excluded for gene in esm]),
+        resolved=np.asarray([gene != excluded.upper() for gene in esm]),
     )
     for index, model_id in enumerate(split.all_model_ids):
         basal = tmp_path / f"basal-{model_id}.h5ad"
@@ -232,15 +232,27 @@ def test_real_raw_preparation_writes_order_and_original_holdout(tmp_path, monkey
     assert payload["hvg_order"] == hvg
     assert payload["common_gene_panel"] == ["G0", "G1"]
     assert {row["gene"] for row in payload["excluded_response_conditions"]} == {
-        excluded
+        excluded.upper()
     }
     for anchor in anchors:
         assert {
             row["gene"]
             for row in payload["response_holdout"]
             if row["model_id"] == anchor
-        } == original_holdout[anchor]
+        } == {gene.upper() for gene in original_holdout[anchor]}
+    rehashed = split_heldout_genes(
+        {anchor: [gene.upper() for gene in response_genes] for anchor in anchors},
+        fraction=0.1,
+        seed=13,
+    )
+    assert any(
+        rehashed[anchor] != {gene.upper() for gene in original_holdout[anchor]}
+        for anchor in anchors
+    )
     opened = load_inputs(config, include_test=True)
+    assert set(opened.response_targets.genes) == {
+        gene.upper() for gene in response_genes if gene != excluded
+    }
     assert (
         opened.response_targets.target_bag(0)[0, 0]
         > opened.response_targets.target_bag(0)[0, 1]

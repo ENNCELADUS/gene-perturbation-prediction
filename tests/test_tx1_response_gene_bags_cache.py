@@ -61,6 +61,51 @@ def test_roundtrip_preserves_mixed_case_hvg_axis(tmp_path):
         )
 
 
+def test_writer_normalizes_perturbations_and_preserves_bag_alignment(tmp_path):
+    metadata = pd.DataFrame(
+        {
+            "model_id": ["A", "A"],
+            "perturbation_gene": ["C1orf109", " C3orf38 "],
+            "n_cells": [1, 2],
+        }
+    )
+    bags = [np.array([[1, 2]], dtype=np.float32), np.full((2, 2), 3, dtype=np.float32)]
+    write_response_targets_cache(
+        tmp_path,
+        genes=["C1orf109@A", " C3orf38 @A"],
+        target_bags=bags,
+        metadata=metadata,
+        hvg_order=["C1orf109", "C3orf38"],
+    )
+    opened = open_response_targets_cache(
+        tmp_path, expected_hvg_order=["C1orf109", "C3orf38"]
+    )
+    assert opened.keys == (("A", "C1ORF109"), ("A", "C3ORF38"))
+    for index, bag in enumerate(bags):
+        np.testing.assert_array_equal(opened.target_bag(index), bag)
+    assert metadata.perturbation_gene.tolist() == ["C1orf109", " C3orf38 "]
+
+
+def test_writer_rejects_case_collisions_before_replacing_cache(tmp_path):
+    expected = write_fixture(tmp_path)
+    with pytest.raises(ValueError, match="duplicate normalized conditions"):
+        write_response_targets_cache(
+            tmp_path,
+            genes=["C1orf109@A", "C1ORF109@A"],
+            target_bags=[np.ones((1, 2), dtype=np.float32)] * 2,
+            metadata=pd.DataFrame(
+                {
+                    "model_id": ["A", "A"],
+                    "perturbation_gene": ["C1orf109", "C1ORF109"],
+                    "n_cells": [1, 1],
+                }
+            ),
+            hvg_order=["Z", "X"],
+        )
+    opened = open_response_targets_cache(tmp_path, expected_hvg_order=["Z", "X"])
+    np.testing.assert_array_equal(opened.target_bag(0), expected[0])
+
+
 @pytest.mark.parametrize(
     "mutation, match",
     [

@@ -44,6 +44,20 @@ class ResponseTargetsCache:
         return np.asarray(self.target_cells[start:stop])
 
 
+def normalize_response_symbols(metadata: pd.DataFrame) -> pd.DataFrame:
+    """Canonicalize perturbation IDs without changing the expression feature axis."""
+    result = metadata.copy()
+    symbols = result["perturbation_gene"]
+    if symbols.isna().any():
+        raise ValueError("response metadata contains missing perturbation symbols")
+    result["perturbation_gene"] = symbols.astype(str).str.strip().str.upper()
+    if result["perturbation_gene"].eq("").any():
+        raise ValueError("response metadata contains empty perturbation symbols")
+    if result.duplicated(["model_id", "perturbation_gene"]).any():
+        raise ValueError("response metadata contains duplicate normalized conditions")
+    return result
+
+
 def open_response_targets_cache(
     cache_dir: Path, *, expected_hvg_order: Sequence[str]
 ) -> ResponseTargetsCache:
@@ -222,11 +236,13 @@ def write_response_targets_cache(
     required = {"model_id", "perturbation_gene", "n_cells"}
     if not required.issubset(metadata.columns):
         raise ValueError("response target metadata lacks identifiers or n_cells")
-    if metadata.duplicated(["model_id", "perturbation_gene"]).any():
-        raise ValueError("response target metadata contains duplicate conditions")
     for gene, bag, row in zip(genes, target_bags, metadata.itertuples(), strict=True):
         if gene != f"{row.perturbation_gene}@{row.model_id}" or row.n_cells != len(bag):
             raise ValueError("response target metadata differs from assembled bags")
+    metadata = normalize_response_symbols(metadata)
+    genes = tuple(
+        f"{row.perturbation_gene}@{row.model_id}" for row in metadata.itertuples()
+    )
     widths = {int(bag.shape[1]) for bag in target_bags} if target_bags else set()
     if len(widths) > 1:
         raise ValueError(f"every bag must share one target width; got {widths}")

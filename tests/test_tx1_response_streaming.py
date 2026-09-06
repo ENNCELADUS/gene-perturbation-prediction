@@ -31,6 +31,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.sparse import csr_matrix
 
 from src.data.basal import (
     _XATLAS_CONTROL_LABEL,
@@ -548,3 +549,92 @@ def test_drain_matches_dict_lookup_for_tokens_missing_from_metadata(
     ]
     assert len(warnings) == 1
     assert "2/3" in warnings[0]
+
+
+def test_drain_matches_coo_reference_with_duplicates_missing_and_budget() -> None:
+    """Direct CSR construction preserves the old COO observable behavior."""
+    reservoirs = {
+        "GENE_B": [
+            (
+                np.array([1, 3], dtype=np.int64),
+                np.array([7.0, 8.0], dtype=np.float32),
+                "b0",
+                "sb",
+            ),
+            (
+                np.array([5], dtype=np.int64),
+                np.array([6.0], dtype=np.float32),
+                "b1",
+                "sb",
+            ),
+        ],
+        "GENE_A": [
+            (
+                np.array([5, 1, 5, 99], dtype=np.int64),
+                np.array([1.0, 2.0, 3.0, 9.0], dtype=np.float32),
+                "a0",
+                "sa",
+            ),
+            (
+                np.array([3, 88], dtype=np.int64),
+                np.array([4.0, 5.0], dtype=np.float32),
+                "a1",
+                "sa",
+            ),
+        ],
+    }
+    original = {gene: list(cells) for gene, cells in reservoirs.items()}
+    metadata = pd.DataFrame(
+        {
+            "ensembl_id": ["ENSG5", "ENSG1", "ENSG3"],
+            "gene_name": ["G5", "G1", "G3"],
+        },
+        index=[5, 1, 3],
+    )
+    keep_mask = resolve_total_budget_keep_mask(4, total_cells=3, seed=1)
+
+    selected = []
+    global_index = 0
+    for gene in sorted(original):
+        for cell in original[gene]:
+            if keep_mask[global_index]:
+                selected.append((gene, cell))
+            global_index += 1
+    tokens = sorted(
+        {
+            int(token)
+            for _gene, cell in selected
+            for token in cell[0]
+            if token in metadata.index
+        }
+    )
+    token_to_col = {token: col for col, token in enumerate(tokens)}
+    rows: list[int] = []
+    columns: list[int] = []
+    values: list[float] = []
+    for row, (_gene, cell) in enumerate(selected):
+        for token, value in zip(cell[0], cell[1], strict=True):
+            if int(token) in token_to_col:
+                rows.append(row)
+                columns.append(token_to_col[int(token)])
+                values.append(float(value))
+    expected = csr_matrix(
+        (values, (rows, columns)), shape=(len(selected), len(tokens)), dtype=np.float32
+    )
+
+    matrix, var, genes, barcodes, samples = drain_gene_reservoirs_to_matrix(
+        reservoirs,
+        metadata,
+        metadata_var_columns=("ensembl_id", "gene_name"),
+        total_cells=3,
+        seed=1,
+    )
+
+    np.testing.assert_array_equal(matrix.indptr, expected.indptr)
+    np.testing.assert_array_equal(matrix.indices, expected.indices)
+    np.testing.assert_array_equal(matrix.data, expected.data)
+    assert var.equals(metadata.loc[tokens].set_index("ensembl_id", drop=False))
+    np.testing.assert_array_equal(genes, [gene for gene, _cell in selected])
+    np.testing.assert_array_equal(barcodes, [cell[2] for _gene, cell in selected])
+    np.testing.assert_array_equal(samples, [cell[3] for _gene, cell in selected])
+    assert all(cell is None for bucket in reservoirs.values() for cell in bucket)
