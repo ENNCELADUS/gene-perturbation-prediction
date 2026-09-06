@@ -81,18 +81,22 @@ it is not multiplied automatically by the replay interval. The interval and coef
 together determine response influence. Log the two losses separately and identify
 updates without a response loss as missing, not as a measured zero.
 
-Proposed starting settings, to be assessed on validation rather than treated as tuned:
+Current settings, to be assessed on validation rather than treated as tuned:
 
-| Setting | Initial value |
+| Setting | Value |
 | --- | --- |
 | Response interval / weight | Every 4 optimizer updates / 1.0 |
-| Dependency conditions per rank | 256 |
+| Dependency conditions per rank | 1024 |
 | Response conditions per replay per rank | 64, 16 from each anchor |
 | STATE / gene-adapter / head learning rates | `1e-6` / `1e-5` / `1e-4` |
 | Optimizer / weight decay / gradient clipping | AdamW / 0.01 / 1.0 |
 | Maximum epochs / validation patience | 50 / 5 |
 | Cell bag / STATE window | 128 cells / 64 cells |
 | Training / cell-collation / projection seed | 0 / 0 / 0 |
+
+Dependency batch 1024/rank replaces 256/rank at the user's explicit request after
+H20 throughput/memory probes. This changes updates per epoch and replay exposure
+per dependency row; it is not a validation-selected hyperparameter.
 
 These are the three runtime base seeds. Epoch/rank-specific sampling streams derive
 from base seed 0. Do not change frozen benchmark membership or relabel historical
@@ -186,6 +190,13 @@ the frozen Tx1 weights into each checkpoint. Resume at epoch boundaries, retaini
 sampler seeds and the global replay counter; do not promise exact mid-epoch recovery.
 The same-world-size resume test must reproduce the next update. A requested world-size
 change requires a fresh run, avoiding an unimplemented reproducibility promise.
+
+An explicitly requested batch-size change may continue from a derived checkpoint
+in a new run directory. Record the original checkpoint hash/configuration and
+the changed batch field, preserving weights, optimizer, fitted preprocessing,
+training counters and rank RNG states. Preserve the original run and checkpoints.
+The derived checkpoint declares its new continuation configuration; this is a
+documented batch transition, not an exact-next-update resume claim.
 
 ```text
 outputs/geneeffect_joint/<run_id>/

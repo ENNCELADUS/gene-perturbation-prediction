@@ -30,6 +30,12 @@ any conflicting supplied configuration. `last.pt` supports epoch-boundary resume
 `best.pt` strictly minimizes validation GeneEffect Huber loss. `metrics.jsonl`
 contains every update and one validation record per completed epoch.
 
+The current dependency batch is 1024 per rank (2048 across two H20s); response
+replay remains 64 per rank every four updates. A requested batch change uses a
+new run directory and explicitly documented derived checkpoint with original
+hash/configuration, preserving optimizer/preprocessing/RNG state. Ordinary resume
+still rejects configuration conflicts; historical checkpoint metadata is retained.
+
 `run.json` records separate training and evaluation states. Testing is explicit
 and does not control training completion. Checkpoint evaluation restores fitted
 preprocessing, weights and actual ESM2 vectors, then exports
