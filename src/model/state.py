@@ -101,12 +101,13 @@ class StateForwardAdapter(nn.Module):
             chunk_sizes,
             control_cells.device,
         )
-        perturbation_cells = torch.cat(
-            tuple(
-                perturbation.unsqueeze(0).expand(size, -1)
-                for perturbation, size in zip(perturbations, chunk_sizes, strict=True)
-            ),
-            dim=0,
+        # Chunks have equal length; one batched expansion avoids a separate
+        # reduction kernel per chunk when propagating perturbation gradients.
+        perturbation_cells = (
+            torch.stack(perturbations)
+            .unsqueeze(1)
+            .expand(-1, chunk_sizes[0], -1)
+            .reshape(control_cells.shape[0], -1)
         )
         gene_cells = [
             gene
