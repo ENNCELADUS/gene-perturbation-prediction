@@ -1,0 +1,120 @@
+{
+  "run_id": "joint_seed0_20260906T174818Z_b1024",
+  "launch": {
+    "run_id": "joint_seed0_20260906T174818Z_b1024",
+    "run_dir": "outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024",
+    "revision": "36acbd022353017b0f14e76175fffa2e4ac2e145",
+    "command": [
+      "bash",
+      "hpc/run.sh",
+      "train",
+      "configs/geneeffect_joint.yaml",
+      "--resume",
+      "outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/last.pt"
+    ],
+    "status": "running",
+    "created_at": "2026-09-06T17:48:31.559385+00:00",
+    "batch_size_transition": "outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/batch_size_transition.json",
+    "launcher_pid": 71023,
+    "train_pid": 71024
+  },
+  "dependency_batch_size_per_rank": 1024,
+  "response_batch_size_per_rank": 64,
+  "world_size": 2,
+  "snapshots": [
+    {
+      "unix_time": 1788716982.0919948,
+      "epoch": 2,
+      "global_step": 11836
+    },
+    {
+      "unix_time": 1788716997.093555,
+      "epoch": 2,
+      "global_step": 11857
+    },
+    {
+      "unix_time": 1788717012.09538,
+      "epoch": 2,
+      "global_step": 11878
+    },
+    {
+      "unix_time": 1788717027.0961945,
+      "epoch": 2,
+      "global_step": 11899
+    }
+  ],
+  "windows": [
+    {
+      "seconds": 15.00156021118164,
+      "updates": 21,
+      "rows_per_second": 2866.9018018501392
+    },
+    {
+      "seconds": 15.001825094223022,
+      "updates": 21,
+      "rows_per_second": 2866.85118176466
+    },
+    {
+      "seconds": 15.000814437866211,
+      "updates": 21,
+      "rows_per_second": 2867.0443313688284
+    }
+  ],
+  "gpu_telemetry": {
+    "0": {
+      "samples": 45,
+      "mean_utilization_percent": 88.08888888888889,
+      "min_memory_mib": 62300.0,
+      "max_memory_mib": 62302.0,
+      "mean_power_watts": 347.4322222222222
+    },
+    "1": {
+      "samples": 45,
+      "mean_utilization_percent": 90.08888888888889,
+      "min_memory_mib": 62294.0,
+      "max_memory_mib": 62296.0,
+      "mean_power_watts": 339.51733333333334
+    }
+  },
+  "dependency_rows_per_second": 2866.9324359954194,
+  "gpu_sampler_exited": true,
+  "batch_size_transition": {
+    "reason": "user requested dependency batch 1024 per rank",
+    "field": "train.dependency_batch_size",
+    "old_value": 256,
+    "new_value": 1024,
+    "source_run": "outputs/geneeffect_joint/joint_seed0_20260906T174004Z_vector",
+    "revision": "36acbd022353017b0f14e76175fffa2e4ac2e145",
+    "checkpoints": {
+      "last.pt": {
+        "source_sha256": "4d77cf8153c2851fcae1a38835770862dfd28d0bca911d7cfc082ff8a6ff960e",
+        "derived_sha256": "0de537b7c4c3c821aaed4f89b67599f764a12a4e8ff3884d8c6cd37b0d94caed",
+        "train_state": {
+          "next_epoch": 2,
+          "global_step": 11778,
+          "best_loss": 0.01632782630622387,
+          "best_epoch": 1,
+          "bad_epochs": 0
+        },
+        "non_config_payload_equal": true,
+        "source_dependency_batch_size": 256
+      },
+      "best.pt": {
+        "source_sha256": "f663b06186073664683eec11c16a139db0f09c996d9cb2b2a1f9c4701bfceabe",
+        "derived_sha256": "b4665e7bc5505c0f759bd4e3b0dc8295960090a2514940d8ae3802a8274f8c91",
+        "train_state": {
+          "next_epoch": 2,
+          "global_step": 11778,
+          "best_loss": 0.01632782630622387,
+          "best_epoch": 1,
+          "bad_epochs": 0
+        },
+        "non_config_payload_equal": true,
+        "source_dependency_batch_size": 256
+      }
+    },
+    "source_last_logged_step": 13852,
+    "discarded_uncheckpointed_updates": 2074
+  },
+  "remote_source": "outputs/launches/joint_seed0_20260906T174818Z_b1024/performance.json"
+}

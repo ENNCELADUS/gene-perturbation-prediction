@@ -1,5 +1,9 @@
 # Joint GeneEffect vectorization diagnosis
 
+The user subsequently selected batch 1024; see the
+[current batch-1024 deployment](2026-09-06-joint-batch1024.md). The measurements
+and batch-256 continuation below are retained as historical comparisons.
+
 Measured on 2026-09-06 at `apg3op6hp3v99-0`, SSH port 30030,
 `/2023533015/VCC_Project`. This continues the
 [resident-input diagnosis](2026-09-06-joint-throughput-diagnosis.md).
