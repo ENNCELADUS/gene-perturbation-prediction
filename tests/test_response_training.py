@@ -166,6 +166,43 @@ def test_predict_bags_combines_conditions_in_one_model_forward() -> None:
     assert [tuple(output.shape) for output in outputs] == [(10, 3), (6, 3)]
 
 
+def test_complete_state_windows_do_not_copy_control_cells():
+    """The 128-cell production path must not launch an index copy per window."""
+    controls = (_bag(128, 3), _bag(128, 3))
+
+    class BorrowedWindows(_WindowedModel):
+        def forward(self, chunks, gene, batch_index_chunks):
+            for index, chunk in enumerate(chunks):
+                source = controls[index // 2]
+                assert chunk.untyped_storage().data_ptr() == (
+                    source.untyped_storage().data_ptr()
+                )
+            return super().forward(chunks, gene, batch_index_chunks)
+
+    predict_bags(BorrowedWindows(3, window=64), controls, ("G1", "G2"), seed=0)
+
+
+@pytest.mark.parametrize("rows", [6, 8, 10, 16])
+def test_state_window_values_and_gradients_match_indexed_reference(rows):
+    from src.model.response import _chunk_control_cell_indices
+
+    control = _bag(rows, 3).requires_grad_()
+    reference = control.detach().clone().requires_grad_()
+    model = _WindowedModel(3, window=8)
+    expected_chunks = tuple(
+        reference[torch.as_tensor(index)]
+        for index in _chunk_control_cell_indices(rows, 8, 73)
+    )
+    expected = torch.cat(
+        model(expected_chunks, "G", (None,) * len(expected_chunks))
+    )[:rows]
+    actual = predict_bags(model, (control,), ("G",), seed=73)[0]
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    actual.square().sum().backward()
+    expected.square().sum().backward()
+    torch.testing.assert_close(control.grad, reference.grad, rtol=0, atol=0)
+
+
 def test_predict_bags_seed_controls_randperm_despite_ambient_rng_changes() -> None:
     model = _RandpermWindowedModel(window=8).eval()
     control = torch.arange(30, dtype=torch.float32).reshape(10, 3)

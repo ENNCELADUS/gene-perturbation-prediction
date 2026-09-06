@@ -165,11 +165,16 @@ def predict_bags(
     cell_counts: list[int] = []
     for control, gene in zip(controls, genes, strict=True):
         n_cells = int(control.shape[0])
-        index_chunks = _chunk_control_cell_indices(n_cells, window, seed)
-        condition_chunks = [
-            control[torch.as_tensor(idx, dtype=torch.long, device=control.device)]
-            for idx in index_chunks
-        ]
+        if n_cells < 1:
+            raise ValueError("at least one basal cell is required")
+        # Complete windows are already consecutive: indexing them creates a
+        # host-to-device index transfer and a GPU copy for every condition.
+        condition_chunks = list(control.split(window, dim=0))
+        if n_cells % window:
+            index = _chunk_control_cell_indices(n_cells, window, seed)[-1]
+            condition_chunks[-1] = control[
+                torch.as_tensor(index, dtype=torch.long, device=control.device)
+            ]
         chunks.extend(condition_chunks)
         chunk_genes.extend(str(gene) for _ in condition_chunks)
         chunks_per_control.append(len(condition_chunks))
