@@ -1,0 +1,94 @@
+{
+  "measured_at": "2026-09-06T17:06:34.638033+00:00",
+  "run_dir": "outputs/geneeffect_joint/joint_seed0_20260906T170355Z_resident",
+  "revision": "aec94da7ac708dcdedd2d3a67ad176771429d9ab",
+  "observations": [
+    {
+      "time": 1788714349.3968902,
+      "monotonic": 2271020.60476739,
+      "global_step": 6220,
+      "epoch": 1
+    },
+    {
+      "time": 1788714364.4050875,
+      "monotonic": 2271035.612964067,
+      "global_step": 6281,
+      "epoch": 1
+    },
+    {
+      "time": 1788714379.4127135,
+      "monotonic": 2271050.620590407,
+      "global_step": 6342,
+      "epoch": 1
+    },
+    {
+      "time": 1788714394.4203148,
+      "monotonic": 2271065.628191728,
+      "global_step": 6403,
+      "epoch": 1
+    }
+  ],
+  "windows": [
+    {
+      "seconds": 15.008196677081287,
+      "updates": 61,
+      "rows_per_second": 2080.996183085324
+    },
+    {
+      "seconds": 15.007626339793205,
+      "updates": 61,
+      "rows_per_second": 2081.0752675249746
+    },
+    {
+      "seconds": 15.007601321209222,
+      "updates": 61,
+      "rows_per_second": 2081.0787368039914
+    }
+  ],
+  "rows_per_second": 2081.0500617729754,
+  "gpu": {
+    "0": {
+      "samples": 45,
+      "mean_utilization": 76.26666666666667,
+      "min_utilization": 51,
+      "max_utilization": 84,
+      "min_memory_mib": 18218,
+      "max_memory_mib": 18218
+    },
+    "1": {
+      "samples": 45,
+      "mean_utilization": 76.33333333333333,
+      "min_utilization": 68,
+      "max_utilization": 84,
+      "min_memory_mib": 18212,
+      "max_memory_mib": 18212
+    }
+  },
+  "replay_comparison": {
+    "start_step": 5890,
+    "end_step": 6145,
+    "losses": {
+      "train_geneeffect_loss": {
+        "compared": 256,
+        "max_abs_difference": 0.0,
+        "exact_matches": 256
+      },
+      "train_total_loss": {
+        "compared": 256,
+        "max_abs_difference": 0.0,
+        "exact_matches": 256
+      },
+      "train_response_mean_delta_mse": {
+        "compared": 64,
+        "max_abs_difference": 0.0,
+        "exact_matches": 64
+      },
+      "train_response_energy_distance": {
+        "compared": 64,
+        "max_abs_difference": 0.0,
+        "exact_matches": 64
+      }
+    }
+  },
+  "old_final_step": 8995
+}

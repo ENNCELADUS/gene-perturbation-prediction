@@ -1,10 +1,11 @@
 # Joint GeneEffect throughput diagnosis
 
 Measured 2026-09-06 on `apg3op6hp3v99-0`, SSH port 30030,
-`/2023533015/VCC_Project`. Optimization and bounded H20 measurements are complete
-and synchronized through `main`. The original long-running process still uses
-`1c5d906`; replacing it awaits explicit stop/resume approval. These are engineering
-measurements, not new scientific results.
+`/2023533015/VCC_Project`. The optimized two-GPU production run is deployed at
+`aec94da`, resumed in `joint_seed0_20260906T170355Z_resident`. The old workers
+were stopped with authorization and their run files preserved. Production
+throughput improved by **40.2%** over the old observation. Training is still
+running; these are engineering measurements, not completed scientific results.
 
 ## Measurements
 
@@ -31,9 +32,23 @@ it does not establish full trajectory equality or improved scientific quality.
 
 Original two-GPU production throughput was about **1,484 rows/s**: steps
 4923/4952/4981 at Unix times 1788712328.495/1788712338.498/1788712348.504.
-The optimized DDP probe is 37.7% faster than that observation, but this is not a
-matched production comparison: the probe starts fresh and omits per-step file
-logging. A replacement production measurement remains pending.
+The optimized DDP probe is 37.7% faster than that observation, but starts fresh
+and omits per-step file logging. The resumed production run was then measured
+with its actual logging and optimizer state:
+
+| Production observation | Old run | Optimized resume |
+| --- | ---: | ---: |
+| Dependency rows/s | 1,484 | **2,081** |
+| Measured windows | 2 x 10 s | 3 x 15 s |
+| Updates/window | 29 | 61 |
+| GPU 0 / 1 mean utilization | 57.97% / 59.60% | **76.27% / 76.33%** |
+| GPU 0 / 1 memory, MiB | 18,692 / 18,952 initial snapshot | 18,218 / 18,212 throughout sampling |
+
+The production measurement covered steps 6220--6403 in epoch 1, including
+ordinary and replay updates. Each window measured approximately 2,081 rows/s;
+GPU telemetry has 45 samples/device. These are short steady-training observations,
+not full-epoch wall times. See the exact
+[production evidence](2026-09-06-joint-throughput-production.json).
 
 Original GPU utilization averaged 57.97% / 59.60% over 96 samples/device. A partial
 optimized DDP timed-window sample averaged 73.67% / 68.08% over 12 samples/device,
@@ -62,7 +77,7 @@ provided the feedback loop.
 Batch sizes, learning rates, sampling streams, losses, replay interval, benchmark
 membership, evaluation frequency and checkpoint selection are unchanged.
 
-## Verification and remaining action
+## Verification and deployment
 
 The no-copy and fixed-input reuse regressions failed before their respective fixes.
 Exact indexed-reference values/input gradients were checked for full, partial and
@@ -76,11 +91,30 @@ checks had **12 passed**. Ruff and whitespace checks passed. Single-GPU and
 The original run is `joint_seed0_20260906T160227Z_perf`. Its verified checkpoint
 has `next_epoch=1`, `global_step=5889`, `best_epoch=0`, and validation GeneEffect
 loss `0.016417402774095535`. This identifies the recovery point, not a new result.
-Automatic approval rejected replacing the live job and trimming its metrics;
-that command did not execute. The revised proposal preserves the entire old run
-and resumes in a new directory after explicit stop/resume authorization. Its
-uncheckpointed epoch prefix must be replayed. Old workers 66332/66333 resumed;
-no replacement long-running job or monitor was launched.
+On explicit authorization, launcher 66200 and workers 66332/66333 were stopped;
+the old run ended at step 8995. Its files were retained. The new run copied the
+checkpoint/config and only completed-epoch metrics; its recorded recovery source
+SHA-256 is `0389b9fa1067c2795ea04070eb5d3db0697bfaae2e41a612e687ca3fafeea4e0`.
+The 3,106 uncheckpointed prefix updates are replayed from step 5889.
+
+The real resumed updates at steps **5890--6145** were compared against the
+preserved old log: all 256 GeneEffect/total losses matched exactly, as did both
+response terms on all 64 replay updates. This establishes equality of those
+logged values over the tested prefix, not equality of every internal tensor or
+an unobserved future trajectory.
+
+The replacement uses `hpc/run.sh train` with the same configuration/world size.
+Supervisor 68057, launcher 68058 and workers 68190/68191 were verified running.
+Remote paths:
+
+- Run: `outputs/geneeffect_joint/joint_seed0_20260906T170355Z_resident/`
+- Launch metadata/log: `outputs/launches/joint_seed0_20260906T170355Z_resident/`
+- Production evidence: `performance.json` and `gpu_performance.csv` in that launch
+  directory. The bounded GPU sampler exited; no recurring monitor was created.
+
+The new run still has to finish its epoch and write a new checkpoint. Its inherited
+checkpoint remains an epoch-0 artifact; successful resume and throughput do not
+establish terminal training completion or a new validation result.
 
 ## Bounded reproduction
 
