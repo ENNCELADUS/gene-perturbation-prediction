@@ -1,5 +1,10 @@
 # Joint GeneEffect throughput diagnosis
 
+This records the first optimization and deployment. The subsequent
+[vectorization diagnosis](2026-09-06-joint-vectorization-diagnosis.md) contains the
+current deployment and additional measurements; the run below has been replaced
+at a completed checkpoint boundary.
+
 Measured 2026-09-06 on `apg3op6hp3v99-0`, SSH port 30030,
 `/2023533015/VCC_Project`. The optimized two-GPU production run is deployed at
 `aec94da`, resumed in `joint_seed0_20260906T170355Z_resident`. The old workers

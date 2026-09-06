@@ -1,0 +1,318 @@
+{
+  "measured_date": "2026-09-06",
+  "host": "apg3op6hp3v99-0",
+  "probes": [
+    {
+      "name": "resident",
+      "source": "outputs/profiles/joint_resident_20260906.json",
+      "revision": "bbe46701b47c2f33380c0926b009760820c9cf2b",
+      "world_size": 1,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 13.898307256400585,
+      "dependency_rows_per_second": 1178.8485962889242,
+      "median_step_seconds": {
+        "ordinary": 0.1904144356958568,
+        "replay": 0.30603492143563926
+      },
+      "peak_allocated_gib": 14.991986274719238,
+      "last_losses": {
+        "train_geneeffect_loss": 0.020633725449442863,
+        "train_total_loss": 0.020633725449442863,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 256,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "resident_ddp",
+      "source": "outputs/profiles/joint_resident_ddp_20260906.json",
+      "revision": "f3d61185a47dd186c657f4b9a72a32268fd583b1",
+      "world_size": 2,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 128,
+      "seconds": 32.08161424100399,
+      "dependency_rows_per_second": 2042.7899764544097,
+      "median_step_seconds": {
+        "ordinary": 0.21528202295303345,
+        "replay": 0.3492262065410614
+      },
+      "peak_allocated_gib": 15.149468421936035,
+      "last_losses": {
+        "train_geneeffect_loss": 0.02204870618879795,
+        "train_total_loss": 0.02204870618879795,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 512,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "batchcast",
+      "source": "outputs/profiles/joint_batchcast_20260906.json",
+      "revision": "6400ce406df833cb29bc18b4ae2ef5d0006b1f49",
+      "world_size": 1,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 29.82309887325391,
+      "dependency_rows_per_second": 549.3728223760668,
+      "median_step_seconds": {
+        "ordinary": 0.4205248535145074,
+        "replay": 0.6017829268239439
+      },
+      "peak_allocated_gib": 14.994397163391113,
+      "last_losses": {
+        "train_geneeffect_loss": 0.020633725449442863,
+        "train_total_loss": 0.020633725449442863,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 256,
+        "train_response_rows": 0
+      },
+      "interpretation": "anomalous trial; repeated on a verified idle GPU"
+    },
+    {
+      "name": "batchcast_gpu1",
+      "source": "outputs/profiles/joint_batchcast_gpu1_20260906.json",
+      "revision": "6400ce406df833cb29bc18b4ae2ef5d0006b1f49",
+      "world_size": 1,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 13.493637162260711,
+      "dependency_rows_per_second": 1214.201908868805,
+      "median_step_seconds": {
+        "ordinary": 0.1833323915489018,
+        "replay": 0.30143880750983953
+      },
+      "peak_allocated_gib": 14.994397163391113,
+      "last_losses": {
+        "train_geneeffect_loss": 0.020633725449442863,
+        "train_total_loss": 0.020633725449442863,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 256,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "statcache",
+      "source": "outputs/profiles/joint_statcache_20260906.json",
+      "revision": "18c4c34e007e1472b968a4dd8549e4ded0da5ebd",
+      "world_size": 1,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 13.643398811109364,
+      "dependency_rows_per_second": 1200.8737871577173,
+      "median_step_seconds": {
+        "ordinary": 0.18423848738893867,
+        "replay": 0.30307068838737905
+      },
+      "peak_allocated_gib": 14.994447708129883,
+      "last_losses": {
+        "train_geneeffect_loss": 0.020633725449442863,
+        "train_total_loss": 0.020633725449442863,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 256,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "expand",
+      "source": "outputs/profiles/joint_expand_20260906.json",
+      "revision": "5fbcfede021f1c4256a023de5c2f2b1760dae41f",
+      "world_size": 1,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 13.228841057047248,
+      "dependency_rows_per_second": 1238.5060739143087,
+      "median_step_seconds": {
+        "ordinary": 0.17852701456286013,
+        "replay": 0.29543344606645405
+      },
+      "peak_allocated_gib": 14.994447708129883,
+      "last_losses": {
+        "train_geneeffect_loss": 0.020633725449442863,
+        "train_total_loss": 0.020633725449442863,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 256,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "b512",
+      "source": "outputs/profiles/joint_b512_20260906.json",
+      "revision": "5fbcfede021f1c4256a023de5c2f2b1760dae41f",
+      "world_size": 1,
+      "dependency_batch_size": 512,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 23.92762109171599,
+      "dependency_rows_per_second": 1369.463344241298,
+      "median_step_seconds": {
+        "ordinary": 0.3423344329930842,
+        "replay": 0.4585631750524044
+      },
+      "peak_allocated_gib": 26.592798233032227,
+      "last_losses": {
+        "train_geneeffect_loss": 0.01646926999092102,
+        "train_total_loss": 0.01646926999092102,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 512,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "b1024",
+      "source": "outputs/profiles/joint_b1024_20260906.json",
+      "revision": "5fbcfede021f1c4256a023de5c2f2b1760dae41f",
+      "world_size": 1,
+      "dependency_batch_size": 1024,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 43.99137013684958,
+      "dependency_rows_per_second": 1489.746734328319,
+      "median_step_seconds": {
+        "ordinary": 0.6532274645287544,
+        "replay": 0.7786395181901753
+      },
+      "peak_allocated_gib": 51.90163564682007,
+      "last_losses": {
+        "train_geneeffect_loss": 0.014945280738174915,
+        "train_total_loss": 0.014945280738174915,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 1024,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "replay",
+      "source": "outputs/profiles/joint_replay_20260906.json",
+      "revision": "70f2b5b4fd61e356d232788e058ae6390a57f7c3",
+      "world_size": 1,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 13.001356868073344,
+      "dependency_rows_per_second": 1260.1761620922207,
+      "median_step_seconds": {
+        "ordinary": 0.17857864289544523,
+        "replay": 0.2798344155307859
+      },
+      "peak_allocated_gib": 15.007303237915039,
+      "last_losses": {
+        "train_geneeffect_loss": 0.020615633577108383,
+        "train_total_loss": 0.020615633577108383,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 256,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "vector_ddp",
+      "source": "outputs/profiles/joint_vector_ddp_20260906.json",
+      "revision": "70f2b5b4fd61e356d232788e058ae6390a57f7c3",
+      "world_size": 2,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 128,
+      "seconds": 29.954941883683205,
+      "dependency_rows_per_second": 2187.8193005508115,
+      "median_step_seconds": {
+        "ordinary": 0.20237699896097183,
+        "replay": 0.3208382576704025
+      },
+      "peak_allocated_gib": 15.162521839141846,
+      "last_losses": {
+        "train_geneeffect_loss": 0.02203095518052578,
+        "train_total_loss": 0.02203095518052578,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 512,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "direct",
+      "source": "outputs/profiles/joint_direct_20260906.json",
+      "revision": "f73f4e06a67e0dbabf229958db5dff50d1131e83",
+      "world_size": 1,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 64,
+      "seconds": 13.051364990416914,
+      "dependency_rows_per_second": 1255.3476216495442,
+      "median_step_seconds": {
+        "ordinary": 0.1772161058615893,
+        "replay": 0.27994055510498583
+      },
+      "peak_allocated_gib": 15.007303237915039,
+      "last_losses": {
+        "train_geneeffect_loss": 0.020615633577108383,
+        "train_total_loss": 0.020615633577108383,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 256,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    },
+    {
+      "name": "direct_ddp",
+      "source": "outputs/profiles/joint_direct_ddp_20260906.json",
+      "revision": "f73f4e06a67e0dbabf229958db5dff50d1131e83",
+      "world_size": 2,
+      "dependency_batch_size": 256,
+      "response_batch_size": 64,
+      "steps": 128,
+      "seconds": 29.425277516245842,
+      "dependency_rows_per_second": 2227.200744795601,
+      "median_step_seconds": {
+        "ordinary": 0.19989732652902603,
+        "replay": 0.31224484741687775
+      },
+      "peak_allocated_gib": 15.162521839141846,
+      "last_losses": {
+        "train_geneeffect_loss": 0.02203095518052578,
+        "train_total_loss": 0.02203095518052578,
+        "train_response_mean_delta_mse": null,
+        "train_response_energy_distance": null,
+        "train_response_loss": null,
+        "train_dependency_rows": 512,
+        "train_response_rows": 0
+      },
+      "interpretation": "bounded probe"
+    }
+  ]
+}

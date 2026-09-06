@@ -1,0 +1,91 @@
+{
+  "run_id": "joint_seed0_20260906T174004Z_vector",
+  "launch": {
+    "run_id": "joint_seed0_20260906T174004Z_vector",
+    "run_dir": "outputs/geneeffect_joint/joint_seed0_20260906T174004Z_vector",
+    "revision": "f73f4e06a67e0dbabf229958db5dff50d1131e83",
+    "command": [
+      "bash",
+      "hpc/run.sh",
+      "train",
+      "configs/geneeffect_joint.yaml",
+      "--resume",
+      "outputs/geneeffect_joint/joint_seed0_20260906T174004Z_vector/last.pt"
+    ],
+    "status": "running",
+    "created_at": "2026-09-06T17:40:06.755578+00:00",
+    "resume_source": {
+      "run_dir": "outputs/geneeffect_joint/joint_seed0_20260906T170355Z_resident",
+      "checkpoint_sha256": "4d77cf8153c2851fcae1a38835770862dfd28d0bca911d7cfc082ff8a6ff960e",
+      "train_state": {
+        "next_epoch": 2,
+        "global_step": 11778,
+        "best_loss": 0.01632782630622387,
+        "best_epoch": 1,
+        "bad_epochs": 0
+      },
+      "last_logged_step": 11779,
+      "replayed_updates": 1
+    },
+    "launcher_pid": 70477,
+    "train_pid": 70478
+  },
+  "snapshots": [
+    {
+      "unix_time": 1788716483.4035273,
+      "epoch": 2,
+      "global_step": 11992
+    },
+    {
+      "unix_time": 1788716498.406696,
+      "epoch": 2,
+      "global_step": 12057
+    },
+    {
+      "unix_time": 1788716513.4098883,
+      "epoch": 2,
+      "global_step": 12122
+    },
+    {
+      "unix_time": 1788716528.413085,
+      "epoch": 2,
+      "global_step": 12188
+    }
+  ],
+  "windows": [
+    {
+      "seconds": 15.003168821334839,
+      "updates": 65,
+      "rows_per_second": 2218.1980617771296
+    },
+    {
+      "seconds": 15.00319218635559,
+      "updates": 65,
+      "rows_per_second": 2218.1946072960363
+    },
+    {
+      "seconds": 15.003196716308594,
+      "updates": 66,
+      "rows_per_second": 2252.319998128654
+    }
+  ],
+  "gpu_telemetry": {
+    "0": {
+      "samples": 45,
+      "mean_utilization_percent": 75.5111111111111,
+      "min_memory_mib": 18166.0,
+      "max_memory_mib": 18166.0,
+      "mean_power_watts": 309.40777777777777
+    },
+    "1": {
+      "samples": 45,
+      "mean_utilization_percent": 77.33333333333333,
+      "min_memory_mib": 18164.0,
+      "max_memory_mib": 18166.0,
+      "mean_power_watts": 305.19377777777777
+    }
+  },
+  "dependency_rows_per_second": 2229.570897260616,
+  "gpu_sampler_exited": true,
+  "checkpoint_kind": "inherited completed epoch-1 checkpoint; epoch 2 running"
+}
