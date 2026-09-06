@@ -209,6 +209,45 @@ def test_standardizer_uses_training_statistics_keeps_constants_and_round_trips()
     assert torch.equal(restored.transform("s", test.detach()), transformed.detach())
 
 
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(),
+                reason="CUDA unavailable",
+            ),
+        ),
+    ],
+)
+def test_standardizer_reuses_device_statistics_across_updates(
+    monkeypatch, device
+) -> None:
+    standardizer = BlockStandardizer().fit({"s": np.array([[1.0, 5.0], [3.0, 5.0]])})
+    # Check restoration too: caches must be rebuilt from checkpoint statistics.
+    standardizer = BlockStandardizer.from_state(standardizer.to_state())
+    original = torch.as_tensor
+    transfers = []
+
+    def counted(*args, **kwargs):
+        transfers.append(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(torch, "as_tensor", counted)
+    for dtype in (torch.float32, torch.float64):
+        for _ in range(2):
+            value = torch.tensor(
+                [[5.0, 8.0]], device=device, dtype=dtype, requires_grad=True
+            )
+            result = standardizer.transform("s", value)
+            torch.testing.assert_close(result, torch.full_like(value, 3.0))
+            result.sum().backward()
+            torch.testing.assert_close(value.grad, torch.ones_like(value))
+    assert len(transfers) == 4  # mean + scale once per dtype/device
+
+
 def test_standardizer_rejects_masks_invalid_and_tampered_inputs() -> None:
     with pytest.raises(ValueError, match="mask blocks"):
         BlockStandardizer().fit({"own_gene_shift_mask": np.ones((2, 1), dtype=bool)})
