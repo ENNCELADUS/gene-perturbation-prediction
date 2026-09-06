@@ -5,6 +5,8 @@ import torch
 from torch import nn
 from src.experiments.prepare import split_heldout_genes
 from src.model.response import energy_distance, mean_delta_mse, predict_bags
+from src.model.response import response_terms
+from src.data.batches import ResponseBatch
 
 
 def test_batched_predictions_and_losses_match_independent_conditions():
@@ -30,6 +32,63 @@ def test_batched_predictions_and_losses_match_independent_conditions():
 def _bag(rows: int, dim: int, offset: float = 0.0, scale: float = 1.0) -> torch.Tensor:
     generator = torch.Generator().manual_seed(rows * 100 + dim)
     return torch.randn(rows, dim, generator=generator) * scale + offset
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(),
+                reason="CUDA unavailable",
+            ),
+        ),
+    ],
+)
+def test_response_terms_batch_equal_shapes_preserving_order_and_gradients(
+    monkeypatch,
+    device,
+):
+    shapes = [(32, 29, 36), (30, 31, 35), (32, 29, 36), (30, 31, 35)]
+    predicted = tuple(
+        _bag(n, 7, offset=i / 10).to(device).requires_grad_()
+        for i, (n, _, _) in enumerate(shapes)
+    )
+    reference = tuple(x.detach().clone().requires_grad_() for x in predicted)
+    observed = tuple(_bag(n, 7, offset=1).to(device) for _, n, _ in shapes)
+    controls = tuple(_bag(n, 7).to(device) for _, _, n in shapes)
+    batch = ResponseBatch(
+        ("L",) * 4, ("A", "B", "C", "D"), controls, observed, controls
+    )
+    expected = {
+        "mean_delta_mse": torch.stack(
+            [
+                mean_delta_mse(p, o, c.mean(0))
+                for p, o, c in zip(reference, observed, controls, strict=True)
+            ]
+        ),
+        "energy_distance": torch.stack(
+            [energy_distance(p, o) for p, o in zip(reference, observed, strict=True)]
+        ),
+    }
+    original = torch.cdist
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(args[0].shape)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(torch, "cdist", counted)
+    actual = response_terms(predicted, batch)
+    for name in expected:
+        torch.testing.assert_close(actual[name], expected[name])
+    sum(value.sum() for value in actual.values()).backward()
+    sum(value.sum() for value in expected.values()).backward()
+    for p, ref in zip(predicted, reference, strict=True):
+        torch.testing.assert_close(p.grad, ref.grad, atol=1e-6, rtol=1e-5)
+    assert len(calls) == 6  # three distances per shape group, not per condition
 
 
 def test_mean_delta_mse_is_zero_when_the_mean_shift_matches() -> None:
@@ -193,9 +252,9 @@ def test_state_window_values_and_gradients_match_indexed_reference(rows):
         reference[torch.as_tensor(index)]
         for index in _chunk_control_cell_indices(rows, 8, 73)
     )
-    expected = torch.cat(
-        model(expected_chunks, "G", (None,) * len(expected_chunks))
-    )[:rows]
+    expected = torch.cat(model(expected_chunks, "G", (None,) * len(expected_chunks)))[
+        :rows
+    ]
     actual = predict_bags(model, (control,), ("G",), seed=73)[0]
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     actual.square().sum().backward()
