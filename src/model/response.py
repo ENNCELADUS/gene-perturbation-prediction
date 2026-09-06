@@ -1,6 +1,8 @@
 """model / response."""
 
 from __future__ import annotations
+
+from src.data.batches import ResponseBatch
 from dataclasses import dataclass
 from typing import Sequence
 import numpy as np
@@ -184,7 +186,9 @@ def _seeded_model_forward(
     *,
     seed: int,
 ) -> tuple[torch.Tensor, ...]:
-    """Run STATE with a private, deterministic CPU/CUDA torch RNG stream."""
+    """Use ordinary rank RNG in training and isolated seeded RNG in evaluation."""
+    if model.training:
+        return tuple(model(tuple(chunks), tuple(genes), tuple(None for _ in chunks)))
     cuda_devices = _cuda_rng_devices(model, chunks)
     with torch.random.fork_rng(devices=list(cuda_devices)):
         torch.random.default_generator.manual_seed(seed)
@@ -203,15 +207,9 @@ def predict_bags(
 ) -> tuple[torch.Tensor, ...]:
     """Forward multiple gene conditions through one padded STATE call.
 
-    ``StateForwardAdapter`` requires every chunk to be exactly
-    ``cell_sentence_len``; a bag that is not a multiple of it must be padded
-    by resampling and the output trimmed back. The caller's ``seed`` governs
-    two independent deterministic streams: NumPy chooses padding indices and
-    a forked torch RNG governs stochastic STATE collator/model operations.
-    The fork restores the caller's CPU and participating CUDA RNG states after
-    the forward. Training happened to satisfy the window contract only because
-    ``max_bag`` equalled the window size, which is accidental -- routing both
-    training and evaluation through this helper makes the contract explicit.
+    Padding indices always use the explicit collator seed. Training stochastic
+    layers consume the normal per-rank torch RNG; evaluation uses an isolated
+    seeded RNG and restores the caller's state.
     """
 
     if len(controls) != len(genes):
@@ -244,10 +242,7 @@ def predict_bags(
         chunk_genes.extend(str(gene) for _ in condition_chunks)
         chunks_per_control.append(len(condition_chunks))
         cell_counts.append(n_cells)
-    # The padding-index and model-forward streams intentionally share the
-    # caller's pinned seed, but live in NumPy and a private torch RNG fork,
-    # respectively. Call the module, never the bound method: a DDP-wrapped
-    # model proxies only ``forward``, and unwrapping would skip all-reduce.
+    # Call the module so DDP observes the forward and synchronizes gradients.
     predicted_chunks = _seeded_model_forward(
         model,
         chunks,
@@ -271,3 +266,31 @@ def predict_bag(
 ) -> torch.Tensor:
     """Forward one bag through the same vectorized path used by training."""
     return predict_bags(model, [control], [gene], seed=seed)[0]
+
+
+def response_terms(
+    predicted: Sequence[torch.Tensor], batch: ResponseBatch
+) -> dict[str, torch.Tensor]:
+    """Return FP32 losses per condition; callers perform anchor reduction."""
+    if not predicted or len(predicted) != len(batch.genes):
+        raise ValueError("response predictions must match a non-empty condition batch")
+    means, energies = [], []
+    for pred, observed, control in zip(
+        predicted, batch.observed_hvg, batch.control_hvg, strict=True
+    ):
+        pred, observed, control = pred.float(), observed.float(), control.float()
+        if pred.ndim != 2 or observed.ndim != 2 or control.ndim != 2:
+            raise ValueError("response bags must be two-dimensional")
+        if not (pred.shape[1] == observed.shape[1] == control.shape[1]):
+            raise ValueError("response bag gene widths must match")
+        if pred.shape[0] == 0 or observed.shape[0] == 0 or control.shape[0] == 0:
+            raise ValueError("response bags must be non-empty")
+        means.append(mean_delta_mse(pred, observed, control.mean(dim=0)))
+        energies.append(energy_distance(pred, observed))
+    terms = {
+        "mean_delta_mse": torch.stack(means),
+        "energy_distance": torch.stack(energies),
+    }
+    if any(not bool(torch.isfinite(value).all()) for value in terms.values()):
+        raise ValueError("non-finite response loss")
+    return terms

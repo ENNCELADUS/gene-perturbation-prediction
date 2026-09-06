@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.data.prepared import PreparedInputs
+    from src.model.geneeffect import GeneEffectE2EModel
 from collections.abc import Iterable, Mapping
 import numpy as np
 import torch
@@ -142,8 +147,6 @@ class BlockStandardizer:
             raise ValueError(f"block {name!r} was not fitted")
         if value.dim() != 2:
             raise ValueError(f"{name} transform data must be 2-D")
-        if not value.is_floating_point() or not bool(torch.isfinite(value).all()):
-            raise ValueError(f"{name} transform data must be finite floating point")
         stats = self._stats[name]
         if value.shape[1] != stats.mean.size:
             raise ValueError(
@@ -159,9 +162,7 @@ class BlockStandardizer:
         return _json_hash(state)
 
     def to_state(self) -> dict[str, object]:
-        state = self._state_without_hash()
-        state["state_hash"] = _json_hash(state)
-        return state
+        return self._state_without_hash()
 
     def _state_without_hash(self) -> dict[str, object]:
         self._require_fitted()
@@ -179,9 +180,7 @@ class BlockStandardizer:
 
     @classmethod
     def from_state(cls, state: Mapping[str, object]) -> BlockStandardizer:
-        payload = {key: value for key, value in state.items() if key != "state_hash"}
-        if state.get("state_hash") != _json_hash(payload):
-            raise ValueError("standardizer state hash mismatch")
+        payload = state
         if payload.get("version") != 1 or not isinstance(
             payload.get("blocks"), Mapping
         ):
@@ -214,3 +213,79 @@ class BlockStandardizer:
     def _require_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("standardizer has not been fitted")
+
+
+def fit_startup_standardizer(
+    model: GeneEffectE2EModel,
+    inputs: PreparedInputs,
+    *,
+    accelerator: Any = None,
+    batch_size: int = 32,
+) -> BlockStandardizer:
+    """Fit up to 32 rows per labeled train line on rank zero, then broadcast.
+
+    This is a fresh-run operation. Resume restores statistics in build_joint_model
+    and must skip this call. Fit errors are broadcast before any rank raises, so a
+    malformed rank-zero input does not strand peers in the statistics collective.
+    All torch/Python/NumPy RNG state and module training modes are restored.
+    """
+    import random
+
+    import torch.distributed as dist
+
+    from src.data.datasets import DependencyDataset
+
+    if batch_size <= 0:
+        raise ValueError("standardizer batch_size must be positive")
+    distributed = dist.is_available() and dist.is_initialized()
+    main = dist.get_rank() == 0 if distributed else True
+    if accelerator is not None and bool(accelerator.is_main_process) != main:
+        raise RuntimeError("accelerator and torch distributed rank disagree")
+    payload: list[Any] = [None]
+    if main:
+        python_rng = random.getstate()
+        numpy_rng = np.random.get_state()
+        modes = [(module, module.training) for module in model.modules()]
+        device = next(model.parameters()).device
+        devices = [device.index or 0] if device.type == "cuda" else []
+        try:
+            with torch.random.fork_rng(devices=devices), torch.no_grad():
+                model.eval()
+                dataset = DependencyDataset(inputs, "train")
+                rng = np.random.default_rng(0)
+                selected: list[int] = []
+                for indices in dataset.rows.groupby(
+                    "model_id", sort=True
+                ).indices.values():
+                    selected.extend(
+                        rng.choice(
+                            indices, size=min(32, len(indices)), replace=False
+                        ).tolist()
+                    )
+
+                def blocks():
+                    for start in range(0, len(selected), batch_size):
+                        batch = dataset.collate(
+                            selected[start : start + batch_size]
+                        ).to(device)
+                        features = model.condition_features(batch.conditions)
+                        yield {
+                            name: getattr(features, name)
+                            for name in sorted(_CONTINUOUS_BLOCKS)
+                        }
+
+                model.standardizer.fit_batches(blocks())
+                payload[0] = {"state": model.standardizer.to_state()}
+        except Exception as exc:
+            payload[0] = {"error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            random.setstate(python_rng)
+            np.random.set_state(numpy_rng)
+            for module, training in modes:
+                module.training = training
+    if distributed:
+        dist.broadcast_object_list(payload, src=0)
+    if "error" in payload[0]:
+        raise RuntimeError(f"startup standardizer fit failed: {payload[0]['error']}")
+    model.standardizer = BlockStandardizer.from_state(payload[0]["state"])
+    return model.standardizer

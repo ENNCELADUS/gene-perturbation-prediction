@@ -15,12 +15,12 @@ from src.model.head import GeneEffectResidualHead
 from src.model.response import predict_bags
 from src.data.batches import E2EForwardOutput
 from src.data.batches import OnlineConditionBatch
-from src.data.batches import PrecomputedFeatureBatch
+from src.data.batches import FeatureBatch
 from src.data.batches import ResponseForwardBatch
 
 
 class GeneEffectE2EModel(nn.Module):
-    """Compose a Stage-1 backbone and the five-block residual head."""
+    """Compose a trainable STATE backbone and the five-block residual head."""
 
     def __init__(
         self,
@@ -74,10 +74,7 @@ class GeneEffectE2EModel(nn.Module):
                 f"{offenders[:10]}"
             )
 
-    def _standardize(
-        self, features: PrecomputedFeatureBatch
-    ) -> dict[str, torch.Tensor]:
-        features.validate()
+    def _standardize(self, features: FeatureBatch) -> dict[str, torch.Tensor]:
         return {
             name: self.standardizer.transform(name, value)
             for name, value in (
@@ -89,7 +86,7 @@ class GeneEffectE2EModel(nn.Module):
             )
         }
 
-    def forward_precomputed(self, features: PrecomputedFeatureBatch) -> torch.Tensor:
+    def forward_precomputed(self, features: FeatureBatch) -> torch.Tensor:
         """Run the head on raw cached features during frozen warmup."""
         blocks = self._standardize(features)
         return self.head(
@@ -99,13 +96,8 @@ class GeneEffectE2EModel(nn.Module):
             own_gene_shift_mask=features.own_gene_shift_mask,
         )
 
-    def forward(
-        self,
-        batch: OnlineConditionBatch,
-        response: ResponseForwardBatch | None = None,
-    ) -> E2EForwardOutput:
-        """Generate dependency and optional response-anchor outputs in one call."""
-        batch.validate()
+    def condition_features(self, batch: OnlineConditionBatch) -> FeatureBatch:
+        """Generate all five raw blocks without detaching the response graph."""
         predicted = predict_bags(
             self.backbone,
             batch.controls_tx1,
@@ -126,7 +118,7 @@ class GeneEffectE2EModel(nn.Module):
                     own_gene_available=bool(batch.own_gene_shift_available[position]),
                 )
             )
-        features = PrecomputedFeatureBatch(
+        return FeatureBatch(
             delta_proj=torch.stack([item.delta_proj for item in built]),
             s=torch.stack([item.s for item in built]),
             q_sc=batch.q_sc,
@@ -139,10 +131,18 @@ class GeneEffectE2EModel(nn.Module):
             ),
             gene_symbols=batch.genes,
             model_ids=batch.model_ids,
+            metadata=tuple(item.metadata for item in built),
         )
+
+    def forward(
+        self,
+        batch: OnlineConditionBatch,
+        response: ResponseForwardBatch | None = None,
+    ) -> E2EForwardOutput:
+        """Generate dependency and optional replay predictions in one DDP call."""
+        features = self.condition_features(batch)
         response_predicted = None
         if response is not None:
-            response.validate()
             response_predicted = predict_bags(
                 self.backbone,
                 response.controls_tx1,
@@ -152,7 +152,7 @@ class GeneEffectE2EModel(nn.Module):
         return E2EForwardOutput(
             delta_hat=self.forward_precomputed(features),
             raw_features=features,
-            feature_metadata=tuple(item.metadata for item in built),
+            feature_metadata=features.metadata,
             response_predicted=response_predicted,
         )
 
