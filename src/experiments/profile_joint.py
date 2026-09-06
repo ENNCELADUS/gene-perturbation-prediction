@@ -9,7 +9,7 @@ import pstats
 import time
 
 from accelerate import Accelerator
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedDataParallelKwargs, set_seed
 import torch
 
 from src.data.prepared import load_inputs
@@ -18,6 +18,7 @@ from src.experiments.geneeffect import _revision
 from src.model.initialization import build_joint_model
 from src.model.normalization import fit_startup_standardizer
 from src.training.sampling import make_training_loaders
+from src.training.distributed import require_distinct_devices
 from src.training.trainer import make_optimizer, train_update
 
 
@@ -31,9 +32,15 @@ def main():
     if args.steps < 4 or args.steps % 4:
         parser.error("--steps must be a positive multiple of four")
     config = load_config(args.config)
-    accelerator = Accelerator(mixed_precision=config["precision"])
-    if accelerator.num_processes != 1 or accelerator.device.type != "cuda":
-        raise ValueError("probe requires exactly one CUDA worker")
+    accelerator = Accelerator(
+        mixed_precision=config["precision"],
+        kwargs_handlers=[DistributedDataParallelKwargs(find_unused_parameters=True)],
+    )
+    if accelerator.device.type != "cuda":
+        raise ValueError("probe requires CUDA workers")
+    if args.profile and accelerator.num_processes != 1:
+        raise ValueError("operator profiling requires a single worker")
+    require_distinct_devices(accelerator)
     torch.set_num_threads(1)
     set_seed(0)
     inputs = load_inputs(config)
@@ -65,21 +72,32 @@ def main():
     for _ in range(args.steps):
         kind = "replay" if step % 4 == 0 else "ordinary"
         start = time.perf_counter()
-        values = update()
+        last_losses = update()
         torch.cuda.synchronize()
         times[kind].append(time.perf_counter() - start)
+    peak = torch.tensor(torch.cuda.max_memory_allocated(), device=accelerator.device)
+    if accelerator.num_processes > 1:
+        for kind, durations in times.items():
+            values = torch.tensor(durations, device=accelerator.device)
+            torch.distributed.all_reduce(values, op=torch.distributed.ReduceOp.MAX)
+            times[kind] = values.cpu().tolist()
+        torch.distributed.all_reduce(peak, op=torch.distributed.ReduceOp.MAX)
+    # train_update already returns globally averaged loss scalars.
     result = {
         "revision": _revision(), "config": config, "steps": args.steps,
+        "world_size": accelerator.num_processes,
         "seconds": sum(sum(t) for t in times.values()), "step_seconds": times,
-        "peak_allocated_gib": torch.cuda.max_memory_allocated() / 2**30,
-        "last_losses": values,
+        "peak_allocated_gib": peak.item() / 2**30,
+        "last_losses": last_losses,
     }
     result["dependency_rows_per_second"] = (
-        args.steps * config["train"]["dependency_batch_size"] / result["seconds"]
+        args.steps * config["train"]["dependency_batch_size"]
+        * accelerator.num_processes / result["seconds"]
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2) + "\n")
-    print(json.dumps(result), flush=True)
+    if accelerator.is_main_process:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(result, indent=2) + "\n")
+        print(json.dumps(result), flush=True)
     if args.profile:
         cpu = cProfile.Profile()
         cpu.enable()
@@ -97,6 +115,7 @@ def main():
         args.output.with_suffix(".ops.txt").write_text(
             profile.key_averages().table(sort_by="self_cpu_time_total", row_limit=40)
         )
+    accelerator.end_training()
 
 
 if __name__ == "__main__":
