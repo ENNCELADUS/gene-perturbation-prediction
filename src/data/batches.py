@@ -7,6 +7,28 @@ from dataclasses import dataclass
 import torch
 
 
+def _move_bags(
+    bags: tuple[torch.Tensor, ...],
+    device: torch.device | str,
+    *,
+    non_blocking: bool,
+) -> tuple[torch.Tensor, ...]:
+    """Transfer one packed array, retaining each condition's cell boundary."""
+    target = torch.device(device)
+    if target.type == "cuda" and target.index is None:
+        target = torch.device("cuda", torch.cuda.current_device())
+    if not bags or all(value.device == target for value in bags):
+        return bags
+    if any(
+        value.device != bags[0].device or value.dtype != bags[0].dtype
+        for value in bags
+    ):
+        raise ValueError("cell bags must share a source device and dtype")
+    sizes = [value.shape[0] for value in bags]
+    packed = torch.cat(bags, dim=0).to(target, non_blocking=non_blocking)
+    return tuple(packed.split(sizes, dim=0))
+
+
 @dataclass(frozen=True)
 class FeatureBatch:
     """Raw, unstandardized live head features."""
@@ -168,12 +190,11 @@ class OnlineConditionBatch:
     ) -> OnlineConditionBatch:
         """Move every tensor field while preserving condition identifiers."""
         return OnlineConditionBatch(
-            controls_tx1=tuple(
-                value.to(device, non_blocking=non_blocking)
-                for value in self.controls_tx1
+            controls_tx1=_move_bags(
+                self.controls_tx1, device, non_blocking=non_blocking
             ),
-            basal_hvg=tuple(
-                value.to(device, non_blocking=non_blocking) for value in self.basal_hvg
+            basal_hvg=_move_bags(
+                self.basal_hvg, device, non_blocking=non_blocking
             ),
             genes=self.genes,
             model_ids=self.model_ids,
@@ -266,17 +287,14 @@ class ResponseBatch:
         return ResponseBatch(
             model_ids=self.model_ids,
             genes=self.genes,
-            controls_tx1=tuple(
-                value.to(device, non_blocking=non_blocking)
-                for value in self.controls_tx1
+            controls_tx1=_move_bags(
+                self.controls_tx1, device, non_blocking=non_blocking
             ),
-            observed_hvg=tuple(
-                value.to(device, non_blocking=non_blocking)
-                for value in self.observed_hvg
+            observed_hvg=_move_bags(
+                self.observed_hvg, device, non_blocking=non_blocking
             ),
-            control_hvg=tuple(
-                value.to(device, non_blocking=non_blocking)
-                for value in self.control_hvg
+            control_hvg=_move_bags(
+                self.control_hvg, device, non_blocking=non_blocking
             ),
         )
 
@@ -304,9 +322,8 @@ class ResponseForwardBatch:
     ) -> ResponseForwardBatch:
         """Move control tensors while preserving bare gene identifiers."""
         return ResponseForwardBatch(
-            controls_tx1=tuple(
-                value.to(device, non_blocking=non_blocking)
-                for value in self.controls_tx1
+            controls_tx1=_move_bags(
+                self.controls_tx1, device, non_blocking=non_blocking
             ),
             genes=self.genes,
         )
