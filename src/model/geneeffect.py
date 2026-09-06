@@ -7,9 +7,8 @@ import torch
 from torch import nn
 from src.model.normalization import BlockStandardizer
 from src.model.features import (
-    ConditionFeatures,
     FixedSparseProjection,
-    compute_condition_features,
+    compute_condition_feature_batch,
 )
 from src.model.head import GeneEffectResidualHead
 from src.model.response import predict_bags
@@ -68,31 +67,23 @@ class GeneEffectE2EModel(nn.Module):
             batch.genes,
             seed=self.collator_seed,
         )
-        built: list[ConditionFeatures] = []
-        for position, (predicted_bag, basal_bag) in enumerate(
-            zip(predicted, batch.basal_hvg, strict=True)
-        ):
-            built.append(
-                compute_condition_features(
-                    predicted_bag.float(),
-                    basal_bag.float(),
-                    projection=self.projection,
-                    gene_in_hvg_panel=bool(batch.gene_in_hvg_panel[position]),
-                    own_gene_hvg_index=batch.own_gene_hvg_indices[position],
-                    own_gene_available=bool(batch.own_gene_shift_available[position]),
-                )
-            )
+        built = compute_condition_feature_batch(
+            tuple(value.float() for value in predicted),
+            tuple(value.float() for value in batch.basal_hvg),
+            projection=self.projection,
+            gene_in_hvg_panel=batch.gene_in_hvg_panel,
+            own_gene_hvg_indices=batch.own_gene_hvg_indices,
+            own_gene_available=batch.own_gene_shift_available,
+        )
         return FeatureBatch(
-            delta_proj=torch.stack([item.delta_proj for item in built]),
-            s=torch.stack([item.s for item in built]),
+            delta_proj=built.delta_proj,
+            s=built.s,
             q_sc=batch.q_sc,
             e_g=batch.e_g,
             z_c=batch.z_c,
             q_sc_mask=batch.q_sc_mask,
-            hvg_panel_mask=torch.stack([item.hvg_panel_mask for item in built]),
-            own_gene_shift_mask=torch.stack(
-                [item.own_gene_shift_mask for item in built]
-            ),
+            hvg_panel_mask=built.hvg_panel_mask,
+            own_gene_shift_mask=built.own_gene_shift_mask,
             gene_symbols=batch.genes,
             model_ids=batch.model_ids,
         )

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import torch
 
+import src.model.features as features_module
 from src.model.features import (
     DELTA_WIDTH,
     HVG_WIDTH,
@@ -129,6 +130,60 @@ def test_unavailable_own_gene_is_zero_with_false_mask() -> None:
         )
         assert result.s[-1].item() == 0.0
         assert result.own_gene_shift_mask.item() is False
+
+
+def test_batched_condition_features_match_scalar_outputs_and_gradients() -> None:
+    torch.manual_seed(4)
+    basal = tuple(torch.randn(3, HVG_WIDTH) for _ in range(3))
+    predicted_reference = tuple(
+        torch.randn(3, HVG_WIDTH, requires_grad=True) for _ in range(3)
+    )
+    predicted_batched = tuple(
+        value.detach().clone().requires_grad_() for value in predicted_reference
+    )
+    projection = FixedSparseProjection()
+    panel = (True, True, False)
+    indices = (0, 7, None)
+    available = (True, False, False)
+
+    reference = tuple(
+        compute_condition_features(
+            predicted,
+            base,
+            projection=projection,
+            gene_in_hvg_panel=in_panel,
+            own_gene_hvg_index=index,
+            own_gene_available=is_available,
+        )
+        for predicted, base, in_panel, index, is_available in zip(
+            predicted_reference,
+            basal,
+            panel,
+            indices,
+            available,
+            strict=True,
+        )
+    )
+    actual = features_module.compute_condition_feature_batch(
+        predicted_batched,
+        basal,
+        projection=projection,
+        gene_in_hvg_panel=torch.tensor(panel),
+        own_gene_hvg_indices=indices,
+        own_gene_available=torch.tensor(available),
+    )
+
+    torch.testing.assert_close(
+        actual.delta_proj, torch.stack([item.delta_proj for item in reference])
+    )
+    torch.testing.assert_close(actual.s, torch.stack([item.s for item in reference]))
+    assert torch.equal(actual.hvg_panel_mask, torch.tensor(panel))
+    assert torch.equal(actual.own_gene_shift_mask, torch.tensor(available))
+
+    sum(item.delta_proj.sum() + item.s.sum() for item in reference).backward()
+    (actual.delta_proj.sum() + actual.s.sum()).backward()
+    for expected, observed in zip(predicted_reference, predicted_batched, strict=True):
+        torch.testing.assert_close(observed.grad, expected.grad)
 
 
 def test_standardizer_uses_training_statistics_keeps_constants_and_round_trips() -> (

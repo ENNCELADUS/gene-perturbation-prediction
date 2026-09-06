@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 import numpy as np
 import torch
 from torch.nn import functional as F
@@ -143,6 +143,127 @@ class ConditionFeatures:
     s: torch.Tensor
     hvg_panel_mask: torch.Tensor
     own_gene_shift_mask: torch.Tensor
+
+
+@dataclass(frozen=True)
+class ConditionFeatureBatch:
+    """Vectorized features for equal-sized dependency condition bags."""
+
+    delta_proj: torch.Tensor
+    s: torch.Tensor
+    hvg_panel_mask: torch.Tensor
+    own_gene_shift_mask: torch.Tensor
+
+
+def compute_condition_feature_batch(
+    predicted: Sequence[torch.Tensor],
+    basal: Sequence[torch.Tensor],
+    *,
+    projection: FixedSparseProjection,
+    gene_in_hvg_panel: torch.Tensor,
+    own_gene_hvg_indices: Sequence[int | None],
+    own_gene_available: torch.Tensor,
+) -> ConditionFeatureBatch:
+    """Build dependency features without one Python/CUDA round trip per row."""
+    size = len(predicted)
+    if size == 0 or len(basal) != size or len(own_gene_hvg_indices) != size:
+        raise ValueError("predicted, basal, and own-gene indices must align")
+    expected_shape = tuple(predicted[0].shape)
+    if (
+        len(expected_shape) != 2
+        or expected_shape[0] == 0
+        or expected_shape[1] != HVG_WIDTH
+        or any(tuple(value.shape) != expected_shape for value in (*predicted, *basal))
+    ):
+        raise ValueError(
+            f"every predicted and basal bag must share shape [cells, {HVG_WIDTH}]"
+        )
+    device = predicted[0].device
+    dtype = predicted[0].dtype
+    if not dtype.is_floating_point or any(
+        value.device != device or value.dtype != dtype for value in (*predicted, *basal)
+    ):
+        raise ValueError(
+            "predicted and basal bags must share one floating-point device and dtype"
+        )
+    for name, value in (
+        ("gene_in_hvg_panel", gene_in_hvg_panel),
+        ("own_gene_available", own_gene_available),
+    ):
+        if (
+            value.shape != (size,)
+            or value.dtype != torch.bool
+            or value.device != device
+        ):
+            raise ValueError(f"{name} must be boolean [{size}] on {device}")
+    panel_values = gene_in_hvg_panel.tolist()
+    available_values = own_gene_available.tolist()
+    for position, (in_panel, index, available) in enumerate(
+        zip(panel_values, own_gene_hvg_indices, available_values, strict=True)
+    ):
+        if in_panel and (index is None or not 0 <= index < HVG_WIDTH):
+            raise ValueError(
+                f"condition {position}: gene in the HVG panel requires a valid index"
+            )
+        if not in_panel and (index is not None or available):
+            raise ValueError(
+                f"condition {position}: a non-HVG gene cannot have an index or shift"
+            )
+        if available and index is None:
+            raise ValueError(
+                f"condition {position}: available own-gene shift requires an index"
+            )
+
+    predicted_batch = torch.stack(tuple(predicted))
+    basal_batch = torch.stack(tuple(basal))
+    if not bool(torch.isfinite(predicted_batch).all()):
+        raise ValueError("predicted bags contain non-finite values")
+
+    predicted_mean = predicted_batch.mean(dim=1)
+    basal_mean = basal_batch.mean(dim=1)
+    predicted_variance = (
+        (predicted_batch - predicted_mean[:, None]).square().mean(dim=1)
+    )
+    basal_variance = (basal_batch - basal_mean[:, None]).square().mean(dim=1)
+    delta_mean = predicted_mean - basal_mean
+    delta = torch.cat((delta_mean, predicted_variance - basal_variance), dim=1)
+
+    cross = torch.cdist(predicted_batch, basal_batch).mean(dim=(1, 2))
+    within_predicted = torch.cdist(predicted_batch, predicted_batch).mean(dim=(1, 2))
+    within_basal = torch.cdist(basal_batch, basal_batch).mean(dim=(1, 2))
+    energy = 2.0 * cross - within_predicted - within_basal
+    basal_distances = torch.linalg.vector_norm(basal_batch - basal_mean[:, None], dim=2)
+    shift_threshold = torch.quantile(basal_distances, 0.95, dim=1)
+    predicted_distances = torch.linalg.vector_norm(
+        predicted_batch - basal_mean[:, None], dim=2
+    )
+    shifted_fraction = (
+        (predicted_distances > shift_threshold[:, None]).to(dtype).mean(1)
+    )
+    safe_indices = torch.tensor(
+        [0 if index is None else index for index in own_gene_hvg_indices],
+        dtype=torch.long,
+        device=device,
+    )
+    own_shift = delta_mean.gather(1, safe_indices[:, None]).squeeze(1)
+    own_shift = torch.where(own_gene_available, own_shift, torch.zeros_like(own_shift))
+    summaries = torch.stack(
+        (
+            energy,
+            predicted_variance.mean(dim=1),
+            shifted_fraction,
+            torch.linalg.vector_norm(delta_mean, dim=1),
+            F.cosine_similarity(predicted_mean, basal_mean, dim=1),
+            own_shift,
+        ),
+        dim=1,
+    )
+    return ConditionFeatureBatch(
+        delta_proj=projection.transform(delta),
+        s=summaries,
+        hvg_panel_mask=gene_in_hvg_panel,
+        own_gene_shift_mask=own_gene_available,
+    )
 
 
 def compute_condition_features(
