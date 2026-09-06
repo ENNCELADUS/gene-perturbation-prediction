@@ -10,12 +10,9 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-import aivc_model.geneeffect_stage2_runner as runner
-from aivc_model.geneeffect_data import (
-    ScoredUniverse,
-    restrict_scored_universe_to_copy_prior,
-)
-from scripts import build_exp13_copy_prior as builder
+import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
+from src.data.geneeffect import ScoredUniverse, restrict_scored_universe_to_copy_prior
+from src.data.prepare import build_exp13_copy_prior as builder
 
 
 SPLIT_PATH = Path("configs/benchmarks/cell_line_geneeffect_226_split.json")
@@ -42,9 +39,7 @@ def _materialized(
 ) -> tuple[Path, Path, Path]:
     source = _source(tmp_path / "CRISPRGeneEffect.csv")
     monkeypatch.setattr(builder, "PINNED_GENE_EFFECT_SHA256", _sha256(source))
-    expected_output = (
-        "gene_symbol,gene_effect\nTP53,-0.5\nMYC,-1.25\n".encode("utf-8")
-    )
+    expected_output = "gene_symbol,gene_effect\nTP53,-0.5\nMYC,-1.25\n".encode("utf-8")
     expected_output_sha256 = hashlib.sha256(expected_output).hexdigest()
     monkeypatch.setattr(builder, "PINNED_COPY_PRIOR_SHA256", expected_output_sha256)
     monkeypatch.setattr(runner, "PINNED_COPY_PRIOR_SHA256", expected_output_sha256)

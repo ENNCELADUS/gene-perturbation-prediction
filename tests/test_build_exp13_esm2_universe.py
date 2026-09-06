@@ -12,27 +12,31 @@ import pandas as pd
 import pytest
 import torch
 
-from aivc_model.geneeffect_data import Exp13Split
-from aivc_model.geneeffect_stage2_runner import authenticate_target_esm2
-from aivc_model.esm2_provenance import (
+from src.data.geneeffect import Exp13Split
+from src.experiments.exp13_legacy.geneeffect_stage2_runner import (
+    authenticate_target_esm2,
+)
+from src.data.esm2_provenance import (
     SCHEMA_VERSION as ESM2_PROVENANCE_SCHEMA,
     build_embedding_artifact_record,
 )
-from aivc_model.stage1_artifact import Stage1ArtifactManifest
-from aivc_model.state_core import sha256_strings
-from scripts.build_exp13_esm2_universe import (
+from src.experiments.exp13_legacy.stage1_artifact import Stage1ArtifactManifest
+from src.data.gene_order import sha256_strings
+from src.experiments.exp13_legacy.build_exp13_esm2_universe import (
     AuthenticatedStage1Vocabulary,
+    authenticate_stage1_manifest,
+    authenticate_vocabulary,
+    load_authenticated_vocabulary,
+    write_universe_artifacts,
+)
+from src.data.prepare.build_exp13_esm2_universe import (
     CoverageUniverse,
     build_coverage_universe,
     build_embedding_union,
     build_precompute_command,
-    authenticate_stage1_manifest,
-    authenticate_vocabulary,
     inspect_npz_coverage,
-    load_authenticated_vocabulary,
     require_npz_coverage,
     require_pinned_gene_effect,
-    write_universe_artifacts,
 )
 
 
@@ -249,12 +253,8 @@ def _write_provenance(path: Path, npz: Path, symbols: list[str]) -> Path:
             "primary_accession": f"P{index:05d}" if is_resolved else None,
             "entry_id": f"GENE{index}_HUMAN" if is_resolved else None,
             "isoform_identifier": f"P{index:05d}" if is_resolved else None,
-            "isoform_policy": (
-                "canonical_reviewed_top_hit" if is_resolved else None
-            ),
-            "sequence_sha256": (
-                _digest(f"sequence:{symbol}") if is_resolved else None
-            ),
+            "isoform_policy": ("canonical_reviewed_top_hit" if is_resolved else None),
+            "sequence_sha256": (_digest(f"sequence:{symbol}") if is_resolved else None),
         }
         for index, (symbol, is_resolved) in enumerate(
             zip(symbols, resolved, strict=True), start=1
@@ -294,7 +294,7 @@ def _write_provenance(path: Path, npz: Path, symbols: list[str]) -> Path:
             "sequence_sha256_by_symbol": {
                 symbol: (_digest(f"sequence:{symbol}") if is_resolved else None)
                 for symbol, is_resolved in zip(symbols, resolved, strict=True)
-            }
+            },
         },
         "embedding_artifact": build_embedding_artifact_record(npz),
     }
@@ -508,12 +508,8 @@ def test_outputs_must_be_distinct_and_verified_npz_is_hash_bound(
         config,
         coverage_qualified_symbols=("PASS",),
         candidate_symbols=("PASS",),
-        coverage_drop_report=manifest["coverage_qualified_upper_bound"][
-            "drop_report"
-        ],
-        candidate_drop_report=manifest["copy_prior_eligible_candidates"][
-            "drop_report"
-        ],
+        coverage_drop_report=manifest["coverage_qualified_upper_bound"]["drop_report"],
+        candidate_drop_report=manifest["copy_prior_eligible_candidates"]["drop_report"],
         scored_symbols=("PASS",),
         embedding_symbols=("PASS", "STAGE1_ONLY"),
     )
@@ -636,9 +632,9 @@ def test_manifest_drops_unresolved_candidate_but_requires_stage1(
         esm2_provenance_path=provenance,
     )
     assert manifest["final_evaluated_universe"]["symbols"] == ["PASS"]
-    assert manifest["final_evaluated_universe"][
-        "unresolved_candidate_symbols"
-    ] == ["MISS"]
+    assert manifest["final_evaluated_universe"]["unresolved_candidate_symbols"] == [
+        "MISS"
+    ]
 
 
 def test_gene_effect_input_is_sha_pinned(
@@ -650,6 +646,6 @@ def test_gene_effect_input_is_sha_pinned(
         require_pinned_gene_effect(path)
     observed = hashlib.sha256(path.read_bytes()).hexdigest()
     monkeypatch.setattr(
-        "scripts.build_exp13_esm2_universe.PINNED_GENE_EFFECT_SHA256", observed
+        "src.data.prepare.build_exp13_esm2_universe.PINNED_GENE_EFFECT_SHA256", observed
     )
     assert require_pinned_gene_effect(path) == observed

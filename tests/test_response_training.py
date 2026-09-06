@@ -20,10 +20,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from aivc_model.response_training import (
+from src.experiments.exp13_legacy.response_training import (
     SELECTION_METRIC_NAME,
-    ResponseLoss,
-    ResponseLossWeights,
     TrainingConfig,
     _GeneIndexDataset,
     _heldout_model_losses,
@@ -34,12 +32,16 @@ from aivc_model.response_training import (
     _run_train_epoch,
     _select_best_epoch,
     _validate_anchor_weights,
-    energy_distance,
     evaluate_response_model,
-    mean_delta_mse,
-    predict_bags,
     split_heldout_genes,
     train_response_model,
+)
+from src.model.response import (
+    ResponseLoss,
+    ResponseLossWeights,
+    energy_distance,
+    mean_delta_mse,
+    predict_bags,
 )
 
 
@@ -728,7 +730,7 @@ def test_predict_bag_pads_and_trims_to_the_window() -> None:
     Training only worked before because max_bag happened to equal the window;
     evaluation passed whole control bags and crashed on exactly this.
     """
-    from aivc_model.response_training import predict_bag
+    from src.model.response import predict_bag
 
     model = _WindowedModel(3, window=8)
     out = predict_bag(model, _bag(21, 3), "G0", seed=0)
@@ -868,7 +870,7 @@ def test_predict_bag_works_through_a_forward_only_wrapper() -> None:
     wrapped = _ForwardOnlyProxy(inner)
     assert not hasattr(wrapped, "predict_response_chunks")
     control = _bag(6, 3)
-    from aivc_model.response_training import predict_bag
+    from src.model.response import predict_bag
 
     out = predict_bag(wrapped, control, "G", seed=0)
     assert out.shape == (6, 3)
@@ -876,7 +878,7 @@ def test_predict_bag_works_through_a_forward_only_wrapper() -> None:
 
 def test_forward_only_state_model_exposes_forward() -> None:
     """The real module must route training through ``forward``, not a method."""
-    from aivc_model.tx1_predicted_response import ForwardOnlyStateModel
+    from src.model.state import ForwardOnlyStateModel
 
     assert "forward" in vars(ForwardOnlyStateModel)
 
@@ -924,7 +926,7 @@ def test_predict_bag_reads_the_window_from_state_model() -> None:
     ValueError the first multi-rank run died on.
     """
     model = _RealShapedModel(dim=3, window=4)
-    from aivc_model.response_training import predict_bag
+    from src.model.response import predict_bag
 
     out = predict_bag(model, _bag(10, 3), "G", seed=0)
     assert out.shape == (10, 3)
@@ -933,7 +935,7 @@ def test_predict_bag_reads_the_window_from_state_model() -> None:
 def test_predict_bag_through_ddp_wrapper_with_real_shape() -> None:
     """The same, behind a forward-only wrapper -- the actual failing case."""
     wrapped = _ForwardOnlyProxy(_RealShapedModel(dim=3, window=4))
-    from aivc_model.response_training import predict_bag
+    from src.model.response import predict_bag
 
     out = predict_bag(wrapped, _bag(10, 3), "G", seed=0)
     assert out.shape == (10, 3)
@@ -947,7 +949,7 @@ def test_predict_bag_refuses_a_windowless_adapter() -> None:
     """
     model = _RealShapedModel(dim=3, window=4)
     del model.state_adapter.state_model.cell_sentence_len
-    from aivc_model.response_training import predict_bag
+    from src.model.response import predict_bag
 
     with pytest.raises(ValueError, match="cell_sentence_len"):
         predict_bag(model, _bag(10, 3), "G", seed=0)

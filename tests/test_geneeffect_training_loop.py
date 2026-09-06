@@ -14,9 +14,9 @@ import pytest
 import torch
 from torch import nn
 
-import aivc_model.geneeffect_training_loop as loops
-from aivc_model.geneeffect_e2e import OnlineConditionBatch, PrecomputedFeatureBatch
-from aivc_model.geneeffect_training import (
+import src.experiments.exp13_legacy.geneeffect_training_loop as loops
+from src.data.batches import OnlineConditionBatch, PrecomputedFeatureBatch
+from src.experiments.exp13_legacy.geneeffect_training import (
     JointStepMetrics,
     OnlineSupervisedBatch,
     PrecomputedSupervisedBatch,

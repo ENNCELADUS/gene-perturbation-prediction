@@ -167,7 +167,7 @@ if [ "${SKIP_ASSEMBLE:-0}" = "1" ]; then
   echo "=== SKIP_ASSEMBLE=1: skipping phase 1, reusing warm RESPONSE_CACHE_DIR=${RESPONSE_CACHE_DIR} ==="
 else
   echo "=== phase 1: single-process assemble/warm (response-cache-dir=${RESPONSE_CACHE_DIR}) ==="
-  "$PYTHON_BIN" scripts/train_geneeffect_response_model.py \
+  "$PYTHON_BIN" -m src.experiments.exp13_legacy.train_geneeffect_response_model \
     --assemble-only \
     "${_common_args[@]}"
 fi
@@ -178,6 +178,6 @@ echo "=== phase 2: accelerate launch, num_processes=${NUM_PROCESSES} ==="
   --num_machines 1 \
   --mixed_precision bf16 \
   --dynamo_backend no \
-  scripts/train_geneeffect_response_model.py \
+  --module src.experiments.exp13_legacy.train_geneeffect_response_model \
   "${_common_args[@]}" \
   --device auto

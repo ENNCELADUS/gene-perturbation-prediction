@@ -1,4 +1,4 @@
-"""Tests for aivc_model.distributed DDP invariants, using a fake accelerator
+"""Tests for src.training.distributed DDP invariants, using a fake accelerator
 (no real process group -- torch.distributed calls are monkeypatched)."""
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 import torch
 
-from aivc_model.distributed import (
+from src.training.distributed import (
     assert_all_ranks_stepped,
     require_distinct_devices,
     run_rank_zero_or_raise,

@@ -58,7 +58,7 @@ dev = [
 default-groups = ["dev"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/aivc_model"]
+packages = ["src"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

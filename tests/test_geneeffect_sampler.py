@@ -3,7 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from aivc_model.geneeffect_sampler import build_epoch_batches, shard_batches
+from src.experiments.exp13_legacy.geneeffect_sampler import (
+    build_epoch_batches,
+    shard_batches,
+)
 
 
 def _fixture() -> tuple[np.ndarray, np.ndarray]:

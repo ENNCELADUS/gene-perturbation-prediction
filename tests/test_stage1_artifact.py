@@ -9,20 +9,17 @@ import numpy as np
 import pytest
 import torch
 
-from aivc_model.gene_embeddings import Esm2EmbeddingTable
-from aivc_model.stage1_artifact import (
+from src.data.embeddings import Esm2EmbeddingTable
+from src.experiments.exp13_legacy.stage1_artifact import (
     Stage1ArtifactManifest,
     load_stage1_artifact,
     seal_stage1_artifact,
     sha256_file,
 )
-from aivc_model.stage1_config import load_stage1_config
-from aivc_model.state_core import (
-    Esm2PerturbationAdapter,
-    LinearMockStateModel,
-    StateForwardAdapter,
-)
-from aivc_model.tx1_predicted_response import ForwardOnlyStateModel
+from src.experiments.exp13_legacy.stage1_config import load_stage1_config
+from src.model.perturbation import Esm2PerturbationAdapter
+from src.model.state import LinearMockStateModel, StateForwardAdapter
+from src.model.state import ForwardOnlyStateModel
 
 _STAGE1_GENES = ("G1", "G2")
 _TARGET_GENES = ("G1", "G2", "G3")

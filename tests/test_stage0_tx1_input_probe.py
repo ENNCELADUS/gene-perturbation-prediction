@@ -21,7 +21,7 @@ import pytest
 import torch
 from scipy import sparse
 
-from scripts.historical_data_preparation.stage0_tx1_input_probe import (
+from src.experiments.historical.stage0_tx1_input_probe import (
     CPM_TARGET_SUM,
     assert_raw_counts,
     compare,

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.historical_data_preparation.prepare_kinker_cpm_h5ad import build
+from src.experiments.historical.prepare_kinker_cpm_h5ad import build
 
 
 def test_build_marks_kinker_cpm_as_sensitivity_only(tmp_path: Path) -> None:

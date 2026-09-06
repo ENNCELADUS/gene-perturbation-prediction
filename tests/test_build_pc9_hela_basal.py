@@ -9,7 +9,7 @@ import pandas as pd
 from scipy import io as scipy_io
 from scipy import sparse
 
-import scripts.build_pc9_hela_basal as builder
+import src.data.prepare.build_pc9_hela_basal as builder
 
 
 def test_repair_hela_excel_symbols_is_position_aware() -> None:

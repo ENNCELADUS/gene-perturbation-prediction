@@ -9,14 +9,13 @@ import numpy as np
 import pytest
 import torch
 
-import aivc_model.stage2_artifacts as stage2_artifacts
-from aivc_model.geneeffect_feature_store import GeneEffectFeatureStoreWriter
-from aivc_model.geneeffect_features import (
-    FEATURE_SCHEMA,
-    BlockStandardizer,
-    FixedSparseProjection,
+import src.experiments.exp13_legacy.stage2_artifacts as stage2_artifacts
+from src.experiments.exp13_legacy.geneeffect_feature_store import (
+    GeneEffectFeatureStoreWriter,
 )
-from aivc_model.stage2_artifacts import (
+from src.model.features import FEATURE_SCHEMA, FixedSparseProjection
+from src.model.normalization import BlockStandardizer
+from src.experiments.exp13_legacy.stage2_artifacts import (
     REQUIRED_STAGE2_OUTPUTS,
     Stage2RunLayout,
     atomic_write_json,
@@ -88,7 +87,7 @@ def _write_full_runner_artifacts(
     torch.save(
         {"model.weight": torch.arange(12, dtype=torch.float32)}, joint_checkpoint
     )
-    from aivc_model.stage2_artifacts import sha256_file
+    from src.experiments.exp13_legacy.stage2_artifacts import sha256_file
 
     warmup_sha = sha256_file(warmup_checkpoint)
     joint_sha = sha256_file(joint_checkpoint)

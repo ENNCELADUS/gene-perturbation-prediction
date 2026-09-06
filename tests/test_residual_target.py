@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aivc_model.residual_target import (
+from src.data.residual_target import (
     ResidualTargets,
     build_residual_targets,
     fit_gene_means,
@@ -74,9 +74,7 @@ def test_min_lines_drops_under_observed_genes_with_correct_count(
         gene_mean = fit_gene_means(labels, train_lines, min_lines=3)
     assert "ENOUGH" in gene_mean.index
     assert "SPARSE" not in gene_mean.index
-    assert any(
-        "dropping 1 gene" in record.getMessage() for record in caplog.records
-    )
+    assert any("dropping 1 gene" in record.getMessage() for record in caplog.records)
 
     targets = build_residual_targets(labels, train_lines)
     assert "SPARSE" not in targets.long["gene_symbol"].unique()
@@ -86,17 +84,13 @@ def test_min_lines_drops_under_observed_genes_with_correct_count(
 
 
 def test_fit_gene_means_raises_on_empty_train_lines() -> None:
-    labels = _labels(
-        [{"model_id": "L1", "gene_symbol": "GENE1", "gene_effect": 1.0}]
-    )
+    labels = _labels([{"model_id": "L1", "gene_symbol": "GENE1", "gene_effect": 1.0}])
     with pytest.raises(ValueError, match="empty"):
         fit_gene_means(labels, [])
 
 
 def test_fit_gene_means_raises_on_unknown_train_line() -> None:
-    labels = _labels(
-        [{"model_id": "L1", "gene_symbol": "GENE1", "gene_effect": 1.0}]
-    )
+    labels = _labels([{"model_id": "L1", "gene_symbol": "GENE1", "gene_effect": 1.0}])
     with pytest.raises(ValueError, match="absent"):
         fit_gene_means(labels, ["L1", "L99"])
 

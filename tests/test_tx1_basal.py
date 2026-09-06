@@ -1,4 +1,4 @@
-"""Tests for src/aivc_model/tx1_basal.py -- CPU-only basal AnnData assembly.
+"""Tests for src/data/basal.py -- CPU-only basal AnnData assembly.
 
 All fixtures are tiny synthetic parquet shards / h5ad files built in
 ``tmp_path``; the real Tahoe-100M and Perturb-seq sources live on the HPC
@@ -17,7 +17,7 @@ import pytest
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
-from aivc_model.tx1_basal import (
+from src.data.basal import (
     _materialize_rows,
     assert_tx1_input_contract,
     build_perturbseq_basal_adata,
@@ -225,7 +225,7 @@ def test_build_tahoe_basal_adata_warns_on_missing_gene_metadata(
         ],
     )
     metadata_path = _write_gene_metadata(tmp_path / "genes.parquet", [3])
-    with caplog.at_level(logging.WARNING, logger="aivc_model.tx1_basal"):
+    with caplog.at_level(logging.WARNING, logger="src.data.basal"):
         adata = build_tahoe_basal_adata(
             shard_dir,
             metadata_path,
@@ -895,7 +895,7 @@ def test_build_xatlas_orion_basal_adata_warns_on_missing_gene_metadata(
     )
     # gene metadata only knows about token 0 -> tokens 1, 2 (2/3) dropped.
     metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
-    with caplog.at_level(logging.WARNING, logger="aivc_model.tx1_basal"):
+    with caplog.at_level(logging.WARNING, logger="src.data.basal"):
         adata = build_xatlas_orion_basal_adata(
             shard_dir,
             metadata_path,
@@ -1185,7 +1185,7 @@ def test_build_xatlas_orion_basal_adata_logs_filter_removal_counts(
         ],
     )
     metadata_path = _write_xatlas_gene_metadata(tmp_path / "genes.parquet", [0])
-    with caplog.at_level(logging.INFO, logger="aivc_model.tx1_basal"):
+    with caplog.at_level(logging.INFO, logger="src.data.basal"):
         build_xatlas_orion_basal_adata(
             shard_dir,
             metadata_path,

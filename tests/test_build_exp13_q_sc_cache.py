@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aivc_model.geneeffect_data import Exp13Split
-from scripts import build_exp13_q_sc_cache as cli
+from src.data.geneeffect import Exp13Split
+from src.data.prepare import build_exp13_q_sc_cache as cli
 
 
 def _split() -> Exp13Split:

@@ -1,4 +1,4 @@
-"""Tests for src/aivc_model/tx1_predicted_response.py and its sibling
+"""Tests for src/experiments/exp13_legacy/tx1_predicted_response.py and its sibling
 src/aivc_model/tx1_predicted_response_cache.py -- the forward-only ST loader,
 predicted-response generation, and the fingerprinted predicted-response cache
 (Global Constraint D11).
@@ -24,21 +24,15 @@ import pytest
 import torch
 from torch import nn
 
-from aivc_model.gene_embeddings import Esm2EmbeddingTable
-from aivc_model.residual_ladder import FixedSplit
-from aivc_model.state_core import (
-    Esm2PerturbationAdapter,
-    LinearMockStateModel,
-    StateForwardAdapter,
-)
-from aivc_model.tx1_embed_cache import EMBEDDING_WIDTH, write_line_cache
-from aivc_model.tx1_predicted_response import (
+from src.data.embeddings import Esm2EmbeddingTable
+from src.data.splits import FixedSplit
+from src.model.perturbation import Esm2PerturbationAdapter
+from src.model.state import LinearMockStateModel, StateForwardAdapter
+from src.data.tx1_cache import EMBEDDING_WIDTH, write_line_cache
+from src.experiments.exp13_legacy.tx1_predicted_response import (
     ARM_HVG,
     ARM_TX1,
-    ForwardOnlyStateModel,
     UnknownPerturbationGeneError,
-    _chunk_control_cell_indices,
-    construct_forward_only_model,
     generate_pooled_predicted_response,
     generate_predicted_response,
     generate_predicted_response_for_line,
@@ -47,6 +41,9 @@ from aivc_model.tx1_predicted_response import (
     resolve_genes_against_vocabulary,
     vocabulary_genes,
 )
+from src.model.state import ForwardOnlyStateModel
+from src.model.response import _chunk_control_cell_indices
+from src.model.initialization import construct_forward_only_model
 
 _INPUT_DIM = 6
 _OUTPUT_DIM = 4
@@ -686,32 +683,6 @@ def _baseline_fingerprint_kwargs(tmp_path: Path) -> dict[str, object]:
         "arm": ARM_TX1,
         "cell_set_len": 4,
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def test_slice_symbol_aliases_resolve_by_default() -> None:

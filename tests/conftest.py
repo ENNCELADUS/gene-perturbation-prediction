@@ -376,8 +376,8 @@ def write_tx1_cache_run_manifest(
         hvg_gene_order: The gene order every line's ``hvg.npy`` was written
             against (``write_line_cache``'s own ``hvg_gene_order`` arg).
     """
-    from aivc_model.state_core import sha256_strings
-    from aivc_model.tx1_embed_cache import MODEL_LABEL, write_run_manifest
+    from src.data.gene_order import sha256_strings
+    from src.data.tx1_cache import MODEL_LABEL, write_run_manifest
 
     hvg_sha256 = sha256_strings(np.asarray(hvg_gene_order, dtype=object))
     line_entries = {

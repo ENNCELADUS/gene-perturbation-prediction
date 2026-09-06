@@ -1,4 +1,4 @@
-"""Tests for :mod:`aivc_model.geneeffect_head` (Exp13 B2 + Phase 6 head).
+"""Tests for :mod:`src.model.head` (Exp13 B2 + Phase 6 head).
 
 Organized around the two pieces the module exists to provide:
 
@@ -25,11 +25,13 @@ import pandas as pd
 import pytest
 import torch
 
-from aivc_model.geneeffect_head import (
+from src.model.head import (
     GeneEffectBlockConfig,
     GeneEffectFeatureDims,
     GeneEffectResidualHead,
-    macro_per_gene_spearman,
+)
+from src.eval.metrics import macro_per_gene_spearman
+from src.experiments.exp13_legacy.geneeffect_head import (
     masked_geneeffect_residual_loss,
     per_gene_rank_variance_loss,
 )

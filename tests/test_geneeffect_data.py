@@ -11,19 +11,21 @@ import pandas as pd
 import pytest
 from scipy import sparse
 
-from aivc_model.gene_splits import sha256_file
-from aivc_model.geneeffect_data import (
+from src.data.gene_splits import sha256_file
+from src.data.geneeffect import (
     Exp13Split,
-    QScFeatures,
     build_g_var,
-    build_q_sc_shards,
     build_residual_data,
     build_scored_universe,
-    compute_q_sc,
     load_exp13_split,
     load_geneeffect_long,
     load_source_registry,
     parse_gene_symbol,
+)
+from src.data.q_sc import (
+    QScFeatures,
+    build_q_sc_shards,
+    compute_q_sc,
     verify_q_sc_shards,
 )
 

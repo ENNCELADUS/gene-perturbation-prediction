@@ -9,10 +9,13 @@ import numpy as np
 import pytest
 import torch
 
-from aivc_model.stage1_artifact import Stage1ArtifactManifest, sha256_file
-from aivc_model.stage1_config import load_stage1_config
-from scripts import seal_stage1_response_artifact as seal_cli
-from scripts.seal_stage1_response_artifact import _seal
+from src.experiments.exp13_legacy.stage1_artifact import (
+    Stage1ArtifactManifest,
+    sha256_file,
+)
+from src.experiments.exp13_legacy.stage1_config import load_stage1_config
+from src.experiments.exp13_legacy import seal_stage1_response_artifact as seal_cli
+from src.experiments.exp13_legacy.seal_stage1_response_artifact import _seal
 
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -218,9 +221,7 @@ def test_seal_resolves_aliases_when_sorted_vocabulary_is_unique(
     np.savez(
         fixture["esm"],
         symbols=np.asarray(["AARS1", "ZZZ", "AARS"], dtype=object),
-        vectors=np.asarray(
-            [[1.0, 2.0], [7.0, 8.0], [1.0, 2.0]], dtype=np.float32
-        ),
+        vectors=np.asarray([[1.0, 2.0], [7.0, 8.0], [1.0, 2.0]], dtype=np.float32),
         resolved=np.ones(3, dtype=bool),
     )
     torch.save(
@@ -255,9 +256,7 @@ def test_digest_collision_still_requires_exact_vector_match(
 def test_digest_collision_without_exact_match_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fixture = _fixture(
-        tmp_path, matrix=np.asarray([[9.0, 10.0]], dtype=np.float32)
-    )
+    fixture = _fixture(tmp_path, matrix=np.asarray([[9.0, 10.0]], dtype=np.float32))
     monkeypatch.setattr(seal_cli, "_vector_digest", lambda vector: "collision")
 
     with pytest.raises(ValueError, match="match at least one"):

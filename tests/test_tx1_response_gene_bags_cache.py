@@ -1,4 +1,4 @@
-"""Tests for src/aivc_model/tx1_response_gene_bags_cache.py (fix-round-3, Fix 2).
+"""Tests for src/data/response_cache.py (fix-round-3, Fix 2).
 
 The one non-negotiable property this module exists for: a stale cache is
 NEVER silently reused. Every "refuses to load" test below asserts a raise,
@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aivc_model.tx1_response_gene_bags_cache import (
+from src.data.response_cache import (
     load_response_targets_cache,
     response_targets_fingerprint,
     write_response_targets_cache,
