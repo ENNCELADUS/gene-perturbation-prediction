@@ -1,5 +1,12 @@
 # Experiment Protocol: Exp13 Cell-Line GeneEffect Residual Benchmark
 
+**Historical staged protocol.** This document describes the previous Exp13 runs.
+Current training follows the [joint-training design](2026-09-06-modular-joint-training-design.md):
+one trainer with recurring four-line response supervision, validation every epoch,
+minimum `val_geneeffect_loss` selection and runtime seeds 0. Historical commands
+and stage configurations below remain available at Git snapshot `e6341d2`; their
+values and results are not reinterpreted as outcomes of the new protocol.
+
 **Status:** Stage 0, the formal Stage 1 response run, and formal Stage 2 are complete.
 The one-seed Stage 2 test is a negative point estimate (0.0225 versus context-PCA 0.0851
 and nearest-line 0.0462); historical Stage 1 training lineage remains incomplete.
@@ -94,7 +101,7 @@ Launcher/Accelerator-auto-detected 2- or 4-rank DDP covers frozen/eval-Stage-1 $
 val lines), so $x_c=E_{\text{Tx1}}(r_c)$ depended on whether the collator reads a CPM row like
 the counts underneath it. **It does not:** per-cell cosine 0.92-0.95 against the raw encode,
 and — unlike gene-subsampling noise, which pools away to 0.9997 — the shift survives pooling
-to the per-line mean at 0.972-0.987 ([result](../results/exp13-stage0-tx1-input-representation.md)).
+to the per-line mean at 0.972-0.987 ([result](../results/exp13_stage0/README.md)).
 "Swap only $z_c$" was never a fallback: ST consumes the embedding as its Stage-1 *input* (§4),
 so an untrustworthy one voids a line's whole forward pass, not one feature block.
 

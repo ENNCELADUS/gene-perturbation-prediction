@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
-import json
 from collections.abc import Mapping
 import numpy as np
 import torch
@@ -27,13 +25,6 @@ PROJECTION_SEED = 0
 SUMMARY_WIDTH = 6
 
 
-def _json_hash(value: object) -> str:
-    payload = json.dumps(
-        value, allow_nan=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
 def _require_finite_2d(name: str, value: torch.Tensor) -> None:
     if value.dim() != 2:
         raise ValueError(f"{name} must be 2-D, got shape {tuple(value.shape)}")
@@ -49,7 +40,7 @@ def _require_finite_2d(name: str, value: torch.Tensor) -> None:
 
 @dataclass(frozen=True)
 class FeatureSchema:
-    """Fixed ordering and widths of the Stage-2 response features."""
+    """Fixed ordering and widths of the joint response features."""
 
     hvg_width: int = HVG_WIDTH
     delta_fields: tuple[str, str] = ("mean_shift", "population_variance_shift")
@@ -73,10 +64,6 @@ class FeatureSchema:
             "summary_fields": list(self.summary_fields),
         }
 
-    @property
-    def schema_hash(self) -> str:
-        return _json_hash(self.to_dict())
-
 
 FEATURE_SCHEMA = FeatureSchema()
 
@@ -86,7 +73,9 @@ class FixedSparseProjection:
 
     Components use the Achlioptas distribution at density ``1/sqrt(4000)``.
     They are generated once from the stated seed; :meth:`transform` remains a
-    plain torch matrix multiply so gradients flow to its input.
+    plain torch matrix multiply so gradients flow to its input. Treat components
+    as fixed after construction; use ``from_state`` to restore a different matrix.
+    Device tensors are retained so per-condition calls do not recopy the matrix.
     """
 
     def __init__(self, seed: int = PROJECTION_SEED) -> None:
@@ -97,16 +86,7 @@ class FixedSparseProjection:
         signs = rng.integers(0, 2, size=nonzero.shape, dtype=np.int8) * 2 - 1
         scale = 1.0 / np.sqrt(density * PROJECTION_WIDTH)
         self.components = np.where(nonzero, signs * scale, 0.0).astype(np.float32)
-
-    @property
-    def components_hash(self) -> str:
-        return hashlib.sha256(self.components.tobytes(order="C")).hexdigest()
-
-    @property
-    def schema_seed_hash(self) -> str:
-        return _json_hash(
-            {"schema_hash": FEATURE_SCHEMA.schema_hash, "seed": self.seed}
-        )
+        self._tensors: dict[tuple[torch.device, torch.dtype], torch.Tensor] = {}
 
     @property
     def metadata(self) -> dict[str, object]:
@@ -124,9 +104,13 @@ class FixedSparseProjection:
             )
         if not delta.is_floating_point():
             raise ValueError("delta must be floating point")
-        components = torch.as_tensor(
-            self.components, device=delta.device, dtype=delta.dtype
-        )
+        key = (delta.device, delta.dtype)
+        components = self._tensors.get(key)
+        if components is None:
+            components = torch.as_tensor(
+                self.components, device=delta.device, dtype=delta.dtype
+            )
+            self._tensors[key] = components
         projected = delta @ components.transpose(0, 1)
         return projected
 
@@ -149,6 +133,7 @@ class FixedSparseProjection:
         if not np.isfinite(components).all():
             raise ValueError("projection components must be finite")
         restored.components = components.copy()
+        restored._tensors = {}
         return restored
 
 
@@ -158,7 +143,6 @@ class ConditionFeatures:
     s: torch.Tensor
     hvg_panel_mask: torch.Tensor
     own_gene_shift_mask: torch.Tensor
-    metadata: dict[str, object]
 
 
 def compute_condition_features(
@@ -231,8 +215,4 @@ def compute_condition_features(
         own_gene_shift_mask=torch.tensor(
             own_gene_available, dtype=torch.bool, device=predicted.device
         ),
-        metadata={
-            "projection_seed": projection.seed,
-            "shift_threshold_basal_l2_p95": float(shift_threshold.detach().cpu()),
-        },
     )

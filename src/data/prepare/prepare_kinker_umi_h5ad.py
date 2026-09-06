@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build raw-UMI Kinker h5ads that satisfy the standard Tx1 input contract.
 
-Sibling of ``historical_data_preparation/prepare_kinker_cpm_h5ad.py``
+Sibling of ``src/experiments/historical/prepare_kinker_cpm_h5ad.py``
 with the contract inverted. That
 script ingests the GEO ``GSE157220_CPM_data.txt.gz`` matrix and deliberately
 marks every artifact ``tx1_raw_count_contract: blocked``, because published
@@ -9,7 +9,7 @@ CPM cannot be reconstructed into counts. Exp13 Stage 0 measured what feeding
 Tx1 that CPM actually costs -- per-cell cosine 0.94 against the raw encode,
 and, unlike gene-subsampling noise, a shift that survives pooling to the
 per-line mean the model consumes -- so the CPM path is not usable for the
-152 Kinker lines and ``docs/04`` §6 branch 1 applies.
+152 Kinker lines and the historical Exp13 protocol §6 branch 1 applies.
 
 The counts exist: Broad Single Cell Portal SCP542 publishes
 ``UMIcount_data.txt`` (pre-QC UMI counts, 56,982 cells, 207 lines), which
@@ -537,7 +537,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                     "tx1_raw_count_contract": "passed",
                     "reason": (
                         "SCP542 UMIcount_data.txt supplies raw UMI counts for every "
-                        "selected Kinker cell; docs/04 §6 branch 1"
+                        "selected Kinker cell; historical Exp13 protocol §6 branch 1"
                     ),
                 },
                 indent=2,

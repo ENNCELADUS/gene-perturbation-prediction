@@ -2,7 +2,7 @@
 
   <h1 style="margin-top: 10px;">Generalizable Synthetic-Lethality Discovery by Virtual-Cell Composition</h1>
 
-  <h2>Discover synthetic-lethal gene pairs that generalize to genes withheld from SL-pair training and to held-out cancer cell-line contexts.</h2>
+  <h2>Study context-conditioned synthetic-lethality ranking in held-out cancer cell lines.</h2>
 
   <div align="center">
     <a href="https://github.com/ENNCELADUS/gene-perturbation-prediction/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/ENNCELADUS/gene-perturbation-prediction"/></a>
@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-09-02):** Active direction — **context-conditioned synthetic-lethality ranking**; `context_screen_v2` is built but unrun. Scope-closed **Exp13** Stage 2 completed with a negative point estimate: test macro per-gene Spearman 0.0225 versus context-PCA ridge 0.0851 and nearest-line 0.0462. This one-seed GeneEffect result supports no positive context claim; historical Stage 1 lineage remains incomplete, and GeneEffect is never SL evidence. [`Result`](docs/results/exp13-stage2-full.md) · [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
+> **Status (2026-09-06):** Current GeneEffect development uses one joint trainer with recurring four-line response supervision. Validate every epoch and select the checkpoint with minimum validation GeneEffect loss; training, collation and projection seeds are 0. This protocol has no scientific run yet. Historical Exp13 Stage 2 reached test macro per-gene Spearman 0.0225 versus context-PCA ridge 0.0851 and nearest-line 0.0462, a negative point estimate. `context_screen_v2` remains a separate, unrun SL track. [`Joint design`](docs/specs/2026-09-06-modular-joint-training-design.md) · [`Historical result`](docs/results/exp13_stage2_full/README.md) · [`Research contract`](docs/01-blueprint.md).
 
 The central question of the active direction:
 
@@ -32,13 +32,13 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 ## *Latest News* 🔥
 
-- **[2026/08]** **Exp13 Stage 0 closed — Tx1 does not read CPM like raw counts.** Measured per-cell cosine 0.92–0.95 against the raw encode, and unlike gene-subsampling noise the shift survives pooling to the per-line mean (0.972–0.987), so the 152 Kinker `processed_cpm` lines were rebuilt from SCP542 raw UMI counts. Also found: the collator subsamples genes with an unseeded `randperm` above 2048 detected genes, so runs must pin a collator seed. [`Result`](docs/results/exp13-stage0-tx1-input-representation.md) · [`Protocol §6`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
-- **[2026/08]** **Legacy GeneEffect stack removed.** The exp05 training stack, Bridge-A, and the Tx1 Phase A–F tree — three overlapping implementations of one task, all closed negative — were deleted; `src/aivc_model/` drops from 49 files to 17, leaving the Exp13 residual head, the fit guard, the residual ladder and the Tx1 basal path. Registered negatives stay in [`docs/results/`](docs/results/); git history holds the implementations.
+- **[2026/08]** **Exp13 Stage 0 closed — Tx1 does not read CPM like raw counts.** Measured per-cell cosine 0.92–0.95 against the raw encode, and unlike gene-subsampling noise the shift survives pooling to the per-line mean (0.972–0.987), so the 152 Kinker `processed_cpm` lines were rebuilt from SCP542 raw UMI counts. Also found: the collator subsamples genes with an unseeded `randperm` above 2048 detected genes, so runs must pin a collator seed. [`Result`](docs/results/exp13_stage0/README.md) · [`Protocol §6`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
+- **[2026/09]** **Joint GeneEffect runtime implemented.** Data, model, training and evaluation now have separate modules. One trainer revisits the four response anchors throughout GeneEffect regression; validation loss selects checkpoints. The new protocol has not run on research data. Registered negatives stay in [`docs/results/`](docs/results/); Git history holds the staged implementations.
 - **[2026/09]** **Exp13 formal Stage 2 completed — negative point estimate.**
   The selected model reached held-out test macro per-gene Spearman 0.0225, below
   context-PCA ridge (0.0851) and nearest-line (0.0462); its macro per-line score was
   0.0217 versus 0.0993 and 0.0577. The 226-line run is terminally verified, but this
-  one-seed GeneEffect result licenses no positive context or SL claim. [`Result`](docs/results/exp13-stage2-full.md) ·
+  one-seed GeneEffect result licenses no positive context or SL claim. [`Result`](docs/results/exp13_stage2_full/README.md) ·
   [`Exp13 protocol`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
 - **[2026/08]** **Nine-context split built.** K562/JURKAT/OVCAR8/HAP1/HT29 are train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only, with cross-side source rows and pairs isolated. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
 - **[2026/07]** **T2 registered primary gate completed — negative.** On the frozen 28 train / 5 validation / 9 test GeneEffect split and 587-gene slice, Tx1-3B-ST failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). HVG-ST was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. T2 is paused for redesign and the remaining baseline ladder is closeout work. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).
@@ -54,14 +54,14 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 
 ## Why This Project?
 
-Most SL predictors do link prediction over a curated SL graph — powerful on seen genes, weak on unseen ones, and usually not conditioned on an explicit cellular context. This project brings signal from *outside* the graph: a virtual cell that predicts cancer-cell fitness from perturbation response, composed into a pairwise interaction for both general pair ranking and held-out-cell-line transfer.
+This project tests whether basal cell state and predicted perturbation response can improve GeneEffect prediction and, in a separate protocol, SL-pair ranking in held-out cell lines. No SL graph enters the features. Single-gene predictions alone do not measure genetic interaction.
 
 - **🔗 Composes, not memorizes** — Turns a single-gene fitness model into a pairwise score against a declared null baseline, instead of reading topology off an SL graph.
-- **🧊 Inductive by construction** — The score reads from gene features (ESM2 identity + predicted perturbation biology), so it is defined for genes no screen has touched, where transductive SOTA has no node at all.
+- **🧊 Gene features** — ESM2 identity and predicted perturbation response define the inputs; the current benchmark does not hold out genes or establish unseen-gene performance.
 - **🌐 Context-resolved evaluation** — The generalization axis is the cell line, on a published held-out split. Pan-essentiality is a controlled variable, not an assumption, via the gene-mean / context-residual split.
 - **🧪 Observed-first methodology** — Validates that *observed* response carries dependency signal before trusting any *predicted* transcriptome, so forward-model error never silently inflates results.
 - **🪜 Honest baseline ladder** — Dummy → ridge → PCA → tabular nonlinear → MIL/foundation models, so every gain is measured against a simpler control.
-- **🚪 Fold-local, no-leakage CV** — A→B models, featurizers, GMM prototypes, and C-heads are all fit on train genes only, inside each fold.
+- **🚪 Train-only fitting** — Model updates and fitted preprocessing use training cell lines; validation selects checkpoints and test evaluation remains separate.
 - **📏 Terminology guardrails** — Dependency prediction, essentiality ranking, and SL candidate prioritization are kept strictly distinct (see [Terminology](#terminology-guardrails)).
 
 ## Quick Start
@@ -81,7 +81,7 @@ uv run python -m pytest
 
 > **Prerequisites**: Python 3.11–3.12 and [`uv`](https://docs.astral.sh/uv/). Running the full pipeline additionally requires Perturb-seq `*.h5ad` files and DepMap labels, which are **not** committed to git (see [Data Sources](#data-sources-and-roles)).
 >
-> **Need more options?** See [Installation](#installation) below for detailed setup, optional dependency groups, and the `aivc_model` exception.
+> See [Installation](#installation) for optional dependencies and [the launcher guide](hpc/README.md) for the GPU environment.
 
 ## Research Framing
 
@@ -95,16 +95,17 @@ that the pair is an experimental synthetic-lethal hit in that line.
 
 The generalization axis is the **cell line**. Graph and knowledge-graph SL predictors need the query gene to already be a node, so they cannot score an unscreened gene at all and cannot condition on a cellular context; this program reaches both by reading from gene identity and predicted perturbation biology instead of graph topology. Genes are *not* held out here, so no unseen-gene claim is available from this benchmark.
 
-- **Stage 1 — response.** Basal cells plus a perturbation gene produce predicted post-perturbation cells, supervised on four Perturb-seq lines.
-- **Stage 2 — dependency.** The perturbation delta, gene identity, and context vector produce GeneEffect as a context-blind gene mean plus a context residual, supervised across many lines.
-- **Stage 3 — pairs.** A lightweight head scores unordered pairs from the predicted residual profile against a declared non-interaction null baseline. The gap is incremental label ranking, **not** an interaction estimate.
+- **Joint GeneEffect training.** Frozen Tx1 embeddings feed STATE and the five-block residual head. Train STATE, the ESM2 adapter and head together with Huber regression over 170 labeled training lines; every fourth update also reconstructs response distributions on four anchors.
+- **Validation and testing.** Every epoch reports total and individual losses, Pearson, Spearman, RMSE, MAE and coverage. Early stopping and `best.pt` use only minimum `val_geneeffect_loss`. Evaluate the selected checkpoint explicitly on test after training.
+- **Separate SL proposal.** A lightweight pair head would score unordered pairs from predicted residual profiles against a declared null. It requires its own out-of-fold fitting and evaluation; this refactor does not implement it.
 
 The full contract — task definition, objective, split, controls, and claim boundaries — lives in the research vault, not here:
 
 - [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract: task, objective, evaluation, and claim boundaries.
 - [`docs/02-literature-review.md`](docs/02-literature-review.md) — related work and the novelty boundary.
 - [`docs/03-experiment-protocol.md`](docs/03-experiment-protocol.md) — the SL-pair executable protocol and its prerequisites.
-- [`docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md) — the scope-closed GeneEffect residual protocol.
+- [`docs/specs/2026-09-06-modular-joint-training-design.md`](docs/specs/2026-09-06-modular-joint-training-design.md) — current GeneEffect training and evaluation.
+- [`docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md) — historical staged GeneEffect protocol.
 - [`docs/data/`](docs/data/) — one card per dataset. Read the card before using the file.
 
 ### Prior Program (Retired as Roadmap, Kept as Evidence)
@@ -151,29 +152,43 @@ uv run python -m pytest      # full test suite (synthetic fixtures)
 
 ### Current Entrypoints
 
-`src/aivc_model/` retains the Tx1/Exp13 substrate and R1 baseline. Run its scripts from the repository root. The retired dependency and Feng2024 CLIs are archived locally; see [archive inventory](docs/archive-inventory-2026-09-05.md).
+Run module commands from the repository root. The [joint configuration](configs/geneeffect_joint.yaml)
+names supplied datasets, model initialization and cache paths. Prepare inputs once;
+training opens those caches without rebuilding raw data on every worker.
 
 ```bash
-# R1 residual baseline ladder on DepMap GeneEffect
-uv run python scripts/run_r1_residual_ladder.py --labels <geneeffect_long.csv> \
-  --split-json configs/benchmarks/cell_line_geneeffect_226_split.json --out-dir <run_dir>
+# Single-process fixed-input preparation
+hpc/run.sh prepare configs/geneeffect_joint.yaml
 
-# Rebuild the frozen Exp13 226-line benchmark split
-uv run python scripts/build_cell_line_geneeffect_226_split.py --help
+# Joint training on visible GPUs, or epoch-boundary resume
+hpc/run.sh train configs/geneeffect_joint.yaml --run-id joint_seed0
+hpc/run.sh train configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/joint_seed0/last.pt
 
-# Tx1-3B basal embedding cache (GPU only; see docs/04 and the hpc-execution skill)
-PYTHONPATH=src:. .venv-tx1/bin/python scripts/build_tx1_basal_embeddings.py --help
+# Explicit testing of the selected checkpoint
+hpc/run.sh test outputs/geneeffect_joint/joint_seed0/best.pt
+
+# Validation or the train-fitted baseline ladder
+uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/joint_seed0/best.pt --split val
+uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml \
+  --split test --out-dir outputs/geneeffect_joint/baselines_seed0
 ```
 
 > Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored. The pipeline requires Perturb-seq and DepMap data you supply locally.
 
 ## Architecture
 
-- `src/aivc_model/`: Tx1 basal/response machinery, Exp13 residual training and R1 controls.
-- `scripts/`: Exp13 preparation, training and evaluation; see [script inventory](scripts/README.md).
-- `scripts/historical_data_preparation/`: non-Exp13 data preparation and historical diagnostics.
-- `configs/benchmarks/`: fixed split and basal registration authorities.
-- `configs/experiments/13_geneeffect_226/`: retained GeneEffect substrate configuration.
+- `src/data/`: fixed splits, batch records, basal/response caches and preparation tools.
+- `src/model/`: STATE/ESM2 adapters, live features, residual head and losses.
+- `src/training/`: sampling, optimization, distributed execution and resumable checkpoints.
+- `src/eval/`: common validation/test scoring and metrics.
+- `src/baselines/`: residual controls fitted on training lines.
+- `src/experiments/`: preparation and experiment wiring; `historical/` retains selected probes.
+- `src/train.py`, `src/evaluate.py`: thin module entry points.
+- `hpc/`: launcher and [operator guide](hpc/README.md); `scripts/` contains operational utilities.
+- `configs/`: current joint config, fixed benchmark membership and small input provenance.
+- `outputs/`: ignored generated runs; `docs/results/`: tracked reports and small evidence.
+
+The old staged implementation and commands remain in Git at `e6341d2`.
 
 The context-conditioned SL model has not run. Historical dependency/Feng2024 implementations, matching tests and outputs were moved out of the active directories on 2026-09-05. See [archive inventory](docs/archive-inventory-2026-09-05.md).
 

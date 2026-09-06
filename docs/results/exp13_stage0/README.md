@@ -2,9 +2,9 @@
 
 **Status:** completed 2026-08-18. Tx1-3B does **not** read a CPM row like the raw counts
 underneath it; the shift is systematic and survives pooling. Branch 1 of
-[`../specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](../specs/2026-08-17-exp13-geneeffect-residual-protocol.md)
+[`Historical protocol`](../../specs/2026-08-17-exp13-geneeffect-residual-protocol.md)
 §6 was taken and executed: raw UMI counts now exist for all 152 Kinker lines. Authority:
-[`../01-blueprint.md`](../01-blueprint.md) §7-8. This is a substrate measurement, not an SL
+[`Research contract`](../../01-blueprint.md) §7-8. This is a substrate measurement, not an SL
 or a dependency result.
 
 ## What was tested
@@ -21,7 +21,7 @@ A second question was added after reading the collator: the released checkpoint 
 ## Method and provenance
 
 `scripts/stage0_tx1_input_probe.py` at commit `260b4bf`, run under `.venv-tx1` on one H20-3e.
-The historical source now lives at `scripts/historical_data_preparation/stage0_tx1_input_probe.py` (moved 2026-09-05).
+The retained source is now `src/experiments/historical/stage0_tx1_input_probe.py`.
 Four arms over the same cells in the same order: `raw`; `cpm` (`raw * 1e6 / library_size`);
 `repeat_seeded`; `repeat_unseeded`. Each seeded arm calls `torch.manual_seed` immediately
 before its forward pass — without that pinning the CPM and subsampling effects are
@@ -31,8 +31,9 @@ exceed 2048 detected genes, because only wider cells can trigger `_sample` at al
 Two runs: 256 raw-count Adamson cells (`adamson_2016_pilot.h5ad`, integer-audited) as a
 proxy, and 256 cells of `ACH-000211` (Daoy) — a Kinker line on the **test** side of
 `cell_line_geneeffect_226_split.json`, built by `scripts/prepare_kinker_umi_h5ad.py`.
-Artifacts: `results/stage0/tx1_input_probe_adamson_pilot.json`,
-`results/stage0/tx1_input_probe_kinker_ACH-000211.json`.
+Artifacts: [Adamson probe](tx1_input_probe_adamson_pilot.json) and
+[Kinker probe](tx1_input_probe_kinker_ACH-000211.json), moved byte-for-byte from
+`results/stage0/`; their embedded historical paths are preserved.
 
 ## Result
 
@@ -82,17 +83,17 @@ comparison arm and must not re-enter the standard Tx1 path.
 ## Reproduction
 
 ```bash
-PYTHONPATH=src:. .venv-tx1/bin/python scripts/prepare_kinker_umi_h5ad.py \
+uv run python -m src.data.prepare.prepare_kinker_umi_h5ad \
   --matrix <sources>/kinker_sccle/UMIcount_data.txt \
   --selected-cells <derived>/kinker_sccle/selected_cells.tsv \
   --line-manifest <manifest>/cell_line_atlas_179_manifest.csv \
   --gene-metadata <tahoe>/gene_metadata.parquet --vocab-json <tx1>/vocab.json \
   --hvg-var-dims <state>/var_dims.pkl --output-dir <processed>/kinker_umi_152
 
-CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src:. .venv-tx1/bin/python \
-  -m scripts.historical_data_preparation.stage0_tx1_input_probe --adata <processed>/kinker_umi_152/h5ad/ACH-000211.h5ad \
+CUDA_VISIBLE_DEVICES=0 uv run python \
+  -m src.experiments.historical.stage0_tx1_input_probe --adata <processed>/kinker_umi_152/h5ad/ACH-000211.h5ad \
   --model-dir data/models/tahoe_x1_3b/3b-model --n-cells 256 --batch-size 8 \
-  --out-json results/stage0/tx1_input_probe_kinker_ACH-000211.json
+  --out-json outputs/stage0/tx1_input_probe_kinker_ACH-000211.json
 ```
 
 Input hashes are recorded in the ingest's `qc.json: source_hashes` and in each probe JSON's

@@ -1,5 +1,9 @@
 # Exp13 Formal Stage 2 GeneEffect Residual Benchmark
 
+Historical staged protocol, retired on 2026-09-06. The replacement
+[joint training design](../../specs/2026-09-06-modular-joint-training-design.md)
+has no scientific run yet; the results below belong to the original staged run.
+
 ## Status
 
 The one-seed 226-line Stage 2 run is complete and terminally verified. Its held-out
@@ -32,12 +36,12 @@ gene-mean.
   `1bbdf819f41c89535075b8d91e3e9e54dd58a503b0fe5ed497c1a37e49357d53`.
 
 Historical Stage 1 training-data/code lineage remains incomplete, although the
-selected checkpoint and its recorded inputs passed the current compatibility and
+selected checkpoint and its recorded inputs passed the then-required compatibility and
 input seal. Tahoe-100M pretraining exposure also remains a scope qualifier.
 
 ## Learning curves
 
-![Exp13 Stage 2 learning curves](exp13_stage2_full/learning_curves.png)
+![Exp13 Stage 2 learning curves](learning_curves.png)
 
 Warmup training loss decreases monotonically through epoch 15, but validation is
 noisy and peaks at epoch 5 (0.028389). During joint tuning, the total, response, and
@@ -60,7 +64,7 @@ The end-to-end point estimate trails context-PCA ridge by 0.062660 per gene and
 line. Twenty of 27 test lines have positive within-line Spearman, but the macro
 effect is small. Test is close to validation: -0.003430 per gene and +0.000069 per
 line. The 27 model-specific values are in
-[`e2e_test_per_line.csv`](exp13_stage2_full/e2e_test_per_line.csv).
+the locally retained `e2e_test_per_line.csv` (not tracked in Git).
 
 ## Interpretation
 
@@ -85,18 +89,17 @@ for `context_screen_v2`.
 
 ## Reproduction
 
-The checked-in telemetry and metric extracts are
-[`learning_curves.csv`](exp13_stage2_full/learning_curves.csv) and
-[`test_results.csv`](exp13_stage2_full/test_results.csv); the model's 27 per-line test
-scores are in [`e2e_test_per_line.csv`](exp13_stage2_full/e2e_test_per_line.csv).
-Rebuild the figure with:
+The locally retained telemetry and metric extracts are `learning_curves.csv`,
+`test_results.csv` and `e2e_test_per_line.csv`; these CSV files are not tracked in
+Git. The figure and plotting source are tracked. With those extracts available,
+rebuild the figure with:
 
 ```bash
 uv run python docs/results/exp13_stage2_full/plot_learning_curves.py
 ```
 
 The plotting source is
-[`plot_learning_curves.py`](exp13_stage2_full/plot_learning_curves.py). The source
+[`plot_learning_curves.py`](plot_learning_curves.py). The source
 run artifacts are the authenticated `warmup_train_log.csv`, `joint_train_log.csv`,
 `geneeffect_residual_metrics.json`, `checkpoint_selection.json`, `run_manifest.json`,
 and `complete.json` in the formal H20 run directory.

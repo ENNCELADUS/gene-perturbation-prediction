@@ -95,6 +95,9 @@ def test_dispatch_keeps_arguments(monkeypatch):
 
 
 def test_missing_cache_training_fails_without_raw_rebuild(tmp_path, monkeypatch):
+    # Keep production Accelerator construction on the synthetic suite's CPU,
+    # including unsandboxed macOS runs where MPS is visible.
+    monkeypatch.setenv("ACCELERATE_USE_CPU", "true")
     from src.experiments import geneeffect, prepare
     from src.data import response
 
@@ -113,6 +116,7 @@ def test_missing_cache_training_fails_without_raw_rebuild(tmp_path, monkeypatch)
     with pytest.raises(FileNotFoundError, match="hpc/run.sh prepare"):
         geneeffect.run_training(path, run_id="missing")
     record = json.loads((tmp_path / "runs/missing/run.json").read_text())
+    assert record["environment"]["device"] == "cpu"
     assert record["training"]["status"] == "failed"
     assert record["evaluation"]["status"] == "not_started"
     assert not (tmp_path / "missing").exists()

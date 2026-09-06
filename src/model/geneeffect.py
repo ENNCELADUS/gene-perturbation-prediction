@@ -37,42 +37,6 @@ class GeneEffectE2EModel(nn.Module):
         self.projection = projection
         self.standardizer = standardizer
         self.collator_seed = int(collator_seed)
-        self._backbone_frozen = False
-
-    @property
-    def backbone_frozen(self) -> bool:
-        return self._backbone_frozen
-
-    def freeze_backbone(self) -> None:
-        """Freeze Stage 1 and keep it in eval mode during head warmup."""
-        self.backbone.requires_grad_(False)
-        self.backbone.eval()
-        self._backbone_frozen = True
-
-    def unfreeze_backbone(self) -> None:
-        """Enable joint Stage-2 optimization of every learned backbone weight."""
-        self.backbone.requires_grad_(True)
-        self._backbone_frozen = False
-        self.backbone.train(self.training)
-
-    def train(self, mode: bool = True) -> GeneEffectE2EModel:
-        super().train(mode)
-        if self._backbone_frozen:
-            self.backbone.eval()
-        return self
-
-    def assert_frozen_backbone_clean(self) -> None:
-        """Fail if a warmup step enabled or accumulated a backbone gradient."""
-        offenders = [
-            name
-            for name, parameter in self.backbone.named_parameters()
-            if parameter.requires_grad or parameter.grad is not None
-        ]
-        if offenders:
-            raise RuntimeError(
-                "frozen backbone contains trainable parameters or gradients: "
-                f"{offenders[:10]}"
-            )
 
     def _standardize(self, features: FeatureBatch) -> dict[str, torch.Tensor]:
         return {
@@ -86,8 +50,8 @@ class GeneEffectE2EModel(nn.Module):
             )
         }
 
-    def forward_precomputed(self, features: FeatureBatch) -> torch.Tensor:
-        """Run the head on raw cached features during frozen warmup."""
+    def forward_features(self, features: FeatureBatch) -> torch.Tensor:
+        """Standardize live feature blocks and predict the GeneEffect residual."""
         blocks = self._standardize(features)
         return self.head(
             **blocks,
@@ -131,7 +95,6 @@ class GeneEffectE2EModel(nn.Module):
             ),
             gene_symbols=batch.genes,
             model_ids=batch.model_ids,
-            metadata=tuple(item.metadata for item in built),
         )
 
     def forward(
@@ -150,9 +113,8 @@ class GeneEffectE2EModel(nn.Module):
                 seed=self.collator_seed,
             )
         return E2EForwardOutput(
-            delta_hat=self.forward_precomputed(features),
+            delta_hat=self.forward_features(features),
             raw_features=features,
-            feature_metadata=features.metadata,
             response_predicted=response_predicted,
         )
 

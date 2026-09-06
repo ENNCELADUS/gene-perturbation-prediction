@@ -115,7 +115,7 @@ The formal one-seed Exp13 Stage 2 test completed on 2026-09-02. End-to-end test
 macro per-gene Spearman was 0.0225, below context-PCA ridge (0.0851) and
 nearest-line (0.0462). This is a negative point estimate, not a significance,
 multi-seed, unseen-gene, context-SL, or measured-GI claim.
-[`Full report`](results/exp13-stage2-full.md).
+[`Full report`](results/exp13_stage2_full/README.md).
 
 ## 9. Key references (bibkeys → why cited)
 

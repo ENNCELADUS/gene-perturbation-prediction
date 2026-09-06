@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 from collections.abc import Iterable, Mapping
 import numpy as np
 import torch
-from src.model.features import _json_hash
 
 _CONTINUOUS_BLOCKS = frozenset({"delta_proj", "s", "q_sc", "e_g", "z_c"})
 
@@ -156,15 +155,7 @@ class BlockStandardizer:
         scale = torch.as_tensor(stats.scale, device=value.device, dtype=value.dtype)
         return (value - mean) / scale
 
-    @property
-    def state_hash(self) -> str:
-        state = self._state_without_hash()
-        return _json_hash(state)
-
     def to_state(self) -> dict[str, object]:
-        return self._state_without_hash()
-
-    def _state_without_hash(self) -> dict[str, object]:
         self._require_fitted()
         return {
             "version": 1,

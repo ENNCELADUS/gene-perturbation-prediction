@@ -31,28 +31,12 @@ class LinearMockStateModel(nn.Module):
         return self.net(torch.cat([basal, pert], dim=1))
 
 
-def _flatten_state_output(output: object) -> torch.Tensor | None:
-    if not isinstance(output, torch.Tensor):
-        return None
-    if output.dim() == 3 and output.shape[0] == 1:
-        output = output.squeeze(0)
-    if output.dim() > 2:
-        output = output.reshape(-1, output.shape[-1])
-    return output
-
-
 class StateForwardAdapter(nn.Module):
     """Thin wrapper around an ArcInstitute STATE transition model."""
 
     def __init__(self, state_model: nn.Module) -> None:
         super().__init__()
         self.state_model = state_model
-        self._last_token_features: torch.Tensor | None = None
-
-    @property
-    def last_token_features(self) -> torch.Tensor | None:
-        """Return token hidden features captured from the most recent forward."""
-        return self._last_token_features
 
     def forward(
         self,
@@ -61,7 +45,7 @@ class StateForwardAdapter(nn.Module):
         gene: str,
         batch_indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Run one unpadded condition for frozen-feature extraction."""
+        """Run one unpadded condition through STATE."""
         return self._forward_state(
             control_cells,
             perturbation,
@@ -167,12 +151,6 @@ class StateForwardAdapter(nn.Module):
         *,
         padded: bool,
     ) -> torch.Tensor:
-        self._last_token_features = None
-        if hasattr(self.state_model, "_token_features"):
-            try:
-                setattr(self.state_model, "_token_features", None)
-            except AttributeError:
-                pass
         batch: dict[str, Any] = {
             "ctrl_cell_emb": control_cells,
             "pert_emb": perturbation_cells,
@@ -204,16 +182,6 @@ class StateForwardAdapter(nn.Module):
             output = output["preds"]
         if isinstance(output, tuple):
             output = output[0]
-        token_features = getattr(self.state_model, "_token_features", None)
-        if (
-            not padded
-            and isinstance(token_features, torch.Tensor)
-            and token_features.dim() == 3
-            and token_features.shape[0] != 1
-        ):
-            msg = "STATE token features must have batch dimension 1 when unpadded"
-            raise ValueError(msg)
-        self._last_token_features = _flatten_state_output(token_features)
         if output.dim() == 3 and output.shape[0] == 1:
             output = output.squeeze(0)
         if output.dim() > 2:

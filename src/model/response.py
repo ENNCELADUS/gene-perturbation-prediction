@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from src.data.batches import ResponseBatch
-from dataclasses import dataclass
 from typing import Sequence
 import numpy as np
 import torch
@@ -21,7 +20,7 @@ def _chunk_control_cell_indices(
     deterministically from ``seed``) from the same line's own basal cells,
     mirroring the retired ``make_cell_set_chunks``'s ``pad_short`` behavior. The
     padded rows only satisfy ST's fixed-window-size contract --
-    :func:`generate_predicted_response` trims the output back to ``n_cells``.
+    :func:`predict_bags` trims the output back to ``n_cells``.
     """
     if n_cells < 1:
         raise ValueError("at least one basal cell is required")
@@ -39,73 +38,6 @@ def _chunk_control_cell_indices(
             window = np.concatenate([window, padding])
         chunks.append(window)
     return tuple(chunks)
-
-
-@dataclass(frozen=True)
-class ResponseLossWeights:
-    """Relative weights of the two ``L_resp`` terms (``01`` §4).
-
-    Attributes:
-        mean_delta: Weight on the mean-delta MSE term.
-        energy: Weight on the energy-distance term. Set to ``0.0`` to train
-            on the mean alone, which is strictly weaker -- it cannot see a
-            change in spread -- and is only useful as an ablation.
-    """
-
-    mean_delta: float = 1.0
-    energy: float = 1.0
-
-    def __post_init__(self) -> None:
-        if self.mean_delta < 0 or self.energy < 0:
-            raise ValueError("loss weights must be non-negative")
-        if self.mean_delta == 0 and self.energy == 0:
-            raise ValueError("at least one loss term must carry weight")
-
-
-class ResponseLoss(nn.Module):
-    """``L_resp`` = ``w_mean * mean-delta MSE + w_energy * energy distance``."""
-
-    def __init__(self, weights: ResponseLossWeights = ResponseLossWeights()) -> None:
-        super().__init__()
-        self.weights = weights
-
-    def forward(
-        self,
-        predicted: torch.Tensor,
-        observed: torch.Tensor,
-        control_mean: torch.Tensor,
-    ) -> tuple[torch.Tensor, dict[str, float]]:
-        """Score one (gene, line) bag pair.
-
-        Args:
-            predicted: ``[n_pred, genes]`` predicted post-perturbation cells.
-            observed: ``[n_obs, genes]`` observed post-perturbation cells.
-            control_mean: ``[genes]`` mean of this line's control cells.
-
-        Returns:
-            ``(loss, parts)`` where ``parts`` carries the detached terms for
-            logging.
-        """
-        total, tensor_parts = self.tensor_parts(predicted, observed, control_mean)
-        return total, {
-            name: float(value.detach()) for name, value in tensor_parts.items()
-        }
-
-    def tensor_parts(
-        self,
-        predicted: torch.Tensor,
-        observed: torch.Tensor,
-        control_mean: torch.Tensor,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Return tensor-valued terms without synchronizing CUDA to Python."""
-        mean_term = mean_delta_mse(predicted, observed, control_mean)
-        parts = {"mean_delta_mse": mean_term}
-        total = self.weights.mean_delta * mean_term
-        energy_term = energy_distance(predicted, observed)
-        parts["energy_distance"] = energy_term
-        total = total + self.weights.energy * energy_term
-        parts["loss"] = total
-        return total, parts
 
 
 def mean_delta_mse(
@@ -133,7 +65,7 @@ def energy_distance(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
     (``docs/results/exp05-hct116-frozen-backbone-transport.md``), so the term
     is not optional in practice.
 
-    Cost is ``O(n*m*d)``; keep bags small (see ``TrainingConfig.max_bag``).
+    Cost is ``O(n*m*d)``; preparation fixes the bag sizes.
     """
     if left.numel() == 0 or right.numel() == 0:
         raise ValueError("energy distance needs at least one cell per bag")

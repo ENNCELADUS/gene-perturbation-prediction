@@ -59,8 +59,8 @@ CPM_TARGET_SUM: float = 1e6
 def _sha256_order(barcodes: np.ndarray) -> np.ndarray:
     """Deterministic cell order: ascending ``sha256(barcode)``.
 
-    Mirrors ``docs/04`` §5's cell-subsample rule so the probe's cells are
-    reproducible across runs and machines without carrying an index file.
+    Mirrors the historical Exp13 protocol §5's cell-subsample rule so the probe's
+    cells are reproducible across runs and machines without carrying an index file.
     """
     digests = [
         hashlib.sha256(str(barcode).encode("utf-8")).hexdigest() for barcode in barcodes

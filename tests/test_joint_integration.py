@@ -28,12 +28,16 @@ def full_tiny_config(root):
 
 
 def test_real_training_independent_test_and_export_retry(tmp_path, monkeypatch):
+    # Use Accelerate's supported CPU environment override instead of letting
+    # a visible MPS device initialize its process-wide singleton for later tests.
+    monkeypatch.setenv("ACCELERATE_USE_CPU", "true")
     torch.set_num_threads(1)
     config = full_tiny_config(tmp_path / "inputs")
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(config))
     run_dir = geneeffect.run_training(path, run_id="tiny")
     record = json.loads((run_dir / "run.json").read_text())
+    assert record["environment"]["device"] == "cpu"
     assert record["training"]["status"] == "completed"
     assert record["evaluation"]["status"] == "not_started"
     checkpoint = run_dir / "best.pt"

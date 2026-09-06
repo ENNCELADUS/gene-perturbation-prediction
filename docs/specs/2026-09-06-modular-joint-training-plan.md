@@ -1,6 +1,8 @@
 # Modular Joint GeneEffect Training Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
+
+**Implementation status:** Completed locally on 2026-09-06. The integrated suite passes 551 tests with one CUDA-only skip; Ruff, wheel imports and 24 command help checks pass. No research-data training or GPU run was launched.
 
 **Goal:** Replace the staged Exp13 runtime with one joint GeneEffect trainer, recurring four-anchor response supervision, loss-selected checkpoints and a topology-style repository layout.
 
@@ -63,7 +65,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
 **Interfaces:** Preserve retained public signatures while moving them. Extract `FixedSplit` first so `src/data/splits.py` never imports the baseline evaluator. Data/model modules must not import `src.training`, `src.eval` or `src.experiments`. Move old checkpoint-seal loading and historical scoring functions out of model construction into the temporary experiment directory.
 
-- [ ] Run the retained-suite baseline and save its counts in the implementation summary:
+- [x] Run the retained-suite baseline and save its counts in the implementation summary:
 
   ```bash
   rtk proxy uv run --no-cache --offline --no-sync python -m pytest tests -q
@@ -72,16 +74,16 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
   If a command fails, distinguish environment/asset failures from failing assertions before editing.
 
-- [ ] Move modules and split the mixed data/model symbols according to the table. Update imports and string-based monkeypatch targets in the same change. Keep checkpoint state-dictionary parameter names unchanged for moved retained components. Set package inclusion to:
+- [x] Move modules and split the mixed data/model symbols according to the table. Update imports and string-based monkeypatch targets in the same change. Keep checkpoint state-dictionary parameter names unchanged for moved retained components. Set package inclusion to:
 
   ```toml
   [tool.hatch.build.targets.wheel]
   packages = ["src"]
   ```
 
-- [ ] Move `GeneBags` and `OnlineConditionBatch` without changing their field definitions. Move pure response functions (`predict_bags`, `predict_bag`, `mean_delta_mse`, `energy_distance`) out of the trainer so model feature construction imports `src.model.response`.
-- [ ] Run the retained suite again. Resolve import cycles in the owning module rather than inserting lazy compatibility imports. Run a wheel build with `uv build --wheel` and verify that it includes the `src` package; report a missing build dependency instead of calling an import check a package-build result.
-- [ ] Commit the runnable extraction as `refactor: separate data model evaluation and experiment modules`.
+- [x] Move `GeneBags` and `OnlineConditionBatch` without changing their field definitions. Move pure response functions (`predict_bags`, `predict_bag`, `mean_delta_mse`, `energy_distance`) out of the trainer so model feature construction imports `src.model.response`.
+- [x] Run the retained suite again. Resolve import cycles in the owning module rather than inserting lazy compatibility imports. Run a wheel build with `uv build --wheel` and verify that it includes the `src` package; report a missing build dependency instead of calling an import check a package-build result.
+- [x] Commit the runnable extraction as `refactor: separate data model evaluation and experiment modules`.
 
 ### Task 2: Provide simple prepared inputs and batch loaders
 
@@ -91,7 +93,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
 **Produces:** `PreparedInputs`, `DependencyBatch`, `ResponseBatch`; `load_inputs(config: Mapping[str, Any], *, preprocessing: Mapping[str, Any] | None = None, include_test: bool = False) -> PreparedInputs`; `make_training_loaders(inputs, config, epoch, accelerator) -> tuple[DataLoader, Iterator[ResponseBatch]]`; `make_evaluation_loaders(inputs, config, split, accelerator) -> tuple[DataLoader, DataLoader]`. Loader builders live in `src/training/sampling.py` and `src/data/datasets.py`, respectively. Accelerator may be `None` in CPU unit tests.
 
-- [ ] Define these shared records; `OnlineConditionBatch` keeps its already inspected fields:
+- [x] Define these shared records; `OnlineConditionBatch` keeps its already inspected fields:
 
   ```python
   @dataclass(frozen=True)
@@ -125,16 +127,16 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
   `labels` has `model_id`, `gene_symbol`, `gene_effect`, `residual`; masks use boolean tensors. Add `.to(device, non_blocking=False)` to the batch records, moving nested tensor fields while preserving identifiers. This makes device transfer explicit and testable with Accelerate.
 
-- [ ] Build dependency rows only from finite labels and the selected split; for a fresh run, fit gene means and variable-gene membership on labeled train lines. When `preprocessing` is supplied by resume/evaluation, restore its means/membership without calling fitting functions. Default loading exposes only train/validation labels; only explicit test evaluation uses `include_test=True`. Load cached basal/HVG rows by ModelID and gene order. Reuse the paired 128-cell selection and explicit masks; no trainable features are stored. Preserve the fixed response holdout, using the existing 10%/seed-13 partition only when reconstructing that historical partition, not as a new training seed.
-- [ ] Implement anchor-balanced replay with separate shuffled index pools. Each call draws 16 conditions from each anchor for the initial batch size of 64. Exhausted pools reshuffle and cycle; epoch/rank RNG streams derive from training seed 0. Assert at loader construction that the response batch size is divisible by four. Dependency sampling uses standard distributed full batches; evaluation keeps the tail and gathers actual rows with padding removed.
-- [ ] Write tests constructing a small `FixedSplit` and cached arrays: holdout IDs never appear in training batches; changing validation labels cannot change train means or normalized training inputs; all replay batches have equal anchor counts; held-out response keys never appear; restarting epoch 2 with the same seed/rank reproduces its first batches. Check preserved GeneEffect labels for response-held-out conditions without admitting their response targets.
-- [ ] Make cache opening a read operation: consume the existing array layout and small metadata without hashing raw sources, rebuilding missing data or creating per-rank caches. A missing/mismatched cache reports the concrete path and the preparation command. Keep raw-source building in the preparation tool. Run:
+- [x] Build dependency rows only from finite labels and the selected split; for a fresh run, fit gene means and variable-gene membership on labeled train lines. When `preprocessing` is supplied by resume/evaluation, restore its means/membership without calling fitting functions. Default loading exposes only train/validation labels; only explicit test evaluation uses `include_test=True`. Load cached basal/HVG rows by ModelID and gene order. Reuse the paired 128-cell selection and explicit masks; no trainable features are stored. Preserve the fixed response holdout, using the existing 10%/seed-13 partition only when reconstructing that historical partition, not as a new training seed.
+- [x] Implement anchor-balanced replay with separate shuffled index pools. Each call draws 16 conditions from each anchor for the initial batch size of 64. Exhausted pools reshuffle and cycle; epoch/rank RNG streams derive from training seed 0. Assert at loader construction that the response batch size is divisible by four. Dependency sampling uses standard distributed full batches; evaluation keeps the tail and gathers actual rows with padding removed.
+- [x] Write tests constructing a small `FixedSplit` and cached arrays: holdout IDs never appear in training batches; changing validation labels cannot change train means or normalized training inputs; all replay batches have equal anchor counts; held-out response keys never appear; restarting epoch 2 with the same seed/rank reproduces its first batches. Check preserved GeneEffect labels for response-held-out conditions without admitting their response targets.
+- [x] Make cache opening a read operation: consume the existing array layout and small metadata without hashing raw sources, rebuilding missing data or creating per-rank caches. A missing/mismatched cache reports the concrete path and the preparation command. Keep raw-source building in the preparation tool. Run:
 
   ```bash
   rtk proxy uv run --no-cache --offline --no-sync python -m pytest tests/test_joint_data.py tests/test_joint_sampling.py tests/test_benchmark_split.py tests/test_residual_target.py tests/test_tx1_response_data.py tests/test_tx1_embed_cache.py -q
   ```
 
-- [ ] Commit as `refactor: load fixed inputs and sample balanced response replay`.
+- [x] Commit as `refactor: load fixed inputs and sample balanced response replay`.
 
 ### Task 3: Make the model support direct joint training with seed 0
 
@@ -144,7 +146,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
 **Produces:** `geneeffect_loss(prediction: Tensor, target: Tensor, valid: Tensor) -> Tensor`; `response_terms(predicted: Sequence[Tensor], batch: ResponseBatch) -> dict[str, Tensor]`, with per-condition vectors under `mean_delta_mse` and `energy_distance`; a model constructible without any Stage 1 artifact. Rename the internal `PrecomputedFeatureBatch` to `FeatureBatch` and update consumers because it now represents live features, not a warmup store.
 
-- [ ] Implement the masked regression objective, rejecting non-finite predictions on labeled rows and an empty labeled batch before reducing:
+- [x] Implement the masked regression objective, rejecting non-finite predictions on labeled rows and an empty labeled batch before reducing:
 
   ```python
   return F.huber_loss(
@@ -154,10 +156,10 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
   For `response_terms`, call the retained mean-delta and energy functions on each predicted/observed bag and its control mean. Return per-condition values so training can average a balanced batch and evaluation can aggregate unequal anchor counts correctly.
 
-- [ ] Change the projection constructor default and its constant to 0, pass `config["seeds"]["projection"]` explicitly at construction and pass the collator seed explicitly to STATE forwarding. Remove state/schema/component hash checks from projection and normalizer serialization; retain shapes, finite values and positive scales. Save the actual matrix/statistics in checkpoints.
-- [ ] Initialize a fresh training model through the inspected upstream-checkpoint construction path; initialize the gene adapter and head normally. For resume/evaluation, construct from saved architecture metadata and load the saved state strictly, without needing to reload upstream weights. Remove Stage 1 artifact imports from the model constructor. Extract raw-feature generation from the existing forward before standardization, exposing `GeneEffectE2EModel.condition_features(batch: OnlineConditionBatch) -> FeatureBatch`. The normal forward uses this same method without detaching it.
-- [ ] Implement the bounded startup standardizer fit on rank zero: select up to 32 train rows per line with seed 0, stream all five blocks without gradients, broadcast statistics and restore RNG state. Skip on resume. No full feature dataset is generated or written.
-- [ ] Add direct checks for the changed behavior:
+- [x] Change the projection constructor default and its constant to 0, pass `config["seeds"]["projection"]` explicitly at construction and pass the collator seed explicitly to STATE forwarding. Remove state/schema/component hash checks from projection and normalizer serialization; retain shapes, finite values and positive scales. Save the actual matrix/statistics in checkpoints.
+- [x] Initialize a fresh training model through the inspected upstream-checkpoint construction path; initialize the gene adapter and head normally. For resume/evaluation, construct from saved architecture metadata and load the saved state strictly, without needing to reload upstream weights. Remove Stage 1 artifact imports from the model constructor. Extract raw-feature generation from the existing forward before standardization, exposing `GeneEffectE2EModel.condition_features(batch: OnlineConditionBatch) -> FeatureBatch`. The normal forward uses this same method without detaching it.
+- [x] Implement the bounded startup standardizer fit on rank zero: select up to 32 train rows per line with seed 0, stream all five blocks without gradients, broadcast statistics and restore RNG state. Skip on resume. No full feature dataset is generated or written.
+- [x] Add direct checks for the changed behavior:
 
   ```python
   def test_huber_matches_absolute_geneeffect():
@@ -177,7 +179,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
   ```
 
   Reuse the tiny STATE fixture from `tests/test_geneeffect_e2e.py` for two gradient tests: regression alone updates both backbone/adapter and head; adding a response batch adds reconstruction gradients through the same wrapped model call. Verify that feature generation remains differentiable and normalization sees training rows only.
-- [ ] Run the four affected model/objective test files and Ruff, then commit as `feat: support direct joint objectives and zero-seed initialization`.
+- [x] Run the four affected model/objective test files and Ruff, then commit as `feat: support direct joint objectives and zero-seed initialization`.
 
 ### Task 4: Implement epoch evaluation and the GeneEffect-loss selector
 
@@ -187,7 +189,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
 **Produces:** `EvalResult` below; `evaluate_model(model, inputs: PreparedInputs, config: Mapping[str, Any], *, split: str, accelerator=None) -> EvalResult`; `compose_metrics(geneeffect: Mapping[str, float | int | None], response: Mapping[str, float | int | None], *, response_weight: float, prefix: str) -> dict[str, float | int | None]`; `TrainState`; `record_validation(state: TrainState, metrics: Mapping[str, Any], epoch: int) -> bool`.
 
-- [ ] Define results and checkpoint-selection state:
+- [x] Define results and checkpoint-selection state:
 
   ```python
   @dataclass
@@ -219,9 +221,9 @@ Keep the existing flat test filenames where their behavior survives; add only th
       return improved
   ```
 
-- [ ] Aggregate GeneEffect Huber by loss sum / valid pair count, not batch means. Aggregate each response term within ModelID, then average the four anchors. Add the loss terms using the explicit response weight, without dividing validation loss by replay frequency. In distributed evaluation use Accelerate's supported gather-for-metrics path and test tail padding removal. Do not average rank-level correlation coefficients.
-- [ ] Compute all fields named in design §4: absolute-GeneEffect per-line Pearson/Spearman, variable-gene residual per-gene Pearson/Spearman, RMSE/MAE and coverage. `predictions` contains `model_id`, `gene_symbol`, `gene_effect`, `residual`, `geneeffect_prediction`, `residual_prediction`; `response` contains one row per held-out condition with `model_id`, `gene_symbol` and both response terms. Derive detailed tables and macro metrics from these aligned rows. Serialize undefined scalars as JSON null, retaining undefined counts. Non-finite predicted values on scored rows are errors, not silently missing scores.
-- [ ] Add concrete conflicting-metric and aggregation cases:
+- [x] Aggregate GeneEffect Huber by loss sum / valid pair count, not batch means. Aggregate each response term within ModelID, then average the four anchors. Add the loss terms using the explicit response weight, without dividing validation loss by replay frequency. In distributed evaluation use Accelerate's supported gather-for-metrics path and test tail padding removal. Do not average rank-level correlation coefficients.
+- [x] Compute all fields named in design §4: absolute-GeneEffect per-line Pearson/Spearman, variable-gene residual per-gene Pearson/Spearman, RMSE/MAE and coverage. `predictions` contains `model_id`, `gene_symbol`, `gene_effect`, `residual`, `geneeffect_prediction`, `residual_prediction`; `response` contains one row per held-out condition with `model_id`, `gene_symbol` and both response terms. Derive detailed tables and macro metrics from these aligned rows. Serialize undefined scalars as JSON null, retaining undefined counts. Non-finite predicted values on scored rows are errors, not silently missing scores.
+- [x] Add concrete conflicting-metric and aggregation cases:
 
   ```python
   def test_only_geneeffect_loss_controls_selection():
@@ -241,7 +243,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
   ```
 
   In evaluator tests use residual errors `[0, 0, 2]` split into batches of 2 and 1: Huber must be `1.5 / 3 = 0.5`. For response conditions with anchor means `[1, 3, 5, 7]` and unequal anchor counts, the aggregate must be 4. Verify a constant prediction has a valid Huber loss and undefined correlations without blocking checkpoint selection. A `compose_metrics` example with GeneEffect loss 0.2, response loss 0.8 and weight 0.5 must produce total loss 0.6.
-- [ ] Run the new evaluator/selector tests and retained residual-metric tests. Commit as `feat: validate all loss terms and select minimum GeneEffect loss`.
+- [x] Run the new evaluator/selector tests and retained residual-metric tests. Commit as `feat: validate all loss terms and select minimum GeneEffect loss`.
 
 ### Task 5: Integrate the single trainer, DDP and epoch-boundary resume
 
@@ -251,7 +253,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
 **Produces:** `fit(model, inputs: PreparedInputs, config: Mapping[str, Any], run_dir: Path, accelerator, *, restored: Mapping[str, Any] | None = None) -> TrainState`; `save_checkpoint(path, model, optimizer, state: TrainState, config, preprocessing, accelerator) -> None`; `load_checkpoint(path: Path) -> dict[str, Any]`. Model and optimizer remain ordinary PyTorch/Accelerate objects, not a new trainer framework.
 
-- [ ] Implement the loop around the prepared model, one optimizer and three learning-rate groups. Use these exact control-flow decisions:
+- [x] Implement the loop around the prepared model, one optimizer and three learning-rate groups. Use these exact control-flow decisions:
 
   ```python
   replay = state.global_step % config["train"]["response_interval"] == 0
@@ -278,11 +280,11 @@ Keep the existing flat test filenames where their behavior survives; add only th
   ```
 
   All ranks take the same replay branch. Use FP32 losses and BF16 model autocast, no static-graph flag and no train-time unwrapping. Missing response-step metrics are null, not 0. Check finite losses/gradients; do not require nonzero gradient magnitude as a runtime quality gate.
-- [ ] After the final training batch of each epoch, call `evaluate_model(..., split="val")` exactly once, print/log every scalar loss/metric/count from its result, apply `record_validation`, save `best.pt` if improved and always save `last.pt`. Stop when `bad_epochs >= patience`. Validation's correlation or response metrics cannot postpone this decision. Restore train mode before the next epoch.
-- [ ] Save complete architecture/configuration, model state, ESM2 buffers/order, train gene means, projection, normalization, optimizer, `TrainState`, world size, AMP state and every rank's RNG state. Encode NumPy RNG arrays as tensors/lists and retain ordinary Python/Torch RNG state; load checkpoint data without pickling model classes. Rank zero writes a temporary file and atomically replaces the target. Epoch/rank deterministic loaders restart at `state.next_epoch`, while replay uses restored `global_step`.
-- [ ] Add a tiny two-epoch CPU run using the existing small STATE model and new data fixtures. Spy on the common evaluator to verify exactly two validation calls, all required logged fields and a best checkpoint selected by GeneEffect loss when other metrics disagree. Stop/resume after epoch 1 and compare the next update against the uninterrupted run, including optimizer tensors and replay position.
-- [ ] Add one two-process CPU/Gloo test for each update type against the same effective single-process batch. Use the real model wrapper, batch transfer, optimizer and gather path; use deterministic no-dropout inputs to isolate synchronization. Preserve the normal pytest initialization instead of running a test file as a script. Verify padded evaluation rows are counted once.
-- [ ] Run the new trainer, distributed, resume, evaluator and model tests. Commit as `feat: train jointly with recurring reconstruction and ordinary checkpoints`.
+- [x] After the final training batch of each epoch, call `evaluate_model(..., split="val")` exactly once, print/log every scalar loss/metric/count from its result, apply `record_validation`, save `best.pt` if improved and always save `last.pt`. Stop when `bad_epochs >= patience`. Validation's correlation or response metrics cannot postpone this decision. Restore train mode before the next epoch.
+- [x] Save complete architecture/configuration, model state, ESM2 buffers/order, train gene means, projection, normalization, optimizer, `TrainState`, world size, AMP state and every rank's RNG state. Encode NumPy RNG arrays as tensors/lists and retain ordinary Python/Torch RNG state; load checkpoint data without pickling model classes. Rank zero writes a temporary file and atomically replaces the target. Epoch/rank deterministic loaders restart at `state.next_epoch`, while replay uses restored `global_step`.
+- [x] Add a tiny two-epoch CPU run using the existing small STATE model and new data fixtures. Spy on the common evaluator to verify exactly two validation calls, all required logged fields and a best checkpoint selected by GeneEffect loss when other metrics disagree. Stop/resume after epoch 1 and compare the next update against the uninterrupted run, including optimizer tensors and replay position.
+- [x] Add one two-process CPU/Gloo test for each update type against the same effective single-process batch. Use the real model wrapper, batch transfer, optimizer and gather path; use deterministic no-dropout inputs to isolate synchronization. Preserve the normal pytest initialization instead of running a test file as a script. Verify padded evaluation rows are counted once.
+- [x] Run the new trainer, distributed, resume, evaluator and model tests. Commit as `feat: train jointly with recurring reconstruction and ordinary checkpoints`.
 
 ### Task 6: Connect real preparation, CLI execution and independent testing
 
@@ -292,7 +294,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
 **Produces:** `load_config(path: Path) -> dict[str, Any]`; `prepare_inputs(config: Mapping[str, Any]) -> Path`; `run_training(config_path: Path, *, run_id: str | None, resume: Path | None) -> Path`; `evaluate_checkpoint(checkpoint: Path, *, split: str) -> EvalResult`; the commands below. Require exactly one of `run_id` and `resume`; resume uses its checkpoint's saved configuration and rejects a conflicting supplied config.
 
-- [ ] Put the approved defaults in one config, including explicit seed and selector fields:
+- [x] Put the approved defaults in one config, including explicit seed and selector fields:
 
   ```yaml
   seeds: {train: 0, collator: 0, projection: 0}
@@ -313,10 +315,10 @@ Keep the existing flat test filenames where their behavior survives; add only th
   ```
 
   Add the real input fields from the current config: split, GeneEffect CSV, source registry, Tx1 cache, q_sc cache, ESM2 table/common gene panel, STATE checkpoint/model directory, response-source JSON and response cache. Add `prepared_root: data/geneeffect_joint/v1`. Retain existing external input paths when their files are not being moved; use Task 7's new path for tracked Phase-A provenance. Do not add a Stage 1 checkpoint, seal, lambda-calibration, frozen-feature-store or run-eligibility field. `load_config` checks unknown/missing settings and numeric domains, and requires the stated selector for this training protocol.
-- [ ] `prepare_inputs` runs source/label alignment and response-target assembly once, preserving the common panel and fixed response holdout, and writes small input/cache metadata. It must prepare an ESM2-resolvable union sufficient for dependency and response conditions and report excluded conditions. Cache readers open those arrays without rescanning raw files. Test that invoking a training rank with a missing cache fails without calling raw assembly.
-- [ ] Make `run_training` compose model/data/trainer only. Record revision, seeds, input identifiers and separate `training`/`evaluation` statuses in `run.json`. On an exception save its phase/type/message, retain valid checkpoints and propagate the failure. Do not make successful training depend on testing or export.
-- [ ] `evaluate_checkpoint` loads model and preprocessing from the checkpoint, passes that state to `load_inputs` with `include_test=(split == "test")`, builds the requested loaders and calls `evaluate_model`. It must not call the preprocessing fit functions. Write named prediction columns to Parquet and scalar metrics to JSON; return per-line/per-gene/response tables for ordinary exports. Use `test_` prefixes for test. Re-running evaluation does not alter training status or model weights. Baseline fitting uses `src.baselines.residual` on train only and exports against the same panel through `src.experiments.baselines`.
-- [ ] Implement thin command dispatch with no separate qualification ladder:
+- [x] `prepare_inputs` runs source/label alignment and response-target assembly once, preserving the common panel and fixed response holdout, and writes small input/cache metadata. It must prepare an ESM2-resolvable union sufficient for dependency and response conditions and report excluded conditions. Cache readers open those arrays without rescanning raw files. Test that invoking a training rank with a missing cache fails without calling raw assembly.
+- [x] Make `run_training` compose model/data/trainer only. Record revision, seeds, input identifiers and separate `training`/`evaluation` statuses in `run.json`. On an exception save its phase/type/message, retain valid checkpoints and propagate the failure. Do not make successful training depend on testing or export.
+- [x] `evaluate_checkpoint` loads model and preprocessing from the checkpoint, passes that state to `load_inputs` with `include_test=(split == "test")`, builds the requested loaders and calls `evaluate_model`. It must not call the preprocessing fit functions. Write named prediction columns to Parquet and scalar metrics to JSON; return per-line/per-gene/response tables for ordinary exports. Use `test_` prefixes for test. Re-running evaluation does not alter training status or model weights. Baseline fitting uses `src.baselines.residual` on train only and exports against the same panel through `src.experiments.baselines`.
+- [x] Implement thin command dispatch with no separate qualification ladder:
 
   ```bash
   hpc/run.sh prepare configs/geneeffect_joint.yaml
@@ -328,8 +330,8 @@ Keep the existing flat test filenames where their behavior survives; add only th
   ```
 
   On the H20 environment, use the existing `.venv-tx1/bin/python` (or explicit `PYTHON_BIN`) and its `-m accelerate.commands.launch --module src.train` entry. Detect visible GPUs through that environment's Torch; respect its visibility mask. `prepare` is single-process, `train` launches the detected workers, and `test` is an ordinary checkpoint evaluation invocation. Help must work without importing models or accessing GPUs. Do not copy the reference repository's unrelated SSH endpoint, fixed checkout or model-family dispatch.
-- [ ] Test parser conflicts, help, dispatch argument preservation, no hidden raw-data rebuild and independent failure states. Use fake launcher executables to inspect arguments without launching GPUs. In the tiny end-to-end fixture, train, reload, evaluate and deliberately fail the export: `training` stays completed, `evaluation` records failure, and a second export succeeds without optimizer steps. Run the three new CLI/integration test files plus moved preparation tests.
-- [ ] Commit as `feat: expose prepare train and checkpoint test commands`.
+- [x] Test parser conflicts, help, dispatch argument preservation, no hidden raw-data rebuild and independent failure states. Use fake launcher executables to inspect arguments without launching GPUs. In the tiny end-to-end fixture, train, reload, evaluate and deliberately fail the export: `training` stays completed, `evaluation` records failure, and a second export succeeds without optimizer steps. Run the three new CLI/integration test files plus moved preparation tests.
+- [x] Commit as `feat: expose prepare train and checkpoint test commands`.
 
 ### Task 7: Retire the old runtime and migrate tracked results and documentation
 
@@ -337,11 +339,11 @@ Keep the existing flat test filenames where their behavior survives; add only th
 
 **Interfaces:** All active Python commands/imports use `src.*`. Old commands resolve in the historical `e6341d2` snapshot. Model, data and experiment types are the concrete types defined in Tasks 1–6, with no re-export shim.
 
-- [ ] Remove obsolete warmup, sealed-artifact and gradient-calibration code/tests after confirming their useful numerical behavior is covered in the retained/new tests. Retain any still-used gene-order, masked-loss, input-semantics, DDP or checkpoint-key checks in their final owner. Do not delete a test merely because it fails after a move.
-- [ ] Move the four tracked Phase-A files byte-for-byte to `configs/benchmarks/provenance/phase_a_tx1_20260724/`. Move the two Stage 0 JSON files and its note to `docs/results/exp13_stage0/`, naming the note `README.md`. Move the Stage 2 note into the existing `docs/results/exp13_stage2_full/README.md`. Record pre/post content hashes for this local file-move verification only; do not install those hashes as runtime gates.
-- [ ] Update active consumers and links, including all four retained historical preparation commands. Update `.gitignore` with `/outputs/` and the exact new small-provenance CSV exceptions, removing obsolete `results/` exceptions. Preserve embedded historical manifest paths/values. Leave ignored datasets, existing caches, archive files and remote runs in place.
-- [ ] Update the current blueprint/protocol to describe the new objective and **minimum validation GeneEffect loss** selector; retain per-gene residual correlations as scientific reporting metrics. Label old Exp13 results/protocol as historical, state that the new run is unexecuted, and distinguish it from the separate SL protocol. Do not copy the old seed into any new training default.
-- [ ] Inspect the final change and run the full retained/new suite once after integration:
+- [x] Remove obsolete warmup, sealed-artifact and gradient-calibration code/tests after confirming their useful numerical behavior is covered in the retained/new tests. Retain any still-used gene-order, masked-loss, input-semantics, DDP or checkpoint-key checks in their final owner. Do not delete a test merely because it fails after a move.
+- [x] Move the four tracked Phase-A files byte-for-byte to `configs/benchmarks/provenance/phase_a_tx1_20260724/`. Move the two Stage 0 JSON files and its note to `docs/results/exp13_stage0/`, naming the note `README.md`. Move the Stage 2 note into the existing `docs/results/exp13_stage2_full/README.md`. Record pre/post content hashes for this local file-move verification only; do not install those hashes as runtime gates.
+- [x] Update active consumers and links, including all four retained historical preparation commands. Update `.gitignore` with `/outputs/` and the exact new small-provenance CSV exceptions, removing obsolete `results/` exceptions. Preserve embedded historical manifest paths/values. Leave ignored datasets, existing caches, archive files and remote runs in place.
+- [x] Update the current blueprint/protocol to describe the new objective and **minimum validation GeneEffect loss** selector; retain per-gene residual correlations as scientific reporting metrics. Label old Exp13 results/protocol as historical, state that the new run is unexecuted, and distinguish it from the separate SL protocol. Do not copy the old seed into any new training default.
+- [x] Inspect the final change and run the full retained/new suite once after integration:
 
   ```bash
   rtk proxy uv run --no-cache --offline --no-sync python -m pytest tests -q
@@ -352,7 +354,7 @@ Keep the existing flat test filenames where their behavior survives; add only th
   ```
 
   Review search hits by role: no retired namespace, artifact gate or old seed remains in the active route. Historical prepared inputs or deliberately tested non-default seeds are not rewritten to satisfy a textual zero-hit quota. Verify wheel imports outside the source checkout, all active CLI help commands and local documentation links. Report skipped real-asset tests and any unexecuted GPU path explicitly.
-- [ ] Commit the completed cutover as `refactor: retire staged Exp13 runtime and organize results` and deliver the changed paths, test outcomes and exact later launch commands. Do not launch them as part of this plan.
+- [x] Commit the completed cutover as `refactor: retire staged Exp13 runtime and organize results` and deliver the changed paths, test outcomes and exact later launch commands. Do not launch them as part of this plan.
 
 ## Plan self-review and execution handoff
 

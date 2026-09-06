@@ -61,21 +61,8 @@ def _precomputed(batch: int = 3) -> FeatureBatch:
     )
 
 
-def test_frozen_warmup_updates_head_only_and_keeps_backbone_eval() -> None:
+def test_online_gradient_reaches_trainable_backbone() -> None:
     model = _model()
-    model.freeze_backbone()
-    model.train()
-    assert not model.backbone.training
-    loss = model.forward_precomputed(_precomputed()).square().mean()
-    loss.backward()
-    model.assert_frozen_backbone_clean()
-    assert any(parameter.grad is not None for parameter in model.head.parameters())
-
-
-def test_unfreeze_enables_online_gradient_to_backbone() -> None:
-    model = _model()
-    model.freeze_backbone()
-    model.unfreeze_backbone()
     model.train()
     controls = tuple(torch.randn(4, 2000) for _ in range(2))
     batch = OnlineConditionBatch(
