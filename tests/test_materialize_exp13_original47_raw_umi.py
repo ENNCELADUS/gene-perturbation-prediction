@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from scripts.materialize_exp13_original47_raw_umi import (
+from src.data.prepare.materialize_exp13_original47_raw_umi import (
     _map_symbols_to_ensembl,
     _stable_rank,
     _update_top_cells,

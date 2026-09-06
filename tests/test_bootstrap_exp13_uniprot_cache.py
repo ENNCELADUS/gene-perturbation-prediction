@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripts.bootstrap_exp13_uniprot_cache import build_cache
+from src.data.prepare.bootstrap_exp13_uniprot_cache import build_cache
 
 
 def _alias(accession: str, primary_symbol: str, sequence: str) -> dict[str, str]:
@@ -28,9 +28,7 @@ def _write_source_manifest(tmp_path: Path, artifacts: dict[str, Path]) -> Path:
                 "taxonomy_id": 9606,
                 "uniprot_query": "reviewed:true AND organism_id:9606",
                 "artifacts": {
-                    name: {
-                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest()
-                    }
+                    name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
                     for name, path in artifacts.items()
                 },
             }
@@ -59,9 +57,7 @@ def test_build_cache_resolves_primary_sequence_and_explicit_alias(
             "Gene Names (primary)": ["DIRECT", "NEW", "OTHER", "OTHER2"],
         }
     ).to_csv(tmp_path / "identities.tsv", sep="\t", index=False)
-    (tmp_path / "legacy.json").write_text(
-        json.dumps({"OLD": "MB", "AMBIG": "MB"})
-    )
+    (tmp_path / "legacy.json").write_text(json.dumps({"OLD": "MB", "AMBIG": "MB"}))
     (tmp_path / "aliases.json").write_text(
         json.dumps(
             {
@@ -101,9 +97,7 @@ def test_build_cache_resolves_primary_sequence_and_explicit_alias(
 
 
 def test_build_cache_rejects_valid_alias_with_wrong_sequence(tmp_path: Path) -> None:
-    pd.DataFrame({"gene_symbol": ["OLD"]}).to_csv(
-        tmp_path / "union.csv", index=False
-    )
+    pd.DataFrame({"gene_symbol": ["OLD"]}).to_csv(tmp_path / "union.csv", index=False)
     pd.DataFrame(
         {
             "Entry": ["P2", "P3"],

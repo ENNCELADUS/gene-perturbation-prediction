@@ -1,7 +1,7 @@
 """Tests for the R1 DepMap GeneEffect residual baseline ladder CLI.
 
 All fixtures are synthetic CSVs/JSON written to ``tmp_path`` -- no
-gitignored data dependency. See ``aivc_model.residual_ladder`` for the
+gitignored data dependency. See ``src.baselines.residual`` for the
 delta-only prediction convention and the leave-one-out centering artifact
 these tests specifically guard against: a prediction centered by a
 fold-*varying* mean (mu_hat_g^(-c)) is an exact affine function of the very
@@ -20,15 +20,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import aivc_model.residual_ladder as residual_ladder
-from aivc_model.residual_ladder import (
-    COPY_PRIOR,
-    GENE_MEAN,
-    _build_fold_targets,
-)
-from aivc_model.residual_metrics import score_predictions
-from aivc_model.residual_target import fit_gene_means
-from scripts.run_r1_residual_ladder import main
+import src.baselines.residual as residual_ladder
+from src.baselines.residual import COPY_PRIOR, GENE_MEAN, _build_fold_targets
+from src.eval.metrics import score_predictions
+from src.data.residual_target import fit_gene_means
+from src.experiments.baselines import main
 
 _BASE_LINES = [f"L{i}" for i in range(6)]
 _BASE_GENES = [f"G{i}" for i in range(12)]
@@ -668,9 +664,7 @@ def test_fixed_split_sparse_train_labels_keep_exact_baseline_coverage(
                 {
                     "model_id": line,
                     "gene_symbol": gene,
-                    "gene_effect": -1.0
-                    + gene_index
-                    + 0.25 * context_value[line],
+                    "gene_effect": -1.0 + gene_index + 0.25 * context_value[line],
                 }
             )
     labels = pd.DataFrame(rows)
@@ -741,9 +735,7 @@ def test_fixed_split_fits_one_pca_per_view_and_one_ridge_per_gene(
     genes = [f"G{i}" for i in range(20)]
     labels = _labels_no_signal(lines, genes)
     signal = {model_id: float(index) for index, model_id in enumerate(lines)}
-    context_csv = _write_context_csv(
-        tmp_path / "ctx.csv", lines, {"signal": signal}
-    )
+    context_csv = _write_context_csv(tmp_path / "ctx.csv", lines, {"signal": signal})
     split_json = _write_split_json(tmp_path / "split.json", train, val, test)
     fit_counts = {"pca": 0, "ridge": 0}
     original_pca_fit = residual_ladder.PCA.fit

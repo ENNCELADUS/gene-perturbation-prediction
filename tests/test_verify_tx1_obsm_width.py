@@ -6,11 +6,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from scripts.verify_tx1_obsm_width import (
-    _TorchBertPadding,
-    tiny_dmso_adata,
-    validate_load_result,
-)
+from src.model.tx1 import _TorchBertPadding, validate_load_result
+from src.data.prepare.verify_tx1_obsm_width import tiny_dmso_adata
 
 
 def test_tiny_dmso_adata_keeps_raw_counts_and_required_axes(tmp_path: Path) -> None:

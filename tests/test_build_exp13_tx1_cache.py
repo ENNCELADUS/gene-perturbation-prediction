@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pandas as pd
 
-import scripts.build_exp13_tx1_cache as cli
-from aivc_model.gene_splits import sha256_file
+import src.data.prepare.build_exp13_tx1_cache as cli
+from src.data.gene_splits import sha256_file
 
 
 def test_verify_binds_registry_source_bytes(tmp_path: Path, monkeypatch) -> None:

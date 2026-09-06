@@ -10,7 +10,7 @@ import pytest
 from scipy import sparse
 from scipy.io import mmwrite
 
-from scripts.prepare_cell_line_atlas_raw_umi import run
+from src.data.prepare.prepare_cell_line_atlas_raw_umi import run
 
 
 def _fixture(tmp_path: Path) -> tuple[Path, Path]:

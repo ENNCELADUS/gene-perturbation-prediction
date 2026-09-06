@@ -1,6 +1,6 @@
 import numpy as np
 
-from aivc_model.gene_embeddings import load_esm2_embeddings
+from src.data.embeddings import load_esm2_embeddings
 
 
 def _write_npz(path):

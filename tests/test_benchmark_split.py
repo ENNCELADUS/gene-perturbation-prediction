@@ -1,4 +1,4 @@
-"""Tests for aivc_model.benchmark_split -- the Exp13 226-line fit/train guard.
+"""Tests for src.data.splits -- the Exp13 226-line fit/train guard.
 
 Replaces ``tx1_geneeffect_data.assert_training_role``'s D6 guard, which
 checked the retired Phase-A ``train_head``/``test`` role column. This
@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from aivc_model.benchmark_split import assert_fit_eligible, load_geneeffect_226_split
-from aivc_model.residual_ladder import FixedSplit
+from src.data.splits import assert_fit_eligible, load_geneeffect_226_split
+from src.data.splits import FixedSplit
 
 _SPLIT = FixedSplit(
     train=("ACH-TRAIN-1", "ACH-TRAIN-2", "ACH-PC9", "ACH-HELA"),

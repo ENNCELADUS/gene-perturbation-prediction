@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from aivc_model.geneeffect_data import load_exp13_split, load_source_registry
-from scripts.build_exp13_basal_source_registry import build_registry
+from src.data.geneeffect import load_exp13_split, load_source_registry
+from src.data.prepare.build_exp13_basal_source_registry import build_registry
 
 
 SPLIT_PATH = Path("configs/benchmarks/cell_line_geneeffect_226_split.json")

@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import torch
 
-from aivc_model.geneeffect_stage2_runner import (
+from src.experiments.exp13_legacy.geneeffect_stage2_runner import (
     GeneEffectSupervisionCache,
     ResponseAssembly,
     Stage2Preflight,
@@ -26,9 +26,9 @@ from aivc_model.geneeffect_stage2_runner import (
     _authenticated_target_esm2_sha256,
     _formal_distributed_runtime,
 )
-from aivc_model.stage1_artifact import sha256_file
-from aivc_model.stage1_config import Stage1ObjectiveConfig
-from aivc_model.stage2_artifacts import Stage2RunLayout
+from src.experiments.exp13_legacy.stage1_artifact import sha256_file
+from src.experiments.exp13_legacy.stage1_config import Stage1ObjectiveConfig
+from src.experiments.exp13_legacy.stage2_artifacts import Stage2RunLayout
 
 
 def _write(path: Path, content: str) -> Path:
@@ -69,8 +69,8 @@ def test_bundle_accepts_absolute_seal_for_relative_stage1_config(
 def test_construct_stage2_backbone_uses_minimal_checkpoint_interface(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
-    import aivc_model.tx1_predicted_response as predicted_response
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.tx1_predicted_response as predicted_response
 
     checkpoint = _write(tmp_path / "best" / "pytorch_model.bin", "checkpoint")
     state_hparams = _write(tmp_path / "state.ckpt", "hparams")
@@ -204,7 +204,7 @@ def _feature_store_fixture(tmp_path: Path, gene_count: int = 19):
 def test_frozen_feature_generation_bounds_live_prediction_bags_by_chunk(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     state, data, _source = _feature_store_fixture(tmp_path, gene_count=41)
     live = 0
@@ -251,7 +251,7 @@ def test_frozen_feature_generation_bounds_live_prediction_bags_by_chunk(
 def test_frozen_feature_generation_never_claims_post_preflight_source_hash(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     state, data, source = _feature_store_fixture(tmp_path, gene_count=2)
 
@@ -281,7 +281,7 @@ def test_frozen_feature_generation_never_claims_post_preflight_source_hash(
 def test_import_frozen_feature_store_verifies_and_hardlinks_atomically(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     source = tmp_path / "old" / "condition_features" / "stage1_frozen"
     source.mkdir(parents=True)
@@ -320,7 +320,7 @@ def test_import_frozen_feature_store_verifies_and_hardlinks_atomically(
 
 
 def test_stage2_cli_requires_run_id_for_frozen_store_reuse(tmp_path: Path) -> None:
-    from scripts.train_geneeffect_e2e import parse_args
+    from src.experiments.exp13_legacy.train_geneeffect_e2e import parse_args
 
     with pytest.raises(SystemExit):
         parse_args(
@@ -372,7 +372,9 @@ def _recovery_fixture(tmp_path: Path):
     state = SimpleNamespace(config=config)
     runtime = {"world_size": 2}
     source = tmp_path / "failed-run"
-    runner = pytest.importorskip("aivc_model.geneeffect_stage2_runner")
+    runner = pytest.importorskip(
+        "src.experiments.exp13_legacy.geneeffect_stage2_runner"
+    )
     runner.atomic_write_json(source / "config_snapshot.json", snapshot)
     runner.atomic_write_json(
         source / "failure.json",
@@ -385,9 +387,7 @@ def _recovery_fixture(tmp_path: Path):
             "distributed_runtime": runtime,
         },
     )
-    _write(
-        source / "cell_line_geneeffect_226_split.json", split.read_text()
-    )
+    _write(source / "cell_line_geneeffect_226_split.json", split.read_text())
     _write(
         source / "condition_features/stage1_frozen/manifest.json",
         '{"stage":"stage1_frozen"}',
@@ -429,7 +429,7 @@ def _recovery_fixture(tmp_path: Path):
         )
         _write(
             training / "train_log.csv",
-            "epoch,validation_macro_per_gene_spearman\n" f"0,{metric}\n",
+            f"epoch,validation_macro_per_gene_spearman\n0,{metric}\n",
         )
     return runner, source, state, runtime
 
@@ -478,7 +478,7 @@ def test_finalization_recovery_rejects_wrong_failure_phase(tmp_path: Path) -> No
 def test_finalization_recovery_strict_loads_joint_checkpoint(
     tmp_path: Path,
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     source = torch.nn.Linear(2, 1)
     checkpoint = tmp_path / "e2e_state.pt"
@@ -499,7 +499,7 @@ def test_finalization_recovery_strict_loads_joint_checkpoint(
 def test_preflight_loads_contract_and_verifies_both_caches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     files = {
         name: _write(tmp_path / name, "asset")
@@ -686,7 +686,7 @@ def test_preflight_loads_contract_and_verifies_both_caches(
 def test_full_run_records_failure_without_completion(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     class FakeAccelerator:
         num_processes = 1
@@ -837,7 +837,7 @@ def test_residual_target_artifact_persists_recomputable_contract(
     tmp_path: Path,
 ) -> None:
     import hashlib
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     genes = ("G1", "G2")
     model_ids = ("T1", "V1", "E1")
@@ -908,7 +908,7 @@ def test_full_run_rejects_unsafe_run_id_before_preflight(tmp_path: Path) -> None
 def test_full_run_rejects_nonformal_topology_before_preflight(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     class FakeAccelerator:
         num_processes = 1
@@ -951,7 +951,7 @@ def test_full_run_rejects_nonformal_topology_before_preflight(
 def test_formal_runtime_records_auto_detected_topology(
     monkeypatch: pytest.MonkeyPatch, world_size: int
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     accelerator = SimpleNamespace(
         num_processes=world_size,
@@ -1002,7 +1002,7 @@ def test_formal_runtime_records_auto_detected_topology(
 def test_stage2_accelerator_declares_static_unused_parameter_graph(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     captured: dict[str, object] = {}
     sentinel = object()
@@ -1031,7 +1031,7 @@ def test_formal_runtime_rejects_unregistered_auto_detected_world_size() -> None:
 
 
 def test_state_window_must_match_configured_cell_set_len() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     backbone = SimpleNamespace(
         state_adapter=SimpleNamespace(state_model=SimpleNamespace(cell_sentence_len=64))
@@ -1042,7 +1042,7 @@ def test_state_window_must_match_configured_cell_set_len() -> None:
 
 
 def test_calibration_closures_require_joint_train_mode() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     class CalibrationModel(torch.nn.Module):
         def __init__(self) -> None:
@@ -1078,7 +1078,7 @@ def test_calibration_closures_require_joint_train_mode() -> None:
 
 
 def test_long_rank_zero_action_removes_success_status(tmp_path: Path) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     class FakeAccelerator:
         num_processes = 1
@@ -1108,7 +1108,7 @@ def _response_assembly_case(
     monkeypatch: pytest.MonkeyPatch,
     before_metrics: dict[str, object],
 ) -> tuple[SimpleNamespace, SimpleNamespace, dict[str, object]]:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     cache = tmp_path / "response"
     _write(cache / "response_targets" / "manifest.json", "{}")
@@ -1293,7 +1293,7 @@ def test_response_assembly_rejects_invalid_heldout_model_loss(
 
 
 def test_response_weights_preserve_anchor_mass_under_unequal_gene_counts() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     counts = {"ACH-000001": 1, "ACH-000002": 2, "ACH-000003": 3, "ACH-000004": 4}
     weights = {model_id: float(index) for index, model_id in enumerate(counts, 1)}
@@ -1324,10 +1324,8 @@ def test_response_weights_preserve_anchor_mass_under_unequal_gene_counts() -> No
 def test_response_lineage_pins_cache_targets_membership_and_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
-    from aivc_model.tx1_response_gene_bags_cache import (
-        write_response_targets_cache,
-    )
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
+    from src.data.response_cache import write_response_targets_cache
 
     fingerprint = "f" * 64
     cache = tmp_path / "cache"
@@ -1432,10 +1430,8 @@ def test_response_lineage_pins_cache_targets_membership_and_sources(
 def test_response_lineage_rejects_cache_target_tamper(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
-    from aivc_model.tx1_response_gene_bags_cache import (
-        write_response_targets_cache,
-    )
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
+    from src.data.response_cache import write_response_targets_cache
 
     fingerprint = "f" * 64
     cache = tmp_path / "cache"
@@ -1502,7 +1498,7 @@ def test_response_lineage_rejects_cache_target_tamper(
 
 
 def test_paired_sampling_uses_barcode_hash_order_and_deterministic_padding() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     obs = pd.DataFrame(index=["cell-c", "cell-a", "cell-b"])
     first, metadata = runner._paired_sample_indices("ACH-000001", obs, count=5)
@@ -1571,7 +1567,7 @@ def _dependency_toctou_state(tmp_path: Path) -> tuple[SimpleNamespace, Path, Pat
 def test_dependency_load_rejects_tx1_mutation_after_precheck(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     state, tx1_line, _ = _dependency_toctou_state(tmp_path)
     monkeypatch.setattr(runner, "_authenticated_target_esm2_sha256", lambda state: "x")
@@ -1602,7 +1598,7 @@ def test_dependency_load_rejects_tx1_mutation_after_precheck(
 def test_dependency_load_rejects_qsc_mutation_after_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     state, _, q_sc_path = _dependency_toctou_state(tmp_path)
     monkeypatch.setattr(runner, "_authenticated_target_esm2_sha256", lambda state: "x")
@@ -1649,8 +1645,10 @@ def test_dependency_load_rejects_qsc_mutation_after_read(
 
 
 def test_response_batch_device_helper_moves_every_tensor() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
-    from aivc_model.geneeffect_training import ResponseSupervisionBatch
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
+    from src.experiments.exp13_legacy.geneeffect_training import (
+        ResponseSupervisionBatch,
+    )
 
     batch = ResponseSupervisionBatch(
         controls_tx1=(torch.ones(2, 4),),
@@ -1689,16 +1687,12 @@ def test_registered_baselines_cover_every_required_method() -> None:
         if model_id not in unlabeled_train
         for gene_index, gene in enumerate(genes)
     ]
-    next(
-        row
-        for row in rows
-        if row["model_id"] == "T4" and row["gene_symbol"] == "G1"
-    )["gene_effect"] = np.nan
-    next(
-        row
-        for row in rows
-        if row["model_id"] == "V1" and row["gene_symbol"] == "G1"
-    )["gene_effect"] = np.nan
+    next(row for row in rows if row["model_id"] == "T4" and row["gene_symbol"] == "G1")[
+        "gene_effect"
+    ] = np.nan
+    next(row for row in rows if row["model_id"] == "V1" and row["gene_symbol"] == "G1")[
+        "gene_effect"
+    ] = np.nan
     state = SimpleNamespace(
         residual_data=SimpleNamespace(targets=SimpleNamespace(long=pd.DataFrame(rows))),
         copy_prior=pd.Series({gene: float(index) for index, gene in enumerate(genes)}),
@@ -1740,7 +1734,7 @@ def test_registered_baselines_cover_every_required_method() -> None:
 def test_split_factories_do_not_materialize_batches_eagerly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     split_path = _write(tmp_path / "split.json", "{}")
     labels_path = _write(tmp_path / "labels.csv", "x")
@@ -1790,7 +1784,7 @@ def test_split_factories_do_not_materialize_batches_eagerly(
 def test_warmup_factories_gather_device_supervision_without_legacy_transfer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     split_path = _write(tmp_path / "split.json", "{}")
     labels_path = _write(tmp_path / "labels.csv", "x")
@@ -1908,7 +1902,7 @@ def test_warmup_factories_gather_device_supervision_without_legacy_transfer(
 
 
 def test_validation_batches_preserve_gene_order_without_g_var_anchors() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     data = SimpleNamespace(
         genes=tuple(f"G{index}" for index in range(7)),
@@ -1926,7 +1920,7 @@ def test_validation_batches_preserve_gene_order_without_g_var_anchors() -> None:
 def test_epoch_sharding_uses_explicit_accelerator_topology(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     row = SimpleNamespace(
         gene_index=0, context_indices=(0, 1, 2), label_mask=(True, True, True)
@@ -1970,8 +1964,11 @@ def test_epoch_sharding_uses_explicit_accelerator_topology(
 def test_epoch_sharding_retains_zero_objective_padding(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
-    from aivc_model.geneeffect_sampler import GeneContextBatchIndex, GeneContextRow
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
+    from src.experiments.exp13_legacy.geneeffect_sampler import (
+        GeneContextBatchIndex,
+        GeneContextRow,
+    )
 
     row = GeneContextRow(
         gene_index=0, context_indices=(0, 1, 2), label_mask=(True, True, True)
@@ -1998,7 +1995,7 @@ def test_epoch_sharding_retains_zero_objective_padding(
 def test_metric_json_normalizes_undefined_but_rejects_infinity(
     tmp_path: Path,
 ) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     normalized = runner._json_metrics({"undefined": float("nan")})
     assert normalized == {"undefined": None}
@@ -2010,7 +2007,7 @@ def test_metric_json_normalizes_undefined_but_rejects_infinity(
 
 
 def test_response_metrics_forbid_historical_improvement_claim() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     payload = runner._response_metric_record(
         {"model_loss": 0.5},
@@ -2044,7 +2041,7 @@ def test_response_metrics_forbid_historical_improvement_claim() -> None:
 
 
 def test_complete_sentinel_must_match_active_run(tmp_path: Path) -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     layout = Stage2RunLayout(tmp_path)
     _write(tmp_path / "complete.json", '{"status":"complete","run_id":"trial"}')
@@ -2055,7 +2052,7 @@ def test_complete_sentinel_must_match_active_run(tmp_path: Path) -> None:
 
 
 def test_model_and_baseline_coverage_must_match_exactly() -> None:
-    import aivc_model.geneeffect_stage2_runner as runner
+    import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
 
     model = pd.DataFrame(
         [("val", "V1", "G1")], columns=["split", "model_id", "gene_symbol"]

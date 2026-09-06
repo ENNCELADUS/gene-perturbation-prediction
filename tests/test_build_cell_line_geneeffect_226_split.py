@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from aivc_model.residual_ladder import run_r1_ladder
-from scripts.run_r1_residual_ladder import _load_split
+from src.baselines.residual import run_r1_ladder
+from src.experiments.baselines import _load_split
 
 
 ROOT = Path(__file__).resolve().parents[1]

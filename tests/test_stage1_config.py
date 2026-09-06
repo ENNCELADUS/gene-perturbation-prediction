@@ -56,7 +56,7 @@ def _write(tmp_path: Path, text: str) -> Path:
 
 
 def test_tracked_yaml_loads_registered_objective() -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     cfg = load_stage1_config(TRACKED_YAML)
     assert cfg.train.max_epochs >= 1
@@ -64,7 +64,7 @@ def test_tracked_yaml_loads_registered_objective() -> None:
 
 
 def test_valid_config_loads(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     p = _write(tmp_path, VALID_YAML)
     cfg = load_stage1_config(p)
@@ -87,7 +87,7 @@ def test_valid_config_loads(tmp_path: Path) -> None:
 
 
 def test_required_anchor_metrics_must_include_both_metrics(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     incomplete = VALID_YAML.replace(
         "[mean_delta_mse, energy_distance]", "[mean_delta_mse]"
@@ -97,7 +97,7 @@ def test_required_anchor_metrics_must_include_both_metrics(tmp_path: Path) -> No
 
 
 def test_unknown_top_level_key_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     p = _write(tmp_path, VALID_YAML + "bogus_top_level: 1\n")
     with pytest.raises(ValueError, match="bogus_top_level"):
@@ -109,7 +109,7 @@ def test_misspelled_key_inside_train_raises_instead_of_taking_default(
 ) -> None:
     """The CLAUDE.md failure mode this loader must not have: a typo'd YAML key
     silently falling back to a dataclass default instead of raising."""
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("max_epochs: 50", "max_epocsh: 50")
     p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
@@ -118,7 +118,7 @@ def test_misspelled_key_inside_train_raises_instead_of_taking_default(
 
 
 def test_missing_required_key_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("  patience: 5\n", "")
     p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
@@ -127,7 +127,7 @@ def test_missing_required_key_raises(tmp_path: Path) -> None:
 
 
 def test_anchor_weights_not_summing_to_one_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_objective = VALID_OBJECTIVE_BLOCK.replace("ACH-000551: 0.25", "ACH-000551: 0.5")
     p = _write(tmp_path, VALID_TRAIN_BLOCK + bad_objective)
@@ -136,7 +136,7 @@ def test_anchor_weights_not_summing_to_one_raises(tmp_path: Path) -> None:
 
 
 def test_empty_anchor_weights_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_objective = """\
 objective:
@@ -149,7 +149,7 @@ objective:
 
 
 def test_negative_anchor_weight_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_objective = VALID_OBJECTIVE_BLOCK.replace(
         "ACH-000551: 0.25", "ACH-000551: -0.25"
@@ -160,7 +160,7 @@ def test_negative_anchor_weight_raises(tmp_path: Path) -> None:
 
 
 def test_max_bag_of_one_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("max_bag: 128", "max_bag: 1")
     p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
@@ -169,7 +169,7 @@ def test_max_bag_of_one_raises(tmp_path: Path) -> None:
 
 
 def test_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace("gene_batch_size: 32", "gene_batch_size: 0")
     p = _write(tmp_path, bad_train + VALID_OBJECTIVE_BLOCK)
@@ -178,7 +178,7 @@ def test_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
 
 
 def test_validation_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace(
         "validation_gene_batch_size: 1", "validation_gene_batch_size: 0"
@@ -189,7 +189,7 @@ def test_validation_gene_batch_size_of_zero_raises(tmp_path: Path) -> None:
 
 
 def test_both_loss_weights_zero_raises(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     bad_train = VALID_TRAIN_BLOCK.replace(
         "w_mean_delta: 1.0", "w_mean_delta: 0.0"
@@ -200,7 +200,7 @@ def test_both_loss_weights_zero_raises(tmp_path: Path) -> None:
 
 
 def test_source_sha256_matches_independently_computed_hash(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     p = _write(tmp_path, VALID_YAML)
     cfg = load_stage1_config(p)
@@ -210,7 +210,7 @@ def test_source_sha256_matches_independently_computed_hash(tmp_path: Path) -> No
 
 
 def test_objective_payload_is_json_serializable(tmp_path: Path) -> None:
-    from aivc_model.stage1_config import load_stage1_config
+    from src.experiments.exp13_legacy.stage1_config import load_stage1_config
 
     p = _write(tmp_path, VALID_YAML)
     cfg = load_stage1_config(p)

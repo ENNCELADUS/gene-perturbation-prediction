@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from aivc_model.stage2_config import load_stage2_config
+from src.experiments.exp13_legacy.stage2_config import load_stage2_config
 
 
 TRACKED_YAML = Path("configs/experiments/13_geneeffect_226/stage2_e2e.yaml")

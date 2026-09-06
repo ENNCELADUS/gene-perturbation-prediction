@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.register_tx1_source import (
+from src.data.prepare.register_tx1_source import (
     EXPECTED_WEIGHT_BYTES,
     EXPECTED_WEIGHT_SHA256,
     MODEL_REVISION,

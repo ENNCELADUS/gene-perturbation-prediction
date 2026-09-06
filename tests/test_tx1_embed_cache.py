@@ -1,4 +1,4 @@
-"""Tests for src/aivc_model/tx1_embed_cache.py -- Tx1 basal embedding cache.
+"""Tests for src/data/tx1_cache.py -- Tx1 basal embedding cache.
 
 No GPU and no real Tx1/Tahoe/Perturb-seq data exist on this machine (Wave 1
 Phase B Global Constraint 6), so every test substitutes a deterministic stub
@@ -22,11 +22,11 @@ import pandas as pd
 import pytest
 from scipy import sparse
 
-import aivc_model.tx1_embed_cache as tx1_embed_cache_module
-import scripts.build_tx1_basal_embeddings as build_tx1_basal_embeddings_module
-from aivc_model.gene_splits import sha256_file
-from aivc_model.tx1_basal import load_line_manifest
-from aivc_model.tx1_embed_cache import (
+import src.data.tx1_cache as tx1_embed_cache_module
+import src.data.prepare.build_tx1_basal_embeddings as build_tx1_basal_embeddings_module
+from src.data.gene_splits import sha256_file
+from src.data.basal import load_line_manifest
+from src.data.tx1_cache import (
     EMBEDDING_WIDTH,
     MODEL_LABEL,
     REJECTED_MODEL_LABEL,
@@ -49,7 +49,7 @@ from conftest import write_tx1_perturbseq_h5ad as _write_perturbseq_h5ad
 from conftest import write_tx1_shard as _write_shard
 from conftest import write_tx1_xatlas_gene_metadata as _write_xatlas_gene_metadata
 from conftest import write_tx1_xatlas_shard as _write_xatlas_shard
-from scripts.build_tx1_basal_embeddings import (
+from src.data.prepare.build_tx1_basal_embeddings import (
     _load_perturbseq_source_config,
     _require_perturbseq_sources_configured,
 )
@@ -134,9 +134,7 @@ def test_registry_uint16_counts_are_promoted_before_encoding(tmp_path: Path) -> 
     source = tmp_path / "ACH-A.h5ad"
     ad.AnnData(
         X=sparse.csr_matrix(
-            np.asarray(
-                [[40_000, 0], [0, 65_535], [40_000, 65_535]], dtype=np.uint16
-            )
+            np.asarray([[40_000, 0], [0, 65_535], [40_000, 65_535]], dtype=np.uint16)
         ),
         obs=pd.DataFrame(
             {"model_id": ["ACH-A"] * 3},
@@ -1881,18 +1879,12 @@ def test_verify_cache_explicit_expected_ids_rejects_invalid_only_line(
 # --- CLI: entrypoint importability under direct execution (Codex P1-a) -----
 
 
-def test_cli_help_succeeds_under_direct_script_execution() -> None:
-    """Codex P1-a: ``python scripts/build_tx1_basal_embeddings.py --help``
-    must succeed without the caller setting PYTHONPATH. Before the fix,
-    Python puts scripts/ (not the repo root) on sys.path when the script is
-    executed directly, so ``from scripts.verify_tx1_obsm_width import ...``
-    raised ModuleNotFoundError even for --help -- confirmed in production
-    (the HPC run only worked via an explicit PYTHONPATH=src:. workaround)."""
-    script = _REPO_ROOT / "scripts" / "build_tx1_basal_embeddings.py"
+def test_cli_help_succeeds_under_module_execution() -> None:
+    """The preparation module resolves imports without a PYTHONPATH override."""
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
     result = subprocess.run(
-        [sys.executable, str(script), "--help"],
+        [sys.executable, "-m", "src.data.prepare.build_tx1_basal_embeddings", "--help"],
         cwd=str(_REPO_ROOT),
         env=env,
         capture_output=True,

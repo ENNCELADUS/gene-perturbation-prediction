@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from scripts.historical_data_preparation.audit_tx1_basal_batch import (
+from src.experiments.historical.audit_tx1_basal_batch import (
     audit_metrics,
     tahoe_pseudobulk,
 )

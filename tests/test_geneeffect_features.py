@@ -6,16 +6,16 @@ import numpy as np
 import pytest
 import torch
 
-from aivc_model.geneeffect_features import (
+from src.model.features import (
     DELTA_WIDTH,
     FEATURE_SCHEMA,
     HVG_WIDTH,
     PROJECTION_WIDTH,
-    BlockStandardizer,
     FixedSparseProjection,
     compute_condition_features,
 )
-from aivc_model.response_training import energy_distance
+from src.model.normalization import BlockStandardizer
+from src.model.response import energy_distance
 
 
 def test_projection_is_deterministic_seeded_round_trippable_and_differentiable() -> (

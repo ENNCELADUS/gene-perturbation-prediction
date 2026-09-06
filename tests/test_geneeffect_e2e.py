@@ -5,13 +5,11 @@ import pytest
 import torch
 from torch import nn
 
-from aivc_model.geneeffect_e2e import (
-    GeneEffectE2EModel,
-    OnlineConditionBatch,
-    PrecomputedFeatureBatch,
-)
-from aivc_model.geneeffect_features import BlockStandardizer, FixedSparseProjection
-from aivc_model.geneeffect_head import GeneEffectFeatureDims, GeneEffectResidualHead
+from src.model.geneeffect import GeneEffectE2EModel
+from src.data.batches import OnlineConditionBatch, PrecomputedFeatureBatch
+from src.model.normalization import BlockStandardizer
+from src.model.features import FixedSparseProjection
+from src.model.head import GeneEffectFeatureDims, GeneEffectResidualHead
 
 
 class _MockBackbone(nn.Module):

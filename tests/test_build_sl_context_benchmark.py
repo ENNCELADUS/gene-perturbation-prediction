@@ -6,10 +6,10 @@ import json
 import pandas as pd
 import pytest
 
-from scripts.historical_data_preparation import (
+from src.experiments.historical import (
     build_sl_context_benchmark as benchmark_builder,
 )
-from scripts.historical_data_preparation.build_sl_context_benchmark import (
+from src.experiments.historical.build_sl_context_benchmark import (
     apply_context_split,
     audit_positive_losses,
     context_statistics,

@@ -1,4 +1,4 @@
-"""Tests for src/aivc_model/tx1_response_data.py -- multi-line observed-response
+"""Tests for src/data/response.py -- multi-line observed-response
 ``GeneBags`` assembly (Wave 2 Phase C, Task 5).
 
 No GPU and no real Tx1/Perturb-seq/X-Atlas-Orion data exist on this machine,
@@ -23,9 +23,9 @@ import pandas as pd
 import pytest
 from scipy.sparse import csr_matrix
 
-import aivc_model.tx1_response_data as tx1_response_data_module
-from aivc_model.tx1_embed_cache import EMBEDDING_WIDTH, write_line_cache
-from aivc_model.tx1_response_data import (
+import src.data.response as tx1_response_data_module
+from src.data.tx1_cache import EMBEDDING_WIDTH, write_line_cache
+from src.data.response import (
     _assert_admissible_role,
     _assert_target_order_matches,
     _select_train_response_lines,
@@ -856,7 +856,7 @@ def test_assemble_logs_peak_rss_before_and_after_each_line(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     fixture = _build_two_line_fixture(tmp_path)
-    with caplog.at_level("INFO", logger="aivc_model.tx1_response_data"):
+    with caplog.at_level("INFO", logger="src.data.response"):
         assemble_train_response_gene_bags(
             cell_line_manifest_path=fixture.manifest_path,
             tx1_cache_dir=fixture.cache_dir,

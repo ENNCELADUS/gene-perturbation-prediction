@@ -1,4 +1,4 @@
-"""Offline unit tests for scripts/precompute_esm2_embeddings.py.
+"""Offline unit tests for src/data/prepare/precompute_esm2_embeddings.py.
 
 Tests cover:
   - FIX 1: corrupt JSON cache recovery in load_or_fetch_sequences
@@ -23,11 +23,8 @@ import pandas as pd
 import pytest
 import torch
 
-from aivc_model.gene_embeddings import (
-    Esm2EmbeddingTable,
-    require_complete_esm_coverage,
-)
-from aivc_model.esm2_provenance import load_and_authenticate_esm2_provenance
+from src.data.embeddings import Esm2EmbeddingTable, require_complete_esm_coverage
+from src.data.esm2_provenance import load_and_authenticate_esm2_provenance
 
 # ---------------------------------------------------------------------------
 # Lazy import: stub out heavy optional imports before loading the script
@@ -57,7 +54,8 @@ def _import_module() -> types.ModuleType:
 
     # Force reload so the module picks up stubs if first import in this process.
     spec_path = (
-        Path(__file__).parent.parent / "scripts" / "precompute_esm2_embeddings.py"
+        Path(__file__).parent.parent
+        / "src/data/prepare/precompute_esm2_embeddings.py"
     )
     spec = importlib.util.spec_from_file_location(
         "precompute_esm2_embeddings", spec_path
@@ -146,9 +144,7 @@ def test_fetch_sequence_uses_exact_symbol_and_validates_returned_identity() -> N
 
 def test_fetch_sequence_validates_requested_gene_id() -> None:
     hit = _uniprot_hit()
-    hit["uniProtKBCrossReferences"] = [
-        {"database": "GeneID", "id": "9999"}
-    ]
+    hit["uniProtKBCrossReferences"] = [{"database": "GeneID", "id": "9999"}]
     with patch.object(
         MOD.urllib.request,
         "urlopen",
@@ -552,9 +548,10 @@ def test_strict_asset_writes_when_coverage_is_complete(
     sidecar = json.loads(
         output.with_suffix(".npz.provenance.json").read_text(encoding="utf-8")
     )
-    assert sidecar["embedding_artifact"]["sha256"] == hashlib.sha256(
-        output.read_bytes()
-    ).hexdigest()
+    assert (
+        sidecar["embedding_artifact"]["sha256"]
+        == hashlib.sha256(output.read_bytes()).hexdigest()
+    )
     assert list(sidecar["sequence_source"]["sequence_sha256_by_symbol"]) == [
         "A",
         "B",

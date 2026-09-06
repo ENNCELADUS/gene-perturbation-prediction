@@ -1,4 +1,4 @@
-"""Tests for src/aivc_model/tx1_response_streaming.py (fix-round-3, Fix 1).
+"""Tests for src/data/response_streaming.py (fix-round-3, Fix 1).
 
 Two things must be proven here, not just asserted:
 
@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aivc_model.tx1_basal import (
+from src.data.basal import (
     _XATLAS_CONTROL_LABEL,
     _XATLAS_GENE_METADATA_TOKEN_COL,
     _XATLAS_GENE_METADATA_VAR_COLUMNS,
@@ -45,7 +45,7 @@ from aivc_model.tx1_basal import (
     assert_tx1_input_contract,
     build_xatlas_orion_response_adata,
 )
-from aivc_model.tx1_response_streaming import (
+from src.data.response_streaming import (
     drain_gene_reservoirs_to_matrix,
     resolve_total_budget_keep_mask,
 )
@@ -534,7 +534,7 @@ def test_drain_matches_dict_lookup_for_tokens_missing_from_metadata(
         ],
     }
     metadata = pd.DataFrame({"ensembl_id": ["ENSG0"], "gene_name": ["G0"]}, index=[0])
-    with caplog.at_level("WARNING", logger="aivc_model.tx1_response_streaming"):
+    with caplog.at_level("WARNING", logger="src.data.response_streaming"):
         matrix, var, _genes, _barcodes, _samples = drain_gene_reservoirs_to_matrix(
             reservoirs, metadata, metadata_var_columns=("ensembl_id", "gene_name")
         )

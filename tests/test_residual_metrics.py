@@ -1,4 +1,4 @@
-"""Tests for :mod:`aivc_model.residual_metrics`.
+"""Tests for :mod:`src.eval.metrics`.
 
 All frames are synthetic and built in-test; nothing here depends on
 gitignored data. The tests are organized around the two mathematical facts
@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aivc_model.residual_metrics import (
+from src.eval.metrics import (
     ResidualScore,
     ShuffleControl,
     bootstrap_delta,
@@ -39,9 +39,7 @@ def _assert_series_close(series: pd.Series, expected: float) -> None:
     assert np.allclose(series.to_numpy(dtype=float), expected)
 
 
-def _long_frame(
-    genes: list[str], lines: list[str], truth_fn, pred_fn
-) -> pd.DataFrame:
+def _long_frame(genes: list[str], lines: list[str], truth_fn, pred_fn) -> pd.DataFrame:
     """Build a long-form (model_id, gene_symbol, truth, pred) frame."""
     rows = []
     for line in lines:
@@ -115,9 +113,7 @@ def test_per_gene_spearman_invariant_to_per_gene_constant_shift() -> None:
     pred_shift = {g: -1.7 * i + 9.0 for i, g in enumerate(genes)}
     gene_ln_pairs = list(zip(frame["gene_symbol"], frame["model_id"], strict=True))
     shifted = frame.copy()
-    shifted["truth"] = [
-        truth_vals[(g, ln)] - truth_shift[g] for g, ln in gene_ln_pairs
-    ]
+    shifted["truth"] = [truth_vals[(g, ln)] - truth_shift[g] for g, ln in gene_ln_pairs]
     shifted["pred"] = [pred_vals[(g, ln)] - pred_shift[g] for g, ln in gene_ln_pairs]
 
     residual = per_gene_spearman(shifted, truth_col="truth", pred_col="pred")

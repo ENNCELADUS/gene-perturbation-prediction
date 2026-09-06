@@ -1,4 +1,4 @@
-"""Tests for ``aivc_model.state_core``, the lifted-symbol single source of truth.
+"""Tests for ``src.model.state``, the lifted-symbol single source of truth.
 
 Covers construction/behavior of each moved symbol (``LinearMockStateModel``,
 ``StateForwardAdapter``, ``Esm2PerturbationAdapter``, ``GeneBags``,
@@ -18,16 +18,12 @@ import pandas as pd
 import pytest
 import torch
 
-import aivc_model.gene_splits as gene_splits_module
-from aivc_model.gene_embeddings import Esm2EmbeddingTable
-from aivc_model.state_core import (
-    Esm2PerturbationAdapter,
-    GeneBags,
-    LinearMockStateModel,
-    StateForwardAdapter,
-    encode_batch_labels,
-    resolve_state_gene_order,
-)
+import src.data.gene_splits as gene_splits_module
+from src.data.embeddings import Esm2EmbeddingTable
+from src.model.perturbation import Esm2PerturbationAdapter
+from src.data.gene_bags import GeneBags
+from src.model.state import LinearMockStateModel, StateForwardAdapter
+from src.data.gene_order import encode_batch_labels, resolve_state_gene_order
 
 
 # --- LinearMockStateModel ----------------------------------------------------

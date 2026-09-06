@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from aivc_model.geneeffect_feature_store import (
+from src.experiments.exp13_legacy.geneeffect_feature_store import (
     CONTEXT_WIDTH,
     DELTA_PROJ_WIDTH,
     GENE_WIDTH,

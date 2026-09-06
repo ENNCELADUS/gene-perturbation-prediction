@@ -8,9 +8,9 @@ import pytest
 import torch
 from torch import nn
 
-import aivc_model.geneeffect_stage2_runner as runner
-from aivc_model.geneeffect_e2e import PrecomputedFeatureBatch
-from aivc_model.geneeffect_training import (
+import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
+from src.data.batches import PrecomputedFeatureBatch
+from src.experiments.exp13_legacy.geneeffect_training import (
     PrecomputedSupervisedBatch,
     SupervisedMatrix,
     calibrate_lambda_dep,
