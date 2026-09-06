@@ -267,3 +267,28 @@ def test_resolve_state_gene_order_never_falls_back_when_gene_is_missing(
 
     with pytest.raises(ValueError, match="1/2"):
         resolve_state_gene_order(adata, model_dir, "gene_name")
+
+
+def test_predict_bags_training_advances_rng_and_eval_is_isolated():
+    from src.model.response import predict_bags
+
+    class StochasticBackbone(torch.nn.Module):
+        def forward(self, controls, genes, batch_indices):
+            return tuple(control + torch.rand_like(control) for control in controls)
+
+    model = StochasticBackbone()
+    control = torch.zeros(5, 8)
+    torch.manual_seed(0)
+    before = torch.get_rng_state().clone()
+    first = predict_bags(model, [control], ["A"], seed=0)[0]
+    after = torch.get_rng_state().clone()
+    second = predict_bags(model, [control], ["A"], seed=0)[0]
+    assert not torch.equal(before, after)
+    assert not torch.equal(first, second)
+    model.eval()
+    before = torch.get_rng_state().clone()
+    first = predict_bags(model, [control], ["A"], seed=0)[0]
+    assert torch.equal(torch.get_rng_state(), before)
+    torch.rand(19)
+    second = predict_bags(model, [control], ["A"], seed=0)[0]
+    torch.testing.assert_close(first, second, rtol=0, atol=0)

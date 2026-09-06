@@ -13,7 +13,7 @@ import uuid
 import numpy as np
 import torch
 
-from src.data.batches import PrecomputedFeatureBatch
+from src.data.batches import FeatureBatch
 
 
 SCHEMA_VERSION = "exp13-geneeffect-feature-store-v1"
@@ -675,7 +675,7 @@ def verify_geneeffect_feature_store(
 class LoadedFeatureBatch:
     model_id: str
     gene_symbols: tuple[str, ...]
-    features: PrecomputedFeatureBatch
+    features: FeatureBatch
 
 
 class GeneEffectFrozenFeatureCache:
@@ -873,7 +873,7 @@ class GeneEffectFrozenFeatureCache:
             tensors=tensors,
         )
 
-    def gather(self, pairs: Sequence[tuple[int, int]]) -> PrecomputedFeatureBatch:
+    def gather(self, pairs: Sequence[tuple[int, int]]) -> FeatureBatch:
         """Gather arbitrary global-index pairs without changing their order."""
         if self._closed:
             raise RuntimeError("frozen feature cache is closed")
@@ -912,7 +912,7 @@ class GeneEffectFrozenFeatureCache:
         device = self._tensors["e_g"].device
         genes = torch.tensor(gene_indices, dtype=torch.long, device=device)
         contexts = torch.tensor(context_positions, dtype=torch.long, device=device)
-        features = PrecomputedFeatureBatch(
+        features = FeatureBatch(
             delta_proj=self._tensors["delta_proj"][contexts, genes],
             s=self._tensors["s"][contexts, genes],
             q_sc=self._tensors["q_sc"][contexts, genes],
@@ -987,7 +987,7 @@ def load_geneeffect_feature_batch(
     with np.load(root / _SHARD_DIR / f"{model_id}.npz", allow_pickle=False) as shard:
         arrays = {name: shard[name].copy() for name in shard.files}
     size = len(genes)
-    features = PrecomputedFeatureBatch(
+    features = FeatureBatch(
         delta_proj=torch.from_numpy(arrays["delta_proj"]),
         s=torch.from_numpy(arrays["s"]),
         q_sc=torch.from_numpy(arrays["q_sc"]),

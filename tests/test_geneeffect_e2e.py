@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from src.model.geneeffect import GeneEffectE2EModel
-from src.data.batches import OnlineConditionBatch, PrecomputedFeatureBatch
+from src.data.batches import OnlineConditionBatch, FeatureBatch
 from src.model.normalization import BlockStandardizer
 from src.model.features import FixedSparseProjection
 from src.model.head import GeneEffectFeatureDims, GeneEffectResidualHead
@@ -46,8 +46,8 @@ def _model() -> GeneEffectE2EModel:
     )
 
 
-def _precomputed(batch: int = 3) -> PrecomputedFeatureBatch:
-    return PrecomputedFeatureBatch(
+def _precomputed(batch: int = 3) -> FeatureBatch:
+    return FeatureBatch(
         delta_proj=torch.randn(batch, 256),
         s=torch.randn(batch, 6),
         q_sc=torch.randn(batch, 3),
@@ -129,7 +129,7 @@ def test_add_train_gene_mean_is_aligned_and_fail_closed() -> None:
 
 def test_precomputed_requires_boolean_masks() -> None:
     features = _precomputed()
-    bad = PrecomputedFeatureBatch(
+    bad = FeatureBatch(
         **{
             **features.__dict__,
             "q_sc_mask": torch.ones(features.batch_size),

@@ -9,7 +9,7 @@ import torch
 from torch import nn
 
 import src.experiments.exp13_legacy.geneeffect_stage2_runner as runner
-from src.data.batches import PrecomputedFeatureBatch
+from src.data.batches import FeatureBatch
 from src.experiments.exp13_legacy.geneeffect_training import (
     PrecomputedSupervisedBatch,
     SupervisedMatrix,
@@ -54,9 +54,9 @@ class _TinyE2E(nn.Module):
         return {"e_g": features.e_g}
 
 
-def _features() -> PrecomputedFeatureBatch:
+def _features() -> FeatureBatch:
     pairs = 6
-    return PrecomputedFeatureBatch(
+    return FeatureBatch(
         delta_proj=torch.randn(pairs, 256),
         s=torch.randn(pairs, 6),
         q_sc=torch.randn(pairs, 3),
@@ -235,7 +235,7 @@ def test_sampler_tail_duplicate_feeds_precomputed_supervision() -> None:
             for model_id in context_row
         )
         pair_count = supervision.pair_count
-        features = PrecomputedFeatureBatch(
+        features = FeatureBatch(
             delta_proj=torch.zeros(pair_count, 256),
             s=torch.zeros(pair_count, 6),
             q_sc=torch.zeros(pair_count, 3),

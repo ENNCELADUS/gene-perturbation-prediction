@@ -15,7 +15,7 @@ import torch
 from torch import nn
 
 import src.experiments.exp13_legacy.geneeffect_training_loop as loops
-from src.data.batches import OnlineConditionBatch, PrecomputedFeatureBatch
+from src.data.batches import OnlineConditionBatch, FeatureBatch
 from src.experiments.exp13_legacy.geneeffect_training import (
     JointStepMetrics,
     OnlineSupervisedBatch,
@@ -137,7 +137,7 @@ def _precomputed_validation_batch() -> PrecomputedSupervisedBatch:
     signal = torch.arange(27, dtype=torch.float32).repeat(2).unsqueeze(1)
     model_ids = _validation_ids() * 2
     gene_symbols = ("G0",) * 27 + ("G1",) * 27
-    features = PrecomputedFeatureBatch(
+    features = FeatureBatch(
         delta_proj=torch.zeros(pairs, 1),
         s=torch.zeros(pairs, 1),
         q_sc=torch.zeros(pairs, 1),

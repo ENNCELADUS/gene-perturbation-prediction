@@ -761,7 +761,7 @@ def test_predict_bags_combines_conditions_in_one_model_forward() -> None:
 
 
 def test_predict_bags_seed_controls_randperm_despite_ambient_rng_changes() -> None:
-    model = _RandpermWindowedModel(window=8)
+    model = _RandpermWindowedModel(window=8).eval()
     control = torch.arange(30, dtype=torch.float32).reshape(10, 3)
 
     torch.manual_seed(11)
@@ -775,7 +775,7 @@ def test_predict_bags_seed_controls_randperm_despite_ambient_rng_changes() -> No
 
 
 def test_predict_bags_different_seeds_can_change_padding_and_randperm() -> None:
-    model = _RandpermWindowedModel(window=8)
+    model = _RandpermWindowedModel(window=8).eval()
     control = torch.arange(30, dtype=torch.float32).reshape(10, 3)
 
     first = predict_bags(model, [control], ["G"], seed=73)[0]
@@ -785,7 +785,7 @@ def test_predict_bags_different_seeds_can_change_padding_and_randperm() -> None:
 
 
 def test_predict_bags_preserves_caller_cpu_rng_state() -> None:
-    model = _RandpermWindowedModel(window=8)
+    model = _RandpermWindowedModel(window=8).eval()
     control = torch.arange(30, dtype=torch.float32).reshape(10, 3)
     torch.manual_seed(241)
     state_before = torch.random.get_rng_state().clone()
@@ -798,7 +798,7 @@ def test_predict_bags_preserves_caller_cpu_rng_state() -> None:
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
 def test_predict_bags_seeds_and_restores_cuda_rng() -> None:
     device = torch.device("cuda", 0)
-    model = _RandpermWindowedModel(window=8).to(device)
+    model = _RandpermWindowedModel(window=8).eval().to(device)
     control = torch.arange(30, dtype=torch.float32, device=device).reshape(10, 3)
     torch.cuda.manual_seed(241)
     state_before = torch.cuda.get_rng_state(device).clone()

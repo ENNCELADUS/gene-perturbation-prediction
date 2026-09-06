@@ -15,7 +15,7 @@ from accelerate import Accelerator
 from src.model.geneeffect import GeneEffectE2EModel
 from src.data.batches import (
     OnlineConditionBatch,
-    PrecomputedFeatureBatch,
+    FeatureBatch,
     ResponseForwardBatch,
 )
 from src.experiments.exp13_legacy.geneeffect_head import (
@@ -91,7 +91,7 @@ class SupervisedMatrix:
 
 @dataclass(frozen=True)
 class PrecomputedSupervisedBatch:
-    features: PrecomputedFeatureBatch
+    features: FeatureBatch
     supervision: SupervisedMatrix
     objective_weight: float = 1.0
 

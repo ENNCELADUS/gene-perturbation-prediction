@@ -9,8 +9,8 @@ import torch
 
 
 @dataclass(frozen=True)
-class PrecomputedFeatureBatch:
-    """Raw, unstandardized head features for frozen-backbone warmup."""
+class FeatureBatch:
+    """Raw, unstandardized live head features."""
 
     delta_proj: torch.Tensor
     s: torch.Tensor
@@ -22,6 +22,8 @@ class PrecomputedFeatureBatch:
     own_gene_shift_mask: torch.Tensor
     gene_symbols: tuple[str, ...]
     model_ids: tuple[str, ...]
+
+    metadata: tuple[Mapping[str, object], ...] = ()
 
     @property
     def batch_size(self) -> int:
@@ -63,23 +65,22 @@ class PrecomputedFeatureBatch:
 
     def to(
         self, device: torch.device | str, *, non_blocking: bool = False
-    ) -> PrecomputedFeatureBatch:
+    ) -> FeatureBatch:
         """Move tensor fields while preserving row identifiers."""
-        return PrecomputedFeatureBatch(
+        return FeatureBatch(
             delta_proj=self.delta_proj.to(device, non_blocking=non_blocking),
             s=self.s.to(device, non_blocking=non_blocking),
             q_sc=self.q_sc.to(device, non_blocking=non_blocking),
             e_g=self.e_g.to(device, non_blocking=non_blocking),
             z_c=self.z_c.to(device, non_blocking=non_blocking),
             q_sc_mask=self.q_sc_mask.to(device, non_blocking=non_blocking),
-            hvg_panel_mask=self.hvg_panel_mask.to(
-                device, non_blocking=non_blocking
-            ),
+            hvg_panel_mask=self.hvg_panel_mask.to(device, non_blocking=non_blocking),
             own_gene_shift_mask=self.own_gene_shift_mask.to(
                 device, non_blocking=non_blocking
             ),
             gene_symbols=self.gene_symbols,
             model_ids=self.model_ids,
+            metadata=self.metadata,
         )
 
 
@@ -176,8 +177,7 @@ class OnlineConditionBatch:
                 for value in self.controls_tx1
             ),
             basal_hvg=tuple(
-                value.to(device, non_blocking=non_blocking)
-                for value in self.basal_hvg
+                value.to(device, non_blocking=non_blocking) for value in self.basal_hvg
             ),
             genes=self.genes,
             model_ids=self.model_ids,
@@ -319,6 +319,6 @@ class ResponseForwardBatch:
 @dataclass(frozen=True)
 class E2EForwardOutput:
     delta_hat: torch.Tensor
-    raw_features: PrecomputedFeatureBatch
+    raw_features: FeatureBatch
     feature_metadata: tuple[Mapping[str, object], ...]
     response_predicted: tuple[torch.Tensor, ...] | None = None

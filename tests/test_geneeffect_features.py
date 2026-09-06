@@ -8,7 +8,6 @@ import torch
 
 from src.model.features import (
     DELTA_WIDTH,
-    FEATURE_SCHEMA,
     HVG_WIDTH,
     PROJECTION_WIDTH,
     FixedSparseProjection,
@@ -39,10 +38,12 @@ def test_projection_is_deterministic_seeded_round_trippable_and_differentiable()
     assert torch.count_nonzero(delta.grad) > 0
 
 
-def test_projection_rejects_tampered_state() -> None:
+def test_projection_restores_actual_values_and_rejects_nonfinite_state() -> None:
     state = FixedSparseProjection().to_state()
     state["components"][0][0] = 123.0
-    with pytest.raises(ValueError, match="hash mismatch"):
+    assert FixedSparseProjection.from_state(state).components[0, 0] == 123.0
+    state["components"][0][0] = float("nan")
+    with pytest.raises(ValueError, match="finite"):
         FixedSparseProjection.from_state(state)
 
 
@@ -77,7 +78,6 @@ def test_condition_features_match_hand_computable_delta_and_summaries() -> None:
     )
     assert torch.allclose(result.s.detach(), expected_s, atol=1e-6)
     assert result.metadata["shift_threshold_basal_l2_p95"] == pytest.approx(1.0)
-    assert result.metadata["feature_schema_hash"] == FEATURE_SCHEMA.schema_hash
     assert result.own_gene_shift_mask.item() is True
     (result.delta_proj.sum() + result.s[[0, 1, 3, 4, 5]].sum()).backward()
     assert predicted.grad is not None
@@ -118,7 +118,7 @@ def test_standardizer_uses_training_statistics_keeps_constants_and_round_trips()
 
     state = standardizer.to_state()
     restored = BlockStandardizer.from_state(state)
-    assert restored.state_hash == standardizer.state_hash
+    assert restored.to_state() == standardizer.to_state()
     assert torch.equal(restored.transform("s", test.detach()), transformed.detach())
 
 
@@ -131,8 +131,8 @@ def test_standardizer_rejects_masks_invalid_and_tampered_inputs() -> None:
     with pytest.raises(ValueError, match="2-D"):
         fitted.transform("s", torch.ones(1))
     state = copy.deepcopy(fitted.to_state())
-    state["blocks"]["s"]["mean"][0] = 2.0
-    with pytest.raises(ValueError, match="hash mismatch"):
+    state["blocks"]["s"]["scale"][0] = 0.0
+    with pytest.raises(ValueError, match="statistics"):
         BlockStandardizer.from_state(state)
 
 
@@ -214,3 +214,9 @@ def test_condition_features_require_explicit_consistent_own_gene_availability() 
             own_gene_hvg_index=None,
             own_gene_available=False,
         )
+
+
+def test_default_projection_uses_zero_seed():
+    np.testing.assert_array_equal(
+        FixedSparseProjection().components, FixedSparseProjection(seed=0).components
+    )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import torch
+from torch.nn import functional as F
 
 _STD_EPS: float = 1e-6
 
@@ -75,3 +76,22 @@ def moment_pool(
         skew = (centered.pow(3).mean(dim=0)) / (std.pow(3) + _STD_EPS)
         parts.append(skew)
     return torch.cat(parts, dim=0)
+
+
+def geneeffect_loss(
+    prediction: torch.Tensor, target: torch.Tensor, valid: torch.Tensor
+) -> torch.Tensor:
+    """Mean FP32 Huber loss over labeled pairs only (delta 1)."""
+    if prediction.shape != target.shape or valid.shape != target.shape:
+        raise ValueError("prediction, target and valid must have matching shapes")
+    if valid.dtype != torch.bool:
+        raise ValueError("valid must be a boolean mask")
+    if not bool(valid.any()):
+        raise ValueError("GeneEffect batch contains no labeled pairs")
+    if not bool(torch.isfinite(prediction[valid]).all()):
+        raise ValueError("non-finite GeneEffect predictions on labeled rows")
+    if not bool(torch.isfinite(target[valid]).all()):
+        raise ValueError("non-finite GeneEffect targets on labeled rows")
+    return F.huber_loss(
+        prediction.float()[valid], target.float()[valid], delta=1.0, reduction="mean"
+    )

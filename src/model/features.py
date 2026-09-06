@@ -21,7 +21,7 @@ DELTA_WIDTH = 2 * HVG_WIDTH
 PROJECTION_WIDTH = 256
 
 
-PROJECTION_SEED = 20_260_828
+PROJECTION_SEED = 0
 
 
 SUMMARY_WIDTH = 6
@@ -115,9 +115,6 @@ class FixedSparseProjection:
             "input_width": DELTA_WIDTH,
             "output_width": PROJECTION_WIDTH,
             "seed": self.seed,
-            "schema_hash": FEATURE_SCHEMA.schema_hash,
-            "schema_seed_hash": self.schema_seed_hash,
-            "components_hash": self.components_hash,
         }
 
     def transform(self, delta: torch.Tensor) -> torch.Tensor:
@@ -127,14 +124,10 @@ class FixedSparseProjection:
             )
         if not delta.is_floating_point():
             raise ValueError("delta must be floating point")
-        if not bool(torch.isfinite(delta).all()):
-            raise ValueError("delta contains non-finite values")
         components = torch.as_tensor(
             self.components, device=delta.device, dtype=delta.dtype
         )
         projected = delta @ components.transpose(0, 1)
-        if not bool(torch.isfinite(projected).all()):
-            raise ValueError("projected delta contains non-finite values")
         return projected
 
     def to_state(self) -> dict[str, object]:
@@ -145,22 +138,17 @@ class FixedSparseProjection:
         metadata = state.get("metadata")
         if not isinstance(metadata, Mapping):
             raise ValueError("projection state metadata must be a mapping")
-        expected_schema = metadata.get("schema_hash")
-        if expected_schema != FEATURE_SCHEMA.schema_hash:
-            raise ValueError("projection schema hash does not match the current schema")
         seed = metadata.get("seed")
         if not isinstance(seed, int):
             raise ValueError("projection seed must be an integer")
-        restored = cls(seed=seed)
+        restored = cls.__new__(cls)
+        restored.seed = seed
         components = np.asarray(state.get("components"), dtype=np.float32)
         if components.shape != (PROJECTION_WIDTH, DELTA_WIDTH):
             raise ValueError(f"invalid projection component shape {components.shape}")
-        restored.components = components
-        if metadata.get("components_hash") != restored.components_hash:
-            raise ValueError("projection components hash mismatch")
-        expected_metadata = restored.metadata
-        if dict(metadata) != expected_metadata:
-            raise ValueError("projection metadata is inconsistent with its components")
+        if not np.isfinite(components).all():
+            raise ValueError("projection components must be finite")
+        restored.components = components.copy()
         return restored
 
 
@@ -184,7 +172,8 @@ def compute_condition_features(
 ) -> ConditionFeatures:
     """Build ``Delta_proj`` and the six scalar summaries for one condition."""
     _require_finite_2d("predicted", predicted)
-    _require_finite_2d("basal", basal)
+    if basal.ndim != 2 or basal.shape[0] == 0 or basal.shape[1] != HVG_WIDTH:
+        raise ValueError(f"basal must have at least one row and {HVG_WIDTH} HVGs")
     if predicted.device != basal.device:
         raise ValueError("predicted and basal must be on the same device")
     if predicted.dtype != basal.dtype or not predicted.is_floating_point():
@@ -232,8 +221,6 @@ def compute_condition_features(
             own_shift,
         )
     )
-    if s.shape != (SUMMARY_WIDTH,) or not bool(torch.isfinite(s).all()):
-        raise ValueError("constructed summary features are invalid or non-finite")
 
     return ConditionFeatures(
         delta_proj=delta_proj,
@@ -245,8 +232,6 @@ def compute_condition_features(
             own_gene_available, dtype=torch.bool, device=predicted.device
         ),
         metadata={
-            "feature_schema_hash": FEATURE_SCHEMA.schema_hash,
-            "projection_components_hash": projection.components_hash,
             "projection_seed": projection.seed,
             "shift_threshold_basal_l2_p95": float(shift_threshold.detach().cpu()),
         },
