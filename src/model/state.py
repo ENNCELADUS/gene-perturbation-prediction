@@ -64,7 +64,7 @@ class StateForwardAdapter(nn.Module):
         """Run equal-size condition chunks as independent STATE sequences."""
         return self.forward_condition_chunks(
             control_chunks,
-            tuple(perturbation for _ in control_chunks),
+            perturbation.unsqueeze(0).expand(len(control_chunks), -1),
             tuple(gene for _ in control_chunks),
             batch_index_chunks,
         )
@@ -72,11 +72,13 @@ class StateForwardAdapter(nn.Module):
     def forward_condition_chunks(
         self,
         control_chunks: tuple[torch.Tensor, ...],
-        perturbations: tuple[torch.Tensor, ...],
+        perturbations: torch.Tensor,
         genes: tuple[str, ...],
         batch_index_chunks: tuple[torch.Tensor | None, ...],
     ) -> tuple[torch.Tensor, ...]:
         """Run multiple gene conditions in one padded STATE forward pass."""
+        if perturbations.dim() != 2:
+            raise ValueError("perturbations must be a [chunks, features] tensor")
         if len(control_chunks) != len(batch_index_chunks):
             raise ValueError("control and batch-index chunks must have equal length")
         if len(control_chunks) != len(perturbations) or len(control_chunks) != len(
@@ -104,8 +106,7 @@ class StateForwardAdapter(nn.Module):
         # Chunks have equal length; one batched expansion avoids a separate
         # reduction kernel per chunk when propagating perturbation gradients.
         perturbation_cells = (
-            torch.stack(perturbations)
-            .unsqueeze(1)
+            perturbations.unsqueeze(1)
             .expand(-1, chunk_sizes[0], -1)
             .reshape(control_cells.shape[0], -1)
         )
@@ -256,10 +257,9 @@ class ForwardOnlyStateModel(nn.Module):
         if len(control_chunks) != len(gene):
             raise ValueError("one gene is required per STATE condition chunk")
         if hasattr(self.perturbations, "forward_many"):
-            perturbation_batch = self.perturbations.forward_many(gene)
-            perturbations = tuple(perturbation_batch.unbind(0))
+            perturbations = self.perturbations.forward_many(gene)
         else:
-            perturbations = tuple(self.perturbations(name) for name in gene)
+            perturbations = torch.stack([self.perturbations(name) for name in gene])
         return self.state_adapter.forward_condition_chunks(
             control_chunks,
             perturbations,

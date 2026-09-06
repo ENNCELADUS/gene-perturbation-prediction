@@ -100,7 +100,7 @@ def test_state_forward_adapter_batches_distinct_gene_conditions() -> None:
     adapter = StateForwardAdapter(state)
     outputs = adapter.forward_condition_chunks(
         (torch.zeros(2, 2), torch.ones(2, 2)),
-        (torch.tensor([1.0, 0.0]), torch.tensor([0.0, 2.0])),
+        torch.tensor([[1.0, 0.0], [0.0, 2.0]]),
         ("G1", "G2"),
         (None, None),
     )
@@ -123,7 +123,7 @@ def test_state_chunks_share_fp32_output_and_preserve_bfloat16_gradients() -> Non
     reference = control.detach().clone().requires_grad_()
     outputs = StateForwardAdapter(BfloatState()).forward_condition_chunks(
         tuple(control.split(2)),
-        (torch.zeros(2),) * 3,
+        torch.zeros(3, 2),
         ("G1", "G2", "G3"),
         (None,) * 3,
     )
@@ -150,7 +150,7 @@ def test_state_batches_perturbation_expansion_with_matching_gradients() -> None:
     with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU]) as p:
         actual = adapter.forward_condition_chunks(
             (torch.zeros(3, 2),) * 5,
-            tuple(perturbations.unbind()),
+            perturbations,
             ("G1",) * 5,
             (None,) * 5,
         )
