@@ -28,6 +28,9 @@ class BlockStandardizer:
     def __init__(self) -> None:
         self._stats: dict[str, _BlockStats] = {}
         self._fitted = False
+        self._tensors: dict[
+            tuple[str, torch.device, torch.dtype], tuple[torch.Tensor, torch.Tensor]
+        ] = {}
 
     @property
     def constant_columns(self) -> dict[str, tuple[int, ...]]:
@@ -151,8 +154,15 @@ class BlockStandardizer:
             raise ValueError(
                 f"{name} width mismatch: fitted {stats.mean.size}, got {value.shape[1]}"
             )
-        mean = torch.as_tensor(stats.mean, device=value.device, dtype=value.dtype)
-        scale = torch.as_tensor(stats.scale, device=value.device, dtype=value.dtype)
+        key = (name, value.device, value.dtype)
+        tensors = self._tensors.get(key)
+        if tensors is None:
+            tensors = tuple(
+                torch.as_tensor(array, device=value.device, dtype=value.dtype)
+                for array in (stats.mean, stats.scale)
+            )
+            self._tensors[key] = tensors
+        mean, scale = tensors
         return (value - mean) / scale
 
     def to_state(self) -> dict[str, object]:
