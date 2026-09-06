@@ -17,7 +17,7 @@ def test_approved_defaults_and_conflicts():
     config = load_config(Path("configs/geneeffect_joint.yaml"))
     assert config["seeds"] == {"train": 0, "collator": 0, "projection": 0}
     assert config["train"]["max_epochs"] == 50
-    assert config["train"]["dependency_batch_size"] == 256
+    assert config["train"]["dependency_batch_size"] == 1024
     assert config["train"]["response_batch_size"] == 64
     for group, key, value in [
         ("selection", "metric", "val_total_loss"),

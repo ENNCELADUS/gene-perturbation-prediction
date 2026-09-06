@@ -2,7 +2,7 @@ seeds: {train: 0, collator: 0, projection: 0}
 train:
   max_epochs: 50
   patience: 5
-  dependency_batch_size: 256
+  dependency_batch_size: 1024
   response_batch_size: 64
   response_interval: 4
   response_weight: 1.0
