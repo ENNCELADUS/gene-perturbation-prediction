@@ -24,7 +24,7 @@ import src.baselines.residual as residual_ladder
 from src.baselines.residual import COPY_PRIOR, GENE_MEAN, _build_fold_targets
 from src.eval.metrics import score_predictions
 from src.data.residual_target import fit_gene_means
-from src.experiments.baselines import main
+from src.data.splits import FixedSplit
 
 _BASE_LINES = [f"L{i}" for i in range(6)]
 _BASE_GENES = [f"G{i}" for i in range(12)]
@@ -115,7 +115,7 @@ def _write_split_json(
     return path
 
 
-def _run_cli(
+def _run_ladder(
     tmp_path: Path,
     labels: pd.DataFrame,
     *,
@@ -126,28 +126,28 @@ def _run_cli(
     outer: str = "lolo",
     split_json: Path | None = None,
 ) -> Path:
-    """Write ``labels`` to CSV, invoke the CLI, and return its out-dir."""
-    labels_csv = _write_csv(tmp_path / "labels.csv", labels)
+    """Exercise the retained numerical ladder directly; CLI has joint inputs."""
     out_dir = tmp_path / out_name
-    argv = [
-        "--labels",
-        str(labels_csv),
-        "--out-dir",
-        str(out_dir),
-        "--pca-components",
-        str(pca_components),
-        "--outer",
-        outer,
-    ]
-    if outer == "fixed":
-        assert split_json is not None, "fixed outer requires split_json in this helper"
-        argv += ["--split-json", str(split_json)]
-    for name, path in (context_paths or {}).items():
-        argv += ["--context", f"{name}={path}"]
-    if prior_path is not None:
-        argv += ["--copy-prior", str(prior_path)]
-    exit_code = main(argv)
-    assert exit_code == 0
+    split = None
+    if split_json is not None:
+        payload = json.loads(split_json.read_text())
+        split = FixedSplit(**{key: tuple(value) for key, value in payload.items()})
+    contexts = {
+        name: pd.read_csv(path).set_index("model_id")
+        for name, path in (context_paths or {}).items()
+    }
+    prior = (
+        pd.read_csv(prior_path).set_index("gene_symbol").gene_effect
+        if prior_path
+        else None
+    )
+    result = residual_ladder.run_r1_ladder(
+        labels, contexts, prior, pca_components=pca_components, outer=outer, split=split
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("predictions", "per_line", "per_gene"):
+        getattr(result, name).to_csv(out_dir / f"{name}.csv", index=False)
+    (out_dir / "summary.json").write_text(json.dumps(result.summary))
     return out_dir
 
 
@@ -174,7 +174,7 @@ def test_end_to_end_writes_expected_outputs(tmp_path: Path) -> None:
     context_csv = _write_context_csv(
         tmp_path / "ctx.csv", _BASE_LINES, {"feat0": _SIGNAL_BY_LINE, "feat1": feat1}
     )
-    out_dir = _run_cli(tmp_path, labels, context_paths={"ctx": context_csv})
+    out_dir = _run_ladder(tmp_path, labels, context_paths={"ctx": context_csv})
 
     for name in ("summary.json", "per_line.csv", "per_gene.csv", "predictions.csv"):
         assert (out_dir / name).exists()
@@ -223,7 +223,7 @@ def test_context_pca_ridge_detects_planted_signal(tmp_path: Path) -> None:
     context_csv = _write_context_csv(
         tmp_path / "ctx.csv", _BASE_LINES, {"signal": _SIGNAL_BY_LINE}
     )
-    out_dir = _run_cli(tmp_path, labels, context_paths={"signal": context_csv})
+    out_dir = _run_ladder(tmp_path, labels, context_paths={"signal": context_csv})
     methods = _read_slice_methods(out_dir)
 
     gene_mean_entry = methods[GENE_MEAN]
@@ -253,7 +253,7 @@ def test_per_gene_axis_invariant_to_truth_column(tmp_path: Path) -> None:
     context_csv = _write_context_csv(
         tmp_path / "ctx.csv", _BASE_LINES, {"signal": _SIGNAL_BY_LINE}
     )
-    out_dir = _run_cli(tmp_path, labels, context_paths={"signal": context_csv})
+    out_dir = _run_ladder(tmp_path, labels, context_paths={"signal": context_csv})
     predictions = pd.read_csv(out_dir / "predictions.csv")
 
     subframe = predictions.loc[predictions["method"] == "context_pca_ridge[signal]"]
@@ -286,7 +286,7 @@ def test_per_line_axis_is_scored_against_residual(tmp_path: Path) -> None:
     context_csv = _write_context_csv(
         tmp_path / "ctx.csv", _BASE_LINES, {"signal": _SIGNAL_BY_LINE}
     )
-    out_dir = _run_cli(tmp_path, labels, context_paths={"signal": context_csv})
+    out_dir = _run_ladder(tmp_path, labels, context_paths={"signal": context_csv})
     predictions = pd.read_csv(out_dir / "predictions.csv")
     methods = _read_slice_methods(out_dir)
 
@@ -321,7 +321,7 @@ def test_context_pca_ridge_null_control_near_zero(tmp_path: Path) -> None:
         "noise1": dict(zip(lines, rng.normal(size=len(lines)), strict=True)),
     }
     context_csv = _write_context_csv(tmp_path / "ctx.csv", lines, noise_features)
-    out_dir = _run_cli(
+    out_dir = _run_ladder(
         tmp_path,
         labels,
         context_paths={"noise": context_csv},
@@ -349,7 +349,7 @@ def test_context_pca_ridge_null_control_near_zero(tmp_path: Path) -> None:
 def test_gene_mean_is_nan_on_both_axes(tmp_path: Path) -> None:
     """gene_mean's delta_hat is identically 0.0, so both axes are NaN."""
     labels = _labels_no_signal(_BASE_LINES, _BASE_GENES)
-    out_dir = _run_cli(tmp_path, labels)
+    out_dir = _run_ladder(tmp_path, labels)
     methods = _read_slice_methods(out_dir)
 
     entry = methods[GENE_MEAN]
@@ -382,7 +382,7 @@ def test_copy_prior_per_gene_is_nan_not_leaked(tmp_path: Path) -> None:
     """
     labels = _labels_no_signal(_BASE_LINES, _BASE_GENES)
     prior_csv = _write_prior_csv(tmp_path / "prior.csv", _BASE_GENES)
-    out_dir = _run_cli(tmp_path, labels, prior_path=prior_csv)
+    out_dir = _run_ladder(tmp_path, labels, prior_path=prior_csv)
     methods = _read_slice_methods(out_dir)
 
     entry = methods[COPY_PRIOR]
@@ -411,7 +411,7 @@ def test_no_method_hits_perfect_per_gene_correlation(tmp_path: Path) -> None:
         tmp_path / "ctx.csv", _BASE_LINES, {"feat0": _SIGNAL_BY_LINE, "feat1": feat1}
     )
     prior_csv = _write_prior_csv(tmp_path / "prior.csv", _BASE_GENES)
-    out_dir = _run_cli(
+    out_dir = _run_ladder(
         tmp_path, labels, context_paths={"ctx": context_csv}, prior_path=prior_csv
     )
     methods = _read_slice_methods(out_dir)
@@ -463,7 +463,7 @@ def test_loo_artifact_regression(tmp_path: Path) -> None:
     assert wrong_score.macro_per_gene == pytest.approx(-1.0, abs=1e-9)
     assert wrong_score.n_gene_undefined == 0
 
-    out_dir = _run_cli(tmp_path, labels)
+    out_dir = _run_ladder(tmp_path, labels)
     methods = _read_slice_methods(out_dir)
     entry = methods[GENE_MEAN]
     assert entry["macro_per_gene"] is None or math.isnan(entry["macro_per_gene"])
@@ -513,7 +513,7 @@ def test_constant_context_feature_is_dropped_not_nan(tmp_path: Path) -> None:
             "signal": _SIGNAL_BY_LINE,
         },
     )
-    out_dir = _run_cli(tmp_path, labels, context_paths={"ctx": context_csv})
+    out_dir = _run_ladder(tmp_path, labels, context_paths={"ctx": context_csv})
     predictions = pd.read_csv(out_dir / "predictions.csv")
 
     context_rows = predictions.loc[
@@ -537,7 +537,7 @@ def test_fixed_split_evaluates_val_and_test_slices(tmp_path: Path) -> None:
     context_csv = _write_context_csv(tmp_path / "ctx.csv", lines, {"signal": signal})
     split_json = _write_split_json(tmp_path / "split.json", train, val, test)
 
-    out_dir = _run_cli(
+    out_dir = _run_ladder(
         tmp_path,
         labels,
         context_paths={"ctx": context_csv},
@@ -562,21 +562,6 @@ def test_fixed_split_evaluates_val_and_test_slices(tmp_path: Path) -> None:
     assert set(predictions["model_id"]).isdisjoint(train)
 
 
-def test_fixed_split_requires_split_json(tmp_path: Path) -> None:
-    """The default --outer=fixed must fail clearly without --split-json."""
-    labels = _labels_no_signal(_BASE_LINES, _BASE_GENES)
-    labels_csv = _write_csv(tmp_path / "labels.csv", labels)
-    with pytest.raises(ValueError, match="split-json"):
-        main(
-            [
-                "--labels",
-                str(labels_csv),
-                "--out-dir",
-                str(tmp_path / "out"),
-            ]
-        )
-
-
 def test_fixed_split_train_never_enters_val_fit(tmp_path: Path) -> None:
     """mu_hat/mu_bar for a fixed split must come from train only, once."""
     lines = [f"L{i}" for i in range(7)]
@@ -593,7 +578,7 @@ def test_fixed_split_train_never_enters_val_fit(tmp_path: Path) -> None:
     labels = pd.DataFrame(rows)
     split_json = _write_split_json(tmp_path / "split.json", train, val, test)
 
-    out_dir = _run_cli(tmp_path, labels, outer="fixed", split_json=split_json)
+    out_dir = _run_ladder(tmp_path, labels, outer="fixed", split_json=split_json)
     predictions = pd.read_csv(out_dir / "predictions.csv")
     val_gene_mean = predictions.loc[
         (predictions["slice"] == "val") & (predictions["method"] == GENE_MEAN)
@@ -621,7 +606,7 @@ def test_fixed_split_keeps_unlabeled_train_members_out_of_supervised_fit(
         tmp_path / "split.json", train, val, test, [unlabeled]
     )
 
-    out_dir = _run_cli(
+    out_dir = _run_ladder(
         tmp_path,
         labels,
         context_paths={"ctx": context_csv},
@@ -676,7 +661,7 @@ def test_fixed_split_sparse_train_labels_keep_exact_baseline_coverage(
     prior_csv = _write_prior_csv(tmp_path / "prior.csv", genes)
     split_json = _write_split_json(tmp_path / "split.json", train, val, test)
 
-    out_dir = _run_cli(
+    out_dir = _run_ladder(
         tmp_path,
         labels,
         context_paths={"ctx": context_csv},
@@ -752,7 +737,7 @@ def test_fixed_split_fits_one_pca_per_view_and_one_ridge_per_gene(
     monkeypatch.setattr(residual_ladder.PCA, "fit", counted_pca_fit)
     monkeypatch.setattr(residual_ladder.Ridge, "fit", counted_ridge_fit)
 
-    out_dir = _run_cli(
+    out_dir = _run_ladder(
         tmp_path,
         labels,
         context_paths={"ctx": context_csv},
@@ -778,7 +763,7 @@ def test_fixed_split_fails_when_copy_prior_cannot_cover_truth_mask(
     incomplete_prior = _write_prior_csv(tmp_path / "prior.csv", ["G0"])
 
     with pytest.raises(ValueError, match="evaluated-key coverage differs"):
-        _run_cli(
+        _run_ladder(
             tmp_path,
             labels,
             prior_path=incomplete_prior,
@@ -794,7 +779,7 @@ def test_fixed_split_rejects_unlabeled_validation(tmp_path: Path) -> None:
         tmp_path / "split.json", _BASE_LINES[:5], ["UNKNOWN_VAL"], [_BASE_LINES[5]]
     )
     with pytest.raises(ValueError, match="split 'val' has unknown model_id"):
-        _run_cli(tmp_path, labels, outer="fixed", split_json=split_json)
+        _run_ladder(tmp_path, labels, outer="fixed", split_json=split_json)
 
 
 def test_fixed_split_rejects_undeclared_unknown_train(tmp_path: Path) -> None:
@@ -806,7 +791,7 @@ def test_fixed_split_rejects_undeclared_unknown_train(tmp_path: Path) -> None:
         [],
     )
     with pytest.raises(ValueError, match="does not match declared unlabeled_train"):
-        _run_cli(tmp_path, labels, outer="fixed", split_json=split_json)
+        _run_ladder(tmp_path, labels, outer="fixed", split_json=split_json)
 
 
 # --- No forbidden provenance/exposure apparatus in the plain JSON output --
@@ -831,7 +816,7 @@ def test_summary_json_has_no_forbidden_keys(tmp_path: Path) -> None:
     context_csv = _write_context_csv(
         tmp_path / "ctx.csv", _BASE_LINES, {"signal": _SIGNAL_BY_LINE}
     )
-    out_dir = _run_cli(tmp_path, labels, context_paths={"ctx": context_csv})
+    out_dir = _run_ladder(tmp_path, labels, context_paths={"ctx": context_csv})
     raw_text = (out_dir / "summary.json").read_text()
     summary = json.loads(raw_text)
 

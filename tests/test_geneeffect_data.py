@@ -11,7 +11,6 @@ import pandas as pd
 import pytest
 from scipy import sparse
 
-from src.data.gene_splits import sha256_file
 from src.data.geneeffect import (
     Exp13Split,
     build_g_var,
@@ -26,7 +25,7 @@ from src.data.q_sc import (
     QScFeatures,
     build_q_sc_shards,
     compute_q_sc,
-    verify_q_sc_shards,
+    load_q_sc_line,
 )
 
 
@@ -257,7 +256,7 @@ def test_q_sc_rejects_noncanonical_requests_and_zero_source_overlap() -> None:
         compute_q_sc(adata, ["C"])
 
 
-def test_q_sc_shards_resume_hash_and_unrestricted_verification(tmp_path: Path) -> None:
+def test_q_sc_shards_resume_and_rebuild_malformed(tmp_path: Path) -> None:
     source_a = tmp_path / "A.h5ad"
     source_b = tmp_path / "B.h5ad"
     source_a.write_bytes(b"source-a")
@@ -285,41 +284,30 @@ def test_q_sc_shards_resume_hash_and_unrestricted_verification(tmp_path: Path) -
     manifest = build_q_sc_shards(registry, output, ["G2", "MISSING"], reader=reader)
     assert manifest["line_count"] == 2
     assert len(calls) == 2
-    verification = verify_q_sc_shards(registry, output, ["G2", "MISSING"])
-    assert verification["status"] == "passed"
-    assert verification["manifest_sha256"] == sha256_file(output / "manifest.json")
-    assert set(verification["shard_sha256"]) == {"A", "B"}
     with np.load(output / "A.npz", allow_pickle=False) as shard:
         assert shard["model_id"].item() == "A"
         assert shard["gene_symbols"].tolist() == ["G2", "MISSING"]
         assert shard["values"].shape == (2, 3)
         assert shard["available"].tolist() == [True, False]
-        assert len(shard["source_sha256"].item()) == 64
 
     calls.clear()
     build_q_sc_shards(registry, output, ["G2", "MISSING"], reader=reader, resume=True)
     assert calls == []
 
-    np.savez(output / "EXTRA.npz", x=np.array([1]))
-    report = verify_q_sc_shards(registry, output, ["G2", "MISSING"])
-    assert report["status"] == "failed"
-    assert "extra shard: EXTRA.npz" in report["discrepancies"]
-
-    (output / "EXTRA.npz").unlink()
     with np.load(output / "A.npz", allow_pickle=False) as shard:
         payload = {key: shard[key] for key in shard.files}
     payload["values"] = payload["values"].copy()
-    payload["values"][0, 0] += 1
+    payload["values"][0, 0] = np.nan
     np.savez(output / "A.npz", **payload)
-    report = verify_q_sc_shards(registry, output, ["G2", "MISSING"])
-    assert "A: shard SHA-256 mismatch" in report["discrepancies"]
+    with pytest.raises(ValueError, match="invalid available values"):
+        load_q_sc_line(output, "A", ["G2", "MISSING"])
 
     calls.clear()
     build_q_sc_shards(registry, output, ["G2", "MISSING"], reader=reader, resume=True)
     assert calls == [source_a]
 
 
-def test_q_sc_builder_refuses_nonresume_overwrite_and_verifier_never_crashes(
+def test_q_sc_builder_refuses_overwrite_and_reader_rejects_malformed(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "A.h5ad"
@@ -346,8 +334,5 @@ def test_q_sc_builder_refuses_nonresume_overwrite_and_verifier_never_crashes(
         available=np.asarray([True]),
         source_sha256=np.asarray("bad"),
     )
-    (output / "manifest.json").write_text("[]")
-    report = verify_q_sc_shards(registry, output, ["G1"])
-    assert report["status"] == "failed"
-    assert "manifest root is not an object" in report["discrepancies"]
-    assert "A: values shape mismatch" in report["discrepancies"]
+    with pytest.raises(ValueError, match="shape"):
+        load_q_sc_line(output, "A", ["G1"])

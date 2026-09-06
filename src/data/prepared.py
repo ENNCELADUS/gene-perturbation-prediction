@@ -321,12 +321,16 @@ def load_inputs(
     if prepared_root_value is None:
         raise ValueError("config.prepared_root is required")
     prepared_root = Path(prepared_root_value)
-    metadata = _read_metadata(prepared_root / PREPARED_METADATA_FILENAME)
+    metadata_path = prepared_root / PREPARED_METADATA_FILENAME
+    metadata = _read_metadata(metadata_path)
     _validate_metadata_split(metadata, split)
 
     genes = _read_panel(_path(config, "common_gene_panel"))
     if tuple(metadata["common_gene_panel"]) != genes:
-        raise ValueError("prepared metadata common gene panel/order does not match CSV")
+        raise ValueError(
+            f"{metadata_path}: prepared metadata common gene panel/order "
+            "does not match CSV; run `hpc/run.sh prepare <config>`"
+        )
     hvg_order = _unique_upper(metadata["hvg_order"], "prepared HVG order")
     state_model_dir = _path(config, "state_model_dir")
     if not (state_model_dir / "var_dims.pkl").is_file():
@@ -338,11 +342,15 @@ def load_inputs(
         load_hvg_gene_order(state_model_dir), "STATE HVG order"
     )
     if hvg_order != state_hvg_order:
-        raise ValueError("prepared HVG order does not match STATE model order")
+        raise ValueError(
+            f"{metadata_path}: prepared HVG order does not match STATE model order; "
+            "run `hpc/run.sh prepare <config>`"
+        )
     expected_hvg_dim = _features(config).get("hvg_dim", 2_000)
     if len(hvg_order) != int(expected_hvg_dim):
         raise ValueError(
-            "prepared HVG order width does not match config.features.hvg_dim"
+            f"{metadata_path}: prepared HVG order width does not match "
+            "config.features.hvg_dim; run `hpc/run.sh prepare <config>`"
         )
 
     esm2_order = _unique_upper(metadata["esm2_order"], "prepared ESM2 order")
@@ -444,7 +452,8 @@ def load_inputs(
     )
     if response_targets.keys != response_conditions:
         raise ValueError(
-            "response cache condition order does not match prepared metadata"
+            f"{metadata_path} and {response_cache}: response cache condition order "
+            "does not match prepared metadata; run `hpc/run.sh prepare <config>`"
         )
     response_key_set = set(response_targets.keys)
     if any(model_id not in response_anchors for model_id, _ in response_key_set):

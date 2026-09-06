@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.baselines.residual import run_r1_ladder
-from src.experiments.baselines import _load_split
+from src.data.splits import load_geneeffect_226_split
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +38,7 @@ def test_single_split_contains_all_original_contexts_in_train() -> None:
 
 
 def test_json_is_the_only_three_way_membership_authority() -> None:
-    split = _load_split(SPLIT)
+    split = load_geneeffect_226_split(SPLIT)
     assert (len(split.train), len(split.val), len(split.test)) == (172, 27, 27)
     assert not (set(split.train) & (set(split.val) | set(split.test)))
     assert not (set(split.val) & set(split.test))
@@ -60,7 +60,7 @@ def test_audit_hashes_and_label_boundary() -> None:
 
 
 def test_exact_authority_runs_with_two_unlabeled_train_members() -> None:
-    split = _load_split(SPLIT)
+    split = load_geneeffect_226_split(SPLIT)
     unlabeled = {"ACH-000779", "ACH-001086"}
     labeled_ids = sorted(
         (set(split.train) | set(split.val) | set(split.test)) - unlabeled

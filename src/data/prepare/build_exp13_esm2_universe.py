@@ -13,23 +13,9 @@ import shlex
 import uuid
 import numpy as np
 import pandas as pd
-from src.data.geneeffect import Exp13Split, PINNED_COPY_PRIOR_SHA256
-
-EXPECTED_COVERAGE_QUALIFIED_COUNT = 17_931
-
-
-EXPECTED_COPY_PRIOR_ELIGIBLE_COUNT = 17_787
-
-
-SCHEMA_VERSION = "exp13-esm2-universes-v2"
-
+from src.data.geneeffect import Exp13Split
 
 COVERAGE_THRESHOLDS = {"train": 5, "val": 3, "test": 3}
-
-
-PINNED_GENE_EFFECT_SHA256 = (
-    "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e"
-)
 
 
 @dataclass(frozen=True)
@@ -53,28 +39,6 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def _symbols_sha256(symbols: Sequence[str]) -> str:
-    payload = "".join(f"{symbol}\n" for symbol in symbols).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
-def _require_sha256(value: str, label: str) -> None:
-    if len(value) != 64 or any(
-        character not in "0123456789abcdef" for character in value
-    ):
-        raise ValueError(f"{label} must be a lowercase SHA-256 digest")
-
-
-def require_pinned_gene_effect(path: Path) -> str:
-    observed = _sha256(path)
-    if observed != PINNED_GENE_EFFECT_SHA256:
-        raise ValueError(
-            "DepMap GeneEffect SHA-256 mismatch: "
-            f"{observed} != {PINNED_GENE_EFFECT_SHA256}"
-        )
-    return observed
 
 
 def _unique_symbols(symbols: Sequence[object], label: str) -> tuple[str, ...]:
@@ -154,58 +118,6 @@ def restrict_coverage_universe_to_copy_prior(
     return CoverageUniverse(kept, tuple(dropped))
 
 
-def load_authenticated_copy_prior_symbols(
-    copy_prior_path: Path,
-    manifest_path: Path,
-    labels: pd.DataFrame,
-    *,
-    split_path: Path,
-    gene_effect_path: Path,
-) -> tuple[str, ...]:
-    """Authenticate and reconstruct the finite K562 donor vocabulary."""
-    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict) or manifest.get("schema_version") != (
-        "exp13-copy-prior-v1"
-    ):
-        raise ValueError("copy-prior manifest schema mismatch")
-    if manifest.get("donor") != {
-        "model_id": "ACH-000551",
-        "split": "train",
-        "unlabeled": False,
-    }:
-        raise ValueError("copy-prior donor identity mismatch")
-    source = manifest.get("source")
-    split_record = manifest.get("split")
-    output_record = manifest.get("output")
-    if not all(
-        isinstance(value, dict) for value in (source, split_record, output_record)
-    ):
-        raise ValueError("copy-prior manifest hash metadata is missing")
-    if source.get("sha256") != _sha256(gene_effect_path):
-        raise ValueError("copy-prior source SHA-256 mismatch")
-    if split_record.get("sha256") != _sha256(split_path):
-        raise ValueError("copy-prior split SHA-256 mismatch")
-    if output_record.get("sha256") != _sha256(copy_prior_path):
-        raise ValueError("copy-prior output SHA-256 mismatch")
-    frame = pd.read_csv(copy_prior_path)
-    if tuple(frame.columns) != ("gene_symbol", "gene_effect"):
-        raise ValueError("copy-prior CSV columns mismatch")
-    symbols = tuple(frame["gene_symbol"].astype(str))
-    values = pd.to_numeric(frame["gene_effect"], errors="coerce")
-    if len(symbols) != len(set(symbols)) or values.isna().any():
-        raise ValueError("copy-prior CSV values are invalid")
-    donor = labels.loc[
-        (labels["model_id"] == "ACH-000551") & labels["gene_effect"].notna()
-    ]
-    if symbols != tuple(donor["gene_symbol"].astype(str)) or (
-        _sha256(copy_prior_path) != PINNED_COPY_PRIOR_SHA256
-    ):
-        raise ValueError("copy-prior CSV does not match pinned K562 donor row")
-    if output_record.get("gene_symbols_sha256") != _symbols_sha256(symbols):
-        raise ValueError("copy-prior symbol coverage hash mismatch")
-    return symbols
-
-
 def coverage_qualified_symbols(
     labels: pd.DataFrame, split: Exp13Split
 ) -> tuple[str, ...]:
@@ -213,12 +125,12 @@ def coverage_qualified_symbols(
 
 
 def build_embedding_union(
-    scored_symbols: Sequence[str], stage1_symbols: Sequence[str]
+    scored_symbols: Sequence[str], response_symbols: Sequence[str]
 ) -> tuple[str, ...]:
     """Return the deterministic union consumed by the sorting precompute script."""
     scored = _unique_symbols(scored_symbols, "scored GeneEffect universe")
-    stage1 = _unique_symbols(stage1_symbols, "Stage-1 vocabulary")
-    return tuple(sorted(set(scored) | set(stage1)))
+    response = _unique_symbols(response_symbols, "response vocabulary")
+    return tuple(sorted(set(scored) | set(response)))
 
 
 def inspect_npz_coverage(
@@ -345,11 +257,65 @@ def _atomic_write_text(path: Path, text: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _universe_record(symbols: tuple[str, ...], path: Path) -> dict[str, object]:
-    return {
-        "symbols": list(symbols),
-        "count": len(symbols),
-        "symbols_sha256": _symbols_sha256(symbols),
-        "csv": str(path),
-        "csv_sha256": _sha256(path),
+def write_embedding_union(*, scored_symbols, response_symbols, esm2_path, output_dir):
+    """Record dependency/response union and supplied table coverage, without seals."""
+    from src.data.embeddings import load_esm2_embeddings
+
+    union = build_embedding_union(tuple(scored_symbols), tuple(response_symbols))
+    report = inspect_npz_coverage(Path(esm2_path), union)
+    table = load_esm2_embeddings(Path(esm2_path))
+    resolved = set(table.vectors_by_symbol)
+    panel = tuple(gene for gene in scored_symbols if gene in resolved)
+    if not panel:
+        raise ValueError("no scored genes resolve in supplied ESM2 table")
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write_text(
+        output_dir / "embedding_union.csv",
+        pd.DataFrame({"gene_symbol": union}).to_csv(index=False),
+    )
+    _atomic_write_text(
+        output_dir / "common_gene_panel.csv",
+        pd.DataFrame({"gene_symbol": panel}).to_csv(index=False),
+    )
+    payload = {
+        "embedding_union": list(union),
+        "common_gene_panel": list(panel),
+        "unresolved_symbols": list(report.missing),
+        "esm2_table": str(esm2_path),
+        "esm2_order": list(table.vectors_by_symbol),
+        "vector_width": table.dim,
     }
+    _atomic_write_text(
+        output_dir / "embedding_union.json", json.dumps(payload, indent=2) + "\n"
+    )
+    return payload
+
+
+def main(argv=None):
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--scored-panel", type=Path, required=True)
+    parser.add_argument(
+        "--response-conditions",
+        type=Path,
+        required=True,
+        help="CSV with perturbation_gene column",
+    )
+    parser.add_argument("--esm2", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args(argv)
+    write_embedding_union(
+        scored_symbols=tuple(pd.read_csv(args.scored_panel).gene_symbol),
+        response_symbols=tuple(
+            sorted(set(pd.read_csv(args.response_conditions).perturbation_gene))
+        ),
+        esm2_path=args.esm2,
+        output_dir=args.output_dir,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
