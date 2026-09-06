@@ -28,10 +28,15 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--steps", type=int, default=64)
     parser.add_argument("--profile", action="store_true")
+    parser.add_argument("--dependency-batch-size", type=int)
     args = parser.parse_args()
     if args.steps < 4 or args.steps % 4:
         parser.error("--steps must be a positive multiple of four")
     config = load_config(args.config)
+    if args.dependency_batch_size is not None:
+        if args.dependency_batch_size < 1:
+            parser.error("--dependency-batch-size must be positive")
+        config["train"]["dependency_batch_size"] = args.dependency_batch_size
     accelerator = Accelerator(
         mixed_precision=config["precision"],
         kwargs_handlers=[DistributedDataParallelKwargs(find_unused_parameters=True)],
