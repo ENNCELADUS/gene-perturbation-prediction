@@ -242,7 +242,7 @@ def fit_startup_standardizer(
         try:
             with torch.random.fork_rng(devices=devices), torch.no_grad():
                 model.eval()
-                dataset = DependencyDataset(inputs, "train")
+                dataset = DependencyDataset(inputs, "train", device=device)
                 rng = np.random.default_rng(0)
                 selected: list[int] = []
                 for indices in dataset.rows.groupby(

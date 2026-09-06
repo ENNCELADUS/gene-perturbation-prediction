@@ -48,7 +48,9 @@ def test_epoch_rank_restart_reproduces_both_streams_without_global_rng_use(tmp_p
     torch_state = torch.get_rng_state().clone()
 
     def sample(epoch, rank):
-        accelerator = SimpleNamespace(process_index=rank, num_processes=2)
+        accelerator = SimpleNamespace(
+            process_index=rank, num_processes=2, device=torch.device("cpu")
+        )
         dep, response = make_training_loaders(inputs, config, epoch, accelerator)
         return [keys(batch) for batch in dep], [keys(next(response)) for _ in range(5)]
 
@@ -109,3 +111,31 @@ def test_cpu_accelerate_evaluation_retains_tail_and_keys(tmp_path):
         )
     assert {row["key"] for row in response_rows} == inputs.response_holdout
     assert len(response_rows) == len(inputs.response_holdout)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_loaders_reuse_fixed_basal_inputs_on_worker_device(tmp_path, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA is unavailable")
+    config = make_prepared_fixture(tmp_path)
+    config["train"]["response_batch_size"] = 8
+    inputs = load_inputs(config)
+    accelerator = SimpleNamespace(
+        process_index=0, num_processes=1, device=torch.device(device)
+    )
+    dependency, response = make_training_loaders(inputs, config, 0, accelerator)
+    first = dependency.dataset.collate([0, 0]).conditions
+    second = dependency.dataset.collate([0, 0]).conditions
+    for field in ("controls_tx1", "basal_hvg"):
+        values = getattr(first, field)
+        assert values[0] is values[1] is getattr(second, field)[0]
+        assert values[0].device.type == device
+        line = inputs.lines[first.model_ids[0]]
+        expected = getattr(line, field)
+        torch.testing.assert_close(values[0].cpu(), torch.from_numpy(expected))
+    replay = next(response)
+    for field in ("controls_tx1", "control_hvg"):
+        values = getattr(replay, field)
+        assert values[0] is values[1]
+        assert values[0].device.type == device
+    assert not set(keys(replay)) & inputs.response_holdout
