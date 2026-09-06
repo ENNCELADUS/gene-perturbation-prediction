@@ -78,8 +78,9 @@ def make_training_loaders(
         raise ValueError("response_batch_size must be positive and divisible by four")
     rank = int(accelerator.process_index) if accelerator is not None else 0
     world_size = int(accelerator.num_processes) if accelerator is not None else 1
-    dependency_dataset = DependencyDataset(inputs, "train")
-    response_dataset = ResponseDataset(inputs, holdout=False)
+    device = "cpu" if accelerator is None else accelerator.device
+    dependency_dataset = DependencyDataset(inputs, "train", device=device)
+    response_dataset = ResponseDataset(inputs, holdout=False, device=device)
     anchors = inputs.response_anchors
     if len(anchors) != 4 or len(set(anchors)) != 4:
         raise ValueError("response replay requires four distinct anchors")

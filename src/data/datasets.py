@@ -30,7 +30,9 @@ def _pooled_context(array: np.ndarray) -> torch.Tensor:
 class DependencyDataset(Dataset[int]):
     """Finite GeneEffect rows with a collator over opened prepared arrays."""
 
-    def __init__(self, inputs: PreparedInputs, split: str) -> None:
+    def __init__(
+        self, inputs: PreparedInputs, split: str, *, device: torch.device | str = "cpu"
+    ) -> None:
         if split == "train":
             model_ids = set(inputs.split.supervised_train)
         elif split == "val":
@@ -63,6 +65,16 @@ class DependencyDataset(Dataset[int]):
             model_id: _pooled_context(line.controls_tx1)
             for model_id, line in inputs.lines.items()
         }
+        # These are fixed sampled basal inputs, not trainable model features.
+        # Keep one tensor per eligible line on the worker device across batches.
+        self._controls = {
+            model_id: torch.from_numpy(inputs.lines[model_id].controls_tx1).to(device)
+            for model_id in sorted(set(rows["model_id"]))
+        }
+        self._basal = {
+            model_id: torch.from_numpy(inputs.lines[model_id].basal_hvg).to(device)
+            for model_id in self._controls
+        }
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -91,12 +103,10 @@ class DependencyDataset(Dataset[int]):
         hvg_indices = tuple(self._hvg_index.get(gene) for gene in genes)
         conditions = OnlineConditionBatch(
             controls_tx1=tuple(
-                torch.from_numpy(self.inputs.lines[model_id].controls_tx1)
-                for model_id in model_ids
+                self._controls[model_id] for model_id in model_ids
             ),
             basal_hvg=tuple(
-                torch.from_numpy(self.inputs.lines[model_id].basal_hvg)
-                for model_id in model_ids
+                self._basal[model_id] for model_id in model_ids
             ),
             genes=genes,
             model_ids=model_ids,
@@ -137,7 +147,10 @@ class DependencyDataset(Dataset[int]):
 class ResponseDataset(Dataset[int]):
     """Prepared response conditions selected by the persisted holdout."""
 
-    def __init__(self, inputs: PreparedInputs, *, holdout: bool) -> None:
+    def __init__(
+        self, inputs: PreparedInputs, *, holdout: bool,
+        device: torch.device | str = "cpu",
+    ) -> None:
         if inputs.response_targets is None:
             raise ValueError("prepared inputs have no opened response cache")
         self.inputs = inputs
@@ -150,6 +163,14 @@ class ResponseDataset(Dataset[int]):
         if not self.indices:
             kind = "holdout" if holdout else "training"
             raise ValueError(f"prepared response cache has no {kind} conditions")
+        self._controls = {
+            model_id: torch.from_numpy(inputs.lines[model_id].controls_tx1).to(device)
+            for model_id in sorted({self.cache.model_ids[i] for i in self.indices})
+        }
+        self._basal = {
+            model_id: torch.from_numpy(inputs.lines[model_id].basal_hvg).to(device)
+            for model_id in self._controls
+        }
 
     def __len__(self) -> int:
         return len(self.indices)
@@ -170,13 +191,11 @@ class ResponseDataset(Dataset[int]):
             model_ids=model_ids,
             genes=genes,
             controls_tx1=tuple(
-                torch.from_numpy(self.inputs.lines[model_id].controls_tx1)
-                for model_id in model_ids
+                self._controls[model_id] for model_id in model_ids
             ),
             observed_hvg=observed,
             control_hvg=tuple(
-                torch.from_numpy(self.inputs.lines[model_id].basal_hvg)
-                for model_id in model_ids
+                self._basal[model_id] for model_id in model_ids
             ),
         )
         # Response cache construction/opening owns the persisted-data contract;
@@ -196,8 +215,9 @@ def make_evaluation_loaders(
     response_size = int(train.get("response_batch_size", 64))
     if dependency_size <= 0 or response_size <= 0:
         raise ValueError("evaluation batch sizes must be positive")
-    dependency_dataset = DependencyDataset(inputs, split)
-    response_dataset = ResponseDataset(inputs, holdout=True)
+    device = "cpu" if accelerator is None else accelerator.device
+    dependency_dataset = DependencyDataset(inputs, split, device=device)
+    response_dataset = ResponseDataset(inputs, holdout=True, device=device)
     dependency_loader = DataLoader(
         dependency_dataset,
         batch_size=dependency_size,
