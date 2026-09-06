@@ -27,6 +27,96 @@ class QScFeatures:
     available: np.ndarray
 
 
+def load_q_sc_line(
+    cache_dir: Path, model_id: str, expected_genes: Sequence[str]
+) -> QScFeatures:
+    """Open one prepared q_sc shard without consulting raw source data.
+
+    The historical ``source_sha256`` scalar is part of the file layout but is
+    deliberately not read or recomputed by the training input path.
+    """
+    symbols = tuple(str(gene).strip().upper() for gene in expected_genes)
+    if not symbols or len(set(symbols)) != len(symbols):
+        raise ValueError(
+            "expected q_sc genes must be non-empty and unique"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    path = Path(cache_dir) / f"{model_id}.npz"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"missing prepared q_sc shard {path}; run `hpc/run.sh prepare <config>`"
+        )
+    try:
+        with np.load(path, allow_pickle=False) as shard:
+            expected_keys = {
+                "model_id",
+                "gene_symbols",
+                "values",
+                "available",
+                "source_sha256",
+            }
+            if set(shard.files) != expected_keys:
+                raise ValueError(
+                    f"q_sc shard {path} fields {sorted(shard.files)} do not match "
+                    f"the prepared layout {sorted(expected_keys)}"
+                    "; run `hpc/run.sh prepare <config>`"
+                )
+            recorded_model_id = str(shard["model_id"].item())
+            recorded_symbols = tuple(shard["gene_symbols"].astype(str).tolist())
+            values = np.asarray(shard["values"])
+            available = np.asarray(shard["available"])
+    except (OSError, EOFError) as exc:
+        raise ValueError(
+            f"unable to read prepared q_sc shard {path}: {exc}"
+            "; run `hpc/run.sh prepare <config>`"
+        ) from exc
+    if recorded_model_id != model_id:
+        raise ValueError(
+            f"q_sc shard {path} records model_id {recorded_model_id!r}, "
+            f"expected {model_id!r}"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if recorded_symbols != symbols:
+        raise ValueError(
+            f"q_sc shard {path} gene order does not match prepared panel"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if values.shape != (len(symbols), 3) or values.dtype != np.dtype(np.float32):
+        raise ValueError(
+            f"q_sc shard {path} values must be float32 [{len(symbols)}, 3], "
+            f"got shape={values.shape} dtype={values.dtype}"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if available.shape != (len(symbols),) or available.dtype != np.dtype(bool):
+        raise ValueError(
+            f"q_sc shard {path} available must be bool [{len(symbols)}], "
+            f"got shape={available.shape} dtype={available.dtype}"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if bool((~available).any()) and not bool(np.isnan(values[~available]).all()):
+        raise ValueError(
+            f"q_sc shard {path} has non-NaN unavailable rows"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if bool(available.any()):
+        present = values[available]
+        if (
+            not bool(np.isfinite(present).all())
+            or bool((present[:, 0] < 0).any())
+            or bool(((present[:, 1] < 0) | (present[:, 1] > 1)).any())
+            or bool((present[:, 2] < 0).any())
+        ):
+            raise ValueError(
+                f"q_sc shard {path} has invalid available values"
+                "; run `hpc/run.sh prepare <config>`"
+            )
+    return QScFeatures(
+        symbols=symbols,
+        values=values.astype(np.float32, copy=False),
+        available=available.astype(bool, copy=False),
+    )
+
+
 def compute_q_sc(
     adata: Any,
     requested_symbols: Sequence[str],

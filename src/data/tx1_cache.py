@@ -511,6 +511,103 @@ def load_line_cache(
     return embeddings, hvg_matrix, obs
 
 
+def open_line_cache(
+    cache_dir: Path,
+    model_id: str,
+    *,
+    expected_hvg_order: Sequence[str],
+) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+    """Open and structurally validate one prepared Tx1/HVG line cache.
+
+    This read path checks only prepared files and the small HVG-order
+    sidecar. It never invokes a raw reader, full verifier, or cache writer.
+    """
+    line_dir = Path(cache_dir) / model_id
+    required = tuple(
+        line_dir / filename
+        for filename in (
+            "embeddings.npy",
+            "hvg.npy",
+            "obs.parquet",
+            _HVG_GENE_ORDER_FILENAME,
+        )
+    )
+    missing = [path for path in required if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"missing prepared Tx1 cache file {missing[0]}; run "
+            "`hpc/run.sh prepare <config>`"
+        )
+    try:
+        embeddings, hvg_matrix, obs = load_line_cache(cache_dir, model_id)
+    except (OSError, EOFError, ValueError) as exc:
+        raise ValueError(
+            f"unable to read prepared Tx1 cache {line_dir}: {exc}"
+            "; run `hpc/run.sh prepare <config>`"
+        ) from exc
+    expected_order = tuple(str(gene).strip().upper() for gene in expected_hvg_order)
+    if not expected_order or len(set(expected_order)) != len(expected_order):
+        raise ValueError(
+            "expected HVG order must be non-empty and unique"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if (
+        embeddings.ndim != 2
+        or embeddings.shape[0] == 0
+        or embeddings.shape[1] != EMBEDDING_WIDTH
+        or embeddings.dtype != np.dtype(np.float32)
+    ):
+        raise ValueError(
+            f"prepared Tx1 embeddings {line_dir / 'embeddings.npy'} must be "
+            f"non-empty float32 [cells, {EMBEDDING_WIDTH}], got "
+            f"shape={embeddings.shape} dtype={embeddings.dtype}"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if (
+        hvg_matrix.ndim != 2
+        or hvg_matrix.shape != (embeddings.shape[0], len(expected_order))
+        or hvg_matrix.dtype != np.dtype(np.float32)
+    ):
+        raise ValueError(
+            f"prepared HVG cache {line_dir / 'hvg.npy'} must be float32 "
+            f"[{embeddings.shape[0]}, {len(expected_order)}], got "
+            f"shape={hvg_matrix.shape} dtype={hvg_matrix.dtype}"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    if len(obs) != embeddings.shape[0]:
+        raise ValueError(
+            f"prepared Tx1 cache {line_dir} row counts disagree"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    cell_ids = tuple(str(value) for value in obs.index)
+    if (
+        obs.index.isna().any()
+        or any(not value for value in cell_ids)
+        or len(set(cell_ids)) != len(cell_ids)
+    ):
+        raise ValueError(
+            f"prepared Tx1 cache {line_dir} has empty/duplicate cell IDs"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    sidecar_path = line_dir / _HVG_GENE_ORDER_FILENAME
+    try:
+        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"invalid HVG order sidecar {sidecar_path}: {exc}"
+            "; run `hpc/run.sh prepare <config>`"
+        ) from exc
+    expected_signature = _hvg_gene_order_signature(expected_order)
+    if not isinstance(sidecar, dict) or any(
+        sidecar.get(key) != expected_signature[key] for key in ("sha256", "width")
+    ):
+        raise ValueError(
+            f"HVG order sidecar {sidecar_path} does not match prepared ordered genes"
+            "; run `hpc/run.sh prepare <config>`"
+        )
+    return embeddings, hvg_matrix, obs
+
+
 def load_hvg_gene_order(state_model_dir: Path) -> np.ndarray:
     """Load the released ST checkpoint's gene order from ``var_dims.pkl``.
 
@@ -1722,6 +1819,7 @@ __all__ = [
     "embedding_norm_stats",
     "write_run_manifest",
     "load_line_cache",
+    "open_line_cache",
     "load_hvg_gene_order",
     "verify_cache",
     "embed_lines",

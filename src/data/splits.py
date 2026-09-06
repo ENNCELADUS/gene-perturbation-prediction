@@ -22,19 +22,57 @@ class FixedSplit:
     test: tuple[str, ...]
     unlabeled_train: tuple[str, ...] = ()
 
+    @property
+    def all_model_ids(self) -> tuple[str, ...]:
+        return self.train + self.val + self.test
+
+    @property
+    def supervised_train(self) -> tuple[str, ...]:
+        unlabeled = set(self.unlabeled_train)
+        return tuple(model_id for model_id in self.train if model_id not in unlabeled)
+
 
 _SPLIT_KEYS: tuple[str, ...] = ("train", "val", "test")
 
 
-__all__ = ["FixedSplit", "load_geneeffect_226_split", "assert_fit_eligible"]
+__all__ = [
+    "FixedSplit",
+    "assert_fit_eligible",
+    "load_geneeffect_226_split",
+    "validate_fixed_split",
+]
+
+
+def validate_fixed_split(split: FixedSplit) -> None:
+    """Require unique, disjoint membership and train-only unlabeled members."""
+    for name in (*_SPLIT_KEYS, "unlabeled_train"):
+        values = getattr(split, name)
+        if any(not isinstance(value, str) or not value for value in values):
+            raise ValueError(f"split {name} contains an empty/non-string ModelID")
+        duplicates = sorted({value for value in values if values.count(value) > 1})
+        if duplicates:
+            raise ValueError(f"split {name} contains duplicates: {duplicates[:10]}")
+    memberships = {
+        "train": set(split.train),
+        "val": set(split.val),
+        "test": set(split.test),
+    }
+    for left, right in (("train", "val"), ("train", "test"), ("val", "test")):
+        overlap = sorted(memberships[left] & memberships[right])
+        if overlap:
+            raise ValueError(
+                f"split membership overlaps between {left}/{right}: {overlap[:10]}"
+            )
+    outside = sorted(set(split.unlabeled_train) - memberships["train"])
+    if outside:
+        raise ValueError(f"unlabeled_train contains non-train ModelIDs: {outside[:10]}")
 
 
 def load_geneeffect_226_split(path: Path) -> FixedSplit:
     """Load a ``cell_line_geneeffect_226_split``-shaped JSON into a :class:`FixedSplit`.
 
-    Shape-validates only (JSON object; ``train``/``val``/``test``/
-    ``unlabeled_train`` are lists of strings) -- mirrors
-    ``src/experiments/baselines.py::_load_split``.
+    Validate string-list fields, disjoint train/validation/test membership,
+    and train-only membership of the explicitly unlabeled lines.
 
     Raises:
         ValueError: ``path`` is not a JSON object, is missing a required key,
@@ -59,12 +97,14 @@ def load_geneeffect_226_split(path: Path) -> FixedSplit:
         raise ValueError(
             f"split JSON {path}: 'unlabeled_train' must be a list of strings"
         )
-    return FixedSplit(
+    split = FixedSplit(
         train=parts["train"],
         val=parts["val"],
         test=parts["test"],
         unlabeled_train=tuple(unlabeled),
     )
+    validate_fixed_split(split)
+    return split
 
 
 def assert_fit_eligible(model_id: str, split: FixedSplit) -> None:

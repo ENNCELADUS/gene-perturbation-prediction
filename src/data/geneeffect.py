@@ -102,6 +102,40 @@ class VariableGenes:
     manifest: dict[str, object]
 
 
+def fit_variable_gene_membership(
+    labels: pd.DataFrame,
+    train_lines: Sequence[str],
+    genes: Sequence[str],
+    *,
+    min_observations: int = 5,
+    percentile: float = 75.0,
+) -> frozenset[str]:
+    """Fit residual-variance membership using labeled training rows only."""
+    required = {"model_id", "gene_symbol", "residual"}
+    missing = sorted(required - set(labels.columns))
+    if missing:
+        raise ValueError(f"labels is missing columns: {missing}")
+    if min_observations <= 0:
+        raise ValueError("min_observations must be positive")
+    if not 0.0 <= percentile <= 100.0:
+        raise ValueError("percentile must be between 0 and 100")
+    ordered = _unique_strings(genes, "variable-gene panel")
+    train_set = set(train_lines)
+    if not train_set:
+        raise ValueError("train_lines must not be empty")
+    train = labels.loc[labels["model_id"].isin(train_set)]
+    grouped = train.groupby("gene_symbol")["residual"]
+    counts = grouped.count().reindex(ordered, fill_value=0)
+    eligible = counts[counts >= min_observations].index
+    variance = grouped.var(ddof=0).reindex(eligible)
+    if variance.empty or not bool(np.isfinite(variance.to_numpy()).all()):
+        raise ValueError("variable-gene fit has no finite eligible variances")
+    threshold = float(
+        np.percentile(variance.to_numpy(), percentile, method="linear")
+    )
+    return frozenset(variance.index[variance >= threshold].astype(str))
+
+
 def _unique_strings(values: Sequence[object], label: str) -> tuple[str, ...]:
     result = tuple(str(value) for value in values)
     if any(not value for value in result):
