@@ -144,6 +144,30 @@ def make_prepared_fixture(root: Path, *, hvg_width: int = 2) -> dict:
     }
 
 
+def test_load_inputs_preserves_mixed_case_state_hvg_axis(tmp_path: Path) -> None:
+    config = make_prepared_fixture(tmp_path)
+    hvg_order = ["C1orf109", "C3orf38"]
+    state_dir = Path(config["paths"]["state_model_dir"])
+    (state_dir / "var_dims.pkl").write_bytes(pickle.dumps({"gene_names": hvg_order}))
+    tx1_root = Path(config["paths"]["tx1_cache"])
+    for sidecar in tx1_root.glob("*/hvg_gene_order.json"):
+        sidecar.write_text(json.dumps(_hvg_gene_order_signature(hvg_order)))
+    prepared_path = Path(config["prepared_root"]) / "prepared_inputs.json"
+    prepared = json.loads(prepared_path.read_text())
+    prepared["hvg_order"] = hvg_order
+    prepared_path.write_text(json.dumps(prepared))
+    response_manifest_path = (
+        Path(config["paths"]["response_cache"]) / "response_targets" / "manifest.json"
+    )
+    response_manifest = json.loads(response_manifest_path.read_text())
+    response_manifest["hvg_order"] = hvg_order
+    response_manifest_path.write_text(json.dumps(response_manifest))
+
+    inputs = load_inputs(config)
+
+    assert inputs.hvg_order == tuple(hvg_order)
+
+
 def test_train_only_fit_and_explicit_test_exposure(tmp_path):
     config = make_prepared_fixture(tmp_path)
     before = load_inputs(config)

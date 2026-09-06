@@ -276,6 +276,15 @@ def _validate_line_cache_inputs(
     hvg_gene_order: Sequence[str] | np.ndarray,
 ) -> None:
     """Raise ``ValueError`` on any :func:`write_line_cache` contract violation."""
+    normalized_hvg_order = tuple(str(gene).strip().upper() for gene in hvg_gene_order)
+    if (
+        not normalized_hvg_order
+        or any(not gene for gene in normalized_hvg_order)
+        or len(set(normalized_hvg_order)) != len(normalized_hvg_order)
+    ):
+        raise ValueError(
+            f"line {model_id}: hvg_gene_order must contain unique non-empty genes"
+        )
     actual_width = embeddings.shape[1] if embeddings.ndim == 2 else None
     if actual_width != EMBEDDING_WIDTH:
         raise ValueError(
@@ -545,8 +554,13 @@ def open_line_cache(
             f"unable to read prepared Tx1 cache {line_dir}: {exc}"
             "; run `hpc/run.sh prepare <config>`"
         ) from exc
-    expected_order = tuple(str(gene).strip().upper() for gene in expected_hvg_order)
-    if not expected_order or len(set(expected_order)) != len(expected_order):
+    expected_order = tuple(str(gene) for gene in expected_hvg_order)
+    normalized_order = tuple(gene.strip().upper() for gene in expected_order)
+    if (
+        not expected_order
+        or any(not gene for gene in normalized_order)
+        or len(set(normalized_order)) != len(normalized_order)
+    ):
         raise ValueError(
             "expected HVG order must be non-empty and unique"
             "; run `hpc/run.sh prepare <config>`"

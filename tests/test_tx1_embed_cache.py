@@ -38,6 +38,7 @@ from src.data.tx1_cache import (
     embedding_norm_stats,
     load_hvg_gene_order,
     load_line_cache,
+    open_line_cache,
     verify_cache,
     write_line_cache,
     write_run_manifest,
@@ -353,6 +354,54 @@ def test_write_line_cache_round_trip(tmp_path: Path) -> None:
     np.testing.assert_array_equal(np.asarray(loaded_embeddings), embeddings)
     np.testing.assert_array_equal(np.asarray(loaded_hvg), hvg)
     assert loaded_obs["cell_type"].tolist() == obs["cell_type"].tolist()
+
+
+def test_open_line_cache_preserves_mixed_case_hvg_order(tmp_path: Path) -> None:
+    embeddings = _embeddings(2)
+    hvg = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    order = ["C1orf109", "C3orf38"]
+    write_line_cache(
+        tmp_path,
+        "ACH-A",
+        embeddings,
+        hvg,
+        _obs(2),
+        hvg_gene_order=order,
+    )
+
+    loaded_embeddings, loaded_hvg, _ = open_line_cache(
+        tmp_path, "ACH-A", expected_hvg_order=order
+    )
+    np.testing.assert_array_equal(np.asarray(loaded_embeddings), embeddings)
+    np.testing.assert_array_equal(np.asarray(loaded_hvg), hvg)
+
+    with pytest.raises(ValueError, match="does not match prepared ordered genes"):
+        open_line_cache(
+            tmp_path,
+            "ACH-A",
+            expected_hvg_order=["C3orf38", "C1orf109"],
+        )
+    with pytest.raises(ValueError, match="does not match prepared ordered genes"):
+        open_line_cache(
+            tmp_path,
+            "ACH-A",
+            expected_hvg_order=["C1ORF109", "C3ORF38"],
+        )
+
+
+def test_open_line_cache_accepts_existing_mixed_case_sidecar(tmp_path: Path) -> None:
+    line = tmp_path / "ACH-A"
+    line.mkdir()
+    np.save(line / "embeddings.npy", _embeddings(2))
+    np.save(line / "hvg.npy", np.ones((2, 2), dtype=np.float32))
+    _obs(2).to_parquet(line / "obs.parquet")
+    order = ["C1orf109", "C3orf38"]
+    (line / "hvg_gene_order.json").write_text(
+        json.dumps(tx1_embed_cache_module._hvg_gene_order_signature(order))
+    )
+
+    _, loaded_hvg, _ = open_line_cache(tmp_path, "ACH-A", expected_hvg_order=order)
+    assert loaded_hvg.shape == (2, 2)
 
 
 def test_write_line_cache_wrong_width_raises(tmp_path: Path) -> None:

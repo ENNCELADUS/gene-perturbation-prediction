@@ -39,6 +39,28 @@ def test_roundtrip_mmap_and_distinct_anchor_keys(tmp_path):
         open_response_targets_cache(tmp_path, expected_hvg_order=["X", "Z"])
 
 
+def test_roundtrip_preserves_mixed_case_hvg_axis(tmp_path):
+    bags = [np.ones((2, 2), dtype=np.float32)]
+    metadata = pd.DataFrame(
+        {"model_id": ["A"], "perturbation_gene": ["G"], "n_cells": [2]}
+    )
+    order = ["C1orf109", "C3orf38"]
+    write_response_targets_cache(
+        tmp_path,
+        genes=["G@A"],
+        target_bags=bags,
+        metadata=metadata,
+        hvg_order=order,
+    )
+
+    opened = open_response_targets_cache(tmp_path, expected_hvg_order=order)
+    np.testing.assert_array_equal(opened.target_bag(0), bags[0])
+    with pytest.raises(ValueError, match="matching ordered hvg_order"):
+        open_response_targets_cache(
+            tmp_path, expected_hvg_order=["C3orf38", "C1orf109"]
+        )
+
+
 @pytest.mark.parametrize(
     "mutation, match",
     [
