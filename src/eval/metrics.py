@@ -9,7 +9,7 @@ import logging
 from collections.abc import Callable
 from typing import Literal
 import numpy as np
-from scipy.stats import spearmanr
+from scipy.stats import pearsonr, spearmanr
 
 
 class MacroPerGeneSpearman(NamedTuple):
@@ -35,7 +35,7 @@ def macro_per_gene_spearman(
     target: torch.Tensor,
     gene_ids: Sequence[str] | None = None,
 ) -> MacroPerGeneSpearman:
-    """Macro per-gene Spearman across contexts -- the selection/reporting metric.
+    """Macro per-gene Spearman across contexts for residual reporting.
 
     This is a thin torch-tensor adapter over
     :func:`src.eval.metrics.per_gene_spearman`: it reshapes
@@ -43,9 +43,8 @@ def macro_per_gene_spearman(
     its per-gene grouping, NaN-on-undefined convention (constant truth or
     prediction, or fewer than
     ``src.eval.metrics.MIN_OBSERVATIONS`` finite pairs), and
-    ``nanmean`` aggregation, rather than reimplementing them. Use this for
-    checkpoint selection / reporting; use :func:`per_gene_rank_variance_loss`
-    (a differentiable surrogate) for training.
+    ``nanmean`` aggregation, rather than reimplementing them. Joint-training
+    checkpoint selection uses GeneEffect Huber loss, not this correlation.
 
     Args:
         pred: Predictions, shape ``[n_genes, n_contexts]``.
@@ -105,6 +104,17 @@ _ZERO_DELTA_EPS = 1e-12
 
 
 _Axis = Literal["per_line", "per_gene"]
+
+
+def _unit_pearson(truth: np.ndarray, pred: np.ndarray) -> float:
+    """Pearson on finite pairs, with the same undefined policy as Spearman."""
+    finite = np.isfinite(truth) & np.isfinite(pred)
+    truth, pred = truth[finite], pred[finite]
+    if truth.size < MIN_OBSERVATIONS:
+        return float("nan")
+    if np.all(truth == truth[0]) or np.all(pred == pred[0]):
+        return float("nan")
+    return float(pearsonr(truth, pred).statistic)
 
 
 def _unit_spearman(truth: np.ndarray, pred: np.ndarray) -> float:
