@@ -1,4 +1,4 @@
-"""DDP invariants for the Exp13 Stage 1 response-model trainer."""
+"""Device assignment and coordinated ordinary rank failures for joint training."""
 
 from collections.abc import Callable
 import traceback
@@ -6,30 +6,19 @@ import traceback
 from accelerate import Accelerator
 import torch
 
-_CUDA_TOPOLOGY_MARKER = "_aivc_cuda_topology"
-
 
 def require_distinct_devices(accelerator: Accelerator) -> None:
-    """Require every DDP rank to sit on a distinct CUDA device.
-
-    A single-process run is legal on any device (CPU, MPS, or a single CUDA
-    device) and returns immediately without any collective. With more than
-    one rank, every rank must report a CUDA device, and no two ranks may
-    report the same CUDA device index -- two ranks sharing one GPU is the
-    real failure this catches.
-    """
+    """Allow CPU/Gloo or require distinct local CUDA assignments."""
     if accelerator.num_processes == 1:
-        return
-    verified = getattr(accelerator, _CUDA_TOPOLOGY_MARKER, None)
-    if (
-        isinstance(verified, tuple)
-        and len(verified) == 2
-        and verified[0] == accelerator.num_processes
-    ):
         return
     local_assignment = (accelerator.device.type, accelerator.device.index)
     assignments: list[object | None] = [None] * accelerator.num_processes
     torch.distributed.all_gather_object(assignments, local_assignment)
+    if all(
+        isinstance(assignment, tuple) and assignment[0] == "cpu"
+        for assignment in assignments
+    ):
+        return
     if any(
         not isinstance(assignment, tuple)
         or len(assignment) != 2
@@ -38,7 +27,7 @@ def require_distinct_devices(accelerator: Accelerator) -> None:
         for assignment in assignments
     ):
         raise RuntimeError(
-            "multi-rank DDP requires CUDA on every rank; "
+            "multi-rank DDP requires CPU on every rank or distinct CUDA devices; "
             f"got assignments {tuple(assignments)}"
         )
     cuda_indices = tuple(int(assignment[1]) for assignment in assignments)  # type: ignore[index]
@@ -47,11 +36,16 @@ def require_distinct_devices(accelerator: Accelerator) -> None:
             f"multi-rank DDP requires {accelerator.num_processes} distinct CUDA "
             f"device assignments; got {cuda_indices}"
         )
-    setattr(
-        accelerator,
-        _CUDA_TOPOLOGY_MARKER,
-        (accelerator.num_processes, tuple(assignments)),
-    )
+
+
+def raise_rank_errors(accelerator: Accelerator, label: str, error: str | None) -> None:
+    """Exchange caught errors before a dependent collective or optimizer update."""
+    errors = [error]
+    if accelerator.num_processes > 1:
+        errors = [None] * accelerator.num_processes
+        torch.distributed.all_gather_object(errors, error)
+    if any(value is not None for value in errors):
+        raise RuntimeError(f"{label} failed on a rank: {errors}")
 
 
 def run_rank_zero_or_raise(
