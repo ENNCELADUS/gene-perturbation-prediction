@@ -7,7 +7,7 @@ Python preparation commands live in `src/data/prepare/` and run from the
 repository root as modules:
 
 ```bash
-uv run python -m src.experiments.prepare --config configs/geneeffect_joint.yaml
+uv run python -m src.experiments.prepare configs/geneeffect_joint.yaml
 uv run python -m src.data.prepare.prepare_kinker_umi_h5ad --help
 uv run python -m src.data.prepare.build_exp13_tx1_cache --help
 uv run python -m src.data.prepare.precompute_esm2_embeddings --help
