@@ -1,0 +1,166 @@
+{
+  "scope": "Descriptive diagnosis of observed test only; no fitting or selection",
+  "methods": {
+    "joint": {
+      "macro_pearson": 0.054141271204235404,
+      "positive_gene_fraction": 0.6147964920170902,
+      "prediction_std_median": 0.012917588767199102,
+      "truth_std_median": 0.22832259226768276,
+      "std_ratio_quantiles": {
+        "0.1": 0.027576744919975072,
+        "0.5": 0.057518232375114046,
+        "0.9": 0.1570267458922745
+      },
+      "centered_prediction_rms": 0.030075569484413815,
+      "centered_truth_rms": 0.28054812588777833,
+      "centered_pooled_correlation": 0.06611913266988306,
+      "variable_huber": 0.04032256443016943,
+      "variable_prior_huber": 0.04042096290878029,
+      "common_line_offset_energy_fraction": 0.06051132318933386,
+      "spectrum_complete_genes": 4315,
+      "prediction_spectrum_top1": 0.588990953150955,
+      "prediction_spectrum_top3": 0.8342825465904998,
+      "prediction_spectrum_participation_rank": 2.5804677026306244
+    },
+    "context_pca_ridge[hvg]": {
+      "macro_pearson": 0.07736288553075506,
+      "positive_gene_fraction": 0.6595457611873173,
+      "prediction_std_median": 0.044829472896293014,
+      "truth_std_median": 0.22832259420547868,
+      "std_ratio_quantiles": {
+        "0.1": 0.1110632532199494,
+        "0.5": 0.19602074120969287,
+        "0.9": 0.32968216139355766
+      },
+      "centered_prediction_rms": 0.06110289532939264,
+      "centered_truth_rms": 0.2805481259876577,
+      "centered_pooled_correlation": 0.09051368588709717,
+      "variable_huber": 0.04086662460739199,
+      "variable_prior_huber": 0.04042096293030235,
+      "common_line_offset_energy_fraction": 0.0073945772643218485,
+      "spectrum_complete_genes": 4315,
+      "prediction_spectrum_top1": 0.4357712366691692,
+      "prediction_spectrum_top3": 0.8128666041130291,
+      "prediction_spectrum_participation_rank": 3.4579925203126303
+    },
+    "context_pca_ridge[tx1]": {
+      "macro_pearson": 0.1216061838227364,
+      "positive_gene_fraction": 0.7290308072858107,
+      "prediction_std_median": 0.056831081918572716,
+      "truth_std_median": 0.22832259420547868,
+      "std_ratio_quantiles": {
+        "0.1": 0.14465982551950302,
+        "0.5": 0.253068869325715,
+        "0.9": 0.40891570309788644
+      },
+      "centered_prediction_rms": 0.07822664842039705,
+      "centered_truth_rms": 0.2805481259876577,
+      "centered_pooled_correlation": 0.14955526510539743,
+      "variable_huber": 0.040471216051023384,
+      "variable_prior_huber": 0.04042096293030235,
+      "common_line_offset_energy_fraction": 0.013618717740091622,
+      "spectrum_complete_genes": 4315,
+      "prediction_spectrum_top1": 0.42917953288531424,
+      "prediction_spectrum_top3": 0.7953348948222252,
+      "prediction_spectrum_participation_rank": 3.656381674778241
+    },
+    "copy_prior": {
+      "macro_pearson": null,
+      "positive_gene_fraction": null,
+      "prediction_std_median": 6.938893903907228e-18,
+      "truth_std_median": 0.22832259420547868,
+      "std_ratio_quantiles": {
+        "0.1": 0.0,
+        "0.5": 3.826058265913989e-17,
+        "0.9": 2.8443581463164915e-16
+      },
+      "centered_prediction_rms": 4.551700079043104e-17,
+      "centered_truth_rms": 0.2805481259876577,
+      "centered_pooled_correlation": null,
+      "variable_huber": 0.08429673010113695,
+      "variable_prior_huber": 0.04042096293030235,
+      "common_line_offset_energy_fraction": null,
+      "spectrum_complete_genes": 4315
+    },
+    "gene_mean": {
+      "macro_pearson": null,
+      "positive_gene_fraction": null,
+      "prediction_std_median": 0.0,
+      "truth_std_median": 0.22832259420547868,
+      "std_ratio_quantiles": {
+        "0.1": 0.0,
+        "0.5": 0.0,
+        "0.9": 0.0
+      },
+      "centered_prediction_rms": 0.0,
+      "centered_truth_rms": 0.2805481259876577,
+      "centered_pooled_correlation": null,
+      "variable_huber": 0.04042096293030235,
+      "variable_prior_huber": 0.04042096293030235,
+      "common_line_offset_energy_fraction": null,
+      "spectrum_complete_genes": 4315
+    },
+    "nearest_line[hvg]": {
+      "macro_pearson": 0.059006567375824354,
+      "positive_gene_fraction": 0.6102990780301327,
+      "prediction_std_median": 0.21952607681883957,
+      "truth_std_median": 0.22832259420547868,
+      "std_ratio_quantiles": {
+        "0.1": 0.6779855481629414,
+        "0.5": 0.9672250285051515,
+        "0.9": 1.3751521669709357
+      },
+      "centered_prediction_rms": 0.2712738589794994,
+      "centered_truth_rms": 0.2805481259876577,
+      "centered_pooled_correlation": 0.07788566618832374,
+      "variable_huber": 0.0710817173565471,
+      "variable_prior_huber": 0.04042096293030235,
+      "common_line_offset_energy_fraction": 0.007900117583684986,
+      "spectrum_complete_genes": 4315,
+      "prediction_spectrum_top1": 0.14681449248772244,
+      "prediction_spectrum_top3": 0.3252430236716445,
+      "prediction_spectrum_participation_rank": 15.257250235207795
+    },
+    "nearest_line[tx1]": {
+      "macro_pearson": 0.060776587040063675,
+      "positive_gene_fraction": 0.6177198111086125,
+      "prediction_std_median": 0.22487752835857908,
+      "truth_std_median": 0.22832259420547868,
+      "std_ratio_quantiles": {
+        "0.1": 0.6943581120628411,
+        "0.5": 0.9823483991011657,
+        "0.9": 1.3801621231558974
+      },
+      "centered_prediction_rms": 0.27430617989853345,
+      "centered_truth_rms": 0.2805481259876577,
+      "centered_pooled_correlation": 0.07198937094785712,
+      "variable_huber": 0.07189380751820397,
+      "variable_prior_huber": 0.04042096293030235,
+      "common_line_offset_energy_fraction": 0.007774945576733243,
+      "spectrum_complete_genes": 4315,
+      "prediction_spectrum_top1": 0.10689316209262316,
+      "prediction_spectrum_top3": 0.27784333707052794,
+      "prediction_spectrum_participation_rank": 18.6110991077067
+    }
+  },
+  "aligned_rows": 478501,
+  "variable_genes": 4447,
+  "truth_spectrum": {
+    "top1": 0.1106097911528002,
+    "top3": 0.2532803089613703,
+    "participation_rank": 20.257443479153615
+  },
+  "joint_minus_tx1_per_gene": {
+    "mean": -0.067464912618501,
+    "median": -0.0635032612239241,
+    "joint_wins": 1764,
+    "ridge_wins": 2683,
+    "quantiles": {
+      "0.1": -0.4102050425784911,
+      "0.25": -0.23913629936688713,
+      "0.5": -0.0635032612239241,
+      "0.75": 0.10786465862714126,
+      "0.9": 0.2749975392605887
+    }
+  }
+}

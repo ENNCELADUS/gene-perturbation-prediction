@@ -1,0 +1,12 @@
+{
+  "version": "2.1.0",
+  "source": "reason",
+  "timestamp": "2026-09-07",
+  "status": "BOUNDED",
+  "results_tsv": "autoresearch/reason-260907-residual-diagnosis/reason-results.tsv",
+  "findings": [
+    {"id": "F1", "type": "observation", "summary": "Joint median within-gene prediction SD is 5.75% of true residual SD; Tx1 ridge is 25.31%; ridge wins correlation on 2683 of 4447 genes."},
+    {"id": "F2", "type": "recommendation", "summary": "Establish an explicit gene-specific direct context branch, training-only calibration, and incremental frozen-response value before renewed joint coupling."}
+  ],
+  "config": {"task": "Diagnose joint residual weakness and recommend design changes", "domain": "research", "mode": "bounded evidence-led review", "training_authorized_or_launched": false}
+}
