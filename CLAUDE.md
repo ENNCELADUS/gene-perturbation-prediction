@@ -13,7 +13,7 @@ before editing anything under `docs/`.
 
 The joint GeneEffect model (`configs/geneeffect_joint.yaml`) has **trained, tested and been baselined** once, seed 0. Joint
 Huber beats the context-blind gene-mean by 0.08% and residual correlations trail a Tx1 PCA-ridge baseline — a working path, not a
-result (`docs/01-blueprint.md` §7, `docs/results/joint_geneeffect_seed0/`). The SL pair head in `docs/03-experiment-protocol.md`
+result (`docs/01-blueprint.md` §7, `docs/results/joint_geneeffect_seed0/`). The SL pair head in `docs/04-sl-ranking-protocol.md`
 is **unimplemented**. Further model decisions use **validation**; the test split is spent. Nothing here is SL evidence.
 
 ## Commands

@@ -1,7 +1,8 @@
 # Related Work: Context, Dependency and Synthetic-Lethality Ranking
 
 Updated 2026-09-07. This review supports the
-[research task](01-blueprint.md) and [SL evaluation proposal](03-experiment-protocol.md).
+[research task](01-blueprint.md), the [GeneEffect protocol](03-geneeffect-protocol.md)
+and the [SL evaluation proposal](04-sl-ranking-protocol.md).
 It separates published evidence from this repository's results and proposed
 contribution. It is a focused review, not an exhaustive novelty search.
 

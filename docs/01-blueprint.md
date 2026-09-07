@@ -2,7 +2,8 @@
 
 Updated 2026-09-07. This document defines the research task and claim boundaries.
 [Related work](02-literature-review.md) explains the prior art;
-[SL protocol](03-experiment-protocol.md) defines the separate pair-label experiment;
+[GeneEffect protocol](03-geneeffect-protocol.md) makes the implemented track executable;
+[SL protocol](04-sl-ranking-protocol.md) defines the separate pair-label experiment;
 [joint GeneEffect design](specs/2026-09-06-modular-joint-training-design.md)
 defines the implemented intermediate task.
 
@@ -103,7 +104,7 @@ The proposed head combines symmetric pair features derived from predicted
 single-gene dependency profiles. Its reference cohort excludes all SL benchmark
 contexts. Profiles use residuals; target-context features use absolute GeneEffect;
 fixed training gene means expose pan-essentiality as a separate control.
-The [SL protocol](03-experiment-protocol.md#6-sl-head-and-controls) records the
+The [SL protocol](04-sl-ranking-protocol.md#6-sl-head-and-controls) records the
 24-feature proposal and controls.
 
 Every backbone-derived SL training vector must be generated out of fold, with

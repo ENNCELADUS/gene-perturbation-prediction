@@ -1,0 +1,175 @@
+{
+  "hostname": "apg3op6hp3v99-0",
+  "run_dir": "/2023533015/VCC_Project/outputs/baselines/tx1_gmm_vs_pca_20260907T111054Z",
+  "revision": "7d82afd0fdcf08b407515bc38a0803cec72a852d",
+  "model_sha256": "9165f640ec04774169127a33d4edc8c810d74dafb420f50c9a505879fa673c35",
+  "launch": {
+    "hostname": "apg3op6hp3v99-0",
+    "revision": "7d82afd0fdcf08b407515bc38a0803cec72a852d",
+    "supervisor_pid": 72951,
+    "cpu_quota": "5400000 100000",
+    "threads": 8,
+    "CUDA_VISIBLE_DEVICES": "",
+    "requested_splits": [
+      "train",
+      "val"
+    ],
+    "reference_split": "val"
+  },
+  "exit_codes": {
+    "gmm": 0,
+    "reference": 0
+  },
+  "gmm_status": {
+    "status": "completed",
+    "gmm_converged": true
+  },
+  "gmm_evaluation_status": {
+    "status": "completed",
+    "split": "val",
+    "output": "outputs/baselines/tx1_gmm_vs_pca_20260907T111054Z/gmm/evaluation/val"
+  },
+  "test_evaluated": false,
+  "aligned_validation_pairs": 479084,
+  "validation_lines": 27,
+  "variable_genes": 4447,
+  "target_max_abs_difference": {
+    "gene_effect": 0,
+    "residual": 0
+  },
+  "gmm": {
+    "train": {
+      "geneeffect_loss": 0.008793151937425137,
+      "geneeffect_rmse": 0.13289017975330353,
+      "geneeffect_pearson_macro_per_line": 0.9518076767339411,
+      "residual_pearson_macro_per_gene": 0.6627243679069708,
+      "residual_spearman_macro_per_gene": 0.6151662713577533,
+      "residual_sd_ratio_macro_per_gene": 0.6526763832036605,
+      "geneeffect_valid_pairs": 3015332
+    },
+    "val": {
+      "geneeffect_loss": 0.054733674973249435,
+      "geneeffect_rmse": 0.3442545235157013,
+      "geneeffect_pearson_macro_per_line": 0.7672713364859545,
+      "residual_pearson_macro_per_gene": 0.07802728928511415,
+      "residual_spearman_macro_per_gene": 0.08114738695579712,
+      "residual_sd_ratio_macro_per_gene": 1.312647118724239,
+      "geneeffect_valid_pairs": 479084
+    }
+  },
+  "reference_val": {
+    "context_pca_ridge[hvg]": {
+      "geneeffect_loss": 0.01645059883594513,
+      "geneeffect_rmse": 0.18228833377361298,
+      "geneeffect_pearson_macro_per_line": 0.908727772288905,
+      "residual_pearson_macro_per_gene": 0.08038268266500455,
+      "residual_spearman_macro_per_gene": 0.08793434434540799,
+      "residual_sd_ratio_macro_per_gene": 0.20372242849219577,
+      "geneeffect_valid_pairs": 479084
+    },
+    "context_pca_ridge[tx1]": {
+      "geneeffect_loss": 0.016280991956591606,
+      "geneeffect_rmse": 0.18130294978618622,
+      "geneeffect_pearson_macro_per_line": 0.9096915619837241,
+      "residual_pearson_macro_per_gene": 0.13297340474094083,
+      "residual_spearman_macro_per_gene": 0.12328642349330454,
+      "residual_sd_ratio_macro_per_gene": 0.2727071849741667,
+      "geneeffect_valid_pairs": 479084
+    },
+    "copy_prior": {
+      "geneeffect_loss": 0.03369072079658508,
+      "geneeffect_rmse": 0.26217928528785706,
+      "geneeffect_pearson_macro_per_line": 0.8185045726843538,
+      "residual_pearson_macro_per_gene": null,
+      "residual_spearman_macro_per_gene": null,
+      "residual_sd_ratio_macro_per_gene": 9.81049814624424e-17,
+      "geneeffect_valid_pairs": 479084
+    },
+    "gene_mean": {
+      "geneeffect_loss": 0.016316814348101616,
+      "geneeffect_rmse": 0.1815958321094513,
+      "geneeffect_pearson_macro_per_line": 0.9094270623554008,
+      "residual_pearson_macro_per_gene": null,
+      "residual_spearman_macro_per_gene": null,
+      "residual_sd_ratio_macro_per_gene": 0,
+      "geneeffect_valid_pairs": 479084
+    },
+    "nearest_line[hvg]": {
+      "geneeffect_loss": 0.02952430211007595,
+      "geneeffect_rmse": 0.24605166912078857,
+      "geneeffect_pearson_macro_per_line": 0.8414810571489445,
+      "residual_pearson_macro_per_gene": 0.044802827782704197,
+      "residual_spearman_macro_per_gene": 0.03907400437847664,
+      "residual_sd_ratio_macro_per_gene": 1.0037080159767415,
+      "geneeffect_valid_pairs": 479084
+    },
+    "nearest_line[tx1]": {
+      "geneeffect_loss": 0.028601083904504776,
+      "geneeffect_rmse": 0.24113582074642181,
+      "geneeffect_pearson_macro_per_line": 0.8464689853787015,
+      "residual_pearson_macro_per_gene": 0.08513315444173165,
+      "residual_spearman_macro_per_gene": 0.07903574027601516,
+      "residual_sd_ratio_macro_per_gene": 1.022489027104249,
+      "geneeffect_valid_pairs": 479084
+    }
+  },
+  "gmm_diagnostics": {
+    "gmm_converged": true,
+    "gmm_iterations": 22,
+    "fit_cell_rows": 21760,
+    "fit_cells_per_line": 128,
+    "train_mean_assignment_confidence": 0.9999688225158917
+  },
+  "context_feature_ranges": {
+    "train": {
+      "occupancy_entropy": {
+        "min": 6.627648769847274e-258,
+        "median": 0.5088717623706613,
+        "max": 1.8928425223892744
+      },
+      "effective_components": {
+        "min": 1,
+        "median": 1.6634836895004295,
+        "max": 6.63821115210758
+      },
+      "assignment_confidence": {
+        "min": 0.9983385304101084,
+        "median": 0.9999999999985292,
+        "max": 1
+      },
+      "nll": {
+        "min": -1190.9148900760315,
+        "median": 2836.522843781403,
+        "max": 3439.4972019957763
+      }
+    },
+    "val": {
+      "occupancy_entropy": {
+        "min": 0.0804848370780194,
+        "median": 1.0858654877222242,
+        "max": 1.967000849020439
+      },
+      "effective_components": {
+        "min": 1.083812412754602,
+        "median": 2.9620022862994224,
+        "max": 7.149202764498606
+      },
+      "assignment_confidence": {
+        "min": 0.9918434053661772,
+        "median": 0.9988595240709066,
+        "max": 0.9999999999975842
+      },
+      "nll": {
+        "min": 2482.8807311777264,
+        "median": 3414.6274075078445,
+        "max": 4032.96791036616
+      }
+    }
+  },
+  "terminal_process_check": {
+    "supervisor_pid": 72951,
+    "gmm_pid": 72952,
+    "reference_pid": 73029,
+    "all_exited": true
+  }
+}
