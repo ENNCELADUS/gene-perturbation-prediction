@@ -149,3 +149,75 @@ the response table is empty. A failed export can be retried with `evaluate`, res
 the saved transforms and readout without refitting. Use only trusted local joblib
 artifacts with their recorded sklearn version. This is a candidate baseline; no
 performance improvement is established by the implementation tests.
+
+## P1-B response adaptation
+
+P1-B uses one process/GPU per arm, seed 0, 192 conditions/update (64 per source
+anchor), 257 updates/epoch, and internal response-loss early stopping (patience 5,
+maximum 50 epochs). It does not train a GeneEffect head. The full protocol is in
+[the P1-B design](../docs/specs/2026-09-07-p1b-response-adaptation-design.md).
+
+Run from the repository root in `.venv-tx1`. Set `P0_CHECKPOINT` to the exact P0
+joint checkpoint used for P1-A. Preparation opens existing caches, reads only raw
+gene metadata to recover the 1,957 measured coordinates, fits source-training
+baselines, and records immutable input/model identities. It does not score Jurkat.
+The output directory must be new; failures are recorded in `status.json`.
+
+```bash
+P1B_PREPARED=outputs/p1b/prepared_seed0
+P1B_RUNS=outputs/p1b/response_seed0
+hpc/run.sh p1b prepare --checkpoint "$P0_CHECKPOINT" --out-dir "$P1B_PREPARED"
+hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state B-native
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state B-init
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state B-joint
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b train-interface --prepared "$P1B_PREPARED" --runs "$P1B_RUNS"
+```
+
+`B-native` currently writes an explicit unavailable record: original numerical
+preprocessing/batch semantics are not verified. It never substitutes Tx1 inputs
+or fabricated native predictions. Model reconstruction for B-init uses the original
+P0 config, released checkpoint, and seed-0 construction order. No head scaler is
+required by P1-B.
+
+Read `stage2.json` after B-interface completes. Only if `eligible` is true (at least
+1% internal validation loss reduction from B-init), run both commands below. They
+may run concurrently on separate GPUs. Both start from the same best interface
+checkpoint with fresh optimizers; no Jurkat result determines this decision.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b train-stage2 --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --arm B-continue
+CUDA_VISIBLE_DEVICES=1 hpc/run.sh p1b train-stage2 --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --arm B-unfreeze
+```
+
+Add `--resume` to the same training command for epoch-boundary recovery. Completed
+runs are not overwritten without that flag. No automatic batch reduction occurs
+on OOM. The first full training batch exercises the fixed production allocation;
+finite gradients and clipping are checked on every update.
+
+After required training finishes, evaluate each completed state internally and
+externally. External evaluation fixes selected checkpoint hashes in
+`external_evaluation.json` and prevents further adaptation in that run directory.
+If stage two is ineligible, omit B-continue/B-unfreeze from this list.
+
+```bash
+for P1B_STATE in B-interface B-continue B-unfreeze; do
+  CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state "$P1B_STATE"
+done
+for P1B_STATE in B-init B-joint B-interface B-continue B-unfreeze; do
+  CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state "$P1B_STATE" --external
+done
+hpc/run.sh p1b compare --prepared "$P1B_PREPARED" --runs "$P1B_RUNS"
+```
+
+Training and export have separate status records. Re-run the exact `evaluate`
+command after an export failure; it does not optimize or rewrite weights. Results
+include condition metrics, mean effects (no full predicted cell matrices), measured
+coordinate and identity provenance, true-gene-coordinate removal, ten fixed
+held-out identity derangements, baseline comparisons, cross-context metrics,
+1,000 paired gene-bootstrap intervals, actual exposure counts, and stage-specific
+curves/common-update contrasts. Identical panels reuse inference; training exports
+use correct identities only. Only held-out diagnostics receive identity shuffles.
+
+Jurkat reporting distinguishes 2,373 training-seen perturbations, four unseen,
+2,006 native-and-seen, and 2,009 native-vocabulary-covered conditions. Jurkat is
+held out from interface adaptation, not verified absent from ST/Tx1 pretraining.
