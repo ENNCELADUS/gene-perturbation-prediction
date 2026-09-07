@@ -25,6 +25,12 @@ model:
   esm2_adapter_hidden: 512
   head_hidden: 256
   head_layers: 2
+  head_blocks:
+    use_delta_proj: true
+    use_s: true
+    use_q_sc: true
+    use_e_g: true
+    use_z_c: true
 preparation:
   response_max_cells_per_gene: 128
   response_total_cells_per_line: null

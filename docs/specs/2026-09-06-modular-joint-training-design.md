@@ -3,6 +3,10 @@
 Date: 2026-09-06. Status: approved direction, including the owner's validation and
 seed corrections below; implemented locally, with no new experiment run.
 
+2026-09-07 P0 amendment: add fixed train diagnostics, feature-block ablation wiring
+and per-epoch exposure accounting. The loss, optimizer schedule and selector remain
+as specified below; this amendment does not launch a new experiment.
+
 The approved direction is a topology-style repository layout and one joint training
 run that keeps revisiting the four Perturb-seq lines. This document specifies that
 direction, including proposed starting settings. The existing Exp13 reports describe
@@ -31,6 +35,20 @@ Use the current STATE checkpoint initialization path, with a newly initialized g
 adapter and head, rather than requiring a previously sealed Stage 1 run. Report loaded
 and newly initialized layers once. Unexpected checkpoint incompatibilities are errors;
 intentional input/adapter changes are explicit in the model constructor.
+
+`model.head_blocks` explicitly contains the five boolean flags `use_delta_proj`,
+`use_s`, `use_q_sc`, `use_e_g`, and `use_z_c`; the default enables all five. Disabled
+blocks and their associated masks are excluded from standardizer fitting, transform
+and head inputs. At least one block must remain enabled. Store the flags in checkpoint
+architecture and restore that architecture for evaluation/resume. Earlier joint
+checkpoints without flags define the original all-enabled head.
+
+The complete response-readout ablation disables both `delta_proj` and `s`. It removes
+the GE gradient path to STATE/perturbation adapter, while retaining independently
+scheduled response replay. Raw response feature extraction remains available; these
+flags control the readout, not the response-supervision schedule or compute budget.
+Detach disabled blocks in diagnostic forward outputs so DDP does not mistake their
+unused computation graphs for loss paths. Enabled response features stay live.
 
 Use the checked-in `cell_line_geneeffect_226_split.json` unchanged:
 
@@ -102,6 +120,22 @@ These are the three runtime base seeds. Epoch/rank-specific sampling streams der
 from base seed 0. Do not change frozen benchmark membership or relabel historical
 input/checkpoint metadata to make old artifacts appear to have been generated with 0.
 
+Controlled P0 comparisons reuse the same prepared inputs, split, ordered common gene
+panel, variable-gene policy, basal cell bags and response holdout. Keep the runtime
+seeds, world size, per-rank batch sizes, replay interval/weight, optimizer settings,
+50-epoch limit and patience 5 fixed, except for the explicitly named ablation.
+Do not rebuild caches between arms or tune against the already observed 27-line test.
+
+Each epoch summary records `epoch_start_step`, cumulative `global_step`, world size,
+effective global dependency/response batch sizes, `epoch_optimizer_updates`,
+`epoch_response_replay_updates`, `epoch_dependency_rows`, `epoch_response_rows`, and
+`epoch_dependency_dropped_rows`. Rows are exposure counts, including repeated replay
+conditions, not unique examples or cells. Sum completed epoch records (and inspect
+update records for an interrupted epoch); never infer historical exposure by multiplying
+the final batch size by all prior updates. A batch-transition run is not a matched-budget
+control. Identical epoch limits/patience do not guarantee equal updates when early
+stopping differs; compare shared update points before attributing an ablation effect.
+
 An epoch is one pass through the dependency loader. Response batches cycle within
 that epoch; both loaders restart from deterministic epoch/rank-specific seeds at the
 next epoch. This keeps epoch-boundary resume independent of an unsaved iterator cursor.
@@ -133,6 +167,14 @@ Use evaluation mode and no gradients, with one inference/evaluation implementati
 shared by in-memory validation and checkpoint-based final testing. Neither path refits
 preprocessing. There is no validation-skipping interval or eligibility gate.
 
+Before that single validation pass, evaluate all finite GeneEffect rows of the 170
+labeled training lines in evaluation mode without gradients, using the same cached
+bags and fitted preprocessing. Keep the evaluation tail, including rows dropped by
+the full-batch training loader. Preserve Python/NumPy/Torch RNG and all module modes.
+Report scalars as `train_eval_*` alongside `val_*`; update-time `train_*` losses remain
+separate. Train diagnostics do not score response conditions, add a total/response
+loss, refit statistics, or influence selection. They add inference cost every epoch.
+
 Every epoch reports the following in the console summary and `metrics.jsonl`:
 
 | Field | Definition |
@@ -146,6 +188,18 @@ Every epoch reports the following in the console summary and `metrics.jsonl`:
 | `val_residual_pearson_macro_per_gene` / `val_residual_spearman_macro_per_gene` | Correlation across validation lines on residuals, macro-averaged over the train-derived variable-gene set |
 | `val_geneeffect_rmse` / `val_geneeffect_mae` | Errors over the same finite labeled validation pairs |
 | Coverage and per-line/per-gene details | Valid pair counts, scored/undefined correlation counts and the corresponding detailed scores |
+
+Train, validation and test share the same aggregation code and train-derived variable
+genes. Their `per_gene` tables also contain `target_sd`, `prediction_sd`, `sd_ratio`,
+`rmse` and `mae` on the same pairwise-finite rows. SD is population SD (`ddof=0`),
+undefined for fewer than two contexts. SD ratio is prediction SD / target SD and is
+undefined for zero target SD; zero prediction SD with positive target SD is a valid
+zero. RMSE/MAE require at least one pair. Existing correlations retain their minimum
+sample and constant-vector rules. For each new quantity, emit
+`{prefix}_residual_{quantity}_macro_per_gene` and scored/undefined gene counts; scalar
+undefined values are JSON null, never substituted zeros. SD ratio is a diagnostic,
+not a prediction calibration factor. The macro ratio averages per-gene ratios rather
+than dividing macro SDs.
 
 `val_total_loss` evaluates both tasks' held-out means together. It is not diluted by
 the response replay interval or presented as an average of the sparse training-step
@@ -276,6 +330,7 @@ hpc/run.sh train configs/geneeffect_joint.yaml --run-id <run_id>
 hpc/run.sh train configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/<run_id>/last.pt
 hpc/run.sh test outputs/geneeffect_joint/<run_id>/best.pt
 uv run python -m src.evaluate --checkpoint <best.pt> --split val
+uv run python -m src.evaluate --checkpoint <best.pt> --split train
 uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml --split test --out-dir <baseline_dir>
 ```
 

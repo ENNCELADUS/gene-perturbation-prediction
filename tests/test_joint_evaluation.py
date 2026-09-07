@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import random
 from types import SimpleNamespace
 
 import conftest  # noqa: F401 -- preserve OpenMP and xgboost-before-torch in spawned ranks
@@ -74,6 +75,98 @@ def test_unequal_batch_huber_is_pair_weighted_and_modes_restore(tmp_path):
     assert model.training and not model.backbone.training
     assert all(parameter.grad is None for parameter in model.parameters())
     json.dumps(result.metrics, allow_nan=False)
+
+
+def test_train_diagnostic_uses_all_labeled_rows_common_metrics_and_no_response(
+    tmp_path, monkeypatch
+):
+    from src.data import datasets
+    from src.training.checkpoint import capture_rng_state
+    from test_joint_training import assert_tree_equal
+
+    config = make_prepared_fixture(tmp_path)
+    inputs = evaluation_inputs(config)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("train diagnostics must not read response targets")
+
+    monkeypatch.setattr(datasets, "ResponseDataset", forbidden)
+
+    class RandomConsumingModel(TinyEvaluatorModel):
+        def forward(self, batch):
+            random.random()
+            np.random.random()
+            torch.rand(())
+            return super().forward(batch)
+
+    model = RandomConsumingModel()
+    model.train()
+    model.backbone.eval()
+    before = capture_rng_state(torch.device("cpu"))
+    result = evaluate_model(model, inputs, config, split="train")
+    assert_tree_equal(before, capture_rng_state(torch.device("cpu")))
+    assert model.training and not model.backbone.training
+    assert result.response.empty
+    assert set(result.predictions.model_id) == set(inputs.split.supervised_train)
+    assert (
+        len(result.predictions) == 15
+    )  # Training drop_last skips one; evaluation must not.
+    common, _, _ = aggregate_geneeffect(
+        result.predictions,
+        model_ids=inputs.split.supervised_train,
+        genes=inputs.genes,
+        variable_genes=[g for g in inputs.genes if g in inputs.variable_genes],
+    )
+    assert result.metrics == {
+        f"train_eval_{key}": value for key, value in common.items()
+    }
+    assert all(parameter.grad is None for parameter in model.parameters())
+    json.dumps(result.metrics, allow_nan=False)
+
+
+def test_residual_amplitude_errors_use_paired_rows_and_keep_undefined_counts():
+    frame = pd.DataFrame(
+        [
+            dict(
+                model_id=line,
+                gene_symbol=gene,
+                residual=truth,
+                residual_prediction=pred,
+                gene_effect=truth,
+                geneeffect_prediction=pred,
+            )
+            for gene, targets, predictions in [
+                ("SCALED", [0.0, 2.0, 4.0], [0.0, 1.0, 2.0]),
+                ("CONSTANT", [1.0, 1.0, 1.0], [0.0, 0.0, 0.0]),
+                ("SINGLE", [1.0, np.nan, np.nan], [2.0, 900.0, -900.0]),
+            ]
+            for line, truth, pred in zip(
+                ("A", "B", "C"), targets, predictions, strict=True
+            )
+        ]
+    )
+    metrics, _, details = aggregate_geneeffect(
+        frame,
+        model_ids=["A", "B", "C"],
+        genes=["SCALED", "CONSTANT", "SINGLE"],
+        variable_genes=["SCALED", "CONSTANT", "SINGLE", "ABSENT"],
+    )
+    details = details.set_index("gene_symbol")
+    assert details.loc["SCALED", "sd_ratio"] == pytest.approx(0.5)
+    assert details.loc["SCALED", "target_sd"] == pytest.approx(np.std([0, 2, 4]))
+    assert details.loc["SCALED", "rmse"] == pytest.approx(np.sqrt(5 / 3))
+    assert details.loc["SCALED", "mae"] == 1
+    assert details.loc["CONSTANT", "prediction_sd"] == 0
+    assert np.isnan(details.loc["CONSTANT", "sd_ratio"])
+    assert details.loc["SINGLE", "valid_pairs"] == 1
+    assert details.loc["SINGLE", "rmse"] == 1
+    assert np.isnan(details.loc["SINGLE", "prediction_sd"])
+    assert np.isnan(details.loc["ABSENT", "rmse"])
+    assert metrics["residual_sd_ratio_macro_per_gene"] == 0.5
+    assert metrics["residual_sd_ratio_per_gene_scored"] == 1
+    assert metrics["residual_sd_ratio_per_gene_undefined"] == 3
+    assert metrics["residual_rmse_per_gene_scored"] == 3
+    json.dumps(metrics, allow_nan=False)
 
 
 def test_constant_prediction_all_undefined_still_selects_and_test_prefix(tmp_path):
@@ -181,7 +274,7 @@ def test_pearson_reuses_finite_minimum_and_constant_policy():
     assert np.isnan(_unit_pearson(np.arange(3), np.ones(3)))
 
 
-def _distributed_evaluation_worker(rank, port, config, output, fail_rank):
+def _distributed_evaluation_worker(rank, port, config, output, fail_rank, split):
     os.environ.update(
         {
             "MASTER_ADDR": "127.0.0.1",
@@ -210,7 +303,7 @@ def _distributed_evaluation_worker(rank, port, config, output, fail_rank):
         inputs = replace(inputs, labels=labels)
         try:
             result = evaluate_model(
-                model, inputs, config, split="val", accelerator=accelerator
+                model, inputs, config, split=split, accelerator=accelerator
             )
         except RuntimeError as exc:
             if fail_rank is None:
@@ -231,9 +324,11 @@ def _distributed_evaluation_worker(rank, port, config, output, fail_rank):
         torch.distributed.destroy_process_group()
 
 
-@pytest.mark.parametrize("fail_rank", [None, 1])
+@pytest.mark.parametrize(
+    "split,fail_rank", [("val", None), ("val", 1), ("train", None)]
+)
 def test_two_rank_accelerate_removes_dependency_and_response_tail_padding(
-    tmp_path, fail_rank
+    tmp_path, fail_rank, split
 ):
     config = make_prepared_fixture(tmp_path)
     config["train"].update(
@@ -245,14 +340,15 @@ def test_two_rank_accelerate_removes_dependency_and_response_tail_padding(
         {"G0": 0.0, "G1": 1.0, "G2": 2.0}
     )
     inputs = replace(inputs, labels=labels)
-    expected = evaluate_model(TinyEvaluatorModel(), inputs, config, split="val")
-    assert expected.metrics["val_geneeffect_pearson_macro_per_line"] is not None
+    expected = evaluate_model(TinyEvaluatorModel(), inputs, config, split=split)
+    prefix = "train_eval" if split == "train" else "val"
+    assert expected.metrics[f"{prefix}_geneeffect_pearson_macro_per_line"] is not None
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     context = torch.multiprocessing.spawn(
         _distributed_evaluation_worker,
-        args=(port, config, str(tmp_path), fail_rank),
+        args=(port, config, str(tmp_path), fail_rank, split),
         nprocs=2,
         join=False,
     )
@@ -276,11 +372,17 @@ def test_two_rank_accelerate_removes_dependency_and_response_tail_padding(
             assert "non-finite GeneEffect prediction" in actual["error"]
             continue
         assert actual["metrics"] == expected.metrics
-        assert len(actual["predictions"]) == 3
+        assert len(actual["predictions"]) == len(expected.predictions)
         assert {
             (row["model_id"], row["gene_symbol"]) for row in actual["predictions"]
-        } == {("ACH-VAL", gene) for gene in inputs.genes}
-        assert len(actual["response"]) == len(inputs.response_holdout)
+        } == set(
+            zip(
+                expected.predictions.model_id,
+                expected.predictions.gene_symbol,
+                strict=True,
+            )
+        )
+        assert len(actual["response"]) == len(expected.response)
         assert {
             (row["model_id"], row["gene_symbol"]) for row in actual["response"]
-        } == inputs.response_holdout
+        } == (inputs.response_holdout if split == "val" else set())

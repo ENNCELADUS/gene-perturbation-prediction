@@ -28,11 +28,33 @@ def test_approved_defaults_and_conflicts():
         ("features", "variable_gene_percentile", 101),
         ("preparation", "response_holdout_seed", 0),
         ("train", "response_interval", 3),
+        ("model", "head_blocks", {"use_s": False}),
     ]:
         changed = copy.deepcopy(config)
         changed[group][key] = value
         with pytest.raises(ValueError):
             validate_config(changed)
+
+
+@pytest.mark.parametrize("value", ["false", 0, None])
+def test_ablation_flags_require_real_booleans(value):
+    config = load_config(Path("configs/geneeffect_joint.yaml"))
+    config["model"]["head_blocks"]["use_s"] = value
+    with pytest.raises(ValueError, match="boolean"):
+        validate_config(config)
+
+
+def test_all_disabled_head_is_rejected():
+    config = load_config(Path("configs/geneeffect_joint.yaml"))
+    config["model"]["head_blocks"] = dict.fromkeys(
+        config["model"]["head_blocks"], False
+    )
+    with pytest.raises(ValueError, match="at least one"):
+        validate_config(config)
+
+
+def test_config_rejects_missing_and_unknown_keys():
+    config = load_config(Path("configs/geneeffect_joint.yaml"))
     for mutation in (
         lambda c: c["train"].pop("patience"),
         lambda c: c.update(stage1="retired"),
@@ -88,9 +110,11 @@ def test_dispatch_keeps_arguments(monkeypatch):
     )
     train.main(["a b.yaml", "--run-id", "run 1"])
     evaluate.main(["--checkpoint", "a b.pt", "--split", "val"])
+    evaluate.main(["--checkpoint", "a b.pt", "--split", "train"])
     assert calls == [
         ((Path("a b.yaml"),), {"run_id": "run 1", "resume": None}),
         ((Path("a b.pt"),), {"split": "val"}),
+        ((Path("a b.pt"),), {"split": "train"}),
     ]
 
 

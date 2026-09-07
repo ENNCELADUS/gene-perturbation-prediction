@@ -178,8 +178,8 @@ def export_evaluation(result: EvalResult, out_dir: Path) -> None:
 
 def evaluate_checkpoint(checkpoint: Path, *, split: str) -> EvalResult:
     """Restore saved preprocessing and model; never fit or take optimizer steps."""
-    if split not in {"val", "test"}:
-        raise ValueError("evaluation split must be val or test")
+    if split not in {"train", "val", "test"}:
+        raise ValueError("evaluation split must be train, val or test")
     from accelerate import Accelerator
     from src.data.prepared import load_inputs
     from src.eval.geneeffect import evaluate_model

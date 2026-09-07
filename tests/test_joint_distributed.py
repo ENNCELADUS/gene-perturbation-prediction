@@ -135,11 +135,24 @@ def _parity_worker(rank, port, initial, output, replay, fail):
         torch.distributed.destroy_process_group()
 
 
-@pytest.mark.parametrize("replay,fail", [(False, False), (True, False), (False, True)])
+@pytest.mark.parametrize(
+    "replay,fail,use_response",
+    [
+        (False, False, True),
+        (True, False, True),
+        (False, True, True),
+        (False, False, False),
+        (True, False, False),
+    ],
+)
 def test_ddp_update_matches_effective_serial_batch_and_trims_eval_tail(
-    tmp_path, replay, fail
+    tmp_path, replay, fail, use_response
 ):
     config = tiny_training_config(tmp_path / "data", transformer_dropout=0.0)
+    config["model"]["head_blocks"] = {
+        "use_delta_proj": use_response,
+        "use_s": use_response,
+    }
     model, inputs = fresh_model(config)
     assert all(
         module.p == 0

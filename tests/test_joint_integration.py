@@ -77,6 +77,21 @@ def test_real_training_independent_test_and_export_retry(tmp_path, monkeypatch):
     pd.testing.assert_frame_equal(exported, result.predictions)
     assert checkpoint.read_bytes() == before
     assert_tree_equal(saved["model_state"], load_checkpoint(checkpoint)["model_state"])
+    train_result = geneeffect.evaluate_checkpoint(checkpoint, split="train")
+    assert set(train_result.predictions.model_id) == {
+        "ACH-A0",
+        "ACH-A1",
+        "ACH-A2",
+        "ACH-A3",
+        "ACH-TRAIN",
+    }
+    assert all(key.startswith("train_eval_") for key in train_result.metrics)
+    assert train_result.response.empty
+    train_details = pd.read_csv(run_dir / "evaluation/best/train/per_gene.csv")
+    assert {"target_sd", "prediction_sd", "sd_ratio", "rmse", "mae"} <= set(
+        train_details
+    )
+    assert checkpoint.read_bytes() == before
     # Config disagreement is rejected before changing completed training state.
     conflict = copy.deepcopy(config)
     conflict["train"]["head_learning_rate"] *= 2

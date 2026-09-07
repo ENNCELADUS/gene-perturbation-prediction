@@ -11,6 +11,7 @@ hpc/run.sh train configs/geneeffect_joint.yaml --run-id joint_seed0
 hpc/run.sh train configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/joint_seed0/last.pt
 hpc/run.sh test outputs/geneeffect_joint/joint_seed0/best.pt
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/joint_seed0/best.pt --split val
+uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/joint_seed0/best.pt --split train
 uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml --split test --out-dir outputs/geneeffect_joint/baselines_seed0
 ```
 
@@ -30,6 +31,20 @@ any conflicting supplied configuration. `last.pt` supports epoch-boundary resume
 `best.pt` strictly minimizes validation GeneEffect Huber loss. `metrics.jsonl`
 contains every update and one validation record per completed epoch.
 
+That epoch record includes fixed-model `train_eval_*` GeneEffect diagnostics over
+all labeled training rows, evaluated before validation without refitting or changing
+training RNG. It also records actual epoch updates, replay updates, dependency/response
+row exposures, dropped dependency rows and effective global batch sizes. The train
+diagnostic does not evaluate response targets or select checkpoints. Its extra full
+training-set inference cost should be included in runtime estimates.
+
+For a response-readout ablation, set both `model.head_blocks.use_delta_proj` and
+`model.head_blocks.use_s` to `false`; all five boolean flags are explicit in the
+default config and saved in checkpoint architecture. Disabled blocks and their masks
+do not enter normalization or the head. Response replay remains independently active.
+Keep prepared inputs, world size, batches and the complete schedule fixed between
+arms; early-stopped runs need comparison at matched updates and exposure counts.
+
 The current dependency batch is 1024 per rank (2048 across two H20s); response
 replay remains 64 per rank every four updates. A requested batch change uses a
 new run directory and explicitly documented derived checkpoint with original
@@ -42,5 +57,9 @@ preprocessing, weights and actual ESM2 vectors, then exports
 `evaluation/<checkpoint-name>/<split>/predictions.parquet`, `metrics.json`,
 `per_line.csv`, `per_gene.csv` and `response.csv`. An export failure can be retried
 with the same evaluation command without optimizer steps. Scalar test names have
-`test_` prefixes. These commands produce GeneEffect evidence, not SL interaction
-evidence; held-out lines retain the documented Tx1 pretraining exposure boundary.
+`test_` prefixes; `--split train` uses `train_eval_` and an empty response table.
+Per-gene details include residual target/prediction SD, SD ratio, RMSE and MAE on
+the same finite rows and train-derived variable genes. Undefined quantities retain
+explicit counts and null scalar values. These commands produce GeneEffect evidence,
+not SL interaction evidence; held-out lines retain the documented Tx1 pretraining
+exposure boundary.

@@ -208,8 +208,8 @@ def make_evaluation_loaders(
     config: Mapping[str, Any],
     split: str,
     accelerator: Any,
-) -> tuple[DataLoader[DependencyBatch], DataLoader[ResponseBatch]]:
-    """Build sequential tail-preserving dependency and response loaders."""
+) -> tuple[DataLoader[DependencyBatch], DataLoader[ResponseBatch] | None]:
+    """Build fixed evaluation rows; train diagnostics have no response evaluation."""
     train = _train_config(config)
     dependency_size = int(train.get("dependency_batch_size", 256))
     response_size = int(train.get("response_batch_size", 64))
@@ -217,28 +217,33 @@ def make_evaluation_loaders(
         raise ValueError("evaluation batch sizes must be positive")
     device = "cpu" if accelerator is None else accelerator.device
     dependency_dataset = DependencyDataset(inputs, split, device=device)
-    response_dataset = ResponseDataset(inputs, holdout=True, device=device)
     dependency_loader = DataLoader(
         dependency_dataset,
         batch_size=dependency_size,
         shuffle=False,
         drop_last=False,
         collate_fn=dependency_dataset.collate,
+        generator=torch.Generator().manual_seed(0),
     )
-    response_loader = DataLoader(
-        response_dataset,
-        batch_size=response_size,
-        shuffle=False,
-        drop_last=False,
-        collate_fn=response_dataset.collate,
-    )
+    response_loader = None
+    if split != "train":
+        response_dataset = ResponseDataset(inputs, holdout=True, device=device)
+        response_loader = DataLoader(
+            response_dataset,
+            batch_size=response_size,
+            shuffle=False,
+            drop_last=False,
+            collate_fn=response_dataset.collate,
+            generator=torch.Generator().manual_seed(0),
+        )
     if accelerator is not None:
         dependency_loader = accelerator.prepare_data_loader(
             dependency_loader, device_placement=False
         )
-        response_loader = accelerator.prepare_data_loader(
-            response_loader, device_placement=False
-        )
+        if response_loader is not None:
+            response_loader = accelerator.prepare_data_loader(
+                response_loader, device_placement=False
+            )
     return dependency_loader, response_loader
 
 
