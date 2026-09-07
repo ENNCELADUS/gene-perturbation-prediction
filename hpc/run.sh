@@ -7,6 +7,7 @@ Usage: hpc/run.sh prepare CONFIG
        hpc/run.sh train CONFIG (--run-id NAME | --resume CHECKPOINT)
        hpc/run.sh test CHECKPOINT
        hpc/run.sh p1a (extract|train|evaluate|compare) OPTIONS
+       hpc/run.sh p1b (prepare|evaluate|train-interface|train-stage2|compare) OPTIONS
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment.
 CUDA_VISIBLE_DEVICES is respected when detecting training workers.
 EOF
@@ -18,13 +19,14 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in prepare|train|test|p1a) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in prepare|train|test|p1a|p1b) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 python_bin=${PYTHON_BIN:-"$repo_root/.venv-tx1/bin/python"}
 case "$command" in
   p1a) exec "$python_bin" -m src.experiments.p1a "$@" ;;
+  p1b) exec "$python_bin" -m src.experiments.p1b "$@" ;;
   prepare) exec "$python_bin" -m src.experiments.prepare "$@" ;;
   test) checkpoint=$1; shift; exec "$python_bin" -m src.evaluate --checkpoint "$checkpoint" --split test "$@" ;;
   train)
