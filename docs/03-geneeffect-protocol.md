@@ -49,10 +49,6 @@ guard; the two unlabeled train members are declared explicitly, and any other mi
 label is a hard error. The 226-line benchmark and the nine-context SL split never
 substitute for each other.
 
-**The seed-0 test has been observed.** Further model decisions use validation only;
-a changed model or objective does not license a second look at test as a selection
-surface. Membership changes require a new benchmark version.
-
 ## 3. Inputs and supervision
 
 ### 3.1 Basal cells
@@ -109,9 +105,7 @@ mean/variance shift $\Delta$ is reduced to 256 dimensions by one fixed seeded pr
 plus six scalar summaries $s$. Concatenated with the fixed covariates $q_{g,c}$ (3 basal
 statistics of $g$ in $c$), $e_g$ and $z_c$ (mean- and variance-pooled $H_c$, 5120-d) and
 three coverage masks, the 6668-d vector feeds the residual head, an MLP 6668 → 256 → 256 → 1
-over train-fitted standardised blocks. (d) The joint objective of §5. Source:
-[`figures/geneeffect_architecture.drawio`](../figures/geneeffect_architecture.drawio);
-vector exports sit beside it.*
+over train-fitted standardised blocks. (d) The joint objective of §5. 
 
 Expression changes subtract basal and predicted bags in the same 2000-gene output
 space; $H_c$ and $\hat Y_{g,c}$ have different widths and are never subtracted.
@@ -152,73 +146,145 @@ derived checkpoint, and produces a mixed continuation, not an ablation.
 
 ## 6. Evaluation
 
-Test is an explicit command on the selected checkpoint; training never runs it. It
-restores the fitted preprocessing without refitting and exports predictions, metrics
-and per-line, per-gene and response tables for the requested split. The blueprint's
-[metric definitions](01-blueprint.md#6-what-the-geneeffect-metrics-measure) apply:
-Huber, RMSE and MAE over observed pairs; absolute Pearson/Spearman across genes within a
-line, macro-averaged over lines; residual Pearson/Spearman across lines for each
-train-defined variable gene, macro-averaged over genes; and response mean-shift MSE
-and energy distance averaged within, then equally across, the four anchors.
+Evaluate the selected checkpoint in `eval()` mode without gradients, restoring its
+fitted preprocessing. Train and validation use their own observed cell-line/gene
+pairs and the same train-defined variable-gene set. Let $y_{cg}$ be the observed
+GeneEffect, $\mu_g$ the fitted training gene mean, $r_{cg}=y_{cg}-\mu_g$ the target
+residual and $\hat r_{cg}$ the predicted residual.
 
-The control ladder is fitted on labeled training lines only and scored on identical
-observed keys: gene mean, K562 copy-prior, nearest line (HVG and Tx1 features) and
-context-PCA ridge (HVG and Tx1 features). Residual targets are centred on the
-fold-fit gene mean excluding the scored line; predictions are centred on the
-fold-independent mean. Centring a prediction on the fold-fit mean scores Spearman 1.0
-by construction and is forbidden. Gene-mean and copy-prior have **undefined** residual
-correlations because their per-gene predictions are constant across lines; report
-scored and undefined counts, never zeros.
+### Residual Pearson ↑
 
-A context claim requires residual correlation above the contextual controls, not high
-absolute correlation, which the gene mean already achieves. Response improvement alone
-establishes neither dependency nor SL improvement.
+For each variable gene, compute Pearson correlation across cell lines, then take
+an equal-weight mean over genes with defined correlations:
 
-## 7. Leakage and integrity rules
+$$
+\rho_g=\operatorname{Pearson}_c(r_{cg},\hat r_{cg}),\qquad
+\rho_{\mathrm{macro}}=\frac{1}{|G_\rho|}\sum_{g\in G_\rho}\rho_g.
+$$
 
-- Validation and test lines are absent from the gene mean, variable-gene selection,
-  normalization, feature-scale initialisation, response supervision and every
-  hyperparameter or checkpoint decision.
-- Join lines by DepMap ModelID through the checked-in map; never by informal name.
-- Per-line z-scoring of predictions is forbidden; it consumes the held-out line's own
-  distribution and erases the quantity under test.
-- The config validator raises on unknown, missing or out-of-domain keys and hard-codes
-  the selector, seeds, HVG width and holdout seeds; checkpoint loads report loaded
-  keys and raise on zero. A complete-looking wrong artifact, not an exception, is the
-  dominant failure mode.
-- Qualify every held-out-line result by the Tx1 Tahoe-100M pretraining exposure of
-  the evaluated lines.
-- Test is one-shot per benchmark version; the seed-0 test is spent.
+This measures how well predictions follow gene-specific context variation.
+The reported set contains 4,447 train-defined variable genes. Correlations use
+pairwise-finite observations; undefined correlations are excluded and counted.
+Absolute Pearson in Section 7 instead correlates across genes within each line,
+then averages over lines.
 
-## 8. Required outputs
+### SD ratio
 
-```text
-outputs/geneeffect_joint/<run_id>/
-  config.yaml
-  run.json                     source revision, inputs, environment, seeds, statuses
-  metrics.jsonl                one record per epoch
-  last.pt, best.pt             weights, fitted preprocessing, counters, rank RNG states
-  evaluation/<ckpt>/<split>/   predictions.parquet, metrics.json, per_line.csv,
-                               per_gene.csv, response.csv
-  baselines/<split>/           the same exports for every control
-```
+For each variable gene, divide prediction SD by target residual SD across the
+same pairwise-finite cell lines, then average the defined ratios equally:
 
-A result note under [`results/`](results/) names the run id, the commit the code ran
-at, the checkpoint SHA-256, the selected epoch, the observed-key count shared by all
-methods and the full comparison table. Planned numbers are not results.
+$$
+q_g=\frac{\operatorname{SD}_c(\hat r_{cg})}{\operatorname{SD}_c(r_{cg})},\qquad
+q_{\mathrm{macro}}=\frac{1}{|G_q|}\sum_{g\in G_q}q_g.
+$$
 
-## 9. Current state
+SD uses `ddof=0`. A ratio below 1 indicates shrinkage; 1 indicates matching
+amplitude. Fewer than two observations or zero target SD makes the ratio
+undefined; zero prediction SD with positive target SD gives zero. Section 7.3
+reports the median and percentiles of these per-gene ratios instead of the mean.
+
+### GeneEffect Huber ↓
+
+For $e_{cg}=\hat r_{cg}-r_{cg}$, use Huber loss with $\delta=1$:
+
+$$
+\ell(e)=\begin{cases}
+\tfrac12 e^2,& |e|\le1,\\
+|e|-\tfrac12,& |e|>1,
+\end{cases}
+\qquad
+L_{\mathrm{GE}}=\frac{1}{|\Omega|}\sum_{(c,g)\in\Omega}\ell(e_{cg}).
+$$
+
+$\Omega$ contains all finite labeled pairs in the split, including genes outside
+the variable-gene set. Each pair has equal weight. Adding the same fitted gene
+mean to predictions and targets leaves this loss unchanged. It excludes response
+loss; minimum validation GeneEffect Huber selects `best.pt`.
+
+## 7. Measured results and learning curves
+
+Run `joint_seed0_20260906T174818Z_b1024`, seed 0. The selected checkpoint is
+`best.pt`, epoch 3 (stored index 2), optimizer step 13250.
+Sources: [run evidence](results/joint_geneeffect_seed0/evidence.json) and
+[full result](results/joint_geneeffect_seed0/README.md).
+
+### 7.1 Training and validation curves
+
+![Training and validation curves](../outputs/analysis/30030_20260907/learning_curves.png)
+
+Epochs 1–2 used batch 256/rank, with 5889 optimizer updates per epoch and 1473/1472
+response replays respectively. Epochs 3–8 used batch 1024/rank, with 1472 updates
+and 368 replays per epoch. This is a documented mixed continuation. Training ended
+after epoch 8 with five epochs without a new minimum validation GE loss. The largest
+observed validation residual Pearson was 0.04946 at epoch 6; selection used GE loss.
+
+### 7.2 Selected-checkpoint test and controls
+
+All methods share 478501 observed `(ModelID, gene_symbol)` keys across 27 test lines;
+1748 missing labels out of 480249 possible pairs are excluded. Residual correlations
+use the same 4447 train-defined variable genes.
 
 | Test method | Huber ↓ | Absolute Pearson ↑ | Residual Pearson ↑ | Residual Spearman ↑ |
 | --- | ---: | ---: | ---: | ---: |
-| Joint best.pt, epoch 3 | 0.01611905 | 0.91050 | 0.05414 | 0.05280 |
-| Gene mean | 0.01613152 | 0.91047 | undefined | undefined |
-| Context-PCA ridge, Tx1 | 0.01625512 | 0.90983 | 0.12161 | 0.11574 |
-| Context-PCA ridge, HVG | 0.01635306 | 0.90920 | 0.07736 | 0.08324 |
+| Joint best.pt, epoch 3 | 0.01612 | 0.9105 | 0.0541 | 0.0528 |
+| Gene mean | 0.01613 | 0.9105 | undefined | undefined |
+| Context-PCA ridge, Tx1 | 0.01626 | 0.9098 | 0.1216 | 0.1157 |
+| Context-PCA ridge, HVG | 0.01635 | 0.9092 | 0.0774 | 0.0832 |
+| Nearest line, Tx1 | 0.02869 | 0.8458 | 0.0608 | 0.0597 |
+| Nearest line, HVG | 0.02854 | 0.8460 | 0.0590 | 0.0613 |
+| K562 copy-prior | 0.03390 | 0.8169 | undefined | undefined |
 
 Seed 0 improves on the gene mean by 0.0773% Huber and trails both contextual ridge
-baselines on residual correlation. Epochs 1–2 ran at batch 256 per rank and 3–8 at
-1024, a mixed continuation. This is a working training and evaluation path, not a
-context-modelling advantage. Next decisions use validation: a matched-batch
-response-weight 0 versus 1 comparison and residual-scale diagnostics
-([full result](results/joint_geneeffect_seed0/README.md)).
+baselines on residual correlation. Selected-checkpoint response MSE / energy distance /
+total are 85.58490 / 370.35131 / 455.93621. These score the same response-condition
+holdout on four training anchors, not measured responses on the 27 test lines.
+
+### 7.3 Existing-test prediction diagnostics
+
+Population standard deviations below are computed across observed test lines within each variable gene; SD ratios are computed
+per gene before taking their median.
+
+| Diagnostic, 4447 variable genes | Joint | Tx1 PCA-ridge |
+| --- | ---: | ---: |
+| Median prediction SD | 0.0129 | 0.0568 |
+| Median true residual SD | 0.2283 | 0.2283 |
+| Median prediction / true SD ratio | 5.7500% | 25.3100% |
+| 10th–90th percentile SD ratio | 2.7600%–15.7000% | 14.4700%–40.8900% |
+| Genes with positive residual Pearson | 61.4800% | 72.9000% |
+| Huber on variable-gene subset | 0.04032 | 0.04047 |
+| Gene-mean Huber on the same subset | 0.04042 | 0.04042 |
+
+Tx1 PCA-ridge has higher per-gene Pearson on 2683/4447 genes (60.33%); joint has
+higher Pearson on 1764. Median joint-minus-ridge Pearson is −0.06350.
+
+For the 4315 variable genes with labels on all 27 test lines, the prediction spectrum
+was measured after subtracting each gene's mean across those lines.
+
+| Centered matrix diagnostic | Joint predictions | Tx1 ridge predictions | True residuals |
+| --- | ---: | ---: | ---: |
+| First singular direction, fraction of squared singular values | 58.9000% | 42.9200% | 11.0600% |
+| First three directions, fraction of squared singular values | 83.4300% | 79.5300% | 25.3300% |
+| Participation rank, $(\sum_i s_i^2)^2/\sum_i s_i^4$ | 2.5800 | 3.6600 | 20.2600 |
+
+An identical cell-line offset shared across genes accounts for 6.05% of centered
+joint prediction energy and 1.36% for Tx1 ridge. Source:
+[diagnostic measurements](../autoresearch/reason-260907-residual-diagnosis/prediction_diagnostics.json)
+and [calculation](../autoresearch/reason-260907-residual-diagnosis/diagnose_predictions.py).
+
+
+### 7.4 Selected-checkpoint train/validation diagnostics
+
+The same selected checkpoint was evaluated on fixed cached inputs on 2026-09-07.
+Pearson and SD ratio are macro means over the train-defined variable genes;
+Huber covers all observed pairs.
+
+| Metric | Train | Validation |
+| --- | ---: | ---: |
+| Residual Pearson ↑ | 0.1649 | 0.0404 |
+| SD ratio | 0.1257 | 0.0931 |
+| GeneEffect Huber ↓ | 0.01511 | 0.01632 |
+
+Exports: `evaluation/best/{train,val}/` under the run directory on H20.
+Training predictions already show weak context correlation and substantial
+shrinkage; validation declines further. Prioritize the fitting bottleneck before
+investigating the additional generalization gap.
