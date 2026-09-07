@@ -1,11 +1,11 @@
 # Experiment Protocol: Held-Out-Cell-Line SL Ranking
 
 Updated 2026-09-07. This is the **separate, unimplemented SL-pair protocol** under
-[the research blueprint](01-blueprint.md). The current GeneEffect model has completed
-training and testing once, seed 0; its
-[joint-training design](specs/2026-09-06-modular-joint-training-design.md)
-and [results](results/joint_geneeffect_seed0/README.md) govern that experiment.
-No SL head, out-of-fold SL feature set or SL performance result exists.
+[the research blueprint](01-blueprint.md). It builds on the backbone defined by the
+[GeneEffect protocol](03-geneeffect-protocol.md), whose seed-0 model has completed
+training and testing once
+([result](results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
+feature set or SL performance result exists.
 
 ## 1. Objective and prediction unit
 
@@ -75,16 +75,12 @@ recorded pretraining and preprocessing provenance.
 
 ### 3.2 Response anchors
 
-| ModelID | Cell line |
-| --- | --- |
-| ACH-000551 | K562 |
-| ACH-000971 | HCT116 |
-| ACH-000995 | Jurkat |
-| ACH-000739 | HepG2 |
-
-Use genetic-perturbation responses and non-targeting controls. Inner-fold exclusion
-also removes an excluded context's response supervision. Response-condition holdout
-is not cell-line holdout and does not imply unseen-gene evaluation.
+The four response anchors are those of the
+[GeneEffect protocol §3.2](03-geneeffect-protocol.md#32-response-anchors): K562, HCT116,
+Jurkat and HepG2, with genetic-perturbation responses and non-targeting controls.
+Inner-fold exclusion also removes an excluded context's response supervision.
+Response-condition holdout is not cell-line holdout and does not imply unseen-gene
+evaluation.
 
 ### 3.3 Dependency labels
 
@@ -102,49 +98,27 @@ the data card. Preserve natural class counts, canonical pairs, `source_row_id`,
 Screened non-hits are not universal non-SL labels. Do not import GeneEffect,
 co-dependency, Feng or measured-GI labels as additional SL ground truth.
 
-## 4. Backbone model, fitting and selection
+## 4. Backbone requirements
 
-![Context-conditioned GeneEffect architecture](../figures/geneeffect_architecture.png)
+The backbone is the joint GeneEffect model: architecture, training loop and checkpoint
+selection are fixed by the [GeneEffect protocol](03-geneeffect-protocol.md) §4–§5 and
+its [joint design](specs/2026-09-06-modular-joint-training-design.md). This protocol
+adds requirements that the GeneEffect run does not meet.
 
-*The implemented GeneEffect backbone that the SL head builds on. (a) Frozen Tx1-3B encodes
-128 sampled basal cells of line $c$ into $H_c\in\mathbb{R}^{128\times2560}$ and frozen ESM-2
-encodes gene $g$ into $e_g\in\mathbb{R}^{1280}$; both are cached at preparation time.
-(b) A trainable adapter maps $e_g$ to the perturbation token $p_g\in\mathbb{R}^{2024}$, and the
-trainable STATE transition model, initialised from the ST-HVG-Replogle checkpoint and run on
-64-cell windows, predicts post-perturbation HVG expression $\hat Y_{g,c}\in\mathbb{R}^{128\times2000}$.
-(c) Response descriptors compare $\hat Y_{g,c}$ with the matched basal HVG expression $X_c$:
-the 4000-d mean/variance shift $\Delta$ is reduced to 256 dimensions by one fixed seeded
-projection, plus six scalar summaries $s$. Concatenated with the fixed covariates
-$q_{g,c}$ (3 basal statistics of $g$ in $c$), $e_g$ and $z_c$ (mean- and variance-pooled $H_c$,
-5120-d) and three coverage masks, the 6668-d vector feeds the residual head, an MLP
-6668 → 256 → 256 → 1 over train-fitted standardised blocks. The prediction is
-$\hat y_{g,c}=\mu_{\text{train}}(g)+\hat\delta(g,c)$. (d) The joint objective. Source:
-[`figures/geneeffect_architecture.drawio`](../figures/geneeffect_architecture.drawio);
-vector exports sit beside it.*
-
-The backbone is the current joint GeneEffect formulation: a fixed training gene mean
-plus a predicted residual, Huber regression (delta 1) at every update and a balanced
-four-anchor response replay (mean-shift MSE plus energy distance, weight 1) at every
-fourth update. The [joint design](specs/2026-09-06-modular-joint-training-design.md)
-defines the implemented loss, once-per-epoch validation and the minimum
-`val_geneeffect_loss` selector; the blueprint
-[§3–§4](01-blueprint.md#3-implemented-geneeffect-model) states the contract.
 The SL experiment must specify its own eligible dependency cohort and validation
 surface before fitting; it must not import the 226-line split by convenience.
-
 SL validation/test contexts are excluded from supervised fitting and fitted
 preprocessing. Validation may select but never join the training cohort. Record
 response loss and both component terms alongside dependency error and correlation;
 improving one task is not evidence of improving the other.
 
-The completed seed-0 `best.pt` (epoch 3, test observed on 2026-09-07) is diagnostic
-evidence only: it beats the context-blind gene mean by 0.0773% Huber and trails the
-Tx1 context-PCA ridge on residual correlation
-([result](results/joint_geneeffect_seed0/README.md)). It neither supplies the
-required SL exclusions nor the inner-fold models of §5, and its 226-line test set
-must not become an SL tuning surface. Inner fits that exclude a response anchor need
-an explicit eligible-anchor configuration; the fixed four-anchor trainer cannot be
-reused unchanged for those folds.
+The completed seed-0 `best.pt` is diagnostic evidence only: it beats the context-blind
+gene mean by 0.0773% Huber and trails the Tx1 context-PCA ridge on residual
+correlation ([result](results/joint_geneeffect_seed0/README.md)). It neither supplies
+the required SL exclusions nor the inner-fold models of §5, and its 226-line test set,
+observed once on 2026-09-07, must not become an SL tuning surface. Inner fits that
+exclude a response anchor need an explicit eligible-anchor configuration; the fixed
+four-anchor trainer cannot be reused unchanged for those folds.
 
 ## 5. Out-of-fold feature generation
 
@@ -230,8 +204,8 @@ context claim is licensed at any absolute AUPR.
 **GeneEffect.** The [metric definitions](01-blueprint.md#6-what-the-geneeffect-metrics-measure)
 distinguish cross-gene absolute correlation from per-gene cross-context residual
 correlation. The latter is scored on the separate 226-line benchmark under the
-[Exp13 residual spec](specs/2026-08-17-exp13-geneeffect-residual-protocol.md), which this
-document does not duplicate; that score is diagnostic, not an SL test score. Among SL
+[GeneEffect protocol §6](03-geneeffect-protocol.md#6-evaluation), which this document
+does not duplicate; that score is diagnostic, not an SL test score. Among SL
 test contexts only 22RV1 is GeneEffect-covered; its per-context cross-gene Spearman is
 reportable and cannot support a context claim. Report response loss and its two terms
 for every inner model.

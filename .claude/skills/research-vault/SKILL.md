@@ -13,12 +13,14 @@ the commit log. If code and vault disagree, the vault wins and the code is the b
 ```
 01-blueprint.md              contract + claim bars   (frozen)
   > 02-literature-review.md  related work, novelty boundary
-    > 03-experiment-protocol.md  the SL-pair protocol
-      > docs/specs/*.md          tracked designs, incl. the Exp13 GeneEffect residual spec
-        > docs/results/*.md      evidence
+    > 03-geneeffect-protocol.md  the implemented GeneEffect track, executable
+      > 04-sl-ranking-protocol.md  the SL-pair protocol built on it
+        > docs/specs/*.md        tracked designs, incl. the Exp13 GeneEffect residual spec
+          > docs/results/*.md    evidence
 ```
 
-`03` §7 defers its dependency-residual metric to the Exp13 spec, which is **scope-closed** —
+`04` §7 defers its dependency-residual metric to `03` §6; the Exp13 spec is the historical
+staged form of `03` and is **scope-closed** —
 a GeneEffect number is never SL evidence (`01` §8). A protocol or spec makes `01`
 executable; it never relaxes it.
 
@@ -51,9 +53,9 @@ A planned number is not a number. **Results enter the vault only after the
 analysis actually runs.**
 
 1. Run the analysis. Keep the artifacts the protocol's "Required Outputs" section
-   lists (`03` §10, `04` §10): config, seeds, commit SHA, per-fold outputs, hashes.
+   lists (`03` §8, `04` §9): config, seeds, commit SHA, per-fold outputs, hashes.
 2. Check admissibility **before** opening the result: the leakage and integrity
-   rules in `01` §7, plus the protocol's own leakage section (`03` §8, `04` §9).
+   rules in `01` §7, plus the protocol's own leakage section (`03` §7, `04` §8).
    A failed rule downgrades or disqualifies the result; it does not become a caveat.
 3. State the verdict in the vocabulary the contract already uses — negative, paused,
    closed, scope-closed, reportable-but-not-claimable — and carry the most restrictive

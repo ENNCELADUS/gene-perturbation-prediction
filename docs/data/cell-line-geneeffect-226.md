@@ -1,8 +1,8 @@
 # Cell-Line GeneEffect Benchmark
 
-**Status:** One fixed split, used by the historical Exp13 Stage 2 run.
-The [joint GeneEffect protocol](../specs/2026-09-06-modular-joint-training-design.md)
-uses the same membership and has no scientific result yet. Historical results:
+**Status:** One fixed split, used by the historical Exp13 Stage 2 run and by the seed-0
+run of the [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been
+observed once ([result](../results/joint_geneeffect_seed0/README.md)). Historical results:
 [Exp13 Stage 2](../results/exp13_stage2_full/README.md).
 
 ## Fixed split
@@ -50,4 +50,4 @@ missing train label, or any missing validation/test label, is a hard runtime err
 The benchmark has 17,931 genes with at least five finite train labels and at least
 three finite labels in validation and test. This is coverage, not the final
 train-defined residual-variance gene universe. Coverage counts describe the split;
-new joint-training performance remains unmeasured.
+performance lives in the result notes.
