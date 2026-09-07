@@ -8,6 +8,8 @@ approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 web_search = "live"
 approvals_reviewer = "auto_review"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 
 [mcp_servers.context7]
 command = "npx"
@@ -37,9 +39,6 @@ config_file = "agents/reviewer.toml"
 [agents.docs_guard]
 description = "Read-only documentation guard for the docs/ research vault, README, and agent instruction files."
 config_file = "agents/docs-guard.toml"
-
-model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
 
 [mcp_servers.codebase-memory-mcp]
 command = "/Users/richardwang/.local/bin/codebase-memory-mcp"
