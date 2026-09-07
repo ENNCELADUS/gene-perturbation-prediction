@@ -9,7 +9,6 @@ sandbox_mode = "workspace-write"
 web_search = "live"
 approvals_reviewer = "auto_review"
 model = "gpt-6-astra"
-model_reasoning_effort = "medium"
 
 [mcp_servers.context7]
 command = "npx"

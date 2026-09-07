@@ -3,7 +3,7 @@
 ## Research contract and sources
 
 - The current task is context-conditioned SL ranking from basal single-cell transcriptomes in held-out **cell lines**, not held-out genes. No SL graph enters the feature path. The Feng2024 gene-holdout formulation is a separate historical track.
-- `docs/01-blueprint.md` defines the research contract and claim boundaries; `docs/02-literature-review.md` defines prior art; `docs/03-experiment-protocol.md` defines the separate SL-pair protocol. Current GeneEffect training uses `docs/specs/2026-09-06-modular-joint-training-design.md`; the 2026-08-17 Exp13 protocol describes historical staged runs.
+- `docs/01-blueprint.md` defines the research contract and claim boundaries; `docs/02-literature-review.md` defines prior art; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented GeneEffect track and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol that builds on it. Current GeneEffect training follows `docs/specs/2026-09-06-modular-joint-training-design.md`; the 2026-08-17 Exp13 protocol describes historical staged runs.
 - Read the relevant `docs/data/` card before using a dataset. Results and scientific status live in `docs/results/` and the blueprint's Current Scientific State, not in this file. `.superpowers/sdd/` contains local execution notes; `docs/specs/` contains tracked designs.
 - Contract documents define admissible experiments and claims; code and artifacts establish what was implemented and executed. Reconcile discrepancies against the designated contract rather than treating implementation drift as a new protocol.
 

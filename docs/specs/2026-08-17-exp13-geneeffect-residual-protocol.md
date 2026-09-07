@@ -13,8 +13,9 @@ and nearest-line 0.0462); historical Stage 1 training lineage remains incomplete
 Supersedes T2 (`results/tx1-hvg-geneeffect-phase-f.md`, marked superseded).
 **Authority:** [`01-blueprint.md`](../01-blueprint.md) is the contract; this document is its
 executable form for the GeneEffect residual track and may not relax it. **Companion:**
-[`03-experiment-protocol.md`](../03-experiment-protocol.md) is the SL-pair protocol; its §7
-defers its dependency-residual metric to this document. **Benchmark:**
+[`04-sl-ranking-protocol.md`](../04-sl-ranking-protocol.md) is the SL-pair protocol; its §7
+defers its dependency-residual metric to [`03-geneeffect-protocol.md`](../03-geneeffect-protocol.md)
+§6, of which this document is the historical staged form. **Benchmark:**
 [`data/cell-line-geneeffect-226.md`](../data/cell-line-geneeffect-226.md).
 
 ## Scope statement (binding)
@@ -24,7 +25,7 @@ evidence for cross-context synthetic lethality.** The single frozen backbone pas
 document registers is valid only under this contract. Any later SL held-out-context reuse
 would require every SL val/test context excluded from both dependency fitting and
 feature-model fitting — an out-of-fold backbone per inner group, per
-[`03-experiment-protocol.md`](../03-experiment-protocol.md) §5 — which this protocol does not
+[`04-sl-ranking-protocol.md`](../04-sl-ranking-protocol.md) §5 — which this protocol does not
 build. This benchmark (`cell_line_geneeffect_226_split`) and `context_screen_v2` never
 substitute for each other; see [`01-blueprint.md`](../01-blueprint.md) §8.
 
@@ -119,7 +120,7 @@ Registered in `configs/experiments/13_geneeffect_226/stage1_response.yaml` and
 snapshotted to `stage1_objective.json` before Stage 1 trains:
 
 - Per-anchor response metrics (mean-delta MSE, energy distance) for each of the four
-  Perturb-seq anchors (K562, HCT116, Jurkat, HepG2 — `03-experiment-protocol.md` §3.2).
+  Perturb-seq anchors (K562, HCT116, Jurkat, HepG2 — `03-geneeffect-protocol.md` §3.2).
 - A held-out perturbation-gene set per anchor, excluded from Stage 1 training and reserved
   for the response-model's own generalization check.
 - The four-line weighting used to combine anchor losses into one Stage 1 objective.
