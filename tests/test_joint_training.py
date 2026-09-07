@@ -119,10 +119,17 @@ def test_two_epoch_real_state_common_evaluator_and_geneeffect_selection(
     model, inputs = fresh_model(config)
     accelerator = Accelerator(cpu=True)
     actual_evaluate = trainer.evaluate_model
-    calls = []
+    calls, train_calls = [], []
 
     def evaluate(*args, **kwargs):
         result = actual_evaluate(*args, **kwargs)
+        if kwargs["split"] == "train":
+            train_calls.append(dict(result.metrics))
+            # Train diagnostics cannot drive checkpoint selection.
+            result.metrics["train_eval_geneeffect_loss"] = [2.0, 1.0][
+                len(train_calls) - 1
+            ]
+            return result
         calls.append(dict(result.metrics))
         result.metrics.update(
             val_geneeffect_loss=[1.0, 2.0][len(calls) - 1],
@@ -134,6 +141,7 @@ def test_two_epoch_real_state_common_evaluator_and_geneeffect_selection(
     monkeypatch.setattr(trainer, "evaluate_model", evaluate)
     state = trainer.fit(model, inputs, config, tmp_path / "run", accelerator)
     assert len(calls) == 2
+    assert len(train_calls) == 2
     assert (
         state.next_epoch,
         state.global_step,
@@ -156,6 +164,14 @@ def test_two_epoch_real_state_common_evaluator_and_geneeffect_selection(
     ]
     validation = [r for r in records if "val_geneeffect_loss" in r]
     assert len(validation) == 2
+    assert [row["epoch_optimizer_updates"] for row in validation] == [7, 7]
+    assert [row["epoch_response_replay_updates"] for row in validation] == [2, 2]
+    assert [row["epoch_start_step"] for row in validation] == [0, 7]
+    assert all(row["epoch_dependency_rows"] == 14 for row in validation)
+    assert all(row["epoch_response_rows"] == 8 for row in validation)
+    assert all(row["epoch_dependency_dropped_rows"] == 1 for row in validation)
+    assert all(row["effective_dependency_batch_size"] == 2 for row in validation)
+    assert all(row["train_eval_geneeffect_valid_pairs"] == 15 for row in validation)
     assert all(set(calls[i]) <= validation[i].keys() for i in range(2))
     training = [r for r in records if "train_geneeffect_loss" in r]
     assert [
@@ -194,3 +210,28 @@ def test_finite_gradient_gate_accepts_zero_and_rejects_nan(tmp_path):
     with pytest.raises(RuntimeError, match="non-finite gradient"):
         trainer.train_update(model, optimizer, batch, None, config, accelerator)
     handle.remove()
+
+
+def test_train_diagnostics_do_not_change_optimization_or_selection(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    config = tiny_training_config(tmp_path / "data")
+    accelerator = Accelerator(cpu=True)
+    model, inputs = fresh_model(config)
+    trainer.fit(model, inputs, config, tmp_path / "with_diagnostics", accelerator)
+    expected = load_checkpoint(tmp_path / "with_diagnostics" / "last.pt")
+    actual_evaluate = trainer.evaluate_model
+
+    def without_train(*args, **kwargs):
+        if kwargs["split"] == "train":
+            return SimpleNamespace(metrics={})
+        return actual_evaluate(*args, **kwargs)
+
+    monkeypatch.setattr(trainer, "evaluate_model", without_train)
+    model, inputs = fresh_model(config)
+    trainer.fit(model, inputs, config, tmp_path / "without_diagnostics", accelerator)
+    actual = load_checkpoint(tmp_path / "without_diagnostics" / "last.pt")
+    for name in ("model_state", "optimizer", "train_state", "rng_states"):
+        assert_tree_equal(actual[name], expected[name])

@@ -22,8 +22,15 @@ from test_joint_training import (
 )
 
 
-def test_epoch_resume_exact_next_update_and_remaining_replay(tmp_path, monkeypatch):
+@pytest.mark.parametrize("use_response", [True, False])
+def test_epoch_resume_exact_next_update_and_remaining_replay(
+    tmp_path, monkeypatch, use_response
+):
     config = tiny_training_config(tmp_path / "data")
+    config["model"]["head_blocks"] = {
+        "use_delta_proj": use_response,
+        "use_s": use_response,
+    }
     accelerator = Accelerator(cpu=True)
     snapshots = []
     original = trainer.train_update
@@ -67,6 +74,9 @@ def test_epoch_resume_exact_next_update_and_remaining_replay(tmp_path, monkeypat
     Path(config["paths"]["esm2_embeddings"]).unlink()
     Path(config["paths"]["state_checkpoint"]).unlink()
     model, inputs = restore_model(boundary)
+    assert model.head.blocks.use_delta_proj is use_response
+    assert model.head.blocks.use_s is use_response
+    assert ("delta_proj" in model.standardizer.to_state()["blocks"]) is use_response
     torch.testing.assert_close(
         model.backbone.perturbations.esm_matrix,
         boundary["preprocessing"]["esm2_vectors"],

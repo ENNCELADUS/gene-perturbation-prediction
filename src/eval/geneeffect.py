@@ -1,9 +1,10 @@
 """Aligned-row GeneEffect and response evaluation for validation and testing."""
 
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 import math
+import random
 from typing import Any
 
 import numpy as np
@@ -116,6 +117,7 @@ def _correlation_details(
     unit_col: str,
     truth_col: str,
     pred_col: str,
+    residual_errors: bool = False,
 ) -> pd.DataFrame:
     rows = []
     groups = {key: group for key, group in frame.groupby(unit_col, sort=False)}
@@ -123,17 +125,32 @@ def _correlation_details(
         group = groups.get(unit, frame.iloc[:0])
         truth = group[truth_col].to_numpy(dtype=float)
         prediction = group[pred_col].to_numpy(dtype=float)
-        rows.append(
-            {
-                unit_col: unit,
-                "valid_pairs": int(
-                    (np.isfinite(truth) & np.isfinite(prediction)).sum()
-                ),
-                "pearson": _unit_pearson(truth, prediction),
-                "spearman": _unit_spearman(truth, prediction),
-            }
-        )
-    return pd.DataFrame(rows, columns=[unit_col, "valid_pairs", "pearson", "spearman"])
+        row = {
+            unit_col: unit,
+            "valid_pairs": int((np.isfinite(truth) & np.isfinite(prediction)).sum()),
+            "pearson": _unit_pearson(truth, prediction),
+            "spearman": _unit_spearman(truth, prediction),
+        }
+        if residual_errors:
+            valid = np.isfinite(truth) & np.isfinite(prediction)
+            target, predicted = truth[valid], prediction[valid]
+            target_sd = float(target.std(ddof=0)) if len(target) >= 2 else math.nan
+            prediction_sd = (
+                float(predicted.std(ddof=0)) if len(target) >= 2 else math.nan
+            )
+            error = predicted - target
+            row.update(
+                target_sd=target_sd,
+                prediction_sd=prediction_sd,
+                sd_ratio=prediction_sd / target_sd if target_sd > 0 else math.nan,
+                rmse=float(np.sqrt(np.mean(error**2))) if len(error) else math.nan,
+                mae=float(np.mean(np.abs(error))) if len(error) else math.nan,
+            )
+        rows.append(row)
+    columns = [unit_col, "valid_pairs", "pearson", "spearman"]
+    if residual_errors:
+        columns += ["target_sd", "prediction_sd", "sd_ratio", "rmse", "mae"]
+    return pd.DataFrame(rows, columns=columns)
 
 
 def aggregate_geneeffect(
@@ -191,6 +208,7 @@ def aggregate_geneeffect(
         unit_col="gene_symbol",
         truth_col="residual",
         pred_col="residual_prediction",
+        residual_errors=True,
     )
     for table, domain, axis in (
         (per_line, "geneeffect", "per_line"),
@@ -204,7 +222,34 @@ def aggregate_geneeffect(
             )
             metrics[f"{key}_{axis}_scored"] = len(defined)
             metrics[f"{key}_{axis}_undefined"] = len(table) - len(defined)
+    for name in ("target_sd", "prediction_sd", "sd_ratio", "rmse", "mae"):
+        defined = per_gene[name].dropna()
+        metrics[f"residual_{name}_macro_per_gene"] = (
+            float(defined.mean()) if len(defined) else None
+        )
+        metrics[f"residual_{name}_per_gene_scored"] = len(defined)
+        metrics[f"residual_{name}_per_gene_undefined"] = len(per_gene) - len(defined)
     return metrics, per_line, per_gene
+
+
+@contextmanager
+def _evaluation_mode(model: nn.Module, device: torch.device):
+    """Diagnostics cannot advance training RNG streams or change module modes."""
+    python_rng, numpy_rng = random.getstate(), np.random.get_state()
+    mps_rng = torch.mps.get_rng_state() if device.type == "mps" else None
+    modes = [(module, module.training) for module in model.modules()]
+    devices = [device.index or 0] if device.type == "cuda" else []
+    try:
+        with torch.random.fork_rng(devices=devices), torch.no_grad():
+            model.eval()
+            yield
+    finally:
+        random.setstate(python_rng)
+        np.random.set_state(numpy_rng)
+        if mps_rng is not None:
+            torch.mps.set_rng_state(mps_rng)
+        for module, training in modes:
+            module.training = training
 
 
 def evaluate_model(
@@ -216,8 +261,8 @@ def evaluate_model(
     accelerator=None,
 ) -> EvalResult:
     """Evaluate once over fixed rows, preserving module modes on exit."""
-    if split not in {"val", "test"}:
-        raise ValueError("evaluation split must be val or test")
+    if split not in {"train", "val", "test"}:
+        raise ValueError("evaluation split must be train, val or test")
     dependency, response_loader = make_evaluation_loaders(
         inputs, config, split, accelerator
     )
@@ -227,45 +272,52 @@ def evaluate_model(
         if accelerator is not None
         else next(model.parameters()).device
     )
-    modes = [(module, module.training) for module in model.modules()]
     dependency_rows, heldout_rows = [], []
-    try:
-        model.eval()
-        with torch.no_grad():
-            for batch in dependency:
-                with (
-                    accelerator.autocast() if accelerator is not None else nullcontext()
-                ):
-                    dependency_rows.extend(
-                        _gather_batch_rows(
-                            lambda: _dependency_rows(model, batch.to(device)),
-                            accelerator,
-                        )
+    with _evaluation_mode(model, device):
+        for batch in dependency:
+            with accelerator.autocast() if accelerator is not None else nullcontext():
+                dependency_rows.extend(
+                    _gather_batch_rows(
+                        lambda: _dependency_rows(model, batch.to(device)),
+                        accelerator,
                     )
-            for batch in response_loader:
-                with (
-                    accelerator.autocast() if accelerator is not None else nullcontext()
-                ):
-                    heldout_rows.extend(
-                        _gather_batch_rows(
-                            lambda: response_rows(unwrapped, batch.to(device)),
-                            accelerator,
-                        )
+                )
+        for batch in response_loader if response_loader is not None else ():
+            with accelerator.autocast() if accelerator is not None else nullcontext():
+                heldout_rows.extend(
+                    _gather_batch_rows(
+                        lambda: response_rows(unwrapped, batch.to(device)),
+                        accelerator,
                     )
-    finally:
-        for module, training in modes:
-            module.training = training
-    predictions, response = pd.DataFrame(dependency_rows), pd.DataFrame(heldout_rows)
+                )
+    predictions = pd.DataFrame(dependency_rows)
+    response = pd.DataFrame(
+        heldout_rows,
+        columns=[
+            "model_id",
+            "gene_symbol",
+            "mean_delta_mse",
+            "energy_distance",
+        ],
+    )
     geneeffect, per_line, per_gene = aggregate_geneeffect(
         predictions,
-        model_ids=getattr(inputs.split, split),
+        model_ids=(
+            inputs.split.supervised_train
+            if split == "train"
+            else getattr(inputs.split, split)
+        ),
         genes=inputs.genes,
         variable_genes=[gene for gene in inputs.genes if gene in inputs.variable_genes],
     )
-    metrics = compose_metrics(
-        geneeffect,
-        aggregate_response(response, inputs.response_anchors),
-        response_weight=float(config["train"]["response_weight"]),
-        prefix=split,
+    metrics = (
+        {f"train_eval_{key}": value for key, value in geneeffect.items()}
+        if split == "train"
+        else compose_metrics(
+            geneeffect,
+            aggregate_response(response, inputs.response_anchors),
+            response_weight=float(config["train"]["response_weight"]),
+            prefix=split,
+        )
     )
     return EvalResult(metrics, predictions, per_line, per_gene, response)

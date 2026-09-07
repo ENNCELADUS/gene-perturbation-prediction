@@ -20,7 +20,9 @@ _GROUPS = {
         "cells_per_context hvg_dim esm2_dim "
         "variable_gene_min_observations variable_gene_percentile"
     ),
-    "model": "cell_sentence_len esm2_adapter_hidden head_hidden head_layers",
+    "model": (
+        "cell_sentence_len esm2_adapter_hidden head_hidden head_layers head_blocks"
+    ),
     "preparation": (
         "response_max_cells_per_gene response_total_cells_per_line "
         "response_sampling_seed response_holdout_fraction "
@@ -51,6 +53,16 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     _keys(config, {*_GROUPS, "precision", "output_root", "prepared_root"}, "config")
     for name, fields in _GROUPS.items():
         _keys(config[name], fields.split(), name)
+    blocks = config["model"]["head_blocks"]
+    _keys(
+        blocks,
+        "use_delta_proj use_s use_q_sc use_e_g use_z_c".split(),
+        "model.head_blocks",
+    )
+    if any(type(value) is not bool for value in blocks.values()):
+        raise ValueError("model.head_blocks values must be boolean")
+    if not any(blocks.values()):
+        raise ValueError("model.head_blocks must enable at least one block")
     for name in ("output_root", "prepared_root"):
         if not isinstance(config[name], str) or not config[name].strip():
             raise ValueError(f"{name} must be a nonempty path")
@@ -75,6 +87,8 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     }
     for group in ("train", "features", "model", "preparation"):
         for name, value in config[group].items():
+            if name == "head_blocks":
+                continue
             if name in {"var_ensembl_col", "hvg_gene_symbol_col"}:
                 if not isinstance(value, str) or not value:
                     raise ValueError(f"{group}.{name} must be a nonempty string")

@@ -58,6 +58,9 @@ class GeneEffectBlockConfig:
     use_z_c: bool = True
 
     def __post_init__(self) -> None:
+        for name in ("use_delta_proj", "use_s", "use_q_sc", "use_e_g", "use_z_c"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f"GeneEffectBlockConfig.{name} must be boolean")
         if not any(
             (
                 self.use_delta_proj,

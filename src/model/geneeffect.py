@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Mapping, Sequence
 import torch
 from torch import nn
@@ -47,6 +48,7 @@ class GeneEffectE2EModel(nn.Module):
                 ("e_g", features.e_g),
                 ("z_c", features.z_c),
             )
+            if getattr(self.head.blocks, f"use_{name}")
         }
 
     def forward_features(self, features: FeatureBatch) -> torch.Tensor:
@@ -54,9 +56,11 @@ class GeneEffectE2EModel(nn.Module):
         blocks = self._standardize(features)
         return self.head(
             **blocks,
-            q_sc_mask=features.q_sc_mask,
-            hvg_panel_mask=features.hvg_panel_mask,
-            own_gene_shift_mask=features.own_gene_shift_mask,
+            q_sc_mask=features.q_sc_mask if self.head.blocks.use_q_sc else None,
+            hvg_panel_mask=features.hvg_panel_mask if self.head.blocks.use_s else None,
+            own_gene_shift_mask=(
+                features.own_gene_shift_mask if self.head.blocks.use_s else None
+            ),
         )
 
     def condition_features(self, batch: OnlineConditionBatch) -> FeatureBatch:
@@ -105,7 +109,16 @@ class GeneEffectE2EModel(nn.Module):
             )
         return E2EForwardOutput(
             delta_hat=self.forward_features(features),
-            raw_features=features,
+            # DDP traverses every returned tensor to discover used parameters.
+            # Disabled diagnostics must not advertise a loss path that is absent.
+            raw_features=replace(
+                features,
+                **{
+                    name: getattr(features, name).detach()
+                    for name in ("delta_proj", "s", "q_sc", "e_g", "z_c")
+                    if not getattr(self.head.blocks, f"use_{name}")
+                },
+            ),
             response_predicted=response_predicted,
         )
 

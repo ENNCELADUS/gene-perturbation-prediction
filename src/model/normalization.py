@@ -273,6 +273,7 @@ def fit_startup_standardizer(
                         yield {
                             name: getattr(features, name)
                             for name in sorted(_CONTINUOUS_BLOCKS)
+                            if getattr(model.head.blocks, f"use_{name}")
                         }
 
                 model.standardizer.fit_batches(blocks())

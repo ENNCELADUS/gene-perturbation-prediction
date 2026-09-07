@@ -190,6 +190,13 @@ def fit(
         dependency_loader, response_iterator = make_training_loaders(
             inputs, config, epoch, accelerator
         )
+        epoch_start_step = state.global_step
+        exposure = {
+            "epoch_optimizer_updates": 0,
+            "epoch_response_replay_updates": 0,
+            "epoch_dependency_rows": 0,
+            "epoch_response_rows": 0,
+        }
         for dependency_batch in dependency_loader:
             replay = state.global_step % train["response_interval"] == 0
             response_batch = next(response_iterator) if replay else None
@@ -197,18 +204,39 @@ def fit(
                 model, optimizer, dependency_batch, response_batch, config, accelerator
             )
             state.global_step += 1
+            exposure["epoch_optimizer_updates"] += 1
+            exposure["epoch_response_replay_updates"] += int(replay)
+            exposure["epoch_dependency_rows"] += metrics["train_dependency_rows"]
+            exposure["epoch_response_rows"] += metrics["train_response_rows"]
             _log(
                 run_dir,
                 {"epoch": epoch, "global_step": state.global_step, **metrics},
                 accelerator,
             )
+        train_metrics = evaluate_model(
+            model, inputs, config, split="train", accelerator=accelerator
+        ).metrics
         result = evaluate_model(
             model, inputs, config, split="val", accelerator=accelerator
         )
         improved = record_validation(state, result.metrics, epoch)
         _log(
             run_dir,
-            {"epoch": epoch, "global_step": state.global_step, **result.metrics},
+            {
+                "epoch": epoch,
+                "global_step": state.global_step,
+                "epoch_start_step": epoch_start_step,
+                "world_size": accelerator.num_processes,
+                "effective_dependency_batch_size": train["dependency_batch_size"]
+                * accelerator.num_processes,
+                "effective_response_batch_size": train["response_batch_size"]
+                * accelerator.num_processes,
+                "epoch_dependency_dropped_rows": len(dependency_loader.dataset)
+                - exposure["epoch_dependency_rows"],
+                **exposure,
+                **train_metrics,
+                **result.metrics,
+            },
             accelerator,
         )
         if improved:

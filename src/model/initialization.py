@@ -15,7 +15,11 @@ from torch import nn
 from src.data.embeddings import Esm2EmbeddingTable
 from src.model.geneeffect import GeneEffectE2EModel
 from src.model.features import FixedSparseProjection, HVG_WIDTH
-from src.model.head import GeneEffectFeatureDims, GeneEffectResidualHead
+from src.model.head import (
+    GeneEffectBlockConfig,
+    GeneEffectFeatureDims,
+    GeneEffectResidualHead,
+)
 from src.model.normalization import BlockStandardizer
 
 if TYPE_CHECKING:
@@ -199,6 +203,9 @@ def build_joint_model(
             "hvg_order": list(inputs.hvg_order),
             "esm2_adapter_hidden": int(model_config.get("esm2_adapter_hidden", 512)),
             "head": {
+                "blocks": asdict(
+                    GeneEffectBlockConfig(**model_config.get("head_blocks", {}))
+                ),
                 "dims": asdict(
                     GeneEffectFeatureDims(
                         e_g=vectors.shape[1], z_c=2 * int(line.controls_tx1.shape[1])
@@ -235,6 +242,8 @@ def build_joint_model(
     head_config = metadata["head"]
     head = GeneEffectResidualHead(
         dims=GeneEffectFeatureDims(**head_config["dims"]),
+        # Earlier joint checkpoints define the original all-block head.
+        blocks=GeneEffectBlockConfig(**head_config.get("blocks", {})),
         hidden=head_config["hidden"],
         n_hidden_layers=head_config["n_hidden_layers"],
     )

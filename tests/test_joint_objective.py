@@ -170,8 +170,9 @@ def test_replay_adds_reconstruction_gradients_in_same_model_call(joint_setup):
         )
 
 
+@pytest.mark.parametrize("original_all_block_checkpoint", [False, True])
 def test_strict_restore_uses_saved_metadata_and_actual_esm_without_upstream(
-    joint_setup, monkeypatch
+    joint_setup, monkeypatch, original_all_block_checkpoint
 ):
     model, inputs, config, batch, _ = joint_setup
     model.eval()
@@ -184,6 +185,8 @@ def test_strict_restore_uses_saved_metadata_and_actual_esm_without_upstream(
         raise AssertionError("resume reread an upstream checkpoint")
 
     monkeypatch.setattr(torch, "load", no_reads)
+    if original_all_block_checkpoint:
+        del model.architecture["head"]["blocks"]
     restored = build_joint_model(
         config,
         inputs,

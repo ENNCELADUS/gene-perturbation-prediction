@@ -7,7 +7,7 @@ from pathlib import Path
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--split", choices=("val", "test"), default="test")
+    parser.add_argument("--split", choices=("train", "val", "test"), default="test")
     return parser.parse_args(argv)
 
 
