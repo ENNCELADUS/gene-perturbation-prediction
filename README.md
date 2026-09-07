@@ -40,7 +40,7 @@ The intuition is compositional: **a cell line's dependency profile is what makes
   0.0217 versus 0.0993 and 0.0577. The 226-line run is terminally verified, but this
   one-seed GeneEffect result licenses no positive context or SL claim. [`Result`](docs/results/exp13_stage2_full/README.md) ·
   [`Exp13 protocol`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md).
-- **[2026/08]** **Nine-context split built.** K562/JURKAT/OVCAR8/HAP1/HT29 are train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only, with cross-side source rows and pairs isolated. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/03-experiment-protocol.md).
+- **[2026/08]** **Nine-context split built.** K562/JURKAT/OVCAR8/HAP1/HT29 are train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only, with cross-side source rows and pairs isolated. [`Contract`](docs/01-blueprint.md) · [`Protocol`](docs/04-sl-ranking-protocol.md).
 - **[2026/07]** **T2 registered primary gate completed — negative.** On the frozen 28 train / 5 validation / 9 test GeneEffect split and 587-gene slice, Tx1-3B-ST failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). HVG-ST was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. T2 is paused for redesign and the remaining baseline ladder is closeout work. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).
 - **[2026/07]** **K562 Bridge-A-vs-Horlbeck mechanism kill-test completed — negative.** The frozen exp05 backbone composed into a symmetrized counterfactual co-dependency score does not recover measured Horlbeck K562 genetic interactions over the 83,028 exp05-covered pairs (|Spearman| < 0.01; AUROC(s_A → strong-SL) ≈ 0.52, below the single-gene floor; no dose-response), across both pooler reference conventions. Per the kill-test rule the composition mechanism is **paused for redesign and not extended across cell lines**. [`Result`](docs/results/exp05-bridge-a-horlbeck-kill-test.md).
 - **[2026/07]** Horlbeck 2018 K562 fitness-GI map acquired and coverage-audited (448 genes, 100,128 pairs; 83,028 exp05-covered), and an execution plan set: two parallel development tracks — a **K562 Bridge-A-vs-Horlbeck mechanism kill-test** on the frozen exp05 backbone, and **DepMap cross-cell-line GeneEffect** transfer (single-gene backbone, not cross-cell-line SL). Neither opens held-out-cell-line SL labels.
@@ -103,7 +103,8 @@ The full contract — task definition, objective, split, controls, and claim bou
 
 - [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract: task, objective, evaluation, and claim boundaries.
 - [`docs/02-literature-review.md`](docs/02-literature-review.md) — related work and the novelty boundary.
-- [`docs/03-experiment-protocol.md`](docs/03-experiment-protocol.md) — the SL-pair executable protocol and its prerequisites.
+- [`docs/03-geneeffect-protocol.md`](docs/03-geneeffect-protocol.md) — the executable protocol of the implemented GeneEffect track: benchmark, model, training, evaluation.
+- [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md) — the SL-pair protocol that builds on it, and its prerequisites.
 - [`docs/specs/2026-09-06-modular-joint-training-design.md`](docs/specs/2026-09-06-modular-joint-training-design.md) — current GeneEffect training and evaluation.
 - [`docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`](docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md) — historical staged GeneEffect protocol.
 - [`docs/data/`](docs/data/) — one card per dataset. Read the card before using the file.
