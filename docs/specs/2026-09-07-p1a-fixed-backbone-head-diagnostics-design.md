@@ -1,7 +1,8 @@
 # P1-A: fixed-backbone head diagnostics
 
-The owner approved the four-arm experimental design on 2026-09-07. This document
-records that design; it does not authorize implementation, a training launch or P1-B.
+The owner approved the four-arm experimental design on 2026-09-07 and subsequently
+authorized its implementation with TDD. This scope does not include a training
+launch or P1-B.
 The owner subsequently confirmed the execution settings below, replacing the
 proposed fixed 50-epoch budget and three seeds with early stopping and seed 0 only.
 
@@ -61,9 +62,11 @@ Each training-covered gene has an independent eight-dimensional w initialized to
 zero with explicit L2 regularization. Do not
 insert fitted ridge predictions or introduce a cell-line parameter lookup.
 
-Copy identical MLP initial weights within A0/A2 and within A1/A3. Record common
-parameter initialization across response contrasts; equal seeds alone do not
-ensure equal weights when input dimensions differ. Removing R also removes its
+Copy identical MLP initial weights within A0/A2 and within A1/A3. Initialize one
+canonical full-input MLP with seed 0, then copy its direct-feature columns and all
+remaining layers to the no-response arms, retaining the canonical fan-in scaling.
+Equal seeds alone do not ensure equal weights when input dimensions differ.
+Removing R also removes its
 associated masks, so the contrast measures the response block as a whole.
 
 ## Auxiliary checks
@@ -168,5 +171,8 @@ training behavior.
 
 Implementation checks should cover cached feature order and identity,
 zero-branch paired initialization, optimizer scope, train-only preprocessing,
-pair/target alignment and the existing metric semantics. No experiment has been
-implemented or run as part of this design approval.
+pair/target alignment and the existing metric semantics. The diagnostic entry point
+is `hpc/run.sh p1a`, with separate extract, train, evaluate and compare commands;
+see the [runbook](../../hpc/README.md#p1-a-fixed-backbone-head-diagnostics).
+Head runs use one process/device per arm, avoiding world-size-dependent batch or
+gradient scaling. No production experiment has been run during implementation.

@@ -64,7 +64,64 @@ explicit counts and null scalar values. These commands produce GeneEffect eviden
 not SL interaction evidence; held-out lines retain the documented Tx1 pretraining
 exposure boundary.
 
-## Tx1 GMM-ridge baseline (P1-A)
+## P1-A fixed-backbone head diagnostics
+
+The [approved design](../docs/specs/2026-09-07-p1a-fixed-backbone-head-diagnostics-design.md)
+uses A0-A3, head seed 0, FP32 AdamW at 1e-4, global batch 1024 with the tail
+retained, and minimum-validation-Huber early stopping (patience 5, cap 50 epochs).
+PCA8 scores have unit training population SD; the explicit branch uses lambda
+0.01 averaged over all training-covered genes, with no additional weight decay.
+The production joint-training configuration is not changed.
+
+```bash
+hpc/run.sh p1a extract --checkpoint outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/best.pt --out-dir outputs/p1a/features
+hpc/run.sh p1a train --cache outputs/p1a/features --out-dir outputs/p1a/heads
+hpc/run.sh p1a compare --cache outputs/p1a/features --runs outputs/p1a/heads --out-dir outputs/p1a/comparison
+```
+
+Extraction restores the supplied checkpoint and its fixed prepared inputs, records
+its SHA256, and computes train/validation features in its saved inference precision.
+It never runs the original head or refits target preprocessing. Raw pair features
+are streamed to memory-mapped arrays; z_c and e_g are stored once per identity.
+The new standardizer and PCA fit only on training data. A failed/incomplete cache
+cannot be opened; retry extraction into a new directory after diagnosing the error.
+
+This diagnostic uses **one process and one device per arm**. The default train
+command runs the four arms sequentially on cuda:0; use `--arms A0 A2` to select
+arms. To run independent arms on multiple GPUs, launch separate commands with
+disjoint arm lists and explicit `CUDA_VISIBLE_DEVICES` masks. Do not use Accelerate
+or torchrun around this entry point: the global batch stays 1024. CPU inspection
+and small fixtures use `--device cpu`. Head training opens only the extracted cache
+and runs no backbone forward or response replay. Extraction's `--batch-size` is
+independent of the fixed head-training batch.
+
+Each arm directory contains `run.json`, epoch `metrics.jsonl`, `best.pt`, `last.pt`,
+and selected train/val predictions, metrics and per-line/per-gene tables under
+`evaluation/best/`. The log distinguishes optimizer-time loss from fixed-model
+train and validation metrics. Resume and export retry are explicit:
+
+```bash
+hpc/run.sh p1a train --cache outputs/p1a/features --out-dir outputs/p1a/heads --arms A2 --resume outputs/p1a/heads/A2/last.pt
+hpc/run.sh p1a evaluate --cache outputs/p1a/features --checkpoint outputs/p1a/heads/A2/best.pt
+```
+
+Resume restores optimizer, fitted scaler and epoch/update counters, retaining the
+deterministic epoch-specific order. It requires the same arm, settings and cache.
+An evaluation/export failure preserves training completion and saved checkpoints.
+The optional old-scaler contrast is an explicit `train --arms A1 --old-scaler`
+invocation, written to `A1-old-scaler/`; it is not run by default.
+
+Comparison writes `selected.csv`, four paired per-gene tables, shared-update curve
+tables, and `paired.json` with 1,000 seed-0 cluster-bootstrap replicates. The default
+context map is the checked-in benchmark split CSV; patients stay together, with
+ModelID grouping for missing PatientID. Bootstrap recomputes per-gene correlations
+and reports common defined-gene support. Intervals are conditional on the selected
+checkpoints and single head seed; they do not estimate initialization variability.
+Use repeatable `--reference-val PATH` arguments with existing single-method P0 or
+PCA-ridge prediction exports to verify matching row keys and targets without rerunning
+them. Comparison uses a new output directory. No test-set evaluation is exposed.
+
+## Tx1 GMM-ridge baseline
 
 This CPU/scikit-learn baseline uses the existing Tx1 basal bags directly, without
 PCA or ST responses. It fits a shared diagonal GMM64 on equal numbers of cells from

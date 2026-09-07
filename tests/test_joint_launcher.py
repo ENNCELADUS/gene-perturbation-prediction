@@ -30,6 +30,18 @@ if sys.argv[1:2] == ["-c"]:
     [
         (["prepare", "a b.yaml"], ["-m", "src.experiments.prepare", "a b.yaml"]),
         (
+            ["p1a", "train", "--cache", "cache path", "--out-dir", "run path"],
+            [
+                "-m",
+                "src.experiments.p1a",
+                "train",
+                "--cache",
+                "cache path",
+                "--out-dir",
+                "run path",
+            ],
+        ),
+        (
             ["test", "checkpoint x.pt"],
             [
                 "-m",
