@@ -58,7 +58,7 @@ def test_explicit_arms_start_at_paired_predictions_and_no_response_arms_ignore_r
     assert heads["A2"].slopes.grad.abs().sum() > 0
 
 
-def cache_fixture(root, val_shift=0):
+def cache_fixture(root, val_shift=0, response_dtype=torch.float32):
     from src.data.readout_cache import write_feature_cache
 
     rng = np.random.default_rng(8)
@@ -71,8 +71,8 @@ def cache_fixture(root, val_shift=0):
             contexts += val_shift
         n = len(ids) * 2
         batch = FeatureBatch(
-            delta_proj=torch.tensor(rng.normal(size=(n, 3)), dtype=torch.float32),
-            s=torch.tensor(rng.normal(size=(n, 6)), dtype=torch.float32),
+            delta_proj=torch.tensor(rng.normal(size=(n, 3)), dtype=response_dtype),
+            s=torch.tensor(rng.normal(size=(n, 6)), dtype=response_dtype),
             q_sc=torch.zeros(n, 3),
             e_g=embeddings.repeat(len(ids), 1),
             z_c=torch.from_numpy(contexts).repeat_interleave(2, dim=0),
@@ -94,6 +94,17 @@ def cache_fixture(root, val_shift=0):
         variable_genes=["G0", "G1"],
         provenance={"checkpoint_sha256": "fixture"},
     )
+
+
+def test_cache_preserves_bf16_response_values_in_fp32_storage(tmp_path):
+    original = cache_fixture(tmp_path / "fp32")
+    autocast = cache_fixture(tmp_path / "bf16", response_dtype=torch.bfloat16)
+    for split in ("train", "val"):
+        for name in ("delta_proj", "s"):
+            expected = torch.tensor(original.splits[split][name]).bfloat16().float()
+            actual = torch.tensor(autocast.splits[split][name])
+            assert actual.dtype == torch.float32
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 def test_cache_roundtrip_uses_unique_context_pca_and_train_only_scaling(tmp_path):

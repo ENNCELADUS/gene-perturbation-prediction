@@ -167,9 +167,10 @@ def write_feature_cache(
             gi = np.array([gi_map[g] for g in feature.gene_symbols], dtype="int64")
             ci = np.array([ci_map[c] for c in feature.model_ids], dtype="int64")
             values = {
-                name: getattr(feature, name).detach().numpy()
-                for name in (*BLOCKS[:3], *MASKS)
+                name: getattr(feature, name).detach().float().numpy()
+                for name in BLOCKS[:3]
             }
+            values.update({name: getattr(feature, name).numpy() for name in MASKS})
             values.update(
                 gene_index=gi,
                 context_index=ci,
@@ -194,7 +195,7 @@ def write_feature_cache(
                     )
                 arrays[name][offset : offset + size] = value
             for name, indices in (("e_g", gi), ("z_c", ci)):
-                value = getattr(feature, name).detach().numpy()
+                value = getattr(feature, name).detach().float().numpy()
                 unique, first = np.unique(indices, return_index=True)
                 for index, row in zip(unique, first, strict=True):
                     if index in seen[name] and not np.array_equal(

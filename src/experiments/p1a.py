@@ -29,7 +29,7 @@ def iter_features(model, dataset, *, batch_size=32, precision="bf16"):
                 else nullcontext()
             ):
                 features = model.condition_features(batch.conditions)
-            # Feature computation emits FP32; retain these exact cached values.
+            # The cache writer losslessly widens any autocast BF16 outputs to FP32.
             yield features.to("cpu"), batch.residual.cpu(), batch.gene_mean.cpu()
 
 
