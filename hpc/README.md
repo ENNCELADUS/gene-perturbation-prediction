@@ -63,3 +63,32 @@ the same finite rows and train-derived variable genes. Undefined quantities reta
 explicit counts and null scalar values. These commands produce GeneEffect evidence,
 not SL interaction evidence; held-out lines retain the documented Tx1 pretraining
 exposure boundary.
+
+## Tx1 GMM-ridge baseline (P1-A)
+
+This CPU/scikit-learn baseline uses the existing Tx1 basal bags directly, without
+PCA or ST responses. It fits a shared diagonal GMM64 on equal numbers of cells from
+each labeled training line (seed 0), then a standardized 68-feature context vector
+and independent Ridge(alpha=1) per gene. Both standardizers and the GMM are train-only.
+The frozen settings and comparison boundaries are in the
+[design](../docs/specs/2026-09-07-tx1-gmm-ridge-design.md).
+
+```bash
+uv run python -m src.experiments.tx1_gmm_ridge fit --config configs/geneeffect_joint.yaml --out-dir outputs/baselines/tx1_gmm_seed0
+uv run python -m src.experiments.tx1_gmm_ridge evaluate --model outputs/baselines/tx1_gmm_seed0/model.joblib --split val
+```
+
+Fit requires a new output directory and automatically exports train and val, never
+test. `model.joblib` stores the fitted model, preprocessing and split; `run.json`
+records source/configuration and separate fitting/evaluation status. `diagnostics.json`
+reports convergence, component weights, training occupancies and per-line fit-cell
+positions/counts. Check convergence before interpreting scores; the code does not
+silently lower K or change the embedding when fitting is difficult.
+
+`evaluation/<split>/` contains P0 predictions/metrics, per-line/per-gene tables and
+`context_features.csv` (64 occupancies plus entropy, effective component count,
+assignment confidence and negative log likelihood). Train scalars use `train_eval_`;
+the response table is empty. A failed export can be retried with `evaluate`, restoring
+the saved transforms and readout without refitting. Use only trusted local joblib
+artifacts with their recorded sklearn version. This is a candidate baseline; no
+performance improvement is established by the implementation tests.

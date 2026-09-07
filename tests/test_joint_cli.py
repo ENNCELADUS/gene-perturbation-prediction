@@ -81,6 +81,7 @@ def test_run_mode_parser():
         "src.evaluate",
         "src.experiments.prepare",
         "src.experiments.baselines",
+        "src.experiments.tx1_gmm_ridge",
     ],
 )
 def test_help_does_not_import_torch(module):
