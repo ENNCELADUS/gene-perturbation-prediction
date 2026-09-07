@@ -1,0 +1,221 @@
+{
+  "verified_at": "2026-09-07",
+  "host": "apg3op6hp3v99-0",
+  "checkout": "/2023533015/VCC_Project",
+  "revision": "36acbd022353017b0f14e76175fffa2e4ac2e145",
+  "evaluation_revision": "a0af4999b73ba6539af58b415291fbac9ea6d90e",
+  "checkpoint_sha256": "37405454717cb12164497542623722cd31e9dc793ebbfef3d79a3ef868e63c59",
+  "training": {
+    "status": "completed",
+    "next_epoch": 8,
+    "global_step": 20610,
+    "best_loss": 0.016320208087563515,
+    "best_epoch": 2,
+    "bad_epochs": 5
+  },
+  "evaluation": {
+    "status": "completed",
+    "split": "test",
+    "checkpoint": "outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/best.pt",
+    "output": "outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/evaluation/best/test"
+  },
+  "model": {
+    "test_geneeffect_loss": 0.01611904986202717,
+    "test_geneeffect_rmse": 0.18038515746593475,
+    "test_geneeffect_mae": 0.12053564935922623,
+    "test_geneeffect_valid_pairs": 478501,
+    "test_geneeffect_possible_pairs": 480249,
+    "test_geneeffect_missing_pairs": 1748,
+    "test_geneeffect_coverage": 0.9963602214684466,
+    "test_geneeffect_pearson_macro_per_line": 0.9105039936396803,
+    "test_geneeffect_pearson_per_line_scored": 27,
+    "test_geneeffect_pearson_per_line_undefined": 0,
+    "test_geneeffect_spearman_macro_per_line": 0.7333893938910577,
+    "test_geneeffect_spearman_per_line_scored": 27,
+    "test_geneeffect_spearman_per_line_undefined": 0,
+    "test_residual_pearson_macro_per_gene": 0.054141271204235404,
+    "test_residual_pearson_per_gene_scored": 4447,
+    "test_residual_pearson_per_gene_undefined": 0,
+    "test_residual_spearman_macro_per_gene": 0.052803601019286175,
+    "test_residual_spearman_per_gene_scored": 4447,
+    "test_residual_spearman_per_gene_undefined": 0,
+    "test_response_mean_delta_mse": 85.5848984872153,
+    "test_response_energy_distance": 370.3513129852929,
+    "test_response_loss": 455.9362114725082,
+    "test_response_conditions": 3285,
+    "test_response_anchors": 4,
+    "test_total_loss": 455.95233052237023
+  },
+  "baselines": {
+    "context_pca_ridge[hvg]": {
+      "test_geneeffect_loss": 0.016353055834770203,
+      "test_geneeffect_rmse": 0.18167029321193695,
+      "test_geneeffect_mae": 0.12165842205286026,
+      "test_geneeffect_valid_pairs": 478501,
+      "test_geneeffect_possible_pairs": 480249,
+      "test_geneeffect_missing_pairs": 1748,
+      "test_geneeffect_coverage": 0.9963602214684466,
+      "test_geneeffect_pearson_macro_per_line": 0.9092011883216239,
+      "test_geneeffect_pearson_per_line_scored": 27,
+      "test_geneeffect_pearson_per_line_undefined": 0,
+      "test_geneeffect_spearman_macro_per_line": 0.7275975221055669,
+      "test_geneeffect_spearman_per_line_scored": 27,
+      "test_geneeffect_spearman_per_line_undefined": 0,
+      "test_residual_pearson_macro_per_gene": 0.07736288553075506,
+      "test_residual_pearson_per_gene_scored": 4447,
+      "test_residual_pearson_per_gene_undefined": 0,
+      "test_residual_spearman_macro_per_gene": 0.0832358655424523,
+      "test_residual_spearman_per_gene_scored": 4447,
+      "test_residual_spearman_per_gene_undefined": 0
+    },
+    "context_pca_ridge[tx1]": {
+      "test_geneeffect_loss": 0.01625511609017849,
+      "test_geneeffect_rmse": 0.18106113374233246,
+      "test_geneeffect_mae": 0.12155256420373917,
+      "test_geneeffect_valid_pairs": 478501,
+      "test_geneeffect_possible_pairs": 480249,
+      "test_geneeffect_missing_pairs": 1748,
+      "test_geneeffect_coverage": 0.9963602214684466,
+      "test_geneeffect_pearson_macro_per_line": 0.909833434321868,
+      "test_geneeffect_pearson_per_line_scored": 27,
+      "test_geneeffect_pearson_per_line_undefined": 0,
+      "test_geneeffect_spearman_macro_per_line": 0.7277715746531628,
+      "test_geneeffect_spearman_per_line_scored": 27,
+      "test_geneeffect_spearman_per_line_undefined": 0,
+      "test_residual_pearson_macro_per_gene": 0.1216061838227364,
+      "test_residual_pearson_per_gene_scored": 4447,
+      "test_residual_pearson_per_gene_undefined": 0,
+      "test_residual_spearman_macro_per_gene": 0.11573946141764212,
+      "test_residual_spearman_per_gene_scored": 4447,
+      "test_residual_spearman_per_gene_undefined": 0
+    },
+    "copy_prior": {
+      "test_geneeffect_loss": 0.03389791026711464,
+      "test_geneeffect_rmse": 0.26316988468170166,
+      "test_geneeffect_mae": 0.181854248046875,
+      "test_geneeffect_valid_pairs": 478501,
+      "test_geneeffect_possible_pairs": 480249,
+      "test_geneeffect_missing_pairs": 1748,
+      "test_geneeffect_coverage": 0.9963602214684466,
+      "test_geneeffect_pearson_macro_per_line": 0.8168603420832957,
+      "test_geneeffect_pearson_per_line_scored": 27,
+      "test_geneeffect_pearson_per_line_undefined": 0,
+      "test_geneeffect_spearman_macro_per_line": 0.5434321663421281,
+      "test_geneeffect_spearman_per_line_scored": 27,
+      "test_geneeffect_spearman_per_line_undefined": 0,
+      "test_residual_pearson_macro_per_gene": null,
+      "test_residual_pearson_per_gene_scored": 0,
+      "test_residual_pearson_per_gene_undefined": 4447,
+      "test_residual_spearman_macro_per_gene": null,
+      "test_residual_spearman_per_gene_scored": 0,
+      "test_residual_spearman_per_gene_undefined": 4447
+    },
+    "gene_mean": {
+      "test_geneeffect_loss": 0.01613151654601097,
+      "test_geneeffect_rmse": 0.1804427206516266,
+      "test_geneeffect_mae": 0.12055335938930511,
+      "test_geneeffect_valid_pairs": 478501,
+      "test_geneeffect_possible_pairs": 480249,
+      "test_geneeffect_missing_pairs": 1748,
+      "test_geneeffect_coverage": 0.9963602214684466,
+      "test_geneeffect_pearson_macro_per_line": 0.9104714574795776,
+      "test_geneeffect_pearson_per_line_scored": 27,
+      "test_geneeffect_pearson_per_line_undefined": 0,
+      "test_geneeffect_spearman_macro_per_line": 0.7339397615025582,
+      "test_geneeffect_spearman_per_line_scored": 27,
+      "test_geneeffect_spearman_per_line_undefined": 0,
+      "test_residual_pearson_macro_per_gene": null,
+      "test_residual_pearson_per_gene_scored": 0,
+      "test_residual_pearson_per_gene_undefined": 4447,
+      "test_residual_spearman_macro_per_gene": null,
+      "test_residual_spearman_per_gene_scored": 0,
+      "test_residual_spearman_per_gene_undefined": 4447
+    },
+    "nearest_line[hvg]": {
+      "test_geneeffect_loss": 0.028539134189486504,
+      "test_geneeffect_rmse": 0.24133962392807007,
+      "test_geneeffect_mae": 0.16490861773490906,
+      "test_geneeffect_valid_pairs": 478501,
+      "test_geneeffect_possible_pairs": 480249,
+      "test_geneeffect_missing_pairs": 1748,
+      "test_geneeffect_coverage": 0.9963602214684466,
+      "test_geneeffect_pearson_macro_per_line": 0.8460265827793274,
+      "test_geneeffect_pearson_per_line_scored": 27,
+      "test_geneeffect_pearson_per_line_undefined": 0,
+      "test_geneeffect_spearman_macro_per_line": 0.5873211494234928,
+      "test_geneeffect_spearman_per_line_scored": 27,
+      "test_geneeffect_spearman_per_line_undefined": 0,
+      "test_residual_pearson_macro_per_gene": 0.05900656737582434,
+      "test_residual_pearson_per_gene_scored": 4447,
+      "test_residual_pearson_per_gene_undefined": 0,
+      "test_residual_spearman_macro_per_gene": 0.0613021380462394,
+      "test_residual_spearman_per_gene_scored": 4447,
+      "test_residual_spearman_per_gene_undefined": 0
+    },
+    "nearest_line[tx1]": {
+      "test_geneeffect_loss": 0.028687817975878716,
+      "test_geneeffect_rmse": 0.24203011393547058,
+      "test_geneeffect_mae": 0.16484275460243225,
+      "test_geneeffect_valid_pairs": 478501,
+      "test_geneeffect_possible_pairs": 480249,
+      "test_geneeffect_missing_pairs": 1748,
+      "test_geneeffect_coverage": 0.9963602214684466,
+      "test_geneeffect_pearson_macro_per_line": 0.8457628009214607,
+      "test_geneeffect_pearson_per_line_scored": 27,
+      "test_geneeffect_pearson_per_line_undefined": 0,
+      "test_geneeffect_spearman_macro_per_line": 0.596982533503282,
+      "test_geneeffect_spearman_per_line_scored": 27,
+      "test_geneeffect_spearman_per_line_undefined": 0,
+      "test_residual_pearson_macro_per_gene": 0.06077658704006366,
+      "test_residual_pearson_per_gene_scored": 4447,
+      "test_residual_pearson_per_gene_undefined": 0,
+      "test_residual_spearman_macro_per_gene": 0.05973718747100386,
+      "test_residual_spearman_per_gene_scored": 4447,
+      "test_residual_spearman_per_gene_undefined": 0
+    }
+  },
+  "row_alignment_audit": {
+    "context_pca_ridge[hvg]": {
+      "rows": 478501,
+      "target_max_abs_diff": {
+        "gene_effect": 1.7184217759869114e-07,
+        "residual": 8.563782527559738e-08
+      }
+    },
+    "context_pca_ridge[tx1]": {
+      "rows": 478501,
+      "target_max_abs_diff": {
+        "gene_effect": 1.7184217759869114e-07,
+        "residual": 8.563782527559738e-08
+      }
+    },
+    "copy_prior": {
+      "rows": 478501,
+      "target_max_abs_diff": {
+        "gene_effect": 1.7184217759869114e-07,
+        "residual": 8.563782527559738e-08
+      }
+    },
+    "gene_mean": {
+      "rows": 478501,
+      "target_max_abs_diff": {
+        "gene_effect": 1.7184217759869114e-07,
+        "residual": 8.563782527559738e-08
+      }
+    },
+    "nearest_line[hvg]": {
+      "rows": 478501,
+      "target_max_abs_diff": {
+        "gene_effect": 1.7184217759869114e-07,
+        "residual": 8.563782527559738e-08
+      }
+    },
+    "nearest_line[tx1]": {
+      "rows": 478501,
+      "target_max_abs_diff": {
+        "gene_effect": 1.7184217759869114e-07,
+        "residual": 8.563782527559738e-08
+      }
+    }
+  }
+}
