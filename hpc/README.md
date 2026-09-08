@@ -272,7 +272,8 @@ progresses, ending in `completed`.
 
 A nonzero exit fails its wave only after the other queued jobs in that wave
 finish. From the variant waves on, **a failed wave does not abort the round**:
-the remaining waves still run, `compare-final` is always written, and the round
+the remaining waves still run, `compare-final` is always run (it can still fail if
+a completed arm's export is missing, so watch `$RUN/*.exit` mid-round), and the round
 then exits 1 with `failed` in `phase.txt` and the status in `$RUN/exit_code` —
 so one dead arm costs that arm, not the other fifteen. The earlier
 tier-0/native/heads wave still exits immediately, because every later wave
