@@ -154,11 +154,15 @@ a diagnostic re-evaluation and the LOAO mean is the transfer metric.
 - V2 requires Tier 1 to pass; otherwise it runs with the (i) values and is labelled
   accordingly. V2-null isolates whether Tx1 context conditioning adds anything to
   response prediction beyond the native basal path.
-- **Initialisation check, per variant:** before training, the untrained V1/V3 must score
-  within 1% of the no-change reference on every anchor, and V2/V2-null within 1% of
-  N-native. This verifies the intended zero-effect behaviour of these designs; it is not
-  a requirement placed on pretrained models in general. Failure is an implementation
-  bug and blocks the arm.
+- **Initialisation check, per variant:** before training, the untrained V1/V3 must return
+  exactly the control bag on every anchor; V2/V2-null must have a zeroed adapter final
+  layer and batch index 0, and must equal the native forward under a zero perturbation
+  vector (unit-tested). Failure of any of these is an implementation bug and blocks the
+  arm. The untrained V2/V2-null loss is *also* compared against N-native's non-targeting
+  identity on the native validation panel and recorded, but not gated: a one-hot identity
+  cannot equal a zero adapter output by construction, so the two are different inputs to
+  the same weights, not the same model. This verifies the intended zero-effect behaviour
+  of these designs; it is not a requirement placed on pretrained models in general.
 - Order and stop rule (bounded iteration): V1, V2-null, V2, then V3 only if V1 or V2 is
   kept. A variant is **kept** when, at its selected checkpoint, (a) internal-val loss
   ratio to no-change is below 1 with a paired interval excluding 0 on at least two of
