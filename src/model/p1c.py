@@ -142,35 +142,77 @@ class NullSubtractedBackbone(ForwardOnlyStateModel):
         gene: str | tuple[str, ...],
         batch_index_chunks: tuple[torch.Tensor | None, ...],
     ) -> tuple[torch.Tensor, ...]:
+        """One STATE call carrying both branches.
+
+        The perturbed chunks and the deduplicated null representatives go
+        through a *single* ``forward_condition_chunks`` call. Two calls would
+        present the transformer with two different batch sizes, and under CUDA
+        bf16 autocast a different kernel may then be selected for each, so
+        ``p - n`` would not be exactly zero for an untrained (identically zero)
+        perturbation vector. One call keeps both branches on the same kernel.
+        """
         if self.training:
             raise RuntimeError(
                 "NullSubtractedBackbone requires eval mode: the null-subtracted "
                 "residual is only exact without stochastic layers"
             )
+        genes = (
+            tuple(gene for _ in control_chunks)
+            if isinstance(gene, str)
+            else tuple(gene)
+        )
+        if len(genes) != len(control_chunks):
+            raise ValueError("one gene is required per STATE condition chunk")
         hvg = tuple(c[:, : self.hvg_width] for c in control_chunks)
         inputs = (
             control_chunks
             if self.state_takes_hvg
             else tuple(c[:, self.hvg_width :] for c in control_chunks)
         )
-        perturbed = super().forward(inputs, gene, batch_index_chunks)
-        null = self.null_outputs(inputs, batch_index_chunks)
+
+        groups = self.null_groups(inputs, batch_index_chunks)
+        representatives = tuple(inputs[ix[0]] for ix in groups.values())
+        null_batches = tuple(batch_index_chunks[ix[0]] for ix in groups.values())
+
+        # ForwardOnlyStateModel.forward's perturbation lookup, inlined: the
+        # null branch's zero rows must be concatenated onto it before the
+        # single STATE call.
+        if hasattr(self.perturbations, "forward_many"):
+            perturbations = self.perturbations.forward_many(genes)
+        else:
+            perturbations = torch.stack([self.perturbations(name) for name in genes])
+        zeros = torch.zeros(
+            len(representatives),
+            perturbations.shape[1],
+            device=perturbations.device,
+            dtype=perturbations.dtype,
+        )
+        outputs = self.state_adapter.forward_condition_chunks(
+            inputs + representatives,
+            torch.cat([perturbations, zeros], dim=0),
+            genes + tuple("__null__" for _ in representatives),
+            tuple(batch_index_chunks) + null_batches,
+        )
+        perturbed = outputs[: len(inputs)]
+        null_outputs = outputs[len(inputs) :]
+        null: list[torch.Tensor | None] = [None] * len(inputs)
+        for out, ix in zip(null_outputs, groups.values(), strict=True):
+            for i in ix:
+                null[i] = out
         return tuple(h + (p - n) for h, p, n in zip(hvg, perturbed, null, strict=True))
 
-    def null_outputs(
-        self,
+    @staticmethod
+    def null_groups(
         inputs: tuple[torch.Tensor, ...],
         batch_index_chunks: tuple[torch.Tensor | None, ...],
-    ) -> tuple[torch.Tensor, ...]:
-        """Forward the fixed null perturbation once per distinct input chunk.
+    ) -> dict[tuple, list[int]]:
+        """Group input chunks that share one null forward.
 
         Two chunks dedupe only when both their input tensor identity *and*
         their batch-index chunk identity match -- otherwise two conditions
         that happen to share a control bag but carry different batch indices
         would collapse into a single null computed at the first one's index.
         """
-        state = self.state_adapter.state_model
-        pert_dim = int(state.pert_dim)
         groups: dict[tuple, list[int]] = {}
         for i, chunk in enumerate(inputs):
             batch_chunk = batch_index_chunks[i]
@@ -187,24 +229,7 @@ class NullSubtractedBackbone(ForwardOnlyStateModel):
                 batch_key,
             )
             groups.setdefault(key, []).append(i)
-        representatives = tuple(inputs[ix[0]] for ix in groups.values())
-        zeros = torch.zeros(
-            len(representatives),
-            pert_dim,
-            device=representatives[0].device,
-            dtype=representatives[0].dtype,
-        )
-        outputs = self.state_adapter.forward_condition_chunks(
-            representatives,
-            zeros,
-            tuple("__null__" for _ in representatives),
-            tuple(batch_index_chunks[ix[0]] for ix in groups.values()),
-        )
-        result: list[torch.Tensor | None] = [None] * len(inputs)
-        for out, ix in zip(outputs, groups.values(), strict=True):
-            for i in ix:
-                result[i] = out
-        return tuple(result)
+        return groups
 
 
 class NativeBackbone(ForwardOnlyStateModel):
@@ -397,12 +422,26 @@ def build_variant(
         origins["perturbations.adapter.net.2.bias"] = "new-zero"
 
         if variant in ("V2", "V3"):
+            native_encoder = state.basal_encoder
             state.basal_encoder = SplitBasalEncoder(
-                state.basal_encoder, HVG_WIDTH, tx1_width, int(hparams["hidden_dim"])
+                native_encoder, HVG_WIDTH, tx1_width, int(hparams["hidden_dim"])
             )
             state.input_dim = HVG_WIDTH + tx1_width
-            origins[prefix + "basal_encoder.native.0.weight"] = "inherited-native"
-            origins[prefix + "basal_encoder.native.0.bias"] = "inherited-native"
+            # Wrapping renames every basal-encoder parameter; reclassify the
+            # whole native encoder, not just its first layer, so a released
+            # checkpoint with several encoder layers still builds. Layer 0 is
+            # the one copied from native_state above; any deeper layer keeps
+            # the template's (released) weights loaded by load_state_dict.
+            for name in [
+                key for key in origins if key.startswith(prefix + "basal_encoder.")
+            ]:
+                del origins[name]
+            for name, _ in native_encoder.named_parameters():
+                origins[prefix + "basal_encoder.native." + name] = (
+                    "inherited-native"
+                    if name.split(".")[0] == "0"
+                    else "inherited-template"
+                )
             origins[prefix + "basal_encoder.context.weight"] = "new-zero"
         else:
             origins[prefix + "basal_encoder.0.weight"] = "inherited-native"
@@ -462,6 +501,8 @@ def build_variant(
         "trainable_count": trainable_count,
         "parameters": parameters_report,
     }
+    if variant in ("V1", "V3"):
+        report["null_perturbation"] = "zero raw vector, same forward call"
     return backbone, report
 
 
