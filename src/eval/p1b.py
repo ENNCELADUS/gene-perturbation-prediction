@@ -238,11 +238,13 @@ def cross_context(frame, effects, bundle):
                 pa, ya = effects[method, a, gene]
                 pb, yb = effects[method, b, gene]
                 p, y = pa - pb, ya - yb
-                correlation = (
-                    float(np.corrcoef(p, y)[0, 1])
-                    if np.std(p) > 0 and np.std(y) > 0
-                    else np.nan
+                defined = (
+                    np.max(np.abs(p)) > 1e-5
+                    and np.max(np.abs(y)) > 1e-5
+                    and np.std(p) > 0
+                    and np.std(y) > 0
                 )
+                correlation = float(np.corrcoef(p, y)[0, 1]) if defined else np.nan
                 rows.append(
                     {
                         "method": method,
