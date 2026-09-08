@@ -1,6 +1,8 @@
+import json
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 
 def test_bias_decomposition_splits_shared_from_condition_specific():
@@ -101,3 +103,103 @@ def test_cross_context_pearson_is_undefined_for_constant_effect_references():
         {**bundle, "splits": {"train": [], "val": [0, 1], "external": [2]}},
     )
     assert len(result) == 1 and np.isnan(result.effect_difference_pearson.iloc[0])
+
+
+def _build_tier0_fixture(tmp_path):
+    from src.data.gene_splits import sha256_file
+
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    response_cache_dir = tmp_path / "cache"
+    (response_cache_dir / "response_targets").mkdir(parents=True)
+    pd.DataFrame({"model_id": ["a", "a", "b"], "n_cells": [100, 120, 90]}).to_parquet(
+        response_cache_dir / "response_targets" / "metadata.parquet"
+    )
+
+    bundle = {
+        "keys": [("a", "G"), ("b", "G"), ("j", "G")],
+        "splits": {"train": [], "val": [0, 1], "external": [2]},
+        "anchors": ["a", "b"],
+        "external": "j",
+        "controls": {
+            "a": {"hvg": np.zeros((5, 3))},
+            "b": {"hvg": np.zeros((5, 3))},
+        },
+        "response_cache": str(response_cache_dir),
+    }
+    torch.save(bundle, prepared / "bundle.pt")
+    manifest = {
+        "bundle_sha256": sha256_file(prepared / "bundle.pt"),
+        "source_missing_genes": {"a": [], "b": []},
+    }
+    (prepared / "manifest.json").write_text(json.dumps(manifest))
+
+    runs = tmp_path / "runs"
+    export_dir = runs / "evaluation" / "B-init" / "internal"
+    export_dir.mkdir(parents=True)
+    methods = ("model", "no_change", "global_mean", "perturbation_mean")
+    conditions = pd.DataFrame(
+        [
+            dict(
+                role="val",
+                model_id=anchor,
+                panel="all",
+                gene="G",
+                method=method,
+                response_loss=1.0,
+            )
+            for anchor in ("a", "b")
+            for method in methods
+        ]
+    )
+    conditions.to_parquet(export_dir / "conditions.parquet", index=False)
+    keys = np.array(
+        [(method, anchor, "G") for anchor in ("a", "b") for method in methods]
+    )
+    predicted = np.tile(np.array([1.0, 0.0]), (len(keys), 1))
+    observed = np.zeros((len(keys), 2))
+    np.savez(
+        export_dir / "effects.npz", keys=keys, predicted=predicted, observed=observed
+    )
+    (export_dir / "evaluation.json").write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "state": "B-init",
+                "bundle": manifest["bundle_sha256"],
+            }
+        )
+    )
+    return prepared, runs, export_dir, manifest
+
+
+def test_run_tier0_verifies_bundle_and_evaluation_identity_and_writes_outputs(tmp_path):
+    from src.eval.p1c_tier0 import run_tier0
+
+    prepared, runs, export_dir, manifest = _build_tier0_fixture(tmp_path)
+    original_bundle_bytes = (prepared / "bundle.pt").read_bytes()
+
+    out_dir = tmp_path / "out"
+    result = run_tier0(runs, prepared, out_dir)
+    assert result == out_dir
+    for name in (
+        "bias_decomposition.csv",
+        "matched_coverage.csv",
+        "anchor_audit.csv",
+        "cross_context_guarded.csv",
+        "tier0.md",
+    ):
+        assert (out_dir / name).exists()
+
+    # Tampering with the prepared bundle after preparation must be caught.
+    (prepared / "bundle.pt").write_bytes(original_bundle_bytes + b"\x00")
+    with pytest.raises(ValueError, match="identity changed"):
+        run_tier0(runs, prepared, out_dir)
+    (prepared / "bundle.pt").write_bytes(original_bundle_bytes)
+
+    # An export recorded against a different bundle must also be rejected.
+    (export_dir / "evaluation.json").write_text(
+        json.dumps({"status": "completed", "state": "B-init", "bundle": "stale-hash"})
+    )
+    with pytest.raises(ValueError):
+        run_tier0(runs, prepared, out_dir)

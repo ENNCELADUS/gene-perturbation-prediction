@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from src.data.gene_splits import sha256_file
 from src.eval.p1b import cross_context
 
 
@@ -109,10 +110,12 @@ def _effects_from_npz(effects_npz_path):
 def run_tier0(p1b_runs, p1b_prepared, out_dir):
     p1b_runs, p1b_prepared, out_dir = Path(p1b_runs), Path(p1b_prepared), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    manifest = json.loads((p1b_prepared / "manifest.json").read_text())
+    if sha256_file(p1b_prepared / "bundle.pt") != manifest["bundle_sha256"]:
+        raise ValueError("prepared bundle identity changed")
     bundle = torch.load(
         p1b_prepared / "bundle.pt", map_location="cpu", weights_only=False
     )
-    manifest = json.loads((p1b_prepared / "manifest.json").read_text())
     cache_metadata = pd.read_parquet(
         Path(bundle["response_cache"]) / "response_targets" / "metadata.parquet"
     )
@@ -120,8 +123,12 @@ def run_tier0(p1b_runs, p1b_prepared, out_dir):
     bias_rows, coverage_rows, cross_rows = [], [], []
     for path in sorted((p1b_runs / "evaluation").glob("*/*/evaluation.json")):
         status = json.loads(path.read_text())
-        if status["status"] != "completed":
+        if status["status"] == "unavailable":
             continue
+        if status["status"] != "completed":
+            raise ValueError(f"incomplete export: {path}")
+        if status["bundle"] != manifest["bundle_sha256"]:
+            raise ValueError("cannot compare exports from different bundles")
         state, export, directory = status["state"], path.parent.name, path.parent
         conditions = pd.read_parquet(directory / "conditions.parquet")
         for method in methods:
