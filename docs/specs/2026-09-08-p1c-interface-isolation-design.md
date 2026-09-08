@@ -166,10 +166,12 @@ a diagnostic re-evaluation and the LOAO mean is the transfer metric.
 - Order and stop rule (bounded iteration): V1, V2-null, V2, then V3 only if V1 or V2 is
   kept. A variant is **kept** when, at its selected checkpoint, (a) internal-val loss
   ratio to no-change is below 1 with a paired interval excluding 0 on at least two of
-  three source anchors, (b) the LOAO mean held-out ratio is below 1 with interval
-  excluding 0, and (c) identity advantage is positive with interval excluding 0 on the
-  held-out fold. Otherwise **discarded**. Two consecutive discards after a keep end the
-  tier. Copying basal expression is not evidence of a learned response; (b) and (c) are
+  three source anchors in every fold, (b) the equal-fold mean of the per-fold held-out
+  ratios (model over no-change on the held-out anchor) is below 1 with its synchronous
+  gene-bootstrap interval excluding 1, and (c) identity advantage is positive with
+  interval excluding 0 on every held-out fold. Per-fold held-out deltas and intervals
+  are reported as diagnostics and are not individually required. Otherwise
+  **discarded**. Two consecutive discards after a keep end the tier. Copying basal expression is not evidence of a learned response; (b) and (c) are
   required, and the cross-context effect-difference MSE must not exceed no-change on the
   held-out fold for the variant to be described as transferring effects.
 
