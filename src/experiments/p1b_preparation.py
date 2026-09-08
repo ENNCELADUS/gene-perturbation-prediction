@@ -246,7 +246,7 @@ def prepare_bundle(
         raise
 
 
-def open_bundle(directory):
+def open_bundle(directory, *, input_layout="tx1"):
     directory = Path(directory)
     if json.loads((directory / "status.json").read_text())["status"] != "completed":
         raise ValueError("P1-B preparation incomplete")
@@ -268,7 +268,7 @@ def open_bundle(directory):
     cache = open_response_targets_cache(
         Path(bundle["response_cache"]), expected_hvg_order=bundle["hvg_order"]
     )
-    return bundle, ResponseView(bundle, cache), manifest
+    return bundle, ResponseView(bundle, cache, input_layout=input_layout), manifest
 
 
 def load_state(directory, state, manifest):

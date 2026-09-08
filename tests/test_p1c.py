@@ -810,3 +810,227 @@ def test_build_variant_rejects_native_map_vector_with_wrong_pert_dim(tmp_path):
             native_map=bad_map,
             expected_count=None,
         )
+
+
+def _build_p1c_fold_fixture(tmp_path, *, fold="k562"):
+    """Tiny prepared P1-C fold directory: real-STATE bundle/template plus a
+    native checkpoint and a two-gene (+ non-targeting) one-hot map, mirroring
+    ``tests/test_p1b.py::test_real_cli_export_retry_preserves_checkpoint``.
+    """
+    from src.data.p1b import build_snapshot
+    from src.experiments.p1b_preparation import digest
+
+    template, inputs, native_state = _build_p1c_variant_fixture(tmp_path)
+    # G0/G1 are real conditions on every anchor in this fixture (the response
+    # holdout puts G0 in val, G1 in train); non-targeting is not a real
+    # condition but is needed for the native-null substitution. Mirroring
+    # ``prepare_bundle``, the bundle's own native_common/native_all panels are
+    # built from this same (small) native vocabulary, not the full ESM2 set,
+    # so every condition inside those panels is one the native model can
+    # actually score.
+    native_map = {
+        "G0": torch.tensor([1.0, 0.0]),
+        "G1": torch.tensor([0.0, 1.0]),
+        "non-targeting": torch.tensor([0.5, 0.5]),
+    }
+    bundle = build_snapshot(
+        inputs,
+        list(range(1957)),
+        set(native_map),
+        anchors=inputs.response_anchors[:3],
+        external=inputs.response_anchors[3],
+    )
+    bundle["response_cache"] = str(inputs.response_cache)
+    root = inputs.response_cache / "response_targets"
+    target_stat = (root / "target_cells.npy").stat()
+    bundle["target_stat"] = {
+        "size": target_stat.st_size,
+        "mtime_ns": target_stat.st_mtime_ns,
+    }
+    bundle["cache_identity"] = {
+        n: digest(root / n)
+        for n in ("manifest.json", "metadata.parquet", "offsets.npy")
+    }
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    torch.save(bundle, prepared / "bundle.pt")
+    torch.save(template, prepared / "B-init.pt")
+
+    native_checkpoint_path = tmp_path / "native.pt"
+    torch.save({"state_dict": native_state}, native_checkpoint_path)
+    native_map_path = tmp_path / "native_map.pt"
+    torch.save(native_map, native_map_path)
+
+    manifest = {
+        "bundle_sha256": digest(prepared / "bundle.pt"),
+        "model_files": {"B-init": digest(prepared / "B-init.pt")},
+        "native_state_checkpoint": str(native_checkpoint_path),
+        "native_map": str(native_map_path),
+    }
+    (prepared / "manifest.json").write_text(json.dumps(manifest))
+    (prepared / "status.json").write_text(json.dumps({"status": "completed"}))
+    (prepared / "fold.json").write_text(
+        json.dumps(
+            {
+                "fold": fold,
+                "external": inputs.response_anchors[3],
+                "sources": list(inputs.response_anchors[:3]),
+            }
+        )
+    )
+    return prepared, inputs, native_state
+
+
+def test_p1c_cli_parses_all_commands():
+    from src.experiments.p1c import parser
+    from src.model.p1c import VARIANTS
+
+    p = parser()
+    for stage in (
+        "prepare",
+        "tier0",
+        "evaluate-native",
+        "train",
+        "evaluate",
+        "compare",
+    ):
+        with pytest.raises(SystemExit) as exc:
+            p.parse_args([stage, "--help"])
+        assert exc.value.code == 0
+
+    args = p.parse_args(["evaluate-native", "--prepared", "x", "--runs", "y"])
+    assert args.batch_indices == [0]
+
+    with pytest.raises(SystemExit):
+        p.parse_args(
+            [
+                "train",
+                "--prepared",
+                "x",
+                "--runs",
+                "y",
+                "--variant",
+                "bogus",
+                "--lr",
+                "1e-4",
+            ]
+        )
+
+    args = p.parse_args(
+        ["train", "--prepared", "x", "--runs", "y", "--variant", "V1", "--lr", "1e-4"]
+    )
+    assert args.variant in VARIANTS
+
+
+def test_train_variant_v1_on_tiny_real_state_records_init_check_and_blocks_after_external(  # noqa: E501
+    tmp_path, monkeypatch
+):
+    torch.set_num_threads(1)
+    import src.experiments.p1c as p1c
+    import src.model.p1c as p1c_model
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    runs = tmp_path / "runs"
+    monkeypatch.setattr(p1c, "MAX_EPOCHS", 1)
+    # The tiny fixture's real STATE model has far fewer parameters than the
+    # production architecture; skip the fixed trainable-count table for it.
+    monkeypatch.setitem(p1c_model._TRAINABLE_COUNTS, "V1", 20506)
+
+    train_args = [
+        "train",
+        "--prepared",
+        str(prepared),
+        "--runs",
+        str(runs),
+        "--variant",
+        "V1",
+        "--lr",
+        "1e-4",
+        "--device",
+        "cpu",
+    ]
+    p1c.main(train_args)
+
+    training = json.loads((runs / "training.json").read_text())
+    assert training["status"] == "completed"
+    assert training["variant"] == "V1"
+    assert training["fold"] == "k562"
+    assert training["lr"] == 1e-4
+    assert training["input_layout"] == "hvg_tx1"
+    assert training["init_check"]["status"] == "passed"
+    assert training["init_check"]["tolerance"] == 1e-6
+
+    p1c.main(
+        [
+            "evaluate",
+            "--prepared",
+            str(prepared),
+            "--runs",
+            str(runs),
+            "--external",
+            "--device",
+            "cpu",
+        ]
+    )
+    assert (runs / "external_evaluation.json").exists()
+    external_status = json.loads(
+        (runs / "evaluation" / "external" / "evaluation.json").read_text()
+    )
+    assert external_status["status"] == "completed"
+
+    with pytest.raises(ValueError, match="external evaluation has started"):
+        p1c.main(train_args)
+
+
+def test_evaluate_native_restricts_to_native_vocabulary(tmp_path):
+    torch.set_num_threads(1)
+    from src.experiments.p1c import main, restrict_to_native
+    from src.experiments.p1b_preparation import open_bundle
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    runs = tmp_path / "runs"
+
+    bundle, view, manifest = open_bundle(prepared, input_layout="hvg")
+    native_genes = {"G0", "G1"}
+    restricted = restrict_to_native(bundle, native_genes)
+    for indices in restricted["splits"].values():
+        assert all(bundle["keys"][i][1] in native_genes for i in indices)
+    assert restricted["panels"]
+    assert all(
+        key.endswith("/native_common") or key.endswith("/native_all")
+        for key in restricted["panels"]
+    )
+
+    main(
+        [
+            "evaluate-native",
+            "--prepared",
+            str(prepared),
+            "--runs",
+            str(runs),
+            "--batch-indices",
+            "0",
+            "1",
+            "--device",
+            "cpu",
+        ]
+    )
+
+    assert (runs / "evaluation" / "N-native" / "internal" / "summary.csv").exists()
+    assert (runs / "evaluation" / "N-native" / "external" / "summary.csv").exists()
+    assert (runs / "evaluation" / "N-native-b1" / "internal" / "summary.csv").exists()
+    assert (runs / "evaluation" / "N-native-b1" / "external" / "summary.csv").exists()
+    assert (
+        runs / "evaluation" / "N-native" / "internal" / "native_null.parquet"
+    ).exists()
+    assert (
+        runs / "evaluation" / "N-native" / "external" / "native_null.parquet"
+    ).exists()
+    for name in ("N-native", "N-native-b1"):
+        for role in ("internal", "external"):
+            status = json.loads(
+                (runs / "evaluation" / name / role / "evaluation.json").read_text()
+            )
+            assert status["status"] == "completed"
+            assert status["variant"] == "N-native"
+            assert status["fold"] == "k562"
