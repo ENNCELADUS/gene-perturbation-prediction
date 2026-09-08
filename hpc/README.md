@@ -233,15 +233,19 @@ context. The pre-registered keep predicate and the V3 precondition are in
 ordinary `hpc/run.sh p1c` command.
 
 ```bash
-RUN=outputs/p1c/p1c_seed0 \
+RUN=outputs/p1c/p1c_seed0
+mkdir -p "$RUN"
+RUN="$RUN" \
 P0_CHECKPOINT=outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/best.pt \
 P1B_PREPARED=outputs/p1b/p1b_seed0_20260907T164813Z/prepared \
 P1B_RUNS=outputs/p1b/p1b_seed0_20260907T164813Z/runs \
-P1A_FEATURES=outputs/p1a/features \
-P1A_REFERENCE_P0=outputs/p1a/reference/p0/predictions.parquet \
-P1A_REFERENCE_PCA=outputs/p1a/reference/pca/predictions.parquet \
-nohup hpc/p1c_pipeline.sh > outputs/p1c/p1c_seed0.out 2>&1 &
+P1A_FEATURES=outputs/p1a/p1a_seed0_20260907T144045Z/features \
+P1A_REFERENCE_P0=outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/evaluation/best/val/predictions.parquet \
+P1A_REFERENCE_PCA=outputs/p1a/p1a_seed0_20260907T144045Z/references/tx1_pca_val.parquet \
+nohup hpc/p1c_pipeline.sh > "$RUN/pipeline.out" 2>&1 &
 ```
+
+Those are the paths that exist on the H20 host today.
 
 All seven variables are required and their paths must exist; `P1B_RUNS` is the
 P1-B *runs* directory containing `evaluation/`. `GPUS` (default `"0 1"`) lists the
@@ -263,10 +267,22 @@ wave order does not assume a GPU count. Every *started* queued job writes
 before it could record its own status; a job still waiting in the queue when the
 round stops writes no files at all. Foreground steps (`prepare-<fold>`,
 `compare-1`, `compare-final`) write only a `.log`; `tier0` is a background job and
-writes all three. A nonzero exit fails the wave only after the other queued jobs
-finish, and the pipeline then exits nonzero with `failed` in `phase.txt` and the
-status in `$RUN/exit_code`. Phase names are written to `$RUN/phase.txt` as the
-round progresses, ending in `completed`.
+writes all three. Phase names are written to `$RUN/phase.txt` as the round
+progresses, ending in `completed`.
+
+A nonzero exit fails its wave only after the other queued jobs in that wave
+finish. From the variant waves on, **a failed wave does not abort the round**:
+the remaining waves still run, `compare-final` is always written, and the round
+then exits 1 with `failed` in `phase.txt` and the status in `$RUN/exit_code` —
+so one dead arm costs that arm, not the other fifteen. The earlier
+tier-0/native/heads wave still exits immediately, because every later wave
+depends on its fold bundles. Recover a failed arm by hand with the resume
+commands below and rerun `compare`.
+
+On two GPUs, one arm (train plus both evaluations) takes about 2.2 h, so a
+four-fold wave is about 4.4 h; a full round with V3 eligible is roughly 24–25 h
+(four variant waves, the learning-rate pair and the V3 wave, plus Tier 0, the
+native evaluation and the Tier-4 heads).
 
 SIGTERM (`kill` on the launched pipeline) or Ctrl-C terminates every running
 queued job **and that job's child Python worker** — `hpc/run.sh` execs Python, so

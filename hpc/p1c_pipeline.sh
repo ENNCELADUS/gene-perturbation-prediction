@@ -136,6 +136,10 @@ phase() {
 run_sh() {
   if [[ "$DRY_RUN" == 1 ]]; then
     echo "hpc/run.sh $*"
+    # Dry-run only: make one named job fail, to exercise the wave-failure path.
+    if [[ -n "${PIPELINE_DRY_RUN_FAIL:-}" && "${PIPELINE_JOB_NAME:-}" == "${PIPELINE_DRY_RUN_FAIL}" ]]; then
+      return 1
+    fi
     return 0
   fi
   hpc/run.sh "$@"
@@ -198,6 +202,7 @@ spawn() {
   (
     trap - EXIT INT TERM
     export CUDA_VISIBLE_DEVICES="$gpu"
+    export PIPELINE_JOB_NAME="$name"
     rc=0
     job_body "$@" || rc=$?
     # Dry-run jobs stay alive long enough to exercise the signal path, with a
@@ -367,16 +372,22 @@ if (( wave_failed != 0 )); then
   exit 1
 fi
 
+# A failed wave costs its own arms, never the rest of the round: the later
+# waves still run and the final comparison is always written, with the failure
+# carried to the exit status.
+round_failed=0
+
 for label in $WAVE_LABELS; do
   phase "wave-$label"
   for fold in $FOLDS; do
     enqueue "$label-$fold" variant "$label" "$label" "$fold" 1e-4
   done
-  run_queue
+  run_queue || round_failed=1
 done
 
 phase compare-1
-run_sh p1c compare --root "$RUN" --out-dir "$RUN/comparison" > "$RUN/compare-1.log" 2>&1
+run_sh p1c compare --root "$RUN" --out-dir "$RUN/comparison" > "$RUN/compare-1.log" 2>&1 \
+  || round_failed=1
 if [[ "$DRY_RUN" == 1 && ! -f "$RUN/comparison/kept.json" && -n "${PIPELINE_DRY_RUN_KEPT:-}" ]]; then
   mkdir -p "$RUN/comparison"
   cp "$PIPELINE_DRY_RUN_KEPT" "$RUN/comparison/kept.json"
@@ -408,14 +419,20 @@ else
   printf 'V3 skipped: V3_eligible is false in %s\n' "$RUN/comparison/kept.json" \
     > "$RUN/v3_skipped.txt"
 fi
-run_queue
+run_queue || round_failed=1
 
 phase compare-final
-run_sh p1c compare --root "$RUN" --out-dir "$RUN/comparison" > "$RUN/compare-final.log" 2>&1
+run_sh p1c compare --root "$RUN" --out-dir "$RUN/comparison" > "$RUN/compare-final.log" 2>&1 \
+  || round_failed=1
 
 if (( v3_read_failed != 0 )); then
   printf 'V3 eligibility could not be read from %s; V3 was not run\n' \
     "$RUN/comparison/kept.json" >&2
+  round_failed=1
+fi
+
+if (( round_failed != 0 )); then
+  printf 'round failed: see %s/*.exit and %s/*.log\n' "$RUN" "$RUN" >&2
   exit 1
 fi
 
