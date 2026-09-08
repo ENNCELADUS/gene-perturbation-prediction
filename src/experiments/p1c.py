@@ -3,6 +3,7 @@
 import json
 import random
 from collections import Counter
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,7 @@ from src.eval.p1b import (
 from src.experiments.geneeffect import _write_json
 from src.experiments.p1b import loss_for_indices
 from src.experiments.p1b_preparation import digest, open_bundle
+from src.data.p1c import HVG_WIDTH
 from src.model.p1c import VARIANTS, INPUT_LAYOUT, build_variant, parameter_groups
 from src.training.p1b import fit
 
@@ -127,6 +129,70 @@ def init_check(backbone, view, bundle, variant, device):
     raise ValueError(f"no init check defined for variant {variant!r}")
 
 
+NATIVE_REFERENCE_CAP = 64
+
+
+def native_null_reference(backbone, view, bundle, template, manifest, device, *, cap):
+    """Compare an untrained V2/V2-null against N-native's non-targeting identity.
+
+    Reported, never gated. A zero adapter output and a one-hot identity are
+    different perturbation inputs, so the two cannot agree by construction;
+    the spec's V2 initialisation requirement is the structural check in
+    :func:`init_check` (zeroed adapter, batch index 0) plus the unit-tested
+    equality with the native forward under a zero perturbation vector. This
+    number says how far the untrained variant sits from the native model's
+    own null identity on the native validation panel.
+    """
+    native_state, native_map = native_inputs(manifest)
+    if "non-targeting" not in native_map:
+        return {
+            "status": "unavailable",
+            "reason": "non-targeting absent from native_map",
+        }
+    restricted = restrict_to_native(bundle, {str(gene) for gene in native_map})
+    indices = []
+    for anchor in bundle["anchors"]:
+        indices.extend(
+            [i for i in restricted["splits"]["val"] if bundle["keys"][i][0] == anchor][
+                :cap
+            ]
+        )
+    if not indices:
+        return {
+            "status": "unavailable",
+            "reason": "no native validation conditions on the source anchors",
+        }
+    native_backbone, _ = build_variant(
+        template,
+        "N-native",
+        native_state=native_state,
+        native_map=native_map,
+        batch_index=0,
+    )
+    native_backbone = native_backbone.to(device)
+    native_view = ResponseView(
+        restricted, view.cache, input_layout=INPUT_LAYOUT["N-native"]
+    )
+    variant_rows = evaluate_rows(backbone, view, indices, device=device)
+    native_rows = _native_null_predictions(
+        native_backbone,
+        native_view,
+        [(i, "val") for i in indices],
+        restricted["coordinates"],
+        device,
+    )
+    variant_loss = float(variant_rows.response_loss.mean())
+    native_loss = float(native_rows.response_loss.mean())
+    return {
+        "status": "reported",
+        "conditions": len(indices),
+        "conditions_cap_per_anchor": int(cap),
+        "variant_loss": variant_loss,
+        "native_null_loss": native_loss,
+        "relative_difference": (variant_loss - native_loss) / native_loss,
+    }
+
+
 def train_variant(prepared, runs, variant, lr, *, device, resume=False):
     runs = Path(runs)
     if (runs / "external_evaluation.json").exists():
@@ -163,6 +229,10 @@ def train_variant(prepared, runs, variant, lr, *, device, resume=False):
     runs.mkdir(parents=True, exist_ok=True)
     _write_json(runs / "parameters.json", report)
     check = init_check(backbone, view, bundle, variant, device)
+    if variant in ("V2", "V2-null"):
+        check["native_null_reference"] = native_null_reference(
+            backbone, view, bundle, template, manifest, device, cap=NATIVE_REFERENCE_CAP
+        )
 
     groups = parameter_groups(backbone, lr)
     state = fit(
@@ -297,6 +367,47 @@ def _native_null_predictions(model, view, indexed, coordinates, device, batch_si
     return pd.DataFrame(rows)
 
 
+def _jsonable(value):
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, bool) or value is None or isinstance(value, (int, float, str)):
+        return value
+    return repr(value)
+
+
+def native_hparams_record(template, manifest):
+    """The hparams N-native is actually built with, against the released ones.
+
+    ``build_variant`` constructs the native state model from the *template's*
+    architecture with ``input_dim`` forced to the HVG width, not from the
+    released checkpoint's own ``hyper_parameters``; anything else that differs
+    (``cell_set_len``, ``output_space``, ``output_dim``, ``pert_dim`` are the
+    candidates) is recorded here rather than left implicit.
+    """
+    used = deepcopy(template["architecture"]["state_hparams"])
+    used["input_dim"] = HVG_WIDTH
+    checkpoint = torch.load(
+        manifest["native_state_checkpoint"], map_location="cpu", weights_only=False
+    )
+    record = {"hparams": _jsonable(used), "input_dim_override": HVG_WIDTH}
+    if "hyper_parameters" not in checkpoint:
+        record["differs_from_checkpoint"] = None
+        record["checkpoint_hyper_parameters"] = "absent"
+        return record
+    released = dict(checkpoint["hyper_parameters"])
+    differences = {}
+    for key in sorted(set(used) | set(released)):
+        left = _jsonable(used[key]) if key in used else "<absent>"
+        right = _jsonable(released[key]) if key in released else "<absent>"
+        if left != right:
+            differences[key] = {"used": left, "checkpoint": right}
+    record["differs_from_checkpoint"] = differences
+    record["checkpoint_hyper_parameters"] = "present"
+    return record
+
+
 def evaluate_native(prepared, runs, batch_indices, *, device):
     runs = Path(runs)
     prepared = Path(prepared)
@@ -314,6 +425,9 @@ def evaluate_native(prepared, runs, batch_indices, *, device):
     )
     coordinates = restricted_bundle["coordinates"]
     has_non_targeting = "non-targeting" in native_map
+
+    runs.mkdir(parents=True, exist_ok=True)
+    _write_json(runs / "native_hparams.json", native_hparams_record(template, manifest))
 
     for index in batch_indices:
         random.seed(0)

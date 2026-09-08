@@ -938,7 +938,14 @@ def _build_p1c_fold_fixture(tmp_path, *, fold="k562"):
     torch.save(template, prepared / "B-init.pt")
 
     native_checkpoint_path = tmp_path / "native.pt"
-    torch.save({"state_dict": native_state}, native_checkpoint_path)
+    # A released checkpoint carries its own hyper_parameters; cell_set_len
+    # deliberately differs from the template's, which N-native is built from.
+    released_hparams = copy.deepcopy(template["architecture"]["state_hparams"])
+    released_hparams.update(input_dim=2000, cell_set_len=8)
+    torch.save(
+        {"state_dict": native_state, "hyper_parameters": released_hparams},
+        native_checkpoint_path,
+    )
     native_map_path = tmp_path / "native_map.pt"
     torch.save(native_map, native_map_path)
 
@@ -1137,6 +1144,121 @@ def test_evaluate_native_restricts_to_native_vocabulary(tmp_path):
         runs / "evaluation" / "N-native" / "external" / "native_null.parquet"
     )
     assert set(null_external["role"]) <= {"val", "external"}
+
+
+def test_evaluate_native_records_the_hparams_it_built_with(tmp_path):
+    torch.set_num_threads(1)
+    from src.experiments.p1c import evaluate_native
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    runs = tmp_path / "runs"
+    evaluate_native(prepared, runs, [0], device="cpu")
+
+    record = json.loads((runs / "native_hparams.json").read_text())
+    assert record["hparams"]["input_dim"] == 2000
+    assert record["input_dim_override"] == 2000
+    assert record["checkpoint_hyper_parameters"] == "present"
+    # The template's cell_set_len (4) is what N-native is actually built with;
+    # the released checkpoint says 8, and that disagreement is recorded.
+    assert record["differs_from_checkpoint"] == {
+        "cell_set_len": {"used": 4, "checkpoint": 8}
+    }
+
+
+def test_native_null_reference_reports_without_gating(tmp_path):
+    torch.set_num_threads(1)
+    import src.experiments.p1c as p1c
+    from src.experiments.p1b_preparation import digest, open_bundle
+    from src.model.p1c import build_variant
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    manifest = json.loads((prepared / "manifest.json").read_text())
+    template = torch.load(
+        prepared / "B-init.pt", map_location="cpu", weights_only=False
+    )
+
+    for variant in ("V2", "V2-null"):
+        bundle, view, _ = open_bundle(prepared, input_layout=p1c.INPUT_LAYOUT[variant])
+        backbone, _ = build_variant(
+            template, variant, native_state=native_state, expected_count=None
+        )
+        reference = p1c.native_null_reference(
+            backbone, view, bundle, template, manifest, "cpu", cap=2
+        )
+        assert reference["status"] == "reported"
+        assert reference["conditions_cap_per_anchor"] == 2
+        assert 0 < reference["conditions"] <= 2 * len(bundle["anchors"])
+        assert reference["variant_loss"] > 0 and reference["native_null_loss"] > 0
+        assert reference["relative_difference"] == pytest.approx(
+            (reference["variant_loss"] - reference["native_null_loss"])
+            / reference["native_null_loss"]
+        )
+
+    # Without a non-targeting token there is nothing to compare against, and
+    # the reference records that instead of failing the arm.
+    without = {
+        gene: vector
+        for gene, vector in torch.load(
+            manifest["native_map"], map_location="cpu", weights_only=False
+        ).items()
+        if gene != "non-targeting"
+    }
+    map_path = tmp_path / "native_map_no_control.pt"
+    torch.save(without, map_path)
+    manifest = dict(
+        manifest, native_map=str(map_path), native_vocabulary_sha256=digest(map_path)
+    )
+    reference = p1c.native_null_reference(
+        backbone, view, bundle, template, manifest, "cpu", cap=2
+    )
+    assert reference == {
+        "status": "unavailable",
+        "reason": "non-targeting absent from native_map",
+    }
+
+
+def test_train_variant_v2_records_the_native_null_reference(tmp_path, monkeypatch):
+    torch.set_num_threads(1)
+    import src.experiments.p1c as p1c
+    import src.model.p1c as p1c_model
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    runs = tmp_path / "runs"
+    monkeypatch.setattr(p1c, "MAX_EPOCHS", 1)
+    monkeypatch.setattr(p1c, "NATIVE_REFERENCE_CAP", 2)
+    monkeypatch.setitem(p1c_model._TRAINABLE_COUNTS, "V2", 20506)
+
+    p1c.main(
+        [
+            "train",
+            "--prepared",
+            str(prepared),
+            "--runs",
+            str(runs),
+            "--variant",
+            "V2",
+            "--lr",
+            "1e-4",
+            "--device",
+            "cpu",
+        ]
+    )
+    training = json.loads((runs / "training.json").read_text())
+    check = training["init_check"]
+    # The structural check is what gates; the native comparison is recorded.
+    assert check["status"] == "passed"
+    assert check["check"] == "adapter_final_layer_zero"
+    reference = check["native_null_reference"]
+    assert reference["status"] == "reported"
+    assert reference["conditions_cap_per_anchor"] == 2
+    assert set(reference) == {
+        "status",
+        "conditions",
+        "conditions_cap_per_anchor",
+        "variant_loss",
+        "native_null_loss",
+        "relative_difference",
+    }
 
 
 def test_native_inputs_rejects_tampered_native_map(tmp_path):
