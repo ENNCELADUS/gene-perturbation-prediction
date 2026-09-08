@@ -398,12 +398,17 @@ def _build_p1c_variant_fixture(tmp_path):
     """Tiny real-STATE template plus a native basal-encoder state for P1-C variants.
 
     Mirrors ``tests/test_p1b.py``'s real-STATE fixture: Tx1 width 2560, HVG width
-    2000, hidden 8, pert_dim 2, cell_set_len 4. The native model shares every
-    hparam except ``input_dim`` (2000 instead of 2560), so its ``state_dict()``
-    is shape-compatible with the template everywhere but ``basal_encoder.0.weight``.
-    The template's own ``basal_encoder.0.bias`` is overwritten with the native
-    model's bias so ``build_variant``'s bias-equality assertion holds -- in
-    production both originate from the same released STATE checkpoint.
+    2000, hidden 8, pert_dim 2, cell_set_len 4. Builds the native model FIRST
+    (``input_dim=2000``, standing in for the released checkpoint a native
+    evaluation would use), then derives the template's own state-model weights
+    from it: every key copied verbatim except ``basal_encoder.0.weight``, which
+    is freshly (randomly) initialised at the wider 2560 Tx1 width -- mirroring
+    how a real P1-B ``B-init.pt`` actually originates (warm-started, shape
+    filtered, from the same released checkpoint a native evaluation uses). This
+    makes the template's transformer backbone / pert_encoder / project_out /
+    basal_encoder bias bit-identical to the native model's own, so a
+    native-basal variant's output can be checked against an independently
+    reconstructed native forward, not merely against another P1-C variant.
     """
     from state.tx.models.state_transition import StateTransitionPerturbationModel
     from src.model.initialization import _suppress_checkpoint_output
@@ -411,22 +416,48 @@ def _build_p1c_variant_fixture(tmp_path):
 
     config = tiny_training_config(tmp_path / "inputs")
     joint, inputs = fresh_model(config)
-    template = {
-        "config": config,
-        "preprocessing": inputs.preprocessing_state(),
-        "architecture": joint.architecture,
-        "model_state": dict(joint.backbone.state_dict()),
-    }
+
     native_hparams = copy.deepcopy(joint.architecture["state_hparams"])
     native_hparams["input_dim"] = 2000
     torch.manual_seed(1)
     with _suppress_checkpoint_output():
         native_model = StateTransitionPerturbationModel(**copy.deepcopy(native_hparams))
     native_state = dict(native_model.state_dict())
-    template["model_state"]["state_adapter.state_model.basal_encoder.0.bias"] = (
-        native_model.basal_encoder[0].bias.detach().clone()
+
+    hidden_dim = int(joint.architecture["state_hparams"]["hidden_dim"])
+    torch.manual_seed(2)
+    template_state_model = dict(native_state)
+    template_state_model["basal_encoder.0.weight"] = torch.randn(hidden_dim, 2560)
+    model_state = {
+        f"state_adapter.state_model.{name}": tensor
+        for name, tensor in template_state_model.items()
+    }
+    model_state.update(
+        {
+            f"perturbations.{name}": tensor
+            for name, tensor in joint.backbone.perturbations.state_dict().items()
+        }
     )
+    template = {
+        "config": config,
+        "preprocessing": inputs.preprocessing_state(),
+        "architecture": joint.architecture,
+        "model_state": model_state,
+    }
     return template, inputs, native_state
+
+
+def _rebuild_native_model(template, native_state):
+    from state.tx.models.state_transition import StateTransitionPerturbationModel
+    from src.model.initialization import _suppress_checkpoint_output
+
+    hparams = copy.deepcopy(template["architecture"]["state_hparams"])
+    hparams["input_dim"] = 2000
+    with _suppress_checkpoint_output():
+        model = StateTransitionPerturbationModel(**copy.deepcopy(hparams))
+    model.load_state_dict(native_state, strict=True)
+    model.eval()
+    return model
 
 
 def test_null_subtracted_variant_starts_at_exact_no_change_and_dedupes_null(tmp_path):
@@ -461,6 +492,44 @@ def test_null_subtracted_variant_starts_at_exact_no_change_and_dedupes_null(tmp_
     assert calls == [2, 1]
 
 
+def test_null_outputs_dedup_respects_batch_index_identity(tmp_path):
+    from src.model.p1c import build_variant
+
+    template, inputs, native_state = _build_p1c_variant_fixture(tmp_path)
+    backbone, _ = build_variant(template, "V1", expected_count=None)
+
+    calls: list[int] = []
+    original = backbone.state_adapter.forward_condition_chunks
+
+    def counting(control_chunks, perturbations, genes, batch_index_chunks):
+        calls.append(len(control_chunks))
+        return original(control_chunks, perturbations, genes, batch_index_chunks)
+
+    backbone.state_adapter.forward_condition_chunks = counting
+    tx1_chunk = torch.randn(4, 2560)
+    batch_a = torch.zeros(4, dtype=torch.long)
+    batch_b = torch.ones(4, dtype=torch.long)
+    try:
+        # Same underlying tensor object (identical data_ptr/shape/stride) for
+        # both conditions, but different batch-index chunks: must NOT dedupe.
+        backbone.null_outputs((tx1_chunk, tx1_chunk), (batch_a, batch_b))
+    finally:
+        backbone.state_adapter.forward_condition_chunks = original
+    assert calls == [2]
+
+
+def test_null_subtracted_backbone_forbids_train_mode(tmp_path):
+    from src.model.p1c import build_variant
+    from src.model.response import predict_bags
+
+    template, inputs, native_state = _build_p1c_variant_fixture(tmp_path)
+    backbone, _ = build_variant(template, "V1", expected_count=None)
+    backbone.train()
+    control = torch.randn(4, 2000 + 2560)
+    with pytest.raises(RuntimeError, match="eval mode"):
+        predict_bags(backbone, [control], [inputs.esm2_symbols[0]], seed=0)
+
+
 def test_native_basal_variants_load_released_encoder_and_zero_context(tmp_path):
     from src.model.p1c import build_variant
     from src.model.response import predict_bags
@@ -471,6 +540,7 @@ def test_native_basal_variants_load_released_encoder_and_zero_context(tmp_path):
     )
     state = backbone.state_adapter.state_model
     assert state.input_dim == 2000 + 2560
+    assert report["state_input_dim"] == 2000 + 2560
     assert torch.equal(
         state.basal_encoder.native[0].weight, native_state["basal_encoder.0.weight"]
     )
@@ -483,22 +553,40 @@ def test_native_basal_variants_load_released_encoder_and_zero_context(tmp_path):
     )
 
     gene = inputs.esm2_symbols[0]
-    hvg_cells = torch.randn(4, 2000)
-    tx1_cells = torch.randn(4, 2560)
+    n_cells = 4  # == cell_set_len, so predict_bags needs no padding.
+    hvg_cells = torch.randn(n_cells, 2000)
+    tx1_cells = torch.randn(n_cells, 2560)
     control = torch.cat([hvg_cells, tx1_cells], dim=1)
-    (pred,) = predict_bags(backbone, [control], [gene], seed=0)
 
-    # Zero context makes SplitBasalEncoder degenerate to the bare native
-    # encoder: V2's output on [hvg | tx1] must equal V2-null's output on the
-    # same hvg cells alone -- both variants share the same template-derived
-    # transformer/pert_encoder/project_out and the same native basal weights,
-    # so this equality does not depend on matching two independent random
-    # initialisations.
-    null_backbone, _ = build_variant(
+    # Independent reference: a separately reconstructed native STATE model
+    # (same weights as native_state, no relation to build_variant's own
+    # construction path) run directly with a zero perturbation and batch 0.
+    # This is only bit-comparable because the fixture derives the template's
+    # transformer/pert_encoder/project_out/basal-bias from this same native
+    # model (see _build_p1c_variant_fixture) -- V2's other-than-basal-weight
+    # parameters are therefore identical to the native model's, not merely
+    # structurally similar.
+    native_model = _rebuild_native_model(template, native_state)
+    with torch.no_grad():
+        reference = native_model(
+            {
+                "ctrl_cell_emb": hvg_cells,
+                "pert_emb": torch.zeros(n_cells, 2),
+                "pert_name": [gene] * n_cells,
+                "batch": torch.zeros(n_cells, dtype=torch.long),
+            },
+            padded=True,
+        )
+
+    (v2_pred,) = predict_bags(backbone, [control], [gene], seed=0)
+    torch.testing.assert_close(v2_pred, reference, atol=1e-6, rtol=0)
+
+    null_backbone, null_report = build_variant(
         template, "V2-null", native_state=native_state, expected_count=None
     )
-    (reference,) = predict_bags(null_backbone, [hvg_cells], [gene], seed=0)
-    torch.testing.assert_close(pred, reference, atol=1e-6, rtol=0)
+    assert null_report["state_input_dim"] == 2000
+    (null_pred,) = predict_bags(null_backbone, [hvg_cells], [gene], seed=0)
+    torch.testing.assert_close(null_pred, reference, atol=1e-6, rtol=0)
 
 
 def test_variant_parameter_ownership_matches_table(tmp_path):
@@ -608,25 +696,117 @@ def test_native_onehot_perturbations_and_batch_index():
 
 
 def test_gradients_reach_interface_through_frozen_variants(tmp_path):
-    from src.model.p1c import build_variant
+    from src.model.p1c import build_variant, parameter_groups
     from src.model.response import predict_bags
 
     template, inputs, native_state = _build_p1c_variant_fixture(tmp_path)
     gene = inputs.esm2_symbols[0]
+    prefix = "state_adapter.state_model."
+    net0 = {"perturbations.adapter.net.0.weight", "perturbations.adapter.net.0.bias"}
+    net2 = ("perturbations.adapter.net.2.weight", "perturbations.adapter.net.2.bias")
+    control_width = {"tx1": 2560, "hvg": 2000, "hvg_tx1": 2000 + 2560}
+
+    # At init the adapter's final layer is zeroed, so every gene's raw
+    # perturbation vector is identically zero. Two exact cancellations follow:
+    # (a) net.0 is "dead": its only path to the loss is
+    # net.2(GELU(net.0(x))), and d(that)/d(net.0.*) is multiplied by
+    # net.2.weight, which is the zero matrix, so the gradient is exactly zero
+    # regardless of net.0's own value; (b) in the null-subtracted variants
+    # (V1/V3) the perturbed and null branches evaluate the identical STATE
+    # sub-computation (same inputs, same zero perturbation) through
+    # basal_encoder/context, so their derivatives w.r.t. any parameter shared
+    # by both branches cancel exactly in p - n.
+    exactly_zero_at_init = {
+        "V0": set(),
+        "V1": net0 | {prefix + "basal_encoder.0.weight"},
+        "V2-null": set(net0),
+        "V2": set(net0),
+        "V3": net0 | {prefix + "basal_encoder.context.weight"},
+    }
 
     for variant, kwargs in (
+        ("V0", {}),
         ("V1", {}),
+        ("V2-null", {"native_state": native_state}),
         ("V2", {"native_state": native_state}),
+        ("V3", {"native_state": native_state}),
     ):
         backbone, report = build_variant(
             template, variant, expected_count=None, **kwargs
         )
-        control = torch.randn(4, 2000 + 2560)
+        width = control_width[report["input_layout"]]
+        control = torch.randn(4, width)
         (pred,) = predict_bags(backbone, [control], [gene], seed=0)
         pred.sum().backward()
-        for name, p in backbone.named_parameters():
-            if report["parameters"][name]["trainable"]:
-                assert p.grad is not None, (variant, name)
-                assert torch.isfinite(p.grad).all(), (variant, name)
-            else:
+
+        zero_names = exactly_zero_at_init[variant]
+        actual = dict(backbone.named_parameters())
+        for name, p in actual.items():
+            if not report["parameters"][name]["trainable"]:
                 assert p.grad is None, (variant, name)
+                continue
+            assert p.grad is not None, (variant, name)
+            assert torch.isfinite(p.grad).all(), (variant, name)
+            if name in zero_names:
+                assert torch.equal(p.grad, torch.zeros_like(p.grad)), (variant, name)
+            else:
+                assert p.grad.abs().max() > 0, (variant, name)
+
+        # The adapter's final layer must always carry signal: it is the only
+        # trainable tensor never cancelled by the null branch or deadened by
+        # a zeroed downstream layer.
+        for name in net2:
+            assert actual[name].grad.abs().max() > 0, (variant, name)
+
+        if not zero_names:
+            continue
+
+        # Confirm the zero gradients above are a degenerate artifact of the
+        # exact-zero init, not permanently dead parameters: one optimizer
+        # step moves net.2 away from zero, so a second backward picks up a
+        # non-zero gradient on every previously-zero trainable tensor.
+        optimizer = torch.optim.SGD(parameter_groups(backbone, lr=1.0))
+        optimizer.step()
+        backbone.zero_grad(set_to_none=True)
+        control2 = torch.randn(4, width)
+        (pred2,) = predict_bags(backbone, [control2], [gene], seed=0)
+        pred2.sum().backward()
+        for name in zero_names:
+            grad = actual[name].grad
+            assert grad is not None, (variant, name)
+            assert grad.abs().max() > 0, (variant, name)
+
+
+def test_zero_final_layer_requires_linear_final_layer():
+    from src.model.p1c import zero_final_layer
+
+    class NotAnAdapter:
+        class _Inner:
+            net = nn.Sequential(nn.Linear(2, 2), nn.GELU())  # final layer is GELU
+
+        adapter = _Inner()
+
+    with pytest.raises(ValueError, match="Linear"):
+        zero_final_layer(NotAnAdapter())
+
+
+def test_native_one_hot_perturbations_rejects_empty_map():
+    from src.model.p1c import NativeOneHotPerturbations
+
+    with pytest.raises(ValueError, match="non-empty"):
+        NativeOneHotPerturbations({})
+
+
+def test_build_variant_rejects_native_map_vector_with_wrong_pert_dim(tmp_path):
+    from src.model.p1c import build_variant
+
+    template, inputs, native_state = _build_p1c_variant_fixture(tmp_path)
+    bad_map = {"G": torch.tensor([1.0, 0.0, 0.0])}  # width 3, pert_dim is 2
+    with pytest.raises(ValueError, match="width"):
+        build_variant(
+            template,
+            "N-native",
+            native_state=native_state,
+            native_map=bad_map,
+            expected_count=None,
+        )
