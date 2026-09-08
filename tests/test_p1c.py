@@ -43,6 +43,43 @@ def test_decompose_effects_reads_npz_by_method_and_anchor(tmp_path):
     frame = decompose_effects(tmp_path / "effects.npz", method="model")
     assert frame.model_id.tolist() == ["A"] and frame.n.tolist() == [2]
     assert frame.shared_bias_fraction.iloc[0] == pytest.approx(1.0)
+    assert "role" not in frame.columns
+
+
+def test_decompose_effects_groups_by_role_when_conditions_are_given(tmp_path):
+    from src.eval.p1c_tier0 import decompose_effects
+
+    keys = np.array(
+        [("model", "A", "G"), ("model", "A", "H"), ("model", "J", "G")],
+    )
+    predicted = np.array([[1.0, 0.0], [1.0, 0.0], [4.0, 0.0]])
+    observed = np.zeros((3, 2))
+    np.savez(
+        tmp_path / "effects.npz", keys=keys, predicted=predicted, observed=observed
+    )
+    conditions = pd.DataFrame(
+        [
+            dict(role="val", model_id="A", gene="G", panel="all", method="model"),
+            dict(role="val", model_id="A", gene="H", panel="all", method="model"),
+            dict(role="val", model_id="A", gene="H", panel="seen", method="model"),
+            dict(role="external", model_id="J", gene="G", panel="all", method="model"),
+        ]
+    )
+    frame = decompose_effects(
+        tmp_path / "effects.npz", method="model", conditions=conditions
+    )
+    assert list(zip(frame.model_id, frame.role, frame.n)) == [
+        ("A", "val", 2),
+        ("J", "external", 1),
+    ]
+    assert frame.total_mse.tolist() == pytest.approx([0.5, 8.0])
+
+    with pytest.raises(ValueError, match="no role"):
+        decompose_effects(
+            tmp_path / "effects.npz",
+            method="model",
+            conditions=conditions[conditions.model_id == "A"],
+        )
 
 
 def test_matched_coverage_restricts_references_to_perturbation_mean_support():
@@ -150,23 +187,32 @@ def _build_tier0_fixture(tmp_path):
     export_dir = runs / "evaluation" / "B-init" / "internal"
     export_dir.mkdir(parents=True)
     methods = ("model", "no_change", "global_mean", "perturbation_mean")
+    losses = {
+        "model": 0.8,
+        "no_change": 1.0,
+        "global_mean": 2.0,
+        "perturbation_mean": 1.5,  # worse than no_change on the covered gene
+    }
+    # Two roles in one export, the shape every P1-B export has: the held-out
+    # anchor's error must not be averaged into the source anchors'.
+    roles = {"a": "val", "b": "val", "j": "external"}
     conditions = pd.DataFrame(
         [
             dict(
-                role="val",
+                role=roles[anchor],
                 model_id=anchor,
                 panel="all",
                 gene="G",
                 method=method,
-                response_loss=1.0,
+                response_loss=losses[method],
             )
-            for anchor in ("a", "b")
+            for anchor in ("a", "b", "j")
             for method in methods
         ]
     )
     conditions.to_parquet(export_dir / "conditions.parquet", index=False)
     keys = np.array(
-        [(method, anchor, "G") for anchor in ("a", "b") for method in methods]
+        [(method, anchor, "G") for anchor in ("a", "b", "j") for method in methods]
     )
     predicted = np.tile(np.array([1.0, 0.0]), (len(keys), 1))
     observed = np.zeros((len(keys), 2))
@@ -202,6 +248,21 @@ def test_run_tier0_verifies_bundle_and_evaluation_identity_and_writes_outputs(tm
         "tier0.md",
     ):
         assert (out_dir / name).exists()
+
+    bias = pd.read_csv(out_dir / "bias_decomposition.csv")
+    assert set(zip(bias.model_id, bias.role)) == {
+        ("a", "val"),
+        ("b", "val"),
+        ("j", "external"),
+    }
+    coverage = pd.read_csv(out_dir / "matched_coverage.csv")
+    assert (coverage.model_loss_on_covered == 0.8).all()
+    tier0 = (out_dir / "tier0.md").read_text()
+    assert "train-side perturbation-mean prior versus no-change" in tier0
+    # One line per anchor for the prior, one for the state's own model ratio.
+    assert tier0.count("perturbation_mean_loss=1.5 > no_change") == 3
+    assert tier0.count("model/no_change on the covered set") == 3
+    assert "model_loss=0.8, ratio=0.8" in tier0
 
     # Tampering with the prepared bundle after preparation must be caught.
     (prepared / "bundle.pt").write_bytes(original_bundle_bytes + b"\x00")
@@ -1357,12 +1418,19 @@ def test_init_check_rejects_nonzero_effect_prediction(tmp_path, monkeypatch):
         p1c.init_check(backbone, FakeView(), bundle, "V1", "cpu")
 
 
-def _condition_rows(anchor, role, better, *, n_genes=3, panel="all"):
+def _condition_rows(anchor, role, better, *, n_genes=3, panel="all", deltas=None):
+    """Paired no_change/model rows. ``deltas`` overrides ``better``, giving each
+    gene's model loss as ``no_change + deltas[gi]`` -- the way to build a fold
+    whose paired interval straddles zero."""
     rows = []
     for gi in range(n_genes):
         gene = f"g{gi}"
         no_change_loss = 1.0 + 0.1 * gi
-        model_loss = (0.3 if better else 1.6) + 0.05 * gi
+        model_loss = (
+            no_change_loss + deltas[gi]
+            if deltas is not None
+            else (0.3 if better else 1.6) + 0.05 * gi
+        )
         rows.append(
             dict(
                 role=role,
@@ -1407,6 +1475,7 @@ def _write_p1c_run(
     n_genes=3,
     better_source_count=2,
     external_better=True,
+    external_deltas=None,
     identity_advantage_positive=True,
 ):
     from src.data.p1c import fold_membership
@@ -1481,7 +1550,11 @@ def _write_p1c_run(
     for anchor in sources:
         external_rows.extend(_condition_rows(anchor, "val", True, n_genes=n_genes))
     ext_anchor_rows = _condition_rows(
-        external, "external", external_better, n_genes=n_genes
+        external,
+        "external",
+        external_better,
+        n_genes=n_genes,
+        deltas=external_deltas,
     )
     ext_anchor_rows = _with_identity_column(
         ext_anchor_rows, identity_advantage_positive
@@ -1571,6 +1644,106 @@ def test_equal_fold_difference_pools_folds_equally_regardless_of_size():
 
     repeat = equal_fold_difference(frames, "loss", repeats=2000)
     assert repeat == result  # seed-0 determinism: identical intervals
+
+
+def test_equal_fold_ratio_pools_ratios_not_differences():
+    from src.eval.p1c import equal_fold_ratio
+
+    def frame(model_losses, no_change_losses, genes):
+        return (
+            pd.DataFrame({"gene": genes, "response_loss": model_losses}),
+            pd.DataFrame({"gene": genes, "response_loss": no_change_losses}),
+        )
+
+    # Fold A is on a small scale (ratio 0.5), fold B on a large one (ratio
+    # 0.25): the equal-fold mean ratio is 0.375, while a pooled *difference*
+    # would be dominated by fold B's magnitude.
+    fold_a = frame([0.4, 0.5, 0.6], [0.8, 1.0, 1.2], ["g0", "g1", "gShared"])
+    fold_b = frame([20.0, 25.0, 30.0], [80.0, 100.0, 120.0], ["g2", "g3", "gShared"])
+    result = equal_fold_ratio([fold_a, fold_b], repeats=2000)
+    assert result["ratio"] == pytest.approx(0.375)
+    assert result["ci_high"] < 1
+    assert result["folds"] == 2
+    assert result["pairs"] == 6
+    assert equal_fold_ratio([fold_a, fold_b], repeats=2000) == result
+
+    assert equal_fold_ratio([], repeats=10) == {
+        "ratio": None,
+        "ci_low": None,
+        "ci_high": None,
+        "folds": 0,
+        "pairs": 0,
+    }
+
+
+def test_summarize_keeps_a_variant_whose_pooled_ratio_clears_one_fold_wide_interval(
+    tmp_path,
+):
+    """(b) is pooled, not per-fold: one fold's external interval may straddle
+    zero and the variant is still kept when the pooled ratio interval is below
+    1 and (a) and (c) hold everywhere."""
+    from src.eval.p1c import summarize
+    from src.data.p1c import FOLDS
+
+    root = tmp_path / "root"
+    for fold in FOLDS:
+        # hct116's external losses straddle no-change gene by gene (mean
+        # difference 0), so that fold's own kept_b is false.
+        _write_p1c_run(
+            root,
+            "V1",
+            fold,
+            external_deltas=[0.3, -0.35, 0.05] if fold == "hct116" else None,
+        )
+
+    out_dir = summarize(root, tmp_path / "out")
+    summary = pd.read_csv(out_dir / "summary.csv")
+    straddling = summary[(summary.label == "V1") & (summary.fold == "hct116")].iloc[0]
+    assert straddling.kept_a == True  # noqa: E712
+    assert straddling.kept_b == False  # noqa: E712
+    assert straddling.kept_c == True  # noqa: E712
+    assert straddling.kept == False  # noqa: E712 -- per-fold kept is descriptive
+
+    variants = pd.read_csv(out_dir / "variants.csv")
+    v1_row = variants[variants.label == "V1"].iloc[0]
+    assert v1_row.folds == 4
+    assert v1_row.kept_folds == 3
+    assert v1_row.pooled_ratio < 1
+    assert v1_row.pooled_ratio_ci_high < 1
+    assert v1_row.kept_all == True  # noqa: E712
+
+    kept = json.loads((out_dir / "kept.json").read_text())
+    assert kept["V1"] is True
+    assert kept["V3_eligible"] is True
+
+
+def test_summarize_reports_epoch_zero_beside_the_selected_checkpoint(tmp_path):
+    from src.eval.p1c import summarize
+
+    root = tmp_path / "root"
+    _write_p1c_run(root, "V1", "k562")
+    summary = pd.read_csv(summarize(root, tmp_path / "out") / "summary.csv")
+    row = summary.iloc[0]
+    # history[0] is fit()'s untrained validation; the no-change equal-anchor
+    # mean over the three source anchors' val rows is 1.1.
+    assert row.epoch0_val_loss == pytest.approx(1.0)
+    assert row.epoch0_internal_ratio_equal == pytest.approx(1.0 / 1.1)
+
+
+def test_fold_summary_reports_a_completed_record_missing_its_fields(tmp_path):
+    from src.eval.p1c import fold_summary
+
+    root = tmp_path / "root"
+    run_dir = _write_p1c_run(root, "V2", "hepg2")
+    training = json.loads((run_dir / "training.json").read_text())
+    del training["variant"], training["lr"], training["fold"]
+    (run_dir / "training.json").write_text(json.dumps(training))
+
+    row = fold_summary(run_dir)
+    assert row["status"] == "incomplete-record"
+    assert row["kept"] is None
+    assert row["variant"] == "V2"  # recovered from the label
+    assert row["missing_fields"] == "variant,fold,lr"
 
 
 def test_summarize_applies_keep_predicate_per_fold_and_reports_two_of_four_folds(
@@ -1721,7 +1894,8 @@ def test_native_export_rows_handle_light_batches_without_conditions_parquet(tmp_
     native_dir = root / "runs" / "N-native" / fold / "evaluation"
 
     # Batch index 0: full export_predictions output (conditions.parquet with
-    # method/panel columns), mirroring evaluate_native's real shape.
+    # method/panel columns), mirroring evaluate_native's real shape -- whose
+    # panels are the native ones only, never "all".
     zero_dir = native_dir / "N-native"
     for side, role, anchors in (
         ("internal", "val", sources),
@@ -1731,7 +1905,9 @@ def test_native_export_rows_handle_light_batches_without_conditions_parquet(tmp_
         side_dir.mkdir(parents=True)
         rows = []
         for anchor in anchors:
-            rows.extend(_condition_rows(anchor, role, True, n_genes=3))
+            rows.extend(
+                _condition_rows(anchor, role, True, n_genes=3, panel="native_all")
+            )
         pd.DataFrame(rows).to_parquet(side_dir / "conditions.parquet", index=False)
         pd.DataFrame(
             columns=[
@@ -1806,6 +1982,39 @@ def test_native_export_rows_handle_light_batches_without_conditions_parquet(tmp_
     assert pd.isna(light_row.external_ratio)
     assert light_row.native_val_loss_equal == pytest.approx(0.41, rel=1e-6)
     assert light_row.native_external_loss == pytest.approx(0.41, rel=1e-6)
+
+
+def test_real_native_exports_summarize_on_the_native_panel(tmp_path, monkeypatch):
+    """End to end: evaluate_native's own exports must be readable by summarize.
+
+    The native exports carry no ``all`` panel (``restrict_to_native`` drops
+    it), so a summary that looked for one produced silent NaN ratios.
+    """
+    torch.set_num_threads(1)
+    import src.eval.p1c as p1c_eval
+    from src.experiments.p1c import evaluate_native
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    anchors = tuple(inputs.response_anchors[:3])
+    external = inputs.response_anchors[3]
+    # The fixture's anchors are synthetic ModelIDs, not the real four.
+    monkeypatch.setattr(p1c_eval, "fold_membership", lambda fold: (anchors, external))
+
+    root = tmp_path / "root"
+    evaluate_native(prepared, root / "runs" / "N-native" / "k562", [0, 1], device="cpu")
+
+    summary = pd.read_csv(p1c_eval.summarize(root, tmp_path / "out") / "summary.csv")
+    native = summary[summary.label == "N-native"]
+    assert set(native.export) == {"N-native", "N-native-b1"}
+
+    zero_row = native[native.export == "N-native"].iloc[0]
+    assert zero_row.panel == "native_all"
+    assert np.isfinite(zero_row.internal_ratio_equal)
+    assert np.isfinite(zero_row.external_ratio)
+
+    light_row = native[native.export == "N-native-b1"].iloc[0]
+    assert np.isfinite(light_row.native_val_loss_equal)
+    assert np.isfinite(light_row.native_external_loss)
 
 
 PIPELINE = "hpc/p1c_pipeline.sh"
