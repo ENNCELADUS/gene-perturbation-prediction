@@ -3,6 +3,8 @@
 import math
 import numpy as np
 
+from src.data.p1c import INPUT_LAYOUTS
+
 SOURCE_ANCHORS = ("ACH-000551", "ACH-000739", "ACH-000971")
 EXTERNAL_ANCHOR = "ACH-000995"
 
@@ -161,10 +163,13 @@ def build_snapshot(
 class ResponseView:
     """Prepared controls plus memory-mapped targets; no raw-data rebuilding."""
 
-    def __init__(self, bundle, cache):
+    def __init__(self, bundle, cache, input_layout="tx1"):
         if list(cache.keys) != [tuple(k) for k in bundle["keys"]]:
             raise ValueError("prepared condition identity/order changed")
+        if input_layout not in INPUT_LAYOUTS:
+            raise ValueError(f"unknown input_layout {input_layout!r}")
         self.bundle, self.cache = bundle, cache
+        self.input_layout = input_layout
         self.keys = tuple(cache.keys)
         self._controls = {}
 
@@ -179,15 +184,22 @@ class ResponseView:
 
         device_key = str(device)
         if device_key not in self._controls:
-            self._controls[device_key] = {
-                a: {k: tensor(v) for k, v in bags.items()}
-                for a, bags in self.bundle["controls"].items()
-            }
+            per_anchor = {}
+            for a, bags in self.bundle["controls"].items():
+                hvg, tx1 = tensor(bags["hvg"]), tensor(bags["tx1"])
+                if self.input_layout == "tx1":
+                    controls_tx1 = tx1
+                elif self.input_layout == "hvg":
+                    controls_tx1 = hvg
+                else:
+                    controls_tx1 = torch.cat([hvg, tx1], dim=1)
+                per_anchor[a] = {"controls_tx1": controls_tx1, "hvg": hvg}
+            self._controls[device_key] = per_anchor
         controls = self._controls[device_key]
         return ResponseBatch(
             tuple(a for a, g in keys),
             tuple(g for a, g in keys),
-            tuple(controls[a]["tx1"] for a, g in keys),
+            tuple(controls[a]["controls_tx1"] for a, g in keys),
             tuple(tensor(self.cache.target_bag(i)) for i in indices),
             tuple(controls[a]["hvg"] for a, g in keys),
         )
