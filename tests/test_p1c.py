@@ -1,8 +1,10 @@
 import copy
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -1642,18 +1644,14 @@ def test_run_sh_p1c_help_names_train_and_compare():
     assert "train" in result.stdout and "compare" in result.stdout
 
 
-def _dry_run_pipeline(tmp_path, v3_eligible, name="run"):
-    """Run the whole pipeline with every hpc/run.sh call replaced by an echo."""
-    run = tmp_path / name
-    kept = tmp_path / f"kept-{name}.json"
-    kept.write_text(json.dumps({"V3_eligible": v3_eligible}))
+def _pipeline_env(run, kept, gpus="0"):
     env = dict(os.environ)
     env.update(
         {
             "PIPELINE_DRY_RUN": "1",
             "PIPELINE_DRY_RUN_KEPT": str(kept),
             "PIPELINE_POLL_SECONDS": "1",
-            "GPUS": "0",
+            "GPUS": gpus,
             "RUN": str(run),
             "P0_CHECKPOINT": "dummy/p0/best.pt",
             "P1B_PREPARED": "dummy/p1b/prepared",
@@ -1664,6 +1662,15 @@ def _dry_run_pipeline(tmp_path, v3_eligible, name="run"):
             "PYTHON_BIN": sys.executable,
         }
     )
+    return env
+
+
+def _dry_run_pipeline(tmp_path, v3_eligible, name="run"):
+    """Run the whole pipeline with every hpc/run.sh call replaced by an echo."""
+    run = tmp_path / name
+    kept = tmp_path / f"kept-{name}.json"
+    kept.write_text(json.dumps({"V3_eligible": v3_eligible}))
+    env = _pipeline_env(run, kept)
     result = subprocess.run(
         ["bash", PIPELINE],
         cwd=REPO_ROOT,
@@ -1730,3 +1737,60 @@ def test_pipeline_dry_run_skips_v3_when_the_predicate_is_not_met(tmp_path):
     )
     assert counts[("p1c", "train")] == 16 + 2
     assert counts[("p1c", "evaluate")] == 2 * (16 + 2)
+
+
+def _wait_until(predicate, timeout):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.2)
+    return predicate()
+
+
+def test_pipeline_sigterm_marks_interrupted_and_kills_running_jobs(tmp_path):
+    run = tmp_path / "run-signal"
+    kept = tmp_path / "kept-signal.json"
+    kept.write_text(json.dumps({"V3_eligible": True}))
+    env = _pipeline_env(run, kept, gpus="0 1")
+    env["PIPELINE_DRY_RUN_SLEEP"] = "5"  # keep each queued job alive to be signalled
+
+    process = subprocess.Popen(
+        ["bash", PIPELINE],
+        cwd=REPO_ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert _wait_until(lambda: any(run.glob("*.pid")), 30), "no job ever started"
+        pids = [int(path.read_text()) for path in sorted(run.glob("*.pid"))]
+        process.send_signal(signal.SIGTERM)
+        process.communicate(timeout=60)
+    finally:
+        if process.poll() is None:  # pragma: no cover -- only on a stuck pipeline
+            process.kill()
+            process.communicate()
+
+    assert process.returncode == 143
+    assert (run / "phase.txt").read_text().strip() == "interrupted"
+    assert (run / "exit_code").read_text().strip() == "143"
+
+    def gone(pid):
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return True
+        return False
+
+    for pid in pids:
+        assert _wait_until(lambda: gone(pid), 10), f"job {pid} survived the signal"
+        assert (run / f"{_job_name(run, pid)}.exit").read_text().strip() == "143"
+
+
+def _job_name(run, pid):
+    for path in run.glob("*.pid"):
+        if int(path.read_text()) == pid:
+            return path.stem
+    raise AssertionError(f"no pid file for {pid}")

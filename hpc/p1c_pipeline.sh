@@ -55,7 +55,59 @@ export OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTHONUNBUFFER
 export MPLCONFIGDIR="$RUN/matplotlib"
 mkdir -p "$MPLCONFIGDIR"
 
-trap 'rc=$?; printf "%s\n" "$rc" > "$RUN/exit_code"; if [ "$rc" -ne 0 ]; then printf "failed\n" > "$RUN/phase.txt"; fi' EXIT
+# Every background job started by spawn, so a signal can stop the whole round.
+# A reaped job's entry becomes 0 so a recycled pid is never signalled.
+tracked_pids=()
+tracked_names=()
+interrupted=0
+
+untrack_pid() {
+  local pid=$1 i
+  for (( i = 0; i < ${#tracked_pids[@]}; i++ )); do
+    if [[ "${tracked_pids[$i]}" == "$pid" ]]; then
+      tracked_pids[$i]=0
+      tracked_names[$i]=""
+    fi
+  done
+}
+
+on_exit() {
+  local rc=$?
+  if (( interrupted != 0 )); then
+    return
+  fi
+  printf '%s\n' "$rc" > "$RUN/exit_code"
+  if [[ "$rc" != 0 ]]; then
+    printf 'failed\n' > "$RUN/phase.txt"
+  fi
+}
+
+on_signal() {
+  interrupted=1
+  trap - INT TERM
+  local i
+  for (( i = 0; i < ${#tracked_pids[@]}; i++ )); do
+    if [[ "${tracked_pids[$i]}" != 0 ]]; then
+      kill -TERM "${tracked_pids[$i]}" 2>/dev/null || true
+    fi
+  done
+  sleep 2
+  for (( i = 0; i < ${#tracked_pids[@]}; i++ )); do
+    if [[ "${tracked_pids[$i]}" == 0 ]]; then
+      continue
+    fi
+    kill -KILL "${tracked_pids[$i]}" 2>/dev/null || true
+    if [[ ! -s "$RUN/${tracked_names[$i]}.exit" ]]; then
+      printf '143\n' > "$RUN/${tracked_names[$i]}.exit"
+    fi
+  done
+  printf 'interrupted\n' > "$RUN/phase.txt"
+  printf '143\n' > "$RUN/exit_code"
+  exit 143
+}
+
+trap on_exit EXIT
+trap on_signal INT TERM
 
 phase() {
   printf '%s\n' "$1" > "$RUN/phase.txt"
@@ -124,26 +176,43 @@ spawn() {
   local name=$1 gpu=$2
   shift 2
   (
-    trap - EXIT
+    trap - EXIT INT TERM
     export CUDA_VISIBLE_DEVICES="$gpu"
     rc=0
     job_body "$@" || rc=$?
+    # Dry-run jobs stay alive long enough to exercise the signal path.
+    if [[ "$DRY_RUN" == 1 && -n "${PIPELINE_DRY_RUN_SLEEP:-}" ]]; then
+      sleep "$PIPELINE_DRY_RUN_SLEEP"
+    fi
     printf '%s\n' "$rc" > "$RUN/$name.exit"
     exit "$rc"
   ) > "$RUN/$name.log" 2>&1 &
   spawn_pid=$!
+  tracked_pids+=("$spawn_pid")
+  tracked_names+=("$name")
   printf '%s\n' "$spawn_pid" > "$RUN/$name.pid"
 }
 
 # Reap a finished job into job_rc: the code the job recorded, else wait's status.
+# A job killed before it could record its own code still gets an exit file, so
+# the run root alone always shows every job's outcome.
 job_rc=0
 reap_job() {
-  local name=$1 pid=$2
+  local name=$1 pid=$2 recorded=""
   job_rc=0
   wait "$pid" 2>/dev/null || job_rc=$?
-  if [[ -r "$RUN/$name.exit" ]]; then
-    job_rc=$(<"$RUN/$name.exit")
+  if [[ ! "$job_rc" =~ ^[0-9]+$ ]]; then
+    job_rc=1
   fi
+  if [[ -r "$RUN/$name.exit" ]]; then
+    recorded=$(<"$RUN/$name.exit")
+  fi
+  if [[ "$recorded" =~ ^[0-9]+$ ]]; then
+    job_rc=$recorded
+  else
+    printf '%s\n' "$job_rc" > "$RUN/$name.exit"
+  fi
+  untrack_pid "$pid"
 }
 
 queue_names=()
@@ -289,10 +358,24 @@ if [[ "$DRY_RUN" == 1 && ! -f "$RUN/comparison/kept.json" && -n "${PIPELINE_DRY_
 fi
 
 phase wave-lr-and-v3
+# Read the predicate before queueing anything: an unreadable kept.json must not
+# cost the learning-rate arms, but it still fails the round at the end.
+v3_read_failed=0
+v3_eligible=0
+kept_read=$("$python_bin" -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["V3_eligible"]))' \
+  "$RUN/comparison/kept.json" 2> "$RUN/v3_read.log") || v3_read_failed=1
+if (( v3_read_failed == 0 )) && [[ "$kept_read" == 0 || "$kept_read" == 1 ]]; then
+  v3_eligible=$kept_read
+else
+  v3_read_failed=1
+fi
+
 enqueue V0-lr1e-6-jurkat variant V0-lr1e-6 V0 jurkat 1e-6
 enqueue V0-lr1e-5-jurkat variant V0-lr1e-5 V0 jurkat 1e-5
-v3_eligible=$("$python_bin" -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["V3_eligible"]))' "$RUN/comparison/kept.json")
-if [[ "$v3_eligible" == 1 ]]; then
+if (( v3_read_failed != 0 )); then
+  printf 'V3 skipped: could not read V3_eligible from %s (see %s)\n' \
+    "$RUN/comparison/kept.json" "$RUN/v3_read.log" > "$RUN/v3_skipped.txt"
+elif [[ "$v3_eligible" == 1 ]]; then
   for fold in $FOLDS; do
     enqueue "V3-$fold" variant V3 V3 "$fold" 1e-4
   done
@@ -304,5 +387,11 @@ run_queue
 
 phase compare-final
 run_sh p1c compare --root "$RUN" --out-dir "$RUN/comparison" > "$RUN/compare-final.log" 2>&1
+
+if (( v3_read_failed != 0 )); then
+  printf 'V3 eligibility could not be read from %s; V3 was not run\n' \
+    "$RUN/comparison/kept.json" >&2
+  exit 1
+fi
 
 phase completed
