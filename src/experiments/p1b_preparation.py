@@ -124,6 +124,13 @@ def prepare_bundle(
     from src.data.prepared import load_inputs
     from src.training.checkpoint import load_checkpoint
 
+    if transform == "raw" and target_sum is not None:
+        raise ValueError("--target-sum requires --transform log1p_norm")
+    if target_sum is not None and (not np.isfinite(target_sum) or target_sum <= 0):
+        raise ValueError(
+            f"target_sum must be a positive finite number, got {target_sum!r}"
+        )
+
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
     _write_json(directory / "status.json", {"status": "running"})
@@ -239,7 +246,6 @@ def prepare_bundle(
             "loaded_keys": loaded,
             "shape_skipped_keys": skipped,
             "parameters": report,
-            "transform": bundle["transform"],
             "native": {
                 "status": "unavailable",
                 "reason": (
@@ -253,6 +259,8 @@ def prepare_bundle(
                 "ST/Tx1 pretraining non-exposure unverified"
             ),
         }
+        if transform != "raw":
+            record["transform"] = bundle["transform"]
         _write_json(directory / "manifest.json", record)
         _write_json(directory / "status.json", {"status": "completed"})
     except Exception as exc:

@@ -47,6 +47,10 @@ def apply_transform(x, transform, target_sum):
         raise ValueError(f"unknown transform {transform!r}")
     if target_sum is None:
         raise ValueError("log1p_norm requires a target_sum")
+    if not np.isfinite(target_sum) or target_sum <= 0:
+        raise ValueError(
+            f"target_sum must be a positive finite number, got {target_sum!r}"
+        )
     if isinstance(x, np.ndarray):
         row_sum = x.sum(axis=-1, keepdims=True)
         scale = np.zeros_like(row_sum, dtype=np.result_type(row_sum, np.float32))

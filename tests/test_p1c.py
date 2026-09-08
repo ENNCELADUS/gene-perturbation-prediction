@@ -371,6 +371,14 @@ def test_apply_transform_rejects_unknown_transform_and_missing_target_sum():
         apply_transform(np.zeros((1, 2)), "log1p_norm", None)
 
 
+def test_apply_transform_rejects_nonpositive_or_nonfinite_target_sum():
+    from src.data.p1c import apply_transform
+
+    for bad in (0.0, -1.0, float("inf"), float("-inf"), float("nan")):
+        with pytest.raises(ValueError, match="positive finite"):
+            apply_transform(np.ones((1, 2)), "log1p_norm", bad)
+
+
 def test_median_row_sum_combines_rows_across_all_arrays():
     from src.data.p1c import median_row_sum
 
@@ -407,11 +415,10 @@ def test_build_snapshot_default_transform_is_raw_and_unchanged():
     bundle = build_snapshot(
         inputs, [0, 1], {"G"}, anchors=("a", "b", "c"), external="j"
     )
-    assert bundle["transform"] == {
-        "name": "raw",
-        "target_sum": None,
-        "row_sum_basis": "hvg_panel",
-    }
+    # A default-transform bundle carries no "transform" key at all, so it is
+    # byte-identical to a bundle built before this feature existed;
+    # bundle_transform()'s absent-key default is what readers rely on.
+    assert "transform" not in bundle
     for a in ("a", "b", "c", "j"):
         np.testing.assert_allclose(bundle["controls"][a]["hvg"], np.ones((2, 3)))
     with pytest.raises(ValueError, match="unknown transform"):
@@ -577,6 +584,19 @@ def test_response_view_defaults_to_raw_when_transform_key_absent():
     np.testing.assert_allclose(batch.observed_hvg[0].numpy(), raw_target)
 
 
+def test_bundle_transform_defaults_to_raw_when_key_absent():
+    from src.data.p1c import bundle_transform
+
+    default = {"name": "raw", "target_sum": None, "row_sum_basis": "hvg_panel"}
+    assert bundle_transform({"keys": []}) == default
+    recorded = {"name": "log1p_norm", "target_sum": 5.0, "row_sum_basis": "hvg_panel"}
+    assert bundle_transform({"keys": [], "transform": recorded}) == recorded
+    # A bundle that recorded "raw" on purpose still round-trips (post round-1
+    # this never happens from build_snapshot, but bundle_transform must not
+    # special-case it away).
+    assert bundle_transform({"keys": [], "transform": default}) == default
+
+
 def _bundle_matching_p1b_expectations(anchors, external):
     """Synthetic bundle whose check_membership() result equals P1B_EXPECTATIONS."""
     train_counts = (16399, 5481, 5481)  # sums to 27361; largest_pool == 16399
@@ -683,7 +703,17 @@ def test_prepare_fold_writes_fold_json_and_checks_reference_coordinates(
         )
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / "manifest.json").write_text(json.dumps({"coordinates": [0, 1, 2]}))
+        manifest = {"coordinates": [0, 1, 2]}
+        if transform != "raw":
+            # Mirrors prepare_bundle: target_sum may have been resolved from
+            # None to a concrete median inside it, so the manifest carries
+            # the full resolved record.
+            manifest["transform"] = {
+                "name": transform,
+                "target_sum": target_sum,
+                "row_sum_basis": "hvg_panel",
+            }
+        (directory / "manifest.json").write_text(json.dumps(manifest))
 
     monkeypatch.setattr(p1c_prep, "prepare_bundle", fake_prepare_bundle)
 
@@ -716,9 +746,11 @@ def test_prepare_fold_writes_fold_json_and_checks_reference_coordinates(
         "log1p_norm",
         12345.0,
     )
-    assert (
-        json.loads((log1p_dir / "fold.json").read_text())["transform"] == "log1p_norm"
-    )
+    assert json.loads((log1p_dir / "fold.json").read_text())["transform"] == {
+        "name": "log1p_norm",
+        "target_sum": 12345.0,
+        "row_sum_basis": "hvg_panel",
+    }
 
     # A reference manifest with matching coordinates is accepted.
     p1c_prep.prepare_fold(
@@ -751,6 +783,53 @@ def test_prepare_fold_writes_fold_json_and_checks_reference_coordinates(
             tmp_path / "hct116",
             reference_manifest=jurkat_dir / "manifest.json",
         )
+
+
+def test_prepare_bundle_rejects_target_sum_with_raw_transform(tmp_path):
+    from src.experiments.p1b_preparation import prepare_bundle
+
+    directory = tmp_path / "should-not-be-created"
+    with pytest.raises(
+        ValueError, match="--target-sum requires --transform log1p_norm"
+    ):
+        prepare_bundle("ckpt", directory, transform="raw", target_sum=1000.0)
+    # Rejected before any writes: no directory, no status.json.
+    assert not directory.exists()
+
+
+def test_prepare_bundle_rejects_nonpositive_or_nonfinite_target_sum(tmp_path):
+    from src.experiments.p1b_preparation import prepare_bundle
+
+    for bad in (0.0, -5.0, float("inf"), float("nan")):
+        directory = tmp_path / f"bad-{bad}"
+        with pytest.raises(ValueError, match="positive finite"):
+            prepare_bundle("ckpt", directory, transform="log1p_norm", target_sum=bad)
+        assert not directory.exists()
+
+
+def test_prepare_cli_rejects_target_sum_with_raw_transform(tmp_path):
+    from src.experiments.p1c import main
+
+    out_dir = tmp_path / "out"
+    with pytest.raises(
+        ValueError, match="--target-sum requires --transform log1p_norm"
+    ):
+        main(
+            [
+                "prepare",
+                "--checkpoint",
+                "nonexistent.pt",
+                "--out-dir",
+                str(out_dir),
+                "--fold",
+                "k562",
+                "--transform",
+                "raw",
+                "--target-sum",
+                "100",
+            ]
+        )
+    assert not out_dir.exists()
 
 
 def _build_p1c_variant_fixture(tmp_path, *, n_encoder_layers=1):
