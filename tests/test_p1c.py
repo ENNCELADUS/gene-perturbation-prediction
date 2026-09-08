@@ -1,5 +1,7 @@
 import copy
 import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -866,6 +868,9 @@ def _build_p1c_fold_fixture(tmp_path, *, fold="k562"):
         "model_files": {"B-init": digest(prepared / "B-init.pt")},
         "native_state_checkpoint": str(native_checkpoint_path),
         "native_map": str(native_map_path),
+        "native_checkpoint_sha256": digest(native_checkpoint_path),
+        "native_vocabulary_sha256": digest(native_map_path),
+        "external": inputs.response_anchors[3],
     }
     (prepared / "manifest.json").write_text(json.dumps(manifest))
     (prepared / "status.json").write_text(json.dumps({"status": "completed"}))
@@ -1034,3 +1039,118 @@ def test_evaluate_native_restricts_to_native_vocabulary(tmp_path):
             assert status["status"] == "completed"
             assert status["variant"] == "N-native"
             assert status["fold"] == "k562"
+
+    # The light (batch index != 0) summary and the native-null diagnostic both
+    # tag every condition with the role it came from.
+    light_internal = pd.read_csv(
+        runs / "evaluation" / "N-native-b1" / "internal" / "summary.csv"
+    )
+    assert set(light_internal["role"]) <= {"train", "val"}
+    light_external = pd.read_csv(
+        runs / "evaluation" / "N-native-b1" / "external" / "summary.csv"
+    )
+    assert set(light_external["role"]) <= {"val", "external"}
+    null_internal = pd.read_parquet(
+        runs / "evaluation" / "N-native" / "internal" / "native_null.parquet"
+    )
+    assert set(null_internal["role"]) <= {"train", "val"}
+    null_external = pd.read_parquet(
+        runs / "evaluation" / "N-native" / "external" / "native_null.parquet"
+    )
+    assert set(null_external["role"]) <= {"val", "external"}
+
+
+def test_native_inputs_rejects_tampered_native_map(tmp_path):
+    from src.experiments.p1c import native_inputs
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    manifest = json.loads((prepared / "manifest.json").read_text())
+
+    # Sanity: the untampered fixture verifies cleanly.
+    native_inputs(manifest)
+
+    native_map_path = Path(manifest["native_map"])
+    original_bytes = native_map_path.read_bytes()
+    native_map_path.write_bytes(original_bytes + b"\x00")
+    with pytest.raises(ValueError, match="native vocabulary identity changed"):
+        native_inputs(manifest)
+    native_map_path.write_bytes(original_bytes)
+
+    native_checkpoint_path = Path(manifest["native_state_checkpoint"])
+    original_checkpoint_bytes = native_checkpoint_path.read_bytes()
+    native_checkpoint_path.write_bytes(original_checkpoint_bytes + b"\x00")
+    with pytest.raises(ValueError, match="native checkpoint identity changed"):
+        native_inputs(manifest)
+    native_checkpoint_path.write_bytes(original_checkpoint_bytes)
+
+
+def test_train_variant_rejects_rerun_without_resume_before_writing_parameters(
+    tmp_path, monkeypatch
+):
+    torch.set_num_threads(1)
+    import src.experiments.p1c as p1c
+    import src.model.p1c as p1c_model
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(tmp_path)
+    runs = tmp_path / "runs"
+    monkeypatch.setattr(p1c, "MAX_EPOCHS", 1)
+    monkeypatch.setitem(p1c_model._TRAINABLE_COUNTS, "V1", 20506)
+
+    train_args = [
+        "train",
+        "--prepared",
+        str(prepared),
+        "--runs",
+        str(runs),
+        "--variant",
+        "V1",
+        "--lr",
+        "1e-4",
+        "--device",
+        "cpu",
+    ]
+    p1c.main(train_args)
+    before = (runs / "parameters.json").read_bytes()
+
+    with pytest.raises(FileExistsError, match="run exists; use resume"):
+        p1c.main(train_args)
+
+    after = (runs / "parameters.json").read_bytes()
+    assert before == after
+
+
+def test_init_check_rejects_nonzero_effect_prediction(tmp_path, monkeypatch):
+    import src.experiments.p1c as p1c
+    from src.model.p1c import build_variant
+
+    template, inputs, native_state = _build_p1c_variant_fixture(tmp_path)
+    backbone, _ = build_variant(template, "V1", expected_count=None)
+
+    bundle = {
+        "anchors": ["a"],
+        "splits": {"val": [0, 1, 2, 3]},
+        "keys": [("a", "g0"), ("a", "g1"), ("a", "g2"), ("a", "g3")],
+    }
+
+    class FakeView:
+        def batch(self, indices, device):
+            from src.data.batches import ResponseBatch
+
+            width = 2000 + 2560
+            control = torch.randn(len(indices), 4, width)
+            hvg = control[:, :, :2000]
+            return ResponseBatch(
+                tuple("a" for _ in indices),
+                tuple(f"g{i}" for i in indices),
+                tuple(control[i] for i in range(len(indices))),
+                tuple(hvg[i] for i in range(len(indices))),
+                tuple(hvg[i] for i in range(len(indices))),
+            )
+
+    def fake_predictions(model, batch, device, genes=None):
+        return tuple(c + 1.0 for c in batch.control_hvg)
+
+    monkeypatch.setattr(p1c, "predictions", fake_predictions)
+
+    with pytest.raises(ValueError, match="zero-effect"):
+        p1c.init_check(backbone, FakeView(), bundle, "V1", "cpu")
