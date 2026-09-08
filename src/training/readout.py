@@ -55,12 +55,16 @@ def fit_readout(
         if Path(resume).resolve() != (out_dir / "last.pt").resolve():
             raise ValueError("resume must use last.pt in the same arm directory")
         restored = torch.load(resume, map_location="cpu", weights_only=True)
+        # P1-A checkpoints written before head_seed existed were all seed 0;
+        # read that legacy state as 0 rather than raising KeyError, and still
+        # reject a resume that asks for a different seed.
+        legacy_seed = restored["head_seed"] if "head_seed" in restored else 0
         if (
             restored["arm"] != arm
             or restored["settings"] != asdict(settings)
             or restored["cache_metadata"] != cache.metadata
             or restored["standardizer"] != scaler.to_state()
-            or restored["head_seed"] != head_seed
+            or legacy_seed != head_seed
         ):
             raise ValueError("resume settings, scaler, arm, cache or head seed differ")
         scaler = BlockStandardizer.from_state(restored["standardizer"])
