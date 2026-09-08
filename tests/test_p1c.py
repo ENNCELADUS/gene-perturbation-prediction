@@ -2067,12 +2067,14 @@ def _pipeline_env(run, kept, gpus="0"):
     return env
 
 
-def _dry_run_pipeline(tmp_path, v3_eligible, name="run"):
+def _dry_run_pipeline(tmp_path, v3_eligible, name="run", fail_job=None):
     """Run the whole pipeline with every hpc/run.sh call replaced by an echo."""
     run = tmp_path / name
     kept = tmp_path / f"kept-{name}.json"
     kept.write_text(json.dumps({"V3_eligible": v3_eligible}))
     env = _pipeline_env(run, kept)
+    if fail_job is not None:
+        env["PIPELINE_DRY_RUN_FAIL"] = fail_job
     result = subprocess.run(
         ["bash", PIPELINE],
         cwd=REPO_ROOT,
@@ -2139,6 +2141,36 @@ def test_pipeline_dry_run_skips_v3_when_the_predicate_is_not_met(tmp_path):
     )
     assert counts[("p1c", "train")] == 16 + 2
     assert counts[("p1c", "evaluate")] == 2 * (16 + 2)
+
+
+def test_pipeline_dry_run_continues_past_a_failed_wave_and_still_fails_the_round(
+    tmp_path,
+):
+    """One failed arm costs its own wave, not the round's remaining work."""
+    run, result = _dry_run_pipeline(
+        tmp_path, True, name="run-failed-wave", fail_job="V0-jurkat"
+    )
+    assert result.returncode == 1
+    assert (run / "phase.txt").read_text().strip() == "failed"
+    assert (run / "exit_code").read_text().strip() == "1"
+    assert (run / "V0-jurkat.exit").read_text().strip() == "1"
+
+    commands = _pipeline_commands(run, result)
+    counts = Counter((tokens[1], tokens[2]) for tokens in commands)
+    runs_arguments = [
+        tokens[tokens.index("--runs") + 1]
+        for tokens in commands
+        if (tokens[1], tokens[2]) == ("p1c", "train")
+    ]
+    # The failing job stops after its own train command; every later wave --
+    # including the conditional V3 folds -- still ran.
+    assert f"{run}/runs/V0/jurkat" in runs_arguments
+    for label in ("V1", "V2-null", "V2", "V3"):
+        for fold in PIPELINE_FOLDS:
+            assert f"{run}/runs/{label}/{fold}" in runs_arguments
+    assert counts[("p1c", "compare")] == 2  # compare-1 and compare-final both ran
+    assert (run / "compare-final.log").exists()
+    assert not (run / "v3_skipped.txt").exists()
 
 
 def _wait_until(predicate, timeout):
