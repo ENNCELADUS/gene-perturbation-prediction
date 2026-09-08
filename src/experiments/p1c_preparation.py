@@ -42,12 +42,17 @@ def prepare_fold(
         reference = json.loads(Path(reference_manifest).read_text())
         if reference["coordinates"] != manifest["coordinates"]:
             raise ValueError("fold coordinates differ from the P1-B reference")
+    # The full resolved record (name, target_sum, row_sum_basis) when a
+    # transform is used -- target_sum may have been None and resolved to a
+    # median inside prepare_bundle, so re-read the manifest it just wrote
+    # rather than echoing the caller's own argument back.
+    recorded_transform = manifest["transform"] if transform != "raw" else "raw"
     _write_json(
         directory / "fold.json",
         {
             "fold": fold,
             "external": external,
             "sources": list(sources),
-            "transform": transform,
+            "transform": recorded_transform,
         },
     )

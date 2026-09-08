@@ -117,14 +117,19 @@ def build_snapshot(
     keys = cache.keys
     splits = split_conditions(keys, inputs.response_holdout, anchors, external)
     seen = {keys[i][1] for i in splits["train"]}
+    # Computed once per source anchor, not once per training condition.
+    basal_mean = {
+        a: apply_transform(
+            np.asarray(inputs.lines[a].basal_hvg), transform, target_sum
+        ).mean(0)
+        for a in anchors
+    }
     baselines = fit_baselines(
         (
             keys[i][0],
             keys[i][1],
             apply_transform(cache.target_bag(i), transform, target_sum).mean(0)
-            - apply_transform(
-                np.asarray(inputs.lines[keys[i][0]].basal_hvg), transform, target_sum
-            ).mean(0),
+            - basal_mean[keys[i][0]],
         )
         for i in splits["train"]
     )
@@ -147,7 +152,7 @@ def build_snapshot(
                         "indices": selected,
                         "derangements": derangements([keys[i][1] for i in selected]),
                     }
-    return {
+    result = {
         "keys": list(keys),
         "splits": splits,
         "anchors": list(anchors),
@@ -166,12 +171,16 @@ def build_snapshot(
         },
         "baselines": baselines,
         "panels": panels,
-        "transform": {
+    }
+    # Omitted for "raw" so a default-transform bundle is byte-identical to one
+    # built before this feature existed; ``bundle_transform`` covers readers.
+    if transform != "raw":
+        result["transform"] = {
             "name": transform,
             "target_sum": target_sum,
             "row_sum_basis": "hvg_panel",
-        },
-    }
+        }
+    return result
 
 
 class ResponseView:
