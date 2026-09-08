@@ -1,0 +1,22 @@
+{
+  "version": "2.1.0",
+  "source": "plan",
+  "timestamp": "2026-09-08",
+  "status": "BOUNDED",
+  "archetype": "decide-design",
+  "mode": "single-pass dispatch",
+  "spec": "docs/specs/2026-09-08-p1c-interface-isolation-design.md",
+  "findings": [
+    {"id": "F1", "type": "observation", "summary": "P1-B: B-joint shows no perturbation-identity use and is 21x worse than the no-change reference on its own anchors; interface adaptation at 1e-4 recovers source reconstruction (900 -> 33) but never beats no-change on held-out conditions and worsens on Jurkat with more source training."},
+    {"id": "F2", "type": "observation", "summary": "P1-A: explicit gene-specific PCA8 slopes raise validation residual Pearson 0.05 -> 0.13, matching Tx1 PCA8-ridge; B-joint R adds no detectable gain under the two tested heads."},
+    {"id": "F3", "type": "hypothesis", "summary": "H1 insufficient interface adaptation (new basal encoder at STATE LR 1e-6 in P0) and H2 representation mismatch at STATE's hidden-space basal skip are priority mechanisms; neither is isolated."},
+    {"id": "F4", "type": "recommendation", "summary": "Run P1-C in tiers: Tier 0 analysis of existing exports (bias decomposition, matched-coverage references, anchor scale audit, cross-context Pearson guard); Tier 1 native functional check; Tier 2 LR isolation at 1e-6/1e-5; Tier 3 interface variants V1 null-subtracted residual, V2 native basal + zero-init Tx1 conditioning, V2-null control, V3, each with leave-one-anchor-out; Tier 4 A2 head-seed stability."}
+  ],
+  "predicate": {
+    "primary_metric": "held-out-context response loss ratio to no-change, LOAO mean, lower is better",
+    "keep": "internal-val ratio < 1 on >= 2/3 anchors (CI excl. 0) AND LOAO held-out ratio < 1 (CI excl. 0) AND identity advantage > 0 (CI excl. 0)",
+    "verify": "hpc/run.sh p1c compare -> p1c/comparison/summary.csv with per-(variant, fold) rows and a kept boolean",
+    "ceiling": "7 training units; plateau after two consecutive discards following a keep"
+  },
+  "config": {"task": "Design the next P1 diagnostic round isolating interface and basal-reconstruction failures", "domain": "research", "training_authorized_or_launched": false, "jurkat_status": "observed; diagnostic re-evaluation only"}
+}
