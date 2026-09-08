@@ -203,3 +203,190 @@ def test_run_tier0_verifies_bundle_and_evaluation_identity_and_writes_outputs(tm
     )
     with pytest.raises(ValueError):
         run_tier0(runs, prepared, out_dir)
+
+
+def test_fold_membership_rotates_one_anchor_out():
+    from src.data.p1c import FOLDS, fold_membership, ALL_ANCHORS
+
+    for fold, held in FOLDS.items():
+        sources, external = fold_membership(fold)
+        assert external == held and held not in sources
+        assert tuple(a for a in ALL_ANCHORS if a != held) == sources
+    with pytest.raises(KeyError):
+        fold_membership("mcf7")
+
+
+def test_response_view_input_layouts_concatenate_hvg_then_tx1():
+    from types import SimpleNamespace
+    from src.data.p1b import build_snapshot, ResponseView
+    from src.data.response_cache import ResponseTargetsCache
+
+    keys = [(a, g) for a in ("a", "b", "c", "j") for g in ("G", "H")]
+    cache = ResponseTargetsCache(
+        tuple(a for a, g in keys),
+        tuple(g for a, g in keys),
+        np.ones((16, 3), dtype=np.float32),
+        np.arange(0, 17, 2),
+        pd.DataFrame(),
+    )
+    inputs = SimpleNamespace(
+        response_targets=cache,
+        response_holdout=frozenset((a, "H") for a in ("a", "b", "c")),
+        hvg_order=("G", "H", "I"),
+        lines={
+            a: SimpleNamespace(
+                controls_tx1=np.full((2, 5), 2.0, dtype=np.float32),
+                basal_hvg=np.full((2, 3), 1.0, dtype=np.float32),
+            )
+            for a in ("a", "b", "c", "j")
+        },
+    )
+    bundle = build_snapshot(
+        inputs, [0, 1], {"G"}, anchors=("a", "b", "c"), external="j"
+    )
+    for layout, width, first in (("tx1", 5, 2.0), ("hvg", 3, 1.0), ("hvg_tx1", 8, 1.0)):
+        batch = ResponseView(bundle, cache, input_layout=layout).batch([0])
+        assert batch.controls_tx1[0].shape == (2, width)
+        assert float(batch.controls_tx1[0][0, 0]) == first
+        assert batch.control_hvg[0].shape == (2, 3)
+    with pytest.raises(ValueError):
+        ResponseView(bundle, cache, input_layout="bogus")
+
+
+def _bundle_matching_p1b_expectations(anchors, external):
+    """Synthetic bundle whose check_membership() result equals P1B_EXPECTATIONS."""
+    train_counts = (16399, 5481, 5481)  # sums to 27361; largest_pool == 16399
+    keys = []
+    for anchor, n in zip(anchors, train_counts):
+        keys.extend((anchor, f"g{i}") for i in range(n))
+    keys.extend((anchors[0], f"v{i}") for i in range(3047))
+    keys.extend((external, f"e{i}") for i in range(2377))
+    n_train = sum(train_counts)
+    splits = {
+        "train": list(range(0, n_train)),
+        "val": list(range(n_train, n_train + 3047)),
+        "external": list(range(n_train + 3047, n_train + 3047 + 2377)),
+    }
+    panels = {
+        f"external/{external}/seen": {"indices": list(range(2373))},
+        f"external/{external}/unseen": {"indices": list(range(4))},
+        f"external/{external}/native_common": {"indices": list(range(2006))},
+        f"external/{external}/native_all": {"indices": list(range(2009))},
+    }
+    return {"keys": keys, "splits": splits, "panels": panels}
+
+
+def test_check_membership_none_expectations_checks_total_and_anchor_set():
+    from src.experiments.p1b_preparation import check_membership
+    from src.data.p1b import SOURCE_ANCHORS, EXTERNAL_ANCHOR
+
+    def bundle_with(total):
+        return {
+            "keys": [(SOURCE_ANCHORS[0], "g")] * total,
+            "splits": {
+                "train": list(range(total - 2)),
+                "val": [total - 2],
+                "external": [total - 1],
+            },
+            "panels": {},
+        }
+
+    good = bundle_with(32785)
+    result = check_membership(good, SOURCE_ANCHORS, EXTERNAL_ANCHOR, None)
+    assert result["counts"] == {"train": 32783, "val": 1, "external": 1}
+    assert result["external_panels"] == {
+        "seen": 0,
+        "unseen": 0,
+        "native_common": 0,
+        "native_all": 0,
+    }
+
+    with pytest.raises(ValueError, match="unexpected total condition count"):
+        check_membership(bundle_with(100), SOURCE_ANCHORS, EXTERNAL_ANCHOR, None)
+
+    with pytest.raises(ValueError, match="approved"):
+        check_membership(good, ("x", "y", "z"), "w", None)
+
+    empty_external = bundle_with(32785)
+    empty_external["splits"]["train"] = list(range(32785))
+    empty_external["splits"]["val"] = []
+    empty_external["splits"]["external"] = []
+    with pytest.raises(ValueError, match="external"):
+        check_membership(empty_external, SOURCE_ANCHORS, EXTERNAL_ANCHOR, None)
+
+
+def test_check_membership_matches_expectations_exactly_or_raises_on_first_mismatch():
+    from src.experiments.p1b_preparation import check_membership, P1B_EXPECTATIONS
+    from src.data.p1b import SOURCE_ANCHORS, EXTERNAL_ANCHOR
+
+    tiny = {
+        "keys": [(SOURCE_ANCHORS[0], "g")] * 5,
+        "splits": {"train": [0, 1, 2], "val": [3], "external": [4]},
+        "panels": {},
+    }
+    with pytest.raises(ValueError, match="counts"):
+        check_membership(tiny, SOURCE_ANCHORS, EXTERNAL_ANCHOR, P1B_EXPECTATIONS)
+
+    matching = _bundle_matching_p1b_expectations(SOURCE_ANCHORS, EXTERNAL_ANCHOR)
+    result = check_membership(
+        matching, SOURCE_ANCHORS, EXTERNAL_ANCHOR, P1B_EXPECTATIONS
+    )
+    assert result == P1B_EXPECTATIONS
+
+
+def test_prepare_fold_writes_fold_json_and_checks_reference_coordinates(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+    import src.experiments.p1c_preparation as p1c_prep
+    from src.data.p1c import fold_membership
+    from src.experiments.p1b_preparation import P1B_EXPECTATIONS
+
+    calls = []
+
+    def fake_prepare_bundle(checkpoint, directory, *, anchors, external, expectations):
+        calls.append((checkpoint, anchors, external, expectations))
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "manifest.json").write_text(json.dumps({"coordinates": [0, 1, 2]}))
+
+    monkeypatch.setattr(p1c_prep, "prepare_bundle", fake_prepare_bundle)
+
+    jurkat_dir = tmp_path / "jurkat"
+    p1c_prep.prepare_fold("ckpt", "jurkat", jurkat_dir)
+    sources, external = fold_membership("jurkat")
+    assert json.loads((jurkat_dir / "fold.json").read_text()) == {
+        "fold": "jurkat",
+        "external": external,
+        "sources": list(sources),
+    }
+    assert calls[0] == ("ckpt", sources, external, P1B_EXPECTATIONS)
+
+    k562_dir = tmp_path / "k562"
+    p1c_prep.prepare_fold("ckpt", "k562", k562_dir)
+    assert calls[1][3] is None
+
+    # A reference manifest with matching coordinates is accepted.
+    p1c_prep.prepare_fold(
+        "ckpt",
+        "hepg2",
+        tmp_path / "hepg2",
+        reference_manifest=jurkat_dir / "manifest.json",
+    )
+
+    # A reference manifest with different coordinates is rejected.
+    def fake_prepare_bundle_mismatch(
+        checkpoint, directory, *, anchors, external, expectations
+    ):
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "manifest.json").write_text(json.dumps({"coordinates": [9, 9, 9]}))
+
+    monkeypatch.setattr(p1c_prep, "prepare_bundle", fake_prepare_bundle_mismatch)
+    with pytest.raises(ValueError, match="fold coordinates differ"):
+        p1c_prep.prepare_fold(
+            "ckpt",
+            "hct116",
+            tmp_path / "hct116",
+            reference_manifest=jurkat_dir / "manifest.json",
+        )
