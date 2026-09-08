@@ -1764,8 +1764,17 @@ def test_pipeline_sigterm_marks_interrupted_and_kills_running_jobs(tmp_path):
         text=True,
     )
     try:
-        assert _wait_until(lambda: any(run.glob("*.pid")), 30), "no job ever started"
-        pids = [int(path.read_text()) for path in sorted(run.glob("*.pid"))]
+        # Every started job has both its own pid file and its child's.
+        assert _wait_until(lambda: any(run.glob("*.child.pid")), 30), "no job started"
+        jobs = {
+            path.stem: int(path.read_text())
+            for path in sorted(run.glob("*.pid"))
+            if not path.name.endswith(".child.pid")
+        }
+        children = {
+            path.name[: -len(".child.pid")]: int(path.read_text())
+            for path in sorted(run.glob("*.child.pid"))
+        }
         process.send_signal(signal.SIGTERM)
         process.communicate(timeout=60)
     finally:
@@ -1776,6 +1785,7 @@ def test_pipeline_sigterm_marks_interrupted_and_kills_running_jobs(tmp_path):
     assert process.returncode == 143
     assert (run / "phase.txt").read_text().strip() == "interrupted"
     assert (run / "exit_code").read_text().strip() == "143"
+    assert jobs and set(children) <= set(jobs)
 
     def gone(pid):
         try:
@@ -1784,13 +1794,10 @@ def test_pipeline_sigterm_marks_interrupted_and_kills_running_jobs(tmp_path):
             return True
         return False
 
-    for pid in pids:
-        assert _wait_until(lambda: gone(pid), 10), f"job {pid} survived the signal"
-        assert (run / f"{_job_name(run, pid)}.exit").read_text().strip() == "143"
-
-
-def _job_name(run, pid):
-    for path in run.glob("*.pid"):
-        if int(path.read_text()) == pid:
-            return path.stem
-    raise AssertionError(f"no pid file for {pid}")
+    for name, pid in jobs.items():
+        assert _wait_until(lambda: gone(pid), 10), f"job {name} ({pid}) survived"
+        assert (run / f"{name}.exit").read_text().strip() == "143"
+    # The job's own child -- standing in for the Python worker hpc/run.sh execs
+    # -- must not be reparented to PID 1 and left holding a GPU.
+    for name, pid in children.items():
+        assert _wait_until(lambda: gone(pid), 10), f"{name} child {pid} survived"

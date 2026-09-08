@@ -258,18 +258,25 @@ four V3 folds when `$RUN/comparison/kept.json` reports `V3_eligible` true
 
 Every GPU job goes through a queue that holds at most one job per listed GPU and
 starts the next queued job on a device as soon as its predecessor exits, so the
-wave order does not assume a GPU count. Each queued job writes `$RUN/<job>.log`,
-`$RUN/<job>.pid` and `$RUN/<job>.exit` — including a job killed before it could
-record its own status. Foreground steps (`prepare-<fold>`, `compare-1`,
-`compare-final`) write only a `.log`; `tier0` is a background job and writes all
-three. A nonzero exit fails the wave only after the other queued jobs finish, and
-the pipeline then exits nonzero with `failed` in `phase.txt` and the status in
-`$RUN/exit_code`. Phase names are written to `$RUN/phase.txt` as the round
-progresses, ending in `completed`. SIGTERM or Ctrl-C terminates every running
-queued job, writes `interrupted` to `phase.txt` and `143` to `exit_code`, and
-exits 143; an unreadable `kept.json` still runs the learning-rate arms and the
-final comparison, records the reason in `$RUN/v3_skipped.txt`, and fails the
-round at the end.
+wave order does not assume a GPU count. Every *started* queued job writes
+`$RUN/<job>.log`, `$RUN/<job>.pid` and `$RUN/<job>.exit` — including a job killed
+before it could record its own status; a job still waiting in the queue when the
+round stops writes no files at all. Foreground steps (`prepare-<fold>`,
+`compare-1`, `compare-final`) write only a `.log`; `tier0` is a background job and
+writes all three. A nonzero exit fails the wave only after the other queued jobs
+finish, and the pipeline then exits nonzero with `failed` in `phase.txt` and the
+status in `$RUN/exit_code`. Phase names are written to `$RUN/phase.txt` as the
+round progresses, ending in `completed`.
+
+SIGTERM (`kill` on the launched pipeline) or Ctrl-C terminates every running
+queued job **and that job's child Python worker** — `hpc/run.sh` execs Python, so
+without this the worker would be reparented to PID 1 and keep holding its GPU —
+then writes `interrupted` to `phase.txt` and `143` to `exit_code` and exits 143.
+While a foreground step is running the signal is acted on only once that step
+returns; no queued job is running at those points. An unreadable `kept.json`
+still runs the learning-rate arms and the final comparison, records the reason in
+`$RUN/v3_skipped.txt` with the reader's stderr in `$RUN/v3_read.log`, and fails
+the round at the end.
 
 Fold bundles live in `$RUN/prepared/<fold>`, Tier 0 in `$RUN/tier0`, Tier-4 heads
 in `$RUN/heads/seed<n>`, comparisons in `$RUN/comparison`, and every trained arm in
