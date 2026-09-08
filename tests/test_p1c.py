@@ -326,6 +326,257 @@ def test_response_view_input_layouts_concatenate_hvg_then_tx1():
         ResponseView(bundle, cache, input_layout="bogus")
 
 
+def test_apply_transform_raw_is_identity_for_ndarray_and_tensor():
+    from src.data.p1c import apply_transform
+
+    arr = np.array([[1.0, 2.0, 3.0], [0.0, 0.0, 0.0]])
+    assert apply_transform(arr, "raw", None) is arr
+    tensor = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    assert torch.equal(apply_transform(tensor, "raw", None), tensor)
+
+
+def test_apply_transform_log1p_norm_scales_rows_and_zero_rows_stay_zero():
+    from src.data.p1c import apply_transform
+
+    arr = np.array([[1.0, 1.0, 2.0], [0.0, 0.0, 0.0], [4.0, 0.0, 0.0]])
+    # row sums: 4, 0, 4; target_sum=8 -> scale 2 for nonzero rows, 0 for the zero row.
+    result = apply_transform(arr, "log1p_norm", target_sum=8.0)
+    expected = np.array(
+        [
+            np.log1p(np.array([1.0, 1.0, 2.0]) * 2.0),
+            [0.0, 0.0, 0.0],
+            np.log1p(np.array([4.0, 0.0, 0.0]) * 2.0),
+        ]
+    )
+    np.testing.assert_allclose(result, expected)
+
+
+def test_apply_transform_log1p_norm_works_on_torch_tensor():
+    from src.data.p1c import apply_transform
+
+    tensor = torch.tensor([[2.0, 2.0], [0.0, 0.0]])
+    result = apply_transform(tensor, "log1p_norm", target_sum=4.0)
+    expected = torch.log1p(
+        torch.tensor([[2.0, 2.0], [0.0, 0.0]]) * torch.tensor([[1.0], [0.0]])
+    )
+    torch.testing.assert_close(result, expected)
+
+
+def test_apply_transform_rejects_unknown_transform_and_missing_target_sum():
+    from src.data.p1c import apply_transform
+
+    with pytest.raises(ValueError, match="unknown transform"):
+        apply_transform(np.zeros((1, 2)), "bogus", None)
+    with pytest.raises(ValueError, match="target_sum"):
+        apply_transform(np.zeros((1, 2)), "log1p_norm", None)
+
+
+def test_median_row_sum_combines_rows_across_all_arrays():
+    from src.data.p1c import median_row_sum
+
+    arrays = [np.array([[1.0, 1.0], [2.0, 2.0]]), np.array([[10.0, 10.0]])]
+    # row sums: 2, 4, 20 -> median 4
+    assert median_row_sum(arrays) == pytest.approx(4.0)
+
+
+def test_build_snapshot_default_transform_is_raw_and_unchanged():
+    from types import SimpleNamespace
+    from src.data.p1b import build_snapshot
+    from src.data.response_cache import ResponseTargetsCache
+
+    keys = [(a, g) for a in ("a", "b", "c", "j") for g in ("G", "H")]
+    cache = ResponseTargetsCache(
+        tuple(a for a, g in keys),
+        tuple(g for a, g in keys),
+        np.ones((16, 3), dtype=np.float32),
+        np.arange(0, 17, 2),
+        pd.DataFrame(),
+    )
+    inputs = SimpleNamespace(
+        response_targets=cache,
+        response_holdout=frozenset((a, "H") for a in ("a", "b", "c")),
+        hvg_order=("G", "H", "I"),
+        lines={
+            a: SimpleNamespace(
+                controls_tx1=np.full((2, 5), 2.0, dtype=np.float32),
+                basal_hvg=np.full((2, 3), 1.0, dtype=np.float32),
+            )
+            for a in ("a", "b", "c", "j")
+        },
+    )
+    bundle = build_snapshot(
+        inputs, [0, 1], {"G"}, anchors=("a", "b", "c"), external="j"
+    )
+    assert bundle["transform"] == {
+        "name": "raw",
+        "target_sum": None,
+        "row_sum_basis": "hvg_panel",
+    }
+    for a in ("a", "b", "c", "j"):
+        np.testing.assert_allclose(bundle["controls"][a]["hvg"], np.ones((2, 3)))
+    with pytest.raises(ValueError, match="unknown transform"):
+        build_snapshot(
+            inputs,
+            [0, 1],
+            {"G"},
+            anchors=("a", "b", "c"),
+            external="j",
+            transform="bogus",
+        )
+
+
+def test_build_snapshot_transform_applies_to_controls_and_baselines():
+    from types import SimpleNamespace
+    from src.data.p1b import build_snapshot
+    from src.data.response_cache import ResponseTargetsCache
+    from src.data.p1c import apply_transform
+
+    # One held-out gene per source anchor (Ha/Hb/Hc) so split_conditions'
+    # every-anchor-in-val requirement is met; only Ga/Gb/Gc feed the baselines
+    # checked below.
+    keys = [
+        ("a", "Ga"),
+        ("a", "Ha"),
+        ("b", "Gb"),
+        ("b", "Hb"),
+        ("c", "Gc"),
+        ("c", "Hc"),
+        ("j", "Gj"),
+    ]
+    target_cells = np.array(
+        [
+            [1.0, 1.0],
+            [1.0, 1.0],  # a: Ga, 2 cells
+            [0.0, 0.0],
+            [0.0, 0.0],  # a: Ha (held out; unused by these assertions)
+            [2.0, 2.0],
+            [2.0, 2.0],  # b: Gb
+            [0.0, 0.0],
+            [0.0, 0.0],  # b: Hb
+            [3.0, 3.0],
+            [3.0, 3.0],  # c: Gc
+            [0.0, 0.0],
+            [0.0, 0.0],  # c: Hc
+            [4.0, 4.0],
+            [4.0, 4.0],  # j: Gj
+        ],
+        dtype=np.float32,
+    )
+    cache = ResponseTargetsCache(
+        tuple(a for a, g in keys),
+        tuple(g for a, g in keys),
+        target_cells,
+        np.arange(0, len(keys) * 2 + 1, 2),
+        pd.DataFrame(),
+    )
+    basal = {
+        "a": np.array([[0.0, 0.0], [2.0, 2.0]], dtype=np.float32),
+        "b": np.array([[1.0, 1.0], [1.0, 1.0]], dtype=np.float32),
+        "c": np.array([[3.0, 3.0], [3.0, 3.0]], dtype=np.float32),
+        "j": np.array([[4.0, 4.0], [4.0, 4.0]], dtype=np.float32),
+    }
+    inputs = SimpleNamespace(
+        response_targets=cache,
+        response_holdout=frozenset({("a", "Ha"), ("b", "Hb"), ("c", "Hc")}),
+        hvg_order=("G", "H"),
+        lines={
+            a: SimpleNamespace(
+                controls_tx1=np.full((2, 3), 9.0, dtype=np.float32),
+                basal_hvg=basal[a],
+            )
+            for a in ("a", "b", "c", "j")
+        },
+    )
+    target_sum = 8.0
+    bundle = build_snapshot(
+        inputs,
+        [0, 1],
+        {"Ga", "Gb", "Gc"},
+        anchors=("a", "b", "c"),
+        external="j",
+        transform="log1p_norm",
+        target_sum=target_sum,
+    )
+    assert bundle["transform"] == {
+        "name": "log1p_norm",
+        "target_sum": target_sum,
+        "row_sum_basis": "hvg_panel",
+    }
+    for a in ("a", "b", "c", "j"):
+        expected_hvg = apply_transform(basal[a], "log1p_norm", target_sum)
+        np.testing.assert_allclose(bundle["controls"][a]["hvg"], expected_hvg)
+        # Tx1 embeddings are untouched by the HVG-panel transform.
+        np.testing.assert_allclose(
+            bundle["controls"][a]["tx1"], inputs.lines[a].controls_tx1
+        )
+
+    gene_to_anchor = {"Ga": "a", "Gb": "b", "Gc": "c"}
+    for gene, anchor in gene_to_anchor.items():
+        row = [i for i, k in enumerate(keys) if k == (anchor, gene)][0]
+        expected_effect = apply_transform(
+            target_cells[row * 2 : row * 2 + 2], "log1p_norm", target_sum
+        ).mean(0) - apply_transform(basal[anchor], "log1p_norm", target_sum).mean(0)
+        np.testing.assert_allclose(bundle["baselines"]["genes"][gene], expected_effect)
+
+
+def test_response_view_applies_transform_only_to_observed_targets():
+    from src.data.p1b import ResponseView
+    from src.data.response_cache import ResponseTargetsCache
+    from src.data.p1c import apply_transform
+
+    keys = [("a", "G")]
+    raw_target = np.array([[2.0, 2.0], [6.0, 0.0]], dtype=np.float32)
+    cache = ResponseTargetsCache(
+        ("a",), ("G",), raw_target, np.array([0, 2]), pd.DataFrame()
+    )
+    target_sum = 4.0
+    # Sentinel controls that would look wrong if re-transformed a second time.
+    already_transformed_hvg = np.array([[9.0, 9.0]], dtype=np.float32)
+    bundle = {
+        "keys": keys,
+        "controls": {
+            "a": {
+                "hvg": already_transformed_hvg,
+                "tx1": np.zeros((1, 3), dtype=np.float32),
+            }
+        },
+        "transform": {
+            "name": "log1p_norm",
+            "target_sum": target_sum,
+            "row_sum_basis": "hvg_panel",
+        },
+    }
+    view = ResponseView(bundle, cache, input_layout="hvg")
+    batch = view.batch([0])
+    expected_observed = apply_transform(raw_target, "log1p_norm", target_sum)
+    np.testing.assert_allclose(batch.observed_hvg[0].numpy(), expected_observed)
+    np.testing.assert_allclose(batch.control_hvg[0].numpy(), already_transformed_hvg)
+    np.testing.assert_allclose(batch.controls_tx1[0].numpy(), already_transformed_hvg)
+
+
+def test_response_view_defaults_to_raw_when_transform_key_absent():
+    from src.data.p1b import ResponseView
+    from src.data.response_cache import ResponseTargetsCache
+
+    keys = [("a", "G")]
+    raw_target = np.array([[2.0, 2.0]], dtype=np.float32)
+    cache = ResponseTargetsCache(
+        ("a",), ("G",), raw_target, np.array([0, 1]), pd.DataFrame()
+    )
+    bundle = {
+        "keys": keys,
+        "controls": {
+            "a": {
+                "hvg": np.zeros((1, 2), dtype=np.float32),
+                "tx1": np.zeros((1, 3), dtype=np.float32),
+            }
+        },
+    }  # no "transform" key: an old bundle predating this feature.
+    view = ResponseView(bundle, cache, input_layout="hvg")
+    batch = view.batch([0])
+    np.testing.assert_allclose(batch.observed_hvg[0].numpy(), raw_target)
+
+
 def _bundle_matching_p1b_expectations(anchors, external):
     """Synthetic bundle whose check_membership() result equals P1B_EXPECTATIONS."""
     train_counts = (16399, 5481, 5481)  # sums to 27361; largest_pool == 16399
@@ -417,8 +668,19 @@ def test_prepare_fold_writes_fold_json_and_checks_reference_coordinates(
 
     calls = []
 
-    def fake_prepare_bundle(checkpoint, directory, *, anchors, external, expectations):
-        calls.append((checkpoint, anchors, external, expectations))
+    def fake_prepare_bundle(
+        checkpoint,
+        directory,
+        *,
+        anchors,
+        external,
+        expectations,
+        transform="raw",
+        target_sum=None,
+    ):
+        calls.append(
+            (checkpoint, anchors, external, expectations, transform, target_sum)
+        )
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "manifest.json").write_text(json.dumps({"coordinates": [0, 1, 2]}))
@@ -432,12 +694,31 @@ def test_prepare_fold_writes_fold_json_and_checks_reference_coordinates(
         "fold": "jurkat",
         "external": external,
         "sources": list(sources),
+        "transform": "raw",
     }
-    assert calls[0] == ("ckpt", sources, external, P1B_EXPECTATIONS)
+    assert calls[0] == ("ckpt", sources, external, P1B_EXPECTATIONS, "raw", None)
 
     k562_dir = tmp_path / "k562"
     p1c_prep.prepare_fold("ckpt", "k562", k562_dir)
     assert calls[1][3] is None
+
+    # transform/target_sum are threaded through to prepare_bundle and fold.json.
+    sources_k562, external_k562 = fold_membership("k562")
+    log1p_dir = tmp_path / "k562-log1p"
+    p1c_prep.prepare_fold(
+        "ckpt", "k562", log1p_dir, transform="log1p_norm", target_sum=12345.0
+    )
+    assert calls[-1] == (
+        "ckpt",
+        sources_k562,
+        external_k562,
+        None,
+        "log1p_norm",
+        12345.0,
+    )
+    assert (
+        json.loads((log1p_dir / "fold.json").read_text())["transform"] == "log1p_norm"
+    )
 
     # A reference manifest with matching coordinates is accepted.
     p1c_prep.prepare_fold(
@@ -449,7 +730,14 @@ def test_prepare_fold_writes_fold_json_and_checks_reference_coordinates(
 
     # A reference manifest with different coordinates is rejected.
     def fake_prepare_bundle_mismatch(
-        checkpoint, directory, *, anchors, external, expectations
+        checkpoint,
+        directory,
+        *,
+        anchors,
+        external,
+        expectations,
+        transform="raw",
+        target_sum=None,
     ):
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
@@ -954,7 +1242,7 @@ def test_build_variant_rejects_native_map_vector_with_wrong_pert_dim(tmp_path):
         )
 
 
-def _build_p1c_fold_fixture(tmp_path, *, fold="k562"):
+def _build_p1c_fold_fixture(tmp_path, *, fold="k562", transform="raw", target_sum=None):
     """Tiny prepared P1-C fold directory: real-STATE bundle/template plus a
     native checkpoint and a two-gene (+ non-targeting) one-hot map, mirroring
     ``tests/test_p1b.py::test_real_cli_export_retry_preserves_checkpoint``.
@@ -981,6 +1269,8 @@ def _build_p1c_fold_fixture(tmp_path, *, fold="k562"):
         set(native_map),
         anchors=inputs.response_anchors[:3],
         external=inputs.response_anchors[3],
+        transform=transform,
+        target_sum=target_sum,
     )
     bundle["response_cache"] = str(inputs.response_cache)
     root = inputs.response_cache / "response_targets"
@@ -1074,6 +1364,50 @@ def test_p1c_cli_parses_all_commands():
     assert args.variant in VARIANTS
 
 
+def test_prepare_cli_parses_transform_and_target_sum():
+    from src.experiments.p1c import parser
+    from src.data.p1c import TRANSFORMS
+
+    p = parser()
+    args = p.parse_args(
+        ["prepare", "--checkpoint", "c", "--out-dir", "o", "--fold", "k562"]
+    )
+    assert args.transform == "raw" and args.target_sum is None
+
+    args = p.parse_args(
+        [
+            "prepare",
+            "--checkpoint",
+            "c",
+            "--out-dir",
+            "o",
+            "--fold",
+            "k562",
+            "--transform",
+            "log1p_norm",
+            "--target-sum",
+            "10000",
+        ]
+    )
+    assert args.transform == "log1p_norm" and args.target_sum == 10000.0
+
+    with pytest.raises(SystemExit):
+        p.parse_args(
+            [
+                "prepare",
+                "--checkpoint",
+                "c",
+                "--out-dir",
+                "o",
+                "--fold",
+                "k562",
+                "--transform",
+                "bogus",
+            ]
+        )
+    assert set(TRANSFORMS) == {"raw", "log1p_norm"}
+
+
 def test_train_variant_v1_on_tiny_real_state_records_init_check_and_blocks_after_external(  # noqa: E501
     tmp_path, monkeypatch
 ):
@@ -1132,6 +1466,21 @@ def test_train_variant_v1_on_tiny_real_state_records_init_check_and_blocks_after
 
     with pytest.raises(ValueError, match="external evaluation has started"):
         p1c.main(train_args)
+
+
+def test_train_variant_refuses_a_transformed_bundle(tmp_path):
+    torch.set_num_threads(1)
+    from src.experiments.p1c import train_variant
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(
+        tmp_path, transform="log1p_norm", target_sum=1000.0
+    )
+    runs = tmp_path / "runs"
+    with pytest.raises(
+        ValueError, match="training on a transformed bundle is not part of P1-C"
+    ):
+        train_variant(prepared, runs, "V1", 1e-4, device="cpu")
+    assert not runs.exists()
 
 
 def test_evaluate_native_restricts_to_native_vocabulary(tmp_path):
@@ -1224,6 +1573,37 @@ def test_evaluate_native_records_the_hparams_it_built_with(tmp_path):
     assert record["differs_from_checkpoint"] == {
         "cell_set_len": {"used": 4, "checkpoint": 8}
     }
+    assert record["transform"] == {
+        "name": "raw",
+        "target_sum": None,
+        "row_sum_basis": "hvg_panel",
+    }
+
+
+def test_evaluate_native_records_the_transform_on_a_transformed_bundle(tmp_path):
+    torch.set_num_threads(1)
+    from src.experiments.p1c import evaluate_native
+
+    prepared, inputs, native_state = _build_p1c_fold_fixture(
+        tmp_path, transform="log1p_norm", target_sum=1000.0
+    )
+    runs = tmp_path / "runs"
+    evaluate_native(prepared, runs, [0], device="cpu")
+
+    expected_transform = {
+        "name": "log1p_norm",
+        "target_sum": 1000.0,
+        "row_sum_basis": "hvg_panel",
+    }
+    record = json.loads((runs / "native_hparams.json").read_text())
+    assert record["transform"] == expected_transform
+
+    for role in ("internal", "external"):
+        status = json.loads(
+            (runs / "evaluation" / "N-native" / role / "evaluation.json").read_text()
+        )
+        assert status["status"] == "completed"
+        assert status["transform"] == expected_transform
 
 
 def test_native_null_reference_reports_without_gating(tmp_path):

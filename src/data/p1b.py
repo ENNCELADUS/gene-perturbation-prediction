@@ -3,7 +3,7 @@
 import math
 import numpy as np
 
-from src.data.p1c import INPUT_LAYOUTS
+from src.data.p1c import INPUT_LAYOUTS, TRANSFORMS, apply_transform, bundle_transform
 
 SOURCE_ANCHORS = ("ACH-000551", "ACH-000739", "ACH-000971")
 EXTERNAL_ANCHOR = "ACH-000995"
@@ -108,7 +108,11 @@ def build_snapshot(
     *,
     anchors=SOURCE_ANCHORS,
     external=EXTERNAL_ANCHOR,
+    transform="raw",
+    target_sum=None,
 ):
+    if transform not in TRANSFORMS:
+        raise ValueError(f"unknown transform {transform!r}")
     cache = inputs.response_targets
     keys = cache.keys
     splits = split_conditions(keys, inputs.response_holdout, anchors, external)
@@ -117,7 +121,10 @@ def build_snapshot(
         (
             keys[i][0],
             keys[i][1],
-            cache.target_bag(i).mean(0) - inputs.lines[keys[i][0]].basal_hvg.mean(0),
+            apply_transform(cache.target_bag(i), transform, target_sum).mean(0)
+            - apply_transform(
+                np.asarray(inputs.lines[keys[i][0]].basal_hvg), transform, target_sum
+            ).mean(0),
         )
         for i in splits["train"]
     )
@@ -151,12 +158,19 @@ def build_snapshot(
         "controls": {
             a: {
                 "tx1": np.array(inputs.lines[a].controls_tx1),
-                "hvg": np.array(inputs.lines[a].basal_hvg),
+                "hvg": apply_transform(
+                    np.array(inputs.lines[a].basal_hvg), transform, target_sum
+                ),
             }
             for a in (*anchors, external)
         },
         "baselines": baselines,
         "panels": panels,
+        "transform": {
+            "name": transform,
+            "target_sum": target_sum,
+            "row_sum_basis": "hvg_panel",
+        },
     }
 
 
@@ -172,6 +186,9 @@ class ResponseView:
         self.input_layout = input_layout
         self.keys = tuple(cache.keys)
         self._controls = {}
+        transform = bundle_transform(bundle)
+        self.transform_name = transform["name"]
+        self.transform_target_sum = transform["target_sum"]
 
     def batch(self, indices, device="cpu"):
         import torch
@@ -200,7 +217,16 @@ class ResponseView:
             tuple(a for a, g in keys),
             tuple(g for a, g in keys),
             tuple(controls[a]["controls_tx1"] for a, g in keys),
-            tuple(tensor(self.cache.target_bag(i)) for i in indices),
+            tuple(
+                tensor(
+                    apply_transform(
+                        self.cache.target_bag(i),
+                        self.transform_name,
+                        self.transform_target_sum,
+                    )
+                )
+                for i in indices
+            ),
             tuple(controls[a]["hvg"] for a, g in keys),
         )
 
