@@ -1347,17 +1347,29 @@ def _write_p1c_run(
 def test_equal_fold_difference_pools_folds_equally_regardless_of_size():
     from src.eval.p1c import equal_fold_difference
 
-    def frame(delta, n):
-        left = pd.DataFrame({"gene": [f"g{i}" for i in range(n)], "loss": [delta] * n})
-        right = pd.DataFrame({"gene": [f"g{i}" for i in range(n)], "loss": [0.0] * n})
+    def frame(deltas, genes):
+        left = pd.DataFrame({"gene": genes, "loss": deltas})
+        right = pd.DataFrame({"gene": genes, "loss": [0.0] * len(genes)})
         return left, right
 
-    frames = [frame(-1.0, 3), frame(-3.0, 5)]
-    result = equal_fold_difference(frames, "loss", repeats=200)
+    # A shared gene ("gShared") appears in both folds with its own per-fold
+    # value, exercising the union index: a replicate that draws "gShared"
+    # must feed BOTH folds' own (different) data for it simultaneously.
+    fold_a = frame([-2.0, -1.0, 0.0], ["g0", "g1", "gShared"])
+    fold_b = frame([-4.0, -3.0, -2.0], ["g2", "g3", "gShared"])
+    frames = [fold_a, fold_b]
+
+    result = equal_fold_difference(frames, "loss", repeats=2000)
+    # Equal-fold mean of per-fold means: mean(-1.0, -3.0) == -2.0.
     assert result["delta"] == pytest.approx(-2.0)
-    assert result["ci_low"] <= result["delta"] <= result["ci_high"]
+    # Per-gene values vary within each fold, so the bootstrap has genuine
+    # spread -- a strict bracket, not a degenerate point interval.
+    assert result["ci_low"] < result["delta"] < result["ci_high"]
     assert result["folds"] == 2
-    assert result["pairs"] == 8
+    assert result["pairs"] == 6
+
+    repeat = equal_fold_difference(frames, "loss", repeats=2000)
+    assert repeat == result  # seed-0 determinism: identical intervals
 
 
 def test_summarize_applies_keep_predicate_per_fold_and_reports_two_of_four_folds(
@@ -1426,7 +1438,7 @@ def test_summarize_kept_all_true_requires_all_four_folds_kept(tmp_path):
     assert kept["V3_eligible"] is True
 
 
-def test_fold_summary_marks_incomplete_training_and_missing_export_as_not_kept(
+def test_fold_summary_marks_incomplete_training_as_not_kept_without_touching_exports(
     tmp_path,
 ):
     from src.eval.p1c import fold_summary
@@ -1442,10 +1454,154 @@ def test_fold_summary_marks_incomplete_training_and_missing_export_as_not_kept(
     assert row["kept"] is None
     assert row["status"] == "running"
 
-    run_dir2 = _write_p1c_run(root, "V3", "hct116")
+
+def test_fold_summary_raises_on_missing_export_when_training_completed(tmp_path):
+    from src.eval.p1c import fold_summary
+
+    root = tmp_path / "root"
+    run_dir = _write_p1c_run(root, "V3", "hct116")
     import shutil
 
-    shutil.rmtree(run_dir2 / "evaluation" / "external")
-    row2 = fold_summary(run_dir2)
-    assert row2["kept"] is None
-    assert "external" in row2["status"]
+    shutil.rmtree(run_dir / "evaluation" / "external")
+    with pytest.raises(ValueError, match="external"):
+        fold_summary(run_dir)
+
+
+def test_fold_summary_raises_on_zero_pairs_instead_of_evaluating_kept_false(tmp_path):
+    from src.eval.p1c import fold_summary
+
+    root = tmp_path / "root"
+    run_dir = _write_p1c_run(root, "V0", "jurkat")
+    internal_path = run_dir / "evaluation" / "internal" / "conditions.parquet"
+    conditions = pd.read_parquet(internal_path)
+    # Drop every no_change row for one source anchor: that anchor's paired
+    # difference now has zero pairs. This must raise, not silently count as
+    # "not below zero" toward anchors_ci_below.
+    from src.data.p1c import fold_membership
+
+    sources, _ = fold_membership("jurkat")
+    first_anchor = sources[0]
+    conditions = conditions[
+        ~((conditions.model_id == first_anchor) & (conditions.method == "no_change"))
+    ]
+    conditions.to_parquet(internal_path, index=False)
+
+    with pytest.raises(ValueError, match=first_anchor):
+        fold_summary(run_dir)
+
+
+def test_fold_summary_kept_false_when_only_anchors_ci_below_fails(tmp_path):
+    from src.eval.p1c import fold_summary
+
+    root = tmp_path / "root"
+    run_dir = _write_p1c_run(
+        root,
+        "V1",
+        "jurkat",
+        better_source_count=1,  # only 1 of 3 source anchors ci_high < 0
+        external_better=True,
+        identity_advantage_positive=True,
+    )
+    row = fold_summary(run_dir)
+    assert row["anchors_ci_below"] == 1
+    assert row["kept_a"] is False
+    assert row["kept_b"] is True
+    assert row["kept_c"] is True
+    assert row["kept"] is False
+
+
+def test_native_export_rows_handle_light_batches_without_conditions_parquet(tmp_path):
+    from src.eval.p1c import summarize
+    from src.data.p1c import fold_membership
+
+    root = tmp_path / "root"
+    fold = "k562"
+    sources, external = fold_membership(fold)
+    native_dir = root / "runs" / "N-native" / fold / "evaluation"
+
+    # Batch index 0: full export_predictions output (conditions.parquet with
+    # method/panel columns), mirroring evaluate_native's real shape.
+    zero_dir = native_dir / "N-native"
+    for side, role, anchors in (
+        ("internal", "val", sources),
+        ("external", "external", (external,)),
+    ):
+        side_dir = zero_dir / side
+        side_dir.mkdir(parents=True)
+        rows = []
+        for anchor in anchors:
+            rows.extend(_condition_rows(anchor, role, True, n_genes=3))
+        pd.DataFrame(rows).to_parquet(side_dir / "conditions.parquet", index=False)
+        pd.DataFrame(
+            columns=[
+                "method",
+                "anchor_a",
+                "anchor_b",
+                "gene",
+                "effect_difference_mse",
+                "effect_difference_pearson",
+            ]
+        ).to_parquet(side_dir / "cross_context.parquet", index=False)
+        np.savez(
+            side_dir / "effects.npz",
+            keys=np.array([("model", "dummy", "g0")]),
+            predicted=np.array([[0.0]]),
+            observed=np.array([[0.0]]),
+        )
+        (side_dir / "evaluation.json").write_text(
+            json.dumps(
+                {
+                    "status": "completed",
+                    "bundle": "b",
+                    "variant": "N-native",
+                    "batch_index": 0,
+                    "fold": fold,
+                }
+            )
+        )
+
+    # Batch index 1: light export -- raw evaluate_rows summary.csv only, no
+    # conditions.parquet, no method/panel columns.
+    light_dir = native_dir / "N-native-b1"
+    for side, role, anchors in (
+        ("internal", "val", sources),
+        ("external", "external", (external,)),
+    ):
+        side_dir = light_dir / side
+        side_dir.mkdir(parents=True)
+        rows = [
+            dict(
+                role=role, model_id=anchor, gene=f"g{gi}", response_loss=0.4 + 0.01 * gi
+            )
+            for anchor in anchors
+            for gi in range(3)
+        ]
+        pd.DataFrame(rows).to_csv(side_dir / "summary.csv", index=False)
+        (side_dir / "evaluation.json").write_text(
+            json.dumps(
+                {
+                    "status": "completed",
+                    "bundle": "b",
+                    "variant": "N-native",
+                    "batch_index": 1,
+                    "fold": fold,
+                }
+            )
+        )
+
+    out_dir = summarize(root, tmp_path / "out")  # must not raise
+    summary = pd.read_csv(out_dir / "summary.csv")
+    native = summary[summary.label == "N-native"]
+    assert set(native.export) == {"N-native", "N-native-b1"}
+
+    zero_row = native[native.export == "N-native"].iloc[0]
+    assert zero_row.batch_index == 0
+    assert zero_row.internal_ratio_equal == pytest.approx(0.35 / 1.1, rel=1e-6)
+    assert zero_row.external_ratio == pytest.approx(0.35 / 1.1, rel=1e-6)
+
+    light_row = native[native.export == "N-native-b1"].iloc[0]
+    assert light_row.batch_index == 1
+    assert pd.isna(light_row.internal_ratio_equal)
+    assert pd.isna(light_row.external_ratio)
+    assert light_row.native_val_loss_equal == pytest.approx(0.41, rel=1e-6)
+    assert light_row.native_external_loss == pytest.approx(0.41, rel=1e-6)
