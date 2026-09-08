@@ -26,8 +26,9 @@ def equal_fold_difference(frames, metric, *, repeats=1000):
 
     ``frames`` is a list of ``(left, right)`` DataFrame pairs, one per fold,
     each carrying ``gene`` and ``metric``. Genes are resampled from the union
-    across folds so a fold's own condition count never dominates the pooled
-    interval.
+    across folds (synchronously -- one draw of the union feeds every fold's
+    own per-gene sums/counts for that replicate) so a fold's own condition
+    count never dominates the pooled interval.
     """
     grouped_by_fold = []
     for left, right in frames:
@@ -94,7 +95,7 @@ def equal_fold_difference(frames, metric, *, repeats=1000):
 def _read_export(directory):
     """Return ``(data, status)``; ``data`` is ``None`` for an absent/incomplete
     optional arm. A present but malformed export (completed status, missing
-    conditions/cross-context) raises."""
+    conditions/cross-context/effects) raises."""
     directory = Path(directory)
     status_path = directory / "evaluation.json"
     if not status_path.exists():
@@ -110,20 +111,42 @@ def _read_export(directory):
     return {"conditions": conditions, "cross": cross, "effects": effects}, "completed"
 
 
+def _require_export(run_dir, side):
+    """Like ``_read_export`` but raises: once training is completed, a
+    missing, absent-``evaluation.json``, or non-completed export is a data
+    problem, not an optional arm."""
+    directory = run_dir / "evaluation" / side
+    data, status = _read_export(directory)
+    if data is None:
+        raise ValueError(
+            f"{run_dir}: {side} export missing or incomplete (status={status!r})"
+        )
+    return data
+
+
+def _paired(left, right, metric, *, anchor, contrast):
+    """``paired_difference`` guarded against an empty pairing silently
+    evaluating a predicate leg as false."""
+    result = paired_difference(left, right, metric)
+    if result["pairs"] == 0:
+        raise ValueError(f"no paired conditions for anchor {anchor!r} ({contrast})")
+    return result
+
+
 def fold_summary(run_dir):
     """One row describing a single ``<root>/runs/<label>/<fold>/`` run.
 
     Assumes ``training.json`` exists; the caller (``summarize``) is
-    responsible for skipping labels/folds that never trained at all.
+    responsible for skipping labels/folds that never trained at all. Once
+    training is ``completed``, both exports are required to exist and be
+    ``completed`` -- their absence raises rather than degrading to
+    ``kept=None``, which is reserved for training that never finished.
     """
     run_dir = Path(run_dir)
     label = run_dir.parent.name
     fold = run_dir.name
     training = json.loads((run_dir / "training.json").read_text())
-    external_anchor = FOLDS[fold]
-    sources, expected_external = fold_membership(fold)
-    if expected_external != external_anchor:
-        raise ValueError(f"fold membership mismatch for {fold!r}")
+    sources, external_anchor = fold_membership(fold)
 
     row = {
         "label": label,
@@ -141,17 +164,8 @@ def fold_summary(run_dir):
             f"training.json fold {training['fold']!r} disagrees with directory {fold!r}"
         )
 
-    internal, internal_status = _read_export(run_dir / "evaluation" / "internal")
-    external, external_status = _read_export(run_dir / "evaluation" / "external")
-    if internal is None or external is None:
-        reasons = []
-        if internal is None:
-            reasons.append(f"internal export {internal_status}")
-        if external is None:
-            reasons.append(f"external export {external_status}")
-        row["status"] = "; ".join(reasons)
-        row["kept"] = None
-        return row
+    internal = _require_export(run_dir, "internal")
+    external = _require_export(run_dir, "external")
 
     row.update(
         best_epoch=training["best_epoch"],
@@ -175,7 +189,13 @@ def fold_summary(run_dir):
         internal_ratio[anchor] = float(
             model_rows.response_loss.mean() / no_change_rows.response_loss.mean()
         )
-        interval = paired_difference(model_rows, no_change_rows, "response_loss")
+        interval = _paired(
+            model_rows,
+            no_change_rows,
+            "response_loss",
+            anchor=anchor,
+            contrast="internal_vs_no_change",
+        )
         if interval["ci_high"] is not None and interval["ci_high"] < 0:
             anchors_ci_below += 1
     internal_ratio_equal = float(np.mean(list(internal_ratio.values())))
@@ -191,14 +211,24 @@ def fold_summary(run_dir):
     external_ratio = float(
         external_model.response_loss.mean() / external_no_change.response_loss.mean()
     )
-    external_interval = paired_difference(
-        external_model, external_no_change, "response_loss"
+    external_interval = _paired(
+        external_model,
+        external_no_change,
+        "response_loss",
+        anchor=external_anchor,
+        contrast="external_vs_no_change",
     )
 
     identity_rows = external_model
     wrong = identity_rows.copy()
     wrong["response_loss"] = wrong["wrong_response_loss"]
-    identity_interval = paired_difference(wrong, identity_rows, "response_loss")
+    identity_interval = _paired(
+        wrong,
+        identity_rows,
+        "response_loss",
+        anchor=external_anchor,
+        contrast="identity",
+    )
 
     cross = external["cross"]
     cross_ext = cross[
@@ -271,9 +301,113 @@ def _flatten_summary_row(row):
     return clean
 
 
-def _native_export_rows(root, out_dir):
+def _native_batch_index(export_name):
+    if export_name == "N-native":
+        return 0
+    prefix = "N-native-b"
+    if not export_name.startswith(prefix):
+        raise ValueError(f"unrecognized native export name {export_name!r}")
+    return int(export_name[len(prefix) :])
+
+
+def _read_native_light_export(directory):
+    """Batch-index != 0 native exports write only a raw ``summary.csv``
+    (``evaluate_rows`` output plus ``role``) -- no ``conditions.parquet``, no
+    ``method``/``panel`` columns, so no baseline is available there."""
+    directory = Path(directory)
+    status_path = directory / "evaluation.json"
+    if not status_path.exists():
+        return None, "missing"
+    status = json.loads(status_path.read_text())
+    if status["status"] != "completed":
+        return None, status["status"]
+    summary_path = directory / "summary.csv"
+    if not summary_path.exists():
+        raise ValueError(f"malformed export: missing summary.csv in {directory}")
+    return pd.read_csv(summary_path), "completed"
+
+
+def _native_export_row(fold, export_name, export_dir, sources, external_anchor):
+    row = {
+        "label": "N-native",
+        "variant": "N-native",
+        "fold": fold,
+        "export": export_name,
+        "batch_index": _native_batch_index(export_name),
+        "kept": None,
+    }
+    if row["batch_index"] == 0:
+        internal, internal_status = _read_export(export_dir / "internal")
+        external, external_status = _read_export(export_dir / "external")
+        row["internal_status"], row["external_status"] = (
+            internal_status,
+            external_status,
+        )
+        if internal is not None:
+            internal_val = internal["conditions"]
+            internal_val = internal_val[
+                (internal_val.role == "val") & (internal_val.panel == "all")
+            ]
+            ratios = []
+            for anchor in sources:
+                model_mean = internal_val[
+                    (internal_val.model_id == anchor) & (internal_val.method == "model")
+                ].response_loss.mean()
+                no_change_mean = internal_val[
+                    (internal_val.model_id == anchor)
+                    & (internal_val.method == "no_change")
+                ].response_loss.mean()
+                ratios.append(model_mean / no_change_mean)
+            row["internal_ratio_equal"] = float(np.mean(ratios)) if ratios else None
+        else:
+            row["internal_ratio_equal"] = None
+        if external is not None:
+            external_ext = external["conditions"]
+            external_ext = external_ext[
+                (external_ext.role == "external")
+                & (external_ext.panel == "all")
+                & (external_ext.model_id == external_anchor)
+            ]
+            model_mean = external_ext[
+                external_ext.method == "model"
+            ].response_loss.mean()
+            no_change_mean = external_ext[
+                external_ext.method == "no_change"
+            ].response_loss.mean()
+            row["external_ratio"] = (
+                float(model_mean / no_change_mean) if no_change_mean else None
+            )
+        else:
+            row["external_ratio"] = None
+        return row
+
+    internal_frame, internal_status = _read_native_light_export(export_dir / "internal")
+    external_frame, external_status = _read_native_light_export(export_dir / "external")
+    row["internal_status"], row["external_status"] = internal_status, external_status
+    if internal_frame is not None:
+        internal_val = internal_frame[internal_frame.role == "val"]
+        means = [
+            internal_val[internal_val.model_id == anchor].response_loss.mean()
+            for anchor in sources
+        ]
+        row["native_val_loss_equal"] = float(np.mean(means)) if means else None
+    else:
+        row["native_val_loss_equal"] = None
+    if external_frame is not None:
+        external_ext = external_frame[
+            (external_frame.role == "external")
+            & (external_frame.model_id == external_anchor)
+        ]
+        row["native_external_loss"] = (
+            float(external_ext.response_loss.mean()) if not external_ext.empty else None
+        )
+    else:
+        row["native_external_loss"] = None
+    return row
+
+
+def _native_export_rows(root):
     """Descriptive-only rows for ``N-native*`` exports (not part of the predicate)."""
-    del out_dir
     native_root = Path(root) / "runs" / "N-native"
     if not native_root.is_dir():
         return []
@@ -281,41 +415,19 @@ def _native_export_rows(root, out_dir):
     for fold_dir in sorted(native_root.iterdir()):
         if not fold_dir.is_dir() or fold_dir.name not in FOLDS:
             continue
+        fold = fold_dir.name
+        sources, external_anchor = fold_membership(fold)
         evaluation_dir = fold_dir / "evaluation"
         if not evaluation_dir.is_dir():
             continue
         for export_dir in sorted(evaluation_dir.iterdir()):
             if not export_dir.is_dir():
                 continue
-            row = {
-                "label": "N-native",
-                "variant": "N-native",
-                "fold": fold_dir.name,
-                "export": export_dir.name,
-                "kept": None,
-            }
-            for side, column in (
-                ("internal", "internal_ratio_equal"),
-                ("external", "external_ratio"),
-            ):
-                data, status = _read_export(export_dir / side)
-                row[f"{side}_status"] = status
-                if data is None:
-                    row[column] = None
-                    continue
-                conditions = data["conditions"]
-                if "method" not in conditions or "panel" not in conditions:
-                    row[column] = None
-                    continue
-                subset = conditions[conditions.panel == "all"]
-                model_mean = subset[subset.method == "model"].response_loss.mean()
-                no_change_mean = subset[
-                    subset.method == "no_change"
-                ].response_loss.mean()
-                row[column] = (
-                    float(model_mean / no_change_mean) if no_change_mean else None
+            rows.append(
+                _native_export_row(
+                    fold, export_dir.name, export_dir, sources, external_anchor
                 )
-            rows.append(row)
+            )
     return rows
 
 
@@ -399,7 +511,7 @@ def summarize(root, out_dir):
                 rows.append(fold_summary(fold_dir))
 
     summary_rows = [_flatten_summary_row(row) for row in rows]
-    summary_rows.extend(_native_export_rows(root, out_dir))
+    summary_rows.extend(_native_export_rows(root))
     summary_frame = pd.DataFrame(summary_rows)
     summary_frame.to_csv(out_dir / "summary.csv", index=False)
 
@@ -420,7 +532,13 @@ def summarize(root, out_dir):
         pooled = (
             equal_fold_difference(frames, "response_loss")
             if frames
-            else {"delta": None, "ci_low": None, "ci_high": None}
+            else {
+                "delta": None,
+                "ci_low": None,
+                "ci_high": None,
+                "folds": 0,
+                "pairs": 0,
+            }
         )
         kept_all = bool(
             kept_folds == folds == len(FOLDS)
