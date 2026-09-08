@@ -58,6 +58,26 @@ def test_explicit_arms_start_at_paired_predictions_and_no_response_arms_ignore_r
     assert heads["A2"].slopes.grad.abs().sum() > 0
 
 
+def test_make_readout_seed_controls_canonical_mlp_initialization():
+    from src.model.readout import make_readout
+
+    dims = GeneEffectFeatureDims(delta_proj=3, e_g=2, z_c=10)
+    seed0_first = make_readout("A2", dims, 3, seed=0)
+    seed0_second = make_readout("A2", dims, 3, seed=0)
+    seed1 = make_readout("A2", dims, 3, seed=1)
+    torch.testing.assert_close(
+        seed0_first.mlp.net[0].weight,
+        seed0_second.mlp.net[0].weight,
+        rtol=0,
+        atol=0,
+    )
+    assert not torch.allclose(seed0_first.mlp.net[0].weight, seed1.mlp.net[0].weight)
+    a0_seed1 = make_readout("A0", dims, 3, seed=1)
+    torch.testing.assert_close(
+        a0_seed1.mlp.net[0].weight, seed1.mlp.net[0].weight, rtol=0, atol=0
+    )
+
+
 def cache_fixture(root, val_shift=0, response_dtype=torch.float32):
     from src.data.readout_cache import write_feature_cache
 
@@ -240,6 +260,24 @@ def test_epoch_checkpoint_resume_matches_uninterrupted_training(tmp_path, monkey
     assert (interrupted / "metrics.jsonl").read_text() == (
         whole / "metrics.jsonl"
     ).read_text()
+
+
+def test_head_seed_is_recorded_and_guards_resume(tmp_path):
+    from src.training.readout import ReadoutSettings, fit_readout
+    import pytest
+
+    cache = cache_fixture(tmp_path / "cache")
+    settings = ReadoutSettings(max_epochs=1, batch_size=10)
+    run = tmp_path / "A0"
+    fit_readout(cache, "A0", run, settings=settings, head_seed=1)
+    record = json.loads((run / "run.json").read_text())
+    assert record["head_seed"] == 1
+    saved = torch.load(run / "best.pt", weights_only=True)
+    assert saved["head_seed"] == 1
+    with pytest.raises(ValueError, match="head seed"):
+        fit_readout(
+            cache, "A0", run, settings=settings, resume=run / "last.pt", head_seed=0
+        )
 
 
 def test_four_arm_comparison_cli_exports_common_updates_and_gene_changes(tmp_path):

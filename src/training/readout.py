@@ -45,6 +45,7 @@ def fit_readout(
     settings=ReadoutSettings(),
     standardizer=None,
     resume=None,
+    head_seed=0,
 ):
     """Train one fresh paired head, then export its minimum-Huber checkpoint."""
     out_dir = Path(out_dir)
@@ -59,15 +60,16 @@ def fit_readout(
             or restored["settings"] != asdict(settings)
             or restored["cache_metadata"] != cache.metadata
             or restored["standardizer"] != scaler.to_state()
+            or restored["head_seed"] != head_seed
         ):
-            raise ValueError("resume settings, scaler, arm or cache differ")
+            raise ValueError("resume settings, scaler, arm, cache or head seed differ")
         scaler = BlockStandardizer.from_state(restored["standardizer"])
     else:
         out_dir.mkdir(parents=True, exist_ok=False)
     record = {
         "arm": arm,
         "settings": asdict(settings),
-        "head_seed": 0,
+        "head_seed": head_seed,
         "data_seed": 0,
         "cache": str(cache.root.resolve()),
         "cache_metadata": cache.metadata,
@@ -82,7 +84,9 @@ def fit_readout(
 
     status()
     try:
-        model = make_readout(arm, cache.dims, len(cache.genes)).to(device)
+        model = make_readout(arm, cache.dims, len(cache.genes), seed=head_seed).to(
+            device
+        )
         groups = [{"params": model.mlp.parameters(), "weight_decay": 0.01}]
         if model.slopes is not None:
             groups.append({"params": [model.slopes], "weight_decay": 0.0})
@@ -157,6 +161,7 @@ def fit_readout(
                 "optimizer": optimizer.state_dict(),
                 "train_state": asdict(state),
                 "settings": asdict(settings),
+                "head_seed": head_seed,
                 "cache_metadata": cache.metadata,
                 "standardizer": scaler.to_state(),
                 "context_scores": torch.from_numpy(cache.context_scores.copy()),
