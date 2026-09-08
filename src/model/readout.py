@@ -46,12 +46,14 @@ class FixedReadout(nn.Module):
         return 0.01 * self.slopes.square().sum(dim=1).mean()
 
 
-def make_readout(arm: str, dims: GeneEffectFeatureDims, n_genes: int) -> FixedReadout:
-    """Seed-0 canonical MLP; copy common columns when removing the response block."""
+def make_readout(
+    arm: str, dims: GeneEffectFeatureDims, n_genes: int, *, seed: int = 0
+) -> FixedReadout:
+    """Seeded canonical MLP; copy common columns when removing the response block."""
     if arm not in ARMS or n_genes < 1:
         raise ValueError("require A0-A3 and at least one training-covered gene")
     with torch.random.fork_rng(devices=[]):
-        torch.manual_seed(0)
+        torch.manual_seed(seed)
         canonical = GeneEffectResidualHead(dims)
         if arm in {"A1", "A3"}:
             mlp = canonical

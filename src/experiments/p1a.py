@@ -125,6 +125,12 @@ def main(argv=None):
         type=Path,
         help="Resume one arm from its last.pt in the same run directory",
     )
+    train.add_argument(
+        "--head-seed",
+        type=int,
+        default=0,
+        help="Head initialisation seed shared by every arm in this run",
+    )
     evaluate = sub.add_parser(
         "evaluate", help="Re-export a trained head without fitting"
     )
@@ -215,6 +221,7 @@ def main(argv=None):
                     device=args.device,
                     standardizer=scaler,
                     resume=args.resume,
+                    head_seed=args.head_seed,
                 )
         else:
             export_checkpoint(cache, args.checkpoint, device=args.device)
