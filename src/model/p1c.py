@@ -59,6 +59,10 @@ class NativeOneHotPerturbations(nn.Module):
 
     def __init__(self, onehot_map: dict[str, torch.Tensor]) -> None:
         super().__init__()
+        if not onehot_map:
+            raise ValueError(
+                "NativeOneHotPerturbations requires a non-empty onehot_map"
+            )
         self._genes = list(onehot_map)
         matrix = torch.stack(
             [
@@ -138,6 +142,11 @@ class NullSubtractedBackbone(ForwardOnlyStateModel):
         gene: str | tuple[str, ...],
         batch_index_chunks: tuple[torch.Tensor | None, ...],
     ) -> tuple[torch.Tensor, ...]:
+        if self.training:
+            raise RuntimeError(
+                "NullSubtractedBackbone requires eval mode: the null-subtracted "
+                "residual is only exact without stochastic layers"
+            )
         hvg = tuple(c[:, : self.hvg_width] for c in control_chunks)
         inputs = (
             control_chunks
@@ -153,16 +162,29 @@ class NullSubtractedBackbone(ForwardOnlyStateModel):
         inputs: tuple[torch.Tensor, ...],
         batch_index_chunks: tuple[torch.Tensor | None, ...],
     ) -> tuple[torch.Tensor, ...]:
-        """Forward the fixed null perturbation once per distinct input chunk."""
+        """Forward the fixed null perturbation once per distinct input chunk.
+
+        Two chunks dedupe only when both their input tensor identity *and*
+        their batch-index chunk identity match -- otherwise two conditions
+        that happen to share a control bag but carry different batch indices
+        would collapse into a single null computed at the first one's index.
+        """
         state = self.state_adapter.state_model
         pert_dim = int(state.pert_dim)
         groups: dict[tuple, list[int]] = {}
         for i, chunk in enumerate(inputs):
+            batch_chunk = batch_index_chunks[i]
+            batch_key = (
+                None
+                if batch_chunk is None
+                else (batch_chunk.data_ptr(), tuple(batch_chunk.shape))
+            )
             key = (
                 chunk.data_ptr(),
                 tuple(chunk.shape),
                 tuple(chunk.stride()),
                 str(chunk.device),
+                batch_key,
             )
             groups.setdefault(key, []).append(i)
         representatives = tuple(inputs[ix[0]] for ix in groups.values())
@@ -220,7 +242,11 @@ class NativeBackbone(ForwardOnlyStateModel):
 
 def zero_final_layer(adapter: Esm2PerturbationAdapter) -> None:
     """Zero an ``Esm2PerturbationAdapter``'s final linear layer in place."""
-    final = adapter.adapter.net[2]
+    final = adapter.adapter.net[-1]
+    if not isinstance(final, nn.Linear):
+        raise ValueError(
+            f"adapter's final layer must be nn.Linear, got {type(final).__name__}"
+        )
     with torch.no_grad():
         final.weight.zero_()
         final.bias.zero_()
@@ -299,6 +325,16 @@ def build_variant(
             raise ValueError("N-native requires native_state")
         if native_map is None:
             raise ValueError("N-native requires native_map")
+        pert_dim = int(hparams["pert_dim"])
+        bad_widths = {
+            gene: tuple(torch.as_tensor(vector).shape)
+            for gene, vector in native_map.items()
+            if torch.as_tensor(vector).shape[-1] != pert_dim
+        }
+        if bad_widths:
+            raise ValueError(
+                f"native_map vectors must have width {pert_dim}: {bad_widths}"
+            )
         state.load_state_dict(native_state, strict=True)
         for name in native_state:
             origins[prefix + name] = "inherited-native"
