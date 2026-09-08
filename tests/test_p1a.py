@@ -280,6 +280,29 @@ def test_head_seed_is_recorded_and_guards_resume(tmp_path):
         )
 
 
+def test_resume_reads_a_pre_head_seed_checkpoint_as_seed_zero(tmp_path):
+    """P1-A checkpoints written before ``head_seed`` existed were all seed 0."""
+    from src.training.readout import ReadoutSettings, fit_readout
+    import pytest
+
+    cache = cache_fixture(tmp_path / "cache")
+    settings = ReadoutSettings(max_epochs=1, batch_size=10)
+    run = tmp_path / "A0"
+    fit_readout(cache, "A0", run, settings=settings, head_seed=0)
+    for name in ("best.pt", "last.pt"):
+        saved = torch.load(run / name, weights_only=True)
+        del saved["head_seed"]
+        torch.save(saved, run / name)
+
+    fit_readout(
+        cache, "A0", run, settings=settings, resume=run / "last.pt", head_seed=0
+    )
+    with pytest.raises(ValueError, match="head seed"):
+        fit_readout(
+            cache, "A0", run, settings=settings, resume=run / "last.pt", head_seed=1
+        )
+
+
 def test_four_arm_comparison_cli_exports_common_updates_and_gene_changes(tmp_path):
     from src.training.readout import ReadoutSettings, fit_readout
     from src.experiments.p1a import main
