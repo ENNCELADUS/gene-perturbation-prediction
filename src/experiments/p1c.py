@@ -21,7 +21,7 @@ from src.eval.p1b import (
 from src.experiments.geneeffect import _write_json
 from src.experiments.p1b import loss_for_indices
 from src.experiments.p1b_preparation import digest, open_bundle
-from src.data.p1c import HVG_WIDTH
+from src.data.p1c import HVG_WIDTH, TRANSFORMS, bundle_transform
 from src.model.p1c import VARIANTS, INPUT_LAYOUT, build_variant, parameter_groups
 from src.training.p1b import fit
 
@@ -201,6 +201,8 @@ def train_variant(prepared, runs, variant, lr, *, device, resume=False):
         )
     input_layout = INPUT_LAYOUT[variant]
     bundle, view, manifest = open_bundle(prepared, input_layout=input_layout)
+    if bundle_transform(bundle)["name"] != "raw":
+        raise ValueError("training on a transformed bundle is not part of P1-C")
     fold = _read_fold(prepared, manifest)["fold"]
     template = _load_template(prepared, manifest)
     template_sha256 = manifest["model_files"]["B-init"]
@@ -425,9 +427,13 @@ def evaluate_native(prepared, runs, batch_indices, *, device):
     )
     coordinates = restricted_bundle["coordinates"]
     has_non_targeting = "non-targeting" in native_map
+    transform = bundle_transform(bundle)
 
     runs.mkdir(parents=True, exist_ok=True)
-    _write_json(runs / "native_hparams.json", native_hparams_record(template, manifest))
+    _write_json(
+        runs / "native_hparams.json",
+        {**native_hparams_record(template, manifest), "transform": transform},
+    )
 
     for index in batch_indices:
         random.seed(0)
@@ -453,6 +459,7 @@ def evaluate_native(prepared, runs, batch_indices, *, device):
                 "variant": "N-native",
                 "batch_index": index,
                 "fold": fold,
+                "transform": transform,
             }
             _write_json(directory / "evaluation.json", {**status, "status": "running"})
             try:
@@ -513,6 +520,8 @@ def parser():
     prepare.add_argument("--out-dir", type=Path, required=True)
     prepare.add_argument("--fold", required=True)
     prepare.add_argument("--reference-manifest", type=Path, default=None)
+    prepare.add_argument("--transform", choices=TRANSFORMS, default="raw")
+    prepare.add_argument("--target-sum", type=float, default=None)
 
     tier0 = commands.add_parser("tier0")
     tier0.add_argument("--p1b-runs", type=Path, required=True)
@@ -568,6 +577,8 @@ def main(argv=None):
             args.fold,
             args.out_dir,
             reference_manifest=args.reference_manifest,
+            transform=args.transform,
+            target_sum=args.target_sum,
         )
     elif args.command == "tier0":
         from src.eval.p1c_tier0 import run_tier0

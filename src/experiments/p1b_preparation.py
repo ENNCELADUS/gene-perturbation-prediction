@@ -14,6 +14,7 @@ from src.data.p1b import (
     source_vocabularies,
     ResponseView,
 )
+from src.data.p1c import median_row_sum
 from src.data.response_cache import open_response_targets_cache
 from src.model.initialization import build_joint_model
 from src.model.p1b import configure_parameters
@@ -117,6 +118,8 @@ def prepare_bundle(
     anchors=SOURCE_ANCHORS,
     external=EXTERNAL_ANCHOR,
     expectations=P1B_EXPECTATIONS,
+    transform="raw",
+    target_sum=None,
 ):
     from src.data.prepared import load_inputs
     from src.training.checkpoint import load_checkpoint
@@ -144,8 +147,18 @@ def prepare_bundle(
         )
         native_map = torch.load(native_map_path, map_location="cpu", weights_only=False)
         native_genes = {str(g) for g in native_map}
+        if transform != "raw" and target_sum is None:
+            target_sum = median_row_sum(
+                [np.asarray(inputs.lines[a].basal_hvg) for a in (*anchors, external)]
+            )
         bundle = build_snapshot(
-            inputs, coordinates, native_genes, anchors=anchors, external=external
+            inputs,
+            coordinates,
+            native_genes,
+            anchors=anchors,
+            external=external,
+            transform=transform,
+            target_sum=target_sum,
         )
         membership = check_membership(bundle, anchors, external, expectations)
         counts, external_panels = membership["counts"], membership["external_panels"]
@@ -226,6 +239,7 @@ def prepare_bundle(
             "loaded_keys": loaded,
             "shape_skipped_keys": skipped,
             "parameters": report,
+            "transform": bundle["transform"],
             "native": {
                 "status": "unavailable",
                 "reason": (
