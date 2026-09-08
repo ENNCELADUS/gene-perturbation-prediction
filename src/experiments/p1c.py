@@ -31,14 +31,28 @@ _NATIVE_STATE_VARIANTS = ("V2-null", "V2", "V3")
 
 
 def native_inputs(manifest):
-    """Load the native STATE checkpoint's ``state_dict`` and the gene one-hot map."""
-    native_state = torch.load(
-        manifest["native_state_checkpoint"], map_location="cpu", weights_only=False
-    )["state_dict"]
-    native_map = torch.load(
-        manifest["native_map"], map_location="cpu", weights_only=False
-    )
+    """Load the native STATE checkpoint's ``state_dict`` and the gene one-hot map.
+
+    Verifies both files' digests against the manifest before loading either.
+    """
+    checkpoint_path = manifest["native_state_checkpoint"]
+    if digest(checkpoint_path) != manifest["native_checkpoint_sha256"]:
+        raise ValueError("native checkpoint identity changed")
+    map_path = manifest["native_map"]
+    if digest(map_path) != manifest["native_vocabulary_sha256"]:
+        raise ValueError("native vocabulary identity changed")
+    native_state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)[
+        "state_dict"
+    ]
+    native_map = torch.load(map_path, map_location="cpu", weights_only=False)
     return native_state, native_map
+
+
+def _read_fold(prepared, manifest):
+    record = json.loads((Path(prepared) / "fold.json").read_text())
+    if record["external"] != manifest["external"]:
+        raise ValueError("fold.json disagrees with manifest")
+    return record
 
 
 def restrict_to_native(bundle, native_genes):
@@ -73,7 +87,10 @@ def init_check(backbone, view, bundle, variant, device):
                 i for i in bundle["splits"]["val"] if bundle["keys"][i][0] == anchor
             ][:4]
             if not indices:
-                continue
+                raise ValueError(
+                    "zero-effect initialisation check failed: "
+                    f"anchor {anchor!r} has no validation conditions"
+                )
             batch = view.batch(indices, device)
             with torch.no_grad():
                 predicted = predictions(backbone, batch, device)
@@ -99,7 +116,7 @@ def init_check(backbone, view, bundle, variant, device):
                 "zero-effect initialisation check failed: "
                 f"{variant} adapter final layer is not all zeros"
             )
-        if getattr(backbone, "batch_index", None) != 0:
+        if backbone.batch_index != 0:
             raise ValueError(
                 "zero-effect initialisation check failed: "
                 f"{variant} must be built with batch_index=0"
@@ -118,8 +135,20 @@ def train_variant(prepared, runs, variant, lr, *, device, resume=False):
         )
     input_layout = INPUT_LAYOUT[variant]
     bundle, view, manifest = open_bundle(prepared, input_layout=input_layout)
-    fold = json.loads((Path(prepared) / "fold.json").read_text())["fold"]
+    fold = _read_fold(prepared, manifest)["fold"]
     template = _load_template(prepared, manifest)
+    template_sha256 = manifest["model_files"]["B-init"]
+    identity = f"{manifest['bundle_sha256']}:{variant}:{lr}:{template_sha256}"
+
+    # Fail before anything is written: fit() itself would reject a resume-less
+    # rerun or an identity-mismatched resume, but only after parameters.json
+    # and init_check have already run against this run directory.
+    if (runs / "last.pt").exists() and not resume:
+        raise FileExistsError("run exists; use resume")
+    if resume:
+        existing = json.loads((runs / "training.json").read_text())
+        if existing["identity"] != identity:
+            raise ValueError("resume identity mismatch")
 
     random.seed(0)
     np.random.seed(0)
@@ -136,8 +165,6 @@ def train_variant(prepared, runs, variant, lr, *, device, resume=False):
     check = init_check(backbone, view, bundle, variant, device)
 
     groups = parameter_groups(backbone, lr)
-    template_sha256 = manifest["model_files"]["B-init"]
-    identity = f"{manifest['bundle_sha256']}:{variant}:{lr}:{template_sha256}"
     state = fit(
         backbone,
         groups,
@@ -178,6 +205,7 @@ def evaluate_variant(prepared, runs, *, device, external=False):
     variant = training["variant"]
     input_layout = INPUT_LAYOUT[variant]
     bundle, view, manifest = open_bundle(prepared, input_layout=input_layout)
+    _read_fold(prepared, manifest)
     if not training["identity"].startswith(f"{manifest['bundle_sha256']}:{variant}:"):
         raise ValueError("evaluation checkpoint identity mismatch")
     template = _load_template(prepared, manifest)
@@ -237,21 +265,30 @@ def evaluate_variant(prepared, runs, *, device, external=False):
         raise
 
 
+def _indices_with_roles(bundle, roles):
+    """Flatten ``bundle["splits"][role]`` for each role, tagging each index with it."""
+    return [(i, role) for role in roles for i in bundle["splits"][role]]
+
+
 @torch.no_grad()
-def _native_null_predictions(model, view, indices, coordinates, device, batch_size=32):
+def _native_null_predictions(model, view, indexed, coordinates, device, batch_size=32):
+    """Score every ``(index, role)`` condition with its gene replaced by
+    ``"non-targeting"``."""
     model.eval()
     rows = []
-    for start in range(0, len(indices), batch_size):
-        selected = indices[start : start + batch_size]
+    for start in range(0, len(indexed), batch_size):
+        chunk = indexed[start : start + batch_size]
+        selected = [i for i, _ in chunk]
         batch = view.batch(selected, device)
         genes = tuple("non-targeting" for _ in selected)
         outputs = predictions(model, batch, device, genes=genes)
-        for i, pred, observed, basal in zip(
-            selected, outputs, batch.observed_hvg, batch.control_hvg
+        for (i, role), pred, observed, basal in zip(
+            chunk, outputs, batch.observed_hvg, batch.control_hvg
         ):
             anchor, gene = view.bundle["keys"][i]
             rows.append(
                 {
+                    "role": role,
                     "model_id": anchor,
                     "gene": gene,
                     **score_bag(pred, observed, basal, coordinates),
@@ -266,10 +303,10 @@ def evaluate_native(prepared, runs, batch_indices, *, device):
     bundle, view, manifest = open_bundle(
         prepared, input_layout=INPUT_LAYOUT["N-native"]
     )
-    fold = json.loads((prepared / "fold.json").read_text())["fold"]
+    fold = _read_fold(prepared, manifest)["fold"]
     template = _load_template(prepared, manifest)
     native_state, native_map = native_inputs(manifest)
-    native_checkpoint_hash = digest(manifest["native_state_checkpoint"])
+    native_checkpoint_hash = manifest["native_checkpoint_sha256"]
     native_genes = {str(gene) for gene in native_map}
     restricted_bundle = restrict_to_native(bundle, native_genes)
     restricted_view = ResponseView(
@@ -305,9 +342,7 @@ def evaluate_native(prepared, runs, batch_indices, *, device):
             }
             _write_json(directory / "evaluation.json", {**status, "status": "running"})
             try:
-                indices = [
-                    i for role in roles for i in restricted_bundle["splits"][role]
-                ]
+                indexed = _indices_with_roles(restricted_bundle, roles)
                 if index == 0:
                     frame, _ = export_predictions(
                         backbone,
@@ -322,7 +357,7 @@ def evaluate_native(prepared, runs, batch_indices, *, device):
                     summary.to_csv(directory / "summary.csv")
                     if has_non_targeting:
                         null_frame = _native_null_predictions(
-                            backbone, restricted_view, indices, coordinates, device
+                            backbone, restricted_view, indexed, coordinates, device
                         )
                         null_frame.to_parquet(
                             directory / "native_null.parquet", index=False
@@ -336,9 +371,11 @@ def evaluate_native(prepared, runs, batch_indices, *, device):
                             },
                         )
                 else:
+                    indices = [i for i, _ in indexed]
                     frame = evaluate_rows(
                         backbone, restricted_view, indices, device=device
                     )
+                    frame["role"] = [role for _, role in indexed]
                     frame.to_csv(directory / "summary.csv", index=False)
                 _write_json(
                     directory / "evaluation.json", {**status, "status": "completed"}
