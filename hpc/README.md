@@ -221,3 +221,63 @@ use correct identities only. Only held-out diagnostics receive identity shuffles
 Jurkat reporting distinguishes 2,373 training-seen perturbations, four unseen,
 2,006 native-and-seen, and 2,009 native-vocabulary-covered conditions. Jurkat is
 held out from interface adaptation, not verified absent from ST/Tx1 pretraining.
+
+## P1-C interface isolation
+
+P1-C repeats the response-adaptation contrast across four held-out anchors
+(`jurkat k562 hepg2 hct116`) and five input/readout variants (`V0 V1 V2-null V2 V3`),
+so an adaptation gain is attributed to the interface rather than to one held-out
+context. The pre-registered keep predicate and the V3 precondition are in
+[the P1-C design](../docs/specs/2026-09-08-p1c-interface-isolation-design.md).
+`hpc/p1c_pipeline.sh` runs one complete round; every stage is also available as an
+ordinary `hpc/run.sh p1c` command.
+
+```bash
+RUN=outputs/p1c/p1c_seed0 \
+P0_CHECKPOINT=outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/best.pt \
+P1B_PREPARED=outputs/p1b/p1b_seed0_20260907T164813Z/prepared \
+P1B_RUNS=outputs/p1b/p1b_seed0_20260907T164813Z/runs \
+P1A_FEATURES=outputs/p1a/features \
+P1A_REFERENCE_P0=outputs/p1a/reference/p0/predictions.parquet \
+P1A_REFERENCE_PCA=outputs/p1a/reference/pca/predictions.parquet \
+nohup hpc/p1c_pipeline.sh > outputs/p1c/p1c_seed0.out 2>&1 &
+```
+
+All seven variables are required and their paths must exist; `P1B_RUNS` is the
+P1-B *runs* directory containing `evaluation/`. `GPUS` (default `"0 1"`) lists the
+visible devices, `PIPELINE_SKIP_TIER4=1` omits the P1-A head seeds, `PYTHON_BIN`
+selects the environment, and `PIPELINE_POLL_SECONDS` (default 30) sets the queue
+poll interval. The script refuses to start when `$RUN/phase.txt` already exists.
+
+Waves run in order: fold preparation (four folds sequentially on CPU); Tier 0
+plus native Jurkat evaluation plus two Tier-4 head seeds; one wave per label in
+`V0 V1 V2-null V2`, each training and evaluating the four folds; `compare-1`;
+the two learning-rate arms (`V0-lr1e-6`, `V0-lr1e-5`, Jurkat) together with the
+four V3 folds when `$RUN/comparison/kept.json` reports `V3_eligible` true
+(otherwise `$RUN/v3_skipped.txt` records the skip); and `compare-final`.
+
+Every GPU job goes through a queue that holds at most one job per listed GPU and
+starts the next queued job on a device as soon as its predecessor exits, so the
+wave order does not assume a GPU count. Each job writes `$RUN/<job>.log`,
+`.pid` and `.exit`; a nonzero exit fails the wave only after the other queued
+jobs finish, and the pipeline then exits nonzero with `failed` in `phase.txt`
+and the status in `$RUN/exit_code`. Phase names are written to `$RUN/phase.txt`
+as the round progresses, ending in `completed`.
+
+Fold bundles live in `$RUN/prepared/<fold>`, Tier 0 in `$RUN/tier0`, Tier-4 heads
+in `$RUN/heads/seed<n>`, comparisons in `$RUN/comparison`, and every trained arm in
+`$RUN/runs/<label>/<fold>` (the native evaluation in `$RUN/runs/N-native/jurkat`);
+`compare` reads exactly that layout. To recover one arm, resume it and re-export
+both evaluations by hand — the pipeline is not restartable in place:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1c train --prepared "$RUN/prepared/k562" \
+  --runs "$RUN/runs/V1/k562" --variant V1 --lr 1e-4 --resume
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1c evaluate --prepared "$RUN/prepared/k562" --runs "$RUN/runs/V1/k562"
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1c evaluate --prepared "$RUN/prepared/k562" --runs "$RUN/runs/V1/k562" --external
+hpc/run.sh p1c compare --root "$RUN" --out-dir "$RUN/comparison"
+```
+
+External evaluation fixes the selected checkpoint and blocks further training in
+that run directory. Comparison re-derives its verdict from existing exports only
+and can be rerun into the same directory.

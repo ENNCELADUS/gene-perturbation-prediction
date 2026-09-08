@@ -1,5 +1,9 @@
 import copy
 import json
+import os
+import subprocess
+import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +11,8 @@ import pandas as pd
 import pytest
 import torch
 from torch import nn
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_bias_decomposition_splits_shared_from_condition_specific():
@@ -1605,3 +1611,122 @@ def test_native_export_rows_handle_light_batches_without_conditions_parquet(tmp_
     assert pd.isna(light_row.external_ratio)
     assert light_row.native_val_loss_equal == pytest.approx(0.41, rel=1e-6)
     assert light_row.native_external_loss == pytest.approx(0.41, rel=1e-6)
+
+
+PIPELINE = "hpc/p1c_pipeline.sh"
+PIPELINE_FOLDS = ("jurkat", "k562", "hepg2", "hct116")
+
+
+def test_pipeline_script_is_syntactically_valid_bash():
+    result = subprocess.run(
+        ["bash", "-n", PIPELINE],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_run_sh_p1c_help_names_train_and_compare():
+    env = dict(os.environ)
+    env["PYTHON_BIN"] = sys.executable
+    result = subprocess.run(
+        ["bash", "hpc/run.sh", "p1c", "--help"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "train" in result.stdout and "compare" in result.stdout
+
+
+def _dry_run_pipeline(tmp_path, v3_eligible, name="run"):
+    """Run the whole pipeline with every hpc/run.sh call replaced by an echo."""
+    run = tmp_path / name
+    kept = tmp_path / f"kept-{name}.json"
+    kept.write_text(json.dumps({"V3_eligible": v3_eligible}))
+    env = dict(os.environ)
+    env.update(
+        {
+            "PIPELINE_DRY_RUN": "1",
+            "PIPELINE_DRY_RUN_KEPT": str(kept),
+            "PIPELINE_POLL_SECONDS": "1",
+            "GPUS": "0",
+            "RUN": str(run),
+            "P0_CHECKPOINT": "dummy/p0/best.pt",
+            "P1B_PREPARED": "dummy/p1b/prepared",
+            "P1B_RUNS": "dummy/p1b/runs",
+            "P1A_FEATURES": "dummy/p1a/features",
+            "P1A_REFERENCE_P0": "dummy/p1a/p0/predictions.parquet",
+            "P1A_REFERENCE_PCA": "dummy/p1a/pca/predictions.parquet",
+            "PYTHON_BIN": sys.executable,
+        }
+    )
+    result = subprocess.run(
+        ["bash", PIPELINE],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return run, result
+
+
+def _pipeline_commands(run, result):
+    """Every echoed hpc/run.sh invocation, from the job logs and stdout."""
+    text = result.stdout + "".join(
+        path.read_text() for path in sorted(run.glob("*.log"))
+    )
+    return [
+        tokens
+        for tokens in (line.split() for line in text.splitlines())
+        if len(tokens) >= 3 and tokens[0] == "hpc/run.sh"
+    ]
+
+
+def test_pipeline_dry_run_issues_every_wave_command_with_v3_eligible(tmp_path):
+    run, result = _dry_run_pipeline(tmp_path, True)
+    assert result.returncode == 0, result.stderr
+    assert (run / "phase.txt").read_text().strip() == "completed"
+    assert not (run / "v3_skipped.txt").exists()
+
+    commands = _pipeline_commands(run, result)
+    counts = Counter((tokens[1], tokens[2]) for tokens in commands)
+    assert counts[("p1c", "prepare")] == 4
+    assert counts[("p1c", "tier0")] == 1
+    assert counts[("p1c", "evaluate-native")] == 1
+    assert counts[("p1a", "train")] == 2
+    assert counts[("p1a", "compare")] == 2
+    # V0/V1/V2-null/V2 on four folds, two learning-rate arms, four V3 folds.
+    assert counts[("p1c", "train")] == 16 + 2 + 4
+    assert counts[("p1c", "evaluate")] == 2 * (16 + 2 + 4)
+    assert counts[("p1c", "compare")] == 2
+
+    expected = [
+        f"{run}/runs/{label}/{fold}"
+        for label in ("V0", "V1", "V2-null", "V2", "V3")
+        for fold in PIPELINE_FOLDS
+    ]
+    expected += [f"{run}/runs/V0-lr1e-6/jurkat", f"{run}/runs/V0-lr1e-5/jurkat"]
+    actual = [
+        tokens[tokens.index("--runs") + 1]
+        for tokens in commands
+        if (tokens[1], tokens[2]) == ("p1c", "train")
+    ]
+    assert sorted(actual) == sorted(expected)
+
+
+def test_pipeline_dry_run_skips_v3_when_the_predicate_is_not_met(tmp_path):
+    run, result = _dry_run_pipeline(tmp_path, False, name="run-ineligible")
+    assert result.returncode == 0, result.stderr
+    assert (run / "phase.txt").read_text().strip() == "completed"
+    assert (run / "v3_skipped.txt").exists()
+
+    counts = Counter(
+        (tokens[1], tokens[2]) for tokens in _pipeline_commands(run, result)
+    )
+    assert counts[("p1c", "train")] == 16 + 2
+    assert counts[("p1c", "evaluate")] == 2 * (16 + 2)
