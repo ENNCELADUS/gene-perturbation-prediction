@@ -59,6 +59,7 @@ mkdir -p "$MPLCONFIGDIR"
 # A reaped job's entry becomes 0 so a recycled pid is never signalled.
 tracked_pids=()
 tracked_names=()
+tracked_kids=()
 interrupted=0
 
 untrack_pid() {
@@ -67,6 +68,7 @@ untrack_pid() {
     if [[ "${tracked_pids[$i]}" == "$pid" ]]; then
       tracked_pids[$i]=0
       tracked_names[$i]=""
+      tracked_kids[$i]=""
     fi
   done
 }
@@ -82,13 +84,31 @@ on_exit() {
   fi
 }
 
+# Signal a job shell and its own worker. hpc/run.sh execs Python, so the process
+# holding the GPU is the job subshell's direct child; it must be recorded before
+# the subshell dies, or it is reparented to PID 1 and pkill -P can no longer
+# find it. The shell is signalled first so it cannot race ahead and record a
+# normal exit for an interrupted job; the recorded children (plus a best-effort
+# pkill for anything started since) follow immediately.
+signal_job() {
+  local signal=$1 pid=$2 index=$3 kid
+  if [[ -z "${tracked_kids[$index]}" ]]; then
+    tracked_kids[$index]=$({ pgrep -P "$pid" 2>/dev/null || true; } | tr '\n' ' ')
+  fi
+  kill "-$signal" "$pid" 2>/dev/null || true
+  for kid in ${tracked_kids[$index]}; do
+    kill "-$signal" "$kid" 2>/dev/null || true
+  done
+  pkill "-$signal" -P "$pid" 2>/dev/null || true
+}
+
 on_signal() {
   interrupted=1
   trap - INT TERM
   local i
   for (( i = 0; i < ${#tracked_pids[@]}; i++ )); do
     if [[ "${tracked_pids[$i]}" != 0 ]]; then
-      kill -TERM "${tracked_pids[$i]}" 2>/dev/null || true
+      signal_job TERM "${tracked_pids[$i]}" "$i"
     fi
   done
   sleep 2
@@ -96,7 +116,7 @@ on_signal() {
     if [[ "${tracked_pids[$i]}" == 0 ]]; then
       continue
     fi
-    kill -KILL "${tracked_pids[$i]}" 2>/dev/null || true
+    signal_job KILL "${tracked_pids[$i]}" "$i"
     if [[ ! -s "$RUN/${tracked_names[$i]}.exit" ]]; then
       printf '143\n' > "$RUN/${tracked_names[$i]}.exit"
     fi
@@ -180,9 +200,13 @@ spawn() {
     export CUDA_VISIBLE_DEVICES="$gpu"
     rc=0
     job_body "$@" || rc=$?
-    # Dry-run jobs stay alive long enough to exercise the signal path.
+    # Dry-run jobs stay alive long enough to exercise the signal path, with a
+    # child of their own standing in for the Python worker hpc/run.sh execs.
     if [[ "$DRY_RUN" == 1 && -n "${PIPELINE_DRY_RUN_SLEEP:-}" ]]; then
-      sleep "$PIPELINE_DRY_RUN_SLEEP"
+      sleep "$PIPELINE_DRY_RUN_SLEEP" &
+      child=$!
+      printf '%s\n' "$child" > "$RUN/$name.child.pid"
+      wait "$child" || true
     fi
     printf '%s\n' "$rc" > "$RUN/$name.exit"
     exit "$rc"
@@ -190,6 +214,7 @@ spawn() {
   spawn_pid=$!
   tracked_pids+=("$spawn_pid")
   tracked_names+=("$name")
+  tracked_kids+=("")
   printf '%s\n' "$spawn_pid" > "$RUN/$name.pid"
 }
 
