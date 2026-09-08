@@ -1154,3 +1154,298 @@ def test_init_check_rejects_nonzero_effect_prediction(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="zero-effect"):
         p1c.init_check(backbone, FakeView(), bundle, "V1", "cpu")
+
+
+def _condition_rows(anchor, role, better, *, n_genes=3, panel="all"):
+    rows = []
+    for gi in range(n_genes):
+        gene = f"g{gi}"
+        no_change_loss = 1.0 + 0.1 * gi
+        model_loss = (0.3 if better else 1.6) + 0.05 * gi
+        rows.append(
+            dict(
+                role=role,
+                model_id=anchor,
+                gene=gene,
+                panel=panel,
+                method="no_change",
+                response_loss=no_change_loss,
+            )
+        )
+        rows.append(
+            dict(
+                role=role,
+                model_id=anchor,
+                gene=gene,
+                panel=panel,
+                method="model",
+                response_loss=model_loss,
+            )
+        )
+    return rows
+
+
+def _with_identity_column(rows, positive):
+    out = []
+    for row in rows:
+        row = dict(row)
+        if row["method"] == "model":
+            gi = int(row["gene"][1:])
+            delta = (0.3 if positive else -0.3) + 0.02 * gi
+            row["wrong_response_loss"] = row["response_loss"] + delta
+        out.append(row)
+    return out
+
+
+def _write_p1c_run(
+    root,
+    label,
+    fold,
+    *,
+    lr=1e-4,
+    n_genes=3,
+    better_source_count=2,
+    external_better=True,
+    identity_advantage_positive=True,
+):
+    from src.data.p1c import fold_membership
+
+    sources, external = fold_membership(fold)
+    run_dir = root / "runs" / label / fold
+    run_dir.mkdir(parents=True)
+
+    variant = label.split("-lr")[0]
+    training = {
+        "status": "completed",
+        "epoch": 3,
+        "step": 30,
+        "best_epoch": 3,
+        "bad_epochs": 0,
+        "identity": f"{label}:{fold}",
+        "best_loss": 0.5,
+        "variant": variant,
+        "fold": fold,
+        "lr": lr,
+        "init_check": {"status": "passed"},
+        "input_layout": "hvg_tx1",
+    }
+    (run_dir / "training.json").write_text(json.dumps(training))
+    history = [
+        {"epoch": e, "step": e * 10, "val": {"response_loss": 1.0 / (e + 1)}}
+        for e in range(4)
+    ]
+    (run_dir / "history.json").write_text(json.dumps(history))
+
+    internal_dir = run_dir / "evaluation" / "internal"
+    internal_dir.mkdir(parents=True)
+    internal_rows = []
+    for idx, anchor in enumerate(sources):
+        internal_rows.extend(
+            _condition_rows(anchor, "val", idx < better_source_count, n_genes=n_genes)
+        )
+    pd.DataFrame(internal_rows).to_parquet(
+        internal_dir / "conditions.parquet", index=False
+    )
+    pd.DataFrame(
+        columns=[
+            "method",
+            "anchor_a",
+            "anchor_b",
+            "gene",
+            "effect_difference_mse",
+            "effect_difference_pearson",
+        ]
+    ).to_parquet(internal_dir / "cross_context.parquet", index=False)
+    np.savez(
+        internal_dir / "effects.npz",
+        keys=np.array([("model", "dummy", "g0")]),
+        predicted=np.array([[0.0]]),
+        observed=np.array([[0.0]]),
+    )
+    (internal_dir / "evaluation.json").write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "bundle": "b",
+                "checkpoint_sha256": "c",
+                "variant": variant,
+                "fold": fold,
+            }
+        )
+    )
+
+    external_dir = run_dir / "evaluation" / "external"
+    external_dir.mkdir(parents=True)
+    external_rows = []
+    for anchor in sources:
+        external_rows.extend(_condition_rows(anchor, "val", True, n_genes=n_genes))
+    ext_anchor_rows = _condition_rows(
+        external, "external", external_better, n_genes=n_genes
+    )
+    ext_anchor_rows = _with_identity_column(
+        ext_anchor_rows, identity_advantage_positive
+    )
+    external_rows.extend(ext_anchor_rows)
+    pd.DataFrame(external_rows).to_parquet(
+        external_dir / "conditions.parquet", index=False
+    )
+
+    cross_rows = []
+    for other in sources:
+        for gi in range(n_genes):
+            gene = f"g{gi}"
+            cross_rows.append(
+                dict(
+                    method="model",
+                    anchor_a=external,
+                    anchor_b=other,
+                    gene=gene,
+                    effect_difference_mse=0.2 + 0.01 * gi,
+                    effect_difference_pearson=0.5,
+                )
+            )
+            cross_rows.append(
+                dict(
+                    method="no_change",
+                    anchor_a=external,
+                    anchor_b=other,
+                    gene=gene,
+                    effect_difference_mse=0.5 + 0.01 * gi,
+                    effect_difference_pearson=0.4,
+                )
+            )
+    pd.DataFrame(cross_rows).to_parquet(
+        external_dir / "cross_context.parquet", index=False
+    )
+
+    keys, predicted, observed = [], [], []
+    for method in ("model", "no_change"):
+        for gi in range(n_genes):
+            keys.append((method, external, f"g{gi}"))
+            predicted.append([0.1, 0.0])
+            observed.append([0.0, 0.0])
+    np.savez(
+        external_dir / "effects.npz",
+        keys=np.array(keys),
+        predicted=np.array(predicted),
+        observed=np.array(observed),
+    )
+    (external_dir / "evaluation.json").write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "bundle": "b",
+                "checkpoint_sha256": "c",
+                "variant": variant,
+                "fold": fold,
+            }
+        )
+    )
+    return run_dir
+
+
+def test_equal_fold_difference_pools_folds_equally_regardless_of_size():
+    from src.eval.p1c import equal_fold_difference
+
+    def frame(delta, n):
+        left = pd.DataFrame({"gene": [f"g{i}" for i in range(n)], "loss": [delta] * n})
+        right = pd.DataFrame({"gene": [f"g{i}" for i in range(n)], "loss": [0.0] * n})
+        return left, right
+
+    frames = [frame(-1.0, 3), frame(-3.0, 5)]
+    result = equal_fold_difference(frames, "loss", repeats=200)
+    assert result["delta"] == pytest.approx(-2.0)
+    assert result["ci_low"] <= result["delta"] <= result["ci_high"]
+    assert result["folds"] == 2
+    assert result["pairs"] == 8
+
+
+def test_summarize_applies_keep_predicate_per_fold_and_reports_two_of_four_folds(
+    tmp_path,
+):
+    from src.eval.p1c import summarize
+
+    root = tmp_path / "root"
+    for fold in ("jurkat", "k562"):
+        _write_p1c_run(root, "V1", fold)
+        _write_p1c_run(
+            root,
+            "V0",
+            fold,
+            better_source_count=0,
+            external_better=False,
+            identity_advantage_positive=False,
+        )
+
+    out_dir = summarize(root, tmp_path / "out")
+    assert out_dir == tmp_path / "out"
+    summary = pd.read_csv(out_dir / "summary.csv")
+
+    good = summary[summary.label == "V1"]
+    assert len(good) == 2
+    assert good.kept.all()
+
+    bad = summary[summary.label == "V0"]
+    assert len(bad) == 2
+    assert not bad.kept.any()
+
+    variants = pd.read_csv(out_dir / "variants.csv")
+    v1_row = variants[variants.label == "V1"].iloc[0]
+    assert v1_row.folds == 2
+    assert v1_row.kept_folds == 2
+    assert v1_row.kept_all == False  # noqa: E712 -- only 2 of 4 folds present
+
+    v0_row = variants[variants.label == "V0"].iloc[0]
+    assert v0_row.kept_folds == 0
+
+    kept = json.loads((out_dir / "kept.json").read_text())
+    assert kept["V1"] is False  # kept_all requires all four folds
+    assert kept["V0"] is False
+    assert kept["V3_eligible"] == (kept.get("V1", False) or kept.get("V2", False))
+    assert (out_dir / "learning_curves.png").exists()
+    assert (out_dir / "analysis.md").exists()
+
+
+def test_summarize_kept_all_true_requires_all_four_folds_kept(tmp_path):
+    from src.eval.p1c import summarize
+    from src.data.p1c import FOLDS
+
+    root = tmp_path / "root"
+    for fold in FOLDS:
+        _write_p1c_run(root, "V1", fold)
+
+    out_dir = summarize(root, tmp_path / "out")
+    variants = pd.read_csv(out_dir / "variants.csv")
+    v1_row = variants[variants.label == "V1"].iloc[0]
+    assert v1_row.folds == 4
+    assert v1_row.kept_folds == 4
+    assert v1_row.kept_all == True  # noqa: E712
+
+    kept = json.loads((out_dir / "kept.json").read_text())
+    assert kept["V1"] is True
+    assert kept["V3_eligible"] is True
+
+
+def test_fold_summary_marks_incomplete_training_and_missing_export_as_not_kept(
+    tmp_path,
+):
+    from src.eval.p1c import fold_summary
+
+    root = tmp_path / "root"
+    run_dir = _write_p1c_run(root, "V2", "hepg2")
+    training = json.loads((run_dir / "training.json").read_text())
+    training["status"] = "running"
+    del training["variant"], training["lr"], training["fold"]
+    (run_dir / "training.json").write_text(json.dumps(training))
+
+    row = fold_summary(run_dir)
+    assert row["kept"] is None
+    assert row["status"] == "running"
+
+    run_dir2 = _write_p1c_run(root, "V3", "hct116")
+    import shutil
+
+    shutil.rmtree(run_dir2 / "evaluation" / "external")
+    row2 = fold_summary(run_dir2)
+    assert row2["kept"] is None
+    assert "external" in row2["status"]
