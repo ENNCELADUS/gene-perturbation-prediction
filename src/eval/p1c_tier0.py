@@ -28,29 +28,60 @@ def bias_decomposition(predicted, observed):
     }
 
 
-def decompose_effects(effects_npz_path, method="model"):
+def decompose_effects(effects_npz_path, method="model", conditions=None):
+    """Shared-bias decomposition per anchor, or per (anchor, role) when the
+    export's ``conditions`` frame is given.
+
+    An export mixes roles (train and val internally, val and external
+    outside), and a single per-anchor number averages a held-out context's
+    error into its source anchors'. Roles come from the ``all`` panel's rows,
+    which cover every scored condition exactly once per anchor and gene.
+    """
     with np.load(effects_npz_path) as data:
         keys, predicted, observed = data["keys"], data["predicted"], data["observed"]
     mask = keys[:, 0] == method
-    rows = []
-    for anchor in sorted(set(keys[mask, 1])):
-        anchor_mask = mask & (keys[:, 1] == anchor)
-        decomposition = bias_decomposition(
-            predicted[anchor_mask], observed[anchor_mask]
-        )
-        rows.append({"method": method, "model_id": anchor, **decomposition})
-    return pd.DataFrame(
-        rows,
-        columns=[
-            "method",
-            "model_id",
-            "n",
-            "total_mse",
-            "shared_bias",
-            "condition_specific",
-            "shared_bias_fraction",
-        ],
+    columns = [
+        "method",
+        "model_id",
+        "n",
+        "total_mse",
+        "shared_bias",
+        "condition_specific",
+        "shared_bias_fraction",
+    ]
+    if conditions is None:
+        rows = []
+        for anchor in sorted(set(keys[mask, 1])):
+            anchor_mask = mask & (keys[:, 1] == anchor)
+            decomposition = bias_decomposition(
+                predicted[anchor_mask], observed[anchor_mask]
+            )
+            rows.append({"method": method, "model_id": anchor, **decomposition})
+        return pd.DataFrame(rows, columns=columns)
+
+    panel = conditions[conditions.panel == "all"]
+    role_by_key = {
+        (row.model_id, row.gene): row.role
+        for row in panel[["model_id", "gene", "role"]].drop_duplicates().itertuples()
+    }
+    roles = np.array(
+        [role_by_key.get((anchor, gene), "") for _, anchor, gene in keys[mask]]
     )
+    unmapped = int((roles == "").sum())
+    if unmapped:
+        raise ValueError(
+            f"{unmapped} effect keys have no role in the export's all panel"
+        )
+    anchors = keys[mask, 1]
+    rows = []
+    for anchor, role in sorted(set(zip(anchors.tolist(), roles.tolist()))):
+        selected = mask.copy()
+        selected[mask] = (anchors == anchor) & (roles == role)
+        decomposition = bias_decomposition(predicted[selected], observed[selected])
+        rows.append(
+            {"method": method, "model_id": anchor, "role": role, **decomposition}
+        )
+    return pd.DataFrame(rows, columns=[*columns[:2], "role", *columns[2:]])
 
 
 def matched_coverage(conditions):
@@ -63,6 +94,9 @@ def matched_coverage(conditions):
         perturbation_mean_loss = group.loc[
             (group.method == "perturbation_mean") & group.gene.isin(covered),
             "response_loss",
+        ].mean()
+        model_loss = group.loc[
+            (group.method == "model") & group.gene.isin(covered), "response_loss"
         ].mean()
         for reference in ("no_change", "global_mean"):
             reference_rows = group[group.method == reference]
@@ -78,6 +112,7 @@ def matched_coverage(conditions):
                     "reference_loss_on_covered": on_covered.response_loss.mean(),
                     "reference_loss_all": reference_rows.response_loss.mean(),
                     "perturbation_mean_loss": perturbation_mean_loss,
+                    "model_loss_on_covered": model_loss,
                 }
             )
     return pd.DataFrame(rows)
@@ -132,7 +167,9 @@ def run_tier0(p1b_runs, p1b_prepared, out_dir):
         state, export, directory = status["state"], path.parent.name, path.parent
         conditions = pd.read_parquet(directory / "conditions.parquet")
         for method in methods:
-            decomposed = decompose_effects(directory / "effects.npz", method=method)
+            decomposed = decompose_effects(
+                directory / "effects.npz", method=method, conditions=conditions
+            )
             decomposed["state"], decomposed["export"] = state, export
             bias_rows.append(decomposed)
         coverage = matched_coverage(conditions)
@@ -150,6 +187,7 @@ def run_tier0(p1b_runs, p1b_prepared, out_dir):
             columns=[
                 "method",
                 "model_id",
+                "role",
                 "n",
                 "total_mse",
                 "shared_bias",
@@ -217,12 +255,22 @@ def run_tier0(p1b_runs, p1b_prepared, out_dir):
         & (coverage_all.reference == "no_change")
         & (coverage_all.perturbation_mean_loss > coverage_all.reference_loss_on_covered)
     ]
-    negative_transfer_lines = [
-        f"- {row.state}/{row.export} {row.model_id} ({row.panel}): "
-        f"perturbation_mean_loss={row.perturbation_mean_loss:.4g} > "
-        f"no_change_loss_on_covered={row.reference_loss_on_covered:.4g}"
-        for row in negative_transfer_rows.itertuples()
-    ]
+    negative_transfer_lines = []
+    for row in negative_transfer_rows.itertuples():
+        negative_transfer_lines.append(
+            f"- {row.state}/{row.export} {row.model_id} ({row.panel}): "
+            f"perturbation_mean_loss={row.perturbation_mean_loss:.4g} > "
+            f"no_change_loss_on_covered={row.reference_loss_on_covered:.4g}"
+        )
+        model_ratio = (
+            row.model_loss_on_covered / row.reference_loss_on_covered
+            if row.reference_loss_on_covered
+            else float("nan")
+        )
+        negative_transfer_lines.append(
+            f"  - {row.state} model/no_change on the covered set: "
+            f"model_loss={row.model_loss_on_covered:.4g}, ratio={model_ratio:.4g}"
+        )
     undefined_lines = []
     if not cross_all.empty:
         undefined_counts = (
@@ -239,8 +287,13 @@ def run_tier0(p1b_runs, p1b_prepared, out_dir):
         "## Shared-bias fraction, adapted states, Jurkat (external)\n\n"
         + ("\n".join(shared_bias_lines) if shared_bias_lines else "None available.")
         + "\n\n"
-        "## Matched-coverage negative transfer (perturbation_mean worse than "
-        "no_change on covered genes)\n\n"
+        "## Matched coverage: the train-side perturbation-mean prior versus "
+        "no-change\n\n"
+        "Each first line reports the train-side perturbation-mean prior against "
+        "the no-change reference on exactly the genes that prior covers -- a "
+        "property of the prior, not of any adapted state. The second line gives "
+        "that state's own (model) loss and its ratio to no-change on the same "
+        "covered set.\n\n"
         + (
             "\n".join(negative_transfer_lines)
             if negative_transfer_lines

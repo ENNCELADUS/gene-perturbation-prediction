@@ -1,9 +1,12 @@
 """P1-C fold comparison against the pre-registered keep predicate.
 
-Reads Task 4's run layout (``<root>/runs/<label>/<fold>/``), applies the
-predicate fixed by the design (``kept_a``/``kept_b``/``kept_c``) per fold, and
-pools folds equally into a variant-level verdict. No model inference or
-refitting happens here -- only re-derivation from existing exports.
+Reads Task 4's run layout (``<root>/runs/<label>/<fold>/``) and applies the
+predicate fixed by the design. Legs (a) internal anchors and (c) identity
+advantage are per-fold requirements; leg (b), the held-out-context loss ratio,
+is pooled equally across the four folds, so the variant-level verdict is
+``kept_all`` in ``variants.csv``. The per-fold ``kept``/``kept_b`` in
+``summary.csv`` are reported diagnostics, not the verdict. No model inference
+or refitting happens here -- only re-derivation from existing exports.
 """
 
 import json
@@ -92,6 +95,88 @@ def equal_fold_difference(frames, metric, *, repeats=1000):
     }
 
 
+def equal_fold_ratio(frames, *, repeats=1000):
+    """Pool per-fold loss *ratios* with equal fold weight.
+
+    ``frames`` is a list of ``(model_rows, no_change_rows)`` DataFrame pairs,
+    one per fold, each carrying ``gene`` and ``response_loss`` for the fold's
+    held-out anchor. A replicate draws one sample of the union of genes and
+    feeds it to every fold, so no fold's own condition count dominates; each
+    fold contributes ``mean(model) / mean(no_change)`` on the resampled
+    conditions, and the replicate's value is the equal-weight mean of those.
+
+    This is the variant-level predicate quantity: the design's keep rule is
+    stated as a ratio below 1, which a pooled *difference* below zero does not
+    imply once anchors differ in scale.
+    """
+    metric = "response_loss"
+    grouped_by_fold = []
+    for model_rows, no_change_rows in frames:
+        aligned = model_rows[["gene", metric]].merge(
+            no_change_rows[["gene", metric]],
+            on="gene",
+            suffixes=("_model", "_no_change"),
+            validate="one_to_one",
+        )
+        columns = [metric + "_model", metric + "_no_change"]
+        valid = aligned.dropna(subset=columns)
+        if valid.empty:
+            continue
+        grouped = valid.groupby("gene")[columns].sum()
+        grouped["count"] = valid.groupby("gene")[columns[0]].count()
+        grouped_by_fold.append(grouped)
+
+    if not grouped_by_fold:
+        return {"ratio": None, "ci_low": None, "ci_high": None, "folds": 0, "pairs": 0}
+
+    model_column, no_change_column = metric + "_model", metric + "_no_change"
+    fold_ratios = [
+        float(g[model_column].sum() / g[no_change_column].sum())
+        for g in grouped_by_fold
+    ]
+    ratio = float(np.mean(fold_ratios))
+    pairs = int(sum(int(g["count"].sum()) for g in grouped_by_fold))
+
+    union = sorted(set().union(*(g.index for g in grouped_by_fold)))
+    union_index = {gene: i for i, gene in enumerate(union)}
+    n = len(union)
+    model_sums, no_change_sums = [], []
+    for grouped in grouped_by_fold:
+        model = np.zeros(n)
+        no_change = np.zeros(n)
+        for gene, row in grouped.iterrows():
+            idx = union_index[gene]
+            model[idx] = row[model_column]
+            no_change[idx] = row[no_change_column]
+        model_sums.append(model)
+        no_change_sums.append(no_change)
+
+    rng = np.random.default_rng(0)
+    indices = rng.integers(0, n, size=(repeats, n))
+    fold_values = []
+    for model, no_change in zip(model_sums, no_change_sums):
+        numerator = model[indices].sum(axis=1)
+        denominator = no_change[indices].sum(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            fold_values.append(
+                np.where(denominator > 0, numerator / denominator, np.nan)
+            )
+    boot = np.nanmean(np.stack(fold_values, axis=0), axis=0)
+    boot = boot[np.isfinite(boot)]
+    low, high = (
+        (float("nan"), float("nan"))
+        if boot.size == 0
+        else np.quantile(boot, [0.025, 0.975])
+    )
+    return {
+        "ratio": ratio,
+        "ci_low": float(low),
+        "ci_high": float(high),
+        "folds": len(grouped_by_fold),
+        "pairs": pairs,
+    }
+
+
 def _read_export(directory):
     """Return ``(data, status)``; ``data`` is ``None`` for an absent/incomplete
     optional arm. A present but malformed export (completed status, missing
@@ -141,6 +226,10 @@ def fold_summary(run_dir):
     training is ``completed``, both exports are required to exist and be
     ``completed`` -- their absence raises rather than degrading to
     ``kept=None``, which is reserved for training that never finished.
+
+    The row's per-fold ``kept``/``kept_b`` are reported diagnostics; the
+    variant-level verdict is ``summarize``'s pooled ratio (see
+    :func:`equal_fold_ratio`).
     """
     run_dir = Path(run_dir)
     label = run_dir.parent.name
@@ -150,13 +239,25 @@ def fold_summary(run_dir):
 
     row = {
         "label": label,
-        "variant": training.get("variant", _label_variant(label)),
-        "lr": training.get("lr"),
+        "variant": training["variant"]
+        if "variant" in training
+        else _label_variant(label),
+        "lr": training["lr"] if "lr" in training else None,
         "fold": fold,
         "external": external_anchor,
         "status": training["status"],
     }
     if training["status"] != "completed":
+        row["kept"] = None
+        return row
+    missing_fields = [
+        name for name in ("variant", "fold", "lr") if name not in training
+    ]
+    if missing_fields:
+        # fit() writes status=completed before train_variant adds these; a run
+        # killed in that window is an incomplete record, not a KeyError.
+        row["status"] = "incomplete-record"
+        row["missing_fields"] = ",".join(missing_fields)
         row["kept"] = None
         return row
     if training["fold"] != fold:
@@ -178,6 +279,7 @@ def fold_summary(run_dir):
         (internal_val.role == "val") & (internal_val.panel == "all")
     ]
     internal_ratio = {}
+    no_change_means = []
     anchors_ci_below = 0
     for anchor in sources:
         model_rows = internal_val[
@@ -186,6 +288,7 @@ def fold_summary(run_dir):
         no_change_rows = internal_val[
             (internal_val.model_id == anchor) & (internal_val.method == "no_change")
         ]
+        no_change_means.append(float(no_change_rows.response_loss.mean()))
         internal_ratio[anchor] = float(
             model_rows.response_loss.mean() / no_change_rows.response_loss.mean()
         )
@@ -199,6 +302,20 @@ def fold_summary(run_dir):
         if interval["ci_high"] is not None and interval["ci_high"] < 0:
             anchors_ci_below += 1
     internal_ratio_equal = float(np.mean(list(internal_ratio.values())))
+
+    # Epoch 0 is the untrained checkpoint's own validation loss, recorded by
+    # fit() before any update: what adaptation started from, on the same
+    # conditions the internal ratio uses.
+    history_path = run_dir / "history.json"
+    epoch0_val_loss = None
+    if history_path.exists():
+        history = json.loads(history_path.read_text())
+        if history:
+            epoch0_val_loss = float(history[0]["val"]["response_loss"])
+    no_change_equal = float(np.mean(no_change_means))
+    epoch0_internal_ratio_equal = (
+        None if epoch0_val_loss is None else epoch0_val_loss / no_change_equal
+    )
 
     external_conditions = external["conditions"]
     external_ext = external_conditions[
@@ -270,6 +387,8 @@ def fold_summary(run_dir):
     row.update(
         internal_ratio=internal_ratio,
         internal_ratio_equal=internal_ratio_equal,
+        epoch0_val_loss=epoch0_val_loss,
+        epoch0_internal_ratio_equal=epoch0_internal_ratio_equal,
         anchors_ci_below=anchors_ci_below,
         external_ratio=external_ratio,
         external_delta=external_interval["delta"],
@@ -327,13 +446,24 @@ def _read_native_light_export(directory):
     return pd.read_csv(summary_path), "completed"
 
 
+NATIVE_PANEL = "native_all"
+
+
 def _native_export_row(fold, export_name, export_dir, sources, external_anchor):
+    """One descriptive row per ``N-native*`` export.
+
+    ``restrict_to_native`` keeps only the ``native_common``/``native_all``
+    panels, so there is no ``all`` panel to read here: every ratio is taken on
+    ``native_all``, the same condition set the light (batch index != 0)
+    summaries score.
+    """
     row = {
         "label": "N-native",
         "variant": "N-native",
         "fold": fold,
         "export": export_name,
         "batch_index": _native_batch_index(export_name),
+        "panel": NATIVE_PANEL,
         "kept": None,
     }
     if row["batch_index"] == 0:
@@ -346,8 +476,12 @@ def _native_export_row(fold, export_name, export_dir, sources, external_anchor):
         if internal is not None:
             internal_val = internal["conditions"]
             internal_val = internal_val[
-                (internal_val.role == "val") & (internal_val.panel == "all")
+                (internal_val.role == "val") & (internal_val.panel == NATIVE_PANEL)
             ]
+            if internal_val.empty:
+                raise ValueError(
+                    f"{export_dir / 'internal'}: no val rows on panel {NATIVE_PANEL!r}"
+                )
             ratios = []
             for anchor in sources:
                 model_mean = internal_val[
@@ -365,9 +499,14 @@ def _native_export_row(fold, export_name, export_dir, sources, external_anchor):
             external_ext = external["conditions"]
             external_ext = external_ext[
                 (external_ext.role == "external")
-                & (external_ext.panel == "all")
+                & (external_ext.panel == NATIVE_PANEL)
                 & (external_ext.model_id == external_anchor)
             ]
+            if external_ext.empty:
+                raise ValueError(
+                    f"{export_dir / 'external'}: no external rows for anchor "
+                    f"{external_anchor!r} on panel {NATIVE_PANEL!r}"
+                )
             model_mean = external_ext[
                 external_ext.method == "model"
             ].response_loss.mean()
@@ -481,7 +620,10 @@ def _write_analysis(variants_frame, out_dir):
     for _, row in variants_frame.iterrows():
         lines.append("| " + " | ".join(_format_cell(row[c]) for c in columns) + " |")
     caveats = (
-        "\n\nSingle training seed 0. Jurkat was observed before this design was "
+        "\n\nThe verdict is `kept_all`: legs (a) and (c) on every fold plus a "
+        "pooled held-out ratio whose interval lies below 1. The per-fold `kept` "
+        "and `kept_b` columns in `summary.csv` are reported diagnostics.\n"
+        "\nSingle training seed 0. Jurkat was observed before this design was "
         "registered, so its fold is a diagnostic re-evaluation, not a held-out "
         "test. The four leave-one-anchor-out folds are related diagnostics on "
         "the same four lines, not independent contexts. ST/Tx1 pretraining "
@@ -520,30 +662,33 @@ def summarize(root, out_dir):
     canonical_labels = sorted(
         {row["label"] for row in rows if "-lr" not in row["label"]}
     )
+    empty_pooled = {"ci_low": None, "ci_high": None, "folds": 0, "pairs": 0}
     for label in canonical_labels:
         label_rows = [row for row in rows if row["label"] == label]
-        folds = sum(1 for row in label_rows if row["kept"] is not None)
-        kept_folds = sum(1 for row in label_rows if row.get("kept"))
+        complete = [row for row in label_rows if row["kept"] is not None]
+        folds = len(complete)
+        kept_folds = sum(1 for row in complete if row["kept"])
         frames = [
             row["_external_frames"]
             for row in label_rows
-            if row.get("_external_frames") is not None
+            if "_external_frames" in row and row["_external_frames"] is not None
         ]
         pooled = (
             equal_fold_difference(frames, "response_loss")
             if frames
-            else {
-                "delta": None,
-                "ci_low": None,
-                "ci_high": None,
-                "folds": 0,
-                "pairs": 0,
-            }
+            else {**empty_pooled, "delta": None}
         )
+        pooled_ratio = (
+            equal_fold_ratio(frames) if frames else {**empty_pooled, "ratio": None}
+        )
+        # The verdict is the pooled held-out ratio, not a count of per-fold
+        # verdicts: (a) and (c) must hold on every fold, but (b) is pooled
+        # across folds so one fold's interval width cannot decide the variant.
         kept_all = bool(
-            kept_folds == folds == len(FOLDS)
-            and pooled["ci_high"] is not None
-            and pooled["ci_high"] < 0
+            folds == len(FOLDS)
+            and all(row["kept_a"] and row["kept_c"] for row in complete)
+            and pooled_ratio["ci_high"] is not None
+            and pooled_ratio["ci_high"] < 1
         )
         kept_by_label[label] = kept_all
         variant_rows.append(
@@ -554,6 +699,9 @@ def summarize(root, out_dir):
                 "pooled_external_delta": pooled["delta"],
                 "pooled_external_ci_low": pooled["ci_low"],
                 "pooled_external_ci_high": pooled["ci_high"],
+                "pooled_ratio": pooled_ratio["ratio"],
+                "pooled_ratio_ci_low": pooled_ratio["ci_low"],
+                "pooled_ratio_ci_high": pooled_ratio["ci_high"],
                 "kept_all": kept_all,
             }
         )
