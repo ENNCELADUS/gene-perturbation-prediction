@@ -201,8 +201,9 @@ def train_variant(prepared, runs, variant, lr, *, device, resume=False):
         )
     input_layout = INPUT_LAYOUT[variant]
     bundle, view, manifest = open_bundle(prepared, input_layout=input_layout)
-    if bundle_transform(bundle)["name"] != "raw":
-        raise ValueError("training on a transformed bundle is not part of P1-C")
+    transform = bundle_transform(bundle)
+    if transform["name"] not in TRANSFORMS:
+        raise ValueError(f"unknown bundle transform {transform['name']!r}")
     fold = _read_fold(prepared, manifest)["fold"]
     template = _load_template(prepared, manifest)
     template_sha256 = manifest["model_files"]["B-init"]
@@ -264,6 +265,7 @@ def train_variant(prepared, runs, variant, lr, *, device, resume=False):
         lr=lr,
         init_check=check,
         input_layout=input_layout,
+        transform=transform,
     )
     _write_json(runs / "training.json", training)
     return state

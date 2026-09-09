@@ -54,6 +54,8 @@ wheels/
 !configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
 !configs/benchmarks/provenance/phase_a_tx1_20260724/differentially_essential_slice.csv
 !configs/benchmarks/provenance/phase_a_tx1_20260724/k_label_panels.csv
+# Curated P1 diagnostic evidence (small comparison tables and summaries, source-of-truth for docs/results)
+!docs/results/p1_response_pathway_diagnostics/evidence/**
 /outputs/
 data/**/features
 data/**/interim

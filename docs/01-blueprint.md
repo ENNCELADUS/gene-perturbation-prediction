@@ -1,6 +1,6 @@
 # Research Blueprint: Context-Conditioned Synthetic-Lethality Ranking
 
-Updated 2026-09-07. This document defines the research task and claim boundaries.
+Updated 2026-09-09. This document defines the research task and claim boundaries.
 [Related work](02-literature-review.md) explains the prior art;
 [GeneEffect protocol](03-geneeffect-protocol.md) makes the implemented track executable;
 [SL protocol](04-sl-ranking-protocol.md) defines the separate pair-label experiment;
@@ -164,5 +164,16 @@ This establishes a working training/evaluation path, not a useful context-modeli
 advantage. There is no SL result.
 
 [Full result, all baselines and provenance](results/joint_geneeffect_seed0/README.md)
-are the evidence source. Further model decisions should use validation, including
-residual-scale diagnostics and a matched-batch response-supervision ablation.
+are the evidence source. Further model decisions should use validation.
+
+Seed-0 response-pathway diagnostics (P1-A/B/C, 2026-09-07 to 09) are closed: the joint
+backbone fed raw UMI counts to a STATE decoder trained on log1p-normalised expression,
+so its response block uses no perturbation identity and no count-space interface variant
+transfers a response to a held-out cell line (leave-one-anchor-out held-out loss ratios
+to no-change 1.03–17 with intervals excluding 1). The released checkpoint driven in
+approximately its own space beats no-change on HepG2 and Jurkat but not K562 or HCT116.
+An explicit gene-specific context slope raises validation residual Pearson from 0.05 to
+0.13 at three head seeds and ties Tx1 PCA8-ridge. This is an implementation finding and
+a validation-only head result; it licenses no context or SL claim.
+[Result](results/p1_response_pathway_diagnostics/README.md) ·
+[Protocol §8](03-geneeffect-protocol.md#8-response-pathway-diagnostics-p1).
