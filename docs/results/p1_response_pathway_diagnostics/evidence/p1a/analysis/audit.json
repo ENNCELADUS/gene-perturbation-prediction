@@ -1,0 +1,306 @@
+{
+  "checkpoint_checks": {
+    "A0": {
+      "best_state": {
+        "next_epoch": 3,
+        "global_step": 8835,
+        "best_loss": 0.016368767246603966,
+        "best_epoch": 2,
+        "bad_epochs": 0
+      },
+      "settings": {
+        "max_epochs": 50,
+        "patience": 5,
+        "batch_size": 1024,
+        "learning_rate": 0.0001
+      },
+      "best_sha256": "39bb09b34c2793b08a6e6cb69e50b6037bb84c38ed44e58f2b467cfd998d4d97",
+      "training": "completed",
+      "evaluation": "completed"
+    },
+    "A1": {
+      "best_state": {
+        "next_epoch": 6,
+        "global_step": 17670,
+        "best_loss": 0.01637006178498268,
+        "best_epoch": 5,
+        "bad_epochs": 0
+      },
+      "settings": {
+        "max_epochs": 50,
+        "patience": 5,
+        "batch_size": 1024,
+        "learning_rate": 0.0001
+      },
+      "best_sha256": "d8e918f530e657cd34a9f2fbee1afa096d979beeb2c08ec7de3a397f4cfcfb60",
+      "training": "completed",
+      "evaluation": "completed"
+    },
+    "A2": {
+      "best_state": {
+        "next_epoch": 3,
+        "global_step": 8835,
+        "best_loss": 0.016193823888897896,
+        "best_epoch": 2,
+        "bad_epochs": 0
+      },
+      "settings": {
+        "max_epochs": 50,
+        "patience": 5,
+        "batch_size": 1024,
+        "learning_rate": 0.0001
+      },
+      "best_sha256": "09352f21c88804f1eb3b568d29d333ad3ef242d9f9588b7239d31a82f381209d",
+      "training": "completed",
+      "evaluation": "completed",
+      "slope_norm_median": 0.024621961638331413,
+      "slope_norm_mean": 0.0264781191945076
+    },
+    "A3": {
+      "best_state": {
+        "next_epoch": 3,
+        "global_step": 8835,
+        "best_loss": 0.016203081235289574,
+        "best_epoch": 2,
+        "bad_epochs": 0
+      },
+      "settings": {
+        "max_epochs": 50,
+        "patience": 5,
+        "batch_size": 1024,
+        "learning_rate": 0.0001
+      },
+      "best_sha256": "d0c7e1d327d262fdb548d26c6d38553a4e7d39a2bc9b680da535560aca6a841f",
+      "training": "completed",
+      "evaluation": "completed",
+      "slope_norm_median": 0.02463591657578945,
+      "slope_norm_mean": 0.026475274935364723
+    }
+  },
+  "baselines": {
+    "P0": {
+      "geneeffect_loss": 0.016320208087563515,
+      "geneeffect_rmse": 0.181610569357872,
+      "geneeffect_mae": 0.1239473968744278,
+      "geneeffect_valid_pairs": 479084,
+      "geneeffect_possible_pairs": 480249,
+      "geneeffect_missing_pairs": 1165,
+      "geneeffect_coverage": 0.9975741750633526,
+      "geneeffect_pearson_macro_per_line": 0.9093983458630007,
+      "geneeffect_pearson_per_line_scored": 27,
+      "geneeffect_pearson_per_line_undefined": 0,
+      "geneeffect_spearman_macro_per_line": 0.7132700411629241,
+      "geneeffect_spearman_per_line_scored": 27,
+      "geneeffect_spearman_per_line_undefined": 0,
+      "residual_pearson_macro_per_gene": 0.04042782621962336,
+      "residual_pearson_per_gene_scored": 4447,
+      "residual_pearson_per_gene_undefined": 0,
+      "residual_spearman_macro_per_gene": 0.04386556345913784,
+      "residual_spearman_per_gene_scored": 4447,
+      "residual_spearman_per_gene_undefined": 0,
+      "residual_target_sd_macro_per_gene": 0.25578832198948703,
+      "residual_target_sd_per_gene_scored": 4447,
+      "residual_target_sd_per_gene_undefined": 0,
+      "residual_prediction_sd_macro_per_gene": 0.022950986740612713,
+      "residual_prediction_sd_per_gene_scored": 4447,
+      "residual_prediction_sd_per_gene_undefined": 0,
+      "residual_sd_ratio_macro_per_gene": 0.09305468321474254,
+      "residual_sd_ratio_per_gene_scored": 4447,
+      "residual_sd_ratio_per_gene_undefined": 0,
+      "residual_rmse_macro_per_gene": 0.2611262968083468,
+      "residual_rmse_per_gene_scored": 4447,
+      "residual_rmse_per_gene_undefined": 0,
+      "residual_mae_macro_per_gene": 0.20176245933527936,
+      "residual_mae_per_gene_scored": 4447,
+      "residual_mae_per_gene_undefined": 0
+    },
+    "PCA8-ridge": {
+      "geneeffect_loss": 0.016280991956591606,
+      "geneeffect_rmse": 0.18130294978618622,
+      "geneeffect_mae": 0.12427230924367905,
+      "geneeffect_valid_pairs": 479084,
+      "geneeffect_possible_pairs": 480249,
+      "geneeffect_missing_pairs": 1165,
+      "geneeffect_coverage": 0.9975741750633526,
+      "geneeffect_pearson_macro_per_line": 0.9096915619837241,
+      "geneeffect_pearson_per_line_scored": 27,
+      "geneeffect_pearson_per_line_undefined": 0,
+      "geneeffect_spearman_macro_per_line": 0.7112117756462563,
+      "geneeffect_spearman_per_line_scored": 27,
+      "geneeffect_spearman_per_line_undefined": 0,
+      "residual_pearson_macro_per_gene": 0.13297340474094083,
+      "residual_pearson_per_gene_scored": 4447,
+      "residual_pearson_per_gene_undefined": 0,
+      "residual_spearman_macro_per_gene": 0.12328642349330454,
+      "residual_spearman_per_gene_scored": 4447,
+      "residual_spearman_per_gene_undefined": 0,
+      "residual_target_sd_macro_per_gene": 0.2557883219743798,
+      "residual_target_sd_per_gene_scored": 4447,
+      "residual_target_sd_per_gene_undefined": 0,
+      "residual_prediction_sd_macro_per_gene": 0.06849546790683353,
+      "residual_prediction_sd_per_gene_scored": 4447,
+      "residual_prediction_sd_per_gene_undefined": 0,
+      "residual_sd_ratio_macro_per_gene": 0.2727071849741667,
+      "residual_sd_ratio_per_gene_scored": 4447,
+      "residual_sd_ratio_per_gene_undefined": 0,
+      "residual_rmse_macro_per_gene": 0.26059364798657625,
+      "residual_rmse_per_gene_scored": 4447,
+      "residual_rmse_per_gene_undefined": 0,
+      "residual_mae_macro_per_gene": 0.20170426357904667,
+      "residual_mae_per_gene_scored": 4447,
+      "residual_mae_per_gene_undefined": 0
+    },
+    "gene_mean": {
+      "geneeffect_loss": 0.016316814348101616,
+      "geneeffect_rmse": 0.1815958321094513,
+      "geneeffect_mae": 0.12367717921733856,
+      "geneeffect_valid_pairs": 479084,
+      "geneeffect_possible_pairs": 480249,
+      "geneeffect_missing_pairs": 1165,
+      "geneeffect_coverage": 0.9975741750633526,
+      "geneeffect_pearson_macro_per_line": 0.9094270623554008,
+      "geneeffect_pearson_per_line_scored": 27,
+      "geneeffect_pearson_per_line_undefined": 0,
+      "geneeffect_spearman_macro_per_line": 0.7155185500329933,
+      "geneeffect_spearman_per_line_scored": 27,
+      "geneeffect_spearman_per_line_undefined": 0,
+      "residual_pearson_macro_per_gene": null,
+      "residual_pearson_per_gene_scored": 0,
+      "residual_pearson_per_gene_undefined": 4447,
+      "residual_spearman_macro_per_gene": null,
+      "residual_spearman_per_gene_scored": 0,
+      "residual_spearman_per_gene_undefined": 4447,
+      "residual_target_sd_macro_per_gene": 0.2557883219743798,
+      "residual_target_sd_per_gene_scored": 4447,
+      "residual_target_sd_per_gene_undefined": 0,
+      "residual_prediction_sd_macro_per_gene": 0.0,
+      "residual_prediction_sd_per_gene_scored": 4447,
+      "residual_prediction_sd_per_gene_undefined": 0,
+      "residual_sd_ratio_macro_per_gene": 0.0,
+      "residual_sd_ratio_per_gene_scored": 4447,
+      "residual_sd_ratio_per_gene_undefined": 0,
+      "residual_rmse_macro_per_gene": 0.26157189289000604,
+      "residual_rmse_per_gene_scored": 4447,
+      "residual_rmse_per_gene_undefined": 0,
+      "residual_mae_macro_per_gene": 0.20218813183137066,
+      "residual_mae_per_gene_scored": 4447,
+      "residual_mae_per_gene_undefined": 0
+    }
+  },
+  "A2_vs_PCA": {
+    "point": {
+      "huber_delta": -8.716901954377043e-05,
+      "pearson_common_genes": 4447,
+      "pearson_delta": -0.001460666420085213,
+      "spearman_common_genes": 4447,
+      "spearman_delta": 0.0037101880704309303,
+      "sd_ratio_common_genes": 4447,
+      "sd_ratio_delta": -0.08413300934453961
+    },
+    "intervals": {
+      "huber": {
+        "interval_95": [
+          -0.00027476117746468774,
+          0.00012224222782550732
+        ],
+        "defined_replicates": 1000
+      },
+      "pearson": {
+        "interval_95": [
+          -0.015293968095939487,
+          0.015895721974542212
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "spearman": {
+        "interval_95": [
+          -0.010319896673616923,
+          0.019423823694772583
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "sd_ratio": {
+        "interval_95": [
+          -0.10291670566406995,
+          -0.06962391103528917
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      }
+    },
+    "clusters": 27,
+    "contexts": 27,
+    "repeats": 1000,
+    "seed": 0,
+    "scope": "conditional on fixed checkpoint selection and head seed 0"
+  },
+  "A2_vs_P0": {
+    "point": {
+      "huber_delta": -0.0001263858081342972,
+      "pearson_common_genes": 4447,
+      "pearson_delta": 0.09108491210028193,
+      "spearman_common_genes": 4447,
+      "spearman_delta": 0.08313104810459762,
+      "sd_ratio_common_genes": 4447,
+      "sd_ratio_delta": 0.09551949242565029
+    },
+    "intervals": {
+      "huber": {
+        "interval_95": [
+          -0.0003493411468766795,
+          7.215878464552788e-05
+        ],
+        "defined_replicates": 1000
+      },
+      "pearson": {
+        "interval_95": [
+          0.06608131679441981,
+          0.1153874369178077
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "spearman": {
+        "interval_95": [
+          0.05570391245358544,
+          0.1059076563476317
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "sd_ratio": {
+        "interval_95": [
+          0.07595122663219546,
+          0.12270514689649878
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      }
+    },
+    "clusters": 27,
+    "contexts": 27,
+    "repeats": 1000,
+    "seed": 0,
+    "scope": "conditional on fixed checkpoint selection and head seed 0"
+  }
+}

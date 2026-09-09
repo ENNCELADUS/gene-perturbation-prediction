@@ -1,0 +1,5 @@
+model_id,conditions,cells_median,cells_p10,cells_p90,control_cells,zero_filled_coordinates
+ACH-000551,9806,128.0,70.0,128.0,128,0
+ACH-000739,2377,45.0,20.0,102.0,128,0
+ACH-000971,18225,128.0,47.0,128.0,128,43
+ACH-000995,2377,82.0,28.0,128.0,128,0

@@ -1,0 +1,299 @@
+# P1-C Tier 0 analysis
+
+## Shared-bias fraction, adapted states, Jurkat (external)
+
+- B-continue: shared_bias_fraction=0.8611
+- B-interface: shared_bias_fraction=0.8236
+- B-unfreeze: shared_bias_fraction=0.8688
+
+## Matched coverage: the train-side perturbation-mean prior versus no-change
+
+Each first line reports the train-side perturbation-mean prior against the no-change reference on exactly the genes that prior covers -- a property of the prior, not of any adapted state. The second line gives that state's own (model) loss and its ratio to no-change on the same covered set.
+
+- B-continue/external ACH-000995 (all): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-continue model/no_change on the covered set: model_loss=173.5, ratio=5.054
+- B-continue/external ACH-000995 (native_all): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-continue model/no_change on the covered set: model_loss=170.3, ratio=4.844
+- B-continue/external ACH-000995 (native_common): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-continue model/no_change on the covered set: model_loss=170.3, ratio=4.844
+- B-continue/external ACH-000995 (seen): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-continue model/no_change on the covered set: model_loss=173.5, ratio=5.054
+- B-continue/external ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-continue model/no_change on the covered set: model_loss=12.51, ratio=1.215
+- B-continue/external ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-continue model/no_change on the covered set: model_loss=23.82, ratio=1.041
+- B-continue/external ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-continue model/no_change on the covered set: model_loss=23.82, ratio=1.041
+- B-continue/external ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-continue model/no_change on the covered set: model_loss=12.51, ratio=1.215
+- B-continue/external ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-continue model/no_change on the covered set: model_loss=56.89, ratio=1.072
+- B-continue/external ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-continue model/no_change on the covered set: model_loss=58.62, ratio=1.063
+- B-continue/external ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-continue model/no_change on the covered set: model_loss=58.62, ratio=1.063
+- B-continue/external ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-continue model/no_change on the covered set: model_loss=56.89, ratio=1.072
+- B-continue/external ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-continue model/no_change on the covered set: model_loss=23.26, ratio=1.708
+- B-continue/external ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-continue model/no_change on the covered set: model_loss=29.61, ratio=1.312
+- B-continue/external ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-continue model/no_change on the covered set: model_loss=29.61, ratio=1.312
+- B-continue/external ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-continue model/no_change on the covered set: model_loss=23.26, ratio=1.708
+- B-continue/internal ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-continue model/no_change on the covered set: model_loss=12.51, ratio=1.215
+- B-continue/internal ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-continue model/no_change on the covered set: model_loss=23.82, ratio=1.041
+- B-continue/internal ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-continue model/no_change on the covered set: model_loss=23.82, ratio=1.041
+- B-continue/internal ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-continue model/no_change on the covered set: model_loss=12.51, ratio=1.215
+- B-continue/internal ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-continue model/no_change on the covered set: model_loss=56.89, ratio=1.072
+- B-continue/internal ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-continue model/no_change on the covered set: model_loss=58.62, ratio=1.063
+- B-continue/internal ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-continue model/no_change on the covered set: model_loss=58.62, ratio=1.063
+- B-continue/internal ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-continue model/no_change on the covered set: model_loss=56.89, ratio=1.072
+- B-continue/internal ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-continue model/no_change on the covered set: model_loss=23.26, ratio=1.708
+- B-continue/internal ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-continue model/no_change on the covered set: model_loss=29.61, ratio=1.312
+- B-continue/internal ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-continue model/no_change on the covered set: model_loss=29.61, ratio=1.312
+- B-continue/internal ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-continue model/no_change on the covered set: model_loss=23.26, ratio=1.708
+- B-init/external ACH-000995 (all): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-init model/no_change on the covered set: model_loss=479.7, ratio=13.97
+- B-init/external ACH-000995 (native_all): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-init model/no_change on the covered set: model_loss=473.4, ratio=13.47
+- B-init/external ACH-000995 (native_common): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-init model/no_change on the covered set: model_loss=473.4, ratio=13.47
+- B-init/external ACH-000995 (seen): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-init model/no_change on the covered set: model_loss=479.7, ratio=13.97
+- B-init/external ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-init model/no_change on the covered set: model_loss=805.4, ratio=78.21
+- B-init/external ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-init model/no_change on the covered set: model_loss=756.2, ratio=33.06
+- B-init/external ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-init model/no_change on the covered set: model_loss=756.2, ratio=33.06
+- B-init/external ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-init model/no_change on the covered set: model_loss=805.4, ratio=78.21
+- B-init/external ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-init model/no_change on the covered set: model_loss=1170, ratio=22.03
+- B-init/external ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-init model/no_change on the covered set: model_loss=1173, ratio=21.27
+- B-init/external ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-init model/no_change on the covered set: model_loss=1173, ratio=21.27
+- B-init/external ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-init model/no_change on the covered set: model_loss=1170, ratio=22.03
+- B-init/external ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-init model/no_change on the covered set: model_loss=719.2, ratio=52.8
+- B-init/external ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-init model/no_change on the covered set: model_loss=706.9, ratio=31.33
+- B-init/external ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-init model/no_change on the covered set: model_loss=706.9, ratio=31.33
+- B-init/external ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-init model/no_change on the covered set: model_loss=719.2, ratio=52.8
+- B-init/internal ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-init model/no_change on the covered set: model_loss=805.4, ratio=78.21
+- B-init/internal ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-init model/no_change on the covered set: model_loss=756.2, ratio=33.06
+- B-init/internal ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-init model/no_change on the covered set: model_loss=756.2, ratio=33.06
+- B-init/internal ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-init model/no_change on the covered set: model_loss=805.4, ratio=78.21
+- B-init/internal ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-init model/no_change on the covered set: model_loss=1170, ratio=22.03
+- B-init/internal ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-init model/no_change on the covered set: model_loss=1173, ratio=21.27
+- B-init/internal ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-init model/no_change on the covered set: model_loss=1173, ratio=21.27
+- B-init/internal ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-init model/no_change on the covered set: model_loss=1170, ratio=22.03
+- B-init/internal ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-init model/no_change on the covered set: model_loss=719.2, ratio=52.8
+- B-init/internal ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-init model/no_change on the covered set: model_loss=706.9, ratio=31.33
+- B-init/internal ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-init model/no_change on the covered set: model_loss=706.9, ratio=31.33
+- B-init/internal ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-init model/no_change on the covered set: model_loss=719.2, ratio=52.8
+- B-interface/external ACH-000995 (all): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-interface model/no_change on the covered set: model_loss=135.9, ratio=3.959
+- B-interface/external ACH-000995 (native_all): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-interface model/no_change on the covered set: model_loss=133.3, ratio=3.793
+- B-interface/external ACH-000995 (native_common): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-interface model/no_change on the covered set: model_loss=133.3, ratio=3.793
+- B-interface/external ACH-000995 (seen): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-interface model/no_change on the covered set: model_loss=135.9, ratio=3.959
+- B-interface/external ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-interface model/no_change on the covered set: model_loss=13.86, ratio=1.346
+- B-interface/external ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-interface model/no_change on the covered set: model_loss=25.44, ratio=1.112
+- B-interface/external ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-interface model/no_change on the covered set: model_loss=25.44, ratio=1.112
+- B-interface/external ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-interface model/no_change on the covered set: model_loss=13.86, ratio=1.346
+- B-interface/external ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-interface model/no_change on the covered set: model_loss=60.42, ratio=1.138
+- B-interface/external ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-interface model/no_change on the covered set: model_loss=62.14, ratio=1.127
+- B-interface/external ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-interface model/no_change on the covered set: model_loss=62.14, ratio=1.127
+- B-interface/external ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-interface model/no_change on the covered set: model_loss=60.42, ratio=1.138
+- B-interface/external ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-interface model/no_change on the covered set: model_loss=25.36, ratio=1.862
+- B-interface/external ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-interface model/no_change on the covered set: model_loss=31.76, ratio=1.408
+- B-interface/external ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-interface model/no_change on the covered set: model_loss=31.76, ratio=1.408
+- B-interface/external ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-interface model/no_change on the covered set: model_loss=25.36, ratio=1.862
+- B-interface/internal ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-interface model/no_change on the covered set: model_loss=13.86, ratio=1.346
+- B-interface/internal ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-interface model/no_change on the covered set: model_loss=25.44, ratio=1.112
+- B-interface/internal ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-interface model/no_change on the covered set: model_loss=25.44, ratio=1.112
+- B-interface/internal ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-interface model/no_change on the covered set: model_loss=13.86, ratio=1.346
+- B-interface/internal ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-interface model/no_change on the covered set: model_loss=60.42, ratio=1.138
+- B-interface/internal ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-interface model/no_change on the covered set: model_loss=62.14, ratio=1.127
+- B-interface/internal ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-interface model/no_change on the covered set: model_loss=62.14, ratio=1.127
+- B-interface/internal ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-interface model/no_change on the covered set: model_loss=60.42, ratio=1.138
+- B-interface/internal ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-interface model/no_change on the covered set: model_loss=25.36, ratio=1.862
+- B-interface/internal ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-interface model/no_change on the covered set: model_loss=31.76, ratio=1.408
+- B-interface/internal ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-interface model/no_change on the covered set: model_loss=31.76, ratio=1.408
+- B-interface/internal ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-interface model/no_change on the covered set: model_loss=25.36, ratio=1.862
+- B-joint/external ACH-000995 (all): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-joint model/no_change on the covered set: model_loss=200.5, ratio=5.841
+- B-joint/external ACH-000995 (native_all): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-joint model/no_change on the covered set: model_loss=196.5, ratio=5.592
+- B-joint/external ACH-000995 (native_common): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-joint model/no_change on the covered set: model_loss=196.5, ratio=5.592
+- B-joint/external ACH-000995 (seen): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-joint model/no_change on the covered set: model_loss=200.5, ratio=5.841
+- B-joint/external ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-joint model/no_change on the covered set: model_loss=475.9, ratio=46.22
+- B-joint/external ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-joint model/no_change on the covered set: model_loss=437.8, ratio=19.14
+- B-joint/external ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-joint model/no_change on the covered set: model_loss=437.8, ratio=19.14
+- B-joint/external ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-joint model/no_change on the covered set: model_loss=475.9, ratio=46.22
+- B-joint/external ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-joint model/no_change on the covered set: model_loss=782.4, ratio=14.74
+- B-joint/external ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-joint model/no_change on the covered set: model_loss=786, ratio=14.25
+- B-joint/external ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-joint model/no_change on the covered set: model_loss=786, ratio=14.25
+- B-joint/external ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-joint model/no_change on the covered set: model_loss=782.4, ratio=14.74
+- B-joint/external ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-joint model/no_change on the covered set: model_loss=355.5, ratio=26.1
+- B-joint/external ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-joint model/no_change on the covered set: model_loss=348, ratio=15.43
+- B-joint/external ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-joint model/no_change on the covered set: model_loss=348, ratio=15.43
+- B-joint/external ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-joint model/no_change on the covered set: model_loss=355.5, ratio=26.1
+- B-joint/internal ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-joint model/no_change on the covered set: model_loss=475.9, ratio=46.22
+- B-joint/internal ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-joint model/no_change on the covered set: model_loss=437.8, ratio=19.14
+- B-joint/internal ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-joint model/no_change on the covered set: model_loss=437.8, ratio=19.14
+- B-joint/internal ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-joint model/no_change on the covered set: model_loss=475.9, ratio=46.22
+- B-joint/internal ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-joint model/no_change on the covered set: model_loss=782.4, ratio=14.74
+- B-joint/internal ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-joint model/no_change on the covered set: model_loss=786, ratio=14.25
+- B-joint/internal ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-joint model/no_change on the covered set: model_loss=786, ratio=14.25
+- B-joint/internal ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-joint model/no_change on the covered set: model_loss=782.4, ratio=14.74
+- B-joint/internal ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-joint model/no_change on the covered set: model_loss=355.5, ratio=26.1
+- B-joint/internal ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-joint model/no_change on the covered set: model_loss=348, ratio=15.43
+- B-joint/internal ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-joint model/no_change on the covered set: model_loss=348, ratio=15.43
+- B-joint/internal ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-joint model/no_change on the covered set: model_loss=355.5, ratio=26.1
+- B-unfreeze/external ACH-000995 (all): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-unfreeze model/no_change on the covered set: model_loss=179.9, ratio=5.241
+- B-unfreeze/external ACH-000995 (native_all): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-unfreeze model/no_change on the covered set: model_loss=176.4, ratio=5.018
+- B-unfreeze/external ACH-000995 (native_common): perturbation_mean_loss=38.89 > no_change_loss_on_covered=35.15
+  - B-unfreeze model/no_change on the covered set: model_loss=176.4, ratio=5.018
+- B-unfreeze/external ACH-000995 (seen): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
+  - B-unfreeze model/no_change on the covered set: model_loss=179.9, ratio=5.241
+- B-unfreeze/external ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-unfreeze model/no_change on the covered set: model_loss=10.55, ratio=1.025
+- B-unfreeze/external ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-unfreeze model/no_change on the covered set: model_loss=19.93, ratio=0.8714
+- B-unfreeze/external ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-unfreeze model/no_change on the covered set: model_loss=19.93, ratio=0.8714
+- B-unfreeze/external ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-unfreeze model/no_change on the covered set: model_loss=10.55, ratio=1.025
+- B-unfreeze/external ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-unfreeze model/no_change on the covered set: model_loss=51.11, ratio=0.9627
+- B-unfreeze/external ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-unfreeze model/no_change on the covered set: model_loss=52.59, ratio=0.9535
+- B-unfreeze/external ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-unfreeze model/no_change on the covered set: model_loss=52.59, ratio=0.9535
+- B-unfreeze/external ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-unfreeze model/no_change on the covered set: model_loss=51.11, ratio=0.9627
+- B-unfreeze/external ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-unfreeze model/no_change on the covered set: model_loss=18.54, ratio=1.361
+- B-unfreeze/external ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-unfreeze model/no_change on the covered set: model_loss=24.73, ratio=1.096
+- B-unfreeze/external ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-unfreeze model/no_change on the covered set: model_loss=24.73, ratio=1.096
+- B-unfreeze/external ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-unfreeze model/no_change on the covered set: model_loss=18.54, ratio=1.361
+- B-unfreeze/internal ACH-000551 (all): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-unfreeze model/no_change on the covered set: model_loss=10.55, ratio=1.025
+- B-unfreeze/internal ACH-000551 (native_all): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-unfreeze model/no_change on the covered set: model_loss=19.93, ratio=0.8714
+- B-unfreeze/internal ACH-000551 (native_common): perturbation_mean_loss=52.56 > no_change_loss_on_covered=22.88
+  - B-unfreeze model/no_change on the covered set: model_loss=19.93, ratio=0.8714
+- B-unfreeze/internal ACH-000551 (seen): perturbation_mean_loss=26.86 > no_change_loss_on_covered=10.3
+  - B-unfreeze model/no_change on the covered set: model_loss=10.55, ratio=1.025
+- B-unfreeze/internal ACH-000739 (all): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-unfreeze model/no_change on the covered set: model_loss=51.11, ratio=0.9627
+- B-unfreeze/internal ACH-000739 (native_all): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-unfreeze model/no_change on the covered set: model_loss=52.59, ratio=0.9535
+- B-unfreeze/internal ACH-000739 (native_common): perturbation_mean_loss=64.95 > no_change_loss_on_covered=55.16
+  - B-unfreeze model/no_change on the covered set: model_loss=52.59, ratio=0.9535
+- B-unfreeze/internal ACH-000739 (seen): perturbation_mean_loss=64.65 > no_change_loss_on_covered=53.09
+  - B-unfreeze model/no_change on the covered set: model_loss=51.11, ratio=0.9627
+- B-unfreeze/internal ACH-000971 (all): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-unfreeze model/no_change on the covered set: model_loss=18.54, ratio=1.361
+- B-unfreeze/internal ACH-000971 (native_all): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-unfreeze model/no_change on the covered set: model_loss=24.73, ratio=1.096
+- B-unfreeze/internal ACH-000971 (native_common): perturbation_mean_loss=42.89 > no_change_loss_on_covered=22.56
+  - B-unfreeze model/no_change on the covered set: model_loss=24.73, ratio=1.096
+- B-unfreeze/internal ACH-000971 (seen): perturbation_mean_loss=22.72 > no_change_loss_on_covered=13.62
+  - B-unfreeze model/no_change on the covered set: model_loss=18.54, ratio=1.361
+
+## References with undefined cross-context Pearson (guarded)
+
+- no_change: 4925 undefined pairs
+- perturbation_mean: 1440 undefined pairs
+
+Tier 0 re-derives statistics from existing P1-B exports only; no model inference or refitting was run to produce this analysis.

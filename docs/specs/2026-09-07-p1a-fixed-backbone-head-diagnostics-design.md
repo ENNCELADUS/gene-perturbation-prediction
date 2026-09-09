@@ -1,5 +1,7 @@
 # P1-A: fixed-backbone head diagnostics
 
+**Status:** executed, seed 0, head seeds 0–2; closed ([result](../results/p1_response_pathway_diagnostics/README.md)).
+
 The owner approved the four-arm experimental design on 2026-09-07 and subsequently
 authorized its implementation with TDD. This scope does not include a training
 launch or P1-B.

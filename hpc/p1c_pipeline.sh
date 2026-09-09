@@ -14,7 +14,19 @@ cd "$repo_root"
 DRY_RUN=${PIPELINE_DRY_RUN:-0}
 GPUS=${GPUS:-"0 1"}
 SKIP_TIER4=${PIPELINE_SKIP_TIER4:-0}
+SKIP_TIER0=${PIPELINE_SKIP_TIER0:-0}
+# Batch indices for the N-native reference arm on every fold; the count-space
+# round swept 0..4 and found under 0.3% spread, so a later round may pass "0".
+NATIVE_BATCH_INDICES=${PIPELINE_NATIVE_BATCH_INDICES:-"0 1 2 3 4"}
 POLL_SECONDS=${PIPELINE_POLL_SECONDS:-30}
+# Numeric space of every prepared fold: "raw" (count space, the original round)
+# or "log1p_norm" with PIPELINE_TARGET_SUM (log-space round, amendment 2026-09-08).
+TRANSFORM=${PIPELINE_TRANSFORM:-raw}
+TARGET_SUM=${PIPELINE_TARGET_SUM:-}
+if [[ "$TRANSFORM" != raw && -z "$TARGET_SUM" ]]; then
+  printf 'PIPELINE_TARGET_SUM is required when PIPELINE_TRANSFORM=%s\n' "$TRANSFORM" >&2
+  exit 2
+fi
 python_bin=${PYTHON_BIN:-.venv-tx1/bin/python}
 
 FOLDS="jurkat k562 hepg2 hct116"
@@ -158,10 +170,12 @@ job_body() {
         --out-dir "$RUN/tier0" || return $?
       ;;
     native)
+      local fold=$1
+      # shellcheck disable=SC2086
       run_sh p1c evaluate-native \
-        --prepared "$RUN/prepared/jurkat" \
-        --runs "$RUN/runs/N-native/jurkat" \
-        --batch-indices 0 1 2 3 4 || return $?
+        --prepared "$RUN/prepared/$fold" \
+        --runs "$RUN/runs/N-native/$fold" \
+        --batch-indices $NATIVE_BATCH_INDICES || return $?
       ;;
     tier4)
       local seed=$1
@@ -343,18 +357,28 @@ phase preparing
 for fold in $FOLDS; do
   (
     export CUDA_VISIBLE_DEVICES=""
+    transform_args=(--transform "$TRANSFORM")
+    if [[ -n "$TARGET_SUM" ]]; then
+      transform_args+=(--target-sum "$TARGET_SUM")
+    fi
     run_sh p1c prepare \
       --checkpoint "$P0_CHECKPOINT" \
       --out-dir "$RUN/prepared/$fold" \
       --fold "$fold" \
-      --reference-manifest "$P1B_PREPARED/manifest.json"
+      --reference-manifest "$P1B_PREPARED/manifest.json" \
+      "${transform_args[@]}"
   ) > "$RUN/prepare-$fold.log" 2>&1
 done
 
 phase tier0-native-heads
-spawn tier0 "" tier0
-tier0_pid=$spawn_pid
-enqueue N-native-jurkat native
+tier0_pid=""
+if [[ "$SKIP_TIER0" != 1 ]]; then
+  spawn tier0 "" tier0
+  tier0_pid=$spawn_pid
+fi
+for fold in $FOLDS; do
+  enqueue "N-native-$fold" native "$fold"
+done
 if [[ "$SKIP_TIER4" != 1 ]]; then
   for seed in 1 2; do
     enqueue "tier4-seed$seed" tier4 "$seed"
@@ -362,11 +386,13 @@ if [[ "$SKIP_TIER4" != 1 ]]; then
 fi
 wave_failed=0
 run_queue || wave_failed=1
-reap_job tier0 "$tier0_pid"
-tier0_rc=$job_rc
-if [[ "$tier0_rc" != 0 ]]; then
-  printf 'job tier0 failed with exit code %s\n' "$tier0_rc" >&2
-  wave_failed=1
+if [[ -n "$tier0_pid" ]]; then
+  reap_job tier0 "$tier0_pid"
+  tier0_rc=$job_rc
+  if [[ "$tier0_rc" != 0 ]]; then
+    printf 'job tier0 failed with exit code %s\n' "$tier0_rc" >&2
+    wave_failed=1
+  fi
 fi
 if (( wave_failed != 0 )); then
   exit 1

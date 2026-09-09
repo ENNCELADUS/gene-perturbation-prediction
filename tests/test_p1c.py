@@ -1547,19 +1547,28 @@ def test_train_variant_v1_on_tiny_real_state_records_init_check_and_blocks_after
         p1c.main(train_args)
 
 
-def test_train_variant_refuses_a_transformed_bundle(tmp_path):
+def test_train_variant_on_a_transformed_bundle_records_the_transform(
+    tmp_path, monkeypatch
+):
+    """Log-space training (P1-C amendment 2026-09-08): V1 on a log1p_norm bundle
+    starts exactly at the transformed control bag and records the transform."""
     torch.set_num_threads(1)
-    from src.experiments.p1c import train_variant
+    from src.experiments import p1c
+    from src.model import p1c as p1c_model
 
+    monkeypatch.setattr(p1c, "MAX_EPOCHS", 1)
+    monkeypatch.setitem(p1c_model._TRAINABLE_COUNTS, "V1", 20506)
     prepared, inputs, native_state = _build_p1c_fold_fixture(
         tmp_path, transform="log1p_norm", target_sum=1000.0
     )
     runs = tmp_path / "runs"
-    with pytest.raises(
-        ValueError, match="training on a transformed bundle is not part of P1-C"
-    ):
-        train_variant(prepared, runs, "V1", 1e-4, device="cpu")
-    assert not runs.exists()
+    p1c.train_variant(prepared, runs, "V1", 1e-4, device="cpu")
+    training = json.loads((runs / "training.json").read_text())
+    assert training["transform"]["name"] == "log1p_norm"
+    assert training["transform"]["target_sum"] == 1000.0
+    assert training["transform"]["row_sum_basis"] == "hvg_panel"
+    assert training["init_check"]["status"] == "passed"
+    assert training["init_check"]["max_abs_deviation"] <= 1e-6
 
 
 def test_evaluate_native_restricts_to_native_vocabulary(tmp_path):
@@ -2567,7 +2576,7 @@ def test_pipeline_dry_run_issues_every_wave_command_with_v3_eligible(tmp_path):
     counts = Counter((tokens[1], tokens[2]) for tokens in commands)
     assert counts[("p1c", "prepare")] == 4
     assert counts[("p1c", "tier0")] == 1
-    assert counts[("p1c", "evaluate-native")] == 1
+    assert counts[("p1c", "evaluate-native")] == 4  # the native reference on every fold
     assert counts[("p1a", "train")] == 2
     assert counts[("p1a", "compare")] == 2
     # V0/V1/V2-null/V2 on four folds, two learning-rate arms, four V3 folds.
@@ -2587,6 +2596,71 @@ def test_pipeline_dry_run_issues_every_wave_command_with_v3_eligible(tmp_path):
         if (tokens[1], tokens[2]) == ("p1c", "train")
     ]
     assert sorted(actual) == sorted(expected)
+
+
+def test_pipeline_dry_run_log_space_round(tmp_path):
+    """Round 2 (spec amendment 2026-09-09): every fold is prepared under the
+    transform, Tier 0 and Tier 4 are skipped, and the native reference arm
+    runs on every fold with the configured batch indices."""
+    run = tmp_path / "run-log"
+    kept = tmp_path / "kept-log.json"
+    kept.write_text(json.dumps({"V3_eligible": False}))
+    env = _pipeline_env(run, kept)
+    env.update(
+        {
+            "PIPELINE_TRANSFORM": "log1p_norm",
+            "PIPELINE_TARGET_SUM": "3500",
+            "PIPELINE_SKIP_TIER0": "1",
+            "PIPELINE_SKIP_TIER4": "1",
+            "PIPELINE_NATIVE_BATCH_INDICES": "0",
+        }
+    )
+    result = subprocess.run(
+        ["bash", PIPELINE],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (run / "phase.txt").read_text().strip() == "completed"
+
+    commands = _pipeline_commands(run, result)
+    counts = Counter((tokens[1], tokens[2]) for tokens in commands)
+    assert counts[("p1c", "tier0")] == 0
+    assert counts[("p1a", "train")] == 0
+    assert counts[("p1c", "evaluate-native")] == 4
+    prepares = [t for t in commands if (t[1], t[2]) == ("p1c", "prepare")]
+    assert len(prepares) == 4
+    for tokens in prepares:
+        assert tokens[tokens.index("--transform") + 1] == "log1p_norm"
+        assert tokens[tokens.index("--target-sum") + 1] == "3500"
+    natives = [t for t in commands if (t[1], t[2]) == ("p1c", "evaluate-native")]
+    for tokens in natives:
+        assert tokens[tokens.index("--batch-indices") + 1 :] == ["0"]
+    assert sorted(t[t.index("--prepared") + 1] for t in natives) == sorted(
+        f"{run}/prepared/{fold}" for fold in PIPELINE_FOLDS
+    )
+
+
+def test_pipeline_refuses_a_transform_without_a_target_sum(tmp_path):
+    run = tmp_path / "run-bad"
+    kept = tmp_path / "kept-bad.json"
+    kept.write_text(json.dumps({"V3_eligible": False}))
+    env = _pipeline_env(run, kept)
+    env["PIPELINE_TRANSFORM"] = "log1p_norm"
+    result = subprocess.run(
+        ["bash", PIPELINE],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 2
+    assert "PIPELINE_TARGET_SUM is required" in result.stderr
+    assert not (run / "phase.txt").exists()
 
 
 def test_pipeline_dry_run_skips_v3_when_the_predicate_is_not_met(tmp_path):

@@ -1,0 +1,234 @@
+{
+  "A2-minus-A0": {
+    "point": {
+      "huber_delta": -0.00017170217670596388,
+      "pearson_common_genes": 4447,
+      "pearson_delta": 0.08020492966530386,
+      "spearman_common_genes": 4447,
+      "spearman_delta": 0.07476522702742626,
+      "sd_ratio_common_genes": 4447,
+      "sd_ratio_delta": 0.09804824740923491
+    },
+    "intervals": {
+      "huber": {
+        "interval_95": [
+          -0.00036768639669596676,
+          -1.8808810868050996e-06
+        ],
+        "defined_replicates": 1000
+      },
+      "pearson": {
+        "interval_95": [
+          0.05511514354212499,
+          0.1038398477727012
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "spearman": {
+        "interval_95": [
+          0.0482754948910307,
+          0.09684945179988909
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "sd_ratio": {
+        "interval_95": [
+          0.0900173160477405,
+          0.11305250362522125
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      }
+    },
+    "clusters": 27,
+    "contexts": 27,
+    "repeats": 1000,
+    "seed": 0,
+    "scope": "conditional on fixed checkpoint selection and head seed 0"
+  },
+  "A3-minus-A1": {
+    "point": {
+      "huber_delta": -0.00017859500989127167,
+      "pearson_common_genes": 4447,
+      "pearson_delta": 0.08164986748441129,
+      "spearman_common_genes": 4447,
+      "spearman_delta": 0.0734051381993815,
+      "sd_ratio_common_genes": 4447,
+      "sd_ratio_delta": 0.09960209764950827
+    },
+    "intervals": {
+      "huber": {
+        "interval_95": [
+          -0.00037581824029748816,
+          -7.493476389653616e-06
+        ],
+        "defined_replicates": 1000
+      },
+      "pearson": {
+        "interval_95": [
+          0.0593617503065295,
+          0.10236839498626427
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "spearman": {
+        "interval_95": [
+          0.04965195689440871,
+          0.09401684766516907
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "sd_ratio": {
+        "interval_95": [
+          0.09033841639046145,
+          0.11610644518368045
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      }
+    },
+    "clusters": 27,
+    "contexts": 27,
+    "repeats": 1000,
+    "seed": 0,
+    "scope": "conditional on fixed checkpoint selection and head seed 0"
+  },
+  "A1-minus-A0": {
+    "point": {
+      "huber_delta": 8.793636658707033e-06,
+      "pearson_common_genes": 4447,
+      "pearson_delta": -0.004208083125780235,
+      "spearman_common_genes": 4447,
+      "spearman_delta": -0.0014147195033185588,
+      "sd_ratio_common_genes": 4447,
+      "sd_ratio_delta": -0.006300894591617159
+    },
+    "intervals": {
+      "huber": {
+        "interval_95": [
+          -3.3051482103670305e-05,
+          5.717255423823028e-05
+        ],
+        "defined_replicates": 1000
+      },
+      "pearson": {
+        "interval_95": [
+          -0.018319181984418134,
+          0.007931213363559952
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "spearman": {
+        "interval_95": [
+          -0.014016729892475039,
+          0.009047088750369824
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "sd_ratio": {
+        "interval_95": [
+          -0.012568323096325693,
+          -0.001186223591462965
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      }
+    },
+    "clusters": 27,
+    "contexts": 27,
+    "repeats": 1000,
+    "seed": 0,
+    "scope": "conditional on fixed checkpoint selection and head seed 0"
+  },
+  "A3-minus-A2": {
+    "point": {
+      "huber_delta": 1.9008034733992368e-06,
+      "pearson_common_genes": 4447,
+      "pearson_delta": -0.0027631453066728033,
+      "spearman_common_genes": 4447,
+      "spearman_delta": -0.002774808331363312,
+      "sd_ratio_common_genes": 4447,
+      "sd_ratio_delta": -0.0047470443513438175
+    },
+    "intervals": {
+      "huber": {
+        "interval_95": [
+          -4.027981365896582e-05,
+          4.4582543069860106e-05
+        ],
+        "defined_replicates": 1000
+      },
+      "pearson": {
+        "interval_95": [
+          -0.010145739279308038,
+          0.003340993840149805
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "spearman": {
+        "interval_95": [
+          -0.009498979429224088,
+          0.0023194740414745597
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      },
+      "sd_ratio": {
+        "interval_95": [
+          -0.009277990053937183,
+          -0.0009210401045659514
+        ],
+        "defined_replicates": 1000,
+        "common_gene_count_range": [
+          4447,
+          4447
+        ]
+      }
+    },
+    "clusters": 27,
+    "contexts": 27,
+    "repeats": 1000,
+    "seed": 0,
+    "scope": "conditional on fixed checkpoint selection and head seed 0"
+  }
+}

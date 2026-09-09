@@ -1,6 +1,6 @@
 # P1-B: response functionality and interface adaptation
 
-Status: approved design, implemented for seed-0 diagnostics. This document records
+**Status:** executed, seed 0; closed ([result](../results/p1_response_pathway_diagnostics/README.md)). This document records
 all decisions confirmed in the P1-B planning conversation. The earlier referenced
 anchor-selection note is absent from this checkout; the decisions are included
 here rather than reconstructing a separate note.

@@ -251,7 +251,21 @@ All seven variables are required and their paths must exist; `P1B_RUNS` is the
 P1-B *runs* directory containing `evaluation/`. `GPUS` (default `"0 1"`) lists the
 visible devices, `PIPELINE_SKIP_TIER4=1` omits the P1-A head seeds, `PYTHON_BIN`
 selects the environment, and `PIPELINE_POLL_SECONDS` (default 30) sets the queue
-poll interval. The script refuses to start when `$RUN/phase.txt` already exists.
+poll interval. `PIPELINE_TRANSFORM` (default `raw`) with `PIPELINE_TARGET_SUM`
+prepares every fold in log space (`log1p_norm`, HVG-panel row sums scaled to the
+target) so the whole round trains and scores there; a log-space round needs its
+own `RUN` and is never pooled with a count-space one. `PIPELINE_SKIP_TIER0=1`
+omits the Tier 0 analysis of the P1-B exports, and `PIPELINE_NATIVE_BATCH_INDICES`
+(default `"0 1 2 3 4"`) sets the batch indices of the N-native reference arm, which
+runs on every fold. The script refuses to start when `$RUN/phase.txt` already exists.
+
+Round 2 (log space, spec amendment 2026-09-09) is launched as:
+
+```bash
+RUN=outputs/p1c/p1c_log3500_seed0_<stamp> PIPELINE_TRANSFORM=log1p_norm PIPELINE_TARGET_SUM=3500 \
+PIPELINE_SKIP_TIER0=1 PIPELINE_SKIP_TIER4=1 PIPELINE_NATIVE_BATCH_INDICES=0 GPUS="0 1" \
+<the seven required variables> nohup bash hpc/p1c_pipeline.sh > $RUN/pipeline.log 2>&1 &
+```
 
 Waves run in order: fold preparation (four folds sequentially on CPU); Tier 0
 plus native Jurkat evaluation plus two Tier-4 head seeds; one wave per label in

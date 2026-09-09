@@ -1,6 +1,6 @@
 # P1-C: interface isolation and basal-reconstruction diagnostics
 
-**Status:** proposed design, 2026-09-08. Not implemented, no launch. Follows
+**Status:** round 1 (count space) executed, seed 0, closed with nothing kept ([result](../results/p1_response_pathway_diagnostics/README.md)); round 2 (log space, below) launched 2026-09-09. Follows
 [P1-A](2026-09-07-p1a-fixed-backbone-head-diagnostics-design.md) and
 [P1-B](2026-09-07-p1b-response-adaptation-design.md); uses the current
 [GeneEffect protocol](../03-geneeffect-protocol.md) and blueprint §§7–8.
@@ -105,10 +105,13 @@ one-hot perturbation vocabulary, `ctrl_cell_emb` = cached control HVG bags,
 `pert_emb` = one-hot, output as STATE emits it. No Tx1 input, no ESM2 adapter.
 
 - Preprocessing candidates, each an explicitly labelled variant, never a claim of
-  recovered native preprocessing: (i) cached HVG values as extracted from the
-  normalized source `.X` in checkpoint gene order; (ii) only if (i) fails the gate below,
-  documented alternatives (for example log1p or total-count normalisation of the same
-  values). Batch index: 0 as in the composite, plus a sensitivity sweep over a handful
+  recovered native preprocessing: (i) cached HVG values in checkpoint gene order — these
+  are raw UMI counts from the raw source h5ads, not normalised expression; (ii) only if
+  (i) fails the gate below, documented alternatives (for example log1p or total-count
+  normalisation of the same values). Measured: (i) fails on every anchor (K562 18.9 ×
+  no-change, identity advantage 0); (ii) as `log1p_norm` over HVG-panel row sums has its
+  optimum at target 3,500 (K562 1.28, HepG2 0.84, HCT116 8.9, Jurkat 0.95; identity
+  advantage 22–66% of loss except HCT116 3%). The K562 gate is missed at 27.5%. Batch index: 0 as in the composite, plus a sensitivity sweep over a handful
   of indices reported as spread, since the gem_group mapping is unknown.
 - Panels: K562 internal holdout native-common (193), the other two source anchors'
   native-common panels, and Jurkat native-common (2,006, diagnostic re-evaluation).
@@ -225,3 +228,27 @@ model retains a functional response predictor. A candidate checkpoint must first
 Tier 1 on its native pathway, then show how much of that functionality survives the
 Tx1 and genetic-perturbation interfaces under Tier 3's predicate, before it replaces
 ST-HVG-Replogle.
+
+## Round 2: log space
+
+Round 1 ran every arm in count space and established that the composite fed raw UMI
+counts to a decoder trained on `normalize_total` + `log1p` expression; nothing was kept
+and the V2 family was uninformative as configured
+([result](../results/p1_response_pathway_diagnostics/README.md)). Round 2 repeats Tier 3
+with every prepared fold built under `--transform log1p_norm --target-sum 3500`: control
+bags and targets are transformed at preparation, and the loss, the references, the
+identity derangements and the cross-context metrics are all computed in that space.
+Arms: V0, V1, V2-null, V2, then V3 under the same keep rule; N-native at the same
+transform is the reference arm on every fold (batch index 0); the two Tier 2 learning-rate
+arms rerun on the Jurkat fold. Tier 0 and Tier 4 are not repeated. Recipe, folds, budget,
+selection and predicate are unchanged. The K562 gate miss (27.5%) is carried as a caveat:
+the HVG-panel row sum is a proxy for the library size, so "native space" is approximate.
+Round-1 results are retained as the record of the numeric-interface defect and are never
+pooled with round 2. If no log-space variant is kept and the K562 reference arm stays
+above the gate, the next step is to rebuild preparation with whole-library normalisation
+from the raw h5ads and repeat the reference arm before any further variant.
+
+Implementation: `train_variant` accepts any registered transform and records it in
+`training.json`; `hpc/p1c_pipeline.sh` takes `PIPELINE_TRANSFORM`, `PIPELINE_TARGET_SUM`,
+`PIPELINE_SKIP_TIER0` and `PIPELINE_NATIVE_BATCH_INDICES`.
+

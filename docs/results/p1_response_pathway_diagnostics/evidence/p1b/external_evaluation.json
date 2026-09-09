@@ -1,0 +1,15 @@
+{
+  "bundle": "180b95d3a5fc14fd5787d79a1bbbcc66e9acfcd53c2a02a5cb68e94d74b6e475",
+  "decision": {
+    "bundle": "180b95d3a5fc14fd5787d79a1bbbcc66e9acfcd53c2a02a5cb68e94d74b6e475",
+    "initial_loss": 900.6125823153849,
+    "best_loss": 33.055731735073735,
+    "eligible": true,
+    "start_sha256": "a7d0420b92bbd935c570bf6027ca6ce24eb9c035e2d70e7e3b4202e261978a6d"
+  },
+  "checkpoints": {
+    "B-interface": "a7d0420b92bbd935c570bf6027ca6ce24eb9c035e2d70e7e3b4202e261978a6d",
+    "B-continue": "c532b2899e16932af9d827d595bac7cab4e5601a6497e080ebda340c0b548db1",
+    "B-unfreeze": "17b973233be6ffb13c5902c841f0f07b063d8ae00b16545c869b6120b0fbbc60"
+  }
+}
