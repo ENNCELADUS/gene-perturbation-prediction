@@ -7,8 +7,9 @@ implementation specification and the [runbook](../hpc/README.md) its operator gu
 One run has completed: seed 0, trained, tested and baselined
 ([result](results/joint_geneeffect_seed0/README.md)). The current best model is that
 backbone frozen under an explicit gene-specific context-slope head (§7, validation
-only). The backbone's response pathway has been diagnosed as non-functional because
-preparation feeds raw counts to a log-space decoder
+only). A numeric-space defect in response preparation was found and corrected; after the
+correction the response pathway learns the cell lines it is adapted on but does not
+transfer to a held-out line
 (§8, [result](results/p1_response_pathway_diagnostics/README.md)). The
 [SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here
 is SL evidence.
@@ -91,7 +92,12 @@ enter preparation or fitting. Missing labels stay masked.
 
 Prepare fixed inputs once, in a single process, under the configured `prepared_root`:
 Tx1 basal-embedding cache, per-gene basal statistics $q_{g,c}$, ESM-2 table, response
-cache with gene order and the common gene panel. Training opens these caches and never
+cache with gene order and the common gene panel. Tx1 reads raw counts (§3.1); the
+response model does not. Control bags and response targets that enter the STATE
+transition model are transformed at preparation into that model's own numeric space,
+log1p of library-normalised counts (target 3,500 over the HVG panel), and the transform
+is recorded in the prepared bundle so that the loss, the references and the identity
+derangements are computed in the same space. Training opens these caches and never
 rebuilds them; a missing cache is an error, not a trigger.
 
 ## 4. Model
@@ -205,99 +211,80 @@ the variable-gene set. Each pair has equal weight. Adding the same fitted gene
 mean to predictions and targets leaves this loss unchanged. It excludes response
 loss; minimum validation GeneEffect Huber selects `best.pt`.
 
-## 7. Measured results and learning curves
+## 7. Results
 
-The current best model is **A2**: the selected seed-0 joint backbone frozen
-(`joint_seed0_20260906T174818Z_b1024/best.pt`, epoch 3, SHA-256 `37405454…63c59`) with
-a fresh residual head that adds a gene-specific context slope to the §4 MLP,
+The best model to date is the selected seed-0 joint backbone, frozen, read out by a
+residual head that adds an explicit gene-specific context slope to the §4 MLP:
 
 $$
-\hat\delta(g,c)=\mathrm{MLP}(F_{g,c})+w_g^{\top}u_c,\qquad u_c=\text{train-fitted PCA8 scores of } z_c \text{ scaled to unit training SD},
+\hat\delta(g,c)=\mathrm{MLP}(F_{g,c})+w_g^{\top}u_c,
 $$
 
-with one zero-initialised, L2-regularised $w_g\in\mathbb{R}^8$ per training-covered gene,
-trained on the cached direct features D ($z_c$, $e_g$, $q_{g,c}$ and masks; no response
-block) with head seed 0 and data seed 0. Selection follows §5: minimum validation
-GeneEffect loss, patience 5. Head run `outputs/p1a/p1a_seed0_20260907T144045Z/heads/A2`,
-`best.pt` SHA-256 `09352f21…209d`, code `afdd7fc`. It is a validation-selected model
-with **no test number**: the test split was spent on the backbone (§7.3) and has not been
-opened for any head. Design: [P1-A](specs/2026-09-07-p1a-fixed-backbone-head-diagnostics-design.md);
-evidence: [P1 result](results/p1_response_pathway_diagnostics/README.md).
+where $u_c$ holds the first eight principal components of the pooled Tx1 context
+embedding $z_c$, fitted on training lines, and $w_g\in\mathbb{R}^8$ is one zero-initialised,
+L2-regularised slope per training-covered gene. The head sees only the direct features
+(context embedding, gene embedding, basal covariates and masks); the backbone's
+response block is excluded. Selection follows §5. The model is validation-selected and
+carries **no test number**: the test split was spent once on the backbone (§7.3) and
+has not been opened for any readout. Provenance and full tables:
+[readout and response diagnostics](results/p1_response_pathway_diagnostics/README.md).
 
-### 7.1 Training and validation curves
+### 7.1 Learning curves
 
-A2 head, batch 1024, learning rate $10^{-4}$, 2945 updates per epoch. Best epoch 3;
-training stopped after epoch 8 with five epochs without a new minimum validation
-GeneEffect loss. The shared-MLP head A0 (same features, same initial MLP weights) is the
-comparison. Residual Pearson and SD ratio are macro means over the 4447 train-defined
-variable genes.
+![Learning curves of the explicit context-slope readout and the shared MLP readout](figures/geneeffect_readout_learning_curves.png)
 
-| Epoch | Step | A2 train Huber ↓ | A2 val Huber ↓ | A2 train residual Pearson | A2 val residual Pearson ↑ | A2 val SD ratio | A0 val Huber | A0 val residual Pearson |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 2945 | 0.01490 | 0.01629 | 0.2632 | 0.1112 | 0.1093 | 0.01645 | 0.0339 |
-| 2 | 5890 | 0.01458 | 0.01626 | 0.2870 | 0.1293 | 0.1569 | 0.01644 | 0.0479 |
-| 3 | 8835 | 0.01430 | 0.01619 | 0.3144 | 0.1315 | 0.1886 | 0.01637 | 0.0495 |
-| 4 | 11780 | 0.01418 | 0.01623 | 0.3201 | 0.1308 | 0.2144 | 0.01638 | 0.0446 |
-| 5 | 14725 | 0.01404 | 0.01629 | 0.3282 | 0.1332 | 0.2450 | 0.01641 | 0.0580 |
-| 6 | 17670 | 0.01394 | 0.01625 | 0.3348 | 0.1362 | 0.2565 | 0.01640 | 0.0570 |
-| 7 | 20615 | 0.01388 | 0.01632 | 0.3369 | 0.1312 | 0.2628 | 0.01640 | 0.0555 |
-| 8 | 23560 | 0.01379 | 0.01635 | 0.3428 | 0.1344 | 0.2744 | 0.01643 | 0.0580 |
+*Figure 1. Readout training on the frozen backbone, head seed 0, one point per epoch.
+Left: validation GeneEffect Huber loss, the selection criterion; the ring marks the
+selected epoch. Middle and right: validation and training residual Pearson, macro
+means over the 4,447 train-defined variable genes. Both readouts start from identical
+MLP weights and see identical cached features; the explicit slope is the only
+difference.*
 
-The explicit slope reaches validation residual Pearson 0.11 after one epoch and
-0.13 by epoch 3, while A0 never exceeds 0.06. Train residual Pearson rises to 0.34 with
-no validation gain after epoch 3: the head fits gene × context structure that does not
-transfer beyond what the first epochs capture. The backbone's own training curves are in
-the [joint result](results/joint_geneeffect_seed0/README.md).
+The explicit slope reaches a validation residual Pearson above 0.11 after one epoch and
+0.13 by the selected third epoch; the shared MLP never exceeds 0.06. Training residual
+Pearson keeps rising to 0.34 with no further validation gain, so the readout fits
+gene-by-context structure that does not transfer beyond what the first epochs capture.
+The backbone's own curves are recorded with the
+[joint result](results/joint_geneeffect_seed0/README.md).
 
-### 7.2 Selected-checkpoint validation and controls
+### 7.2 Validation comparison with controls
 
-All methods share the 479084 observed `(ModelID, gene_symbol)` keys across the 27
-validation lines (1165 missing labels excluded) and the same 4447 variable genes.
-Heads and references use identical cached features; PCA8-ridge is the Tx1 context-PCA
-ridge fitted on training lines.
+All methods share the same 479,084 observed cell-line/gene pairs over the 27 validation
+lines and the same variable-gene set; readouts consume identical cached features.
 
 | Validation method | Huber ↓ | Absolute Pearson ↑ | Residual Pearson ↑ | Residual Spearman ↑ | SD ratio |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| **A2, explicit context slope on D** | 0.01619 | 0.9103 | 0.1315 | 0.1270 | 0.1886 |
-| A3, explicit slope on D + R | 0.01620 | 0.9102 | 0.1280 | 0.1240 | 0.1864 |
-| A0, shared MLP on D | 0.01637 | 0.9093 | 0.0495 | 0.0515 | 0.0929 |
-| A1, shared MLP on D + R | 0.01637 | 0.9093 | 0.0496 | 0.0479 | 0.1270 |
-| Joint best.pt head (P0) | 0.01632 | 0.9094 | 0.0404 | 0.0439 | 0.0931 |
-| Context-PCA8 ridge, Tx1 | 0.01628 | 0.9097 | 0.1330 | 0.1233 | 0.2727 |
+| **Explicit context slope, direct features** | 0.01619 | 0.9103 | 0.1315 | 0.1270 | 0.189 |
+| Explicit context slope, direct features + response block | 0.01620 | 0.9102 | 0.1280 | 0.1240 | 0.186 |
+| Shared MLP, direct features | 0.01637 | 0.9093 | 0.0495 | 0.0515 | 0.093 |
+| Shared MLP, direct features + response block | 0.01637 | 0.9093 | 0.0496 | 0.0479 | 0.127 |
+| Joint backbone readout, as trained | 0.01632 | 0.9094 | 0.0404 | 0.0439 | 0.093 |
+| Context-PCA ridge on Tx1 (eight components) | 0.01628 | 0.9097 | 0.1330 | 0.1233 | 0.273 |
 | Gene mean | 0.01632 | 0.9094 | undefined | undefined | 0 |
 
-Paired 27-line bootstrap (1000 resamples, seed 0), residual Pearson unless stated:
-A2 − A0 = +0.0820 [0.0577, 0.1047] and Huber −0.00018 [−0.00037, −0.00000];
-A2 − P0 = +0.0911 [0.0661, 0.1154]; A2 − PCA8-ridge = −0.0015 [−0.0153, 0.0159] with
-SD ratio −0.084 [−0.103, −0.070]; A1 − A0 = +0.0001 [−0.0204, 0.0159];
-A3 − A2 = −0.0035 [−0.0103, 0.0025]. Head seeds 1 and 2 reproduce A2 at 0.1328 and
-0.1344 with A2 − A0 = +0.0711 [0.0487, 0.0947] and +0.0802 [0.0551, 0.1038].
+Paired bootstrap over the 27 validation lines (1,000 resamples): the explicit slope
+improves residual Pearson over the shared MLP by +0.082 [0.058, 0.105] and over the
+joint readout by +0.091 [0.066, 0.115]; it is indistinguishable from the context-PCA
+ridge, −0.002 [−0.015, 0.016], while predicting with smaller amplitude. Adding the
+response block changes nothing under either readout (+0.000 [−0.020, 0.016] and
+−0.004 [−0.010, 0.003]). Two further head initialisations reproduce the explicit-slope
+result at 0.133 and 0.134 with the same gain over the shared MLP. Huber differences are
+of order $10^{-4}$: the context signal is small against the gene-mean block.
 
-A2 beats the joint head and the shared MLP on every residual metric with intervals
-excluding 0, ties Tx1 PCA8-ridge on correlation while predicting with less variance,
-and gains nothing from the response block R. Huber differences are at the
-$10^{-4}$ level: the context signal is small against the gene-mean block. This is a
-validation-only readout result on a frozen backbone whose response pathway is
-non-functional (§8); it licenses no context-modelling claim beyond the explicit PCA8
-baseline and no SL claim.
+This is a validation-only readout result on a backbone trained before the numeric-space
+correction of §8. It licenses no context-modelling claim beyond an eight-component
+linear context baseline and no SL claim.
 
 ### 7.3 Backbone test record
 
-Run `joint_seed0_20260906T174818Z_b1024`, seed 0, `best.pt` epoch 3 (stored index 2),
-optimizer step 13250, evaluated once on the test split with its baselines on 2026-09-07.
-Sources: [run evidence](results/joint_geneeffect_seed0/evidence.json) and
-[full result](results/joint_geneeffect_seed0/README.md). Epochs 1–2 used batch 256/rank
-(5889 updates, 1473/1472 replays per epoch); epochs 3–8 used 1024/rank (1472 updates,
-368 replays), a documented mixed continuation; training ended after epoch 8 on patience.
-The test split is spent: it has not been and will not be used to choose or score heads.
-
-All methods share 478501 observed `(ModelID, gene_symbol)` keys across 27 test lines;
-1748 missing labels out of 480249 possible pairs are excluded. Residual correlations
-use the same 4447 train-defined variable genes.
+The joint backbone (seed 0, selected at epoch 3) was evaluated once on the test split
+with its baselines; the test split is spent and has not been used to choose or score
+any readout. Epochs 1–2 ran at batch 256 and epochs 3–8 at 1,024, a documented mixed
+continuation ([full result](results/joint_geneeffect_seed0/README.md)).
 
 | Test method | Huber ↓ | Absolute Pearson ↑ | Residual Pearson ↑ | Residual Spearman ↑ |
 | --- | ---: | ---: | ---: | ---: |
-| Joint best.pt, epoch 3 | 0.01612 | 0.9105 | 0.0541 | 0.0528 |
+| Joint backbone, selected epoch | 0.01612 | 0.9105 | 0.0541 | 0.0528 |
 | Gene mean | 0.01613 | 0.9105 | undefined | undefined |
 | Context-PCA ridge, Tx1 | 0.01626 | 0.9098 | 0.1216 | 0.1157 |
 | Context-PCA ridge, HVG | 0.01635 | 0.9092 | 0.0774 | 0.0832 |
@@ -305,102 +292,85 @@ use the same 4447 train-defined variable genes.
 | Nearest line, HVG | 0.02854 | 0.8460 | 0.0590 | 0.0613 |
 | K562 copy-prior | 0.03390 | 0.8169 | undefined | undefined |
 
-Seed 0 improves on the gene mean by 0.0773% Huber and trails both contextual ridge
-baselines on residual correlation. Selected-checkpoint response MSE / energy distance /
-total are 85.58490 / 370.35131 / 455.93621. These score the same response-condition
-holdout on four training anchors, not measured responses on the 27 test lines.
+The backbone improves on the gene mean by 0.08% Huber and trails both contextual ridge
+baselines on residual correlation.
 
-### 7.4 Backbone test prediction diagnostics
+### 7.4 Prediction diagnostics
 
-Population standard deviations below are computed across observed test lines within each variable gene; SD ratios are computed
-per gene before taking their median.
+The backbone's test predictions are strongly shrunk and low-rank. The median per-gene
+ratio of prediction spread to true residual spread is 5.8%, against 25.3% for the Tx1
+ridge; the first singular direction of the centred prediction matrix carries 59% of its
+energy, against 43% for the ridge and 11% for the true residuals; and the ridge has the
+higher per-gene correlation on 60% of variable genes. On training lines the backbone
+reaches residual Pearson 0.165 with SD ratio 0.126, falling to 0.040 and 0.093 on
+validation. Weak context correlation and heavy shrinkage are already present in the fit;
+generalisation loses the rest.
 
-| Diagnostic, 4447 variable genes | Joint | Tx1 PCA-ridge |
-| --- | ---: | ---: |
-| Median prediction SD | 0.0129 | 0.0568 |
-| Median true residual SD | 0.2283 | 0.2283 |
-| Median prediction / true SD ratio | 5.7500% | 25.3100% |
-| 10th–90th percentile SD ratio | 2.7600%–15.7000% | 14.4700%–40.8900% |
-| Genes with positive residual Pearson | 61.4800% | 72.9000% |
-| Huber on variable-gene subset | 0.04032 | 0.04047 |
-| Gene-mean Huber on the same subset | 0.04042 | 0.04042 |
+## 8. Where the model stalls: response-pathway diagnostics
 
-Tx1 PCA-ridge has higher per-gene Pearson on 2683/4447 genes (60.33%); joint has
-higher Pearson on 1764. Median joint-minus-ridge Pearson is −0.06350.
+Three closed diagnostics on the selected backbone locate the bottleneck. Designs are
+under [`specs/`](specs/); evidence and provenance are in the
+[result note](results/p1_response_pathway_diagnostics/README.md). All are validation
+only, single training seed, and none is SL evidence.
 
-For the 4315 variable genes with labels on all 27 test lines, the prediction spectrum
-was measured after subtracting each gene's mean across those lines.
+**Numeric-space correction.** The seed-0 backbone was trained with control bags and
+response targets cached as raw UMI counts, whereas the STATE checkpoint of §4 expects
+library-normalised, log-transformed expression. Its response block therefore made no
+detectable use of perturbation identity and scored about 21 times the no-change
+reference on its own anchors' held-out conditions. Preparation now transforms both
+inputs and targets into the decoder's space (§3.4). Under the corrected preparation the
+released checkpoint, untrained, beats no-change on HepG2 and Jurkat and uses
+perturbation identity for 22–66% of its loss; it remains 25% above no-change on K562 and
+fails on HCT116 at every scale, a platform mismatch for that anchor rather than a scale
+issue. The results below are from the corrected preparation.
 
-| Centered matrix diagnostic | Joint predictions | Tx1 ridge predictions | True residuals |
-| --- | ---: | ---: | ---: |
-| First singular direction, fraction of squared singular values | 58.9000% | 42.9200% | 11.0600% |
-| First three directions, fraction of squared singular values | 83.4300% | 79.5300% | 25.3300% |
-| Participation rank, $(\sum_i s_i^2)^2/\sum_i s_i^4$ | 2.5800 | 3.6600 | 20.2600 |
+**No interface transfers across cell lines.** With the backbone otherwise frozen, four
+interfaces between the Tx1 context representation and the response model were adapted
+on three anchors and scored on the fourth, in leave-one-anchor-out folds, first in the
+original count space and then in the decoder's own space. The table reports the ratio
+of response loss to the no-change reference on the held-out anchor; the untrained
+released checkpoint is the reference row.
 
-An identical cell-line offset shared across genes accounts for 6.05% of centered
-joint prediction energy and 1.36% for Tx1 ridge. Source:
-[diagnostic measurements](../autoresearch/reason-260907-residual-diagnosis/prediction_diagnostics.json)
-and [calculation](../autoresearch/reason-260907-residual-diagnosis/diagnose_predictions.py).
-
-
-### 7.5 Backbone train/validation diagnostics
-
-The same selected checkpoint was evaluated on fixed cached inputs on 2026-09-07.
-Pearson and SD ratio are macro means over the train-defined variable genes;
-Huber covers all observed pairs.
-
-| Metric | Train | Validation |
-| --- | ---: | ---: |
-| Residual Pearson ↑ | 0.1649 | 0.0404 |
-| SD ratio | 0.1257 | 0.0931 |
-| GeneEffect Huber ↓ | 0.01511 | 0.01632 |
-
-Exports: `evaluation/best/{train,val}/` under the run directory on H20.
-Training predictions already show weak context correlation and substantial
-shrinkage; validation declines further. Prioritize the fitting bottleneck before
-investigating the additional generalization gap.
-
-## 8. Response-pathway diagnostics (P1)
-
-Three seed-0 diagnostics on the selected checkpoint above — P1-A fixed-backbone heads,
-P1-B interface adaptation, P1-C interface isolation — are closed. Evidence and provenance:
-[result](results/p1_response_pathway_diagnostics/README.md); designs under
-[`specs/`](specs/). Validation only; the test split was not used.
-
-**Finding.** §3.4 preparation caches the HVG control bags and response targets as raw
-UMI counts, while the STATE ST-HVG-Replogle checkpoint in §4 was trained on
-`normalize_total` + `log1p` expression. The joint trainer therefore drove a log-space
-decoder with count-space inputs and scored its outputs against count-space targets. As
-trained, the seed-0 backbone's response block shows no perturbation-identity use and
-scores about 21 × the no-change reference on its own anchors' condition holdout. Driven in
-approximately its own space (log1p of HVG-panel row sums normalised to 3,500), the
-released checkpoint beats no-change on HepG2 (0.84) and Jurkat (0.95) with identity
-advantage 22–66% of loss, misses the pre-registered K562 gate (1.28 against 1.10) and
-fails on HCT116 at every scale (8.9, an X-Atlas-Orion platform mismatch).
-
-| Count-space interface, LOAO held-out ratio to no-change | jurkat | k562 | hepg2 | hct116 | pooled [95%] |
+| Held-out response loss / no-change, expression space | Jurkat | K562 | HepG2 | HCT116 | pooled [95%] |
 | --- | ---: | ---: | ---: | ---: | --- |
-| V0, P1-B interface adaptation at 1e-4 | 3.96 | 19.9 | 10.2 | 35.3 | 17.3 [16.8, 17.9] |
-| V1, null-subtracted expression residual | 1.02 | 1.04 | 1.00 | 1.06 | 1.031 [1.028, 1.033] |
-| V2, native basal path + zero-init Tx1 context | 2.86 | 11.9 | 5.62 | 27.7 | 12.0 [11.6, 12.4] |
+| Released checkpoint, native inputs, untrained | 0.95 | 1.25 | 0.92 | 7.8 | — |
+| Adapted Tx1 interface (new basal encoder into the STATE skip) | 17.6 | 32.9 | 20.5 | 32.0 | 25.7 [25.3, 26.2] |
+| Expression-residual interface (effect added to known basal expression) | 1.01 | 1.22 | 0.98 | 1.15 | 1.088 [1.086, 1.091] |
+| Native basal path, ESM-2 perturbation tokens | 1.01 | 1.63 | 1.02 | 11.9 | 3.88 [3.81, 3.95] |
+| Native basal path with a trainable Tx1 context term | 6.0 | 12.7 | 11.5 | 11.7 | 10.5 [10.3, 10.7] |
 
-Nothing met the keep predicate. V1 removes the blow-up but its held-out interval
-excludes 1 from above and its held-out identity advantage vanishes on HCT116. Interface
-learning rate is monotone (1e-6 → 10.2, 1e-5 → 4.63, 1e-4 → 3.96 on the Jurkat fold)
-but every arm fits a count-space offset, so the P0 rate of 1e-6 on the new basal encoder
-is bounded, not isolated, as a cause.
+Every interface learns its three source anchors, most below no-change, yet none meets
+the pre-registered keep rule on the held-out line. Two regularities emerge. First, the
+held-out error grows with how much of STATE's basal skip is trained on Tx1 input: the
+full new encoder fails by 18–33 times, an additive context term by 6–13 times, and the
+native path with nothing trained there sits at parity. The Tx1-conditioned term learns a
+per-context offset that does not exist for an unseen line. Second, the
+expression-residual interface, which routes known basal expression around that skip,
+removes the failure entirely but transfers no effect: it uses perturbation identity for
+only 2–3% of its held-out loss and is matched or beaten by a constant global-mean shift
+on three of four lines. The count-space repetition gives the same ordering with larger
+failures (pooled 17.3, 1.031, 18.2 and 12.0), and interface learning rate is monotone but
+does not change the picture.
 
-**GeneEffect side.** With the backbone frozen, an explicit gene-specific PCA8 context
-slope (A2) raises validation residual Pearson from 0.05 to 0.13 at head seeds 0, 1 and 2
-(A2 − A0 = +0.071 to +0.082, intervals exclude 0), ties Tx1 PCA8-ridge (−0.001
-[−0.015, 0.016]) and gains nothing from the response block R at any seed. A2 is the
-head control for any future response representation.
+**The readout is not the limit.** The explicit context slope of §7 lifts validation
+residual Pearson from 0.05 to 0.13 at three head initialisations, ties an
+eight-component linear context baseline, and gains nothing from the response block
+under either readout. The context information reachable through the pooled Tx1 embedding
+is low-rank, and the response block adds none because the response pathway that feeds
+it does not generalise. A readout on response features from the corrected pathway has not
+been trained; on the transfer evidence above it is not expected to move the residual
+correlation.
 
-**Consequence for this protocol.** Before any further response supervision or response
-feature is used, §3.4 preparation must transform control bags and targets into the
-response model's own numeric space and record the transform in the prepared bundle; the
-loss, the references and the identity derangements are then computed in that space. The
-count-space round is retained as the record of the defect and is never pooled with a
-transformed round. The P0 number in §7 stands as the GeneEffect record; its response
-losses in §7.3 were computed in count space and carry no response-quality meaning.
+**Bottleneck.** The GeneEffect residual is small against the gene mean and is sampled
+on 170 training lines, so gene-by-context parameters overfit within three epochs; the
+pooled Tx1 context carries about as much usable signal as eight principal components;
+and the perturbation-response model, meant to supply mechanism, does not transfer to a
+cell line outside its adaptation set with three usable anchors. Progress requires either
+a response model that holds up on a held-out line or a richer context representation;
+further head engineering on the present features cannot move the residual correlation.
 
+**Scope of the records.** Diagnostics run before the correction are retained as the
+record of the defect and are never pooled with corrected runs. The backbone's test
+record in §7.3 predates the correction and stands as the GeneEffect record; its response
+losses carry no response-quality meaning. Any re-training of the joint backbone follows
+the corrected preparation of §3.4.
