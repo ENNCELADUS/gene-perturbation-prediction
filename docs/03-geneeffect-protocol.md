@@ -102,9 +102,9 @@ rebuilds them; a missing cache is an error, not a trigger.
 
 ## 4. Model
 
-![Context-conditioned GeneEffect architecture](../figures/geneeffect_architecture.png)
+![](../figures/geneeffect_architecture.png)
 
-*(a) Frozen Tx1-3B encodes 128 sampled basal cells of line $c$ into
+*Figure 1. (a) Frozen Tx1-3B encodes 128 sampled basal cells of line $c$ into
 $H_c\in\mathbb{R}^{128\times2560}$ and frozen ESM-2 encodes gene $g$ into
 $e_g\in\mathbb{R}^{1280}$; both are cached at preparation time. (b) A trainable adapter maps
 $e_g$ to the perturbation token $p_g\in\mathbb{R}^{2024}$, and the trainable STATE transition
@@ -115,7 +115,7 @@ mean/variance shift $\Delta$ is reduced to 256 dimensions by one fixed seeded pr
 plus six scalar summaries $s$. Concatenated with the fixed covariates $q_{g,c}$ (3 basal
 statistics of $g$ in $c$), $e_g$ and $z_c$ (mean- and variance-pooled $H_c$, 5120-d) and
 three coverage masks, the 6668-d vector feeds the residual head, an MLP 6668 → 256 → 256 → 1
-over train-fitted standardised blocks. (d) The joint objective of §5. 
+over train-fitted standardised blocks. (d) The joint objective of §5.*
 
 Expression changes subtract basal and predicted bags in the same 2000-gene output
 space; $H_c$ and $\hat Y_{g,c}$ have different widths and are never subtracted.
@@ -231,9 +231,9 @@ has not been opened for any readout. Provenance and full tables:
 
 ### 7.1 Learning curves
 
-![Learning curves of the explicit context-slope readout and the shared MLP readout](figures/geneeffect_readout_learning_curves.png)
+![](figures/geneeffect_readout_learning_curves.png)
 
-*Figure 1. Readout training on the frozen backbone, head seed 0, one point per epoch.
+*Figure 2. Readout training on the frozen backbone, head seed 0, one point per epoch.
 Left: validation GeneEffect Huber loss, the selection criterion; the ring marks the
 selected epoch. Middle and right: validation and training residual Pearson, macro
 means over the 4,447 train-defined variable genes. Both readouts start from identical
@@ -253,7 +253,7 @@ All methods share the same 479,084 observed cell-line/gene pairs over the 27 val
 lines and the same variable-gene set; readouts consume identical cached features.
 
 | Validation method | Huber ↓ | Absolute Pearson ↑ | Residual Pearson ↑ | Residual Spearman ↑ | SD ratio |
-| --- | ---: | ---: | ---: | ---: | ---: |
+| ---------------------------------------- | -------: | -------: | -------: | -------: | -----: |
 | **Explicit context slope, direct features** | 0.01619 | 0.9103 | 0.1315 | 0.1270 | 0.189 |
 | Explicit context slope, direct features + response block | 0.01620 | 0.9102 | 0.1280 | 0.1240 | 0.186 |
 | Shared MLP, direct features | 0.01637 | 0.9093 | 0.0495 | 0.0515 | 0.093 |
@@ -283,7 +283,7 @@ any readout. Epochs 1–2 ran at batch 256 and epochs 3–8 at 1,024, a document
 continuation ([full result](results/joint_geneeffect_seed0/README.md)).
 
 | Test method | Huber ↓ | Absolute Pearson ↑ | Residual Pearson ↑ | Residual Spearman ↑ |
-| --- | ---: | ---: | ---: | ---: |
+| ---------------------------- | -------: | ---------: | ---------: | ---------: |
 | Joint backbone, selected epoch | 0.01612 | 0.9105 | 0.0541 | 0.0528 |
 | Gene mean | 0.01613 | 0.9105 | undefined | undefined |
 | Context-PCA ridge, Tx1 | 0.01626 | 0.9098 | 0.1216 | 0.1157 |
@@ -332,7 +332,7 @@ of response loss to the no-change reference on the held-out anchor; the untraine
 released checkpoint is the reference row.
 
 | Held-out response loss / no-change, expression space | Jurkat | K562 | HepG2 | HCT116 | pooled [95%] |
-| --- | ---: | ---: | ---: | ---: | --- |
+| ------------------------------------------------ | -----: | -----: | -----: | -----: | ------------ |
 | Released checkpoint, native inputs, untrained | 0.95 | 1.25 | 0.92 | 7.8 | — |
 | Adapted Tx1 interface (new basal encoder into the STATE skip) | 17.6 | 32.9 | 20.5 | 32.0 | 25.7 [25.3, 26.2] |
 | Expression-residual interface (effect added to known basal expression) | 1.01 | 1.22 | 0.98 | 1.15 | 1.088 [1.086, 1.091] |
@@ -374,3 +374,29 @@ record of the defect and are never pooled with corrected runs. The backbone's te
 record in §7.3 predates the correction and stands as the GeneEffect record; its response
 losses carry no response-quality meaning. Any re-training of the joint backbone follows
 the corrected preparation of §3.4.
+
+## 9. Future work
+
+The next round targets the readout objective before any further architecture. The
+learning curves of §7.1 show validation Huber overfitting from epoch 3 while residual
+Pearson keeps improving: the Huber criterion is a mean-squared error whose context
+signal is of order $10^{-4}$ of its value, it weights genes by residual variance where
+the metric weights them equally, and selecting on it keeps the earlier, more shrunk
+model. The plan in
+[readout objective and selection](specs/2026-09-10-readout-objective-and-selection-design.md)
+therefore proceeds in four tiers, each on the frozen backbone and cached features until
+a response model that transfers exists:
+
+1. **Objective and selection.** Select on validation residual Pearson; train on per-gene
+   standardised residuals; a correlation-aligned loss on gene-major batches; train-side
+   per-gene calibration for amplitude; regularisation and component sweeps; seed
+   ensembles. Each arm is kept only against the incumbent under a paired 27-line
+   bootstrap with agreement at two further head seeds. Changing the selection rule
+   amends blueprint §4 in place, by the owner.
+2. **Context representation.** Basal-expression components, per-cell Tx1 embeddings
+   with learned pooling, and gene-neighbourhood covariates, each scored against the
+   expression-only control so that any Tx1 claim is earned.
+3. **Response model.** Only a response model that beats no-change on a held-out anchor
+   under the corrected preparation re-enters the feature path; the expression-residual
+   interface with more anchors is the first candidate.
+
