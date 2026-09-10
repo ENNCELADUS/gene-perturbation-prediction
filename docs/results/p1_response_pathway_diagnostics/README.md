@@ -1,13 +1,13 @@
 # P1 response-pathway diagnostics: fixed-backbone heads (P1-A), interface adaptation (P1-B), interface isolation (P1-C)
 
-**Status:** closed, diagnostic, seed 0. No context claim, no SL claim, no test-split use.
+**Status:** closed (count space) and in final phase (expression space, learning-rate arms pending), diagnostic, seed 0. No context claim, no SL claim, no test-split use.
 The count-space interface of the seed-0 joint backbone is identified as defective;
 no adapted variant transfers a perturbation response to a held-out cell line.
 
 Designs: [P1-A](../../specs/2026-09-07-p1a-fixed-backbone-head-diagnostics-design.md),
 [P1-B](../../specs/2026-09-07-p1b-response-adaptation-design.md),
 [P1-C](../../specs/2026-09-08-p1c-interface-isolation-design.md).
-Protocol: [GeneEffect protocol §8](../../03-geneeffect-protocol.md#8-response-pathway-diagnostics-p1).
+Protocol: [GeneEffect protocol §8](../../03-geneeffect-protocol.md#8-where-the-model-stalls-response-pathway-diagnostics).
 Backbone under test: the selected seed-0 joint checkpoint
 (`joint_seed0_20260906T174818Z_b1024/best.pt`, SHA-256 `37405454…63c59`,
 [result](../joint_geneeffect_seed0/README.md)), called P0 below.
@@ -166,6 +166,31 @@ no-change (54.8). V2-null starts at the native raw-count loss (336–466) and de
 288–409 in 50 epochs; V2 descends to 22–38 because its trainable Tx1 context layer learns
 a count-space offset. V3 was not eligible and did not run.
 
+### P1-C round 2: the same variants in the decoder's own space
+
+Run `outputs/p1c/p1c_log3500_seed0_20260909T110631Z` (code `3f226e5`, host 30030, 2 × H20):
+every fold prepared under log1p over HVG-panel row sums normalised to 3,500; loss,
+references, derangements and cross-context metrics computed in that space; Tier 0 and
+Tier 4 not repeated; N-native evaluated at the same transform on every fold (batch index 0).
+Init checks passed on every fold (V1 deviation 0.0; V2/V2-null within 1.8% of the native
+null forward). Round 2 is in its final phase: the two learning-rate arms and compare-final
+were still running when this section was written; the Tier 3 table below is from
+compare-1 (`comparison/variants.csv`, kept.json all false, V3 not eligible).
+
+| Variant | jurkat | k562 | hepg2 | hct116 | Pooled ratio [95%] | Held-out identity share | Kept |
+| --- | ---: | ---: | ---: | ---: | --- | --- | --- |
+| N-native (untrained reference) | 0.953 | 1.248 | 0.923 | 7.80 | — | 41% / 22% / 66% / 3% | — |
+| V0 | 17.6 | 32.9 | 20.5 | 32.0 | 25.7 [25.3, 26.2] | ≤ 2% | no |
+| V1 | 1.009 | 1.216 | 0.981 | 1.148 | 1.088 [1.086, 1.091] | 3.0 / 3.2 / 2.4 / 1.7% | no (hepg2 fold passes all legs) |
+| V2-null | 1.007 | 1.63 | 1.020 | 11.9 | 3.88 [3.81, 3.95] | 8.8 / 2.4 / 5.1 / 0.2% | no |
+| V2 | 6.04 | 12.7 | 11.5 | 11.7 | 10.5 [10.3, 10.7] | ≤ 1% | no |
+
+Every arm fits its source anchors (internal-validation ratios 0.84–0.98 for V1 on every
+anchor; V0 and V2 below 1 except HCT116 at 2.7–3.0; V2-null cannot fit HCT116, 10.3).
+V1 passes legs (a) and (c) on all four folds and leg (b) on hepg2 only. The global-mean
+effect beats V1 on three held-out lines. V2-null keeps the largest held-out identity use
+of any trained arm but never lowers the loss below no-change.
+
 ## Interpretation
 
 - **The numeric interface is the defect.** The composite feeds raw UMI counts into a
@@ -183,8 +208,11 @@ a count-space offset. V3 was not eligible and did not run.
   and the held-out identity advantage collapses from 0.92 on Jurkat to 0.003 on HCT116.
   In count space the residual head learns a shared per-context shift, not a
   perturbation-specific effect.
-- **The V2 family is uninformative as configured** and says nothing about whether Tx1
-  context conditioning helps in the checkpoint's own space.
+- **In the decoder's own space the failure is the basal skip, then the interface.** The
+  held-out error scales with how much of STATE's hidden-space skip is trained on Tx1 input
+  (V0 18–33 ×, V2 6–13 ×, V2-null ≈ 1 ×); V1, which bypasses the skip, is at parity with
+  identity use of 2–3% and is matched by a constant shift. The native basal encoder cannot
+  absorb the HCT116 platform shift on either side (8.9 untrained, 10.3 trained).
 - **Learning rate is monotone but not isolated.** 1e-6 barely moves the interface within
   the budget, consistent with H1 (P0 gave the new basal encoder the STATE rate 1e-6), but
   every arm is fitting a count-space offset, so Tier 2 bounds H1 rather than isolating it.
