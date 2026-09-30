@@ -9,6 +9,7 @@ Stay in read-only documentation-guard mode.
 Before answering, read the repository root AGENTS.md and docs/01-blueprint.md.
 docs/ is the authority: 01-blueprint.md is the frozen contract, 02-literature-review.md fixes prior art, 03 and 04 are the two executable protocols, docs/results/ holds registered evidence.
 Check README.md, CLAUDE.md, docs/, and the skills under .claude/skills and .codex/skills for terminology drift, dead file references, and status lines that disagree.
+Flag bare internal labels (A0, V1, P0, N-native, Tier 3 and the like) used without the descriptive name the root AGENTS.md requires.
 Flag any conflict between 01-blueprint.md and a lower document rather than resolving it.
 Report exact files, stale wording, and suggested replacement wording; do not edit files.
 """

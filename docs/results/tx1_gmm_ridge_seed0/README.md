@@ -46,9 +46,9 @@ Remote root:
 `/2023533015/VCC_Project/outputs/baselines/tx1_gmm_vs_pca_20260907T111054Z`.
 
 - `gmm/model.joblib`, `gmm/diagnostics.json`, `gmm/run.json`
-- `gmm/evaluation/train/` and `gmm/evaluation/val/`: P0 metrics, predictions,
+- `gmm/evaluation/train/` and `gmm/evaluation/val/`: joint-training evaluator metrics, predictions,
   per-gene/per-line details and context features
-- `reference_val/`: all six reference methods and their P0 metrics/details
+- `reference_val/`: all six reference methods and their joint-training evaluator metrics/details
 - `run.log`, `launch.json`, `gmm.exit`, `reference.exit`, `comparison.json`
 
 Model SHA256: `9165f640ec04774169127a33d4edc8c810d74dafb420f50c9a505879fa673c35`.

@@ -1,20 +1,20 @@
-# P1-B: response functionality and interface adaptation
+# Response-adaptation diagnostic (P1-B): response functionality and interface adaptation
 
 **Status:** executed, seed 0; closed ([result](../results/p1_response_pathway_diagnostics/README.md)). This document records
-all decisions confirmed in the P1-B planning conversation. The earlier referenced
+all decisions confirmed in the response-adaptation diagnostic planning conversation. The earlier referenced
 anchor-selection note is absent from this checkout; the decisions are included
 here rather than reconstructing a separate note.
 
 ## Question and limits
 
-Does the assembled Tx1 + ESM2 + ST backbone correctly use perturbation identity and
+Does the assembled Tx1 + ESM2 + STATE transition model (ST) backbone correctly use perturbation identity and
 context to predict Perturb-seq responses? Does independent interface adaptation
-improve it, and does subsequent ST adaptation add value? GeneEffect heads and
-labels do not enter the response optimization or selection objective. No P1-A
-retraining, multi-seed search, random-ST control, or new pretraining is included.
+improve it, and does subsequent STATE adaptation add value? GeneEffect heads and
+labels do not enter the response optimization or selection objective. No fixed-backbone head
+diagnostic (P1-A) retraining, multi-seed search, random-STATE control, or new pretraining is included.
 
-Jurkat is held out **from interface adaptation**. Original ST and Tx1 pretraining
-non-exposure is not established. B-joint has already received all four anchors'
+Jurkat is held out **from interface adaptation**. Original STATE and Tx1 pretraining
+non-exposure is not established. The joint backbone as trained has already received all four anchors'
 response supervision and is an exposed reference, not an independent transfer arm.
 Improved response prediction is not evidence of improved GeneEffect or SL ranking.
 
@@ -31,7 +31,7 @@ count disagreement. All fitting, checkpoint selection, early stopping and stage
 choices use the three source anchors only. Jurkat response labels are never read
 while fitting baselines, and do not affect the stage-two eligibility decision.
 
-Keep fixed basal and observed bags, gene order, and ESM2 vectors. The ST output
+Keep fixed basal and observed bags, gene order, and ESM2 vectors. The STATE output
 remains 2,000-dimensional. Use exactly **1,957 common measured coordinates** for
 all training losses and primary evaluation. Recover the mask by exact matching of
 checkpoint symbols against each source's configured `target_gene_symbol_col`,
@@ -43,21 +43,21 @@ Store included/excluded symbols per source; fail if the intersection count diffe
 Jurkat strata are all 2,377; training-seen 2,373; unseen four; native vocabulary
 2,009; native-and-training-seen 2,006. The unseen genes are ATP6V0C, COX6C, DHX15,
 HIST1H2BM. The main transfer analysis uses seen perturbations; the four unseen
-conditions support descriptive results only. Persist original B-joint condition
-holdout membership in exports.
+conditions support descriptive results only. Persist the original condition holdout
+membership of the joint backbone as trained in exports.
 
 ## States and trainable parameters
 
 | State | Definition |
 |---|---|
-| B-native | Original checkpoint, original inputs, original perturbation encoding; evaluation only |
-| B-init | Original P0 config and seed-0 construction order, released checkpoint plus new interfaces |
-| B-joint | Exact P0 backbone used by P1-A; evaluation only |
-| B-interface | From B-init; train only new basal input weight and ESM2 adapter |
-| B-continue | Conditional stage two: continue interface-only training from best B-interface |
-| B-unfreeze | Same stage-two starting checkpoint, additionally train inherited ST parameters |
+| Released STATE checkpoint on native inputs (B-native) | Original checkpoint, original inputs, original perturbation encoding; evaluation only |
+| Untrained composite (B-init) | Original config and seed-0 construction order of the joint training run (P0), released checkpoint plus new interfaces |
+| Joint backbone as trained (B-joint) | Exact seed-0 joint backbone used by the fixed-backbone head diagnostic; evaluation only |
+| Interface-only adaptation (B-interface) | From the untrained composite; train only new basal input weight and ESM2 adapter |
+| Extended interface-only adaptation (B-continue) | Conditional stage two: continue interface-only training from best interface-only adaptation |
+| Interface adaptation with STATE unfrozen (B-unfreeze) | Same stage-two starting checkpoint, additionally train inherited STATE parameters |
 
-B-interface contains exactly 2,533,864 trainable parameters:
+Interface-only adaptation contains exactly 2,533,864 trainable parameters:
 
 - `state_adapter.state_model.basal_encoder.0.weight`: 328 x 2560.
 - `perturbations.adapter.net.0.weight` / bias: 512 x 1280 / 512.
@@ -68,17 +68,17 @@ actual source/destination checkpoint shapes and loaded names, then classify ever
 parameter; mismatched shapes, new unclassified parameters or missing inherited
 parameters are errors. Do not infer provenance by treating a whole module as new.
 
-ST and the assembled backbone stay in eval mode in **both stages**. Autograd stays
+STATE and the assembled backbone stay in eval mode in **both stages**. Autograd stays
 enabled through inherited operations so new interfaces receive gradients. Stage two
-changes parameter training flags only, not dropout behavior. B-init is built through
-the same public joint constructor as P0, but only the backbone is persisted and
+changes parameter training flags only, not dropout behavior. The untrained composite is built through
+the same public joint constructor as the joint training run, but only the backbone is persisted and
 restored thereafter. Head standardization and projection are irrelevant to response
 prediction and are not refitted.
 
-B-native is a functional reference, limited to native vocabulary support. Original
+The released STATE checkpoint on native inputs is a functional reference, limited to native vocabulary support. Original
 normalization/output scaling and batch mapping remain unverified; `int_counts:
 false` does not establish them, and the referenced external original config is
-unavailable. The current evaluator explicitly records B-native as unavailable and
+unavailable. The current evaluator explicitly records the released STATE checkpoint on native inputs as unavailable and
 never fabricates native inputs/predictions. Resolving these prerequisites is separate
 work; it does not block assembled-backbone diagnosis.
 
@@ -97,7 +97,7 @@ this loss alone cannot demonstrate correct perturbation identity use.
 | Exposure/epoch | 16,448 per anchor; 49,344 total, including repeats |
 | AdamW | beta=(0.9,0.999), epsilon=1e-8, weight decay=0.01 |
 | Interface LR | 1e-4 in both stages |
-| Inherited ST LR | 1e-6, B-unfreeze only |
+| Inherited STATE LR | 1e-6, interface adaptation with STATE unfrozen only |
 | Gradient clipping | Combined trainable-parameter norm 1.0 |
 | Precision | CUDA BF16 forward; FP32 loss/distance computation; CPU tests FP32 |
 | Scheduler/warmup | None |
@@ -112,12 +112,14 @@ update norms. Only validation loss selects checkpoints. Epoch zero is eligible;
 strict reduction updates best, ties count toward patience. If no improvement occurs,
 stop after five epochs and keep the starting checkpoint.
 
-Run B-continue and B-unfreeze only when best B-interface internal validation loss
-is at least 1% below B-init. This is a fixed execution trigger, not significance.
+Run extended interface-only adaptation and interface adaptation with STATE unfrozen
+only when best interface-only adaptation internal validation loss is at least 1%
+below the untrained composite. This is a fixed execution trigger, not significance.
 Both stage-two arms start from the exact same best checkpoint with fresh optimizers,
 identical sampling order and their own patience-five/50-epoch budgets. Compare best
 checkpoints and joined common-update points. Additional training alone is controlled
-by B-continue; only its contrast with B-unfreeze identifies an unfreezing benefit.
+by extended interface-only adaptation; only its contrast with interface adaptation
+with STATE unfrozen identifies an unfreezing benefit.
 
 Complete required training and record selected checkpoint hashes in ordinary
 `external_evaluation.json` before scoring Jurkat. Once that record exists, further
@@ -159,7 +161,8 @@ Interpretation: lower errors plus correct-identity advantage and better context
 contrasts supports response functionality; error-only gains suggest improved average
 reconstruction. Internal-only gains do not establish transfer. Responses improved
 without downstream head testing remain response findings. Any future GeneEffect
-check should reuse the explicit P1-A readout and A2 no-response reference.
+check should reuse the explicit fixed-backbone head diagnostic readout and
+explicit context-slope head (A2) no-response reference.
 
 ## Execution and acceptance
 

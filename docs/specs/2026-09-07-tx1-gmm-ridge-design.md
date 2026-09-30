@@ -1,6 +1,7 @@
 # Tx1 GMM-ridge baseline
 
-Approved in chat on 2026-09-07. P1-A uses the same prepared basal Tx1 bags,
+Approved in chat on 2026-09-07. Within the fixed-backbone head diagnostic (P1-A), this
+baseline uses the same prepared basal Tx1 bags,
 GeneEffect split and common gene panel as Tx1 PCA8-ridge. It predicts no perturbation
 response and makes no unseen-gene or SL claim.
 
@@ -20,7 +21,7 @@ Targets subtract the saved training gene mean; absolute predictions add that sam
 mean. Missing labels are never imputed. Require at least three train contexts per
 gene, matching the existing context baseline's eligibility floor.
 
-Fit produces a saved model and train/val predictions using the P0 evaluator:
+Fit produces a saved model and train/val predictions using the joint-training evaluator:
 per-line absolute and per-gene residual correlations, amplitude/error metrics and
 coverage. Train scalars use train_eval_; validation uses val_. Export context features
 and GMM convergence, component weights, iteration count, lower bound and training
