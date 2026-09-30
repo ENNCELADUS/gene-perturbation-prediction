@@ -1,33 +1,33 @@
-# P1-A: fixed-backbone head diagnostics
+# Fixed-backbone head diagnostic (P1-A)
 
 **Status:** executed, seed 0, head seeds 0–2; closed ([result](../results/p1_response_pathway_diagnostics/README.md)).
 
 The owner approved the four-arm experimental design on 2026-09-07 and subsequently
 authorized its implementation with TDD. This scope does not include a training
-launch or P1-B.
+launch or the response-adaptation diagnostic (P1-B).
 The owner subsequently confirmed the execution settings below, replacing the
 proposed fixed 50-epoch budget and three seeds with early stopping and seed 0 only.
 
 ## Question and scope
 
 Determine whether an explicit gene-specific context slope improves readout from
-the selected P0 backbone, and whether its fixed response features add predictive
+the selected seed-0 joint backbone (P0), and whether its fixed response features add predictive
 value. This is a held-out-cell-line GeneEffect diagnostic on training-covered
 genes, not an SL interaction experiment or an unseen-gene claim.
 
 Use the current GeneEffect protocol in [03-geneeffect-protocol.md](../03-geneeffect-protocol.md).
-P0 train/validation values and the [validation PCA/GMM reference](../results/tx1_gmm_ridge_seed0/README.md)
+The seed-0 joint backbone's train/validation values and the [validation PCA/GMM reference](../results/tx1_gmm_ridge_seed0/README.md)
 motivate the experiment. Reuse the PCA-ridge results. Do not use the already observed
 test set to choose arms, hyperparameters or checkpoints.
 
 ## Shared representation and training boundary
 
-Restore the checkpoint that produced P0, including STATE, the ESM2 adapter,
+Restore the seed-0 joint backbone checkpoint, including STATE, the ESM2 adapter,
 projection, gene order and original normalization. Verify checkpoint identity
-against the P0 exports before extracting features.
+against the seed-0 joint backbone exports before extracting features.
 
-- D contains the existing z_c, e_g, q_sc and applicable masks.
-- R contains the 256-dimensional delta projection, six response summaries and
+- Direct features (D) contain the existing z_c, e_g, q_sc and applicable masks.
+- The response block (R) contains the 256-dimensional delta projection, six response summaries and
   the two masks associated with the response-summary block.
 - Extract raw features once with fixed basal bags, inference mode and precision.
   Store context features by ModelID, gene features by gene, and pair features by
@@ -42,10 +42,10 @@ against the P0 exports before extracting features.
 
 | Arm | Head | Inputs | Primary comparison |
 | --- | --- | --- | --- |
-| A0 | Current shared MLP | D | Direct-feature reference |
-| A1 | Current shared MLP | D + R | A1 minus A0: response-block effect |
-| A2 | Current MLP plus gene-specific context slope | D | A2 minus A0: explicit-readout effect |
-| A3 | Current MLP plus gene-specific context slope | D + R | A3 minus A1: explicit-readout effect; A3 minus A2: response-block effect |
+| Shared MLP head (A0) | Current shared MLP | Direct features | Direct-feature reference |
+| Shared MLP head + response block (A1) | Current shared MLP | Direct features + response block | This arm minus shared MLP head: response-block effect |
+| Explicit context-slope head (A2) | Current MLP plus gene-specific context slope | Direct features | This arm minus shared MLP head: explicit-readout effect |
+| Explicit context-slope head + response block (A3) | Current MLP plus gene-specific context slope | Direct features + response block | This arm minus shared MLP head + response block: explicit-readout effect; this arm minus explicit context-slope head: response-block effect |
 
 The MLP retains two Linear -> LayerNorm -> GELU hidden layers of width 256 and
 the scalar output. The explicit arms predict
@@ -64,30 +64,32 @@ Each training-covered gene has an independent eight-dimensional w initialized to
 zero with explicit L2 regularization. Do not
 insert fitted ridge predictions or introduce a cell-line parameter lookup.
 
-Copy identical MLP initial weights within A0/A2 and within A1/A3. Initialize one
+Copy identical MLP initial weights between the shared MLP head and the explicit
+context-slope head, and between the shared MLP head + response block and the
+explicit context-slope head + response block. Initialize one
 canonical full-input MLP with seed 0, then copy its direct-feature columns and all
 remaining layers to the no-response arms, retaining the canonical fan-in scaling.
 Equal seeds alone do not ensure equal weights when input dimensions differ.
-Removing R also removes its
+Removing the response block also removes its
 associated masks, so the contrast measures the response block as a whole.
 
 ## Auxiliary checks
 
-Reuse the existing P0 predictions and metrics; do not rerun the original head with
+Reuse the existing seed-0 joint backbone predictions and metrics; do not rerun the original head with
 the original scaler. Check cached feature order, pair keys and labels. Align
 validation exports with
 the reference's 479,084 observed keys and 4,447 train-defined variable genes;
 verify targets as well as membership.
 
-Optionally train A1 with the old scaler if feature-scale diagnostics motivate it.
-Use the same initialization and training as A1, changing only the scaler. Do not
+Optionally train the shared MLP head + response block with the old scaler if feature-scale diagnostics motivate it.
+Use the same initialization and training as that arm, changing only the scaler. Do not
 apply a new scaler to the old head as a substitute. The old scaler used at most
 32 sampled conditions per training line: measure representation drift on matched
 conditions to distinguish it from changing the statistics-fitting sample.
 
 ## Training, reporting and interpretation
 
-Use Huber delta 1 with the current label weighting. Run A0-A3 once each with head
+Use Huber delta 1 with the current label weighting. Run the four arms once each with head
 seed 0: four main training runs, with no multi-seed repeats in this round.
 
 | Parameter | Setting |
@@ -104,7 +106,7 @@ seed 0: four main training runs, with no multi-seed repeats in this round.
 | Data-order seed | 0, with deterministic epoch-specific permutations shared across arms |
 | Head training precision | FP32 |
 
-For A2/A3, the training objective is
+For the two explicit context-slope heads, the training objective is
 
 ```text
 L = mean_batch Huber_delta1(prediction, residual_target)
@@ -114,8 +116,8 @@ L = mean_batch Huber_delta1(prediction, residual_target)
 The regularizer covers all training-covered genes at every update, not only genes
 present in the batch. Lambda is 0.01, with the eight coefficients summed within
 each gene and averaged across genes. This is a fixed diagnostic setting, not a
-validated optimal lambda or a translation of ridge alpha=1. A0/A1 have no branch
-regularizer. Validation Huber excludes regularization.
+validated optimal lambda or a translation of ridge alpha=1. The two shared MLP heads have no
+branch regularizer. Validation Huber excludes regularization.
 
 Evaluate complete train and validation sets once at each epoch end. A strict
 decrease in validation Huber saves best.pt and resets patience; a tie or increase
@@ -145,8 +147,12 @@ Pairs within one context are not independent generalization samples. This is a
 single-seed diagnostic; context bootstrap does not measure initialization or
 backbone-training variability and does not repeat checkpoint selection.
 
-- A2/A0 and A3/A1 improvements support the explicit readout under the tested setup.
-- A1/A0 and A3/A2 improvements support incremental value of the fixed response block.
+- Improvements of the explicit context-slope head over the shared MLP head, and of the
+  explicit context-slope head + response block over the shared MLP head + response
+  block, support the explicit readout under the tested setup.
+- Improvements of the shared MLP head + response block over the shared MLP head, and
+  of the explicit context-slope head + response block over the explicit context-slope
+  head, support incremental value of the fixed response block.
 - Different response effects across heads indicate dependence on the readout.
 - Train-only improvements indicate increased fitting without demonstrated transfer.
 - Negative response contrasts establish lack of benefit in these settings, not
@@ -156,14 +162,14 @@ backbone-training variability and does not repeat checkpoint selection.
 - Correlation gains with worse Huber must be reported as a tradeoff, not overall
   prediction improvement or an automatic decision to adopt the branch.
 
-This validation diagnostic is conditional on the selected P0 checkpoint. Features
+This validation diagnostic is conditional on the selected seed-0 joint backbone checkpoint. Features
 from that supervised backbone do not support independent pipeline cross-validation
 within its training contexts; such validation must also exclude upstream supervision
-by fold. P1-B separately addresses perturbation prediction and backbone adaptation.
+by fold. The response-adaptation diagnostic separately addresses perturbation prediction and backbone adaptation.
 
 ## Execution handoff
 
-Before extraction, record the exact P0 checkpoint/cache identity and inference
+Before extraction, record the exact seed-0 joint backbone checkpoint/cache identity and inference
 precision. The numerical head-training settings above are fixed before comparing
 validation outcomes; do not treat the
 production seed validator or early-stopping configuration as an existing head-only

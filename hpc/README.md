@@ -64,10 +64,12 @@ explicit counts and null scalar values. These commands produce GeneEffect eviden
 not SL interaction evidence; held-out lines retain the documented Tx1 pretraining
 exposure boundary.
 
-## P1-A fixed-backbone head diagnostics
+## Fixed-backbone head diagnostic (P1-A)
 
 The [approved design](../docs/specs/2026-09-07-p1a-fixed-backbone-head-diagnostics-design.md)
-uses A0-A3, head seed 0, FP32 AdamW at 1e-4, global batch 1024 with the tail
+trains four heads, head seed 0: shared MLP (`A0`), shared MLP + response block
+(`A1`), explicit context slope (`A2`) and explicit context slope + response block
+(`A3`). It uses FP32 AdamW at 1e-4, global batch 1024 with the tail
 retained, and minimum-validation-Huber early stopping (patience 5, cap 50 epochs).
 PCA8 scores have unit training population SD; the explicit branch uses lambda
 0.01 averaged over all training-covered genes, with no additional weight decay.
@@ -117,7 +119,7 @@ context map is the checked-in benchmark split CSV; patients stay together, with
 ModelID grouping for missing PatientID. Bootstrap recomputes per-gene correlations
 and reports common defined-gene support. Intervals are conditional on the selected
 checkpoints and single head seed; they do not estimate initialization variability.
-Use repeatable `--reference-val PATH` arguments with existing single-method P0 or
+Use repeatable `--reference-val PATH` arguments with existing single-method joint-training-evaluator or
 PCA-ridge prediction exports to verify matching row keys and targets without rerunning
 them. Comparison uses a new output directory. No test-set evaluation is exposed.
 
@@ -142,7 +144,7 @@ reports convergence, component weights, training occupancies and per-line fit-ce
 positions/counts. Check convergence before interpreting scores; the code does not
 silently lower K or change the embedding when fitting is difficult.
 
-`evaluation/<split>/` contains P0 predictions/metrics, per-line/per-gene tables and
+`evaluation/<split>/` contains joint-training-evaluator predictions/metrics, per-line/per-gene tables and
 `context_features.csv` (64 occupancies plus entropy, effective component count,
 assignment confidence and negative log likelihood). Train scalars use `train_eval_`;
 the response table is empty. A failed export can be retried with `evaluate`, restoring
@@ -150,15 +152,15 @@ the saved transforms and readout without refitting. Use only trusted local jobli
 artifacts with their recorded sklearn version. This is a candidate baseline; no
 performance improvement is established by the implementation tests.
 
-## P1-B response adaptation
+## Response-adaptation diagnostic (P1-B)
 
-P1-B uses one process/GPU per arm, seed 0, 192 conditions/update (64 per source
+This diagnostic uses one process/GPU per arm, seed 0, 192 conditions/update (64 per source
 anchor), 257 updates/epoch, and internal response-loss early stopping (patience 5,
 maximum 50 epochs). It does not train a GeneEffect head. The full protocol is in
-[the P1-B design](../docs/specs/2026-09-07-p1b-response-adaptation-design.md).
+[the response-adaptation design](../docs/specs/2026-09-07-p1b-response-adaptation-design.md).
 
-Run from the repository root in `.venv-tx1`. Set `P0_CHECKPOINT` to the exact P0
-joint checkpoint used for P1-A. Preparation opens existing caches, reads only raw
+Run from the repository root in `.venv-tx1`. Set `P0_CHECKPOINT` to the exact seed-0
+joint checkpoint used by the fixed-backbone head diagnostic. Preparation opens existing caches, reads only raw
 gene metadata to recover the 1,957 measured coordinates, fits source-training
 baselines, and records immutable input/model identities. It does not score Jurkat.
 The output directory must be new; failures are recorded in `status.json`.
@@ -173,16 +175,18 @@ CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b train-interface --prepared "$P1B_PREPARED" --runs "$P1B_RUNS"
 ```
 
-`B-native` currently writes an explicit unavailable record: original numerical
-preprocessing/batch semantics are not verified. It never substitutes Tx1 inputs
-or fabricated native predictions. Model reconstruction for B-init uses the original
-P0 config, released checkpoint, and seed-0 construction order. No head scaler is
-required by P1-B.
+The released STATE checkpoint on native inputs (`B-native`) currently writes an
+explicit unavailable record: original numerical preprocessing/batch semantics are
+not verified. It never substitutes Tx1 inputs or fabricated native predictions.
+Model reconstruction for the untrained composite (`B-init`) uses the original
+joint-training config, released checkpoint, and seed-0 construction order. No head
+scaler is required here.
 
-Read `stage2.json` after B-interface completes. Only if `eligible` is true (at least
-1% internal validation loss reduction from B-init), run both commands below. They
-may run concurrently on separate GPUs. Both start from the same best interface
-checkpoint with fresh optimizers; no Jurkat result determines this decision.
+Read `stage2.json` after interface-only adaptation (`B-interface`) completes. Only
+if `eligible` is true (at least 1% internal validation loss reduction from the
+untrained composite), run both commands below. They may run concurrently on separate
+GPUs. Both start from the same best interface checkpoint with fresh optimizers; no
+Jurkat result determines this decision.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b train-stage2 --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --arm B-continue
@@ -197,7 +201,10 @@ finite gradients and clipping are checked on every update.
 After required training finishes, evaluate each completed state internally and
 externally. External evaluation fixes selected checkpoint hashes in
 `external_evaluation.json` and prevents further adaptation in that run directory.
-If stage two is ineligible, omit B-continue/B-unfreeze from this list.
+If stage two is ineligible, omit extended interface-only adaptation (`B-continue`) and
+interface adaptation with STATE unfrozen (`B-unfreeze`) from this list. The other
+states are the joint backbone as trained (`B-joint`) and the untrained composite
+(`B-init`).
 
 ```bash
 for P1B_STATE in B-interface B-continue B-unfreeze; do
@@ -222,13 +229,16 @@ Jurkat reporting distinguishes 2,373 training-seen perturbations, four unseen,
 2,006 native-and-seen, and 2,009 native-vocabulary-covered conditions. Jurkat is
 held out from interface adaptation, not verified absent from ST/Tx1 pretraining.
 
-## P1-C interface isolation
+## Interface-isolation diagnostic (P1-C)
 
-P1-C repeats the response-adaptation contrast across four held-out anchors
-(`jurkat k562 hepg2 hct116`) and five input/readout variants (`V0 V1 V2-null V2 V3`),
+This diagnostic repeats the response-adaptation contrast across four held-out anchors
+(`jurkat k562 hepg2 hct116`) and five input/readout variants: adapted Tx1 basal
+encoder (`V0`), expression-residual interface (`V1`), native basal path with ESM-2
+perturbation tokens (`V2-null`), native basal path + trainable Tx1 context term (`V2`),
+and native basal path + Tx1 term + expression residual (`V3`),
 so an adaptation gain is attributed to the interface rather than to one held-out
-context. The pre-registered keep predicate and the V3 precondition are in
-[the P1-C design](../docs/specs/2026-09-08-p1c-interface-isolation-design.md).
+context. The pre-registered keep predicate and the precondition for the combined variant are in
+[the interface-isolation design](../docs/specs/2026-09-08-p1c-interface-isolation-design.md).
 `hpc/p1c_pipeline.sh` runs one complete round; every stage is also available as an
 ordinary `hpc/run.sh p1c` command.
 
@@ -248,18 +258,19 @@ nohup hpc/p1c_pipeline.sh > "$RUN/pipeline.out" 2>&1 &
 Those are the paths that exist on the H20 host today.
 
 All seven variables are required and their paths must exist; `P1B_RUNS` is the
-P1-B *runs* directory containing `evaluation/`. `GPUS` (default `"0 1"`) lists the
-visible devices, `PIPELINE_SKIP_TIER4=1` omits the P1-A head seeds, `PYTHON_BIN`
+response-adaptation *runs* directory containing `evaluation/`. `GPUS` (default `"0 1"`) lists the
+visible devices, `PIPELINE_SKIP_TIER4=1` omits the head-seed stability check of the fixed-backbone heads, `PYTHON_BIN`
 selects the environment, and `PIPELINE_POLL_SECONDS` (default 30) sets the queue
 poll interval. `PIPELINE_TRANSFORM` (default `raw`) with `PIPELINE_TARGET_SUM`
 prepares every fold in log space (`log1p_norm`, HVG-panel row sums scaled to the
 target) so the whole round trains and scores there; a log-space round needs its
 own `RUN` and is never pooled with a count-space one. `PIPELINE_SKIP_TIER0=1`
-omits the Tier 0 analysis of the P1-B exports, and `PIPELINE_NATIVE_BATCH_INDICES`
-(default `"0 1 2 3 4"`) sets the batch indices of the N-native reference arm, which
+omits the existing-export analysis of the response-adaptation exports, and `PIPELINE_NATIVE_BATCH_INDICES`
+(default `"0 1 2 3 4"`) sets the batch indices of the untrained released-checkpoint reference arm
+(`N-native`), which
 runs on every fold. The script refuses to start when `$RUN/phase.txt` already exists.
 
-Round 2 (log space, spec amendment 2026-09-09) is launched as:
+The expression-space round (log space, spec amendment 2026-09-09) is launched as:
 
 ```bash
 RUN=outputs/p1c/p1c_log3500_seed0_<stamp> PIPELINE_TRANSFORM=log1p_norm PIPELINE_TARGET_SUM=3500 \
@@ -267,12 +278,12 @@ PIPELINE_SKIP_TIER0=1 PIPELINE_SKIP_TIER4=1 PIPELINE_NATIVE_BATCH_INDICES=0 GPUS
 <the seven required variables> nohup bash hpc/p1c_pipeline.sh > $RUN/pipeline.log 2>&1 &
 ```
 
-Waves run in order: fold preparation (four folds sequentially on CPU); Tier 0
-plus native Jurkat evaluation plus two Tier-4 head seeds; one wave per label in
-`V0 V1 V2-null V2`, each training and evaluating the four folds; `compare-1`;
-the two learning-rate arms (`V0-lr1e-6`, `V0-lr1e-5`, Jurkat) together with the
-four V3 folds when `$RUN/comparison/kept.json` reports `V3_eligible` true
-(otherwise `$RUN/v3_skipped.txt` records the skip); and `compare-final`.
+Waves run in order: fold preparation (four folds sequentially on CPU); the existing-export
+analysis plus native Jurkat evaluation plus two head-seed stability heads; one wave per label in
+`V0 V1 V2-null V2`, each training and evaluating the four folds; the first comparison pass (`compare-1`);
+the two learning-rate arms of the adapted Tx1 basal encoder (`V0-lr1e-6`, `V0-lr1e-5`,
+Jurkat) together with the four folds of the combined variant when `$RUN/comparison/kept.json` reports `V3_eligible` true
+(otherwise `$RUN/v3_skipped.txt` records the skip); and the final comparison pass (`compare-final`).
 
 Every GPU job goes through a queue that holds at most one job per listed GPU and
 starts the next queued job on a device as soon as its predecessor exits, so the
@@ -295,9 +306,9 @@ depends on its fold bundles. Recover a failed arm by hand with the resume
 commands below and rerun `compare`.
 
 On two GPUs, one arm (train plus both evaluations) takes about 2.2 h, so a
-four-fold wave is about 4.4 h; a full round with V3 eligible is roughly 24–25 h
-(four variant waves, the learning-rate pair and the V3 wave, plus Tier 0, the
-native evaluation and the Tier-4 heads).
+four-fold wave is about 4.4 h; a full round with the combined variant eligible is roughly 24–25 h
+(four variant waves, the learning-rate pair and the combined-variant wave, plus the
+existing-export analysis, the native evaluation and the head-seed stability heads).
 
 SIGTERM (`kill` on the launched pipeline) or Ctrl-C terminates every running
 queued job **and that job's child Python worker** — `hpc/run.sh` execs Python, so
@@ -309,7 +320,7 @@ still runs the learning-rate arms and the final comparison, records the reason i
 `$RUN/v3_skipped.txt` with the reader's stderr in `$RUN/v3_read.log`, and fails
 the round at the end.
 
-Fold bundles live in `$RUN/prepared/<fold>`, Tier 0 in `$RUN/tier0`, Tier-4 heads
+Fold bundles live in `$RUN/prepared/<fold>`, the existing-export analysis in `$RUN/tier0`, head-seed stability heads
 in `$RUN/heads/seed<n>`, comparisons in `$RUN/comparison`, and every trained arm in
 `$RUN/runs/<label>/<fold>` (the native evaluation in `$RUN/runs/N-native/jurkat`);
 `compare` reads exactly that layout. To recover one arm, resume it and re-export

@@ -3,7 +3,7 @@
 Date: 2026-09-06. Status: approved direction, including the owner's validation and
 seed corrections below; implemented locally, with no new experiment run.
 
-2026-09-07 P0 amendment: add fixed train diagnostics, feature-block ablation wiring
+2026-09-07 amendment for the seed-0 joint run (P0): add fixed train diagnostics, feature-block ablation wiring
 and per-epoch exposure accounting. The loss, optimizer schedule and selector remain
 as specified below; this amendment does not launch a new experiment.
 
@@ -120,7 +120,7 @@ These are the three runtime base seeds. Epoch/rank-specific sampling streams der
 from base seed 0. Do not change frozen benchmark membership or relabel historical
 input/checkpoint metadata to make old artifacts appear to have been generated with 0.
 
-Controlled P0 comparisons reuse the same prepared inputs, split, ordered common gene
+Controlled comparisons against the seed-0 joint run reuse the same prepared inputs, split, ordered common gene
 panel, variable-gene policy, basal cell bags and response holdout. Keep the runtime
 seeds, world size, per-rank batch sizes, replay interval/weight, optimizer settings,
 50-epoch limit and patience 5 fixed, except for the explicitly named ablation.
