@@ -1,7 +1,7 @@
 # Joint GeneEffect execution
 
 Run from the repository root on H20. The launcher uses `.venv-tx1/bin/python`;
-set `PYTHON_BIN` to select another installed environment. Training uses Torch's visible
+set `PYTHON_BIN` to select another installed environment. `all` uses Torch's visible
 GPU count and respects `CUDA_VISIBLE_DEVICES`. Synchronize code with Git before using the
 remote checkout.
 
@@ -20,9 +20,9 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
    cache, and the manifest with `expression_space`. Skipped when the manifest exists.
 2. **STATE sanity line**: the released checkpoint scored on each anchor against no-change.
    Printed and written; not a gate.
-3. **Response-model comparison**: six arms, leave-one-anchor-out, folds spread over the
-   visible GPUs ([protocol §9](../docs/03-geneeffect-protocol.md#9-response-model-comparison-and-the-all-run)).
-4. **Joint training** on all visible GPUs. Rerunning continues from `train/last.pt`.
+3. **Response-model comparison**: six arms, leave-one-anchor-out, all folds on one GPU
+   ([protocol §9](../docs/03-geneeffect-protocol.md#9-response-model-comparison-and-the-all-run)).
+4. **Joint training** through `accelerate launch`. Rerunning continues from `train/last.pt`.
 5. **Validation evaluation** of `train/best.pt`, the baseline ladder (gene mean, K562 copy
    prior, nearest line, context-PCA ridge on Tx1 and on log HVG) and the readout head with
    the explicit gene-specific context slope on the new backbone's cached features.
@@ -30,10 +30,18 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
    and the validation table for the joint model, readout head and every baseline.
 
 The run directory is `outputs/geneeffect_joint/<run_id>/{comparison/, train/, evaluation/val/,
-baselines/val/, readout/, summary.md}`. An interrupted run is resumed by rerunning the same
-command with the same `--run-id`; a fresh run needs a new run id. Resume uses the
-checkpoint's configuration and rejects any conflicting configuration, so a batch-size change
-needs a new run id.
+baselines/val/, readout/, logs/, summary.md}`; `summary.md` is rewritten on every rerun.
+An interrupted run is resumed by rerunning the same command with the same `--run-id`; a
+fresh run needs a new run id. Resume uses the checkpoint's configuration and rejects any
+conflicting configuration, so a batch-size change needs a new run id.
+
+With N ≥ 2 visible GPUs the comparison runs on the last one while training runs on the
+other N−1, concurrently; with one GPU the comparison runs first, then training; without
+CUDA both run in-process on the CPU (the test path). Training always gets the same GPUs
+for a run, because resuming from `last.pt` requires the same number of processes. Each
+subprocess logs to `logs/comparison.log` or `logs/train.log` in the run directory; a
+failed step stops the run with its name and log path once the other step has finished.
+The STATE sanity line is printed as soon as `comparison/sanity.json` exists.
 
 `all` never evaluates the test split. `hpc/run.sh test CHECKPOINT` is the only route to it
 and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without
