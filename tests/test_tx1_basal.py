@@ -1,4 +1,4 @@
-"""Raw-count builders and helpers in ``src.data.basal``."""
+"""Raw-count helpers and readers in ``src.data.basal``."""
 
 from __future__ import annotations
 
@@ -13,15 +13,17 @@ from scipy import sparse
 from scipy.sparse import csr_matrix
 
 from src.data.basal import (
+    _cap_indices_by_group,
+    _group_candidate_indices_by_label,
     _materialize_rows,
     align_columns,
     assert_tx1_input_contract,
-    build_perturbseq_basal_adata,
-    build_perturbseq_response_adata,
-    build_xatlas_orion_response_adata,
+    perturbseq_control_library_sizes,
+    read_perturbseq_response_cells,
     require_raw_counts,
     symbol_column,
 )
+from src.data.response_streaming import read_xatlas_response_cells
 
 
 def _perturbseq_h5ad(path: Path, labels: list[str], *, ensembl_index=False) -> Path:
@@ -128,41 +130,63 @@ def test_materialize_rows_holds_one_dense_chunk_at_a_time():
     np.testing.assert_array_equal(out.toarray(), values[::-1])
 
 
-def test_perturbseq_basal_builder_keeps_every_gene_of_control_cells(tmp_path):
-    path = _perturbseq_h5ad(
-        tmp_path / "a.h5ad", ["non-targeting", "TP53", "non-targeting"]
-    )
-    adata = build_perturbseq_basal_adata(
+@pytest.mark.parametrize("ensembl_index", [False, True])
+def test_control_library_sizes_sum_every_gene(tmp_path, ensembl_index):
+    labels = ["non-targeting", "TP53", "non-targeting"]
+    path = _perturbseq_h5ad(tmp_path / "a.h5ad", labels, ensembl_index=ensembl_index)
+    sizes = perturbseq_control_library_sizes(
         path,
         control_label="non-targeting",
         perturbation_col="gene",
-        model_id="ACH-1",
         var_ensembl_col="gene_id",
+        label="ACH-1 controls",
     )
-    assert list(adata.obs_names) == ["cell0", "cell2"]
-    assert adata.n_vars == 3
-    assert list(adata.var["ensembl_id"]) == list(adata.var.index)
+    counts = ad.read_h5ad(path).X.toarray()
+    np.testing.assert_array_equal(sizes, counts[[0, 2]].sum(axis=1))
+    with pytest.raises(ValueError, match="neither a column nor an index"):
+        perturbseq_control_library_sizes(
+            path,
+            control_label="non-targeting",
+            perturbation_col="gene",
+            var_ensembl_col="missing",
+            label="ACH-1 controls",
+        )
 
 
-def test_perturbseq_response_builder_caps_each_gene(tmp_path):
+def test_perturbseq_response_reader_caps_each_gene(tmp_path):
     labels = ["non-targeting"] * 2 + ["G1"] * 5 + ["G2"] * 2
     path = _perturbseq_h5ad(tmp_path / "a.h5ad", labels, ensembl_index=True)
     kwargs = dict(
         control_label="non-targeting",
         perturbation_col="gene",
-        model_id="ACH-1",
         var_ensembl_col="gene_id",
+        symbol_col="gene_name",
+        gene_order=("C", "A", "Z"),
+        label="ACH-1",
         max_cells_per_gene=3,
         seed=4,
     )
-    adata = build_perturbseq_response_adata(path, **kwargs)
-    assert adata.obs["perturbation_gene"].value_counts().to_dict() == {"G1": 3, "G2": 2}
-    again = build_perturbseq_response_adata(path, **kwargs)
-    assert list(again.obs_names) == list(adata.obs_names)
-    total = build_perturbseq_response_adata(
+    cells = read_perturbseq_response_cells(path, **kwargs)
+    assert pd.Series(cells.labels).value_counts().to_dict() == {"G1": 3, "G2": 2}
+    np.testing.assert_array_equal(cells.present, [True, True, False])
+    again = read_perturbseq_response_cells(path, **kwargs)
+    np.testing.assert_array_equal(again.library_sizes, cells.library_sizes)
+    np.testing.assert_array_equal(
+        again.hvg_counts.toarray(), cells.hvg_counts.toarray()
+    )
+    counts = ad.read_h5ad(path).X.toarray()
+    rows = _cap_indices_by_group(
+        _group_candidate_indices_by_label(np.arange(2, 9), np.array(labels[2:])), 3, 4
+    )
+    np.testing.assert_array_equal(cells.labels, np.array(labels)[rows])
+    np.testing.assert_array_equal(cells.library_sizes, counts[rows].sum(axis=1))
+    expected = np.zeros((len(rows), 3))
+    expected[:, :2] = counts[rows][:, [2, 0]]
+    np.testing.assert_array_equal(cells.hvg_counts.toarray(), expected)
+    total = read_perturbseq_response_cells(
         path, **{**kwargs, "total_cells_per_line": 4}
     )
-    assert total.n_obs == 4
+    assert len(total.labels) == total.hvg_counts.shape[0] == 4
 
 
 def _xatlas_world(tmp_path: Path) -> tuple[Path, Path]:
@@ -194,27 +218,24 @@ def _xatlas_world(tmp_path: Path) -> tuple[Path, Path]:
     return shards, tmp_path / "meta.parquet"
 
 
-def test_xatlas_response_builder_filters_and_caps(tmp_path):
+def test_xatlas_response_reader_filters_and_caps(tmp_path):
     shards, meta = _xatlas_world(tmp_path)
-    adata = build_xatlas_orion_response_adata(
-        shards, meta, model_id="ACH-000971", shard_glob="HCT116_*.parquet"
-    )
-    assert adata.obs["perturbation_gene"].tolist() == ["G1", "G1", "G1", "G2"]
-    assert adata.obs_names.tolist() == ["s1:bc1", "s1:bc2", "s1:bc5", "s1:bc4"]
-    assert sparse.issparse(adata.X)
-    assert adata.X.toarray()[:, 0].tolist() == [2.0, 3.0, 6.0, 5.0]
-    capped = build_xatlas_orion_response_adata(
-        shards,
-        meta,
+    kwargs = dict(
         model_id="ACH-000971",
         shard_glob="HCT116_*.parquet",
-        max_cells_per_gene=2,
+        control_label="Non-Targeting",
+        pass_guide_filter_value=1,
+        symbol_col="gene_name",
+        gene_order=("A", "C", "Z"),
     )
-    assert capped.obs["perturbation_gene"].value_counts().to_dict() == {
-        "G1": 2,
-        "G2": 1,
-    }
+    cells = read_xatlas_response_cells(shards, meta, **kwargs)
+    assert cells.labels.tolist() == ["G1", "G1", "G1", "G2"]
+    assert sparse.issparse(cells.hvg_counts)
+    assert cells.hvg_counts.toarray()[:, 0].tolist() == [2.0, 3.0, 6.0, 5.0]
+    np.testing.assert_array_equal(cells.library_sizes, [2.0, 3.0, 6.0, 5.0])
+    # C is in the metadata but no kept cell has a positive count for it.
+    np.testing.assert_array_equal(cells.present, [True, False, False])
+    capped = read_xatlas_response_cells(shards, meta, **kwargs, max_cells_per_gene=2)
+    assert pd.Series(capped.labels).value_counts().to_dict() == {"G1": 2, "G2": 1}
     with pytest.raises(ValueError, match="No parquet shards"):
-        build_xatlas_orion_response_adata(
-            shards, meta, model_id="x", shard_glob="none*"
-        )
+        read_xatlas_response_cells(shards, meta, **{**kwargs, "shard_glob": "none*"})

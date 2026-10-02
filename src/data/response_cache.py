@@ -7,7 +7,7 @@ import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -32,12 +32,22 @@ class ResponseTargetsCache:
 
 
 def write_response_targets(
-    directory: Path, keys: Sequence[tuple[str, str]], bags: Sequence[np.ndarray]
+    directory: Path,
+    keys: Sequence[tuple[str, str]],
+    lengths: Sequence[int],
+    width: int,
+    bags: Iterable[np.ndarray],
 ) -> Path:
-    """Atomically write ``bags`` (one ``[cells, genes]`` array per key)."""
+    """Atomically write one ``[lengths[i], width]`` bag per key.
+
+    ``bags`` is consumed in key order and written straight to disk, so only
+    one bag needs to be resident at a time.
+    """
     directory = Path(directory)
     directory.parent.mkdir(parents=True, exist_ok=True)
-    lengths = [len(bag) for bag in bags]
+    lengths = [int(length) for length in lengths]
+    if len(lengths) != len(keys):
+        raise ValueError(f"{len(keys)} keys but {len(lengths)} bag lengths")
     offsets = np.concatenate([[0], np.cumsum(lengths)]).astype(np.int64)
     tmp_dir = directory.parent / f".tmp-{directory.name}-{uuid.uuid4().hex}"
     tmp_dir.mkdir()
@@ -46,10 +56,14 @@ def write_response_targets(
             tmp_dir / "target_cells.npy",
             mode="w+",
             dtype=np.float32,
-            shape=(int(offsets[-1]), int(bags[0].shape[1])),
+            shape=(int(offsets[-1]), int(width)),
         )
-        for start, bag in zip(offsets[:-1], bags, strict=True):
-            cells[start : start + len(bag)] = bag
+        for key, start, length, bag in zip(
+            keys, offsets[:-1], lengths, bags, strict=True
+        ):
+            if bag.shape != (length, width):
+                raise ValueError(f"{key}: bag shape {bag.shape} != {(length, width)}")
+            cells[start : start + length] = bag
         cells.flush()
         del cells
         np.save(tmp_dir / "offsets.npy", offsets)

@@ -1,28 +1,32 @@
-"""Raw-count AnnData builders for Perturb-seq sources, and raw-count helpers.
+"""Raw-count helpers and memory-bounded readers of Perturb-seq sources.
 
-Every builder returns raw non-negative UMI counts with ``var`` indexed by
-Ensembl id (the Tx1 input contract). Expression-space transforms happen in
-``src.data.expression``, never here.
+The readers return raw non-negative UMI counts: whole-library totals and
+counts in a given gene order, reduced one row chunk (or one parquet shard) at
+a time so a full-transcriptome matrix is never held. Expression-space
+transforms happen in ``src.data.expression``, never here.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Mapping, NamedTuple, Sequence
 
 import anndata as ad
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
-from src.data.response_streaming import drain_gene_reservoirs_to_matrix
+from src.data.expression import library_sizes
 
 _LOGGER = logging.getLogger(__name__)
 
-_PERTURBSEQ_BASAL_SOURCE = "Perturb-seq non-targeting control"
 _ENSEMBL_ID_PATTERN = re.compile(r"^ENSG\d+(\.\d+)?$")
 _SYMBOL_COLUMNS: Final[tuple[str, ...]] = ("gene_symbol", "gene_symbols", "gene_name")
 
@@ -41,14 +45,27 @@ _XATLAS_READ_COLUMNS: Final[tuple[str, ...]] = (
     _XATLAS_PERTURBATION_COL,
     _XATLAS_PASS_GUIDE_FILTER_COL,
 )
-_XATLAS_CONTROL_LABEL: Final[str] = "Non-Targeting"
-_XATLAS_PASS_GUIDE_FILTER_VALUE: Final[int] = 1
-_XATLAS_GENE_METADATA_TOKEN_COL: Final[str] = "gene_token_id"
-_XATLAS_GENE_METADATA_VAR_COLUMNS: Final[tuple[str, str]] = ("ensembl_id", "gene_name")
+XATLAS_GENE_METADATA_TOKEN_COL: Final[str] = "gene_token_id"
 
 #: Rows per backed read; one huge fancy index over a dense unchunked HDF5
 #: dataset can spin for tens of minutes before reading a byte.
 _MATERIALIZE_CHUNK_ROWS: Final[int] = 2000
+
+
+@dataclass(frozen=True)
+class ResponseCells:
+    """Perturbed cells of one anchor, reduced to what response targets need.
+
+    ``labels`` are the raw perturbation labels, ``library_sizes`` each cell's
+    UMI total over every gene of its source (float64) and ``hvg_counts`` its
+    raw counts in a given gene order (float64 CSR; source columns sharing a
+    symbol summed, absent genes zero and ``False`` in ``present``).
+    """
+
+    labels: np.ndarray
+    library_sizes: np.ndarray
+    hvg_counts: csr_matrix
+    present: np.ndarray
 
 
 # --- raw-count helpers -------------------------------------------------------
@@ -153,14 +170,6 @@ def _require_ensembl_source(
     )
 
 
-def _ensembl_var(var: pd.DataFrame, var_ensembl_col: str) -> pd.DataFrame:
-    var = var.copy()
-    if var_ensembl_col in var.columns:
-        var.index = var[var_ensembl_col].astype(str)
-    var["ensembl_id"] = var.index.astype(str)
-    return var
-
-
 def _select_indices_deterministic(
     candidate_indices: np.ndarray, max_cells: int | None, seed: int
 ) -> np.ndarray:
@@ -170,6 +179,24 @@ def _select_indices_deterministic(
     rng = np.random.default_rng(seed)
     chosen = rng.choice(len(candidate_indices), size=max_cells, replace=False)
     return np.sort(candidate_indices[chosen])
+
+
+def _row_chunks(
+    matrix: object,
+    sorted_indices: np.ndarray,
+    *,
+    chunk_size: int = _MATERIALIZE_CHUNK_ROWS,
+    sparsify_chunks: bool = False,
+) -> Iterator[object]:
+    """Rows ``sorted_indices`` (ascending) of a backed matrix, one chunk at a time.
+
+    ``sparsify_chunks`` converts each dense chunk to CSR before the next is read.
+    """
+    for start in range(0, len(sorted_indices), chunk_size):
+        chunk = matrix[sorted_indices[start : start + chunk_size], :]
+        if sparsify_chunks and not sparse.issparse(chunk):
+            chunk = csr_matrix(chunk)
+        yield chunk
 
 
 def _materialize_rows(
@@ -190,14 +217,14 @@ def _materialize_rows(
     if not sorted_indices.size:
         stacked = matrix[sorted_indices, :]
     else:
-        chunks = []
-        for start in range(0, len(sorted_indices), chunk_size):
-            chunk = matrix[sorted_indices[start : start + chunk_size], :]
-            # Sparsify before reading the next chunk, so at most one dense
-            # chunk is held at a time.
-            if sparsify_chunks and not sparse.issparse(chunk):
-                chunk = csr_matrix(chunk)
-            chunks.append(chunk)
+        chunks = list(
+            _row_chunks(
+                matrix,
+                sorted_indices,
+                chunk_size=chunk_size,
+                sparsify_chunks=sparsify_chunks,
+            )
+        )
         if sparse.issparse(chunks[0]):
             stacked = sparse.vstack(chunks, format="csr")
         else:
@@ -236,33 +263,15 @@ def _cap_indices_by_group(
     return np.concatenate(selected)
 
 
-def _labelled_adata(
-    matrix: csr_matrix,
-    var: pd.DataFrame,
-    obs_names: Sequence[str],
-    *,
-    model_id: str,
-    columns: Mapping[str, object],
-) -> ad.AnnData:
-    obs = pd.DataFrame(
-        {"cell_type": model_id, "model_id": model_id, **columns}, index=list(obs_names)
-    )
-    adata = ad.AnnData(X=matrix, obs=obs, var=var)
-    assert_tx1_input_contract(adata)
-    return adata
-
-
-def build_perturbseq_basal_adata(
+def perturbseq_control_library_sizes(
     h5ad_path: Path,
     *,
     control_label: str,
     perturbation_col: str,
-    model_id: str,
     var_ensembl_col: str,
-    max_cells: int | None = None,
-    seed: int = 0,
-) -> ad.AnnData:
-    """Non-targeting control cells of a Perturb-seq h5ad, over every gene."""
+    label: str,
+) -> np.ndarray:
+    """Whole-library UMI totals of a Perturb-seq h5ad's control cells, in row order."""
     backed = ad.read_h5ad(h5ad_path, backed="r")
     try:
         _require_ensembl_source(backed.var, var_ensembl_col, h5ad_path)
@@ -273,36 +282,35 @@ def build_perturbseq_basal_adata(
                 f"No control cells found for {perturbation_col}={control_label!r} "
                 f"in {h5ad_path}"
             )
-        selected = _select_indices_deterministic(control, max_cells, seed)
-        matrix = csr_matrix(_materialize_rows(backed.X, selected, sparsify_chunks=True))
-        obs_names = backed.obs_names.to_numpy()[selected].astype(str)
-        var = _ensembl_var(backed.var, var_ensembl_col)
+        sizes = []
+        for chunk in _row_chunks(backed.X, control, sparsify_chunks=True):
+            chunk = csr_matrix(chunk)
+            require_raw_counts(chunk, label)
+            sizes.append(library_sizes(chunk))
     finally:
         backed.file.close()
-    return _labelled_adata(
-        matrix,
-        var,
-        obs_names,
-        model_id=model_id,
-        columns={"basal_source": _PERTURBSEQ_BASAL_SOURCE},
-    )
+    return np.concatenate(sizes)
 
 
-def build_perturbseq_response_adata(
+def read_perturbseq_response_cells(
     h5ad_path: Path,
     *,
     control_label: str,
     perturbation_col: str,
-    model_id: str,
     var_ensembl_col: str,
+    symbol_col: str,
+    gene_order: Sequence[str],
+    label: str,
     max_cells_per_gene: int | None = None,
     total_cells_per_line: int | None = None,
     seed: int = 0,
-) -> ad.AnnData:
-    """Perturbed cells of a Perturb-seq h5ad with ``obs["perturbation_gene"]``.
+) -> ResponseCells:
+    """Perturbed cells of a Perturb-seq h5ad, columns aligned to ``gene_order``.
 
     The per-gene cap is applied before any expression value is read; the
     optional total cap follows it. Rows come out grouped by sorted label.
+    Each row chunk is reduced to library sizes and aligned columns before the
+    next is read.
     """
     backed = ad.read_h5ad(h5ad_path, backed="r")
     try:
@@ -317,25 +325,24 @@ def build_perturbseq_response_adata(
         grouped = _group_candidate_indices_by_label(candidate, labels[candidate])
         selected = _cap_indices_by_group(grouped, max_cells_per_gene, seed)
         selected = _select_indices_deterministic(selected, total_cells_per_line, seed)
-        matrix = csr_matrix(_materialize_rows(backed.X, selected, sparsify_chunks=True))
-        obs_names = backed.obs_names.to_numpy()[selected].astype(str)
-        var = _ensembl_var(backed.var, var_ensembl_col)
+        symbols = backed.var[symbol_col].astype(str)
+        order = np.argsort(selected)
+        sizes, counts = [], []
+        for chunk in _row_chunks(backed.X, selected[order], sparsify_chunks=True):
+            chunk = csr_matrix(chunk)
+            require_raw_counts(chunk, label)
+            sizes.append(library_sizes(chunk))
+            aligned, present = align_columns(chunk, symbols, gene_order)
+            counts.append(aligned)
     finally:
         backed.file.close()
-    adata = _labelled_adata(
-        matrix,
-        var,
-        obs_names,
-        model_id=model_id,
-        columns={"perturbation_gene": labels[selected]},
+    inverse = np.argsort(order)
+    return ResponseCells(
+        labels=labels[selected],
+        library_sizes=np.concatenate(sizes)[inverse],
+        hvg_counts=sparse.vstack(counts, format="csr")[inverse, :],
+        present=present,
     )
-    _LOGGER.info(
-        "%s: %d perturbed cells, %d perturbations",
-        model_id,
-        adata.n_obs,
-        len(set(labels[selected])),
-    )
-    return adata
 
 
 # --- X-Atlas-Orion parquet shards ----------------------------------------------
@@ -433,106 +440,58 @@ def _assemble_token_matrix(
     return matrix, var
 
 
-def build_xatlas_orion_response_adata(
-    shard_dir: Path,
-    gene_metadata_path: Path,
-    *,
-    model_id: str,
-    shard_glob: str = "*.parquet",
-    control_label: str = _XATLAS_CONTROL_LABEL,
-    pass_guide_filter_value: int = _XATLAS_PASS_GUIDE_FILTER_VALUE,
-    max_cells_per_gene: int | None = None,
-    total_cells_per_line: int | None = None,
-    seed: int = 0,
-) -> ad.AnnData:
-    """Perturbed, guide-QC-passing X-Atlas-Orion cells, capped per gene.
+def read_xatlas_shard(
+    path: Path, control_label: str, pass_guide_filter_value: int
+) -> tuple[list[str], np.ndarray, pa.Table, np.ndarray]:
+    """Perturbed, guide-QC-passing rows of one shard, token lists left in Arrow.
 
-    Shards are streamed through one Algorithm-R reservoir per perturbation;
-    the reservoir is drained straight into CSR to bound peak memory.
+    Applies :func:`_filter_xatlas_shard`'s filters to the label and QC columns
+    only. Returns ``(labels, rows, table, [total, after_label_filter,
+    after_guide_filter])``: ``rows[i]`` is the ``table`` row (token and value
+    lists) of ``labels[i]``.
     """
-    reservoirs = _stream_xatlas_response_cells(
-        shard_dir,
-        shard_glob,
-        control_label=control_label,
-        pass_guide_filter_value=pass_guide_filter_value,
-        max_cells_per_gene=max_cells_per_gene,
-        seed=seed,
+    table = pq.read_table(
+        path,
+        columns=[
+            _XATLAS_PERTURBATION_COL,
+            _XATLAS_PASS_GUIDE_FILTER_COL,
+            _XATLAS_GENE_TOKEN_COL,
+            _XATLAS_EXPRESSION_COL,
+        ],
     )
-    metadata = pd.read_parquet(gene_metadata_path).set_index(
-        _XATLAS_GENE_METADATA_TOKEN_COL
+    frame = table.select(
+        [_XATLAS_PERTURBATION_COL, _XATLAS_PASS_GUIDE_FILTER_COL]
+    ).to_pandas()
+    target = frame[_XATLAS_PERTURBATION_COL]
+    perturbed = np.flatnonzero((target.astype(str) != control_label).to_numpy())
+    guide = frame[_XATLAS_PASS_GUIDE_FILTER_COL].iloc[perturbed].astype(int)
+    rows = perturbed[(guide == pass_guide_filter_value).to_numpy()]
+    labels = [str(value) for value in target.iloc[rows]]
+    counts = np.array([len(frame), len(perturbed), len(rows)], dtype=np.int64)
+    return (
+        labels,
+        rows,
+        table.select([_XATLAS_GENE_TOKEN_COL, _XATLAS_EXPRESSION_COL]),
+        counts,
     )
-    matrix, var, perturbation_genes, barcodes, samples = (
-        drain_gene_reservoirs_to_matrix(
-            reservoirs,
-            metadata,
-            metadata_var_columns=_XATLAS_GENE_METADATA_VAR_COLUMNS,
-            total_cells=total_cells_per_line,
-            seed=seed,
-        )
-    )
-    adata = _labelled_adata(
-        matrix,
-        var,
-        [f"{sample}:{barcode}" for sample, barcode in zip(samples, barcodes)],
-        model_id=model_id,
-        columns={"perturbation_gene": perturbation_genes, "sample": samples},
-    )
-    _LOGGER.info(
-        "%s: %d perturbed cells, %d perturbations",
-        model_id,
-        adata.n_obs,
-        len(set(perturbation_genes.tolist())),
-    )
-    return adata
 
 
-def _stream_xatlas_response_cells(
-    shard_dir: Path,
-    shard_glob: str,
-    *,
-    control_label: str,
-    pass_guide_filter_value: int,
-    max_cells_per_gene: int | None = None,
-    seed: int = 0,
-) -> dict[str, list[_XatlasCell]]:
-    """One seeded Algorithm-R reservoir per ``gene_target`` over all shards."""
-    paths = sorted(Path(shard_dir).glob(shard_glob))
-    if not paths:
-        raise ValueError(
-            f"No parquet shards matching {shard_glob!r} found under {shard_dir}"
-        )
-    rng = np.random.default_rng(seed)
-    reservoirs: dict[str, list[_XatlasCell]] = {}
-    seen: dict[str, int] = {}
-    counts = np.zeros(3, dtype=np.int64)
-    for path in paths:
-        frame, shard_counts = _filter_xatlas_shard(
-            path, control_label, pass_guide_filter_value, perturbed=True
-        )
-        counts += shard_counts
-        for row in frame.itertuples(index=False):
-            gene = str(getattr(row, _XATLAS_PERTURBATION_COL))
-            cell = _row_to_xatlas_cell(row)
-            bucket = reservoirs.setdefault(gene, [])
-            seen[gene] = seen.get(gene, 0) + 1
-            if max_cells_per_gene is None or len(bucket) < max_cells_per_gene:
-                bucket.append(cell)
-                continue
-            replacement = int(rng.integers(0, seen[gene]))
-            if replacement < max_cells_per_gene:
-                bucket[replacement] = cell
-    total, perturbed, passing = (int(value) for value in counts)
-    _LOGGER.info(
-        "X-Atlas-Orion %s (%s): %d rows, %d perturbed, %d pass guide QC",
-        shard_dir,
-        shard_glob,
-        total,
-        perturbed,
-        passing,
+def xatlas_token_rows(table: pa.Table, rows: np.ndarray) -> tuple[np.ndarray, ...]:
+    """``(cell, token, value)`` of every positive entry of ``table`` rows ``rows``.
+
+    ``cell`` indexes ``rows``; entries keep their order within each cell.
+    X-Atlas tokens reserve no special ids; only positive values are kept.
+    """
+    subset = table.take(pa.array(rows, type=pa.int64()))
+    tokens = subset.column(_XATLAS_GENE_TOKEN_COL).combine_chunks()
+    values = subset.column(_XATLAS_EXPRESSION_COL).combine_chunks()
+    lengths = np.asarray(tokens.value_lengths(), dtype=np.int64)
+    if not np.array_equal(lengths, np.asarray(values.value_lengths(), dtype=np.int64)):
+        raise ValueError("X-Atlas-Orion token and value lists differ in length")
+    cell = np.repeat(np.arange(len(rows)), lengths)
+    token = np.asarray(tokens.flatten().to_numpy(zero_copy_only=False), dtype=np.int64)
+    value = np.asarray(
+        values.flatten().to_numpy(zero_copy_only=False), dtype=np.float32
     )
-    if not reservoirs:
-        raise ValueError(
-            f"No perturbed cells found matching {_XATLAS_PERTURBATION_COL}!="
-            f"{control_label!r} under {shard_dir} ({shard_glob!r})"
-        )
-    return reservoirs
+    positive = value > 0
+    return cell[positive], token[positive], value[positive]

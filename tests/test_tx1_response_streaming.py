@@ -1,16 +1,21 @@
-"""Memory-bounded CSR assembly of per-gene X-Atlas-Orion reservoirs."""
+"""Memory-bounded streaming of X-Atlas-Orion reservoirs."""
 
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
-import pytest
-from scipy.sparse import csr_matrix
+import threading
+import time
 
+import numpy as np
+import pytest
+
+import test_prepare as base
+from src.data import response_streaming
 from src.data.response_streaming import (
-    drain_gene_reservoirs_to_matrix,
+    prefetched,
+    read_xatlas_response_cells,
     resolve_total_budget_keep_mask,
 )
+from test_prepare_equivalence import CAPPED, _write_xatlas, naive_xatlas_cells
 
 
 # --- resolve_total_budget_keep_mask ----------------------------------------
@@ -45,178 +50,88 @@ def test_keep_mask_different_seed_changes_selection() -> None:
     assert not np.array_equal(first, second)
 
 
-# --- drain_gene_reservoirs_to_matrix: total-cell budget --------------------
+# --- prefetched -----------------------------------------------------------
 
 
-def _reservoir_cell(value: float, barcode: str) -> tuple:
-    return (
-        np.array([0], dtype=np.int64),
-        np.array([value], dtype=np.float32),
-        barcode,
-        "s",
+def test_prefetched_keeps_order_and_bounds_reads_ahead() -> None:
+    lock = threading.Lock()
+    running, peak = 0, 0
+
+    def read(item: int) -> int:
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.02 if item % 2 else 0.0)  # odd items finish last
+        with lock:
+            running -= 1
+        return item * 10
+
+    assert list(prefetched(read, range(9), threads=3)) == [i * 10 for i in range(9)]
+    assert 1 < peak <= 3
+
+
+# --- read_xatlas_response_cells -------------------------------------------
+
+
+def _read(source: dict, caps: dict, seed: int):
+    return read_xatlas_response_cells(
+        source["shard_dir"],
+        source["gene_metadata_path"],
+        model_id=base.HCT116,
+        shard_glob=source["shard_glob"],
+        control_label=source["control_label"],
+        pass_guide_filter_value=source["pass_guide_filter_value"],
+        symbol_col="gene_name",
+        gene_order=base.HVG,
+        max_cells_per_gene=caps["response_max_cells_per_gene"],
+        total_cells_per_line=caps["response_total_cells_per_line"],
+        seed=seed,
     )
 
 
-def test_drain_applies_total_cell_budget_after_per_gene_cap() -> None:
-    reservoirs = {
-        "GENE_A": [_reservoir_cell(1.0, f"a{i}") for i in range(6)],
-        "GENE_B": [_reservoir_cell(2.0, f"b{i}") for i in range(6)],
-    }
-    metadata = pd.DataFrame({"ensembl_id": ["ENSG0"], "gene_name": ["G0"]}, index=[0])
-    matrix, var, genes, barcodes, samples = drain_gene_reservoirs_to_matrix(
-        reservoirs,
-        metadata,
-        metadata_var_columns=("ensembl_id", "gene_name"),
-        total_cells=5,
-        seed=0,
-    )
-    assert matrix.shape[0] == 5
-    assert len(genes) == 5
-    assert len(barcodes) == 5
-    assert len(samples) == 5
+@pytest.mark.parametrize(
+    "caps",
+    [
+        CAPPED,
+        {"response_max_cells_per_gene": 3, "response_total_cells_per_line": None},
+        {"response_max_cells_per_gene": None, "response_total_cells_per_line": 700},
+    ],
+)
+def test_reservoir_matches_whole_cell_reference(tmp_path, caps) -> None:
+    """Several shards, rejected rows, duplicate and unknown tokens, both caps."""
+    source = _write_xatlas(tmp_path, seed=300)
+    cells = _read(source, caps, seed=11)
+    labels, sizes, aligned = naive_xatlas_cells(source, base.HVG, caps, seed=11)
+    np.testing.assert_array_equal(cells.labels, labels)
+    assert cells.library_sizes.tobytes() == sizes.tobytes()
+    assert cells.hvg_counts.toarray().tobytes() == aligned.tobytes()
+    np.testing.assert_array_equal(cells.present, (aligned > 0).any(axis=0))
+    assert not cells.present[base.HVG.index("H1")]  # absent from the metadata
 
 
-def test_drain_total_cells_none_keeps_all() -> None:
-    reservoirs = {
-        "GENE_A": [_reservoir_cell(1.0, f"a{i}") for i in range(4)],
-    }
-    metadata = pd.DataFrame({"ensembl_id": ["ENSG0"], "gene_name": ["G0"]}, index=[0])
-    matrix, _var, genes, _barcodes, _samples = drain_gene_reservoirs_to_matrix(
-        reservoirs,
-        metadata,
-        metadata_var_columns=("ensembl_id", "gene_name"),
-        total_cells=None,
-    )
-    assert matrix.shape[0] == 4
-    assert len(genes) == 4
+def test_only_rows_a_reservoir_keeps_are_converted(tmp_path, monkeypatch) -> None:
+    source = _write_xatlas(tmp_path, seed=300)
+    converted = []
+    original = response_streaming.xatlas_token_rows
+
+    def spy(table, rows):
+        converted.append(len(rows))
+        return original(table, rows)
+
+    monkeypatch.setattr(response_streaming, "xatlas_token_rows", spy)
+    caps = {"response_max_cells_per_gene": 1, "response_total_cells_per_line": None}
+    cells = _read(source, caps, seed=0)
+    n_genes = len(set(cells.labels.tolist()))
+    assert len(converted) == 5  # one conversion per shard
+    assert all(0 < count <= n_genes for count in converted)
 
 
-def test_drain_drains_reservoir_slots_to_none() -> None:
-    """Every consumed slot is released."""
-    reservoirs = {"GENE_A": [_reservoir_cell(1.0, "a")]}
-    drain_gene_reservoirs_to_matrix(
-        reservoirs,
-        pd.DataFrame({"ensembl_id": ["ENSG0"], "gene_name": ["G0"]}, index=[0]),
-        metadata_var_columns=("ensembl_id", "gene_name"),
-    )
-    assert reservoirs["GENE_A"][0] is None
-
-
-def test_drain_drops_tokens_missing_from_metadata(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A token absent from ``metadata`` drops that entry, not the cell."""
-    reservoirs = {
-        "GENE_A": [
-            (
-                np.array([0, 1, 2], dtype=np.int64),
-                np.array([1.0, 2.0, 3.0], dtype=np.float32),
-                "a",
-                "s",
-            )
-        ],
-    }
-    metadata = pd.DataFrame({"ensembl_id": ["ENSG0"], "gene_name": ["G0"]}, index=[0])
+def test_unknown_tokens_of_kept_cells_are_reported(tmp_path, caplog) -> None:
+    source = _write_xatlas(tmp_path, seed=300)
     with caplog.at_level("WARNING", logger="src.data.response_streaming"):
-        matrix, var, _genes, _barcodes, _samples = drain_gene_reservoirs_to_matrix(
-            reservoirs, metadata, metadata_var_columns=("ensembl_id", "gene_name")
-        )
-    assert matrix.shape == (1, 1)
-    assert matrix.toarray().tolist() == [[1.0]]
-    assert var.index.tolist() == ["ENSG0"]
-    warnings = [
-        record.message
-        for record in caplog.records
-        if "missing from gene metadata index" in record.message
+        _read(source, CAPPED, seed=0)
+    assert [r.message for r in caplog.records if "missing from" in r.message] == [
+        f"{base.HCT116}: dropped 2 distinct gene tokens missing from the gene "
+        "metadata index"
     ]
-    assert len(warnings) == 1
-    assert "2/3" in warnings[0]
-
-
-def test_drain_matches_coo_reference_with_duplicates_missing_and_budget() -> None:
-    """Direct CSR construction equals a COO reference build."""
-    reservoirs = {
-        "GENE_B": [
-            (
-                np.array([1, 3], dtype=np.int64),
-                np.array([7.0, 8.0], dtype=np.float32),
-                "b0",
-                "sb",
-            ),
-            (
-                np.array([5], dtype=np.int64),
-                np.array([6.0], dtype=np.float32),
-                "b1",
-                "sb",
-            ),
-        ],
-        "GENE_A": [
-            (
-                np.array([5, 1, 5, 99], dtype=np.int64),
-                np.array([1.0, 2.0, 3.0, 9.0], dtype=np.float32),
-                "a0",
-                "sa",
-            ),
-            (
-                np.array([3, 88], dtype=np.int64),
-                np.array([4.0, 5.0], dtype=np.float32),
-                "a1",
-                "sa",
-            ),
-        ],
-    }
-    original = {gene: list(cells) for gene, cells in reservoirs.items()}
-    metadata = pd.DataFrame(
-        {
-            "ensembl_id": ["ENSG5", "ENSG1", "ENSG3"],
-            "gene_name": ["G5", "G1", "G3"],
-        },
-        index=[5, 1, 3],
-    )
-    keep_mask = resolve_total_budget_keep_mask(4, total_cells=3, seed=1)
-
-    selected = []
-    global_index = 0
-    for gene in sorted(original):
-        for cell in original[gene]:
-            if keep_mask[global_index]:
-                selected.append((gene, cell))
-            global_index += 1
-    tokens = sorted(
-        {
-            int(token)
-            for _gene, cell in selected
-            for token in cell[0]
-            if token in metadata.index
-        }
-    )
-    token_to_col = {token: col for col, token in enumerate(tokens)}
-    rows: list[int] = []
-    columns: list[int] = []
-    values: list[float] = []
-    for row, (_gene, cell) in enumerate(selected):
-        for token, value in zip(cell[0], cell[1], strict=True):
-            if int(token) in token_to_col:
-                rows.append(row)
-                columns.append(token_to_col[int(token)])
-                values.append(float(value))
-    expected = csr_matrix(
-        (values, (rows, columns)), shape=(len(selected), len(tokens)), dtype=np.float32
-    )
-
-    matrix, var, genes, barcodes, samples = drain_gene_reservoirs_to_matrix(
-        reservoirs,
-        metadata,
-        metadata_var_columns=("ensembl_id", "gene_name"),
-        total_cells=3,
-        seed=1,
-    )
-
-    np.testing.assert_array_equal(matrix.indptr, expected.indptr)
-    np.testing.assert_array_equal(matrix.indices, expected.indices)
-    np.testing.assert_array_equal(matrix.data, expected.data)
-    assert var.equals(metadata.loc[tokens].set_index("ensembl_id", drop=False))
-    np.testing.assert_array_equal(genes, [gene for gene, _cell in selected])
-    np.testing.assert_array_equal(barcodes, [cell[2] for _gene, cell in selected])
-    np.testing.assert_array_equal(samples, [cell[3] for _gene, cell in selected])
-    assert all(cell is None for bucket in reservoirs.values() for cell in bucket)

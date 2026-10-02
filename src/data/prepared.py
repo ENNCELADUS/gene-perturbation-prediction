@@ -25,7 +25,6 @@ from typing import Any, Final
 
 import numpy as np
 import pandas as pd
-import torch
 
 from src.data.basal import align_columns
 from src.data.embeddings import load_esm2_embeddings
@@ -72,6 +71,8 @@ class PreparedInputs:
 
     def preprocessing_state(self) -> dict[str, object]:
         """Return checkpoint-ready fitted state, including actual ESM2 vectors."""
+        import torch  # deferred: basal-line preparation workers never need it
+
         return {
             "target_sum": float(self.target_sum),
             "gene_means": {
@@ -256,6 +257,8 @@ def load_inputs(
         variable_genes = frozenset(preprocessing["variable_genes"])
         esm2_symbols = tuple(preprocessing["esm2_symbols"])
         vectors = preprocessing["esm2_vectors"]
+        import torch
+
         if isinstance(vectors, torch.Tensor):
             vectors = vectors.detach().cpu().numpy()
         esm2_vectors = np.asarray(vectors)
