@@ -1,114 +1,49 @@
 ---
 name: hpc-execution
-description: Use before running the `all` pipeline (preparation, response-model comparison, joint GeneEffect training, validation evaluation) or a checkpoint test for this repository, or when a task needs the Replogle GWPS h5ad, ESM2 embeddings, STATE checkpoint or Tx1-3B weights that the local Mac lacks. Covers the H20 container ports, Git-only code sync to the shared checkout, hpc/run.sh, GPU inspection and process reporting.
+description: Use before running the `all` pipeline or a checkpoint test, or when a task needs the raw data, ESM2 embeddings, STATE checkpoint or Tx1-3B weights the local Mac lacks. Covers H20 container ports, pushing code to the shared checkout, environment and GPU checks, disconnect-safe launches and run reporting.
 ---
 
 # HPC execution
+`hpc/README.md` and `hpc/run.sh` are the live sources; CLAUDE.md covers commands, resume and sync rules.
 
-Treat `hpc/README.md` and `hpc/run.sh` as the live execution sources. The repository has
-one launcher, `hpc/run.sh`, and no scheduler or qualification ladder. Run experiments
-directly; do not add preregistration, hash, eligibility or qualification preflights.
+## Connect
 
-The local Mac has no GPU, Tx1 weights, STATE checkpoint, ESM2 table or raw data. It runs
-synthetic-fixture tests only; real preparation, training and evaluation run on the H20 host.
-
-## Connect to an H20 container
-
-Containers on the same host share the `/2023533015` filesystem, so one checkout, one
-`data/`, and one `outputs/` tree serve all of them. Pick a container by its SSH port:
+Containers on one host share `/2023533015` (one checkout, `data/`, `outputs/`) but each sees only its own GPUs, and all
+share 224 CPU cores: set `OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes you launch (`hpc/run.sh` does not).
 
 | Port | GPUs | Use |
 |---|---|---|
-| 30838 | 4 × H20 | default and, as of 2026-09-29, the only reachable one; no GitHub access |
-| 30030, 30670, 30846 | 4 × H20 | extra lanes when they accept connections (all refused on 2026-09-29) |
+| 30838 | 4 × H20 | default; the only reachable one on 2026-09-29; no GitHub access |
+| 30030, 30670, 30846 | 4 × H20 | extra lanes when they accept connections |
 
-```bash
-ssh -p 30838 root@10.15.171.204
-cd /2023533015/VCC_Project
-```
+`ssh -p 30838 root@10.15.171.204`, then `cd /2023533015/VCC_Project`. Ports change when a container is recreated; if one
+refuses, ask the user rather than scanning. Ports in `docs/results/` are historical. Never store the SSH password in the repo.
 
-Ports change when a container is recreated. If the listed one refuses, ask the user
-rather than scanning. Historical ports in `docs/results/` are not a connection authority.
-Do not store the SSH password in the repository.
-
-Each container sees only its own GPUs, so jobs on different containers never contend for
-a GPU, but they share the host's 224 CPU cores. `hpc/run.sh` does not cap threads; set
-`OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes you launch.
-
-## Sync code through Git only
-
-Never rsync, scp or tar a working tree. The host has no GitHub access, so push from the
-laptop straight into the checkout over SSH, then move the checkout onto that branch:
+## Push code (the host has no GitHub access; push from the laptop over SSH)
 
 ```bash
 git push ssh://root@10.15.171.204:30838/2023533015/VCC_Project main
 ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git checkout main && git log -1 --oneline'
 ```
 
-The checkout keeps its own branch and can drift from local `main`. Git refuses a push to
-the checked-out branch, so push a branch it is not on, or check `main` out first. Look at
-`git branch --show-current`, `git log -1` and `git status --short` there before assuming
-your code is present, and never discard the host's uncommitted changes.
+Git refuses a push to the checked-out branch, so check out another branch there first. The checkout drifts: read
+`git branch --show-current`, `git log -1` and `git status --short` before assuming your code is present, and never discard
+the host's uncommitted changes. The host holds the only copies of caches, checkpoints and `outputs/`.
 
-The host holds the only copies of the prepared caches, checkpoints and `outputs/`.
-Git-ignored assets (`data/`, `outputs/`, `*.pt`) never travel through Git.
+## Environment and GPUs
 
-## Environment
+`hpc/run.sh` uses `.venv-tx1/bin/python` (or `PYTHON_BIN`), not `.venv`; `uv` is `/2023533015/.uv/bin/uv`. Before
+consequential work confirm the interpreter imports torch, accelerate and `state`, and query hardware, never assume it:
+`nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader` and `ps aux | grep '[s]rc\.'`.
+`all` runs the response-model comparison on the last visible GPU and training on the other N−1 (`accelerate`). Size batches
+from measured throughput; never shrink one silently after an OOM. After killing `all`, check for orphaned `src.train` /
+`response_comparison` processes before relaunching.
 
-`hpc/run.sh` uses `.venv-tx1/bin/python`, or an explicit `PYTHON_BIN`; plain `.venv` is
-not the training environment. Environment names do not establish contents: before
-consequential work check that the interpreter imports torch, accelerate, `state` and the
-input libraries, and that `nvidia-smi` shows the expected devices. Run module commands
-from the repository root (`src.*` imports; `uv` is at `/2023533015/.uv/bin/uv`).
+## Launch and report
 
-## GPUs — query, never assume
-
-Hardware changes with the container.
-
-```bash
-nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader
-ps aux | grep '[s]rc\.'
-```
-
-`hpc/run.sh all` counts the visible GPUs (respecting `CUDA_VISIBLE_DEVICES`). Do not
-hard-code a GPU count. Resume needs the same world size, and a batch-size change needs a new run id (`hpc/README.md`). Choose
-batch sizes from measured throughput; never shrink one silently after an OOM.
-
-## Commands
-
-```bash
-hpc/run.sh all  configs/geneeffect_joint.yaml [--run-id <id>]   # prepare → comparison ∥ train → val eval, baselines, readout → summary.md
-hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt     # explicit; `all` never runs test
-```
-
-`all` puts the response-model comparison on the last visible GPU and joint training on
-the rest (`accelerate`, N−1 processes); rerunning with the same run id resumes and skips
-finished steps, and refuses a changed config. Resume keeps the same GPU count. Subprocess
-logs are under `outputs/geneeffect_joint/<id>/logs/`. If the `all` process is killed,
-check for orphaned `src.train`/`response_comparison` processes before relaunching.
-
-Preparation is the only step that reads raw data; training opens caches and never
-rebuilds them. Testing is explicit, restores fitted preprocessing from the checkpoint and
-does not refit. The test split is spent, so model decisions use validation.
-
-For a disconnect-safe launch, add only shell-level logging around the same command, then
-exit the session and confirm the process from a fresh one (a `nohup` launch inside a
-single `ssh` command can hang that session):
-
-```bash
-mkdir -p outputs/launches
-nohup hpc/run.sh all configs/geneeffect_joint.yaml --run-id <new_id> > outputs/launches/<new_id>.log 2>&1 &
-```
-
-## Reporting
-
-Distinguish launch, running state, completed training and scientific evaluation. A
-launcher PID or GPU utilization is execution evidence only. Confirm each step of an `all`
-run from its output in the run directory: `comparison/verdicts.json` for the comparison,
-`train/done.json` (with `train/metrics.jsonl`, `best.pt` and `last.pt`) for training,
-`evaluation/val/metrics.json`, `baselines/val/metrics.json` and `readout/metrics.json` for
-validation, and `summary.md` last; read `logs/<step>.log` for a failure. A failed
-evaluation step is retried by rerunning `all` with the same run id, without retraining.
-Historical runs keep their historical records; do not fabricate status files or relabel
-their protocols.
-Nothing produced here is SL interaction evidence.
+Disconnect-safe launch (then exit and confirm from a fresh session; `nohup` inside a single `ssh` command can hang it):
+`mkdir -p outputs/launches && nohup hpc/run.sh all configs/geneeffect_joint.yaml --run-id <id> > outputs/launches/<id>.log 2>&1 &`
+A PID or GPU utilization is launch evidence only. Confirm each step from `outputs/geneeffect_joint/<id>/`:
+`comparison/verdicts.json`; `train/done.json` (+ `metrics.jsonl`, `best.pt`, `last.pt`); `evaluation/val/metrics.json`,
+`baselines/val/metrics.json`, `readout/metrics.json`; `summary.md` last. Failures are in `logs/<step>.log`; rerun `all` with
+the same id to retry evaluation without retraining. Never fabricate status files or relabel historical runs.
