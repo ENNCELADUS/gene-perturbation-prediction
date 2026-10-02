@@ -567,6 +567,12 @@ def run_all(
     else:
         bound.write_text(json.dumps(config, indent=2) + "\n")
 
+    if chosen:
+        import torch
+
+        # In-process GPU work (Tx1 encoding of missing lines, checkpoint
+        # evaluation) uses the current device; make it the first chosen GPU.
+        torch.cuda.set_device(visible.index(chosen[0]))
     with sigterm_raises():
         manifest = _read_json(prepare_inputs(config))
         print(target_sum_line(manifest), flush=True)

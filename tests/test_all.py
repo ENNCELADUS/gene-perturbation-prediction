@@ -517,3 +517,21 @@ def test_main_passes_gpus_outside_the_config(monkeypatch):
         (Path("c.yaml"), {"run_id": "r", "gpus": ("1", "3")}),
         (Path("c.yaml"), {"run_id": None, "gpus": None}),
     ]
+
+
+def test_in_process_gpu_work_uses_first_chosen_gpu(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(pipeline, "visible_gpus", lambda: ("0", "1", "2", "3"))
+    monkeypatch.setattr(torch.cuda, "set_device", calls.append)
+
+    def stop(config):
+        raise RuntimeError("stop after the device is set")
+
+    monkeypatch.setattr("src.experiments.prepare.prepare_inputs", stop)
+    config_path = tmp_path / "config.yaml"
+    config = test_prepare.build_world(tmp_path)
+    config["output_root"] = str(tmp_path / "runs")
+    config_path.write_text(yaml.safe_dump(config))
+    with pytest.raises(RuntimeError, match="stop after"):
+        pipeline.run_all(config_path, run_id="device", gpus=("1", "3"))
+    assert calls == [1]
