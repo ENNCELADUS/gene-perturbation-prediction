@@ -1,26 +1,30 @@
-"""model / geneeffect."""
+"""Joint GeneEffect model: STATE response features feeding the residual head."""
 
 from __future__ import annotations
 
-from dataclasses import replace
-from typing import Mapping, Sequence
 import torch
 from torch import nn
-from src.model.normalization import BlockStandardizer
-from src.model.features import (
-    FixedSparseProjection,
-    compute_condition_feature_batch,
+
+from src.data.batches import (
+    E2EForwardOutput,
+    FeatureBatch,
+    OnlineConditionBatch,
+    ResponseForwardBatch,
 )
+from src.model.features import FixedSparseProjection, compute_condition_feature_batch
 from src.model.head import GeneEffectResidualHead
+from src.model.normalization import BlockStandardizer
 from src.model.response import predict_bags
-from src.data.batches import E2EForwardOutput
-from src.data.batches import OnlineConditionBatch
-from src.data.batches import FeatureBatch
-from src.data.batches import ResponseForwardBatch
+
+BLOCKS = ("delta_proj", "s", "q_sc", "e_g", "z_c")
 
 
 class GeneEffectE2EModel(nn.Module):
-    """Compose a trainable STATE backbone and the five-block residual head."""
+    """A trainable STATE response model and the five-block residual head.
+
+    STATE sees only each line's log-space basal HVG cells; the Tx1 context
+    ``z_c`` reaches the head directly.
+    """
 
     def __init__(
         self,
@@ -38,42 +42,29 @@ class GeneEffectE2EModel(nn.Module):
         self.standardizer = standardizer
         self.collator_seed = int(collator_seed)
 
-    def _standardize(self, features: FeatureBatch) -> dict[str, torch.Tensor]:
-        return {
-            name: self.standardizer.transform(name, value)
-            for name, value in (
-                ("delta_proj", features.delta_proj),
-                ("s", features.s),
-                ("q_sc", features.q_sc),
-                ("e_g", features.e_g),
-                ("z_c", features.z_c),
-            )
-            if getattr(self.head.blocks, f"use_{name}")
-        }
-
     def forward_features(self, features: FeatureBatch) -> torch.Tensor:
-        """Standardize live feature blocks and predict the GeneEffect residual."""
-        blocks = self._standardize(features)
+        """Standardize the enabled blocks and predict the GeneEffect residual."""
+        blocks = self.head.blocks
         return self.head(
-            **blocks,
-            q_sc_mask=features.q_sc_mask if self.head.blocks.use_q_sc else None,
-            hvg_panel_mask=features.hvg_panel_mask if self.head.blocks.use_s else None,
-            own_gene_shift_mask=(
-                features.own_gene_shift_mask if self.head.blocks.use_s else None
-            ),
+            **{
+                name: self.standardizer.transform(name, getattr(features, name))
+                for name in BLOCKS
+                if getattr(blocks, f"use_{name}")
+            },
+            q_sc_mask=features.q_sc_mask if blocks.use_q_sc else None,
+            hvg_panel_mask=features.hvg_panel_mask if blocks.use_s else None,
+            own_gene_shift_mask=features.own_gene_shift_mask if blocks.use_s else None,
         )
 
     def condition_features(self, batch: OnlineConditionBatch) -> FeatureBatch:
-        """Generate all five raw blocks without detaching the response graph."""
+        """All five raw blocks, keeping the STATE graph for backpropagation."""
+        basal = tuple(value.float() for value in batch.basal_hvg)
         predicted = predict_bags(
-            self.backbone,
-            batch.controls_tx1,
-            batch.genes,
-            seed=self.collator_seed,
+            self.backbone, basal, batch.genes, seed=self.collator_seed
         )
         built = compute_condition_feature_batch(
-            tuple(value.float() for value in predicted),
-            tuple(value.float() for value in batch.basal_hvg),
+            predicted,
+            basal,
             projection=self.projection,
             gene_in_hvg_panel=batch.gene_in_hvg_panel,
             own_gene_hvg_indices=batch.own_gene_hvg_indices,
@@ -97,46 +88,17 @@ class GeneEffectE2EModel(nn.Module):
         batch: OnlineConditionBatch,
         response: ResponseForwardBatch | None = None,
     ) -> E2EForwardOutput:
-        """Generate dependency and optional replay predictions in one DDP call."""
-        features = self.condition_features(batch)
+        """GeneEffect residuals and, on replay updates, response predictions.
+
+        Both go through one module call so DDP synchronises every gradient.
+        """
+        delta_hat = self.forward_features(self.condition_features(batch))
         response_predicted = None
         if response is not None:
             response_predicted = predict_bags(
                 self.backbone,
-                response.controls_tx1,
+                tuple(value.float() for value in response.basal_hvg),
                 response.genes,
                 seed=self.collator_seed,
             )
-        return E2EForwardOutput(
-            delta_hat=self.forward_features(features),
-            # DDP traverses every returned tensor to discover used parameters.
-            # Disabled diagnostics must not advertise a loss path that is absent.
-            raw_features=replace(
-                features,
-                **{
-                    name: getattr(features, name).detach()
-                    for name in ("delta_proj", "s", "q_sc", "e_g", "z_c")
-                    if not getattr(self.head.blocks, f"use_{name}")
-                },
-            ),
-            response_predicted=response_predicted,
-        )
-
-    @staticmethod
-    def add_train_gene_mean(
-        genes: Sequence[str],
-        delta_hat: torch.Tensor,
-        mu_train: Mapping[str, float],
-    ) -> torch.Tensor:
-        """Return absolute GeneEffect while failing on an unregistered gene."""
-        if delta_hat.shape != (len(genes),):
-            raise ValueError("delta_hat must align one-to-one with genes")
-        missing = [str(gene) for gene in genes if str(gene) not in mu_train]
-        if missing:
-            raise KeyError(f"genes absent from train-only mu_g: {missing[:10]}")
-        mean = torch.as_tensor(
-            [mu_train[str(gene)] for gene in genes],
-            dtype=delta_hat.dtype,
-            device=delta_hat.device,
-        )
-        return delta_hat + mean
+        return E2EForwardOutput(delta_hat, response_predicted)

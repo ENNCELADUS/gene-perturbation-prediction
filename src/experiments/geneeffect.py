@@ -1,29 +1,28 @@
-"""Compose cache-only joint training and independent checkpoint evaluation."""
+"""Joint GeneEffect training in a run directory, and checkpoint evaluation."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict
 import json
 import os
 from pathlib import Path
 import random
 import subprocess
-import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from src.experiments.config import load_config
+from src.experiments.config import validate_config
 
 if TYPE_CHECKING:
+    from src.data.prepared import PreparedInputs
     from src.eval.geneeffect import EvalResult
+    from src.model.geneeffect import GeneEffectE2EModel
 
 
 def _write_json(path: Path, value) -> None:
     temporary = path.with_name(path.name + ".tmp")
-    try:
-        temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
+    os.replace(temporary, path)
 
 
 def _revision() -> str | None:
@@ -40,194 +39,123 @@ def _set_status(run_dir: Path, status_key: str, status: str, **details) -> None:
     _write_json(path, record)
 
 
-def _restore_model(saved, inputs):
-    from src.model.initialization import build_joint_model
+def restore_model(
+    saved: Mapping[str, Any], inputs: PreparedInputs
+) -> GeneEffectE2EModel:
+    """Rebuild a checkpoint's joint model; ``inputs`` use its saved preprocessing."""
+    from src.model.initialization import restore_joint_model
 
-    return build_joint_model(
-        saved["config"],
-        inputs,
-        **{
-            key: saved[key]
-            for key in (
-                "architecture",
-                "model_state",
-                "projection_state",
-                "normalization_state",
-            )
-        },
-    )
+    return restore_joint_model(saved, inputs)
+
+
+# The readout entry point still imports the earlier private name.
+_restore_model = restore_model
 
 
 def run_training(
-    config_path: Path, *, run_id: str | None = None, resume: Path | None = None
+    config: Mapping[str, Any],
+    run_dir: Path,
+    *,
+    inputs: PreparedInputs | None = None,
 ) -> Path:
-    """Run or resume training; testing/export is a separate command and status."""
-    if (run_id is None) == (resume is None):
-        raise ValueError("require exactly one of run_id and resume")
-    if run_id is not None and (
-        Path(run_id).name != run_id or run_id in {"", ".", ".."}
-    ):
-        raise ValueError("run_id must be one directory name")
-    config = load_config(config_path)
-    import accelerate
-    from accelerate import Accelerator
+    """Train into ``run_dir`` and return its ``best.pt``.
+
+    Resumes from ``run_dir/last.pt`` when present (the saved config must equal
+    ``config``); returns at once when ``done.json`` exists. Works as one CPU
+    process or under ``accelerate launch``. ``inputs`` replaces ``load_inputs``
+    for synthetic tests.
+    """
     import numpy as np
     import torch
-    from src.data.prepared import load_inputs
+    from accelerate import Accelerator
+    import yaml
+
     from src.model.initialization import build_joint_model
     from src.training.checkpoint import load_checkpoint
-    from src.training.distributed import raise_rank_errors, run_rank_zero_or_raise
     from src.training.trainer import fit
 
-    saved = load_checkpoint(resume) if resume is not None else None
-    if saved is not None:
-        if config != saved["config"]:
-            raise ValueError(
-                "supplied config conflicts with checkpoint saved configuration"
-            )
-        config = saved["config"]
-    run_dir = (
-        Path(resume).parent
-        if resume is not None
-        else Path(config["output_root"]) / run_id
+    config = validate_config(config)
+    run_dir = Path(run_dir)
+    best = run_dir / "best.pt"
+    if (run_dir / "done.json").exists():
+        return best
+    saved = (
+        load_checkpoint(run_dir / "last.pt") if (run_dir / "last.pt").exists() else None
     )
+    if saved is not None and saved["config"] != config:
+        raise ValueError(f"config differs from the one saved in {run_dir / 'last.pt'}")
     accelerator = Accelerator(mixed_precision=config["precision"])
-
-    def initialize():
-        if saved is None:
-            run_dir.mkdir(parents=True, exist_ok=False)
-            _write_json(
-                run_dir / "run.json",
-                {
-                    "revision": _revision(),
-                    "seeds": config["seeds"],
-                    "inputs": {
-                        "prepared_root": config["prepared_root"],
-                        **config["paths"],
-                    },
-                    "config": config,
-                    "environment": {
-                        "python": sys.version.split()[0],
-                        "torch": torch.__version__,
-                        "accelerate": accelerate.__version__,
-                        "world_size": accelerator.num_processes,
-                        "precision": accelerator.mixed_precision,
-                        "device": str(accelerator.device),
-                    },
-                    "training": {"status": "running"},
-                    "evaluation": {"status": "not_started"},
-                },
-            )
-            import yaml
-
-            (run_dir / "config.yaml").write_text(
-                yaml.safe_dump(config, sort_keys=False)
-            )
-        else:
-            _set_status(run_dir, "training", "running", resumed_from=str(resume))
-
-    run_rank_zero_or_raise(accelerator, "initialize run", initialize)
-    try:
-        error = None
-        try:
-            # Seed BEFORE constructing a fresh model, including its new adapters.
-            random.seed(config["seeds"]["train"])
-            np.random.seed(config["seeds"]["train"])
-            torch.manual_seed(config["seeds"]["train"])
-            inputs = load_inputs(
-                config, preprocessing=None if saved is None else saved["preprocessing"]
-            )
-            model = (
-                build_joint_model(config, inputs)
-                if saved is None
-                else _restore_model(saved, inputs)
-            )
-        except Exception as exc:
-            error = f"{type(exc).__name__}: {exc}"
-            if accelerator.num_processes == 1:
-                raise
-        raise_rank_errors(accelerator, "construct prepared model", error)
-        state = fit(model, inputs, config, run_dir, accelerator, restored=saved)
-        run_rank_zero_or_raise(
-            accelerator,
-            "complete training",
-            lambda: _set_status(run_dir, "training", "completed", **asdict(state)),
+    if accelerator.is_main_process and saved is None:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "config.yaml").write_text(
+            yaml.safe_dump(dict(config), sort_keys=False)
         )
-    except Exception as exc:
-        if accelerator.is_main_process:
-            _set_status(
-                run_dir,
-                "training",
-                "failed",
-                phase="training",
-                error_type=type(exc).__name__,
-                message=str(exc),
-            )
-        raise
-    return run_dir
+        _write_json(
+            run_dir / "run.json",
+            {
+                "revision": _revision(),
+                "world_size": accelerator.num_processes,
+                "precision": accelerator.mixed_precision,
+                "device": str(accelerator.device),
+            },
+        )
+    # Seed before constructing the new adapter and head so every rank matches.
+    random.seed(config["seeds"]["train"])
+    np.random.seed(config["seeds"]["train"])
+    torch.manual_seed(config["seeds"]["train"])
+    if inputs is None:
+        from src.data.prepared import load_inputs
+
+        inputs = load_inputs(
+            config, preprocessing=None if saved is None else saved["preprocessing"]
+        )
+    model = (
+        build_joint_model(config, inputs)
+        if saved is None
+        else restore_model(saved, inputs)
+    )
+    state = fit(model, inputs, config, run_dir, accelerator, restored=saved)
+    if accelerator.is_main_process:
+        _write_json(run_dir / "done.json", asdict(state))
+    if accelerator.num_processes > 1:
+        torch.distributed.barrier()  # every rank returns once done.json exists
+    return best
 
 
-def export_evaluation(result: EvalResult, out_dir: Path) -> None:
-    """Write named prediction columns and ordinary scalar/per-unit artifacts."""
-    out_dir.mkdir(parents=True, exist_ok=True)
-    result.predictions.to_parquet(out_dir / "predictions.parquet", index=False)
-    for name in ("per_line", "per_gene", "response"):
-        getattr(result, name).to_csv(out_dir / f"{name}.csv", index=False)
-    _write_json(out_dir / "metrics.json", result.metrics)
+def evaluate_checkpoint(
+    checkpoint: Path,
+    *,
+    split: str,
+    inputs: PreparedInputs | None = None,
+) -> EvalResult:
+    """Score a checkpoint on one split with its saved preprocessing; never fits.
 
-
-def evaluate_checkpoint(checkpoint: Path, *, split: str) -> EvalResult:
-    """Restore saved preprocessing and model; never fit or take optimizer steps."""
-    if split not in {"train", "val", "test"}:
-        raise ValueError("evaluation split must be train, val or test")
+    ``inputs`` replaces ``load_inputs`` for synthetic tests.
+    """
     from accelerate import Accelerator
-    from src.data.prepared import load_inputs
+
     from src.eval.geneeffect import evaluate_model
     from src.training.checkpoint import load_checkpoint
 
-    checkpoint = Path(checkpoint)
-    run_dir = checkpoint.parent
-    _set_status(
-        run_dir, "evaluation", "running", split=split, checkpoint=str(checkpoint)
-    )
-    phase = "evaluation"
-    try:
-        saved = load_checkpoint(checkpoint)
-        config = saved["config"]
+    saved = load_checkpoint(Path(checkpoint))
+    config = saved["config"]
+    if inputs is None:
+        from src.data.prepared import load_inputs
+
         inputs = load_inputs(
-            config, preprocessing=saved["preprocessing"], include_test=(split == "test")
+            config, preprocessing=saved["preprocessing"], include_test=split == "test"
         )
-        model = _restore_model(saved, inputs)
-        accelerator = Accelerator(mixed_precision=config["precision"])
-        if accelerator.num_processes != 1:
-            raise ValueError(
-                "checkpoint evaluation must be launched as one ordinary process"
-            )
-        model.to(accelerator.device)
-        result = evaluate_model(
-            model, inputs, config, split=split, accelerator=accelerator
-        )
-        phase = "export"
-        destination = run_dir / "evaluation" / checkpoint.stem / split
-        export_evaluation(result, destination)
-        _set_status(
-            run_dir,
-            "evaluation",
-            "completed",
-            split=split,
-            checkpoint=str(checkpoint),
-            output=str(destination),
-        )
-        return result
-    except Exception as exc:
-        _set_status(
-            run_dir,
-            "evaluation",
-            "failed",
-            phase=phase,
-            split=split,
-            checkpoint=str(checkpoint),
-            error_type=type(exc).__name__,
-            message=str(exc),
-        )
-        raise
+    # The same precision as training-time validation, so the numbers agree.
+    accelerator = Accelerator(mixed_precision=config["precision"])
+    model = restore_model(saved, inputs).to(accelerator.device)
+    return evaluate_model(model, inputs, config, split=split, accelerator=accelerator)
+
+
+def export_evaluation(result: EvalResult, out_dir: Path) -> None:
+    """Write predictions.parquet, metrics.json, per_line.csv and per_gene.csv."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    result.predictions.to_parquet(out_dir / "predictions.parquet", index=False)
+    result.per_line.to_csv(out_dir / "per_line.csv", index=False)
+    result.per_gene.to_csv(out_dir / "per_gene.csv", index=False)
+    _write_json(out_dir / "metrics.json", result.metrics)

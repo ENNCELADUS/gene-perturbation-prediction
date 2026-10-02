@@ -1,4 +1,7 @@
-"""Train the joint GeneEffect model from prepared inputs."""
+"""Train the joint GeneEffect model into a run directory (resumes from last.pt).
+
+Runs as one process (CPU or one GPU) or under ``accelerate launch``.
+"""
 
 import argparse
 from pathlib import Path
@@ -6,18 +9,17 @@ from pathlib import Path
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("config", type=Path)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--run-id")
-    mode.add_argument("--resume", type=Path)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--run-dir", type=Path, required=True)
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
+    from src.experiments.config import load_config
     from src.experiments.geneeffect import run_training
 
-    run_training(args.config, run_id=args.run_id, resume=args.resume)
+    print(run_training(load_config(args.config), args.run_dir), flush=True)
     return 0
 
 

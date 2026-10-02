@@ -1,4 +1,4 @@
-"""Epoch-boundary training state and GeneEffect-loss checkpoint selection."""
+"""Epoch-boundary training state, GeneEffect-loss selection and checkpoints."""
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -9,8 +9,6 @@ from typing import Any
 
 import numpy as np
 import torch
-
-from src.training.distributed import run_rank_zero_or_raise
 
 
 @dataclass
@@ -25,7 +23,7 @@ class TrainState:
 def record_validation(
     state: TrainState, metrics: Mapping[str, Any], epoch: int
 ) -> bool:
-    """Record a completed epoch; only a strict GeneEffect-loss decrease wins."""
+    """Record a finished epoch; only a strict ``val_geneeffect_loss`` decrease wins."""
     loss = float(metrics["val_geneeffect_loss"])
     if not math.isfinite(loss):
         raise ValueError("val_geneeffect_loss must be finite")
@@ -39,7 +37,7 @@ def record_validation(
 
 
 def capture_rng_state(device: torch.device) -> dict[str, Any]:
-    """Use weights-only-loadable types, including the NumPy MT19937 words."""
+    """Python, NumPy, torch and accelerator RNG in weights-only-loadable types."""
     numpy = np.random.get_state()
     result = {
         "python": random.getstate(),
@@ -48,8 +46,6 @@ def capture_rng_state(device: torch.device) -> dict[str, Any]:
     }
     if device.type == "cuda":
         result["cuda"] = torch.cuda.get_rng_state(device)
-    elif device.type == "mps":
-        result["mps"] = torch.mps.get_rng_state()
     return result
 
 
@@ -60,21 +56,19 @@ def restore_rng_state(saved: Mapping[str, Any], device: torch.device) -> None:
     torch.set_rng_state(saved["torch"])
     if device.type == "cuda":
         torch.cuda.set_rng_state(saved["cuda"], device)
-    elif device.type == "mps":
-        torch.mps.set_rng_state(saved["mps"])
 
 
 def save_checkpoint(
     path: Path, model, optimizer, state: TrainState, config, preprocessing, accelerator
 ) -> None:
-    """Collect every rank's RNG, then atomically save ordinary checkpoint data."""
+    """Gather every rank's RNG, then rank zero writes the checkpoint atomically."""
     rng_states = [capture_rng_state(accelerator.device)]
     if accelerator.num_processes > 1:
-        local = rng_states[0]
         rng_states = [None] * accelerator.num_processes
-        torch.distributed.all_gather_object(rng_states, local)
-
-    def write():
+        torch.distributed.all_gather_object(
+            rng_states, capture_rng_state(accelerator.device)
+        )
+    if accelerator.is_main_process:
         unwrapped = accelerator.unwrap_model(model)
         payload = {
             "architecture": unwrapped.architecture,
@@ -86,44 +80,16 @@ def save_checkpoint(
             "train_state": asdict(state),
             "config": dict(config),
             "world_size": accelerator.num_processes,
-            "amp_state": {
-                "mixed_precision": accelerator.mixed_precision,
-                "scaler": None
-                if accelerator.scaler is None
-                else accelerator.scaler.state_dict(),
-            },
+            "scaler": None
+            if accelerator.scaler is None
+            else accelerator.scaler.state_dict(),
             "rng_states": rng_states,
         }
-        path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(path.name + ".tmp")
-        try:
-            torch.save(payload, temporary)
-            temporary.replace(path)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-    run_rank_zero_or_raise(accelerator, f"checkpoint {path}", write)
+        torch.save(payload, temporary)
+        temporary.replace(path)
 
 
 def load_checkpoint(path: Path) -> dict[str, Any]:
-    """Load tensors and Python data on CPU, never serialized model classes."""
-    saved = torch.load(path, map_location="cpu", weights_only=True)
-    required = {
-        "architecture",
-        "model_state",
-        "projection_state",
-        "normalization_state",
-        "preprocessing",
-        "optimizer",
-        "train_state",
-        "config",
-        "world_size",
-        "amp_state",
-        "rng_states",
-    }
-    if not isinstance(saved, dict) or required - saved.keys():
-        raise ValueError(f"incomplete joint checkpoint: {path}")
-    if saved["world_size"] < 1 or len(saved["rng_states"]) != saved["world_size"]:
-        raise ValueError("checkpoint requires one RNG state per rank")
-    TrainState(**saved["train_state"])
-    return saved
+    """Load tensors and plain Python data on CPU, never pickled classes."""
+    return torch.load(path, map_location="cpu", weights_only=True)
