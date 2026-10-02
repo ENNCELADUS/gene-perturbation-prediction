@@ -1,12 +1,12 @@
 # Joint GeneEffect execution
 
 Run from the repository root on H20. The launcher uses `.venv-tx1/bin/python`;
-set `PYTHON_BIN` to select another installed environment. `all` uses Torch's visible
-GPU count and respects `CUDA_VISIBLE_DEVICES`. Synchronize code with Git before using the
-remote checkout.
+set `PYTHON_BIN` to select another installed environment. Every GPU step of `all` uses
+every visible GPU (Torch's count, respecting `CUDA_VISIBLE_DEVICES`), or only the ids
+given by `--gpus`. Synchronize code with Git before using the remote checkout.
 
 ```bash
-hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>]
+hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
@@ -18,11 +18,16 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
    (only missing lines are encoded), one pass over the basal sources computing library
    sizes, the target total `T`, log-space HVG bags and `q_sc`, the log-space response
    cache, and the manifest with `expression_space`. Skipped when the manifest exists.
-2. **STATE sanity line**: the released checkpoint scored on each anchor against no-change.
-   Printed and written; not a gate.
-3. **Response-model comparison**: six arms, leave-one-anchor-out, all folds on one GPU
+2. **Untrained response-model comparison arms** (no change, global mean effect, released
+   STATE checkpoint) on the first chosen GPU, which also give the **STATE sanity line**: the
+   released checkpoint scored on each anchor against no-change. Printed and written; not a
+   gate.
+3. **Joint training** through `accelerate launch` with one process per chosen GPU.
+   Rerunning continues from `train/last.pt`.
+4. **Trained response-model comparison arms** (STATE as in the joint model, MLP on HVG, MLP
+   on Tx1; one job per arm and held-out anchor, twelve in all), one job per chosen GPU at a
+   time, the next starting as soon as a GPU frees, then the comparison table and verdicts
    ([protocol §9](../docs/03-geneeffect-protocol.md#9-response-model-comparison-and-the-all-run)).
-4. **Joint training** through `accelerate launch`. Rerunning continues from `train/last.pt`.
 5. **Validation evaluation** of `train/best.pt`, the baseline ladder (gene mean, K562 copy
    prior, nearest line, context-PCA ridge on Tx1 and on log HVG) and the readout head with
    the explicit gene-specific context slope on the new backbone's cached features.
@@ -36,13 +41,17 @@ fresh run needs a new run id. A run directory is bound to the config it started 
 (`run_config.json`), and training resumes from `train/last.pt` only when the config saved
 there equals the current one, so a batch-size or any other config change needs a new run id.
 
-With N ≥ 2 visible GPUs the comparison runs on the last one while training runs on the
-other N−1, concurrently; with one GPU the comparison runs first, then training; without
-CUDA both run in-process on the CPU (the test path). Training always gets the same GPUs
-for a run, because resuming from `last.pt` requires the same number of processes. Each
-subprocess logs to `logs/comparison.log` or `logs/train.log` in the run directory; a
-failed step stops the run with its name and log path once the other step has finished.
-The STATE sanity line is printed as soon as `comparison/sanity.json` exists.
+Each GPU step uses the whole set of chosen GPUs, so the GeneEffect result arrives before
+the comparison tail. `--gpus` takes ids as `CUDA_VISIBLE_DEVICES` lists them (or 0..N−1
+without it) and is not bound to the run: a resumed run may use other GPUs for the
+comparison jobs, which are independent and seeded per job, but unfinished training resumes
+only on as many GPUs as it started on (`train/run.json`); another count is refused before
+launch. Without CUDA every step runs in-process on the CPU, in the same order (the test
+path). Subprocesses log to `logs/comparison_untrained.log`, `logs/train.log` and
+`logs/comparison_<arm>__<anchor>.log` in the run directory. A failed subprocess stops the
+run with its step, exit code and log path; comparison jobs already running finish first and
+no new one starts. SIGINT or SIGTERM to `all` terminates its subprocess groups before it
+exits, so no GPU worker is orphaned.
 
 `all` never evaluates the test split. `hpc/run.sh test CHECKPOINT` is the only route to it
 and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without

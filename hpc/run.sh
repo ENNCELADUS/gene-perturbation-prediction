@@ -3,10 +3,11 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: hpc/run.sh all CONFIG [--run-id ID]
+Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh test CHECKPOINT
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment.
-CUDA_VISIBLE_DEVICES is respected when `all` schedules GPUs.
+`all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every
+GPU step; --gpus restricts it to the listed ids among the visible ones.
 EOF
 }
 

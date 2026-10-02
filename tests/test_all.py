@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
+import signal
+import subprocess
 import sys
+import time
 
 import pytest
 import torch
@@ -210,7 +214,10 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
     run = tmp_path / "runs" / "resume"
     assert (run / "train" / "last.pt").is_file()
     assert not (run / "train" / "done.json").exists()
-    assert (run / "comparison" / "verdicts.json").is_file()
+    # The untrained arms run before training, the trained jobs after it.
+    assert (run / "comparison" / "sanity.json").is_file()
+    assert not list((run / "comparison" / "folds").glob("mlp_*"))
+    assert not (run / "comparison" / "verdicts.json").exists()
     monkeypatch.setattr(trainer, "save_checkpoint", original)
 
     finished = [
@@ -222,7 +229,7 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
     def refuse(*args, **kwargs):
         raise AssertionError("a finished comparison was recomputed")
 
-    monkeypatch.setattr(response_comparison, "run_comparison", refuse)
+    monkeypatch.setattr(response_comparison, "_run_untrained", refuse)
     resumed = []
     fit = trainer.fit
 
@@ -235,10 +242,12 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
     assert [state["next_epoch"] for state in resumed] == [1]
     assert json.loads((run / "train" / "done.json").read_text())["next_epoch"] == 2
     assert {p: p.stat().st_mtime_ns for p in finished} == stamps
+    assert (run / "comparison" / "verdicts.json").is_file()
     assert (run / "summary.md").is_file()
 
     # A finished run only rewrites its summary.
     monkeypatch.setattr(trainer, "fit", refuse)
+    monkeypatch.setattr(response_comparison, "_run_trained", refuse)
     monkeypatch.setattr("src.experiments.readout.extract_cache", refuse)
     pipeline.run_all(config_path, run_id="resume")
 
@@ -250,19 +259,97 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
         pipeline.run_all(config_path, run_id="resume")
 
 
-def test_gpu_schedule(tmp_path):
-    config = {"precision": "bf16"}
-    run = tmp_path / "run"
-    config_path = Path("c.yaml")
-    [[comparison, train]] = pipeline.gpu_schedule(
-        config_path, config, run, ("3", "5", "7")
+class FakeProcess:
+    """Finishes with ``code`` on its ``polls + 1``-th poll."""
+
+    def __init__(self, polls: int, code: int):
+        self.left, self.code, self.done = polls, code, False
+
+    def poll(self):
+        if self.left:
+            self.left -= 1
+            return None
+        self.done = True
+        return self.code
+
+
+class FakeLauncher:
+    """Records every start and fails if a GPU would hold two processes at once."""
+
+    def __init__(self, polls=lambda step: 1, codes=lambda step: 0):
+        self.polls, self.codes = polls, codes
+        self.started = []  # (step, argv, gpus, process)
+        self.most_at_once = 0
+
+    def __call__(self, argv, gpus, log):
+        live = [entry for entry in self.started if not entry[3].done]
+        busy = {gpu for entry in live for gpu in entry[2]}
+        assert not busy & set(gpus), f"{log.stem} on busy GPU {gpus}"
+        self.most_at_once = max(self.most_at_once, len(live) + 1)
+        step = log.stem
+        process = FakeProcess(self.polls(step), self.codes(step))
+        self.started.append((step, tuple(argv), tuple(gpus), process))
+        return process
+
+
+TWELVE_JOBS = [
+    (arm, anchor)
+    for anchor in test_prepare.ANCHORS
+    for arm in ("state_joint", "mlp_hvg", "mlp_tx1")
+]
+
+
+@pytest.fixture
+def fake_comparison(monkeypatch):
+    """Twelve pending trained jobs; summarise and in-process training refuse."""
+    from src.experiments import geneeffect, response_comparison
+
+    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0)
+    monkeypatch.setattr(
+        response_comparison,
+        "pending_trained_jobs",
+        lambda config, out_dir: list(TWELVE_JOBS),
     )
-    assert comparison.step == "comparison" and comparison.gpus == ("7",)
-    assert comparison.argv[1:3] == ("-m", "src.experiments.response_comparison")
-    assert train.step == "train" and train.gpus == ("3", "5")
-    assert train.argv[train.argv.index("--num_processes") + 1] == "2"
-    assert "--multi_gpu" in train.argv
-    assert train.argv[-6:] == (
+    summarised = []
+    monkeypatch.setattr(
+        response_comparison,
+        "summarise",
+        lambda config, out_dir: summarised.append(out_dir),
+    )
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a GPU run trained in the orchestrating process")
+
+    monkeypatch.setattr(geneeffect, "run_training", refuse)
+    return summarised
+
+
+def _plan(tmp_path, gpus, polls=lambda step: 1):
+    launcher = FakeLauncher(polls)
+    run = tmp_path / "run"
+    pipeline.comparison_and_training(
+        Path("c.yaml"), {"precision": "bf16"}, run, gpus, start=launcher
+    )
+    return run, launcher
+
+
+def test_every_gpu_step_uses_every_chosen_gpu(tmp_path, fake_comparison):
+    # Job lengths vary so that GPUs free out of order.
+    run, launcher = _plan(
+        tmp_path, ("0", "1", "2", "3"), polls=lambda step: len(step) % 4
+    )
+    steps = [entry[0] for entry in launcher.started]
+    assert steps[:2] == ["comparison_untrained", "train"]
+    untrained, train = launcher.started[0], launcher.started[1]
+    assert untrained[2] == ("0",)
+    assert untrained[1][1:3] == ("-m", "src.experiments.response_comparison")
+    assert untrained[1][-1] == "--untrained"
+    assert train[2] == ("0", "1", "2", "3")
+    argv = train[1]
+    assert argv[argv.index("--num_processes") + 1] == "4"
+    assert argv[argv.index("--mixed_precision") + 1] == "bf16"
+    assert "--multi_gpu" in argv
+    assert argv[-6:] == (
         "--module",
         "src.train",
         "--config",
@@ -270,46 +357,134 @@ def test_gpu_schedule(tmp_path):
         "--run-dir",
         str(run / "train"),
     )
-
-    two = pipeline.gpu_schedule(config_path, config, run, ("3", "7"))
-    assert [[job.gpus for job in batch] for batch in two] == [[("7",), ("3",)]]
-    assert "--multi_gpu" not in two[0][1].argv
-
-    single = pipeline.gpu_schedule(config_path, config, run, ("0",))
-    assert [[job.step for job in batch] for batch in single] == [
-        ["comparison"],
-        ["train"],
+    jobs = launcher.started[2:]
+    assert sorted(entry[1][-2:] for entry in jobs) == sorted(TWELVE_JOBS)
+    assert [entry[0] for entry in jobs] == [
+        f"comparison_{arm}__{anchor}" for arm, anchor in TWELVE_JOBS
     ]
-    assert single[1][0].gpus == ("0",)
-
-    (run / "comparison").mkdir(parents=True)
-    (run / "comparison" / "verdicts.json").write_text("{}")
-    assert [
-        [job.step for job in batch]
-        for batch in pipeline.gpu_schedule(config_path, config, run, ("3", "7"))
-    ] == [["train"]]
+    assert all(len(entry[2]) == 1 for entry in jobs)
+    assert {entry[2][0] for entry in jobs} == {"0", "1", "2", "3"}
+    assert launcher.most_at_once == 4
+    assert all(entry[3].done for entry in launcher.started)
+    assert fake_comparison == [run / "comparison"]
 
 
-def test_failed_job_raises_with_step_and_log(tmp_path, monkeypatch):
-    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0.01)
-    ok = pipeline.Job("comparison", (sys.executable, "-c", "print('fine')"), ("7",))
-    bad = pipeline.Job(
-        "train",
-        (
-            sys.executable,
-            "-c",
-            "import os, sys; print(os.environ['CUDA_VISIBLE_DEVICES']); sys.exit(3)",
-        ),
-        ("3", "5"),
+def test_chosen_gpus_restrict_every_step(tmp_path, fake_comparison):
+    gpus = pipeline.choose_gpus(("1", "3"), ("0", "1", "2", "3"))
+    assert gpus == ("1", "3")
+    _, launcher = _plan(tmp_path, gpus)
+    untrained, train, *jobs = launcher.started
+    assert untrained[2] == ("1",)
+    assert train[2] == ("1", "3")
+    assert train[1][train[1].index("--num_processes") + 1] == "2"
+    assert "--multi_gpu" in train[1]
+    assert len(jobs) == 12 and {entry[2] for entry in jobs} == {("1",), ("3",)}
+
+
+def test_choose_gpus_defaults_to_every_visible_and_rejects_others():
+    visible = ("4", "5", "6")
+    assert pipeline.choose_gpus(None, visible) == visible
+    assert pipeline.choose_gpus(None, ()) == ()
+    for wrong in (("7",), ("4", "4"), ("",)):
+        with pytest.raises(ValueError, match="visible ones 4,5,6"):
+            pipeline.choose_gpus(wrong, visible)
+    with pytest.raises(ValueError, match="no CUDA GPU"):
+        pipeline.choose_gpus(("0",), ())
+
+
+def test_one_gpu_trains_in_one_process(tmp_path, fake_comparison):
+    _, launcher = _plan(tmp_path, ("0",))
+    train = launcher.started[1]
+    assert train[1][train[1].index("--num_processes") + 1] == "1"
+    assert "--multi_gpu" not in train[1]
+    assert {entry[2] for entry in launcher.started} == {("0",)}
+    assert launcher.most_at_once == 1
+
+
+def test_finished_steps_start_nothing(tmp_path, fake_comparison):
+    run = tmp_path / "run"
+    for name in ("comparison/verdicts.json", "train/done.json"):
+        (run / name).parent.mkdir(parents=True, exist_ok=True)
+        (run / name).write_text("{}")
+    _, launcher = _plan(tmp_path, ("0", "1"))
+    assert launcher.started == [] and fake_comparison == []
+
+
+def test_resume_on_another_gpu_count_is_refused(tmp_path, fake_comparison):
+    train = tmp_path / "run" / "train"
+    train.mkdir(parents=True)
+    (train / "last.pt").write_bytes(b"")
+    (train / "run.json").write_text(json.dumps({"world_size": 2}))
+    (tmp_path / "run" / "comparison").mkdir()
+    (tmp_path / "run" / "comparison" / "verdicts.json").write_text("{}")
+    with pytest.raises(ValueError, match="started on 2 GPU.*not 4.*new --run-id"):
+        _plan(tmp_path, ("0", "1", "2", "3"))
+    _, launcher = _plan(tmp_path, ("0", "2"))
+    assert [entry[0] for entry in launcher.started] == ["train"]
+
+
+def test_failed_pool_job_lets_running_jobs_finish_and_starts_no_more(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0)
+    launcher = FakeLauncher(
+        polls=lambda step: {"slow": 3, "broken": 0}.get(step, 0),
+        codes=lambda step: 3 if step == "broken" else 0,
     )
+    jobs = [
+        pipeline.Job(step, ("true",)) for step in ("slow", "broken", "next", "last")
+    ]
     with pytest.raises(RuntimeError) as error:
-        pipeline.run_jobs([ok, bad], tmp_path)
-    log = tmp_path / "logs" / "train.log"
-    assert "train failed with exit code 3" in str(error.value)
-    assert str(log) in str(error.value)
-    assert "comparison" not in str(error.value)
-    assert log.read_text().strip() == "3,5"
-    assert (tmp_path / "logs" / "comparison.log").read_text().strip() == "fine"
+        pipeline.run_pool(jobs, [("0",), ("1",)], tmp_path / "logs", start=launcher)
+    assert [entry[0] for entry in launcher.started] == ["slow", "broken"]
+    assert launcher.started[0][3].done
+    message = str(error.value)
+    assert message == (
+        f"broken failed with exit code 3; see {tmp_path / 'logs' / 'broken.log'}"
+    )
+
+
+def test_processes_see_their_gpus_and_log_output(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0.01)
+    show = "import os; print(os.environ['CUDA_VISIBLE_DEVICES'])"
+    ok = pipeline.Job("comparison_untrained", (sys.executable, "-c", show))
+    bad = pipeline.Job("train", (sys.executable, "-c", show + "; exit(3)"))
+    with pytest.raises(RuntimeError, match="train failed with exit code 3") as error:
+        pipeline.run_pool([ok, bad], [("7",), ("0", "1", "2", "3")], tmp_path)
+    assert "comparison_untrained" not in str(error.value)
+    assert (tmp_path / "train.log").read_text().strip() == "0,1,2,3"
+    assert (tmp_path / "comparison_untrained.log").read_text().strip() == "7"
+
+
+def test_sigterm_terminates_child_process_groups(tmp_path):
+    """A run killed with SIGTERM leaves no worker behind, grandchildren included."""
+    group_file = tmp_path / "group"
+    script = f"""
+from pathlib import Path
+from src.experiments import all as pipeline
+pipeline.POLL_SECONDS = 0.05
+child = pipeline.Job("sleeper", ("sh", "-c", "sleep 60 & echo $$ > {group_file}; wait"))
+with pipeline.sigterm_raises():
+    pipeline.run_pool([child], [("0",)], Path({str(tmp_path)!r}))
+"""
+    runner = subprocess.Popen(
+        [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1]
+    )
+    deadline = time.monotonic() + 30
+    while not group_file.is_file() or not group_file.read_text().strip():
+        assert runner.poll() is None and time.monotonic() < deadline
+        time.sleep(0.05)
+    group = int(group_file.read_text())
+    os.killpg(group, 0)  # the child group is alive
+    runner.send_signal(signal.SIGTERM)
+    assert runner.wait(timeout=30) == 128 + signal.SIGTERM
+    while True:
+        try:
+            os.killpg(group, 0)
+        except ProcessLookupError:
+            break
+        assert time.monotonic() < deadline, "the sleeping child survived SIGTERM"
+        time.sleep(0.05)
 
 
 def test_summary_marks_missing_baseline(finished, tmp_path):
@@ -329,3 +504,16 @@ def test_summary_marks_missing_baseline(finished, tmp_path):
     config = copy.deepcopy(yaml.safe_load((run / "train" / "config.yaml").read_text()))
     lines = pipeline._validation_section(config, copied)
     assert any(line.startswith("| Nearest line (HVG) | not produced") for line in lines)
+
+
+def test_main_passes_gpus_outside_the_config(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        pipeline, "run_all", lambda config, **kwargs: calls.append((config, kwargs))
+    )
+    assert pipeline.main(["c.yaml", "--run-id", "r", "--gpus", "1, 3"]) == 0
+    assert pipeline.main(["c.yaml"]) == 0
+    assert calls == [
+        (Path("c.yaml"), {"run_id": "r", "gpus": ("1", "3")}),
+        (Path("c.yaml"), {"run_id": None, "gpus": None}),
+    ]
