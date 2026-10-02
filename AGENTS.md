@@ -1,29 +1,100 @@
 # AGENTS.md
 
-## Research contract and sources
+This file provides guidance to Codex and other coding agents when working with code in this repository.
 
-- The current task is context-conditioned SL ranking from basal single-cell transcriptomes in held-out **cell lines**, not held-out genes. No SL graph enters the feature path. The Feng2024 gene-holdout formulation is a separate historical track.
-- `docs/01-blueprint.md` defines the research contract and claim boundaries; `docs/02-literature-review.md` defines prior art; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented GeneEffect track and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol that builds on it. Current GeneEffect expression space, STATE wiring and the single `all` run follow `docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`, which supersedes the response wiring of `docs/specs/2026-09-06-modular-joint-training-design.md`; the 2026-08-17 Exp13 protocol describes historical staged runs.
-- Read the relevant `docs/data/` card before using a dataset. Results and scientific status live in `docs/results/` and the protocol's results sections, not in this file. `.superpowers/sdd/` contains local execution notes; `docs/specs/` contains tracked designs.
-- Say everything explicitly. In docs, figures, commit messages and replies, name every model, head, arm, variant, run, stage and tier by what it is ("shared MLP head", "expression-residual interface", "the seed-0 joint backbone"), never by a bare internal label (`A0`, `V1`, `P0`, `N-native`, `Tier 3`). Where code or evidence files use a label, give it once in parentheses beside the name at first use, then use the name.
-- Contract documents define admissible experiments and claims; code and artifacts establish what was implemented and executed. Reconcile discrepancies against the designated contract rather than treating implementation drift as a new protocol.
+## Research task and document authority
 
-## Environment and implementation
+The task is context-conditioned synthetic-lethality (SL) ranking from basal single-cell transcriptomes in held-out **cell
+lines**, not held-out genes. 
 
-- Sync working code between machines through Git only: commit, push, then pull on the H20 checkout. Do not rsync/scp/tar working trees.
-- GPU work uses the H20 container and `hpc/run.sh`, without a scheduler or general qualification ladder. `hpc/run.sh all CONFIG [--run-id ID]` runs preparation, the response-model comparison, joint training, validation evaluation, baselines, the readout head and `summary.md`, auto-sizing to visible GPUs; rerunning with the same run id resumes and skips finished steps. `hpc/run.sh test CHECKPOINT` is the only route to the test split. Direct worker invocation is debug-only; runner details are in the runbook.
-- `src/data/`, `src/model/`, `src/training/`, `src/eval/`, `src/baselines/` and `src/experiments/` separate input preparation, model computation, optimization, scoring, controls and experiment wiring. Use `src.*` imports and root-level module commands; data/model modules do not import trainers, evaluators or experiments.
-- All expression quantities except Tx1's input live in one log space: whole-library `normalize_total` to a recorded target `T`, `log1p`, then STATE's HVG slice. STATE reads those log-space basal cells through its own released basal encoder; Tx1 raw-UMI embeddings feed only the GeneEffect head's context. The joint trainer uses GeneEffect Huber every update and balanced four-anchor response replay (all conditions, no condition holdout) every four updates, at learning rates head 1e-4, ESM2 adapter 1e-4, STATE 1e-5. Validate once at each epoch end on the 27 GeneEffect validation lines, the only validation split, and minimize only `val_geneeffect_loss` for early stopping and `best.pt`. Training, cell-collation and projection base seeds are all 0.
-- Prepare fixed inputs once in a single process under `data/geneeffect_joint/v2`. Training opens caches without raw-data rebuilding or recursive artifact checks. Save ordinary resumable checkpoints under ignored `outputs/`; keep curated evidence in `docs/results/`.
-- Run Python, pytest and Ruff from the repository root through `uv run` (for example, `rtk proxy uv run python -m pytest tests/<file>.py`). Preserve `tests/conftest.py` initialization rather than executing test files as scripts.
-- `uv sync` installs the default `dev` group; research extras such as `scib` and `datasets` are optional. `arc-state` is pinned to a Git commit. Missing gitignored assets or optional dependencies can skip tests; an import check does not exercise an asset-dependent pipeline.
+`docs/` outranks this file. Start at `docs/01-blueprint.md` (research contract, claim boundaries §4);
+`docs/02-literature-review.md` is prior art; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented
+GeneEffect track and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it. The current expression space,
+STATE wiring and `all` run follow `docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`. Read
+the `docs/data/` card before using a dataset. Results live in `docs/results/`.
 
-## Data and claim boundaries
+Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
+bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-- Join cell lines by DepMap ModelID through the checked-in map, never informal names. `K-562` and `K562` are not interchangeable join keys.
-- GeneEffect membership comes from `configs/benchmarks/cell_line_geneeffect_226_split.json` and `src.data.splits.assert_fit_eligible`. It does not substitute for `configs/benchmarks/context_screen_v2_split.json` or the retired Phase-A role column. Fit means, variable-gene membership and normalization on labeled training lines only; restore them for resume/evaluation.
-- Never center a prediction on a fold-fit gene mean: targets use `mu_hat_g^(-c)`, predictions use fold-independent `mu_bar`. Context claims require residual evaluation against context-blind priors.
-- Apply the blueprint's claim boundaries (§4) and the SL protocol's leakage rules (§8): train-side fitting/calibration only; no per-context prediction z-scoring; one label-independent pair universe; missing scores remain missing; qualify held-out-context results by Tx1 Tahoe-100M pretraining exposure.
-- Single-gene essentiality and scope-closed Exp13 are not SL evidence. The current classifier supplies no joint or measured genetic-interaction quantity, so its ranking gain is not an interaction claim. Preserve the blueprint's limits on unseen genes, cross-context significance, label reversal and experimental target validation.
-- Dataset meanings are not interchangeable: `jost_replogle_dual_sgrna` measures knockdown efficacy, not epistasis; `essential` and `gwps` h5ads have different gene panels; Horlbeck uses `gi_score` with negative meaning SL; screened non-hits are not universal non-SL labels.
-- Preserve each protocol's evaluation unit and evidence requirements; do not impose Feng2024's five-fold reporting on the separate context or Exp13 tracks.
+## Current state (2026-10-02)
+
+The joint GeneEffect model (`configs/geneeffect_joint.yaml`) has trained, tested and been baselined once, seed 0: Huber beats
+the context-blind gene-mean by 0.08% and residual correlations trail a Tx1 PCA-ridge baseline — a working path, not a result
+(`docs/results/joint_geneeffect_seed0/`). That run predates the expression-space change (STATE was fed raw counts), so its
+numbers are not like for like with the current pipeline. The SL pair head is unimplemented. Further model decisions use
+validation; the test split is spent. Nothing here is SL evidence.
+
+## Commands
+
+Python 3.11–3.12, managed by `uv`. Run Python, pytest and Ruff from the repo root through `uv run`, as modules; imports are
+`src.*`.
+
+```bash
+uv sync                                                   # core deps + dev group (pytest, ruff, xgboost); scib/datasets are optional extras
+uv run python -m pytest tests -q                          # full suite
+uv run python -m pytest tests/test_all.py -q -k <name>    # one file / one test
+uv run ruff check .                                       # lint (E,W,F only; import order not enforced)
+uv run ruff format <files you touched>                    # never `ruff format .` — rewrites unrelated files
+
+hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>]  # prepare, response-model comparison, train, val eval, baselines, readout, summary.md
+hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # the only route to the test split; `all` never runs it
+uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
+```
+
+`all` skips every step whose output exists and auto-sizes to visible GPUs, so rerunning with the same run id resumes (training
+from `train/last.pt`). Direct worker invocation is debug-only; runner details are in `hpc/README.md`.
+
+- The local Mac has no GPU, no Tx1 weights and no raw data. Preparation, training and evaluation run on the H20 container
+  (`.codex/skills/hpc-execution`), without a scheduler. Tests use synthetic fixtures and skip silently when gitignored data or
+  `accelerate` is missing — an import check proves nothing about an asset-dependent path.
+- Run the full suite before changing code so a failure you cause is distinguishable from one you inherit.
+- `tests/conftest.py` sets `PYTORCH_ENABLE_MPS_FALLBACK` and `OMP_NUM_THREADS` and imports xgboost before torch; running a test
+  file as a script segfaults. `-m` markers do nothing.
+
+## Project rules
+
+- When a change alters behaviour a doc describes, update that doc in the same change.
+- No formalism gates: do not add digest pinning, contract verifiers, eligibility ceremony or any check that blocks a run on
+  model quality. Record provenance and proceed; model-quality signals are telemetry. The existing guards against silent wrong
+  artifacts (below) fail closed and stay.
+- GPU work needs the H20 container: finish everything local first (config, tests, commit, push) and end with the exact
+  `hpc/run.sh` launch command.
+- Sync code between machines through Git only: commit, push, then pull on the H20 checkout. Never rsync/scp/tar working trees.
+- Work done on its own branch or worktree is merged into `main` as soon as the feature is established as working — suite and
+  lint pass, any requested review is adjudicated, and an asset-dependent path has run on the H20 host — then `main` is pushed and the branch
+  deleted. Do not leave finished work on a side branch.
+- Commits use Conventional Commits (`feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`).
+
+## Architecture
+
+One route, `hpc/run.sh all`: **prepare → response-model comparison → train → evaluate (+ baselines, readout) → summary**,
+driven by one strict YAML config. `data` and `model` never import `training`, `eval` or `experiments`.
+
+- **Expression space.** Everything except Tx1's input is log space: whole-library `normalize_total` to a recorded target `T`,
+  `log1p`, then STATE's HVG slice. Tx1 reads raw UMI, not CPM.
+- **Preparation** (`src/experiments/prepare.py`) is the only place raw data is read. It writes fixed caches and a manifest
+  recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them.
+- **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
+  reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
+  only the residual head's context. GeneEffect Huber every update, response replay on the four anchor lines every fourth.
+  `best.pt` and early stopping use **only** `val_geneeffect_loss`.
+- **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing from the checkpoint;
+  `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
+  `src/experiments/all.py` chains every step and writes `summary.md`.
+- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (172 train / 27 val / 27 test);
+  `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config and provenance files are tracked data.
+
+## Pitfalls and claim boundaries
+
+Mistakes here produce a complete-looking **wrong artifact**, not an exception.
+
+- `src/experiments/config.py` raises on unknown or missing keys; never add `.get(key, default)` config reads.
+- `load_inputs` refuses manifests without `expression_space`, and checkpoint loads raise on zero or mismatched keys
+  (`load_released_state`). Never bypass either or add a bare `load_state_dict(..., strict=False)`.
+- Resume rejects a conflicting config; a batch-size change needs a new run id.
+- Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on fold-independent `mu_bar` — centering a prediction
+  on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-prior residual correlations are undefined, not zero.
+- Join cell lines by DepMap ModelID through the checked-in map, never informal names (`K-562` ≠ `K562`). Fit means, gene
+  membership and normalization on labeled training lines only.
+- Context claims need residual evaluation against context-blind priors; follow the blueprint's claim boundaries (§4) and the SL
+  protocol's leakage rules (§8). Single-gene predictions are not SL or genetic-interaction evidence.
