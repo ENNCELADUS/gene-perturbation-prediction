@@ -1,10 +1,23 @@
-"""Read-only opening of fixed inputs for joint GeneEffect training."""
+"""Prepared joint-training inputs: per-line arrays, response targets, manifest.
+
+Layout under ``config["prepared_root"]``:
+
+- ``prepared_inputs.json`` (written last): ``expression_space``,
+  ``common_gene_panel``, ``hvg_order``, ``response_anchors``;
+- ``lines/<ModelID>.npz``: ``controls_tx1``, ``basal_hvg``, ``q_sc_values``,
+  ``q_sc_available``;
+- ``response/``: log-space response targets (``src.data.response_cache``);
+- ``common_gene_panel.csv``, ``embedding_union.{csv,json}``.
+
+Every expression quantity is in STATE's space: whole-library normalize_total
+to ``target_sum``, then log1p. Only Tx1 embeddings come from raw counts.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections import Counter
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,22 +27,22 @@ import numpy as np
 import pandas as pd
 import torch
 
-import src.data.geneeffect as geneeffect_data
-import src.data.residual_target as residual_target
+from src.data.basal import align_columns
 from src.data.embeddings import load_esm2_embeddings
-from src.data.q_sc import QScFeatures, load_q_sc_line
-from src.data.response_cache import ResponseTargetsCache
-from src.data.response_cache import open_response_targets_cache
-from src.data.splits import FixedSplit, load_geneeffect_226_split
-from src.data.tx1_cache import load_hvg_gene_order, open_line_cache
+from src.data.expression import library_sizes, log_normalize
+from src.data.geneeffect import fit_variable_gene_membership, load_geneeffect_long
+from src.data.q_sc import QScFeatures, compute_q_sc
+from src.data.residual_target import fit_gene_means
+from src.data.response_cache import ResponseTargetsCache, open_response_targets
+from src.data.splits import FixedSplit, assert_fit_eligible, load_geneeffect_226_split
 
 PREPARED_METADATA_FILENAME: Final[str] = "prepared_inputs.json"
-PREPARED_METADATA_SCHEMA: Final[str] = "geneeffect-joint-prepared-v1"
+EXPRESSION_TRANSFORM: Final[str] = "log1p_normalize_total"
 
 
 @dataclass(frozen=True)
 class PreparedLine:
-    """One line's fixed paired basal arrays and aligned q_sc summaries."""
+    """One line's selected basal cells: Tx1 embeddings, log-space HVG, q_sc."""
 
     controls_tx1: np.ndarray
     basal_hvg: np.ndarray
@@ -38,35 +51,29 @@ class PreparedLine:
 
 @dataclass(frozen=True)
 class PreparedInputs:
-    """Fixed labels, preprocessing, feature orders, and opened cache views."""
+    """Fixed labels, train-fit preprocessing, feature orders and prepared arrays.
+
+    Every expression quantity is in STATE's space: whole-library normalize_total
+    to ``target_sum``, then log1p. Only Tx1 embeddings come from raw counts.
+    """
 
     split: FixedSplit
     labels: pd.DataFrame
     genes: tuple[str, ...]
     train_gene_means: pd.Series
     variable_genes: frozenset[str]
-    tx1_cache: Path
-    q_sc_cache: Path
-    response_cache: Path
     hvg_order: tuple[str, ...]
-    response_holdout: frozenset[tuple[str, str]]
-    esm2_symbols: tuple[str, ...] = ()
-    esm2_vectors: np.ndarray = field(
-        default_factory=lambda: np.empty((0, 0), dtype=np.float32),
-        repr=False,
-        compare=False,
-    )
-    lines: Mapping[str, PreparedLine] = field(
-        default_factory=dict, repr=False, compare=False
-    )
-    response_targets: ResponseTargetsCache | None = field(
-        default=None, repr=False, compare=False
-    )
-    response_anchors: tuple[str, ...] = ()
+    esm2_symbols: tuple[str, ...]
+    esm2_vectors: np.ndarray = field(repr=False, compare=False)
+    lines: Mapping[str, PreparedLine] = field(repr=False, compare=False)
+    response_targets: ResponseTargetsCache = field(repr=False, compare=False)
+    response_anchors: tuple[str, ...]
+    target_sum: float
 
     def preprocessing_state(self) -> dict[str, object]:
         """Return checkpoint-ready fitted state, including actual ESM2 vectors."""
         return {
+            "target_sum": float(self.target_sum),
             "gene_means": {
                 "symbols": list(self.genes),
                 "values": [float(self.train_gene_means[gene]) for gene in self.genes],
@@ -81,208 +88,16 @@ class PreparedInputs:
         }
 
 
-def _path(config: Mapping[str, Any], key: str) -> Path:
-    paths = config.get("paths")
-    if not isinstance(paths, Mapping) or key not in paths:
-        raise ValueError(f"config.paths.{key} is required")
-    return Path(paths[key])
+# --- one basal line --------------------------------------------------------------
 
 
-def _features(config: Mapping[str, Any]) -> Mapping[str, Any]:
-    value = config.get("features", {})
-    if not isinstance(value, Mapping):
-        raise ValueError("config.features must be a mapping")
-    return value
-
-
-def _unique_upper(values: Sequence[object], label: str) -> tuple[str, ...]:
-    result = tuple(str(value).strip().upper() for value in values)
-    if not result or any(not value for value in result):
-        raise ValueError(f"{label} must contain non-empty genes")
-    duplicates = sorted(value for value, count in Counter(result).items() if count > 1)
-    if duplicates:
-        raise ValueError(f"{label} contains duplicates: {duplicates[:10]}")
-    return result
-
-
-def _unique_exact(values: Sequence[object], label: str) -> tuple[str, ...]:
-    """Validate an ordered feature axis without changing checkpoint spelling."""
-    result = tuple(str(value) for value in values)
-    normalized = tuple(value.strip().upper() for value in result)
-    if not result or any(not value for value in normalized):
-        raise ValueError(f"{label} must contain non-empty genes")
-    duplicates = sorted(
-        value for value, count in Counter(normalized).items() if count > 1
-    )
-    if duplicates:
-        raise ValueError(f"{label} contains duplicates: {duplicates[:10]}")
-    return result
-
-
-def _read_panel(path: Path) -> tuple[str, ...]:
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"missing prepared common gene panel {path}; run "
-            "`hpc/run.sh prepare <config>`"
-        )
-    frame = pd.read_csv(path)
-    if tuple(frame.columns) != ("gene_symbol",):
-        raise ValueError(
-            f"prepared common gene panel {path} must have one gene_symbol column"
-            "; run `hpc/run.sh prepare <config>`"
-        )
-    return _unique_upper(frame["gene_symbol"].tolist(), "common gene panel")
-
-
-def _read_metadata(path: Path) -> Mapping[str, Any]:
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"missing prepared input metadata {path}; run `hpc/run.sh prepare <config>`"
-        )
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(
-            f"unable to read prepared input metadata {path}: {exc}"
-            "; run `hpc/run.sh prepare <config>`"
-        ) from exc
-    if not isinstance(payload, Mapping):
-        raise ValueError(
-            f"prepared input metadata {path} must be a JSON object"
-            "; run `hpc/run.sh prepare <config>`"
-        )
-    if payload.get("schema_version") != PREPARED_METADATA_SCHEMA:
-        raise ValueError(
-            f"prepared input metadata {path} must use {PREPARED_METADATA_SCHEMA!r}"
-            "; run `hpc/run.sh prepare <config>`"
-        )
-    required = {
-        "split",
-        "common_gene_panel",
-        "hvg_order",
-        "esm2_order",
-        "response_anchors",
-        "response_conditions",
-        "response_holdout",
-    }
-    missing = sorted(required - set(payload))
-    if missing:
-        raise ValueError(
-            f"prepared input metadata {path} is missing fields {missing}"
-            "; run `hpc/run.sh prepare <config>`"
-        )
-    return payload
-
-
-def _metadata_pairs(values: object, label: str) -> tuple[tuple[str, str], ...]:
-    if not isinstance(values, list):
-        raise ValueError(f"prepared metadata {label} must be a list")
-    pairs: list[tuple[str, str]] = []
-    for index, value in enumerate(values):
-        if not isinstance(value, Mapping) or set(value) != {"model_id", "gene"}:
-            raise ValueError(
-                f"prepared metadata {label}[{index}] must contain model_id and gene"
-            )
-        model_id = str(value["model_id"]).strip()
-        gene = str(value["gene"]).strip().upper()
-        if not model_id or not gene:
-            raise ValueError(f"prepared metadata {label}[{index}] has an empty key")
-        pairs.append((model_id, gene))
-    if len(set(pairs)) != len(pairs):
-        raise ValueError(f"prepared metadata {label} contains duplicate keys")
-    return tuple(pairs)
-
-
-def _validate_metadata_split(metadata: Mapping[str, Any], split: FixedSplit) -> None:
-    expected = {
-        "train": list(split.train),
-        "val": list(split.val),
-        "test": list(split.test),
-        "unlabeled_train": list(split.unlabeled_train),
-    }
-    if metadata["split"] != expected:
-        raise ValueError(
-            "prepared metadata split membership/order does not match split file"
-        )
-
-
-def _restore_gene_means(
-    preprocessing: Mapping[str, Any], genes: tuple[str, ...]
-) -> pd.Series:
-    state = preprocessing.get("gene_means")
-    if not isinstance(state, Mapping):
-        raise ValueError("preprocessing.gene_means must contain symbols and values")
-    symbols = _unique_upper(state.get("symbols", []), "checkpoint gene means")
-    values = np.asarray(state.get("values", []), dtype=np.float64)
-    if (
-        symbols != genes
-        or values.shape != (len(genes),)
-        or not np.isfinite(values).all()
-    ):
-        raise ValueError("checkpoint gene means do not match the prepared gene panel")
-    return pd.Series(
-        values, index=pd.Index(genes, name="gene_symbol"), name="gene_mean"
-    )
-
-
-def _restore_variable_genes(
-    preprocessing: Mapping[str, Any], genes: tuple[str, ...]
-) -> frozenset[str]:
-    values = preprocessing.get("variable_genes")
-    if not isinstance(values, (list, tuple)):
-        raise ValueError("preprocessing.variable_genes must be an ordered list")
-    restored = _unique_upper(values, "checkpoint variable genes")
-    unknown = sorted(set(restored) - set(genes))
-    if unknown:
-        raise ValueError(
-            f"checkpoint variable genes are outside the panel: {unknown[:10]}"
-        )
-    return frozenset(restored)
-
-
-def _esm2_state(
-    config: Mapping[str, Any],
-    preprocessing: Mapping[str, Any] | None,
-    expected_order: tuple[str, ...],
-) -> tuple[tuple[str, ...], np.ndarray]:
-    if preprocessing is not None:
-        if "esm2_symbols" not in preprocessing or "esm2_vectors" not in preprocessing:
-            raise ValueError(
-                "checkpoint preprocessing requires esm2_symbols and esm2_vectors"
-            )
-        symbols = _unique_upper(
-            preprocessing.get("esm2_symbols", []), "checkpoint ESM2 symbols"
-        )
-        raw_vectors = preprocessing.get("esm2_vectors")
-        if isinstance(raw_vectors, torch.Tensor):
-            vectors = raw_vectors.detach().cpu().numpy()
-        else:
-            vectors = np.asarray(raw_vectors)
-        vectors = np.asarray(vectors, dtype=np.float32)
-    else:
-        path = _path(config, "esm2_embeddings")
-        if not path.is_file():
-            raise FileNotFoundError(
-                f"missing prepared ESM2 table {path}; run `hpc/run.sh prepare <config>`"
-            )
-        table = load_esm2_embeddings(path)
-        symbols = tuple(table.vectors_by_symbol)
-        vectors = np.stack([table.vectors_by_symbol[symbol] for symbol in symbols])
-    if symbols != expected_order:
-        raise ValueError("ESM2 symbol order does not match prepared metadata")
-    if vectors.ndim != 2 or vectors.shape[0] != len(symbols):
-        raise ValueError("ESM2 vectors do not align with their ordered symbols")
-    if vectors.dtype != np.dtype(np.float32) or not bool(np.isfinite(vectors).all()):
-        raise ValueError("ESM2 vectors must be finite float32")
-    configured_dim = _features(config).get("esm2_dim")
-    if configured_dim is not None and int(configured_dim) != vectors.shape[1]:
-        raise ValueError("ESM2 vector width does not match config.features.esm2_dim")
-    return symbols, vectors
-
-
-def _paired_indices(
+def select_context_cells(
     model_id: str, cell_ids: Sequence[object], count: int
 ) -> np.ndarray:
+    """``count`` cell positions ranked by ``sha256(ModelID|cell)``.
+
+    Repeats the ranking when the line has fewer cells than ``count``.
+    """
     identifiers = tuple(str(value) for value in cell_ids)
     ranked = sorted(
         range(len(identifiers)),
@@ -296,31 +111,96 @@ def _paired_indices(
     return np.asarray(selected, dtype=np.int64)
 
 
-def _open_lines(
-    model_ids: Sequence[str],
+def prepare_line(
+    counts: object,
+    cell_ids: Sequence[str],
+    symbols: Sequence[str],
+    embeddings: np.ndarray,
+    cached_cells: Sequence[str],
     *,
-    tx1_cache: Path,
-    q_sc_cache: Path,
-    genes: tuple[str, ...],
-    hvg_order: tuple[str, ...],
+    model_id: str,
+    hvg_order: Sequence[str],
+    genes: Sequence[str],
+    target_sum: float,
     cells_per_context: int,
-) -> dict[str, PreparedLine]:
-    result: dict[str, PreparedLine] = {}
-    for model_id in model_ids:
-        embeddings, hvg, obs = open_line_cache(
-            tx1_cache, model_id, expected_hvg_order=hvg_order
+) -> PreparedLine:
+    """Log-space HVG and q_sc of one line from its raw source matrix.
+
+    ``counts`` holds raw UMI over every gene of the source (``cell_ids`` rows,
+    ``symbols`` columns); the library size of each cell is its total over
+    all of them. The context cells are the Tx1-cached cells, in
+    :func:`select_context_cells` order; q_sc summarises every source cell.
+    """
+    sizes = library_sizes(counts)
+    order = select_context_cells(model_id, cached_cells, cells_per_context)
+    rows = pd.Index(cell_ids).get_indexer([cached_cells[i] for i in order])
+    if (rows < 0).any():
+        raise ValueError(f"{model_id}: Tx1-cached cells are missing from the source")
+    hvg, _ = align_columns(counts[rows], symbols, hvg_order)
+    panel_symbols = [str(symbol).strip().upper() for symbol in symbols]
+    return PreparedLine(
+        controls_tx1=np.array(embeddings[order], dtype=np.float32),
+        basal_hvg=log_normalize(hvg, sizes[rows], target_sum),
+        q_sc=compute_q_sc(counts, panel_symbols, genes, sizes, target_sum),
+    )
+
+
+def write_prepared_line(path: Path, line: PreparedLine) -> None:
+    """Atomically write one line's ``.npz``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    with temporary.open("wb") as handle:
+        np.savez(
+            handle,
+            controls_tx1=line.controls_tx1,
+            basal_hvg=line.basal_hvg,
+            q_sc_values=line.q_sc.values,
+            q_sc_available=line.q_sc.available,
         )
-        indices = _paired_indices(model_id, obs.index, cells_per_context)
-        controls = np.array(embeddings[indices], dtype=np.float32, copy=True)
-        basal_hvg = np.array(hvg[indices], dtype=np.float32, copy=True)
-        if not np.isfinite(controls).all() or not np.isfinite(basal_hvg).all():
-            raise ValueError(f"{model_id}: selected paired basal arrays are non-finite")
-        result[model_id] = PreparedLine(
-            controls_tx1=controls,
-            basal_hvg=basal_hvg,
-            q_sc=load_q_sc_line(q_sc_cache, model_id, genes),
+    os.replace(temporary, path)
+
+
+def read_prepared_line(path: Path, genes: tuple[str, ...]) -> PreparedLine:
+    with np.load(path) as payload:
+        return PreparedLine(
+            controls_tx1=payload["controls_tx1"],
+            basal_hvg=payload["basal_hvg"],
+            q_sc=QScFeatures(
+                symbols=genes,
+                values=payload["q_sc_values"],
+                available=payload["q_sc_available"],
+            ),
         )
-    return result
+
+
+# --- opening the prepared root ---------------------------------------------------
+
+
+def read_manifest(root: Path) -> dict[str, Any]:
+    """The prepared manifest; refuses one prepared before the log expression space."""
+    path = Path(root) / PREPARED_METADATA_FILENAME
+    if not path.is_file():
+        raise FileNotFoundError(f"missing {path}; run preparation first")
+    manifest = json.loads(path.read_text())
+    if "expression_space" not in manifest:
+        raise ValueError(
+            f"{path} has no expression_space: it was prepared in raw-count space by "
+            "older code and STATE must not read it; prepare a new prepared_root"
+        )
+    return manifest
+
+
+def _restored_target_sum(preprocessing: Mapping[str, Any], target_sum: float) -> None:
+    if "target_sum" not in preprocessing:
+        raise ValueError(
+            "checkpoint preprocessing has no target_sum: the model was trained on "
+            "raw-count inputs that predate the log expression_space; retrain it"
+        )
+    if float(preprocessing["target_sum"]) != target_sum:
+        raise ValueError(
+            f"checkpoint target_sum {preprocessing['target_sum']} differs from the "
+            f"prepared expression_space target_sum {target_sum}"
+        )
 
 
 def load_inputs(
@@ -329,179 +209,93 @@ def load_inputs(
     preprocessing: Mapping[str, Any] | None = None,
     include_test: bool = False,
 ) -> PreparedInputs:
-    """Open prepared joint-training inputs without raw reads or cache writes."""
-    split = load_geneeffect_226_split(_path(config, "split"))
-    prepared_root_value = config.get("prepared_root")
-    if prepared_root_value is None:
-        raise ValueError("config.prepared_root is required")
-    prepared_root = Path(prepared_root_value)
-    metadata_path = prepared_root / PREPARED_METADATA_FILENAME
-    metadata = _read_metadata(metadata_path)
-    _validate_metadata_split(metadata, split)
+    """Open prepared inputs; fit (or restore) gene means and variable genes.
 
-    genes = _read_panel(_path(config, "common_gene_panel"))
-    if tuple(metadata["common_gene_panel"]) != genes:
-        raise ValueError(
-            f"{metadata_path}: prepared metadata common gene panel/order "
-            "does not match CSV; run `hpc/run.sh prepare <config>`"
-        )
-    hvg_order = _unique_exact(metadata["hvg_order"], "prepared HVG order")
-    state_model_dir = _path(config, "state_model_dir")
-    if not (state_model_dir / "var_dims.pkl").is_file():
-        raise FileNotFoundError(
-            f"missing STATE gene order {state_model_dir / 'var_dims.pkl'}; "
-            "run `hpc/run.sh prepare <config>`"
-        )
-    state_hvg_order = _unique_exact(
-        load_hvg_gene_order(state_model_dir), "STATE HVG order"
-    )
-    if hvg_order != state_hvg_order:
-        raise ValueError(
-            f"{metadata_path}: prepared HVG order does not match STATE model order; "
-            "run `hpc/run.sh prepare <config>`"
-        )
-    expected_hvg_dim = _features(config).get("hvg_dim", 2_000)
-    if len(hvg_order) != int(expected_hvg_dim):
-        raise ValueError(
-            f"{metadata_path}: prepared HVG order width does not match "
-            "config.features.hvg_dim; run `hpc/run.sh prepare <config>`"
-        )
+    Fitting uses labeled training lines only. ``preprocessing`` restores a
+    checkpoint's fitted state instead. Test labels and lines are opened only
+    with ``include_test``.
+    """
+    root = Path(config["prepared_root"])
+    manifest = read_manifest(root)
+    target_sum = float(manifest["expression_space"]["target_sum"])
+    if preprocessing is not None:
+        _restored_target_sum(preprocessing, target_sum)
+    paths, features = config["paths"], config["features"]
+    split = load_geneeffect_226_split(Path(paths["split"]))
+    genes = tuple(manifest["common_gene_panel"])
+    labels = load_geneeffect_long(Path(paths["gene_effect"]), split)
+    labels = labels.loc[labels["gene_symbol"].isin(genes)].copy()
+    train = split.supervised_train
 
-    esm2_order = _unique_upper(metadata["esm2_order"], "prepared ESM2 order")
-    esm2_symbols, esm2_vectors = _esm2_state(config, preprocessing, esm2_order)
-    esm2_symbol_set = set(esm2_symbols)
-    missing_esm2 = [gene for gene in genes if gene not in esm2_symbol_set]
-    if missing_esm2:
-        raise ValueError(
-            f"common panel genes missing from ESM2 state: {missing_esm2[:10]}"
-        )
-
-    raw_labels = geneeffect_data.load_geneeffect_long(
-        _path(config, "gene_effect"), split
-    )
-    raw_labels = raw_labels.loc[raw_labels["gene_symbol"].isin(genes)].copy()
-    train_ids = split.supervised_train
     if preprocessing is None:
-        gene_means = residual_target.fit_gene_means(raw_labels, train_ids)
-        if tuple(gene_means.index) != tuple(sorted(genes)):
-            raise ValueError("train-fit gene means do not cover the prepared panel")
-        gene_means = gene_means.reindex(genes)
+        for model_id in train:
+            assert_fit_eligible(model_id, split)
+        gene_means = fit_gene_means(labels, train).loc[list(genes)]
     else:
-        gene_means = _restore_gene_means(preprocessing, genes)
-    raw_labels["residual"] = raw_labels["gene_effect"] - raw_labels["gene_symbol"].map(
-        gene_means
-    )
+        state = preprocessing["gene_means"]
+        gene_means = pd.Series(
+            np.asarray(state["values"], dtype=np.float64),
+            index=list(state["symbols"]),
+            name="gene_mean",
+        ).loc[list(genes)]
+    gene_means.index.name = "gene_symbol"
+    labels["residual"] = labels["gene_effect"] - labels["gene_symbol"].map(gene_means)
+
     if preprocessing is None:
-        features = _features(config)
-        variable_genes = geneeffect_data.fit_variable_gene_membership(
-            raw_labels,
-            train_ids,
+        variable_genes = fit_variable_gene_membership(
+            labels,
+            train,
             genes,
-            min_observations=int(features.get("variable_gene_min_observations", 5)),
-            percentile=float(features.get("variable_gene_percentile", 75.0)),
+            min_observations=int(features["variable_gene_min_observations"]),
+            percentile=float(features["variable_gene_percentile"]),
         )
+        table = load_esm2_embeddings(Path(paths["esm2_embeddings"]))
+        esm2_symbols = tuple(table.vectors_by_symbol)
+        esm2_vectors = np.stack([table.vectors_by_symbol[s] for s in esm2_symbols])
     else:
-        variable_genes = _restore_variable_genes(preprocessing, genes)
+        variable_genes = frozenset(preprocessing["variable_genes"])
+        esm2_symbols = tuple(preprocessing["esm2_symbols"])
+        vectors = preprocessing["esm2_vectors"]
+        if isinstance(vectors, torch.Tensor):
+            vectors = vectors.detach().cpu().numpy()
+        esm2_vectors = np.asarray(vectors)
 
-    exposed_ids = set((*split.train, *split.val))
-    if include_test:
-        exposed_ids.update(split.test)
-    labels = raw_labels.loc[
-        raw_labels["model_id"].isin(exposed_ids)
-        & np.isfinite(raw_labels["gene_effect"])
-        & np.isfinite(raw_labels["residual"]),
+    exposed = {*split.train, *split.val, *(split.test if include_test else ())}
+    exposed -= set(split.unlabeled_train)
+    labels = labels.loc[
+        labels["model_id"].isin(exposed) & np.isfinite(labels["gene_effect"]),
         ["model_id", "gene_symbol", "gene_effect", "residual"],
     ].reset_index(drop=True)
-    if not include_test and set(labels["model_id"]) & set(split.test):
-        raise AssertionError("test labels entered default prepared inputs")
-
-    anchors_raw = metadata["response_anchors"]
-    if not isinstance(anchors_raw, list):
-        raise ValueError("prepared response_anchors must be a list")
-    response_anchors = tuple(str(value).strip() for value in anchors_raw)
-    if len(response_anchors) != 4 or len(set(response_anchors)) != 4:
-        raise ValueError("prepared response_anchors must contain four unique ModelIDs")
-    if not set(response_anchors).issubset(split.supervised_train):
-        raise ValueError("prepared response anchors must be labeled training lines")
-    response_conditions = _metadata_pairs(
-        metadata["response_conditions"], "response_conditions"
-    )
-    response_holdout_ordered = _metadata_pairs(
-        metadata["response_holdout"], "response_holdout"
-    )
-    missing_response_esm2 = sorted(
-        {gene for _, gene in response_conditions} - set(esm2_symbols)
-    )
-    if missing_response_esm2:
-        raise ValueError(
-            f"response genes missing from ESM2 state: {missing_response_esm2[:10]}"
-        )
-    response_holdout = frozenset(response_holdout_ordered)
-    if not response_holdout or not response_holdout.issubset(response_conditions):
-        raise ValueError(
-            "prepared response holdout must be a non-empty condition subset"
-        )
-
-    tx1_cache = _path(config, "tx1_cache")
-    q_sc_cache = _path(config, "q_sc_cache")
-    response_cache = _path(config, "response_cache")
-    needed_lines = tuple(
-        model_id
+    lines = {
+        model_id: read_prepared_line(root / "lines" / f"{model_id}.npz", genes)
         for model_id in split.all_model_ids
-        if model_id in exposed_ids and model_id not in split.unlabeled_train
-    )
-    cells_per_context = int(_features(config).get("cells_per_context", 128))
-    if cells_per_context <= 0:
-        raise ValueError("config.features.cells_per_context must be positive")
-    lines = _open_lines(
-        needed_lines,
-        tx1_cache=tx1_cache,
-        q_sc_cache=q_sc_cache,
-        genes=genes,
-        hvg_order=hvg_order,
-        cells_per_context=cells_per_context,
-    )
-    response_targets = open_response_targets_cache(
-        response_cache, expected_hvg_order=hvg_order
-    )
-    if response_targets.keys != response_conditions:
-        raise ValueError(
-            f"{metadata_path} and {response_cache}: response cache condition order "
-            "does not match prepared metadata; run `hpc/run.sh prepare <config>`"
-        )
-    response_key_set = set(response_targets.keys)
-    if any(model_id not in response_anchors for model_id, _ in response_key_set):
-        raise ValueError("response cache contains a condition outside the four anchors")
-    for anchor in response_anchors:
-        anchor_keys = {key for key in response_key_set if key[0] == anchor}
-        if not anchor_keys - response_holdout or not anchor_keys & response_holdout:
-            raise ValueError(
-                f"response anchor {anchor} lacks train or holdout conditions"
-            )
-
+        if model_id in exposed
+    }
     return PreparedInputs(
         split=split,
         labels=labels,
         genes=genes,
         train_gene_means=gene_means,
         variable_genes=variable_genes,
-        tx1_cache=tx1_cache,
-        q_sc_cache=q_sc_cache,
-        response_cache=response_cache,
-        hvg_order=hvg_order,
-        response_holdout=response_holdout,
+        hvg_order=tuple(manifest["hvg_order"]),
         esm2_symbols=esm2_symbols,
-        esm2_vectors=esm2_vectors,
+        esm2_vectors=np.asarray(esm2_vectors, dtype=np.float32),
         lines=lines,
-        response_targets=response_targets,
-        response_anchors=response_anchors,
+        response_targets=open_response_targets(root / "response"),
+        response_anchors=tuple(manifest["response_anchors"]),
+        target_sum=target_sum,
     )
 
 
 __all__ = [
+    "EXPRESSION_TRANSFORM",
     "PREPARED_METADATA_FILENAME",
-    "PREPARED_METADATA_SCHEMA",
     "PreparedInputs",
     "PreparedLine",
     "load_inputs",
+    "prepare_line",
+    "read_manifest",
+    "read_prepared_line",
+    "select_context_cells",
+    "write_prepared_line",
 ]
