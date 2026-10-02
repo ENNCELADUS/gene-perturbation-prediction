@@ -190,15 +190,14 @@ def _materialize_rows(
     if not sorted_indices.size:
         stacked = matrix[sorted_indices, :]
     else:
-        chunks = [
-            matrix[sorted_indices[start : start + chunk_size], :]
-            for start in range(0, len(sorted_indices), chunk_size)
-        ]
-        if sparsify_chunks:
-            chunks = [
-                chunk if sparse.issparse(chunk) else csr_matrix(chunk)
-                for chunk in chunks
-            ]
+        chunks = []
+        for start in range(0, len(sorted_indices), chunk_size):
+            chunk = matrix[sorted_indices[start : start + chunk_size], :]
+            # Sparsify before reading the next chunk, so at most one dense
+            # chunk is held at a time.
+            if sparsify_chunks and not sparse.issparse(chunk):
+                chunk = csr_matrix(chunk)
+            chunks.append(chunk)
         if sparse.issparse(chunks[0]):
             stacked = sparse.vstack(chunks, format="csr")
         else:

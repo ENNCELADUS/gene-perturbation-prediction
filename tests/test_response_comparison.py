@@ -195,6 +195,25 @@ def test_bootstrap_interval_contains_point(tmp_path):
     assert no_change["ratio"] == 1.0 and no_change["interval"] == [1.0, 1.0]
 
 
+def test_bootstrap_draws_each_gene_once_across_folds():
+    folds = {
+        arm: {
+            a: {
+                "genes": ["G1", "G2"],
+                "loss": [1.0, 3.0] if arm != "no_change" else [1.0, 1.0],
+            }
+            for a in ("A", "B")
+        }
+        for arm in rc.ARMS
+    }
+    samples = rc._bootstrap(folds, ["A", "B"], {"all": ["A", "B"]}, 200)
+    # Both folds share genes, so every resample weights them identically and
+    # the two fold ratios agree: no resample can mix G1 in one fold with G2 in
+    # the other.
+    pooled = samples["all"]["mlp_hvg"]
+    assert set(np.round(pooled, 6)) <= {1.0, 2.0, 3.0}
+
+
 def test_pooled_with_and_without_hct116(tmp_path):
     table, out_dir = run(tmp_path, epochs=1)
     verdicts = json.loads((out_dir / "verdicts.json").read_text())

@@ -107,6 +107,27 @@ def test_materialize_rows_chunks_keep_requested_order(tmp_path, dense):
         np.testing.assert_array_equal(out.toarray(), values[rows])
 
 
+def test_materialize_rows_holds_one_dense_chunk_at_a_time():
+    import gc
+    import weakref
+
+    values = np.arange(60, dtype=np.float32).reshape(12, 5)
+    alive = []
+
+    class Backed:
+        def __getitem__(self, key):
+            gc.collect()
+            assert sum(ref() is not None for ref in alive) == 0
+            chunk = values[key[0]].copy()
+            alive.append(weakref.ref(chunk))
+            return chunk
+
+    out = _materialize_rows(
+        Backed(), np.arange(12)[::-1], chunk_size=3, sparsify_chunks=True
+    )
+    np.testing.assert_array_equal(out.toarray(), values[::-1])
+
+
 def test_perturbseq_basal_builder_keeps_every_gene_of_control_cells(tmp_path):
     path = _perturbseq_h5ad(
         tmp_path / "a.h5ad", ["non-targeting", "TP53", "non-targeting"]

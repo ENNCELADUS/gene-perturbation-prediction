@@ -392,25 +392,43 @@ def _bootstrap(
 ) -> dict[str, dict[str, np.ndarray]]:
     """Pooled ratio per resample, variant and arm.
 
-    Each resample draws held-out conditions with replacement within every fold,
-    the same draw for every arm.
+    The bootstrap unit is the perturbed gene: each resample draws gene
+    identities with replacement once, from every held-out gene of every fold,
+    and weights each fold's conditions by how often their gene was drawn. A
+    gene perturbed in several anchors therefore moves all its folds together,
+    and every arm sees the same draw.
     """
     rng = np.random.default_rng(SEED)
     losses = {arm: {a: _array(folds[arm][a]["loss"]) for a in anchors} for arm in ARMS}
+    genes = {a: folds["no_change"][a]["genes"] for a in anchors}
+    universe = sorted({gene for a in anchors for gene in genes[a]})
+    index = {gene: i for i, gene in enumerate(universe)}
+    positions = {a: np.array([index[g] for g in genes[a]], dtype=int) for a in anchors}
     samples = {v: {arm: np.empty(resamples) for arm in ARMS} for v in variants}
     for b in range(resamples):
-        draws = {
-            a: rng.integers(0, len(losses["no_change"][a]), len(losses["no_change"][a]))
-            for a in anchors
-        }
+        counts = np.bincount(
+            rng.integers(0, len(universe), len(universe)), minlength=len(universe)
+        )
+        weights = {a: counts[positions[a]].astype(float) for a in anchors}
         for arm in ARMS:
             ratio = {
-                a: _ratio(losses[arm][a][draws[a]], losses["no_change"][a][draws[a]])
+                a: _weighted_ratio(losses[arm][a], losses["no_change"][a], weights[a])
                 for a in anchors
             }
             for variant, members in variants.items():
                 samples[variant][arm][b] = np.mean([ratio[a] for a in members])
     return samples
+
+
+def _weighted_ratio(
+    loss: np.ndarray, no_change: np.ndarray, weights: np.ndarray
+) -> float:
+    """``_ratio`` with each condition counted ``weights`` times."""
+    covered = np.isfinite(loss) & (weights > 0)
+    if not covered.any():
+        return math.nan
+    w = weights[covered]
+    return float((w * loss[covered]).sum() / (w * no_change[covered]).sum())
 
 
 def _interval(values: np.ndarray) -> list[float | None]:
