@@ -316,7 +316,7 @@ def test_selection_uses_val_geneeffect_loss(world, tmp_path, monkeypatch):
     losses = iter([2.0, 1.0, 1.5, 3.0, 0.1])
     correlations = iter([0.9, -0.9, 0.0, 0.95, 0.0])
 
-    def evaluate(model, inputs, config, *, split, accelerator):
+    def evaluate(model, inputs, config, *, split, accelerator, lines=None):
         if split == "train":
             return SimpleNamespace(metrics={"train_eval_geneeffect_loss": 0.0})
         return SimpleNamespace(
@@ -337,6 +337,50 @@ def test_selection_uses_val_geneeffect_loss(world, tmp_path, monkeypatch):
     )
     assert (
         load_checkpoint(tmp_path / "run" / "last.pt")["train_state"]["next_epoch"] == 4
+    )
+
+
+def test_training_diagnostic_uses_fixed_line_subset(world, tmp_path, monkeypatch):
+    from accelerate import Accelerator
+
+    many = SimpleNamespace(
+        split=SimpleNamespace(supervised_train=tuple(f"ACH-{i:03d}" for i in range(60)))
+    )
+    chosen = trainer.training_diagnostic_lines(many)
+    assert len(chosen) == trainer.TRAINING_DIAGNOSTIC_LINES == 27
+    assert list(chosen) == sorted(chosen) and set(chosen) < set(
+        many.split.supervised_train
+    )
+    reversed_order = SimpleNamespace(
+        split=SimpleNamespace(supervised_train=many.split.supervised_train[::-1])
+    )
+    assert trainer.training_diagnostic_lines(reversed_order) == chosen
+
+    # Three of the six synthetic training lines, every epoch the same three.
+    monkeypatch.setattr(trainer, "TRAINING_DIAGNOSTIC_LINES", 3)
+    expected = trainer.training_diagnostic_lines(world.inputs)
+    assert len(expected) == 3
+    scored = []
+
+    def evaluate(model, inputs, config, *, split, accelerator, lines=None):
+        result = evaluate_model(
+            model, inputs, config, split=split, accelerator=accelerator, lines=lines
+        )
+        if split == "train":
+            scored.append(set(result.predictions.model_id))
+        else:
+            assert lines is None and set(result.predictions.model_id) == set(VAL)
+        return result
+
+    monkeypatch.setattr(trainer, "evaluate_model", evaluate)
+    trainer.fit(
+        world.model, world.inputs, world.config, tmp_path / "run", Accelerator(cpu=True)
+    )
+    assert scored == [set(expected)] * world.config["train"]["max_epochs"]
+    records = [json.loads(line) for line in (tmp_path / "run" / "metrics.jsonl").open()]
+    epochs = [r for r in records if "val_geneeffect_loss" in r]
+    assert all(
+        r["train_eval_geneeffect_possible_pairs"] == 3 * len(GENES) for r in epochs
     )
 
 
@@ -364,6 +408,8 @@ def test_cpu_single_process_training_writes_best_last_and_done(
         assert (run_dir / name).is_file()
     done = json.loads((run_dir / "done.json").read_text())
     assert done["next_epoch"] == 2
+    run_record = json.loads((run_dir / "run.json").read_text())
+    assert run_record["training_diagnostic_lines"] == sorted(TRAIN)
     records = [json.loads(line) for line in (run_dir / "metrics.jsonl").open()]
     epochs = [r for r in records if "val_geneeffect_loss" in r]
     updates = [r for r in records if "train_geneeffect_loss" in r]
@@ -542,3 +588,78 @@ def test_two_rank_cpu_training_under_distributed_launch(tmp_path, cpu):
     records = [json.loads(line) for line in (run_dir / "metrics.jsonl").open()]
     # 36 training rows over 2 ranks x batch 4 -> 4 updates per epoch.
     assert max(r["global_step"] for r in records) == 8
+
+
+def _rank_zero_metrics_worker(rank, port, config, out_dir):
+    import os
+
+    from accelerate import Accelerator
+
+    from src.eval import geneeffect as evaluation
+
+    os.environ.update(
+        ACCELERATE_USE_CPU="true",
+        MASTER_ADDR="127.0.0.1",
+        MASTER_PORT=str(port),
+        RANK=str(rank),
+        LOCAL_RANK=str(rank),
+        WORLD_SIZE="2",
+        LOCAL_WORLD_SIZE="2",
+    )
+    torch.set_num_threads(1)
+    accelerator = Accelerator(cpu=True)
+    inputs = make_inputs()
+    torch.manual_seed(0)
+    model = build_joint_model(config, inputs)
+    fit_startup_standardizer(model, inputs, batch_size=8)
+    calls = []
+    aggregate = evaluation.aggregate_geneeffect
+
+    def spy(*args, **kwargs):
+        calls.append(rank)
+        return aggregate(*args, **kwargs)
+
+    evaluation.aggregate_geneeffect = spy
+    result = evaluation.evaluate_model(
+        model, inputs, config, split="val", accelerator=accelerator
+    )
+    Path(out_dir, f"rank{rank}.json").write_text(
+        json.dumps(
+            {
+                "aggregations": len(calls),
+                "rows": len(result.predictions),
+                "metrics": result.metrics,
+            }
+        )
+    )
+
+
+def test_metrics_aggregated_once_on_rank_zero(tmp_path, cpu):
+    import socket
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    config = make_config(tmp_path)  # batch 4: 12 validation rows -> 3 batches
+    torch.multiprocessing.spawn(
+        _rank_zero_metrics_worker,
+        args=(port, config, str(tmp_path)),
+        nprocs=2,
+        join=True,
+    )
+    ranks = [json.loads((tmp_path / f"rank{r}.json").read_text()) for r in (0, 1)]
+    assert [r["aggregations"] for r in ranks] == [1, 0]
+    assert [r["rows"] for r in ranks] == [len(VAL) * len(GENES), 0]
+    assert ranks[0]["metrics"] == ranks[1]["metrics"]
+
+    inputs = make_inputs()
+    torch.manual_seed(0)
+    model = build_joint_model(config, inputs)
+    fit_startup_standardizer(model, inputs, batch_size=8)
+    single = evaluate_model(model, inputs, config, split="val").metrics
+    assert single.keys() == ranks[0]["metrics"].keys()
+    for key, value in single.items():
+        if isinstance(value, float):
+            assert ranks[0]["metrics"][key] == pytest.approx(value, rel=0, abs=1e-6)
+        else:
+            assert ranks[0]["metrics"][key] == value

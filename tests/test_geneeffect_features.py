@@ -69,6 +69,25 @@ def test_condition_features_match_hand_computable_shift_and_summaries():
     assert torch.isfinite(predicted.grad).all()
 
 
+def test_shared_basal_bags_give_the_same_features_as_separate_copies():
+    generator = torch.Generator().manual_seed(0)
+    lines = [torch.rand(5, HVG_WIDTH, generator=generator) for _ in range(2)]
+    predicted = [torch.rand(5, HVG_WIDTH, generator=generator) for _ in range(4)]
+    shared = (lines[0], lines[1], lines[0], lines[0])  # rows of two lines
+    kwargs = dict(
+        projection=FixedSparseProjection(),
+        gene_in_hvg_panel=torch.tensor([True, True, False, True]),
+        own_gene_hvg_indices=(3, 7, None, 0),
+        own_gene_available=torch.tensor([True, False, False, True]),
+    )
+    deduplicated = compute_condition_feature_batch(predicted, shared, **kwargs)
+    separate = compute_condition_feature_batch(
+        predicted, tuple(bag.clone() for bag in shared), **kwargs
+    )
+    assert torch.equal(deduplicated.delta_proj, separate.delta_proj)
+    assert torch.equal(deduplicated.s, separate.s)
+
+
 @pytest.mark.parametrize(("panel", "index"), [(False, None), (True, 0)])
 def test_unavailable_own_gene_shift_is_zero_with_false_mask(panel, index):
     bag = torch.ones(2, HVG_WIDTH)

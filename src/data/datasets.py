@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Sequence
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 from src.data.batches import DependencyBatch, OnlineConditionBatch, ResponseBatch
 from src.data.prepared import PreparedInputs
@@ -30,29 +29,80 @@ def split_lines(inputs: PreparedInputs, split: str) -> tuple[str, ...]:
 class DependencyDataset(Dataset[int]):
     """Labelled (line, gene) GeneEffect rows of one split, with a collator.
 
-    Each line's basal HVG cells are kept once on ``device`` and shared by every
-    row of that line.
+    ``lines`` restricts the rows to a subset of the split's lines. Every fixed
+    quantity is placed on ``device`` once: each line's basal HVG cells, pooled Tx1
+    context and q_sc table, the ESM2 table and every row's targets and indices.
+    The collator only gathers by row index, so a batch is born on ``device``.
     """
 
     def __init__(
-        self, inputs: PreparedInputs, split: str, *, device: torch.device | str = "cpu"
+        self,
+        inputs: PreparedInputs,
+        split: str,
+        *,
+        device: torch.device | str = "cpu",
+        lines: Sequence[str] | None = None,
     ) -> None:
-        lines = set(split_lines(inputs, split))
+        allowed = split_lines(inputs, split)
+        lines = allowed if lines is None else tuple(lines)
+        if not set(lines) <= set(allowed):
+            raise ValueError(
+                f"lines outside the {split} split: {set(lines) - set(allowed)}"
+            )
         self.inputs = inputs
         self.split = split
-        self.rows = inputs.labels.loc[inputs.labels["model_id"].isin(lines)]
+        self.lines = lines
+        self.device = torch.device(device)
+        self.rows = inputs.labels.loc[inputs.labels["model_id"].isin(set(lines))]
         self.rows = self.rows.reset_index(drop=True)
-        self._hvg_index = {gene: index for index, gene in enumerate(inputs.hvg_order)}
-        self._gene_index = {gene: index for index, gene in enumerate(inputs.genes)}
-        self._esm2_index = {g: i for i, g in enumerate(inputs.esm2_symbols)}
-        present = sorted(set(self.rows["model_id"]))
-        self._contexts = {
-            m: pooled_context(inputs.lines[m].controls_tx1) for m in present
-        }
+        self.model_ids = self.rows["model_id"].astype(str).tolist()
+        self.genes = self.rows["gene_symbol"].astype(str).tolist()
+        hvg_index = {gene: index for index, gene in enumerate(inputs.hvg_order)}
+        self.hvg_indices = [hvg_index.get(gene) for gene in self.genes]
+        present = sorted(set(self.model_ids))
+        line_index = {m: index for index, m in enumerate(present)}
+        gene_index = {gene: index for index, gene in enumerate(inputs.genes)}
+        esm2_index = {gene: index for index, gene in enumerate(inputs.esm2_symbols)}
+
+        def on_device(values, dtype: torch.dtype) -> torch.Tensor:
+            return torch.as_tensor(values, dtype=dtype).to(self.device)
+
         self._basal = {
-            m: torch.from_numpy(np.asarray(inputs.lines[m].basal_hvg)).to(device)
+            m: torch.from_numpy(np.asarray(inputs.lines[m].basal_hvg)).to(self.device)
             for m in present
         }
+        self._contexts = torch.stack(
+            [pooled_context(inputs.lines[m].controls_tx1) for m in present]
+        ).to(self.device)
+        self._q_sc = on_device(
+            np.stack(
+                [
+                    np.nan_to_num(inputs.lines[m].q_sc.values, nan=0.0).astype(
+                        np.float32
+                    )
+                    for m in present
+                ]
+            ),
+            torch.float32,
+        )
+        self._q_sc_available = on_device(
+            np.stack([inputs.lines[m].q_sc.available for m in present]).astype(bool),
+            torch.bool,
+        )
+        self._esm2 = on_device(
+            np.asarray(inputs.esm2_vectors, dtype=np.float32), torch.float32
+        )
+        self._row_line = on_device([line_index[m] for m in self.model_ids], torch.long)
+        self._row_gene = on_device([gene_index[g] for g in self.genes], torch.long)
+        self._row_esm2 = on_device([esm2_index[g] for g in self.genes], torch.long)
+        self._row_in_hvg_panel = on_device(
+            [index is not None for index in self.hvg_indices], torch.bool
+        )
+        self.residual = on_device(self.rows["residual"].to_numpy(), torch.float32)
+        self.gene_effect = on_device(self.rows["gene_effect"].to_numpy(), torch.float32)
+        self.gene_mean = on_device(
+            inputs.train_gene_means.loc[self.genes].to_numpy(), torch.float32
+        )
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -61,50 +111,29 @@ class DependencyDataset(Dataset[int]):
         return int(index)
 
     def collate(self, indices: Sequence[int]) -> DependencyBatch:
-        selected = self.rows.iloc[list(indices)]
-        model_ids = tuple(selected["model_id"].astype(str))
-        genes = tuple(selected["gene_symbol"].astype(str))
-        positions = [self._gene_index[gene] for gene in genes]
-        q_sc = [self.inputs.lines[m].q_sc for m in model_ids]
-        q_values = np.stack([q.values[i] for q, i in zip(q_sc, positions, strict=True)])
-        q_available = np.asarray(
-            [q.available[i] for q, i in zip(q_sc, positions, strict=True)], dtype=bool
-        )
-        hvg_indices = tuple(self._hvg_index.get(gene) for gene in genes)
+        positions = [int(index) for index in indices]
+        rows = torch.as_tensor(positions, dtype=torch.long).to(self.device)
+        line, gene = self._row_line[rows], self._row_gene[rows]
+        model_ids = tuple(self.model_ids[i] for i in positions)
+        q_available = self._q_sc_available[line, gene]
+        in_hvg_panel = self._row_in_hvg_panel[rows]
         conditions = OnlineConditionBatch(
             basal_hvg=tuple(self._basal[m] for m in model_ids),
-            genes=genes,
+            genes=tuple(self.genes[i] for i in positions),
             model_ids=model_ids,
-            q_sc=torch.from_numpy(np.nan_to_num(q_values, nan=0.0).astype(np.float32)),
-            e_g=torch.from_numpy(
-                np.stack(
-                    [self.inputs.esm2_vectors[self._esm2_index[gene]] for gene in genes]
-                ).astype(np.float32)
-            ),
-            z_c=torch.stack([self._contexts[m] for m in model_ids]),
-            q_sc_mask=torch.from_numpy(q_available),
-            gene_in_hvg_panel=torch.tensor([i is not None for i in hvg_indices]),
-            own_gene_hvg_indices=hvg_indices,
-            own_gene_shift_available=torch.tensor(
-                [
-                    i is not None and bool(a)
-                    for i, a in zip(hvg_indices, q_available, strict=True)
-                ],
-                dtype=torch.bool,
-            ),
+            q_sc=self._q_sc[line, gene],
+            e_g=self._esm2[self._row_esm2[rows]],
+            z_c=self._contexts[line],
+            q_sc_mask=q_available,
+            gene_in_hvg_panel=in_hvg_panel,
+            own_gene_hvg_indices=tuple(self.hvg_indices[i] for i in positions),
+            own_gene_shift_available=in_hvg_panel & q_available,
         )
-
-        def column(name: str) -> torch.Tensor:
-            return torch.tensor(selected[name].to_numpy(), dtype=torch.float32)
-
         return DependencyBatch(
             conditions=conditions,
-            residual=column("residual"),
-            gene_effect=column("gene_effect"),
-            gene_mean=torch.tensor(
-                [self.inputs.train_gene_means[gene] for gene in genes],
-                dtype=torch.float32,
-            ),
+            residual=self.residual[rows],
+            gene_effect=self.gene_effect[rows],
+            gene_mean=self.gene_mean[rows],
         )
 
 
@@ -117,8 +146,9 @@ class ResponseDataset(Dataset[int]):
         self.inputs = inputs
         self.cache = inputs.response_targets
         self.keys = tuple(self.cache.keys)
+        self.device = torch.device(device)
         self._basal = {
-            m: torch.from_numpy(np.asarray(inputs.lines[m].basal_hvg)).to(device)
+            m: torch.from_numpy(np.asarray(inputs.lines[m].basal_hvg)).to(self.device)
             for m in sorted({model_id for model_id, _ in self.keys})
         }
 
@@ -129,33 +159,13 @@ class ResponseDataset(Dataset[int]):
         return int(index)
 
     def collate(self, indices: Sequence[int]) -> ResponseBatch:
+        """One host-to-device copy of every observed bag, split back per condition."""
         keys = [self.keys[index] for index in indices]
+        bags = [self.cache.target_bag(index) for index in indices]
+        observed = torch.from_numpy(np.concatenate(bags).astype(np.float32, copy=False))
         return ResponseBatch(
             model_ids=tuple(model_id for model_id, _ in keys),
             genes=tuple(gene for _, gene in keys),
             control_hvg=tuple(self._basal[model_id] for model_id, _ in keys),
-            observed_hvg=tuple(
-                torch.from_numpy(np.array(self.cache.target_bag(i), dtype=np.float32))
-                for i in indices
-            ),
+            observed_hvg=observed.to(self.device).split([len(bag) for bag in bags]),
         )
-
-
-def make_evaluation_loader(
-    inputs: PreparedInputs,
-    config: Mapping[str, Any],
-    split: str,
-    accelerator: Any = None,
-) -> DataLoader[DependencyBatch]:
-    """Fixed-order GeneEffect rows of one split, sharded across ranks if launched."""
-    device = "cpu" if accelerator is None else accelerator.device
-    dataset = DependencyDataset(inputs, split, device=device)
-    loader = DataLoader(
-        dataset,
-        batch_size=config["train"]["dependency_batch_size"],
-        shuffle=False,
-        collate_fn=dataset.collate,
-    )
-    if accelerator is not None:
-        loader = accelerator.prepare_data_loader(loader, device_placement=False)
-    return loader

@@ -93,26 +93,47 @@ def compute_condition_feature_batch(
     own_gene_hvg_indices: Sequence[int | None],
     own_gene_available: torch.Tensor,
 ) -> ConditionFeatureBatch:
-    """``Delta_proj`` and the six scalar summaries for every condition at once."""
+    """``Delta_proj`` and the six scalar summaries for every condition at once.
+
+    Rows of one line share its basal tensor object; the basal-only statistics are
+    computed once per distinct tensor and indexed back to the rows.
+    """
     predicted_batch = torch.stack(tuple(predicted))
-    basal_batch = torch.stack(tuple(basal))
     dtype = predicted_batch.dtype
+    distinct: dict[int, int] = {}
+    bags: list[torch.Tensor] = []
+    for bag in basal:
+        if id(bag) not in distinct:
+            distinct[id(bag)] = len(bags)
+            bags.append(bag)
+    distinct_batch = torch.stack(bags)
+    row_bag = torch.tensor(
+        [distinct[id(bag)] for bag in basal],
+        dtype=torch.long,
+        device=distinct_batch.device,
+    )
+    basal_batch = distinct_batch[row_bag]
 
     predicted_mean = predicted_batch.mean(dim=1)
-    basal_mean = basal_batch.mean(dim=1)
+    distinct_mean = distinct_batch.mean(dim=1)
+    basal_mean = distinct_mean[row_bag]
     predicted_variance = (
         (predicted_batch - predicted_mean[:, None]).square().mean(dim=1)
     )
-    basal_variance = (basal_batch - basal_mean[:, None]).square().mean(dim=1)
+    basal_variance = (
+        (distinct_batch - distinct_mean[:, None]).square().mean(dim=1)[row_bag]
+    )
     delta_mean = predicted_mean - basal_mean
     delta = torch.cat((delta_mean, predicted_variance - basal_variance), dim=1)
 
     cross = torch.cdist(predicted_batch, basal_batch).mean(dim=(1, 2))
     within_predicted = torch.cdist(predicted_batch, predicted_batch).mean(dim=(1, 2))
-    within_basal = torch.cdist(basal_batch, basal_batch).mean(dim=(1, 2))
-    energy = 2.0 * cross - within_predicted - within_basal
-    basal_distances = torch.linalg.vector_norm(basal_batch - basal_mean[:, None], dim=2)
-    shift_threshold = torch.quantile(basal_distances, 0.95, dim=1)
+    within_basal = torch.cdist(distinct_batch, distinct_batch).mean(dim=(1, 2))
+    energy = 2.0 * cross - within_predicted - within_basal[row_bag]
+    basal_distances = torch.linalg.vector_norm(
+        distinct_batch - distinct_mean[:, None], dim=2
+    )
+    shift_threshold = torch.quantile(basal_distances, 0.95, dim=1)[row_bag]
     predicted_distances = torch.linalg.vector_norm(
         predicted_batch - basal_mean[:, None], dim=2
     )

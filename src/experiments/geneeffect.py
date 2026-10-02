@@ -48,7 +48,6 @@ def restore_model(
     return restore_joint_model(saved, inputs)
 
 
-
 def run_training(
     config: Mapping[str, Any],
     run_dir: Path,
@@ -69,7 +68,7 @@ def run_training(
 
     from src.model.initialization import build_joint_model
     from src.training.checkpoint import load_checkpoint
-    from src.training.trainer import fit
+    from src.training.trainer import fit, training_diagnostic_lines
 
     config = validate_config(config)
     run_dir = Path(run_dir)
@@ -106,6 +105,11 @@ def run_training(
         inputs = load_inputs(
             config, preprocessing=None if saved is None else saved["preprocessing"]
         )
+    if accelerator.is_main_process:
+        path = run_dir / "run.json"
+        record = json.loads(path.read_text()) if path.exists() else {}
+        record["training_diagnostic_lines"] = list(training_diagnostic_lines(inputs))
+        _write_json(path, record)
     model = (
         build_joint_model(config, inputs)
         if saved is None
@@ -144,6 +148,10 @@ def evaluate_checkpoint(
         )
     # The same precision as training-time validation, so the numbers agree.
     accelerator = Accelerator(mixed_precision=config["precision"])
+    if accelerator.num_processes > 1:
+        raise ValueError(
+            "evaluate_checkpoint runs in one process: only rank zero holds the tables"
+        )
     model = restore_model(saved, inputs).to(accelerator.device)
     return evaluate_model(model, inputs, config, split=split, accelerator=accelerator)
 

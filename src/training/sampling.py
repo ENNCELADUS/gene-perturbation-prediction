@@ -59,7 +59,8 @@ def make_training_loaders(
 
     GeneEffect rows are split across ranks by a seeded ``DistributedSampler`` with
     the incomplete tail dropped, so every rank takes the same number of updates.
-    Do not pass the loader through ``accelerator.prepare``.
+    Do not pass the loader through ``accelerator.prepare``. The datasets keep their
+    tables on the rank's device, so the loader collates in-process, without workers.
     """
     train = config["train"]
     rank, world = accelerator.process_index, accelerator.num_processes
