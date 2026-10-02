@@ -76,7 +76,9 @@ def make_prepared_fixture(root: Path, *, hvg_width: int = 2) -> dict:
     ]
     cells = np.log1p(np.arange(len(keys) * 2 * hvg_width, dtype=np.float32))
     cells = cells.reshape(len(keys), 2, hvg_width)
-    write_response_targets(prepared / "response", keys, list(cells))
+    write_response_targets(
+        prepared / "response", keys, [2] * len(keys), hvg_width, list(cells)
+    )
     (prepared / "prepared_inputs.json").write_text(
         json.dumps(
             {

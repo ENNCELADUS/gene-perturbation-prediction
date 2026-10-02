@@ -15,9 +15,13 @@ from src.data.expression import log_normalize
 from src.data.response import (
     PerturbseqSource,
     XatlasOrionSource,
-    build_response_targets,
     control_library_sizes,
     load_response_sources,
+    read_response_part,
+    response_bags,
+    response_cells,
+    response_part,
+    write_response_part,
 )
 from src.data.response_cache import open_response_targets, write_response_targets
 
@@ -71,15 +75,26 @@ def test_control_library_sizes_cover_every_gene(tmp_path):
     np.testing.assert_array_equal(control_library_sizes(source, "ACH-1"), [6, 15, 24])
 
 
+def _targets(source, model_id, hvg_order, target_sum):
+    """``(keys, bags)`` of one anchor, read in this process."""
+    part = response_part(
+        response_cells(
+            source,
+            model_id,
+            hvg_order,
+            max_cells_per_gene=None,
+            total_cells_per_line=None,
+            seed=0,
+        )
+    )
+    keys = [(model_id, gene) for gene in part.genes]
+    return keys, [part.bag(i, target_sum) for i in range(len(keys))]
+
+
 def test_targets_are_log_space_over_whole_library(tmp_path):
     counts = np.arange(1, len(LABELS) * 3 + 1, dtype=np.float32).reshape(-1, 3)
-    keys, bags = build_response_targets(
-        {"ACH-1": _h5ad(tmp_path / "a.h5ad")},
-        ("H2", "MISSING", "H1"),
-        10.0,
-        max_cells_per_gene=None,
-        total_cells_per_line=None,
-        seed=0,
+    keys, bags = _targets(
+        _h5ad(tmp_path / "a.h5ad"), "ACH-1", ("H2", "MISSING", "H1"), 10.0
     )
     assert keys == [("ACH-1", "KIF11"), ("ACH-1", "TP53")]
     for (_, gene), bag in zip(keys, bags, strict=True):
@@ -96,14 +111,7 @@ def test_targets_are_log_space_over_whole_library(tmp_path):
 
 def test_targets_reject_normalised_source(tmp_path):
     with pytest.raises(ValueError, match="integer"):
-        build_response_targets(
-            {"ACH-1": _h5ad(tmp_path / "a.h5ad", scale=0.1)},
-            ("H1",),
-            10.0,
-            max_cells_per_gene=None,
-            total_cells_per_line=None,
-            seed=0,
-        )
+        _targets(_h5ad(tmp_path / "a.h5ad", scale=0.1), "ACH-1", ("H1",), 10.0)
 
 
 def test_xatlas_targets(tmp_path):
@@ -130,27 +138,48 @@ def test_xatlas_targets(tmp_path):
         ]
     ).to_parquet(shards / "HCT116_Batch1.parquet")
     source = XatlasOrionSource(shards, tmp_path / "meta.parquet", "Non-Targeting")
-    keys, bags = build_response_targets(
-        {"ACH-000971": source},
-        ("H1",),
-        5.0,
-        max_cells_per_gene=None,
-        total_cells_per_line=None,
-        seed=0,
-    )
+    keys, bags = _targets(source, "ACH-000971", ("H1",), 5.0)
     assert keys == [("ACH-000971", "G1")]
     np.testing.assert_allclose(
         bags[0][:, 0], np.log1p(np.array([2.0, 3.0]) * 5.0 / np.array([5.0, 6.0]))
     )
 
 
+def test_part_file_round_trip_gives_the_same_bags(tmp_path):
+    source = _h5ad(tmp_path / "a.h5ad")
+    hvg_order = ("H2", "MISSING", "H1")
+    keys, bags = _targets(source, "ACH-1", hvg_order, 10.0)
+    path = write_response_part(
+        tmp_path / "part.npz",
+        source,
+        "ACH-1",
+        hvg_order,
+        max_cells_per_gene=None,
+        total_cells_per_line=None,
+        seed=0,
+    )
+    assert read_response_part(path).genes == ("KIF11", "TP53")
+    for streamed, bag in zip(
+        response_bags({"ACH-1": path}, keys, 10.0), bags, strict=True
+    ):
+        assert streamed.dtype == np.float32
+        np.testing.assert_array_equal(streamed, bag)
+
+
 def test_response_cache_roundtrip_and_overwrite(tmp_path):
     keys = [("ACH-1", "A"), ("ACH-2", "B")]
     bags = [np.ones((2, 3), dtype=np.float32), np.full((1, 3), 2.0, dtype=np.float32)]
-    write_response_targets(tmp_path / "response", keys, bags)
+    write_response_targets(tmp_path / "response", keys, [2, 1], 3, iter(bags))
     cache = open_response_targets(tmp_path / "response")
     assert cache.keys == tuple(keys)
     np.testing.assert_array_equal(cache.target_bag(1), bags[1])
-    write_response_targets(tmp_path / "response", keys[:1], bags[:1])
+    write_response_targets(tmp_path / "response", keys[:1], [2], 3, bags[:1])
     assert open_response_targets(tmp_path / "response").keys == (keys[0],)
     assert [p.name for p in tmp_path.iterdir()] == ["response"]
+
+
+def test_response_cache_rejects_a_bag_of_the_wrong_length(tmp_path):
+    bags = [np.ones((2, 3), dtype=np.float32)]
+    with pytest.raises(ValueError, match="bag shape"):
+        write_response_targets(tmp_path / "response", [("ACH-1", "A")], [3], 3, bags)
+    assert list(tmp_path.iterdir()) == []

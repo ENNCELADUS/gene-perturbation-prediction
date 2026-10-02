@@ -5,6 +5,12 @@ then STATE's HVG slice, with ``L_cell`` the cell's UMI total over every gene
 of its source matrix and ``T`` the median ``L_cell`` of the non-targeting
 cells in the Nadig 2025 Jurkat and HepG2 sources (data STATE's Replogle
 checkpoint was trained on). Skipped when ``prepared_inputs.json`` exists.
+
+The two ``T`` sources and every response anchor are read at once, one process
+each; each anchor process writes its reduced cells to a temporary part file
+that this process turns into log-space bags once ``T`` is known. The basal
+lines then run on a process pool. Every result is what one process computing
+them in turn would write.
 """
 
 from __future__ import annotations
@@ -12,8 +18,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import logging.handlers
+import multiprocessing
 import os
-from collections.abc import Mapping
+import shutil
+import uuid
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Any, Final
 
@@ -23,6 +35,89 @@ _LOGGER = logging.getLogger(__name__)
 TARGET_SUM_SOURCES: Final[tuple[str, str]] = ("ACH-000995", "ACH-000739")
 #: K562 supplies the copy-prior baseline, so scored genes need its label.
 COPY_PRIOR_DONOR: Final[str] = "ACH-000551"
+#: Processes reading the ``T`` sources and the response anchors, all at once
+#: (two ``T`` sources plus four anchors in the joint config).
+RESPONSE_PROCESSES: Final[int] = 8
+#: Processes preparing basal lines; each holds one line's source in memory.
+LINE_PROCESSES: Final[int] = 16
+
+
+def _forward_logs_to(queue, level: int) -> None:
+    """Worker initializer: send every log record to the parent's handlers."""
+    root = logging.getLogger()
+    root.handlers[:] = [logging.handlers.QueueHandler(queue)]
+    root.setLevel(level)
+
+
+def _in_processes(calls: Sequence[Callable[[], Any]], processes: int) -> Iterator[Any]:
+    """Each call's result, in order, from up to ``processes`` spawned processes.
+
+    One process (or one call) runs them here, in turn. Worker log records go
+    through this process's logging handlers.
+    """
+    if processes <= 1 or len(calls) <= 1:
+        for call in calls:
+            yield call()
+        return
+    context = multiprocessing.get_context("spawn")
+    queue = context.Queue()
+    root = logging.getLogger()
+    handlers = root.handlers or [logging.lastResort]
+    listener = logging.handlers.QueueListener(
+        queue, *handlers, respect_handler_level=True
+    )
+    listener.start()
+    pool = ProcessPoolExecutor(
+        max_workers=min(processes, len(calls)),
+        mp_context=context,
+        initializer=_forward_logs_to,
+        initargs=(queue, root.getEffectiveLevel()),
+    )
+    try:
+        futures = [pool.submit(call) for call in calls]
+        for future in futures:
+            yield future.result()
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+        listener.stop()
+
+
+def _prepare_basal_line(
+    model_id: str,
+    source_path: Path,
+    output_path: Path,
+    *,
+    tx1_cache: Path,
+    var_ensembl_col: str,
+    hvg_gene_symbol_col: str,
+    hvg_order: tuple[str, ...],
+    genes: tuple[str, ...],
+    target_sum: float,
+    cells_per_context: int,
+) -> None:
+    """Write ``lines/<ModelID>.npz`` of one registered basal line."""
+    from src.data.basal import symbol_column
+    from src.data.prepared import prepare_line, write_prepared_line
+    from src.data.tx1_cache import load_line_cache, read_registry_source
+
+    source = read_registry_source(
+        source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
+    )
+    embeddings, _, obs = load_line_cache(tx1_cache, model_id)
+    column = symbol_column(source.var, hvg_gene_symbol_col)
+    line = prepare_line(
+        source.X,
+        source.obs_names.astype(str),
+        source.var[column].astype(str).tolist(),
+        embeddings,
+        obs.index.astype(str).tolist(),
+        model_id=model_id,
+        hvg_order=hvg_order,
+        genes=genes,
+        target_sum=target_sum,
+        cells_per_context=cells_per_context,
+    )
+    write_prepared_line(output_path, line)
 
 
 def _encode_missing_tx1(config: Mapping[str, Any], registry) -> list[str]:
@@ -84,7 +179,6 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
 
     import numpy as np
 
-    from src.data.basal import symbol_column
     from src.data.expression import median_library_size
     from src.data.geneeffect import load_geneeffect_long, load_source_registry
     from src.data.prepare.build_exp13_esm2_universe import (
@@ -92,20 +186,17 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         restrict_coverage_universe_to_copy_prior,
         write_embedding_union,
     )
-    from src.data.prepared import EXPRESSION_TRANSFORM, prepare_line
-    from src.data.prepared import write_prepared_line
+    from src.data.prepared import EXPRESSION_TRANSFORM
     from src.data.response import (
-        build_response_targets,
         control_library_sizes,
         load_response_sources,
+        part_conditions,
+        response_bags,
+        write_response_part,
     )
     from src.data.response_cache import write_response_targets
     from src.data.splits import assert_fit_eligible, load_geneeffect_226_split
-    from src.data.tx1_cache import (
-        load_hvg_gene_order,
-        load_line_cache,
-        read_registry_source,
-    )
+    from src.data.tx1_cache import load_hvg_gene_order
 
     paths, settings = config["paths"], config["preparation"]
     cells_per_context = config["features"]["cells_per_context"]
@@ -127,62 +218,78 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     sources = load_response_sources(Path(paths["perturbseq_sources"]))
     for anchor in sources:
         assert_fit_eligible(anchor, split)
-    target_sum = median_library_size(
-        *(
-            control_library_sizes(sources[model_id], model_id)
+    anchors = sorted(sources)
+    part_dir = root / f".tmp-response-parts-{uuid.uuid4().hex}"
+    part_dir.mkdir(parents=True)
+    try:
+        calls = [
+            partial(control_library_sizes, sources[model_id], model_id)
             for model_id in TARGET_SUM_SOURCES
-        )
-    )
-    _LOGGER.info("Expression target sum T = %.1f", target_sum)
+        ] + [
+            partial(
+                write_response_part,
+                part_dir / f"{model_id}.npz",
+                sources[model_id],
+                model_id,
+                hvg_order,
+                max_cells_per_gene=settings["response_max_cells_per_gene"],
+                total_cells_per_line=settings["response_total_cells_per_line"],
+                seed=settings["response_sampling_seed"],
+            )
+            for model_id in anchors
+        ]
+        results = list(_in_processes(calls, RESPONSE_PROCESSES))
+        target_sum = median_library_size(*results[: len(TARGET_SUM_SOURCES)])
+        _LOGGER.info("Expression target sum T = %.1f", target_sum)
+        parts = dict(zip(anchors, results[len(TARGET_SUM_SOURCES) :], strict=True))
 
-    keys, bags = build_response_targets(
-        sources,
-        hvg_order,
-        target_sum,
-        max_cells_per_gene=settings["response_max_cells_per_gene"],
-        total_cells_per_line=settings["response_total_cells_per_line"],
-        seed=settings["response_sampling_seed"],
-    )
-    union = write_embedding_union(
-        scored_symbols=candidates.symbols,
-        response_symbols=tuple(sorted({gene for _, gene in keys})),
-        esm2_path=Path(paths["esm2_embeddings"]),
-        output_dir=root,
-    )
-    resolved = set(union["esm2_order"])
-    keep = [index for index, (_, gene) in enumerate(keys) if gene in resolved]
-    if not keep:
-        raise ValueError("no response condition resolves in the ESM2 table")
-    _LOGGER.info("Writing %d of %d response conditions", len(keep), len(keys))
-    write_response_targets(
-        root / "response", [keys[i] for i in keep], [bags[i] for i in keep]
-    )
-    del bags
+        conditions = [
+            (model_id, gene, n_cells)
+            for model_id in anchors
+            for gene, n_cells in part_conditions(parts[model_id])
+        ]
+        union = write_embedding_union(
+            scored_symbols=candidates.symbols,
+            response_symbols=tuple(sorted({gene for _, gene, _ in conditions})),
+            esm2_path=Path(paths["esm2_embeddings"]),
+            output_dir=root,
+        )
+        resolved = set(union["esm2_order"])
+        kept = [condition for condition in conditions if condition[1] in resolved]
+        if not kept:
+            raise ValueError("no response condition resolves in the ESM2 table")
+        _LOGGER.info("Writing %d of %d response conditions", len(kept), len(conditions))
+        keys = [(model_id, gene) for model_id, gene, _ in kept]
+        write_response_targets(
+            root / "response",
+            keys,
+            [n_cells for _, _, n_cells in kept],
+            len(hvg_order),
+            response_bags(parts, keys, target_sum),
+        )
+    finally:
+        shutil.rmtree(part_dir, ignore_errors=True)
 
     genes = tuple(union["common_gene_panel"])
-    for done, (model_id, row) in enumerate(registry.iterrows()):
-        if done % 25 == 0:
-            _LOGGER.info("Preparing basal line %d of %d", done + 1, len(registry))
-        source = read_registry_source(
+    line_calls = [
+        partial(
+            _prepare_basal_line,
+            str(model_id),
             Path(row["source_path"]),
-            model_id=str(model_id),
+            root / "lines" / f"{model_id}.npz",
+            tx1_cache=Path(paths["tx1_cache"]),
             var_ensembl_col=settings["var_ensembl_col"],
-        )
-        embeddings, _, obs = load_line_cache(Path(paths["tx1_cache"]), str(model_id))
-        column = symbol_column(source.var, settings["hvg_gene_symbol_col"])
-        line = prepare_line(
-            source.X,
-            source.obs_names.astype(str),
-            source.var[column].astype(str).tolist(),
-            embeddings,
-            obs.index.astype(str).tolist(),
-            model_id=str(model_id),
+            hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
             hvg_order=hvg_order,
             genes=genes,
             target_sum=target_sum,
             cells_per_context=cells_per_context,
         )
-        write_prepared_line(root / "lines" / f"{model_id}.npz", line)
+        for model_id, row in registry.iterrows()
+    ]
+    for done, _ in enumerate(_in_processes(line_calls, LINE_PROCESSES), start=1):
+        if done % 25 == 0:
+            _LOGGER.info("Prepared basal line %d of %d", done, len(line_calls))
     _LOGGER.info("Prepared %d basal lines", len(registry))
 
     manifest = {
