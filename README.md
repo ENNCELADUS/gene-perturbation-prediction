@@ -156,24 +156,16 @@ uv run python -m pytest      # full test suite (synthetic fixtures)
 ### Current Entrypoints
 
 Run module commands from the repository root. The [joint configuration](configs/geneeffect_joint.yaml)
-names supplied datasets, model initialization and cache paths. Prepare inputs once;
-training opens those caches without rebuilding raw data on every worker.
+names supplied datasets, model initialization and cache paths. One command runs the
+whole route; rerunning it with the same run id resumes and skips finished steps.
 
 ```bash
-# Single-process fixed-input preparation
-hpc/run.sh prepare configs/geneeffect_joint.yaml
+# Preparation, response-model comparison, joint training, validation evaluation,
+# baselines, readout head and summary.md under outputs/geneeffect_joint/<run id>/
+hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>]
 
-# Joint training on visible GPUs, or epoch-boundary resume
-hpc/run.sh train configs/geneeffect_joint.yaml --run-id joint_seed0
-hpc/run.sh train configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/joint_seed0/last.pt
-
-# Explicit testing of the selected checkpoint
-hpc/run.sh test outputs/geneeffect_joint/joint_seed0/best.pt
-
-# Validation or the train-fitted baseline ladder
-uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/joint_seed0/best.pt --split val
-uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml \
-  --split test --out-dir outputs/geneeffect_joint/baselines_seed0
+# Explicit testing of a selected checkpoint (never run by `all`)
+hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 ```
 
 > Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored. The pipeline requires Perturb-seq and DepMap data you supply locally.
