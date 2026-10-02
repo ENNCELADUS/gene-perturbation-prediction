@@ -73,11 +73,18 @@ def _in_processes(calls: Sequence[Callable[[], Any]], processes: int) -> Iterato
         initializer=_forward_logs_to,
         initargs=(queue, root.getEffectiveLevel()),
     )
+    finished = False
     try:
         futures = [pool.submit(call) for call in calls]
         for future in futures:
             yield future.result()
+        finished = True
     finally:
+        if not finished:
+            # Interrupted or failed: stop running workers now instead of
+            # waiting for their whole source read to finish.
+            for process in list(pool._processes.values()):
+                process.terminate()
         pool.shutdown(wait=True, cancel_futures=True)
         listener.stop()
 
