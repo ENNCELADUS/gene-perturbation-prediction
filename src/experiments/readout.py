@@ -1,4 +1,5 @@
-"""P1-A: extract fixed features once, train selected arms, and compare exports."""
+"""Readout head with the explicit gene-specific context slope on a frozen joint
+backbone."""
 
 import argparse
 from contextlib import nullcontext
@@ -96,7 +97,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     extract = sub.add_parser(
-        "extract", help="Extract train/val features once from the P0 checkpoint"
+        "extract",
+        help="Extract train/val features once from the joint-backbone checkpoint",
     )
     extract.add_argument("--checkpoint", type=Path, required=True)
     extract.add_argument("--out-dir", type=Path, required=True)
@@ -116,9 +118,19 @@ def main(argv=None):
         nargs="+",
         choices=["A0", "A1", "A2", "A3"],
         default=["A0", "A1", "A2", "A3"],
+        help=(
+            "Heads to train: A0 = shared MLP head, A1 = shared MLP head plus "
+            "response block, A2 = explicit context-slope head, A3 = explicit "
+            "context-slope head plus response block"
+        ),
     )
     train.add_argument(
-        "--old-scaler", action="store_true", help="Optional A1-only scaler contrast"
+        "--old-scaler",
+        action="store_true",
+        help=(
+            "Optional contrast using the source scaler; shared MLP head plus "
+            "response block only (A1)"
+        ),
     )
     train.add_argument(
         "--resume",
@@ -138,7 +150,7 @@ def main(argv=None):
     evaluate.add_argument("--checkpoint", type=Path, required=True)
     compare = sub.add_parser(
         "compare",
-        help="Compare four completed arms on aligned train/validation exports",
+        help="Compare the four completed heads on aligned train/validation exports",
     )
     compare.add_argument("--cache", type=Path, required=True)
     compare.add_argument("--runs", type=Path, required=True)
@@ -154,7 +166,7 @@ def main(argv=None):
         type=Path,
         action="append",
         default=[],
-        help="Existing single-method P0/baseline predictions.parquet for alignment",
+        help="Existing single-method baseline predictions.parquet for alignment",
     )
     for command in (extract, train, evaluate):
         command.add_argument(
@@ -163,7 +175,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if int(os.environ.get("WORLD_SIZE", "1")) != 1:
         parser.error(
-            "P1-A runs one process per arm; do not launch it with distributed workers"
+            "The fixed-backbone head diagnostic runs one process per head; "
+            "do not launch it with distributed workers"
         )
     if args.command == "extract":
         extract_cache(
@@ -208,7 +221,10 @@ def main(argv=None):
             scaler = None
             if args.old_scaler:
                 if args.arms != ["A1"]:
-                    parser.error("--old-scaler requires --arms A1")
+                    parser.error(
+                        "--old-scaler requires --arms A1 "
+                        "(shared MLP head plus response block)"
+                    )
                 from src.model.normalization import BlockStandardizer
 
                 source = torch.load(cache.root / "source_state.pt", weights_only=True)
