@@ -3,7 +3,6 @@
 import copy
 from dataclasses import replace
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import joblib
@@ -195,15 +194,25 @@ def test_failed_export_is_retryable_without_changing_fit_status(tmp_path, monkey
 
 
 def test_prepared_fit_and_evaluation_restore_without_refitting(tmp_path, monkeypatch):
-    from test_joint_integration import full_tiny_config
+    import test_joint
 
-    config = full_tiny_config(tmp_path / "inputs")
-    config["features"]["cells_per_context"] = 16  # 5 training bags support K64.
+    # Ten training bags of 16 cells support K64.
+    monkeypatch.setattr(test_joint, "CELLS", 16)
+    monkeypatch.setattr(
+        test_joint, "TRAIN", (*test_joint.ANCHORS, *(f"ACH-T{i}" for i in range(6)))
+    )
+    config = test_joint.make_config(tmp_path)
+    inputs = test_joint.make_inputs()
+    calls = []
+
+    def load_inputs(config, *, preprocessing=None, include_test=False):
+        calls.append(preprocessing is None)
+        return inputs
+
+    monkeypatch.setattr("src.data.prepared.load_inputs", load_inputs)
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(config))
     out_dir = tmp_path / "run"
-    # No STATE construction or prediction is part of the baseline command.
-    Path(config["paths"]["state_checkpoint"]).unlink()
     path = experiment.fit_baseline(config_path, out_dir)
     record = json.loads((out_dir / "run.json").read_text())
     assert record["fitting"]["status"] == "completed"
@@ -211,7 +220,6 @@ def test_prepared_fit_and_evaluation_restore_without_refitting(tmp_path, monkeyp
     assert not (out_dir / "evaluation/test").exists()
     original = pd.read_parquet(out_dir / "evaluation/val/predictions.parquet")
     before = path.read_bytes()
-    Path(config["paths"]["esm2_embeddings"]).unlink()
 
     def forbidden(*args, **kwargs):
         raise AssertionError("saved-model evaluation refitted an estimator")
@@ -220,6 +228,7 @@ def test_prepared_fit_and_evaluation_restore_without_refitting(tmp_path, monkeyp
     monkeypatch.setattr(StandardScaler, "fit", forbidden)
     monkeypatch.setattr(Ridge, "fit", forbidden)
     result = experiment.evaluate_checkpoint(path, split="val")
+    assert calls == [True, False]  # evaluation restores the saved preprocessing
     pd.testing.assert_frame_equal(original, result.predictions, check_exact=True)
     assert before == path.read_bytes()
     with pytest.raises(FileExistsError):
