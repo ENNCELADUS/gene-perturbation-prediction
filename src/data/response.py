@@ -151,6 +151,7 @@ def build_response_targets(
     bags: list[np.ndarray] = []
     for model_id in sorted(sources):
         source = sources[model_id]
+        _LOGGER.info("Reading perturbed cells of response anchor %s", model_id)
         adata = response_cells(
             source,
             model_id,
