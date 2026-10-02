@@ -1,81 +1,38 @@
-"""model / features."""
+"""Response features of one condition: projected expression shift and summaries.
+
+``Delta`` = [mean shift, population-variance shift] of STATE's predicted cells
+against the line's basal cells, both in log-space HVG expression.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+
 import numpy as np
 import torch
 from torch.nn import functional as F
-from src.model.losses import moment_pool
-from src.model.response import energy_distance
 
 HVG_WIDTH = 2_000
-
-
 DELTA_WIDTH = 2 * HVG_WIDTH
-
-
 PROJECTION_WIDTH = 256
-
-
 PROJECTION_SEED = 0
-
-
-SUMMARY_WIDTH = 6
-
-
-def _require_finite_2d(name: str, value: torch.Tensor) -> None:
-    if value.dim() != 2:
-        raise ValueError(f"{name} must be 2-D, got shape {tuple(value.shape)}")
-    if value.shape[0] == 0:
-        raise ValueError(f"{name} must contain at least one row")
-    if value.shape[1] != HVG_WIDTH:
-        raise ValueError(
-            f"{name} must have {HVG_WIDTH} HVGs, got width {value.shape[1]}"
-        )
-    if not bool(torch.isfinite(value).all()):
-        raise ValueError(f"{name} contains non-finite values")
-
-
-@dataclass(frozen=True)
-class FeatureSchema:
-    """Fixed ordering and widths of the joint response features."""
-
-    hvg_width: int = HVG_WIDTH
-    delta_fields: tuple[str, str] = ("mean_shift", "population_variance_shift")
-    summary_fields: tuple[str, ...] = (
-        "energy_distance",
-        "mean_predicted_population_variance",
-        "fraction_cells_beyond_basal_p95",
-        "mean_shift_l2",
-        "mean_cosine",
-        "own_gene_mean_shift",
-    )
-
-    @property
-    def delta_width(self) -> int:
-        return self.hvg_width * len(self.delta_fields)
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "hvg_width": self.hvg_width,
-            "delta_fields": list(self.delta_fields),
-            "summary_fields": list(self.summary_fields),
-        }
-
-
-FEATURE_SCHEMA = FeatureSchema()
+SUMMARY_FIELDS = (
+    "energy_distance",
+    "mean_predicted_population_variance",
+    "fraction_cells_beyond_basal_p95",
+    "mean_shift_l2",
+    "mean_cosine",
+    "own_gene_mean_shift",
+)
 
 
 class FixedSparseProjection:
-    """A deterministic, data-independent sparse JL projection.
+    """A deterministic, data-independent sparse JL projection 4000 -> 256.
 
-    Components use the Achlioptas distribution at density ``1/sqrt(4000)``.
-    They are generated once from the stated seed; :meth:`transform` remains a
-    plain torch matrix multiply so gradients flow to its input. Treat components
-    as fixed after construction; use ``from_state`` to restore a different matrix.
-    Device tensors are retained so per-condition calls do not recopy the matrix.
+    Components follow the Achlioptas distribution at density ``1/sqrt(4000)``,
+    generated once from the seed; :meth:`transform` is a plain matrix multiply so
+    gradients reach its input. Device copies are cached across calls.
     """
 
     def __init__(self, seed: int = PROJECTION_SEED) -> None:
@@ -98,56 +55,28 @@ class FixedSparseProjection:
         }
 
     def transform(self, delta: torch.Tensor) -> torch.Tensor:
-        if delta.shape[-1:] != (DELTA_WIDTH,):
-            raise ValueError(
-                f"delta must end in width {DELTA_WIDTH}, got {tuple(delta.shape)}"
-            )
-        if not delta.is_floating_point():
-            raise ValueError("delta must be floating point")
         key = (delta.device, delta.dtype)
-        components = self._tensors.get(key)
-        if components is None:
-            components = torch.as_tensor(
+        if key not in self._tensors:
+            self._tensors[key] = torch.as_tensor(
                 self.components, device=delta.device, dtype=delta.dtype
             )
-            self._tensors[key] = components
-        projected = delta @ components.transpose(0, 1)
-        return projected
+        return delta @ self._tensors[key].transpose(0, 1)
 
     def to_state(self) -> dict[str, object]:
         return {"metadata": self.metadata, "components": self.components.tolist()}
 
     @classmethod
     def from_state(cls, state: Mapping[str, object]) -> FixedSparseProjection:
-        metadata = state.get("metadata")
-        if not isinstance(metadata, Mapping):
-            raise ValueError("projection state metadata must be a mapping")
-        seed = metadata.get("seed")
-        if not isinstance(seed, int):
-            raise ValueError("projection seed must be an integer")
         restored = cls.__new__(cls)
-        restored.seed = seed
-        components = np.asarray(state.get("components"), dtype=np.float32)
-        if components.shape != (PROJECTION_WIDTH, DELTA_WIDTH):
-            raise ValueError(f"invalid projection component shape {components.shape}")
-        if not np.isfinite(components).all():
-            raise ValueError("projection components must be finite")
-        restored.components = components.copy()
+        restored.seed = int(state["metadata"]["seed"])
+        restored.components = np.asarray(state["components"], dtype=np.float32)
         restored._tensors = {}
         return restored
 
 
 @dataclass(frozen=True)
-class ConditionFeatures:
-    delta_proj: torch.Tensor
-    s: torch.Tensor
-    hvg_panel_mask: torch.Tensor
-    own_gene_shift_mask: torch.Tensor
-
-
-@dataclass(frozen=True)
 class ConditionFeatureBatch:
-    """Vectorized features for equal-sized dependency condition bags."""
+    """Response features for a batch of equal-sized condition bags."""
 
     delta_proj: torch.Tensor
     s: torch.Tensor
@@ -164,60 +93,10 @@ def compute_condition_feature_batch(
     own_gene_hvg_indices: Sequence[int | None],
     own_gene_available: torch.Tensor,
 ) -> ConditionFeatureBatch:
-    """Build dependency features without one Python/CUDA round trip per row."""
-    size = len(predicted)
-    if size == 0 or len(basal) != size or len(own_gene_hvg_indices) != size:
-        raise ValueError("predicted, basal, and own-gene indices must align")
-    expected_shape = tuple(predicted[0].shape)
-    if (
-        len(expected_shape) != 2
-        or expected_shape[0] == 0
-        or expected_shape[1] != HVG_WIDTH
-        or any(tuple(value.shape) != expected_shape for value in (*predicted, *basal))
-    ):
-        raise ValueError(
-            f"every predicted and basal bag must share shape [cells, {HVG_WIDTH}]"
-        )
-    device = predicted[0].device
-    dtype = predicted[0].dtype
-    if not dtype.is_floating_point or any(
-        value.device != device or value.dtype != dtype for value in (*predicted, *basal)
-    ):
-        raise ValueError(
-            "predicted and basal bags must share one floating-point device and dtype"
-        )
-    for name, value in (
-        ("gene_in_hvg_panel", gene_in_hvg_panel),
-        ("own_gene_available", own_gene_available),
-    ):
-        if (
-            value.shape != (size,)
-            or value.dtype != torch.bool
-            or value.device != device
-        ):
-            raise ValueError(f"{name} must be boolean [{size}] on {device}")
-    panel_values = gene_in_hvg_panel.tolist()
-    available_values = own_gene_available.tolist()
-    for position, (in_panel, index, available) in enumerate(
-        zip(panel_values, own_gene_hvg_indices, available_values, strict=True)
-    ):
-        if in_panel and (index is None or not 0 <= index < HVG_WIDTH):
-            raise ValueError(
-                f"condition {position}: gene in the HVG panel requires a valid index"
-            )
-        if not in_panel and (index is not None or available):
-            raise ValueError(
-                f"condition {position}: a non-HVG gene cannot have an index or shift"
-            )
-        if available and index is None:
-            raise ValueError(
-                f"condition {position}: available own-gene shift requires an index"
-            )
-
+    """``Delta_proj`` and the six scalar summaries for every condition at once."""
     predicted_batch = torch.stack(tuple(predicted))
     basal_batch = torch.stack(tuple(basal))
-    if not bool(torch.isfinite(predicted_batch).all()):
-        raise ValueError("predicted bags contain non-finite values")
+    dtype = predicted_batch.dtype
 
     predicted_mean = predicted_batch.mean(dim=1)
     basal_mean = basal_batch.mean(dim=1)
@@ -243,7 +122,7 @@ def compute_condition_feature_batch(
     safe_indices = torch.tensor(
         [0 if index is None else index for index in own_gene_hvg_indices],
         dtype=torch.long,
-        device=device,
+        device=predicted_batch.device,
     )
     own_shift = delta_mean.gather(1, safe_indices[:, None]).squeeze(1)
     own_shift = torch.where(own_gene_available, own_shift, torch.zeros_like(own_shift))
@@ -263,77 +142,4 @@ def compute_condition_feature_batch(
         s=summaries,
         hvg_panel_mask=gene_in_hvg_panel,
         own_gene_shift_mask=own_gene_available,
-    )
-
-
-def compute_condition_features(
-    predicted: torch.Tensor,
-    basal: torch.Tensor,
-    *,
-    projection: FixedSparseProjection,
-    gene_in_hvg_panel: bool,
-    own_gene_hvg_index: int | None,
-    own_gene_available: bool,
-) -> ConditionFeatures:
-    """Build ``Delta_proj`` and the six scalar summaries for one condition."""
-    _require_finite_2d("predicted", predicted)
-    if basal.ndim != 2 or basal.shape[0] == 0 or basal.shape[1] != HVG_WIDTH:
-        raise ValueError(f"basal must have at least one row and {HVG_WIDTH} HVGs")
-    if predicted.device != basal.device:
-        raise ValueError("predicted and basal must be on the same device")
-    if predicted.dtype != basal.dtype or not predicted.is_floating_point():
-        raise ValueError("predicted and basal must share a floating-point dtype")
-
-    if not isinstance(gene_in_hvg_panel, bool):
-        raise ValueError("gene_in_hvg_panel must be an explicit bool")
-    if not isinstance(own_gene_available, bool):
-        raise ValueError("own_gene_available must be an explicit bool")
-    if gene_in_hvg_panel:
-        if own_gene_hvg_index is None or not 0 <= own_gene_hvg_index < HVG_WIDTH:
-            raise ValueError("gene in the HVG panel requires a valid HVG index")
-    elif own_gene_hvg_index is not None:
-        raise ValueError("gene outside the HVG panel must use own_gene_hvg_index=None")
-    if own_gene_available and not gene_in_hvg_panel:
-        raise ValueError("own-gene shift cannot be available outside the HVG panel")
-
-    pred_moments = moment_pool(predicted, moments=2)
-    basal_moments = moment_pool(basal, moments=2)
-    delta = pred_moments - basal_moments
-    delta_mean = delta[:HVG_WIDTH]
-    pred_variance = pred_moments[HVG_WIDTH:]
-    delta_proj = projection.transform(delta)
-
-    basal_mean = basal_moments[:HVG_WIDTH]
-    predicted_mean = pred_moments[:HVG_WIDTH]
-    basal_distances = torch.linalg.vector_norm(basal - basal_mean, dim=1)
-    shift_threshold = torch.quantile(basal_distances, 0.95)
-    predicted_distances = torch.linalg.vector_norm(predicted - basal_mean, dim=1)
-    shifted_fraction = (
-        (predicted_distances > shift_threshold).to(predicted.dtype).mean()
-    )
-    own_shift = (
-        delta_mean[own_gene_hvg_index]
-        if own_gene_available and own_gene_hvg_index is not None
-        else delta_mean.new_zeros(())
-    )
-    s = torch.stack(
-        (
-            energy_distance(predicted, basal),
-            pred_variance.mean(),
-            shifted_fraction,
-            torch.linalg.vector_norm(delta_mean),
-            F.cosine_similarity(predicted_mean, basal_mean, dim=0),
-            own_shift,
-        )
-    )
-
-    return ConditionFeatures(
-        delta_proj=delta_proj,
-        s=s,
-        hvg_panel_mask=torch.tensor(
-            gene_in_hvg_panel, dtype=torch.bool, device=predicted.device
-        ),
-        own_gene_shift_mask=torch.tensor(
-            own_gene_available, dtype=torch.bool, device=predicted.device
-        ),
     )

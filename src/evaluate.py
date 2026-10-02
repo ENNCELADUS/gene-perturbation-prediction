@@ -1,4 +1,7 @@
-"""Evaluate a saved checkpoint independently of training."""
+"""Evaluate a saved checkpoint on one split, independently of training.
+
+Writes ``<checkpoint dir>/evaluation/<checkpoint name>/<split>/``.
+"""
 
 import argparse
 from pathlib import Path
@@ -13,9 +16,13 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    from src.experiments.geneeffect import evaluate_checkpoint
+    from src.experiments.geneeffect import evaluate_checkpoint, export_evaluation
 
-    evaluate_checkpoint(args.checkpoint, split=args.split)
+    result = evaluate_checkpoint(args.checkpoint, split=args.split)
+    export_evaluation(
+        result,
+        args.checkpoint.parent / "evaluation" / args.checkpoint.stem / args.split,
+    )
     return 0
 
 

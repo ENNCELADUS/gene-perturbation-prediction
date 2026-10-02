@@ -1,4 +1,4 @@
-"""Deterministic dependency epochs and independently cycling anchor replay."""
+"""Training epochs: sharded GeneEffect batches and anchor-balanced response batches."""
 
 from __future__ import annotations
 
@@ -10,43 +10,43 @@ import torch
 from torch.utils.data import DataLoader, DistributedSampler
 
 from src.data.batches import DependencyBatch, ResponseBatch
-from src.data.datasets import DependencyDataset, ResponseDataset, _train_config
+from src.data.datasets import DependencyDataset, ResponseDataset
 from src.data.prepared import PreparedInputs
 
 
-def _balanced_replay(
+def balanced_responses(
     dataset: ResponseDataset, *, batch_size: int, epoch: int, rank: int
 ) -> Iterator[ResponseBatch]:
-    per_anchor = batch_size // 4
+    """Endless batches with ``batch_size // anchors`` conditions from every anchor.
+
+    Each anchor cycles through all of its conditions in a fresh seeded
+    permutation per pass; there is no held-out condition.
+    """
+    anchors = dataset.inputs.response_anchors
     pools = [
-        np.asarray(
-            [
-                index
-                for index in dataset.indices
-                if dataset.cache.model_ids[index] == anchor
-            ],
-            dtype=np.int64,
-        )
-        for anchor in dataset.inputs.response_anchors
+        np.asarray([i for i, (m, _) in enumerate(dataset.keys) if m == anchor])
+        for anchor in anchors
     ]
+    for anchor, pool in zip(anchors, pools, strict=True):
+        if not len(pool):
+            raise ValueError(f"response anchor {anchor} has no prepared conditions")
     generators = [
-        np.random.default_rng(np.random.SeedSequence([0, epoch, rank, anchor]))
-        for anchor in range(4)
+        np.random.default_rng(np.random.SeedSequence([0, epoch, rank, position]))
+        for position in range(len(anchors))
     ]
-    orders = [
-        rng.permutation(pool) for rng, pool in zip(generators, pools, strict=True)
-    ]
-    positions = [0] * 4
+    orders = [rng.permutation(pool) for rng, pool in zip(generators, pools)]
+    positions = [0] * len(anchors)
+    per_anchor = batch_size // len(anchors)
     while True:
-        batch_indices: list[int] = []
-        for anchor, (pool, rng) in enumerate(zip(pools, generators, strict=True)):
+        indices: list[int] = []
+        for anchor in range(len(anchors)):
             for _ in range(per_anchor):
                 if positions[anchor] == len(orders[anchor]):
-                    orders[anchor] = rng.permutation(pool)
+                    orders[anchor] = generators[anchor].permutation(pools[anchor])
                     positions[anchor] = 0
-                batch_indices.append(int(orders[anchor][positions[anchor]]))
+                indices.append(int(orders[anchor][positions[anchor]]))
                 positions[anchor] += 1
-        yield dataset.collate(batch_indices)
+        yield dataset.collate(indices)
 
 
 def make_training_loaders(
@@ -55,68 +55,31 @@ def make_training_loaders(
     epoch: int,
     accelerator: Any,
 ) -> tuple[DataLoader[DependencyBatch], Iterator[ResponseBatch]]:
-    """Build one full-batch dependency epoch and unlimited equal-anchor replay.
+    """One shuffled GeneEffect epoch for this rank and its endless response batches.
 
-    Dependency rows use DistributedSampler exactly once; do not subsequently pass
-    this loader through Accelerate.prepare/prepare_data_loader. Evaluation loaders
-    instead use Accelerate sharding and its per-iteration gather_for_metrics tail
-    trimming. Replay is a plain iterator and never changes Accelerate loader state.
+    GeneEffect rows are split across ranks by a seeded ``DistributedSampler`` with
+    the incomplete tail dropped, so every rank takes the same number of updates.
+    Do not pass the loader through ``accelerator.prepare``.
     """
-    train = _train_config(config)
-    seeds = config.get("seeds", {})
-    if not isinstance(seeds, Mapping) or any(
-        seeds.get(name, 0) != 0 for name in ("train", "collator", "projection")
-    ):
-        raise ValueError("runtime train, collator, and projection base seeds must be 0")
-    if epoch < 0:
-        raise ValueError("epoch must be nonnegative")
-    dependency_size = int(train.get("dependency_batch_size", 256))
-    response_size = int(train.get("response_batch_size", 64))
-    if dependency_size <= 0:
-        raise ValueError("dependency_batch_size must be positive")
-    if response_size <= 0 or response_size % 4:
-        raise ValueError("response_batch_size must be positive and divisible by four")
-    rank = int(accelerator.process_index) if accelerator is not None else 0
-    world_size = int(accelerator.num_processes) if accelerator is not None else 1
-    device = "cpu" if accelerator is None else accelerator.device
-    dependency_dataset = DependencyDataset(inputs, "train", device=device)
-    response_dataset = ResponseDataset(inputs, holdout=False, device=device)
-    anchors = inputs.response_anchors
-    if len(anchors) != 4 or len(set(anchors)) != 4:
-        raise ValueError("response replay requires four distinct anchors")
-    for anchor in anchors:
-        if not any(
-            response_dataset.cache.model_ids[index] == anchor
-            for index in response_dataset.indices
-        ):
-            raise ValueError(
-                f"response replay anchor {anchor} has no training conditions"
-            )
+    train = config["train"]
+    rank, world = accelerator.process_index, accelerator.num_processes
+    dependency = DependencyDataset(inputs, "train", device=accelerator.device)
     sampler = DistributedSampler(
-        dependency_dataset,
-        num_replicas=world_size,
-        rank=rank,
-        shuffle=True,
-        seed=0,
-        drop_last=True,
+        dependency, num_replicas=world, rank=rank, shuffle=True, seed=0, drop_last=True
     )
     sampler.set_epoch(epoch)
     loader = DataLoader(
-        dependency_dataset,
-        batch_size=dependency_size,
+        dependency,
+        batch_size=train["dependency_batch_size"],
         sampler=sampler,
         drop_last=True,
-        collate_fn=dependency_dataset.collate,
-        generator=torch.Generator().manual_seed(epoch * world_size + rank),
+        collate_fn=dependency.collate,
+        generator=torch.Generator().manual_seed(epoch * world + rank),
     )
-    if len(loader) == 0:
-        raise ValueError(
-            "dependency training has no full batch per rank; "
-            "reduce dependency_batch_size"
-        )
-    return loader, _balanced_replay(
-        response_dataset, batch_size=response_size, epoch=epoch, rank=rank
+    responses = balanced_responses(
+        ResponseDataset(inputs, device=accelerator.device),
+        batch_size=train["response_batch_size"],
+        epoch=epoch,
+        rank=rank,
     )
-
-
-__all__ = ["make_training_loaders"]
+    return loader, responses
