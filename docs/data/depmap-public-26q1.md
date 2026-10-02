@@ -2,9 +2,9 @@
 
 ## Role
 
-Primary dependency-label source for Stage 1 K562 alignment. Use continuous
-CRISPR gene-effect scores as population-level fitness labels, not single-cell
-death labels.
+The pinned GeneEffect label source (`CRISPRGeneEffect.csv`) of the 226-line GeneEffect
+benchmark and the SL protocol, joined by ModelID. Use continuous CRISPR gene-effect
+scores as population-level fitness labels, not single-cell death labels.
 
 ## Downloaded Files
 

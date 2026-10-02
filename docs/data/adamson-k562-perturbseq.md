@@ -2,9 +2,9 @@
 
 ## Role
 
-K562 Perturb-seq / CRISPRi response benchmark for Stage 1. This is more
-modality-compatible with DepMap CRISPR gene-effect labels than Norman CRISPRa,
-but it is much smaller than Replogle genome-scale K562.
+K562 Perturb-seq / CRISPRi response dataset, more modality-compatible with DepMap
+CRISPR gene-effect labels than Norman CRISPRa but much smaller than Replogle
+genome-scale K562. It is not an input of the joint GeneEffect pipeline.
 
 ## Downloaded Files
 

@@ -1,4 +1,4 @@
-"""Compact, immutable raw feature cache and train-only P1-A preprocessing."""
+"""Compact, immutable raw feature cache and train-only readout-head preprocessing."""
 
 from dataclasses import asdict
 import json

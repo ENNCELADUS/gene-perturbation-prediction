@@ -1,9 +1,7 @@
-"""Tests for src.data.splits -- the Exp13 226-line fit/train guard.
+"""Tests for src.data.splits -- the 226-line GeneEffect fit/train guard.
 
-Replaces ``tx1_geneeffect_data.assert_training_role``'s D6 guard, which
-checked the retired Phase-A ``train_head``/``test`` role column. This
-module's authority is the ``cell_line_geneeffect_226_split`` JSON instead
-(``train``/``val``/``test``/``unlabeled_train``).
+The guard's authority is the ``cell_line_geneeffect_226_split`` JSON
+(``train``/``val``/``test``/``unlabeled_train``), not the Phase-A role column.
 """
 
 from __future__ import annotations
@@ -33,7 +31,7 @@ def test_assert_fit_eligible_accepts_labeled_train_member() -> None:
 
 def test_assert_fit_eligible_rejects_unlabeled_train_member() -> None:
     """PC9/HeLa are train members but have no GeneEffect label -- excluded
-    from every supervised fit (the Exp13 spec under docs/specs/, §2)."""
+    from every supervised fit (``docs/03-geneeffect-protocol.md`` §2)."""
     with pytest.raises(ValueError, match="unlabeled_train"):
         assert_fit_eligible("ACH-PC9", _SPLIT)
 
@@ -93,8 +91,8 @@ def test_load_geneeffect_226_split_defaults_unlabeled_train_to_empty(
 
 def test_load_geneeffect_226_split_against_the_real_tracked_file() -> None:
     """The actual tracked split file must load and satisfy the documented shape
-    (172 train / 27 val / 27 test, PC9 + HeLa unlabeled) -- docs/specs/2026-08-17-exp13-
-    geneeffect-residual-protocol.md §2."""
+    (172 train / 27 val / 27 test, PC9 + HeLa unlabeled) --
+    ``docs/03-geneeffect-protocol.md`` §2."""
     repo_root = Path(__file__).resolve().parents[1]
     split_path = (
         repo_root / "configs" / "benchmarks" / "cell_line_geneeffect_226_split.json"

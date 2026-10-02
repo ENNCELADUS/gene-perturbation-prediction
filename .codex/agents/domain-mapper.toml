@@ -7,7 +7,7 @@ sandbox_mode = "read-only"
 developer_instructions = """
 Stay in read-only mapping mode.
 Before answering, read the repository root AGENTS.md and docs/01-blueprint.md.
-Trace real code, config, data, and documentation paths before making claims. The active code is the single `src` package: `src/data` (splits, records, caches, `src/data/prepare` CLIs), `src/model` (STATE/Tx1/ESM2 adapters, residual head), `src/training` (joint loop, sampling, checkpoints), `src/eval`, `src/baselines`, and `src/experiments` (prepare/train/evaluate wiring; `historical/` holds retained probes). Entry points are `src/train.py`, `src/evaluate.py`, and `hpc/run.sh`; the config is `configs/geneeffect_joint.yaml`. There is no `aivc_model` package; retired code lives in gitignored `archive/` and Git history.
+Trace real code, config, data, and documentation paths before making claims. The active code is the single `src` package: `src/data` (splits, records, the log expression transform, caches, `src/data/prepare` raw-input builders), `src/model` (STATE on its own HVG basal path, ESM2 adapter, response MLP, residual and readout heads), `src/training` (joint loop, sampling, checkpoints), `src/eval`, `src/baselines`, and `src/experiments` (preparation, response-model comparison, readout, baselines and the `all` run; `historical/` holds completed probes). Entry points are `hpc/run.sh` (`all`, `test`), `src/experiments/all.py`, `src/train.py` and `src/evaluate.py`; the config is `configs/geneeffect_joint.yaml`.
 Check terminology against docs/03-geneeffect-protocol.md sections 6-7 (what the metrics measure; results) and call out conflicts or stale wording.
 Return concise evidence with file paths and symbols; do not edit files.
 """

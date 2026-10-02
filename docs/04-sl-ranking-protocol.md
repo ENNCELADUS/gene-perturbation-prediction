@@ -1,6 +1,6 @@
 # Experiment Protocol: Held-Out-Cell-Line SL Ranking
 
-Updated 2026-09-07. This is the **separate, unimplemented SL-pair protocol** under
+Updated 2026-10-02. This is the **separate, unimplemented SL-pair protocol** under
 [the research blueprint](01-blueprint.md). It builds on the backbone defined by the
 [GeneEffect protocol](03-geneeffect-protocol.md), whose seed-0 model has completed
 training and testing once
@@ -24,7 +24,9 @@ predictor. Neither outcome estimates a double-knockout interaction phenotype.
 The [tracked split](../configs/benchmarks/context_screen_v2_split.json) and
 [basal registry](../configs/benchmarks/context_screen_v2_basal_registry.json)
 are the authorities. The [data card](data/sl-context-screen.md) documents source
-filters, label inference and artifact provenance.
+filters, label inference and artifact provenance. The benchmark is this project's own
+proposal, built from screen-level pair labels in named cell lines; the Feng 2024 SL
+benchmark is not used.
 
 | Split | Context | ModelID | Positive | Negative |
 | --- | --- | --- | ---: | ---: |
@@ -69,7 +71,9 @@ mismatch.
 ### 3.1 Basal cells
 
 Use the exact registered model's basal cells: raw UMI or documented count inputs,
-not an informal-name match or substituted bulk profile. Fit transforms on eligible
+not an informal-name match or substituted bulk profile. Tx1 reads the counts; every
+other expression quantity uses the log expression space of the
+[GeneEffect protocol §3.4](03-geneeffect-protocol.md#34-expression-space). Fit transforms on eligible
 training contexts and restore them for evaluation. Frozen Tx1 caches retain their
 recorded pretraining and preprocessing provenance.
 
@@ -101,8 +105,8 @@ co-dependency, Feng or measured-GI labels as additional SL ground truth.
 ## 4. Backbone requirements
 
 The backbone is the joint GeneEffect model: architecture, training loop and checkpoint
-selection are fixed by the [GeneEffect protocol](03-geneeffect-protocol.md) §4–§5 and
-its [joint design](specs/2026-09-06-modular-joint-training-design.md). This protocol
+selection are fixed by the [GeneEffect protocol](03-geneeffect-protocol.md) §3.4–§5 and
+its [current design](specs/2026-10-02-expression-space-and-all-pipeline-design.md). This protocol
 adds requirements that the GeneEffect run does not meet.
 
 The SL experiment must specify its own eligible dependency cohort and validation
@@ -135,12 +139,12 @@ The profile reference cohort $\mathcal{C}_{\text{ref}}$ is the GeneEffect-labell
 cohort with **all nine SL benchmark contexts removed**; it is identical for every arm.
 Fit the feature standardiser only on complete out-of-fold vectors. Mixing an
 in-sample profile block with an out-of-fold context block inside one vector is
-prohibited, and there is no non-out-of-fold fallback for Arm A.
+prohibited, and there is no non-out-of-fold fallback for the predicted-profile arm.
 
 The dominant cost is materialising $\hat\delta(g,c')$ for every benchmark gene across
 every $\mathcal{C}_{\text{ref}}$ context once per inner model, on the order of
-genes × contexts × cells-per-bag STATE forward passes over the once-built Tx1 basal
-cache; predicted responses are reduced online, never cached to disk. Pin the bag size
+genes × contexts × cells-per-bag STATE forward passes over the once-prepared basal
+caches (log-space HVG bags for STATE, Tx1 embeddings for the head's context); predicted responses are reduced online, never cached to disk. Pin the bag size
 (128 cells), the cell-sampling seed and the cache layout, and record a measured
 GPU-hour estimate for one inner model before launching the full set.
 
@@ -169,31 +173,32 @@ $a\leftrightarrow b$. $\psi_{\min}=\min(\hat y_{a,c},\hat y_{b,c})$ is the decla
 non-interaction null (highest single agent; GeneEffect is negative-is-lethal), so
 $\psi$ used as a ranking score is negated. An additive null is excluded because it
 duplicates the sum feature. Uncovered genes are masked explicitly, never zero-filled;
-in Arm B a pair with a missing profile leaves the common universe.
+in the measured-profile arm a pair with a missing profile leaves the common universe.
 
 The head minimises binary cross-entropy over train-side SL contexts,
 **context-balanced** so each context contributes equally, with positives and negatives
 reweighted inside each context; otherwise HAP1 alone (57,013 of 86,460 train rows,
-20 negatives) dominates. Three arms score one identical pair universe: **Arm A**
-out-of-fold predicted profiles, **Arm B** measured DepMap GeneEffect over the same
-$\mathcal{C}_{\text{ref}}$ columns, **Arm B-full** measured over all DepMap columns as
-the ceiling.
+20 negatives) dominates. Three arms score one identical pair universe: the **predicted-profile arm**
+uses out-of-fold predicted profiles, the **measured-profile arm** measured DepMap GeneEffect
+over the same $\mathcal{C}_{\text{ref}}$ columns, and the **measured all-lines ceiling**
+measured GeneEffect over all DepMap columns.
 
 Controls, all reported as per-context lift on the same universe; none may remove a
 context after its result is seen:
 
-| ID | Control | Shortcut removed |
+| Control | Definition | Shortcut removed |
 | --- | --- | --- |
-| C1 | pair identity / train-context label frequency | pair memorisation |
-| C1b | anchor-gene frequency, `max(r_a, r_b)` | gene-level memorisation C1 misses |
-| C2 | $\psi$ alone, predicted and measured | ranking that is only the null |
-| C3 | the $\mu_{\text{train}}$ block alone | pan-essentiality |
-| C5 | the strongest residual control of the GeneEffect baseline ladder replacing the backbone | a backbone beating no simple prior |
-| C6 | identically trained head with the three context dimensions ablated | a context claim with no context information |
-| C4 | Arm B, Arm B-full | reference only, never a bar |
+| Pair-identity prior | pair identity / train-context label frequency | pair memorisation |
+| Anchor-gene prior | anchor-gene frequency, `max(r_a, r_b)` | gene-level memorisation the pair-identity prior misses |
+| Null alone | $\psi$ alone, predicted and measured | ranking that is only the null |
+| Gene-mean block alone | the $\mu_{\text{train}}$ block alone | pan-essentiality |
+| Baseline-ladder backbone | the strongest residual control of the GeneEffect baseline ladder replacing the backbone | a backbone beating no simple prior |
+| Context-ablated head | identically trained head with the three context dimensions ablated | a context claim with no context information |
+| Measured references | the measured-profile arm and the measured all-lines ceiling | reference only, never a bar |
 
-C1 is a lift, not an absolute bar: on the v1 benchmark it reached AUPR 1.0 on Jurkat,
-HeLa and PC9, so the split, not a threshold, handles those contexts. C6 also includes
+The pair-identity prior is a lift, not an absolute bar: on the unsplit first build of the
+context-screen table it reached AUPR 1.0 on Jurkat, HeLa and PC9, so the split, not a
+threshold, handles those contexts. The context-ablated head also includes
 fixed deterministic context derangements and a permutation null. Declare the minimum
 per-context incremental AUPR − prior attributable to the context block before reading
 any test label; statistical distinguishability alone does not clear it, and below it no
@@ -216,8 +221,8 @@ by whether both, one or neither endpoint appeared in SL training. The de-duplica
 diagnostic macro weights observable label clusters: PC9/HeLa share one cluster but keep
 separate scores. Uncertainty uses a two-way dyadic bootstrap over both endpoints, 2,000
 replicates per context; a one-way anchor-gene bootstrap is invalid because pairs have
-two endpoints. Report Arm A − Arm B both in full and restricted to the context block;
-only the restricted form isolates out-of-sample GeneEffect cost, since 21 of 24
+two endpoints. Report the predicted-profile arm minus the measured-profile arm both in
+full and restricted to the context block; only the restricted form isolates out-of-sample GeneEffect cost, since 21 of 24
 dimensions are context-invariant in both arms.
 
 ## 8. Leakage rules

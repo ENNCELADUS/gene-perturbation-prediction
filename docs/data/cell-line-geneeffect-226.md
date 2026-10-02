@@ -1,9 +1,9 @@
 # Cell-Line GeneEffect Benchmark
 
-**Status:** One fixed split, used by the historical Exp13 Stage 2 run and by the seed-0
-run of the [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been
-observed once ([result](../results/joint_geneeffect_seed0/README.md)). Historical results:
-[Exp13 Stage 2](../results/exp13_stage2_full/README.md).
+**Status:** One fixed split, used by the final run of the historical staged GeneEffect
+protocol (Exp13, [result](../results/exp13_stage2_full/README.md)) and by the seed-0 run of
+the [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been observed once
+([result](../results/joint_geneeffect_seed0/README.md)).
 
 ## Fixed split
 

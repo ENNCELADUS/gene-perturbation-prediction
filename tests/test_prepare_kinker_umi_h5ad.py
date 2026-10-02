@@ -1,4 +1,4 @@
-"""Tests for the raw-UMI Kinker ingest (``docs/04`` §6 branch 1).
+"""Tests for the raw-UMI Kinker ingest (historical Exp13 protocol §6, branch 1).
 
 The CPM sibling's tests assert its output is *blocked* from the Tx1 raw-count
 path. These assert the inverse, plus the two guards that are specific to this

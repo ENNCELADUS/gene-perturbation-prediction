@@ -158,9 +158,10 @@ Per rank, batches hold 1024 dependency conditions and 64 response conditions. Ad
 three parameter groups: the new residual head at $10^{-4}$, the ESM2 adapter at $10^{-4}$
 and the pretrained STATE model at $10^{-5}$, the most cautious. Training, cell-collation
 and projection base seeds are all 0. Settings are fixed in
-`configs/geneeffect_joint.yaml` and described in the
-[joint-training design](specs/2026-09-06-modular-joint-training-design.md), with the
-rates and basal path of the [current design](specs/2026-10-02-expression-space-and-all-pipeline-design.md).
+`configs/geneeffect_joint.yaml`. The loop follows the
+[joint-training design](specs/2026-09-06-modular-joint-training-design.md); the
+[current design](specs/2026-10-02-expression-space-and-all-pipeline-design.md) replaces its
+response wiring, learning rates, basal path and validation splits with those above.
 
 Validation runs once per completed epoch over the 27 validation lines, the only validation
 split. **Only minimum validation GeneEffect Huber loss selects `best.pt` and controls early
@@ -378,10 +379,11 @@ anchors and scores every condition of the fourth.
 
 Trained arms use AdamW (new layers $10^{-4}$, STATE $10^{-5}$), 50 fixed epochs with no early
 stopping, balanced anchor sampling and seed 0. The response loss is the mean-shift MSE plus
-energy distance of §5. The reported statistic is the pooled held-out loss ratio to
-no-change at the final epoch (below 1 beats no-change), with one 95% interval from a
-1,000-resample gene bootstrap, pooled over all four folds and over the three folds without
-HCT116. Identity share (loss increase under ten fixed gene shuffles, as a fraction of
+energy distance of §5. The reported statistic is the held-out loss ratio to no-change at
+the final epoch (below 1 beats no-change), per fold and pooled as the mean of the per-fold
+ratios, over all four folds and over the three folds without HCT116, with one 95% interval
+from a 1,000-resample bootstrap over perturbed genes (a gene drawn once moves every fold it
+appears in). Identity share (loss increase under ten fixed gene shuffles, as a fraction of
 loss), source-anchor training ratio and per-epoch held-out curves are reported for
 reading only. Two verdicts: STATE as in the joint model against MLP on log HVG (what the
 STATE transformer adds), and MLP on Tx1 against MLP on log HVG (what Tx1 adds as a
@@ -394,8 +396,9 @@ result.
 `hpc/run.sh all configs/geneeffect_joint.yaml` runs, skipping any step whose output
 exists so that a rerun with the same run id resumes: preparation (Tx1 cache reuse, one
 pass computing $T$, log-space bags, $q_{g,c}$ and response cache); a sanity line scoring the
-released STATE checkpoint on each anchor; the six-arm comparison; joint training on all
-visible GPUs; validation evaluation of `best.pt`, the controls of §6 and the explicit
+released STATE checkpoint on each anchor; the six-arm comparison on the last visible GPU,
+concurrently with joint training on the remaining GPUs (one after the other on a single
+GPU); validation evaluation of `best.pt`, the controls of §6 and the explicit
 context-slope readout of §7 on the new backbone's cached features; and `summary.md`
 (target total $T$, sanity line, comparison table and verdicts, validation table for the
 joint model, readout and every control). `hpc/run.sh test CHECKPOINT` is the only route to

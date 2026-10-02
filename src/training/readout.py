@@ -1,4 +1,4 @@
-"""Single-device, fixed-cache P1-A optimization with ordinary early stopping."""
+"""Single-device, fixed-cache readout-head optimization with ordinary early stopping."""
 
 from dataclasses import asdict, dataclass
 import json
@@ -55,7 +55,7 @@ def fit_readout(
         if Path(resume).resolve() != (out_dir / "last.pt").resolve():
             raise ValueError("resume must use last.pt in the same arm directory")
         restored = torch.load(resume, map_location="cpu", weights_only=True)
-        # P1-A checkpoints written before head_seed existed were all seed 0;
+        # Readout-head checkpoints written before head_seed existed were all seed 0;
         # read that legacy state as 0 rather than raising KeyError, and still
         # reject a resume that asks for a different seed.
         legacy_seed = restored["head_seed"] if "head_seed" in restored else 0

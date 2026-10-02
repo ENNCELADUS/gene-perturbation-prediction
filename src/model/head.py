@@ -9,7 +9,7 @@ from torch import nn
 
 @dataclass(frozen=True)
 class GeneEffectFeatureDims:
-    """Per-block feature widths (target architecture, per the Exp13 plan).
+    """Per-block feature widths (``docs/03-geneeffect-protocol.md`` §4).
 
     Attributes:
         delta_proj: ``Delta_{g,c}`` projected 4000 -> this width by a fixed
@@ -77,7 +77,7 @@ class GeneEffectResidualHead(nn.Module):
     """MLP predicting ``delta_hat(g, c)`` from up to five feature blocks.
 
     ``delta_hat_{g,c} = h_delta(Delta_proj, s, q_sc, e_g, z_c)``
-    (the Exp13 plan, Target architecture). Every block is gated
+    (``docs/03-geneeffect-protocol.md`` §4). Every block is gated
     by :class:`GeneEffectBlockConfig`; a disabled block's tensor argument to
     :meth:`forward` must be ``None`` and contributes nothing to the input
     width or the parameter count -- each of the five ablations is therefore
