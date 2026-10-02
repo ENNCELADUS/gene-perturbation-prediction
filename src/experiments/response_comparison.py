@@ -17,6 +17,11 @@ same log HVG cells, and what Tx1 adds as the MLP's cell representation.
 
 Every arm x fold result is written to ``folds/<arm>__<anchor>.json`` and is not
 recomputed on rerun; ``verdicts.json`` is written last and marks the run done.
+
+The work splits into independent jobs: the untrained arms (with ``sanity.json``),
+one job per trained arm and held-out anchor, and the summary. A trained job
+starts from a fixed seed and reads the no-change losses from the untrained fold
+files, so jobs may run in any order, in one process or on separate GPUs.
 """
 
 from __future__ import annotations
@@ -35,28 +40,27 @@ import torch
 from torch import nn
 
 from src.data.embeddings import Esm2EmbeddingTable
-from src.data.prepared import load_inputs
+from src.data.prepared import load_inputs, read_manifest
 from src.experiments.config import load_config
 from src.model.perturbation import Esm2PerturbationAdapter
-from src.model.response import predict_bags, response_loss
+from src.model.response import predict_bags
 from src.model.response_mlp import ResponseMLP
 from src.model.state import StateResponse, load_released_state
 
 HCT116 = "ACH-000971"
-ARMS = (
-    "no_change",
-    "global_mean_effect",
-    "released_state",
-    "state_joint",
-    "mlp_hvg",
-    "mlp_tx1",
-)
+UNTRAINED_ARMS = ("no_change", "global_mean_effect", "released_state")
 TRAINED_ARMS = ("state_joint", "mlp_hvg", "mlp_tx1")
+ARMS = (*UNTRAINED_ARMS, *TRAINED_ARMS)
 VERDICTS = (
     ("state_joint_vs_mlp_hvg", "state_joint", "mlp_hvg"),
     ("mlp_tx1_vs_mlp_hvg", "mlp_tx1", "mlp_hvg"),
 )
 SEED = 0
+# Observed cells stay on a CUDA device when they take at most this share of its
+# free memory; the rest is left for the model, activations and optimizer state.
+RESIDENT_SHARE = 0.6
+# Conditions read from the response cache per host-to-device copy while loading.
+LOAD_CONDITIONS = 512
 
 Predict = Callable[[Sequence[str], Sequence[str]], Sequence[torch.Tensor]]
 
@@ -84,6 +88,77 @@ class OneHotPerturbations(nn.Module):
         return self.matrix[torch.as_tensor(rows, device=self.matrix.device)]
 
 
+class _ObservedCells:
+    """Every response condition's observed cells, read from the cache once.
+
+    The cells stay on the comparison device when they take at most
+    ``RESIDENT_SHARE`` of its free memory; otherwise they stay in host memory
+    and each batch's cells move to the device in one pinned transfer. Each
+    condition's observed mean and within-observed energy-distance term
+    ``E|y-y'|`` do not depend on any prediction and are computed once.
+    """
+
+    def __init__(self, cache: Any, device: torch.device, batch_size: int) -> None:
+        count = len(cache.keys)
+        self.length = np.array(
+            [np.asarray(cache.target_bag(i)).shape[0] for i in range(count)],
+            dtype=np.int64,
+        )
+        self.start = np.concatenate([[0], np.cumsum(self.length)]).astype(np.int64)
+        width = int(np.asarray(cache.target_bag(0)).shape[1])
+        total = int(self.start[-1])
+        resident = device.type != "cuda" or (
+            total * width * 4 <= RESIDENT_SHARE * torch.cuda.mem_get_info(device)[0]
+        )
+        self.device = device
+        self.resident = resident
+        self._cells = torch.empty(
+            (total, width),
+            dtype=torch.float32,
+            device=device if resident else torch.device("cpu"),
+            pin_memory=not resident,
+        )
+        for first in range(0, count, LOAD_CONDITIONS):
+            last = min(first + LOAD_CONDITIONS, count)
+            host = np.concatenate(
+                [
+                    np.asarray(cache.target_bag(i), dtype=np.float32)
+                    for i in range(first, last)
+                ]
+            )
+            self._cells[self.start[first] : self.start[last]].copy_(
+                torch.from_numpy(host)
+            )
+        self.mean = torch.empty((count, width), device=device)
+        self.within = torch.empty(count, device=device)
+        with torch.no_grad():
+            for first in range(0, count, batch_size):
+                part = np.arange(first, min(first + batch_size, count))
+                for group in _groups(self.length[part]):
+                    rows = part[group]
+                    cells = self.bags(rows)
+                    index = torch.from_numpy(rows).to(device)
+                    self.mean[index] = cells.mean(dim=1)
+                    self.within[index] = torch.cdist(cells, cells).mean(dim=(1, 2))
+
+    def bags(self, indices: np.ndarray) -> torch.Tensor:
+        """``[conditions, cells, genes]`` cells of conditions with equal cell counts."""
+        cells = int(self.length[indices[0]])
+        rows = (self.start[indices][:, None] + np.arange(cells)).reshape(-1)
+        picked = self._cells[torch.from_numpy(rows).to(self._cells.device)]
+        if not self.resident:
+            picked = picked.pin_memory().to(self.device, non_blocking=True)
+        return picked.view(len(indices), cells, -1)
+
+
+def _groups(keys: Sequence[Any]) -> list[np.ndarray]:
+    """Positions with equal keys, groups in order of first appearance."""
+    groups: dict[Any, list[int]] = {}
+    for position, key in enumerate(keys):
+        groups.setdefault(key, []).append(position)
+    return [np.asarray(group, dtype=np.int64) for group in groups.values()]
+
+
 @dataclass
 class _World:
     """Response conditions and per-anchor cells on the comparison device."""
@@ -94,28 +169,32 @@ class _World:
     by_anchor: dict[str, np.ndarray]
     basal: dict[str, torch.Tensor]
     tx1: dict[str, torch.Tensor]
+    control_mean: torch.Tensor
+    anchor_of: np.ndarray
     esm2: torch.Tensor
     esm2_row: dict[str, int]
-    targets: Any
+    observed: _ObservedCells
     device: torch.device
 
-    def target(self, index: int) -> torch.Tensor:
-        bag = np.array(self.targets.target_bag(int(index)), dtype=np.float32)
-        return torch.from_numpy(bag).to(self.device)
-
-    def gene_vector(self, gene: str) -> torch.Tensor:
-        return self.esm2[self.esm2_row[str(gene).upper()]]
+    def gene_vectors(self, genes: Sequence[str]) -> torch.Tensor:
+        rows = [self.esm2_row[str(gene).upper()] for gene in genes]
+        return self.esm2[torch.as_tensor(rows, device=self.device)]
 
 
-def _world(inputs: Any, device: torch.device) -> _World:
+def _world(inputs: Any, device: torch.device, batch_size: int) -> _World:
     keys = tuple(inputs.response_targets.keys)
     anchors = tuple(inputs.response_anchors)
     model_ids = tuple(str(m) for m, _ in keys)
+    position = {a: k for k, a in enumerate(anchors)}
+    strays = sorted(set(model_ids) - set(anchors))
+    if strays:
+        raise ValueError(f"response conditions of lines that are not anchors: {strays}")
     symbols = [str(s).upper() for s in inputs.esm2_symbols]
 
     def tensor(array: np.ndarray) -> torch.Tensor:
         return torch.as_tensor(np.asarray(array, dtype=np.float32), device=device)
 
+    basal = {a: tensor(inputs.lines[a].basal_hvg) for a in anchors}
     return _World(
         model_ids=model_ids,
         genes=tuple(str(g) for _, g in keys),
@@ -124,11 +203,13 @@ def _world(inputs: Any, device: torch.device) -> _World:
             a: np.flatnonzero(np.asarray(model_ids) == a).astype(np.int64)
             for a in anchors
         },
-        basal={a: tensor(inputs.lines[a].basal_hvg) for a in anchors},
+        basal=basal,
         tx1={a: tensor(inputs.lines[a].controls_tx1) for a in anchors},
+        control_mean=torch.stack([basal[a].mean(dim=0) for a in anchors]),
+        anchor_of=np.array([position[m] for m in model_ids], dtype=np.int64),
         esm2=tensor(inputs.esm2_vectors),
         esm2_row={s: row for row, s in enumerate(symbols)},
-        targets=inputs.response_targets,
+        observed=_ObservedCells(inputs.response_targets, device, batch_size),
         device=device,
     )
 
@@ -141,20 +222,27 @@ class _Arm:
     module: nn.Module | None = None
     param_groups: list[dict[str, Any]] = field(default_factory=list)
     covers: Callable[[str], bool] = lambda gene: True
+    # The prediction ignores the gene, so a gene shuffle cannot change the loss.
+    gene_blind: bool = False
 
 
 def _no_change(world: _World) -> _Arm:
-    return _Arm(lambda model_ids, genes: [world.basal[m] for m in model_ids])
+    return _Arm(
+        lambda model_ids, genes: [world.basal[m] for m in model_ids], gene_blind=True
+    )
 
 
 def _global_mean_effect(world: _World, source: np.ndarray) -> _Arm:
     """Mean over source conditions of mean(target) - mean(that anchor's controls)."""
-    shift = torch.zeros_like(world.basal[world.anchors[0]][0])
-    for index in source:
-        anchor = world.model_ids[index]
-        shift += world.target(index).mean(dim=0) - world.basal[anchor].mean(dim=0)
-    shift /= len(source)
-    return _Arm(lambda model_ids, genes: [world.basal[m] + shift for m in model_ids])
+    index = torch.from_numpy(source).to(world.device)
+    controls = world.control_mean[
+        torch.from_numpy(world.anchor_of[source]).to(world.device)
+    ]
+    shift = (world.observed.mean[index] - controls).sum(dim=0) / len(source)
+    return _Arm(
+        lambda model_ids, genes: [world.basal[m] + shift for m in model_ids],
+        gene_blind=True,
+    )
 
 
 def _state_arm(world: _World, response: StateResponse) -> Predict:
@@ -211,25 +299,62 @@ def _mlp(
     def predict(
         model_ids: Sequence[str], genes: Sequence[str]
     ) -> Sequence[torch.Tensor]:
-        return [
-            model(cells[m], world.basal[m], world.gene_vector(g))
-            for m, g in zip(model_ids, genes, strict=True)
-        ]
+        # Every condition of the batch in one call: each cell row carries its
+        # condition's ESM2 vector.
+        counts = [int(cells[m].shape[0]) for m in model_ids]
+        gene = world.gene_vectors(genes).repeat_interleave(
+            torch.as_tensor(counts, device=world.device), dim=0, output_size=sum(counts)
+        )
+        predicted = model(
+            torch.cat([cells[m] for m in model_ids]),
+            torch.cat([world.basal[m] for m in model_ids]),
+            gene,
+        )
+        return predicted.split(counts)
 
     return _Arm(predict, model, [{"params": list(model.parameters()), "lr": lr}])
+
+
+def _response_losses(
+    world: _World, predicted: Sequence[torch.Tensor], indices: Sequence[int]
+) -> torch.Tensor:
+    """``response_loss`` of each predicted bag against its observed condition.
+
+    Mean-shift MSE from the anchor's control mean plus energy distance; bags
+    with equal predicted and observed cell counts are computed as one batch.
+    """
+    indices = np.asarray(indices, dtype=np.int64)
+    observed = world.observed
+    shapes = [
+        (int(p.shape[0]), int(observed.length[i]))
+        for p, i in zip(predicted, indices, strict=True)
+    ]
+    parts, order = [], []
+    for group in _groups(shapes):
+        rows = indices[group]
+        cells = torch.stack([predicted[k] for k in group])
+        targets = observed.bags(rows)
+        index = torch.from_numpy(rows).to(world.device)
+        control = world.control_mean[
+            torch.from_numpy(world.anchor_of[rows]).to(world.device)
+        ]
+        shift = (cells.mean(dim=1) - control) - (observed.mean[index] - control)
+        energy = (
+            2.0 * torch.cdist(cells, targets).mean(dim=(1, 2))
+            - torch.cdist(cells, cells).mean(dim=(1, 2))
+            - observed.within[index]
+        )
+        parts.append(shift.pow(2).mean(dim=1) + energy)
+        order.extend(group)
+    losses = torch.cat(parts)
+    return losses[torch.from_numpy(np.argsort(order)).to(losses.device)]
 
 
 def _batch_losses(
     arm: _Arm, world: _World, indices: Sequence[int], genes: Sequence[str]
 ) -> torch.Tensor:
-    model_ids = [world.model_ids[i] for i in indices]
-    predicted = arm.predict(model_ids, genes)
-    return torch.stack(
-        [
-            response_loss(p, world.target(i), world.basal[m])
-            for p, i, m in zip(predicted, indices, model_ids, strict=True)
-        ]
-    )
+    predicted = arm.predict([world.model_ids[i] for i in indices], genes)
+    return _response_losses(world, predicted, indices)
 
 
 def _losses(
@@ -272,6 +397,15 @@ def _derangement(n: int, rng: np.random.Generator) -> np.ndarray | None:
             return order
 
 
+def _gene_blind_shuffled(loss: np.ndarray, shuffles: int) -> np.ndarray:
+    """Gene-shuffled losses of a gene-blind arm: its own losses, where scored."""
+    shuffled = np.full(len(loss), np.nan)
+    scored = np.isfinite(loss)
+    if shuffles and scored.sum() >= 2:
+        shuffled[scored] = loss[scored]
+    return shuffled
+
+
 def _score(
     arm: _Arm,
     world: _World,
@@ -284,25 +418,34 @@ def _score(
 ) -> dict[str, list[float | None]]:
     """Held-out, gene-shuffled held-out and source per-condition losses."""
     loss = _losses(arm, world, held_out, batch_size)
-    covered = held_out[np.isfinite(loss)]
-    genes = np.asarray([world.genes[i] for i in covered], dtype=object)
-    shuffled = np.full(len(held_out), np.nan)
-    totals = np.zeros(len(covered))
-    for shuffle in range(shuffles):
-        # Fixed per anchor and shuffle, so every arm sees the same derangements.
-        order = _derangement(
-            len(covered), np.random.default_rng([SEED, position, shuffle])
-        )
-        if order is None:
-            break
-        totals += _losses(arm, world, covered, batch_size, genes=list(genes[order]))
+    if arm.gene_blind:
+        shuffled = _gene_blind_shuffled(loss, shuffles)
     else:
-        if shuffles:
-            shuffled[np.isfinite(loss)] = totals / shuffles
+        covered = held_out[np.isfinite(loss)]
+        genes = np.asarray([world.genes[i] for i in covered], dtype=object)
+        shuffled = np.full(len(held_out), np.nan)
+        totals = np.zeros(len(covered))
+        for shuffle in range(shuffles):
+            # Fixed per anchor and shuffle, so every arm sees the same derangements.
+            order = _derangement(
+                len(covered), np.random.default_rng([SEED, position, shuffle])
+            )
+            if order is None:
+                break
+            totals += _losses(arm, world, covered, batch_size, genes=list(genes[order]))
+        else:
+            if shuffles:
+                shuffled[np.isfinite(loss)] = totals / shuffles
+    return _result(loss, shuffled, _losses(arm, world, source, batch_size))
+
+
+def _result(
+    loss: np.ndarray, shuffled: np.ndarray, source: np.ndarray
+) -> dict[str, list[float | None]]:
     return {
         "loss": _listed(loss),
         "shuffled_loss": _listed(shuffled),
-        "source_loss": _listed(_losses(arm, world, source, batch_size)),
+        "source_loss": _listed(source),
     }
 
 
@@ -384,6 +527,251 @@ def _fold_path(out_dir: Path, arm: str, anchor: str) -> Path:
     return out_dir / "folds" / f"{arm}__{anchor}.json"
 
 
+def _fold_indices(world: _World, anchor: str) -> tuple[np.ndarray, np.ndarray]:
+    """Held-out conditions of ``anchor`` and the source conditions, anchor order."""
+    source = np.concatenate([world.by_anchor[b] for b in world.anchors if b != anchor])
+    return world.by_anchor[anchor], source
+
+
+def _write_fold(
+    out_dir: Path,
+    world: _World,
+    arm: str,
+    anchor: str,
+    result: Mapping[str, Any],
+    curve: list[float | None] | None = None,
+) -> None:
+    payload = {
+        "arm": arm,
+        "anchor": anchor,
+        "genes": [world.genes[i] for i in world.by_anchor[anchor]],
+        **result,
+        "curve": curve,
+    }
+    _write_json(_fold_path(out_dir, arm, anchor), payload)
+    print(f"response comparison: {arm} held out {anchor} done", flush=True)
+
+
+def _anchors(config: Mapping[str, Any], inputs: Any) -> tuple[str, ...]:
+    if inputs is not None:
+        return tuple(inputs.response_anchors)
+    return tuple(read_manifest(Path(config["prepared_root"]))["response_anchors"])
+
+
+def _released_state_factory(config: Mapping[str, Any]) -> Callable[[], nn.Module]:
+    def build() -> nn.Module:
+        return load_released_state(
+            Path(config["paths"]["state_checkpoint"]),
+            cell_set_len=int(config["model"]["cell_sentence_len"]),
+        )
+
+    return build
+
+
+def _untrained_done(out_dir: Path, anchors: Sequence[str]) -> bool:
+    return (out_dir / "sanity.json").is_file() and all(
+        _fold_path(out_dir, arm, a).is_file() for arm in UNTRAINED_ARMS for a in anchors
+    )
+
+
+def _run_untrained(
+    world: _World,
+    config: Mapping[str, Any],
+    out_dir: Path,
+    state_factory: Callable[[], nn.Module],
+) -> None:
+    comparison = config["comparison"]
+    batch_size, shuffles = int(comparison["batch_size"]), int(comparison["shuffles"])
+    anchors = world.anchors
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def pending(arm: str) -> list[str]:
+        return [a for a in anchors if not _fold_path(out_dir, arm, a).is_file()]
+
+    def score(arm: _Arm, a: str) -> dict[str, list[float | None]]:
+        held_out, source = _fold_indices(world, a)
+        return _score(
+            arm,
+            world,
+            held_out,
+            source,
+            position=anchors.index(a),
+            shuffles=shuffles,
+            batch_size=batch_size,
+        )
+
+    if pending("no_change"):
+        # The basal bag is the prediction whatever the arm, fold or gene, so one
+        # pass over every condition gives every fold's held-out and source losses.
+        everything = np.concatenate([world.by_anchor[a] for a in anchors])
+        loss = np.full(len(world.model_ids), np.nan)
+        loss[everything] = _losses(_no_change(world), world, everything, batch_size)
+        for a in pending("no_change"):
+            held_out, source = _fold_indices(world, a)
+            shuffled = _gene_blind_shuffled(loss[held_out], shuffles)
+            _write_fold(
+                out_dir,
+                world,
+                "no_change",
+                a,
+                _result(loss[held_out], shuffled, loss[source]),
+            )
+
+    # The released checkpoint is untrained, so its held-out score per anchor is
+    # also the sanity line.
+    if pending("released_state"):
+        vocabulary = torch.load(
+            Path(config["paths"]["state_model_dir"]) / "pert_onehot_map.pt",
+            map_location="cpu",
+            weights_only=False,
+        )
+        released = _released_state(
+            world, state_factory(), OneHotPerturbations(vocabulary)
+        )
+        for a in pending("released_state"):
+            _write_fold(out_dir, world, "released_state", a, score(released, a))
+    if not (out_dir / "sanity.json").is_file():
+        sanity = {}
+        for a in anchors:
+            fold = json.loads(_fold_path(out_dir, "released_state", a).read_text())
+            base = json.loads(_fold_path(out_dir, "no_change", a).read_text())
+            loss = _array(fold["loss"])
+            sanity[a] = {
+                "ratio_to_no_change": _number(_ratio(loss, _array(base["loss"]))),
+                "covered_genes": int(np.isfinite(loss).sum()),
+                "total_genes": len(loss),
+            }
+        _write_json(
+            out_dir / "sanity.json",
+            {
+                "checkpoint": str(config["paths"]["state_checkpoint"]),
+                "statistic": "released STATE checkpoint, untrained: mean loss over the "
+                "anchor's covered conditions / no-change mean over the same conditions",
+                "anchors": sanity,
+            },
+        )
+
+    for a in pending("global_mean_effect"):
+        _, source = _fold_indices(world, a)
+        arm = _global_mean_effect(world, source)
+        _write_fold(out_dir, world, "global_mean_effect", a, score(arm, a))
+
+
+def _run_trained(
+    world: _World,
+    inputs: Any,
+    config: Mapping[str, Any],
+    out_dir: Path,
+    arm_name: str,
+    anchor: str,
+    state_factory: Callable[[], nn.Module],
+) -> None:
+    comparison = config["comparison"]
+    held_out, source = _fold_indices(world, anchor)
+    base = _array(
+        json.loads(_fold_path(out_dir, "no_change", anchor).read_text())["loss"]
+    )
+    pools = [world.by_anchor[b] for b in world.anchors if b != anchor]
+    # Every job starts from the same fixed seed, so its result does not depend on
+    # which jobs ran before it, in this process or another.
+    torch.manual_seed(SEED)
+    if arm_name == "state_joint":
+        arm = _state_joint(world, state_factory(), inputs, config)
+    else:
+        cells = world.basal if arm_name == "mlp_hvg" else world.tx1
+        arm = _mlp(world, cells, comparison["hidden"], comparison["learning_rate"])
+    curve = _train(arm, world, pools, held_out, base, comparison)
+    result = _score(
+        arm,
+        world,
+        held_out,
+        source,
+        position=world.anchors.index(anchor),
+        shuffles=int(comparison["shuffles"]),
+        batch_size=int(comparison["batch_size"]),
+    )
+    _write_fold(out_dir, world, arm_name, anchor, result, [_number(r) for r in curve])
+
+
+def run_untrained(
+    config: Mapping[str, Any],
+    out_dir: Path,
+    *,
+    device: str,
+    inputs: Any = None,
+    state_factory: Callable[[], nn.Module] | None = None,
+) -> None:
+    """Write every untrained arm's fold files and ``sanity.json``.
+
+    Existing fold files are kept. ``state_factory`` returns a fresh released
+    STATE model; by default it loads ``paths.state_checkpoint``.
+    """
+    out_dir = Path(out_dir)
+    if _untrained_done(out_dir, _anchors(config, inputs)):
+        return
+    inputs = load_inputs(config) if inputs is None else inputs
+    world = _world(
+        inputs, torch.device(device), int(config["comparison"]["batch_size"])
+    )
+    _run_untrained(
+        world, config, out_dir, state_factory or _released_state_factory(config)
+    )
+
+
+def pending_trained_jobs(
+    config: Mapping[str, Any], out_dir: Path, *, inputs: Any = None
+) -> list[tuple[str, str]]:
+    """``(arm, anchor)`` of every trained fold without a fold file, anchors outer."""
+    out_dir = Path(out_dir)
+    return [
+        (arm, a)
+        for a in _anchors(config, inputs)
+        for arm in TRAINED_ARMS
+        if not _fold_path(out_dir, arm, a).is_file()
+    ]
+
+
+def run_trained_job(
+    config: Mapping[str, Any],
+    out_dir: Path,
+    arm: str,
+    anchor: str,
+    *,
+    device: str,
+    inputs: Any = None,
+    state_factory: Callable[[], nn.Module] | None = None,
+) -> None:
+    """Train ``arm`` on the other anchors, score it on ``anchor``, write its fold file.
+
+    Does nothing when the fold file exists. Needs the no-change fold file of
+    ``anchor`` (written by :func:`run_untrained`) for the held-out curve.
+    """
+    out_dir = Path(out_dir)
+    anchors = _anchors(config, inputs)
+    if arm not in TRAINED_ARMS:
+        raise ValueError(f"{arm!r} is not a trained arm; choose from {TRAINED_ARMS}")
+    if anchor not in anchors:
+        raise ValueError(f"{anchor!r} is not a response anchor; choose from {anchors}")
+    if _fold_path(out_dir, arm, anchor).is_file():
+        return
+    base = _fold_path(out_dir, "no_change", anchor)
+    if not base.is_file():
+        raise FileNotFoundError(f"{base} is missing: run the untrained arms first")
+    inputs = load_inputs(config) if inputs is None else inputs
+    world = _world(
+        inputs, torch.device(device), int(config["comparison"]["batch_size"])
+    )
+    _run_trained(
+        world,
+        inputs,
+        config,
+        out_dir,
+        arm,
+        anchor,
+        state_factory or _released_state_factory(config),
+    )
+
+
 def _bootstrap(
     folds: Mapping[str, Mapping[str, Mapping[str, Any]]],
     anchors: Sequence[str],
@@ -442,10 +830,24 @@ def _number(value: float) -> float | None:
     return float(value) if np.isfinite(value) else None
 
 
-def _summarise(
-    out_dir: Path, world: _World, comparison: Mapping[str, Any]
+def summarise(
+    config: Mapping[str, Any], out_dir: Path, *, inputs: Any = None
 ) -> pd.DataFrame:
-    anchors = world.anchors
+    """Write ``comparison.csv``, ``curves.csv`` and, last, ``verdicts.json``.
+
+    Reads every arm x fold file; raises naming the fold files that are missing.
+    """
+    out_dir = Path(out_dir)
+    anchors = _anchors(config, inputs)
+    comparison = config["comparison"]
+    missing = [
+        str(_fold_path(out_dir, arm, a))
+        for arm in ARMS
+        for a in anchors
+        if not _fold_path(out_dir, arm, a).is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(f"response comparison fold files missing: {missing}")
     folds = {
         arm: {a: json.loads(_fold_path(out_dir, arm, a).read_text()) for a in anchors}
         for arm in ARMS
@@ -534,122 +936,28 @@ def run_comparison(
     inputs: Any = None,
     state_factory: Callable[[], nn.Module] | None = None,
 ) -> pd.DataFrame:
-    """Run (or resume) the six-arm comparison and return the per arm x fold table.
+    """Run (or resume) the whole comparison in this process; the arm x fold table.
 
-    ``state_factory`` returns a fresh released STATE model on each call; by
-    default it loads ``paths.state_checkpoint``. Returns the existing table
+    The untrained arms, every pending trained job and the summary, in that
+    order. ``state_factory`` returns a fresh released STATE model on each call;
+    by default it loads ``paths.state_checkpoint``. Returns the existing table
     without recomputing when ``verdicts.json`` exists.
     """
     out_dir = Path(out_dir)
     if (out_dir / "verdicts.json").is_file():
         return pd.read_csv(out_dir / "comparison.csv")
-    if inputs is None:
-        inputs = load_inputs(config)
-    if state_factory is None:
-
-        def state_factory() -> nn.Module:
-            return load_released_state(
-                Path(config["paths"]["state_checkpoint"]),
-                cell_set_len=int(config["model"]["cell_sentence_len"]),
-            )
-
-    comparison = config["comparison"]
-    batch_size, shuffles = int(comparison["batch_size"]), int(comparison["shuffles"])
-    world = _world(inputs, torch.device(device))
-    anchors = world.anchors
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    def fold_indices(a: str) -> tuple[np.ndarray, np.ndarray]:
-        source = np.concatenate([world.by_anchor[b] for b in anchors if b != a])
-        return world.by_anchor[a], source
-
-    def score_and_write(arm_name: str, a: str, arm: _Arm, curve=None) -> None:
-        held_out, source = fold_indices(a)
-        result = _score(
-            arm,
-            world,
-            held_out,
-            source,
-            position=anchors.index(a),
-            shuffles=shuffles,
-            batch_size=batch_size,
+    inputs = load_inputs(config) if inputs is None else inputs
+    state_factory = state_factory or _released_state_factory(config)
+    jobs = pending_trained_jobs(config, out_dir, inputs=inputs)
+    if jobs or not _untrained_done(out_dir, _anchors(config, inputs)):
+        # One world for every job: the observed cells are read from the cache once.
+        world = _world(
+            inputs, torch.device(device), int(config["comparison"]["batch_size"])
         )
-        payload = {
-            "arm": arm_name,
-            "anchor": a,
-            "genes": [world.genes[i] for i in held_out],
-            **result,
-            "curve": curve,
-        }
-        _write_json(_fold_path(out_dir, arm_name, a), payload)
-        print(f"response comparison: {arm_name} held out {a} done", flush=True)
-
-    def done(arm_name: str, a: str) -> bool:
-        return _fold_path(out_dir, arm_name, a).is_file()
-
-    no_change = _no_change(world)
-    for a in anchors:
-        if not done("no_change", a):
-            score_and_write("no_change", a, no_change)
-
-    # The released checkpoint is untrained, so its held-out score per anchor is
-    # also the sanity line; it is written before any training.
-    if not (out_dir / "sanity.json").is_file():
-        pending = [a for a in anchors if not done("released_state", a)]
-        if pending:
-            vocabulary = torch.load(
-                Path(config["paths"]["state_model_dir"]) / "pert_onehot_map.pt",
-                map_location="cpu",
-                weights_only=False,
-            )
-            released = _released_state(
-                world, state_factory(), OneHotPerturbations(vocabulary)
-            )
-            for a in pending:
-                score_and_write("released_state", a, released)
-        sanity = {}
-        for a in anchors:
-            fold = json.loads(_fold_path(out_dir, "released_state", a).read_text())
-            base = json.loads(_fold_path(out_dir, "no_change", a).read_text())
-            loss = _array(fold["loss"])
-            sanity[a] = {
-                "ratio_to_no_change": _number(_ratio(loss, _array(base["loss"]))),
-                "covered_genes": int(np.isfinite(loss).sum()),
-                "total_genes": len(loss),
-            }
-        _write_json(
-            out_dir / "sanity.json",
-            {
-                "checkpoint": str(config["paths"]["state_checkpoint"]),
-                "statistic": "released STATE checkpoint, untrained: mean loss over the "
-                "anchor's covered conditions / no-change mean over the same conditions",
-                "anchors": sanity,
-            },
-        )
-
-    for a in anchors:
-        held_out, source = fold_indices(a)
-        if not done("global_mean_effect", a):
-            score_and_write("global_mean_effect", a, _global_mean_effect(world, source))
-        base = _array(
-            json.loads(_fold_path(out_dir, "no_change", a).read_text())["loss"]
-        )
-        pools = [world.by_anchor[b] for b in anchors if b != a]
-        for arm_name in TRAINED_ARMS:
-            if done(arm_name, a):
-                continue
-            torch.manual_seed(SEED)
-            if arm_name == "state_joint":
-                arm = _state_joint(world, state_factory(), inputs, config)
-            else:
-                cells = world.basal if arm_name == "mlp_hvg" else world.tx1
-                arm = _mlp(
-                    world, cells, comparison["hidden"], comparison["learning_rate"]
-                )
-            curve = _train(arm, world, pools, held_out, base, comparison)
-            score_and_write(arm_name, a, arm, [_number(r) for r in curve])
-
-    return _summarise(out_dir, world, comparison)
+        _run_untrained(world, config, out_dir, state_factory)
+        for arm, anchor in jobs:
+            _run_trained(world, inputs, config, out_dir, arm, anchor, state_factory)
+    return summarise(config, out_dir, inputs=inputs)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -659,9 +967,35 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--device", default="cuda" if torch.cuda.is_available() else "cpu"
     )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--untrained",
+        action="store_true",
+        help="only the untrained arms and sanity.json",
+    )
+    mode.add_argument(
+        "--job",
+        nargs=2,
+        metavar=("ARM", "ANCHOR"),
+        help="only one trained arm on one held-out anchor",
+    )
+    mode.add_argument(
+        "--summarise",
+        action="store_true",
+        help="only the tables and verdicts from existing fold files",
+    )
     args = parser.parse_args(argv)
-    table = run_comparison(load_config(args.config), args.out_dir, device=args.device)
-    print(table.to_string(index=False))
+    config = load_config(args.config)
+    if args.untrained:
+        run_untrained(config, args.out_dir, device=args.device)
+    elif args.job:
+        run_trained_job(config, args.out_dir, *args.job, device=args.device)
+    else:
+        if args.summarise:
+            table = summarise(config, args.out_dir)
+        else:
+            table = run_comparison(config, args.out_dir, device=args.device)
+        print(table.to_string(index=False))
 
 
 if __name__ == "__main__":
