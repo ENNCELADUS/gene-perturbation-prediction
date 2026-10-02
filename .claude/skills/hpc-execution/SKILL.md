@@ -33,8 +33,8 @@ Do not store the SSH password in the repository.
 
 Each container sees only its own GPUs, so jobs on different containers never contend for
 a GPU, but they share the host's 224 CPU cores. `hpc/run.sh` does not cap threads; set
-`OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes you launch (`hpc/p1c_pipeline.sh`
-already exports 8).
+`OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes you launch.
+.
 
 ## Sync code through Git only
 
@@ -73,24 +73,22 @@ nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --for
 ps aux | grep '[s]rc\.'
 ```
 
-`hpc/run.sh train` counts the visible GPUs (respecting `CUDA_VISIBLE_DEVICES`) and
-launches `accelerate` with that many processes. Do not hard-code a GPU count. Resume needs
+`hpc/run.sh all` counts the visible GPUs (respecting `CUDA_VISIBLE_DEVICES`). Do not hard-code a GPU count. Resume needs
 the same world size, and a batch-size change needs a new run id (`hpc/README.md`). Choose
 batch sizes from measured throughput; never shrink one silently after an OOM.
 
 ## Commands
 
 ```bash
-hpc/run.sh prepare configs/geneeffect_joint.yaml                     # once, single process
-hpc/run.sh train   configs/geneeffect_joint.yaml --run-id <new_id>
-hpc/run.sh train   configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/<id>/last.pt
-hpc/run.sh test    outputs/geneeffect_joint/<id>/best.pt             # explicit; training never runs test
+hpc/run.sh all  configs/geneeffect_joint.yaml [--run-id <id>]   # prepare → comparison ∥ train → val eval, baselines, readout → summary.md
+hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt     # explicit; `all` never runs test
 ```
 
-The response-pathway diagnostics (`p1a`, `p1b`, `p1c`) run one process and one device per arm, so
-mask GPUs with `CUDA_VISIBLE_DEVICES` per arm; `hpc/p1c_pipeline.sh` runs a whole
-interface-isolation (P1-C) round and its variables are in `hpc/README.md`. `--max-steps` and direct worker
-invocation are debug-only, never for a reported run.
+`all` puts the response-model comparison on the last visible GPU and joint training on
+the rest (`accelerate`, N−1 processes); rerunning with the same run id resumes and skips
+finished steps, and refuses a changed config. Resume keeps the same GPU count. Subprocess
+logs are under `outputs/geneeffect_joint/<id>/logs/`. If the `all` process is killed,
+check for orphaned `src.train`/`response_comparison` processes before relaunching.
 
 Preparation is the only step that reads raw data; training opens caches and never
 rebuilds them. Testing is explicit, restores fitted preprocessing from the checkpoint and
@@ -102,7 +100,7 @@ single `ssh` command can hang that session):
 
 ```bash
 mkdir -p outputs/launches
-nohup hpc/run.sh train configs/geneeffect_joint.yaml --run-id <new_id> > outputs/launches/<new_id>.log 2>&1 &
+nohup hpc/run.sh all configs/geneeffect_joint.yaml --run-id <new_id> > outputs/launches/<new_id>.log 2>&1 &
 ```
 
 ## Reporting

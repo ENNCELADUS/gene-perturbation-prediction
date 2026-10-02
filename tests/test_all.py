@@ -242,6 +242,13 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
     monkeypatch.setattr("src.experiments.readout.extract_cache", refuse)
     pipeline.run_all(config_path, run_id="resume")
 
+    # The run directory refuses a different config instead of mixing experiments.
+    changed = yaml.safe_load(config_path.read_text())
+    changed["comparison"]["epochs"] += 1
+    config_path.write_text(yaml.safe_dump(changed))
+    with pytest.raises(ValueError, match="different config"):
+        pipeline.run_all(config_path, run_id="resume")
+
 
 def test_gpu_schedule(tmp_path):
     config = {"precision": "bf16"}

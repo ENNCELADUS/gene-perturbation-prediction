@@ -438,6 +438,17 @@ def run_all(config_path: Path, *, run_id: str | None) -> Path:
     print(f"run id: {run_id}", flush=True)
     run = Path(config["output_root"]) / run_id
     run.mkdir(parents=True, exist_ok=True)
+    # A run directory belongs to one config: finished steps are skipped by
+    # file existence, so resuming under another config would mix experiments.
+    bound = run / "run_config.json"
+    if bound.is_file():
+        if json.loads(bound.read_text()) != config:
+            raise ValueError(
+                f"{run} was started with a different config ({bound}); "
+                "use a new --run-id for this config"
+            )
+    else:
+        bound.write_text(json.dumps(config, indent=2) + "\n")
 
     manifest = _read_json(prepare_inputs(config))
     print(target_sum_line(manifest), flush=True)

@@ -53,6 +53,15 @@ def _encode_missing_tx1(config: Mapping[str, Any], registry) -> list[str]:
     )
 
 
+def preparation_settings(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Every config value that changes what preparation writes."""
+    return {
+        "preparation": dict(config["preparation"]),
+        "cells_per_context": config["features"]["cells_per_context"],
+        "paths": dict(config["paths"]),
+    }
+
+
 def prepare_inputs(config: Mapping[str, Any]) -> Path:
     """Write the prepared root; return its manifest path (written last)."""
     from src.experiments.config import validate_config
@@ -62,7 +71,14 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     from src.data.prepared import PREPARED_METADATA_FILENAME
 
     manifest_path = root / PREPARED_METADATA_FILENAME
+    produced_by = preparation_settings(config)
     if manifest_path.is_file():
+        recorded = json.loads(manifest_path.read_text()).get("settings")
+        if recorded != produced_by:
+            raise ValueError(
+                f"{root} was prepared with different settings ({recorded}); "
+                "choose a new prepared_root for these settings"
+            )
         _LOGGER.info("Prepared inputs already exist at %s", root)
         return manifest_path
 
@@ -177,6 +193,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         "common_gene_panel": list(genes),
         "hvg_order": list(hvg_order),
         "response_anchors": sorted(sources),
+        "settings": produced_by,
     }
     temporary = manifest_path.with_name(manifest_path.name + ".tmp")
     temporary.write_text(json.dumps(manifest, indent=2, allow_nan=False) + "\n")

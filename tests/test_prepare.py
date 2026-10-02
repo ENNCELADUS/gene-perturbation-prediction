@@ -342,14 +342,30 @@ def test_prepare_rejects_non_integer_source(tmp_path):
 
 
 def test_prepare_skips_when_manifest_exists(tmp_path):
+    from src.experiments.prepare import preparation_settings
+
     config = build_world(tmp_path)
     root = Path(config["prepared_root"])
     root.mkdir()
-    (root / "prepared_inputs.json").write_text("{}")
-    config["paths"]["source_registry"] = str(tmp_path / "missing.csv")
+    recorded = json.dumps({"settings": preparation_settings(config)})
+    (root / "prepared_inputs.json").write_text(recorded)
+    Path(config["paths"]["source_registry"]).unlink()
     assert prepare_inputs(config) == root / "prepared_inputs.json"
-    assert (root / "prepared_inputs.json").read_text() == "{}"
+    assert (root / "prepared_inputs.json").read_text() == recorded
     assert not (root / "lines").exists()
+
+
+def test_prepare_refuses_reuse_under_different_settings(tmp_path):
+    from src.experiments.prepare import preparation_settings
+
+    config = build_world(tmp_path)
+    root = Path(config["prepared_root"])
+    root.mkdir()
+    recorded = json.dumps({"settings": preparation_settings(config)})
+    (root / "prepared_inputs.json").write_text(recorded)
+    config["features"]["cells_per_context"] += 1
+    with pytest.raises(ValueError, match="different settings"):
+        prepare_inputs(config)
 
 
 def test_train_means_fit_on_supervised_train_only(prepared, monkeypatch):
