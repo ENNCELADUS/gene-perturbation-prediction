@@ -2,9 +2,9 @@
 
 ## Role
 
-Primary observed-transcriptome source for Stage 1 K562 alignment. This is the
-v0 CRISPRi-compatible perturbation-response dataset paired with DepMap K562
-gene-effect labels.
+K562 essential-gene CRISPRi Perturb-seq subset, aligned to DepMap K562 GeneEffect
+labels. It is not an input of the joint GeneEffect pipeline, whose K562 response anchor
+is [Replogle K562 GWPS](replogle-k562-gwps.md).
 
 ## Downloaded File
 

@@ -1,4 +1,4 @@
-"""Evaluate cached P1-A heads with the production GeneEffect aggregation."""
+"""Evaluate cached readout heads with the production GeneEffect aggregation."""
 
 import json
 from pathlib import Path

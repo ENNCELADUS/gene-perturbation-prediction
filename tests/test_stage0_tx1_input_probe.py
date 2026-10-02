@@ -1,4 +1,4 @@
-"""Tests for the Stage 0 Tx1 input probe (``docs/04`` §6).
+"""Tests for the Tx1 input probe (historical Exp13 protocol §6).
 
 The GPU forward pass is not testable here, so these cover the parts that
 decide whether the probe's answer means anything:

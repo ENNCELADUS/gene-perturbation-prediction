@@ -1,4 +1,4 @@
-"""Head-only readouts for the fixed-backbone P1-A diagnostic."""
+"""Head-only readouts on the frozen joint backbone's cached condition features."""
 
 from copy import deepcopy
 

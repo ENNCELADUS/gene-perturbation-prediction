@@ -139,9 +139,9 @@ def compare(reference: np.ndarray, other: np.ndarray) -> dict[str, float]:
     """Summarize how far ``other`` sits from ``reference``.
 
     Reports the per-cell agreement and the agreement of the pooled mean,
-    because the pooled mean is what ``z_c`` and ``Delta`` actually consume
-    (``01-blueprint.md`` §3) -- a per-cell wobble that averages out matters
-    far less than one that does not.
+    because the pooled mean is what the context embedding ``z_c`` consumes
+    (``docs/03-geneeffect-protocol.md`` §4) -- a per-cell wobble that averages
+    out matters far less than one that does not.
     """
     cosines = _cosine_rows(reference, other)
     reference_mean = reference.mean(axis=0, keepdims=True)
@@ -251,10 +251,9 @@ def load_probe_adata(
 def build_encoder(model_dir: Path, batch_size: int, max_length: int):
     """Build the real Tx1-3B encode callable.
 
-    Deliberately not reusing ``build_tx1_basal_embeddings._build_tx1_encoder``:
-    that one is private and, more to the point, this probe must be able to
-    set the global torch seed *between* forward passes, which only works if
-    the loader is constructed per call.
+    Deliberately not reusing the Tx1 cache encoder in ``src.data.tx1_cache``:
+    this probe must be able to set the global torch seed *between* forward
+    passes, which only works if the loader is constructed per call.
     """
     from composer import Trainer
     from tahoe_x1.utils.util import loader_from_adata

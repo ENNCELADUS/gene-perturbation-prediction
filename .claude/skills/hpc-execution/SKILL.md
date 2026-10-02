@@ -1,6 +1,6 @@
 ---
 name: hpc-execution
-description: Use before running GPU preparation, joint GeneEffect training, checkpoint evaluation or the response-pathway diagnostics for this repository, or when a task needs the Replogle GWPS h5ad, ESM2 embeddings or Tx1-3B weights that the local Mac lacks. Covers the H20 container ports, Git-only code sync to the shared checkout, hpc/run.sh, GPU inspection and process reporting.
+description: Use before running the `all` pipeline (preparation, response-model comparison, joint GeneEffect training, validation evaluation) or a checkpoint test for this repository, or when a task needs the Replogle GWPS h5ad, ESM2 embeddings, STATE checkpoint or Tx1-3B weights that the local Mac lacks. Covers the H20 container ports, Git-only code sync to the shared checkout, hpc/run.sh, GPU inspection and process reporting.
 ---
 
 # HPC execution
@@ -9,8 +9,8 @@ Treat `hpc/README.md` and `hpc/run.sh` as the live execution sources. The reposi
 one launcher, `hpc/run.sh`, and no scheduler or qualification ladder. Run experiments
 directly; do not add preregistration, hash, eligibility or qualification preflights.
 
-The local Mac has no GPU, Tx1 weights, ESM2 table or raw data. It runs synthetic-fixture
-tests only; real preparation, training and evaluation run on the H20 host.
+The local Mac has no GPU, Tx1 weights, STATE checkpoint, ESM2 table or raw data. It runs
+synthetic-fixture tests only; real preparation, training and evaluation run on the H20 host.
 
 ## Connect to an H20 container
 
@@ -34,7 +34,6 @@ Do not store the SSH password in the repository.
 Each container sees only its own GPUs, so jobs on different containers never contend for
 a GPU, but they share the host's 224 CPU cores. `hpc/run.sh` does not cap threads; set
 `OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes you launch.
-.
 
 ## Sync code through Git only
 
@@ -46,12 +45,10 @@ git push ssh://root@10.15.171.204:30838/2023533015/VCC_Project main
 ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git checkout main && git log -1 --oneline'
 ```
 
-The checkout keeps its own branch and drifts from local `main` (2026-09-30:
-`codex/p1-geneeffect-readout-response-adaptation` @ `3f226e5`, clean, with no
-`receive.denyCurrentBranch`). Git refuses a push to the checked-out branch, so push a
-branch it is not on, or check `main` out first. Look at `git branch --show-current`,
-`git log -1` and `git status --short` there before assuming your code is present, and
-never discard the host's uncommitted changes.
+The checkout keeps its own branch and can drift from local `main`. Git refuses a push to
+the checked-out branch, so push a branch it is not on, or check `main` out first. Look at
+`git branch --show-current`, `git log -1` and `git status --short` there before assuming
+your code is present, and never discard the host's uncommitted changes.
 
 The host holds the only copies of the prepared caches, checkpoints and `outputs/`.
 Git-ignored assets (`data/`, `outputs/`, `*.pt`) never travel through Git.
@@ -73,8 +70,8 @@ nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --for
 ps aux | grep '[s]rc\.'
 ```
 
-`hpc/run.sh all` counts the visible GPUs (respecting `CUDA_VISIBLE_DEVICES`). Do not hard-code a GPU count. Resume needs
-the same world size, and a batch-size change needs a new run id (`hpc/README.md`). Choose
+`hpc/run.sh all` counts the visible GPUs (respecting `CUDA_VISIBLE_DEVICES`). Do not
+hard-code a GPU count. Resume needs the same world size, and a batch-size change needs a new run id (`hpc/README.md`). Choose
 batch sizes from measured throughput; never shrink one silently after an OOM.
 
 ## Commands
@@ -106,9 +103,12 @@ nohup hpc/run.sh all configs/geneeffect_joint.yaml --run-id <new_id> > outputs/l
 ## Reporting
 
 Distinguish launch, running state, completed training and scientific evaluation. A
-launcher PID or GPU utilization is execution evidence only. Confirm completion from the
-process exit, the log, `metrics.jsonl`, the required checkpoints and the training status in
-`run.json`; training and evaluation status are recorded separately, and an export failure
-is retryable with the same evaluation command without retraining. Historical runs keep
-their historical records; do not fabricate status files or relabel their protocols.
+launcher PID or GPU utilization is execution evidence only. Confirm each step of an `all`
+run from its output in the run directory: `comparison/verdicts.json` for the comparison,
+`train/done.json` (with `train/metrics.jsonl`, `best.pt` and `last.pt`) for training,
+`evaluation/val/metrics.json`, `baselines/val/metrics.json` and `readout/metrics.json` for
+validation, and `summary.md` last; read `logs/<step>.log` for a failure. A failed
+evaluation step is retried by rerunning `all` with the same run id, without retraining.
+Historical runs keep their historical records; do not fabricate status files or relabel
+their protocols.
 Nothing produced here is SL interaction evidence.

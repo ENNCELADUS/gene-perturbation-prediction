@@ -25,7 +25,7 @@ description = "Read-only mapper for code, data, config, and documentation paths 
 config_file = "agents/domain-mapper.toml"
 
 [agents.experiment_planner]
-description = "Read-only planner for experiment, config, and verification designs across the Exp13 GeneEffect residual benchmark and the context_screen_v2 SL split."
+description = "Read-only planner for experiment, config, and verification designs across the 226-line GeneEffect benchmark and the context_screen_v2 SL split."
 config_file = "agents/experiment-planner.toml"
 
 [agents.implementation_worker]

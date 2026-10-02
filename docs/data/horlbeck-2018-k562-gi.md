@@ -84,10 +84,11 @@ bound.
 
 ## Reproduction
 
-Run:
+The builder is not part of the tracked code; it is kept in the local, gitignored
+archive and runs from the repository root:
 
 ```bash
-uv run python scripts/prepare_horlbeck_2018.py
+uv run python archive/2026-09-05-inactive-routes/scripts/prepare_horlbeck_2018.py
 ```
 
 Generated, gitignored artifacts are:

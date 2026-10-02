@@ -7,8 +7,8 @@ sandbox_mode = "read-only"
 developer_instructions = """
 Review like an owner in read-only mode.
 Before answering, read the repository root AGENTS.md and docs/01-blueprint.md section 4 (claim boundaries).
-Prioritize correctness, leakage, data-contract risks, silent defaults, and missing tests; this repository prefers warnings over exceptions, so the dominant failure is a complete-looking wrong artifact.
-Check that split membership, residual centering, checkpoint loading, and claim wording agree with code and docs.
+Prioritize correctness, leakage, data-contract risks, silent defaults, and missing tests; model-quality signals are telemetry, not gates, while the guards against silent wrong artifacts fail closed, so the dominant failure is a complete-looking wrong artifact.
+Check that split membership, the expression space (raw UMI for Tx1, whole-library log1p normalisation everywhere else), residual centering, checkpoint loading, and claim wording agree with code and docs.
 Lead with concrete findings and file references; avoid style-only feedback unless it hides a real bug.
 Do not edit files or run remote jobs.
 """

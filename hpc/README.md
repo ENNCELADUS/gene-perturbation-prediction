@@ -32,8 +32,9 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
 The run directory is `outputs/geneeffect_joint/<run_id>/{comparison/, train/, evaluation/val/,
 baselines/val/, readout/, logs/, summary.md}`; `summary.md` is rewritten on every rerun.
 An interrupted run is resumed by rerunning the same command with the same `--run-id`; a
-fresh run needs a new run id. Resume uses the checkpoint's configuration and rejects any
-conflicting configuration, so a batch-size change needs a new run id.
+fresh run needs a new run id. A run directory is bound to the config it started with
+(`run_config.json`), and training resumes from `train/last.pt` only when the config saved
+there equals the current one, so a batch-size or any other config change needs a new run id.
 
 With N ≥ 2 visible GPUs the comparison runs on the last one while training runs on the
 other N−1, concurrently; with one GPU the comparison runs first, then training; without
@@ -45,9 +46,9 @@ The STATE sanity line is printed as soon as `comparison/sanity.json` exists.
 
 `all` never evaluates the test split. `hpc/run.sh test CHECKPOINT` is the only route to it
 and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without
-optimizer steps. Standalone evaluation exports
-`evaluation/<checkpoint-name>/<split>/predictions.parquet`, `metrics.json`, `per_line.csv`
-and `per_gene.csv`; per-gene details carry residual target and prediction SD, SD ratio, RMSE
+optimizer steps. Standalone evaluation (`test`, or `src.evaluate --split val|train`)
+writes `evaluation/<checkpoint-name>/<split>/` beside the checkpoint, holding
+`predictions.parquet`, `metrics.json`, `per_line.csv` and `per_gene.csv`; per-gene details carry residual target and prediction SD, SD ratio, RMSE
 and MAE on the same finite rows and train-derived variable genes, and undefined quantities
 keep explicit counts and null scalar values. An export failure is retried by rerunning the
 same evaluation command. Nothing here is SL interaction evidence; held-out lines retain the
@@ -90,8 +91,8 @@ silently lower K or change the embedding when fitting is difficult.
 
 `evaluation/<split>/` contains joint-training-evaluator predictions/metrics, per-line/per-gene tables and
 `context_features.csv` (64 occupancies plus entropy, effective component count,
-assignment confidence and negative log likelihood). Train scalars use `train_eval_`;
-the response table is empty. A failed export can be retried with `evaluate`, restoring
+assignment confidence and negative log likelihood). Train scalars use `train_eval_`.
+A failed export can be retried with `evaluate`, restoring
 the saved transforms and readout without refitting. Use only trusted local joblib
 artifacts with their recorded sklearn version. This is a candidate baseline; no
 performance improvement is established by the implementation tests.

@@ -1,6 +1,6 @@
 # Related Work: Context, Dependency and Synthetic-Lethality Ranking
 
-Updated 2026-09-07. This review supports the
+Updated 2026-10-02. This review supports the
 [research task](01-blueprint.md), the [GeneEffect protocol](03-geneeffect-protocol.md)
 and the [SL evaluation proposal](04-sl-ranking-protocol.md).
 It separates published evidence from this repository's results and proposed
@@ -49,8 +49,11 @@ not by itself estimate a genetic interaction.
 | [DeepDEP, Chiu et al. 2021](https://pubmed.ncbi.nlm.nih.gov/34417181/) | Predicts cancer dependencies from integrative genomic profiles | Dependency prediction from molecular context has prior art; response simulation must justify its added cost |
 
 This repository combines frozen Tx1 basal embeddings, trainable STATE, an ESM2
-adapter and a residual GeneEffect head. These components do not make single-gene
-fitness a direct readout of a simulated double knockout. Expression-distribution
+adapter and a residual GeneEffect head. STATE reads log-normalised highly variable
+gene expression through its own released basal encoder, the input space it was
+trained in; the Tx1 embeddings feed only the residual head's context. These
+components do not make single-gene fitness a direct readout of a simulated double
+knockout. Expression-distribution
 accuracy and dependency accuracy require separate evaluations.
 
 ## 4. Simple baselines and metric choice
@@ -111,10 +114,19 @@ The completed seed-0 joint experiment achieves test Huber 0.01611905 versus
 This shows a functioning composition but little dependency-error improvement over
 a context-blind prior and weaker context correlations than simple predictors.
 It does not establish an SL-ranking benefit, superiority to published systems,
-statistical significance or multi-seed robustness.
+statistical significance or multi-seed robustness. That run fed STATE raw counts;
+it predates the current expression space.
 
-The next discriminating experiments are validation-side checks of residual
-prediction scale and a matched-batch response-supervision ablation. A later SL
+On validation only, a readout head with an explicit gene-specific context slope on the
+frozen seed-0 backbone lifts residual Pearson from 0.05 to 0.13 and ties an
+eight-component context-PCA ridge, and no tested response interface transferred a
+perturbation response to a held-out cell line
+([diagnostics](results/p1_response_pathway_diagnostics/README.md)). The next
+discriminating experiment is a leave-one-anchor-out response-model comparison that
+replaces STATE with a plain MLP on the same inputs, measuring what the STATE
+transformer and the Tx1 representation each add
+([GeneEffect protocol §9](03-geneeffect-protocol.md#9-response-model-comparison-and-the-all-run)),
+in line with the simple-baseline findings of §4. A later SL
 experiment must retain identity, essentiality, simple-context and matched
 context-ablated controls. The scientific contribution depends on those results;
 it is not guaranteed by architecture or by the absence of an SL graph.

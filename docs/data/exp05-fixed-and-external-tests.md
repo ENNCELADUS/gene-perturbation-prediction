@@ -1,9 +1,10 @@
-# Exp05 Fixed Split and Cell-Line Data Roles
+# K562 Forward-Model (exp05) Fixed Split and Cell-Line Data Roles
 
-**Status:** retired. The exp05 implementation — the builder, the config, and the
-training stack this card described — was deleted at `873c99c` after T1/T2 closed
-negative; the gitignored split artifacts, the completed HCT116 audit, and the
-external-dataset decisions below remain as evidence. Exp13 uses its own split.
+**Status:** retired. The K562 forward-model implementation — the builder, the config, and
+the training stack this card described — was deleted at `873c99c` after its K562 and
+Tx1-conditioned few-shot gates closed negative; the gitignored split artifacts, the
+completed HCT116 audit, and the external-dataset decisions below remain as evidence. The
+226-line GeneEffect benchmark uses its own split.
 
 ## Role contract
 
