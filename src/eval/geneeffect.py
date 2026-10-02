@@ -17,8 +17,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from src.data.batches import DependencyBatch
-from src.data.datasets import make_evaluation_loader, split_lines
+from src.data.datasets import DependencyDataset
 from src.data.prepared import PreparedInputs
 from src.eval.metrics import _unit_pearson, _unit_spearman
 
@@ -143,27 +142,63 @@ def aggregate_geneeffect(
     return metrics, per_line, per_gene
 
 
-def _rows(model: nn.Module, batch: DependencyBatch) -> list[dict]:
-    prediction = model(batch.conditions).delta_hat.float()
-    values = torch.stack(
-        (batch.gene_effect, batch.residual, batch.gene_mean, prediction), dim=1
+def _predict(
+    model: nn.Module,
+    dataset: DependencyDataset,
+    batch_size: int,
+    accelerator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """This rank's row positions and float32 residual predictions.
+
+    Batches are consecutive ``batch_size`` rows in dataset order; rank ``r`` of
+    ``W`` takes batches ``r, r + W, ...``.
+    """
+    rank, world = (
+        (0, 1)
+        if accelerator is None
+        else (accelerator.process_index, accelerator.num_processes)
     )
-    return [
+    positions, predictions = [], []
+    for start in range(rank * batch_size, len(dataset), world * batch_size):
+        rows = range(start, min(start + batch_size, len(dataset)))
+        batch = dataset.collate(rows)
+        with accelerator.autocast() if accelerator else nullcontext():
+            predicted = model(batch.conditions).delta_hat.float()
+        positions.append(np.asarray(rows, dtype=np.int64))
+        predictions.append(predicted.cpu().numpy())
+    if not positions:
+        return np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float32)
+    return np.concatenate(positions), np.concatenate(predictions)
+
+
+def _assemble(
+    gathered: Sequence[tuple[np.ndarray, np.ndarray]], rows: int
+) -> np.ndarray:
+    """Every rank's predictions placed at their row positions, each row exactly once."""
+    positions = np.concatenate([rank_positions for rank_positions, _ in gathered])
+    if not np.array_equal(np.sort(positions), np.arange(rows)):
+        raise RuntimeError("ranks did not predict every evaluation row exactly once")
+    predicted = np.empty(rows, dtype=np.float32)
+    predicted[positions] = np.concatenate([values for _, values in gathered])
+    return predicted
+
+
+def _prediction_frame(
+    dataset: DependencyDataset, predicted: np.ndarray
+) -> pd.DataFrame:
+    """One row per dataset row; float32 targets and predictions widened to float64."""
+    mean = dataset.gene_mean.cpu().numpy().astype(np.float64)
+    residual_prediction = predicted.astype(np.float64)
+    return pd.DataFrame(
         {
-            "model_id": model_id,
-            "gene_symbol": gene,
-            "gene_effect": gene_effect,
-            "residual": residual,
-            "geneeffect_prediction": predicted + mean,
-            "residual_prediction": predicted,
+            "model_id": dataset.model_ids,
+            "gene_symbol": dataset.genes,
+            "gene_effect": dataset.gene_effect.cpu().numpy().astype(np.float64),
+            "residual": dataset.residual.cpu().numpy().astype(np.float64),
+            "geneeffect_prediction": residual_prediction + mean,
+            "residual_prediction": residual_prediction,
         }
-        for model_id, gene, (gene_effect, residual, mean, predicted) in zip(
-            batch.conditions.model_ids,
-            batch.conditions.genes,
-            values.cpu().tolist(),
-            strict=True,
-        )
-    ]
+    )
 
 
 def evaluate_model(
@@ -173,45 +208,66 @@ def evaluate_model(
     *,
     split: str,
     accelerator=None,
+    lines: Sequence[str] | None = None,
 ) -> EvalResult:
     """Score every labelled row of ``split`` once, leaving training state untouched.
 
-    Metrics are prefixed ``{split}_``; the training-split diagnostic uses
-    ``train_eval_`` so it never collides with per-update training losses. Module
-    modes and the torch RNG are restored on exit.
+    ``lines`` restricts scoring to a subset of the split's lines. Metrics are
+    prefixed ``{split}_``; the training-split diagnostic uses ``train_eval_`` so it
+    never collides with per-update training losses. Module modes and the torch
+    RNG are restored on exit.
+
+    Under several processes each rank predicts its share of the batches, rank
+    zero gathers the predictions with their row positions, builds the tables and
+    metrics alone and broadcasts the metrics. Every rank returns the metrics; only
+    rank zero's result carries the tables, the others carry empty frames.
     """
     if accelerator is not None:
         model = accelerator.unwrap_model(model)
     device = next(model.parameters()).device
-    loader = make_evaluation_loader(inputs, config, split, accelerator)
+    dataset = DependencyDataset(inputs, split, device=device, lines=lines)
     modes = [(module, module.training) for module in model.modules()]
     devices = [device.index or 0] if device.type == "cuda" else []
-    rows: list[dict] = []
     try:
         with torch.random.fork_rng(devices=devices), torch.no_grad():
             model.eval()
-            for batch in loader:
-                with accelerator.autocast() if accelerator else nullcontext():
-                    batch_rows = _rows(model, batch.to(device))
-                if accelerator is not None:
-                    batch_rows = accelerator.gather_for_metrics(
-                        batch_rows, use_gather_object=True
-                    )
-                rows.extend(batch_rows)
+            local = _predict(
+                model, dataset, config["train"]["dependency_batch_size"], accelerator
+            )
     finally:
         for module, training in modes:
             module.training = training
-    predictions = pd.DataFrame(rows)
-    metrics, per_line, per_gene = aggregate_geneeffect(
-        predictions,
-        model_ids=split_lines(inputs, split),
-        genes=inputs.genes,
-        variable_genes=[gene for gene in inputs.genes if gene in inputs.variable_genes],
-    )
+    distributed = accelerator is not None and accelerator.num_processes > 1
+    gathered = [local]
+    if distributed:
+        gathered = (
+            [None] * accelerator.num_processes if accelerator.is_main_process else None
+        )
+        torch.distributed.gather_object(local, gathered, dst=0)
     prefix = "train_eval" if split == "train" else split
-    return EvalResult(
-        {f"{prefix}_{key}": value for key, value in metrics.items()},
-        predictions,
-        per_line,
-        per_gene,
-    )
+    payload: list[Any] = [None]
+    failure: Exception | None = None
+    empty = pd.DataFrame()
+    predictions, per_line, per_gene = empty, empty, empty
+    if not distributed or accelerator.is_main_process:
+        try:
+            predictions = _prediction_frame(dataset, _assemble(gathered, len(dataset)))
+            metrics, per_line, per_gene = aggregate_geneeffect(
+                predictions,
+                model_ids=dataset.lines,
+                genes=inputs.genes,
+                variable_genes=[
+                    gene for gene in inputs.genes if gene in inputs.variable_genes
+                ],
+            )
+            payload[0] = {f"{prefix}_{key}": value for key, value in metrics.items()}
+        except Exception as error:  # the other ranks must not wait at the broadcast
+            failure = error
+            payload[0] = f"{type(error).__name__}: {error}"
+    if distributed:
+        torch.distributed.broadcast_object_list(payload, src=0)
+    if failure is not None:
+        raise failure
+    if isinstance(payload[0], str):
+        raise RuntimeError(f"rank zero evaluation failed: {payload[0]}")
+    return EvalResult(payload[0], predictions, per_line, per_gene)

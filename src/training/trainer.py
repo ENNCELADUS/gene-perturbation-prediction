@@ -1,7 +1,9 @@
 """Joint training loop: GeneEffect every update, anchor response every few updates.
 
 Validation runs once per epoch on the validation lines' GeneEffect rows only;
-``best.pt`` and early stopping follow ``val_geneeffect_loss``.
+``best.pt`` and early stopping follow ``val_geneeffect_loss``. The ``train_eval_``
+diagnostic scores a fixed subset of supervised training lines of the validation
+split's size, so the two curves are comparable.
 """
 
 from collections.abc import Mapping
@@ -10,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from accelerate.utils import DistributedDataParallelKwargs
+import numpy as np
 import torch
 
 from src.data.batches import ResponseForwardBatch
@@ -25,6 +28,22 @@ from src.training.checkpoint import (
     save_checkpoint,
 )
 from src.training.sampling import make_training_loaders
+
+TRAINING_DIAGNOSTIC_LINES = 27
+
+
+def training_diagnostic_lines(inputs: PreparedInputs) -> tuple[str, ...]:
+    """The supervised training lines scored by the per-epoch ``train_eval_`` metrics.
+
+    ``TRAINING_DIAGNOSTIC_LINES`` lines (all of them if fewer) drawn once from the
+    sorted supervised training lines with ``np.random.default_rng(0)``, returned
+    sorted. Depends only on the split, so a resumed run scores the same lines.
+    """
+    lines = sorted(inputs.split.supervised_train)
+    chosen = np.random.default_rng(0).choice(
+        len(lines), size=min(TRAINING_DIAGNOSTIC_LINES, len(lines)), replace=False
+    )
+    return tuple(lines[index] for index in sorted(chosen))
 
 
 def make_optimizer(model, config: Mapping[str, Any]) -> torch.optim.AdamW:
@@ -151,6 +170,7 @@ def fit(
             restored["rng_states"][accelerator.process_index], accelerator.device
         )
     preprocessing = inputs.preprocessing_state()
+    diagnostic_lines = training_diagnostic_lines(inputs)
     for epoch in range(state.next_epoch, train["max_epochs"]):
         if state.bad_epochs >= train["patience"]:
             break
@@ -173,7 +193,12 @@ def fit(
                 accelerator,
             )
         train_metrics = evaluate_model(
-            model, inputs, config, split="train", accelerator=accelerator
+            model,
+            inputs,
+            config,
+            split="train",
+            accelerator=accelerator,
+            lines=diagnostic_lines,
         ).metrics
         validation = evaluate_model(
             model, inputs, config, split="val", accelerator=accelerator
