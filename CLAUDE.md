@@ -103,7 +103,7 @@ file and read the findings when it finishes. Findings are input to adjudicate ag
 
 ```bash
 CH=<scratch>/codex-home; mkdir -p "$CH"; cp ~/.codex/auth.json "$CH/"
-printf 'model = "gpt-6-astra"\nmodel_reasoning_effort = "medium"\napproval_policy = "never"\nsandbox_mode = "workspace-write"\n' > "$CH/config.toml"
+printf 'model = "gpt-6.1-sol"\nmodel_reasoning_effort = "high"\napproval_policy = "never"\nsandbox_mode = "workspace-write"\n' > "$CH/config.toml"
 CODEX_HOME="$CH" codex review --base <WAVE_BASE_SHA> > <wave>-review.txt 2>&1              # built-in reviewer over the wave diff
 CODEX_HOME="$CH" node ~/.claude/plugins/cache/openai-codex/codex/<ver>/scripts/codex-companion.mjs \
   adversarial-review --background --base <WAVE_BASE_SHA> "<focus text>"                       # design challenge; shows in /codex:status

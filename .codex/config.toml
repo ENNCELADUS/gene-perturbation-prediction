@@ -8,7 +8,8 @@ approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 web_search = "live"
 approvals_reviewer = "auto_review"
-model = "gpt-6-astra"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
 
 [mcp_servers.context7]
 command = "npx"
@@ -16,7 +17,7 @@ args = ["-y", "@upstash/context7-mcp@latest"]
 startup_timeout_sec = 30
 
 [agents]
-max_threads = 6
+max_threads = 3
 max_depth = 1
 
 [agents.domain_mapper]
