@@ -48,9 +48,6 @@ def restore_model(
     return restore_joint_model(saved, inputs)
 
 
-# The readout entry point still imports the earlier private name.
-_restore_model = restore_model
-
 
 def run_training(
     config: Mapping[str, Any],

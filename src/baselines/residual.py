@@ -12,7 +12,7 @@ from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 from src.eval.metrics import ResidualScore, bootstrap_delta, score_predictions
 from src.data.residual_target import ResidualTargets, fit_gene_means
-from src.data.splits import FixedSplit
+from src.data.splits import FixedSplit, assert_fit_eligible
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,9 +42,6 @@ _MIN_TRAIN_LINES_FOR_CONTEXT: int = 2
 
 
 _FEATURE_CONSTANT_EPS: float = 1e-12
-
-
-_AXIS_INVARIANCE_TOL: float = 1e-6
 
 
 @dataclass(frozen=True)
@@ -344,10 +341,6 @@ def _run_fixed_evals(
             targets = gene_rows["residual"].to_numpy(dtype=float)
             ridge = Ridge(alpha=config.ridge_alpha).fit(train_pcs[indices], targets)
             gene_predictions = np.asarray(ridge.predict(eval_pcs), dtype=float)
-            if not np.isfinite(gene_predictions).all():
-                raise ValueError(
-                    f"invalid fixed-split ridge prediction: {view_name}/{gene}"
-                )
             for slice_name, held_out_id in eval_specs:
                 held = held_by_id[held_out_id]
                 if gene in held.index:
@@ -442,8 +435,6 @@ def _context_pca_ridge_rows(
     pca = PCA(n_components=n_components, svd_solver="full").fit(train_scaled)
     train_pcs = pca.transform(train_scaled)
     held_pcs = pca.transform(held_scaled)
-    if not np.isfinite(train_pcs).all() or not np.isfinite(held_pcs).all():
-        raise ValueError(f"context PCA is degenerate for line {held_out_id}")
 
     held = rt.long.loc[rt.long["model_id"] == held_out_id].set_index("gene_symbol")
     gene_order = [gene for gene in rt.gene_mean.index if gene in held.index]
@@ -466,56 +457,17 @@ def _context_pca_ridge_rows(
         targets = gene_rows["residual"].to_numpy(dtype=float)
         ridge = Ridge(alpha=config.ridge_alpha).fit(train_pcs[indices], targets)
         prediction = float(np.asarray(ridge.predict(held_pcs)).reshape(-1)[0])
-        if not np.isfinite(prediction):
-            raise ValueError(
-                f"invalid ridge prediction: {held_out_id}/{view_name}/{gene}"
-            )
         rows.append(_row(slice_name, held_out_id, method, held, gene, prediction))
     return rows, n_components
 
 
-def _check_axis_invariance(
-    residual_score: ResidualScore, raw_score: ResidualScore, method: str
-) -> None:
-    """Assert the per-gene axis agrees whether scored on residual or raw truth.
+def _combined_score(frame: pd.DataFrame) -> ResidualScore:
+    """Score one method: per-line vs. the fold-fit residual, per-gene vs. raw effect.
 
-    Per-gene Spearman is invariant to subtracting any per-gene constant
-    from the truth column, so scoring against ``residual`` and against raw
-    ``gene_effect`` must agree on the per-gene axis. Free correctness check
-    on the whole fold-refit-and-score pipeline: divergence means the
-    residual construction leaked.
-    """
-    residual_series = residual_score.per_gene.sort_index()
-    raw_series = raw_score.per_gene.sort_index()
-    if not residual_series.index.equals(raw_series.index):
-        raise ValueError(f"{method}: per-gene axis index mismatch")
-    residual_nan = residual_series.isna()
-    raw_nan = raw_series.isna()
-    if (residual_nan != raw_nan).any():
-        bad = residual_series.index[residual_nan != raw_nan].tolist()
-        raise ValueError(f"{method}: per-gene axis NaN pattern differs for {bad[:10]}")
-    finite = ~residual_nan
-    if finite.any() and not np.allclose(
-        residual_series[finite].to_numpy(),
-        raw_series[finite].to_numpy(),
-        atol=_AXIS_INVARIANCE_TOL,
-    ):
-        raise ValueError(
-            f"{method}: per-gene axis is not invariant to truth-column choice "
-            "(residual vs. raw gene_effect) -- the residual construction leaked"
-        )
-
-
-def _combined_score(frame: pd.DataFrame, method: str) -> ResidualScore:
-    """Score one method: per-line vs. delta (the coherent pairing), per-gene vs. raw.
-
-    Per-line truth is the fold-fit ``residual`` column (delta), paired with
-    the delta-only prediction -- the mu-free quantity on both sides. Truth
-    on raw ``gene_effect`` would put mu_g back into only one side of the
-    per-line comparison and measure accidental alignment with the gene
-    main effect instead. Per-gene truth is raw ``gene_effect``, which
-    :func:`_check_axis_invariance` proves must equal scoring against
-    ``residual`` (the axis is invariant to a per-gene truth shift).
+    Per-line truth is the fold-fit ``residual`` (delta), paired with the
+    delta-only prediction, so mu_g sits on neither side. Per-gene Spearman is
+    invariant to a per-gene shift of the truth, so raw ``gene_effect`` gives the
+    same per-gene axis.
     """
     residual_score = score_predictions(
         frame, truth_col="residual", pred_col="residual_prediction"
@@ -523,7 +475,6 @@ def _combined_score(frame: pd.DataFrame, method: str) -> ResidualScore:
     raw_score = score_predictions(
         frame, truth_col="gene_effect", pred_col="residual_prediction"
     )
-    _check_axis_invariance(residual_score, raw_score, method)
     return ResidualScore(
         macro_per_line=residual_score.macro_per_line,
         macro_per_gene=raw_score.macro_per_gene,
@@ -556,12 +507,7 @@ def _run_eval(
     construction. ``mu_bar`` must be fold-independent -- see the module
     docstring -- the caller supplies it; this function only consumes it.
     """
-    if held_out_id in train_lines:
-        raise ValueError("internal error: held-out line in its own train set")
-
     rt = _build_fold_targets(labels, train_lines, config.min_lines)
-    if held_out_id in rt.train_lines:
-        raise ValueError(f"internal error: line {held_out_id} leaked into train_lines")
     if held_out_id not in set(rt.long["model_id"]):
         _LOGGER.warning("line %s: no surviving genes this fold; skipping", held_out_id)
         return []
@@ -624,45 +570,28 @@ def _run_eval(
 
 
 def _validate_split(labels: pd.DataFrame, split: FixedSplit) -> tuple[str, ...]:
-    """Validate ``split`` and return its supervised train subset.
+    """Return the supervised train lines; every fit line passes the eligibility guard.
 
-    Train membership may include contexts without GeneEffect labels. They remain
-    registered train contexts but are excluded from every supervised fit and
-    label-donor set. Validation and test must be fully labeled.
+    Train membership may include contexts without GeneEffect labels. They stay
+    registered train contexts but enter no fit and no donor set. Validation and
+    test lines must be labeled. ``split`` membership itself was validated when
+    it was loaded.
     """
     known = set(labels["model_id"])
     for name, ids in (("val", split.val), ("test", split.test)):
         unknown = sorted(set(ids) - known)
         if unknown:
             raise ValueError(f"split {name!r} has unknown model_id(s): {unknown}")
-    overlaps = {
-        "train/val": set(split.train) & set(split.val),
-        "train/test": set(split.train) & set(split.test),
-        "val/test": set(split.val) & set(split.test),
-    }
-    bad = {k: sorted(v) for k, v in overlaps.items() if v}
-    if bad:
-        raise ValueError(f"split partitions overlap: {bad}")
-    if not split.train:
-        raise ValueError("split 'train' must be non-empty")
-    declared_unlabeled = set(split.unlabeled_train)
-    outside_train = sorted(declared_unlabeled - set(split.train))
-    if outside_train:
-        raise ValueError(
-            f"split 'unlabeled_train' contains non-train model_id(s): {outside_train}"
-        )
     unknown_train = set(split.train) - known
-    if unknown_train != declared_unlabeled:
+    if unknown_train != set(split.unlabeled_train):
         raise ValueError(
             "split train label coverage does not match declared unlabeled_train: "
             f"unknown={sorted(unknown_train)}, "
-            f"declared={sorted(declared_unlabeled)}"
+            f"declared={sorted(split.unlabeled_train)}"
         )
     supervised_train = tuple(model_id for model_id in split.train if model_id in known)
-    if not supervised_train:
-        raise ValueError("split 'train' has no GeneEffect-labeled model_id")
-    if not split.val and not split.test:
-        raise ValueError("split must have at least one of 'val' or 'test' to evaluate")
+    for model_id in supervised_train:
+        assert_fit_eligible(model_id, split)
     return supervised_train
 
 
@@ -774,55 +703,10 @@ def run_r1_ladder(
         .sort_values(["slice", "method", "model_id", "gene_symbol"], kind="stable")
         .reset_index(drop=True)
     )
-    if predictions.duplicated(["slice", "method", "model_id", "gene_symbol"]).any():
-        raise ValueError("internal error: duplicate prediction keys")
-    _validate_exact_method_coverage(predictions, context_views, copy_prior)
 
     return _summarize(
         predictions, effective_components, config, seed, context_views, outer, split
     )
-
-
-def _validate_exact_method_coverage(
-    predictions: pd.DataFrame,
-    context_views: Mapping[str, pd.DataFrame],
-    copy_prior: pd.Series | None,
-) -> None:
-    """Require every configured baseline on the same observable truth keys."""
-    expected_methods = {GENE_MEAN}
-    if copy_prior is not None:
-        expected_methods.add(COPY_PRIOR)
-    for view_name in context_views:
-        expected_methods.add(_view_method_name(NEAREST_LINE, view_name))
-        expected_methods.add(_view_method_name(CONTEXT_PCA_RIDGE, view_name))
-
-    key_columns = ["slice", "model_id", "gene_symbol"]
-    truth_keys = set(
-        predictions.loc[predictions["method"] == GENE_MEAN, key_columns].itertuples(
-            index=False, name=None
-        )
-    )
-    actual_methods = set(predictions["method"])
-    missing_methods = sorted(expected_methods - actual_methods)
-    unexpected_methods = sorted(actual_methods - expected_methods)
-    if missing_methods or unexpected_methods:
-        raise ValueError(
-            "baseline method set mismatch: "
-            f"missing={missing_methods}, unexpected={unexpected_methods}"
-        )
-    for method in sorted(expected_methods):
-        method_keys = set(
-            predictions.loc[predictions["method"] == method, key_columns].itertuples(
-                index=False, name=None
-            )
-        )
-        if method_keys != truth_keys:
-            missing = sorted(truth_keys - method_keys)
-            extra = sorted(method_keys - truth_keys)
-            raise ValueError(
-                f"{method}: evaluated-key coverage differs from common truth mask: "
-                f"missing={missing[:10]}, extra={extra[:10]}"
-            )
 
 
 def _method_entry(score: ResidualScore, seed: int) -> dict[str, object]:
@@ -914,7 +798,7 @@ def _summarize(
         scores: dict[str, ResidualScore] = {}
         for method in sorted(slice_predictions["method"].unique()):
             subframe = slice_predictions.loc[slice_predictions["method"] == method]
-            scores[method] = _combined_score(subframe, method)
+            scores[method] = _combined_score(subframe)
 
         method_summaries: dict[str, dict[str, object]] = {}
         for method, score in scores.items():

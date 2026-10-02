@@ -4,10 +4,14 @@ backbone."""
 import argparse
 from contextlib import nullcontext
 import hashlib
+import json
 import os
 from pathlib import Path
+import shutil
 
 import torch
+
+READOUT_ARM = "A2"  # the explicit gene-specific context-slope head
 
 
 def iter_features(model, dataset, *, batch_size=32, precision="bf16"):
@@ -34,19 +38,23 @@ def iter_features(model, dataset, *, batch_size=32, precision="bf16"):
             yield features.to("cpu"), batch.residual.cpu(), batch.gene_mean.cpu()
 
 
-def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32):
+def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, inputs=None):
+    """Write train/val features of a joint checkpoint; ``inputs`` replaces
+    ``load_inputs`` (synthetic tests)."""
     from src.data.datasets import DependencyDataset
-    from src.data.prepared import load_inputs
     from src.data.readout_cache import write_feature_cache
-    from src.experiments.geneeffect import _restore_model, _revision
+    from src.experiments.geneeffect import _revision, restore_model
     from src.training.checkpoint import load_checkpoint
 
     checkpoint = Path(checkpoint)
     saved = load_checkpoint(checkpoint)
-    inputs = load_inputs(
-        saved["config"], preprocessing=saved["preprocessing"], include_test=False
-    )
-    model = _restore_model(saved, inputs).to(device)
+    if inputs is None:
+        from src.data.prepared import load_inputs
+
+        inputs = load_inputs(
+            saved["config"], preprocessing=saved["preprocessing"], include_test=False
+        )
+    model = restore_model(saved, inputs).to(device)
     datasets = {
         split: DependencyDataset(inputs, split, device=device)
         for split in ("train", "val")
@@ -91,6 +99,34 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32):
         cache.root / "source_state.pt",
     )
     return cache
+
+
+def run_readout(checkpoint, out_dir, *, device, inputs=None):
+    """Train the explicit gene-specific context-slope readout on a frozen backbone.
+
+    Extracts train/val features into ``out_dir/features``, fits the readout (head
+    seed 0), scores validation and writes ``out_dir/metrics.json``. Returns that
+    file's contents at once when it already exists.
+    """
+    from src.data.readout_cache import ReadoutCache
+    from src.training.readout import fit_readout
+
+    out_dir = Path(out_dir)
+    metrics_path = out_dir / "metrics.json"
+    if metrics_path.exists():
+        return json.loads(metrics_path.read_text())
+    features = out_dir / "features"
+    try:
+        cache = ReadoutCache(features)
+    except (FileNotFoundError, ValueError):  # absent or interrupted extraction
+        shutil.rmtree(features, ignore_errors=True)
+        cache = extract_cache(checkpoint, features, device=device, inputs=inputs)
+    arm_dir = out_dir / READOUT_ARM
+    shutil.rmtree(arm_dir, ignore_errors=True)  # an interrupted earlier fit
+    fit_readout(cache, READOUT_ARM, arm_dir, device=device, head_seed=0)
+    metrics = json.loads((arm_dir / "evaluation/best/val/metrics.json").read_text())
+    metrics_path.write_text(json.dumps(metrics, indent=2, allow_nan=False) + "\n")
+    return metrics
 
 
 def main(argv=None):

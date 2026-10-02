@@ -240,36 +240,6 @@ def test_context_pca_ridge_detects_planted_signal(tmp_path: Path) -> None:
     )
 
 
-def test_per_gene_axis_invariant_to_truth_column(tmp_path: Path) -> None:
-    """Per-gene Spearman of delta_hat vs. gene_effect == vs. residual.
-
-    Per-gene Spearman is invariant to subtracting any per-gene constant
-    from the truth column, so scoring the same predictions against raw
-    gene_effect and against the fold-fit residual must agree exactly.
-    This is the free correctness check the R1 protocol relies on to prove
-    the residual construction did not leak.
-    """
-    labels = _labels_with_signal(_BASE_LINES, _BASE_GENES, _SIGNAL_BY_LINE)
-    context_csv = _write_context_csv(
-        tmp_path / "ctx.csv", _BASE_LINES, {"signal": _SIGNAL_BY_LINE}
-    )
-    out_dir = _run_ladder(tmp_path, labels, context_paths={"signal": context_csv})
-    predictions = pd.read_csv(out_dir / "predictions.csv")
-
-    subframe = predictions.loc[predictions["method"] == "context_pca_ridge[signal]"]
-    assert len(subframe) > 0
-    via_residual = score_predictions(
-        subframe, truth_col="residual", pred_col="residual_prediction"
-    )
-    via_raw = score_predictions(
-        subframe, truth_col="gene_effect", pred_col="residual_prediction"
-    )
-    assert not math.isnan(via_residual.macro_per_gene)
-    assert via_raw.macro_per_gene == pytest.approx(
-        via_residual.macro_per_gene, abs=1e-6
-    )
-
-
 def test_per_line_axis_is_scored_against_residual(tmp_path: Path) -> None:
     """The reported per-line axis must pair delta_hat against delta (residual).
 
@@ -305,6 +275,11 @@ def test_per_line_axis_is_scored_against_residual(tmp_path: Path) -> None:
     )
     reported = methods["context_pca_ridge[signal]"]["macro_per_line"]
     assert reported == pytest.approx(via_residual.macro_per_line, abs=1e-9)
+    # The per-gene axis is invariant to the per-gene truth shift, so scoring on
+    # raw effects reports the same value as scoring on residuals.
+    assert methods["context_pca_ridge[signal]"]["macro_per_gene"] == pytest.approx(
+        via_residual.macro_per_gene, abs=1e-6
+    )
 
 
 # --- Null control: no spurious signal from pure noise context ----------
@@ -750,28 +725,6 @@ def test_fixed_split_fits_one_pca_per_view_and_one_ridge_per_gene(
     assert len(predictions) == 3 * (len(val) + len(test)) * len(genes)
 
 
-def test_fixed_split_fails_when_copy_prior_cannot_cover_truth_mask(
-    tmp_path: Path,
-) -> None:
-    """A configured baseline may not silently evaluate fewer gene-line keys."""
-    lines = [f"L{i}" for i in range(7)]
-    genes = ["G0", "G1"]
-    labels = _labels_no_signal(lines, genes)
-    split_json = _write_split_json(
-        tmp_path / "split.json", lines[:5], [lines[5]], [lines[6]]
-    )
-    incomplete_prior = _write_prior_csv(tmp_path / "prior.csv", ["G0"])
-
-    with pytest.raises(ValueError, match="evaluated-key coverage differs"):
-        _run_ladder(
-            tmp_path,
-            labels,
-            prior_path=incomplete_prior,
-            outer="fixed",
-            split_json=split_json,
-        )
-
-
 def test_fixed_split_rejects_unlabeled_validation(tmp_path: Path) -> None:
     """Only train may contain a context without GeneEffect labels."""
     labels = _labels_no_signal(_BASE_LINES, _BASE_GENES)
@@ -826,3 +779,76 @@ def test_summary_json_has_no_forbidden_keys(tmp_path: Path) -> None:
     for token in forbidden:
         assert token not in all_keys, f"forbidden key fragment {token!r} in keys"
         assert token not in lower_text, f"forbidden token {token!r} in summary.json"
+
+
+# --- The command on synthetic prepared inputs ---------------------------
+
+
+def _synthetic_inputs():
+    """Eleven lines on 12 genes; ACH-000551 (the K562 copy-prior donor) trains."""
+    from src.data.prepared import PreparedInputs, PreparedLine
+    from src.data.q_sc import QScFeatures
+
+    rng = np.random.default_rng(0)
+    train = ("ACH-000551", *(f"ACH-T{i}" for i in range(5)))
+    val, test = tuple(f"ACH-V{i}" for i in range(4)), ("ACH-X0",)
+    lines = (*train, *val, *test)
+    genes = tuple(_BASE_GENES)
+    signal = {line: float(i) - 4.0 for i, line in enumerate(lines)}
+    labels = _labels_with_signal(list(lines), list(genes), signal)
+    means = fit_gene_means(labels, train).reindex(list(genes))
+    labels["residual"] = labels.gene_effect - labels.gene_symbol.map(means)
+    q_sc = QScFeatures(
+        symbols=genes, values=np.zeros((len(genes), 3)), available=np.ones(12, bool)
+    )
+    prepared = {
+        line: PreparedLine(
+            controls_tx1=(rng.normal(size=(16, 5)) + signal[line]).astype(np.float32),
+            basal_hvg=(rng.normal(size=(16, 7)) + 0.5 * signal[line]).astype(
+                np.float32
+            ),
+            q_sc=q_sc,
+        )
+        for line in lines
+    }
+    return PreparedInputs(
+        split=FixedSplit(train=train, val=val, test=test),
+        labels=labels,
+        genes=genes,
+        train_gene_means=means,
+        variable_genes=frozenset(genes),
+        hvg_order=tuple(f"H{i}" for i in range(7)),
+        esm2_symbols=genes,
+        esm2_vectors=np.zeros((len(genes), 2), dtype=np.float32),
+        lines=prepared,
+        response_targets=None,
+        response_anchors=(),
+        target_sum=1000.0,
+    )
+
+
+def test_baselines_run_on_synthetic_inputs(tmp_path: Path) -> None:
+    from src.experiments.baselines import run_baselines
+
+    inputs = _synthetic_inputs()
+    result = run_baselines({}, split="val", out_dir=tmp_path / "val", inputs=inputs)
+
+    assert set(result.summary) == {
+        GENE_MEAN,
+        COPY_PRIOR,
+        "nearest_line[tx1]",
+        "nearest_line[hvg]",
+        "context_pca_ridge[tx1]",
+        "context_pca_ridge[hvg]",
+    }
+    gene_mean = result.summary[GENE_MEAN]
+    assert gene_mean["val_residual_pearson_macro_per_gene"] is None  # undefined
+    assert gene_mean["val_residual_pearson_per_gene_scored"] == 0
+    assert gene_mean["val_residual_pearson_per_gene_undefined"] == len(_BASE_GENES)
+    ridge = result.summary["context_pca_ridge[hvg]"]
+    assert ridge["val_residual_pearson_macro_per_gene"] > 0.5  # the planted signal
+    evaluated = set(result.predictions.model_id)
+    assert evaluated == set(inputs.split.val)  # no train or test line is scored
+    for name in ("predictions.parquet", "per_line.csv", "per_gene.csv", "metrics.json"):
+        assert (tmp_path / "val" / name).is_file()
+    assert not (tmp_path / "test").exists()

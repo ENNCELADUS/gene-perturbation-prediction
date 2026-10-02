@@ -5,17 +5,21 @@ import json
 from pathlib import Path
 
 
-def run_baselines(config, *, split, out_dir):
+def run_baselines(config, *, split, out_dir, inputs=None):
+    """Fit the control ladder on train lines; score ``split``. ``inputs`` replaces
+    ``load_inputs`` (synthetic tests)."""
     import numpy as np
     import pandas as pd
     from src.baselines.residual import R1Result, run_r1_ladder
     from src.eval.geneeffect import aggregate_geneeffect
-    from src.data.prepared import load_inputs
     from src.data.splits import FixedSplit
 
     if split not in {"val", "test"}:
         raise ValueError("baseline split must be val or test")
-    inputs = load_inputs(config, include_test=(split == "test"))
+    if inputs is None:
+        from src.data.prepared import load_inputs
+
+        inputs = load_inputs(config, include_test=(split == "test"))
     train = inputs.split.supervised_train
     requested = getattr(inputs.split, split)
     labels = inputs.labels.loc[inputs.labels.model_id.isin((*train, *requested))].copy()
@@ -55,8 +59,8 @@ def run_baselines(config, *, split, out_dir):
     result = run_r1_ladder(
         labels, views, donor.loc[list(inputs.genes)], seed=0, outer="fixed", split=fixed
     )
-    # Re-score the shared predictions on the current absolute-per-line and
-    # residual-per-gene axes, using the same fixed training means as the model.
+    # Re-score on the model's absolute-per-line and residual-per-gene axes, adding
+    # back the same fixed training means the model uses.
     predictions = result.predictions.copy()
     means = predictions.gene_symbol.map(inputs.train_gene_means)
     predictions["geneeffect_prediction"] = predictions.residual_prediction + means
