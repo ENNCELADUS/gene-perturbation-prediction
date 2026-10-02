@@ -79,7 +79,7 @@ copy-prior, nearest-line and context-PCA-ridge, with Tx1 and HVG context feature
 Pairwise error measures scale accuracy; per-gene correlation across held-out
 lines measures context variation. High correlation across genes within a line
 can already be supplied by a context-blind gene mean. These axes are defined
-explicitly in the [blueprint](01-blueprint.md#6-what-the-geneeffect-metrics-measure).
+explicitly in the [GeneEffect protocol §6](03-geneeffect-protocol.md#6-evaluation).
 
 ## 5. Single-gene dependency, SL labels and genetic interaction
 

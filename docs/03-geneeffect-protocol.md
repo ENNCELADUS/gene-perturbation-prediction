@@ -1,15 +1,18 @@
 # Experiment Protocol: Held-Out-Cell-Line GeneEffect Prediction
 
-Updated 2026-09-30. This is the protocol for the **implemented** GeneEffect track under
-[the research blueprint](01-blueprint.md) §3–§4 and §6. Implementation settings live in
-the [joint-training design](specs/2026-09-06-modular-joint-training-design.md) and
-operating commands in the [runbook](../hpc/README.md). One run has completed: seed 0,
-trained, tested and baselined ([result](results/joint_geneeffect_seed0/README.md)). The
-current best model is that backbone frozen under an explicit gene-specific context-slope
-head (§7, validation only). A numeric-space defect in response preparation was found and
-corrected. After the correction, the response pathway learns the cell lines it is adapted
-on but does not transfer to a held-out line
-(§8, [result](results/p1_response_pathway_diagnostics/README.md)). The
+Updated 2026-10-02. This is the protocol for the **implemented** GeneEffect track under
+[the research blueprint](01-blueprint.md); it holds the model, expression space, training,
+metrics and results. The design behind the current wiring is the
+[expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md),
+and operating commands are in the [runbook](../hpc/README.md). One run has completed: seed 0,
+trained, tested and baselined ([result](results/joint_geneeffect_seed0/README.md)). It
+predates the expression-space change of §3.4 (STATE was fed raw counts) and its numbers are
+not compared like for like with the current pipeline. The best validation model to date is
+that backbone frozen under an explicit gene-specific context-slope head (§7, validation
+only). Response-pathway diagnostics (§8, [result](results/p1_response_pathway_diagnostics/README.md))
+found that the response pathway learns the cell lines it is adapted on but does not
+transfer to a held-out line; §9 specifies the comparison that measures what STATE adds and
+the single command that runs the whole pipeline. The
 [SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here
 is SL evidence.
 
@@ -58,16 +61,18 @@ nine-context SL split never substitute for each other.
 Use each line's basal cells as raw UMI counts, never CPM: Tx1 does not read CPM the way
 it reads the counts underneath, and the shift survives pooling
 ([measured](results/exp13_stage0/README.md)). A fixed random sample of up to 128 basal
-cells per line is encoded once by the frozen Tx1-3B foundation model.
+cells per line is encoded once by the frozen Tx1-3B foundation model; the same cells,
+in the expression space of §3.4, are STATE's basal input.
 
 ### 3.2 Response anchors
 
 Four labeled training lines carry genetic-perturbation response data: K562, HCT116,
 Jurkat and HepG2, joined by DepMap ModelID. Use genetic-perturbation responses and
 non-targeting controls; a response condition need not carry a GeneEffect observation.
-A fixed 10% of each anchor's response conditions is withheld from optimization and
-scored at validation and test. This is condition holdout on training lines, not
-cell-line or unseen-gene holdout.
+Response supervision is an auxiliary task that fine-tunes STATE: it uses all conditions of
+all four anchors and withholds no condition. The 27 GeneEffect validation lines (§2) are the
+only validation split, so the response task has no held-out score inside training; its
+held-out behaviour is measured by the comparison of §9.
 
 ### 3.3 Dependency labels
 
@@ -76,48 +81,92 @@ variable-gene set and all normalization on the 170 labeled training lines only, 
 reuse them unchanged in every later evaluation. Test values never enter preparation or
 fitting. Missing labels stay missing.
 
+### 3.4 Expression space
+
+Every expression quantity except Tx1's input uses one space, the one STATE's released
+checkpoint was trained in (arc-state `preprocess_train`): normalise each cell's library to
+a target total $T$, take $\log(1+\cdot)$, then slice STATE's 2,000 highly variable genes
+(HVGs):
+
+$$
+x^{\text{log}}_{ig}=\log\!\Big(1+\frac{T\,x_{ig}}{L_i}\Big),\qquad L_i=\sum_{g'}x_{ig'}\ \text{over all genes of the cell's source matrix.}
+$$
+
+- $T$ is the median library size of the non-targeting cells in the Nadig 2025 Jurkat and
+  HepG2 response sources, the data STATE's Replogle checkpoint was trained on. It is
+  computed once at preparation, recorded in the prepared manifest as `expression_space`,
+  and never configured.
+- Library size is taken over **all** genes of each source matrix, not over the HVG panel.
+  This is a known approximation: gene universes differ slightly between the Nadig,
+  Replogle, X-Atlas-Orion and atlas matrices.
+- Tx1 keeps raw UMI counts (§3.1). The transform covers STATE's basal bags for all 226
+  lines, the response targets and anchor control bags, the basal statistics $q_{g,c}$
+  (mean and variance; detected fraction is space-invariant), and the HVG features of the
+  context baselines (§6).
+- Preparation refuses a source matrix that is already normalised, and loading refuses a
+  prepared root without `expression_space`, so a raw-count cache cannot reach STATE.
+
 ## 4. Model
 
 ![](../figures/geneeffect_architecture.svg)
 
-*Figure 1. (a) Frozen Tx1-3B encodes the sampled basal cells of line $c$ and frozen ESM-2
-encodes gene $g$. Both are computed once and cached. (b) A trainable adapter turns the
-gene embedding into a perturbation token. The trainable STATE transition model,
-initialised from a published Replogle checkpoint, predicts the line's post-perturbation
-expression. (c) Response descriptors summarise how predicted expression differs from
-basal expression. With the pooled context embedding, the gene embedding and basal
-statistics of $g$ in $c$, they feed a small residual head that predicts the GeneEffect
-residual. Arrows carry the tensors passed between modules, shaped for one gene–line
-condition (cells × features, no batch dimension); boxes state the width change inside
-each module. The adapter emits 2024 values because that is the width of STATE's
-perturbation vocabulary, which STATE projects, like the 2560-wide Tx1 embeddings, to its
-hidden size of 328. Notation: $H_c$, Tx1 cell embeddings of line $c$; $e_g$ and $p_g$, the gene
+*Figure 1. (a) Frozen Tx1-3B encodes the sampled basal cells of line $c$ from raw counts into
+cell embeddings that are pooled into a context embedding; frozen ESM-2 encodes gene $g$.
+Both are computed once and cached. The same cells in log-normalised HVG expression (§3.4) are
+STATE's basal input. (b) A trainable adapter turns the gene embedding into a perturbation
+token. The trainable STATE transition model, initialised from a published Replogle
+checkpoint, reads the log-normalised basal cells through its own released basal encoder
+and predicts the line's post-perturbation expression. (c) Response descriptors summarise
+how predicted expression differs from basal expression. With the pooled Tx1 context
+embedding, the gene embedding and basal statistics of $g$ in $c$, they feed a small
+residual head that predicts the GeneEffect residual. Tx1 feeds only this head; it does not
+enter STATE. Arrows carry the tensors passed between modules, shaped for one gene–line
+condition (cells × features, no batch dimension); boxes state the width change inside each
+module. The adapter emits 2024 values because that is the width of STATE's perturbation
+vocabulary; STATE projects it, like the 2000-wide expression input, to its hidden size of
+328. Notation: $H_c$, Tx1 cell embeddings of line $c$; $e_g$ and $p_g$, the gene
 embedding and the perturbation token; $X_c$ and $\hat Y_{g,c}$, basal and predicted
-post-perturbation expression; $\Delta$ and $s$, the projected expression shift and scalar
-response summaries; $q_{g,c}$, basal statistics of $g$ in $c$; $z_c$, the pooled context
-embedding; $\mu_{\text{train}}(g)$, the training gene mean; $\hat\delta$, the predicted
-residual. The training objective is given in §5.*
+post-perturbation log expression; $\Delta$ and $s$, the projected expression shift and
+scalar response summaries; $q_{g,c}$, basal statistics of $g$ in $c$; $z_c$, the pooled
+context embedding; $\mu_{\text{train}}(g)$, the training gene mean; $\hat\delta$, the
+predicted residual. The training objective is given in §5.*
 
-Predicted and basal expression are compared in one shared gene space. Cell distributions
-are supervised as distributions, without pairing individual control and perturbed
-cells. Covariates that are unavailable for a gene or line are masked, never zero-filled.
+Tx1 is frozen and supplies cached basal-cell embeddings. STATE and an ESM2 adapter predict
+perturbed expression, and the head uses five feature blocks: pooled expression change,
+response dispersion statistics, gene-specific basal single-cell statistics, gene embedding
+and basal context embedding. The gene mean $\mu_{\text{train}}$ is fixed preprocessing, not
+a learned head.
+
+Predicted and basal expression are compared in one shared gene space, the 2,000 log-space
+HVGs of §3.4; basal Tx1 embeddings and predicted expression have different widths and are
+never subtracted. Cell distributions are supervised as distributions, without pairing
+individual control and perturbed cells. Covariates that are unavailable for a gene or line
+are masked, never zero-filled.
 
 ## 5. Training and selection
 
-A single joint training loop runs. Every update minimizes the mean GeneEffect Huber
-loss on $\hat\delta$ against $y-\mu_{\text{train}}$. Every fourth update also adds a
-response batch balanced across the four anchors:
+A single joint training loop runs. Every update minimizes the mean GeneEffect Huber loss
+(delta 1) on $\hat\delta$ against $y-\mu_{\text{train}}$. Every fourth update (0, 4, 8, …)
+also adds a response batch balanced across the four anchors (K562, HepG2, Jurkat, HCT116),
+sampled from all of their conditions:
 
 $$
 L_t=L_{GE}+\mathbf{1}[t\bmod4=0]\,\lambda\,\big(L_{\text{mean-shift MSE}}+L_{\text{energy distance}}\big),\qquad \lambda=1.
 $$
 
-The pretrained STATE model is updated most cautiously and the new residual head fastest.
-Validation runs once per epoch over all 27 validation lines and the withheld response
-conditions. **Only validation GeneEffect Huber loss selects the checkpoint and controls
-early stopping**; total loss, response loss and correlations are reported diagnostics.
-Learning rates, batch sizes, patience and seeds are fixed in the
-[joint-training design](specs/2026-09-06-modular-joint-training-design.md).
+Per rank, batches hold 1024 dependency conditions and 64 response conditions. AdamW has
+three parameter groups: the new residual head at $10^{-4}$, the ESM2 adapter at $10^{-4}$
+and the pretrained STATE model at $10^{-5}$, the most cautious. Training, cell-collation
+and projection base seeds are all 0. Settings are fixed in
+`configs/geneeffect_joint.yaml` and described in the
+[joint-training design](specs/2026-09-06-modular-joint-training-design.md), with the
+rates and basal path of the [current design](specs/2026-10-02-expression-space-and-all-pipeline-design.md).
+
+Validation runs once per completed epoch over the 27 validation lines, the only validation
+split. **Only minimum validation GeneEffect Huber loss selects `best.pt` and controls early
+stopping** (patience 5, at most 50 epochs). Test restores the checkpoint's preprocessing
+without refitting or optimizer updates; the seed-0 test has been observed once and must not
+become a tuning or checkpoint-selection surface.
 
 ## 6. Evaluation
 
@@ -171,7 +220,53 @@ $\Omega$ contains all labeled pairs in the split, including genes outside the
 variable-gene set, each with equal weight. It excludes response loss and is the
 selection criterion of §5.
 
+### Further metrics and controls
+
+Let $\mathcal C_{eval}$ be the evaluated lines and $\mathcal G_{var}$ the train-defined
+variable-gene set (4,447 genes in the seed-0 run). Only finite observed labels are scored.
+
+| Metric | Calculation | Interpretation |
+| --- | --- | --- |
+| RMSE, MAE | Error over all observed gene–line pairs | Accuracy, including prediction scale |
+| Absolute Pearson/Spearman | For each line, correlate $\hat y$ and $y$ across genes; average lines equally | Cross-gene dependency ranking within a line |
+| Residual Spearman | As residual Pearson, with rank correlation | Context variation for the same gene |
+
+Residual and absolute correlations differ in the **axis of correlation**, not in
+centering: for a fixed gene, subtracting its fixed mean does not change Pearson. Targets
+are centred on the fold-fit training mean $\mu_g^{(-c)}$ and predictions on the
+fold-independent $\bar\mu_g$; centring a prediction on the fold-fit mean scores Spearman
+$+1$ by construction. Constant predictions have undefined correlation: gene-mean and
+copy-prior residual correlations stay missing, with scored and undefined counts reported,
+never zero-filled.
+
+Every model is compared on identical observed keys with the controls fitted on training
+lines only: gene mean, K562 copy prior, nearest line, and context-PCA ridge on both the Tx1
+embedding and the log-space HVG mean and variance features (§3.4). High absolute
+correlation alone cannot establish context learning, and response improvement alone cannot
+establish dependency improvement.
+
 ## 7. Results
+
+### 7.0 Seed-0 joint backbone
+
+The seed-0 joint run completed eight epochs and selected epoch 3 (stored index 2). Epochs
+1–2 used batch 256 per rank and epochs 3–8 continued at 1024, a mixed-batch continuation,
+not a batch ablation. Test and all six baseline variants completed on 2026-09-07 with
+identical 478,501 observed keys. STATE was fed raw counts in this run (§3.4), so the
+numbers below predate the expression-space change.
+
+| Test method | Huber ↓ | Absolute Pearson ↑ | Residual Pearson ↑ | Residual Spearman ↑ |
+| --- | ---: | ---: | ---: | ---: |
+| Joint best.pt | 0.01611905 | 0.91050 | 0.05414 | 0.05280 |
+| Gene-mean | 0.01613152 | 0.91047 | undefined | undefined |
+| Context-PCA-ridge, Tx1 | 0.01625512 | 0.90983 | 0.12161 | 0.11574 |
+| Context-PCA-ridge, HVG | 0.01635306 | 0.90920 | 0.07736 | 0.08324 |
+
+Joint Huber improves on gene-mean by only 0.0773%, while residual correlations trail the
+context baselines. Response validation loss fell 45.57% from epoch 1 to 8 without
+sustained GeneEffect validation improvement. This establishes a working training and
+evaluation path, not a context-modelling advantage
+([full result](results/joint_geneeffect_seed0/README.md)).
 
 The best model to date is the selected seed-0 joint backbone, frozen, read out by a
 residual head that adds an explicit gene-specific context slope to the §4 head:
@@ -238,9 +333,10 @@ Three closed, validation-only diagnostics on the selected backbone locate the
 bottleneck; designs are under [`specs/`](specs/) and evidence in the
 [result note](results/p1_response_pathway_diagnostics/README.md). The seed-0 backbone
 was trained on response data cached as raw counts, whereas STATE expects log-normalised
-expression, so its response block made no detectable use of perturbation identity. Preparation now
-works in STATE's own space (§3.4), and every diagnostic below uses the corrected
-preparation.
+expression, so its response block made no detectable use of perturbation identity. The diagnostics
+below ran in STATE's log-normalised space, with library size approximated by scaling
+HVG-panel row sums to a target (a proxy). The formal pipeline now normalises by the whole
+library (§3.4).
 
 ![](figures/geneeffect_interface_transfer.svg)
 
@@ -258,19 +354,57 @@ Tx1 context holds about eight components of usable signal, and the response mode
 not generalise beyond its three adaptation lines. Progress needs a response model that
 holds up on a held-out line or a richer context representation.
 
-## 9. Future work
+## 9. Response-model comparison and the `all` run
 
-The [readout objective and selection](specs/2026-09-10-readout-objective-and-selection-design.md)
-plan works on the frozen backbone and cached features, in order:
+The diagnostics of §8 never replaced STATE with a plain model on the same inputs, so the
+value of STATE's transformer, and of Tx1 as a representation for the response task, is
+unmeasured. The comparison below measures both, in the expression space of §3.4. The
+design and its decisions are in the
+[expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md).
 
-1. **Objective and selection.** Select on validation residual Pearson rather than Huber
-   (an in-place amendment to blueprint §4, by the owner), and try correlation-aligned
-   objectives, per-gene calibration and head-seed ensembles.
-2. **Context representation.** Basal-expression components, learned pooling of per-cell
-   Tx1 embeddings and gene-neighbourhood covariates, each against an expression-only
-   control.
-3. **Response model.** Re-enters the feature path only once it beats no-change on a
-   held-out anchor.
-4. **Test split.** Reopens once, only for a model that beats the context ridge by at
-   least +0.02 residual Pearson, with an interval excluding 0, at each of three training
-   seeds.
+### 9.1 Six-arm response-model comparison
+
+Leave-one-anchor-out over the four anchors: each fold trains on all conditions of three
+anchors and scores every condition of the fourth.
+
+| Arm | Basal input | Response model | Trained |
+| --- | --- | --- | --- |
+| No-change | none | basal bag copied | no |
+| Global mean effect | none | mean shift of the training anchors, gene-blind | no |
+| Released STATE checkpoint | log HVG | released STATE with its one-hot gene vocabulary, scored on genes in that vocabulary | no |
+| STATE as in the joint model | log HVG | STATE with the ESM2 adapter, joint learning rates | yes |
+| MLP on log HVG | log HVG cell | $x+f([x;a(e_g)])$, final layer zero-initialised | yes |
+| MLP on Tx1 | Tx1 cell embedding $h$ | $x+f([h;a(e_g)])$, final layer zero-initialised | yes |
+
+Trained arms use AdamW (new layers $10^{-4}$, STATE $10^{-5}$), 50 fixed epochs with no early
+stopping, balanced anchor sampling and seed 0. The response loss is the mean-shift MSE plus
+energy distance of §5. The reported statistic is the pooled held-out loss ratio to
+no-change at the final epoch (below 1 beats no-change), with one 95% interval from a
+1,000-resample gene bootstrap, pooled over all four folds and over the three folds without
+HCT116. Identity share (loss increase under ten fixed gene shuffles, as a fraction of
+loss), source-anchor training ratio and per-epoch held-out curves are reported for
+reading only. Two verdicts: STATE as in the joint model against MLP on log HVG (what the
+STATE transformer adds), and MLP on Tx1 against MLP on log HVG (what Tx1 adds as a
+representation). A tie at no-change is an expected, informative outcome. The comparison has
+four contexts, and STATE's own pretraining exposure (K562, HepG2, Jurkat) qualifies every
+result.
+
+### 9.2 The `all` run
+
+`hpc/run.sh all configs/geneeffect_joint.yaml` runs, skipping any step whose output
+exists so that a rerun with the same run id resumes: preparation (Tx1 cache reuse, one
+pass computing $T$, log-space bags, $q_{g,c}$ and response cache); a sanity line scoring the
+released STATE checkpoint on each anchor; the six-arm comparison; joint training on all
+visible GPUs; validation evaluation of `best.pt`, the controls of §6 and the explicit
+context-slope readout of §7 on the new backbone's cached features; and `summary.md`
+(target total $T$, sanity line, comparison table and verdicts, validation table for the
+joint model, readout and every control). `hpc/run.sh test CHECKPOINT` is the only route to
+the test split; `all` never calls it, and the test split stays closed until a model beats
+the context ridge by at least +0.02 residual Pearson, with an interval excluding 0, at each
+of three training seeds.
+
+Seed-0 numbers in §7 predate the expression-space change and are not compared like for
+like with the `all` run. The [readout objective and selection](specs/2026-09-10-readout-objective-and-selection-design.md)
+plan on the frozen backbone remains the follow-up for objective, selection and context
+representation; the response model re-enters the feature path only once it beats no-change
+on a held-out anchor.

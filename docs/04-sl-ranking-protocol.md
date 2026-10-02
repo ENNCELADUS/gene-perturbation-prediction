@@ -79,8 +79,8 @@ The four response anchors are those of the
 [GeneEffect protocol §3.2](03-geneeffect-protocol.md#32-response-anchors): K562, HCT116,
 Jurkat and HepG2, with genetic-perturbation responses and non-targeting controls.
 Inner-fold exclusion also removes an excluded context's response supervision.
-Response-condition holdout is not cell-line holdout and does not imply unseen-gene
-evaluation.
+Response supervision is auxiliary and uses every condition of each included anchor;
+there is no response-condition holdout.
 
 ### 3.3 Dependency labels
 
@@ -201,7 +201,7 @@ context claim is licensed at any absolute AUPR.
 
 ## 7. Metrics
 
-**GeneEffect.** The [metric definitions](01-blueprint.md#6-what-the-geneeffect-metrics-measure)
+**GeneEffect.** The [metric definitions](03-geneeffect-protocol.md#6-evaluation)
 distinguish cross-gene absolute correlation from per-gene cross-context residual
 correlation. The latter is scored on the separate 226-line benchmark under the
 [GeneEffect protocol §6](03-geneeffect-protocol.md#6-evaluation), which this document

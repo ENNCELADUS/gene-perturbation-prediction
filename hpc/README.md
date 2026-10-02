@@ -1,127 +1,63 @@
 # Joint GeneEffect execution
 
 Run from the repository root on H20. The launcher uses `.venv-tx1/bin/python`;
-set `PYTHON_BIN` to select another installed environment. Preparation runs once
-in one process; training uses Torch's visible GPU count and respects
-`CUDA_VISIBLE_DEVICES`. Synchronize code with Git before using the remote checkout.
+set `PYTHON_BIN` to select another installed environment. Training uses Torch's visible
+GPU count and respects `CUDA_VISIBLE_DEVICES`. Synchronize code with Git before using the
+remote checkout.
 
 ```bash
-hpc/run.sh prepare configs/geneeffect_joint.yaml
-hpc/run.sh train configs/geneeffect_joint.yaml --run-id joint_seed0
-hpc/run.sh train configs/geneeffect_joint.yaml --resume outputs/geneeffect_joint/joint_seed0/last.pt
-hpc/run.sh test outputs/geneeffect_joint/joint_seed0/best.pt
-uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/joint_seed0/best.pt --split val
-uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/joint_seed0/best.pt --split train
-uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml --split test --out-dir outputs/geneeffect_joint/baselines_seed0
+hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>]
+hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
+uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
 
-All configuration fields are explicit in `configs/geneeffect_joint.yaml`. Input
-paths are relative to the repository root. Preparation requires the raw source
-registry, GeneEffect CSV, supplied ESM2 table, STATE gene order and response
-sources. Missing Tx1 caches additionally require the configured local Tx1 model
-and a GPU. Existing Tx1 cache seed provenance is preserved. Newly encoded cells
-use collation seed 0. q_sc uses raw UMI counts; response sampling seed 42 and
-the fixed 10%/seed-13 holdout are preparation settings, distinct from runtime
-seeds 0/0/0. The response cache header records gene order established during
-raw target alignment; old headers without gene order require preparation.
+`all` runs the whole pipeline in one command and prints its run id first (default
+`all_<UTC timestamp>`). Steps, in order, each skipped when its output already exists:
 
-Training only opens prepared caches and never rebuilds raw inputs. A fresh run
-requires a new run ID. Resume uses the checkpoint's configuration and rejects
-any conflicting supplied configuration. `last.pt` supports epoch-boundary resume;
-`best.pt` strictly minimizes validation GeneEffect Huber loss. `metrics.jsonl`
-contains every update and one validation record per completed epoch.
+1. **Preparation** into `prepared_root` (`data/geneeffect_joint/v2`): reuse the Tx1 cache
+   (only missing lines are encoded), one pass over the basal sources computing library
+   sizes, the target total `T`, log-space HVG bags and `q_sc`, the log-space response
+   cache, and the manifest with `expression_space`. Skipped when the manifest exists.
+2. **STATE sanity line**: the released checkpoint scored on each anchor against no-change.
+   Printed and written; not a gate.
+3. **Response-model comparison**: six arms, leave-one-anchor-out, folds spread over the
+   visible GPUs ([protocol §9](../docs/03-geneeffect-protocol.md#9-response-model-comparison-and-the-all-run)).
+4. **Joint training** on all visible GPUs. Rerunning continues from `train/last.pt`.
+5. **Validation evaluation** of `train/best.pt`, the baseline ladder (gene mean, K562 copy
+   prior, nearest line, context-PCA ridge on Tx1 and on log HVG) and the readout head with
+   the explicit gene-specific context slope on the new backbone's cached features.
+6. **`summary.md`**: target total `T`, the sanity line, the comparison table and verdicts,
+   and the validation table for the joint model, readout head and every baseline.
 
-That epoch record includes fixed-model `train_eval_*` GeneEffect diagnostics over
-all labeled training rows, evaluated before validation without refitting or changing
-training RNG. It also records actual epoch updates, replay updates, dependency/response
-row exposures, dropped dependency rows and effective global batch sizes. The train
-diagnostic does not evaluate response targets or select checkpoints. Its extra full
-training-set inference cost should be included in runtime estimates.
+The run directory is `outputs/geneeffect_joint/<run_id>/{comparison/, train/, evaluation/val/,
+baselines/val/, readout/, summary.md}`. An interrupted run is resumed by rerunning the same
+command with the same `--run-id`; a fresh run needs a new run id. Resume uses the
+checkpoint's configuration and rejects any conflicting configuration, so a batch-size change
+needs a new run id.
 
-For a response-readout ablation, set both `model.head_blocks.use_delta_proj` and
-`model.head_blocks.use_s` to `false`; all five boolean flags are explicit in the
-default config and saved in checkpoint architecture. Disabled blocks and their masks
-do not enter normalization or the head. Response replay remains independently active.
-Keep prepared inputs, world size, batches and the complete schedule fixed between
-arms; early-stopped runs need comparison at matched updates and exposure counts.
+`all` never evaluates the test split. `hpc/run.sh test CHECKPOINT` is the only route to it
+and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without
+optimizer steps. Standalone evaluation exports
+`evaluation/<checkpoint-name>/<split>/predictions.parquet`, `metrics.json`, `per_line.csv`
+and `per_gene.csv`; per-gene details carry residual target and prediction SD, SD ratio, RMSE
+and MAE on the same finite rows and train-derived variable genes, and undefined quantities
+keep explicit counts and null scalar values. An export failure is retried by rerunning the
+same evaluation command. Nothing here is SL interaction evidence; held-out lines retain the
+documented Tx1 pretraining exposure boundary.
 
-The current dependency batch is 1024 per rank (2048 across two H20s); response
-replay remains 64 per rank every four updates. A requested batch change uses a
-new run directory and explicitly documented derived checkpoint with original
-hash/configuration, preserving optimizer/preprocessing/RNG state. Ordinary resume
-still rejects configuration conflicts; historical checkpoint metadata is retained.
+## Configuration and inputs
 
-`run.json` records separate training and evaluation states. Testing is explicit
-and does not control training completion. Checkpoint evaluation restores fitted
-preprocessing, weights and actual ESM2 vectors, then exports
-`evaluation/<checkpoint-name>/<split>/predictions.parquet`, `metrics.json`,
-`per_line.csv`, `per_gene.csv` and `response.csv`. An export failure can be retried
-with the same evaluation command without optimizer steps. Scalar test names have
-`test_` prefixes; `--split train` uses `train_eval_` and an empty response table.
-Per-gene details include residual target/prediction SD, SD ratio, RMSE and MAE on
-the same finite rows and train-derived variable genes. Undefined quantities retain
-explicit counts and null scalar values. These commands produce GeneEffect evidence,
-not SL interaction evidence; held-out lines retain the documented Tx1 pretraining
-exposure boundary.
-
-## Fixed-backbone head diagnostic (P1-A)
-
-The [approved design](../docs/specs/2026-09-07-p1a-fixed-backbone-head-diagnostics-design.md)
-trains four heads, head seed 0: shared MLP (`A0`), shared MLP + response block
-(`A1`), explicit context slope (`A2`) and explicit context slope + response block
-(`A3`). It uses FP32 AdamW at 1e-4, global batch 1024 with the tail
-retained, and minimum-validation-Huber early stopping (patience 5, cap 50 epochs).
-PCA8 scores have unit training population SD; the explicit branch uses lambda
-0.01 averaged over all training-covered genes, with no additional weight decay.
-The production joint-training configuration is not changed.
-
-```bash
-hpc/run.sh p1a extract --checkpoint outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/best.pt --out-dir outputs/p1a/features
-hpc/run.sh p1a train --cache outputs/p1a/features --out-dir outputs/p1a/heads
-hpc/run.sh p1a compare --cache outputs/p1a/features --runs outputs/p1a/heads --out-dir outputs/p1a/comparison
-```
-
-Extraction restores the supplied checkpoint and its fixed prepared inputs, records
-its SHA256, and computes train/validation features in its saved inference precision.
-It never runs the original head or refits target preprocessing. Raw pair features
-are streamed to memory-mapped arrays; z_c and e_g are stored once per identity.
-The new standardizer and PCA fit only on training data. A failed/incomplete cache
-cannot be opened; retry extraction into a new directory after diagnosing the error.
-
-This diagnostic uses **one process and one device per arm**. The default train
-command runs the four arms sequentially on cuda:0; use `--arms A0 A2` to select
-arms. To run independent arms on multiple GPUs, launch separate commands with
-disjoint arm lists and explicit `CUDA_VISIBLE_DEVICES` masks. Do not use Accelerate
-or torchrun around this entry point: the global batch stays 1024. CPU inspection
-and small fixtures use `--device cpu`. Head training opens only the extracted cache
-and runs no backbone forward or response replay. Extraction's `--batch-size` is
-independent of the fixed head-training batch.
-
-Each arm directory contains `run.json`, epoch `metrics.jsonl`, `best.pt`, `last.pt`,
-and selected train/val predictions, metrics and per-line/per-gene tables under
-`evaluation/best/`. The log distinguishes optimizer-time loss from fixed-model
-train and validation metrics. Resume and export retry are explicit:
-
-```bash
-hpc/run.sh p1a train --cache outputs/p1a/features --out-dir outputs/p1a/heads --arms A2 --resume outputs/p1a/heads/A2/last.pt
-hpc/run.sh p1a evaluate --cache outputs/p1a/features --checkpoint outputs/p1a/heads/A2/best.pt
-```
-
-Resume restores optimizer, fitted scaler and epoch/update counters, retaining the
-deterministic epoch-specific order. It requires the same arm, settings and cache.
-An evaluation/export failure preserves training completion and saved checkpoints.
-The optional old-scaler contrast is an explicit `train --arms A1 --old-scaler`
-invocation, written to `A1-old-scaler/`; it is not run by default.
-
-Comparison writes `selected.csv`, four paired per-gene tables, shared-update curve
-tables, and `paired.json` with 1,000 seed-0 cluster-bootstrap replicates. The default
-context map is the checked-in benchmark split CSV; patients stay together, with
-ModelID grouping for missing PatientID. Bootstrap recomputes per-gene correlations
-and reports common defined-gene support. Intervals are conditional on the selected
-checkpoints and single head seed; they do not estimate initialization variability.
-Use repeatable `--reference-val PATH` arguments with existing single-method joint-training-evaluator or
-PCA-ridge prediction exports to verify matching row keys and targets without rerunning
-them. Comparison uses a new output directory. No test-set evaluation is exposed.
+All configuration fields are explicit in `configs/geneeffect_joint.yaml`; unknown or
+missing keys are errors. Input paths are relative to the repository root. Preparation
+requires the raw source registry, GeneEffect CSV, supplied ESM2 table, STATE checkpoint and
+gene order, and the response and basal sources. Missing Tx1 caches additionally need the
+configured local Tx1 model and a GPU; newly encoded cells use collation seed 0, and the Tx1
+cache's existing on-disk format is read, never rewritten. Tx1 reads raw UMI counts; every
+other expression quantity is log-normalised by whole-library size to `T`, the median
+library size of the non-targeting cells in the Nadig Jurkat and HepG2 sources. Response
+sampling seed 42 is a preparation setting distinct from the runtime seeds 0/0/0. Training
+only opens prepared caches and never rebuilds raw inputs; a prepared root or checkpoint
+from before the expression-space change is refused for lacking `expression_space`.
 
 ## Tx1 GMM-ridge baseline
 
@@ -151,189 +87,3 @@ the response table is empty. A failed export can be retried with `evaluate`, res
 the saved transforms and readout without refitting. Use only trusted local joblib
 artifacts with their recorded sklearn version. This is a candidate baseline; no
 performance improvement is established by the implementation tests.
-
-## Response-adaptation diagnostic (P1-B)
-
-This diagnostic uses one process/GPU per arm, seed 0, 192 conditions/update (64 per source
-anchor), 257 updates/epoch, and internal response-loss early stopping (patience 5,
-maximum 50 epochs). It does not train a GeneEffect head. The full protocol is in
-[the response-adaptation design](../docs/specs/2026-09-07-p1b-response-adaptation-design.md).
-
-Run from the repository root in `.venv-tx1`. Set `P0_CHECKPOINT` to the exact seed-0
-joint checkpoint used by the fixed-backbone head diagnostic. Preparation opens existing caches, reads only raw
-gene metadata to recover the 1,957 measured coordinates, fits source-training
-baselines, and records immutable input/model identities. It does not score Jurkat.
-The output directory must be new; failures are recorded in `status.json`.
-
-```bash
-P1B_PREPARED=outputs/p1b/prepared_seed0
-P1B_RUNS=outputs/p1b/response_seed0
-hpc/run.sh p1b prepare --checkpoint "$P0_CHECKPOINT" --out-dir "$P1B_PREPARED"
-hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state B-native
-CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state B-init
-CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state B-joint
-CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b train-interface --prepared "$P1B_PREPARED" --runs "$P1B_RUNS"
-```
-
-The released STATE checkpoint on native inputs (`B-native`) currently writes an
-explicit unavailable record: original numerical preprocessing/batch semantics are
-not verified. It never substitutes Tx1 inputs or fabricated native predictions.
-Model reconstruction for the untrained composite (`B-init`) uses the original
-joint-training config, released checkpoint, and seed-0 construction order. No head
-scaler is required here.
-
-Read `stage2.json` after interface-only adaptation (`B-interface`) completes. Only
-if `eligible` is true (at least 1% internal validation loss reduction from the
-untrained composite), run both commands below. They may run concurrently on separate
-GPUs. Both start from the same best interface checkpoint with fresh optimizers; no
-Jurkat result determines this decision.
-
-```bash
-CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b train-stage2 --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --arm B-continue
-CUDA_VISIBLE_DEVICES=1 hpc/run.sh p1b train-stage2 --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --arm B-unfreeze
-```
-
-Add `--resume` to the same training command for epoch-boundary recovery. Completed
-runs are not overwritten without that flag. No automatic batch reduction occurs
-on OOM. The first full training batch exercises the fixed production allocation;
-finite gradients and clipping are checked on every update.
-
-After required training finishes, evaluate each completed state internally and
-externally. External evaluation fixes selected checkpoint hashes in
-`external_evaluation.json` and prevents further adaptation in that run directory.
-If stage two is ineligible, omit extended interface-only adaptation (`B-continue`) and
-interface adaptation with STATE unfrozen (`B-unfreeze`) from this list. The other
-states are the joint backbone as trained (`B-joint`) and the untrained composite
-(`B-init`).
-
-```bash
-for P1B_STATE in B-interface B-continue B-unfreeze; do
-  CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state "$P1B_STATE"
-done
-for P1B_STATE in B-init B-joint B-interface B-continue B-unfreeze; do
-  CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1b evaluate --prepared "$P1B_PREPARED" --runs "$P1B_RUNS" --state "$P1B_STATE" --external
-done
-hpc/run.sh p1b compare --prepared "$P1B_PREPARED" --runs "$P1B_RUNS"
-```
-
-Training and export have separate status records. Re-run the exact `evaluate`
-command after an export failure; it does not optimize or rewrite weights. Results
-include condition metrics, mean effects (no full predicted cell matrices), measured
-coordinate and identity provenance, true-gene-coordinate removal, ten fixed
-held-out identity derangements, baseline comparisons, cross-context metrics,
-1,000 paired gene-bootstrap intervals, actual exposure counts, and stage-specific
-curves/common-update contrasts. Identical panels reuse inference; training exports
-use correct identities only. Only held-out diagnostics receive identity shuffles.
-
-Jurkat reporting distinguishes 2,373 training-seen perturbations, four unseen,
-2,006 native-and-seen, and 2,009 native-vocabulary-covered conditions. Jurkat is
-held out from interface adaptation, not verified absent from ST/Tx1 pretraining.
-
-## Interface-isolation diagnostic (P1-C)
-
-This diagnostic repeats the response-adaptation contrast across four held-out anchors
-(`jurkat k562 hepg2 hct116`) and five input/readout variants: adapted Tx1 basal
-encoder (`V0`), expression-residual interface (`V1`), native basal path with ESM-2
-perturbation tokens (`V2-null`), native basal path + trainable Tx1 context term (`V2`),
-and native basal path + Tx1 term + expression residual (`V3`),
-so an adaptation gain is attributed to the interface rather than to one held-out
-context. The pre-registered keep predicate and the precondition for the combined variant are in
-[the interface-isolation design](../docs/specs/2026-09-08-p1c-interface-isolation-design.md).
-`hpc/p1c_pipeline.sh` runs one complete round; every stage is also available as an
-ordinary `hpc/run.sh p1c` command.
-
-```bash
-RUN=outputs/p1c/p1c_seed0
-mkdir -p "$RUN"
-RUN="$RUN" \
-P0_CHECKPOINT=outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/best.pt \
-P1B_PREPARED=outputs/p1b/p1b_seed0_20260907T164813Z/prepared \
-P1B_RUNS=outputs/p1b/p1b_seed0_20260907T164813Z/runs \
-P1A_FEATURES=outputs/p1a/p1a_seed0_20260907T144045Z/features \
-P1A_REFERENCE_P0=outputs/geneeffect_joint/joint_seed0_20260906T174818Z_b1024/evaluation/best/val/predictions.parquet \
-P1A_REFERENCE_PCA=outputs/p1a/p1a_seed0_20260907T144045Z/references/tx1_pca_val.parquet \
-nohup hpc/p1c_pipeline.sh > "$RUN/pipeline.out" 2>&1 &
-```
-
-Those are the paths that exist on the H20 host today.
-
-All seven variables are required and their paths must exist; `P1B_RUNS` is the
-response-adaptation *runs* directory containing `evaluation/`. `GPUS` (default `"0 1"`) lists the
-visible devices, `PIPELINE_SKIP_TIER4=1` omits the head-seed stability check of the fixed-backbone heads, `PYTHON_BIN`
-selects the environment, and `PIPELINE_POLL_SECONDS` (default 30) sets the queue
-poll interval. `PIPELINE_TRANSFORM` (default `raw`) with `PIPELINE_TARGET_SUM`
-prepares every fold in log space (`log1p_norm`, HVG-panel row sums scaled to the
-target) so the whole round trains and scores there; a log-space round needs its
-own `RUN` and is never pooled with a count-space one. `PIPELINE_SKIP_TIER0=1`
-omits the existing-export analysis of the response-adaptation exports, and `PIPELINE_NATIVE_BATCH_INDICES`
-(default `"0 1 2 3 4"`) sets the batch indices of the untrained released-checkpoint reference arm
-(`N-native`), which
-runs on every fold. The script refuses to start when `$RUN/phase.txt` already exists.
-
-The expression-space round (log space, spec amendment 2026-09-09) is launched as:
-
-```bash
-RUN=outputs/p1c/p1c_log3500_seed0_<stamp> PIPELINE_TRANSFORM=log1p_norm PIPELINE_TARGET_SUM=3500 \
-PIPELINE_SKIP_TIER0=1 PIPELINE_SKIP_TIER4=1 PIPELINE_NATIVE_BATCH_INDICES=0 GPUS="0 1" \
-<the seven required variables> nohup bash hpc/p1c_pipeline.sh > $RUN/pipeline.log 2>&1 &
-```
-
-Waves run in order: fold preparation (four folds sequentially on CPU); the existing-export
-analysis plus native Jurkat evaluation plus two head-seed stability heads; one wave per label in
-`V0 V1 V2-null V2`, each training and evaluating the four folds; the first comparison pass (`compare-1`);
-the two learning-rate arms of the adapted Tx1 basal encoder (`V0-lr1e-6`, `V0-lr1e-5`,
-Jurkat) together with the four folds of the combined variant when `$RUN/comparison/kept.json` reports `V3_eligible` true
-(otherwise `$RUN/v3_skipped.txt` records the skip); and the final comparison pass (`compare-final`).
-
-Every GPU job goes through a queue that holds at most one job per listed GPU and
-starts the next queued job on a device as soon as its predecessor exits, so the
-wave order does not assume a GPU count. Every *started* queued job writes
-`$RUN/<job>.log`, `$RUN/<job>.pid` and `$RUN/<job>.exit` — including a job killed
-before it could record its own status; a job still waiting in the queue when the
-round stops writes no files at all. Foreground steps (`prepare-<fold>`,
-`compare-1`, `compare-final`) write only a `.log`; `tier0` is a background job and
-writes all three. Phase names are written to `$RUN/phase.txt` as the round
-progresses, ending in `completed`.
-
-A nonzero exit fails its wave only after the other queued jobs in that wave
-finish. From the variant waves on, **a failed wave does not abort the round**:
-the remaining waves still run, `compare-final` is always run (it can still fail if
-a completed arm's export is missing, so watch `$RUN/*.exit` mid-round), and the round
-then exits 1 with `failed` in `phase.txt` and the status in `$RUN/exit_code` —
-so one dead arm costs that arm, not the other fifteen. The earlier
-tier-0/native/heads wave still exits immediately, because every later wave
-depends on its fold bundles. Recover a failed arm by hand with the resume
-commands below and rerun `compare`.
-
-On two GPUs, one arm (train plus both evaluations) takes about 2.2 h, so a
-four-fold wave is about 4.4 h; a full round with the combined variant eligible is roughly 24–25 h
-(four variant waves, the learning-rate pair and the combined-variant wave, plus the
-existing-export analysis, the native evaluation and the head-seed stability heads).
-
-SIGTERM (`kill` on the launched pipeline) or Ctrl-C terminates every running
-queued job **and that job's child Python worker** — `hpc/run.sh` execs Python, so
-without this the worker would be reparented to PID 1 and keep holding its GPU —
-then writes `interrupted` to `phase.txt` and `143` to `exit_code` and exits 143.
-While a foreground step is running the signal is acted on only once that step
-returns; no queued job is running at those points. An unreadable `kept.json`
-still runs the learning-rate arms and the final comparison, records the reason in
-`$RUN/v3_skipped.txt` with the reader's stderr in `$RUN/v3_read.log`, and fails
-the round at the end.
-
-Fold bundles live in `$RUN/prepared/<fold>`, the existing-export analysis in `$RUN/tier0`, head-seed stability heads
-in `$RUN/heads/seed<n>`, comparisons in `$RUN/comparison`, and every trained arm in
-`$RUN/runs/<label>/<fold>` (the native evaluation in `$RUN/runs/N-native/jurkat`);
-`compare` reads exactly that layout. To recover one arm, resume it and re-export
-both evaluations by hand — the pipeline is not restartable in place:
-
-```bash
-CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1c train --prepared "$RUN/prepared/k562" \
-  --runs "$RUN/runs/V1/k562" --variant V1 --lr 1e-4 --resume
-CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1c evaluate --prepared "$RUN/prepared/k562" --runs "$RUN/runs/V1/k562"
-CUDA_VISIBLE_DEVICES=0 hpc/run.sh p1c evaluate --prepared "$RUN/prepared/k562" --runs "$RUN/runs/V1/k562" --external
-hpc/run.sh p1c compare --root "$RUN" --out-dir "$RUN/comparison"
-```
-
-External evaluation fixes the selected checkpoint and blocks further training in
-that run directory. Comparison re-derives its verdict from existing exports only
-and can be rerun into the same directory.
