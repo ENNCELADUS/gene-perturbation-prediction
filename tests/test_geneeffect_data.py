@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
-from scipy import sparse
 
 from src.data.geneeffect import (
     Exp13Split,
@@ -20,12 +18,6 @@ from src.data.geneeffect import (
     load_geneeffect_long,
     load_source_registry,
     parse_gene_symbol,
-)
-from src.data.q_sc import (
-    QScFeatures,
-    build_q_sc_shards,
-    compute_q_sc,
-    load_q_sc_line,
 )
 
 
@@ -196,143 +188,3 @@ def test_source_registry_requires_exact_membership_and_raw_umi(tmp_path: Path) -
     pd.DataFrame(rows).to_csv(path, index=False)
     with pytest.raises(ValueError, match="non-raw-UMI"):
         load_source_registry(path, split)
-
-
-def test_q_sc_raw_counts_and_explicit_unavailable_mask() -> None:
-    adata = SimpleNamespace(
-        X=sparse.csr_matrix([[0, 1], [2, 1], [4, 1]]),
-        var=pd.DataFrame({"gene_symbol": ["A", "B"]}),
-    )
-    result = compute_q_sc(adata, ["B", "MISSING", "A"])
-    assert isinstance(result, QScFeatures)
-    np.testing.assert_allclose(result.values[0], [1.0, 1.0, 0.0])
-    np.testing.assert_allclose(result.values[2], [2.0, 2 / 3, 8 / 3])
-    assert result.available.tolist() == [True, False, True]
-    assert np.isnan(result.values[1]).all()
-
-    adata.X = np.array([[0.5, 1.0]])
-    with pytest.raises(ValueError, match="raw UMI"):
-        compute_q_sc(adata, ["A"])
-
-
-def test_q_sc_auto_detects_gene_name_normalizes_and_aggregates_duplicates() -> None:
-    adata = SimpleNamespace(
-        X=sparse.csr_matrix([[1, 2, 4], [3, 4, 5]]),
-        var=pd.DataFrame({"gene_name": ["a", "A", "B"]}),
-    )
-
-    result = compute_q_sc(adata, ["A", "B"])
-
-    np.testing.assert_allclose(result.values, [[5.0, 1.0, 4.0], [4.5, 1.0, 0.25]])
-
-
-def test_q_sc_auto_rejects_ambiguous_or_missing_symbol_columns() -> None:
-    adata = SimpleNamespace(
-        X=sparse.csr_matrix([[1, 2]]),
-        var=pd.DataFrame({"gene_name": ["A", "B"]}),
-    )
-    adata.var["gene_symbol"] = adata.var["gene_name"]
-    with pytest.raises(ValueError, match="exactly one recognized gene-symbol"):
-        compute_q_sc(adata, ["A", "B"])
-    result = compute_q_sc(adata, ["A", "B"], gene_symbol_column="gene_name")
-    np.testing.assert_allclose(result.values[:, 0], [1.0, 2.0])
-
-    adata.var = pd.DataFrame({"ensembl_id": ["ENSG1", "ENSG2"]})
-    with pytest.raises(ValueError, match=r"found \[\]"):
-        compute_q_sc(adata, ["A", "B"])
-
-
-def test_q_sc_rejects_noncanonical_requests_and_zero_source_overlap() -> None:
-    adata = SimpleNamespace(
-        X=sparse.csr_matrix([[1, 2]]),
-        var=pd.DataFrame({"gene_symbols": [" A ", "B"]}),
-    )
-    result = compute_q_sc(adata, ["A", "B"])
-    np.testing.assert_allclose(result.values[:, 0], [1.0, 2.0])
-
-    with pytest.raises(ValueError, match="canonical uppercase"):
-        compute_q_sc(adata, ["a"])
-    with pytest.raises(ValueError, match="zero overlap"):
-        compute_q_sc(adata, ["C"])
-
-
-def test_q_sc_shards_resume_and_rebuild_malformed(tmp_path: Path) -> None:
-    source_a = tmp_path / "A.h5ad"
-    source_b = tmp_path / "B.h5ad"
-    source_a.write_bytes(b"source-a")
-    source_b.write_bytes(b"source-b")
-    registry = pd.DataFrame(
-        {
-            "source_path": [str(source_a), str(source_b)],
-            "source_kind": ["h5ad", "h5ad"],
-            "matrix_semantics": ["raw_umi_counts", "raw_umi_counts"],
-        },
-        index=pd.Index(["A", "B"], name="model_id"),
-    )
-    adata = SimpleNamespace(
-        X=np.array([[0, 1], [2, 3]], dtype=int),
-        var=pd.DataFrame({"gene_symbol": ["G1", "G2"]}),
-    )
-    calls = []
-
-    def reader(path: Path) -> SimpleNamespace:
-        calls.append(path)
-        adata.obs = pd.DataFrame({"model_id": [path.stem, path.stem]})
-        return adata
-
-    output = tmp_path / "q_sc"
-    manifest = build_q_sc_shards(registry, output, ["G2", "MISSING"], reader=reader)
-    assert manifest["line_count"] == 2
-    assert len(calls) == 2
-    with np.load(output / "A.npz", allow_pickle=False) as shard:
-        assert shard["model_id"].item() == "A"
-        assert shard["gene_symbols"].tolist() == ["G2", "MISSING"]
-        assert shard["values"].shape == (2, 3)
-        assert shard["available"].tolist() == [True, False]
-
-    calls.clear()
-    build_q_sc_shards(registry, output, ["G2", "MISSING"], reader=reader, resume=True)
-    assert calls == []
-
-    with np.load(output / "A.npz", allow_pickle=False) as shard:
-        payload = {key: shard[key] for key in shard.files}
-    payload["values"] = payload["values"].copy()
-    payload["values"][0, 0] = np.nan
-    np.savez(output / "A.npz", **payload)
-    with pytest.raises(ValueError, match="invalid available values"):
-        load_q_sc_line(output, "A", ["G2", "MISSING"])
-
-    calls.clear()
-    build_q_sc_shards(registry, output, ["G2", "MISSING"], reader=reader, resume=True)
-    assert calls == [source_a]
-
-
-def test_q_sc_builder_refuses_overwrite_and_reader_rejects_malformed(
-    tmp_path: Path,
-) -> None:
-    source = tmp_path / "A.h5ad"
-    source.write_bytes(b"source")
-    registry = pd.DataFrame(
-        {
-            "source_path": [str(source)],
-            "source_kind": ["h5ad"],
-            "matrix_semantics": ["raw_umi_counts"],
-        },
-        index=pd.Index(["A"], name="model_id"),
-    )
-    output = tmp_path / "q_sc"
-    output.mkdir()
-    (output / "stale").write_text("stale")
-    with pytest.raises(FileExistsError, match="nonempty"):
-        build_q_sc_shards(registry, output, ["G1"], reader=lambda _: None)
-
-    np.savez(
-        output / "A.npz",
-        model_id=np.asarray("A"),
-        gene_symbols=np.asarray(["G1"]),
-        values=np.asarray([1.0]),
-        available=np.asarray([True]),
-        source_sha256=np.asarray("bad"),
-    )
-    with pytest.raises(ValueError, match="shape"):
-        load_q_sc_line(output, "A", ["G1"])

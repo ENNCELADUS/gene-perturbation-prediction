@@ -18,14 +18,13 @@ the repository root. Hatch packages the complete `src` package; there is no
 Data and model modules do not import training, evaluation or experiment modules.
 `data.splits.FixedSplit` is independent of baseline evaluation. Model construction
 uses `model.initialization` for fresh upstream weights or saved checkpoint architecture.
-`data.batches` and `data.gene_bags` own the shared records. Pure response functions
+`data.batches` and `data.prepared` own the shared records. Pure response functions
 live in `model.response`, so feature construction does not depend on a trainer.
 
 Retained preparation commands keep their basenames:
 
 ```bash
-uv run python -m src.data.prepare.build_exp13_tx1_cache --help
-uv run python -m src.data.prepare.build_tx1_basal_embeddings --help
+uv run python -m src.experiments.prepare configs/geneeffect_joint.yaml
 uv run python -m src.data.prepare.precompute_esm2_embeddings --help
 uv run python -m src.experiments.baselines --help
 ```

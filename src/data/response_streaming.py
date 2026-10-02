@@ -1,45 +1,9 @@
-"""Memory-bounded assembly of a per-gene cell reservoir into a CSR matrix.
+"""Memory-bounded assembly of per-gene X-Atlas-Orion reservoirs into CSR.
 
-Wave 2 Phase C, fix-round-3, Fix 1 -- see
-``.superpowers/sdd/phase-c/progress.md``'s 2026-07-26 entry for the incident
-this module fixes: both Phase C training arms were killed after climbing to
-~621-625 GB RSS each, stuck at "X-Atlas-Orion response cell filtering" for
-HCT116 (18,293 perturbed genes; a 44 GB source expanded ~14x in RAM).
-
-**What did NOT cause the incident and is not touched here:** the per-gene
-cell cap (``max_cells_per_gene``) already works exactly as implemented --
-each gene's reservoir really is bounded to at most that many cells. The
-incident was the multiplication the cap's own docstring never spelled out:
-18,293 genes x 256 cells/gene = 4.68 million cells, ALL of them necessarily
-resident at once (a gene's reservoir cannot be closed out early -- its cells
-are scattered across shards in an order this module does not control) --
-matching the observed RSS almost exactly at ~130 KB/cell. That per-gene x
-gene-count product is bounded only by an explicit total-cell budget (see
-``total_cells``/``seed`` below), which this module exposes as an optional
-knob but does not default to any value -- choosing that value is a reserved
-human decision (fix-round-3 brief), pending the peak-RSS measurement
-:mod:`src.data.response` now logs per line (Fix 3).
-
-**What this module DOES fix:** the old pipeline (formerly
-``tx1_basal._stream_xatlas_response_cells`` + ``_assemble_token_matrix``)
-flattened the finalized reservoir into a fresh list, then built
-``rows``/``columns``/``values`` as three plain Python lists of BOXED
-ints/floats -- one Python object per nonzero matrix entry -- before finally
-calling ``scipy.sparse.csr_matrix`` once. That pays for the reservoir's real
-data a SECOND time, at several times a raw numpy array's per-element
-overhead (see this module's own peak-memory test). :func:`
-drain_gene_reservoirs_to_matrix` instead computes the CSR component arrays
-with vectorized numpy operations, and DRAINS the caller-owned reservoir as
-it consumes it -- nulling each processed slot so its ``(genes, values)``
-arrays are garbage-collected immediately rather than staying referenced
-until the whole function returns -- so peak memory during assembly is
-proportional to the finalized reservoir/output matrix, not to the assembly
-method's own intermediate representation.
-
-Deliberately generic over the caller's per-cell wrapper type: any 4-tuple-
-or 4-field-NamedTuple-like object that unpacks to ``(genes, values, barcode,
-sample)`` works (``tx1_basal._XatlasCell`` unpacks this way already), so
-this module has no import-time dependency on ``tx1_basal``.
+A genome-scale line keeps millions of reservoir cells resident at once, so the
+CSR arrays are built with vectorized numpy and every reservoir slot is
+released as soon as it is consumed. Cells unpack to
+``(genes, values, barcode, sample)``.
 """
 
 from __future__ import annotations
@@ -57,23 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 def resolve_total_budget_keep_mask(
     n_cells: int, total_cells: int | None, seed: int
 ) -> np.ndarray:
-    """Boolean keep-mask over ``n_cells`` gene-sorted, slot-ordered rows.
-
-    ``total_cells is None`` (the default everywhere in this repo today) or
-    ``total_cells >= n_cells`` keeps every row -- i.e. this is a no-op unless
-    a caller opts in, so existing behavior is reproduced exactly (C1) when
-    the reserved total-cell-budget knob is left unset.
-
-    Args:
-        n_cells: Total cells across every gene's reservoir, before any
-            total-budget trim.
-        total_cells: Optional cap on the combined cell count. ``None``
-            leaves every cell.
-        seed: Seed for the deterministic downsample when trimming.
-
-    Returns:
-        A length-``n_cells`` boolean array, ``True`` for kept rows.
-    """
+    """Seeded keep-mask over ``n_cells`` rows; ``None`` keeps every row."""
     if total_cells is None or total_cells >= n_cells:
         return np.ones(n_cells, dtype=bool)
     rng = np.random.default_rng(seed)
@@ -91,34 +39,12 @@ def drain_gene_reservoirs_to_matrix(
     total_cells: int | None = None,
     seed: int = 0,
 ) -> tuple[csr_matrix, pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
-    """Build a CSR matrix from a finalized per-gene cell reservoir, draining
-    it as it is consumed.
+    """Build CSR from ``{gene: [cell, ...]}``, setting each slot to ``None``.
 
-    Args:
-        reservoirs: ``{gene: [cell, ...]}``, where each ``cell`` unpacks to
-            ``(genes, values, barcode, sample)`` -- ``genes``/``values`` are
-            parallel 1-D numpy arrays for one cell, already filtered to
-            positive-value entries by the caller. **Mutated in place**:
-            every slot is set to ``None`` once consumed, regardless of
-            ``total_cells`` (an unselected cell's memory is freed exactly
-            like a selected one's).
-        metadata: Token-indexed metadata (``token_id`` -> Ensembl id/name
-            columns), e.g. the X-Atlas-Orion ``gene_metadata.parquet``.
-        metadata_var_columns: The ``metadata`` columns to carry into the
-            returned ``var``; the first must be the Ensembl id column,
-            which becomes ``var.index``.
-        total_cells: Optional total-cell budget across every gene combined
-            (fix-round-3, Fix 1's reserved knob -- see the module
-            docstring). ``None`` keeps every reservoir-selected cell, i.e.
-            today's behavior.
-        seed: Seed for the total-budget downsample; unused when
-            ``total_cells`` is ``None``.
-
-    Returns:
-        ``(matrix, var, perturbation_genes, barcodes, samples)``, every
-        array ordered exactly as ``sorted(reservoirs)`` then each gene's own
-        slot order ``0..len(bucket)-1`` -- the same final cell order the
-        pre-fix implementation always produced.
+    Rows follow ``sorted(reservoirs)`` then slot order; ``total_cells``
+    optionally downsamples them. Tokens absent from ``metadata`` are dropped
+    with a warning. Returns ``(matrix, var, perturbation_genes, barcodes,
+    samples)``.
     """
     genes_order = sorted(reservoirs)
     n_cells_before_budget = sum(len(reservoirs[gene]) for gene in genes_order)

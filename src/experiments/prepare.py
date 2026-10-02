@@ -1,262 +1,187 @@
-"""Prepare fixed joint-training inputs once, before starting training workers."""
+"""Prepare fixed joint-training inputs once, in STATE's log expression space.
+
+Tx1 reads raw UMI. Every other expression quantity is ``log1p(x * T / L_cell)``
+then STATE's HVG slice, with ``L_cell`` the cell's UMI total over every gene
+of its source matrix and ``T`` the median ``L_cell`` of the non-targeting
+cells in the Nadig 2025 Jurkat and HepG2 sources (data STATE's Replogle
+checkpoint was trained on). Skipped when ``prepared_inputs.json`` exists.
+"""
 
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping, Sequence
-import hashlib
 import json
 import logging
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 _LOGGER = logging.getLogger(__name__)
 
-
-def split_heldout_genes(
-    genes_by_line: Mapping[str, Sequence[str]], *, fraction: float, seed: int
-) -> dict[str, frozenset[str]]:
-    """Preserve historical per-line SHA256 ranking, before ESM2 exclusions."""
-    if not 0 < fraction < 1:
-        raise ValueError(f"fraction must be in (0, 1), got {fraction}")
-    result = {}
-    for model_id, genes in genes_by_line.items():
-        unique = sorted(set(map(str, genes)))
-        n_hold = int(len(unique) * fraction)
-        if n_hold < 1:
-            raise ValueError(
-                f"{model_id}: {len(unique)} genes cannot yield a held-out set "
-                f"at fraction {fraction}"
-            )
-        ranked = sorted(
-            unique,
-            key=lambda gene: hashlib.sha256(
-                f"{seed}|{model_id}|{gene}".encode()
-            ).hexdigest(),
-        )
-        result[model_id] = frozenset(ranked[:n_hold])
-    return result
+#: Jurkat and HepG2: the response sources whose controls define ``T``.
+TARGET_SUM_SOURCES: Final[tuple[str, str]] = ("ACH-000995", "ACH-000739")
+#: K562 supplies the copy-prior baseline, so scored genes need its label.
+COPY_PRIOR_DONOR: Final[str] = "ACH-000551"
 
 
-def _prepare_tx1(config, registry):
-    from src.data.tx1_cache import (
-        embed_registry_lines,
-        load_hvg_gene_order,
-        open_line_cache,
-    )
+def _encode_missing_tx1(config: Mapping[str, Any], registry) -> list[str]:
+    from src.data.tx1_cache import encode_lines, load_hvg_gene_order, missing_lines
 
     paths, settings = config["paths"], config["preparation"]
     cache = Path(paths["tx1_cache"])
-    hvg_order = load_hvg_gene_order(Path(paths["state_model_dir"]))
-    missing = []
-    for model_id in registry.index.astype(str):
-        try:
-            open_line_cache(cache, model_id, expected_hvg_order=hvg_order)
-        except (FileNotFoundError, ValueError, OSError):
-            missing.append(model_id)
-    if missing:
-        from src.model.tx1 import _build_tx1_encoder
+    missing = missing_lines(cache, registry.index)
+    if not missing:
+        return []
+    from src.model.tx1 import _build_tx1_encoder
 
-        encoder, _ = _build_tx1_encoder(
-            Path(paths["tx1_model_dir"]),
-            settings["tx1_batch_size"],
-            settings["tx1_max_length"],
-        )
-        embed_registry_lines(
-            registry,
-            cache,
-            encoder=encoder,
-            hvg_state_model_dir=Path(paths["state_model_dir"]),
-            var_ensembl_col=settings["var_ensembl_col"],
-            hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
-            max_cells_per_line=config["features"]["cells_per_context"],
-            seed=0,
-            only_lines=missing,
-        )
-        for model_id in missing:
-            # This sidecar describes ONLY newly encoded cells, never old caches.
-            (cache / model_id / "encoder_settings.json").write_text(
-                json.dumps(
-                    {
-                        "collator_seed": 0,
-                        "batch_size": settings["tx1_batch_size"],
-                        "max_length": settings["tx1_max_length"],
-                        "model_dir": paths["tx1_model_dir"],
-                    },
-                    indent=2,
-                )
-                + "\n"
-            )
-    return missing
+    _LOGGER.info("Encoding %d lines missing from the Tx1 cache", len(missing))
+    encoder, _ = _build_tx1_encoder(
+        Path(paths["tx1_model_dir"]),
+        settings["tx1_batch_size"],
+        settings["tx1_max_length"],
+    )
+    return encode_lines(
+        registry.loc[missing],
+        cache,
+        encoder=encoder,
+        hvg_order=tuple(load_hvg_gene_order(Path(paths["state_model_dir"]))),
+        var_ensembl_col=settings["var_ensembl_col"],
+        hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
+        max_cells_per_line=config["features"]["cells_per_context"],
+        seed=0,
+    )
 
 
 def prepare_inputs(config: Mapping[str, Any]) -> Path:
-    """Build aligned panel, basal caches and response targets; write metadata last."""
+    """Write the prepared root; return its manifest path (written last)."""
+    from src.experiments.config import validate_config
+
+    validate_config(config)
+    root = Path(config["prepared_root"])
+    from src.data.prepared import PREPARED_METADATA_FILENAME
+
+    manifest_path = root / PREPARED_METADATA_FILENAME
+    if manifest_path.is_file():
+        _LOGGER.info("Prepared inputs already exist at %s", root)
+        return manifest_path
+
     import numpy as np
-    import pandas as pd
-    from src.data.geneeffect import (
-        load_exp13_split,
-        load_geneeffect_long,
-        load_source_registry,
-    )
-    from src.data.prepared import load_inputs
-    from src.data.q_sc import build_q_sc_shards
-    from src.data.response import assemble_train_response_gene_bags
-    from src.data.response_cache import (
-        normalize_response_symbols,
-        write_response_targets_cache,
-    )
-    from src.data.tx1_cache import load_hvg_gene_order
+
+    from src.data.basal import symbol_column
+    from src.data.expression import median_library_size
+    from src.data.geneeffect import load_geneeffect_long, load_source_registry
     from src.data.prepare.build_exp13_esm2_universe import (
         build_coverage_universe,
         restrict_coverage_universe_to_copy_prior,
         write_embedding_union,
     )
-    from src.experiments.config import validate_config
+    from src.data.prepared import EXPRESSION_TRANSFORM, prepare_line
+    from src.data.prepared import write_prepared_line
+    from src.data.response import (
+        build_response_targets,
+        control_library_sizes,
+        load_response_sources,
+    )
+    from src.data.response_cache import write_response_targets
+    from src.data.splits import assert_fit_eligible, load_geneeffect_226_split
+    from src.data.tx1_cache import (
+        load_hvg_gene_order,
+        load_line_cache,
+        read_registry_source,
+    )
 
-    validate_config(config)
-    if int(os.environ.get("WORLD_SIZE", "1")) != 1:
-        raise ValueError("prepare must run in one process before training launch")
     paths, settings = config["paths"], config["preparation"]
-    root = Path(config["prepared_root"])
-    split = load_exp13_split(Path(paths["split"]))
+    cells_per_context = config["features"]["cells_per_context"]
+    split = load_geneeffect_226_split(Path(paths["split"]))
     labels = load_geneeffect_long(Path(paths["gene_effect"]), split)
-    if "ACH-000551" not in split.supervised_train:
-        raise ValueError("K562 copy-prior donor must be a labeled training line")
+    assert_fit_eligible(COPY_PRIOR_DONOR, split)
     donor = labels.loc[
-        (labels.model_id == "ACH-000551") & np.isfinite(labels.gene_effect),
+        (labels.model_id == COPY_PRIOR_DONOR) & np.isfinite(labels.gene_effect),
         "gene_symbol",
     ]
     candidates = restrict_coverage_universe_to_copy_prior(
         build_coverage_universe(labels, split), tuple(donor)
     )
     registry = load_source_registry(Path(paths["source_registry"]), split)
-    _LOGGER.info("Preparing basal caches for %d cell lines", len(registry))
-    encoded = _prepare_tx1(config, registry)
-    _LOGGER.info("Basal caches ready; %d lines newly encoded", len(encoded))
-    hvg_order = tuple(
-        str(gene) for gene in load_hvg_gene_order(Path(paths["state_model_dir"]))
+    hvg_order = tuple(load_hvg_gene_order(Path(paths["state_model_dir"])))
+    encoded = _encode_missing_tx1(config, registry)
+    _LOGGER.info("Tx1 cache ready; %d lines newly encoded", len(encoded))
+
+    sources = load_response_sources(Path(paths["perturbseq_sources"]))
+    for anchor in sources:
+        assert_fit_eligible(anchor, split)
+    target_sum = median_library_size(
+        *(
+            control_library_sizes(sources[model_id], model_id)
+            for model_id in TARGET_SUM_SOURCES
+        )
     )
-    _LOGGER.info("Assembling observed response targets for the four training anchors")
-    bags = assemble_train_response_gene_bags(
-        cell_line_manifest_path=Path(paths["cell_line_manifest"]),
-        tx1_cache_dir=Path(paths["tx1_cache"]),
-        hvg_state_model_dir=Path(paths["state_model_dir"]),
-        perturbseq_sources_path=Path(paths["perturbseq_sources"]),
+    _LOGGER.info("Expression target sum T = %.1f", target_sum)
+
+    keys, bags = build_response_targets(
+        sources,
+        hvg_order,
+        target_sum,
         max_cells_per_gene=settings["response_max_cells_per_gene"],
         total_cells_per_line=settings["response_total_cells_per_line"],
-        control_cells_per_line=config["features"]["cells_per_context"],
         seed=settings["response_sampling_seed"],
-    )
-    # target_feature_names is produced by raw alignment plus per-line order checks.
-    # Never upgrade a dimension-only historical header with an assumed order.
-    if (
-        bags.target_feature_names is None
-        or tuple(bags.target_feature_names) != hvg_order
-    ):
-        raise ValueError("assembled response target gene order differs from STATE")
-    metadata = bags.metadata.reset_index(drop=True)
-    genes_by_line = {
-        str(key): tuple(frame.perturbation_gene)
-        for key, frame in metadata.groupby("model_id", sort=False)
-    }
-    anchors = tuple(genes_by_line)
-    if len(anchors) != 4 or not set(anchors).issubset(split.supervised_train):
-        raise ValueError("response sources must contain four labeled training anchors")
-    holdout = split_heldout_genes(
-        genes_by_line,
-        fraction=settings["response_holdout_fraction"],
-        seed=settings["response_holdout_seed"],
-    )
-    # Keep the historical split on source identifiers, then canonicalize lookup
-    # keys. Rehashing uppercased names would silently change the fixed holdout.
-    heldout_rows = [
-        str(row.perturbation_gene) in holdout[str(row.model_id)]
-        for row in metadata.itertuples()
-    ]
-    raw_metadata = metadata
-    metadata = normalize_response_symbols(raw_metadata)
-    _LOGGER.info(
-        "Aligning %d response conditions with the supplied ESM2 table", len(metadata)
     )
     union = write_embedding_union(
         scored_symbols=candidates.symbols,
-        response_symbols=tuple(sorted(set(metadata.perturbation_gene))),
+        response_symbols=tuple(sorted({gene for _, gene in keys})),
         esm2_path=Path(paths["esm2_embeddings"]),
         output_dir=root,
     )
-    panel = tuple(union["common_gene_panel"])
-    panel_path = Path(paths["common_gene_panel"])
-    panel_path.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({"gene_symbol": panel}).to_csv(panel_path, index=False)
     resolved = set(union["esm2_order"])
-    keep = [i for i, gene in enumerate(metadata.perturbation_gene) if gene in resolved]
-    conditions = [
-        {"model_id": str(row.model_id), "gene": str(row.perturbation_gene)}
-        for row in metadata.itertuples()
-    ]
-    selected = [conditions[i] for i in keep]
-    surviving_holdout = [conditions[i] for i in keep if heldout_rows[i]]
-    for model_id in anchors:
-        held = {row["gene"] for row in surviving_holdout if row["model_id"] == model_id}
-        train = {row["gene"] for row in selected if row["model_id"] == model_id} - held
-        if not held or not train:
-            raise ValueError(
-                f"{model_id}: ESM2 filtering emptied response train or fixed holdout"
-            )
-    _LOGGER.info("Writing %d ESM2-covered response conditions", len(keep))
-    write_response_targets_cache(
-        Path(paths["response_cache"]),
-        genes=[bags.genes[i] for i in keep],
-        target_bags=[bags.effective_target_bags[i] for i in keep],
-        metadata=raw_metadata.iloc[keep].reset_index(drop=True),
-        hvg_order=tuple(bags.target_feature_names),
+    keep = [index for index, (_, gene) in enumerate(keys) if gene in resolved]
+    if not keep:
+        raise ValueError("no response condition resolves in the ESM2 table")
+    _LOGGER.info("Writing %d of %d response conditions", len(keep), len(keys))
+    write_response_targets(
+        root / "response", [keys[i] for i in keep], [bags[i] for i in keep]
     )
-    _LOGGER.info("Preparing basal expression summaries for %d genes", len(panel))
-    build_q_sc_shards(registry, Path(paths["q_sc_cache"]), panel, resume=True)
-    payload = {
-        "schema_version": "geneeffect-joint-prepared-v1",
-        "split": {
-            name: list(getattr(split, name))
-            for name in ("train", "val", "test", "unlabeled_train")
+    del bags
+
+    genes = tuple(union["common_gene_panel"])
+    for model_id, row in registry.iterrows():
+        source = read_registry_source(
+            Path(row["source_path"]),
+            model_id=str(model_id),
+            var_ensembl_col=settings["var_ensembl_col"],
+        )
+        embeddings, _, obs = load_line_cache(Path(paths["tx1_cache"]), str(model_id))
+        column = symbol_column(source.var, settings["hvg_gene_symbol_col"])
+        line = prepare_line(
+            source.X,
+            source.obs_names.astype(str),
+            source.var[column].astype(str).tolist(),
+            embeddings,
+            obs.index.astype(str).tolist(),
+            model_id=str(model_id),
+            hvg_order=hvg_order,
+            genes=genes,
+            target_sum=target_sum,
+            cells_per_context=cells_per_context,
+        )
+        write_prepared_line(root / "lines" / f"{model_id}.npz", line)
+    _LOGGER.info("Prepared %d basal lines", len(registry))
+
+    manifest = {
+        "expression_space": {
+            "transform": EXPRESSION_TRANSFORM,
+            "target_sum": target_sum,
+            "library_size": "all_genes",
+            "target_sum_sources": list(TARGET_SUM_SOURCES),
         },
-        "common_gene_panel": list(panel),
+        "common_gene_panel": list(genes),
         "hvg_order": list(hvg_order),
-        "esm2_order": union["esm2_order"],
-        "response_anchors": list(anchors),
-        "response_conditions": selected,
-        "response_holdout": surviving_holdout,
-        "excluded_response_conditions": [
-            dict(row, reason="unresolved_esm2")
-            for row in conditions
-            if row["gene"] not in resolved
-        ],
-        "excluded_dependency_genes": [
-            *candidates.dropped,
-            *[
-                {"gene_symbol": gene, "reasons": ["unresolved_esm2"]}
-                for gene in candidates.symbols
-                if gene not in resolved
-            ],
-        ],
-        "preparation": dict(settings),
-        "inputs": dict(paths),
-        "newly_encoded_tx1_lines": encoded,
-        "layouts": {
-            "tx1": "per ModelID embeddings.npy/hvg.npy/obs.parquet",
-            "q_sc": "per ModelID .npz",
-            "response": "response_targets arrays + metadata.parquet + ordered manifest",
-        },
+        "response_anchors": sorted(sources),
     }
-    destination = root / "prepared_inputs.json"
-    temporary = root / "prepared_inputs.json.tmp"
-    temporary.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
-    os.replace(temporary, destination)
-    # Exercise the actual readers, including test-cache shape/order boundaries.
-    _LOGGER.info("Opening the prepared training, validation and test inputs")
-    load_inputs(config, include_test=True)
-    return destination
+    temporary = manifest_path.with_name(manifest_path.name + ".tmp")
+    temporary.write_text(json.dumps(manifest, indent=2, allow_nan=False) + "\n")
+    os.replace(temporary, manifest_path)
+    return manifest_path
 
 
 def main(argv=None):
