@@ -160,7 +160,9 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     del bags
 
     genes = tuple(union["common_gene_panel"])
-    for model_id, row in registry.iterrows():
+    for done, (model_id, row) in enumerate(registry.iterrows()):
+        if done % 25 == 0:
+            _LOGGER.info("Preparing basal line %d of %d", done + 1, len(registry))
         source = read_registry_source(
             Path(row["source_path"]),
             model_id=str(model_id),

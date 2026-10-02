@@ -16,6 +16,7 @@ import argparse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -464,6 +465,10 @@ def main(argv=None) -> int:
     parser.add_argument("config", type=Path)
     parser.add_argument("--run-id")
     args = parser.parse_args(argv)
+    # Preparation reports its progress (T, anchors, lines) through logging.
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(name)s: %(message)s", force=True
+    )
     run_all(args.config, run_id=args.run_id)
     return 0
 
