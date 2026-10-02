@@ -70,22 +70,24 @@ nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --for
 ps aux | grep '[s]rc\.'
 ```
 
-`hpc/run.sh all` counts the visible GPUs (respecting `CUDA_VISIBLE_DEVICES`). Do not
-hard-code a GPU count. Resume needs the same world size, and a batch-size change needs a new run id (`hpc/README.md`). Choose
+`hpc/run.sh all` uses every visible GPU (respecting `CUDA_VISIBLE_DEVICES`) unless
+`--gpus` lists some. Do not hard-code a GPU count. Resume needs the same world size, and a batch-size change needs a new run id (`hpc/README.md`). Choose
 batch sizes from measured throughput; never shrink one silently after an OOM.
 
 ## Commands
 
 ```bash
-hpc/run.sh all  configs/geneeffect_joint.yaml [--run-id <id>]   # prepare → comparison ∥ train → val eval, baselines, readout → summary.md
+hpc/run.sh all  configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]   # prepare → untrained comparison → train → trained comparison → val eval, baselines, readout → summary.md
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt     # explicit; `all` never runs test
 ```
 
-`all` puts the response-model comparison on the last visible GPU and joint training on
-the rest (`accelerate`, N−1 processes); rerunning with the same run id resumes and skips
-finished steps, and refuses a changed config. Resume keeps the same GPU count. Subprocess
-logs are under `outputs/geneeffect_joint/<id>/logs/`. If the `all` process is killed,
-check for orphaned `src.train`/`response_comparison` processes before relaunching.
+Every GPU step of `all` uses all chosen GPUs: the untrained comparison arms on the first,
+joint training on all of them (`accelerate`, one process per GPU), then the trained
+comparison jobs one per GPU at a time. Rerunning with the same run id resumes and skips
+finished steps, and refuses a changed config; unfinished training resumes only on the GPU
+count it started on. Subprocess logs are under `outputs/geneeffect_joint/<id>/logs/`.
+SIGINT or SIGTERM to `all` terminates its subprocesses; after a SIGKILL, check for orphaned
+`src.train`/`response_comparison` processes before relaunching.
 
 Preparation is the only step that reads raw data; training opens caches and never
 rebuilds them. Testing is explicit, restores fitted preprocessing from the checkpoint and

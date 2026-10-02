@@ -36,13 +36,14 @@ uv run python -m pytest tests/test_all.py -q -k <name>    # one file / one test
 uv run ruff check .                                       # lint (E,W,F only; import order not enforced)
 uv run ruff format <files you touched>                    # never `ruff format .` — rewrites unrelated files
 
-hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>]  # prepare, response-model comparison, train, val eval, baselines, readout, summary.md
+hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]  # prepare, comparison, train, val eval, baselines, readout, summary.md
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # the only route to the test split; `all` never runs it
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
-`all` skips every step whose output exists and auto-sizes to visible GPUs, so rerunning with the same run id resumes (training
-from `train/last.pt`). Direct worker invocation is debug-only; runner details are in `hpc/README.md`.
+`all` skips every step whose output exists, so rerunning with the same run id resumes (training from `train/last.pt`). Every
+GPU step uses every visible GPU, or those `--gpus` lists: untrained comparison arms on the first, training on all, then one
+trained comparison job per GPU at a time. Direct worker invocation is debug-only; runner details are in `hpc/README.md`.
 
 - The local Mac has no GPU, no Tx1 weights and no raw data. Preparation, training and evaluation run on the H20 container
   (`.codex/skills/hpc-execution`), without a scheduler. Tests use synthetic fixtures and skip silently when gitignored data or
@@ -67,7 +68,7 @@ from `train/last.pt`). Direct worker invocation is debug-only; runner details ar
 
 ## Architecture
 
-One route, `hpc/run.sh all`: **prepare → response-model comparison → train → evaluate (+ baselines, readout) → summary**,
+One route, `hpc/run.sh all`: **prepare → untrained comparison → train → trained comparison → evaluate (+ baselines, readout) → summary**,
 driven by one strict YAML config. `data` and `model` never import `training`, `eval` or `experiments`.
 
 - **Expression space.** Everything except Tx1's input is log space: whole-library `normalize_total` to a recorded target `T`,

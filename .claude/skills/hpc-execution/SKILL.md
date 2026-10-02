@@ -35,9 +35,11 @@ the host's uncommitted changes. The host holds the only copies of caches, checkp
 `hpc/run.sh` uses `.venv-tx1/bin/python` (or `PYTHON_BIN`), not `.venv`; `uv` is `/2023533015/.uv/bin/uv`. Before
 consequential work confirm the interpreter imports torch, accelerate and `state`, and query hardware, never assume it:
 `nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader` and `ps aux | grep '[s]rc\.'`.
-`all` runs the response-model comparison on the last visible GPU and training on the other N−1 (`accelerate`). Size batches
-from measured throughput; never shrink one silently after an OOM. After killing `all`, check for orphaned `src.train` /
-`response_comparison` processes before relaunching.
+Every GPU step of `all` uses every visible GPU, or the ids given by `--gpus 0,1,2,3`: untrained comparison arms on the
+first, training on all (`accelerate`, one process each), then one trained comparison job per GPU at a time. Unfinished
+training resumes only on its starting GPU count. Size batches from measured throughput; never shrink one silently after an
+OOM. Stop `all` with SIGINT or SIGTERM (it terminates its subprocess groups); after a SIGKILL, check for orphaned
+`src.train` / `response_comparison` processes before relaunching.
 
 ## Launch and report
 

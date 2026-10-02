@@ -1,18 +1,25 @@
 """One automatic run: preparation through validation evaluation, then summary.md.
 
-``python -m src.experiments.all CONFIG [--run-id ID]`` writes
+``python -m src.experiments.all CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
 ``<output_root>/<run id>/{comparison/, train/, evaluation/val/, baselines/val/,
 readout/, logs/, summary.md}``. Every step is skipped when its output exists, so
 rerunning with the same run id resumes. The test split is never evaluated here.
 
-GPU use: with two or more visible GPUs the response-model comparison runs on the
-last one while joint training runs on the others, concurrently; with one GPU they
-run one after the other; without CUDA both run in this process on the CPU.
+Steps, in order: preparation; the untrained response-comparison arms (one
+subprocess on the first chosen GPU); joint training (``accelerate launch`` on
+every chosen GPU); the trained response-comparison jobs (one subprocess per
+chosen GPU at a time, the next starting as soon as a GPU frees) and their
+summary; validation evaluation, baselines and the readout head (on the first
+chosen GPU); summary.md. The chosen GPUs are every visible one unless ``--gpus``
+names some. Without CUDA every step runs in this process on the CPU. SIGINT or
+SIGTERM terminates the running subprocesses before the run exits.
 """
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Sequence
+import contextlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
@@ -20,6 +27,7 @@ import logging
 import math
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -57,6 +65,7 @@ VALIDATION_COLUMNS = {
     "SD ratio (per gene)": "val_residual_sd_ratio_macro_per_gene",
 }
 POLL_SECONDS = 10.0
+STOP_SECONDS = 30.0
 
 
 def _name(model_id: str) -> str:
@@ -77,7 +86,7 @@ def _read_json(path: Path) -> Any:
 
 
 # ----------------------------------------------------------------------------
-# Response-model comparison and joint training, scheduled over visible GPUs
+# GPU subprocesses: one pool of GPU slots per step
 # ----------------------------------------------------------------------------
 
 
@@ -87,11 +96,10 @@ class Job:
 
     step: str
     argv: tuple[str, ...]
-    gpus: tuple[str, ...]
 
 
 def visible_gpus() -> tuple[str, ...]:
-    """CUDA device ids as the child processes must name them."""
+    """CUDA device ids as the child processes must name them (empty without CUDA)."""
     import torch
 
     count = torch.cuda.device_count()
@@ -100,129 +108,230 @@ def visible_gpus() -> tuple[str, ...]:
     return tuple(i.strip() for i in ids[:count])
 
 
-def gpu_schedule(
-    config_path: Path, config: dict, run: Path, gpus: tuple[str, ...]
-) -> list[list[Job]]:
-    """Batches of jobs; the jobs of one batch run concurrently.
+def choose_gpus(
+    requested: Sequence[str] | None, visible: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Every visible GPU, or the requested ones after checking they are visible.
 
-    Two or more GPUs: the comparison on the last GPU beside training on the
-    rest. One GPU: comparison, then training. Finished steps are left out.
-    Training keeps the same GPUs when the comparison is already finished,
-    because resuming from ``last.pt`` requires the same number of processes.
+    GPU ids are the ones ``CUDA_VISIBLE_DEVICES`` lists, or 0..n-1 without it.
     """
-    comparison = Job(
-        "comparison",
-        (
-            sys.executable,
-            "-m",
-            "src.experiments.response_comparison",
-            "--config",
-            str(config_path),
-            "--out-dir",
-            str(run / "comparison"),
-            "--device",
-            "cuda",
-        ),
-        gpus[-1:],
+    if requested is None:
+        return visible
+    chosen = tuple(requested)
+    if not visible:
+        raise ValueError("--gpus was given but no CUDA GPU is visible")
+    if not chosen or len(set(chosen)) != len(chosen) or set(chosen) - set(visible):
+        raise ValueError(
+            f"--gpus {','.join(chosen)}: choose distinct GPUs among the visible "
+            f"ones {','.join(visible)}"
+        )
+    return chosen
+
+
+def start_process(argv: Sequence[str], gpus: Sequence[str], log: Path):
+    """Start ``argv`` on ``gpus`` in its own process group, output to ``log``."""
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES=",".join(gpus), PYTHONUNBUFFERED="1")
+    with log.open("a") as handle:
+        return subprocess.Popen(
+            argv,
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
+        )
+
+
+def stop_processes(processes: Sequence[subprocess.Popen]) -> None:
+    """Terminate each process group, wait, then kill whatever is left of it."""
+    for process in processes:
+        if process.poll() is None:
+            with contextlib.suppress(OSError):
+                os.killpg(process.pid, signal.SIGTERM)
+    deadline = time.monotonic() + STOP_SECONDS
+    for process in processes:
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=max(0.0, deadline - time.monotonic()))
+        # Workers of a launcher can outlive it; the group id still names them.
+        with contextlib.suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+
+
+def run_pool(
+    jobs: Sequence[Job],
+    slots: Sequence[tuple[str, ...]],
+    logs: Path,
+    start: Callable = start_process,
+) -> None:
+    """Run ``jobs`` with at most one job per slot (a tuple of GPU ids) at a time.
+
+    The next job starts as soon as a slot frees. After a failure no new job
+    starts; the running ones finish, then this raises naming every failed step,
+    its exit code and log. On any exception (SIGINT, SIGTERM) the running
+    process groups are terminated.
+    """
+    logs.mkdir(parents=True, exist_ok=True)
+    waiting, free = list(jobs), list(slots)
+    running = []  # (job, slot, process, log)
+    failures = []
+    try:
+        while running or (waiting and not failures):
+            while waiting and free and not failures:
+                job, slot = waiting.pop(0), free.pop(0)
+                log = logs / f"{job.step}.log"
+                print(
+                    f"{job.step}: started on GPU {','.join(slot)}, log {log}",
+                    flush=True,
+                )
+                running.append((job, slot, start(job.argv, slot, log), log))
+            time.sleep(POLL_SECONDS)
+            for entry in list(running):
+                job, slot, process, log = entry
+                code = process.poll()
+                if code is None:
+                    continue
+                running.remove(entry)
+                free.append(slot)
+                if code:
+                    failures.append(
+                        f"{job.step} failed with exit code {code}; see {log}"
+                    )
+                    print(failures[-1], flush=True)
+                else:
+                    print(f"{job.step}: finished", flush=True)
+    finally:
+        stop_processes([process for _, _, process, _ in running])
+    if failures:
+        raise RuntimeError("; ".join(failures))
+
+
+@contextlib.contextmanager
+def sigterm_raises():
+    """Turn SIGTERM into SystemExit, as SIGINT is KeyboardInterrupt, so that
+    :func:`run_pool` terminates its children on either."""
+
+    def handler(signum, frame):
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def comparison_argv(config_path: Path, run: Path, *mode: str) -> tuple[str, ...]:
+    return (
+        sys.executable,
+        "-m",
+        "src.experiments.response_comparison",
+        "--config",
+        str(config_path),
+        "--out-dir",
+        str(run / "comparison"),
+        "--device",
+        "cuda",
+        *mode,
     )
-    train_gpus = gpus[:-1] if len(gpus) > 1 else gpus
+
+
+def training_argv(
+    config_path: Path, config: dict, run: Path, processes: int
+) -> tuple[str, ...]:
     launch = [
         sys.executable,
         "-m",
         "accelerate.commands.launch",
         "--num_processes",
-        str(len(train_gpus)),
+        str(processes),
         "--num_machines",
         "1",
         "--mixed_precision",
         str(config["precision"]),
     ]
-    if len(train_gpus) > 1:
+    if processes > 1:
         launch.append("--multi_gpu")
-    train = Job(
-        "train",
-        (
-            *launch,
-            "--module",
-            "src.train",
-            "--config",
-            str(config_path),
-            "--run-dir",
-            str(run / "train"),
-        ),
-        train_gpus,
+    return (
+        *launch,
+        "--module",
+        "src.train",
+        "--config",
+        str(config_path),
+        "--run-dir",
+        str(run / "train"),
     )
-    pending = [
-        job
-        for job, done in (
-            (comparison, run / "comparison" / "verdicts.json"),
-            (train, run / "train" / "done.json"),
+
+
+def _check_resume_processes(train: Path, processes: int) -> None:
+    """Resuming ``last.pt`` needs the process count it was started with."""
+    if not (train / "last.pt").is_file():
+        return
+    started = _read_json(train / "run.json")["world_size"]
+    if started != processes:
+        raise ValueError(
+            f"training in {train} was started on {started} GPU(s) and resumes "
+            f"only on {started} (the effective batch depends on it); pass --gpus "
+            f"with {started} GPU(s), not {processes}, or use a new --run-id"
         )
-        if not done.is_file()
-    ]
-    return [pending] if len(gpus) > 1 else [[job] for job in pending]
 
 
-def run_jobs(jobs: list[Job], run: Path, on_poll=lambda: None) -> None:
-    """Start the jobs, wait for all of them, raise naming every failed step."""
-    logs = run / "logs"
-    logs.mkdir(parents=True, exist_ok=True)
-    running = []
-    for job in jobs:
-        log = logs / f"{job.step}.log"
-        handle = log.open("a")
-        env = dict(os.environ, CUDA_VISIBLE_DEVICES=",".join(job.gpus))
-        env["PYTHONUNBUFFERED"] = "1"
-        print(f"{job.step}: started on GPU {','.join(job.gpus)}, log {log}", flush=True)
-        process = subprocess.Popen(
-            job.argv, stdout=handle, stderr=subprocess.STDOUT, env=env
-        )
-        running.append((job, process, handle, log))
-    failures = []
-    while running:
-        on_poll()
-        for entry in list(running):
-            job, process, handle, log = entry
-            code = process.poll()
-            if code is None:
-                continue
-            handle.close()
-            running.remove(entry)
-            if code:
-                failures.append(f"{job.step} failed with exit code {code}; see {log}")
-                print(failures[-1], flush=True)
-            else:
-                print(f"{job.step}: finished", flush=True)
-        if running:
-            time.sleep(POLL_SECONDS)
-    on_poll()
-    if failures:
-        raise RuntimeError("; ".join(failures))
+# ----------------------------------------------------------------------------
+# Response-model comparison and joint training
+# ----------------------------------------------------------------------------
 
 
-def _comparison_and_training(config_path: Path, config: dict, run: Path) -> None:
-    comparison, train = run / "comparison", run / "train"
-    announced = []
+def comparison_and_training(
+    config_path: Path,
+    config: dict,
+    run: Path,
+    gpus: tuple[str, ...],
+    start: Callable = start_process,
+) -> None:
+    """Untrained comparison arms, joint training, trained comparison jobs, summary.
 
-    def announce_sanity() -> None:
-        if not announced and (comparison / "sanity.json").is_file():
-            announced.append(True)
+    With GPUs every step is a subprocess: the untrained arms on the first GPU,
+    training on all of them, then one trained comparison job per GPU at a time.
+    Without GPUs every step runs in this process on the CPU, in the same order.
+    """
+    from src.experiments import response_comparison
+    from src.experiments.geneeffect import run_training
+
+    comparison, train, logs = run / "comparison", run / "train", run / "logs"
+    compared = (comparison / "verdicts.json").is_file()
+    if not compared:
+        if gpus:
+            job = Job(
+                "comparison_untrained", comparison_argv(config_path, run, "--untrained")
+            )
+            run_pool([job], [gpus[:1]], logs, start)
+        else:
+            response_comparison.run_untrained(config, comparison, device="cpu")
+        if (comparison / "sanity.json").is_file():
             print(sanity_line(comparison), flush=True)
-
-    gpus = visible_gpus()
-    if gpus:
-        for batch in gpu_schedule(config_path, config, run, gpus):
-            run_jobs(batch, run, announce_sanity)
-    else:
-        from src.experiments.geneeffect import run_training
-        from src.experiments.response_comparison import run_comparison
-
-        if not (comparison / "verdicts.json").is_file():
-            run_comparison(config, comparison, device="cpu")
-        announce_sanity()
-        if not (train / "done.json").is_file():
+    if not (train / "done.json").is_file():
+        if gpus:
+            _check_resume_processes(train, len(gpus))
+            job = Job("train", training_argv(config_path, config, run, len(gpus)))
+            run_pool([job], [gpus], logs, start)
+        else:
             run_training(config, train)
-    announce_sanity()
+    if not compared:
+        pending = response_comparison.pending_trained_jobs(config, comparison)
+        if gpus:
+            jobs = [
+                Job(
+                    f"comparison_{arm}__{anchor}",
+                    comparison_argv(config_path, run, "--job", arm, anchor),
+                )
+                for arm, anchor in pending
+            ]
+            run_pool(jobs, [(gpu,) for gpu in gpus], logs, start)
+        else:
+            for arm, anchor in pending:
+                response_comparison.run_trained_job(
+                    config, comparison, arm, anchor, device="cpu"
+                )
+        response_comparison.summarise(config, comparison)
 
 
 # ----------------------------------------------------------------------------
@@ -230,9 +339,7 @@ def _comparison_and_training(config_path: Path, config: dict, run: Path) -> None
 # ----------------------------------------------------------------------------
 
 
-def _validation(config: dict, run: Path) -> None:
-    import torch
-
+def _validation(config: dict, run: Path, device: str) -> None:
     from src.experiments.baselines import run_baselines
     from src.experiments.geneeffect import evaluate_checkpoint, export_evaluation
     from src.experiments.readout import run_readout
@@ -248,7 +355,6 @@ def _validation(config: dict, run: Path) -> None:
         run_baselines(config, split="val", out_dir=baselines)
     if not (run / "readout" / "metrics.json").is_file():
         print("readout head with the explicit gene-specific context slope", flush=True)
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         run_readout(best, run / "readout", device=device)
 
 
@@ -428,15 +534,25 @@ def write_summary(config: dict, run: Path, run_id: str) -> Path:
 # ----------------------------------------------------------------------------
 
 
-def run_all(config_path: Path, *, run_id: str | None) -> Path:
-    """Run (or resume) every step into ``<output_root>/<run id>``; return that dir."""
+def run_all(
+    config_path: Path, *, run_id: str | None, gpus: Sequence[str] | None = None
+) -> Path:
+    """Run (or resume) every step into ``<output_root>/<run id>``; return that dir.
+
+    ``gpus`` names the GPUs to use (ids as ``CUDA_VISIBLE_DEVICES`` lists them);
+    by default every visible GPU. It is not bound to the run: a resumed run may
+    use other GPUs, except that unfinished training needs as many as it started on.
+    """
     from src.experiments.prepare import prepare_inputs
 
     config_path = Path(config_path)
     config = load_config(config_path)
+    visible = visible_gpus()
+    chosen = choose_gpus(gpus, visible)
     if run_id is None:
         run_id = "all_" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     print(f"run id: {run_id}", flush=True)
+    print(f"GPUs: {','.join(chosen) if chosen else 'none, CPU only'}", flush=True)
     run = Path(config["output_root"]) / run_id
     run.mkdir(parents=True, exist_ok=True)
     # A run directory belongs to one config: finished steps are skipped by
@@ -451,11 +567,13 @@ def run_all(config_path: Path, *, run_id: str | None) -> Path:
     else:
         bound.write_text(json.dumps(config, indent=2) + "\n")
 
-    manifest = _read_json(prepare_inputs(config))
-    print(target_sum_line(manifest), flush=True)
-    _comparison_and_training(config_path, config, run)
-    _validation(config, run)
-    summary = write_summary(config, run, run_id)
+    with sigterm_raises():
+        manifest = _read_json(prepare_inputs(config))
+        print(target_sum_line(manifest), flush=True)
+        comparison_and_training(config_path, config, run, chosen)
+        device = f"cuda:{visible.index(chosen[0])}" if chosen else "cpu"
+        _validation(config, run, device)
+        summary = write_summary(config, run, run_id)
     print(f"summary: {summary}", flush=True)
     return run
 
@@ -464,12 +582,17 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("config", type=Path)
     parser.add_argument("--run-id")
+    parser.add_argument(
+        "--gpus",
+        type=lambda text: tuple(gpu.strip() for gpu in text.split(",")),
+        help="comma-separated GPU ids to use (default: every visible GPU)",
+    )
     args = parser.parse_args(argv)
     # Preparation reports its progress (T, anchors, lines) through logging.
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(name)s: %(message)s", force=True
     )
-    run_all(args.config, run_id=args.run_id)
+    run_all(args.config, run_id=args.run_id, gpus=args.gpus)
     return 0
 
 

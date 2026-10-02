@@ -30,6 +30,10 @@ with open(os.environ["ARG_LOG"], "a") as handle:
             ["-m", "src.experiments.all", "a b.yaml", "--run-id", "run x"],
         ),
         (
+            ["all", "a b.yaml", "--run-id", "r", "--gpus", "1,3"],
+            ["-m", "src.experiments.all", "a b.yaml", "--run-id", "r", "--gpus", "1,3"],
+        ),
+        (
             ["test", "checkpoint x.pt"],
             [
                 "-m",
@@ -64,7 +68,7 @@ def test_help(executable):
     completed = subprocess.run(
         ["hpc/run.sh", "--help"], env=env, check=True, capture_output=True, text=True
     )
-    assert "hpc/run.sh all CONFIG [--run-id ID]" in completed.stdout
+    assert "hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]" in completed.stdout
     assert "hpc/run.sh test CHECKPOINT" in completed.stdout
     assert "prepare" not in completed.stdout and "train" not in completed.stdout
     assert not log.exists()

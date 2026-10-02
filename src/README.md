@@ -21,13 +21,13 @@ construction uses `model.initialization` for the released STATE weights or a sav
 checkpoint's architecture; Tx1 loader and encoder construction live in `model.tx1`.
 
 The standard route is one command, `hpc/run.sh all CONFIG`, which runs
-`src.experiments.all`: preparation, then the response-model comparison beside joint
-training, then validation evaluation, baselines and the readout head, then
-`summary.md`. [The HPC guide](../hpc/README.md) lists launch commands. The steps are
+`src.experiments.all`: preparation, the untrained response-model comparison arms,
+joint training on every chosen GPU, the trained comparison arms one job per GPU, then
+validation evaluation, baselines and the readout head, then `summary.md`. [The HPC guide](../hpc/README.md) lists launch commands. The steps are
 also modules:
 
 ```bash
-uv run python -m src.experiments.all configs/geneeffect_joint.yaml --run-id <id>
+uv run python -m src.experiments.all configs/geneeffect_joint.yaml --run-id <id> [--gpus 0,1]
 uv run python -m src.experiments.prepare configs/geneeffect_joint.yaml
 uv run python -m src.experiments.response_comparison --config configs/geneeffect_joint.yaml --out-dir <dir>
 uv run python -m src.train --config configs/geneeffect_joint.yaml --run-dir <dir>

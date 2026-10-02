@@ -393,12 +393,13 @@ result.
 
 ### 9.2 The `all` run
 
-`hpc/run.sh all configs/geneeffect_joint.yaml` runs, skipping any step whose output
-exists so that a rerun with the same run id resumes: preparation (Tx1 cache reuse, one
-pass computing $T$, log-space bags, $q_{g,c}$ and response cache); a sanity line scoring the
-released STATE checkpoint on each anchor; the six-arm comparison on the last visible GPU,
-concurrently with joint training on the remaining GPUs (one after the other on a single
-GPU); validation evaluation of `best.pt`, the controls of §6 and the explicit
+`hpc/run.sh all configs/geneeffect_joint.yaml [--gpus 0,1,2,3]` runs, skipping any step
+whose output exists so that a rerun with the same run id resumes: preparation (Tx1 cache
+reuse, one pass computing $T$, log-space bags, $q_{g,c}$ and response cache); the untrained
+comparison arms on the first chosen GPU, including a sanity line scoring the released STATE
+checkpoint on each anchor; joint training on every chosen GPU (every visible GPU unless
+`--gpus` names some); the trained comparison arms, one job per arm and held-out anchor, one
+job per chosen GPU at a time; validation evaluation of `best.pt`, the controls of §6 and the explicit
 context-slope readout of §7 on the new backbone's cached features; and `summary.md`
 (target total $T$, sanity line, comparison table and verdicts, validation table for the
 joint model, readout and every control). `hpc/run.sh test CHECKPOINT` is the only route to
