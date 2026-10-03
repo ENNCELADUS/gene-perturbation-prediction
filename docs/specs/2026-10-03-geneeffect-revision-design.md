@@ -46,16 +46,17 @@ treatment; preparation, splits, baselines and the response comparison are unchan
 
 ## 3. Staging
 
-All runs use the four H20s of the container on port 30734, one run at a time, seed 0 unless noted.
+All runs use the four H20s of the container on port 30734, one run at a time, seed 0. One config is
+one experiment: train, select `best.pt` on validation, then score it once on test. There is no
+multi-seed stage.
 
 1. **Objective screen.** STATE setting (a) under objectives (1), (2), (3). The winner is the highest
    `val_selective_spearman` at its `best.pt`.
 2. **STATE screen.** The winning objective under settings (b) and (c); setting (a) is reused from
    stage 1. The winner is chosen the same way; when two settings differ by less than the 27-line
    paired bootstrap interval, the simpler one (c, then a, then b) is preferred.
-3. **Seeds.** The overall winner at seeds 1 and 2.
 
-Every run reports, against the `all` run's baselines on the same metrics: the Tx1 and HVG context-PCA
+Every run reports, on validation and on test, against the `all` run's baselines on the same metrics: the Tx1 and HVG context-PCA
 ridges, nearest line, K562 copy prior and gene mean, with a 27-line paired bootstrap of the selector
 difference to the Tx1 ridge.
 
@@ -64,8 +65,8 @@ difference to the Tx1 ridge.
 - Code on branch `feat/geneeffect-revision`; the 30734 container uses its own git worktree of the
   shared repository (`/2023533015/VCC_Project_revision`) with `data/`, `model/` and `.venv-tx1`
   linked from the main checkout, so the main checkout stays on `main`.
-- A route that runs training, validation evaluation and the baseline metrics for one config, without
-  the response comparison: `hpc/run.sh revision CONFIG --run-id ID`. Outputs under
+- A route that runs training, then validation and test evaluation with the baseline metrics, for one
+  config, without the response comparison: `hpc/run.sh revision CONFIG --run-id ID`. Outputs under
   `outputs/geneeffect_revision/<id>/`.
 - One config per variant under `configs/revision/`. The prepared root is reused; nothing is
   re-prepared.
@@ -78,6 +79,7 @@ the runs.
 
 ## 6. Claim boundaries
 
-Validation only; the test split stays closed. Selective-gene Spearman is a GeneEffect diagnostic
+Variants are chosen on validation; each run's test numbers are reported, never used to choose.
+Selective-gene Spearman is a GeneEffect diagnostic
 chosen for its alignment with a cohort-based SL test; it is not SL evidence, and no SL computation
 runs here. The selective-gene set is fitted on training lines only.

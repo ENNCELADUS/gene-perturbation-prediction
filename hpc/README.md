@@ -69,27 +69,27 @@ already exists:
 2. **Joint training** through `accelerate launch` with one process per chosen GPU, as in
    `all`; rerunning continues from `train/last.pt`. Selection and early stopping follow the
    validation selective-gene Spearman.
-3. **Validation evaluation** of `train/best.pt` and the **validation baselines** (gene mean,
-   K562 copy prior, nearest line, context-PCA ridge on Tx1 and on log HVG), on the first
-   chosen GPU.
-4. **`revision.json` and `summary.md`**: one validation table (selective Spearman, selective
+3. **Validation, then test evaluation** of `train/best.pt` and the **baselines** on the same
+   split (gene mean, K562 copy prior, nearest line, context-PCA ridge on Tx1 and on log HVG),
+   on the first chosen GPU. `best.pt` is chosen on validation alone; test scores it once.
+4. **`revision.json` and `summary.md`**: per split, one table (selective Spearman, selective
    AUPR lift, residual Pearson over variable genes, Huber, SD ratio) for the joint model and
-   every baseline, the paired line bootstrap of selective Spearman (joint model minus the Tx1
-   context-PCA ridge; 1,000 resamples, seed 0) and the best epoch with its training-diagnostic
+   every baseline and the paired line bootstrap of selective Spearman (joint model minus the Tx1
+   context-PCA ridge; 1,000 resamples, seed 0); then the best epoch with its training-diagnostic
    and validation selective Spearman. Both files are rewritten on every rerun.
 
-The run directory is `<output_root>/<run_id>/{train/, evaluation/val/, baselines/val/, logs/,
-revision.json, summary.md}`; `output_root` is `outputs/geneeffect_revision` in
+The run directory is `<output_root>/<run_id>/{train/, evaluation/{val,test}/,
+baselines/{val,test}/, logs/, revision.json, summary.md}`; `output_root` is `outputs/geneeffect_revision` in
 `configs/revision/*.yaml` and `outputs/geneeffect_joint` in the base config. There is no
 response-model comparison and no readout head. Training uses every chosen GPU (every visible
 GPU unless `--gpus` names some); unfinished training resumes only on as many GPUs as it
 started on, and `--gpus` is not bound to the run. Resume, config binding
 (`run_config.json`; a changed config needs a new run id), the training subprocess log
-(`logs/train.log`) and SIGINT or SIGTERM handling are those of `all`. `revision` never
-evaluates the test split; a revision checkpoint reaches it only through `hpc/run.sh test`.
+(`logs/train.log`) and SIGINT or SIGTERM handling are those of `all`. One config is one experiment at one seed:
+training with validation selection, then test.
 
-`all` never evaluates the test split. `hpc/run.sh test CHECKPOINT` is the only route to it
-and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without
+`all` never evaluates the test split; `revision` scores its own `best.pt` on test.
+`hpc/run.sh test CHECKPOINT` scores any other checkpoint on test and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without
 optimizer steps. Standalone evaluation (`test`, or `src.evaluate --split val|train`)
 writes `evaluation/<checkpoint-name>/<split>/` beside the checkpoint, holding
 `predictions.parquet`, `metrics.json`, `per_line.csv` and `per_gene.csv`; per-gene details cover

@@ -115,28 +115,30 @@ $$
 ![](../figures/geneeffect_architecture.svg)
 
 *Figure 1. (a) Frozen Tx1-3B encodes the sampled basal cells of line $c$ from raw counts into
-cell embeddings that are pooled into a context embedding; frozen ESM-2 encodes gene $g$.
+cell embeddings that are moment-pooled into a context embedding; frozen ESM-2 encodes gene $g$.
 Both are computed once and cached. The same cells in log-normalised HVG expression (§3.4) are
 STATE's basal input. (b) A trainable adapter turns the gene embedding into a perturbation
-token. The trainable STATE transition model, initialised from a published Replogle
-checkpoint, reads the log-normalised basal cells through its own released basal encoder
-and predicts the line's post-perturbation expression. (c) Response descriptors summarise
-how predicted expression differs from basal expression. With the pooled Tx1 context
-embedding, the gene embedding and basal statistics of $g$ in $c$, they feed a small
-residual head that predicts the GeneEffect residual. Tx1 feeds only this head; it does not
-enter STATE. Arrows carry the tensors passed between modules, shaped for one gene–line
-condition (cells × features, no batch dimension); boxes state the width change inside each
-module. The adapter emits 2024 values because that is the width of STATE's perturbation
-vocabulary; STATE projects it, like the 2000-wide expression input, to its hidden size of
-328. Notation: $H_c$, Tx1 cell embeddings of line $c$; $e_g$ and $p_g$, the gene
-embedding and the perturbation token; $X_c$ and $\hat Y_{g,c}$, basal and predicted
-post-perturbation log expression; $\Delta$ and $s$, the projected expression shift and
-scalar response summaries; $q_{g,c}$, basal statistics of $g$ in $c$; $z_c$, the pooled
-context embedding; $\mu_{\text{train}}(g)$, the training gene mean; $\hat\delta$, the
-predicted residual. The training objective is given in §5.*
+token. The STATE transition model, initialised from a published Replogle checkpoint, reads the
+log-normalised basal cells through its own released basal encoder and predicts the line's
+post-perturbation expression; it is frozen or fine-tuned by variant (`train.state_mode`), and
+the no-STATE variant skips STATE and the adapter. Response replay to measured Perturb-seq is
+drawn dashed: it is off in the current runs. Response descriptors summarise how predicted
+expression differs from basal expression. (c) The factorised gene × context head: a trunk MLP
+over all five feature blocks, plus the inner product of a gene factor $G(g)$ (free per-gene
+embedding plus a linear map of $e_g$) and a context tower $C(g,c)$ over every block except
+$e_g$, scaled by the fixed per-gene residual SD $\sigma_g$ to give $\hat\delta$; the training
+gene mean is added for the GeneEffect prediction. Tx1 feeds only the head; it does not enter
+STATE. Arrows carry the tensors passed between modules, shaped for one gene–line condition
+(cells × features, no batch dimension); boxes state the width change inside each module. The
+adapter emits 2024 values because that is the width of STATE's perturbation vocabulary; STATE
+projects it, like the 2000-wide expression input, to its hidden size of 328. Notation: $H_c$,
+Tx1 cell embeddings of line $c$; $e_g$ and $p_g$, the gene embedding and the perturbation token;
+$X_c$ and $\hat Y_{g,c}$, basal and predicted post-perturbation log expression; $\Delta$ and $s$,
+the projected expression shift and scalar response summaries; $q_{g,c}$, basal statistics of $g$
+in $c$; $z_c$, the pooled context embedding; $\mu_{\text{train}}(g)$, the training gene mean;
+$\hat\delta$, the predicted residual. The training protocol is Figure 2 in §5.*
 
-Figure 1 shows the data flow; the head drawn there as one small residual head is the
-factorised head below. Tx1 is frozen and supplies cached basal-cell embeddings. STATE and an
+Figure 1 shows the data flow and the factorised head defined below. Tx1 is frozen and supplies cached basal-cell embeddings. STATE and an
 ESM2 adapter predict perturbed expression, and the head uses five feature blocks: pooled
 expression change $\Delta$ (projected), response dispersion statistics $s$, gene-specific basal
 single-cell statistics $q_{g,c}$, gene embedding $e_g$ and basal context embedding $z_c$.
@@ -180,6 +182,15 @@ individual control and perturbed cells. Covariates that are unavailable for a ge
 are masked, never zero-filled.
 
 ## 5. Training and selection
+
+![](../figures/geneeffect_training_protocol.svg)
+
+*Figure 2. Training protocol. Preparation fits the gene means, the selective genes and the
+per-gene residual SD on training lines once; Tx1-3B and ESM-2 stay frozen throughout. The
+objective screen trains the adapter and head with STATE frozen; the STATE screen compares STATE
+frozen, STATE fine-tuned and no STATE (head only) under the winning objective. Every run is one
+config at seed 0: train, validate each epoch, keep the best checkpoint, then score it once on
+test.*
 
 A single joint training loop runs. Every update minimizes one GeneEffect objective
 (`train.objective`) on $\hat\delta$ against $r_{cg}=y_{cg}-\mu_{\text{train}}(g)$, with
@@ -545,16 +556,16 @@ STATE and over the MLP on Tx1. The revision of
 [the design](specs/2026-10-03-geneeffect-revision-design.md) answers that run with the head,
 objectives, STATE settings and selection rule of §4–§6, and `hpc/run.sh revision CONFIG
 [--run-id <id>] [--gpus 0,1,2,3]` runs one variant of it: preparation (returns at once on the
-existing prepared root), joint training on every chosen GPU, validation evaluation of
-`best.pt`, the validation controls of §6, and `summary.md` with `revision.json`. It runs no
-response comparison and no readout and never touches the test split; resume and run-directory
-rules are those of `all`. `summary.md` holds one validation table (selective Spearman,
-selective AUPR lift, residual Pearson over variable genes, Huber, SD ratio) for the joint model
-and every control, the paired line bootstrap of selective Spearman for the joint model minus the
-Tx1 context-PCA ridge, and the best epoch with its training-diagnostic and validation selective
-Spearman. Runs are screened one at a time at seed 0: the three objectives under frozen STATE;
-then the winning objective with trainable STATE and with no STATE; then the overall winner at
-seeds 1 and 2. A winner has the highest `val_selective_spearman` at its `best.pt`; when two
-settings differ by less than the 27-line paired bootstrap interval, the simpler is preferred
-(no STATE, then frozen, then trainable). Validation only: the screens are model selection, not
-SL evidence.
+existing prepared root), joint training on every chosen GPU, evaluation of `best.pt` with the
+controls of §6 on validation and then on test, and `summary.md` with `revision.json`. It runs
+no response comparison and no readout; resume and run-directory rules are those of `all`.
+`summary.md` holds, per split, one table (selective Spearman, selective AUPR lift, residual
+Pearson over variable genes, Huber, SD ratio) for the joint model and every control and the
+paired line bootstrap of selective Spearman for the joint model minus the Tx1 context-PCA
+ridge, then the best epoch with its training-diagnostic and validation selective Spearman. One
+config is one experiment at seed 0 (Figure 2); there is no multi-seed stage. Runs are screened
+one at a time: the three objectives under frozen STATE, then the winning objective with
+trainable STATE and with no STATE. A winner has the highest `val_selective_spearman` at its
+`best.pt`; when two settings differ by less than the 27-line paired bootstrap interval, the
+simpler is preferred (no STATE, then frozen, then trainable). Test numbers are reported for
+every run and never used to choose. The screens are model selection, not SL evidence.

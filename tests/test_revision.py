@@ -27,14 +27,14 @@ CONFIG = {
 }
 
 
-def metric_row(spearman, *, aupr=0.1, pearson=0.2, huber=0.3, sd=0.9):
+def metric_row(spearman, *, split="val", aupr=0.1, pearson=0.2, huber=0.3, sd=0.9):
     return {
-        "val_selective_spearman": spearman,
-        "val_selective_aupr_lift": aupr,
-        "val_residual_pearson_macro_per_gene": pearson,
-        "val_geneeffect_loss": huber,
-        "val_residual_sd_ratio_macro_per_gene": sd,
-        "val_unrelated": 99.0,
+        f"{split}_selective_spearman": spearman,
+        f"{split}_selective_aupr_lift": aupr,
+        f"{split}_residual_pearson_macro_per_gene": pearson,
+        f"{split}_geneeffect_loss": huber,
+        f"{split}_residual_sd_ratio_macro_per_gene": sd,
+        f"{split}_unrelated": 99.0,
     }
 
 
@@ -57,7 +57,8 @@ def frame(method=None, value=0.0):
 
 @pytest.fixture
 def finished(tmp_path) -> Path:
-    """A finished run directory: training record, evaluation and baselines."""
+    """A finished run directory: training record, evaluation and baselines on
+    validation and test (test scores are validation's minus 0.01)."""
     run = tmp_path / "run"
     write_json(run / "train" / "done.json", {"best_epoch": 1, "next_epoch": 4})
     records = [
@@ -86,20 +87,24 @@ def finished(tmp_path) -> Path:
         "\n".join(json.dumps(r) for r in records) + "\n"
     )
     torch.save({"preprocessing": {"selective_genes": SELECTIVE}}, run / "train/best.pt")
-    write_json(run / "evaluation/val/metrics.json", metric_row(0.07))
-    frame(value=0.2).to_parquet(run / "evaluation/val/predictions.parquet")
-    write_json(
-        run / "baselines/val/metrics.json",
-        {
-            "gene_mean": metric_row(None, pearson=None),
-            "context_pca_ridge[tx1]": metric_row(0.05),
-            "custom_method": metric_row(0.02),
-            "nearest_line[tx1]": metric_row(0.04),
-        },
-    )
-    pd.concat(
-        [frame("context_pca_ridge[tx1]", 0.1), frame("gene_mean", 0.0)]
-    ).to_parquet(run / "baselines/val/predictions.parquet")
+    for split, shift in (("val", 0.0), ("test", 0.01)):
+        write_json(
+            run / f"evaluation/{split}/metrics.json",
+            metric_row(0.07 - shift, split=split),
+        )
+        frame(value=0.2).to_parquet(run / f"evaluation/{split}/predictions.parquet")
+        write_json(
+            run / f"baselines/{split}/metrics.json",
+            {
+                "gene_mean": metric_row(None, split=split, pearson=None),
+                "context_pca_ridge[tx1]": metric_row(0.05 - shift, split=split),
+                "custom_method": metric_row(0.02 - shift, split=split),
+                "nearest_line[tx1]": metric_row(0.04 - shift, split=split),
+            },
+        )
+        pd.concat(
+            [frame("context_pca_ridge[tx1]", 0.1), frame("gene_mean", 0.0)]
+        ).to_parquet(run / f"baselines/{split}/predictions.parquet")
     return run
 
 
@@ -124,7 +129,15 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
     assert record["run_id"] == "rid"
     assert record["config"] == "configs/revision/x.yaml"
     assert record["git_revision"] == "abc123"
-    validation = record["validation"]
+    assert list(record) == [
+        "run_id",
+        "config",
+        "git_revision",
+        "val",
+        "test",
+        "training",
+    ]
+    validation = record["val"]["models"]
     # Joint model first, then the baselines in the documented order, unknown last.
     assert list(validation) == [
         "Joint model",
@@ -143,13 +156,20 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
     # Undefined stays null, never 0.
     assert validation["Gene mean"]["selective_spearman"] is None
     assert validation["Gene mean"]["residual_pearson"] is None
-    assert record["bootstrap"] == {
-        "comparison": "Joint model minus Context-PCA ridge (Tx1)",
-        "repeats": 1000,
-        "seed": 0,
-        "difference": 0.02,
-        "interval": [-0.01, 0.05],
-    }
+    assert record["test"]["models"]["Joint model"][
+        "selective_spearman"
+    ] == pytest.approx(0.06)
+    assert record["test"]["models"]["Context-PCA ridge (Tx1)"][
+        "selective_spearman"
+    ] == pytest.approx(0.04)
+    for split in ("val", "test"):
+        assert record[split]["bootstrap"] == {
+            "comparison": "Joint model minus Context-PCA ridge (Tx1)",
+            "repeats": 1000,
+            "seed": 0,
+            "difference": 0.02,
+            "interval": [-0.01, 0.05],
+        }
     # Best epoch 1 (0-based) is the second epoch; its own record, not the last.
     assert record["training"] == {
         "best_epoch": 2,
@@ -161,16 +181,23 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
     text = summary.read_text()
     assert text.startswith("# Revision run rid")
     assert "`abc123`" in text and "configs/revision/x.yaml" in text
-    table = {
-        line.split(" | ")[0].removeprefix("| "): line.split(" | ")[1:]
-        for line in text.splitlines()
-        if line.startswith("| ")
-    }
-    assert table["Model"][0] == "Selective Spearman"
-    assert table["Joint model"][:3] == ["0.0700", "0.1000", "0.2000"]
-    assert table["Gene mean"][0] == "undefined"
-    assert "| Context-PCA ridge (Tx1) |" in text
-    assert "0.0200 [-0.0100, 0.0500]" in text
+    validation_text, test_text = text.split("## Test lines")
+    assert "## Validation lines" in validation_text
+
+    def table(section):
+        return {
+            line.split(" | ")[0].removeprefix("| "): line.split(" | ")[1:]
+            for line in section.splitlines()
+            if line.startswith("| ")
+        }
+
+    assert table(validation_text)["Model"][0] == "Selective Spearman"
+    assert table(validation_text)["Joint model"][:3] == ["0.0700", "0.1000", "0.2000"]
+    assert table(validation_text)["Gene mean"][0] == "undefined"
+    assert table(test_text)["Joint model"][0] == "0.0600"
+    assert "| Context-PCA ridge (Tx1) |" in test_text
+    assert "0.0200 [-0.0100, 0.0500], paired bootstrap over validation" in text
+    assert "0.0200 [-0.0100, 0.0500], paired bootstrap over test" in text
     assert "epoch 2 of 4 trained" in text
     assert "0.6000 on the training diagnostic" in text
     assert "0.0700 on the validation lines" in text
@@ -178,19 +205,20 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
 
 def test_bootstrap_inputs_are_the_joint_and_tx1_ridge_rows(finished, bootstrap):
     revision.build_record(Path("c.yaml"), finished, "rid", "rev")
-    ((left, right, selective, repeats, seed),) = bootstrap
-    assert set(left.residual_prediction) == {0.2}
-    assert set(right.method) == {"context_pca_ridge[tx1]"}
-    assert set(right.residual_prediction) == {0.1} and len(right) == 4
-    assert selective == frozenset(SELECTIVE)
-    assert (repeats, seed) == (1000, 0)
+    assert len(bootstrap) == 2
+    for left, right, selective, repeats, seed in bootstrap:
+        assert set(left.residual_prediction) == {0.2}
+        assert set(right.method) == {"context_pca_ridge[tx1]"}
+        assert set(right.residual_prediction) == {0.1} and len(right) == 4
+        assert selective == frozenset(SELECTIVE)
+        assert (repeats, seed) == (1000, 0)
 
 
 def test_summary_requires_the_tx1_ridge_and_a_best_epoch_record(finished, bootstrap):
-    metrics = json.loads((finished / "baselines/val/metrics.json").read_text())
+    metrics = json.loads((finished / "baselines/test/metrics.json").read_text())
     del metrics["context_pca_ridge[tx1]"]
-    write_json(finished / "baselines/val/metrics.json", metrics)
-    with pytest.raises(ValueError, match="context_pca_ridge"):
+    write_json(finished / "baselines/test/metrics.json", metrics)
+    with pytest.raises(ValueError, match="baselines/test/metrics.json has no"):
         revision.build_record(Path("c.yaml"), finished, "rid", "rev")
     write_json(finished / "train/done.json", {"best_epoch": 7, "next_epoch": 8})
     with pytest.raises(ValueError, match="no epoch record for epoch 7"):
@@ -204,8 +232,8 @@ def test_nan_difference_is_written_as_null(finished, monkeypatch):
         raising=False,
     )
     record = revision.build_record(Path("c.yaml"), finished, "rid", "rev")
-    assert record["bootstrap"]["difference"] is None
-    assert record["bootstrap"]["interval"] == [None, 1.0]
+    assert record["val"]["bootstrap"]["difference"] is None
+    assert record["val"]["bootstrap"]["interval"] == [None, 1.0]
     json.dumps(record, allow_nan=False)
 
 
@@ -261,23 +289,21 @@ def test_finished_steps_start_nothing_and_summary_is_rewritten(
     assert revision.run_revision(Path("c.yaml"), run_id="done") == run
     assert prepared == [config]
     assert (run / "revision.json").is_file() and (run / "summary.md").is_file()
-    assert not [p for p in run.rglob("*") if p.name == "test"]
 
 
-def test_unfinished_run_trains_then_validates_val_only(
+def test_unfinished_run_trains_then_evaluates_val_then_test(
     world, finished, bootstrap, monkeypatch
 ):
     config, _ = world
     run = Path(config["output_root"]) / "fresh"
     calls = []
-    # Keep only the evaluation and baseline outputs the fakes will rewrite.
+    # Keep the evaluation and baseline outputs the fakes will rewrite, per split.
     outputs = {
-        p: p.read_bytes()
-        for p in (finished / "evaluation/val").iterdir()
-        if p.is_file()
-    }
-    baseline_outputs = {
-        p: p.read_bytes() for p in (finished / "baselines/val").iterdir()
+        (kind, split): {
+            p.name: p.read_bytes() for p in (finished / kind / split).iterdir()
+        }
+        for kind in ("evaluation", "baselines")
+        for split in ("val", "test")
     }
     train_files = {
         p.name: p.read_bytes() for p in (finished / "train").iterdir() if p.is_file()
@@ -291,19 +317,19 @@ def test_unfinished_run_trains_then_validates_val_only(
 
     def fake_evaluate(checkpoint, *, split):
         calls.append(("evaluate", checkpoint, split))
-        return "result"
+        return split
 
-    def fake_export(result, out_dir):
-        assert result == "result"
+    def fake_export(split, out_dir):
+        assert out_dir == run / "evaluation" / split
         out_dir.mkdir(parents=True)
-        for path, content in outputs.items():
-            (out_dir / path.name).write_bytes(content)
+        for name, content in outputs["evaluation", split].items():
+            (out_dir / name).write_bytes(content)
 
     def fake_baselines(cfg, *, split, out_dir):
         calls.append(("baselines", split))
         out_dir.mkdir(parents=True)
-        for path, content in baseline_outputs.items():
-            (out_dir / path.name).write_bytes(content)
+        for name, content in outputs["baselines", split].items():
+            (out_dir / name).write_bytes(content)
 
     monkeypatch.setattr("src.experiments.geneeffect.run_training", fake_training)
     monkeypatch.setattr("src.experiments.geneeffect.evaluate_checkpoint", fake_evaluate)
@@ -314,6 +340,8 @@ def test_unfinished_run_trains_then_validates_val_only(
         ("train", run / "train"),
         ("evaluate", run / "train" / "best.pt", "val"),
         ("baselines", "val"),
+        ("evaluate", run / "train" / "best.pt", "test"),
+        ("baselines", "test"),
     ]
     assert (run / "summary.md").is_file()
 
@@ -336,7 +364,7 @@ def test_default_run_id_is_revision_timestamp(world, monkeypatch, capsys):
 def test_run_directory_refuses_a_different_config(world, monkeypatch):
     config, _ = world
     monkeypatch.setattr(revision, "train_joint", lambda *args, **kwargs: None)
-    monkeypatch.setattr(revision, "_validation", lambda *args: None)
+    monkeypatch.setattr(revision, "_evaluate", lambda *args: None)
     monkeypatch.setattr(revision, "write_outputs", lambda *args: Path("s.md"))
     revision.run_revision(Path("c.yaml"), run_id="bound")
     revision.run_revision(Path("c.yaml"), run_id="bound")
