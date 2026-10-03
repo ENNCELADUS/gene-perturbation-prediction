@@ -11,17 +11,20 @@ _GROUPS = {
     "train": (
         "max_epochs patience dependency_batch_size response_batch_size "
         "response_interval response_weight state_learning_rate "
-        "adapter_learning_rate head_learning_rate weight_decay"
+        "adapter_learning_rate head_learning_rate weight_decay "
+        "objective state_mode warmup_epochs genes_per_block"
     ),
     "comparison": (
         "epochs hidden learning_rate state_learning_rate batch_size shuffles bootstrap"
     ),
     "features": (
         "cells_per_context hvg_dim esm2_dim "
-        "variable_gene_min_observations variable_gene_percentile"
+        "variable_gene_min_observations variable_gene_percentile "
+        "selective_min_lines selective_max_fraction residual_sd_floor_percentile"
     ),
     "model": (
-        "cell_sentence_len esm2_adapter_hidden head_hidden head_layers head_blocks"
+        "cell_sentence_len esm2_adapter_hidden head_hidden head_layers head_blocks "
+        "factor_rank"
     ),
     "preparation": (
         "response_max_cells_per_gene response_total_cells_per_line "
@@ -36,6 +39,8 @@ _GROUPS = {
 }
 _TOP_LEVEL = "precision output_root prepared_root"
 _HEAD_BLOCKS = "use_delta_proj use_s use_q_sc use_e_g use_z_c"
+OBJECTIVES = ("huber", "standardized_mse", "pearson_blocks")
+STATE_MODES = ("frozen", "trainable")
 
 
 def _require_keys(value: Any, expected: set[str], name: str) -> None:
@@ -49,13 +54,16 @@ def _require_keys(value: Any, expected: set[str], name: str) -> None:
 
 
 def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Reject missing and unknown keys; values are taken as written."""
+    """Reject missing and unknown keys and unknown choices; values otherwise as written."""
     _require_keys(config, {*_GROUPS, *_TOP_LEVEL.split()}, "config")
     for name, keys in _GROUPS.items():
         _require_keys(config[name], set(keys.split()), name)
     _require_keys(
         config["model"]["head_blocks"], set(_HEAD_BLOCKS.split()), "model.head_blocks"
     )
+    for key, choices in (("objective", OBJECTIVES), ("state_mode", STATE_MODES)):
+        if config["train"][key] not in choices:
+            raise ValueError(f"train.{key} must be one of {choices}")
     return dict(config)
 
 
