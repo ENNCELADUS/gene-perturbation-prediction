@@ -7,6 +7,7 @@ given by `--gpus`. Synchronize code with Git before using the remote checkout.
 
 ```bash
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
+hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
@@ -23,7 +24,8 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
    released checkpoint scored on each anchor against no-change. Printed and written; not a
    gate.
 3. **Joint training** through `accelerate launch` with one process per chosen GPU.
-   Rerunning continues from `train/last.pt`.
+   Rerunning continues from `train/last.pt`. `best.pt` and early stopping follow the
+   validation selective-gene Spearman (higher wins), not the GeneEffect loss.
 4. **Trained response-model comparison arms** (STATE as in the joint model, MLP on HVG, MLP
    on Tx1; one job per arm and held-out anchor, twelve in all), one job per chosen GPU at a
    time, the next starting as soon as a GPU frees, then the comparison table and verdicts
@@ -32,7 +34,8 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
    prior, nearest line, context-PCA ridge on Tx1 and on log HVG) and the readout head with
    the explicit gene-specific context slope on the new backbone's cached features.
 6. **`summary.md`**: target total `T`, the sanity line, the comparison table and verdicts,
-   and the validation table for the joint model, readout head and every baseline.
+   and the validation table (selective-gene Spearman and AUPR lift, Huber, correlations) for
+   the joint model, readout head and every baseline.
 
 The run directory is `outputs/geneeffect_joint/<run_id>/{comparison/, train/, evaluation/val/,
 baselines/val/, readout/, logs/, summary.md}`; `summary.md` is rewritten on every rerun.
@@ -53,20 +56,56 @@ run with its step, exit code and log path; comparison jobs already running finis
 no new one starts. SIGINT or SIGTERM to `all` terminates its subprocess groups before it
 exits, so no GPU worker is orphaned.
 
+## The `revision` command
+
+`hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]` runs one variant of the
+[GeneEffect revision](../docs/specs/2026-10-03-geneeffect-revision-design.md) (objective and
+STATE setting chosen by the config, one per variant in `configs/revision/`) and prints its run
+id first (default `revision_<UTC timestamp>`). Steps, in order, each skipped when its output
+already exists:
+
+1. **Preparation check**: `prepare_inputs` returns at once on an existing `prepared_root`; the
+   prepared root of `all` is reused and nothing is re-prepared.
+2. **Joint training** through `accelerate launch` with one process per chosen GPU, as in
+   `all`; rerunning continues from `train/last.pt`. Selection and early stopping follow the
+   validation selective-gene Spearman.
+3. **Validation evaluation** of `train/best.pt` and the **validation baselines** (gene mean,
+   K562 copy prior, nearest line, context-PCA ridge on Tx1 and on log HVG), on the first
+   chosen GPU.
+4. **`revision.json` and `summary.md`**: one validation table (selective Spearman, selective
+   AUPR lift, residual Pearson over variable genes, Huber, SD ratio) for the joint model and
+   every baseline, the paired line bootstrap of selective Spearman (joint model minus the Tx1
+   context-PCA ridge; 1,000 resamples, seed 0) and the best epoch with its training-diagnostic
+   and validation selective Spearman. Both files are rewritten on every rerun.
+
+The run directory is `<output_root>/<run_id>/{train/, evaluation/val/, baselines/val/, logs/,
+revision.json, summary.md}`; `output_root` is `outputs/geneeffect_revision` in
+`configs/revision/*.yaml` and `outputs/geneeffect_joint` in the base config. There is no
+response-model comparison and no readout head. Training uses every chosen GPU (every visible
+GPU unless `--gpus` names some); unfinished training resumes only on as many GPUs as it
+started on, and `--gpus` is not bound to the run. Resume, config binding
+(`run_config.json`; a changed config needs a new run id), the training subprocess log
+(`logs/train.log`) and SIGINT or SIGTERM handling are those of `all`. `revision` never
+evaluates the test split; a revision checkpoint reaches it only through `hpc/run.sh test`.
+
 `all` never evaluates the test split. `hpc/run.sh test CHECKPOINT` is the only route to it
 and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without
 optimizer steps. Standalone evaluation (`test`, or `src.evaluate --split val|train`)
 writes `evaluation/<checkpoint-name>/<split>/` beside the checkpoint, holding
-`predictions.parquet`, `metrics.json`, `per_line.csv` and `per_gene.csv`; per-gene details carry residual target and prediction SD, SD ratio, RMSE
-and MAE on the same finite rows and train-derived variable genes, and undefined quantities
-keep explicit counts and null scalar values. An export failure is retried by rerunning the
+`predictions.parquet`, `metrics.json`, `per_line.csv` and `per_gene.csv`; per-gene details cover
+the union of the train-derived variable and selective genes with boolean `variable` and
+`selective` columns, carry residual target and prediction SD, SD ratio, RMSE and MAE on the
+same finite rows, and add the dependent-line `aupr_lift`; the `residual_*` metrics use the
+variable rows only, `selective_spearman` and `selective_aupr_lift` the selective rows, and
+undefined quantities keep explicit counts and null scalar values. An export failure is retried by rerunning the
 same evaluation command. Nothing here is SL interaction evidence; held-out lines retain the
 documented Tx1 pretraining exposure boundary.
 
 ## Configuration and inputs
 
 All configuration fields are explicit in `configs/geneeffect_joint.yaml`; unknown or
-missing keys are errors. Input paths are relative to the repository root. Preparation
+missing keys are errors; a checkpoint from before the selective-gene revision lacks its
+fitted selective genes and residual scale and is refused. Input paths are relative to the repository root. Preparation
 requires the raw source registry, GeneEffect CSV, supplied ESM2 table, STATE checkpoint and
 gene order, and the response and basal sources. Missing Tx1 caches additionally need the
 configured local Tx1 model and a GPU; newly encoded cells use collation seed 0, and the Tx1

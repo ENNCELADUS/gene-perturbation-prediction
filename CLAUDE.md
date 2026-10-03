@@ -16,13 +16,16 @@ the `docs/data/` card before using a dataset. Results live in `docs/results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-02)
+## Current state (2026-10-03)
 
-The joint GeneEffect model (`configs/geneeffect_joint.yaml`) has **trained, tested and been baselined** once, seed 0. Joint
-Huber beats the context-blind gene-mean by 0.08% and residual correlations trail a Tx1 PCA-ridge baseline — a working path, not a
-result (`docs/03-geneeffect-protocol.md` §7, `docs/results/joint_geneeffect_seed0/`). That run predates the **expression-space
-change** (STATE was fed raw counts), so its numbers are not like for like with the current pipeline. The SL pair head is
-**unimplemented**. Further model decisions use **validation**; the test split is spent. Nothing here is SL evidence.
+The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and baselined once at seed 0, before the
+**expression-space change** (STATE was fed raw counts), so those numbers are not like for like with the current pipeline
+(`docs/03-geneeffect-protocol.md` §7, `docs/results/joint_geneeffect_seed0/`). The 2026-10-02 `all` run
+(`all_20261002T174946Z`) finished: validation residual Pearson 0.068 for the joint model against 0.133 for the Tx1 context ridge,
+and the response comparison favours the HVG MLP over fine-tuned STATE and over the Tx1 MLP. The current work is the **revision**
+(`docs/specs/2026-10-03-geneeffect-revision-design.md`): a selective-gene selector, a factorised head, and objective and STATE
+screens on the 30734 container. The SL pair head is **unimplemented**. Further model decisions use **validation**; the test split
+is spent. Nothing here is SL evidence.
 
 ## Commands
 
@@ -37,13 +40,15 @@ uv run python -m pytest tests/test_all.py -q             # one file; -k for one 
 .venv/bin/ruff format <files you touched>                 # never `ruff format .` — rewrites unrelated files
 
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]  # prepare, comparison, train, val eval, baselines, readout, summary.md
-hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # the only route to the test split; `all` never runs it
+hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: train, val eval, baselines, summary.md + revision.json in outputs/geneeffect_revision/<id>/ (configs/revision/*.yaml; no comparison, no readout)
+hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # the only route to the test split; `all` and `revision` never run it
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
-`all` skips every step whose output exists, so rerunning with the same run id resumes (training from `train/last.pt`). Every
+`all` and `revision` skip every step whose output exists, so rerunning with the same run id resumes (training from `train/last.pt`). Every
 GPU step uses every visible GPU, or those `--gpus` lists: untrained comparison arms on the first, training on all, then one
-trained comparison job per GPU at a time. Direct worker invocation is debug-only; runner details are in `hpc/README.md`.
+trained comparison job per GPU at a time (`revision` has only the training step). Direct worker invocation is debug-only; runner
+details are in `hpc/README.md`.
 
 - **Local Mac has no GPU, no Tx1 weights, no raw data.** Preparation, training and evaluation run on the H20 container
   (`hpc-execution` skill), without a scheduler. Tests use synthetic fixtures and skip silently when gitignored data or
@@ -83,11 +88,17 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them.
 - **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
-  only the residual head's context. GeneEffect Huber every update, response replay on the four anchor lines every fourth.
-  `best.pt` and early stopping use **only** `val_geneeffect_loss`.
-- **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing from the checkpoint;
+  the head's context. The head is a trunk MLP plus a rank-`factor_rank` gene × context product, and predicts in units of the
+  per-gene training residual SD. One GeneEffect objective per update, `train.objective` (`huber`, `standardized_mse`,
+  `pearson_blocks`); response replay on the four anchor lines every fourth update only when `response_weight > 0` (the base config
+  has 0). `train.state_mode` freezes STATE at the released weights or trains it; no STATE is `head_blocks` `use_delta_proj` and
+  `use_s` both false, which skips STATE and the adapter. Warmup then cosine learning rate. `best.pt` and early stopping use
+  **only** `val_selective_spearman` (higher wins), over the selective genes fitted on training lines.
+- **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
+  selective genes, residual SD) from the checkpoint;
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
-  `src/experiments/all.py` chains every step and writes `summary.md`.
+  `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation
+  evaluation and baselines for one config.
 - `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (172 train / 27 val / 27 test);
   `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config and provenance files are tracked data.
 
