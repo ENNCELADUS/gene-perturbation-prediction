@@ -9,7 +9,7 @@ from src.data.batches import FeatureBatch
 from src.model.head import (
     GeneEffectBlockConfig,
     GeneEffectFeatureDims,
-    GeneEffectResidualHead,
+    GeneEffectMLP,
 )
 
 ARMS = ("A0", "A1", "A2", "A3")
@@ -18,7 +18,7 @@ ARMS = ("A0", "A1", "A2", "A3")
 class FixedReadout(nn.Module):
     """Consume standardized features and optionally add per-gene PCA slopes."""
 
-    def __init__(self, mlp: GeneEffectResidualHead, n_genes: int, explicit: bool):
+    def __init__(self, mlp: GeneEffectMLP, n_genes: int, explicit: bool):
         super().__init__()
         self.mlp = mlp
         self.slopes = nn.Parameter(torch.zeros(n_genes, 8)) if explicit else None
@@ -54,11 +54,11 @@ def make_readout(
         raise ValueError("require A0-A3 and at least one training-covered gene")
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(seed)
-        canonical = GeneEffectResidualHead(dims)
+        canonical = GeneEffectMLP(dims)
         if arm in {"A1", "A3"}:
             mlp = canonical
         else:
-            mlp = GeneEffectResidualHead(
+            mlp = GeneEffectMLP(
                 dims, GeneEffectBlockConfig(use_delta_proj=False, use_s=False)
             )
             state = deepcopy(canonical.state_dict())

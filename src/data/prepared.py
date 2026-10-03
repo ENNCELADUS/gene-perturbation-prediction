@@ -29,7 +29,12 @@ import pandas as pd
 from src.data.basal import align_columns
 from src.data.embeddings import load_esm2_embeddings
 from src.data.expression import library_sizes, log_normalize
-from src.data.geneeffect import fit_variable_gene_membership, load_geneeffect_long
+from src.data.geneeffect import (
+    fit_residual_scale,
+    fit_selective_genes,
+    fit_variable_gene_membership,
+    load_geneeffect_long,
+)
 from src.data.q_sc import QScFeatures, compute_q_sc
 from src.data.residual_target import fit_gene_means
 from src.data.response_cache import ResponseTargetsCache, open_response_targets
@@ -61,6 +66,8 @@ class PreparedInputs:
     genes: tuple[str, ...]
     train_gene_means: pd.Series
     variable_genes: frozenset[str]
+    selective_genes: frozenset[str]
+    residual_scale: pd.Series
     hvg_order: tuple[str, ...]
     esm2_symbols: tuple[str, ...]
     esm2_vectors: np.ndarray = field(repr=False, compare=False)
@@ -82,6 +89,13 @@ class PreparedInputs:
             "variable_genes": [
                 gene for gene in self.genes if gene in self.variable_genes
             ],
+            "selective_genes": [
+                gene for gene in self.genes if gene in self.selective_genes
+            ],
+            "residual_scale": {
+                "symbols": list(self.genes),
+                "values": [float(self.residual_scale[gene]) for gene in self.genes],
+            },
             "esm2_symbols": list(self.esm2_symbols),
             "esm2_vectors": torch.from_numpy(
                 np.asarray(self.esm2_vectors, dtype=np.float32)
@@ -204,13 +218,25 @@ def _restored_target_sum(preprocessing: Mapping[str, Any], target_sum: float) ->
         )
 
 
+def _restored_keys(preprocessing: Mapping[str, Any]) -> None:
+    missing = [
+        key for key in ("selective_genes", "residual_scale") if key not in preprocessing
+    ]
+    if missing:
+        raise ValueError(
+            f"checkpoint preprocessing has no {', '.join(missing)}: it predates the "
+            "selective-gene revision; retrain it"
+        )
+
+
 def load_inputs(
     config: Mapping[str, Any],
     *,
     preprocessing: Mapping[str, Any] | None = None,
     include_test: bool = False,
 ) -> PreparedInputs:
-    """Open prepared inputs; fit (or restore) gene means and variable genes.
+    """Open prepared inputs; fit (or restore) gene means, variable and selective
+    genes and the residual scale.
 
     Fitting uses labeled training lines only. ``preprocessing`` restores a
     checkpoint's fitted state instead. Test labels and lines are opened only
@@ -221,6 +247,7 @@ def load_inputs(
     target_sum = float(manifest["expression_space"]["target_sum"])
     if preprocessing is not None:
         _restored_target_sum(preprocessing, target_sum)
+        _restored_keys(preprocessing)
     paths, features = config["paths"], config["features"]
     split = load_geneeffect_226_split(Path(paths["split"]))
     genes = tuple(manifest["common_gene_panel"])
@@ -250,11 +277,35 @@ def load_inputs(
             min_observations=int(features["variable_gene_min_observations"]),
             percentile=float(features["variable_gene_percentile"]),
         )
+        selective_genes = fit_selective_genes(
+            labels,
+            train,
+            genes,
+            min_lines=int(features["selective_min_lines"]),
+            max_fraction=float(features["selective_max_fraction"]),
+        )
+        residual_scale = fit_residual_scale(
+            labels,
+            train,
+            genes,
+            floor_percentile=float(features["residual_sd_floor_percentile"]),
+        )
         table = load_esm2_embeddings(Path(paths["esm2_embeddings"]))
         esm2_symbols = tuple(table.vectors_by_symbol)
         esm2_vectors = np.stack([table.vectors_by_symbol[s] for s in esm2_symbols])
     else:
         variable_genes = frozenset(preprocessing["variable_genes"])
+        selective_genes = frozenset(preprocessing["selective_genes"])
+        state = preprocessing["residual_scale"]
+        residual_scale = pd.Series(
+            np.asarray(state["values"], dtype=np.float64),
+            index=list(state["symbols"]),
+            name="residual_scale",
+        ).loc[list(genes)]
+        residual_scale.index.name = "gene_symbol"
+        values = residual_scale.to_numpy()
+        if not (np.isfinite(values).all() and (values > 0).all()):
+            raise ValueError("restored residual_scale must be finite and positive")
         esm2_symbols = tuple(preprocessing["esm2_symbols"])
         vectors = preprocessing["esm2_vectors"]
         import torch
@@ -280,6 +331,8 @@ def load_inputs(
         genes=genes,
         train_gene_means=gene_means,
         variable_genes=variable_genes,
+        selective_genes=selective_genes,
+        residual_scale=residual_scale,
         hvg_order=tuple(manifest["hvg_order"]),
         esm2_symbols=esm2_symbols,
         esm2_vectors=np.asarray(esm2_vectors, dtype=np.float32),

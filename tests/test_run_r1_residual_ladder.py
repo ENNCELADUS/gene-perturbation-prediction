@@ -817,6 +817,8 @@ def _synthetic_inputs():
         genes=genes,
         train_gene_means=means,
         variable_genes=frozenset(genes),
+        selective_genes=frozenset(genes),
+        residual_scale=pd.Series(1.0, index=list(genes), name="residual_scale"),
         hvg_order=tuple(f"H{i}" for i in range(7)),
         esm2_symbols=genes,
         esm2_vectors=np.zeros((len(genes), 2), dtype=np.float32),

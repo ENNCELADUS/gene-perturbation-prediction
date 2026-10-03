@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+
 import torch
 from torch import nn
 
@@ -73,7 +75,20 @@ class GeneEffectBlockConfig:
             raise ValueError("GeneEffectBlockConfig must enable at least one block")
 
 
-class GeneEffectResidualHead(nn.Module):
+def _mlp(width: int, hidden: int, n_hidden_layers: int, out: int) -> nn.Sequential:
+    """``n_hidden_layers`` x ``Linear -> LayerNorm -> GELU``, then ``Linear -> out``."""
+    layers: list[nn.Module] = []
+    for index in range(n_hidden_layers):
+        layers += [
+            nn.Linear(width if index == 0 else hidden, hidden),
+            nn.LayerNorm(hidden),
+            nn.GELU(),
+        ]
+    layers.append(nn.Linear(hidden, out))
+    return nn.Sequential(*layers)
+
+
+class GeneEffectMLP(nn.Module):
     """MLP predicting ``delta_hat(g, c)`` from up to five feature blocks.
 
     ``delta_hat_{g,c} = h_delta(Delta_proj, s, q_sc, e_g, z_c)``
@@ -161,20 +176,7 @@ class GeneEffectResidualHead(nn.Module):
         if blocks.use_z_c:
             width += dims.z_c
         self.input_width = width
-
-        layers: list[nn.Module] = [
-            nn.Linear(self.input_width, self.hidden),
-            nn.LayerNorm(self.hidden),
-            nn.GELU(),
-        ]
-        for _ in range(n_hidden_layers - 1):
-            layers += [
-                nn.Linear(self.hidden, self.hidden),
-                nn.LayerNorm(self.hidden),
-                nn.GELU(),
-            ]
-        layers.append(nn.Linear(self.hidden, 1))
-        self.net = nn.Sequential(*layers)
+        self.net = _mlp(self.input_width, self.hidden, n_hidden_layers, 1)
 
     def _check_block(
         self,
@@ -222,7 +224,12 @@ class GeneEffectResidualHead(nn.Module):
             )
         return value
 
-    def forward(
+    def forward(self, **blocks: torch.Tensor | None) -> torch.Tensor:
+        """``delta_hat``, shape ``[batch]``; arguments as :meth:`block_inputs`."""
+        x = torch.cat(list(self.block_inputs(**blocks).values()), dim=-1)
+        return self.net(x).squeeze(-1)
+
+    def block_inputs(
         self,
         *,
         delta_proj: torch.Tensor | None = None,
@@ -233,8 +240,8 @@ class GeneEffectResidualHead(nn.Module):
         q_sc_mask: torch.Tensor | None = None,
         hvg_panel_mask: torch.Tensor | None = None,
         own_gene_shift_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        """Predict ``delta_hat`` for a batch of ``(gene, context)`` rows.
+    ) -> dict[str, torch.Tensor]:
+        """Validated, masked net input of each enabled block, in block order.
 
         Every argument is keyword-only. A block's tensor must be ``None``
         iff that block is disabled in ``self.blocks`` (enforced, not just
@@ -260,7 +267,8 @@ class GeneEffectResidualHead(nn.Module):
                 ``blocks.use_s``.
 
         Returns:
-            ``delta_hat``, shape ``[batch]``.
+            ``{block name: [batch, width]}``; ``s`` and ``q_sc`` carry their
+            mask-bit channels.
 
         Raises:
             ValueError: On a block/mask presence mismatch with ``self.blocks``,
@@ -290,24 +298,139 @@ class GeneEffectResidualHead(nn.Module):
             "own_gene_shift_mask", blocks.use_s, own_gene_shift_mask, batch
         )
 
-        parts: list[torch.Tensor] = []
+        parts: dict[str, torch.Tensor] = {}
         if blocks.use_delta_proj:
-            parts.append(delta_proj)
+            parts["delta_proj"] = delta_proj
         if blocks.use_s:
             own_gate = own_gene_shift_mask.to(dtype=s.dtype).unsqueeze(-1)
             own_shift = s[:, -1:] * own_gate
-            s_masked = torch.cat([s[:, :-1], own_shift], dim=-1)
-            parts.append(s_masked)
-            parts.append(hvg_panel_mask.to(dtype=s.dtype).unsqueeze(-1))
-            parts.append(own_gene_shift_mask.to(dtype=s.dtype).unsqueeze(-1))
+            parts["s"] = torch.cat(
+                [
+                    s[:, :-1],
+                    own_shift,
+                    hvg_panel_mask.to(dtype=s.dtype).unsqueeze(-1),
+                    own_gene_shift_mask.to(dtype=s.dtype).unsqueeze(-1),
+                ],
+                dim=-1,
+            )
         if blocks.use_q_sc:
             q_gate = q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)
-            parts.append(q_sc * q_gate)
-            parts.append(q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1))
+            parts["q_sc"] = torch.cat(
+                [q_sc * q_gate, q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)], dim=-1
+            )
         if blocks.use_e_g:
-            parts.append(e_g)
+            parts["e_g"] = e_g
         if blocks.use_z_c:
-            parts.append(z_c)
+            parts["z_c"] = z_c
+        return parts
 
-        x = torch.cat(parts, dim=-1)
-        return self.net(x).squeeze(-1)
+
+class GeneEffectResidualHead(nn.Module):
+    """Factorised gene x context head over the five-block MLP.
+
+    ``head(g, c) = MLP(F) + <G(g), C(g, c)> / sqrt(rank)``. ``MLP`` is
+    :class:`GeneEffectMLP` over every enabled block. ``G(g)`` is a free
+    per-gene embedding plus, when ``e_g`` is enabled, a linear map of the
+    ESM2 embedding. ``C(g, c)`` is an MLP over the enabled context blocks
+    (``z_c``, ``q_sc``, ``delta_proj``, ``s``, each masked exactly as the MLP
+    sees it), so a gene x context effect is one explicit inner product
+    rather than something the MLP must build from additive pieces.
+
+    The free embedding is indexed by gene position in ``inputs.genes``; there
+    is still no per-line lookup: the only per-line signal is ``z_c``.
+
+    Attributes:
+        trunk: The additive five-block MLP.
+        gene_embedding: Free ``[n_genes, factor_rank]`` gene factors.
+        gene_projection: ``Linear(e_g -> factor_rank)``, or ``None`` when
+            ``e_g`` is disabled.
+        context: MLP ``context_width -> factor_rank``.
+        context_width: Width of the context MLP's input.
+    """
+
+    def __init__(
+        self,
+        dims: GeneEffectFeatureDims,
+        blocks: GeneEffectBlockConfig,
+        hidden: int,
+        n_hidden_layers: int,
+        n_genes: int,
+        factor_rank: int,
+    ) -> None:
+        """Initialize the head.
+
+        Args:
+            dims: Per-block feature widths.
+            blocks: Per-block enable flags.
+            hidden: Hidden width of the MLP trunk and the context MLP.
+            n_hidden_layers: Hidden layers of the MLP trunk and the context MLP.
+            n_genes: Rows of the free gene embedding (``len(inputs.genes)``).
+            factor_rank: Width of the gene and context factors.
+
+        Raises:
+            ValueError: If ``n_genes`` or ``factor_rank`` is non-positive, or
+                no context block is enabled.
+        """
+        super().__init__()
+        if n_genes < 1:
+            raise ValueError(f"n_genes must be positive, got {n_genes}")
+        if factor_rank < 1:
+            raise ValueError(f"factor_rank must be positive, got {factor_rank}")
+        self.trunk = GeneEffectMLP(dims, blocks, hidden, n_hidden_layers)
+        self.dims = dims
+        self.blocks = blocks
+        self.n_genes = int(n_genes)
+        self.factor_rank = int(factor_rank)
+        self.context_width = self.trunk.input_width - (
+            dims.e_g if blocks.use_e_g else 0
+        )
+        if self.context_width == 0:
+            raise ValueError(
+                "the factorised head needs a context block (delta_proj, s, q_sc or z_c)"
+            )
+        self.gene_embedding = nn.Embedding(self.n_genes, self.factor_rank)
+        nn.init.normal_(self.gene_embedding.weight, std=0.02)
+        self.gene_projection = (
+            nn.Linear(dims.e_g, self.factor_rank) if blocks.use_e_g else None
+        )
+        self.context = _mlp(
+            self.context_width, self.trunk.hidden, n_hidden_layers, self.factor_rank
+        )
+
+    def forward(
+        self, *, gene_index: torch.Tensor, **blocks: torch.Tensor | None
+    ) -> torch.Tensor:
+        """Predict ``delta_hat`` for a batch of ``(gene, context)`` rows.
+
+        Args:
+            gene_index: ``[batch]`` integer position of each row's gene in
+                ``inputs.genes``.
+            **blocks: Block tensors and coverage masks, validated and masked
+                exactly as :meth:`GeneEffectMLP.block_inputs`.
+
+        Returns:
+            ``delta_hat``, shape ``[batch]``.
+
+        Raises:
+            ValueError: As :meth:`GeneEffectMLP.block_inputs`, or when
+                ``gene_index`` is not an integer ``[batch]`` tensor.
+        """
+        parts = self.trunk.block_inputs(**blocks)
+        trunk = self.trunk.net(torch.cat(list(parts.values()), dim=-1)).squeeze(-1)
+        batch = trunk.shape[0]
+        if (
+            tuple(gene_index.shape) != (batch,)
+            or gene_index.is_floating_point()
+            or gene_index.dtype == torch.bool
+        ):
+            raise ValueError(
+                f"gene_index must be an integer tensor shaped ({batch},), got "
+                f"shape={tuple(gene_index.shape)} dtype={gene_index.dtype}"
+            )
+        gene = self.gene_embedding(gene_index)
+        if self.gene_projection is not None:
+            gene = gene + self.gene_projection(parts["e_g"])
+        context = self.context(
+            torch.cat([value for name, value in parts.items() if name != "e_g"], dim=-1)
+        )
+        return trunk + (gene * context).sum(dim=-1) / math.sqrt(self.factor_rank)

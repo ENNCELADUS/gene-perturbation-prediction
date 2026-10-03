@@ -41,6 +41,9 @@ def evaluate_model(model, inputs, *, split):
         model_ids=model_ids,
         genes=inputs.genes,
         variable_genes=[gene for gene in inputs.genes if gene in inputs.variable_genes],
+        selective_genes=[
+            gene for gene in inputs.genes if gene in inputs.selective_genes
+        ],
     )
     prefix = "train_eval" if split == "train" else split
     result = EvalResult(

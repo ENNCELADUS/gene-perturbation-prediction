@@ -36,7 +36,7 @@ from src.model.normalization import fit_startup_standardizer  # noqa: E402
 from src.model.state import build_state, load_released_state, released_hparams  # noqa: E402
 from src.training import trainer  # noqa: E402
 from src.training.checkpoint import load_checkpoint  # noqa: E402
-from src.training.sampling import balanced_responses, make_training_loaders  # noqa: E402
+from src.training.sampling import balanced_responses, dependency_loader  # noqa: E402
 
 CONFIG = Path("configs/geneeffect_joint.yaml")
 RELEASED = Path(
@@ -49,9 +49,10 @@ CELLS = 8
 SENTENCE = 4
 ANCHORS = ("ACH-A0", "ACH-A1", "ACH-A2", "ACH-A3")
 TRAIN = (*ANCHORS, "ACH-T0", "ACH-T1")
-VAL = ("ACH-V0", "ACH-V1")
+VAL = ("ACH-V0", "ACH-V1", "ACH-V2")  # three: Spearman needs three lines
 TEST = ("ACH-X0",)
 GENES = ("G0", "G1", "G2", "G3", "G4", "G5")
+SELECTIVE = ("G0", "G2", "G3", "G5")
 HVG_ORDER = ("G0", "G1", *(f"H{i}" for i in range(HVG - 2)))
 RESPONSE_GENES = ("G0", "G2", "G4")
 
@@ -78,6 +79,9 @@ def make_inputs(seed: int = 0) -> PreparedInputs:
         labels[labels.model_id.isin(TRAIN)].groupby("gene_symbol").gene_effect.mean()
     )
     labels["residual"] = labels.gene_effect - labels.gene_symbol.map(means)
+    scale = (
+        labels[labels.model_id.isin(TRAIN)].groupby("gene_symbol").residual.std(ddof=0)
+    )
     prepared_lines = {
         m: PreparedLine(
             controls_tx1=rng.normal(size=(CELLS, TX1)).astype(np.float32),
@@ -101,6 +105,8 @@ def make_inputs(seed: int = 0) -> PreparedInputs:
         genes=GENES,
         train_gene_means=means.reindex(list(GENES)),
         variable_genes=frozenset(GENES),
+        selective_genes=frozenset(SELECTIVE),
+        residual_scale=scale.reindex(list(GENES)),
         hvg_order=HVG_ORDER,
         esm2_symbols=GENES,
         esm2_vectors=rng.normal(size=(len(GENES), ESM2)).astype(np.float32),
@@ -143,7 +149,10 @@ def write_released_state(path: Path, *, dropout: float = 0.0) -> Path:
     return path
 
 
-def make_config(root: Path, *, dropout: float = 0.0) -> dict:
+def make_config(
+    root: Path, *, dropout: float = 0.0, state: bool = True, **train
+) -> dict:
+    """The production config at toy sizes; ``state=False`` drops both STATE blocks."""
     config = load_config(CONFIG)
     config["precision"] = "no"
     config["output_root"] = str(root / "runs")
@@ -151,10 +160,20 @@ def make_config(root: Path, *, dropout: float = 0.0) -> dict:
         write_released_state(root / "released.ckpt", dropout=dropout)
     )
     config["model"].update(
-        cell_sentence_len=SENTENCE, esm2_adapter_hidden=4, head_hidden=8, head_layers=1
+        cell_sentence_len=SENTENCE,
+        esm2_adapter_hidden=4,
+        head_hidden=8,
+        head_layers=1,
+        factor_rank=4,
     )
+    config["model"]["head_blocks"].update(use_delta_proj=state, use_s=state)
     config["train"].update(
-        max_epochs=2, patience=5, dependency_batch_size=4, response_batch_size=8
+        max_epochs=2,
+        patience=5,
+        dependency_batch_size=4,
+        response_batch_size=8,
+        genes_per_block=2,
+        **train,
     )
     return config
 
@@ -277,11 +296,12 @@ def test_response_batches_cover_all_conditions():
 
 def test_training_batches_shard_disjointly_across_ranks():
     inputs = make_inputs()
-    config = {"train": {"dependency_batch_size": 2, "response_batch_size": 4}}
+    dataset = DependencyDataset(inputs, "train")
+    config = {"train": {"objective": "huber", "dependency_batch_size": 2}}
     keys, steps = [], []
     for rank in range(3):
         accelerator = SimpleNamespace(process_index=rank, num_processes=3, device="cpu")
-        loader, _ = make_training_loaders(inputs, config, 0, accelerator)
+        loader = dependency_loader(dataset, config, 0, accelerator)
         steps.append(len(loader))
         keys += [
             key
@@ -292,37 +312,85 @@ def test_training_batches_shard_disjointly_across_ranks():
     assert len(keys) == (len(TRAIN) * len(GENES) // 6) * 6
 
 
-def test_optimizer_rates(world):
-    config = load_config(CONFIG)
-    optimizer = trainer.make_optimizer(world.model, config)
-    groups = {group["name"]: group for group in optimizer.param_groups}
-    assert {name: group["lr"] for name, group in groups.items()} == {
-        "state": 1e-5,
-        "adapter": 1e-4,
-        "head": 1e-4,
-    }
-    assigned = [id(p) for group in optimizer.param_groups for p in group["params"]]
-    assert sorted(assigned) == sorted(id(p) for p in world.model.parameters())
-    assert {id(p) for p in groups["state"]["params"]} == {
-        id(p) for p in world.model.backbone.state.parameters()
-    }
+def test_pearson_blocks_batches_hold_every_training_row_of_their_genes():
+    inputs = make_inputs()
+    dataset = DependencyDataset(inputs, "train")
+    config = {"train": {"objective": "pearson_blocks", "genes_per_block": 2}}
+    blocks = []
+    for rank in range(2):  # 3 blocks of 2 genes over 2 ranks: one block each
+        accelerator = SimpleNamespace(process_index=rank, num_processes=2, device="cpu")
+        loader = dependency_loader(dataset, config, 0, accelerator)
+        batches = list(loader)
+        assert len(loader) == len(batches) == 1
+        for batch in batches:
+            genes = set(batch.conditions.genes)
+            assert len(genes) == 2
+            assert sorted(zip(batch.conditions.model_ids, batch.conditions.genes)) == [
+                (m, g) for m in sorted(TRAIN) for g in sorted(genes)
+            ]
+            torch.testing.assert_close(
+                batch.selective,
+                torch.tensor([g in SELECTIVE for g in batch.conditions.genes]),
+            )
+            blocks.append(genes)
+    assert not blocks[0] & blocks[1]
 
 
-def test_selection_uses_val_geneeffect_loss(world, tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("state", "state_mode", "groups"),
+    [
+        (True, "frozen", {"adapter": 1e-4, "head": 1e-3}),
+        (True, "trainable", {"state": 1e-5, "adapter": 1e-4, "head": 1e-3}),
+        (False, "frozen", {"head": 1e-3}),
+    ],
+)
+def test_optimizer_groups_follow_state_setting(
+    tmp_path, cpu, state, state_mode, groups
+):
+    config = make_config(tmp_path, state=state, state_mode=state_mode)
+    model = build_joint_model(config, make_inputs())
+    optimizer = trainer.make_optimizer(model, config)
+    assert {g["name"]: g["lr"] for g in optimizer.param_groups} == groups
+    held = sorted(id(p) for group in optimizer.param_groups for p in group["params"])
+    assert held == sorted(id(p) for p in model.parameters() if p.requires_grad)
+    modules = {"state": model.backbone.state, "adapter": model.backbone.perturbations}
+    for name in modules.keys() - groups.keys():
+        assert not any(p.requires_grad for p in modules[name].parameters())
+
+
+@pytest.mark.parametrize("state_mode", ["frozen", "trainable"])
+def test_frozen_state_runs_in_eval_mode_during_training(world, tmp_path, state_mode):
+    from accelerate import Accelerator
+
+    config = copy.deepcopy(world.config)
+    config["train"].update(max_epochs=1, state_mode=state_mode)
+    modes = []
+    world.model.backbone.state.register_forward_pre_hook(
+        lambda module, args: (
+            modes.append(module.training) if torch.is_grad_enabled() else None
+        )
+    )
+    trainer.fit(
+        world.model, world.inputs, config, tmp_path / "run", Accelerator(cpu=True)
+    )
+    assert modes and set(modes) == {state_mode == "trainable"}
+
+
+def test_selection_uses_val_selective_spearman(world, tmp_path, monkeypatch):
     from accelerate import Accelerator
 
     config = copy.deepcopy(world.config)
     config["train"].update(max_epochs=5, patience=2)
-    losses = iter([2.0, 1.0, 1.5, 3.0, 0.1])
-    correlations = iter([0.9, -0.9, 0.0, 0.95, 0.0])
+    scores = iter([0.1, 0.5, 0.2, -0.1, 0.9])
+    losses = iter([0.1, 2.0, 0.0, 0.0, 0.0])
 
     def evaluate(model, inputs, config, *, split, accelerator, lines=None):
         if split == "train":
             return SimpleNamespace(metrics={"train_eval_geneeffect_loss": 0.0})
         return SimpleNamespace(
             metrics={
+                "val_selective_spearman": next(scores),
                 "val_geneeffect_loss": next(losses),
-                "val_residual_pearson_macro_per_gene": next(correlations),
             }
         )
 
@@ -330,8 +398,9 @@ def test_selection_uses_val_geneeffect_loss(world, tmp_path, monkeypatch):
     state = trainer.fit(
         world.model, world.inputs, config, tmp_path / "run", Accelerator(cpu=True)
     )
-    # Epoch 1 has the lowest loss; epochs 2 and 3 exhaust patience before 0.1.
+    # Epoch 1 scores highest; epochs 2 and 3 exhaust patience before 0.9.
     assert (state.best_epoch, state.next_epoch, state.bad_epochs) == (1, 4, 2)
+    assert state.best_score == 0.5
     assert (
         load_checkpoint(tmp_path / "run" / "best.pt")["train_state"]["best_epoch"] == 1
     )
@@ -414,13 +483,8 @@ def test_cpu_single_process_training_writes_best_last_and_done(
     epochs = [r for r in records if "val_geneeffect_loss" in r]
     updates = [r for r in records if "train_geneeffect_loss" in r]
     assert len(epochs) == 2 and not any("val_response" in k for k in epochs[0])
-    assert [r["train_response_loss"] is not None for r in updates[:5]] == [
-        True,
-        False,
-        False,
-        False,
-        True,
-    ]
+    # response_weight 0: no replay update.
+    assert updates and all(r["train_response_loss"] is None for r in updates)
     # A finished run directory is not retrained.
     assert geneeffect.run_training(config, run_dir) == run_dir / "best.pt"
     assert calls == [True]
@@ -433,13 +497,62 @@ def test_cpu_single_process_training_writes_best_last_and_done(
         assert (out / name).is_file()
     metrics = json.loads((out / "metrics.json").read_text())
     saved = load_checkpoint(run_dir / "best.pt")
-    assert metrics["val_geneeffect_loss"] == pytest.approx(
-        saved["train_state"]["best_loss"], rel=1e-5
+    assert metrics["val_selective_spearman"] == pytest.approx(
+        saved["train_state"]["best_score"], rel=1e-5
     )
 
 
-def test_resume_continues_from_last(tmp_path, cpu, monkeypatch):
-    config = make_config(tmp_path, dropout=0.1)
+@pytest.mark.parametrize(
+    ("settings", "state"),
+    [
+        ({"objective": "standardized_mse"}, True),
+        ({"objective": "pearson_blocks"}, True),
+        ({"state_mode": "trainable", "response_weight": 1.0}, True),
+        ({"objective": "pearson_blocks"}, False),
+    ],
+)
+def test_training_variants_train_only_their_modules(tmp_path, cpu, settings, state):
+    config = make_config(tmp_path, state=state, **settings)
+    torch.manual_seed(config["seeds"]["train"])  # as run_training seeds the build
+    initial = build_joint_model(config, make_inputs()).state_dict()
+    best = geneeffect.run_training(config, tmp_path / "run", inputs=make_inputs())
+    final = load_checkpoint(best.parent / "last.pt")["model_state"]
+
+    def moved(prefix: str) -> bool:
+        names = [name for name in initial if name.startswith(prefix)]
+        assert names
+        return any(not torch.equal(final[name], initial[name]) for name in names)
+
+    trains_state = config["train"]["state_mode"] == "trainable" and state
+    assert moved("backbone.state.") == trains_state
+    assert moved("backbone.perturbations.") == state
+    assert moved("head.")
+    records = [json.loads(line) for line in (best.parent / "metrics.jsonl").open()]
+    epochs = [r for r in records if "val_selective_spearman" in r]
+    assert len(epochs) == 2
+    assert all(np.isfinite(r["val_selective_spearman"]) for r in epochs)
+    replays = [
+        r["train_response_loss"] is not None
+        for r in records
+        if "train_geneeffect_loss" in r
+    ]
+    if config["train"]["response_weight"] > 0:
+        assert replays[:5] == [True, False, False, False, True]
+    else:
+        assert replays and not any(replays)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"state_mode": "trainable", "response_weight": 1.0},
+        {"objective": "pearson_blocks"},
+    ],
+)
+def test_resume_continues_from_last(tmp_path, cpu, monkeypatch, settings):
+    # STATE dropout under trainable STATE checks the restored RNG; the response
+    # stream and the gene blocks check the per-epoch seeding.
+    config = make_config(tmp_path, dropout=0.1, **settings)
     reference = geneeffect.run_training(
         config, tmp_path / "whole", inputs=make_inputs()
     )
@@ -461,13 +574,15 @@ def test_resume_continues_from_last(tmp_path, cpu, monkeypatch):
     monkeypatch.setattr(trainer, "save_checkpoint", original)
 
     changed = copy.deepcopy(config)
-    changed["train"]["head_learning_rate"] = 1e-3
+    changed["train"]["head_learning_rate"] = 5e-4
     with pytest.raises(ValueError, match="config differs"):
         geneeffect.run_training(changed, run_dir, inputs=make_inputs())
 
     geneeffect.run_training(config, run_dir, inputs=make_inputs())
     resumed = load_checkpoint(run_dir / "last.pt")
     assert resumed["train_state"] == expected["train_state"]
+    assert resumed["scheduler"] == expected["scheduler"]
+    assert resumed["scheduler"]["last_epoch"] == resumed["train_state"]["global_step"]
     for name, value in expected["model_state"].items():
         torch.testing.assert_close(resumed["model_state"][name], value, rtol=0, atol=0)
 
@@ -512,13 +627,19 @@ def test_constant_prediction_residual_correlation_is_nan():
     )  # constant within every gene, as a gene-mean predictor is
     frame["geneeffect_prediction"] = frame.residual_prediction + 1.0
     metrics, _, per_gene = aggregate_geneeffect(
-        frame, model_ids=("L0", "L1", "L2", "L3"), genes=GENES, variable_genes=GENES
+        frame,
+        model_ids=("L0", "L1", "L2", "L3"),
+        genes=GENES,
+        variable_genes=GENES,
+        selective_genes=GENES,
     )
     assert per_gene.pearson.isna().all() and per_gene.spearman.isna().all()
     assert metrics["residual_pearson_macro_per_gene"] is None
     assert metrics["residual_spearman_macro_per_gene"] is None
     assert metrics["residual_pearson_per_gene_undefined"] == len(GENES)
     assert metrics["residual_pearson_per_gene_scored"] == 0
+    assert metrics["selective_spearman"] is None
+    assert metrics["selective_spearman_undefined"] == len(GENES)
 
 
 def test_config_rejects_unknown_key():
@@ -571,13 +692,22 @@ def _two_rank_worker(rank, port, config, run_dir):
     geneeffect.run_training(config, Path(run_dir), inputs=make_inputs())
 
 
-def test_two_rank_cpu_training_under_distributed_launch(tmp_path, cpu):
+@pytest.mark.parametrize(
+    ("objective", "steps"),
+    [
+        ("huber", 8),  # 36 training rows over 2 ranks x batch 4: 4 updates an epoch
+        ("pearson_blocks", 2),  # 3 blocks of 2 genes over 2 ranks: 1 update an epoch
+    ],
+)
+def test_two_rank_cpu_training_under_distributed_launch(
+    tmp_path, cpu, objective, steps
+):
     import socket
 
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
-    config = make_config(tmp_path)
+    config = make_config(tmp_path, objective=objective)
     run_dir = tmp_path / "run"
     torch.multiprocessing.spawn(
         _two_rank_worker, args=(port, config, str(run_dir)), nprocs=2, join=True
@@ -586,8 +716,7 @@ def test_two_rank_cpu_training_under_distributed_launch(tmp_path, cpu):
     assert saved["world_size"] == 2 and len(saved["rng_states"]) == 2
     assert json.loads((run_dir / "done.json").read_text())["next_epoch"] == 2
     records = [json.loads(line) for line in (run_dir / "metrics.jsonl").open()]
-    # 36 training rows over 2 ranks x batch 4 -> 4 updates per epoch.
-    assert max(r["global_step"] for r in records) == 8
+    assert max(r["global_step"] for r in records) == steps
 
 
 def _rank_zero_metrics_worker(rank, port, config, out_dir):
@@ -640,7 +769,7 @@ def test_metrics_aggregated_once_on_rank_zero(tmp_path, cpu):
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
-    config = make_config(tmp_path)  # batch 4: 12 validation rows -> 3 batches
+    config = make_config(tmp_path)  # batch 4: 18 validation rows -> 5 batches
     torch.multiprocessing.spawn(
         _rank_zero_metrics_worker,
         args=(port, config, str(tmp_path)),

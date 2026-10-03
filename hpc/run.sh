@@ -4,10 +4,13 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
+       hpc/run.sh revision CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh test CHECKPOINT
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment.
 `all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every
 GPU step; --gpus restricts it to the listed ids among the visible ones.
+`revision` runs training, validation evaluation and baselines for one config
+(no response comparison, no readout) and writes summary.md and revision.json.
 EOF
 }
 
@@ -17,12 +20,13 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|test) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 python_bin=${PYTHON_BIN:-"$repo_root/.venv-tx1/bin/python"}
 case "$command" in
   all) exec "$python_bin" -m src.experiments.all "$@" ;;
+  revision) exec "$python_bin" -m src.experiments.revision "$@" ;;
   test) checkpoint=$1; shift; exec "$python_bin" -m src.evaluate --checkpoint "$checkpoint" --split test "$@" ;;
 esac

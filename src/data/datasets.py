@@ -93,7 +93,10 @@ class DependencyDataset(Dataset[int]):
             np.asarray(inputs.esm2_vectors, dtype=np.float32), torch.float32
         )
         self._row_line = on_device([line_index[m] for m in self.model_ids], torch.long)
-        self._row_gene = on_device([gene_index[g] for g in self.genes], torch.long)
+        self._row_gene_positions = np.array(
+            [gene_index[g] for g in self.genes], dtype=np.int64
+        )
+        self._row_gene = on_device(self._row_gene_positions, torch.long)
         self._row_esm2 = on_device([esm2_index[g] for g in self.genes], torch.long)
         self._row_in_hvg_panel = on_device(
             [index is not None for index in self.hvg_indices], torch.bool
@@ -103,12 +106,24 @@ class DependencyDataset(Dataset[int]):
         self.gene_mean = on_device(
             inputs.train_gene_means.loc[self.genes].to_numpy(), torch.float32
         )
+        self.residual_scale = on_device(
+            inputs.residual_scale.loc[self.genes].to_numpy(), torch.float32
+        )
+        self.selective = on_device(
+            [gene in inputs.selective_genes for gene in self.genes], torch.bool
+        )
 
     def __len__(self) -> int:
         return len(self.rows)
 
     def __getitem__(self, index: int) -> int:
         return int(index)
+
+    def rows_by_gene(self) -> list[np.ndarray]:
+        """Row positions of each gene, in ``inputs.genes`` order; empty when absent."""
+        order = np.argsort(self._row_gene_positions, kind="stable")
+        counts = np.bincount(self._row_gene_positions, minlength=len(self.inputs.genes))
+        return np.split(order, np.cumsum(counts)[:-1])
 
     def collate(self, indices: Sequence[int]) -> DependencyBatch:
         positions = [int(index) for index in indices]
@@ -120,6 +135,7 @@ class DependencyDataset(Dataset[int]):
         conditions = OnlineConditionBatch(
             basal_hvg=tuple(self._basal[m] for m in model_ids),
             genes=tuple(self.genes[i] for i in positions),
+            gene_index=gene,
             model_ids=model_ids,
             q_sc=self._q_sc[line, gene],
             e_g=self._esm2[self._row_esm2[rows]],
@@ -134,6 +150,8 @@ class DependencyDataset(Dataset[int]):
             residual=self.residual[rows],
             gene_effect=self.gene_effect[rows],
             gene_mean=self.gene_mean[rows],
+            residual_scale=self.residual_scale[rows],
+            selective=self.selective[rows],
         )
 
 

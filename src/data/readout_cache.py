@@ -55,6 +55,7 @@ class ReadoutCache:
         self.genes = self.metadata["genes"]
         self.lines = self.metadata["lines"]
         self.variable_genes = self.metadata["variable_genes"]
+        self.selective_genes = self.metadata["selective_genes"]
         self.dims = GeneEffectFeatureDims(**self.metadata["dims"])
         self.arrays = {
             name: np.load(self.root / f"{name}.npy", mmap_mode="r")
@@ -109,7 +110,15 @@ class ReadoutCache:
 
 
 def write_feature_cache(
-    root, batches, *, row_counts, split_lines, genes, variable_genes, provenance
+    root,
+    batches,
+    *,
+    row_counts,
+    split_lines,
+    genes,
+    variable_genes,
+    selective_genes,
+    provenance,
 ):
     """Stream (raw FeatureBatch, residual, mean) tuples; never fit on validation."""
     root = Path(root)
@@ -120,6 +129,8 @@ def write_feature_cache(
         raise ValueError("split contexts must be disjoint and identities unique")
     if not set(variable_genes).issubset(genes):
         raise ValueError("variable genes outside gene order")
+    if not set(selective_genes).issubset(genes):
+        raise ValueError("selective genes outside gene order")
     root.mkdir(parents=True, exist_ok=False)
     metadata = {
         "status": "writing",
@@ -127,6 +138,7 @@ def write_feature_cache(
         "lines": lines,
         "split_lines": split_lines,
         "variable_genes": list(variable_genes),
+        "selective_genes": list(selective_genes),
         "provenance": provenance,
         "row_counts": row_counts,
     }

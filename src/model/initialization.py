@@ -101,6 +101,10 @@ def _assemble(
 ) -> GeneEffectE2EModel:
     if list(architecture["state_hparams"]["gene_names"]) != list(inputs.hvg_order):
         raise ValueError("STATE's gene order differs from the prepared HVG order")
+    if list(architecture["genes"]) != list(inputs.genes):
+        raise ValueError("the saved gene order differs from the prepared gene order")
+    if list(inputs.residual_scale.index) != list(inputs.genes):
+        raise ValueError("residual_scale is not indexed by the prepared gene order")
     vectors = np.asarray(inputs.esm2_vectors, dtype=np.float32)
     table = Esm2EmbeddingTable(
         vectors.shape[1], dict(zip(inputs.esm2_symbols, vectors, strict=True))
@@ -119,10 +123,15 @@ def _assemble(
             blocks=GeneEffectBlockConfig(**head["blocks"]),
             hidden=head["hidden"],
             n_hidden_layers=head["n_hidden_layers"],
+            n_genes=head["n_genes"],
+            factor_rank=head["factor_rank"],
         ),
         projection,
         standardizer,
         collator_seed=architecture["collator_seed"],
+        residual_scale=torch.as_tensor(
+            inputs.residual_scale.to_numpy(), dtype=torch.float32
+        ),
     )
     model.architecture = dict(architecture)
     return model
@@ -131,7 +140,11 @@ def _assemble(
 def build_joint_model(
     config: Mapping[str, Any], inputs: PreparedInputs
 ) -> GeneEffectE2EModel:
-    """Released STATE (every weight), a new ESM2 adapter and a new GeneEffect head."""
+    """Released STATE (every weight), a new ESM2 adapter and a new GeneEffect head.
+
+    STATE and the adapter are built even when no head block uses them, so every
+    STATE setting shares one module layout; such a model never calls them.
+    """
     model_config = config["model"]
     checkpoint = Path(config["paths"]["state_checkpoint"])
     cell_set_len = int(model_config["cell_sentence_len"])
@@ -139,6 +152,7 @@ def build_joint_model(
     architecture = {
         "state_hparams": released_hparams(checkpoint, cell_set_len=cell_set_len),
         "esm2_adapter_hidden": int(model_config["esm2_adapter_hidden"]),
+        "genes": list(inputs.genes),
         "head": {
             "blocks": dict(model_config["head_blocks"]),
             "dims": asdict(
@@ -149,6 +163,8 @@ def build_joint_model(
             ),
             "hidden": int(model_config["head_hidden"]),
             "n_hidden_layers": int(model_config["head_layers"]),
+            "n_genes": len(inputs.genes),
+            "factor_rank": int(model_config["factor_rank"]),
         },
         "collator_seed": int(config["seeds"]["collator"]),
     }

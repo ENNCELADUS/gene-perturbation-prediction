@@ -54,7 +54,7 @@ def _require_keys(value: Any, expected: set[str], name: str) -> None:
 
 
 def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Reject missing and unknown keys and unknown choices; values otherwise as written."""
+    """Reject missing and unknown keys and unknown choices; values as written."""
     _require_keys(config, {*_GROUPS, *_TOP_LEVEL.split()}, "config")
     for name, keys in _GROUPS.items():
         _require_keys(config[name], set(keys.split()), name)

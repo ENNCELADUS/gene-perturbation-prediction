@@ -37,6 +37,7 @@ def evaluate_head(
         model_ids=cache.metadata["split_lines"][split],
         genes=cache.genes,
         variable_genes=cache.variable_genes,
+        selective_genes=cache.selective_genes,
     )
     return EvalResult(
         {f"{split}_{key}": value for key, value in metrics.items()},
