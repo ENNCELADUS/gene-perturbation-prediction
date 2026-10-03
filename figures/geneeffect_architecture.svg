@@ -1,147 +1,351 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 962" width="1000" height="962" font-family="Helvetica, Arial, sans-serif">
-<title>Joint GeneEffect model: inputs, response model and readout</title>
-<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#444"/></marker></defs>
-<rect width="1000" height="962" fill="#ffffff"/>
-<rect x="8" y="8" width="984" height="305" rx="10" fill="#fbfbfb" stroke="#bbbbbb" stroke-width="1.2"/>
-<text x="22" y="34" font-size="17" text-anchor="start" font-weight="bold" fill="#222222" font-style="normal">(a)</text>
-<text x="50" y="34" font-size="15" text-anchor="start" font-weight="normal" fill="#222222" font-style="normal">Inputs for one gene-line condition (g, c)</text>
-<rect x="20" y="56" width="130" height="152" rx="7" fill="#ffffff" stroke="#666666" stroke-width="1.6"/>
-<text x="85.0" y="112.2" font-size="13" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">basal cells</text>
-<text x="85.0" y="128.4" font-size="13" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">of line c</text>
-<text x="85.0" y="144.7" font-size="13" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">raw UMI</text>
-<text x="85.0" y="160.9" font-size="13" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">128 cells</text>
-<rect x="250" y="56" width="180" height="60" rx="7" fill="#e4e4e4" stroke="#7a7a7a" stroke-width="1.6"/>
-<text x="340.0" y="82.4" font-size="13" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">Tx1-3B</text>
-<text x="340.0" y="98.7" font-size="13" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">frozen</text>
-<text x="340" y="134" font-size="12" text-anchor="middle" font-weight="normal" fill="#555" font-style="italic">feeds z<tspan font-size="8.6" dy="3.0">c</tspan><tspan dy="-3.0"></tspan> only; not STATE</text>
-<rect x="540" y="56" width="170" height="60" rx="7" fill="#fbefcf" stroke="#B8860B" stroke-width="1.6"/>
-<text x="625.0" y="82.4" font-size="13" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">mean + variance</text>
-<text x="625.0" y="98.7" font-size="13" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">pooling over cells</text>
-<rect x="800" y="66" width="110" height="40" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="855.0" y="91.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">z<tspan font-size="10.8" dy="3.8">c</tspan><tspan dy="-3.8"></tspan></text>
-<line x1="150" y1="86" x2="250" y2="86" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="200" y="79" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">raw UMI</text>
-<line x1="430" y1="86" x2="540" y2="86" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="485" y="79" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">128×2560</text>
-<text x="485" y="65" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">H<tspan font-size="8.6" dy="3.0">c</tspan><tspan dy="-3.0"></tspan></text>
-<line x1="710" y1="86" x2="800" y2="86" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="755" y="79" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">5120</text>
-<text x="755" y="65" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">z<tspan font-size="8.6" dy="3.0">c</tspan><tspan dy="-3.0"></tspan></text>
-<text x="855" y="120" font-size="11" text-anchor="middle" font-weight="normal" fill="#555" font-style="normal">mean and variance of H<tspan font-size="7.9" dy="2.8">c</tspan><tspan dy="-2.8"></tspan></text>
-<rect x="250" y="148" width="180" height="60" rx="7" fill="#fbefcf" stroke="#B8860B" stroke-width="1.6"/>
-<text x="340.0" y="174.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">normalize_total + log1p</text>
-<text x="340.0" y="189.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">(whole library), HVG slice</text>
-<rect x="800" y="158" width="110" height="40" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="855.0" y="183.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">X<tspan font-size="10.8" dy="3.8">c</tspan><tspan dy="-3.8"></tspan></text>
-<line x1="150" y1="178" x2="250" y2="178" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<line x1="430" y1="178" x2="800" y2="178" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="615" y="171" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">128×2000</text>
-<text x="615" y="157" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">X<tspan font-size="8.6" dy="3.0">c</tspan><tspan dy="-3.0"></tspan></text>
-<rect x="20" y="234" width="130" height="60" rx="7" fill="#ffffff" stroke="#666666" stroke-width="1.6"/>
-<text x="85.0" y="268.6" font-size="13" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">gene g</text>
-<rect x="250" y="234" width="180" height="60" rx="7" fill="#e4e4e4" stroke="#7a7a7a" stroke-width="1.6"/>
-<text x="340.0" y="260.4" font-size="13" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">ESM-2</text>
-<text x="340.0" y="276.7" font-size="13" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">frozen</text>
-<rect x="800" y="244" width="110" height="40" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="855.0" y="269.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">e<tspan font-size="10.8" dy="3.8">g</tspan><tspan dy="-3.8"></tspan></text>
-<line x1="150" y1="264" x2="250" y2="264" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<line x1="430" y1="264" x2="800" y2="264" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="615" y="257" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">1280</text>
-<text x="615" y="243" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">e<tspan font-size="8.6" dy="3.0">g</tspan><tspan dy="-3.0"></tspan></text>
-<rect x="8" y="325" width="984" height="262" rx="10" fill="#fbfbfb" stroke="#bbbbbb" stroke-width="1.2"/>
-<text x="22" y="351" font-size="17" text-anchor="start" font-weight="bold" fill="#222222" font-style="normal">(b)</text>
-<text x="50" y="351" font-size="15" text-anchor="start" font-weight="normal" fill="#222222" font-style="normal">Response model: predicted post-perturbation expression of 128 cells</text>
-<rect x="20" y="401" width="90" height="40" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="65.0" y="426.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">X<tspan font-size="10.8" dy="3.8">c</tspan><tspan dy="-3.8"></tspan></text>
-<rect x="20" y="495" width="90" height="40" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="65.0" y="520.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">e<tspan font-size="10.8" dy="3.8">g</tspan><tspan dy="-3.8"></tspan></text>
-<rect x="170" y="487" width="130" height="56" rx="7" fill="#cfe2f3" stroke="#0072B2" stroke-width="1.6"/>
-<text x="235.0" y="511.7" font-size="12" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">ESM2 adapter</text>
-<text x="235.0" y="526.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">trainable, lr 1e-4</text>
-<rect x="395" y="371" width="410" height="194" rx="9" fill="#cfe2f3" fill-opacity="0.45" stroke="#0072B2" stroke-width="1.6"/>
-<text x="600" y="389" font-size="12.5" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">STATE (released checkpoint), trainable, lr 1e-5</text>
-<rect x="410" y="397" width="130" height="52" rx="7" fill="#ffffff" stroke="#666666" stroke-width="1.6"/>
-<text x="475.0" y="419.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">basal encoder</text>
-<text x="475.0" y="434.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">2000→328</text>
-<rect x="410" y="491" width="130" height="52" rx="7" fill="#ffffff" stroke="#666666" stroke-width="1.6"/>
-<text x="475.0" y="513.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">perturbation encoder</text>
-<text x="475.0" y="528.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">2024→328</text>
-<rect x="575" y="412" width="90" height="112" rx="7" fill="#ffffff" stroke="#666666" stroke-width="1.6"/>
-<text x="620.0" y="472.2" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">transformer</text>
-<rect x="700" y="412" width="95" height="112" rx="7" fill="#ffffff" stroke="#666666" stroke-width="1.6"/>
-<text x="747.5" y="464.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">decoder</text>
-<text x="747.5" y="479.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">328→2000</text>
-<rect x="880" y="446" width="100" height="44" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="930.0" y="473.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">Ŷ<tspan font-size="10.8" dy="3.8">g,c</tspan><tspan dy="-3.8"></tspan></text>
-<line x1="110" y1="421" x2="410" y2="421" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="260" y="414" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">128×2000</text>
-<line x1="110" y1="515" x2="170" y2="515" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="140" y="508" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">1280</text>
-<line x1="300" y1="515" x2="410" y2="515" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="350" y="508" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">2024</text>
-<text x="350" y="494" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">p<tspan font-size="8.6" dy="3.0">g</tspan><tspan dy="-3.0"></tspan></text>
-<line x1="540" y1="421" x2="575" y2="421" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<line x1="540" y1="515" x2="575" y2="515" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<line x1="665" y1="468" x2="700" y2="468" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<line x1="795" y1="468" x2="880" y2="468" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="842" y="440" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">128×2000</text>
-<rect x="850" y="530" width="130" height="44" rx="7" fill="#ffffff" stroke="#666666" stroke-width="1.6" stroke-dasharray="5 3"/>
-<text x="915.0" y="549.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">auxiliary response loss</text>
-<text x="915.0" y="562.7" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">on four anchor lines</text>
-<line x1="930" y1="490" x2="930" y2="530" stroke="#444" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ah)"/>
-<rect x="8" y="600" width="984" height="320" rx="10" fill="#fbfbfb" stroke="#bbbbbb" stroke-width="1.2"/>
-<text x="22" y="626" font-size="17" text-anchor="start" font-weight="bold" fill="#222222" font-style="normal">(c)</text>
-<text x="50" y="626" font-size="15" text-anchor="start" font-weight="normal" fill="#222222" font-style="normal">Readout: predicted GeneEffect</text>
-<rect x="20" y="651" width="130" height="38" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="85.0" y="675.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">Ŷ<tspan font-size="10.8" dy="3.8">g,c</tspan><tspan dy="-3.8"></tspan></text>
-<rect x="20" y="703" width="130" height="38" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="85.0" y="727.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">X<tspan font-size="10.8" dy="3.8">c</tspan><tspan dy="-3.8"></tspan></text>
-<rect x="20" y="755" width="130" height="38" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="85.0" y="779.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">z<tspan font-size="10.8" dy="3.8">c</tspan><tspan dy="-3.8"></tspan></text>
-<rect x="20" y="807" width="130" height="38" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="85.0" y="831.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">e<tspan font-size="10.8" dy="3.8">g</tspan><tspan dy="-3.8"></tspan></text>
-<rect x="20" y="859" width="130" height="38" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="85.0" y="883.2" font-size="15" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">q<tspan font-size="10.8" dy="3.8">g,c</tspan><tspan dy="-3.8"></tspan></text>
-<rect x="235" y="640" width="190" height="112" rx="7" fill="#fbefcf" stroke="#B8860B" stroke-width="1.6"/>
-<text x="330.0" y="677.7" font-size="12" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">response descriptors</text>
-<text x="330.0" y="692.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">Δ: projected mean and</text>
-<text x="330.0" y="707.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">variance shift, Ŷ vs X<tspan font-size="8.6" dy="3.0">c</tspan><tspan dy="-3.0"></tspan></text>
-<text x="330.0" y="722.7" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">s: scalar summaries</text>
-<line x1="150" y1="670" x2="235" y2="670" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="192" y="664" font-size="11" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">128×2000</text>
-<line x1="150" y1="722" x2="235" y2="722" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="192" y="716" font-size="11" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">128×2000</text>
-<rect x="560" y="640" width="150" height="268" rx="7" fill="#cfe2f3" stroke="#0072B2" stroke-width="1.6"/>
-<text x="635.0" y="761.4" font-size="14" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">residual head</text>
-<text x="635.0" y="778.9" font-size="14" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">trainable</text>
-<text x="635.0" y="796.4" font-size="14" text-anchor="middle" font-weight="normal" fill="#222222" font-style="normal">lr 1e-4</text>
-<line x1="425" y1="696.0" x2="560" y2="696.0" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="492" y="690.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">Δ, s</text>
-<line x1="150" y1="774" x2="560" y2="774" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="492" y="768" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">5120</text>
-<line x1="150" y1="826" x2="560" y2="826" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="492" y="820" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">1280</text>
-<line x1="150" y1="878" x2="560" y2="878" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="350" y="872" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">q<tspan font-size="8.6" dy="3.0">g,c</tspan><tspan dy="-3.0"></tspan>: basal statistics of g in c (log space)</text>
-<circle cx="800" cy="774" r="15" fill="#ffffff" stroke="#444" stroke-width="1.6"/>
-<text x="800" y="780" font-size="20" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">+</text>
-<line x1="710" y1="774" x2="785" y2="774" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="755" y="768" font-size="12" text-anchor="middle" font-weight="normal" fill="#333" font-style="normal">δ̂(g,c)</text>
-<rect x="740" y="859" width="120" height="38" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="800.0" y="882.9" font-size="14" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">μ<tspan font-size="10.1" dy="3.5">train</tspan><tspan dy="-3.5"></tspan>(g)</text>
-<line x1="800" y1="859" x2="800" y2="789" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<text x="812" y="830" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-style="normal">fit on train lines</text>
-<rect x="850" y="748" width="130" height="52" rx="7" fill="#d9efe7" stroke="#009E73" stroke-width="1.6"/>
-<text x="915.0" y="770.1" font-size="14" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">predicted</text>
-<text x="915.0" y="787.6" font-size="14" text-anchor="middle" font-weight="bold" fill="#222222" font-style="normal">GeneEffect</text>
-<line x1="815" y1="774" x2="850" y2="774" stroke="#444" stroke-width="1.6" marker-end="url(#ah)"/>
-<rect x="20" y="930" width="26" height="16" rx="3" fill="#e4e4e4" stroke="#7a7a7a" stroke-width="1.4"/>
-<text x="54" y="943" font-size="12" text-anchor="start" font-weight="normal" fill="#222222" font-style="normal">frozen</text>
-<rect x="120" y="930" width="26" height="16" rx="3" fill="#cfe2f3" stroke="#0072B2" stroke-width="1.4"/>
-<text x="154" y="943" font-size="12" text-anchor="start" font-weight="normal" fill="#222222" font-style="normal">trainable (learning rate)</text>
-<rect x="300" y="930" width="26" height="16" rx="3" fill="#fbefcf" stroke="#B8860B" stroke-width="1.4"/>
-<text x="334" y="943" font-size="12" text-anchor="start" font-weight="normal" fill="#222222" font-style="normal">parameter-free step</text>
-<rect x="460" y="930" width="26" height="16" rx="3" fill="#d9efe7" stroke="#009E73" stroke-width="1.4"/>
-<text x="494" y="943" font-size="12" text-anchor="start" font-weight="normal" fill="#222222" font-style="normal">tensor</text>
-<text x="560" y="943" font-size="12" text-anchor="start" font-weight="normal" fill="#555" font-style="normal">Arrow labels: cells × features for one condition, no batch dimension.</text>
+<svg width="1420" height="1000" viewBox="0 0 1420 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+<title>Joint GeneEffect model: inputs, response model and factorised head</title>
+<rect width="1420" height="1000" fill="white"/>
+<rect x="16.6" y="16.6" width="802.8" height="498.8" rx="17.4" stroke="#9A9A9A" stroke-width="1.2" stroke-dasharray="8 6"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="bold" letter-spacing="0em"><tspan x="34" y="45.5455">(a) Inputs and frozen encoders</tspan></text>
+<rect x="34.75" y="70.75" width="174.5" height="74.5" rx="1.25" fill="white"/>
+<rect x="34.75" y="70.75" width="174.5" height="74.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="46.5" y="105.045">Protein sequence</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="68" y="125.227">perturbed gene&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="168" y="125.227">g</tspan></text>
+<path d="M250 108L242 103.381V112.619L250 108ZM210 108V108.8H242.8V108V107.2H210V108Z" fill="#2B2B2B"/>
+<rect x="250.75" y="70.75" width="168.5" height="74.5" rx="9.25" fill="#E3E3E3"/>
+<rect x="250.75" y="70.75" width="168.5" height="74.5" rx="9.25" stroke="#666666" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="306" y="95.5455">ESM-2</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="258.5" y="115.727">650M, sequence &#x2192; 1280</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="294" y="134.727">mean-pooled</tspan></text>
+<path d="M720 108L712 103.381V112.619L720 108ZM420 108V108.8H712.8V108V107.2H420V108Z" fill="#2B2B2B"/>
+<rect x="720.75" y="84.75" width="78.5" height="46.5" rx="1.25" fill="white"/>
+<rect x="720.75" y="84.75" width="78.5" height="46.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="750.5" y="106.432">e</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="761.5" y="110.114">g</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="747" y="123.75">1280</tspan></text>
+<rect x="34.75" y="180.75" width="174.5" height="284.5" rx="1.25" fill="white"/>
+<rect x="34.75" y="180.75" width="174.5" height="284.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="76.5" y="310.545">Basal cells</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="93" y="330.727">cell line&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="143" y="330.727">c</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="66" y="349.727">128 cells, raw UMI</tspan></text>
+<path d="M250 218L242 213.381V222.619L250 218ZM210 218V218.8H242.8V218V217.2H210V218Z" fill="#2B2B2B"/>
+<rect x="250.75" y="180.75" width="168.5" height="74.5" rx="9.25" fill="#E3E3E3"/>
+<rect x="250.75" y="180.75" width="168.5" height="74.5" rx="9.25" stroke="#666666" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="275.5" y="205.545">Tahoe Tx1-3B</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="298.5" y="225.727">cell &#x2192; 2560</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="312.5" y="244.727">per cell</tspan></text>
+<path d="M540 218L532 213.381V222.619L540 218ZM420 218V218.8H532.8V218V217.2H420V218Z" fill="#2B2B2B"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-style="italic" letter-spacing="0em"><tspan x="433" y="208.911">H</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" font-style="italic" letter-spacing="0em"><tspan x="444" y="211.956">c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="450" y="208.911">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="478" y="199.636">128&#xd7;2560</tspan></text>
+<rect x="540.75" y="180.75" width="148.5" height="74.5" rx="1.25" fill="white"/>
+<rect x="540.75" y="180.75" width="148.5" height="74.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" font-weight="500" letter-spacing="0em"><tspan x="553" y="204.818">Moment pooling</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="564" y="224.227">mean + variance</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="585.5" y="243.227">over cells</tspan></text>
+<path d="M720 218L712 213.381V222.619L720 218ZM690 218V218.8H712.8V218V217.2H690V218Z" fill="#2B2B2B"/>
+<rect x="720.75" y="194.75" width="78.5" height="46.5" rx="1.25" fill="white"/>
+<rect x="720.75" y="194.75" width="78.5" height="46.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="751.5" y="216.432">z</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="761.5" y="220.114">c</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="747" y="233.75">5120</tspan></text>
+<path d="M250 328L242 323.381V332.619L250 328ZM210 328V328.8H242.8V328V327.2H210V328Z" fill="#2B2B2B"/>
+<rect x="250.75" y="290.75" width="168.5" height="74.5" rx="1.25" fill="white"/>
+<rect x="250.75" y="290.75" width="168.5" height="74.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" font-weight="500" letter-spacing="0em"><tspan x="279.5" y="314.818">Log-normalise</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="268.5" y="334.227">normalize_total, log1p</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="299.5" y="353.227">2000 HVGs</tspan></text>
+<path d="M720 328L712 323.381V332.619L720 328ZM420 328V328.8H712.8V328V327.2H420V328Z" fill="#2B2B2B"/>
+<rect x="720.75" y="304.75" width="78.5" height="46.5" rx="1.25" fill="white"/>
+<rect x="720.75" y="304.75" width="78.5" height="46.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="750.5" y="326.432">X</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="762.5" y="330.114">c</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="733" y="343.75">128&#xd7;2000</tspan></text>
+<path d="M250 428L242 423.381V432.619L250 428ZM210 428V428.8H242.8V428V427.2H210V428Z" fill="#2B2B2B"/>
+<rect x="250.75" y="390.75" width="168.5" height="74.5" rx="1.25" fill="white"/>
+<rect x="250.75" y="390.75" width="168.5" height="74.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" font-weight="500" letter-spacing="0em"><tspan x="277" y="414.818">Basal statistics</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="280" y="434.227">of gene&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="331" y="434.227">g</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="339" y="434.227">&#xa0;in line&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="382" y="434.227">c</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="261" y="453.227">mean, fraction, variance</tspan></text>
+<path d="M720 428L712 423.381V432.619L720 428ZM420 428V428.8H712.8V428V427.2H420V428Z" fill="#2B2B2B"/>
+<rect x="720.75" y="404.75" width="78.5" height="46.5" rx="1.25" fill="white"/>
+<rect x="720.75" y="404.75" width="78.5" height="46.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="745.5" y="426.432">q</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="756.5" y="430.114">g,c</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="731.5" y="443.75">3 + 1 mask</tspan></text>
+<text fill="#555555" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" letter-spacing="0em"><tspan x="34" y="492.364">Tx1-3B and ESM-2 embeddings are computed once and cached. Every input except Tx1 is in log space.</tspan></text>
+<rect x="836.6" y="16.6" width="566.8" height="498.8" rx="17.4" stroke="#9A9A9A" stroke-width="1.2" stroke-dasharray="8 6"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="bold" letter-spacing="0em"><tspan x="854" y="45.5455">(b) Response model</tspan></text>
+<rect x="925.75" y="70.75" width="238.5" height="74.5" rx="9.25" fill="#8DB6E6"/>
+<rect x="925.75" y="70.75" width="238.5" height="74.5" rx="9.25" stroke="#2F64A8" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="955" y="105.045">Perturbation adapter</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="967.5" y="125.227">MLP 1280 &#x2192; 512 &#x2192; 2024</tspan></text>
+<path d="M925 108L917 103.381V112.619L925 108ZM800 108V108.8H917.8V108V107.2H800V108Z" fill="#2B2B2B"/>
+<path d="M1045 196L1049.62 188H1040.38L1045 196ZM1045 146H1044.2V188.8H1045H1045.8V146H1045Z" fill="#2B2B2B"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-style="italic" letter-spacing="0em"><tspan x="1055" y="176.911">p</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" font-style="italic" letter-spacing="0em"><tspan x="1064" y="179.956">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1071" y="176.911">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1099" y="167.636">2024</tspan></text>
+<rect x="870.75" y="196.75" width="348.5" height="168.5" rx="9.25" fill="url(#paint0_linear_10_2)"/>
+<rect x="870.75" y="196.75" width="348.5" height="168.5" rx="9.25" stroke="#2F64A8" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="945" y="240.045">STATE transition model</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="954.5" y="260.227">released Replogle checkpoint</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="961.5" y="279.227">basal encoder 2000 &#x2192; 328</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="939.5" y="298.227">perturbation encoder 2024 &#x2192; 328</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="912" y="317.227">transformer, hidden 328, 64-cell sentences</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="979.5" y="336.227">decoder 328 &#x2192; 2000</tspan></text>
+<rect x="1097.2" y="186.6" width="116.2" height="20.2" rx="9.4" fill="white"/>
+<rect x="1097.2" y="186.6" width="116.2" height="20.2" rx="9.4" stroke="#2F64A8" stroke-width="1.2"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="500" letter-spacing="0em"><tspan x="1105.8" y="200.7">frozen / fine-tuned</tspan></text>
+<path d="M870 328L862 323.381V332.619L870 328ZM800 328V328.8H862.8V328V327.2H800V328Z" fill="#2B2B2B"/>
+<path d="M1045 404L1049.62 396H1040.38L1045 404ZM1045 366H1044.2V396.8H1045H1045.8V366H1045Z" fill="#2B2B2B"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-style="italic" letter-spacing="0em"><tspan x="1055" y="388.911">&#x176;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" font-style="italic" letter-spacing="0em"><tspan x="1065" y="391.956">g,c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1080" y="388.911">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1108" y="379.636">128&#xd7;2000</tspan></text>
+<rect x="870.75" y="404.75" width="348.5" height="94.5" rx="9.25" fill="#5CC6A0"/>
+<rect x="870.75" y="404.75" width="348.5" height="94.5" rx="9.25" stroke="#1E7A56" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-weight="500" letter-spacing="0em"><tspan x="956" y="428.932">Response descriptors</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="906" y="448.977">&#x394;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="915" y="451.523">proj</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="932" y="448.977">: mean, variance shift vs&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="1085" y="448.977">X</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" font-style="italic" letter-spacing="0em"><tspan x="1094" y="451.523">c</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1100" y="448.977">, 4000 &#x2192; 256</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="932.5" y="469.477">by a fixed seeded random projection</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="965" y="488.477">s</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="972" y="488.477">: 6 summaries + 2 masks</tspan></text>
+<path d="M1248 281L1240 276.381V285.619L1248 281ZM1220 281V281.8H1221.75V281V280.2H1220V281ZM1225.25 281V281.8H1228.75V281V280.2H1225.25V281ZM1232.25 281V281.8H1235.75V281V280.2H1232.25V281ZM1239.25 281V281.8H1242.75V281V280.2H1239.25V281Z" fill="#777777"/>
+<rect x="1248.75" y="236.75" width="144.5" height="88.5" rx="9.25" fill="#F7F7F7"/>
+<rect x="1248.75" y="236.75" width="144.5" height="88.5" rx="9.25" stroke="#9A9A9A" stroke-width="1.5" stroke-dasharray="4 4"/>
+<text fill="#777777" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-weight="500" letter-spacing="0em"><tspan x="1265.5" y="268.091">Response replay</tspan></text>
+<text fill="#777777" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1256.5" y="286.364">measured Perturb-seq</tspan></text>
+<text fill="#777777" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1282.5" y="304.364">off (weight 0)</tspan></text>
+<text fill="#555555" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" letter-spacing="0em"><tspan x="1236" y="416.364">No-STATE variant: STATE </tspan><tspan x="1236" y="432.364">and the adapter are </tspan><tspan x="1236" y="448.364">skipped; the head runs </tspan><tspan x="1236" y="464.364">without the response </tspan><tspan x="1236" y="480.364">descriptors.</tspan></text>
+<rect x="16.6" y="532.6" width="1386.8" height="406.8" rx="17.4" stroke="#9A9A9A" stroke-width="1.2" stroke-dasharray="8 6"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="bold" letter-spacing="0em"><tspan x="34" y="561.545">(c) Factorised gene &#xd7; context residual head</tspan></text>
+<rect x="34.75" y="590.75" width="148.5" height="42.5" rx="9.25" fill="#5CC6A0"/>
+<rect x="34.75" y="590.75" width="148.5" height="42.5" rx="9.25" stroke="#1E7A56" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="67.5" y="619.055">&#x394;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="500" letter-spacing="0em"><tspan x="78.5" y="622.6">proj</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="99.5" y="619.055">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="500" letter-spacing="0em"><tspan x="129.5" y="609.4">256</tspan></text>
+<path d="M184 612H214" stroke="#2B2B2B" stroke-width="1.6"/>
+<rect x="34.75" y="642.75" width="148.5" height="42.5" rx="9.25" fill="#5CC6A0"/>
+<rect x="34.75" y="642.75" width="148.5" height="42.5" rx="9.25" stroke="#1E7A56" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="79" y="672.305">s</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="88" y="672.305">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="500" letter-spacing="0em"><tspan x="118" y="662.65">6+2</tspan></text>
+<path d="M184 664H214" stroke="#2B2B2B" stroke-width="1.6"/>
+<rect x="34.75" y="694.75" width="148.5" height="42.5" rx="1.25" fill="white"/>
+<rect x="34.75" y="694.75" width="148.5" height="42.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="70.5" y="723.055">q</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="80.5" y="726.6">g,c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="97.5" y="723.055">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="500" letter-spacing="0em"><tspan x="127.5" y="713.4">3+1</tspan></text>
+<path d="M184 716H214" stroke="#2B2B2B" stroke-width="1.6"/>
+<rect x="34.75" y="746.75" width="148.5" height="42.5" rx="1.25" fill="white"/>
+<rect x="34.75" y="746.75" width="148.5" height="42.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="73" y="775.055">z</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="82" y="778.6">c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="89" y="775.055">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="500" letter-spacing="0em"><tspan x="119" y="765.4">5120</tspan></text>
+<path d="M184 768H214" stroke="#2B2B2B" stroke-width="1.6"/>
+<rect x="34.75" y="798.75" width="148.5" height="42.5" rx="1.25" fill="white"/>
+<rect x="34.75" y="798.75" width="148.5" height="42.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="73" y="827.055">e</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="82" y="830.6">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="89" y="827.055">&#xa0;&#x2208; &#x211d;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="500" letter-spacing="0em"><tspan x="119" y="817.4">1280</tspan></text>
+<path d="M184 820H214" stroke="#2B2B2B" stroke-width="1.6"/>
+<rect x="34.75" y="860.75" width="148.5" height="42.5" rx="1.25" fill="white"/>
+<rect x="34.75" y="860.75" width="148.5" height="42.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="62.5" y="887.455">gene index&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="145.5" y="887.455">g</tspan></text>
+<path d="M214 612V840" stroke="#2B2B2B" stroke-width="1.6"/>
+<rect x="330.75" y="576.75" width="328.5" height="82.5" rx="9.25" fill="#8DB6E6"/>
+<rect x="330.75" y="576.75" width="328.5" height="82.5" rx="9.25" stroke="#2F64A8" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="449" y="605.545">Trunk MLP</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="377" y="625.727">all five blocks, 6668 &#x2192; 256 &#x2192; 256 &#x2192; 1</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="366.5" y="644.727">Linear, LayerNorm, GELU per hidden layer</tspan></text>
+<rect x="330.75" y="690.75" width="328.5" height="82.5" rx="9.25" fill="#8DB6E6"/>
+<rect x="330.75" y="690.75" width="328.5" height="82.5" rx="9.25" stroke="#2F64A8" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="400.5" y="719.545">Context tower&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="528.5" y="719.545">C</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="542.5" y="719.545">(</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="549.5" y="719.545">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="561.5" y="719.545">,&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="571.5" y="719.545">c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="582.5" y="719.545">)</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="417" y="739.727">5388 &#x2192; 256 &#x2192; 256 &#x2192; 64</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="401" y="758.727">same layer design as the trunk</tspan></text>
+<rect x="330.75" y="812.75" width="328.5" height="98.5" rx="9.25" fill="#8DB6E6"/>
+<rect x="330.75" y="812.75" width="328.5" height="98.5" rx="9.25" stroke="#2F64A8" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="421.5" y="848.795">Gene factor&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="528.5" y="848.795">G</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="542.5" y="848.795">(</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="549.5" y="848.795">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="561.5" y="848.795">)</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="386.5" y="868.977">free embedding, 17,787 genes &#xd7; 64</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="416" y="887.977">+ Linear of&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="486" y="887.977">e</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" font-style="italic" letter-spacing="0em"><tspan x="494" y="890.523">g</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="500" y="887.977">, 1280 &#x2192; 64</tspan></text>
+<path d="M330 618L322 613.381V622.619L330 618ZM214 618V618.8H322.8V618V617.2H214V618Z" fill="#2B2B2B"/>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="245.5" y="609.864">all blocks</tspan></text>
+<path d="M330 732L322 727.381V736.619L330 732ZM214 732V732.8H322.8V732V731.2H214V732Z" fill="#2B2B2B"/>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="246" y="721.864">all but&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" letter-spacing="0em"><tspan x="284" y="721.864">e</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" font-style="italic" letter-spacing="0em"><tspan x="292" y="724.773">g</tspan></text>
+<path d="M330 840L322 835.381V844.619L330 840ZM214 840V840.8H322.8V840V839.2H214V840Z" fill="#2B2B2B"/>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" letter-spacing="0em"><tspan x="265" y="831.864">e</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" font-style="italic" letter-spacing="0em"><tspan x="273" y="834.773">g</tspan></text>
+<path d="M330 882L322 877.381V886.619L330 882ZM184 882V882.8H322.8V882V881.2H184V882Z" fill="#2B2B2B"/>
+<circle cx="748" cy="797" r="27.2" fill="white" stroke="#2B2B2B" stroke-width="1.6"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="500" letter-spacing="0em"><tspan x="735" y="802.455">&#x27e8;&#xb7;,&#xb7;&#x27e9;</tspan></text>
+<path d="M748 732H748.8V731.2H748V732ZM748 769L752.619 761H743.381L748 769ZM660 732V732.8H748V732V731.2H660V732ZM748 732H747.2V761.8H748H748.8V732H748Z" fill="#2B2B2B"/>
+<path d="M748 862V862.8H748.8V862H748ZM748 825L743.381 833H752.619L748 825ZM660 862V862.8H748V862V861.2H660V862ZM748 862H748.8V832.2H748H747.2V862H748Z" fill="#2B2B2B"/>
+<circle cx="860" cy="618" r="21.2" fill="white" stroke="#2B2B2B" stroke-width="1.6"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="22" font-weight="500" letter-spacing="0em"><tspan x="852.5" y="626">+</tspan></text>
+<path d="M838 618L830 613.381V622.619L838 618ZM660 618V618.8H830.8V618V617.2H660V618Z" fill="#2B2B2B"/>
+<path d="M860 797V797.8H860.8V797H860ZM860 640L855.381 648H864.619L860 640ZM776 797V797.8H860V797V796.2H776V797ZM860 797H860.8V647.2H860H859.2V797H860Z" fill="#2B2B2B"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="796.5" y="787.727">&#xf7; &#x221a;64</tspan></text>
+<circle cx="980" cy="618" r="21.2" fill="white" stroke="#2B2B2B" stroke-width="1.6"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="20" font-weight="500" letter-spacing="0em"><tspan x="973" y="625.273">&#xd7;</tspan></text>
+<path d="M958 618L950 613.381V622.619L958 618ZM882 618V618.8H950.8V618V617.2H882V618Z" fill="#2B2B2B"/>
+<rect x="906.75" y="690.75" width="146.5" height="70.5" rx="1.25" fill="white"/>
+<rect x="906.75" y="690.75" width="146.5" height="70.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="970.5" y="714.932">&#x3c3;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="981.5" y="718.614">g</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="920" y="734.614">per-gene residual SD</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="926.5" y="750.614">training lines, fixed</tspan></text>
+<path d="M980 640L975.381 648H984.619L980 640ZM980 690H980.8V647.2H980H979.2V690H980Z" fill="#2B2B2B"/>
+<circle cx="1132" cy="618" r="21.2" fill="white" stroke="#2B2B2B" stroke-width="1.6"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="22" font-weight="500" letter-spacing="0em"><tspan x="1124.5" y="626">+</tspan></text>
+<path d="M1110 618L1102 613.381V622.619L1110 618ZM1002 618V618.8H1102.8V618V617.2H1002V618Z" fill="#2B2B2B"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1033.5" y="608.911">&#x3b4;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1035" y="603.031">&#x2c6;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1041.5" y="608.911">(</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-style="italic" letter-spacing="0em"><tspan x="1047.5" y="608.911">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1056.5" y="608.911">,&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-style="italic" letter-spacing="0em"><tspan x="1064.5" y="608.911">c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1072.5" y="608.911">)</tspan></text>
+<rect x="1062.75" y="690.75" width="138.5" height="70.5" rx="1.25" fill="white"/>
+<rect x="1062.75" y="690.75" width="138.5" height="70.5" rx="1.25" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="1100.5" y="714.932">&#x3bc;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-weight="500" letter-spacing="0em"><tspan x="1111.5" y="718.614">train</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-weight="500" letter-spacing="0em"><tspan x="1138.5" y="714.932">(</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" font-weight="500" letter-spacing="0em"><tspan x="1145.5" y="714.932">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-weight="500" letter-spacing="0em"><tspan x="1156.5" y="714.932">)</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1077.5" y="734.614">training gene mean</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1118" y="750.614">fixed</tspan></text>
+<path d="M1132 640L1127.38 648H1136.62L1132 640ZM1132 690H1132.8V647.2H1132H1131.2V690H1132Z" fill="#2B2B2B"/>
+<rect x="1216.75" y="578.75" width="172.5" height="78.5" rx="9.25" fill="#F1E08F"/>
+<rect x="1216.75" y="578.75" width="172.5" height="78.5" rx="9.25" stroke="#C7A21E" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="500" letter-spacing="0em"><tspan x="1254.5" y="611.825">GeneEffect</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="1250.5" y="636.947">&#x3bc;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1259.5" y="639.493">train</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1279.5" y="636.947">(</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="1284.5" y="636.947">g</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1292.5" y="636.947">) +&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1313.5" y="636.947">&#x3b4;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1315.5" y="631.487">&#x2c6;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1321.5" y="636.947">(</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="1326.5" y="636.947">g</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1334.5" y="636.947">,&#xa0;</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-style="italic" letter-spacing="0em"><tspan x="1342.5" y="636.947">c</tspan></text>
+<text fill="#3A3A3A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1350.5" y="636.947">)</tspan></text>
+<path d="M1216 618L1208 613.381V622.619L1216 618ZM1154 618V618.8H1208.8V618V617.2H1154V618Z" fill="#2B2B2B"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="870" y="853.142">&#x3b4;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="872" y="846.002">&#x2c6;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="880" y="853.142">(</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="887" y="853.142">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="898" y="853.142">,&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="908" y="853.142">c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="918" y="853.142">) =&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="945" y="853.142">&#x3c3;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" letter-spacing="0em"><tspan x="956" y="856.824">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="964" y="853.142">&#xa0;&#xb7; [ trunk + &#x27e8;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="1059" y="853.142">G</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="1072" y="853.142">(</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="1079" y="853.142">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="1090" y="853.142">),&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="1106" y="853.142">C</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="1119" y="853.142">(</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="1126" y="853.142">g</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="1137" y="853.142">,&#xa0;</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" font-style="italic" letter-spacing="0em"><tspan x="1147" y="853.142">c</tspan></text>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="17" letter-spacing="0em"><tspan x="1157" y="853.142">)&#x27e9; / &#x221a;64 ]</tspan></text>
+<text fill="#555555" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-style="italic" letter-spacing="0em"><tspan x="870" y="884.364">The head predicts in residual-SD units; the residual SD and the gene mean are fitted on the </tspan><tspan x="870" y="900.364">172 training lines only.</tspan></text>
+<g clip-path="url(#clip0_10_2)">
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" font-weight="bold" letter-spacing="0em"><tspan x="34" y="973.818">Legend</tspan></text>
+<g clip-path="url(#clip1_10_2)">
+<rect x="115.75" y="958.75" width="32.5" height="18.5" rx="1.25" fill="white" stroke="#333333" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="157" y="973.091">Input / fixed</tspan></text>
+</g>
+<g clip-path="url(#clip2_10_2)">
+<rect x="258.75" y="958.75" width="32.5" height="18.5" rx="4.25" fill="#E3E3E3" stroke="#666666" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="300" y="973.091">Frozen</tspan></text>
+</g>
+<g clip-path="url(#clip3_10_2)">
+<rect x="368.75" y="958.75" width="32.5" height="18.5" rx="4.25" fill="#8DB6E6" stroke="#2F64A8" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="410" y="973.091">Trainable</tspan></text>
+</g>
+<g clip-path="url(#clip4_10_2)">
+<rect x="493.75" y="958.75" width="32.5" height="18.5" rx="4.25" fill="url(#paint1_linear_10_2)" stroke="#2F64A8" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="535" y="973.091">Frozen or fine-tuned, by variant</tspan></text>
+</g>
+<g clip-path="url(#clip5_10_2)">
+<rect x="767.75" y="958.75" width="32.5" height="18.5" rx="4.25" fill="#5CC6A0" stroke="#1E7A56" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="809" y="973.091">Response descriptors</tspan></text>
+</g>
+<g clip-path="url(#clip6_10_2)">
+<rect x="975.75" y="958.75" width="32.5" height="18.5" rx="4.25" fill="#F1E08F" stroke="#C7A21E" stroke-width="1.5"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1017" y="973.091">Prediction</tspan></text>
+</g>
+<g clip-path="url(#clip7_10_2)">
+<rect x="1106.75" y="958.75" width="32.5" height="18.5" rx="4.25" fill="#F7F7F7" stroke="#9A9A9A" stroke-width="1.5" stroke-dasharray="4 4"/>
+<text fill="#1A1A1A" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="1148" y="973.091">Off in current runs</tspan></text>
+</g>
+</g>
+<defs>
+<linearGradient id="paint0_linear_10_2" x1="870" y1="281" x2="1220" y2="281" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E3E3E3"/>
+<stop offset="0.5" stop-color="#E3E3E3"/>
+<stop offset="0.5" stop-color="#8DB6E6"/>
+<stop offset="1" stop-color="#8DB6E6"/>
+</linearGradient>
+<linearGradient id="paint1_linear_10_2" x1="493" y1="968" x2="527" y2="968" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E3E3E3"/>
+<stop offset="0.5" stop-color="#E3E3E3"/>
+<stop offset="0.5" stop-color="#8DB6E6"/>
+<stop offset="1" stop-color="#8DB6E6"/>
+</linearGradient>
+<clipPath id="clip0_10_2">
+<rect width="1235" height="20" fill="white" transform="translate(34 958)"/>
+</clipPath>
+<clipPath id="clip1_10_2">
+<rect width="121" height="20" fill="white" transform="translate(115 958)"/>
+</clipPath>
+<clipPath id="clip2_10_2">
+<rect width="88" height="20" fill="white" transform="translate(258 958)"/>
+</clipPath>
+<clipPath id="clip3_10_2">
+<rect width="103" height="20" fill="white" transform="translate(368 958)"/>
+</clipPath>
+<clipPath id="clip4_10_2">
+<rect width="252" height="20" fill="white" transform="translate(493 958)"/>
+</clipPath>
+<clipPath id="clip5_10_2">
+<rect width="186" height="20" fill="white" transform="translate(767 958)"/>
+</clipPath>
+<clipPath id="clip6_10_2">
+<rect width="109" height="20" fill="white" transform="translate(975 958)"/>
+</clipPath>
+<clipPath id="clip7_10_2">
+<rect width="163" height="20" fill="white" transform="translate(1106 958)"/>
+</clipPath>
+</defs>
 </svg>

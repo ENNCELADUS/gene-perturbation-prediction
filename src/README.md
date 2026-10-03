@@ -25,7 +25,7 @@ The standard route is one command, `hpc/run.sh all CONFIG`, which runs
 joint training on every chosen GPU, the trained comparison arms one job per GPU, then
 validation evaluation, baselines and the readout head, then `summary.md`. [The HPC guide](../hpc/README.md) lists launch commands. One variant of the
 GeneEffect revision runs through `hpc/run.sh revision CONFIG`, which runs
-`src.experiments.revision`: training, validation evaluation and baselines for one config, then
+`src.experiments.revision`: training, validation then test evaluation with baselines for one config, then
 `summary.md` and `revision.json`, without the response comparison or the readout head. The steps are
 also modules:
 

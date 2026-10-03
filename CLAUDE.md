@@ -24,8 +24,8 @@ The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and
 (`all_20261002T174946Z`) finished: validation residual Pearson 0.068 for the joint model against 0.133 for the Tx1 context ridge,
 and the response comparison favours the HVG MLP over fine-tuned STATE and over the Tx1 MLP. The current work is the **revision**
 (`docs/specs/2026-10-03-geneeffect-revision-design.md`): a selective-gene selector, a factorised head, and objective and STATE
-screens on the 30734 container. The SL pair head is **unimplemented**. Further model decisions use **validation**; the test split
-is spent. Nothing here is SL evidence.
+screens on the 30734 container. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select
+`best.pt` on **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
 
@@ -40,8 +40,8 @@ uv run python -m pytest tests/test_all.py -q             # one file; -k for one 
 .venv/bin/ruff format <files you touched>                 # never `ruff format .` — rewrites unrelated files
 
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]  # prepare, comparison, train, val eval, baselines, readout, summary.md
-hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: train, val eval, baselines, summary.md + revision.json in outputs/geneeffect_revision/<id>/ (configs/revision/*.yaml; no comparison, no readout)
-hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # the only route to the test split; `all` and `revision` never run it
+hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: train, val then test eval with baselines, summary.md + revision.json in outputs/geneeffect_revision/<id>/ (configs/revision/*.yaml; no comparison, no readout)
+hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any checkpoint; `all` never runs test, `revision` scores its own best.pt
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
@@ -97,7 +97,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
 - **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
   selective genes, residual SD) from the checkpoint;
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
-  `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation
+  `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
   evaluation and baselines for one config.
 - `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (172 train / 27 val / 27 test);
   `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config and provenance files are tracked data.

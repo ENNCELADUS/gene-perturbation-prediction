@@ -1,19 +1,21 @@
-"""One revision run: training, validation evaluation and baselines, then summary.md.
+"""One revision run: training, validation and test with baselines, then summary.md.
 
 ``python -m src.experiments.revision CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
-``<output_root>/<run id>/{train/, evaluation/val/, baselines/val/, logs/,
-revision.json, summary.md}``. Every step is skipped when its output exists, so
+``<output_root>/<run id>/{train/, evaluation/{val,test}/, baselines/{val,test}/,
+logs/, revision.json, summary.md}``. Every step is skipped when its output exists, so
 rerunning with the same run id resumes. There is no response comparison and no
-readout, and the test split is never evaluated here.
+readout. One config is one experiment at one seed: ``train/best.pt`` is chosen on
+validation alone and then scored once on test.
 
 Steps, in order: preparation (returns at once on an existing prepared root); joint
 training (``accelerate launch`` on every chosen GPU, in this process on a CPU-only
-machine); validation evaluation of ``train/best.pt`` and the validation baselines
-(on the first chosen GPU); revision.json and summary.md, which hold the validation
-table of the joint model against every baseline, the paired line bootstrap of
-selective-gene Spearman against the Tx1 context-PCA ridge, and the training record
-at the best epoch. The chosen GPUs are every visible one unless ``--gpus`` names
-some. SIGINT or SIGTERM terminates the running subprocesses before the run exits.
+machine); for validation, then test, the evaluation of ``train/best.pt`` and the
+baselines (on the first chosen GPU); revision.json and summary.md, which hold per
+split the table of the joint model against every baseline and the paired line
+bootstrap of selective-gene Spearman against the Tx1 context-PCA ridge, and the
+training record at the best epoch. The chosen GPUs are every visible one unless
+``--gpus`` names some. SIGINT or SIGTERM terminates the running subprocesses before
+the run exits.
 """
 
 from __future__ import annotations
@@ -48,18 +50,20 @@ JOINT_NAME = "Joint model"
 TX1_RIDGE = "context_pca_ridge[tx1]"
 BOOTSTRAP_REPEATS = 1000
 BOOTSTRAP_SEED = 0
+# Evaluated splits, in order, with their summary section titles.
+SPLITS = {"val": "Validation", "test": "Test"}
 # Table column name, revision.json key, metrics key of the joint model and of every
-# baseline (both carry the ``val_`` prefix).
+# baseline (both prefix it with the split, ``val_`` or ``test_``).
 COLUMNS = (
-    ("Selective Spearman", "selective_spearman", "val_selective_spearman"),
-    ("Selective AUPR lift", "selective_aupr_lift", "val_selective_aupr_lift"),
+    ("Selective Spearman", "selective_spearman", "selective_spearman"),
+    ("Selective AUPR lift", "selective_aupr_lift", "selective_aupr_lift"),
     (
         "Residual Pearson (per variable gene)",
         "residual_pearson",
-        "val_residual_pearson_macro_per_gene",
+        "residual_pearson_macro_per_gene",
     ),
-    ("Huber", "huber", "val_geneeffect_loss"),
-    ("SD ratio (per gene)", "sd_ratio", "val_residual_sd_ratio_macro_per_gene"),
+    ("Huber", "huber", "geneeffect_loss"),
+    ("SD ratio (per gene)", "sd_ratio", "residual_sd_ratio_macro_per_gene"),
 )
 # The best epoch's record in train/metrics.jsonl: training-diagnostic and validation.
 TRAIN_DIAGNOSTIC_KEY = "train_eval_selective_spearman"
@@ -87,7 +91,7 @@ def _git_revision() -> str:
 
 
 # ----------------------------------------------------------------------------
-# Training and validation
+# Training and evaluation
 # ----------------------------------------------------------------------------
 
 
@@ -112,20 +116,22 @@ def train_joint(
         run_training(config, train)
 
 
-def _validation(config: dict, run: Path) -> None:
+def _evaluate(config: dict, run: Path, split: str) -> None:
+    """Score ``train/best.pt`` and fit and score the baselines on ``split``."""
     from src.experiments.baselines import run_baselines
     from src.experiments.geneeffect import evaluate_checkpoint, export_evaluation
 
-    evaluation = run / "evaluation" / "val"
+    title = SPLITS[split].lower()
+    evaluation = run / "evaluation" / split
     if not (evaluation / "metrics.json").is_file():
-        print("validation evaluation of the joint model", flush=True)
+        print(f"{title} evaluation of the joint model", flush=True)
         export_evaluation(
-            evaluate_checkpoint(run / "train" / "best.pt", split="val"), evaluation
+            evaluate_checkpoint(run / "train" / "best.pt", split=split), evaluation
         )
-    baselines = run / "baselines" / "val"
+    baselines = run / "baselines" / split
     if not (baselines / "metrics.json").is_file():
-        print("validation baselines", flush=True)
-        run_baselines(config, split="val", out_dir=baselines)
+        print(f"{title} baselines", flush=True)
+        run_baselines(config, split=split, out_dir=baselines)
 
 
 # ----------------------------------------------------------------------------
@@ -133,8 +139,8 @@ def _validation(config: dict, run: Path) -> None:
 # ----------------------------------------------------------------------------
 
 
-def _row(metrics: dict) -> dict[str, float | None]:
-    return {key: _finite(metrics[source]) for _, key, source in COLUMNS}
+def _row(metrics: dict, split: str) -> dict[str, float | None]:
+    return {key: _finite(metrics[f"{split}_{source}"]) for _, key, source in COLUMNS}
 
 
 def _baseline_order(baselines: dict) -> list[str]:
@@ -142,20 +148,18 @@ def _baseline_order(baselines: dict) -> list[str]:
     return known + [method for method in baselines if method not in BASELINE_NAMES]
 
 
-def _bootstrap(run: Path, baselines: dict) -> dict[str, Any]:
+def _bootstrap(
+    run: Path, split: str, baselines: dict, selective: frozenset[str]
+) -> dict[str, Any]:
     """Paired line bootstrap of selective Spearman, joint model minus Tx1 ridge."""
     import pandas as pd
 
     from src.eval import metrics
-    from src.training.checkpoint import load_checkpoint
 
     if TX1_RIDGE not in baselines:
-        raise ValueError(f"baselines/val/metrics.json has no {TX1_RIDGE} method")
-    selective = frozenset(
-        load_checkpoint(run / "train" / "best.pt")["preprocessing"]["selective_genes"]
-    )
-    joint = pd.read_parquet(run / "evaluation" / "val" / "predictions.parquet")
-    ridge = pd.read_parquet(run / "baselines" / "val" / "predictions.parquet")
+        raise ValueError(f"baselines/{split}/metrics.json has no {TX1_RIDGE} method")
+    joint = pd.read_parquet(run / "evaluation" / split / "predictions.parquet")
+    ridge = pd.read_parquet(run / "baselines" / split / "predictions.parquet")
     ridge = ridge.loc[ridge["method"] == TX1_RIDGE]
     result = metrics.paired_line_bootstrap(
         joint,
@@ -195,60 +199,80 @@ def _training_record(run: Path) -> dict[str, Any]:
     }
 
 
+def _split_record(run: Path, split: str, selective: frozenset[str]) -> dict[str, Any]:
+    """The split's table (joint model, then baselines) and its bootstrap."""
+    baselines = _read_json(run / "baselines" / split / "metrics.json")
+    joint = _read_json(run / "evaluation" / split / "metrics.json")
+    return {
+        "models": {
+            JOINT_NAME: _row(joint, split),
+            **{
+                BASELINE_NAMES.get(method, method): _row(baselines[method], split)
+                for method in _baseline_order(baselines)
+            },
+        },
+        "bootstrap": _bootstrap(run, split, baselines, selective),
+    }
+
+
 def build_record(
     config_path: Path, run: Path, run_id: str, git_revision: str
 ) -> dict[str, Any]:
-    baselines = _read_json(run / "baselines" / "val" / "metrics.json")
+    from src.training.checkpoint import load_checkpoint
+
+    selective = frozenset(
+        load_checkpoint(run / "train" / "best.pt")["preprocessing"]["selective_genes"]
+    )
     return {
         "run_id": run_id,
         "config": str(config_path),
         "git_revision": git_revision,
-        "validation": {
-            JOINT_NAME: _row(_read_json(run / "evaluation" / "val" / "metrics.json")),
-            **{
-                BASELINE_NAMES.get(method, method): _row(baselines[method])
-                for method in _baseline_order(baselines)
-            },
-        },
-        "bootstrap": _bootstrap(run, baselines),
+        **{split: _split_record(run, split, selective) for split in SPLITS},
         "training": _training_record(run),
     }
 
 
-def _summary_lines(record: dict[str, Any]) -> list[str]:
-    bootstrap, training = record["bootstrap"], record["training"]
+def _split_lines(title: str, split: dict[str, Any]) -> list[str]:
+    bootstrap = split["bootstrap"]
     low, high = bootstrap["interval"]
     header = ["Model", *(name for name, _, _ in COLUMNS)]
     lines = [
-        f"# Revision run {record['run_id']}",
-        "",
-        f"Config `{record['config']}`, git revision `{record['git_revision']}`. "
-        "Validation only; the test split is not evaluated by this run. Nothing "
-        "here is synthetic-lethality evidence.",
-        "",
-        "## Validation on the GeneEffect validation lines",
-        "",
-        "Selective Spearman and AUPR lift are macro means over the selective "
-        "genes; residual Pearson and the SD ratio are macro means over the "
-        "variable genes.",
+        f"## {title} lines",
         "",
         "| " + " | ".join(header) + " |",
         "|" + "---|" * len(header),
     ]
-    for name, row in record["validation"].items():
+    for name, row in split["models"].items():
         cells = [_number(row[key]) for _, key, _ in COLUMNS]
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
-    lines += [
+    return lines + [
         "",
-        "Undefined correlations come from predictors that are constant per gene "
-        "across lines (gene mean, copy prior); they are not zero.",
+        f"Selective Spearman, {bootstrap['comparison']}: "
+        f"{_number(bootstrap['difference'])} [{_number(low)}, {_number(high)}], "
+        f"paired bootstrap over {title.lower()} lines ({bootstrap['repeats']} "
+        f"resamples, seed {bootstrap['seed']}).",
         "",
-        "## Selective Spearman against the Tx1 context-PCA ridge",
+    ]
+
+
+def _summary_lines(record: dict[str, Any]) -> list[str]:
+    training = record["training"]
+    lines = [
+        f"# Revision run {record['run_id']}",
         "",
-        f"{bootstrap['comparison']}: {_number(bootstrap['difference'])} "
-        f"[{_number(low)}, {_number(high)}], paired bootstrap over validation "
-        f"lines ({bootstrap['repeats']} resamples, seed {bootstrap['seed']}).",
+        f"Config `{record['config']}`, git revision `{record['git_revision']}`. "
+        "`train/best.pt` is chosen on validation alone, then scored once on test. "
+        "Nothing here is synthetic-lethality evidence.",
         "",
+        "Selective Spearman and AUPR lift are macro means over the selective "
+        "genes; residual Pearson and the SD ratio are macro means over the "
+        "variable genes. Undefined correlations come from predictors that are "
+        "constant per gene across lines (gene mean, copy prior); they are not zero.",
+        "",
+    ]
+    for split, title in SPLITS.items():
+        lines += _split_lines(title, record[split])
+    return lines + [
         "## Training",
         "",
         f"`train/best.pt` is epoch {training['best_epoch']} of "
@@ -257,7 +281,6 @@ def _summary_lines(record: dict[str, Any]) -> list[str]:
         f"diagnostic lines and {_number(training[VALIDATION_KEY])} on the "
         "validation lines.",
     ]
-    return lines
 
 
 def write_outputs(config_path: Path, run: Path, run_id: str) -> Path:
@@ -318,7 +341,8 @@ def run_revision(
     with sigterm_raises():
         prepare_inputs(config)
         train_joint(config_path, config, run, chosen)
-        _validation(config, run)
+        for split in SPLITS:
+            _evaluate(config, run, split)
         summary = write_outputs(config_path, run, run_id)
     print(f"summary: {summary}", flush=True)
     return run
