@@ -23,8 +23,8 @@ _GROUPS = {
         "selective_min_lines selective_max_fraction residual_sd_floor_percentile"
     ),
     "model": (
-        "cell_sentence_len esm2_adapter_hidden head_hidden head_layers head_blocks "
-        "factor_rank"
+        "cell_sentence_len esm2_adapter_hidden head_blocks factor_rank "
+        "context_components dropout"
     ),
     "preparation": (
         "response_max_cells_per_gene response_total_cells_per_line "

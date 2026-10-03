@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from src.data.basal import align_columns
+from src.data.context_pca import ContextPCA, fit_context_pca, pooled_context
 from src.data.embeddings import load_esm2_embeddings
 from src.data.expression import library_sizes, log_normalize
 from src.data.geneeffect import (
@@ -68,6 +69,7 @@ class PreparedInputs:
     variable_genes: frozenset[str]
     selective_genes: frozenset[str]
     residual_scale: pd.Series
+    context_pca: ContextPCA = field(repr=False, compare=False)
     hvg_order: tuple[str, ...]
     esm2_symbols: tuple[str, ...]
     esm2_vectors: np.ndarray = field(repr=False, compare=False)
@@ -95,6 +97,12 @@ class PreparedInputs:
             "residual_scale": {
                 "symbols": list(self.genes),
                 "values": [float(self.residual_scale[gene]) for gene in self.genes],
+            },
+            "context_pca": {
+                key: torch.from_numpy(np.asarray(value)).clone()
+                if isinstance(value, np.ndarray)
+                else value
+                for key, value in self.context_pca.to_state().items()
             },
             "esm2_symbols": list(self.esm2_symbols),
             "esm2_vectors": torch.from_numpy(
@@ -220,12 +228,14 @@ def _restored_target_sum(preprocessing: Mapping[str, Any], target_sum: float) ->
 
 def _restored_keys(preprocessing: Mapping[str, Any]) -> None:
     missing = [
-        key for key in ("selective_genes", "residual_scale") if key not in preprocessing
+        key
+        for key in ("selective_genes", "residual_scale", "context_pca")
+        if key not in preprocessing
     ]
     if missing:
         raise ValueError(
             f"checkpoint preprocessing has no {', '.join(missing)}: it predates the "
-            "selective-gene revision; retrain it"
+            "current preprocessing; retrain it"
         )
 
 
@@ -236,7 +246,7 @@ def load_inputs(
     include_test: bool = False,
 ) -> PreparedInputs:
     """Open prepared inputs; fit (or restore) gene means, variable and selective
-    genes and the residual scale.
+    genes, the residual scale and the context PCA (``model.context_components``).
 
     Fitting uses labeled training lines only. ``preprocessing`` restores a
     checkpoint's fitted state instead. Test labels and lines are opened only
@@ -325,6 +335,15 @@ def load_inputs(
         for model_id in split.all_model_ids
         if model_id in exposed
     }
+    if preprocessing is None:
+        context_pca = fit_context_pca(
+            np.stack(
+                [pooled_context(lines[model_id].controls_tx1) for model_id in train]
+            ),
+            int(config["model"]["context_components"]),
+        )
+    else:
+        context_pca = ContextPCA.from_state(preprocessing["context_pca"])
     return PreparedInputs(
         split=split,
         labels=labels,
@@ -333,6 +352,7 @@ def load_inputs(
         variable_genes=variable_genes,
         selective_genes=selective_genes,
         residual_scale=residual_scale,
+        context_pca=context_pca,
         hvg_order=tuple(manifest["hvg_order"]),
         esm2_symbols=esm2_symbols,
         esm2_vectors=np.asarray(esm2_vectors, dtype=np.float32),

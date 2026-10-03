@@ -13,6 +13,9 @@ import numpy as np
 import torch
 
 _CONTINUOUS_BLOCKS = frozenset({"delta_proj", "s", "q_sc", "e_g", "z_c"})
+#: Blocks the joint model standardizes. ``z_c`` is excluded: it arrives as
+#: eigen-scaled context PCA scores whose decaying scale must survive.
+STANDARDIZED_BLOCKS = ("delta_proj", "s", "q_sc", "e_g")
 
 
 @dataclass(frozen=True)
@@ -205,8 +208,6 @@ class BlockStandardizer:
             ):
                 raise ValueError("invalid standardizer statistics")
             stats[name] = _BlockStats(mean, scale, constant)
-        if not stats:
-            raise ValueError("standardizer state contains no blocks")
         restored._stats = stats
         restored._fitted = True
         return restored
@@ -225,8 +226,10 @@ def fit_startup_standardizer(
 ) -> BlockStandardizer:
     """Fit on up to 32 rows per supervised training line, once, before training.
 
-    Rank zero fits from the fresh model's live features; other ranks receive its
-    statistics so every rank standardizes identically. Resume restores saved
+    Only the enabled :data:`STANDARDIZED_BLOCKS` are fitted; with none enabled
+    the standardizer is empty. Rank zero fits from the fresh model's live
+    features; other ranks receive its statistics so every rank standardizes
+    identically. Resume restores saved
     statistics instead of calling this.
     """
     from src.data.datasets import DependencyDataset
@@ -243,7 +246,7 @@ def fit_startup_standardizer(
         ]
         enabled = [
             name
-            for name in sorted(_CONTINUOUS_BLOCKS)
+            for name in sorted(STANDARDIZED_BLOCKS)
             if getattr(model.head.blocks, f"use_{name}")
         ]
 
@@ -253,11 +256,14 @@ def fit_startup_standardizer(
                 features = model.condition_features(batch.to(device).conditions)
                 yield {name: getattr(features, name) for name in enabled}
 
-        training = model.training
-        model.eval()
-        with torch.no_grad():
-            payload[0] = BlockStandardizer().fit_batches(blocks()).to_state()
-        model.train(training)
+        if enabled:
+            training = model.training
+            model.eval()
+            with torch.no_grad():
+                payload[0] = BlockStandardizer().fit_batches(blocks()).to_state()
+            model.train(training)
+        else:
+            payload[0] = {"version": 1, "blocks": {}}
     if accelerator is not None and accelerator.num_processes > 1:
         torch.distributed.broadcast_object_list(payload, src=0)
     model.standardizer = BlockStandardizer.from_state(payload[0])

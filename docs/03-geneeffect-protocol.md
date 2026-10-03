@@ -123,11 +123,12 @@ log-normalised basal cells through its own released basal encoder and predicts t
 post-perturbation expression; it is frozen or fine-tuned by variant (`train.state_mode`), and
 the no-STATE variant skips STATE and the adapter. Response replay to measured Perturb-seq is
 drawn dashed: it is off in the current runs. Response descriptors summarise how predicted
-expression differs from basal expression. (c) The factorised gene × context head: a trunk MLP
-over all five feature blocks, plus the inner product of a gene factor $G(g)$ (free per-gene
-embedding plus a linear map of $e_g$) and a context tower $C(g,c)$ over every block except
-$e_g$, scaled by the fixed per-gene residual SD $\sigma_g$ to give $\hat\delta$; the training
-gene mean is added for the GeneEffect prediction. Tx1 feeds only the head; it does not enter
+expression differs from basal expression. (c) The nested low-rank head: a gene factor $G(g)$
+(free per-gene embedding plus a linear map of $e_g$) meets a line factor $C(\tilde z_c)$ read
+from the training-line context PCA alone, and a per-(g, c) correction $h$ reads the basal
+statistics, the response descriptors and $e_g$ but never the context; their sum, scaled by
+the fixed per-gene residual SD $\sigma_g$, is $\hat\delta$, and the training gene mean is added
+for the GeneEffect prediction. Tx1 feeds only the head; it does not enter
 STATE. Arrows carry the tensors passed between modules, shaped for one gene–line condition
 (cells × features, no batch dimension); boxes state the width change inside each module. The
 adapter emits 2024 values because that is the width of STATE's perturbation vocabulary; STATE
@@ -138,30 +139,46 @@ the projected expression shift and scalar response summaries; $q_{g,c}$, basal s
 in $c$; $z_c$, the pooled context embedding; $\mu_{\text{train}}(g)$, the training gene mean;
 $\hat\delta$, the predicted residual. The training protocol is Figure 2 in §5.*
 
-Figure 1 shows the data flow and the factorised head defined below. Tx1 is frozen and supplies cached basal-cell embeddings. STATE and an
+Figure 1 shows the data flow and the nested head defined below. Tx1 is frozen and supplies cached basal-cell embeddings. STATE and an
 ESM2 adapter predict perturbed expression, and the head uses five feature blocks: pooled
 expression change $\Delta$ (projected), response dispersion statistics $s$, gene-specific basal
-single-cell statistics $q_{g,c}$, gene embedding $e_g$ and basal context embedding $z_c$.
-Their concatenation, each block standardised with statistics fitted on training rows and each
-partial-coverage value paired with an explicit mask bit, is $F_{g,c}$. The gene mean
-$\mu_{\text{train}}$ is fixed preprocessing, not a learned head.
+single-cell statistics $q_{g,c}$, gene embedding $e_g$ and the compressed basal context
+$\tilde z_c$. $\Delta$, $s$, $q_{g,c}$ and $e_g$ are standardised per dimension with statistics
+fitted on training rows, each partial-coverage value paired with an explicit mask bit. The gene
+mean $\mu_{\text{train}}$ is fixed preprocessing, not a learned head.
 
-**Factorised head.** The head adds a rank-$r$ gene $\times$ context product to the MLP over
-$F_{g,c}$, and the model rescales the sum by a fixed per-gene residual scale $\sigma_g$:
+**Context PCA.** The pooled Tx1 context $z_c$ (5120 = mean and variance of the 2560-d cell
+embeddings) takes only 170 distinct values in training, one per labelled training line, so its
+rank is at most 169 (z-scored, 90% of its variance lies in 86 components). It is therefore
+compressed before the head: z-scored per dimension and projected onto its first 128 principal
+components (`model.context_components`), all fitted on the labelled training lines only, saved in
+the checkpoint and restored at evaluation. The scores are divided by one constant, the SD of the
+first component's scores, so the leading component has unit variance and the tail keeps its
+smaller scale (eigen-scaled, not whitened); $\tilde z_c$ bypasses the per-dimension standardiser.
+
+**Nested low-rank head.** The head is a rank-$r$ gene $\times$ line product plus a per-(g, c)
+correction, rescaled by a fixed per-gene residual scale $\sigma_g$:
 
 $$
-\hat\delta(g,c)=\sigma_g\Big[\mathrm{MLP}(F_{g,c})+\tfrac{1}{\sqrt r}\,\big\langle G(g),\,C(g,c)\big\rangle\Big],\qquad
-G(g)=E_g+W e_g,\qquad C(g,c)=\mathrm{MLP}_C\big(z_c,\,q_{g,c},\,\Delta,\,s\big).
+\hat\delta(g,c)=\sigma_g\Big[\tfrac{1}{\sqrt r}\,\big\langle G(g),\,C(\tilde z_c)\big\rangle+h\big(q_{g,c},\,s,\,\Delta,\,e_g\big)\Big],\qquad
+G(g)=E_g+W e_g,\qquad C(\tilde z)=A\tilde z+\mathrm{SwiGLU}_C(\tilde z).
 $$
 
 $E\in\mathbb R^{|\mathcal G|\times r}$ is a free per-gene embedding (normal, SD 0.02) indexed by
-the gene's position in the fixed gene order, $W$ a linear map of the ESM2 embedding $e_g$ to
-$\mathbb R^r$, and $\mathrm{MLP}_C$ a context tower over the enabled context blocks with their
-masks (every block except $e_g$). Both MLPs have 2 hidden layers of width 256 with LayerNorm
-and GELU, and $r=64$ (`model.factor_rank`). A gene $\times$ context effect is therefore one explicit
-inner product instead of something the MLP must assemble from additive pieces. There is no
-per-line lookup anywhere: the only per-line signal is $z_c$ and, through STATE, the basal
-cells.
+the gene's position in the fixed gene order and $W$ a linear map of $e_g$ to $\mathbb R^r$, with
+$r=64$ (`model.factor_rank`). $C$ reads only the line context: a linear map $A$ (128 → $r$) plus a
+residual branch (SwiGLU 128 → 128, dropout, linear 128 → $r$) whose output layer starts at zero.
+With $C=A\tilde z$ the first term is a reduced-rank regression on the context components, the form
+of the Tx1 context-PCA ridge, so training starts from the strongest control's model class.
+$h$ encodes each enabled block separately (linear then LayerNorm: $q$ with its mask → 16, $s$ with
+its masks → 16, $\Delta$ → 32, $e_g$ → 32), concatenates them, applies dropout and a SwiGLU layer of
+width 64, and ends in a zero-initialised linear map to one value; it never sees the context.
+SwiGLU is $(\mathrm{SiLU}(xW_1)\odot xW_2)W_3$. Dropout is 0.1 (`model.dropout`). The layer widths are
+fixed in code. There is no per-line lookup anywhere: the only per-line signal is $\tilde z_c$
+and, through STATE, the basal cells. This head replaced a trunk MLP over all five blocks plus a
+gene $\times$ context product (2 hidden layers of 256, raw 5120-d $z_c$; 4.46M parameters, 1.33M
+now), which reached a training-diagnostic selective Spearman of 0.53–0.67 against 0.15 on
+validation ([head revision design](specs/2026-10-03-geneeffect-head-revision-design.md)).
 
 $\sigma_g$ is the population SD of the residual $y_{cg}-\mu_{\text{train}}(g)$ over the labeled
 training lines, floored at its 10th percentile over genes
@@ -220,7 +237,7 @@ The base config has $\lambda=0$, so no response batch is drawn and the joint mod
 response data for nothing; a model without STATE cannot replay at all. Earlier runs used
 $\lambda=1$ and Huber only.
 
-AdamW (weight decay 0.01) has up to three parameter groups, each present only when its module
+AdamW (weight decay 0.05, `train.weight_decay`) has up to three parameter groups, each present only when its module
 is trained: the head, including the gene embedding and the context tower, at $10^{-3}$; the
 ESM2 adapter at $10^{-4}$ when STATE is used; and STATE at $10^{-5}$, only under `trainable`
 (a frozen STATE has no gradient and runs without dropout). The learning rate rises linearly

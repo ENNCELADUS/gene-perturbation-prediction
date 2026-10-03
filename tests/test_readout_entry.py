@@ -14,10 +14,12 @@ from src.experiments.geneeffect import run_training  # noqa: E402
 
 @pytest.fixture
 def nine_training_lines(monkeypatch):
-    # The readout's context PCA needs at least nine training contexts.
+    # The readout's context PCA needs at least nine training contexts and eight
+    # context components.
     monkeypatch.setattr(
         test_joint, "TRAIN", (*test_joint.ANCHORS, *(f"ACH-T{i}" for i in range(6)))
     )
+    monkeypatch.setattr(test_joint, "CONTEXT_COMPONENTS", 8)
 
 
 def test_run_readout_writes_val_metrics_and_skips_when_done(

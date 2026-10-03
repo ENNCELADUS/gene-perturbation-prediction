@@ -23,9 +23,10 @@ The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and
 (`docs/03-geneeffect-protocol.md` §7, `docs/results/joint_geneeffect_seed0/`). The 2026-10-02 `all` run
 (`all_20261002T174946Z`) finished: validation residual Pearson 0.068 for the joint model against 0.133 for the Tx1 context ridge,
 and the response comparison favours the HVG MLP over fine-tuned STATE and over the Tx1 MLP. The current work is the **revision**
-(`docs/specs/2026-10-03-geneeffect-revision-design.md`): a selective-gene selector, a factorised head, and objective and STATE
-screens on the 30734 container. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select
-`best.pt` on **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
+(`docs/specs/2026-10-03-geneeffect-revision-design.md`, then `docs/specs/2026-10-03-geneeffect-head-revision-design.md`): a
+selective-gene selector, a nested low-rank head over a training-line context PCA, and objective and STATE screens on the 30734
+container. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+**validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
 
@@ -88,14 +89,15 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them.
 - **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
-  the head's context. The head is a trunk MLP plus a rank-`factor_rank` gene × context product, and predicts in units of the
+  the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
+  128-component context PCA (fitted on training lines), plus a per-(g, c) correction that never sees the context, and predicts in units of the
   per-gene training residual SD. One GeneEffect objective per update, `train.objective` (`huber`, `standardized_mse`,
   `pearson_blocks`); response replay on the four anchor lines every fourth update only when `response_weight > 0` (the base config
   has 0). `train.state_mode` freezes STATE at the released weights or trains it; no STATE is `head_blocks` `use_delta_proj` and
   `use_s` both false, which skips STATE and the adapter. Warmup then cosine learning rate. `best.pt` and early stopping use
   **only** `val_selective_spearman` (higher wins), over the selective genes fitted on training lines.
 - **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
-  selective genes, residual SD) from the checkpoint;
+  selective genes, residual SD, context PCA) from the checkpoint;
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
   `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
   evaluation and baselines for one config.
