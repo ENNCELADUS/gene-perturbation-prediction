@@ -182,7 +182,12 @@ def test_all_end_to_end_writes_summary(finished):
     for row in rows:
         assert row in table and "not produced" not in table[row][-1], row
     # Gene mean is constant per gene across lines: undefined, never 0.
-    assert table["Gene mean"][2] == "undefined"
+    columns = list(pipeline.VALIDATION_COLUMNS)
+    for column in (
+        "Selective Spearman (per selective gene)",
+        "Residual Pearson (per gene)",
+    ):
+        assert table["Gene mean"][columns.index(column)] == "undefined", column
     assert "training ran to the maximum of 1 epochs" in summary
     assert "A2" not in summary
 

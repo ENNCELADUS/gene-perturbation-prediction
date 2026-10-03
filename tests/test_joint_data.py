@@ -172,3 +172,57 @@ def test_restore_skips_fitting_and_external_esm2(tmp_path, monkeypatch):
     state["target_sum"] = TARGET_SUM * 2
     with pytest.raises(ValueError, match="target_sum"):
         load_inputs(config, preprocessing=state)
+
+
+def test_dependency_batch_carries_gene_index_scale_and_selectivity(tmp_path):
+    import dataclasses
+
+    import torch
+
+    from src.data.datasets import DependencyDataset
+
+    opened = load_inputs(make_prepared_fixture(tmp_path))
+    scale = pd.Series([0.5, 2.0, 4.0], index=list(opened.genes))
+    inputs = dataclasses.replace(
+        opened, residual_scale=scale, selective_genes=frozenset({"G0"})
+    )
+    dataset = DependencyDataset(inputs, "train")
+    batch = dataset.collate(range(len(dataset)))
+    genes = batch.conditions.genes
+    gene_index = batch.conditions.gene_index
+    assert gene_index.dtype == torch.long
+    assert [inputs.genes[i] for i in gene_index.tolist()] == list(genes)
+    assert batch.residual_scale.dtype == torch.float32
+    assert batch.residual_scale.tolist() == [scale[gene] for gene in genes]
+    assert batch.selective.dtype == torch.bool
+    assert batch.selective.tolist() == [gene == "G0" for gene in genes]
+    moved = batch.to("meta")
+    for value in (
+        moved.conditions.gene_index,
+        moved.residual_scale,
+        moved.selective,
+        moved.residual,
+    ):
+        assert value.device.type == "meta"
+
+
+def test_rows_by_gene_partitions_rows_in_gene_order(tmp_path):
+    import dataclasses
+
+    from src.data.datasets import DependencyDataset
+
+    opened = load_inputs(make_prepared_fixture(tmp_path))
+    assert opened.genes == ("G1", "G0", "G2")
+    inputs = dataclasses.replace(
+        opened, labels=opened.labels.loc[opened.labels.gene_symbol != "G0"]
+    )
+    dataset = DependencyDataset(inputs, "train")
+    groups = dataset.rows_by_gene()
+    assert len(groups) == len(inputs.genes)
+    assert len(groups[1]) == 0
+    np.testing.assert_array_equal(
+        np.sort(np.concatenate(groups)), np.arange(len(dataset))
+    )
+    for gene, rows in zip(inputs.genes, groups, strict=True):
+        assert {dataset.genes[i] for i in rows} <= {gene}
+        assert len(rows) == sum(g == gene for g in dataset.genes)

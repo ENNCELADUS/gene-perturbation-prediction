@@ -69,6 +69,8 @@ def test_help(executable):
         ["hpc/run.sh", "--help"], env=env, check=True, capture_output=True, text=True
     )
     assert "hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]" in completed.stdout
+    assert "hpc/run.sh revision CONFIG [--run-id ID]" in completed.stdout
     assert "hpc/run.sh test CHECKPOINT" in completed.stdout
-    assert "prepare" not in completed.stdout and "train" not in completed.stdout
+    assert "run.sh prepare" not in completed.stdout
+    assert "run.sh train" not in completed.stdout
     assert not log.exists()

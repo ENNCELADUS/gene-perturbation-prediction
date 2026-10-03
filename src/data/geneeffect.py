@@ -17,6 +17,9 @@ from src.data.residual_target import ResidualTargets, build_residual_targets
 SPLIT_COUNTS: Final = {"train": 172, "val": 27, "test": 27}
 
 
+DEPENDENCY_THRESHOLD: Final = -0.5
+
+
 UNLABELED_TRAIN: Final = ("ACH-000779", "ACH-001086")
 
 
@@ -134,6 +137,85 @@ def fit_variable_gene_membership(
         np.percentile(variance.to_numpy(), percentile, method="linear")
     )
     return frozenset(variance.index[variance >= threshold].astype(str))
+
+
+def fit_selective_genes(
+    labels: pd.DataFrame,
+    train_lines: Sequence[str],
+    genes: Sequence[str],
+    *,
+    min_lines: int,
+    max_fraction: float,
+) -> frozenset[str]:
+    """Fit selective-dependency membership using labeled training rows only.
+
+    A gene is selective when at least ``min_lines`` training lines depend on it
+    (``gene_effect < DEPENDENCY_THRESHOLD``) and fewer than ``max_fraction`` of
+    its labeled training lines do.
+    """
+    required = {"model_id", "gene_symbol", "gene_effect"}
+    missing = sorted(required - set(labels.columns))
+    if missing:
+        raise ValueError(f"labels is missing columns: {missing}")
+    if min_lines <= 0:
+        raise ValueError("min_lines must be positive")
+    if not 0.0 < max_fraction <= 1.0:
+        raise ValueError("max_fraction must be in (0, 1]")
+    ordered = _unique_strings(genes, "selective-gene panel")
+    train_set = set(train_lines)
+    if not train_set:
+        raise ValueError("train_lines must not be empty")
+    train = labels.loc[
+        labels["model_id"].isin(train_set) & np.isfinite(labels["gene_effect"])
+    ]
+    dependent = train["gene_effect"] < DEPENDENCY_THRESHOLD
+    grouped = dependent.groupby(train["gene_symbol"])
+    counts = grouped.sum().reindex(ordered, fill_value=0)
+    rows = grouped.count().reindex(ordered, fill_value=0)
+    selective = (counts >= min_lines) & (counts / rows < max_fraction)
+    return frozenset(counts.index[selective].astype(str))
+
+
+def fit_residual_scale(
+    labels: pd.DataFrame,
+    train_lines: Sequence[str],
+    genes: Sequence[str],
+    *,
+    floor_percentile: float,
+) -> pd.Series:
+    """Fit the per-gene residual SD on labeled training rows only.
+
+    Population SD (ddof 0) per gene, indexed in ``genes`` order. The floor is
+    ``floor_percentile`` over the finite SDs; a gene with fewer than two rows or
+    an SD below the floor takes the floor, so every value is finite and positive.
+    """
+    required = {"model_id", "gene_symbol", "residual"}
+    missing = sorted(required - set(labels.columns))
+    if missing:
+        raise ValueError(f"labels is missing columns: {missing}")
+    if not 0.0 <= floor_percentile <= 100.0:
+        raise ValueError("floor_percentile must be between 0 and 100")
+    ordered = _unique_strings(genes, "residual-scale panel")
+    train_set = set(train_lines)
+    if not train_set:
+        raise ValueError("train_lines must not be empty")
+    train = labels.loc[
+        labels["model_id"].isin(train_set) & np.isfinite(labels["residual"])
+    ]
+    grouped = train.groupby("gene_symbol")["residual"]
+    counts = grouped.count().reindex(ordered, fill_value=0)
+    sd = grouped.std(ddof=0).reindex(ordered).where(counts >= 2)
+    finite = sd.to_numpy(dtype=np.float64)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        raise ValueError("residual-scale fit has no gene with two training rows")
+    floor = float(np.percentile(finite, floor_percentile, method="linear"))
+    if not floor > 0.0:
+        raise ValueError(f"residual-scale floor must be positive; got {floor}")
+    scale = sd.fillna(floor).clip(lower=floor)
+    scale.index.name = "gene_symbol"
+    scale.name = "residual_scale"
+    return scale.astype(np.float64)
 
 
 def _unique_strings(values: Sequence[object], label: str) -> tuple[str, ...]:

@@ -40,8 +40,14 @@ def test_run_readout_writes_val_metrics_and_skips_when_done(
         "val_residual_spearman_macro_per_gene",
         "val_residual_sd_ratio_macro_per_gene",
         "val_geneeffect_pearson_macro_per_line",
+        "val_selective_spearman",
+        "val_selective_aupr_lift",
     ):
         assert key in metrics
+    cache_metadata = json.loads((out_dir / "features" / "metadata.json").read_text())
+    assert cache_metadata["selective_genes"] == [
+        gene for gene in inputs.genes if gene in inputs.selective_genes
+    ]
 
     def forbidden(*args, **kwargs):
         raise AssertionError("a finished readout was recomputed")

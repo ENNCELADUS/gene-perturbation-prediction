@@ -58,6 +58,8 @@ BASELINE_NAMES = {
     "context_pca_ridge[hvg]": "Context-PCA ridge (HVG)",
 }
 VALIDATION_COLUMNS = {
+    "Selective Spearman (per selective gene)": "val_selective_spearman",
+    "Selective AUPR lift": "val_selective_aupr_lift",
     "Huber": "val_geneeffect_loss",
     "Absolute Pearson (per line)": "val_geneeffect_pearson_macro_per_line",
     "Residual Pearson (per gene)": "val_residual_pearson_macro_per_gene",
@@ -465,7 +467,7 @@ def _validation_section(config: dict, run: Path) -> list[str]:
     if done["bad_epochs"] >= train["patience"]:
         stop = (
             f"training stopped early after {done['bad_epochs']} epochs without a "
-            "lower validation GeneEffect loss"
+            "higher validation selective-gene Spearman"
         )
     else:
         stop = f"training ran to the maximum of {train['max_epochs']} epochs"
@@ -481,8 +483,8 @@ def _validation_section(config: dict, run: Path) -> list[str]:
         "## Validation on the GeneEffect validation lines",
         "",
         f"Joint model: `train/best.pt` is epoch {done['best_epoch'] + 1} of "
-        f"{done['next_epoch']} trained (validation GeneEffect loss "
-        f"{_number(done['best_loss'])}); {stop}.",
+        f"{done['next_epoch']} trained (validation selective-gene Spearman "
+        f"{_number(done['best_score'])}); {stop}.",
         "",
         "| Model | " + " | ".join(VALIDATION_COLUMNS) + " |",
         "|" + "---|" * (len(VALIDATION_COLUMNS) + 1),

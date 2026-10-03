@@ -1,4 +1,4 @@
-"""Epoch-boundary training state, GeneEffect-loss selection and checkpoints."""
+"""Epoch-boundary training state, selective-gene Spearman selection and checkpoints."""
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -15,7 +15,7 @@ import torch
 class TrainState:
     next_epoch: int = 0
     global_step: int = 0
-    best_loss: float = math.inf
+    best_score: float = -math.inf
     best_epoch: int = -1
     bad_epochs: int = 0
 
@@ -23,13 +23,17 @@ class TrainState:
 def record_validation(
     state: TrainState, metrics: Mapping[str, Any], epoch: int
 ) -> bool:
-    """Record a finished epoch; only a strict ``val_geneeffect_loss`` decrease wins."""
-    loss = float(metrics["val_geneeffect_loss"])
-    if not math.isfinite(loss):
-        raise ValueError("val_geneeffect_loss must be finite")
-    improved = loss < state.best_loss
+    """Record a finished epoch; only a strict ``val_selective_spearman`` rise wins.
+
+    An undefined (``None``) or non-finite selector raises before ``state`` changes.
+    """
+    score = metrics["val_selective_spearman"]
+    if score is None or not math.isfinite(float(score)):
+        raise ValueError(f"val_selective_spearman must be finite, got {score!r}")
+    score = float(score)
+    improved = score > state.best_score
     if improved:
-        state.best_loss, state.best_epoch, state.bad_epochs = loss, epoch, 0
+        state.best_score, state.best_epoch, state.bad_epochs = score, epoch, 0
     else:
         state.bad_epochs += 1
     state.next_epoch = epoch + 1
@@ -59,7 +63,14 @@ def restore_rng_state(saved: Mapping[str, Any], device: torch.device) -> None:
 
 
 def save_checkpoint(
-    path: Path, model, optimizer, state: TrainState, config, preprocessing, accelerator
+    path: Path,
+    model,
+    optimizer,
+    scheduler,
+    state: TrainState,
+    config,
+    preprocessing,
+    accelerator,
 ) -> None:
     """Gather every rank's RNG, then rank zero writes the checkpoint atomically."""
     rng_states = [capture_rng_state(accelerator.device)]
@@ -77,6 +88,7 @@ def save_checkpoint(
             "normalization_state": unwrapped.standardizer.to_state(),
             "preprocessing": dict(preprocessing),
             "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict(),
             "train_state": asdict(state),
             "config": dict(config),
             "world_size": accelerator.num_processes,

@@ -71,6 +71,7 @@ def run_baselines(config, *, split, out_dir, inputs=None):
             model_ids=requested,
             genes=inputs.genes,
             variable_genes=[g for g in inputs.genes if g in inputs.variable_genes],
+            selective_genes=[g for g in inputs.genes if g in inputs.selective_genes],
         )
         metrics[method] = {f"{split}_{key}": value for key, value in scalar.items()}
         per_line.append(lines.assign(method=method))

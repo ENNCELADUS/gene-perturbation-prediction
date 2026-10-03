@@ -43,6 +43,7 @@ def synthetic_inputs():
         genes=("UP", "DOWN", "MISSING"),
         train_gene_means=means,
         variable_genes=frozenset(means.index),
+        selective_genes=frozenset({"UP", "DOWN"}),
     )
 
 

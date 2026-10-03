@@ -15,9 +15,11 @@ import numpy as np
 import pandas as pd
 import torch
 from torch import nn
+from sklearn.metrics import average_precision_score
 from torch.nn import functional as F
 
 from src.data.datasets import DependencyDataset
+from src.data.geneeffect import DEPENDENCY_THRESHOLD
 from src.data.prepared import PreparedInputs
 from src.eval.metrics import _unit_pearson, _unit_spearman
 
@@ -74,19 +76,56 @@ def _correlation_details(
     return pd.DataFrame(rows, columns=columns)
 
 
+def _aupr_lift(frame: pd.DataFrame, units: Sequence[str]) -> pd.Series:
+    """Per-gene dependent-line AUPR minus prevalence; NaN without both classes.
+
+    A gene is scored on its rows with a finite GeneEffect and prediction; a line is
+    dependent when ``gene_effect < DEPENDENCY_THRESHOLD`` and ranks higher the lower
+    its predicted GeneEffect. A constant prediction scores exactly 0.
+    """
+    groups = dict(tuple(frame.groupby("gene_symbol", sort=False)))
+    lift = {}
+    for gene in units:
+        group = groups.get(gene, frame.iloc[:0])
+        truth = group["gene_effect"].to_numpy(dtype=float)
+        prediction = group["geneeffect_prediction"].to_numpy(dtype=float)
+        valid = np.isfinite(truth) & np.isfinite(prediction)
+        dependent = truth[valid] < DEPENDENCY_THRESHOLD
+        positives = int(dependent.sum())
+        if positives == 0 or positives == len(dependent):
+            lift[gene] = math.nan
+            continue
+        lift[gene] = float(
+            average_precision_score(dependent, -prediction[valid])
+            - positives / len(dependent)
+        )
+    return pd.Series(lift, dtype=float)
+
+
 def aggregate_geneeffect(
     frame: pd.DataFrame,
     *,
     model_ids: Sequence[str],
     genes: Sequence[str],
     variable_genes: Sequence[str],
+    selective_genes: Sequence[str],
 ) -> tuple[dict[str, float | int | None], pd.DataFrame, pd.DataFrame]:
-    """Pair errors, absolute per-line and residual per-variable-gene correlations.
+    """Pair errors, absolute per-line, residual per-variable-gene and selective metrics.
 
     ``frame`` holds ``model_id``, ``gene_symbol``, ``gene_effect``, ``residual``,
     ``geneeffect_prediction`` and ``residual_prediction``. Undefined correlations
     stay NaN in the tables, are left out of the macro means and are counted.
+
+    ``per_gene`` covers the union of the variable and selective genes in ``genes``
+    order, with boolean ``variable`` and ``selective`` columns and the gene's
+    dependent-line ``aupr_lift``. Every ``residual_*`` metric uses the variable rows
+    only; ``selective_spearman`` (residual Spearman across lines) and
+    ``selective_aupr_lift`` are macro means over the selective rows.
     """
+    variable, selective = set(variable_genes), set(selective_genes)
+    if not (variable | selective) <= set(genes):
+        raise ValueError("variable or selective genes outside the gene order")
+    tabled = [gene for gene in genes if gene in variable | selective]
     if frame.duplicated(["model_id", "gene_symbol"]).any():
         raise ValueError("duplicate GeneEffect rows")
     scored = frame.loc[np.isfinite(frame["residual"].to_numpy(dtype=float))]
@@ -114,15 +153,30 @@ def aggregate_geneeffect(
     )
     per_gene = _correlation_details(
         frame,
-        variable_genes,
+        tabled,
         unit_col="gene_symbol",
         truth_col="residual",
         pred_col="residual_prediction",
         residual_errors=True,
     )
+    per_gene["variable"] = per_gene["gene_symbol"].isin(variable)
+    per_gene["selective"] = per_gene["gene_symbol"].isin(selective)
+    per_gene["aupr_lift"] = per_gene["gene_symbol"].map(
+        _aupr_lift(frame, [gene for gene in tabled if gene in selective])
+    )
+    variable_rows = per_gene.loc[per_gene["variable"]]
+    selective_rows = per_gene.loc[per_gene["selective"]]
+    for name, column in (
+        ("selective_spearman", "spearman"),
+        ("selective_aupr_lift", "aupr_lift"),
+    ):
+        defined = selective_rows[column].dropna()
+        metrics[name] = float(defined.mean()) if len(defined) else None
+        metrics[f"{name}_scored"] = len(defined)
+        metrics[f"{name}_undefined"] = len(selective_rows) - len(defined)
     for table, domain, axis in (
         (per_line, "geneeffect", "per_line"),
-        (per_gene, "residual", "per_gene"),
+        (variable_rows, "residual", "per_gene"),
     ):
         for correlation in ("pearson", "spearman"):
             defined = table[correlation].dropna()
@@ -133,12 +187,14 @@ def aggregate_geneeffect(
             metrics[f"{key}_{axis}_scored"] = len(defined)
             metrics[f"{key}_{axis}_undefined"] = len(table) - len(defined)
     for name in ("target_sd", "prediction_sd", "sd_ratio", "rmse", "mae"):
-        defined = per_gene[name].dropna()
+        defined = variable_rows[name].dropna()
         metrics[f"residual_{name}_macro_per_gene"] = (
             float(defined.mean()) if len(defined) else None
         )
         metrics[f"residual_{name}_per_gene_scored"] = len(defined)
-        metrics[f"residual_{name}_per_gene_undefined"] = len(per_gene) - len(defined)
+        metrics[f"residual_{name}_per_gene_undefined"] = len(variable_rows) - len(
+            defined
+        )
     return metrics, per_line, per_gene
 
 
@@ -258,6 +314,9 @@ def evaluate_model(
                 genes=inputs.genes,
                 variable_genes=[
                     gene for gene in inputs.genes if gene in inputs.variable_genes
+                ],
+                selective_genes=[
+                    gene for gene in inputs.genes if gene in inputs.selective_genes
                 ],
             )
             payload[0] = {f"{prefix}_{key}": value for key, value in metrics.items()}
