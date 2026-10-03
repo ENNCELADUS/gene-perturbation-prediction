@@ -9,14 +9,8 @@ import torch
 from torch.utils.data import Dataset
 
 from src.data.batches import DependencyBatch, OnlineConditionBatch, ResponseBatch
+from src.data.context_pca import pooled_context
 from src.data.prepared import PreparedInputs
-
-
-def pooled_context(controls_tx1: np.ndarray) -> torch.Tensor:
-    """Tx1 context ``z_c``: per-dimension mean and population variance of the cells."""
-    tensor = torch.from_numpy(np.asarray(controls_tx1, dtype=np.float32))
-    mean = tensor.mean(dim=0)
-    return torch.cat((mean, (tensor - mean).square().mean(dim=0)))
 
 
 def split_lines(inputs: PreparedInputs, split: str) -> tuple[str, ...]:
@@ -30,8 +24,9 @@ class DependencyDataset(Dataset[int]):
     """Labelled (line, gene) GeneEffect rows of one split, with a collator.
 
     ``lines`` restricts the rows to a subset of the split's lines. Every fixed
-    quantity is placed on ``device`` once: each line's basal HVG cells, pooled Tx1
-    context and q_sc table, the ESM2 table and every row's targets and indices.
+    quantity is placed on ``device`` once: each line's basal HVG cells, compressed
+    Tx1 context (the pooled ``z_c`` through ``inputs.context_pca``) and q_sc
+    table, the ESM2 table and every row's targets and indices.
     The collator only gathers by row index, so a batch is born on ``device``.
     """
 
@@ -71,9 +66,12 @@ class DependencyDataset(Dataset[int]):
             m: torch.from_numpy(np.asarray(inputs.lines[m].basal_hvg)).to(self.device)
             for m in present
         }
-        self._contexts = torch.stack(
+        contexts = np.stack(
             [pooled_context(inputs.lines[m].controls_tx1) for m in present]
-        ).to(self.device)
+        )
+        self._contexts = on_device(
+            inputs.context_pca.transform(contexts), torch.float32
+        )
         self._q_sc = on_device(
             np.stack(
                 [

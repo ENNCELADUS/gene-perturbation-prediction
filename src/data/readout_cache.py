@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.decomposition import PCA
 import torch
 
 from src.data.batches import FeatureBatch
@@ -230,21 +229,20 @@ def write_feature_cache(
     for array in shared.values():
         array.flush()
 
-    # Fit PCA on unique contexts, independently of the number of observed genes.
+    # The joint model's z_c is already its training-line context PCA, components in
+    # decreasing variance; the readout's eight context scores are its first eight,
+    # scaled to unit SD on the training contexts. Re-standardising the columns would
+    # whiten them and make any further PCA arbitrary.
     train = np.asarray(shared["z_c"][: len(split_lines["train"])], dtype=float)
-    keep = train.std(axis=0) > 0
-    center, scale = train[:, keep].mean(0), train[:, keep].std(0)
-    standardized = (train[:, keep] - center) / scale
-    if min(standardized.shape[0] - 1, standardized.shape[1]) < 8:
+    if train.shape[0] < 9 or train.shape[1] < 8:
         raise ValueError(
-            "P1-A PCA8 requires at least nine training contexts "
-            "and eight nonconstant features"
+            "the readout's eight context scores need at least nine training "
+            "contexts and eight context components"
         )
-    pca = PCA(n_components=8, svd_solver="full").fit(standardized)
-    pc_scale = pca.transform(standardized).std(0)
+    pc_scale = train[:, :8].std(0)
     if np.any(pc_scale <= np.finfo(float).eps):
-        raise ValueError("P1-A PCA8 has a degenerate component")
-    scores = pca.transform((shared["z_c"][:, keep] - center) / scale) / pc_scale
+        raise ValueError("the readout's context scores have a degenerate component")
+    scores = np.asarray(shared["z_c"][:, :8], dtype=float) / pc_scale
 
     train_arrays = {
         name: np.load(root / "train" / f"{name}.npy", mmap_mode="r")
@@ -263,17 +261,7 @@ def write_feature_cache(
         {
             "standardizer": scaler.to_state(),
             "context_scores": torch.tensor(scores, dtype=torch.float32),
-            "pca": {
-                key: torch.tensor(value)
-                for key, value in {
-                    "keep": keep,
-                    "center": center,
-                    "scale": scale,
-                    "mean": pca.mean_,
-                    "components": pca.components_,
-                    "pc_scale": pc_scale,
-                }.items()
-            },
+            "context_score_scale": torch.tensor(pc_scale),
         },
         root / "preprocessing.pt",
     )

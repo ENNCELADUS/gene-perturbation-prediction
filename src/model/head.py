@@ -22,15 +22,16 @@ class GeneEffectFeatureDims:
         q_sc: ``[mean expr, fraction expressing, expr variance]`` of gene
             ``g`` in line ``c``, from basal single cells.
         e_g: ESM2 protein embedding width.
-        z_c: Raw moment-pooled Tx1 basal-context width (mean + variance of
-            the 2560-d embedding); no PCA is applied.
+        z_c: Line-context width: the number of train-fit principal
+            components of the moment-pooled Tx1 basal context (mean +
+            variance of the 2560-d embedding), ``model.context_components``.
     """
 
     delta_proj: int = 256
     s: int = 6
     q_sc: int = 3
     e_g: int = 1280
-    z_c: int = 5120
+    z_c: int = 128
 
     def __post_init__(self) -> None:
         for name in ("delta_proj", "s", "q_sc", "e_g", "z_c"):
@@ -178,223 +179,280 @@ class GeneEffectMLP(nn.Module):
         self.input_width = width
         self.net = _mlp(self.input_width, self.hidden, n_hidden_layers, 1)
 
-    def _check_block(
-        self,
-        name: str,
-        enabled: bool,
-        value: torch.Tensor | None,
-        expected_width: int,
-    ) -> torch.Tensor | None:
-        """Validate one block tensor against its enable flag and width."""
-        if not enabled:
-            if value is not None:
-                raise ValueError(
-                    f"block {name!r} is disabled (blocks.use_{name}=False) but a "
-                    f"tensor was passed; pass None instead"
-                )
-            return None
-        if value is None:
-            raise ValueError(
-                f"block {name!r} is enabled (blocks.use_{name}=True) but no "
-                f"tensor was passed"
-            )
-        if value.dim() != 2 or value.shape[-1] != expected_width:
-            raise ValueError(
-                f"block {name!r} must be shaped [batch, {expected_width}], got "
-                f"{tuple(value.shape)}"
-            )
-        return value
-
-    def _check_mask(
-        self, name: str, required: bool, value: torch.Tensor | None, batch: int
-    ) -> torch.Tensor | None:
-        """Validate one boolean coverage-mask tensor."""
-        if not required:
-            if value is not None:
-                raise ValueError(
-                    f"mask {name!r} is not applicable (its block is disabled) but "
-                    f"a tensor was passed; pass None instead"
-                )
-            return None
-        if value is None:
-            raise ValueError(f"mask {name!r} is required but no tensor was passed")
-        if tuple(value.shape) != (batch,):
-            raise ValueError(
-                f"mask {name!r} must be shaped ({batch},), got {tuple(value.shape)}"
-            )
-        return value
-
     def forward(self, **blocks: torch.Tensor | None) -> torch.Tensor:
-        """``delta_hat``, shape ``[batch]``; arguments as :meth:`block_inputs`."""
-        x = torch.cat(list(self.block_inputs(**blocks).values()), dim=-1)
+        """``delta_hat``, shape ``[batch]``; arguments as :func:`masked_blocks`."""
+        x = torch.cat(
+            list(masked_blocks(self.dims, self.blocks, **blocks).values()), -1
+        )
         return self.net(x).squeeze(-1)
 
-    def block_inputs(
-        self,
-        *,
-        delta_proj: torch.Tensor | None = None,
-        s: torch.Tensor | None = None,
-        q_sc: torch.Tensor | None = None,
-        e_g: torch.Tensor | None = None,
-        z_c: torch.Tensor | None = None,
-        q_sc_mask: torch.Tensor | None = None,
-        hvg_panel_mask: torch.Tensor | None = None,
-        own_gene_shift_mask: torch.Tensor | None = None,
-    ) -> dict[str, torch.Tensor]:
-        """Validated, masked net input of each enabled block, in block order.
 
-        Every argument is keyword-only. A block's tensor must be ``None``
-        iff that block is disabled in ``self.blocks`` (enforced, not just
-        ignored, so a disabled block provably cannot influence the
-        forward pass). Wherever a coverage mask is ``False``, the
-        corresponding value channel(s) are zeroed **inside this method**
-        before entering the net -- callers are not required to pre-zero
-        them -- but the mask bit itself is always concatenated as an
-        explicit feature, so a masked-missing value is never
-        indistinguishable from a genuine zero.
-
-        Args:
-            delta_proj: ``[batch, dims.delta_proj]`` if ``blocks.use_delta_proj``,
-                else ``None``.
-            s: ``[batch, dims.s]`` if ``blocks.use_s``, else ``None``. The
-                last column is the own-gene HVG-index shift.
-            q_sc: ``[batch, dims.q_sc]`` if ``blocks.use_q_sc``, else ``None``.
-            e_g: ``[batch, dims.e_g]`` if ``blocks.use_e_g``, else ``None``.
-            z_c: ``[batch, dims.z_c]`` if ``blocks.use_z_c``, else ``None``.
-            q_sc_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_q_sc``.
-            hvg_panel_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_s``.
-            own_gene_shift_mask: ``[batch]`` bool/0-1, required iff
-                ``blocks.use_s``.
-
-        Returns:
-            ``{block name: [batch, width]}``; ``s`` and ``q_sc`` carry their
-            mask-bit channels.
-
-        Raises:
-            ValueError: On a block/mask presence mismatch with ``self.blocks``,
-                a wrong tensor shape, or no tensor provided at all (batch
-                size cannot be inferred).
-        """
-        blocks = self.blocks
-        dims = self.dims
-        provided = [t for t in (delta_proj, s, q_sc, e_g, z_c) if t is not None]
-        if not provided:
-            raise ValueError("forward() received no tensors; cannot infer batch size")
-        batch = provided[0].shape[0]
-
-        delta_proj = self._check_block(
-            "delta_proj", blocks.use_delta_proj, delta_proj, dims.delta_proj
-        )
-        s = self._check_block("s", blocks.use_s, s, dims.s)
-        q_sc = self._check_block("q_sc", blocks.use_q_sc, q_sc, dims.q_sc)
-        e_g = self._check_block("e_g", blocks.use_e_g, e_g, dims.e_g)
-        z_c = self._check_block("z_c", blocks.use_z_c, z_c, dims.z_c)
-
-        q_sc_mask = self._check_mask("q_sc_mask", blocks.use_q_sc, q_sc_mask, batch)
-        hvg_panel_mask = self._check_mask(
-            "hvg_panel_mask", blocks.use_s, hvg_panel_mask, batch
-        )
-        own_gene_shift_mask = self._check_mask(
-            "own_gene_shift_mask", blocks.use_s, own_gene_shift_mask, batch
-        )
-
-        parts: dict[str, torch.Tensor] = {}
-        if blocks.use_delta_proj:
-            parts["delta_proj"] = delta_proj
-        if blocks.use_s:
-            own_gate = own_gene_shift_mask.to(dtype=s.dtype).unsqueeze(-1)
-            own_shift = s[:, -1:] * own_gate
-            parts["s"] = torch.cat(
-                [
-                    s[:, :-1],
-                    own_shift,
-                    hvg_panel_mask.to(dtype=s.dtype).unsqueeze(-1),
-                    own_gene_shift_mask.to(dtype=s.dtype).unsqueeze(-1),
-                ],
-                dim=-1,
+def _check_block(
+    name: str, enabled: bool, value: torch.Tensor | None, expected_width: int
+) -> torch.Tensor | None:
+    """Validate one block tensor against its enable flag and width."""
+    if not enabled:
+        if value is not None:
+            raise ValueError(
+                f"block {name!r} is disabled (blocks.use_{name}=False) but a "
+                f"tensor was passed; pass None instead"
             )
-        if blocks.use_q_sc:
-            q_gate = q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)
-            parts["q_sc"] = torch.cat(
-                [q_sc * q_gate, q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)], dim=-1
+        return None
+    if value is None:
+        raise ValueError(
+            f"block {name!r} is enabled (blocks.use_{name}=True) but no "
+            f"tensor was passed"
+        )
+    if value.dim() != 2 or value.shape[-1] != expected_width:
+        raise ValueError(
+            f"block {name!r} must be shaped [batch, {expected_width}], got "
+            f"{tuple(value.shape)}"
+        )
+    return value
+
+
+def _check_mask(
+    name: str, required: bool, value: torch.Tensor | None, batch: int
+) -> torch.Tensor | None:
+    """Validate one boolean coverage-mask tensor."""
+    if not required:
+        if value is not None:
+            raise ValueError(
+                f"mask {name!r} is not applicable (its block is disabled) but "
+                f"a tensor was passed; pass None instead"
             )
-        if blocks.use_e_g:
-            parts["e_g"] = e_g
-        if blocks.use_z_c:
-            parts["z_c"] = z_c
-        return parts
+        return None
+    if value is None:
+        raise ValueError(f"mask {name!r} is required but no tensor was passed")
+    if tuple(value.shape) != (batch,):
+        raise ValueError(
+            f"mask {name!r} must be shaped ({batch},), got {tuple(value.shape)}"
+        )
+    return value
 
 
-class GeneEffectResidualHead(nn.Module):
-    """Factorised gene x context head over the five-block MLP.
+def masked_blocks(
+    dims: GeneEffectFeatureDims,
+    blocks: GeneEffectBlockConfig,
+    *,
+    delta_proj: torch.Tensor | None = None,
+    s: torch.Tensor | None = None,
+    q_sc: torch.Tensor | None = None,
+    e_g: torch.Tensor | None = None,
+    z_c: torch.Tensor | None = None,
+    q_sc_mask: torch.Tensor | None = None,
+    hvg_panel_mask: torch.Tensor | None = None,
+    own_gene_shift_mask: torch.Tensor | None = None,
+) -> dict[str, torch.Tensor]:
+    """Validated, masked input of each enabled block, in block order.
 
-    ``head(g, c) = MLP(F) + <G(g), C(g, c)> / sqrt(rank)``. ``MLP`` is
-    :class:`GeneEffectMLP` over every enabled block. ``G(g)`` is a free
-    per-gene embedding plus, when ``e_g`` is enabled, a linear map of the
-    ESM2 embedding. ``C(g, c)`` is an MLP over the enabled context blocks
-    (``z_c``, ``q_sc``, ``delta_proj``, ``s``, each masked exactly as the MLP
-    sees it), so a gene x context effect is one explicit inner product
-    rather than something the MLP must build from additive pieces.
+    Every block argument is keyword-only. A block's tensor must be ``None``
+    iff that block is disabled in ``blocks`` (enforced, not just ignored, so a
+    disabled block provably cannot influence the forward pass). Wherever a
+    coverage mask is ``False``, the corresponding value channel(s) are zeroed
+    **here** -- callers are not required to pre-zero them -- but the mask bit
+    itself is always concatenated as an explicit feature, so a masked-missing
+    value is never indistinguishable from a genuine zero.
+
+    Args:
+        dims: Per-block feature widths.
+        blocks: Per-block enable flags.
+        delta_proj: ``[batch, dims.delta_proj]`` if ``blocks.use_delta_proj``,
+            else ``None``.
+        s: ``[batch, dims.s]`` if ``blocks.use_s``, else ``None``. The last
+            column is the own-gene HVG-index shift.
+        q_sc: ``[batch, dims.q_sc]`` if ``blocks.use_q_sc``, else ``None``.
+        e_g: ``[batch, dims.e_g]`` if ``blocks.use_e_g``, else ``None``.
+        z_c: ``[batch, dims.z_c]`` if ``blocks.use_z_c``, else ``None``.
+        q_sc_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_q_sc``.
+        hvg_panel_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_s``.
+        own_gene_shift_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_s``.
+
+    Returns:
+        ``{block name: [batch, width]}``; ``s`` and ``q_sc`` carry their
+        mask-bit channels.
+
+    Raises:
+        ValueError: On a block/mask presence mismatch with ``blocks``, a wrong
+            tensor shape, or no tensor provided at all (batch size cannot be
+            inferred).
+    """
+    provided = [t for t in (delta_proj, s, q_sc, e_g, z_c) if t is not None]
+    if not provided:
+        raise ValueError("forward() received no tensors; cannot infer batch size")
+    batch = provided[0].shape[0]
+
+    delta_proj = _check_block(
+        "delta_proj", blocks.use_delta_proj, delta_proj, dims.delta_proj
+    )
+    s = _check_block("s", blocks.use_s, s, dims.s)
+    q_sc = _check_block("q_sc", blocks.use_q_sc, q_sc, dims.q_sc)
+    e_g = _check_block("e_g", blocks.use_e_g, e_g, dims.e_g)
+    z_c = _check_block("z_c", blocks.use_z_c, z_c, dims.z_c)
+
+    q_sc_mask = _check_mask("q_sc_mask", blocks.use_q_sc, q_sc_mask, batch)
+    hvg_panel_mask = _check_mask("hvg_panel_mask", blocks.use_s, hvg_panel_mask, batch)
+    own_gene_shift_mask = _check_mask(
+        "own_gene_shift_mask", blocks.use_s, own_gene_shift_mask, batch
+    )
+
+    parts: dict[str, torch.Tensor] = {}
+    if blocks.use_delta_proj:
+        parts["delta_proj"] = delta_proj
+    if blocks.use_s:
+        own_gate = own_gene_shift_mask.to(dtype=s.dtype).unsqueeze(-1)
+        own_shift = s[:, -1:] * own_gate
+        parts["s"] = torch.cat(
+            [
+                s[:, :-1],
+                own_shift,
+                hvg_panel_mask.to(dtype=s.dtype).unsqueeze(-1),
+                own_gene_shift_mask.to(dtype=s.dtype).unsqueeze(-1),
+            ],
+            dim=-1,
+        )
+    if blocks.use_q_sc:
+        q_gate = q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)
+        parts["q_sc"] = torch.cat(
+            [q_sc * q_gate, q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)], dim=-1
+        )
+    if blocks.use_e_g:
+        parts["e_g"] = e_g
+    if blocks.use_z_c:
+        parts["z_c"] = z_c
+    return parts
+
+
+class SwiGLU(nn.Module):
+    """``out((x W_1) * SiLU(x W_2))`` with dropout on the gated hidden layer.
+
+    The output layer is zero-initialised, so the module starts as the zero
+    function and its contribution grows from there.
+    """
+
+    def __init__(self, width: int, hidden: int, out: int, dropout: float) -> None:
+        super().__init__()
+        self.value = nn.Linear(width, hidden)
+        self.gate = nn.Linear(width, hidden)
+        self.dropout = nn.Dropout(dropout)
+        self.out = nn.Linear(hidden, out)
+        nn.init.zeros_(self.out.weight)
+        nn.init.zeros_(self.out.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        hidden = self.value(x) * nn.functional.silu(self.gate(x))
+        return self.out(self.dropout(hidden))
+
+
+#: Width of each per-(g, c) block's encoder in the correction ``h``. ``s`` and
+#: ``q_sc`` enter with their mask channels.
+CORRECTION_ENCODER_WIDTHS = {"delta_proj": 32, "s": 16, "q_sc": 16, "e_g": 32}
+#: Hidden width of the correction's SwiGLU layer.
+CORRECTION_HIDDEN = 64
+#: Hidden width of the context tower's residual SwiGLU branch.
+CONTEXT_HIDDEN = 128
+
+
+class GeneEffectNestedHead(nn.Module):
+    """Nested low-rank head: a gene x context product plus a per-row correction.
+
+    ``head(g, c) = <G(g), C(z_c)> / sqrt(rank) + h(q_sc, s, delta_proj, e_g)``,
+    in units of the per-gene training residual SD.
+
+    - ``G(g)`` is a free per-gene embedding plus, when ``e_g`` is enabled, a
+      linear map of the ESM2 embedding.
+    - ``C(z) = W z + SwiGLU(z)`` reads only the line context ``z_c`` (the
+      eigen-scaled context PCA scores). The SwiGLU branch's output layer is
+      zero-initialised, so training starts at a reduced-rank context ridge.
+    - ``h`` encodes each enabled per-(g, c) block with ``Linear -> LayerNorm``,
+      concatenates them, applies dropout and a SwiGLU layer whose output is
+      zero-initialised. It never sees ``z_c``; with no such block enabled it is
+      absent and contributes zero.
 
     The free embedding is indexed by gene position in ``inputs.genes``; there
-    is still no per-line lookup: the only per-line signal is ``z_c``.
+    is no per-line lookup: the only per-line signal is ``z_c``.
 
     Attributes:
-        trunk: The additive five-block MLP.
         gene_embedding: Free ``[n_genes, factor_rank]`` gene factors.
         gene_projection: ``Linear(e_g -> factor_rank)``, or ``None`` when
             ``e_g`` is disabled.
-        context: MLP ``context_width -> factor_rank``.
-        context_width: Width of the context MLP's input.
+        context_linear: The linear part ``W`` of ``C``.
+        context_residual: The residual SwiGLU branch of ``C``.
+        encoders: One ``Linear -> LayerNorm`` per enabled block of ``h``.
+        correction: ``Dropout -> SwiGLU -> 1``, or ``None`` without ``h`` blocks.
     """
 
     def __init__(
         self,
         dims: GeneEffectFeatureDims,
         blocks: GeneEffectBlockConfig,
-        hidden: int,
-        n_hidden_layers: int,
+        *,
         n_genes: int,
         factor_rank: int,
+        dropout: float,
     ) -> None:
         """Initialize the head.
 
         Args:
-            dims: Per-block feature widths.
-            blocks: Per-block enable flags.
-            hidden: Hidden width of the MLP trunk and the context MLP.
-            n_hidden_layers: Hidden layers of the MLP trunk and the context MLP.
+            dims: Per-block feature widths; ``dims.z_c`` is the number of
+                context PCA components.
+            blocks: Per-block enable flags; ``use_z_c`` must be true.
             n_genes: Rows of the free gene embedding (``len(inputs.genes)``).
             factor_rank: Width of the gene and context factors.
+            dropout: Dropout on ``h``'s concatenated encodings and in ``C``'s
+                residual hidden layer.
 
         Raises:
-            ValueError: If ``n_genes`` or ``factor_rank`` is non-positive, or
-                no context block is enabled.
+            ValueError: If ``n_genes`` or ``factor_rank`` is non-positive,
+                ``dropout`` is outside ``[0, 1)``, or ``z_c`` is disabled.
         """
         super().__init__()
         if n_genes < 1:
             raise ValueError(f"n_genes must be positive, got {n_genes}")
         if factor_rank < 1:
             raise ValueError(f"factor_rank must be positive, got {factor_rank}")
-        self.trunk = GeneEffectMLP(dims, blocks, hidden, n_hidden_layers)
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError(f"dropout must be in [0, 1), got {dropout}")
+        if not blocks.use_z_c:
+            raise ValueError("the nested head needs the line context (use_z_c=True)")
         self.dims = dims
         self.blocks = blocks
         self.n_genes = int(n_genes)
         self.factor_rank = int(factor_rank)
-        self.context_width = self.trunk.input_width - (
-            dims.e_g if blocks.use_e_g else 0
-        )
-        if self.context_width == 0:
-            raise ValueError(
-                "the factorised head needs a context block (delta_proj, s, q_sc or z_c)"
-            )
+
         self.gene_embedding = nn.Embedding(self.n_genes, self.factor_rank)
         nn.init.normal_(self.gene_embedding.weight, std=0.02)
         self.gene_projection = (
             nn.Linear(dims.e_g, self.factor_rank) if blocks.use_e_g else None
         )
-        self.context = _mlp(
-            self.context_width, self.trunk.hidden, n_hidden_layers, self.factor_rank
+        self.context_linear = nn.Linear(dims.z_c, self.factor_rank)
+        self.context_residual = SwiGLU(
+            dims.z_c, CONTEXT_HIDDEN, self.factor_rank, dropout
+        )
+
+        inputs = {
+            "delta_proj": dims.delta_proj,
+            "s": dims.s + GeneEffectMLP._S_BLOCK_MASK_BITS,
+            "q_sc": dims.q_sc + GeneEffectMLP._Q_SC_BLOCK_MASK_BITS,
+            "e_g": dims.e_g,
+        }
+        self.encoders = nn.ModuleDict(
+            {
+                name: nn.Sequential(
+                    nn.Linear(width, CORRECTION_ENCODER_WIDTHS[name]),
+                    nn.LayerNorm(CORRECTION_ENCODER_WIDTHS[name]),
+                )
+                for name, width in inputs.items()
+                if getattr(blocks, f"use_{name}")
+            }
+        )
+        encoded = sum(CORRECTION_ENCODER_WIDTHS[name] for name in self.encoders)
+        self.correction = (
+            nn.Sequential(
+                nn.Dropout(dropout), SwiGLU(encoded, CORRECTION_HIDDEN, 1, 0.0)
+            )
+            if self.encoders
+            else None
         )
 
     def forward(
@@ -406,18 +464,18 @@ class GeneEffectResidualHead(nn.Module):
             gene_index: ``[batch]`` integer position of each row's gene in
                 ``inputs.genes``.
             **blocks: Block tensors and coverage masks, validated and masked
-                exactly as :meth:`GeneEffectMLP.block_inputs`.
+                exactly as :func:`masked_blocks`.
 
         Returns:
-            ``delta_hat``, shape ``[batch]``.
+            ``delta_hat`` in residual-SD units, shape ``[batch]``.
 
         Raises:
-            ValueError: As :meth:`GeneEffectMLP.block_inputs`, or when
-                ``gene_index`` is not an integer ``[batch]`` tensor.
+            ValueError: As :func:`masked_blocks`, or when ``gene_index`` is not
+                an integer ``[batch]`` tensor.
         """
-        parts = self.trunk.block_inputs(**blocks)
-        trunk = self.trunk.net(torch.cat(list(parts.values()), dim=-1)).squeeze(-1)
-        batch = trunk.shape[0]
+        parts = masked_blocks(self.dims, self.blocks, **blocks)
+        context = parts["z_c"]
+        batch = context.shape[0]
         if (
             tuple(gene_index.shape) != (batch,)
             or gene_index.is_floating_point()
@@ -430,7 +488,11 @@ class GeneEffectResidualHead(nn.Module):
         gene = self.gene_embedding(gene_index)
         if self.gene_projection is not None:
             gene = gene + self.gene_projection(parts["e_g"])
-        context = self.context(
-            torch.cat([value for name, value in parts.items() if name != "e_g"], dim=-1)
-        )
-        return trunk + (gene * context).sum(dim=-1) / math.sqrt(self.factor_rank)
+        context = self.context_linear(context) + self.context_residual(context)
+        prediction = (gene * context).sum(dim=-1) / math.sqrt(self.factor_rank)
+        if self.correction is not None:
+            encoded = torch.cat(
+                [encoder(parts[name]) for name, encoder in self.encoders.items()], -1
+            )
+            prediction = prediction + self.correction(encoded).squeeze(-1)
+        return prediction

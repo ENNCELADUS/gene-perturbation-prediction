@@ -113,6 +113,8 @@ def make_prepared_fixture(root: Path, *, hvg_width: int = 2) -> dict:
         },
         "train": {"dependency_batch_size": 2, "response_batch_size": 8},
         "seeds": {"train": 0, "collator": 0, "projection": 0},
+        # Every Tx1 dimension of a fixture cell is equal: the contexts have rank one.
+        "model": {"context_components": 1},
     }
 
 
@@ -226,3 +228,84 @@ def test_rows_by_gene_partitions_rows_in_gene_order(tmp_path):
     for gene, rows in zip(inputs.genes, groups, strict=True):
         assert {dataset.genes[i] for i in rows} <= {gene}
         assert len(rows) == sum(g == gene for g in dataset.genes)
+
+
+def _rewrite_tx1(config: dict, model_id: str, controls: np.ndarray) -> None:
+    from src.data.prepared import read_prepared_line
+
+    path = Path(config["prepared_root"]) / "lines" / f"{model_id}.npz"
+    line = read_prepared_line(path, ("G1", "G0", "G2"))
+    write_prepared_line(
+        path, PreparedLine(controls.astype(np.float32), line.basal_hvg, line.q_sc)
+    )
+
+
+def _same_pca(left, right) -> bool:
+    return all(
+        np.array_equal(getattr(left, key), getattr(right, key))
+        for key in ("mean", "scale", "components", "score_scale")
+    )
+
+
+def test_context_pca_fits_on_labelled_training_lines_only(tmp_path):
+    config = make_prepared_fixture(tmp_path)
+    before = load_inputs(config).context_pca
+    assert before.n_components == 1 and before.width == 2 * 2560
+    rng = np.random.default_rng(0)
+    for model_id in ("ACH-VAL", "ACH-TEST"):
+        _rewrite_tx1(config, model_id, rng.normal(size=(5, 2560)))
+    assert _same_pca(before, load_inputs(config).context_pca)
+    assert _same_pca(before, load_inputs(config, include_test=True).context_pca)
+    _rewrite_tx1(config, "ACH-TRAIN", rng.normal(size=(5, 2560)))
+    assert not _same_pca(before, load_inputs(config).context_pca)
+
+
+def test_context_pca_restores_without_refitting(tmp_path, monkeypatch):
+    import src.data.prepared as prepared
+    from src.data.datasets import DependencyDataset
+
+    config = make_prepared_fixture(tmp_path)
+    fitted = load_inputs(config)
+    state = fitted.preprocessing_state()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("restore must not refit")
+
+    monkeypatch.setattr(prepared, "fit_context_pca", forbidden)
+    restored = load_inputs(config, preprocessing=state)
+    assert _same_pca(fitted.context_pca, restored.context_pca)
+    for inputs in (fitted, restored):
+        assert DependencyDataset(inputs, "val").collate([0]).conditions.z_c.shape == (
+            1,
+            1,
+        )
+    broken = {key: value for key, value in state.items() if key != "context_pca"}
+    with pytest.raises(ValueError, match="context_pca"):
+        load_inputs(config, preprocessing=broken)
+    partial = dict(state, context_pca=dict(state["context_pca"]))
+    del partial["context_pca"]["score_scale"]
+    with pytest.raises(ValueError, match="score_scale"):
+        load_inputs(config, preprocessing=partial)
+
+
+def test_context_pca_is_eigen_scaled_and_signed():
+    from src.data.context_pca import ContextPCA, fit_context_pca
+
+    rng = np.random.default_rng(1)
+    latent = rng.normal(size=(40, 6)) * np.array([5.0, 3.0, 2.0, 1.0, 0.5, 0.2])
+    contexts = latent @ rng.normal(size=(6, 30)) + rng.normal(size=30)
+    contexts[:, 7] = 4.0  # a constant dimension is guarded, not divided by zero
+    pca = fit_context_pca(contexts, 5)
+    scores = pca.transform(contexts)
+    sd = scores.std(axis=0)
+    assert sd[0] == pytest.approx(1.0)
+    assert np.all(np.diff(sd) < 0) and sd[-1] < 0.5
+    np.testing.assert_allclose(scores.mean(axis=0), 0.0, atol=1e-10)
+    np.testing.assert_allclose(pca.components @ pca.components.T, np.eye(5), atol=1e-10)
+    peak = np.abs(pca.components).argmax(axis=1)
+    assert (pca.components[np.arange(5), peak] > 0).all()
+    assert np.isfinite(scores).all() and pca.scale[7] == 1.0
+    restored = ContextPCA.from_state(pca.to_state())
+    np.testing.assert_array_equal(restored.transform(contexts), scores)
+    with pytest.raises(ValueError, match="rank 3"):
+        fit_context_pca(contexts[:4], 4)

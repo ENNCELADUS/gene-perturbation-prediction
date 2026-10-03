@@ -21,6 +21,7 @@ pytest.importorskip("accelerate")
 pytest.importorskip("state.tx.models.state_transition")
 
 from src.data.batches import DependencyBatch  # noqa: E402
+from src.data.context_pca import fit_context_pca, pooled_context  # noqa: E402
 from src.data.datasets import DependencyDataset, ResponseDataset  # noqa: E402
 from src.data.prepared import PreparedInputs, PreparedLine  # noqa: E402
 from src.data.q_sc import QScFeatures  # noqa: E402
@@ -55,6 +56,7 @@ GENES = ("G0", "G1", "G2", "G3", "G4", "G5")
 SELECTIVE = ("G0", "G2", "G3", "G5")
 HVG_ORDER = ("G0", "G1", *(f"H{i}" for i in range(HVG - 2)))
 RESPONSE_GENES = ("G0", "G2", "G4")
+CONTEXT_COMPONENTS = 4
 
 
 class FakeResponseTargets:
@@ -107,6 +109,10 @@ def make_inputs(seed: int = 0) -> PreparedInputs:
         variable_genes=frozenset(GENES),
         selective_genes=frozenset(SELECTIVE),
         residual_scale=scale.reindex(list(GENES)),
+        context_pca=fit_context_pca(
+            np.stack([pooled_context(prepared_lines[m].controls_tx1) for m in TRAIN]),
+            CONTEXT_COMPONENTS,
+        ),
         hvg_order=HVG_ORDER,
         esm2_symbols=GENES,
         esm2_vectors=rng.normal(size=(len(GENES), ESM2)).astype(np.float32),
@@ -162,9 +168,8 @@ def make_config(
     config["model"].update(
         cell_sentence_len=SENTENCE,
         esm2_adapter_hidden=4,
-        head_hidden=8,
-        head_layers=1,
         factor_rank=4,
+        context_components=CONTEXT_COMPONENTS,
     )
     config["model"]["head_blocks"].update(use_delta_proj=state, use_s=state)
     config["train"].update(

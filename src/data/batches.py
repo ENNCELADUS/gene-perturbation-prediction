@@ -113,7 +113,8 @@ class OnlineConditionBatch:
     """Inputs for differentiable response-feature generation, one row per condition.
 
     ``basal_hvg`` holds each condition's line's log-space basal HVG cells, STATE's
-    only cell input; ``z_c`` is the pooled Tx1 context for the head.
+    only cell input; ``z_c`` is the line's eigen-scaled Tx1 context PCA scores
+    for the head.
     ``gene_index`` is each row's gene position in ``inputs.genes``.
     """
 

@@ -158,6 +158,7 @@ def build_world(root: Path) -> dict:
     config = yaml.safe_load(Path("configs/geneeffect_joint.yaml").read_text())
     config["prepared_root"] = str(root / "prepared")
     config["features"]["cells_per_context"] = CELLS_PER_CONTEXT
+    config["model"]["context_components"] = 4  # within the training lines' rank
     config["paths"].update(
         split=str(root / "split.json"),
         gene_effect=str(root / "gene_effect.csv"),

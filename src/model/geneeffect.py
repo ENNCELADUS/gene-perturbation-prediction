@@ -12,18 +12,17 @@ from src.data.batches import (
     ResponseForwardBatch,
 )
 from src.model.features import FixedSparseProjection, compute_condition_feature_batch
-from src.model.head import GeneEffectResidualHead
-from src.model.normalization import BlockStandardizer
+from src.model.head import GeneEffectNestedHead
+from src.model.normalization import STANDARDIZED_BLOCKS, BlockStandardizer
 from src.model.response import predict_bags
-
-BLOCKS = ("delta_proj", "s", "q_sc", "e_g", "z_c")
 
 
 class GeneEffectE2EModel(nn.Module):
-    """A STATE response model and the factorised residual head.
+    """A STATE response model and the nested low-rank residual head.
 
     STATE sees only each line's log-space basal HVG cells; the Tx1 context
-    ``z_c`` reaches the head directly. With both response blocks (``delta_proj``
+    ``z_c`` (eigen-scaled context PCA scores) reaches the head directly and is
+    not standardized. With both response blocks (``delta_proj``
     and ``s``) disabled, STATE is never called. The head predicts in units of
     the per-gene training residual SD ``residual_scale``; :meth:`forward`
     multiplies it back, so ``delta_hat`` is in residual units.
@@ -32,7 +31,7 @@ class GeneEffectE2EModel(nn.Module):
     def __init__(
         self,
         backbone: nn.Module,
-        head: GeneEffectResidualHead,
+        head: GeneEffectNestedHead,
         projection: FixedSparseProjection,
         standardizer: BlockStandardizer,
         *,
@@ -66,15 +65,17 @@ class GeneEffectE2EModel(nn.Module):
     def forward_features(
         self, features: FeatureBatch, gene_index: torch.Tensor
     ) -> torch.Tensor:
-        """Standardize the enabled blocks; the head's output in residual-SD units."""
+        """Standardize the enabled blocks except ``z_c``; the head's output in
+        residual-SD units."""
         blocks = self.head.blocks
         return self.head(
             gene_index=gene_index,
             **{
                 name: self.standardizer.transform(name, getattr(features, name))
-                for name in BLOCKS
+                for name in STANDARDIZED_BLOCKS
                 if getattr(blocks, f"use_{name}")
             },
+            z_c=features.z_c,
             q_sc_mask=features.q_sc_mask if blocks.use_q_sc else None,
             hvg_panel_mask=features.hvg_panel_mask if blocks.use_s else None,
             own_gene_shift_mask=features.own_gene_shift_mask if blocks.use_s else None,

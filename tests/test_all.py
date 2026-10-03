@@ -88,8 +88,9 @@ def make_world(root: Path, monkeypatch, *, max_epochs: int = 1) -> Path:
     config["precision"] = "no"
     config["output_root"] = str(root / "runs")
     config["paths"]["state_checkpoint"] = str(write_state(root / "state"))
+    # Eight context components: the readout's context PCA needs eight features.
     config["model"].update(
-        cell_sentence_len=4, esm2_adapter_hidden=4, head_hidden=8, head_layers=1
+        cell_sentence_len=4, esm2_adapter_hidden=4, context_components=8
     )
     config["train"].update(
         max_epochs=max_epochs,

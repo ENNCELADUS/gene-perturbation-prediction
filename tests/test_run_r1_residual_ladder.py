@@ -786,6 +786,7 @@ def test_summary_json_has_no_forbidden_keys(tmp_path: Path) -> None:
 
 def _synthetic_inputs():
     """Eleven lines on 12 genes; ACH-000551 (the K562 copy-prior donor) trains."""
+    from src.data.context_pca import fit_context_pca, pooled_context
     from src.data.prepared import PreparedInputs, PreparedLine
     from src.data.q_sc import QScFeatures
 
@@ -819,6 +820,10 @@ def _synthetic_inputs():
         variable_genes=frozenset(genes),
         selective_genes=frozenset(genes),
         residual_scale=pd.Series(1.0, index=list(genes), name="residual_scale"),
+        context_pca=fit_context_pca(
+            np.stack([pooled_context(prepared[line].controls_tx1) for line in train]),
+            2,
+        ),
         hvg_order=tuple(f"H{i}" for i in range(7)),
         esm2_symbols=genes,
         esm2_vectors=np.zeros((len(genes), 2), dtype=np.float32),

@@ -18,7 +18,7 @@ from src.model.geneeffect import GeneEffectE2EModel
 from src.model.head import (
     GeneEffectBlockConfig,
     GeneEffectFeatureDims,
-    GeneEffectResidualHead,
+    GeneEffectNestedHead,
 )
 from src.model.normalization import BlockStandardizer
 from src.model.perturbation import Esm2PerturbationAdapter
@@ -105,6 +105,12 @@ def _assemble(
         raise ValueError("the saved gene order differs from the prepared gene order")
     if list(inputs.residual_scale.index) != list(inputs.genes):
         raise ValueError("residual_scale is not indexed by the prepared gene order")
+    head = architecture["head"]
+    if inputs.context_pca.n_components != head["dims"]["z_c"]:
+        raise ValueError(
+            f"the head reads {head['dims']['z_c']} context components but the "
+            f"prepared context PCA has {inputs.context_pca.n_components}"
+        )
     vectors = np.asarray(inputs.esm2_vectors, dtype=np.float32)
     table = Esm2EmbeddingTable(
         vectors.shape[1], dict(zip(inputs.esm2_symbols, vectors, strict=True))
@@ -115,16 +121,14 @@ def _assemble(
         architecture["esm2_adapter_hidden"],
         int(architecture["state_hparams"]["pert_dim"]),
     )
-    head = architecture["head"]
     model = GeneEffectE2EModel(
         StateResponse(state, perturbations),
-        GeneEffectResidualHead(
+        GeneEffectNestedHead(
             dims=GeneEffectFeatureDims(**head["dims"]),
             blocks=GeneEffectBlockConfig(**head["blocks"]),
-            hidden=head["hidden"],
-            n_hidden_layers=head["n_hidden_layers"],
             n_genes=head["n_genes"],
             factor_rank=head["factor_rank"],
+            dropout=head["dropout"],
         ),
         projection,
         standardizer,
@@ -148,7 +152,6 @@ def build_joint_model(
     model_config = config["model"]
     checkpoint = Path(config["paths"]["state_checkpoint"])
     cell_set_len = int(model_config["cell_sentence_len"])
-    line = next(iter(inputs.lines.values()))
     architecture = {
         "state_hparams": released_hparams(checkpoint, cell_set_len=cell_set_len),
         "esm2_adapter_hidden": int(model_config["esm2_adapter_hidden"]),
@@ -158,13 +161,12 @@ def build_joint_model(
             "dims": asdict(
                 GeneEffectFeatureDims(
                     e_g=int(np.asarray(inputs.esm2_vectors).shape[1]),
-                    z_c=2 * int(line.controls_tx1.shape[1]),
+                    z_c=int(model_config["context_components"]),
                 )
             ),
-            "hidden": int(model_config["head_hidden"]),
-            "n_hidden_layers": int(model_config["head_layers"]),
             "n_genes": len(inputs.genes),
             "factor_rank": int(model_config["factor_rank"]),
+            "dropout": float(model_config["dropout"]),
         },
         "collator_seed": int(config["seeds"]["collator"]),
     }
