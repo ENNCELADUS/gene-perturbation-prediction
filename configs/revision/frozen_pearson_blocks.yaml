@@ -1,3 +1,4 @@
+# Objective screen: STATE frozen, objective pearson_blocks.
 seeds: {train: 0, collator: 0, projection: 0}
 train:
   max_epochs: 30
@@ -10,7 +11,7 @@ train:
   adapter_learning_rate: 0.0001
   head_learning_rate: 0.001
   weight_decay: 0.01
-  objective: huber
+  objective: pearson_blocks
   state_mode: frozen
   warmup_epochs: 1
   genes_per_block: 6
@@ -23,7 +24,7 @@ comparison:
   shuffles: 10
   bootstrap: 1000
 precision: bf16
-output_root: outputs/geneeffect_joint
+output_root: outputs/geneeffect_revision
 prepared_root: data/geneeffect_joint/v2
 features: {cells_per_context: 128, hvg_dim: 2000, esm2_dim: 1280, variable_gene_min_observations: 5, variable_gene_percentile: 75, selective_min_lines: 5, selective_max_fraction: 0.9, residual_sd_floor_percentile: 10}
 model:
