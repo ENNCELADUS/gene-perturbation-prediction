@@ -25,7 +25,10 @@ The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and
 and the response comparison favours the HVG MLP over fine-tuned STATE and over the Tx1 MLP. The current work is the **revision**
 (`docs/specs/2026-10-03-geneeffect-revision-design.md`, then `docs/specs/2026-10-03-geneeffect-head-revision-design.md`): a
 selective-gene selector, a nested low-rank head over a training-line context PCA, and objective and STATE screens on the 30734
-container. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+container. The other current work is the **linear context prior**
+(`docs/specs/2026-10-04-context-generalization-design.md`, protocol §10; branch `feat/context-prior`): a closed-form
+CPU prior from bulk and pseudo-bulk expression, with DepMap lines outside the 226 as extra training-side lines
+(`docs/data/extra-bulk-lines-26q1.md`); its H20 run has not happened. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
@@ -43,6 +46,7 @@ uv run python -m pytest tests/test_all.py -q             # one file; -k for one 
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]  # prepare, comparison, train, val eval, baselines, readout, summary.md
 hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: train, val then test eval with baselines, summary.md + revision.json in outputs/geneeffect_revision/<id>/ (configs/revision/*.yaml; no comparison, no readout)
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any checkpoint; `all` never runs test, `revision` scores its own best.pt
+hpc/run.sh prior CONFIG --run-id <id>   # linear context prior, CPU (configs/context_prior/*.yaml): pseudo-bulk, bridge, learning curve, extra-lines decision, block selection, cross-fit, test; outputs/context_prior/<id>/ (`python -m src.experiments.context_prior CONFIG --run-id <id> --oracle-only` runs only the bulk-input curve, on the Mac)
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
@@ -102,7 +106,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
   evaluation and baselines for one config.
 - `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (172 train / 27 val / 27 test);
-  `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config and provenance files are tracked data.
+  `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
 
 ## Pitfalls and claim boundaries
 

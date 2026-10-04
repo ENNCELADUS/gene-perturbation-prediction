@@ -48,13 +48,13 @@ no GeneEffect label, and gene-pair knowledge.
 | --- | --- | --- |
 | Single-cell training lines | 170 labelled (172 members; PC9 and HeLa unlabelled); 167 have 26Q1 bulk RNA (COLO 205, Evsa-T and JHU-011 do not) | prior and correction |
 | Extra labelled lines | 919: 26Q1 CRISPRGeneEffect and bulk TPM, outside the 226; 133 haematopoietic, kept | prior, once the curve passes; encoders always |
-| Extra unlabelled lines | 578 with bulk RNA and no GeneEffect | label-free encoders (expression components) and, with their mutation and lineage labels, supervised encoders |
+| Extra unlabelled lines | 576 with bulk RNA and no GeneEffect | label-free encoders (expression components) and, with their mutation and lineage labels, supervised encoders |
 | Validation, test | 27 + 27, unchanged; 26 and 27 have bulk RNA | scored only; their bulk RNA is read by the oracle diagnostic alone (§8.3) |
 
 Exclusions apply to every fit, labelled or not: validation and test lines and every line sharing a `PatientID`
-with one of them (10 lines on 26Q1: ACH-000023, which shares a patient with validation line ACH-000022, and nine
-that lack GeneEffect or bulk RNA). The 10 extras that share a patient with a training line stay on the training side, in that
-line's cross-fitting fold. The training side then holds 1,664 lines with bulk RNA, 1,089 labelled (1,086 with
+with one of them (10 lines on 26Q1, each listed with its reason in the membership file; ACH-000023, for example,
+shares a patient with validation line ACH-000022). Extras that share a patient with a training line stay on the
+training side, in that line's cross-fitting fold. The training side then holds 1,664 lines with bulk RNA, 1,089 labelled (1,086 with
 bulk RNA), 1,907 with mutation calls and 2,077 with a lineage.
 
 The 919 extras become a tracked membership file next to the split,
@@ -65,7 +65,8 @@ labels. One run of the prior drops the haematopoietic extras.
 ### 3.2 Shared expression space and the bridge
 
 - **Genes:** protein-coding genes present in both the 26Q1 bulk matrix and the single-cell gene panel, joined by
-  Entrez ID; the list is recorded with the prepared artifacts.
+  symbol, read from DepMap's `SYMBOL (Entrez)` column headers (not by Entrez ID); the list is recorded with the
+  prepared artifacts.
 - **Bulk side:** DepMap `OmicsExpressionTPMLogp1HumanProteinCodingGenes`, default entry per model.
 - **Single-cell side:** pseudo-bulk per line: raw UMI summed over all of the line's basal cells, CPM, log1p.
   Computed by preparation (the only reader of raw data) into the prepared root and recorded in its manifest,
@@ -74,7 +75,9 @@ labels. One run of the prior drops the haematopoietic extras.
   sorted bulk profile of the training side.
 - **Bridge:** one affine map per gene from normalised pseudo-bulk to normalised bulk, fitted by least squares on
   the 167 training lines that have both, and applied to every single-cell line. A per-gene map is required: 3′ UMI
-  counts carry no gene-length normalisation and TPM does. Celligner-style contrastive PCA enters only if the
+  counts carry no gene-length normalisation and TPM does. A gene is constant when its range across lines is zero
+  (not when a floating-point variance is positive); a constant pseudo-bulk gene maps to its bulk mean, and the
+  bridge-quality correlation (§8.2) is undefined for a gene constant on either side. Celligner-style contrastive PCA enters only if the
   measured bridge loss is large (§8.1), as a step in the order of work, not a code fallback.
 
 ### 3.3 Context data
@@ -87,7 +90,7 @@ function on both sides; the correction reads only what single cells add.**
 | --- | --- | --- | --- |
 | Expression components | 128 principal components of normalised expression, eigen-scaled as the current context PCA | all 1,664 training-side bulk lines, label-free | prior |
 | Pathway and program scores | MSigDB hallmark (50; mean within-line rank of the set's genes, centred) and PROGENy (14 pathways; weighted sum over each pathway's top-100 footprint genes) | nothing: fixed published gene sets | prior |
-| Predicted genotype | From normalised expression: L2 logistic regressions to driver status and lineage, ridge to MSI score. Drivers are the genes of DepMap's hotspot matrix with a hotspot or damaging mutation in at least 5% of training-side lines, a rule that never reads GeneEffect | training-side lines with the label: mutations 1,907, lineage 2,077, MSI from `OmicsSignatures` | prior |
+| Predicted genotype | From the 128 expression components: L2 logistic regressions to driver status and lineage, ridge to MSI score. Drivers are the genes of DepMap's hotspot matrix with a hotspot or damaging mutation in at least 5% of training-side lines, a rule that never reads GeneEffect | training-side lines with the label: mutations 1,907, lineage 2,077, MSI from `OmicsSignatures` | prior |
 | Inferred arm-level copy number | expression smoothed along chromosome positions against the training-side reference, summarised to 39 arm scores | checked against Cohen-Sharir arm calls and 26Q1 WGS copy number on training lines | prior, second wave |
 | Single-cell state | Tx1 context components (existing); fraction of cells scored S or G2/M with the Tirosh cell-cycle sets; for each Kinker and Gavish heterogeneity program, the fraction of cells above the training-side 90th percentile of per-cell scores | Tx1 pretrained on Tahoe-100M; gene sets fixed; percentiles from training lines | correction |
 
@@ -98,8 +101,10 @@ encoders (expression components, fixed gene sets) are fitted once.
 
 ### 3.4 Gene-pair knowledge
 
-Pinned with provenance under `configs/` or the prepared root: Ensembl human paralogs with % identity (a fixed
-minimum identity in the config) and CORUM core human complexes. Data-selected partners (§4) are computed from
+Pinned with provenance under `configs/context_prior/reference/`, built on the Mac by
+`src/data/prepare/build_context_reference.py` and committed, because the H20 host has no internet: Ensembl human
+paralogs with % identity (the lower of the two directions), keeping each gene's 10 closest at 20% identity or
+more, and CORUM's current human release of complexes. Data-selected partners (§4) are computed from
 training-side lines only, inside each fold.
 
 ### 3.5 Fitting scope
@@ -120,16 +125,18 @@ calls or WGS copy number as query-time inputs would change the contract and are 
 ## 4. Features for each gene in each line
 
 Prior features live in the shared expression space (bulk for bulk lines, bridged pseudo-bulk for single-cell
-lines), standardised with training-side statistics. A feature that does not apply (no paralog, no complex, gene
-not measured) takes the training mean plus a mask bit, never a zero.
+lines). Each knowledge feature is z-scored per gene with training-side statistics. A feature that does not apply
+(no paralog, no complex, gene not measured) is undefined and takes the training mean, so it contributes nothing;
+there is no mask bit, because the per-gene intercept makes one redundant. A panel gene with no column in the
+shared expression space has undefined own-expression and partner features and is still predicted from context.
 
 | Block | Definition |
 | --- | --- |
 | Own expression | g's expression in c |
-| Paralogs | min and sum of paralog expression; expression of the closest paralog by % identity |
+| Paralogs | min and sum of expression over the gene's 10 closest paralogs (at 20% identity or more); expression of the closest by % identity |
 | Complex partners | mean expression of CORUM co-members over every complex containing g |
 | Low-partner fraction | fraction of g's paralogs and complex partners in the bottom expression decile of the training side (ISLE's cSL score) |
-| Data-selected genes | the N genes (N from 10, 50, 200; g excluded) whose expression has the largest absolute Pearson correlation with g's residual GeneEffect across training-side lines |
+| Data-selected genes | the N genes (N from 10, 50, 200; g excluded) whose expression has the largest absolute Pearson correlation, across training-side lines, with the residual GeneEffect that g has left after the earlier blocks (§5.1, §7.1) |
 | Context views | §3.3, prior rows |
 
 **Sharing.** The four knowledge blocks (own expression, paralogs, complex partners, low-partner fraction) have
@@ -155,9 +162,13 @@ $$\hat y(g,c)=\mu_g+\hat r_{\text{prior}}(g,c)+\sigma_g\Big[\tfrac{1}{\sqrt r}\b
 
 ### 5.1 Linear context prior
 
-A per-gene generalised ridge on the residual in units of σ_g, fitted in two steps: the pooled knowledge-block
-weights first, by least squares over every (g, c) row; then, per gene, the deviation from them (penalised by the
-shrinkage strength) together with the data-selected and context-view blocks, each with its own penalty.
+A stagewise ridge on the residual in units of σ_g: the blocks of §7.1 are fitted one after another, each to
+what the earlier blocks leave, and the prior is the sum of the stage predictions. Every stage has a per-gene
+intercept and each block its own penalty, multiplied by the number of fitted lines so that one grid serves every
+training-set size; a constant feature column gets scale 1 and contributes nothing. The knowledge blocks have
+pooled weights by least squares over every (g, c) row, then, per gene, the deviation from them (penalised by the
+shrinkage strength); the data-selected and context-view blocks have per-gene ridge weights. A missing training
+label (DepMap leaves some line × gene pairs empty) counts as zero residual in fitting and is skipped in scoring.
 
 - **Inputs.** Fitted on bulk RNA for every training-side line that has it. Every single-cell line is predicted
   from bridged pseudo-bulk: out-of-fold training lines, validation and test, so the correction trains on
@@ -260,8 +271,9 @@ subsets per size; the 167 point is the actual single-cell training lines. The ri
 validation at each size. Scored on validation from bulk RNA (the oracle, 26 lines, locally) and from bridged
 pseudo-bulk (27 lines, on the H20 host).
 
-**The extra lines pass** when, with bridged pseudo-bulk input, the 1,086-line prior beats the 167-line prior with
-a 95% paired bootstrap interval excluding zero. If the gain appears with bulk input but not with bridged input,
+**The extra lines pass** when, with bridged pseudo-bulk input, the 1,086-line prior beats the 167-line prior, both
+in the expression-components-plus-50-data-selected-genes configuration, with a 95% paired bootstrap interval
+excluding zero. If the gain appears with bulk input but not with bridged input,
 the bridge is failing: contrastive-PCA alignment is tried before deciding.
 
 ### 8.2 Metrics and controls

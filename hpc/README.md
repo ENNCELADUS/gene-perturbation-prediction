@@ -9,6 +9,7 @@ given by `--gpus`. Synchronize code with Git before using the remote checkout.
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
+hpc/run.sh prior configs/context_prior/prior.yaml --run-id <id>
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
 
@@ -100,6 +101,26 @@ variable rows only, `selective_spearman` and `selective_aupr_lift` the selective
 undefined quantities keep explicit counts and null scalar values. An export failure is retried by rerunning the
 same evaluation command. Nothing here is SL interaction evidence; held-out lines retain the
 documented Tx1 pretraining exposure boundary.
+
+## The `prior` command
+
+`hpc/run.sh prior CONFIG --run-id <id>` runs the linear context prior of
+[protocol §10](../docs/03-geneeffect-protocol.md#10-linear-context-prior) (`configs/context_prior/prior.yaml`;
+`prior_no_haematopoietic.yaml` drops the haematopoietic extra lines). The run id defaults to a timestamp, and
+the route needs no GPU. Steps, in order, each skipped when its output already exists: pseudo-bulk preparation
+into `prepared_root` (summing the raw UMI of each line's basal cells; the one step that reads raw data), the
+bridge from pseudo-bulk to bulk, the learning curve and the extra-lines decision, block selection on
+validation, cross-fitting, and one test score with the controls. The prepared root of `all` is reused.
+
+The run directory is `outputs/context_prior/<run_id>/{run_config.json, curve.json, decision.json,
+selection.json, folds.json, oof.parquet, bridge_quality.csv, crossfit.json, view_weights.parquet (when kept),
+baselines/{val,test}/, predictions.parquet, metrics.json, summary.md}`; `summary.md` is
+rewritten on every rerun, and an interrupted run resumes by rerunning the same command with the same run id.
+The reference tables it reads are committed under `configs/context_prior/reference/` and the extra-line
+membership at `configs/benchmarks/extra_bulk_lines_26Q1.json`; the H20 host has no internet and downloads
+nothing. `uv run python -m src.experiments.context_prior CONFIG --run-id <id> --oracle-only` runs only the
+learning curve from validation lines' bulk RNA (off-contract, non-binding decision), needs no raw single
+cells, and runs on the Mac.
 
 ## Configuration and inputs
 
