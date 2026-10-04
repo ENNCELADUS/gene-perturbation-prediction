@@ -660,3 +660,10 @@ every rerun. `summary.md` holds the curve, the decision, the selection log, one 
 ratio) for the prior and every control, and a descriptive per-lineage table (one to five lines
 per lineage). One config is one run at seed 0: validation chooses, test is scored once. The
 prior is not SL evidence; a GeneEffect result estimates no genetic interaction.
+
+The first runs (2026-10-04, [record](../results/context_prior_seed0/README.md)): with every extra line the
+bridged extra-lines decision failed (+0.017 [−0.006, 0.039]) and the prior fell back to the single-cell
+training lines; without the 133 haematopoietic extras it passed (+0.051 [0.027, 0.069]). Validation chose
+that config: expression components only, selective Spearman 0.223 on validation and 0.223 on test against
+0.130 and 0.121 for the Tx1 context-PCA ridge. Gene-level blocks did not survive the bridge (median per-gene
+bridge correlation 0.43).

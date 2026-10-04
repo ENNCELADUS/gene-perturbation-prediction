@@ -28,7 +28,9 @@ selective-gene selector, a nested low-rank head over a training-line context PCA
 container. The other current work is the **linear context prior**
 (`docs/specs/2026-10-04-context-generalization-design.md`, protocol §10; branch `feat/context-prior`): a closed-form
 CPU prior from bulk and pseudo-bulk expression, with DepMap lines outside the 226 as extra training-side lines
-(`docs/data/extra-bulk-lines-26q1.md`); its H20 run has not happened. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+(`docs/data/extra-bulk-lines-26q1.md`). Its 2026-10-04 run (`results/context_prior_seed0/`): validation chose the config
+without the haematopoietic extras, a ridge on 128 expression components over 953 labelled lines read from bridged
+pseudo-bulk; selective Spearman 0.223 validation / 0.223 test against 0.130 / 0.121 for the Tx1 context ridge. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
