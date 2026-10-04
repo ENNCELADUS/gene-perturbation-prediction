@@ -276,7 +276,8 @@ def fit_prior(
     The reduced-rank basis, when ``spec.rank`` is set, comes from the fit lines'
     residual and restricts the context stages only. Context stages come before
     gene-level stages. The gene-level stages read the columns of
-    ``inputs.gene_space`` and fit on ``inputs.gene_rows`` when they are set.
+    ``inputs.gene_space`` and fit on ``inputs.gene_rows`` when they are set; the
+    data-selected stage selects at most every readable column but a gene's own.
     """
     if not set(fit_lines) <= set(encoder_lines):
         raise ValueError("fit lines must be encoder lines too")
@@ -340,7 +341,14 @@ def fit_prior(
             inner, train = _selected_view(rows)
             position = {gene: i for i, gene in enumerate(gene_columns)}
             own = np.array([position.get(gene, -1) for gene in genes], dtype=int)
-            selection = select_genes(train, gene_remaining, stage.selected, own)
+            # A gene space narrower than the count yields every column but a
+            # gene's own; one with no column to spare selects none (intercepts).
+            count = min(stage.selected, len(gene_columns) - 1)
+            selection = (
+                select_genes(train, gene_remaining, count, own)
+                if count > 0
+                else np.empty((len(genes), 0), dtype=int)
+            )
             model = selected_ridge(train, selection, gene_remaining, [stage.penalty])[0]
         # Reassigned, never updated in place: without gene rows it aliases
         # ``remaining`` until here.
