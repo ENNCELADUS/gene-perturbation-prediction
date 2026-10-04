@@ -31,7 +31,7 @@ class ContextPCA:
 
     Attributes:
         mean: Per-dimension training mean of ``z_c``.
-        scale: Per-dimension training population SD; 1 where that SD is 0.
+        scale: Per-dimension training population SD; 1 where the column is constant.
         components: ``[n_components, width]`` unit loadings, each signed so its
             largest-magnitude loading is positive.
         score_scale: The first component's training score SD, ``sqrt(lambda_1)``.
@@ -110,7 +110,9 @@ def fit_context_pca(contexts: np.ndarray, n_components: int) -> ContextPCA:
         raise ValueError(f"n_components must be positive, got {n_components}")
     mean = contexts.mean(axis=0)
     scale = contexts.std(axis=0, ddof=0)
-    scale[scale == 0.0] = 1.0
+    # A constant column can carry an SD of ~1e-16 from float rounding of its mean;
+    # its zero range marks it, so a query off the constant cannot blow up.
+    scale[(scale == 0.0) | (np.ptp(contexts, axis=0) == 0.0)] = 1.0
     standardized = (contexts - mean) / scale
     _, singular, vt = np.linalg.svd(standardized, full_matrices=False)
     tolerance = singular[0] * max(standardized.shape) * np.finfo(np.float64).eps

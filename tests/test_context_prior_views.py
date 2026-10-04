@@ -59,3 +59,15 @@ def test_genotype_features_are_out_of_sample_and_handle_a_constant_driver():
     assert own.loc[components[0] > 1, "driver:KRAS"].mean() > 0.7
     query = encoders.predict(components.iloc[:3])
     assert list(query.columns) == list(own.columns)
+
+
+def test_float_inexact_constant_column_does_not_move_components():
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(rng.normal(size=(60, 5)), columns=list("ABCDE"))
+    frame["E"] = 0.1  # mean of 60 copies of 0.1 is not exactly 0.1
+    pca = fit_expression_components(frame, 3)
+    query = frame.iloc[:2].copy()
+    moved = query.assign(E=0.5)
+    assert np.allclose(
+        expression_components(pca, query), expression_components(pca, moved), atol=1e-6
+    )
