@@ -204,3 +204,75 @@ def test_crossfit_refuses_a_query_line_of_another_fold():
         crossfit(
             spec, inputs, folds=folds, queries=queries, labelled=ids, encoder_lines=ids
         )
+
+
+def test_gene_space_hides_unlisted_genes_from_gene_level_blocks():
+    from dataclasses import replace
+
+    inputs, ids = synthetic()
+    spec = PriorSpec(
+        (Stage("expression_components", 0.1), Stage("own_expression", 1.0))
+    )
+    hidden = replace(inputs, gene_space=tuple(g for g in SPACE if g != "E1"))
+    stage = fit_prior(spec, hidden, fit_lines=ids, encoder_lines=ids).predict(
+        inputs.expression.loc[ids[:10]]
+    )["own_expression"]
+    assert np.allclose(stage["E1"], stage["E1"].iloc[0])  # intercept only
+    visible = fit_prior(spec, inputs, fit_lines=ids, encoder_lines=ids).predict(
+        inputs.expression.loc[ids[:10]]
+    )["own_expression"]
+    assert visible["E1"].std() > 0  # the same gene varies when its column is readable
+
+
+def test_gene_rows_fit_gene_level_blocks_on_other_rows_and_order_is_enforced():
+    from dataclasses import replace
+
+    inputs, ids = synthetic()
+    spec = PriorSpec(
+        (
+            Stage("expression_components", 0.1),
+            Stage("own_expression", 1.0),
+            Stage("data_selected", 0.01, selected=2),
+        )
+    )
+    query = inputs.expression.loc[ids[:10]]
+    default = fit_prior(spec, inputs, fit_lines=ids, encoder_lines=ids).predict(query)
+    # Gene rows equal to the fit rows: the context stages leave the same residual
+    # on them, so the fit is the default one.
+    same = fit_prior(
+        spec,
+        replace(inputs, gene_rows=inputs.expression.loc[ids]),
+        fit_lines=ids,
+        encoder_lines=ids,
+    ).predict(query)
+    for block, frame in default.items():
+        assert np.allclose(frame, same[block])
+    rng = np.random.default_rng(3)
+    noisy = inputs.expression.loc[ids[:60]] + 3.0 * rng.normal(size=(60, 12))
+    own = PriorSpec((Stage("own_expression", np.inf),))
+
+    def weight(prior_inputs):
+        fitted = fit_prior(own, prior_inputs, fit_lines=ids, encoder_lines=ids)
+        models = {block: model for block, _, model in fitted.stages}
+        return abs(models["own_expression"].pooled[0])
+
+    # Attenuation learnt on noisy rows.
+    assert weight(replace(inputs, gene_rows=noisy)) < weight(inputs)
+    wrong = PriorSpec(
+        (Stage("own_expression", 1.0), Stage("expression_components", 0.1))
+    )
+    with pytest.raises(ValueError, match="before"):
+        fit_prior(
+            wrong, replace(inputs, gene_rows=noisy), fit_lines=ids, encoder_lines=ids
+        )
+    # Gene rows of a held-out fold would carry its labels into the fit.
+    folds = {m: i % 4 for i, m in enumerate(ids)}
+    with pytest.raises(ValueError, match="gene rows"):
+        crossfit(
+            spec,
+            replace(inputs, gene_rows=noisy),
+            folds=folds,
+            queries={0: query},
+            labelled=ids,
+            encoder_lines=ids,
+        )

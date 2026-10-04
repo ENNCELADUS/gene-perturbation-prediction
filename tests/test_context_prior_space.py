@@ -1,4 +1,4 @@
-"""Quantile normalisation to a reference and patient-grouped folds and subsets."""
+"""Quantile normalisation to a reference and patient-grouped folds."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.context_prior.folds import patient_folds, patient_subset
+from src.context_prior.folds import patient_folds
 from src.context_prior.space import quantile_normalize, quantile_reference
 
 
@@ -34,17 +34,6 @@ def test_patient_folds_keep_patients_together_and_are_seeded():
     assert folds == patient_folds(lines, patients, n_folds=3, seed=0)
     assert all(folds[f"L{2 * i}"] == folds[f"L{2 * i + 1}"] for i in range(6))
     assert set(folds.values()) == {0, 1, 2}
-
-
-def test_patient_subset_takes_whole_patients():
-    lines = [f"L{i}" for i in range(10)]
-    patients = {line: f"P{i // 2}" for i, line in enumerate(lines)}
-    subset = patient_subset(lines, patients, size=5, seed=3)
-    assert 5 <= len(subset) <= 6
-    chosen = {patients[m] for m in subset}
-    assert sum(patients[m] in chosen for m in lines) == len(subset)
-    with pytest.raises(ValueError):
-        patient_subset(lines, patients, size=11, seed=0)
 
 
 def test_space_keeps_genes_every_scored_line_measures():
