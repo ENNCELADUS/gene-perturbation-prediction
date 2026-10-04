@@ -7,7 +7,7 @@ This file provides guidance to Codex and other coding agents when working with c
 The task is context-conditioned synthetic-lethality (SL) ranking from basal single-cell transcriptomes in held-out **cell
 lines**, not held-out genes. 
 
-`docs/` outranks this file. Start at `docs/01-blueprint.md` (research contract, claim boundaries §4);
+`docs/` outranks this file. Start at `docs/01-blueprint.md` (the research question and approach, motivation only);
 `docs/02-literature-review.md` is prior art; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented
 GeneEffect track and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it. The current expression space,
 STATE wiring and `all` run follow `docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`. Read
@@ -97,5 +97,5 @@ Mistakes here produce a complete-looking **wrong artifact**, not an exception.
   on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-prior residual correlations are undefined, not zero.
 - Join cell lines by DepMap ModelID through the checked-in map, never informal names (`K-562` ≠ `K562`). Fit means, gene
   membership and normalization on labeled training lines only.
-- Context claims need residual evaluation against context-blind priors; follow the blueprint's claim boundaries (§4) and the SL
-  protocol's leakage rules (§8). Single-gene predictions are not SL or genetic-interaction evidence.
+- Context claims need residual evaluation against context-blind priors; the rules are in the GeneEffect protocol (§11) and the
+  SL protocol (§8). Single-gene predictions are not SL or genetic-interaction evidence.

@@ -9,7 +9,7 @@ given by `--gpus`. Synchronize code with Git before using the remote checkout.
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
-hpc/run.sh prior configs/context_prior/prior.yaml --run-id <id>
+hpc/run.sh prior configs/context_prior/bridge_remedies.yaml [--run-id <id>] [--experiments affine,contrastive]
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
 
@@ -104,23 +104,23 @@ documented Tx1 pretraining exposure boundary.
 
 ## The `prior` command
 
-`hpc/run.sh prior CONFIG --run-id <id>` runs the linear context prior of
-[protocol §10](../docs/03-geneeffect-protocol.md#10-linear-context-prior) (`configs/context_prior/prior.yaml`;
-`prior_no_haematopoietic.yaml` drops the haematopoietic extra lines). The run id defaults to a timestamp, and
-the route needs no GPU. Steps, in order, each skipped when its output already exists: pseudo-bulk preparation
-into `prepared_root` (summing the raw UMI of each line's basal cells; the one step that reads raw data), the
-bridge from pseudo-bulk to bulk, the learning curve and the extra-lines decision, block selection on
-validation, cross-fitting, and one test score with the controls. The prepared root of `all` is reused.
+`hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior
+([protocol §10](../docs/03-geneeffect-protocol.md#10-linear-context-prior); `configs/context_prior/bridge_remedies.yaml`).
+The run id defaults to a timestamp, and the route needs no GPU. The config lists experiments, each a bridge remedy
+with its settings and block sets; the runner first prepares pseudo-bulk into `prepared_root` (summing the raw UMI of
+each line's basal cells; the one step that reads raw data; the prepared root of `all` is reused), then for every
+setting builds the bridged inputs, fits the prior for every block set and penalty, and scores validation and test
+(and the bulk-input oracle on validation). It decides nothing beyond tuning penalties on validation; the table is
+read by a person.
 
-The run directory is `outputs/context_prior/<run_id>/{run_config.json, curve.json, decision.json,
-selection.json, folds.json, oof.parquet, bridge_quality.csv, crossfit.json, view_weights.parquet (when kept),
-baselines/{val,test}/, predictions.parquet, metrics.json, summary.md}`; `summary.md` is
-rewritten on every rerun, and an interrupted run resumes by rerunning the same command with the same run id.
-The reference tables it reads are committed under `configs/context_prior/reference/` and the extra-line
-membership at `configs/benchmarks/extra_bulk_lines_26Q1.json`; the H20 host has no internet and downloads
-nothing. `uv run python -m src.experiments.context_prior CONFIG --run-id <id> --oracle-only` runs only the
-learning curve from validation lines' bulk RNA (off-contract, non-binding decision), needs no raw single
-cells, and runs on the Mac.
+The run directory is `outputs/context_prior/<run_id>/{run_config.json, rows/<experiment>__<n>.json, results.md}`.
+Each setting writes its row file when finished and is skipped when the file exists, so an interrupted run resumes by
+rerunning the same command with the same run id; `results.md` is rewritten from whatever rows exist on every run.
+`--experiments` restricts a process to the named experiments (all of them by default), so several processes can
+share one run directory: rows are per setting and never shared. A run directory is bound to the config it started
+with; another config needs a new run id. The reference tables it reads are committed under
+`configs/context_prior/reference/` and the extra-line membership at `configs/benchmarks/extra_bulk_lines_26Q1.json`;
+the H20 host has no internet and downloads nothing.
 
 ## Configuration and inputs
 

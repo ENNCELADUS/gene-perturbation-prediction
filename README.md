@@ -22,13 +22,13 @@
 
 </div>
 
-> **Status (2026-10-02):** The seed-0 joint GeneEffect run is trained, tested and baselined: its Huber loss beats the context-blind gene mean by 0.08% and its residual correlations trail a Tx1 context-PCA ridge, a working path and not a result. On that frozen backbone, a readout head with an explicit gene-specific context slope lifts validation residual Pearson from 0.05 to 0.13 and ties the eight-component context-PCA ridge. No tested interface transfers a perturbation response to a held-out cell line. The pipeline now runs in STATE's log expression space, with STATE on its own released basal encoder and Tx1 feeding only the GeneEffect head, and one command runs preparation, a six-arm response-model comparison, joint training and validation evaluation; it has no result yet. Further model decisions use validation. No SL model has run. [`Protocol`](docs/03-geneeffect-protocol.md) · [`Diagnostics`](results/p1_response_pathway_diagnostics/README.md) · [`Joint result`](results/joint_geneeffect_seed0/README.md) · [`Research contract`](docs/01-blueprint.md).
+> **Status (2026-10-02):** The seed-0 joint GeneEffect run is trained, tested and baselined: its Huber loss beats the context-blind gene mean by 0.08% and its residual correlations trail a Tx1 context-PCA ridge, a working path and not a result. On that frozen backbone, a readout head with an explicit gene-specific context slope lifts validation residual Pearson from 0.05 to 0.13 and ties the eight-component context-PCA ridge. No tested interface transfers a perturbation response to a held-out cell line. The pipeline now runs in STATE's log expression space, with STATE on its own released basal encoder and Tx1 feeding only the GeneEffect head, and one command runs preparation, a six-arm response-model comparison, joint training and validation evaluation; it has no result yet. Further model decisions use validation. No SL model has run. [`Protocol`](docs/03-geneeffect-protocol.md) · [`Diagnostics`](results/p1_response_pathway_diagnostics/README.md) · [`Joint result`](results/joint_geneeffect_seed0/README.md) · [`Research statement`](docs/01-blueprint.md).
 
 The central question of the active direction:
 
 > Can a dependency profile predicted by a perturbation-response-trained virtual cell rank synthetic-lethal pairs in a cancer cell line that was excluded from every fitting and selection step, beyond what a declared null and a context-ablated model already achieve?
 
-The intuition is compositional: **a cell line's dependency profile is what makes a pair lethal there.** If a virtual cell can predict how a gene's fitness cost shifts with cellular context, then the shape of that shift across lines should carry pair-specific signal that a curated SL graph can only memorize. The bar is deliberately internal — the gene-mean block, the null baseline, and a context-ablated head must all be beaten before any context claim is licensed. Nothing here estimates a genetic interaction; see [`docs/01-blueprint.md`](docs/01-blueprint.md#4-claim-boundaries) §4 for what that forbids.
+The intuition is compositional: **a cell line's dependency profile is what makes a pair lethal there.** If a virtual cell can predict how a gene's fitness cost shifts with cellular context, then the shape of that shift across lines should carry pair-specific signal that a curated SL graph can only memorize. The bar is deliberately internal — the gene-mean block, the null baseline, and a context-ablated head must all be beaten before any context claim is licensed. Nothing here estimates a genetic interaction; see the rules in the [GeneEffect](docs/03-geneeffect-protocol.md#11-rules) and [SL](docs/04-sl-ranking-protocol.md#8-rules) protocols.
 
 ## *Latest News* 🔥
 
@@ -78,7 +78,7 @@ uv run python -m pytest tests -q
 
 ## Research Framing
 
-> **Status:** the SL contract and protocol are written, and SL ranking is scored on a benchmark this project proposes; its current build is the nine-context screen table, whose raw-filter audit is incomplete. The Feng 2024 SL benchmark is not used. No SL model has run. Live contract: [`docs/01-blueprint.md`](docs/01-blueprint.md).
+> **Status:** the SL contract and protocol are written, and SL ranking is scored on a benchmark this project proposes; its current build is the nine-context screen table, whose raw-filter audit is incomplete. The Feng 2024 SL benchmark is not used. No SL model has run. Research statement: [`docs/01-blueprint.md`](docs/01-blueprint.md); rules: [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md#8-rules).
 
 ```text
 Given a cancer cell line described only by its basal single-cell transcriptome —
@@ -96,7 +96,7 @@ The generalization axis is the **cell line**. Graph and knowledge-graph SL predi
 
 The full contract — task definition, objective, split, controls, and claim boundaries — lives in the research vault, not here:
 
-- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract: task, data, and claim boundaries.
+- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research statement: question, approach and where the work stands.
 - [`docs/02-literature-review.md`](docs/02-literature-review.md) — related work and the novelty boundary.
 - [`docs/03-geneeffect-protocol.md`](docs/03-geneeffect-protocol.md) — the executable protocol of the implemented GeneEffect track: benchmark, expression space, model, training, evaluation, results.
 - [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md) — the SL-pair protocol that builds on it, and its prerequisites.
@@ -200,7 +200,7 @@ The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson *
 ## Documentation
 
 - [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents.
-- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract; start here. [`results/`](results/) holds registered evidence.
+- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research statement; start here. [`results/`](results/) holds registered evidence.
 - [`docs/03-geneeffect-protocol.md`](docs/03-geneeffect-protocol.md) and [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md) — the two executable protocols.
 - [`docs/data/`](docs/data/) — dataset cards for downloaded data.
 - [`hpc/README.md`](hpc/README.md) — running the pipeline on the GPU host.
@@ -246,6 +246,6 @@ Follow the **Plan → Confirm → Code** workflow for non-trivial research or im
 <div align="center">
   <p>
     <strong>Active direction: generalizable synthetic-lethality discovery by virtual-cell composition, evaluated on held-out cell lines.</strong><br>
-    <sub>See <a href="docs/01-blueprint.md">docs/01-blueprint.md</a> for the live research contract.</sub>
+    <sub>See <a href="docs/01-blueprint.md">docs/01-blueprint.md</a> for the research statement.</sub>
   </p>
 </div>
