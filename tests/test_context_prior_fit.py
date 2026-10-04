@@ -276,3 +276,53 @@ def test_gene_rows_fit_gene_level_blocks_on_other_rows_and_order_is_enforced():
             labelled=ids,
             encoder_lines=ids,
         )
+
+
+GENE_LEVEL = PriorSpec(
+    (
+        Stage("expression_components", 0.1),
+        Stage("own_expression", 1.0),
+        Stage("partners", 1.0),
+        Stage("data_selected", 0.01, selected=2),
+    )
+)
+
+
+def test_an_empty_gene_space_leaves_gene_level_blocks_intercepts_only():
+    from dataclasses import replace
+
+    inputs, ids = synthetic()
+    query = inputs.expression.loc[ids[:10]]
+    stages = fit_prior(
+        GENE_LEVEL, replace(inputs, gene_space=()), fit_lines=ids, encoder_lines=ids
+    ).predict(query)
+    components = fit_prior(
+        PriorSpec(GENE_LEVEL.stages[:1]), inputs, fit_lines=ids, encoder_lines=ids
+    ).predict(query)["expression_components"]
+    assert np.allclose(stages["expression_components"], components)
+    # Each intercept is the mean the context stage leaves on the fit lines: zero.
+    for block in ("own_expression", "partners", "data_selected"):
+        assert np.allclose(stages[block], 0.0)
+
+
+def test_a_gene_space_narrower_than_the_count_selects_every_column_but_own():
+    from dataclasses import replace
+
+    inputs, ids = synthetic()
+    spec = PriorSpec(
+        (
+            Stage("expression_components", 0.1),
+            Stage("data_selected", 0.01, selected=50),
+        )
+    )
+    narrow = replace(inputs, gene_space=("E0", "E3", "E5", "E6"))
+    fitted = fit_prior(spec, narrow, fit_lines=ids[:60], encoder_lines=ids)
+    models = {block: model for block, _, model in fitted.stages}
+    selection = models["data_selected"].selection  # positions in the gene space
+    assert selection.shape == (len(GENES), 3)
+    assert sorted(selection[0]) == [1, 2, 3]  # E0's own column is left out
+    assert {2, 3} <= set(selection[2])  # Q reads E5 and E6
+    held_out, _ = synthetic(seed=1, lines=1000)
+    prediction = total(fitted.predict(held_out.expression))
+    for gene in ("E0", "Q"):
+        assert prediction[gene].corr(held_out.residual[gene]) > 0.8
