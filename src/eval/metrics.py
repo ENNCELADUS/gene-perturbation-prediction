@@ -672,3 +672,17 @@ def paired_line_bootstrap(
         else (math.nan, math.nan)
     )
     return {"difference": observed, "interval": [float(low), float(high)]}
+
+
+def macro_gene_spearman(truth: np.ndarray, prediction: np.ndarray) -> float:
+    """Macro mean over genes (rows) of the Spearman across lines (columns).
+
+    The same quantity as ``aggregate_geneeffect``'s ``selective_spearman``:
+    non-finite pairs are dropped, and a gene with fewer than
+    :data:`MIN_OBSERVATIONS` pairs or a constant side is undefined and left out.
+    """
+    if truth.ndim != 2 or truth.shape != prediction.shape:
+        raise ValueError("truth and prediction must be equal genes x lines arrays")
+    rho = _ResampledSpearman(truth, prediction)(np.ones((1, truth.shape[1])))[0]
+    defined = rho[np.isfinite(rho)]
+    return float(defined.mean()) if defined.size else math.nan
