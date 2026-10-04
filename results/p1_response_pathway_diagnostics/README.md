@@ -7,7 +7,7 @@ no adapted variant transfers a perturbation response to a held-out cell line.
 Designs: fixed-backbone head diagnostic (`docs/specs/2026-09-07-p1a-fixed-backbone-head-diagnostics-design.md`, removed; `git show 1694f5c:<path>`),
 response-adaptation diagnostic (`docs/specs/2026-09-07-p1b-response-adaptation-design.md`, removed; `git show 1694f5c:<path>`),
 interface-isolation diagnostic (`docs/specs/2026-09-08-p1c-interface-isolation-design.md`, removed; `git show 1694f5c:<path>`).
-Protocol: [GeneEffect protocol §8](../../03-geneeffect-protocol.md#8-where-the-model-stalls-response-pathway-diagnostics).
+Protocol: [GeneEffect protocol §8](../../docs/03-geneeffect-protocol.md#8-where-the-model-stalls-response-pathway-diagnostics).
 Backbone under test: the selected seed-0 joint checkpoint
 (`joint_seed0_20260906T174818Z_b1024/best.pt`, SHA-256 `37405454…63c59`,
 [result](../joint_geneeffect_seed0/README.md)), called the seed-0 joint backbone (P0) below.
@@ -264,4 +264,4 @@ uv run python -m src.experiments.p1c evaluate-native --prepared <dir> --runs <ru
 uv run python -m src.experiments.p1c compare --root $RUN --out-dir $RUN/comparison
 ```
 
-Operator details: [runbook, interface-isolation section](../../../hpc/README.md#p1-c-interface-isolation).
+Operator details: [runbook, interface-isolation section](../../hpc/README.md#p1-c-interface-isolation).

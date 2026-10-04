@@ -46,10 +46,10 @@ adds HCT116 value beyond direct K562 GeneEffect transfer.
 
 Primary artifacts:
 
-- [`metrics.csv`](../../results/experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/metrics.csv)
-- [`bootstrap_ci.csv`](../../results/experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/bootstrap_ci.csv)
-- [`paired_comparisons.csv`](../../results/experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/paired_comparisons.csv)
-- [`evaluation_manifest.json`](../../results/experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/evaluation_manifest.json)
+- [`metrics.csv`](experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/metrics.csv)
+- [`bootstrap_ci.csv`](experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/bootstrap_ci.csv)
+- [`paired_comparisons.csv`](experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/paired_comparisons.csv)
+- [`evaluation_manifest.json`](experiments/05_aivc_a_to_b_to_c/runs/hct116_formal_relative_z_evaluation_v1/evaluation_manifest.json)
 
 The evaluation manifest binds prediction-manifest SHA-256
 `893ceacc937712f96cf0a179b0631ae309071ff57d42846c1da032a061228eb1`

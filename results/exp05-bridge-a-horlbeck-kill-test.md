@@ -4,7 +4,7 @@
 composed into a Bridge A counterfactual co-dependency score, does **not** recover
 measured Horlbeck 2018 K562 genetic interactions (|Spearman| < 0.01;
 AUROC(s_A -> strong-SL) approximately 0.52). Authority:
-[`../01-blueprint.md`](../01-blueprint.md) §7-8; plan:
+[`../01-blueprint.md`](../docs/01-blueprint.md) §7-8; plan:
 `../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md` (`docs/specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`, removed; `git show 1694f5c:<path>`)
 (T1).
 
@@ -35,7 +35,7 @@ synthetic-lethal (more negative Horlbeck `gi_score`).
   (`exp05_observed_pair_covered`: both genes trained in the fixed pool,
   DepMap-label-qualified, and >=8 observed Replogle cells), a complete clique over
   the 408 genes, all present in the ESM2 perturbation vocabulary. Target:
-  [`../data/horlbeck-2018-k562-gi.md`](../data/horlbeck-2018-k562-gi.md) frozen
+  [`../data/horlbeck-2018-k562-gi.md`](../docs/data/horlbeck-2018-k562-gi.md) frozen
   `gi_score` (1,281 strong-SL pairs at `gi_score < -3.0`; range [-13.27, +8.56]).
 - **Independent-N matching.** Both arms of each `Delta` use an equal, without-
   replacement independent-cell budget `w = min(n_cells // 64, 8)` windows; sub-window

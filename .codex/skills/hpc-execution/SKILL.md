@@ -28,7 +28,7 @@ cd /2023533015/VCC_Project
 ```
 
 Ports change when a container is recreated. If the listed one refuses, ask the user
-rather than scanning. Historical ports in `docs/results/` are not a connection authority.
+rather than scanning. Historical ports in `results/` are not a connection authority.
 Do not store the SSH password in the repository.
 
 Each container sees only its own GPUs, so jobs on different containers never contend for

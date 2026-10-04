@@ -95,7 +95,7 @@ Git. The figure and plotting source are tracked. With those extracts available,
 rebuild the figure with:
 
 ```bash
-uv run python docs/results/exp13_stage2_full/plot_learning_curves.py
+uv run python results/exp13_stage2_full/plot_learning_curves.py
 ```
 
 The plotting source is

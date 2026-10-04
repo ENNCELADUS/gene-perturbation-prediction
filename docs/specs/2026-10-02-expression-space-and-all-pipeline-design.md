@@ -5,7 +5,7 @@ Bound by the [blueprint](../01-blueprint.md) claim boundaries. Supersedes the re
 the joint training design (`2026-09-06-modular-joint-training-design.md`) and the
 readout objective plan (`2026-09-10-readout-objective-and-selection-design.md`)'s ordering of
 response-model work after readout work. Both were removed from the tree; `git show 1694f5c:docs/specs/<name>`.
-Evidence it builds on: [response-pathway diagnostics](../results/p1_response_pathway_diagnostics/README.md).
+Evidence it builds on: [response-pathway diagnostics](../../results/p1_response_pathway_diagnostics/README.md).
 
 ## 1. Why
 
@@ -133,7 +133,7 @@ out of the deleted fixed-backbone head harness).
 **Keep untouched:** the readout head (`src/{model,training,eval,data}/readout*.py`,
 `src/eval/readout_comparison.py`), `src/eval/metrics.py`, `src/data/{splits,split_build,gene_splits,residual_target,geneeffect,embeddings,esm2_provenance,gene_order}.py`,
 the one-off raw-input builders under `src/data/prepare/`, `src/experiments/historical/`, the GMM
-ridge baseline, every file under `docs/results/`, and earlier specs.
+ridge baseline, every file under `results/`, and earlier specs.
 
 **Guards kept** (one line each where possible): fitting on training lines only
 (`assert_fit_eligible`); target residuals on the fold-fit mean, predictions on the fold-independent

@@ -22,7 +22,7 @@ Achilles/CTRP cell-death-signature coefficients. 5-fold CV × 1 repeat, seed 42,
 | **NAR-residualized transcriptome** | `nar_resid_delta_all` | **0.503** |
 | NAR + burden-residualized transcriptome | `nuisance_resid_delta_all` | 0.469 |
 
-**Reading: exp02 supports the specificity hypothesis** ([`01-blueprint.md`](../01-blueprint.md)
+**Reading: exp02 supports the specificity hypothesis** ([`01-blueprint.md`](../docs/01-blueprint.md)
 §5.2). Residualizing the generic viability axis out of the transcriptome *improves*
 prediction of the independent DepMap anchor (0.503 > 0.494) — generic viability is not what
 carries the signal. Residualizing out viability **and** burden still leaves 0.469, only
@@ -35,7 +35,7 @@ one's success does not imply the other's redundancy.
 
 ## exp09 — K562 SL pair cross-cell-line selectivity
 
-Artifacts: [`results/experiments/09_k562_sl_pair_cross_cell_line_selectivity/run/`](../../results/experiments/09_k562_sl_pair_cross_cell_line_selectivity/run/) (gitignored)
+Artifacts: [`results/experiments/09_k562_sl_pair_cross_cell_line_selectivity/run/`](experiments/09_k562_sl_pair_cross_cell_line_selectivity/run/) (gitignored)
 
 **Task.** Test whether a cross-cell-line DepMap "Selectivity" contrast feature lifts
 gene-pair SL link prediction over the dependency-only floor, on the CV1/CV2/CV3 `Rand` 1:1
@@ -52,7 +52,7 @@ K562 benchmark splits.
 CV3 lift disappears — it was attributable to essentiality structure, not pair-specific
 co-dependency. CV1/CV2 retain a genuine pair-specific component after the same slice; CV3
 does not. This is what gates any context-specific-residual claim
-([`01-blueprint.md`](../01-blueprint.md) §5.4).
+([`01-blueprint.md`](../docs/01-blueprint.md) §5.4).
 
 ## Removed write-ups
 

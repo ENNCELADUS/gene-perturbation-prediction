@@ -11,7 +11,7 @@ lines**, not held-out genes.
 `docs/02-literature-review.md` is prior art; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented
 GeneEffect track and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it. The current expression space,
 STATE wiring and `all` run follow `docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`. Read
-the `docs/data/` card before using a dataset. Results live in `docs/results/`.
+the `docs/data/` card before using a dataset. Results live in `results/`.
 
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
@@ -20,7 +20,7 @@ bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it onc
 
 The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and baselined once at seed 0, before the
 **expression-space change** (STATE was fed raw counts), so those numbers are not like for like with the current pipeline
-(`docs/03-geneeffect-protocol.md` §7, `docs/results/joint_geneeffect_seed0/`). The 2026-10-02 `all` run
+(`docs/03-geneeffect-protocol.md` §7, `results/joint_geneeffect_seed0/`). The 2026-10-02 `all` run
 (`all_20261002T174946Z`) finished: validation residual Pearson 0.068 for the joint model against 0.133 for the Tx1 context ridge,
 and the response comparison favours the HVG MLP over fine-tuned STATE and over the Tx1 MLP. The current work is the **revision**
 (`docs/specs/2026-10-03-geneeffect-revision-design.md`, then `docs/specs/2026-10-03-geneeffect-head-revision-design.md`): a

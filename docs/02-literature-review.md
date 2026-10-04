@@ -109,7 +109,7 @@ The completed seed-0 joint experiment achieves test Huber 0.01611905 versus
 0.01613152 for gene-mean, a relative reduction of **0.0773%**. Residual Pearson is
 0.05414 versus 0.12161 for Tx1 PCA-ridge; residual Spearman is 0.05280 versus
 0.11574. The same observed test keys were verified across all methods.
-[Full results and provenance](results/joint_geneeffect_seed0/README.md).
+[Full results and provenance](../results/joint_geneeffect_seed0/README.md).
 
 This shows a functioning composition but little dependency-error improvement over
 a context-blind prior and weaker context correlations than simple predictors.
@@ -121,7 +121,7 @@ On validation only, a readout head with an explicit gene-specific context slope 
 frozen seed-0 backbone lifts residual Pearson from 0.05 to 0.13 and ties an
 eight-component context-PCA ridge, and no tested response interface transferred a
 perturbation response to a held-out cell line
-([diagnostics](results/p1_response_pathway_diagnostics/README.md)). The next
+([diagnostics](../results/p1_response_pathway_diagnostics/README.md)). The next
 discriminating experiment is a leave-one-anchor-out response-model comparison that
 replaces STATE with a plain MLP on the same inputs, measuring what the STATE
 transformer and the Tx1 representation each add

@@ -1,7 +1,7 @@
 """Draw the result figures of docs/03-geneeffect-protocol.md from tracked evidence.
 
 Run from the repository root:  uv run python docs/figures/plot_geneeffect_protocol.py
-Every number comes from a file under docs/results/; nothing is typed in by hand.
+Every number comes from a file under results/; nothing is typed in by hand.
 """
 
 import json
@@ -16,7 +16,7 @@ import pandas as pd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "docs" / "figures"
-P1 = ROOT / "docs" / "results" / "p1_response_pathway_diagnostics" / "evidence"
+P1 = ROOT / "results" / "p1_response_pathway_diagnostics" / "evidence"
 MM = 1 / 25.4
 
 matplotlib.rcParams.update(

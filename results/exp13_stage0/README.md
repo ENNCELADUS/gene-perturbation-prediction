@@ -4,7 +4,7 @@
 underneath it; the shift is systematic and survives pooling. Branch 1 of
 `Historical protocol` (`docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`, removed; `git show 1694f5c:<path>`)
 §6 was taken and executed: raw UMI counts now exist for all 152 Kinker lines. Authority:
-[`Research contract`](../../01-blueprint.md) §7-8. This is a substrate measurement, not an SL
+[`Research contract`](../../docs/01-blueprint.md) §7-8. This is a substrate measurement, not an SL
 or a dependency result.
 
 ## What was tested

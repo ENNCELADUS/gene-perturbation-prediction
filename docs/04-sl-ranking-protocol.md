@@ -4,7 +4,7 @@ Updated 2026-10-02. This is the **separate, unimplemented SL-pair protocol** und
 [the research blueprint](01-blueprint.md). It builds on the backbone defined by the
 [GeneEffect protocol](03-geneeffect-protocol.md), whose seed-0 model has completed
 training and testing once
-([result](results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
+([result](../results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
 feature set or SL performance result exists.
 
 ## 1. Objective and prediction unit
@@ -118,7 +118,7 @@ improving one task is not evidence of improving the other.
 
 The completed seed-0 `best.pt` is diagnostic evidence only: it beats the context-blind
 gene mean by 0.0773% Huber and trails the Tx1 context-PCA ridge on residual
-correlation ([result](results/joint_geneeffect_seed0/README.md)). It neither supplies
+correlation ([result](../results/joint_geneeffect_seed0/README.md)). It neither supplies
 the required SL exclusions nor the inner-fold models of §5, and its 226-line test set,
 observed once on 2026-09-07, must not become an SL tuning surface. Inner fits that
 exclude a response anchor need an explicit eligible-anchor configuration; the fixed
@@ -259,5 +259,5 @@ release, exact context lists and inner groups, the gene universe and variable-ge
 all hyperparameters with the surface each was selected on, and the training, collation
 and projection seeds. `sl_scores.csv` records context ModelID, canonical pair, arm,
 score, label, endpoint-seen stratum and every exclusion reason. Planned metrics are not
-results; a claim enters [`results/`](results/) only after the frozen run completes and
+results; a claim enters [`results/`](../results/) only after the frozen run completes and
 its integrity checks pass.

@@ -81,8 +81,8 @@ specified in the [SL protocol](04-sl-ranking-protocol.md#6-sl-head-and-controls)
 A joint GeneEffect model has been trained, tested and baselined once (seed 0). Its Huber
 loss beats the context-blind gene mean by 0.08%, and its residual correlations trail
 simple context baselines: a working path, not a result
-([record](results/joint_geneeffect_seed0/README.md)). That run predates the
+([record](../results/joint_geneeffect_seed0/README.md)). That run predates the
 expression-space change; the model, expression space, training, metrics, response-model
 comparison and the single `all` run are specified in the
 [GeneEffect protocol](03-geneeffect-protocol.md), and curated evidence is under
-[`results/`](results/).
+[`results/`](../results/).
