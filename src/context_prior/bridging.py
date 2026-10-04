@@ -50,7 +50,10 @@ class BridgeInputs:
             transformed).
         queries: ``val`` and ``test`` (bridged pseudo-bulk) and ``oracle``
             (validation bulk), in the space of ``expression``.
-        oof_paired: Out-of-fold bridged rows of the paired lines, for diagnostics.
+        oof_paired: Out-of-fold bridged rows of the paired lines, for diagnostics;
+            anything a remedy learns is refitted without each row's fold.
+        oof_bulk: The paired lines' bulk in the space of ``oof_paired``: what the
+            diagnostics compare it with.
         gene_space: Expression genes the gene-level blocks may read; None for all.
         gene_rows: Rows the gene-level blocks are fitted on instead of
             ``expression``; None for ``expression``'s fit rows.
@@ -59,6 +62,7 @@ class BridgeInputs:
     expression: pd.DataFrame
     queries: Mapping[str, pd.DataFrame]
     oof_paired: pd.DataFrame
+    oof_bulk: pd.DataFrame
     gene_space: tuple[str, ...] | None = None
     gene_rows: pd.DataFrame | None = None
 

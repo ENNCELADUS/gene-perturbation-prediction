@@ -102,6 +102,7 @@ def assert_same_inputs(left, right):
     for name in left.queries:
         pd.testing.assert_frame_equal(left.queries[name], right.queries[name])
     pd.testing.assert_frame_equal(left.oof_paired, right.oof_paired)
+    pd.testing.assert_frame_equal(left.oof_bulk, right.oof_bulk)
     assert left.gene_space is None and left.gene_rows is None
 
 

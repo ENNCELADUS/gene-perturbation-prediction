@@ -35,7 +35,12 @@ def test_denoised_rows_are_rank_r_reconstructions():
         got = inputs.queries[name]
         assert not np.allclose(got, reference.queries[name])
         assert np.allclose(project(got, pca), got.to_numpy())  # idempotent
-    assert np.allclose(project(inputs.oof_paired, pca), inputs.oof_paired.to_numpy())
+    # Each out-of-fold row lies on components fitted without its fold's bulk.
+    for fold in sorted({b.folds[m] for m in b.paired}):
+        held = [m for m in b.paired if b.folds[m] == fold]
+        local = fit_context_pca(b.bulk.drop(index=held).to_numpy(), 4)
+        rows = inputs.oof_paired.loc[held]
+        assert np.allclose(project(rows, local), rows.to_numpy())
 
 
 def test_full_rank_equals_the_affine_queries():

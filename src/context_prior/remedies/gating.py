@@ -19,7 +19,7 @@ def build(base: BridgeBase, setting: Mapping[str, Any]) -> BridgeInputs:
     if set(setting) != {"threshold"}:
         raise ValueError(f"gating takes exactly a threshold, got {dict(setting)}")
     inputs = affine.build(base, {})
-    quality = bridge_quality(inputs.oof_paired, base.bulk.loc[list(base.paired)])
+    quality = bridge_quality(inputs.oof_paired, inputs.oof_bulk)
     threshold = float(setting["threshold"])
     space = tuple(g for g in base.bulk.columns if quality[g] >= threshold)
     return replace(inputs, gene_space=space)
