@@ -1,0 +1,41 @@
+{
+  "retrieved": "2026-10-04",
+  "settings": {
+    "paralog_min_identity": 20.0,
+    "paralogs_per_gene": 10,
+    "progeny_top": 100,
+    "driver_min_fraction": 0.05
+  },
+  "files": {
+    "paralogs.tsv.gz": {
+      "source": "https://useast.ensembl.org/biomart/martservice",
+      "rows": 93520,
+      "sha256": "1b530c26125f60fb19983331e001d13ebb8ca7fa06638ee925f90e49da28af17"
+    },
+    "complexes.tsv": {
+      "source": "https://mips.helmholtz-muenchen.de/fastapi-corum/public/file/download_current_file?file_id=human&file_format=txt",
+      "rows": 18932,
+      "sha256": "1f6e33e9a19a8bee5d1615a45088b3d8c1ba648ed192abb48cc3638042450bca"
+    },
+    "hallmark.tsv": {
+      "source": "https://data.broadinstitute.org/gsea-msigdb/msigdb/release/2024.1.Hs/h.all.v2024.1.Hs.symbols.gmt",
+      "rows": 7322,
+      "sha256": "0af0d0ef59a7a3f42aa13fb3aaacb73f96fb3b4b966778c88d6ce7dbe2f12519"
+    },
+    "progeny.tsv": {
+      "source": "https://omnipathdb.org/annotations?resources=PROGENy&format=tsv",
+      "rows": 1400,
+      "sha256": "92dd89c436dce6440b80d93c4db3473e1302070e5fb470ce9c914423004f28d2"
+    },
+    "drivers.tsv": {
+      "source": "data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv",
+      "rows": 1907,
+      "sha256": "50742744c17ec3df8808807c3f478136b3b90b9998be9b0d86cba05204a1b4f3"
+    },
+    "msi.tsv": {
+      "source": "https://ndownloader.figshare.com/files/51065726",
+      "rows": 1868,
+      "sha256": "7e821e6f6bc2e25b6234d9fe212db57bdb6246e07c865b4cf490dc750fa2a638"
+    }
+  }
+}
