@@ -401,7 +401,7 @@ class ResponseMLP(nn.Module):
 ### Task 4 (easy): documents
 
 **Files:** Modify `docs/01-blueprint.md`, `docs/03-geneeffect-protocol.md`, `AGENTS.md`, `CLAUDE.md`,
-`hpc/README.md`, `docs/literature/notes/01_Papers/03_models/foundation_models/2025_Tahoe-x1_3B_perturbation_FM.md`.
+`hpc/README.md`, `docs/notes/paper-notes/2025_Tahoe-x1_3B_perturbation_FM.md`.
 
 - [ ] Step 1: Blueprint → high-level task description only: keep §1 task, §2 data and generalisation,
   §5 SL composition (shortened to intent), claim boundaries, and a status paragraph linking the protocol
