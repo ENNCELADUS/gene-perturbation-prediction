@@ -159,7 +159,7 @@ three parameter groups: the new residual head at $10^{-4}$, the ESM2 adapter at 
 and the pretrained STATE model at $10^{-5}$, the most cautious. Training, cell-collation
 and projection base seeds are all 0. Settings are fixed in
 `configs/geneeffect_joint.yaml`. The loop follows the
-[joint-training design](specs/2026-09-06-modular-joint-training-design.md); the
+joint-training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show 1694f5c:<path>`); the
 [current design](specs/2026-10-02-expression-space-and-all-pipeline-design.md) replaces its
 response wiring, learning rates, basal path and validation splits with those above.
 
@@ -408,7 +408,7 @@ the context ridge by at least +0.02 residual Pearson, with an interval excluding
 of three training seeds.
 
 Seed-0 numbers in §7 predate the expression-space change and are not compared like for
-like with the `all` run. The [readout objective and selection](specs/2026-09-10-readout-objective-and-selection-design.md)
-plan on the frozen backbone remains the follow-up for objective, selection and context
+like with the `all` run. The readout objective and selection plan (`docs/specs/2026-09-10-readout-objective-and-selection-design.md`,
+removed; `git show 1694f5c:<path>`) on the frozen backbone remains the follow-up for objective, selection and context
 representation; the response model re-enters the feature path only once it beats no-change
 on a held-out anchor.

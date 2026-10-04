@@ -84,7 +84,7 @@ PCA or ST responses. It fits a shared diagonal GMM64 on equal numbers of cells f
 each labeled training line (seed 0), then a standardized 68-feature context vector
 and independent Ridge(alpha=1) per gene. Both standardizers and the GMM are train-only.
 The frozen settings and comparison boundaries are in the
-[design](../docs/specs/2026-09-07-tx1-gmm-ridge-design.md).
+design (`docs/specs/2026-09-07-tx1-gmm-ridge-design.md`, removed; `git show 1694f5c:<path>`).
 
 ```bash
 uv run python -m src.experiments.tx1_gmm_ridge fit --config configs/geneeffect_joint.yaml --out-dir outputs/baselines/tx1_gmm_seed0

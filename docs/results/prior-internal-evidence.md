@@ -54,6 +54,13 @@ co-dependency. CV1/CV2 retain a genuine pair-specific component after the same s
 does not. This is what gates any context-specific-residual claim
 ([`01-blueprint.md`](../01-blueprint.md) §5.4).
 
+## Removed write-ups
+
+On 2026-10-04 the retired program's specs and results (K562 mechanism, Tx1-ST backbone, Exp13 staged protocol,
+the P1 designs, throughput probes, GMM-ridge, Feng and Horlbeck coverage notes, the K562-only dataset cards)
+were deleted from the tree. Every one is recoverable from git history, e.g. `git show 1694f5c:docs/specs/<name>`;
+`git ls-tree -r 1694f5c --name-only docs` lists them.
+
 ## Sourcing
 
 `docs/archive/` is untracked and gitignored: the archived write-ups exist on disk in this
