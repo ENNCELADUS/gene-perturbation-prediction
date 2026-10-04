@@ -613,7 +613,7 @@ block sets to fit under it. A run:
 1. **Pseudo-bulk and the bridge inputs.** Preparation sums each line's raw UMI over all its basal
    cells, then CPM and log1p, into the prepared root; this is the only raw-data read. The shared
    space is the bulk genes every validation and test line's source measures (9,711); a training
-   line lacking one takes the training lines' mean for it (`space.json`). Bulk and pseudo-bulk
+   line lacking one takes the training lines' mean for it (counts in `facts.json`). Bulk and pseudo-bulk
    profiles are quantile-normalised to the mean sorted bulk profile of the training side.
 2. **One bridge setting.** The remedy's `build` turns the normalised sources into the rows the prior
    is fitted on and the validation, test and oracle query rows. The reference remedy is one
@@ -621,15 +621,27 @@ block sets to fit under it. A run:
    lines that have both; a gene whose range across lines is zero maps to its bulk mean. Bridge
    quality is the per-gene correlation across lines between out-of-fold bridged pseudo-bulk and
    bulk (five patient-grouped folds, seed 0), reported with counts above 0.3, 0.5 and 0.7 for
-   all genes, the selective genes and their paralogs.
+   all genes, the selective genes and their paralogs. The other remedies:
+   - **contrastive PCA** projects the directions that only one source varies along
+     (eigenvectors of the difference of the paired covariances) out of both sources, then
+     bridges as the reference does;
+   - **reliability gating** lets the gene-level blocks read only genes whose out-of-fold
+     bridge quality reaches a threshold (`gene_space`; the data-selected block takes at most
+     the space's other genes);
+   - **noise-matched fitting** fits the gene-level blocks on the single-cell training lines'
+     out-of-fold bridged pseudo-bulk, against the residual the components stage leaves on
+     those rows (`gene_rows`);
+   - **low-rank denoising** replaces the bridged validation and test rows by their projection
+     on the leading components of the standardised training bulk.
 3. **Fits and scores.** For every block set the prior is fitted on training lines only and scored
    on validation and test with the metrics of §6; the oracle row scores the validation lines'
    bulk RNA (off-contract: marked in every table, never a model or comparison row). Each row
    carries the selective-Spearman gain over the reference row with a 95% paired line-bootstrap
    interval (1,000 resamples, seed 0).
 
-Tuning is the only automatic choice: penalties are chosen on validation by point estimate, and a
-gene-level block set is fitted on top of the components stage at its best-validation penalty.
+Tuning is the only automatic choice: a gene-level block set is fitted on top of the components
+stage at its best-validation penalty (point estimate); every components and gene penalty is a
+reported row.
 Nothing is kept, dropped, passed or failed in code. Which setting, block set or extra-line
 cohort to use is decided by reading the table.
 
