@@ -5,7 +5,7 @@ composed into a Bridge A counterfactual co-dependency score, does **not** recove
 measured Horlbeck 2018 K562 genetic interactions (|Spearman| < 0.01;
 AUROC(s_A -> strong-SL) approximately 0.52). Authority:
 [`../01-blueprint.md`](../01-blueprint.md) §7-8; plan:
-[`../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`](../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md)
+`../specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md` (`docs/specs/2026-07-22-k562-mechanism-and-geneeffect-generalization-plan.md`, removed; `git show 1694f5c:<path>`)
 (T1).
 
 ## What was tested
