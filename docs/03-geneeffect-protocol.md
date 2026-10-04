@@ -1,7 +1,7 @@
 # Experiment Protocol: Held-Out-Cell-Line GeneEffect Prediction
 
 Updated 2026-10-04. This is the protocol for the **implemented** GeneEffect track under
-[the research blueprint](01-blueprint.md); it holds the model, expression space, training,
+[the research blueprint](01-blueprint.md); it holds the rules (§11), the model, expression space, training,
 metrics and results. The design behind the current wiring is the
 [expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md),
 and operating commands are in the [runbook](../hpc/README.md). One run has completed: seed 0,
@@ -593,77 +593,96 @@ every run and never used to choose. The screens are model selection, not SL evid
 The [context-generalization design](specs/2026-10-04-context-generalization-design.md) adds a
 closed-form, CPU-only **linear context prior** that predicts the GeneEffect residual of §3.3 in
 units of the per-gene residual SD from a line's expression alone. It is a control, not a
-model of the joint pipeline: its own summary reports it beside the controls of §6, and the
+model of the joint pipeline: its own results table reports it beside the controls of §6, and the
 single-cell correction that would stack on it is not built. The prior reads the shared expression space of the design (bulk TPM for bulk lines,
 bridged pseudo-bulk for single-cell lines); the selective genes, $\hat\mu_g$ and $\sigma_g$ are
 those of §3.3 and §6, fitted on the 170 labelled training lines, so every number stays on the
 metrics of §6. A missing training label counts as a zero residual in fitting and is skipped in
-scoring. Lines outside the 226 enter the training side as described in the
-[blueprint](01-blueprint.md#2-data-and-generalization) and the
+scoring. Lines outside the 226 enter the training side under the rules of §11 and the
 [data card](data/extra-bulk-lines-26q1.md).
 
-`hpc/run.sh prior CONFIG --run-id ID` (for example `configs/context_prior/prior.yaml`;
-`configs/context_prior/prior_no_haematopoietic.yaml` drops the haematopoietic extras) runs the
-steps below in order. A step whose output exists is skipped, so rerunning with the same run
-id resumes. `python -m src.experiments.context_prior CONFIG --run-id ID --oracle-only` runs
-only the learning curve, scored from validation lines' bulk RNA, and needs no raw single cells,
-so it runs on the Mac.
+`hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]` runs a minimal experiment runner
+(`src/experiments/context_prior.py`). The config names the paths, the training side (the
+lineages dropped from the extra lines), the prior (component count, folds, bootstrap repeats,
+data-selected genes), the penalty grids, the **block sets** (each starts with the expression
+components and adds gene-level blocks: own expression, partner group, data-selected genes), a
+`reference` experiment, and the **experiments**. An experiment is one bridge remedy (`kind`,
+a module under `src/context_prior/remedies/`), a list of **settings** of that remedy, and the
+block sets to fit under it. A run:
 
-1. **Pseudo-bulk.** Preparation sums each line's raw UMI over all its basal cells, then CPM and
-   log1p, into the prepared root. This is the only raw-data read.
-2. **Bridge.** The shared space is the bulk genes every validation and test line's source
-   measures (9,711); a training line lacking one takes the training lines' mean for it
-   (`space.json`). Bulk and pseudo-bulk profiles are quantile-normalised to the mean sorted bulk
-   profile of the training side; one affine map per gene, from normalised pseudo-bulk to
-   normalised bulk, is fitted by least squares on the training lines that have both and applied
-   to every single-cell line. A gene whose range across lines is zero maps to its bulk mean.
-   Bridge quality is the per-gene correlation across lines between bridged pseudo-bulk and bulk
-   on out-of-fold training lines.
-3. **Learning curve.** Two fixed prior configurations (the 128 expression components alone, and
-   the components plus 50 data-selected genes) are fitted on 100, 167, 400, 700 and 1,086
-   training-side lines (three patient-grouped random subsets per size below the full set; the
-   167-line point is the actual single-cell training lines), with the ridge penalty chosen on
-   validation at each size. Validation selective Spearman is scored from bulk RNA (the oracle,
-   off-contract) and, in a full run, from bridged pseudo-bulk.
-4. **Extra-lines decision.** The extra lines pass when, on bridged pseudo-bulk input, the
-   prior on all labelled lines beats the prior on the 167 single-cell training lines (both
-   components plus 50 data-selected genes) with a 95% paired bootstrap interval of selective
-   Spearman excluding zero. The oracle-only decision is not binding. If the labels fail the
-   rule, the prior is fitted on the single-cell training lines alone; the bridge and the
-   encoders are built either way.
-5. **Selection.** Blocks are added in a fixed order (expression components, pathway scores,
-   predicted genotype, own expression, partner group, data-selected genes), each fitted to what
-   the earlier ones leave. A block is kept only if the 95% paired bootstrap interval (27
-   validation lines, 1,000 resamples, seed 0) of its validation selective Spearman gain over the
-   current prior excludes zero; penalties, the knowledge-block shrinkage and the number of
-   data-selected genes are chosen on the grid by point estimate. The reduced-rank context term
-   and the gene-conditioned view weights are tried last under the same rule.
-6. **Cross-fit.** Five patient-grouped folds, assigned from seed 0, give out-of-fold
-   predictions of every single-cell training line (bridged pseudo-bulk, bridge refitted
-   without the line's fold) and of the labelled extra lines (bulk), with bridge, encoders,
-   data-selected genes and ridges refitted inside each fold.
-7. **Test.** The chosen prior is fitted on the whole training side and scored once on test, and
-   on validation, with the baseline ladder of §6 (gene mean, copy prior, nearest line,
-   context-PCA ridge on Tx1 and on log HVG) and the paired line bootstrap of selective Spearman
-   for the prior minus the Tx1 context-PCA ridge. Validation also scores the oracle row, marked
-   off-contract in every table and never a model or a comparison row.
+1. **Pseudo-bulk and the bridge inputs.** Preparation sums each line's raw UMI over all its basal
+   cells, then CPM and log1p, into the prepared root; this is the only raw-data read. The shared
+   space is the bulk genes every validation and test line's source measures (9,711); a training
+   line lacking one takes the training lines' mean for it (`space.json`). Bulk and pseudo-bulk
+   profiles are quantile-normalised to the mean sorted bulk profile of the training side.
+2. **One bridge setting.** The remedy's `build` turns the normalised sources into the rows the prior
+   is fitted on and the validation, test and oracle query rows. The reference remedy is one
+   affine map per gene from normalised pseudo-bulk to normalised bulk, fitted on the training
+   lines that have both; a gene whose range across lines is zero maps to its bulk mean. Bridge
+   quality is the per-gene correlation across lines between out-of-fold bridged pseudo-bulk and
+   bulk (five patient-grouped folds, seed 0), reported with counts above 0.3, 0.5 and 0.7 for
+   all genes, the selective genes and their paralogs.
+3. **Fits and scores.** For every block set the prior is fitted on training lines only and scored
+   on validation and test with the metrics of §6; the oracle row scores the validation lines'
+   bulk RNA (off-contract: marked in every table, never a model or comparison row). Each row
+   carries the selective-Spearman gain over the reference row with a 95% paired line-bootstrap
+   interval (1,000 resamples, seed 0).
 
-The run directory is `outputs/context_prior/<run_id>/` and holds `run_config.json` (the config and
-mode the directory is bound to; a resume with another config or mode is refused), `curve.json` (score by
-point, configuration and input), `decision.json`, `selection.json` (the chosen prior and the per-block log
-with intervals), `folds.json`, `oof.parquet` (out-of-fold stage predictions in residual-SD units),
-`bridge_quality.csv`, `crossfit.json` (median bridge quality and the view-weights outcome),
-`view_weights.parquet` (only when kept), `baselines/{val,test}/`, `predictions.parquet`, `metrics.json`
-and `summary.md`, which is rewritten on
-every rerun. `summary.md` holds the curve, the decision, the selection log, one table per split
-(selective Spearman, selective AUPR lift, residual Pearson over variable genes, Huber, SD
-ratio) for the prior and every control, and a descriptive per-lineage table (one to five lines
-per lineage). One config is one run at seed 0: validation chooses, test is scored once. The
-prior is not SL evidence; a GeneEffect result estimates no genetic interaction.
+Tuning is the only automatic choice: penalties are chosen on validation by point estimate, and a
+gene-level block set is fitted on top of the components stage at its best-validation penalty.
+Nothing is kept, dropped, passed or failed in code. Which setting, block set or extra-line
+cohort to use is decided by reading the table.
 
-The first runs (2026-10-04, [record](../results/context_prior_seed0/README.md)): with every extra line the
-bridged extra-lines decision failed (+0.017 [−0.006, 0.039]) and the prior fell back to the single-cell
-training lines; without the 133 haematopoietic extras it passed (+0.051 [0.027, 0.069]). Validation chose
-that config: expression components only, selective Spearman 0.223 on validation and 0.223 on test against
-0.130 and 0.121 for the Tx1 context-PCA ridge. Gene-level blocks did not survive the bridge (median per-gene
-bridge correlation 0.43).
+Each setting writes `rows/<experiment>__<n>.json` and is skipped when the file exists, so a
+rerun with the same run id resumes; `--experiments` restricts a process to the named
+experiments, and two processes may share a run directory (rows are per setting). The run
+directory is `outputs/context_prior/<run_id>/` and holds `run_config.json` (the config it is
+bound to; a resume with another config is refused), `rows/`, and `results.md`, rewritten from
+whatever rows exist: run facts, then per experiment one table with a line per setting, block
+set and penalty (validation and test selective Spearman, gain over the reference with its
+interval, selective AUPR lift, residual Pearson over variable genes, oracle validation
+selective Spearman) and a bridge-diagnostics table per setting. One config is one run at seed
+0. The prior is not SL evidence; a GeneEffect result estimates no genetic interaction.
+
+The first runs (2026-10-04, [record](../results/context_prior_seed0/README.md)) used an earlier
+runner that applied a learning-curve rule to the extra lines and kept blocks by bootstrap
+interval; its code is gone. Read from its tables: without the 133 haematopoietic extras the
+prior on all labelled lines beat the prior on the single-cell training lines (+0.051 [0.027, 0.069]
+selective Spearman, bridged input), and the chosen config (expression components only) scored
+0.223 on validation and 0.223 on test against 0.130 and 0.121 for the Tx1 context-PCA ridge.
+Gene-level blocks did not survive the bridge (median per-gene bridge correlation 0.43). The next
+run compares four bridge remedies on that training side
+([plan](specs/2026-10-04-bridge-remedies-plan.md),
+`configs/context_prior/bridge_remedies.yaml`).
+
+## 11. Rules
+
+The experiments follow the usual train, validation and test practice; these are the points
+specific to this task.
+
+- **Fit on training lines.** Gene means, variable and selective gene sets, residual SD,
+  normalisation, context PCA, bridge, encoders and every fitted preprocessing use the labelled
+  training lines only. Fit eligibility is checked against the split file.
+- **Tune on validation.** Hyperparameters, penalties, checkpoints and the choice among settings
+  use validation. Report validation and test for every row; one config is one run at seed 0, and
+  `best.pt` is scored on test once. The seed-0 joint-model test split has been observed, so
+  later model decisions rest on validation.
+- **Experiment code reports; people decide.** Code computes and tabulates; it holds no pass,
+  fail, keep or drop rule beyond hyperparameter tuning on validation.
+- **Query lines supply basal single cells only.** No GeneEffect or SL measurement of a query
+  line is an input. Validation lines' bulk RNA is read only in the labelled oracle row; test
+  lines' bulk RNA is never read.
+- **Line authorities.** The [split file](../configs/benchmarks/cell_line_geneeffect_226_split.json)
+  fixes the 226 members; the [extra-line membership file](../configs/benchmarks/extra_bulk_lines_26Q1.json)
+  fixes the DepMap lines outside the 226 that may join the training side
+  ([card](data/extra-bulk-lines-26q1.md)). Lines join by DepMap ModelID, never by name, and every
+  line sharing a patient with a validation or test line is excluded from every fit. Results that
+  use extra lines are a training-data change scored on the unchanged validation and test lines.
+- **Context claims need context-blind controls.** Residual evaluation against the gene mean, the
+  copy prior, the nearest line and the context ridges (§6) decides whether a model learned
+  context; high absolute correlation does not. Response improvement is not dependency
+  improvement.
+- **Pretraining exposure.** Note Tx1's Tahoe-100M pretraining exposure of held-out lines, and
+  STATE's pretraining exposure to K562, HepG2 and Jurkat, wherever results are compared.
+- **Scope.** A GeneEffect result is single-gene dependency evidence; it estimates no genetic
+  interaction and is not an SL result.

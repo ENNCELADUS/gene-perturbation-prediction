@@ -36,9 +36,10 @@ patient with a training line are kept; they stay on the training side, in that l
 cross-fitting fold. The file is a pinned list, not a rule recomputed from labels at run time.
 
 **Haematopoietic lineages.** 133 of the labelled lines are haematopoietic. They are kept in
-the main run. The ablation config `configs/context_prior/prior_no_haematopoietic.yaml` drops
-the lineages `Lymphoid` and `Myeloid` (Model.csv `OncotreeLineage`) from the training side
-to show how much of any gain they carry.
+the first run. The `training_side.exclude_lineages` key of a prior config drops lineages from the
+training side (`Lymphoid` and `Myeloid` in `configs/context_prior/bridge_remedies.yaml`; Model.csv
+`OncotreeLineage`). Validation and test hold no haematopoietic line, and the first runs showed that
+keeping them lowered the bridged score ([record](../../results/context_prior_seed0/README.md)).
 
 ## Rebuild
 
@@ -65,5 +66,5 @@ duplicate ModelIDs or any overlap between labelled, unlabelled, excluded and the
 ## Use
 
 Validation lines' bulk RNA is read only by the oracle diagnostic; test lines' bulk RNA is
-never read ([blueprint §4](../01-blueprint.md#4-claim-boundaries)). Results that use the
+never read ([GeneEffect protocol rules](../03-geneeffect-protocol.md#11-rules)). Results that use the
 extra lines are a training-data change, scored on the unchanged validation and test lines.

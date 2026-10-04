@@ -1,7 +1,7 @@
 # Experiment Protocol: Held-Out-Cell-Line SL Ranking
 
 Updated 2026-10-02. This is the **separate, unimplemented SL-pair protocol** under
-[the research blueprint](01-blueprint.md). It builds on the backbone defined by the
+[the research blueprint](01-blueprint.md); its rules are in §8. It builds on the backbone defined by the
 [GeneEffect protocol](03-geneeffect-protocol.md), whose seed-0 model has completed
 training and testing once
 ([result](../results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
@@ -225,7 +225,11 @@ two endpoints. Report the predicted-profile arm minus the measured-profile arm b
 full and restricted to the context block; only the restricted form isolates out-of-sample GeneEffect cost, since 21 of 24
 dimensions are context-invariant in both arms.
 
-## 8. Leakage rules
+## 8. Rules
+
+The experiments follow the usual train, validation and test practice, with the
+[GeneEffect protocol rules](03-geneeffect-protocol.md#11-rules) (fit on training, tune on
+validation, report both, experiment code reports and people decide). The SL-specific points:
 
 - Test contexts are absent from response training, dependency training,
   $\mu_{\text{train}}$, SL-head training, hyperparameter and checkpoint selection,
@@ -239,7 +243,16 @@ dimensions are context-invariant in both arms.
 - One common, label-independent pair universe across arms. Missing scores stay
   missing, never imputed to zero and never counted as negatives.
 - Report every test context; none may be dropped after its result is inspected.
-- Qualify every result with the Tx1 Tahoe-100M pretraining exposure of the test lines.
+- Qualify every result with the Tx1 Tahoe-100M pretraining exposure of the test lines, and response
+  results with STATE's pretraining exposure to K562, HepG2 and Jurkat.
+- Every backbone-derived SL training vector is out of fold (§5); the profile reference cohort excludes all
+  SL benchmark contexts. The standalone 226-line checkpoints are not eligible for held-out-SL claims.
+- Pair labels are `silver_inferred` screen hits and screened non-hits in a named context (§3.4), not
+  independently reconstructed per-context evidence; the table's known limitations (incomplete filter
+  attribution, degenerate A549 validation labels, shared PC9/HeLa aggregate labels) travel with every result.
+- A sigmoid score is a ranking score, not a calibrated probability of synthetic lethality. A single-gene
+  GeneEffect result is not an SL result, and neither estimates a double-knockout interaction.
+- The seed-0 GeneEffect test split has been observed and is not an SL tuning surface.
 
 ## 9. Required outputs
 

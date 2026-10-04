@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The task is context-conditioned synthetic-lethality (SL) ranking from basal single-cell transcriptomes in held-out **cell
 lines**, not held-out genes. 
 
-`docs/` outranks this file. Start at `docs/01-blueprint.md` (research contract, claim boundaries §4);
+`docs/` outranks this file. Start at `docs/01-blueprint.md` (the research question and approach, motivation only);
 `docs/02-literature-review.md` is prior art; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented
-GeneEffect track and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it. The current expression space,
+GeneEffect track (its §11 holds the rules) and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it (its §8 holds the rules). The current expression space,
 STATE wiring and `all` run follow `docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`. Read
 the `docs/data/` card before using a dataset. Results live in `results/`.
 
@@ -30,7 +30,10 @@ container. The other current work is the **linear context prior**
 CPU prior from bulk and pseudo-bulk expression, with DepMap lines outside the 226 as extra training-side lines
 (`docs/data/extra-bulk-lines-26q1.md`). Its 2026-10-04 run (`results/context_prior_seed0/`): validation chose the config
 without the haematopoietic extras, a ridge on 128 expression components over 953 labelled lines read from bridged
-pseudo-bulk; selective Spearman 0.223 validation / 0.223 test against 0.130 / 0.121 for the Tx1 context ridge. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+pseudo-bulk; selective Spearman 0.223 validation / 0.223 test against 0.130 / 0.121 for the Tx1 context ridge; gene-level
+blocks did not survive the bridge. That run's gated runner and its two configs are gone: the next prior run compares
+bridge remedies in a minimal runner that decides nothing (`configs/context_prior/bridge_remedies.yaml`, plan
+`docs/specs/2026-10-04-bridge-remedies-plan.md`). The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
@@ -48,7 +51,7 @@ uv run python -m pytest tests/test_all.py -q             # one file; -k for one 
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]  # prepare, comparison, train, val eval, baselines, readout, summary.md
 hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: train, val then test eval with baselines, summary.md + revision.json in outputs/geneeffect_revision/<id>/ (configs/revision/*.yaml; no comparison, no readout)
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any checkpoint; `all` never runs test, `revision` scores its own best.pt
-hpc/run.sh prior CONFIG --run-id <id>   # linear context prior, CPU (configs/context_prior/*.yaml): pseudo-bulk, bridge, learning curve, extra-lines decision, block selection, cross-fit, test; outputs/context_prior/<id>/ (`python -m src.experiments.context_prior CONFIG --run-id <id> --oracle-only` runs only the bulk-input curve, on the Mac)
+hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   # linear context prior, CPU: bridge remedies scored on validation and test; rows/, results.md in outputs/context_prior/<id>/
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
@@ -69,6 +72,7 @@ details are in `hpc/README.md`.
 ## Project rules
 
 - When a change alters behaviour a doc describes, update that doc in the same change.
+- Experiment code reports results; decisions are made by reading them, not in code.
 - No formalism gates: do not add digest pinning, contract verifiers, eligibility ceremony or any check that blocks a run on
   model quality. Record provenance and proceed; model-quality signals are telemetry. The existing guards against silent wrong
   artifacts (below) fail closed and stay.
@@ -122,5 +126,5 @@ Mistakes here produce a complete-looking **wrong artifact**, not an exception.
   on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-prior residual correlations are undefined, not zero.
 - Join cell lines by DepMap ModelID through the checked-in map, never informal names (`K-562` ≠ `K562`). Fit means, gene
   membership and normalization on labeled training lines only.
-- Context claims need residual evaluation against context-blind priors; follow the blueprint's claim boundaries (§4) and the SL
-  protocol's leakage rules (§8). Single-gene predictions are not SL or genetic-interaction evidence.
+- Context claims need residual evaluation against context-blind priors; the rules are in the GeneEffect protocol (§11) and the
+  SL protocol (§8). Single-gene predictions are not SL or genetic-interaction evidence.

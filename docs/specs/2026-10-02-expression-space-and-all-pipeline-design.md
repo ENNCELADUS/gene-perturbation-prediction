@@ -1,7 +1,7 @@
 # Design: one expression space, STATE on its own basal path, and a single automatic run
 
 **Status:** design, 2026-10-02, agreed in conversation; awaiting review of this written form.
-Bound by the [blueprint](../01-blueprint.md) claim boundaries. Supersedes the response wiring of
+Follows the [GeneEffect protocol rules](../03-geneeffect-protocol.md#11-rules). Supersedes the response wiring of
 the joint training design (`2026-09-06-modular-joint-training-design.md`) and the
 readout objective plan (`2026-09-10-readout-objective-and-selection-design.md`)'s ordering of
 response-model work after readout work. Both were removed from the tree; `git show 1694f5c:docs/specs/<name>`.

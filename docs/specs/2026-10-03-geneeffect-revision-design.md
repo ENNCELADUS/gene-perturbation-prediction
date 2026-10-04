@@ -1,7 +1,7 @@
 # Design: SL-aligned selection, a factorised head and three STATE settings for the joint GeneEffect model
 
-**Status:** design, 2026-10-03, agreed in conversation (grill session). Bound by the
-[blueprint](../01-blueprint.md) claim boundaries. Builds on the
+**Status:** design, 2026-10-03, agreed in conversation (grill session). Follows the
+[GeneEffect protocol rules](../03-geneeffect-protocol.md#11-rules). Builds on the
 [expression-space design](2026-10-02-expression-space-and-all-pipeline-design.md) and the `all` run
 `all_20261002T174946Z`. Replaces only the joint model's head, objective, selection and STATE
 treatment; preparation, splits, baselines and the response comparison are unchanged.
