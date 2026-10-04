@@ -45,3 +45,27 @@ def test_patient_subset_takes_whole_patients():
     assert sum(patients[m] in chosen for m in lines) == len(subset)
     with pytest.raises(ValueError):
         patient_subset(lines, patients, size=11, seed=0)
+
+
+def test_space_keeps_genes_every_scored_line_measures():
+    from src.context_prior.space import measured_genes
+
+    frame = pd.DataFrame(
+        {"A": [1.0, 2.0, np.nan], "B": [1.0, np.nan, 3.0], "C": [1.0, 2.0, 3.0]},
+        index=["T1", "V1", "S1"],
+    )
+    assert measured_genes(frame, ["A", "B", "C"], ["V1", "S1"]) == ["C"]
+    assert measured_genes(frame, ["A", "B", "C"], ["V1"]) == ["A", "C"]
+
+
+def test_unmeasured_values_take_the_reference_lines_mean():
+    from src.context_prior.space import fill_unmeasured
+
+    frame = pd.DataFrame(
+        {"A": [1.0, 3.0, np.nan], "B": [np.nan, 4.0, 6.0]}, index=["T1", "T2", "T3"]
+    )
+    filled, counts = fill_unmeasured(frame, ["T1", "T2", "T3"])
+    assert filled.loc["T3", "A"] == 2.0 and filled.loc["T1", "B"] == 5.0
+    assert counts.to_dict() == {"T1": 1, "T2": 0, "T3": 1}
+    with pytest.raises(ValueError, match="none of the reference lines"):
+        fill_unmeasured(frame.assign(B=np.nan), ["T1"])

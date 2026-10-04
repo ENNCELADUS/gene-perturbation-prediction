@@ -611,7 +611,9 @@ so it runs on the Mac.
 
 1. **Pseudo-bulk.** Preparation sums each line's raw UMI over all its basal cells, then CPM and
    log1p, into the prepared root. This is the only raw-data read.
-2. **Bridge.** Bulk and pseudo-bulk profiles are quantile-normalised to the mean sorted bulk
+2. **Bridge.** The shared space is the bulk genes every validation and test line's source
+   measures (9,711); a training line lacking one takes the training lines' mean for it
+   (`space.json`). Bulk and pseudo-bulk profiles are quantile-normalised to the mean sorted bulk
    profile of the training side; one affine map per gene, from normalised pseudo-bulk to
    normalised bulk, is fitted by least squares on the training lines that have both and applied
    to every single-cell line. A gene whose range across lines is zero maps to its bulk mean.
