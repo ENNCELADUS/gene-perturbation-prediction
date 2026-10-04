@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import math
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -88,6 +89,36 @@ def test_a_run_directory_belongs_to_one_config(tmp_path):
     changed["prior"]["selected_genes"] = 10
     with pytest.raises(ValueError, match="different config"):
         run._bind(tmp_path, changed)
+
+
+def test_shared_files_wait_for_the_run_directory_lock(tmp_path):
+    """Two processes share a run directory: the config check and a results scan
+    with its replacement each run under the lock, so neither interleaves."""
+    run._bind(tmp_path, CONFIG)
+    (tmp_path / "rows").mkdir()
+    changed = copy.deepcopy(CONFIG)
+    changed["prior"]["selected_genes"] = 10
+    errors = []
+
+    def bind():
+        try:
+            run._bind(tmp_path, changed)
+        except ValueError as error:
+            errors.append(error)
+
+    with run._locked(tmp_path):
+        writer = threading.Thread(target=run.write_results, args=(tmp_path,))
+        binder = threading.Thread(target=bind)
+        writer.start()
+        binder.start()
+        writer.join(0.3)
+        binder.join(0.3)
+        assert writer.is_alive() and binder.is_alive()
+        assert not (tmp_path / "results.md").exists()
+    writer.join(5)
+    binder.join(5)
+    assert (tmp_path / "results.md").is_file()
+    assert len(errors) == 1
 
 
 # ----------------------------------------------------------------------------

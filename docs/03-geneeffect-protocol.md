@@ -620,7 +620,8 @@ block sets to fit under it. A run:
    affine map per gene from normalised pseudo-bulk to normalised bulk, fitted on the training
    lines that have both; a gene whose range across lines is zero maps to its bulk mean. Bridge
    quality is the per-gene correlation across lines between out-of-fold bridged pseudo-bulk and
-   bulk (five patient-grouped folds, seed 0), reported with counts above 0.3, 0.5 and 0.7 for
+   bulk (five patient-grouped folds, seed 0; whatever a remedy learns, the bridge included, is
+   refitted without the held fold), reported with counts above 0.3, 0.5 and 0.7 for
    all genes, the selective genes and their paralogs. The other remedies:
    - **contrastive PCA** projects the directions that only one source varies along
      (eigenvectors of the difference of the paired covariances) out of both sources, then

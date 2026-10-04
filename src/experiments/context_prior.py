@@ -16,11 +16,13 @@ different experiments may share it, since rows are per setting.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import importlib
 import json
 import math
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -404,10 +406,9 @@ def run_setting(
                 for b in blocks[1:]
             ]
             add(name, chosen, float(value), *fit(stages))
-    paired = list(base.bridge.paired)
     diagnostics = bridge_diagnostics(
         inputs.oof_paired,
-        inputs.expression.loc[paired],
+        inputs.oof_bulk,
         base.definitions.selective,
         base.reference.paralogs,
     )
@@ -478,19 +479,33 @@ def _write_json(path: Path, payload: Any) -> None:
     _write_text(path, json.dumps(_jsonable(payload), indent=2, allow_nan=False) + "\n")
 
 
+@contextmanager
+def _locked(run_dir: Path) -> Iterator[None]:
+    """Serialises the run directory's shared files across processes: the config
+    check and its creation, and a results scan with its replacement (so an older
+    scan never overwrites a newer one)."""
+    with open(run_dir / ".lock", "w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def _bind(run_dir: Path, config: Mapping[str, Any]) -> None:
     """A run directory belongs to one config: finished settings are skipped by
     file existence, so resuming under another would mix experiments."""
     record = _jsonable({"config": config})
     path = run_dir / "run_config.json"
-    if path.is_file():
-        if _read_json(path) != record:
-            raise ValueError(
-                f"{run_dir} was started with a different config ({path}); "
-                "use a new --run-id"
-            )
-        return
-    _write_json(path, record)
+    with _locked(run_dir):
+        if path.is_file():
+            if _read_json(path) != record:
+                raise ValueError(
+                    f"{run_dir} was started with a different config ({path}); "
+                    "use a new --run-id"
+                )
+            return
+        _write_json(path, record)
 
 
 def _row_path(run_dir: Path, experiment: str, index: int) -> Path:
@@ -520,6 +535,11 @@ def write_results(run_dir: Path) -> Path:
     """``results.md`` from every row file present: run facts, then per experiment
     a table with one row per setting x block set x penalty and a diagnostics
     table with one row per setting."""
+    with _locked(run_dir):
+        return _write_results(run_dir)
+
+
+def _write_results(run_dir: Path) -> Path:
     config = _read_json(run_dir / "run_config.json")["config"]
     out = [f"# Linear context prior experiments, run {run_dir.name}", ""]
     if (run_dir / "facts.json").is_file():

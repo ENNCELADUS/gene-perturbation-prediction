@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.context_prior.bridge import fit_bridge
 from src.context_prior.bridging import BridgeBase, bridge_diagnostics, oof_bridged
@@ -69,3 +73,30 @@ def test_affine_remedy_and_diagnostics():
     assert report["selective"]["total"] == 2
     assert report["selective_paralogs"]["total"] == 1
     assert 0.5 < report["median"] <= 1.0
+
+
+@pytest.mark.parametrize(
+    ("kind", "setting"),
+    [
+        ("affine", {}),
+        ("contrastive", {"pseudo_components": 2, "bulk_components": 1}),
+        ("gating", {"threshold": 0.3}),
+        ("noise_matched", {}),
+        ("denoise", {"rank": 4}),
+    ],
+)
+def test_oof_rows_never_read_their_own_folds_bulk(kind, setting):
+    """Out-of-fold rows stand in for unseen queries, so nothing a remedy learns
+    for them may read the held fold's bulk RNA."""
+    build = importlib.import_module(f"src.context_prior.remedies.{kind}").build
+    b = base()
+    held = [m for m in b.paired if b.folds[m] == 0]
+    bulk = b.bulk.copy()
+    bulk.loc[held] = np.random.default_rng(9).normal(size=(len(held), len(GENES)))
+    before = build(b, setting)
+    after = build(replace(b, bulk=bulk), setting)
+    pd.testing.assert_frame_equal(
+        after.oof_paired.loc[held], before.oof_paired.loc[held]
+    )
+    assert list(before.oof_bulk.index) == list(b.paired)
+    assert list(before.oof_bulk.columns) == list(before.oof_paired.columns)

@@ -24,4 +24,5 @@ def build(base: BridgeBase, setting: Mapping[str, Any]) -> BridgeInputs:
             "oracle": base.oracle,
         },
         oof_paired=oof_bridged(base.pseudobulk, base.bulk, paired, paired, base.folds),
+        oof_bulk=base.bulk.loc[paired],
     )
