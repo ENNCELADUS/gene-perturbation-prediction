@@ -1,6 +1,6 @@
 # Research Blueprint: Context-Conditioned Synthetic-Lethality Ranking
 
-Updated 2026-10-02. This document defines the research task and its claim boundaries
+Updated 2026-10-04. This document defines the research task and its claim boundaries
 and nothing else. [Related work](02-literature-review.md) explains the prior art;
 [GeneEffect protocol](03-geneeffect-protocol.md) holds the model, training, metrics and
 results of the implemented single-gene track; [SL protocol](04-sl-ranking-protocol.md)
@@ -38,6 +38,12 @@ The two benchmarks have different assignments and cannot substitute for each oth
 | GeneEffect, 226 members | 172 members, 170 labeled | 27 lines | 27 lines | [Fixed split](../configs/benchmarks/cell_line_geneeffect_226_split.json), [data card](data/cell-line-geneeffect-226.md) |
 | SL, nine contexts | K562, Jurkat, OVCAR8, HAP1, HT29 | A549 | 22RV1, PC9, HeLa | [Fixed split](../configs/benchmarks/context_screen_v2_split.json), [data card](data/sl-context-screen.md) |
 
+DepMap lines outside the 226 with 26Q1 bulk RNA may join the GeneEffect training side of
+the linear context prior ([membership](../configs/benchmarks/extra_bulk_lines_26Q1.json),
+[card](data/extra-bulk-lines-26q1.md)): their bulk RNA and other-omics labels fit context
+encoders, and their GeneEffect labels fit the prior once the learning-curve rule passes.
+Every line sharing a patient with a validation or test line is excluded from every fit.
+
 GeneEffect labels are from the pinned DepMap 26Q1 release. PC9 and HeLa are the
 two unlabeled GeneEffect training members; neither participates in supervised
 fitting. K562, Jurkat, HepG2 and HCT116 carry genetic-perturbation response data and
@@ -73,6 +79,10 @@ specified in the [SL protocol](04-sl-ranking-protocol.md#6-sl-head-and-controls)
 - Held-out-context results are qualified by the Tx1 Tahoe-100M pretraining exposure of
   the held-out lines, and response results by STATE's pretraining exposure to K562,
   HepG2 and Jurkat.
+- Results that use extra lines are a training-data change, scored on the unchanged
+  validation and test lines.
+- Validation lines' bulk RNA is read only by the oracle diagnostic; test lines' bulk RNA is
+  never read.
 - The seed-0 GeneEffect test split has been observed once and is not a tuning or
   selection surface. Further model decisions use validation.
 
