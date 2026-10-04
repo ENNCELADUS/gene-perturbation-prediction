@@ -104,6 +104,11 @@ class PriorInputs:
         reference: Pinned reference tables.
         lineage: Training-side lineage labels.
         patients: PatientID of every line.
+        gene_space: Expression genes the gene-level blocks may read; a gene
+            outside it is an undefined (zero) feature. None: every gene.
+        gene_rows: Expression rows the gene-level blocks are fitted on, with
+            labels in ``residual``, instead of the fit lines' rows; they fit to
+            what the context stages leave on these rows. None: the fit lines.
     """
 
     expression: pd.DataFrame
@@ -112,6 +117,8 @@ class PriorInputs:
     reference: Reference
     lineage: pd.Series
     patients: Mapping[str, str]
+    gene_space: tuple[str, ...] | None = None
+    gene_rows: pd.DataFrame | None = None
 
 
 @dataclass
@@ -267,7 +274,9 @@ def fit_prior(
     GeneEffect (predicted genotype, low-expression thresholds) use ``encoder_lines``.
 
     The reduced-rank basis, when ``spec.rank`` is set, comes from the fit lines'
-    residual and restricts the context stages only.
+    residual and restricts the context stages only. Context stages come before
+    gene-level stages. The gene-level stages read the columns of
+    ``inputs.gene_space`` and fit on ``inputs.gene_rows`` when they are set.
     """
     if not set(fit_lines) <= set(encoder_lines):
         raise ValueError("fit lines must be encoder lines too")
@@ -278,30 +287,68 @@ def fit_prior(
     remaining = inputs.residual.loc[list(fit_lines)].to_numpy(dtype=np.float64)
     remaining = np.where(np.isfinite(remaining), remaining, 0.0)
     basis = None if spec.rank is None else _residual_basis(remaining, spec.rank)
+    readable = None if inputs.gene_space is None else set(inputs.gene_space)
+    gene_columns = (
+        space if readable is None else tuple(g for g in space if g in readable)
+    )
+    gene_rows = (
+        None if inputs.gene_rows is None else inputs.gene_rows.loc[:, list(space)]
+    )
+    gene_fit_rows = fit_rows if gene_rows is None else gene_rows
+    gene_remaining: np.ndarray | None = None
     index: PartnerIndex | None = None
     low: np.ndarray | None = None
     stages = []
     for stage in spec.stages:
         if stage.block in CONTEXT_BLOCKS:
+            if gene_remaining is not None:
+                raise ValueError("context blocks must come before gene-level blocks")
             features, train = _context_view(stage.block, inputs, fit_rows, encoder_rows)
             model = shared_ridge(train, remaining, [stage.penalty], basis=basis)[0]
-        elif stage.block in _KNOWLEDGE_FEATURES:
-            if index is None:
-                index = partner_index(genes, space, inputs.reference)
-                low = np.percentile(
-                    encoder_rows.to_numpy(dtype=np.float64), LOW_PERCENTILE, axis=0
+            remaining -= model.predict(train)
+            stages.append((stage.block, features, model))
+            continue
+        if gene_remaining is None:
+            # Gene-level blocks fit on their own rows: what the context stages
+            # leave on those rows (the same rows as the context stages by default).
+            if gene_rows is None:
+                gene_remaining = remaining
+            else:
+                residual = inputs.residual.loc[list(gene_rows.index)].to_numpy(
+                    dtype=np.float64
                 )
-            features, train = _knowledge_view(
-                _KNOWLEDGE_FEATURES[stage.block], index, low, fit_rows
+                gene_remaining = np.where(np.isfinite(residual), residual, 0.0)
+                for _, context_features, context_model in stages:
+                    gene_remaining = gene_remaining - context_model.predict(
+                        context_features(gene_rows)
+                    )
+        rows = gene_fit_rows.loc[:, list(gene_columns)]
+        if stage.block in _KNOWLEDGE_FEATURES:
+            if index is None:
+                index = partner_index(genes, gene_columns, inputs.reference)
+                source = encoder_rows if gene_rows is None else gene_rows
+                low = np.percentile(
+                    source.loc[:, list(gene_columns)].to_numpy(dtype=np.float64),
+                    LOW_PERCENTILE,
+                    axis=0,
+                )
+            inner, train = _knowledge_view(
+                _KNOWLEDGE_FEATURES[stage.block], index, low, rows
             )
-            model = gene_ridge(train, remaining, [stage.penalty], pooled=True)[0]
+            model = gene_ridge(train, gene_remaining, [stage.penalty], pooled=True)[0]
         else:
-            features, train = _selected_view(fit_rows)
-            position = {gene: i for i, gene in enumerate(space)}
+            inner, train = _selected_view(rows)
+            position = {gene: i for i, gene in enumerate(gene_columns)}
             own = np.array([position.get(gene, -1) for gene in genes], dtype=int)
-            selection = select_genes(train, remaining, stage.selected, own)
-            model = selected_ridge(train, selection, remaining, [stage.penalty])[0]
-        remaining -= model.predict(train)
+            selection = select_genes(train, gene_remaining, stage.selected, own)
+            model = selected_ridge(train, selection, gene_remaining, [stage.penalty])[0]
+        # Reassigned, never updated in place: without gene rows it aliases
+        # ``remaining`` until here.
+        gene_remaining = gene_remaining - model.predict(train)
+
+        def features(rows_in: pd.DataFrame, inner=inner) -> np.ndarray:
+            return inner(rows_in.loc[:, list(gene_columns)])
+
         stages.append((stage.block, features, model))
     return FittedPrior(genes, space, stages)
 
@@ -317,6 +364,8 @@ def crossfit(
 ) -> dict[str, pd.DataFrame]:
     """Per-stage predictions of each fold's query rows by the prior fitted on the
     lines outside that fold, keyed by the query rows' index."""
+    if inputs.gene_rows is not None:
+        raise ValueError("cross-fitting does not split gene rows by fold")
     parts: dict[str, list[pd.DataFrame]] = {}
     for fold, query in sorted(queries.items()):
         strays = [m for m in query.index if folds[m] != fold]

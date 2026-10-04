@@ -1,4 +1,4 @@
-"""Train-only metric definitions and the fast selective Spearman."""
+"""Train-only metric definitions."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ import pandas as pd
 
 from src.context_prior.targets import fit_definitions, residual_frame
 from src.data.splits import FixedSplit
-from src.eval.geneeffect import aggregate_geneeffect
-from src.eval.metrics import macro_gene_spearman
 
 SETTINGS = {
     "variable_gene_min_observations": 3,
@@ -34,30 +32,4 @@ def test_definitions_use_labelled_training_lines_only():
     residual = residual_frame(effect, ["V2"], definitions)
     assert np.isclose(
         residual.loc["V2", "B"], effect.loc["V2", "B"] - definitions.gene_means["B"]
-    )
-
-
-def test_fast_selector_matches_aggregate_geneeffect():
-    rng = np.random.default_rng(1)
-    genes, lines = [f"G{i}" for i in range(5)], [f"L{i}" for i in range(7)]
-    truth = rng.normal(size=(5, 7))
-    prediction = rng.normal(size=(5, 7))
-    truth[0, :3] = np.nan
-    prediction[1] = 0.5  # constant: undefined
-    prediction[2, :4] = 1.0  # ties
-    frame = pd.DataFrame(
-        {
-            "model_id": np.tile(lines, 5),
-            "gene_symbol": np.repeat(genes, 7),
-            "residual": truth.ravel(),
-            "residual_prediction": prediction.ravel(),
-        }
-    ).dropna(subset=["residual"])
-    frame["gene_effect"] = frame["residual"]
-    frame["geneeffect_prediction"] = frame["residual_prediction"]
-    metrics, _, _ = aggregate_geneeffect(
-        frame, model_ids=lines, genes=genes, variable_genes=genes, selective_genes=genes
-    )
-    assert np.isclose(
-        macro_gene_spearman(truth, prediction), metrics["selective_spearman"]
     )

@@ -76,18 +76,38 @@ def load_config(path: Path) -> dict[str, Any]:
 _PRIOR_GROUPS = {
     "paths": "extra_lines reference model bulk_expression",
     "training_side": "exclude_lineages",
-    "curve": "sizes subsets selected",
-    "selection": "penalties shrinkages selected rank view_weights",
-    "prior": "components folds bootstrap_repeats",
+    "prior": "components folds bootstrap_repeats selected_genes",
+    "penalties": "components gene",
 }
-_PRIOR_TOP_LEVEL = "seed joint_config output_root"
+_PRIOR_TOP_LEVEL = "seed joint_config output_root reference block_sets experiments"
+_EXPERIMENT_KEYS = "kind settings block_sets"
+GENE_BLOCKS = ("own_expression", "partners", "data_selected")
 
 
 def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Reject missing and unknown keys of a linear-context-prior config."""
+    """Keys of a linear-context-prior experiment config; experiments and block
+    sets are named by the config, their shape is checked."""
     _require_keys(config, {*_PRIOR_GROUPS, *_PRIOR_TOP_LEVEL.split()}, "config")
     for name, keys in _PRIOR_GROUPS.items():
         _require_keys(config[name], set(keys.split()), name)
+    for name, blocks in config["block_sets"].items():
+        if (
+            not blocks
+            or blocks[0] != "expression_components"
+            or any(b not in GENE_BLOCKS for b in blocks[1:])
+        ):
+            raise ValueError(
+                f"block set {name}: expression_components first, then gene-level blocks"
+            )
+    for name, experiment in config["experiments"].items():
+        _require_keys(experiment, set(_EXPERIMENT_KEYS.split()), f"experiments.{name}")
+        unknown = set(experiment["block_sets"]) - set(config["block_sets"])
+        if unknown:
+            raise ValueError(
+                f"experiments.{name}: unknown block sets {sorted(unknown)}"
+            )
+    if config["reference"] not in config["experiments"]:
+        raise ValueError("reference must name an experiment")
     return dict(config)
 
 

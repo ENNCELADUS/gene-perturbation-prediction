@@ -6,15 +6,15 @@ usage() {
 Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh revision CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh test CHECKPOINT
-       hpc/run.sh prior CONFIG [--run-id ID] [--oracle-only]   (linear context prior, CPU)
+       hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   (linear context prior, CPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment.
 `all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every
 GPU step; --gpus restricts it to the listed ids among the visible ones.
 `revision` runs training, validation evaluation and baselines for one config
 (no response comparison, no readout) and writes summary.md and revision.json.
-`prior` runs the linear context prior (learning curve, extra-lines decision,
-block selection, cross-fitting, one test score) into outputs/context_prior/<id>/;
---oracle-only stops after the bulk-input curve and decision.
+`prior` runs the named experiments (default: all) of a linear context prior
+config: every bridge setting, block set and penalty, scored on validation and
+test, into outputs/context_prior/<id>/ (rows/, results.md).
 EOF
 }
 

@@ -1,0 +1,51 @@
+# Bridge remedies for the linear context prior: every experiment x setting x block
+# set x penalty is scored on validation and test; the table is the result.
+seed: 0
+joint_config: configs/revision/frozen_huber.yaml
+output_root: outputs/context_prior
+paths:
+  extra_lines: configs/benchmarks/extra_bulk_lines_26Q1.json
+  reference: configs/context_prior/reference
+  model: data/sl_dependency_v0/raw/depmap/Model.csv
+  bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
+training_side:
+  exclude_lineages: [Lymphoid, Myeloid]
+prior: {components: 128, folds: 5, bootstrap_repeats: 1000, selected_genes: 50}
+penalties:
+  components: [0.1, 1.0, 10.0, 100.0, 1000.0]
+  gene: [0.1, 1.0, 10.0]
+block_sets:
+  components: [expression_components]
+  own_and_partners: [expression_components, own_expression, partners]
+  selected: [expression_components, data_selected]
+  all: [expression_components, own_expression, partners, data_selected]
+reference: affine
+experiments:
+  affine:
+    kind: affine
+    settings: [{}]
+    block_sets: [components, own_and_partners, selected, all]
+  contrastive:
+    kind: contrastive
+    settings:
+      - {pseudo_components: 2, bulk_components: 0}
+      - {pseudo_components: 4, bulk_components: 0}
+      - {pseudo_components: 8, bulk_components: 0}
+      - {pseudo_components: 16, bulk_components: 0}
+      - {pseudo_components: 2, bulk_components: 4}
+      - {pseudo_components: 4, bulk_components: 4}
+      - {pseudo_components: 8, bulk_components: 4}
+      - {pseudo_components: 16, bulk_components: 4}
+    block_sets: [components, own_and_partners, selected, all]
+  gating:
+    kind: gating
+    settings: [{threshold: 0.3}, {threshold: 0.5}, {threshold: 0.7}]
+    block_sets: [own_and_partners, selected, all]
+  noise_matched:
+    kind: noise_matched
+    settings: [{}]
+    block_sets: [own_and_partners, selected, all]
+  denoise:
+    kind: denoise
+    settings: [{rank: 16}, {rank: 32}, {rank: 64}]
+    block_sets: [components, own_and_partners, selected, all]
