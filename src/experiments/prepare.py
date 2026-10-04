@@ -317,6 +317,76 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     return manifest_path
 
 
+def _pseudobulk_line(
+    model_id: str,
+    source_path: Path,
+    *,
+    var_ensembl_col: str,
+    hvg_gene_symbol_col: str,
+    genes: tuple[str, ...],
+):
+    from src.data.basal import symbol_column
+    from src.data.pseudobulk import pseudobulk
+    from src.data.tx1_cache import read_registry_source
+
+    source = read_registry_source(
+        source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
+    )
+    column = symbol_column(source.var, hvg_gene_symbol_col)
+    return pseudobulk(source.X, source.var[column].astype(str).tolist(), genes)
+
+
+def prepare_pseudobulk(config: Mapping[str, Any], genes: Sequence[str]) -> Path:
+    """Write ``<prepared_root>/pseudobulk/`` for every registered line, once.
+
+    Reads each line's raw source (preparation stays the only reader of raw data);
+    skipped when the manifest exists for the same genes.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from src.data.geneeffect import load_source_registry
+    from src.data.pseudobulk import PSEUDOBULK_DIR, TRANSFORM
+    from src.data.splits import load_geneeffect_226_split
+
+    root = Path(config["prepared_root"]) / PSEUDOBULK_DIR
+    manifest_path = root / "manifest.json"
+    if manifest_path.is_file():
+        if json.loads(manifest_path.read_text())["genes"] != list(genes):
+            raise ValueError(f"{root} holds pseudo-bulk for other genes")
+        return manifest_path
+    paths, settings = config["paths"], config["preparation"]
+    split = load_geneeffect_226_split(Path(paths["split"]))
+    registry = load_source_registry(Path(paths["source_registry"]), split)
+    calls = [
+        partial(
+            _pseudobulk_line,
+            str(model_id),
+            Path(row["source_path"]),
+            var_ensembl_col=settings["var_ensembl_col"],
+            hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
+            genes=tuple(genes),
+        )
+        for model_id, row in registry.iterrows()
+    ]
+    frame = pd.DataFrame(
+        np.stack(list(_in_processes(calls, LINE_PROCESSES))),
+        index=pd.Index([str(m) for m in registry.index], name="model_id"),
+        columns=list(genes),
+    )
+    root.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(root / "pseudobulk.parquet")
+    manifest = {
+        "transform": TRANSFORM,
+        "genes": list(genes),
+        "lines": list(frame.index),
+    }
+    temporary = manifest_path.with_name(manifest_path.name + ".tmp")
+    temporary.write_text(json.dumps(manifest, indent=2) + "\n")
+    os.replace(temporary, manifest_path)
+    return manifest_path
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
