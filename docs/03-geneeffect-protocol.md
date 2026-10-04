@@ -5,11 +5,11 @@ Updated 2026-10-03. This is the protocol for the **implemented** GeneEffect trac
 metrics and results. The design behind the current wiring is the
 [expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md),
 and operating commands are in the [runbook](../hpc/README.md). One run has completed: seed 0,
-trained, tested and baselined ([result](results/joint_geneeffect_seed0/README.md)). It
+trained, tested and baselined ([result](../results/joint_geneeffect_seed0/README.md)). It
 predates the expression-space change of §3.4 (STATE was fed raw counts) and its numbers are
 not compared like for like with the current pipeline. The best validation model to date is
 that backbone frozen under an explicit gene-specific context-slope head (§7, validation
-only). Response-pathway diagnostics (§8, [result](results/p1_response_pathway_diagnostics/README.md))
+only). Response-pathway diagnostics (§8, [result](../results/p1_response_pathway_diagnostics/README.md))
 found that the response pathway learns the cell lines it is adapted on but does not
 transfer to a held-out line; §9 specifies the comparison that measures what STATE adds and
 the single command that runs the whole pipeline. The 2026-10-03
@@ -63,7 +63,7 @@ nine-context SL split never substitute for each other.
 
 Use each line's basal cells as raw UMI counts, never CPM: Tx1 does not read CPM the way
 it reads the counts underneath, and the shift survives pooling
-([measured](results/exp13_stage0/README.md)). A fixed random sample of up to 128 basal
+([measured](../results/exp13_stage0/README.md)). A fixed random sample of up to 128 basal
 cells per line is encoded once by the frozen Tx1-3B foundation model; the same cells,
 in the expression space of §3.4, are STATE's basal input.
 
@@ -413,7 +413,7 @@ Joint Huber improves on gene-mean by only 0.0773%, while residual correlations t
 context baselines. Response validation loss fell 45.57% from epoch 1 to 8 without
 sustained GeneEffect validation improvement. This establishes a working training and
 evaluation path, not a context-modelling advantage
-([full result](results/joint_geneeffect_seed0/README.md)).
+([full result](../results/joint_geneeffect_seed0/README.md)).
 
 The best model to date is the selected seed-0 joint backbone, frozen, read out by a
 residual head that adds an explicit gene-specific context slope to the §4 head:
@@ -430,9 +430,9 @@ Huber, the rule of that time (§5 now selects on selective-gene Spearman). The m
 is validation-selected and carries **no test number**: the test split was spent once on
 the joint backbone, which improved on the gene mean by 0.08% Huber and trailed the
 context ridge baselines
-([joint result](results/joint_geneeffect_seed0/README.md)), and it has not been opened
+([joint result](../results/joint_geneeffect_seed0/README.md)), and it has not been opened
 for any readout. Provenance and the full numbers:
-[readout and response diagnostics](results/p1_response_pathway_diagnostics/README.md).
+[readout and response diagnostics](../results/p1_response_pathway_diagnostics/README.md).
 All result figures are drawn from tracked evidence by
 [`plot_geneeffect_protocol.py`](figures/plot_geneeffect_protocol.py).
 
@@ -479,7 +479,7 @@ linear context baseline and no SL claim.
 
 Three closed, validation-only diagnostics on the selected backbone locate the
 bottleneck; designs are under [`specs/`](specs/) and evidence in the
-[result note](results/p1_response_pathway_diagnostics/README.md). The seed-0 backbone
+[result note](../results/p1_response_pathway_diagnostics/README.md). The seed-0 backbone
 was trained on response data cached as raw counts, whereas STATE expects log-normalised
 expression, so its response block made no detectable use of perturbation identity. The diagnostics
 below ran in STATE's log-normalised space, with library size approximated by scaling

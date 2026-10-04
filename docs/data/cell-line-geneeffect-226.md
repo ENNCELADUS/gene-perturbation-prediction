@@ -1,9 +1,9 @@
 # Cell-Line GeneEffect Benchmark
 
 **Status:** One fixed split, used by the final run of the historical staged GeneEffect
-protocol (Exp13, [result](../results/exp13_stage2_full/README.md)) and by the seed-0 run of
+protocol (Exp13, [result](../../results/exp13_stage2_full/README.md)) and by the seed-0 run of
 the [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been observed once
-([result](../results/joint_geneeffect_seed0/README.md)).
+([result](../../results/joint_geneeffect_seed0/README.md)).
 
 ## Fixed split
 
@@ -26,7 +26,7 @@ contexts. Raw UMI, registered basal and processed CPM input semantics remain rec
 per row at the available source level; `registered_basal` is not a numeric matrix
 semantic. **Resolved 2026-08-18:** the 152 `kinker_sccle` lines were published as
 `processed_cpm`, and Tx1 does not read CPM like the counts underneath it (the shift survives
-pooling; [result](../results/exp13_stage0/README.md)). Raw UMI counts from
+pooling; [result](../../results/exp13_stage0/README.md)). Raw UMI counts from
 SCP542 now back all 152 lines — protocol §6, branch 1. Membership is unchanged.
 
 The split JSON is the sole membership authority. Fit residual targets, normalization,

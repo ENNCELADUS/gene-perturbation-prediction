@@ -22,7 +22,7 @@
 
 </div>
 
-> **Status (2026-10-02):** The seed-0 joint GeneEffect run is trained, tested and baselined: its Huber loss beats the context-blind gene mean by 0.08% and its residual correlations trail a Tx1 context-PCA ridge, a working path and not a result. On that frozen backbone, a readout head with an explicit gene-specific context slope lifts validation residual Pearson from 0.05 to 0.13 and ties the eight-component context-PCA ridge. No tested interface transfers a perturbation response to a held-out cell line. The pipeline now runs in STATE's log expression space, with STATE on its own released basal encoder and Tx1 feeding only the GeneEffect head, and one command runs preparation, a six-arm response-model comparison, joint training and validation evaluation; it has no result yet. Further model decisions use validation. No SL model has run. [`Protocol`](docs/03-geneeffect-protocol.md) · [`Diagnostics`](docs/results/p1_response_pathway_diagnostics/README.md) · [`Joint result`](docs/results/joint_geneeffect_seed0/README.md) · [`Research contract`](docs/01-blueprint.md).
+> **Status (2026-10-02):** The seed-0 joint GeneEffect run is trained, tested and baselined: its Huber loss beats the context-blind gene mean by 0.08% and its residual correlations trail a Tx1 context-PCA ridge, a working path and not a result. On that frozen backbone, a readout head with an explicit gene-specific context slope lifts validation residual Pearson from 0.05 to 0.13 and ties the eight-component context-PCA ridge. No tested interface transfers a perturbation response to a held-out cell line. The pipeline now runs in STATE's log expression space, with STATE on its own released basal encoder and Tx1 feeding only the GeneEffect head, and one command runs preparation, a six-arm response-model comparison, joint training and validation evaluation; it has no result yet. Further model decisions use validation. No SL model has run. [`Protocol`](docs/03-geneeffect-protocol.md) · [`Diagnostics`](results/p1_response_pathway_diagnostics/README.md) · [`Joint result`](results/joint_geneeffect_seed0/README.md) · [`Research contract`](docs/01-blueprint.md).
 
 The central question of the active direction:
 
@@ -33,18 +33,18 @@ The intuition is compositional: **a cell line's dependency profile is what makes
 ## *Latest News* 🔥
 
 - **[2026/10]** **One expression space and one command.** STATE's released checkpoint was trained on whole-library-normalised `log1p` expression, but the joint pipeline fed it raw counts through a newly initialised Tx1 basal layer. Every expression quantity except Tx1's input is now `log1p(x·T/library size)` on STATE's 2,000 highly variable genes, STATE reads basal cells through its own released encoder, and Tx1 feeds only the GeneEffect head. `hpc/run.sh all` runs preparation, a six-arm leave-one-anchor-out response-model comparison (what the STATE transformer adds over a plain MLP, and what Tx1 adds as a representation), joint training and validation evaluation to one `summary.md`. The closed diagnostic harnesses were deleted; their evidence stays. [`Design`](docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md) · [`Protocol §9`](docs/03-geneeffect-protocol.md#9-response-model-comparison-and-the-all-run).
-- **[2026/09]** **Response pathway diagnosed and its numeric-space defect corrected.** Seed-0 diagnostics: response preparation had cached raw UMI counts for a STATE decoder trained in log space, leaving the backbone's response block without perturbation-identity use. After the correction every adapted interface learns its training lines, but none beats no-change on a held-out cell line (pooled leave-one-anchor-out ratios 1.09–26); the untrained released checkpoint beats no-change on HepG2 and Jurkat, not K562 or HCT116. A gene-specific context slope raises validation residual Pearson 0.05 → 0.13 at three head seeds and ties the eight-component context-PCA ridge. No context or SL claim. [`Result`](docs/results/p1_response_pathway_diagnostics/README.md) · [`Protocol §8`](docs/03-geneeffect-protocol.md#8-where-the-model-stalls-response-pathway-diagnostics).
-- **[2026/09]** **Seed-0 joint GeneEffect run trained, tested and baselined.** Test Huber 0.01612 against 0.01613 for the gene mean (0.08% lower); residual Pearson 0.054 against 0.122 for the Tx1 context-PCA ridge. A working training and evaluation path, not a context-modelling result. [`Result`](docs/results/joint_geneeffect_seed0/README.md).
+- **[2026/09]** **Response pathway diagnosed and its numeric-space defect corrected.** Seed-0 diagnostics: response preparation had cached raw UMI counts for a STATE decoder trained in log space, leaving the backbone's response block without perturbation-identity use. After the correction every adapted interface learns its training lines, but none beats no-change on a held-out cell line (pooled leave-one-anchor-out ratios 1.09–26); the untrained released checkpoint beats no-change on HepG2 and Jurkat, not K562 or HCT116. A gene-specific context slope raises validation residual Pearson 0.05 → 0.13 at three head seeds and ties the eight-component context-PCA ridge. No context or SL claim. [`Result`](results/p1_response_pathway_diagnostics/README.md) · [`Protocol §8`](docs/03-geneeffect-protocol.md#8-where-the-model-stalls-response-pathway-diagnostics).
+- **[2026/09]** **Seed-0 joint GeneEffect run trained, tested and baselined.** Test Huber 0.01612 against 0.01613 for the gene mean (0.08% lower); residual Pearson 0.054 against 0.122 for the Tx1 context-PCA ridge. A working training and evaluation path, not a context-modelling result. [`Result`](results/joint_geneeffect_seed0/README.md).
 - **[2026/09]** **Staged GeneEffect protocol (Exp13) completed — negative point estimate.**
   The selected model reached held-out test macro per-gene Spearman 0.0225, below
   context-PCA ridge (0.0851) and nearest-line (0.0462); its macro per-line score was
   0.0217 versus 0.0993 and 0.0577. This one-seed GeneEffect result licenses no positive
-  context or SL claim. [`Result`](docs/results/exp13_stage2_full/README.md).
-- **[2026/08]** **Tx1 does not read CPM like raw counts.** Measured per-cell cosine 0.92–0.95 against the raw encode, and unlike gene-subsampling noise the shift survives pooling to the per-line mean (0.972–0.987), so the 152 Kinker `processed_cpm` lines were rebuilt from SCP542 raw UMI counts. Also found: the collator subsamples genes with an unseeded `randperm` above 2048 detected genes, so runs pin a collator seed. [`Result`](docs/results/exp13_stage0/README.md).
+  context or SL claim. [`Result`](results/exp13_stage2_full/README.md).
+- **[2026/08]** **Tx1 does not read CPM like raw counts.** Measured per-cell cosine 0.92–0.95 against the raw encode, and unlike gene-subsampling noise the shift survives pooling to the per-line mean (0.972–0.987), so the 152 Kinker `processed_cpm` lines were rebuilt from SCP542 raw UMI counts. Also found: the collator subsamples genes with an unseeded `randperm` above 2048 detected genes, so runs pin a collator seed. [`Result`](results/exp13_stage0/README.md).
 - **[2026/08]** **Nine-context SL split built.** K562/JURKAT/OVCAR8/HAP1/HT29 are train, A549 validation, and 22RV1/PC9/HELA test; PC9/HELA are SL-label-only, with cross-side source rows and pairs isolated. [`Data card`](docs/data/sl-context-screen.md) · [`Protocol`](docs/04-sl-ranking-protocol.md).
-- **[2026/07]** **Tx1-conditioned STATE few-shot GeneEffect gate completed — negative.** On a 28 train / 5 validation / 9 test GeneEffect split and a 587-gene slice, the Tx1-3B-conditioned STATE model failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). The HVG-conditioned control was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. [`Result`](docs/results/tx1-hvg-geneeffect-phase-f.md).
-- **[2026/07]** **K562 counterfactual co-dependency kill-test against Horlbeck completed — negative.** The frozen K562 forward-model backbone composed into a symmetrized counterfactual co-dependency score does not recover measured Horlbeck K562 genetic interactions over the 83,028 covered pairs (|Spearman| < 0.01; AUROC ≈ 0.52, below the single-gene floor; no dose-response), across both pooler reference conventions. The composition mechanism was not extended across cell lines. [`Result`](docs/results/exp05-bridge-a-horlbeck-kill-test.md).
-- **[2026/07]** **HCT116 frozen-backbone audit closed negative.** Direct K562 GeneEffect transfer remained strong (Spearman 0.554), but the response head collapsed and added no independent HCT116 signal. Single-gene backbone evidence, not cross-cell-line SL. [`Result`](docs/results/exp05-hct116-frozen-backbone-transport.md).
+- **[2026/07]** **Tx1-conditioned STATE few-shot GeneEffect gate completed — negative.** On a 28 train / 5 validation / 9 test GeneEffect split and a 587-gene slice, the Tx1-3B-conditioned STATE model failed to beat copy-K562 + 10 labels (`Delta rho = -0.0048`, 95% CI `[-0.0941, 0.0769]`, registered `rho_min = 0.05`). The HVG-conditioned control was also negative (`Delta rho = 0.0326`, 95% CI `[-0.0602, 0.1181]`). Both few-shot curves deteriorated with larger k. [`Result`](results/tx1-hvg-geneeffect-phase-f.md).
+- **[2026/07]** **K562 counterfactual co-dependency kill-test against Horlbeck completed — negative.** The frozen K562 forward-model backbone composed into a symmetrized counterfactual co-dependency score does not recover measured Horlbeck K562 genetic interactions over the 83,028 covered pairs (|Spearman| < 0.01; AUROC ≈ 0.52, below the single-gene floor; no dose-response), across both pooler reference conventions. The composition mechanism was not extended across cell lines. [`Result`](results/exp05-bridge-a-horlbeck-kill-test.md).
+- **[2026/07]** **HCT116 frozen-backbone audit closed negative.** Direct K562 GeneEffect transfer remained strong (Spearman 0.554), but the response head collapsed and added no independent HCT116 signal. Single-gene backbone evidence, not cross-cell-line SL. [`Result`](results/exp05-hct116-frozen-backbone-transport.md).
 
 ## Why This Project?
 
@@ -165,11 +165,11 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
 - `src/train.py`, `src/evaluate.py`: thin module entry points.
 - `hpc/`: launcher and [operator guide](hpc/README.md); `scripts/` contains operational utilities.
 - `configs/`: current joint config, fixed benchmark membership and small input provenance.
-- `outputs/`: ignored generated runs; `docs/results/`: tracked reports and small evidence.
+- `outputs/`: ignored generated runs; `results/`: tracked reports and small evidence.
 
 ## Results
 
-Current GeneEffect-track results are in the [protocol §7](docs/03-geneeffect-protocol.md#7-results) and [`docs/results/`](docs/results/). The sections below are historical evidence from retired routes; their raw local outputs and implementations are not in the tree, and they are not results of the active context-conditioned SL protocol. Consolidated table: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
+Current GeneEffect-track results are in the [protocol §7](docs/03-geneeffect-protocol.md#7-results) and [`results/`](results/). The sections below are historical evidence from retired routes; their raw local outputs and implementations are not in the tree, and they are not results of the active context-conditioned SL protocol. Consolidated table: [`results/prior-internal-evidence.md`](results/prior-internal-evidence.md).
 
 ### HCT116 Frozen-K562-Backbone Transport (one-shot audit, 2026-07-21)
 
@@ -179,11 +179,11 @@ collapsed prediction standard deviation of 0.059 versus 0.409 for HCT116
 GeneEffect. A follow-up analysis controlling for K562 GeneEffect gave
 partial Spearman about -0.005. The failed path is HCT116 observed response through the frozen K562
 fitness head; this is not a pairwise SL or cross-cell-line SL result. Full
-protocol, metrics, and interpretation: [`docs/results/exp05-hct116-frozen-backbone-transport.md`](docs/results/exp05-hct116-frozen-backbone-transport.md).
+protocol, metrics, and interpretation: [`results/exp05-hct116-frozen-backbone-transport.md`](results/exp05-hct116-frozen-backbone-transport.md).
 
 ### Single-Cell Bag → Dependency (Adamson K562 external transfer)
 
-The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson **Spearman ≈ 0.67**, **AUROC ≈ 0.91**, **AUPRC ≈ 0.80**, with held-out-gene Spearman ≈ 0.64 — clearing the original distribution-regression gate and beating the earlier scVI128 single-head gated-attention row. Full tables: [`docs/results/prior-internal-evidence.md`](docs/results/prior-internal-evidence.md).
+The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson **Spearman ≈ 0.67**, **AUROC ≈ 0.91**, **AUPRC ≈ 0.80**, with held-out-gene Spearman ≈ 0.64 — clearing the original distribution-regression gate and beating the earlier scVI128 single-head gated-attention row. Full tables: [`results/prior-internal-evidence.md`](results/prior-internal-evidence.md).
 
 ## Data Sources and Roles
 
@@ -200,7 +200,7 @@ The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson *
 ## Documentation
 
 - [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents.
-- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract; start here. [`docs/results/`](docs/results/) holds registered evidence.
+- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research contract; start here. [`results/`](results/) holds registered evidence.
 - [`docs/03-geneeffect-protocol.md`](docs/03-geneeffect-protocol.md) and [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md) — the two executable protocols.
 - [`docs/data/`](docs/data/) — dataset cards for downloaded data.
 - [`hpc/README.md`](hpc/README.md) — running the pipeline on the GPU host.

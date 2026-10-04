@@ -74,7 +74,7 @@ difference to the Tx1 ridge.
 ## 5. Documents
 
 `docs/03-geneeffect-protocol.md` §4–§6 (head, objective, selection, metrics) and `CLAUDE.md`
-(the `best.pt` rule) change with the code. Results go to `docs/results/geneeffect_revision/` after
+(the `best.pt` rule) change with the code. Results go to `results/geneeffect_revision/` after
 the runs.
 
 ## 6. Claim boundaries
