@@ -2,9 +2,9 @@
 
 **Status:** design, 2026-10-02, agreed in conversation; awaiting review of this written form.
 Bound by the [blueprint](../01-blueprint.md) claim boundaries. Supersedes the response wiring of
-the [joint training design](2026-09-06-modular-joint-training-design.md) and the
-[readout objective plan](2026-09-10-readout-objective-and-selection-design.md)'s ordering of
-response-model work after readout work.
+the joint training design (`2026-09-06-modular-joint-training-design.md`) and the
+readout objective plan (`2026-09-10-readout-objective-and-selection-design.md`)'s ordering of
+response-model work after readout work. Both were removed from the tree; `git show 1694f5c:docs/specs/<name>`.
 Evidence it builds on: [response-pathway diagnostics](../results/p1_response_pathway_diagnostics/README.md).
 
 ## 1. Why

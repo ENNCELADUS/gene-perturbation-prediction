@@ -1,7 +1,7 @@
 # Exp13 Formal Stage 2 GeneEffect Residual Benchmark
 
 Historical staged protocol, retired on 2026-09-06. The replacement
-[joint training design](../../specs/2026-09-06-modular-joint-training-design.md)
+joint training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show 1694f5c:<path>`)
 has no scientific run yet; the results below belong to the original staged run.
 
 ## Status
