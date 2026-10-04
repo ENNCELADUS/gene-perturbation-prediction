@@ -48,7 +48,12 @@ from src.context_prior.prior import (
     total,
 )
 from src.context_prior.reference import load_reference
-from src.context_prior.space import quantile_normalize, quantile_reference
+from src.context_prior.space import (
+    fill_unmeasured,
+    measured_genes,
+    quantile_normalize,
+    quantile_reference,
+)
 from src.context_prior.targets import Definitions, fit_definitions, residual_frame
 from src.context_prior.view_weights import ViewWeights, fit_view_weights
 from src.context_prior.views import fit_expression_components
@@ -136,6 +141,7 @@ class RunData:
     pseudobulk: pd.DataFrame | None
     bridge: Bridge | None
     queries: Mapping[str, pd.DataFrame]
+    filled: pd.Series | None = None
 
     def truth(self, lines: Sequence[str]) -> pd.DataFrame:
         """Residual of ``lines`` in residual-SD units; reads their labels."""
@@ -175,7 +181,7 @@ def load_run_data(config: Mapping[str, Any], *, oracle_only: bool) -> RunData:
     needed = {*split.all_model_ids, *kept(extra.labelled)}
     gene_effect = gene_effect.loc[gene_effect.index.isin(needed)]
 
-    pseudo = None
+    pseudo = filled = None
     if oracle_only:
         panel = [g for g in gene_effect.columns if g in bulk.columns]
         space = list(bulk.columns)
@@ -188,8 +194,10 @@ def load_run_data(config: Mapping[str, Any], *, oracle_only: bool) -> RunData:
         panel = list(read_manifest(prepared)["common_gene_panel"])
         prepare_pseudobulk(joint, list(bulk.columns))
         pseudo = read_pseudobulk(prepared)
-        finite = np.isfinite(pseudo.loc[:, list(bulk.columns)].to_numpy()).all(axis=0)
-        space = [g for g, ok in zip(bulk.columns, finite, strict=True) if ok]
+        # The space is what every scored line measures; a training line whose
+        # source lacks one of those genes takes the training lines' mean for it.
+        space = measured_genes(pseudo, list(bulk.columns), [*split.val, *split.test])
+        pseudo, filled = fill_unmeasured(pseudo.loc[:, space], split.train)
     definitions = fit_definitions(gene_effect, split, panel, joint["features"])
     gene_effect = gene_effect.loc[:, list(definitions.genes)]
 
@@ -202,7 +210,7 @@ def load_run_data(config: Mapping[str, Any], *, oracle_only: bool) -> RunData:
     queries = {"oracle": normalized.loc[oracle_lines]}
     pseudobulk = bridge = None
     if pseudo is not None:
-        pseudobulk = quantile_normalize(pseudo.loc[:, space], reference_profile)
+        pseudobulk = quantile_normalize(pseudo, reference_profile)
         bridge = fit_bridge(
             pseudobulk.loc[list(single_cell_train)],
             expression.loc[list(single_cell_train)],
@@ -236,6 +244,7 @@ def load_run_data(config: Mapping[str, Any], *, oracle_only: bool) -> RunData:
         pseudobulk=pseudobulk,
         bridge=bridge,
         queries=queries,
+        filled=filled,
     )
 
 
@@ -982,6 +991,15 @@ def write_summary(run_dir: Path) -> Path:
             for entry in selection["log"]
         ]
         out += ["", f"Chosen prior: `{json.dumps(selection['spec'])}`"]
+    if (run_dir / "space.json").is_file():
+        space = _read_json(run_dir / "space.json")
+        out += [
+            "",
+            f"Shared expression space: {space['genes']} genes, the bulk genes "
+            "every validation and test line measures; "
+            f"{space['filled_lines']} training lines lacked some of them in their "
+            "source and took the training mean for those.",
+        ]
     if (run_dir / "crossfit.json").is_file():
         record = _read_json(run_dir / "crossfit.json")
         quality, weights = record["bridge_quality"], record["view_weights"]
@@ -1060,6 +1078,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"summary: {write_summary(run_dir)}", flush=True)
         return 0
     data = load_run_data(config, oracle_only=args.oracle_only)
+    if data.filled is not None and not (run_dir / "space.json").is_file():
+        filled = data.filled.loc[data.filled > 0]
+        _write_json(
+            run_dir / "space.json",
+            {
+                "genes": len(data.pseudobulk.columns),
+                "rule": "genes every validation and test line measures",
+                "filled_lines": len(filled),
+                "filled_per_line": {line: int(n) for line, n in filled.items()},
+            },
+        )
     if not (run_dir / "decision.json").is_file():
         rows, predictions = run_curve(data)
         _write_json(run_dir / "curve.json", rows)

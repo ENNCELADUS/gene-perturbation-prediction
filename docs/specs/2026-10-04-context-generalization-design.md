@@ -64,9 +64,12 @@ labels. One run of the prior drops the haematopoietic extras.
 
 ### 3.2 Shared expression space and the bridge
 
-- **Genes:** protein-coding genes present in both the 26Q1 bulk matrix and the single-cell gene panel, joined by
-  symbol, read from DepMap's `SYMBOL (Entrez)` column headers (not by Entrez ID); the list is recorded with the
-  prepared artifacts.
+- **Genes:** the 26Q1 bulk matrix's protein-coding genes that every validation and test line's single-cell source
+  measures, joined by symbol, read from DepMap's `SYMBOL (Entrez)` column headers (not by Entrez ID); 9,711 genes
+  on the current sources. The sources differ in gene vocabulary: the 47 original training contexts measure 7,715
+  to 18,467 genes, so requiring every line would leave 4,425. A training line whose source lacks a space gene
+  takes that gene's mean over the single-cell training lines that measured it, before quantile normalisation;
+  the run records how many values each line took (`space.json`).
 - **Bulk side:** DepMap `OmicsExpressionTPMLogp1HumanProteinCodingGenes`, default entry per model.
 - **Single-cell side:** pseudo-bulk per line: raw UMI summed over all of the line's basal cells, CPM, log1p.
   Computed by preparation (the only reader of raw data) into the prepared root and recorded in its manifest,
