@@ -34,6 +34,10 @@ with open(os.environ["ARG_LOG"], "a") as handle:
             ["-m", "src.experiments.all", "a b.yaml", "--run-id", "r", "--gpus", "1,3"],
         ),
         (
+            ["prior", "a b.yaml", "--run-id", "r"],
+            ["-m", "src.experiments.context_prior", "a b.yaml", "--run-id", "r"],
+        ),
+        (
             ["test", "checkpoint x.pt"],
             [
                 "-m",
