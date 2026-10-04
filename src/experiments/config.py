@@ -71,3 +71,27 @@ def load_config(path: Path) -> dict[str, Any]:
     """Load and validate a YAML config; relative paths resolve from the repo root."""
     with Path(path).open() as handle:
         return validate_config(yaml.safe_load(handle))
+
+
+_PRIOR_GROUPS = {
+    "paths": "extra_lines reference model bulk_expression",
+    "training_side": "exclude_lineages",
+    "curve": "sizes subsets selected",
+    "selection": "penalties shrinkages selected rank view_weights",
+    "prior": "components folds bootstrap_repeats",
+}
+_PRIOR_TOP_LEVEL = "seed joint_config output_root"
+
+
+def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Reject missing and unknown keys of a linear-context-prior config."""
+    _require_keys(config, {*_PRIOR_GROUPS, *_PRIOR_TOP_LEVEL.split()}, "config")
+    for name, keys in _PRIOR_GROUPS.items():
+        _require_keys(config[name], set(keys.split()), name)
+    return dict(config)
+
+
+def load_prior_config(path: Path) -> dict[str, Any]:
+    """Load and validate a prior YAML config; paths resolve from the repo root."""
+    with Path(path).open() as handle:
+        return validate_prior_config(yaml.safe_load(handle))
