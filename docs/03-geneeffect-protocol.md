@@ -640,9 +640,10 @@ block sets to fit under it. A run:
    carries the selective-Spearman gain over the reference row with a 95% paired line-bootstrap
    interval (1,000 resamples, seed 0).
 
-Tuning is the only automatic choice: a gene-level block set is fitted on top of the components
-stage at its best-validation penalty (point estimate); every components and gene penalty is a
-reported row.
+Every components penalty is a reported row, and a gene-level block set has a row for every
+components and gene penalty pair: the components penalty sets how much residual the gene-level
+stages fit, while the scale-free score barely separates components penalties on their own.
+The reference row's components penalty, its best on validation, is the only choice in code.
 Nothing is kept, dropped, passed or failed in code. Which setting, block set or extra-line
 cohort to use is decided by reading the table.
 
@@ -663,10 +664,12 @@ interval; its code is gone. Read from its tables: without the 133 haematopoietic
 prior on all labelled lines beat the prior on the single-cell training lines (+0.051 [0.027, 0.069]
 selective Spearman, bridged input), and the chosen config (expression components only) scored
 0.223 on validation and 0.223 on test against 0.130 and 0.121 for the Tx1 context-PCA ridge.
-Gene-level blocks did not survive the bridge (median per-gene bridge correlation 0.43). The next
-run compares four bridge remedies on that training side
-([plan](specs/2026-10-04-bridge-remedies-plan.md),
-`configs/context_prior/bridge_remedies.yaml`).
+Gene-level blocks did not survive the bridge (median per-gene bridge correlation 0.43). The
+bridge-remedy run (2026-10-04, `configs/context_prior/bridge_remedies.yaml`,
+[record](../results/bridge_remedies_seed0/README.md)) found no remedy above the reference on
+validation, but it fitted gene-level blocks on the components-only penalty pick, and on bulk
+input they add +0.0125 at components penalty 1. Its rerun over the full penalty grid uses
+`configs/context_prior/bridge_remedies_penalty_grid.yaml`.
 
 ## 11. Rules
 

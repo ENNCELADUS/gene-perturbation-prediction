@@ -5,9 +5,9 @@ runs every listed experiment: for each bridge setting it builds the bridged inpu
 (``src.context_prior.remedies.<kind>.build``), fits the prior for every block set
 and penalty, and scores validation and test (and the bulk-input oracle on
 validation). Each setting writes ``rows/<experiment>__<n>.json`` and is skipped when
-it exists, so a rerun resumes; ``results.md`` tabulates every row present. The
-components penalty under a gene-level block set is the one with the best validation
-score (tuning); nothing else is chosen here.
+it exists, so a rerun resumes; ``results.md`` tabulates every row present. A
+gene-level block set gives one row per components and gene penalty pair; nothing is
+chosen here except the reference row's components penalty.
 
 A run directory belongs to one config (``run_config.json``); processes running
 different experiments may share it, since rows are per setting.
@@ -355,8 +355,9 @@ def run_setting(
     ``val``/``test`` to the reference row's predictions (the gain baseline).
 
     A block set of expression components alone gives one row per components
-    penalty; any other gives one row per gene penalty, on the components penalty
-    with the best validation score.
+    penalty; any other gives one row per components and gene penalty pair, since
+    the components penalty sets how much residual the gene-level stages fit and
+    the scale-free score barely separates the components penalties alone.
     """
     config = base.config
     inputs = _build(base, experiment["kind"], setting)
@@ -364,7 +365,6 @@ def run_setting(
     repeats = int(config["prior"]["bootstrap_repeats"])
     selected = int(config["prior"]["selected_genes"])
     grid = fit.components()
-    chosen = _best_penalty(grid)
     rows = []
 
     def add(block_set, components_penalty, gene_penalty, predictions, scores):
@@ -400,12 +400,13 @@ def run_setting(
             for penalty, (predictions, scores) in grid.items():
                 add(name, penalty, None, predictions, scores)
             continue
-        for value in config["penalties"]["gene"]:
-            stages = [Stage("expression_components", chosen)] + [
-                Stage(b, float(value), selected if b == "data_selected" else 0)
-                for b in blocks[1:]
-            ]
-            add(name, chosen, float(value), *fit(stages))
+        for components in grid:
+            for value in config["penalties"]["gene"]:
+                stages = [Stage("expression_components", components)] + [
+                    Stage(b, float(value), selected if b == "data_selected" else 0)
+                    for b in blocks[1:]
+                ]
+                add(name, components, float(value), *fit(stages))
     diagnostics = bridge_diagnostics(
         inputs.oof_paired,
         inputs.oof_bulk,
@@ -414,7 +415,7 @@ def run_setting(
     )
     if inputs.gene_space is not None:
         diagnostics["gene_space"] = len(inputs.gene_space)
-    return {"components_penalty": chosen, "rows": rows, "diagnostics": diagnostics}
+    return {"rows": rows, "diagnostics": diagnostics}
 
 
 def reference_predictions(base: RunBase) -> dict[str, pd.DataFrame]:
@@ -560,8 +561,8 @@ def _write_results(run_dir: Path) -> Path:
         f"reference row (experiment `{config['reference']}`, first setting, "
         "expression components alone at their best validation penalty), with its "
         "95% paired line-bootstrap interval. Oracle: validation lines' bulk RNA as "
-        "input (off-contract). Under gene-level blocks the components penalty is "
-        "the best on validation. Nothing here is synthetic-lethality evidence.",
+        "input (off-contract). A gene-level block set has a row per components "
+        "and gene penalty pair. Nothing here is synthetic-lethality evidence.",
     ]
     records: dict[str, list[dict]] = {}
     for path in (run_dir / "rows").glob("*.json"):

@@ -312,24 +312,28 @@ def test_run_setting_scores_every_block_set_and_penalty(tmp_path):
     assert [row["components_penalty"] for row in components] == [
         float(p) for p in config["penalties"]["components"]
     ]
-    assert len(rows) == len(components) + 3 * 3
+    assert len(rows) == len(components) + 3 * len(components) * 3
     for row in rows:
         assert set(row["val"]) == set(run.METRICS) == set(row["oracle"])
         assert set(row["test"]) == set(run.METRICS)
         for split in ("val", "test"):
             assert len(row[f"{split}_gain"]["interval"]) == 2
     best = max(components, key=lambda row: row["val"]["selective_spearman"])
-    assert result["components_penalty"] == best["components_penalty"]
+    assert set(result) == {"rows", "diagnostics"}  # nothing chosen
     gene_level = [row for row in rows if row["block_set"] != "components"]
     assert {row["block_set"] for row in gene_level} == {
         "own_and_partners",
         "selected",
         "all",
     }
-    assert all(
-        row["components_penalty"] == best["components_penalty"] for row in gene_level
-    )
-    assert [row["gene_penalty"] for row in gene_level] == [0.1, 1.0, 10.0] * 3
+    # Every components penalty pairs with every gene penalty.
+    pairs = [(row["components_penalty"], row["gene_penalty"]) for row in gene_level]
+    grid = [
+        (float(c), g)
+        for c in config["penalties"]["components"]
+        for g in (0.1, 1.0, 10.0)
+    ]
+    assert pairs == grid * 3
     # The reference row is the best components row of the reference experiment.
     for split in ("val", "test"):
         assert best[f"{split}_gain"] == {"difference": 0.0, "interval": [0.0, 0.0]}
@@ -377,7 +381,7 @@ def test_main_writes_rows_and_results_and_skips_existing_rows(tmp_path, monkeypa
     ]
     record = run._read_json(run_dir / "rows" / "affine__0.json")
     assert record["experiment"] == "affine" and record["setting"] == {}
-    assert len(record["rows"]) == 5 + 3 * 3
+    assert len(record["rows"]) == 5 + 3 * 5 * 3
     results = (run_dir / "results.md").read_text()
     for text in ("## affine", "## affine_again", "own_and_partners", "Oracle"):
         assert text in results
