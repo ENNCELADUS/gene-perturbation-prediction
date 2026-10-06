@@ -31,9 +31,11 @@ CPU prior from bulk and pseudo-bulk expression, with DepMap lines outside the 22
 (`docs/data/extra-bulk-lines-26q1.md`). Its 2026-10-04 run (`results/context_prior_seed0/`): validation chose the config
 without the haematopoietic extras, a ridge on 128 expression components over 953 labelled lines read from bridged
 pseudo-bulk; selective Spearman 0.223 validation / 0.223 test against 0.130 / 0.121 for the Tx1 context ridge; gene-level
-blocks did not survive the bridge. That run's gated runner and its two configs are gone: the next prior run compares
-bridge remedies in a minimal runner that decides nothing (`configs/context_prior/bridge_remedies.yaml`, plan
-`docs/specs/2026-10-04-bridge-remedies-plan.md`). The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+blocks did not survive the bridge. The bridge-remedy runs (`results/bridge_remedies_seed0/`, a minimal runner that
+decides nothing; plan `docs/specs/2026-10-04-bridge-remedies-plan.md`) found no remedy better than the affine bridge,
+and, once every components and gene penalty pair is reported (`configs/context_prior/bridge_remedies_penalty_grid.yaml`),
+the affine bridge with all gene-level blocks at components penalty 1 and gene penalty 10 scores 0.230 validation /
+0.235 test (+0.007 and +0.013 over components alone, intervals above zero). The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
