@@ -668,8 +668,11 @@ Gene-level blocks did not survive the bridge (median per-gene bridge correlation
 bridge-remedy run (2026-10-04, `configs/context_prior/bridge_remedies.yaml`,
 [record](../results/bridge_remedies_seed0/README.md)) found no remedy above the reference on
 validation, but it fitted gene-level blocks on the components-only penalty pick, and on bulk
-input they add +0.0125 at components penalty 1. Its rerun over the full penalty grid uses
-`configs/context_prior/bridge_remedies_penalty_grid.yaml`.
+input they add +0.0125 at components penalty 1. Its rerun over the full penalty grid
+(`configs/context_prior/bridge_remedies_penalty_grid.yaml`, same record) puts the affine bridge with
+all gene-level blocks at components penalty 1 and gene penalty 10 at 0.2300 validation / 0.2352 test,
++0.0068 [0.0011, 0.0129] and +0.0125 [0.0049, 0.0187] over components alone; no remedy beats the
+affine bridge on validation.
 
 ## 11. Rules
 

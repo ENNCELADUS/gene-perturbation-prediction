@@ -36,7 +36,9 @@ a 95% paired line-bootstrap interval.
 
 **No remedy beats the reference on validation, and no gene-level block set gains over the reference on validation
 under any remedy.** The reference reproduces the first runs' chosen prior to four decimals: 0.2232 on validation and
-0.2227 on test.
+0.2227 on test. That second clause comes from the runner's components-penalty pick (next sections); the
+[rerun over the full penalty grid](#rerun-over-the-full-penalty-grid) reverses it: under the affine bridge, all
+three gene-level blocks gain +0.0068 on validation and +0.0125 on test, both intervals above zero.
 
 | Remedy | Best row on validation | Val | Test | Val gain | Test gain | Oracle val |
 | --- | --- | ---: | ---: | --- | --- | ---: |
@@ -187,20 +189,46 @@ None of the following is chosen on test.
 - **The reverse.** Gating at 0.7 has a validation interval that spans zero, while its test interval excludes zero
   below.
 
+## Rerun over the full penalty grid
+
+Run `bridge_remedies_penalty_grid_20261005`, 2026-10-05, same host and training side, code `d314b74`, config
+`configs/context_prior/bridge_remedies_penalty_grid.yaml`: every gene-level block set fitted at every components
+penalty (0.1–1000) and gene penalty (0.1–1000, extended from 10), for the affine bridge, contrastive 4/0 and 8/4,
+and gating at 0.7. Full table: [results_penalty_grid.md](results_penalty_grid.md). The best row per block set on
+validation, with its test score; gains are over the reference row (components alone at penalty 10).
+
+| Bridge | Block set | Penalties (components, gene) | Val | Test | Val gain | Test gain | Oracle val |
+| --- | --- | --- | ---: | ---: | --- | --- | ---: |
+| Affine | components alone | 10, — | 0.2232 | 0.2227 | — | — | 0.2358 |
+| Affine | + own expression and partners | 1, 1 | 0.2258 | 0.2254 | +0.0027 [−0.0007, 0.0062] | +0.0027 [−0.0007, 0.0059] | 0.2423 |
+| Affine | + data-selected genes | 1, 10 | 0.2290 | 0.2338 | +0.0058 [0.0001, 0.0116] | +0.0111 [0.0038, 0.0174] | 0.2464 |
+| Affine | **+ all three** | **1, 10** | **0.2300** | **0.2352** | **+0.0068 [0.0011, 0.0129]** | **+0.0125 [0.0049, 0.0187]** | 0.2477 |
+| Contrastive 4/0 | + all three | 1, 10 | 0.2248 | 0.2372 | +0.0016 [−0.0068, 0.0098] | +0.0145 [0.0012, 0.0263] | 0.2483 |
+| Contrastive 8/4 | + all three | 1, 10 | 0.2145 | 0.2386 | −0.0087 [−0.0244, 0.0068] | +0.0159 [0.0025, 0.0279] | 0.2317 |
+| Gating at 0.7 | + all three | 1, 10 | 0.2264 | 0.2285 | +0.0032 [−0.0048, 0.0118] | +0.0058 [−0.0043, 0.0156] | 0.2430 |
+
+- **Gene-level blocks survive the affine bridge** once the components penalty is searched with the gene penalty.
+  At components penalty 1 the components stage removes more of the residual and the gene-level stages fit what
+  is left; all three blocks then gain on validation and on test with intervals above zero. The bulk-input gain
+  (+0.0119 over the best components-alone oracle) mostly carries through the bridge (+0.0068 validation, +0.0125
+  test).
+- **Data-selected genes carry most of it.** Own expression and partners alone add +0.0027 with intervals spanning
+  zero on both splits.
+- **No remedy improves on the affine bridge on validation.** Contrastive 4/0 and 8/4 gain more on test than the
+  affine row but less on validation, as in the first run; gating at 0.7 lies between, inside the intervals.
+- **Grid edges.** The chosen pair (1, 10) is interior on both grids. The row was chosen among 75 gene-level rows of
+  the affine bridge on validation, so its validation gain is optimistic; the test gain is the unbiased estimate.
+
 ## Recommendation (my reading; the user decides)
 
-1. **Integrate no remedy into the prior.** Keep the affine bridge with components alone at penalty 10 (0.2232 /
-   0.2227). Every remedy's best validation row is below it. The closest, gating at 0.7, is below on test with an
-   interval that excludes zero.
+1. **Integrate no remedy into the prior, but add the gene-level blocks.** After the full-grid rerun, the prior to
+   carry forward is the affine bridge with expression components (penalty 1) plus own expression, partners and
+   data-selected genes (gene penalty 10): 0.2300 validation / 0.2352 test, against 0.2232 / 0.2227 for components
+   alone. No remedy's best validation row reaches it.
 2. **Carry nothing forward from noise-matched fitting or low-rank denoising.** Every validation row is below the
    reference. Denoising removes components signal at every rank, and noise-matched fitting trades 953 lines for 170.
-3. **Change the runner's tuning instead.** For a gene-level block set, tune the components penalty jointly with the
-   gene penalty on validation. Both stay point estimates, so tuning remains the only automatic choice. Also extend
-   the gene grid above 10. The current rule picks the components penalty from a near-tie, and that pick decides the
-   gene-level outcome.
-4. **Under joint tuning, rerun the affine bridge, contrastive 4/0 and 8/4, and gating at 0.7.** The open question is
-   whether the bulk-input gain at components penalty 1 (+0.0125) survives the bridge. Contrastive is the one remedy
-   under which the bridged-versus-bulk gap for gene-level blocks mostly closes.
+3. **Done:** the runner now reports every components and gene penalty pair (`d314b74`), and the rerun above
+   answered the open question.
 
 ## Caveats
 
@@ -225,8 +253,5 @@ None of the following is chosen on test.
 
 ## Next steps the results point to
 
-1. Joint tuning of the components and gene penalties for gene-level block sets, with the gene grid extended above
-   10. Then rerun the affine bridge, contrastive 4/0 and 8/4, and gating at 0.7 (CPU).
-2. If no gene-level block set then gains on validation, treat the gene-level route through the bulk-trained prior as
-   closed for this split.
-3. The single-cell correction on top of the chosen prior: what Tx1, `q_sc` and STATE add.
+1. The single-cell correction on top of the prior with gene-level blocks: what Tx1, `q_sc` and STATE add.
+2. Which data-selected genes carry the gain, and whether partner features help once data-selected genes are in.
