@@ -369,6 +369,23 @@ def test_prepare_refuses_reuse_under_different_settings(tmp_path):
         prepare_inputs(config)
 
 
+def test_prepare_reuses_a_root_whatever_prior_export_the_config_names(tmp_path):
+    """The prior export is read by training, not preparation: a root prepared
+    before ``paths.prior`` existed is reused by a correction config."""
+    config = build_world(tmp_path)
+    root = Path(config["prepared_root"])
+    root.mkdir()
+    before = {key: value for key, value in config["paths"].items() if key != "prior"}
+    recorded = {
+        "preparation": dict(config["preparation"]),
+        "cells_per_context": config["features"]["cells_per_context"],
+        "paths": before,
+    }
+    (root / "prepared_inputs.json").write_text(json.dumps({"settings": recorded}))
+    config["paths"]["prior"] = "outputs/context_prior/some_export/export"
+    assert prepare_inputs(config) == root / "prepared_inputs.json"
+
+
 def test_train_means_fit_on_supervised_train_only(prepared, monkeypatch):
     import src.data.prepared as module
 

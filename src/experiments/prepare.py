@@ -156,11 +156,14 @@ def _encode_missing_tx1(config: Mapping[str, Any], registry) -> list[str]:
 
 
 def preparation_settings(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Every config value that changes what preparation writes."""
+    """Every config value that changes what preparation writes. The prior export
+    (``paths.prior``) is read by training and evaluation only."""
     return {
         "preparation": dict(config["preparation"]),
         "cells_per_context": config["features"]["cells_per_context"],
-        "paths": dict(config["paths"]),
+        "paths": {
+            key: value for key, value in config["paths"].items() if key != "prior"
+        },
     }
 
 
