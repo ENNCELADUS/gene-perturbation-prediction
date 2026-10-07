@@ -56,7 +56,13 @@ BASELINE_NAMES = {
     "nearest_line[hvg]": "Nearest line (HVG)",
     "context_pca_ridge[tx1]": "Context-PCA ridge (Tx1)",
     "context_pca_ridge[hvg]": "Context-PCA ridge (HVG)",
+    "context_prior": "Linear context prior",
+    "context_prior+context_pca_ridge[tx1]": (
+        "Linear context prior + Tx1 context-PCA ridge"
+    ),
 }
+# Controls that exist only when the config names a prior export (paths.prior).
+PRIOR_CONTROLS = ("context_prior", "context_prior+context_pca_ridge[tx1]")
 VALIDATION_COLUMNS = {
     "Selective Spearman (per selective gene)": "val_selective_spearman",
     "Selective AUPR lift": "val_selective_aupr_lift",
@@ -477,7 +483,11 @@ def _validation_section(config: dict, run: Path) -> list[str]:
         "Readout head with the explicit gene-specific context slope": _read_json(
             run / "readout" / "metrics.json"
         ),
-        **{name: baselines.get(method) for method, name in BASELINE_NAMES.items()},
+        **{
+            name: baselines.get(method)
+            for method, name in BASELINE_NAMES.items()
+            if method in baselines or method not in PRIOR_CONTROLS
+        },
     }
     lines = [
         "## Validation on the GeneEffect validation lines",
