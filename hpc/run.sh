@@ -8,6 +8,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh test CHECKPOINT
        hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   (linear context prior, CPU)
        hpc/run.sh prior-selected CONFIG --run-id ID   (the reference prior's data-selected genes, CPU)
+       hpc/run.sh prior-export CONFIG --run-id ID   (the reference prior's predictions for the correction, CPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment.
 `all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every
 GPU step; --gpus restricts it to the listed ids among the visible ones.
@@ -18,6 +19,8 @@ config: every bridge setting, block set and penalty, scored on validation and
 test, into outputs/context_prior/<id>/ (rows/, results.md).
 `prior-selected` fits the config's reference row and tabulates its
 data-selected stage into outputs/context_prior/<id>/data_selected/.
+`prior-export` writes the config's reference row, out of fold for the
+single-cell training lines, into outputs/context_prior/<id>/export/.
 EOF
 }
 
@@ -27,7 +30,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|prior|prior-selected|prior-export) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -37,5 +40,6 @@ case "$command" in
   revision) exec "$python_bin" -m src.experiments.revision "$@" ;;
   prior) exec "$python_bin" -m src.experiments.context_prior "$@" ;;
   prior-selected) exec "$python_bin" -m src.experiments.data_selected_analysis "$@" ;;
+  prior-export) exec "$python_bin" -m src.experiments.prior_export "$@" ;;
   test) checkpoint=$1; shift; exec "$python_bin" -m src.evaluate --checkpoint "$checkpoint" --split test "$@" ;;
 esac
