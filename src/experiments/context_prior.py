@@ -7,7 +7,7 @@ and penalty, and scores validation and test (and the bulk-input oracle on
 validation). Each setting writes ``rows/<experiment>__<n>.json`` and is skipped when
 it exists, so a rerun resumes; ``results.md`` tabulates every row present. A
 gene-level block set gives one row per components and gene penalty pair; nothing is
-chosen here except the reference row's components penalty.
+chosen here. Gains are measured against the reference row the config pins.
 
 A run directory belongs to one config (``run_config.json``); processes running
 different experiments may share it, since rows are per setting.
@@ -267,11 +267,6 @@ def gain(
     }
 
 
-def _score_key(value: float | None) -> float:
-    """Ranking key: an undefined score is the worst."""
-    return value if value is not None and math.isfinite(value) else -math.inf
-
-
 # ----------------------------------------------------------------------------
 # Experiments
 # ----------------------------------------------------------------------------
@@ -340,9 +335,19 @@ class _Fitter:
         }
 
 
-def _best_penalty(grid: Mapping[float, tuple[dict, dict]]) -> float:
-    """The components penalty with the best validation selective Spearman."""
-    return max(grid, key=lambda p: _score_key(grid[p][1]["val"]["selective_spearman"]))
+def stages(
+    config: Mapping[str, Any],
+    block_set: str,
+    components_penalty: float,
+    gene_penalty: float | None,
+) -> list[Stage]:
+    """The prior's stages for one row: a block set at one penalty pair."""
+    blocks = list(config["block_sets"][block_set])
+    selected = int(config["prior"]["selected_genes"])
+    return [Stage("expression_components", float(components_penalty))] + [
+        Stage(b, float(gene_penalty), selected if b == "data_selected" else 0)
+        for b in blocks[1:]
+    ]
 
 
 def run_setting(
@@ -363,7 +368,6 @@ def run_setting(
     inputs = _build(base, experiment["kind"], setting)
     fit = _Fitter(base, inputs)
     repeats = int(config["prior"]["bootstrap_repeats"])
-    selected = int(config["prior"]["selected_genes"])
     grid = fit.components()
     rows = []
 
@@ -402,11 +406,12 @@ def run_setting(
             continue
         for components in grid:
             for value in config["penalties"]["gene"]:
-                stages = [Stage("expression_components", components)] + [
-                    Stage(b, float(value), selected if b == "data_selected" else 0)
-                    for b in blocks[1:]
-                ]
-                add(name, components, float(value), *fit(stages))
+                add(
+                    name,
+                    components,
+                    float(value),
+                    *fit(stages(config, name, components, value)),
+                )
     diagnostics = bridge_diagnostics(
         inputs.oof_paired,
         inputs.oof_bulk,
@@ -419,13 +424,19 @@ def run_setting(
 
 
 def reference_predictions(base: RunBase) -> dict[str, pd.DataFrame]:
-    """The reference experiment's first setting, components only, at its best
-    validation penalty: its ``val`` and ``test`` predictions."""
-    experiment = base.config["experiments"][base.config["reference"]]
-    grid = _Fitter(
-        base, _build(base, experiment["kind"], experiment["settings"][0])
-    ).components()
-    predictions, _ = grid[_best_penalty(grid)]
+    """The pinned reference row (its experiment's first setting): its ``val`` and
+    ``test`` predictions."""
+    reference = base.config["reference"]
+    experiment = base.config["experiments"][reference["experiment"]]
+    fit = _Fitter(base, _build(base, experiment["kind"], experiment["settings"][0]))
+    predictions, _ = fit(
+        stages(
+            base.config,
+            reference["block_set"],
+            reference["components_penalty"],
+            reference["gene_penalty"],
+        )
+    )
     return {name: predictions[name] for name in SCORED}
 
 
@@ -555,11 +566,14 @@ def _write_results(run_dir: Path) -> Path:
             f"{facts['selective_genes']} selective genes.",
             "",
         ]
+    reference = config["reference"]
     out += [
         "Selective Spearman: macro mean over the selective genes of the Spearman "
         "across lines of the residual. Gain: selective Spearman minus that of the "
-        f"reference row (experiment `{config['reference']}`, first setting, "
-        "expression components alone at their best validation penalty), with its "
+        f"reference row (experiment `{reference['experiment']}`, first setting, "
+        f"block set `{reference['block_set']}`, components penalty "
+        f"{_penalty(reference['components_penalty'])}, gene penalty "
+        f"{_penalty(reference['gene_penalty'])}), with its "
         "95% paired line-bootstrap interval. Oracle: validation lines' bulk RNA as "
         "input (off-contract). A gene-level block set has a row per components "
         "and gene penalty pair. Nothing here is synthetic-lethality evidence.",

@@ -19,7 +19,9 @@ block_sets:
   own_and_partners: [expression_components, own_expression, partners]
   selected: [expression_components, data_selected]
   all: [expression_components, own_expression, partners, data_selected]
-reference: affine
+# The gain baseline: components alone at penalty 10, the components penalty this run's
+# runner picked on validation (it chose the reference penalty in code then).
+reference: {experiment: affine, block_set: components, components_penalty: 10.0, gene_penalty: null}
 experiments:
   affine:
     kind: affine

@@ -81,6 +81,8 @@ _PRIOR_GROUPS = {
 }
 _PRIOR_TOP_LEVEL = "seed joint_config output_root reference block_sets experiments"
 _EXPERIMENT_KEYS = "kind settings block_sets"
+#: The pinned row every gain is measured against: the experiment's first setting.
+_REFERENCE_KEYS = "experiment block_set components_penalty gene_penalty"
 GENE_BLOCKS = ("own_expression", "partners", "data_selected")
 
 
@@ -106,8 +108,20 @@ def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError(
                 f"experiments.{name}: unknown block sets {sorted(unknown)}"
             )
-    if config["reference"] not in config["experiments"]:
+    reference = config["reference"]
+    _require_keys(reference, set(_REFERENCE_KEYS.split()), "reference")
+    if reference["experiment"] not in config["experiments"]:
         raise ValueError("reference must name an experiment")
+    if reference["block_set"] not in config["block_sets"]:
+        raise ValueError("reference must name a block set")
+    components_only = config["block_sets"][reference["block_set"]] == [
+        "expression_components"
+    ]
+    if components_only != (reference["gene_penalty"] is None):
+        raise ValueError(
+            "reference gene_penalty: null for expression components alone, "
+            "a number otherwise"
+        )
     return dict(config)
 
 
