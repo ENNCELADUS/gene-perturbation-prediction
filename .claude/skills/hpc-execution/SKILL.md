@@ -13,8 +13,7 @@ share 224 CPU cores: set `OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes 
 
 | Port | GPUs | Use |
 |---|---|---|
-| 30838 | 4 × H20 | default; the only reachable one on 2026-09-29; no GitHub access |
-| 30030, 30670, 30846 | 4 × H20 | extra lanes when they accept connections |
+| 30838 | 4 × H20 | default |
 
 `ssh -p 30838 root@10.15.171.204`, then `cd /2023533015/VCC_Project`. Ports change when a container is recreated; if one
 refuses, ask the user rather than scanning. Ports in `results/` are historical. Never store the SSH password in the repo.
