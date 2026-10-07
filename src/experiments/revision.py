@@ -179,7 +179,8 @@ def _bootstrap(
 
 
 def _training_record(run: Path) -> dict[str, Any]:
-    """Best epoch (1-based) and its diagnostic and validation selective Spearman."""
+    """Best epoch (1-based; 0 is the pre-update validation of a stack) and its
+    diagnostic and validation selective Spearman."""
     done = _read_json(run / "train" / "done.json")
     best = done["best_epoch"]
     epoch_records = [
@@ -272,14 +273,18 @@ def _summary_lines(record: dict[str, Any]) -> list[str]:
     ]
     for split, title in SPLITS.items():
         lines += _split_lines(title, record[split])
+    when = (
+        "the model before its first update (the prior alone)"
+        if training["best_epoch"] == 0
+        else f"epoch {training['best_epoch']}"
+    )
     return lines + [
         "## Training",
         "",
-        f"`train/best.pt` is epoch {training['best_epoch']} of "
-        f"{training['epochs_trained']} trained. At that epoch the selective "
-        f"Spearman is {_number(training[TRAIN_DIAGNOSTIC_KEY])} on the training "
-        f"diagnostic lines and {_number(training[VALIDATION_KEY])} on the "
-        "validation lines.",
+        f"`train/best.pt` is {when}; {training['epochs_trained']} epochs trained. "
+        f"At that point the selective Spearman is "
+        f"{_number(training[TRAIN_DIAGNOSTIC_KEY])} on the training diagnostic "
+        f"lines and {_number(training[VALIDATION_KEY])} on the validation lines.",
     ]
 
 
