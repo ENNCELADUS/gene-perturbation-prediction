@@ -605,8 +605,9 @@ scoring. Lines outside the 226 enter the training side under the rules of §11 a
 (`src/experiments/context_prior.py`). The config names the paths, the training side (the
 lineages dropped from the extra lines), the prior (component count, folds, bootstrap repeats,
 data-selected genes), the penalty grids, the **block sets** (each starts with the expression
-components and adds gene-level blocks: own expression, partner group, data-selected genes), a
-`reference` experiment, and the **experiments**. An experiment is one bridge remedy (`kind`,
+components and adds gene-level blocks: own expression, partner group, data-selected genes), the
+pinned **reference row** (experiment, block set, components penalty and gene penalty, on the
+experiment's first setting), and the **experiments**. An experiment is one bridge remedy (`kind`,
 a module under `src/context_prior/remedies/`), a list of **settings** of that remedy, and the
 block sets to fit under it. A run:
 
@@ -643,9 +644,16 @@ block sets to fit under it. A run:
 Every components penalty is a reported row, and a gene-level block set has a row for every
 components and gene penalty pair: the components penalty sets how much residual the gene-level
 stages fit, while the scale-free score barely separates components penalties on their own.
-The reference row's components penalty, its best on validation, is the only choice in code.
-Nothing is kept, dropped, passed or failed in code. Which setting, block set or extra-line
-cohort to use is decided by reading the table.
+Gains are measured against the reference row the config pins; nothing is chosen, kept, dropped,
+passed or failed in code. Which setting, block set or extra-line cohort to use is decided by
+reading the table. `hpc/run.sh prior-selected CONFIG --run-id ID`
+(`src/experiments/data_selected_analysis.py`) fits the reference row, which must end with the
+data-selected genes, and writes `data_selected/` into the run directory: per feature, how often
+and how heavily it is selected, whether it is a partner of its target and how much of its variance
+lineage and the expression components explain (`features.csv`); per selective gene, its
+validation and test Spearman with and without the stage (`targets.csv`); and the scores with the
+stage's weights masked to its top 10, 50, 200 and 1,000 features or without them
+(`ablation.json`, `summary.md`). The masking does not refit, so correlated features share credit.
 
 Each setting writes `rows/<experiment>__<n>.json` and is skipped when the file exists, so a
 rerun with the same run id resumes; `--experiments` restricts a process to the named
@@ -672,7 +680,13 @@ input they add +0.0125 at components penalty 1. Its rerun over the full penalty 
 (`configs/context_prior/bridge_remedies_penalty_grid.yaml`, same record) puts the affine bridge with
 all gene-level blocks at components penalty 1 and gene penalty 10 at 0.2300 validation / 0.2352 test,
 +0.0068 [0.0011, 0.0129] and +0.0125 [0.0049, 0.0187] over components alone; no remedy beats the
-affine bridge on validation.
+affine bridge on validation. The follow-ups on that row (2026-10-07,
+`configs/context_prior/default_prior_followups.yaml`,
+[record](../results/default_prior_followups_seed0/README.md)) found that own expression and partners add
++0.0010 on validation (interval spanning zero) once the data-selected genes are in, and that the
+data-selected genes' gain is spread over thousands of features. The **default prior** is therefore the
+affine bridge with expression components at penalty 1 and data-selected genes at gene penalty 10:
+0.2290 validation / 0.2338 test (`configs/context_prior/default_prior.yaml`).
 
 ## 11. Rules
 

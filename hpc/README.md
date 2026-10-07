@@ -110,8 +110,12 @@ The run id defaults to a timestamp, and the route needs no GPU. The config lists
 with its settings and block sets; the runner first prepares pseudo-bulk into `prepared_root` (summing the raw UMI of
 each line's basal cells; the one step that reads raw data; the prepared root of `all` is reused), then for every
 setting builds the bridged inputs, fits the prior for every block set and penalty, and scores validation and test
-(and the bulk-input oracle on validation). It decides nothing beyond tuning penalties on validation; the table is
-read by a person.
+(and the bulk-input oracle on validation). It decides nothing: gains are measured against the reference row the config
+pins, and the table is read by a person. `configs/context_prior/default_prior.yaml` holds the default prior alone.
+
+`hpc/run.sh prior-selected CONFIG --run-id <id>` fits the config's reference row (its last stage must be the
+data-selected genes) and writes `data_selected/{features.csv, targets.csv, ablation.json, summary.md}` into the same run
+directory: feature use, per-target gains of the stage, and scores with the stage masked to or without its top features.
 
 The run directory is `outputs/context_prior/<run_id>/{run_config.json, rows/<experiment>__<n>.json, results.md}`.
 Each setting writes its row file when finished and is skipped when the file exists, so an interrupted run resumes by

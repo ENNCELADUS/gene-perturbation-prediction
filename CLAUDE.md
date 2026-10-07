@@ -35,7 +35,11 @@ blocks did not survive the bridge. The bridge-remedy runs (`results/bridge_remed
 decides nothing; plan `docs/specs/2026-10-04-bridge-remedies-plan.md`) found no remedy better than the affine bridge,
 and, once every components and gene penalty pair is reported (`configs/context_prior/bridge_remedies_penalty_grid.yaml`),
 the affine bridge with all gene-level blocks at components penalty 1 and gene penalty 10 scores 0.230 validation /
-0.235 test (+0.007 and +0.013 over components alone, intervals above zero). The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+0.235 test (+0.007 and +0.013 over components alone, intervals above zero). Its follow-ups
+(`results/default_prior_followups_seed0/`) found that the data-selected genes carry that gain, so the **default prior**
+(`configs/context_prior/default_prior.yaml`) is the affine bridge with components at penalty 1 and data-selected genes at gene
+penalty 10: 0.229 validation / 0.234 test. The **single-cell correction** (the nested head trained on what that prior leaves)
+is planned in `docs/specs/2026-10-07-single-cell-correction-plan.md`. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
@@ -54,6 +58,7 @@ hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]  #
 hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: train, val then test eval with baselines, summary.md + revision.json in outputs/geneeffect_revision/<id>/ (configs/revision/*.yaml; no comparison, no readout)
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any checkpoint; `all` never runs test, `revision` scores its own best.pt
 hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   # linear context prior, CPU: bridge remedies scored on validation and test; rows/, results.md in outputs/context_prior/<id>/
+hpc/run.sh prior-selected CONFIG --run-id ID                # the reference row's data-selected genes, CPU: data_selected/ in the same run directory
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
