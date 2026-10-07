@@ -1,0 +1,27 @@
+# The default linear context prior: the affine bridge, 128 expression components at penalty 1,
+# then 50 data-selected genes at gene penalty 10 (0.2290 validation / 0.2338 test). Chosen on
+# 2026-10-07 from default_prior_followups.yaml: own expression and partners added +0.0010 on
+# validation, interval spanning zero (results/default_prior_followups_seed0/). The single-cell
+# correction stacks on this row.
+seed: 0
+joint_config: configs/revision/frozen_huber.yaml
+output_root: outputs/context_prior
+paths:
+  extra_lines: configs/benchmarks/extra_bulk_lines_26Q1.json
+  reference: configs/context_prior/reference
+  model: data/sl_dependency_v0/raw/depmap/Model.csv
+  bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
+training_side:
+  exclude_lineages: [Lymphoid, Myeloid]
+prior: {components: 128, folds: 5, bootstrap_repeats: 1000, selected_genes: 50}
+penalties:
+  components: [1.0]
+  gene: [10.0]
+block_sets:
+  selected: [expression_components, data_selected]
+reference: {experiment: affine, block_set: selected, components_penalty: 1.0, gene_penalty: 10.0}
+experiments:
+  affine:
+    kind: affine
+    settings: [{}]
+    block_sets: [selected]

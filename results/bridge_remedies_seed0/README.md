@@ -255,3 +255,9 @@ validation, with its test score; gains are over the reference row (components al
 
 1. The single-cell correction on top of the prior with gene-level blocks: what Tx1, `q_sc` and STATE add.
 2. Which data-selected genes carry the gain, and whether partner features help once data-selected genes are in.
+
+**Decision (2026-10-07).** The user took recommendation 1, then the
+[follow-ups](../default_prior_followups_seed0/README.md) answered step 2: own expression and partners add +0.0010 on
+validation (interval spanning zero) once data-selected genes are in. The default prior is the affine bridge with
+expression components at penalty 1 and data-selected genes at gene penalty 10 (0.2290 / 0.2338), and the single-cell
+correction stacks on it.
