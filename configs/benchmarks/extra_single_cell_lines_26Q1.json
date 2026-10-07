@@ -1,0 +1,847 @@
+{
+  "schema_version": 1,
+  "policy": "Lines outside the 226 with public basal single-cell RNA; labelled ones have 26Q1 GeneEffect. A line in the 226 or sharing a PatientID with a validation or test line is excluded. Membership is pinned; ingesting the lines is a separate step.",
+  "labelled": [
+    "ACH-000001",
+    "ACH-000012",
+    "ACH-000014",
+    "ACH-000015",
+    "ACH-000018",
+    "ACH-000021",
+    "ACH-000026",
+    "ACH-000035",
+    "ACH-000047",
+    "ACH-000085",
+    "ACH-000096",
+    "ACH-000098",
+    "ACH-000142",
+    "ACH-000149",
+    "ACH-000174",
+    "ACH-000200",
+    "ACH-000212",
+    "ACH-000235",
+    "ACH-000237",
+    "ACH-000265",
+    "ACH-000268",
+    "ACH-000280",
+    "ACH-000281",
+    "ACH-000292",
+    "ACH-000341",
+    "ACH-000368",
+    "ACH-000390",
+    "ACH-000393",
+    "ACH-000407",
+    "ACH-000411",
+    "ACH-000416",
+    "ACH-000427",
+    "ACH-000434",
+    "ACH-000444",
+    "ACH-000445",
+    "ACH-000452",
+    "ACH-000458",
+    "ACH-000460",
+    "ACH-000477",
+    "ACH-000479",
+    "ACH-000486",
+    "ACH-000488",
+    "ACH-000495",
+    "ACH-000502",
+    "ACH-000517",
+    "ACH-000527",
+    "ACH-000532",
+    "ACH-000535",
+    "ACH-000537",
+    "ACH-000542",
+    "ACH-000549",
+    "ACH-000569",
+    "ACH-000587",
+    "ACH-000589",
+    "ACH-000595",
+    "ACH-000618",
+    "ACH-000624",
+    "ACH-000652",
+    "ACH-000657",
+    "ACH-000661",
+    "ACH-000662",
+    "ACH-000666",
+    "ACH-000685",
+    "ACH-000701",
+    "ACH-000704",
+    "ACH-000734",
+    "ACH-000738",
+    "ACH-000749",
+    "ACH-000756",
+    "ACH-000769",
+    "ACH-000774",
+    "ACH-000776",
+    "ACH-000784",
+    "ACH-000796",
+    "ACH-000822",
+    "ACH-000824",
+    "ACH-000826",
+    "ACH-000833",
+    "ACH-000836",
+    "ACH-000837",
+    "ACH-000847",
+    "ACH-000873",
+    "ACH-000880",
+    "ACH-000884",
+    "ACH-000886",
+    "ACH-000888",
+    "ACH-000896",
+    "ACH-000905",
+    "ACH-000906",
+    "ACH-000911",
+    "ACH-000921",
+    "ACH-000936",
+    "ACH-000939",
+    "ACH-000941",
+    "ACH-000961",
+    "ACH-000966",
+    "ACH-000973",
+    "ACH-001021",
+    "ACH-001239",
+    "ACH-001307"
+  ],
+  "unlabelled": [
+    "ACH-000027",
+    "ACH-000117",
+    "ACH-000171",
+    "ACH-000186",
+    "ACH-000201",
+    "ACH-000205",
+    "ACH-000236",
+    "ACH-000270",
+    "ACH-000347",
+    "ACH-000392",
+    "ACH-000409",
+    "ACH-000423",
+    "ACH-000428",
+    "ACH-000447",
+    "ACH-000449",
+    "ACH-000457",
+    "ACH-000482",
+    "ACH-000553",
+    "ACH-000555",
+    "ACH-000572",
+    "ACH-000582",
+    "ACH-000590",
+    "ACH-000603",
+    "ACH-000613",
+    "ACH-000617",
+    "ACH-000625",
+    "ACH-000628",
+    "ACH-000643",
+    "ACH-000644",
+    "ACH-000650",
+    "ACH-000669",
+    "ACH-000670",
+    "ACH-000678",
+    "ACH-000680",
+    "ACH-000692",
+    "ACH-000715",
+    "ACH-000723",
+    "ACH-000726",
+    "ACH-000730",
+    "ACH-000750",
+    "ACH-000803",
+    "ACH-000808",
+    "ACH-000814",
+    "ACH-000852",
+    "ACH-000868",
+    "ACH-000875",
+    "ACH-000895",
+    "ACH-000897",
+    "ACH-000927",
+    "ACH-000940",
+    "ACH-000954",
+    "ACH-000967",
+    "ACH-000982",
+    "ACH-000990",
+    "ACH-000998"
+  ],
+  "excluded": {
+    "ACH-000013": "already one of the 226",
+    "ACH-000019": "already one of the 226",
+    "ACH-000022": "already one of the 226",
+    "ACH-000023": "shares PatientID PT-lVglGI with held-out line ACH-000022",
+    "ACH-000028": "already one of the 226",
+    "ACH-000040": "already one of the 226",
+    "ACH-000042": "already one of the 226",
+    "ACH-000048": "already one of the 226",
+    "ACH-000054": "already one of the 226",
+    "ACH-000086": "already one of the 226",
+    "ACH-000087": "already one of the 226",
+    "ACH-000090": "already one of the 226",
+    "ACH-000092": "already one of the 226",
+    "ACH-000097": "already one of the 226",
+    "ACH-000114": "already one of the 226",
+    "ACH-000116": "already one of the 226",
+    "ACH-000118": "already one of the 226",
+    "ACH-000120": "already one of the 226",
+    "ACH-000123": "already one of the 226",
+    "ACH-000132": "already one of the 226",
+    "ACH-000133": "already one of the 226",
+    "ACH-000138": "already one of the 226",
+    "ACH-000139": "already one of the 226",
+    "ACH-000141": "already one of the 226",
+    "ACH-000147": "already one of the 226",
+    "ACH-000148": "already one of the 226",
+    "ACH-000155": "already one of the 226",
+    "ACH-000159": "already one of the 226",
+    "ACH-000163": "already one of the 226",
+    "ACH-000164": "already one of the 226",
+    "ACH-000169": "already one of the 226",
+    "ACH-000178": "already one of the 226",
+    "ACH-000181": "already one of the 226",
+    "ACH-000188": "already one of the 226",
+    "ACH-000189": "already one of the 226",
+    "ACH-000192": "already one of the 226",
+    "ACH-000207": "already one of the 226",
+    "ACH-000209": "already one of the 226",
+    "ACH-000211": "already one of the 226",
+    "ACH-000213": "already one of the 226",
+    "ACH-000217": "already one of the 226",
+    "ACH-000219": "already one of the 226",
+    "ACH-000222": "already one of the 226",
+    "ACH-000228": "already one of the 226",
+    "ACH-000231": "already one of the 226",
+    "ACH-000234": "already one of the 226",
+    "ACH-000242": "already one of the 226",
+    "ACH-000243": "already one of the 226",
+    "ACH-000244": "already one of the 226",
+    "ACH-000252": "already one of the 226",
+    "ACH-000255": "already one of the 226",
+    "ACH-000260": "already one of the 226",
+    "ACH-000261": "already one of the 226",
+    "ACH-000264": "already one of the 226",
+    "ACH-000274": "already one of the 226",
+    "ACH-000276": "already one of the 226",
+    "ACH-000277": "already one of the 226",
+    "ACH-000288": "already one of the 226",
+    "ACH-000296": "already one of the 226",
+    "ACH-000302": "already one of the 226",
+    "ACH-000311": "already one of the 226",
+    "ACH-000313": "already one of the 226",
+    "ACH-000318": "already one of the 226",
+    "ACH-000323": "already one of the 226",
+    "ACH-000324": "already one of the 226",
+    "ACH-000329": "already one of the 226",
+    "ACH-000335": "already one of the 226",
+    "ACH-000343": "already one of the 226",
+    "ACH-000348": "already one of the 226",
+    "ACH-000352": "already one of the 226",
+    "ACH-000356": "already one of the 226",
+    "ACH-000367": "already one of the 226",
+    "ACH-000374": "already one of the 226",
+    "ACH-000376": "already one of the 226",
+    "ACH-000389": "already one of the 226",
+    "ACH-000396": "already one of the 226",
+    "ACH-000397": "already one of the 226",
+    "ACH-000403": "already one of the 226",
+    "ACH-000414": "already one of the 226",
+    "ACH-000415": "already one of the 226",
+    "ACH-000420": "already one of the 226",
+    "ACH-000430": "already one of the 226",
+    "ACH-000435": "already one of the 226",
+    "ACH-000437": "already one of the 226",
+    "ACH-000446": "already one of the 226",
+    "ACH-000456": "already one of the 226",
+    "ACH-000461": "already one of the 226",
+    "ACH-000463": "already one of the 226",
+    "ACH-000464": "already one of the 226",
+    "ACH-000467": "already one of the 226",
+    "ACH-000468": "already one of the 226",
+    "ACH-000471": "already one of the 226",
+    "ACH-000481": "already one of the 226",
+    "ACH-000493": "already one of the 226",
+    "ACH-000496": "already one of the 226",
+    "ACH-000500": "already one of the 226",
+    "ACH-000503": "already one of the 226",
+    "ACH-000504": "already one of the 226",
+    "ACH-000510": "already one of the 226",
+    "ACH-000521": "already one of the 226",
+    "ACH-000528": "already one of the 226",
+    "ACH-000545": "already one of the 226",
+    "ACH-000547": "already one of the 226",
+    "ACH-000548": "already one of the 226",
+    "ACH-000551": "already one of the 226",
+    "ACH-000552": "already one of the 226",
+    "ACH-000558": "already one of the 226",
+    "ACH-000563": "already one of the 226",
+    "ACH-000565": "already one of the 226",
+    "ACH-000573": "already one of the 226",
+    "ACH-000579": "already one of the 226",
+    "ACH-000580": "already one of the 226",
+    "ACH-000592": "already one of the 226",
+    "ACH-000601": "already one of the 226",
+    "ACH-000605": "already one of the 226",
+    "ACH-000614": "already one of the 226",
+    "ACH-000622": "already one of the 226",
+    "ACH-000637": "already one of the 226",
+    "ACH-000647": "already one of the 226",
+    "ACH-000649": "already one of the 226",
+    "ACH-000663": "already one of the 226",
+    "ACH-000665": "already one of the 226",
+    "ACH-000671": "already one of the 226",
+    "ACH-000672": "already one of the 226",
+    "ACH-000681": "already one of the 226",
+    "ACH-000694": "already one of the 226",
+    "ACH-000706": "already one of the 226",
+    "ACH-000713": "already one of the 226",
+    "ACH-000717": "already one of the 226",
+    "ACH-000720": "already one of the 226",
+    "ACH-000721": "already one of the 226",
+    "ACH-000724": "already one of the 226",
+    "ACH-000735": "already one of the 226",
+    "ACH-000748": "already one of the 226",
+    "ACH-000757": "already one of the 226",
+    "ACH-000762": "already one of the 226",
+    "ACH-000764": "already one of the 226",
+    "ACH-000771": "already one of the 226",
+    "ACH-000775": "already one of the 226",
+    "ACH-000783": "already one of the 226",
+    "ACH-000785": "already one of the 226",
+    "ACH-000788": "already one of the 226",
+    "ACH-000790": "already one of the 226",
+    "ACH-000791": "already one of the 226",
+    "ACH-000792": "already one of the 226",
+    "ACH-000793": "already one of the 226",
+    "ACH-000800": "already one of the 226",
+    "ACH-000807": "already one of the 226",
+    "ACH-000810": "already one of the 226",
+    "ACH-000834": "already one of the 226",
+    "ACH-000840": "already one of the 226",
+    "ACH-000841": "already one of the 226",
+    "ACH-000842": "shares PatientID PT-IPboWn with held-out line ACH-000651",
+    "ACH-000845": "already one of the 226",
+    "ACH-000848": "already one of the 226",
+    "ACH-000849": "already one of the 226",
+    "ACH-000853": "already one of the 226",
+    "ACH-000860": "already one of the 226",
+    "ACH-000861": "already one of the 226",
+    "ACH-000866": "already one of the 226",
+    "ACH-000869": "already one of the 226",
+    "ACH-000882": "already one of the 226",
+    "ACH-000885": "already one of the 226",
+    "ACH-000890": "already one of the 226",
+    "ACH-000899": "already one of the 226",
+    "ACH-000900": "already one of the 226",
+    "ACH-000903": "already one of the 226",
+    "ACH-000916": "already one of the 226",
+    "ACH-000919": "already one of the 226",
+    "ACH-000926": "already one of the 226",
+    "ACH-000929": "already one of the 226",
+    "ACH-000932": "already one of the 226",
+    "ACH-000934": "already one of the 226",
+    "ACH-000943": "already one of the 226",
+    "ACH-000945": "already one of the 226",
+    "ACH-000947": "already one of the 226",
+    "ACH-000948": "already one of the 226",
+    "ACH-000950": "already one of the 226",
+    "ACH-000956": "already one of the 226",
+    "ACH-000957": "already one of the 226",
+    "ACH-000958": "already one of the 226",
+    "ACH-000959": "already one of the 226",
+    "ACH-000963": "already one of the 226",
+    "ACH-000968": "already one of the 226",
+    "ACH-000971": "already one of the 226",
+    "ACH-000972": "already one of the 226",
+    "ACH-000976": "already one of the 226",
+    "ACH-000977": "already one of the 226",
+    "ACH-000984": "already one of the 226",
+    "ACH-000988": "already one of the 226",
+    "ACH-000994": "already one of the 226",
+    "ACH-000996": "already one of the 226",
+    "ACH-000997": "already one of the 226",
+    "ACH-001039": "already one of the 226",
+    "ACH-001075": "already one of the 226",
+    "ACH-001190": "already one of the 226",
+    "ACH-001306": "already one of the 226",
+    "ACH-001333": "already one of the 226",
+    "ACH-002249": "already one of the 226",
+    "ACH-002251": "already one of the 226"
+  },
+  "sources": {
+    "ACH-000001": [
+      "mixseq"
+    ],
+    "ACH-000012": [
+      "mixseq"
+    ],
+    "ACH-000014": [
+      "mixseq"
+    ],
+    "ACH-000015": [
+      "mixseq"
+    ],
+    "ACH-000018": [
+      "mixseq"
+    ],
+    "ACH-000021": [
+      "mixseq"
+    ],
+    "ACH-000026": [
+      "mixseq"
+    ],
+    "ACH-000027": [
+      "kinker_scp542"
+    ],
+    "ACH-000035": [
+      "mixseq"
+    ],
+    "ACH-000047": [
+      "mixseq"
+    ],
+    "ACH-000085": [
+      "mixseq"
+    ],
+    "ACH-000096": [
+      "mixseq"
+    ],
+    "ACH-000098": [
+      "mixseq"
+    ],
+    "ACH-000117": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000142": [
+      "mixseq"
+    ],
+    "ACH-000149": [
+      "mixseq"
+    ],
+    "ACH-000171": [
+      "kinker_scp542"
+    ],
+    "ACH-000174": [
+      "mixseq"
+    ],
+    "ACH-000186": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000200": [
+      "mixseq"
+    ],
+    "ACH-000201": [
+      "kinker_scp542"
+    ],
+    "ACH-000205": [
+      "kinker_scp542"
+    ],
+    "ACH-000212": [
+      "mixseq"
+    ],
+    "ACH-000235": [
+      "mixseq"
+    ],
+    "ACH-000236": [
+      "tahoe100m"
+    ],
+    "ACH-000237": [
+      "mixseq"
+    ],
+    "ACH-000265": [
+      "mixseq"
+    ],
+    "ACH-000268": [
+      "mixseq"
+    ],
+    "ACH-000270": [
+      "mixseq"
+    ],
+    "ACH-000280": [
+      "mixseq"
+    ],
+    "ACH-000281": [
+      "mixseq"
+    ],
+    "ACH-000292": [
+      "mixseq"
+    ],
+    "ACH-000341": [
+      "mixseq"
+    ],
+    "ACH-000347": [
+      "mixseq"
+    ],
+    "ACH-000368": [
+      "mixseq"
+    ],
+    "ACH-000390": [
+      "mixseq"
+    ],
+    "ACH-000392": [
+      "wyler2021_cellxgene"
+    ],
+    "ACH-000393": [
+      "mixseq"
+    ],
+    "ACH-000407": [
+      "mixseq"
+    ],
+    "ACH-000409": [
+      "kinker_scp542"
+    ],
+    "ACH-000411": [
+      "mixseq"
+    ],
+    "ACH-000416": [
+      "mixseq"
+    ],
+    "ACH-000423": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000427": [
+      "mixseq"
+    ],
+    "ACH-000428": [
+      "mixseq"
+    ],
+    "ACH-000434": [
+      "mixseq"
+    ],
+    "ACH-000444": [
+      "mixseq"
+    ],
+    "ACH-000445": [
+      "mixseq"
+    ],
+    "ACH-000447": [
+      "kinker_scp542"
+    ],
+    "ACH-000449": [
+      "mixseq"
+    ],
+    "ACH-000452": [
+      "mixseq"
+    ],
+    "ACH-000457": [
+      "mixseq"
+    ],
+    "ACH-000458": [
+      "mixseq"
+    ],
+    "ACH-000460": [
+      "mixseq"
+    ],
+    "ACH-000477": [
+      "mixseq"
+    ],
+    "ACH-000479": [
+      "mixseq"
+    ],
+    "ACH-000482": [
+      "kinker_scp542"
+    ],
+    "ACH-000486": [
+      "mixseq"
+    ],
+    "ACH-000488": [
+      "mixseq"
+    ],
+    "ACH-000495": [
+      "mixseq"
+    ],
+    "ACH-000502": [
+      "mixseq"
+    ],
+    "ACH-000517": [
+      "mixseq"
+    ],
+    "ACH-000527": [
+      "mixseq"
+    ],
+    "ACH-000532": [
+      "mixseq"
+    ],
+    "ACH-000535": [
+      "mixseq"
+    ],
+    "ACH-000537": [
+      "mixseq"
+    ],
+    "ACH-000542": [
+      "mixseq"
+    ],
+    "ACH-000549": [
+      "mixseq"
+    ],
+    "ACH-000553": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000555": [
+      "tahoe100m"
+    ],
+    "ACH-000569": [
+      "mixseq"
+    ],
+    "ACH-000572": [
+      "mixseq"
+    ],
+    "ACH-000582": [
+      "kinker_scp542"
+    ],
+    "ACH-000587": [
+      "mixseq"
+    ],
+    "ACH-000589": [
+      "mixseq"
+    ],
+    "ACH-000590": [
+      "kinker_scp542"
+    ],
+    "ACH-000595": [
+      "mixseq"
+    ],
+    "ACH-000603": [
+      "mixseq"
+    ],
+    "ACH-000613": [
+      "kinker_scp542"
+    ],
+    "ACH-000617": [
+      "kinker_scp542"
+    ],
+    "ACH-000618": [
+      "mixseq"
+    ],
+    "ACH-000624": [
+      "mixseq"
+    ],
+    "ACH-000625": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000628": [
+      "tahoe100m"
+    ],
+    "ACH-000643": [
+      "kinker_scp542"
+    ],
+    "ACH-000644": [
+      "mixseq"
+    ],
+    "ACH-000650": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000652": [
+      "mixseq"
+    ],
+    "ACH-000657": [
+      "mixseq"
+    ],
+    "ACH-000661": [
+      "mixseq"
+    ],
+    "ACH-000662": [
+      "mixseq"
+    ],
+    "ACH-000666": [
+      "mixseq"
+    ],
+    "ACH-000669": [
+      "mixseq",
+      "tahoe100m"
+    ],
+    "ACH-000670": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000678": [
+      "kinker_scp542"
+    ],
+    "ACH-000680": [
+      "mixseq"
+    ],
+    "ACH-000685": [
+      "mixseq"
+    ],
+    "ACH-000692": [
+      "kinker_scp542"
+    ],
+    "ACH-000701": [
+      "mixseq"
+    ],
+    "ACH-000704": [
+      "mixseq"
+    ],
+    "ACH-000715": [
+      "kinker_scp542",
+      "mixseq"
+    ],
+    "ACH-000723": [
+      "mixseq"
+    ],
+    "ACH-000726": [
+      "kinker_scp542"
+    ],
+    "ACH-000730": [
+      "kinker_scp542"
+    ],
+    "ACH-000734": [
+      "mixseq"
+    ],
+    "ACH-000738": [
+      "mixseq"
+    ],
+    "ACH-000749": [
+      "mixseq"
+    ],
+    "ACH-000750": [
+      "mixseq",
+      "tahoe100m"
+    ],
+    "ACH-000756": [
+      "mixseq"
+    ],
+    "ACH-000769": [
+      "mixseq"
+    ],
+    "ACH-000774": [
+      "mixseq"
+    ],
+    "ACH-000776": [
+      "mixseq"
+    ],
+    "ACH-000784": [
+      "mixseq"
+    ],
+    "ACH-000796": [
+      "mixseq"
+    ],
+    "ACH-000803": [
+      "mixseq"
+    ],
+    "ACH-000808": [
+      "kinker_scp542"
+    ],
+    "ACH-000814": [
+      "kinker_scp542"
+    ],
+    "ACH-000822": [
+      "mixseq"
+    ],
+    "ACH-000824": [
+      "mixseq"
+    ],
+    "ACH-000826": [
+      "mixseq"
+    ],
+    "ACH-000833": [
+      "mixseq"
+    ],
+    "ACH-000836": [
+      "mixseq"
+    ],
+    "ACH-000837": [
+      "mixseq"
+    ],
+    "ACH-000847": [
+      "mixseq"
+    ],
+    "ACH-000852": [
+      "kinker_scp542"
+    ],
+    "ACH-000868": [
+      "mixseq"
+    ],
+    "ACH-000873": [
+      "mixseq"
+    ],
+    "ACH-000875": [
+      "kinker_scp542",
+      "mixseq",
+      "tahoe100m"
+    ],
+    "ACH-000880": [
+      "mixseq"
+    ],
+    "ACH-000884": [
+      "mixseq"
+    ],
+    "ACH-000886": [
+      "mixseq"
+    ],
+    "ACH-000888": [
+      "mixseq"
+    ],
+    "ACH-000895": [
+      "kinker_scp542"
+    ],
+    "ACH-000896": [
+      "mixseq"
+    ],
+    "ACH-000897": [
+      "mixseq"
+    ],
+    "ACH-000905": [
+      "mixseq"
+    ],
+    "ACH-000906": [
+      "mixseq"
+    ],
+    "ACH-000911": [
+      "mixseq"
+    ],
+    "ACH-000921": [
+      "mixseq"
+    ],
+    "ACH-000927": [
+      "kinker_scp542",
+      "mixseq",
+      "tahoe100m"
+    ],
+    "ACH-000936": [
+      "mixseq"
+    ],
+    "ACH-000939": [
+      "mixseq"
+    ],
+    "ACH-000940": [
+      "tahoe100m"
+    ],
+    "ACH-000941": [
+      "mixseq"
+    ],
+    "ACH-000954": [
+      "mixseq",
+      "tahoe100m"
+    ],
+    "ACH-000961": [
+      "mixseq"
+    ],
+    "ACH-000966": [
+      "mixseq"
+    ],
+    "ACH-000967": [
+      "mixseq"
+    ],
+    "ACH-000973": [
+      "mixseq"
+    ],
+    "ACH-000982": [
+      "mixseq"
+    ],
+    "ACH-000990": [
+      "kinker_scp542"
+    ],
+    "ACH-000998": [
+      "mixseq"
+    ],
+    "ACH-001021": [
+      "tahoe100m"
+    ],
+    "ACH-001239": [
+      "mixseq"
+    ],
+    "ACH-001307": [
+      "mixseq"
+    ]
+  }
+}
