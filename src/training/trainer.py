@@ -136,6 +136,7 @@ def train_update(
         objective=config["train"]["objective"],
         gene_index=dependency_batch.conditions.gene_index,
         selective=dependency_batch.selective,
+        gene_mean=dependency_batch.gene_mean,
     )
     total = dependency_loss
     replay_loss = torch.zeros_like(dependency_loss)

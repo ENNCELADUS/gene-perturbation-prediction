@@ -180,6 +180,7 @@ def test_training_loss_and_evaluation_score_the_stack(tmp_path):
         objective=config["train"]["objective"],
         gene_index=batch.conditions.gene_index,
         selective=batch.selective,
+        gene_mean=batch.gene_mean,
     )
     optimizer = make_optimizer(model, config)
     metrics = train_update(

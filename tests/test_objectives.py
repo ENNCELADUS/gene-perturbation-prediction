@@ -10,7 +10,12 @@ import pytest
 import torch
 from torch import nn
 
-from src.model.losses import blocked_pearson_loss, geneeffect_loss
+from src.model.losses import (
+    blocked_pearson_loss,
+    dependency_loss,
+    geneeffect_loss,
+    line_ranking_loss,
+)
 from src.training.sampling import GeneBlockSampler
 from src.training.trainer import make_optimizer, make_scheduler
 
@@ -23,6 +28,7 @@ def loss(prediction, target, scale, objective, gene_index, selective):
         objective=objective,
         gene_index=torch.tensor(gene_index),
         selective=torch.tensor(selective),
+        gene_mean=torch.zeros(len(prediction)),
     )
 
 
@@ -85,6 +91,7 @@ def test_constant_prediction_or_target_gives_finite_loss_and_gradient():
         objective="pearson_blocks",
         gene_index=torch.tensor([4, 4, 4, 7, 7, 7]),
         selective=torch.ones(6, dtype=torch.bool),
+        gene_mean=torch.zeros(6),
     )
     mse = (prediction.detach() - target).square().mean()
     assert value.item() == pytest.approx(mse.item() + 1.0, rel=1e-5)
@@ -95,7 +102,13 @@ def test_constant_prediction_or_target_gives_finite_loss_and_gradient():
 def test_objectives_compute_in_fp32():
     prediction = torch.tensor([0.5, -0.25, 1.0, 0.0], dtype=torch.bfloat16)
     target = torch.tensor([0.0, 0.5, 0.75, -0.5])
-    for objective in ("huber", "standardized_mse", "pearson_blocks"):
+    for objective in (
+        "huber",
+        "standardized_mse",
+        "pearson_blocks",
+        "line_ranking",
+        "dependency_classification",
+    ):
         value = geneeffect_loss(
             prediction,
             target,
@@ -103,6 +116,7 @@ def test_objectives_compute_in_fp32():
             objective=objective,
             gene_index=torch.tensor([0, 0, 0, 0]),
             selective=torch.ones(4, dtype=torch.bool),
+            gene_mean=torch.zeros(4),
         )
         assert value.dtype == torch.float32 and torch.isfinite(value)
     with pytest.raises(ValueError, match="unknown GeneEffect objective"):
@@ -113,7 +127,83 @@ def test_objectives_compute_in_fp32():
             objective="mse",
             gene_index=torch.zeros(4, dtype=torch.long),
             selective=torch.ones(4, dtype=torch.bool),
+            gene_mean=torch.zeros(4),
         )
+
+
+def test_line_ranking_is_listnet_cross_entropy_over_a_genes_lines():
+    target = torch.tensor([-2.0, 0.0, 1.0, 0.5, 0.0, -0.5])
+    prediction = torch.tensor([-1.0, 0.0, 0.5, 0.0, 0.0, 0.0])
+    gene_index = torch.tensor([3, 3, 3, 8, 8, 8])
+    selective = torch.ones(6, dtype=torch.bool)
+    value = line_ranking_loss(prediction, target, gene_index, selective)
+    expected = []
+    for rows in (slice(0, 3), slice(3, 6)):
+        p = torch.softmax(-target[rows], 0)
+        log_q = torch.log_softmax(-prediction[rows], 0)
+        expected.append(-(p * log_q).sum())
+    assert value.item() == pytest.approx(torch.stack(expected).mean().item(), rel=1e-6)
+
+
+def test_line_ranking_is_smallest_at_the_target_and_ignores_constant_genes():
+    target = torch.tensor([-2.0, 0.0, 1.0, 0.4, 0.4, 0.4])
+    gene_index = torch.tensor([0, 0, 0, 1, 1, 1])
+    selective = torch.ones(6, dtype=torch.bool)
+    exact = line_ranking_loss(target + 3.0, target, gene_index, selective)
+    worse = line_ranking_loss(-target, target, gene_index, selective)
+    assert exact < worse
+    alone = line_ranking_loss(target[:3], target[:3], gene_index[:3], selective[:3])
+    assert exact.item() == pytest.approx(alone.item(), rel=1e-6)
+
+
+def test_dependency_loss_reads_the_measured_threshold():
+    gene_mean = torch.tensor([-0.4, -0.4, 0.0])
+    target = torch.tensor([-0.3, 0.2, 0.1])  # GeneEffect -0.7, -0.2, 0.1
+    prediction = torch.tensor([-0.3, 0.2, 0.1])
+    scale = torch.tensor([0.5, 0.5, 1.0])
+    selective = torch.tensor([True, True, False])
+    value = dependency_loss(prediction, target, scale, gene_mean, selective)
+    logit = (-0.5 - gene_mean[:2] - prediction[:2]) / scale[:2]
+    expected = torch.nn.functional.binary_cross_entropy_with_logits(
+        logit, torch.tensor([1.0, 0.0])
+    )
+    assert value.item() == pytest.approx(expected.item(), rel=1e-6)
+    none = dependency_loss(
+        prediction, target, scale, gene_mean, torch.zeros(3, dtype=torch.bool)
+    )
+    assert none.item() == 0.0
+
+
+def test_two_term_objectives_add_to_standardized_mse():
+    prediction = torch.tensor([0.1, -0.3, 0.2, 0.0])
+    target = torch.tensor([0.0, -0.5, 0.4, 0.1])
+    scale = torch.tensor([0.5, 0.5, 0.5, 0.5])
+    gene_index = torch.tensor([0, 0, 0, 0])
+    selective = torch.ones(4, dtype=torch.bool)
+    gene_mean = torch.full((4,), -0.2)
+    mse = ((prediction - target) / scale).square().mean()
+
+    def value(objective):
+        return geneeffect_loss(
+            prediction,
+            target,
+            scale,
+            objective=objective,
+            gene_index=gene_index,
+            selective=selective,
+            gene_mean=gene_mean,
+        )
+
+    ranking = line_ranking_loss(
+        prediction / scale, target / scale, gene_index, selective
+    )
+    assert value("line_ranking").item() == pytest.approx(
+        (mse + ranking).item(), rel=1e-6
+    )
+    dependency = dependency_loss(prediction, target, scale, gene_mean, selective)
+    assert value("dependency_classification").item() == pytest.approx(
+        (mse + dependency).item(), rel=1e-6
+    )
 
 
 def test_gene_blocks_cover_each_gene_at_most_once_with_equal_rank_counts():
@@ -162,6 +252,19 @@ def test_gene_blocks_cover_each_gene_at_most_once_with_equal_rank_counts():
         GeneBlockSampler(rows_by_gene, genes_per_block=2, epoch=1, rank=0, world=1)
     )
     assert first != second
+
+
+def test_line_ranking_uses_gene_blocks():
+    from types import SimpleNamespace
+
+    from src.training import sampling
+
+    rows = [np.array([0, 1]), np.array([2, 3]), np.array([4, 5])]
+    dataset = SimpleNamespace(rows_by_gene=lambda: rows, collate=lambda batch: batch)
+    config = {"train": {"objective": "line_ranking", "genes_per_block": 1}}
+    accelerator = SimpleNamespace(process_index=0, num_processes=1)
+    loader = sampling.dependency_loader(dataset, config, 0, accelerator)
+    assert isinstance(loader.batch_sampler, sampling.GeneBlockSampler)
 
 
 class FakeBackbone(nn.Module):
