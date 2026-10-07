@@ -126,8 +126,10 @@ def train_update(
         )
     with accelerator.autocast():
         output = model(dependency_batch.conditions, response=response)
+    # The stack: the prior's offset plus the head's output, in residual units.
+    prediction = output.delta_hat + dependency_batch.prior
     dependency_loss = geneeffect_loss(
-        output.delta_hat,
+        prediction,
         dependency_batch.residual,
         dependency_batch.residual_scale,
         objective=config["train"]["objective"],

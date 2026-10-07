@@ -34,7 +34,7 @@ _GROUPS = {
     "paths": (
         "split gene_effect source_registry tx1_registration cell_line_manifest "
         "tx1_model_dir tx1_cache esm2_embeddings state_checkpoint state_model_dir "
-        "perturbseq_sources"
+        "perturbseq_sources prior"
     ),
 }
 _TOP_LEVEL = "precision output_root prepared_root"

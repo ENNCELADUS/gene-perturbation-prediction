@@ -54,3 +54,5 @@ paths:
   state_checkpoint: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
   state_model_dir: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562
   perturbseq_sources: configs/experiments/13_geneeffect_226/perturbseq_sources.json
+  # The linear context prior export the head stacks on (prior-export), or null.
+  prior: null

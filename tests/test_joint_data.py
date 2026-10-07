@@ -100,6 +100,7 @@ def make_prepared_fixture(root: Path, *, hvg_width: int = 2) -> dict:
             "split": str(root / "split.json"),
             "gene_effect": str(root / "labels.csv"),
             "esm2_embeddings": str(root / "esm2.npz"),
+            "prior": None,
         },
         "features": {
             "hvg_dim": hvg_width,

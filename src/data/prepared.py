@@ -36,6 +36,12 @@ from src.data.geneeffect import (
     fit_variable_gene_membership,
     load_geneeffect_long,
 )
+from src.data.prior_offsets import (
+    PriorOffsets,
+    check_prior_identity,
+    checked_prior,
+    read_prior_offsets,
+)
 from src.data.q_sc import QScFeatures, compute_q_sc
 from src.data.residual_target import fit_gene_means
 from src.data.response_cache import ResponseTargetsCache, open_response_targets
@@ -60,6 +66,7 @@ class PreparedInputs:
 
     Every expression quantity is in STATE's space: whole-library normalize_total
     to ``target_sum``, then log1p. Only Tx1 embeddings come from raw counts.
+    ``prior`` is the linear context prior export the head stacks on, or None.
     """
 
     split: FixedSplit
@@ -77,6 +84,7 @@ class PreparedInputs:
     response_targets: ResponseTargetsCache = field(repr=False, compare=False)
     response_anchors: tuple[str, ...]
     target_sum: float
+    prior: PriorOffsets | None = field(default=None, repr=False, compare=False)
 
     def preprocessing_state(self) -> dict[str, object]:
         """Return checkpoint-ready fitted state, including actual ESM2 vectors."""
@@ -108,6 +116,7 @@ class PreparedInputs:
             "esm2_vectors": torch.from_numpy(
                 np.asarray(self.esm2_vectors, dtype=np.float32)
             ).clone(),
+            "prior": None if self.prior is None else dict(self.prior.identity),
         }
 
 
@@ -229,7 +238,7 @@ def _restored_target_sum(preprocessing: Mapping[str, Any], target_sum: float) ->
 def _restored_keys(preprocessing: Mapping[str, Any]) -> None:
     missing = [
         key
-        for key in ("selective_genes", "residual_scale", "context_pca")
+        for key in ("selective_genes", "residual_scale", "context_pca", "prior")
         if key not in preprocessing
     ]
     if missing:
@@ -250,7 +259,9 @@ def load_inputs(
 
     Fitting uses labeled training lines only. ``preprocessing`` restores a
     checkpoint's fitted state instead. Test labels and lines are opened only
-    with ``include_test``.
+    with ``include_test``. ``config["paths"]["prior"]`` names a prior export; it
+    must match the gene panel, the residual SD and every exposed line, and a
+    restored checkpoint must have been trained on it.
     """
     root = Path(config["prepared_root"])
     manifest = read_manifest(root)
@@ -326,6 +337,16 @@ def load_inputs(
 
     exposed = {*split.train, *split.val, *(split.test if include_test else ())}
     exposed -= set(split.unlabeled_train)
+    prior = None
+    if paths["prior"] is not None:
+        prior = checked_prior(
+            read_prior_offsets(Path(paths["prior"])),
+            genes=genes,
+            residual_scale=residual_scale,
+            lines=exposed,
+        )
+    if preprocessing is not None:
+        check_prior_identity(preprocessing["prior"], prior)
     labels = labels.loc[
         labels["model_id"].isin(exposed) & np.isfinite(labels["gene_effect"]),
         ["model_id", "gene_symbol", "gene_effect", "residual"],
@@ -360,6 +381,7 @@ def load_inputs(
         response_targets=open_response_targets(root / "response"),
         response_anchors=tuple(manifest["response_anchors"]),
         target_sum=target_sum,
+        prior=prior,
     )
 
 
