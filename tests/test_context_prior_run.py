@@ -41,9 +41,16 @@ def test_prior_config_is_strict():
     with pytest.raises(ValueError, match="expression_components first"):
         validate_prior_config(unordered)
     unnamed = copy.deepcopy(CONFIG)
-    unnamed["reference"] = "nothing"
+    unnamed["reference"]["experiment"] = "nothing"
     with pytest.raises(ValueError, match="reference"):
         validate_prior_config(unnamed)
+    # A gene penalty belongs to a gene-level reference row and only to one.
+    gene_level = copy.deepcopy(CONFIG)
+    gene_level["reference"]["block_set"] = "all"
+    with pytest.raises(ValueError, match="gene_penalty"):
+        validate_prior_config(gene_level)
+    gene_level["reference"]["gene_penalty"] = 10.0
+    validate_prior_config(gene_level)
 
 
 def test_long_frame_keeps_finite_labels_in_geneeffect_units():
@@ -318,7 +325,8 @@ def test_run_setting_scores_every_block_set_and_penalty(tmp_path):
         assert set(row["test"]) == set(run.METRICS)
         for split in ("val", "test"):
             assert len(row[f"{split}_gain"]["interval"]) == 2
-    best = max(components, key=lambda row: row["val"]["selective_spearman"])
+    pinned = [row for row in components if row["components_penalty"] == 10.0]
+    (best,) = pinned
     assert set(result) == {"rows", "diagnostics"}  # nothing chosen
     gene_level = [row for row in rows if row["block_set"] != "components"]
     assert {row["block_set"] for row in gene_level} == {
@@ -334,7 +342,7 @@ def test_run_setting_scores_every_block_set_and_penalty(tmp_path):
         for g in (0.1, 1.0, 10.0)
     ]
     assert pairs == grid * 3
-    # The reference row is the best components row of the reference experiment.
+    # The reference row is the row the config pins.
     for split in ("val", "test"):
         assert best[f"{split}_gain"] == {"difference": 0.0, "interval": [0.0, 0.0]}
     # A gain is the row's selective Spearman minus the reference row's.
@@ -349,6 +357,35 @@ def test_run_setting_scores_every_block_set_and_penalty(tmp_path):
     assert diagnostics["all"]["total"] == len(GENES)
     assert diagnostics["selective"]["total"] == 6
     assert "gene_space" not in diagnostics
+
+
+def test_gains_are_measured_against_a_pinned_gene_level_row(tmp_path):
+    config = tiny_config(tmp_path)
+    config["reference"] = {
+        "experiment": "affine",
+        "block_set": "all",
+        "components_penalty": 1.0,
+        "gene_penalty": 1.0,
+    }
+    config = validate_prior_config(config)
+    synthetic = synthetic_base(config)
+    reference = run.reference_predictions(synthetic)
+    rows = run.run_setting(synthetic, config["experiments"]["affine"], {}, reference)[
+        "rows"
+    ]
+    (pinned,) = [
+        row
+        for row in rows
+        if (row["block_set"], row["components_penalty"], row["gene_penalty"])
+        == ("all", 1.0, 1.0)
+    ]
+    for split in ("val", "test"):
+        assert pinned[f"{split}_gain"] == {"difference": 0.0, "interval": [0.0, 0.0]}
+        for row in rows:
+            expected = (
+                row[split]["selective_spearman"] - pinned[split]["selective_spearman"]
+            )
+            assert np.isclose(row[f"{split}_gain"]["difference"], expected)
 
 
 def _counted(monkeypatch, config):

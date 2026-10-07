@@ -1,0 +1,31 @@
+# Follow-ups on the default prior (the affine bridge, expression components at penalty 1,
+# then own expression, partners and data-selected genes at gene penalty 10; chosen on
+# 2026-10-07 from bridge_remedies_penalty_grid.yaml). Gains are measured against it.
+# Block sets separate own expression from partners once data-selected genes are in;
+# src.experiments.data_selected_analysis reads the reference row's data-selected stage.
+seed: 0
+joint_config: configs/revision/frozen_huber.yaml
+output_root: outputs/context_prior
+paths:
+  extra_lines: configs/benchmarks/extra_bulk_lines_26Q1.json
+  reference: configs/context_prior/reference
+  model: data/sl_dependency_v0/raw/depmap/Model.csv
+  bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
+training_side:
+  exclude_lineages: [Lymphoid, Myeloid]
+prior: {components: 128, folds: 5, bootstrap_repeats: 1000, selected_genes: 50}
+penalties:
+  components: [0.1, 1.0, 10.0]
+  gene: [1.0, 10.0, 100.0]
+block_sets:
+  components: [expression_components]
+  selected: [expression_components, data_selected]
+  own_and_selected: [expression_components, own_expression, data_selected]
+  partners_and_selected: [expression_components, partners, data_selected]
+  all: [expression_components, own_expression, partners, data_selected]
+reference: {experiment: affine, block_set: all, components_penalty: 1.0, gene_penalty: 10.0}
+experiments:
+  affine:
+    kind: affine
+    settings: [{}]
+    block_sets: [components, selected, own_and_selected, partners_and_selected, all]
