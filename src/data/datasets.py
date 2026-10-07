@@ -28,6 +28,7 @@ class DependencyDataset(Dataset[int]):
     Tx1 context (the pooled ``z_c`` through ``inputs.context_pca``) and q_sc
     table, the ESM2 table and every row's targets and indices.
     The collator only gathers by row index, so a batch is born on ``device``.
+    Each row also carries its prior offset (``prior``), zero without a prior.
     """
 
     def __init__(
@@ -110,6 +111,19 @@ class DependencyDataset(Dataset[int]):
         self.selective = on_device(
             [gene in inputs.selective_genes for gene in self.genes], torch.bool
         )
+        if inputs.prior is None:
+            prior = np.zeros(len(self.rows))
+        else:
+            table = inputs.prior.values
+            line_rows = table.index.get_indexer(self.model_ids)
+            gene_columns = table.columns.get_indexer(self.genes)
+            if (line_rows < 0).any() or (gene_columns < 0).any():
+                raise ValueError("the prior export lacks some of the split's rows")
+            prior = (
+                table.to_numpy()[line_rows, gene_columns]
+                * inputs.residual_scale.loc[self.genes].to_numpy()
+            )
+        self.prior = on_device(prior, torch.float32)
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -150,6 +164,7 @@ class DependencyDataset(Dataset[int]):
             gene_mean=self.gene_mean[rows],
             residual_scale=self.residual_scale[rows],
             selective=self.selective[rows],
+            prior=self.prior[rows],
         )
 
 
