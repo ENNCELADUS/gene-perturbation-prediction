@@ -1,0 +1,59 @@
+# Single-cell correction, wave one, objective screen: the nested head on what the
+# default prior leaves (paths.prior), STATE absent, objective standardized_mse.
+seeds: {train: 0, collator: 0, projection: 0}
+train:
+  max_epochs: 30
+  patience: 5
+  dependency_batch_size: 1024
+  response_batch_size: 64
+  response_interval: 4
+  response_weight: 0.0
+  state_learning_rate: 0.00001
+  adapter_learning_rate: 0.0001
+  head_learning_rate: 0.001
+  weight_decay: 0.05
+  objective: standardized_mse
+  state_mode: frozen   # unused: STATE is absent (use_delta_proj and use_s false)
+  warmup_epochs: 1
+  genes_per_block: 6
+comparison:
+  epochs: 50
+  hidden: 512
+  learning_rate: 0.0001
+  state_learning_rate: 0.00001
+  batch_size: 64
+  shuffles: 10
+  bootstrap: 1000
+precision: bf16
+output_root: outputs/geneeffect_correction
+prepared_root: data/geneeffect_joint/v2
+features: {cells_per_context: 128, hvg_dim: 2000, esm2_dim: 1280, variable_gene_min_observations: 5, variable_gene_percentile: 75, selective_min_lines: 5, selective_max_fraction: 0.9, residual_sd_floor_percentile: 10}
+model:
+  cell_sentence_len: 64
+  esm2_adapter_hidden: 512
+  head_blocks: {use_delta_proj: false, use_s: false, use_q_sc: true, use_e_g: true, use_z_c: true}
+  factor_rank: 64
+  context_components: 128
+  dropout: 0.1
+preparation:
+  response_max_cells_per_gene: 128
+  response_total_cells_per_line: null
+  response_sampling_seed: 42
+  tx1_batch_size: 32
+  tx1_max_length: 2048
+  var_ensembl_col: ensembl_id
+  hvg_gene_symbol_col: auto
+paths:
+  split: configs/benchmarks/cell_line_geneeffect_226_split.json
+  gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+  source_registry: configs/experiments/13_geneeffect_226/basal_source_registry.csv
+  tx1_registration: configs/benchmarks/provenance/phase_a_tx1_20260724/phase_a_registration.json
+  cell_line_manifest: configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
+  tx1_model_dir: data/models/tahoe_x1_3b/3b-model
+  tx1_cache: data/tx1_basal_embeddings/v1
+  esm2_embeddings: data/esm2/exp13_gene_universe_esm2_650M.npz
+  state_checkpoint: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
+  state_model_dir: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562
+  perturbseq_sources: configs/experiments/13_geneeffect_226/perturbseq_sources.json
+  # The default prior's export (hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_export).
+  prior: outputs/context_prior/default_prior_export/export

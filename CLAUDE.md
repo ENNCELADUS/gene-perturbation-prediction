@@ -38,8 +38,10 @@ the affine bridge with all gene-level blocks at components penalty 1 and gene pe
 0.235 test (+0.007 and +0.013 over components alone, intervals above zero). Its follow-ups
 (`results/default_prior_followups_seed0/`) found that the data-selected genes carry that gain, so the **default prior**
 (`configs/context_prior/default_prior.yaml`) is the affine bridge with components at penalty 1 and data-selected genes at gene
-penalty 10: 0.229 validation / 0.234 test. The **single-cell correction** (the nested head trained on what that prior leaves)
-is planned in `docs/specs/2026-10-07-single-cell-correction-plan.md`. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+penalty 10: 0.229 validation / 0.234 test. The **single-cell correction** (the nested head stacked on that prior's out-of-fold export,
+protocol §12) is implemented for wave one (`docs/specs/2026-10-07-single-cell-correction-plan.md`): `paths.prior`
+names the export, the stack starts at the prior and validates before its first update, the baselines add the prior
+alone and the prior plus the Tx1 ridge, and `configs/correction/` holds the objective screen with STATE absent. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
@@ -59,6 +61,8 @@ hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: tra
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any checkpoint; `all` never runs test, `revision` scores its own best.pt
 hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   # linear context prior, CPU: bridge remedies scored on validation and test; rows/, results.md in outputs/context_prior/<id>/
 hpc/run.sh prior-selected CONFIG --run-id ID                # the reference row's data-selected genes, CPU: data_selected/ in the same run directory
+hpc/run.sh prior-export CONFIG --run-id ID                  # the reference row for the correction, CPU: export/ (val/test, training lines out of fold); never overwritten
+uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
