@@ -6,8 +6,9 @@ from pathlib import Path
 
 
 def run_baselines(config, *, split, out_dir, inputs=None):
-    """Fit the control ladder on train lines; score ``split``. ``inputs`` replaces
-    ``load_inputs`` (synthetic tests)."""
+    """Fit the control ladder on train lines; score ``split``. With a prior export
+    (``paths.prior``) the prior alone and the prior plus the Tx1 ridge join the
+    ladder. ``inputs`` replaces ``load_inputs`` (synthetic tests)."""
     import numpy as np
     import pandas as pd
     from src.baselines.residual import R1Result, run_r1_ladder
@@ -62,6 +63,12 @@ def run_baselines(config, *, split, out_dir, inputs=None):
     # Re-score on the model's absolute-per-line and residual-per-gene axes, adding
     # back the same fixed training means the model uses.
     predictions = result.predictions.copy()
+    if inputs.prior is not None:
+        from src.baselines.prior_controls import prior_control_rows
+
+        predictions = pd.concat(
+            [predictions, prior_control_rows(inputs, split)], ignore_index=True
+        )
     means = predictions.gene_symbol.map(inputs.train_gene_means)
     predictions["geneeffect_prediction"] = predictions.residual_prediction + means
     metrics, per_line, per_gene = {}, [], []
