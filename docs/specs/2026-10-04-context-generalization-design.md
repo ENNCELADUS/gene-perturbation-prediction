@@ -340,3 +340,33 @@ the extra-lines decision.
 - 26Q1 files behind the portal's Cloudflare check (`OmicsGlobalSignatures`, `CRISPRConfounders`, subtype
   tables) are fetched from the H20 host or a browser session if needed; the 24Q4 figshare `OmicsSignatures`
   supplies MSI scores meanwhile.
+
+## 12. Amendments (2026-10-07)
+
+Agreed in the design interview after the default-prior follow-ups
+([results](../../results/default_prior_followups_seed0/README.md)); the plans are
+[wave one](2026-10-07-single-cell-correction-plan.md) and
+[the second wave](2026-10-07-single-cell-correction-second-wave-plan.md).
+
+- **Prior.** The correction stacks on the affine bridge with expression components (penalty 1) and data-selected
+  genes (gene penalty 10), 0.2290 validation / 0.2338 test; own expression and partners added +0.0010 on
+  validation (interval spanning zero) once data-selected genes were in.
+- **Objective (§7.3).** The objective is screened again on the prior's residual with STATE absent: Huber,
+  standardised MSE, standardised MSE plus a ListNet cross-entropy across a gene's lines (temperature 1 in σ units),
+  and standardised MSE plus a binary cross-entropy of GeneEffect < −0.5 on the stack's output. The winner runs with
+  frozen and with trainable STATE. If STATE absent wins, the research plan is discussed before anything else runs.
+- **Growth in layers (§5.2).** Wave one is the existing head unchanged. The second wave adds each input on its own
+  against the wave-one winner: partner fractions, program-score Δ (with a STATE setting), the state views,
+  inferred copy number, then `C` off, linear `C`, `C` over the views and cross-attention; then one combined run.
+- **State views (§3.3).** Tirosh cell-cycle sets and Gavish meta-programs only. Kinker's programs were derived from
+  the cells of 23 validation and 19 test lines (`kinker_sccle` is their source), so they would expose held-out lines.
+- **Inferred copy number (§3.3).** Also computed from single cells for the correction: arm-level scores, their
+  spread across cells and an aneuploidy score as part of the state views, and local copy number of g and its
+  closest paralog as an `h` block.
+- **More labelled contexts (§10).** The search for public single-cell atlases of screened lines outside the 226 runs
+  alongside wave one and ends in a pinned membership file; ingesting the lines is a separate decision.
+- **Controls (§8.2).** Every correction summary adds the prior alone and the prior plus the Tx1 context-PCA ridge
+  fitted on what the prior leaves, each with a paired bootstrap of the stack minus it.
+- **Not in these plans.** Contrastive representation learning (a gene-side contrastive term on `G` is a later
+  candidate), predicted genotype in the correction, and other single-cell foundation-model embeddings: the
+  limit is labelled contexts, and predicted genotype already gave no gain as a prior block.
