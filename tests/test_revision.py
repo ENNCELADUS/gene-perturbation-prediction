@@ -198,9 +198,31 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
     assert "| Context-PCA ridge (Tx1) |" in test_text
     assert "0.0200 [-0.0100, 0.0500], paired bootstrap over validation" in text
     assert "0.0200 [-0.0100, 0.0500], paired bootstrap over test" in text
-    assert "epoch 2 of 4 trained" in text
+    assert "epoch 2; 4 epochs trained" in text
     assert "0.6000 on the training diagnostic" in text
     assert "0.0700 on the validation lines" in text
+
+
+def test_best_before_the_first_update_is_the_prior_alone(
+    finished, bootstrap, monkeypatch
+):
+    monkeypatch.setattr(revision, "_git_revision", lambda: "abc123")
+    write_json(finished / "train" / "done.json", {"best_epoch": -1, "next_epoch": 3})
+    before = {
+        "epoch": -1,
+        "global_step": 0,
+        "train_eval_selective_spearman": 0.4,
+        "val_selective_spearman": 0.09,
+    }
+    path = finished / "train" / "metrics.jsonl"
+    path.write_text(json.dumps(before) + "\n" + path.read_text())
+    summary = revision.write_outputs(Path("configs/revision/x.yaml"), finished, "rid")
+    record = json.loads((finished / "revision.json").read_text())
+    assert record["training"]["best_epoch"] == 0
+    assert record["training"]["val_selective_spearman"] == 0.09
+    text = summary.read_text()
+    assert "the model before its first update (the prior alone)" in text
+    assert "3 epochs trained" in text
 
 
 def test_bootstrap_inputs_are_the_joint_and_tx1_ridge_rows(finished, bootstrap):

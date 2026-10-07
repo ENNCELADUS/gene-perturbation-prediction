@@ -362,8 +362,9 @@ class GeneEffectNestedHead(nn.Module):
     - ``G(g)`` is a free per-gene embedding plus, when ``e_g`` is enabled, a
       linear map of the ESM2 embedding.
     - ``C(z) = W z + SwiGLU(z)`` reads only the line context ``z_c`` (the
-      eigen-scaled context PCA scores). The SwiGLU branch's output layer is
-      zero-initialised, so training starts at a reduced-rank context ridge.
+      eigen-scaled context PCA scores). ``W`` and the SwiGLU branch's output
+      layer start at zero, so the head predicts zero before the first update (its
+      gradient reaches ``W`` first through ``G``).
     - ``h`` encodes each enabled per-(g, c) block with ``Linear -> LayerNorm``,
       concatenates them, applies dropout and a SwiGLU layer whose output is
       zero-initialised. It never sees ``z_c``; with no such block enabled it is
@@ -426,6 +427,10 @@ class GeneEffectNestedHead(nn.Module):
             nn.Linear(dims.e_g, self.factor_rank) if blocks.use_e_g else None
         )
         self.context_linear = nn.Linear(dims.z_c, self.factor_rank)
+        # C starts at zero: with h's zero output layer the head predicts zero before
+        # the first update, so a stack equals its prior there.
+        nn.init.zeros_(self.context_linear.weight)
+        nn.init.zeros_(self.context_linear.bias)
         self.context_residual = SwiGLU(
             dims.z_c, CONTEXT_HIDDEN, self.factor_rank, dropout
         )
