@@ -13,6 +13,9 @@ from src.data.batches import DependencyBatch, ResponseBatch
 from src.data.datasets import DependencyDataset, ResponseDataset
 from src.data.prepared import PreparedInputs
 
+# Objectives whose batches hold every training row of a few genes.
+GENE_BLOCK_OBJECTIVES = ("pearson_blocks", "line_ranking")
+
 
 def balanced_responses(
     dataset: ResponseDataset, *, batch_size: int, epoch: int, rank: int
@@ -97,7 +100,8 @@ def dependency_loader(
 ) -> DataLoader[DependencyBatch]:
     """One shuffled GeneEffect epoch of training batches for this rank.
 
-    ``pearson_blocks`` takes gene blocks (``GeneBlockSampler``); every other
+    ``pearson_blocks`` and ``line_ranking`` take gene blocks
+    (``GeneBlockSampler``); every other
     objective takes ``dependency_batch_size`` rows from a seeded
     ``DistributedSampler`` with the incomplete tail dropped. Either way every rank
     takes the same number of updates. Do not pass the loader through
@@ -106,7 +110,7 @@ def dependency_loader(
     """
     train = config["train"]
     rank, world = accelerator.process_index, accelerator.num_processes
-    if train["objective"] == "pearson_blocks":
+    if train["objective"] in GENE_BLOCK_OBJECTIVES:
         sampler = GeneBlockSampler(
             dataset.rows_by_gene(),
             genes_per_block=train["genes_per_block"],
