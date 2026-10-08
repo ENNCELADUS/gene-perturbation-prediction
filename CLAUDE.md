@@ -16,7 +16,7 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-03)
+## Current state (2026-10-08)
 
 The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and baselined once at seed 0, before the
 **expression-space change** (STATE was fed raw counts), so those numbers are not like for like with the current pipeline
@@ -39,9 +39,12 @@ the affine bridge with all gene-level blocks at components penalty 1 and gene pe
 (`results/default_prior_followups_seed0/`) found that the data-selected genes carry that gain, so the **default prior**
 (`configs/context_prior/default_prior.yaml`) is the affine bridge with components at penalty 1 and data-selected genes at gene
 penalty 10: 0.229 validation / 0.234 test. The **single-cell correction** (the nested head stacked on that prior's out-of-fold export,
-protocol §12) is implemented for wave one (`docs/specs/2026-10-07-single-cell-correction-plan.md`): `paths.prior`
-names the export, the stack starts at the prior and validates before its first update, the baselines add the prior
-alone and the prior plus the Tx1 ridge, and `configs/correction/` holds the objective screen with STATE absent. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+protocol §12) ran wave one (`docs/specs/2026-10-07-single-cell-correction-plan.md`, `results/correction_wave_one_seed0/`):
+`paths.prior` names the export, the stack starts at the prior and validates before its first update, the baselines add
+the prior alone and the prior plus the Tx1 ridge, and `configs/correction/` holds the objective screen and the STATE
+runs. In all six runs (four objectives with STATE absent, then standardised MSE with frozen and trainable STATE)
+`best.pt` is the prior alone (0.229 / 0.234): every trained epoch lowers validation, and the prior plus the Tx1 ridge
+scores 0.183 / 0.182. STATE absent won; the research plan is to be discussed before a second wave. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
