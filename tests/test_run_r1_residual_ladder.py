@@ -859,3 +859,30 @@ def test_baselines_run_on_synthetic_inputs(tmp_path: Path) -> None:
     for name in ("predictions.parquet", "per_line.csv", "per_gene.csv", "metrics.json"):
         assert (tmp_path / "val" / name).is_file()
     assert not (tmp_path / "test").exists()
+
+
+def test_baselines_add_the_prior_controls_with_a_prior(tmp_path: Path) -> None:
+    import dataclasses
+
+    from src.baselines.prior_controls import PRIOR, PRIOR_PLUS_TX1_RIDGE
+    from src.data.prior_offsets import PriorOffsets
+    from src.experiments.baselines import run_baselines
+
+    inputs = _synthetic_inputs()
+    lines = (*inputs.split.supervised_train, *inputs.split.val)
+    values = pd.DataFrame(
+        np.outer(0.1 * np.arange(len(lines)), np.ones(len(inputs.genes))),
+        index=list(lines),
+        columns=list(inputs.genes),
+    )
+    prior = dataclasses.replace(
+        inputs,
+        prior=PriorOffsets(
+            {"run_id": "r", "reference": {}}, values, inputs.residual_scale
+        ),
+    )
+    result = run_baselines({}, split="val", out_dir=tmp_path / "val", inputs=prior)
+    assert {PRIOR, PRIOR_PLUS_TX1_RIDGE} <= set(result.summary)
+    assert result.summary[PRIOR]["val_selective_spearman"] is not None
+    controls = result.predictions.loc[result.predictions.method == PRIOR]
+    assert set(controls.model_id) == set(inputs.split.val)

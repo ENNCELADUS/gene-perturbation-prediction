@@ -204,7 +204,8 @@ def _predict(
     batch_size: int,
     accelerator,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """This rank's row positions and float32 residual predictions.
+    """This rank's row positions and float32 residual predictions of the stack
+    (prior offset plus head).
 
     Batches are consecutive ``batch_size`` rows in dataset order; rank ``r`` of
     ``W`` takes batches ``r, r + W, ...``.
@@ -219,7 +220,7 @@ def _predict(
         rows = range(start, min(start + batch_size, len(dataset)))
         batch = dataset.collate(rows)
         with accelerator.autocast() if accelerator else nullcontext():
-            predicted = model(batch.conditions).delta_hat.float()
+            predicted = model(batch.conditions).delta_hat.float() + batch.prior
         positions.append(np.asarray(rows, dtype=np.int64))
         predictions.append(predicted.cpu().numpy())
     if not positions:

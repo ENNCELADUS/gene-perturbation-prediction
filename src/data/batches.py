@@ -157,7 +157,9 @@ class DependencyBatch:
     ``residual`` is the training target; ``gene_mean`` is the fixed train mean added
     back to a predicted residual; ``gene_effect`` is the measured absolute value.
     ``residual_scale`` is each row's gene's training residual SD and ``selective``
-    whether that gene is selective.
+    whether that gene is selective. ``prior`` is each row's prior prediction in
+    residual units, zero without a prior; the stack predicts ``prior`` plus the
+    head's output.
     """
 
     conditions: OnlineConditionBatch
@@ -166,6 +168,7 @@ class DependencyBatch:
     gene_mean: torch.Tensor
     residual_scale: torch.Tensor
     selective: torch.Tensor
+    prior: torch.Tensor
 
     def to(self, device: torch.device | str) -> DependencyBatch:
         return DependencyBatch(
@@ -175,6 +178,7 @@ class DependencyBatch:
             gene_mean=self.gene_mean.to(device),
             residual_scale=self.residual_scale.to(device),
             selective=self.selective.to(device),
+            prior=self.prior.to(device),
         )
 
 

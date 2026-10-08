@@ -10,6 +10,8 @@ hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 hpc/run.sh prior configs/context_prior/bridge_remedies.yaml [--run-id <id>] [--experiments affine,contrastive]
+hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_export
+hpc/run.sh revision configs/correction/huber_no_state.yaml --run-id correction_huber_no_state_seed0
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
 
@@ -79,6 +81,15 @@ already exists:
    context-PCA ridge; 1,000 resamples, seed 0); then the best epoch with its training-diagnostic
    and validation selective Spearman. Both files are rewritten on every rerun.
 
+With `paths.prior` set (the single-cell correction, `configs/correction/`,
+[protocol §12](../docs/03-geneeffect-protocol.md#12-single-cell-correction)) the run is a
+correction: the model predicts the prior export's offset plus the head, validation also runs
+before the first update (epoch −1, the prior alone, eligible for `best.pt`), the baselines add
+the prior alone and the prior plus the Tx1 context-PCA ridge, `summary.md` bootstraps the stack
+against each of them as well, and every summary carries a per-lineage table read from the split
+table next to the split file. `uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val`
+prints the paired line bootstrap of selective Spearman between two finished runs (A minus B).
+
 The run directory is `<output_root>/<run_id>/{train/, evaluation/{val,test}/,
 baselines/{val,test}/, logs/, revision.json, summary.md}`; `output_root` is `outputs/geneeffect_revision` in
 `configs/revision/*.yaml` and `outputs/geneeffect_joint` in the base config. There is no
@@ -117,6 +128,13 @@ pins, and the table is read by a person. `configs/context_prior/default_prior.ya
 data-selected genes) and writes `data_selected/{features.csv, targets.csv, ablation.json, summary.md}` into the same run
 directory: feature use, per-target gains of the stage, and scores with the stage masked to or without its top features.
 
+`hpc/run.sh prior-export CONFIG --run-id <id>` writes the config's reference row for the single-cell correction into
+`outputs/context_prior/<run_id>/export/{prior.npz, prior.json}`: validation and test from the reference fit, and every
+labelled single-cell training line out of fold (the bridge and every stage refitted without the line's patient-grouped
+fold). An existing export is never replaced; a correction checkpoint records the export's run id, so a new export
+needs a new run id. It runs on CPU (set `OMP_NUM_THREADS` and `MKL_NUM_THREADS`); `prior.json` holds its own
+validation and test scores, which reproduce the reference row of the `prior` run.
+
 The run directory is `outputs/context_prior/<run_id>/{run_config.json, rows/<experiment>__<n>.json, results.md}`.
 Each setting writes its row file when finished and is skipped when the file exists, so an interrupted run resumes by
 rerunning the same command with the same run id; `results.md` is rewritten from whatever rows exist on every run.
@@ -130,7 +148,8 @@ the H20 host has no internet and downloads nothing.
 
 All configuration fields are explicit in `configs/geneeffect_joint.yaml`; unknown or
 missing keys are errors; a checkpoint from before the selective-gene revision lacks its
-fitted selective genes and residual scale and is refused. Input paths are relative to the repository root. Preparation
+fitted selective genes and residual scale and is refused, and one from before the single-cell
+correction lacks its recorded prior export and is refused too. Input paths are relative to the repository root. Preparation
 requires the raw source registry, GeneEffect CSV, supplied ESM2 table, STATE checkpoint and
 gene order, and the response and basal sources. Missing Tx1 caches additionally need the
 configured local Tx1 model and a GPU; newly encoded cells use collation seed 0, and the Tx1

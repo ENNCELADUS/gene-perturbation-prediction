@@ -60,6 +60,10 @@ def finished(tmp_path) -> Path:
     """A finished run directory: training record, evaluation and baselines on
     validation and test (test scores are validation's minus 0.01)."""
     run = tmp_path / "run"
+    run.mkdir()
+    pd.DataFrame({"model_id": ["L1", "L2"], "lineage": ["Lung", "Skin"]}).to_csv(
+        tmp_path / "split.csv", index=False
+    )
     write_json(run / "train" / "done.json", {"best_epoch": 1, "next_epoch": 4})
     records = [
         {"epoch": 0, "global_step": 1, "train_geneeffect_loss": 1.0},
@@ -122,7 +126,9 @@ def bootstrap(monkeypatch):
 
 def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
     monkeypatch.setattr(revision, "_git_revision", lambda: "abc123")
-    summary = revision.write_outputs(Path("configs/revision/x.yaml"), finished, "rid")
+    summary = revision.write_outputs(
+        Path("configs/revision/x.yaml"), finished, "rid", finished.parent / "split.csv"
+    )
     assert summary == finished / "summary.md"
 
     record = json.loads((finished / "revision.json").read_text())
@@ -163,13 +169,15 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
         "selective_spearman"
     ] == pytest.approx(0.04)
     for split in ("val", "test"):
-        assert record[split]["bootstrap"] == {
-            "comparison": "Joint model minus Context-PCA ridge (Tx1)",
-            "repeats": 1000,
-            "seed": 0,
-            "difference": 0.02,
-            "interval": [-0.01, 0.05],
-        }
+        assert record[split]["bootstraps"] == [
+            {
+                "comparison": "Joint model minus Context-PCA ridge (Tx1)",
+                "repeats": 1000,
+                "seed": 0,
+                "difference": 0.02,
+                "interval": [-0.01, 0.05],
+            }
+        ]
     # Best epoch 1 (0-based) is the second epoch; its own record, not the last.
     assert record["training"] == {
         "best_epoch": 2,
@@ -198,13 +206,76 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
     assert "| Context-PCA ridge (Tx1) |" in test_text
     assert "0.0200 [-0.0100, 0.0500], paired bootstrap over validation" in text
     assert "0.0200 [-0.0100, 0.0500], paired bootstrap over test" in text
-    assert "epoch 2 of 4 trained" in text
+    assert "epoch 2; 4 epochs trained" in text
     assert "0.6000 on the training diagnostic" in text
     assert "0.0700 on the validation lines" in text
 
 
+def test_best_before_the_first_update_is_the_prior_alone(
+    finished, bootstrap, monkeypatch
+):
+    monkeypatch.setattr(revision, "_git_revision", lambda: "abc123")
+    write_json(finished / "train" / "done.json", {"best_epoch": -1, "next_epoch": 3})
+    before = {
+        "epoch": -1,
+        "global_step": 0,
+        "train_eval_selective_spearman": 0.4,
+        "val_selective_spearman": 0.09,
+    }
+    path = finished / "train" / "metrics.jsonl"
+    path.write_text(json.dumps(before) + "\n" + path.read_text())
+    summary = revision.write_outputs(
+        Path("configs/revision/x.yaml"), finished, "rid", finished.parent / "split.csv"
+    )
+    record = json.loads((finished / "revision.json").read_text())
+    assert record["training"]["best_epoch"] == 0
+    assert record["training"]["val_selective_spearman"] == 0.09
+    text = summary.read_text()
+    assert "the model before its first update (the prior alone)" in text
+    assert "3 epochs trained" in text
+
+
+def test_summary_bootstraps_the_stack_against_every_prior_control(
+    finished, bootstrap, monkeypatch
+):
+    monkeypatch.setattr(revision, "_git_revision", lambda: "abc123")
+    for split in ("val", "test"):
+        path = finished / f"baselines/{split}/metrics.json"
+        metrics = json.loads(path.read_text())
+        metrics["context_prior"] = metric_row(0.06, split=split)
+        metrics["context_prior+context_pca_ridge[tx1]"] = metric_row(0.065, split=split)
+        path.write_text(json.dumps(metrics))
+        pd.concat(
+            [
+                frame("context_pca_ridge[tx1]", 0.1),
+                frame("gene_mean", 0.0),
+                frame("context_prior", 0.15),
+                frame("context_prior+context_pca_ridge[tx1]", 0.12),
+            ]
+        ).to_parquet(finished / f"baselines/{split}/predictions.parquet")
+    revision.write_outputs(
+        Path("configs/revision/x.yaml"), finished, "rid", finished.parent / "split.csv"
+    )
+    record = json.loads((finished / "revision.json").read_text())
+    comparisons = [b["comparison"] for b in record["val"]["bootstraps"]]
+    assert comparisons == [
+        "Joint model minus Context-PCA ridge (Tx1)",
+        "Joint model minus Linear context prior",
+        "Joint model minus Linear context prior + Tx1 context-PCA ridge",
+    ]
+    assert len(bootstrap) == 6  # three comparisons on each split
+    lineages = record["val"]["lineages"]
+    assert [row["lineage"] for row in lineages] == ["Lung", "Skin"]
+    assert {"Joint model", "Linear context prior"} <= set(lineages[0])
+    summary = (finished / "summary.md").read_text()
+    assert "Joint model minus Linear context prior:" in summary
+    assert "| Lung | 1 |" in summary
+
+
 def test_bootstrap_inputs_are_the_joint_and_tx1_ridge_rows(finished, bootstrap):
-    revision.build_record(Path("c.yaml"), finished, "rid", "rev")
+    revision.build_record(
+        Path("c.yaml"), finished, "rid", "rev", finished.parent / "split.csv"
+    )
     assert len(bootstrap) == 2
     for left, right, selective, repeats, seed in bootstrap:
         assert set(left.residual_prediction) == {0.2}
@@ -219,7 +290,9 @@ def test_summary_requires_the_tx1_ridge_and_a_best_epoch_record(finished, bootst
     del metrics["context_pca_ridge[tx1]"]
     write_json(finished / "baselines/test/metrics.json", metrics)
     with pytest.raises(ValueError, match="baselines/test/metrics.json has no"):
-        revision.build_record(Path("c.yaml"), finished, "rid", "rev")
+        revision.build_record(
+            Path("c.yaml"), finished, "rid", "rev", finished.parent / "split.csv"
+        )
     write_json(finished / "train/done.json", {"best_epoch": 7, "next_epoch": 8})
     with pytest.raises(ValueError, match="no epoch record for epoch 7"):
         revision._training_record(finished)
@@ -231,9 +304,12 @@ def test_nan_difference_is_written_as_null(finished, monkeypatch):
         lambda *args, **kwargs: {"difference": math.nan, "interval": [math.nan, 1.0]},
         raising=False,
     )
-    record = revision.build_record(Path("c.yaml"), finished, "rid", "rev")
-    assert record["val"]["bootstrap"]["difference"] is None
-    assert record["val"]["bootstrap"]["interval"] == [None, 1.0]
+    record = revision.build_record(
+        Path("c.yaml"), finished, "rid", "rev", finished.parent / "split.csv"
+    )
+    (bootstrap,) = record["val"]["bootstraps"]
+    assert bootstrap["difference"] is None
+    assert bootstrap["interval"] == [None, 1.0]
     json.dumps(record, allow_nan=False)
 
 
@@ -260,7 +336,14 @@ class FakeProcess:
 @pytest.fixture
 def world(tmp_path, monkeypatch):
     """run_revision with config, GPUs and preparation replaced; returns call logs."""
-    config = {**CONFIG, "output_root": str(tmp_path / "runs")}
+    config = {
+        **CONFIG,
+        "output_root": str(tmp_path / "runs"),
+        "paths": {"split": str(tmp_path / "split.json")},
+    }
+    pd.DataFrame({"model_id": ["L1", "L2"], "lineage": ["Lung", "Skin"]}).to_csv(
+        tmp_path / "split.csv", index=False
+    )
     prepared = []
     monkeypatch.setattr(revision, "load_config", lambda path: config)
     monkeypatch.setattr(revision, "visible_gpus", lambda: ())
@@ -429,3 +512,19 @@ def test_cpu_training_runs_in_process_and_finished_training_is_skipped(
     write_json(run / "train" / "done.json", {})
     revision.train_joint(Path("c.yaml"), CONFIG, run, ())
     assert calls == [run / "train"]
+
+
+def test_compare_runs_bootstraps_a_minus_b(finished, bootstrap):
+    from src.experiments.compare_runs import compare
+
+    result = compare(finished, finished, "val")
+    assert result == {"difference": 0.02, "interval": [-0.01, 0.05]}
+    left, right, selective, repeats, seed = bootstrap[-1]
+    assert list(selective) == list(SELECTIVE) and (repeats, seed) == (1000, 0)
+
+
+def test_compare_runs_prints_a_minus_b(finished, bootstrap, capsys):
+    from src.experiments.compare_runs import main
+
+    assert main([str(finished), str(finished), "--split", "test"]) == 0
+    assert capsys.readouterr().out == "run minus run, test: 0.0200 [-0.0100, 0.0500]\n"

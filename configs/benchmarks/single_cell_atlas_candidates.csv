@@ -1,0 +1,453 @@
+source,accession,model_id,identifier,identifier_kind,cells,raw_counts,condition,size_gb
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000120,CVCL_1125,rrid,11219,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000138,CVCL_1119,rrid,51178,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000139,CVCL_1635,rrid,37487,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000148,CVCL_0332,rrid,39854,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000164,CVCL_0480,rrid,95259,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000178,CVCL_0334,rrid,55202,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000222,CVCL_0152,rrid,51407,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000236,CVCL_1717,rrid,43500,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000311,CVCL_1531,rrid,610,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000348,CVCL_1666,rrid,36612,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000389,CVCL_1239,rrid,24306,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000396,CVCL_0359,rrid,56439,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000437,CVCL_1715,rrid,3254,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000463,CVCL_0459,rrid,126345,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000493,CVCL_0366,rrid,36803,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000496,CVCL_1495,rrid,42864,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000521,CVCL_1517,rrid,46472,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000552,CVCL_0320,rrid,50552,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000555,CVCL_1056,rrid,64417,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000558,CVCL_0131,rrid,56447,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000580,CVCL_1097,rrid,49119,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000601,CVCL_0428,rrid,56383,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000628,CVCL_1571,rrid,345,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000669,CVCL_1731,rrid,38161,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000681,CVCL_0023,rrid,60135,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000750,CVCL_1381,rrid,52427,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000757,CVCL_1055,rrid,35415,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000790,CVCL_1693,rrid,50344,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000793,CVCL_0371,rrid,51949,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000842,CVCL_0546,rrid,139224,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000853,CVCL_1577,rrid,3206,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000861,CVCL_1285,rrid,75431,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000875,CVCL_1550,rrid,48845,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000890,CVCL_1716,rrid,4940,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000900,CVCL_1547,rrid,43557,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000916,CVCL_1478,rrid,46867,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000927,CVCL_0179,rrid,31009,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000932,CVCL_0099,rrid,29414,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000940,CVCL_0028,rrid,13778,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000943,CVCL_0504,rrid,54386,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000950,CVCL_0399,rrid,67833,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000954,CVCL_0293,rrid,54333,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000957,CVCL_0397,rrid,41614,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000958,CVCL_1724,rrid,22444,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-000997,CVCL_0292,rrid,34053,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-001021,CVCL_1098,rrid,29046,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-001039,CVCL_0218,rrid,32353,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-001190,CVCL_0069,rrid,35843,true,"DMSO_TF vehicle, plate-matched",428.8
+tahoe100m,huggingface.co/datasets/tahoebio/Tahoe-100M,ACH-001333,CVCL_1094,rrid,34685,true,"DMSO_TF vehicle, plate-matched",428.8
+kinker_scp542,SCP542; GEO GSE157220,ACH-000013,ONCODG1_OVARY,ccle_name,270,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000019,MCF7_BREAST,ccle_name,143,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000022,PATU8988S_PANCREAS,ccle_name,244,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000027,GOS3_CENTRAL_NERVOUS_SYSTEM,ccle_name,191,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000028,KPL1_BREAST,ccle_name,276,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000040,U118MG_CENTRAL_NERVOUS_SYSTEM,ccle_name,244,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000042,PANC0203_PANCREAS,ccle_name,506,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000048,TOV112D_OVARY,ccle_name,78,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000054,HT1080_SOFT_TISSUE,ccle_name,516,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000086,ACCMESO1_PLEURA,ccle_name,162,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000087,SKES1_BONE,ccle_name,91,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000090,PC3_PROSTATE,ccle_name,169,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000092,NCIH2452_PLEURA,ccle_name,538,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000097,ZR751_BREAST,ccle_name,309,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000114,SU8686_PANCREAS,ccle_name,82,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000116,OAW28_OVARY,ccle_name,161,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000117,EFM192A_BREAST,ccle_name,333,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000118,HUPT3_PANCREAS,ccle_name,136,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000123,COV434_OVARY,ccle_name,88,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000132,JHOS2_OVARY,ccle_name,213,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000133,HS729_SOFT_TISSUE,ccle_name,215,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000141,SNU308_BILIARY_TRACT,ccle_name,94,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000147,T47D_BREAST,ccle_name,221,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000155,SW1990_PANCREAS,ccle_name,307,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000159,OSRC2_KIDNEY,ccle_name,126,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000163,SW579_THYROID,ccle_name,217,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000164,PANC1_PANCREAS,ccle_name,159,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000169,RD_SOFT_TISSUE,ccle_name,261,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000171,VMRCRCZ_KIDNEY,ccle_name,300,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000181,SCC9_UPPER_AERODIGESTIVE_TRACT,ccle_name,475,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000186,NCIH2444_LUNG,ccle_name,237,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000188,SCC25_UPPER_AERODIGESTIVE_TRACT,ccle_name,898,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000189,RCC10RGB_KIDNEY,ccle_name,233,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000192,MFE280_ENDOMETRIUM,ccle_name,217,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000201,A204_SOFT_TISSUE,ccle_name,250,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000205,PK59_PANCREAS,ccle_name,174,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000207,DETROIT562_UPPER_AERODIGESTIVE_TRACT,ccle_name,163,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000209,SNU1079_BILIARY_TRACT,ccle_name,73,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000211,DAOY_CENTRAL_NERVOUS_SYSTEM,ccle_name,281,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000213,HUPT4_PANCREAS,ccle_name,56,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000217,JHH6_LIVER,ccle_name,206,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000219,A375_SKIN,ccle_name,593,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000222,ASPC1_PANCREAS,ccle_name,290,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000228,BICR31_UPPER_AERODIGESTIVE_TRACT,ccle_name,248,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000231,KALS1_CENTRAL_NERVOUS_SYSTEM,ccle_name,288,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000234,CAKI2_KIDNEY,ccle_name,278,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000242,RT4_URINARY_TRACT,ccle_name,106,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000243,DANG_PANCREAS,ccle_name,143,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000244,DKMG_CENTRAL_NERVOUS_SYSTEM,ccle_name,271,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000252,LS1034_LARGE_INTESTINE,ccle_name,146,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000255,LMSU_STOMACH,ccle_name,255,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000260,SKNAS_AUTONOMIC_GANGLIA,ccle_name,226,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000261,RERFLCAI_LUNG,ccle_name,763,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000264,CALU6_LUNG,ccle_name,258,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000274,HS852T_SKIN,ccle_name,162,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000276,HCC38_BREAST,ccle_name,200,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000277,HCC1419_BREAST,ccle_name,221,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000288,BT549_BREAST,ccle_name,266,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000296,OUMS23_LARGE_INTESTINE,ccle_name,107,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000302,SNU1077_ENDOMETRIUM,ccle_name,172,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000313,KMRC3_KIDNEY,ccle_name,245,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000318,TE10_OESOPHAGUS,ccle_name,219,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000323,42MGBA_CENTRAL_NERVOUS_SYSTEM,ccle_name,518,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000324,JHOC5_OVARY,ccle_name,145,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000329,CCFSTTG1_CENTRAL_NERVOUS_SYSTEM,ccle_name,246,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000335,MSTO211H_PLEURA,ccle_name,297,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000343,NCIH522_LUNG,ccle_name,208,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000352,HCC1428_BREAST,ccle_name,127,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000356,MKN45_STOMACH,ccle_name,118,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000367,NCIH226_LUNG,ccle_name,235,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000397,TEN_ENDOMETRIUM,ccle_name,316,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000403,NCIH747_LARGE_INTESTINE,ccle_name,80,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000409,OVSAHO_OVARY,ccle_name,227,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000414,NCIH1944_LUNG,ccle_name,414,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000415,BICR6_UPPER_AERODIGESTIVE_TRACT,ccle_name,286,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000420,SNU449_LIVER,ccle_name,282,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000423,SKMEL3_SKIN,ccle_name,194,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000430,TYKNU_OVARY,ccle_name,117,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000435,EFE184_ENDOMETRIUM,ccle_name,86,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000437,SW1088_CENTRAL_NERVOUS_SYSTEM,ccle_name,128,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000446,KPNSI9S_AUTONOMIC_GANGLIA,ccle_name,129,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000447,NCIH2228_LUNG,ccle_name,367,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000456,BCPAP_THYROID,ccle_name,152,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000461,SNU1196_BILIARY_TRACT,ccle_name,286,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000463,NCIH460_LUNG,ccle_name,837,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000464,CAS1_CENTRAL_NERVOUS_SYSTEM,ccle_name,133,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000467,HCC56_LARGE_INTESTINE,ccle_name,99,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000468,PK45H_PANCREAS,ccle_name,271,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000471,LI7_LIVER,ccle_name,196,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000481,NCIH2170_LUNG,ccle_name,142,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000482,RERFLCKJ_LUNG,ccle_name,87,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000493,SNU423_LIVER,ccle_name,212,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000496,NCIH1792_LUNG,ccle_name,111,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000500,SNU46_UPPER_AERODIGESTIVE_TRACT,ccle_name,236,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000503,BICR16_UPPER_AERODIGESTIVE_TRACT,ccle_name,212,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000510,NCIH1299_LUNG,ccle_name,534,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000528,ABC1_LUNG,ccle_name,311,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000545,VMCUB1_URINARY_TRACT,ccle_name,478,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000547,HT1197_URINARY_TRACT,ccle_name,74,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000548,BHY_UPPER_AERODIGESTIVE_TRACT,ccle_name,145,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000553,SQ1_LUNG,ccle_name,238,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000563,EBC1_LUNG,ccle_name,186,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000565,RCM1_LARGE_INTESTINE,ccle_name,128,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000573,MDAMB436_BREAST,ccle_name,281,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000579,UACC257_SKIN,ccle_name,239,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000580,C32_SKIN,ccle_name,554,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000582,COLO741_SKIN,ccle_name,329,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000590,NCIH2073_LUNG,ccle_name,176,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000592,TM31_CENTRAL_NERVOUS_SYSTEM,ccle_name,116,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000605,TE6_OESOPHAGUS,ccle_name,551,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000613,HOS_BONE,ccle_name,829,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000614,RVH421_SKIN,ccle_name,239,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000617,OVCAR4_OVARY,ccle_name,283,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000622,KNS42_CENTRAL_NERVOUS_SYSTEM,ccle_name,172,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000625,HEP3B217_LIVER,ccle_name,118,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000637,KYSE520_OESOPHAGUS,ccle_name,323,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000643,HDQP1_BREAST,ccle_name,64,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000647,TE1_OESOPHAGUS,ccle_name,206,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000650,IGR37_SKIN,ccle_name,347,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000663,OVTOKO_OVARY,ccle_name,209,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000665,SKMES1_LUNG,ccle_name,144,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000670,SBC5_LUNG,ccle_name,102,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000671,HUH6_LIVER,ccle_name,338,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000672,IALM_LUNG,ccle_name,322,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000678,MKN7_STOMACH,ccle_name,258,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000692,SNU899_UPPER_AERODIGESTIVE_TRACT,ccle_name,83,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000694,TE9_OESOPHAGUS,ccle_name,248,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000706,EKVX_LUNG,ccle_name,146,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000713,CAOV3_OVARY,ccle_name,221,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000715,SNU1214_UPPER_AERODIGESTIVE_TRACT,ccle_name,188,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000717,COLO680N_OESOPHAGUS,ccle_name,523,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000720,TCCSUP_URINARY_TRACT,ccle_name,316,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000721,HMC18_BREAST,ccle_name,293,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000724,HT1376_URINARY_TRACT,ccle_name,120,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000726,TE14_OESOPHAGUS,ccle_name,474,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000730,SKMEL5_SKIN,ccle_name,297,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000735,PECAPJ49_UPPER_AERODIGESTIVE_TRACT,ccle_name,202,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000748,SJSA1_BONE,ccle_name,110,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000762,YD38_UPPER_AERODIGESTIVE_TRACT,ccle_name,624,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000764,SH10TC_STOMACH,ccle_name,351,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000771,BICR56_UPPER_AERODIGESTIVE_TRACT,ccle_name,81,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000775,NCIH727_LUNG,ccle_name,270,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000783,CAMA1_BREAST,ccle_name,291,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000785,NCIH2126_LUNG,ccle_name,264,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000788,A2058_SKIN,ccle_name,294,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000791,RERFLCAD1_LUNG,ccle_name,243,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000792,BFTC909_KIDNEY,ccle_name,379,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000800,NCIH446_LUNG,ccle_name,196,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000807,SNU738_CENTRAL_NERVOUS_SYSTEM,ccle_name,379,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000808,HUH28_BILIARY_TRACT,ccle_name,139,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000810,SKMEL30_SKIN,ccle_name,353,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000814,HS939T_SKIN,ccle_name,236,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000834,UMUC1_URINARY_TRACT,ccle_name,197,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000840,HCC366_LUNG,ccle_name,202,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000841,NCIH2087_LUNG,ccle_name,219,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000845,NCIH1373_LUNG,ccle_name,164,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000848,JHH7_LIVER,ccle_name,198,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000852,NCIH1435_LUNG,ccle_name,267,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000860,NCIH358_LUNG,ccle_name,336,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000866,NCIH1048_LUNG,ccle_name,400,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000869,NCIH1568_LUNG,ccle_name,287,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000875,NCIH2347_LUNG,ccle_name,145,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000882,IGR1_SKIN,ccle_name,725,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000885,TOV21G_OVARY,ccle_name,305,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000890,SW1271_LUNG,ccle_name,115,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000895,CL34_LARGE_INTESTINE,ccle_name,378,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000899,WM88_SKIN,ccle_name,242,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000903,FTC133_THYROID,ccle_name,140,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000919,IM95_STOMACH,ccle_name,185,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000926,HT55_LARGE_INTESTINE,ccle_name,211,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000927,BT474_BREAST,ccle_name,125,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000929,NCIH2110_LUNG,ccle_name,1990,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000934,MDAMB361_BREAST,ccle_name,135,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000945,NCIH650_LUNG,ccle_name,271,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000947,OVK18_OVARY,ccle_name,178,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000948,2313287_STOMACH,ccle_name,103,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000957,LS180_LARGE_INTESTINE,ccle_name,361,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000959,SNUC4_LARGE_INTESTINE,ccle_name,467,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000963,CCK81_LARGE_INTESTINE,ccle_name,127,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000968,COLO792_SKIN,ccle_name,271,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000972,HEC151_ENDOMETRIUM,ccle_name,250,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000976,HUCCT1_BILIARY_TRACT,ccle_name,241,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000977,LNCAPCLONEFGC_PROSTATE,ccle_name,129,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000984,HEC6_ENDOMETRIUM,ccle_name,161,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000988,MFE319_ENDOMETRIUM,ccle_name,191,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000990,HEC108_ENDOMETRIUM,ccle_name,172,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000994,HEC59_ENDOMETRIUM,ccle_name,385,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-000996,HEC251_ENDOMETRIUM,ccle_name,107,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-001075,NCIH292_LUNG,ccle_name,213,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-001190,SKMEL2_SKIN,ccle_name,276,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-001306,8305C_THYROID,ccle_name,459,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-002249,JHU011_UPPER_AERODIGESTIVE_TRACT,ccle_name,717,true,"untreated, pooled culture",9.31
+kinker_scp542,SCP542; GEO GSE157220,ACH-002251,JHU029_UPPER_AERODIGESTIVE_TRACT,ccle_name,797,true,"untreated, pooled culture",9.31
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000001,ACH-000001,model_id,25,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000012,ACH-000012,model_id,34,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000014,ACH-000014,model_id,38,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000015,ACH-000015,model_id,280,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000018,ACH-000018,model_id,43,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000021,ACH-000021,model_id,209,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000022,ACH-000022,model_id,125,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000023,ACH-000023,model_id,85,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000026,ACH-000026,model_id,112,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000035,ACH-000035,model_id,147,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000047,ACH-000047,model_id,230,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000048,ACH-000048,model_id,393,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000054,ACH-000054,model_id,17,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000085,ACH-000085,model_id,18,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000086,ACH-000086,model_id,226,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000090,ACH-000090,model_id,166,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000096,ACH-000096,model_id,170,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000098,ACH-000098,model_id,82,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000117,ACH-000117,model_id,107,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000123,ACH-000123,model_id,394,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000142,ACH-000142,model_id,63,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000149,ACH-000149,model_id,18,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000159,ACH-000159,model_id,109,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000163,ACH-000163,model_id,85,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000164,ACH-000164,model_id,180,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000174,ACH-000174,model_id,390,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000178,ACH-000178,model_id,99,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000186,ACH-000186,model_id,106,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000189,ACH-000189,model_id,1023,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000200,ACH-000200,model_id,50,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000209,ACH-000209,model_id,413,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000211,ACH-000211,model_id,343,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000212,ACH-000212,model_id,154,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000217,ACH-000217,model_id,4,true,"expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000219,ACH-000219,model_id,177,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000228,ACH-000228,model_id,1001,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000235,ACH-000235,model_id,113,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000237,ACH-000237,model_id,42,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000244,ACH-000244,model_id,663,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000252,ACH-000252,model_id,494,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000255,ACH-000255,model_id,202,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000265,ACH-000265,model_id,434,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000268,ACH-000268,model_id,93,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000270,ACH-000270,model_id,36,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000274,ACH-000274,model_id,89,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000277,ACH-000277,model_id,127,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000280,ACH-000280,model_id,107,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000281,ACH-000281,model_id,24,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000288,ACH-000288,model_id,441,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000292,ACH-000292,model_id,226,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000302,ACH-000302,model_id,32,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000323,ACH-000323,model_id,189,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000324,ACH-000324,model_id,29,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000329,ACH-000329,model_id,540,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000335,ACH-000335,model_id,144,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000341,ACH-000341,model_id,31,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000343,ACH-000343,model_id,108,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000347,ACH-000347,model_id,57,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000367,ACH-000367,model_id,669,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000368,ACH-000368,model_id,125,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000374,ACH-000374,model_id,174,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000376,ACH-000376,model_id,24,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000389,ACH-000389,model_id,23,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000390,ACH-000390,model_id,87,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000393,ACH-000393,model_id,106,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000396,ACH-000396,model_id,253,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000397,ACH-000397,model_id,805,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000407,ACH-000407,model_id,100,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000411,ACH-000411,model_id,250,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000415,ACH-000415,model_id,374,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000416,ACH-000416,model_id,308,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000423,ACH-000423,model_id,617,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000427,ACH-000427,model_id,23,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000428,ACH-000428,model_id,153,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000434,ACH-000434,model_id,153,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000444,ACH-000444,model_id,82,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000445,ACH-000445,model_id,85,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000449,ACH-000449,model_id,41,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000452,ACH-000452,model_id,26,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000457,ACH-000457,model_id,6,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000458,ACH-000458,model_id,92,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000460,ACH-000460,model_id,23,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000463,ACH-000463,model_id,3453,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000471,ACH-000471,model_id,90,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000477,ACH-000477,model_id,123,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000479,ACH-000479,model_id,107,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000486,ACH-000486,model_id,87,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000488,ACH-000488,model_id,186,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000495,ACH-000495,model_id,100,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000502,ACH-000502,model_id,72,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000504,ACH-000504,model_id,168,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000510,ACH-000510,model_id,280,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000517,ACH-000517,model_id,71,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000527,ACH-000527,model_id,42,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000532,ACH-000532,model_id,50,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000535,ACH-000535,model_id,14,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000537,ACH-000537,model_id,54,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000542,ACH-000542,model_id,11,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000545,ACH-000545,model_id,98,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000549,ACH-000549,model_id,56,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000552,ACH-000552,model_id,65,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000553,ACH-000553,model_id,586,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000565,ACH-000565,model_id,656,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000569,ACH-000569,model_id,103,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000572,ACH-000572,model_id,135,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000579,ACH-000579,model_id,186,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000587,ACH-000587,model_id,51,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000589,ACH-000589,model_id,46,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000595,ACH-000595,model_id,165,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000601,ACH-000601,model_id,211,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000603,ACH-000603,model_id,160,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000605,ACH-000605,model_id,97,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000618,ACH-000618,model_id,129,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000622,ACH-000622,model_id,147,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000624,ACH-000624,model_id,63,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000625,ACH-000625,model_id,58,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000644,ACH-000644,model_id,34,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000649,ACH-000649,model_id,324,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000650,ACH-000650,model_id,225,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000652,ACH-000652,model_id,131,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000657,ACH-000657,model_id,300,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000661,ACH-000661,model_id,50,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000662,ACH-000662,model_id,95,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000666,ACH-000666,model_id,208,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000669,ACH-000669,model_id,98,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000670,ACH-000670,model_id,660,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000672,ACH-000672,model_id,355,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000680,ACH-000680,model_id,14,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000681,ACH-000681,model_id,94,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000685,ACH-000685,model_id,569,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000701,ACH-000701,model_id,27,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000704,ACH-000704,model_id,306,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000713,ACH-000713,model_id,657,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000715,ACH-000715,model_id,67,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000717,ACH-000717,model_id,1204,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000723,ACH-000723,model_id,309,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000734,ACH-000734,model_id,139,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000738,ACH-000738,model_id,76,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000748,ACH-000748,model_id,84,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000749,ACH-000749,model_id,271,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000750,ACH-000750,model_id,114,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000756,ACH-000756,model_id,58,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000762,ACH-000762,model_id,603,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000764,ACH-000764,model_id,622,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000769,ACH-000769,model_id,162,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000774,ACH-000774,model_id,18,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000776,ACH-000776,model_id,97,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000784,ACH-000784,model_id,67,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000785,ACH-000785,model_id,133,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000788,ACH-000788,model_id,96,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000791,ACH-000791,model_id,642,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000792,ACH-000792,model_id,52,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000796,ACH-000796,model_id,42,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000803,ACH-000803,model_id,78,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000822,ACH-000822,model_id,143,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000824,ACH-000824,model_id,145,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000826,ACH-000826,model_id,171,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000833,ACH-000833,model_id,172,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000834,ACH-000834,model_id,758,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000836,ACH-000836,model_id,46,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000837,ACH-000837,model_id,124,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000842,ACH-000842,model_id,82,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000847,ACH-000847,model_id,205,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000849,ACH-000849,model_id,152,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000866,ACH-000866,model_id,156,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000868,ACH-000868,model_id,71,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000873,ACH-000873,model_id,186,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000875,ACH-000875,model_id,424,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000880,ACH-000880,model_id,219,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000882,ACH-000882,model_id,234,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000884,ACH-000884,model_id,205,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000886,ACH-000886,model_id,38,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000888,ACH-000888,model_id,179,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000896,ACH-000896,model_id,845,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000897,ACH-000897,model_id,65,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000900,ACH-000900,model_id,173,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000903,ACH-000903,model_id,28,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000905,ACH-000905,model_id,43,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000906,ACH-000906,model_id,127,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000911,ACH-000911,model_id,154,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000916,ACH-000916,model_id,77,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000921,ACH-000921,model_id,42,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000927,ACH-000927,model_id,376,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000936,ACH-000936,model_id,74,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000939,ACH-000939,model_id,151,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000941,ACH-000941,model_id,135,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000943,ACH-000943,model_id,57,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000947,ACH-000947,model_id,425,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000950,ACH-000950,model_id,229,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000954,ACH-000954,model_id,43,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000956,ACH-000956,model_id,144,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000958,ACH-000958,model_id,106,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000961,ACH-000961,model_id,601,true,"expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000966,ACH-000966,model_id,318,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000967,ACH-000967,model_id,29,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000971,ACH-000971,model_id,118,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000973,ACH-000973,model_id,67,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000976,ACH-000976,model_id,95,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000977,ACH-000977,model_id,654,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000982,ACH-000982,model_id,216,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000997,ACH-000997,model_id,86,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000998,ACH-000998,model_id,14,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-001190,ACH-001190,model_id,920,true,expt 1 DMSO 6 h; expt 1 DMSO 24 h; expt 1 untreated 6 h; expt 10 DMSO 24 h; expt 5 DMSO 3-48 h (hashed),2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-001239,ACH-001239,model_id,24,true,expt 10 DMSO 24 h,2.26
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-001307,ACH-001307,model_id,262,true,expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h,2.26
+sciplex3_cellxgene,CELLxGENE collection 00109df5-7810-4542-8db5-2288c46e0424; GEO GSE139944,ACH-000019,CVCL_0031,rrid,6358,true,"vehicle, 24 h",1.86
+sciplex3_cellxgene,CELLxGENE collection 00109df5-7810-4542-8db5-2288c46e0424; GEO GSE139944,ACH-000551,CVCL_0004,rrid,3359,true,"vehicle, 24 h",1.86
+sciplex3_cellxgene,CELLxGENE collection 00109df5-7810-4542-8db5-2288c46e0424; GEO GSE139944,ACH-000681,CVCL_0023,rrid,3287,true,"vehicle, 24 h",1.86
+wyler2021_cellxgene,CELLxGENE collection d0e9c47b-4ce7-4f84-b182-eddcfa0b2658; GEO GSE148729,ACH-000392,CVCL_0609,rrid,16512,true,"mock infection, 4 h and 12 h",11.4
+wyler2021_cellxgene,CELLxGENE collection d0e9c47b-4ce7-4f84-b182-eddcfa0b2658; GEO GSE148729,ACH-000510,CVCL_0060,rrid,16218,true,"mock infection, 4 h and 36 h",11.4

@@ -1,4 +1,7 @@
-# Objective screen: STATE frozen, objective huber.
+# Single-cell correction, wave one, STATE comparison: the nested head on what the default
+# prior leaves (paths.prior), STATE frozen, objective standardized_mse. The objective screen
+# (STATE absent) tied at the prior alone for every objective; standardized_mse was taken for
+# its highest trained-epoch validation score (results/correction_wave_one_seed0/).
 seeds: {train: 0, collator: 0, projection: 0}
 train:
   max_epochs: 30
@@ -11,7 +14,7 @@ train:
   adapter_learning_rate: 0.0001
   head_learning_rate: 0.001
   weight_decay: 0.05
-  objective: huber
+  objective: standardized_mse
   state_mode: frozen
   warmup_epochs: 1
   genes_per_block: 6
@@ -24,7 +27,7 @@ comparison:
   shuffles: 10
   bootstrap: 1000
 precision: bf16
-output_root: outputs/geneeffect_revision
+output_root: outputs/geneeffect_correction
 prepared_root: data/geneeffect_joint/v2
 features: {cells_per_context: 128, hvg_dim: 2000, esm2_dim: 1280, variable_gene_min_observations: 5, variable_gene_percentile: 75, selective_min_lines: 5, selective_max_fraction: 0.9, residual_sd_floor_percentile: 10}
 model:
@@ -54,5 +57,5 @@ paths:
   state_checkpoint: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
   state_model_dir: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562
   perturbseq_sources: configs/experiments/13_geneeffect_226/perturbseq_sources.json
-  # The linear context prior export the head stacks on (prior-export), or null.
-  prior: null
+  # The default prior's export (hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_export).
+  prior: outputs/context_prior/default_prior_export/export
