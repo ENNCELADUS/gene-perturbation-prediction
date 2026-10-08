@@ -34,12 +34,18 @@ _GROUPS = {
     "paths": (
         "split gene_effect source_registry tx1_registration cell_line_manifest "
         "tx1_model_dir tx1_cache esm2_embeddings state_checkpoint state_model_dir "
-        "perturbseq_sources"
+        "perturbseq_sources prior"
     ),
 }
 _TOP_LEVEL = "precision output_root prepared_root"
 _HEAD_BLOCKS = "use_delta_proj use_s use_q_sc use_e_g use_z_c"
-OBJECTIVES = ("huber", "standardized_mse", "pearson_blocks")
+OBJECTIVES = (
+    "huber",
+    "standardized_mse",
+    "pearson_blocks",
+    "line_ranking",
+    "dependency_classification",
+)
 STATE_MODES = ("frozen", "trainable")
 
 

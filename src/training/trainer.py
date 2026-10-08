@@ -4,10 +4,11 @@ The objective is ``train.objective`` (``src.model.losses``); response replay run
 every ``response_interval`` updates only when ``response_weight`` is positive. The
 learning rate warms up linearly over ``warmup_epochs`` and decays by cosine to zero
 at ``max_epochs``, stepped per update. Validation runs once per epoch on the
-validation lines' GeneEffect rows only; ``best.pt`` and early stopping follow
-``val_selective_spearman`` (higher wins). The ``train_eval_`` diagnostic scores a
-fixed subset of supervised training lines of the validation split's size, so the
-two curves are comparable.
+validation lines' GeneEffect rows only and, when a prior is set, once before the
+first update (epoch -1), so the prior alone can be ``best.pt``. ``best.pt`` and
+early stopping follow ``val_selective_spearman`` (higher wins). The
+``train_eval_`` diagnostic scores a fixed subset of supervised training lines of
+the validation split's size, so the two curves are comparable.
 """
 
 from collections.abc import Mapping
@@ -126,13 +127,16 @@ def train_update(
         )
     with accelerator.autocast():
         output = model(dependency_batch.conditions, response=response)
+    # The stack: the prior's offset plus the head's output, in residual units.
+    prediction = output.delta_hat + dependency_batch.prior
     dependency_loss = geneeffect_loss(
-        output.delta_hat,
+        prediction,
         dependency_batch.residual,
         dependency_batch.residual_scale,
         objective=config["train"]["objective"],
         gene_index=dependency_batch.conditions.gene_index,
         selective=dependency_batch.selective,
+        gene_mean=dependency_batch.gene_mean,
     )
     total = dependency_loss
     replay_loss = torch.zeros_like(dependency_loss)
@@ -232,34 +236,9 @@ def fit(
         )
     preprocessing = inputs.preprocessing_state()
     diagnostic_lines = training_diagnostic_lines(inputs)
-    for epoch in range(state.next_epoch, train["max_epochs"]):
-        if state.bad_epochs >= train["patience"]:
-            break
-        model.train()
-        if not trains_state(network, config):
-            network.backbone.state.eval()  # a frozen STATE runs without dropout
-        loader = dependency_loader(dependency, config, epoch, accelerator)
-        responses = response_stream(inputs, config, epoch, accelerator)
-        for batch in loader:
-            replay = (
-                responses is not None
-                and state.global_step % train["response_interval"] == 0
-            )
-            metrics = train_update(
-                model,
-                optimizer,
-                scheduler,
-                batch,
-                next(responses) if replay else None,
-                config,
-                accelerator,
-            )
-            state.global_step += 1
-            _log(
-                run_dir,
-                {"epoch": epoch, "global_step": state.global_step, **metrics},
-                accelerator,
-            )
+
+    def close_epoch(epoch: int) -> None:
+        """Score, record and checkpoint; epoch -1 is the model before any update."""
         train_metrics = evaluate_model(
             model,
             inputs,
@@ -294,4 +273,38 @@ def fit(
                     preprocessing,
                     accelerator,
                 )
+
+    if restored is None and inputs.prior is not None:
+        # The head's output layers start at zero, so the model is its prior here:
+        # "the prior alone" is scored and eligible for best.pt.
+        close_epoch(-1)
+    for epoch in range(state.next_epoch, train["max_epochs"]):
+        if state.bad_epochs >= train["patience"]:
+            break
+        model.train()
+        if not trains_state(network, config):
+            network.backbone.state.eval()  # a frozen STATE runs without dropout
+        loader = dependency_loader(dependency, config, epoch, accelerator)
+        responses = response_stream(inputs, config, epoch, accelerator)
+        for batch in loader:
+            replay = (
+                responses is not None
+                and state.global_step % train["response_interval"] == 0
+            )
+            metrics = train_update(
+                model,
+                optimizer,
+                scheduler,
+                batch,
+                next(responses) if replay else None,
+                config,
+                accelerator,
+            )
+            state.global_step += 1
+            _log(
+                run_dir,
+                {"epoch": epoch, "global_step": state.global_step, **metrics},
+                accelerator,
+            )
+        close_epoch(epoch)
     return state

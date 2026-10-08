@@ -5,13 +5,13 @@ the repository root. Hatch packages the complete `src` package.
 
 | Package | Responsibility |
 | --- | --- |
-| `data` | Split and batch records, GeneEffect targets with the fitted selective-gene set and per-gene residual SD (`data.geneeffect`, restored from checkpoints by `data.prepared`), STATE's log expression transform, basal/response assembly, the Tx1 embedding cache, ESM2 tables, prepared inputs, the readout-head feature cache and gene order |
+| `data` | Split and batch records, GeneEffect targets with the fitted selective-gene set and per-gene residual SD (`data.geneeffect`, restored from checkpoints by `data.prepared`), the linear context prior's exported offsets with their fail-closed checks (`data.prior_offsets`), STATE's log expression transform, basal/response assembly, the Tx1 embedding cache, ESM2 tables, prepared inputs, the readout-head feature cache and gene order |
 | `data.prepare` | One-off raw-input builders (split, source registry, atlas and Kinker raw UMI, ESM2 universe, copy prior, PC9/HeLa basal), plus pure gene-universe helpers |
-| `model` | STATE on its own HVG basal path with ESM2 perturbation tokens, the STATE-free response MLP, initialization, response computation, features, normalization, the nested low-rank residual head (a rank-r gene factor × line factor over the training-line context PCA plus a per-(g, c) correction, predicting in units of the per-gene residual SD; STATE is skipped when its blocks are off), the training objectives (`model.losses`: Huber, standardised MSE, gene-blocked Pearson) and the readout head |
+| `model` | STATE on its own HVG basal path with ESM2 perturbation tokens, the STATE-free response MLP, initialization, response computation, features, normalization, the nested low-rank residual head (a rank-r gene factor × line factor over the training-line context PCA plus a per-(g, c) correction, predicting in units of the per-gene residual SD; STATE is skipped when its blocks are off), the training objectives (`model.losses`: Huber, standardised MSE, gene-blocked Pearson, ListNet ranking across lines, dependency cross-entropy) and the readout head |
 | `eval` | GeneEffect evaluation of one split, metrics (including selective-gene Spearman, selective AUPR lift and the paired line bootstrap), readout-head evaluation and comparison |
-| `baselines` | Residual baseline ladder and the Tx1 GMM-ridge baseline |
+| `baselines` | Residual baseline ladder, the controls built on the linear context prior (`baselines.prior_controls`) and the Tx1 GMM-ridge baseline |
 | `training` | Joint optimizer loop with per-module learning rates (STATE frozen or trainable) and a warmup-cosine schedule, random or gene-blocked batches (`training.sampling`), optional anchor-balanced response replay, checkpoint selection on selective-gene Spearman and resumable state; readout-head training |
-| `experiments` | Command wiring: preparation, the response-model comparison, the readout head, baselines, the Tx1 GMM-ridge baseline, the `all` run and the `revision` run |
+| `experiments` | Command wiring: preparation, the response-model comparison, the readout head, baselines, the Tx1 GMM-ridge baseline, the `all` run, the `revision` run, the linear context prior and its export for the single-cell correction (`experiments.prior_export`), and the paired bootstrap between two runs (`experiments.compare_runs`) |
 | `experiments.historical` | Completed Tx1 probes and the separate SL context-screen builder |
 
 Data and model modules do not import training, evaluation or experiment modules.
@@ -38,6 +38,8 @@ uv run python -m src.train --config configs/geneeffect_joint.yaml --run-dir <dir
 uv run python -m src.evaluate --checkpoint <best.pt> --split val
 uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml --split val --out-dir <dir>
 uv run python -m src.experiments.readout --help
+uv run python -m src.experiments.prior_export configs/context_prior/default_prior.yaml --run-id <id>
+uv run python -m src.experiments.compare_runs <run A> <run B> --split val
 ```
 
 Preparation writes fixed inputs once, in STATE's log expression space (Tx1 alone reads

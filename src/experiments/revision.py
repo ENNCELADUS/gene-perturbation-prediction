@@ -11,11 +11,12 @@ Steps, in order: preparation (returns at once on an existing prepared root); joi
 training (``accelerate launch`` on every chosen GPU, in this process on a CPU-only
 machine); for validation, then test, the evaluation of ``train/best.pt`` and the
 baselines (on the first chosen GPU); revision.json and summary.md, which hold per
-split the table of the joint model against every baseline and the paired line
-bootstrap of selective-gene Spearman against the Tx1 context-PCA ridge, and the
-training record at the best epoch. The chosen GPUs are every visible one unless
-``--gpus`` names some. SIGINT or SIGTERM terminates the running subprocesses before
-the run exits.
+split the table of the joint model against every baseline, the paired line
+bootstrap of selective-gene Spearman against the Tx1 context-PCA ridge and, with a
+prior, against the prior alone and the prior plus the Tx1 ridge, and a per-lineage
+table; and the training record at the best epoch. The chosen GPUs are every
+visible one unless ``--gpus`` names some. SIGINT or SIGTERM terminates the running
+subprocesses before the run exits.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from typing import Any
 
 from src.experiments.all import (
     BASELINE_NAMES,
+    PRIOR_CONTROLS,
     Job,
     _check_resume_processes,
     _number,
@@ -65,6 +67,8 @@ COLUMNS = (
     ("Huber", "huber", "geneeffect_loss"),
     ("SD ratio (per gene)", "sd_ratio", "residual_sd_ratio_macro_per_gene"),
 )
+# Controls the joint model is bootstrapped against, in order, when present.
+COMPARED = (TX1_RIDGE, *PRIOR_CONTROLS)
 # The best epoch's record in train/metrics.jsonl: training-diagnostic and validation.
 TRAIN_DIAGNOSTIC_KEY = "train_eval_selective_spearman"
 VALIDATION_KEY = "val_selective_spearman"
@@ -149,28 +153,22 @@ def _baseline_order(baselines: dict) -> list[str]:
 
 
 def _bootstrap(
-    run: Path, split: str, baselines: dict, selective: frozenset[str]
+    run: Path, split: str, method: str, selective: frozenset[str]
 ) -> dict[str, Any]:
-    """Paired line bootstrap of selective Spearman, joint model minus Tx1 ridge."""
+    """Paired line bootstrap of selective Spearman, joint model minus ``method``."""
     import pandas as pd
 
     from src.eval import metrics
 
-    if TX1_RIDGE not in baselines:
-        raise ValueError(f"baselines/{split}/metrics.json has no {TX1_RIDGE} method")
     joint = pd.read_parquet(run / "evaluation" / split / "predictions.parquet")
-    ridge = pd.read_parquet(run / "baselines" / split / "predictions.parquet")
-    ridge = ridge.loc[ridge["method"] == TX1_RIDGE]
+    control = pd.read_parquet(run / "baselines" / split / "predictions.parquet")
+    control = control.loc[control["method"] == method]
     result = metrics.paired_line_bootstrap(
-        joint,
-        ridge,
-        selective,
-        repeats=BOOTSTRAP_REPEATS,
-        seed=BOOTSTRAP_SEED,
+        joint, control, selective, repeats=BOOTSTRAP_REPEATS, seed=BOOTSTRAP_SEED
     )
     low, high = result["interval"]
     return {
-        "comparison": f"{JOINT_NAME} minus {BASELINE_NAMES[TX1_RIDGE]}",
+        "comparison": f"{JOINT_NAME} minus {BASELINE_NAMES[method]}",
         "repeats": BOOTSTRAP_REPEATS,
         "seed": BOOTSTRAP_SEED,
         "difference": _finite(result["difference"]),
@@ -178,8 +176,43 @@ def _bootstrap(
     }
 
 
+def _lineages(
+    run: Path, split: str, selective: frozenset[str], split_table: Path
+) -> list[dict[str, Any]]:
+    """Per lineage: lines, and the mean over its lines of each model's per-line
+    residual Spearman across the selective genes (descriptive; 1-5 lines each)."""
+    import pandas as pd
+    from scipy.stats import spearmanr
+
+    lineage = pd.read_csv(split_table).set_index("model_id")["lineage"]
+    frames = {
+        JOINT_NAME: pd.read_parquet(run / "evaluation" / split / "predictions.parquet")
+    }
+    controls = pd.read_parquet(run / "baselines" / split / "predictions.parquet")
+    for method in COMPARED:
+        if method in set(controls["method"]):
+            frames[BASELINE_NAMES[method]] = controls.loc[controls["method"] == method]
+    per_line = {}
+    for name, frame in frames.items():
+        rows = frame.loc[frame["gene_symbol"].isin(selective)]
+        per_line[name] = rows.groupby("model_id")[
+            ["residual", "residual_prediction"]
+        ].apply(lambda g: spearmanr(g["residual"], g["residual_prediction"]).statistic)
+    table = pd.DataFrame(per_line)
+    table["lineage"] = table.index.map(lineage)
+    return [
+        {
+            "lineage": name,
+            "lines": len(group),
+            **{model: _finite(group[model].mean()) for model in per_line},
+        }
+        for name, group in table.groupby("lineage", sort=True)
+    ]
+
+
 def _training_record(run: Path) -> dict[str, Any]:
-    """Best epoch (1-based) and its diagnostic and validation selective Spearman."""
+    """Best epoch (1-based; 0 is the pre-update validation of a stack) and its
+    diagnostic and validation selective Spearman."""
     done = _read_json(run / "train" / "done.json")
     best = done["best_epoch"]
     epoch_records = [
@@ -199,10 +232,14 @@ def _training_record(run: Path) -> dict[str, Any]:
     }
 
 
-def _split_record(run: Path, split: str, selective: frozenset[str]) -> dict[str, Any]:
-    """The split's table (joint model, then baselines) and its bootstrap."""
+def _split_record(
+    run: Path, split: str, selective: frozenset[str], split_table: Path
+) -> dict[str, Any]:
+    """The split's table (joint model, then baselines), its bootstraps and lineages."""
     baselines = _read_json(run / "baselines" / split / "metrics.json")
     joint = _read_json(run / "evaluation" / split / "metrics.json")
+    if TX1_RIDGE not in baselines:
+        raise ValueError(f"baselines/{split}/metrics.json has no {TX1_RIDGE} method")
     return {
         "models": {
             JOINT_NAME: _row(joint, split),
@@ -211,12 +248,17 @@ def _split_record(run: Path, split: str, selective: frozenset[str]) -> dict[str,
                 for method in _baseline_order(baselines)
             },
         },
-        "bootstrap": _bootstrap(run, split, baselines, selective),
+        "bootstraps": [
+            _bootstrap(run, split, method, selective)
+            for method in COMPARED
+            if method in baselines
+        ],
+        "lineages": _lineages(run, split, selective, split_table),
     }
 
 
 def build_record(
-    config_path: Path, run: Path, run_id: str, git_revision: str
+    config_path: Path, run: Path, run_id: str, git_revision: str, split_table: Path
 ) -> dict[str, Any]:
     from src.training.checkpoint import load_checkpoint
 
@@ -227,14 +269,14 @@ def build_record(
         "run_id": run_id,
         "config": str(config_path),
         "git_revision": git_revision,
-        **{split: _split_record(run, split, selective) for split in SPLITS},
+        **{
+            split: _split_record(run, split, selective, split_table) for split in SPLITS
+        },
         "training": _training_record(run),
     }
 
 
 def _split_lines(title: str, split: dict[str, Any]) -> list[str]:
-    bootstrap = split["bootstrap"]
-    low, high = bootstrap["interval"]
     header = ["Model", *(name for name, _, _ in COLUMNS)]
     lines = [
         f"## {title} lines",
@@ -245,14 +287,30 @@ def _split_lines(title: str, split: dict[str, Any]) -> list[str]:
     for name, row in split["models"].items():
         cells = [_number(row[key]) for _, key, _ in COLUMNS]
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
-    return lines + [
+    lines.append("")
+    for bootstrap in split["bootstraps"]:
+        low, high = bootstrap["interval"]
+        lines.append(
+            f"Selective Spearman, {bootstrap['comparison']}: "
+            f"{_number(bootstrap['difference'])} [{_number(low)}, {_number(high)}], "
+            f"paired bootstrap over {title.lower()} lines ({bootstrap['repeats']} "
+            f"resamples, seed {bootstrap['seed']})."
+        )
+    models = [key for key in split["lineages"][0] if key not in {"lineage", "lines"}]
+    lines += [
         "",
-        f"Selective Spearman, {bootstrap['comparison']}: "
-        f"{_number(bootstrap['difference'])} [{_number(low)}, {_number(high)}], "
-        f"paired bootstrap over {title.lower()} lines ({bootstrap['repeats']} "
-        f"resamples, seed {bootstrap['seed']}).",
+        f"Per lineage, descriptive: mean over the lineage's {title.lower()} lines of "
+        "the per-line residual Spearman across the selective genes.",
         "",
+        "| Lineage | Lines | " + " | ".join(models) + " |",
+        "|---|---|" + "---|" * len(models),
     ]
+    for row in split["lineages"]:
+        cells = [_number(row[model]) for model in models]
+        lines.append(
+            f"| {row['lineage']} | {row['lines']} | " + " | ".join(cells) + " |"
+        )
+    return lines + [""]
 
 
 def _summary_lines(record: dict[str, Any]) -> list[str]:
@@ -272,20 +330,25 @@ def _summary_lines(record: dict[str, Any]) -> list[str]:
     ]
     for split, title in SPLITS.items():
         lines += _split_lines(title, record[split])
+    when = (
+        "the model before its first update (the prior alone)"
+        if training["best_epoch"] == 0
+        else f"epoch {training['best_epoch']}"
+    )
     return lines + [
         "## Training",
         "",
-        f"`train/best.pt` is epoch {training['best_epoch']} of "
-        f"{training['epochs_trained']} trained. At that epoch the selective "
-        f"Spearman is {_number(training[TRAIN_DIAGNOSTIC_KEY])} on the training "
-        f"diagnostic lines and {_number(training[VALIDATION_KEY])} on the "
-        "validation lines.",
+        f"`train/best.pt` is {when}; {training['epochs_trained']} epochs trained. "
+        f"At that point the selective Spearman is "
+        f"{_number(training[TRAIN_DIAGNOSTIC_KEY])} on the training diagnostic "
+        f"lines and {_number(training[VALIDATION_KEY])} on the validation lines.",
     ]
 
 
-def write_outputs(config_path: Path, run: Path, run_id: str) -> Path:
-    """Write revision.json, then summary.md; return summary.md."""
-    record = build_record(config_path, run, run_id, _git_revision())
+def write_outputs(config_path: Path, run: Path, run_id: str, split_table: Path) -> Path:
+    """Write revision.json, then summary.md; return summary.md. ``split_table`` is
+    the split's CSV (``model_id``, ``lineage``) for the per-lineage table."""
+    record = build_record(config_path, run, run_id, _git_revision(), split_table)
     (run / "revision.json").write_text(
         json.dumps(record, indent=2, allow_nan=False) + "\n"
     )
@@ -343,7 +406,13 @@ def run_revision(
         train_joint(config_path, config, run, chosen)
         for split in SPLITS:
             _evaluate(config, run, split)
-        summary = write_outputs(config_path, run, run_id)
+        # The split table (model_id, lineage) sits next to the split file.
+        split_table = Path(config["paths"]["split"]).with_suffix(".csv")
+        if not split_table.is_file():
+            raise FileNotFoundError(
+                f"{split_table}: the split table next to the split file"
+            )
+        summary = write_outputs(config_path, run, run_id, split_table)
     print(f"summary: {summary}", flush=True)
     return run
 

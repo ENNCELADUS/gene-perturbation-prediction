@@ -90,12 +90,15 @@ def _head(
 
 
 def _live(head: GeneEffectNestedHead) -> GeneEffectNestedHead:
-    """Replace the zero-initialised SwiGLU output layers by random weights."""
+    """Replace every zero-initialised layer (the SwiGLU output layers and ``C``'s
+    linear map) by random weights."""
     with torch.no_grad():
         for module in head.modules():
             if isinstance(module, SwiGLU):
                 module.out.weight.normal_()
                 module.out.bias.normal_()
+        head.context_linear.weight.normal_(std=0.1)
+        head.context_linear.bias.normal_(std=0.1)
     return head
 
 
@@ -133,16 +136,12 @@ def test_head_forward_all_blocks_enabled_returns_finite_batch() -> None:
     assert torch.isfinite(out).all()
 
 
-def test_zero_initialised_branches_leave_the_reduced_rank_ridge() -> None:
+def test_head_predicts_zero_before_the_first_update() -> None:
     torch.manual_seed(0)
     dims = _full_dims()
     head = _head(dims)
     inputs = _full_inputs(6, dims)
     z = inputs["z_c"]
-    gene = head.gene_embedding(inputs["gene_index"]) + head.gene_projection(
-        inputs["e_g"]
-    )
-    expected = (gene * head.context_linear(z)).sum(-1) / math.sqrt(RANK)
     with torch.no_grad():
         assert torch.equal(head.context_residual(z), torch.zeros(6, RANK))
         parts = masked_blocks(dims, head.blocks, **_blocks_only(inputs))
@@ -150,7 +149,8 @@ def test_zero_initialised_branches_leave_the_reduced_rank_ridge() -> None:
             [encoder(parts[name]) for name, encoder in head.encoders.items()], -1
         )
         assert torch.equal(head.correction(encoded), torch.zeros(6, 1))
-        torch.testing.assert_close(head(**inputs), expected, rtol=0, atol=0)
+        torch.testing.assert_close(head(**inputs), torch.zeros(6), rtol=0, atol=0)
+        assert torch.equal(head.context_linear(z), torch.zeros(6, RANK))
 
 
 def test_head_is_gene_context_product_plus_correction() -> None:
@@ -211,13 +211,13 @@ def test_context_only_head_has_no_correction() -> None:
 def test_prediction_depends_on_gene_index() -> None:
     torch.manual_seed(0)
     dims = _full_dims()
-    head = _head(dims)
+    head = _live(_head(dims))
     inputs = _full_inputs(5, dims)
     other = dict(inputs, gene_index=(inputs["gene_index"] + 1) % N_GENES)
     with torch.no_grad():
         assert not torch.allclose(head(**inputs), head(**other))
     # Without ESM2 the free embedding alone still separates genes.
-    no_esm2 = _head(dims, GeneEffectBlockConfig(use_e_g=False))
+    no_esm2 = _live(_head(dims, GeneEffectBlockConfig(use_e_g=False)))
     assert no_esm2.gene_projection is None
     del inputs["e_g"], other["e_g"]
     with torch.no_grad():

@@ -1,6 +1,6 @@
 # Experiment Protocol: Held-Out-Cell-Line GeneEffect Prediction
 
-Updated 2026-10-04. This is the protocol for the **implemented** GeneEffect track under
+Updated 2026-10-07. This is the protocol for the **implemented** GeneEffect track under
 [the research blueprint](01-blueprint.md); it holds the rules (§11), the model, expression space, training,
 metrics and results. The design behind the current wiring is the
 [expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md),
@@ -18,7 +18,7 @@ selection rule and STATE treatment (§4–§6, §9.3): §4–§6 state the curre
 historical records of earlier runs under the earlier head and Huber selection. The
 [SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here
 is SL evidence. §10 specifies the linear context prior, a CPU control that the joint model is
-compared against.
+compared against, and §12 the single-cell correction that stacks the joint head on it.
 
 ## 1. Objective and prediction unit
 
@@ -168,9 +168,11 @@ $$
 $E\in\mathbb R^{|\mathcal G|\times r}$ is a free per-gene embedding (normal, SD 0.02) indexed by
 the gene's position in the fixed gene order and $W$ a linear map of $e_g$ to $\mathbb R^r$, with
 $r=64$ (`model.factor_rank`). $C$ reads only the line context: a linear map $A$ (128 → $r$) plus a
-residual branch (SwiGLU 128 → 128, dropout, linear 128 → $r$) whose output layer starts at zero.
-With $C=A\tilde z$ the first term is a reduced-rank regression on the context components, the form
-of the Tx1 context-PCA ridge, so training starts from the strongest control's model class.
+residual branch (SwiGLU 128 → 128, dropout, linear 128 → $r$). With $C=A\tilde z$ the first term is
+a reduced-rank regression on the context components, the form of the Tx1 context-PCA ridge. $A$
+(weight and bias) and the residual branch's output layer start at zero, as does $h$'s output, so
+the head predicts zero before its first update and a stack on the linear context prior (§12)
+starts at the prior; the first gradient reaches $A$ through $G$.
 $h$ encodes each enabled block separately (linear then LayerNorm: $q$ with its mask → 16, $s$ with
 its masks → 16, $\Delta$ → 32, $e_g$ → 32), concatenates them, applies dropout and a SwiGLU layer of
 width 64, and ends in a zero-initialised linear map to one value; it never sees the context.
@@ -219,9 +221,16 @@ $e_{cg}=\hat\delta_{cg}-r_{cg}$ and $\sigma_g$ of §4:
 | `huber` | Huber ($\delta=1$) of $e_{cg}$, in residual units | 1024 random rows per rank |
 | `standardized_mse` | $\operatorname{mean}\,(e_{cg}/\sigma_g)^2$ | 1024 random rows per rank |
 | `pearson_blocks` | $\operatorname{mean}\,(e_{cg}/\sigma_g)^2+\operatorname{mean}_{g\in B}\big(1-\operatorname{Pearson}_c(\hat\delta_{cg}/\sigma_g,\,r_{cg}/\sigma_g)\big)$ | every training line of 6 genes per update (`train.genes_per_block`) |
+| `line_ranking` | $\operatorname{mean}\,(e_{cg}/\sigma_g)^2+\operatorname{mean}_{g\in B}\big(-\sum_c p_{cg}\log q_{cg}\big)$, $p_{\cdot g}=\operatorname{softmax}_c(-r_{cg}/\sigma_g)$, $q_{\cdot g}=\operatorname{softmax}_c(-\hat\delta_{cg}/\sigma_g)$ | as `pearson_blocks` |
+| `dependency_classification` | $\operatorname{mean}\,(e_{cg}/\sigma_g)^2+\operatorname{BCE}\big(\ell_{cg},\,\mathbf 1[y_{cg}<-0.5]\big)$ over selective rows, $\ell_{cg}=(-0.5-\mu_{\text{train}}(g)-\hat\delta_{cg})/\sigma_g$ | 1024 random rows per rank |
 
-In the blocked objective $B$ is the set of selective genes (§6) of the batch that have at
-least three rows and a non-constant target there; with no such gene the term is zero. Each
+In the blocked objectives $B$ is the set of selective genes (§6) of the batch that have at
+least three rows and a non-constant target there; with no such gene the term is zero. The
+line-ranking term is the ListNet cross-entropy across a gene's lines (temperature 1 in units of
+$\sigma_g$): the target puts most mass on the most dependent lines. The dependency term is the
+binary cross-entropy of the measured dependency call (GeneEffect below $-0.5$, §6) against the
+logit of the model's own GeneEffect prediction; without a selective row it is zero. Both extra
+terms have weight 1. Each
 epoch deals a seeded permutation of the genes in blocks round-robin to the ranks and drops the
 incomplete tail, so every rank takes the same number of updates. All losses are computed in
 FP32.
@@ -244,8 +253,9 @@ ESM2 adapter at $10^{-4}$ when STATE is used; and STATE at $10^{-5}$, only under
 (a frozen STATE has no gradient and runs without dropout). The learning rate rises linearly
 over the first epoch of updates (`warmup_epochs` 1) and then follows a cosine to zero at the
 last of at most 30 epochs, stepped per update. Training, cell-collation and projection base
-seeds are all 0. Settings are fixed in `configs/geneeffect_joint.yaml`, and
-`configs/revision/` holds one config per objective with STATE frozen. The loop follows the
+seeds are all 0. Settings are fixed in `configs/geneeffect_joint.yaml`,
+`configs/revision/` holds one config per objective with STATE frozen, and `configs/correction/`
+the single-cell correction's objective screen (§12). The loop follows the
 joint-training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show 1694f5c:<path>`); the
 [expression-space design](specs/2026-10-02-expression-space-and-all-pipeline-design.md) set its
 response wiring, basal path and validation splits and the
@@ -253,7 +263,8 @@ response wiring, basal path and validation splits and the
 learning rates, schedule and selection.
 
 Validation runs once per completed epoch over the 27 validation lines, the only validation
-split. **Only the maximum validation selective-gene Spearman (§6) selects `best.pt` and
+split, and, when the config names a prior export (§12), once before the first update (epoch
+−1), so the prior alone is a candidate for `best.pt`. **Only the maximum validation selective-gene Spearman (§6) selects `best.pt` and
 controls early stopping** (patience 5, at most 30 epochs); an undefined selector stops the run
 rather than counting as a loss. Each epoch also scores 27 fixed training lines, chosen as
 the validation split's size, as a telemetry curve (`train_eval_`): the fit is observed, never
@@ -578,9 +589,13 @@ existing prepared root), joint training on every chosen GPU, evaluation of `best
 controls of §6 on validation and then on test, and `summary.md` with `revision.json`. It runs
 no response comparison and no readout; resume and run-directory rules are those of `all`.
 `summary.md` holds, per split, one table (selective Spearman, selective AUPR lift, residual
-Pearson over variable genes, Huber, SD ratio) for the joint model and every control and the
+Pearson over variable genes, Huber, SD ratio) for the joint model and every control, the
 paired line bootstrap of selective Spearman for the joint model minus the Tx1 context-PCA
-ridge, then the best epoch with its training-diagnostic and validation selective Spearman. One
+ridge (and, with a prior export, minus each prior control of §12), and a descriptive
+per-lineage table (the mean over a lineage's lines of the per-line residual Spearman across the
+selective genes), then the best epoch with its training-diagnostic and validation selective
+Spearman; a best epoch before the first update is reported as the prior alone. The lineages come
+from the split table next to the split file (`cell_line_geneeffect_226_split.csv`). One
 config is one experiment at seed 0 (Figure 2); there is no multi-seed stage. Runs are screened
 one at a time: the three objectives under frozen STATE, then the winning objective with
 trainable STATE and with no STATE. A winner has the highest `val_selective_spearman` at its
@@ -594,7 +609,7 @@ The [context-generalization design](specs/2026-10-04-context-generalization-desi
 closed-form, CPU-only **linear context prior** that predicts the GeneEffect residual of §3.3 in
 units of the per-gene residual SD from a line's expression alone. It is a control, not a
 model of the joint pipeline: its own results table reports it beside the controls of §6, and the
-single-cell correction that would stack on it is not built. The prior reads the shared expression space of the design (bulk TPM for bulk lines,
+single-cell correction of §12 stacks the joint head on it. The prior reads the shared expression space of the design (bulk TPM for bulk lines,
 bridged pseudo-bulk for single-cell lines); the selective genes, $\hat\mu_g$ and $\sigma_g$ are
 those of §3.3 and §6, fitted on the 170 labelled training lines, so every number stays on the
 metrics of §6. A missing training label counts as a zero residual in fitting and is skipped in
@@ -654,6 +669,17 @@ lineage and the expression components explain (`features.csv`); per selective ge
 validation and test Spearman with and without the stage (`targets.csv`); and the scores with the
 stage's weights masked to its top 10, 50, 200 and 1,000 features or without them
 (`ablation.json`, `summary.md`). The masking does not refit, so correlated features share credit.
+
+`hpc/run.sh prior-export CONFIG --run-id ID` (`src/experiments/prior_export.py`) writes the
+config's reference row into `outputs/context_prior/<run_id>/export/` for the single-cell
+correction (§12): `prior.npz` (lines × genes in residual-SD units, the line and gene order, the
+residual SD it was fitted with) and `prior.json` (run id, reference row, units, lines per split,
+and the export's own selective-Spearman scores). Validation and test rows are the reference row
+itself. Each labelled single-cell training line is predicted **out of fold**: the bridge and every
+stage are refitted without the line's patient-grouped fold (the five folds of step 2); an extra
+line sharing a patient with a line of that fold is held out with it, and every other extra line is
+always fitted on. The export is written once; an existing export is never replaced, because a
+correction checkpoint may have recorded it. The export runs for the affine bridge only.
 
 Each setting writes `rows/<experiment>__<n>.json` and is skipped when the file exists, so a
 rerun with the same run id resumes; `--experiments` restricts a process to the named
@@ -719,3 +745,40 @@ specific to this task.
   STATE's pretraining exposure to K562, HepG2 and Jurkat, wherever results are compared.
 - **Scope.** A GeneEffect result is single-gene dependency evidence; it estimates no genetic
   interaction and is not an SL result.
+
+## 12. Single-cell correction
+
+The [context-generalization design](specs/2026-10-04-context-generalization-design.md) (§5.2, §7.2,
+§7.3, §8.2 and its 2026-10-07 amendments) stacks the nested head of §4 on the default linear
+context prior of §10. The [wave-one plan](specs/2026-10-07-single-cell-correction-plan.md) builds
+it without changing any model input.
+
+- **The prior export.** `paths.prior` in a joint config names a `prior-export` directory (§10),
+  or is null. `load_inputs` reads it and refuses one whose gene order or residual SD differs from
+  the joint model's, or that lacks any line the run exposes; the checkpoint records the export's
+  identity (run id and reference row) and a restore refuses a checkpoint trained on another export,
+  or on none. These checks fail closed; nothing else gates a run.
+- **The stack.** Each GeneEffect row carries the prior's prediction for its line and gene in
+  residual units (the export's value times $\sigma_g$), and the prediction is that offset plus
+  $\hat\delta$. Every objective of §5 and every metric of §6 score the stack, so for `huber` and
+  `standardized_mse` the head fits what the prior leaves. The training lines' offsets are the
+  out-of-fold export, so the head learns at the error a query line will have.
+- **The start.** The head predicts zero before its first update (§4), so the stack starts at the
+  prior. Validation runs then (epoch −1) and is eligible for `best.pt`: "the prior alone" can win.
+- **Controls.** With a prior export the control ladder adds the prior alone
+  (`context_prior`) and the prior plus the Tx1 context-PCA ridge fitted on what the prior leaves
+  on the labelled training lines (`context_prior+context_pca_ridge[tx1]`; same view, 8
+  components, ridge $\alpha=1$ as the Tx1 ridge of §6), the linear special case of the head on
+  the same target. The revision summary (§9.3) bootstraps the stack minus the Tx1 ridge, minus the
+  prior and minus the prior plus Tx1 ridge, and adds the per-lineage table.
+- **Wave one.** `configs/correction/` holds the objective screen with STATE absent, one config
+  per objective (`huber`, `standardized_mse`, `line_ranking`, `dependency_classification`), all on
+  the default prior's export (`outputs/context_prior/default_prior_export/export`), each run with
+  `hpc/run.sh revision CONFIG --run-id <id>` into `outputs/geneeffect_correction/`. The winner on
+  validation then runs with frozen and with trainable STATE. The reading rule is that of §9.3:
+  the highest validation selective Spearman at `best.pt`; within the 27-line paired bootstrap
+  interval (`uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val`) the simpler
+  wins, a single-term loss before a two-term one and STATE absent before frozen before
+  trainable. Test is reported for every run and never used to choose.
+- **Scope.** A correction result is single-gene dependency evidence on held-out lines; it
+  estimates no genetic interaction and is not an SL result.
