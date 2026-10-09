@@ -144,7 +144,10 @@ with its per-gene process pools, repeated model loads, discarded forward passes 
 loaders removed, byte-identical outputs (design §4.4). Each step script takes `--released` to run the
 released code instead. `hpc/cilantro/check_equivalence.py --reference <finished run> --out <dir>`
 recomputes a few genes and one fold of stage one and the classifier both ways and compares them
-(`equivalence.json`); run it after any change to the fast paths. A run interrupted on the released
+(`equivalence.json`); run it after any change to the fast paths (2026-10-09, smoke run: five genes
+byte-identical, two classifier folds and stage one equal in weights, losses, predictions,
+probabilities, conformal p-values and RNG state; released deletion 464 s for the five genes against
+97 s, released classifier epoch 4.3 s against 0.7 s on the smoke fold). A run interrupted on the released
 path resumes on the fast path unchanged: the gene files are the same, and `perturb.py` first
 removes any gene whose files are incomplete.
 
