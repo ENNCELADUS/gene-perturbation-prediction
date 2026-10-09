@@ -6,6 +6,7 @@ from src.experiments.cilantro_coverage import (
     context_rows,
     covered_rows,
     top_tokens,
+    unversioned,
 )
 
 
@@ -46,3 +47,9 @@ def test_context_rows_count_rows_with_both_genes_covered():
     assert rows["K562"]["covered_rows"] == 1
     assert rows["K562"]["covered_positives"] == 1
     assert rows["A549"]["covered_rows"] == 0
+
+
+def test_unversioned_strips_ensembl_versions_only():
+    assert unversioned("ENSG00000223972.5") == "ENSG00000223972"
+    assert unversioned("ENSG00000223972") == "ENSG00000223972"
+    assert unversioned("RP11-34P13.3") == "RP11-34P13.3"
