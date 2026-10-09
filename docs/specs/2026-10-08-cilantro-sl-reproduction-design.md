@@ -188,7 +188,10 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
     (max abs difference 6e-8 on the classifier's logits, 3.6e-7 on stage one's penultimate layer,
     measured) and were therefore not adopted; every replaced loop still draws the one base seed the
     released `DataLoader` took from the global torch RNG, which seeds the next fold's network;
-    probabilities are kept as one array (the metrics pickle
+    the released training loop read `loss.item()` after every batch, a GPU synchronisation
+    (5.8 ms per batch with it against 2.6 ms without, measured on a shared GPU), so the fast classes
+    carry the released `train_nn` with the detached per-batch losses added up in order at the end of
+    the epoch, the same Python double; probabilities are kept as one array (the metrics pickle
     holds arrays where the released code pickled lists of one-row tensors) and the conformal p-values
     come from one `searchsorted` over all rows instead of pandarallel over unique scores, which gives
     the same numbers.
@@ -196,9 +199,24 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
     the fast deletion and compares the CSVs byte for byte with the run's (and, with
     `--released-deletion`, with a fresh released run), and trains and scores one fold of the
     classifier and of stage one with the released and the fast classes from the same RNG state,
-    comparing weights, predictions, probabilities, metrics, conformal outputs and RNG states. Results
-    of 2026-10-09 on the 40-gene smoke run: see `results/cilantro_reproduction_seed0/` once curated,
-    and the summary in `hpc/README.md`.
+    comparing weights, per-epoch losses, predictions, probabilities, metrics, conformal outputs and
+    RNG states. Results of 2026-10-09 on the 40-gene smoke run (`smoke40_gc95M`), on GPUs shared with
+    the running full deletion, so every time is under contention: the five genes checked (2,727 line
+    rows) are byte-identical to the smoke run's files and to a fresh released run; the released
+    perturber took 464 s for them, the fast path 97 s plus 64 s of one-off start-up (the released
+    full run itself averaged 77 s per gene per process). Classifier folds 0 and 1 and stage one at
+    two epochs: weights, losses, predictions, probabilities, metrics, conformal p-values and RNG
+    states all equal. Per epoch on the smoke fold (312 batches) 4.3 s released against 0.7 s fast;
+    the 6,658-row test loop 40 s against 0.6 s, conformal 6.2 s against 0.6 s; stage one's 9,983-row
+    test and extraction loops 5.9 s and 10.7 s against 1.4 s and 1.5 s. One training epoch over a
+    synthetic 8,000,000-row fold (62,500 batches): 384 s released against 354 s fast (an earlier
+    pair 517 s against 419 s). With two Geneformer shards saturating the same GPU, every batch's
+    forty small kernels wait for time slices (about 5.6 ms per batch either way), which bounds both
+    loops; the data-path saving (about 1.6 ms per batch of per-item fetching and collation, and the
+    per-batch synchronisation) shows only once the deletion has finished and the classifier has its
+    GPU to itself, which the pipeline order gives it but which could not be measured on 2026-10-09.
+    The per-row loops (test, calibration, conformal, stage-one test and extraction: about 8 million
+    rows per regime at full scale) are 10 to 60 times faster regardless.
   - Not done, by the same bar: TF32, bf16 or fp16 (change every embedding), larger Geneformer batches
     (batch size changes floats), batched inference of the small nets (above), running the five folds
     on separate GPUs (each fold's RNG state would have to be replayed), and the pandas lookups of
