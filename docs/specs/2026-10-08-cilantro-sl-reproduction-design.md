@@ -189,6 +189,28 @@ reports rows, positives and negatives with both genes covered:
 The report is read before the deletion pass. Expected outcome: per-cell bags become the main arm, and
 pseudo-bulk stays as the paper-faithful arm, scored on its own covered rows.
 
+First measurement, 2026-10-09 (`src/experiments/cilantro_coverage.py`, H20
+`outputs/cilantro_coverage/coverage_v1/`). The registry's raw sources hold a median of 212 cells per
+line, so a bag is often every registered cell. Rows with both genes covered and both in Gene2vec,
+positives covered over all positives, pseudo-bulk then per-cell:
+
+| Split | Context | Rows | Pseudo-bulk rows | Pseudo-bulk positives | Per-cell rows | Per-cell positives |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| test | 22RV1 | 618 | 69 | 2 / 38 | 355 | 22 / 38 |
+| test | PC9 | 2,498 | 106 | 15 / 134 | 285 | 35 / 134 |
+| test | HeLa | 2,534 | 6 | 6 / 170 | 11 | 10 / 170 |
+| validation | A549 | 1,973 | 43 | 0 / 392 | 352 | 107 / 392 |
+| train | K562 | 11,939 | 1,287 | 134 / 1,669 | 5,933 | 772 / 1,669 |
+| train | Jurkat | 9,219 | 1,484 | 18 / 95 | 4,735 | 40 / 95 |
+| train | HT29 | 7,557 | 321 | 2 / 235 | 2,106 | 78 / 235 |
+| train | OVCAR8 | 732 | 10 | 4 / 89 | 62 | 14 / 89 |
+| train | HAP1 | 57,013 | 2,236 | 2,236 / 56,993 | 12,124 | 12,124 / 56,993 |
+
+A stage-one line has a median of 5,020 labelled genes covered per-cell against 2,036 in pseudo-bulk.
+HeLa's cells detect about 6,900 genes each, so the 2048-token cut binds inside single cells too and
+its screen genes drop out; it is unevaluable in both arms. 3,000 rows carry a symbol the gc30M
+dictionary does not name.
+
 The reason, from a proxy on the stale four-context table: DepMap bulk TPM was divided by each gene's
 across-line nonzero median, as Geneformer divides by its corpus medians, and the top 2048 tokens were
 kept. The share of rows with both genes covered, and covered positives, by vocabulary size:

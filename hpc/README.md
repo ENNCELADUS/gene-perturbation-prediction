@@ -138,6 +138,9 @@ exists, so rerunning the same RUN_ID resumes; `run.json` fixes the run's setting
 Logs are in `logs/<step>.log`. `--gene-subset N --epochs E` makes a smoke run (the N genes with
 the most SynLethDB pairs, E epochs), only to check the chain.
 
+The port's coverage report (step 0, CPU only) runs in the project environment:
+`.venv-tx1/bin/python -m src.experiments.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
+
 ## The `prior` command
 
 `hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior
