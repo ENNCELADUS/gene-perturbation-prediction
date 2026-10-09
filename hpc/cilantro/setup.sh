@@ -2,7 +2,7 @@
 # Build the official Cilantro-SL harness on the H20: pinned released code, its Python 3.9 environment, Geneformer files.
 #
 # The H20 cannot reach GitHub, so the released code arrives by git push from the laptop into third_party/<name>
-# (see hpc/README.md); this script checks the pinned commits, applies official.patch, builds .venv-cilantro from
+# (see hpc/README.md); this script checks the pinned commits, applies the two patches, builds .venv-cilantro from
 # PyPI (Python itself from the npmmirror copy of python-build-standalone) and fetches Geneformer from
 # ModelScope's copy, checked against the Hugging Face hashes.
 set -euo pipefail
@@ -22,12 +22,17 @@ check_commit() {
 check_commit cilantro_sl "$CILANTRO_COMMIT"
 check_commit geneformer_cilantro "$GENEFORMER_COMMIT"
 
-patch=$(pwd)/hpc/cilantro/official.patch
-if git -C third_party/cilantro_sl apply --reverse --check "$patch" 2>/dev/null; then
-  echo "official.patch already applied"
-else
-  git -C third_party/cilantro_sl apply "$patch"
-fi
+apply_patch() {  # repository under third_party/, patch file under hpc/cilantro/
+  local patch
+  patch=$(pwd)/hpc/cilantro/$2
+  if git -C "third_party/$1" apply --reverse --check "$patch" 2>/dev/null; then
+    echo "$2 already applied"
+  else
+    git -C "third_party/$1" apply "$patch"
+  fi
+}
+apply_patch cilantro_sl official.patch
+apply_patch geneformer_cilantro geneformer.patch
 
 "$UV" python install 3.9.20
 [[ -x .venv-cilantro/bin/python ]] || "$UV" venv --python 3.9.20 .venv-cilantro

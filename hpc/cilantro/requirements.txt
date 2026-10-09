@@ -27,3 +27,4 @@ tqdm
 optuna
 seaborn
 statsmodels
+tensorboard
