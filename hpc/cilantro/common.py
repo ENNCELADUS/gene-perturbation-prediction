@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OFFICIAL_CODE = ROOT / "third_party" / "cilantro_sl"
+GENEFORMER_CODE = ROOT / "third_party" / "geneformer_cilantro"
 OFFICIAL_DATA = ROOT / "data" / "cilantro" / "official"
 GENEFORMER_DATA = ROOT / "data" / "cilantro" / "geneformer"
 GENEFORMER_MODEL = GENEFORMER_DATA / "gf-12L-30M-i2048"
@@ -89,10 +90,16 @@ def configure(run_dir: Path, res_dir: Path | None = None) -> None:
     os.environ["CILANTRO_ORIG_EMBS_CSV"] = str(p["orig_embs"])
     os.environ["CILANTRO_MODEL_DIR"] = str(p["models"])
     os.environ["CILANTRO_RES_DIR"] = str(res_dir or run_dir / "perturb" / "res") + "/"
-    for sub in ("", "nn_helpers", "isp", "input_setup"):
-        path = str(OFFICIAL_CODE / sub) if sub else str(OFFICIAL_CODE)
-        if path not in sys.path:
-            sys.path.insert(0, path)
+    # The notebooks import the Geneformer fork and the helpers from their source trees.
+    for directory in (
+        GENEFORMER_CODE,
+        OFFICIAL_CODE,
+        OFFICIAL_CODE / "nn_helpers",
+        OFFICIAL_CODE / "isp",
+        OFFICIAL_CODE / "input_setup",
+    ):
+        if str(directory) not in sys.path:
+            sys.path.insert(0, str(directory))
 
 
 def seed_everything(seed: int) -> None:

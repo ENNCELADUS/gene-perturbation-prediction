@@ -32,7 +32,6 @@ fi
 [[ -x .venv-cilantro/bin/python ]] || "$UV" venv --python 3.9.20 .venv-cilantro
 "$UV" pip install --python .venv-cilantro/bin/python -r hpc/cilantro/requirements.txt \
   --override hpc/cilantro/overrides.txt
-"$UV" pip install --python .venv-cilantro/bin/python --no-deps -e third_party/geneformer_cilantro
 
 .venv-cilantro/bin/python hpc/cilantro/fetch_geneformer.py
 # The fork resolves its default (gc95M) dictionaries next to geneformer/__init__.py.
@@ -40,5 +39,7 @@ for name in token_dictionary gene_median_dictionary gene_name_id_dict ensembl_ma
   ln -sfn "$(pwd)/data/cilantro/geneformer/geneformer/${name}_gc95M.pkl" \
     "third_party/geneformer_cilantro/geneformer/${name}_gc95M.pkl"
 done
-.venv-cilantro/bin/python -c "import torch, geneformer, scanpy, pandas; \
+# The notebooks import the fork from its source directory (sys.path), as hpc/cilantro/common.py does;
+# it is not pip-installed (its setup.py requires Python >= 3.10, the released environment is 3.9).
+PYTHONPATH=third_party/geneformer_cilantro .venv-cilantro/bin/python -c "import torch, geneformer, scanpy, pandas; \
 print('torch', torch.__version__, torch.cuda.is_available(), 'pandas', pandas.__version__, 'scanpy', scanpy.__version__)"
