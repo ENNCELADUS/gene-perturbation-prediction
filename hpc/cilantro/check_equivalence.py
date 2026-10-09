@@ -233,6 +233,7 @@ def check_classifier(reference: Path, out: Path, epochs: int) -> dict:
                     "corr": corr,
                     "probs": as_matrix(probs),
                     "metrics": [float(m) for m in metrics],
+                    "loss_arr": list(pc.loss_arr),
                     "rng_after": rng_snapshot(),
                     "timing": {
                         "train_seconds_per_epoch": round(t_train / epochs, 2),
@@ -278,6 +279,7 @@ def check_classifier(reference: Path, out: Path, epochs: int) -> dict:
                 "probs_max_abs_diff": float(np.abs(rf["probs"] - ff["probs"]).max()),
                 "metrics_equal": rf["metrics"] == ff["metrics"],
                 "metrics": {"released": rf["metrics"], "fast": ff["metrics"]},
+                "loss_arr_equal": rf["loss_arr"] == ff["loss_arr"],
                 "rng_after_equal": rng_equal(rf["rng_after"], ff["rng_after"]),
                 "timing": {"released": rf["timing"], "fast": ff["timing"]},
             }
@@ -328,6 +330,7 @@ def check_stage_one(reference: Path, out: Path, epochs: int) -> dict:
             "state": {k: v.cpu().clone() for k, v in ve.net.state_dict().items()},
             "vals": vals,
             "y_true": y_true,
+            "loss_arr": list(ve.loss_arr),
             "rng_after": after,
             "layers": pd.read_hdf(layers, "table"),
             "timing": {
@@ -347,6 +350,7 @@ def check_stage_one(reference: Path, out: Path, epochs: int) -> dict:
         "test_predictions_max_abs_diff": float(
             np.abs(np.asarray(r["vals"]) - np.asarray(f["vals"])).max()
         ),
+        "loss_arr_equal": r["loss_arr"] == f["loss_arr"],
         "rng_after_equal": rng_equal(r["rng_after"], f["rng_after"]),
         "layers_index_equal": list(r["layers"].index) == list(f["layers"].index)
         and list(r["layers"].columns) == list(f["layers"].columns),
