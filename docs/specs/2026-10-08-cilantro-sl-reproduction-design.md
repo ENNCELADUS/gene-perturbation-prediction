@@ -1,7 +1,9 @@
 # Design: reproducing Cilantro-SL, then porting it to the context screen and basal single cells
 
-**Status:** design, 2026-10-08, agreed in conversation (grill session). Nothing is implemented. The
-port (phase 2) follows the [SL protocol rules](../04-sl-ranking-protocol.md#8-rules). Paper: Hua,
+**Status:** design agreed 2026-10-08 (grill session); updated 2026-10-09. Phase 1 is implemented
+(`hpc/cilantro/`, branch `feat/cilantro-sl`) and its first run is in progress on the H20 (§4.5). Phase
+2 has only its coverage report (§5.2); the rest of §5 is not yet built and has no implementation
+plan. The port (phase 2) follows the [SL protocol rules](../04-sl-ranking-protocol.md#8-rules). Paper: Hua,
 Haber and Ma, *Uncertainty-aware synthetic lethality prediction with pretrained foundation models*,
 bioRxiv 2026 (local PDF under `docs/literature/03_models/synthetic_lethality/`). Phase 1 reproduces
 the paper on its own data with its own code; phase 2 carries the method to the
@@ -90,12 +92,16 @@ conformal prediction.
 | Matched dictionary | gc30M dictionary and gene medians; a second Geneformer pass |
 | Gene-clean stage one | in gene-holdout, stage one fitted without the test fold's genes |
 | Held-out stage-one fit | stage one fitted with a fixed, seeded 20% of lines held out and scored on them |
-| 222-line stage one | stage one on a seeded random 222 of the 1,021 lines (the port's line count) |
+| 222-line stage one | stage one on a seeded random 222 of the 1,140 labelled lines (the port's line count) |
 | Paper ablations | perturbed embedding + Gene2vec; delta only; PCA-32 of Δ with no pretraining |
 | Gene-only | Gene2vec of both genes through the same classifier, no Geneformer input |
 | ESM+MLP | our ESM2 gene embeddings through the paper's ESM+MLP |
 
 The paper's other six baselines (KG4SL, SL2MF, SLMGAE, DDGCN, MVGCN-iSL, ESM4SL) are not run.
+
+Only the as-released run exists so far (§4.5). The other rows need their own runs: the matched
+dictionary is `hpc/cilantro/run.sh RUN_ID --dictionary gc30M`; the stage-one variants, the paper's
+ablations, gene-only and ESM+MLP are not yet implemented in the harness.
 
 ### 4.2 Metrics
 
@@ -231,6 +237,33 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   `geneformer/__init__.py`; Cilantro never uses the multitask classifier. The notebooks import the
   fork from its source directory, and so does the harness: its `setup.py` requires Python 3.10,
   the released environment is 3.9.
+
+### 4.5 State of phase 1 (2026-10-09)
+
+Built (`hpc/cilantro/`, commits on `feat/cilantro-sl`, not yet merged to `main`):
+
+- `setup.sh` and `fetch_geneformer.py`: the pinned released code, its Python 3.9.20 environment
+  (`.venv-cilantro`) and the Geneformer files, on the H20.
+- One script per released notebook (`prepare_inputs`, `tokenize_lines`, `original_embeddings`,
+  `perturb`, `generate_inputs`, `sample_negatives`, `setup_input`, `pretrain`, `classify`), chained by
+  `run.sh` with done markers and resume; `report.py` for the metrics of §4.2.
+- The fast paths of §4.4 (`fast_perturb.py`, `fast_classifier.py`, `fast_core.py`) as defaults,
+  `--released` for the released classes, and `check_equivalence.py`.
+- Codex review round 1 adjudicated: all six findings fixed.
+
+Runs on the 30838 container (`outputs/cilantro_reproduction/`):
+
+| Run | Settings | State |
+| --- | --- | --- |
+| `smoke40_gc95M` | gc95M, 40 most-paired genes, 2 epochs | complete end to end, including `report.md`; its numbers check the chain only |
+| `as_released_gc95M` | gc95M, all 9,987 genes, 100 epochs | deletion in progress: about 1,300 of 9,987 genes at 07:53 UTC, about 31 genes per minute on the fast path (6 per minute on the released perturber before 07:39); then generate, negative sampling, setup, stage one, both classifier regimes, report, chained by `run.sh` |
+
+A batch-size benchmark of the deletion (`outputs/cilantro_benchmarks/deletion_batch_size.json`, one
+GPU shared with the running deletion): 25.4 lines per second at the released batch of 50, 27.8 at
+400, with embeddings differing by up to 2.4e-7 at any other size. Batch 50 is kept.
+
+Still to do for phase 1: the remaining rows of §4.1, a curated result under
+`results/cilantro_reproduction_seed0/`, and merging the branch once the full run has completed.
 
 ## 5. Phase 2: the port
 
@@ -375,14 +408,19 @@ not built here.
 ## 6. Order of work
 
 1. Phase 1 environment, released code and patch; a smoke run end to end. Measure Geneformer
-   throughput on 50 genes and record the estimate before the full pass.
-2. The as-released run, then the fix runs, ablations and controls of §4.1.
+   throughput on 50 genes and record the estimate before the full pass. *Done (§4.5).*
+2. The as-released run, then the fix runs, ablations and controls of §4.1. *As-released run in
+   progress; the rest not started.*
 3. The `src/` port: batched deletion with its equivalence check, then stage one, classifier and
-   conformal, which must reproduce the as-released phase-1 numbers from the official Δ.
-4. The coverage report (§5.2), read before GPU work.
+   conformal, which must reproduce the as-released phase-1 numbers from the official Δ. *Not
+   started; the harness's fast deletion (§4.4) is the starting point.* Before it: an implementation
+   plan, and the minimum per-context gain over the context-ablated arm that the SL protocol (§6)
+   asks to be declared before any test label is read.
+4. The coverage report (§5.2), read before GPU work. *Done; per-cell bags chosen.*
 5. Measure per-cell throughput on one line and record a GPU-hour estimate. Rough figure: 226 lines ×
-   128 cells × about 3k present genes is about 90M forward passes, on the order of 80 GPU-hours.
-   Then the full deletion pass.
+   128 cells × about 3k present genes is about 90M forward passes, on the order of 80 GPU-hours
+   on the released perturber; the fast deletion (§4.4) should cut that several-fold, to be
+   measured. Then the full deletion pass.
 6. The port: out-of-fold stage one, classifier, conformal, controls and secondary CV; test once.
    Results go to `results/cilantro_port_seed0/` with a run manifest (commits, input hashes, line and
    gene lists, seeds).
