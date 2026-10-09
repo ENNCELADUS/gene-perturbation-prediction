@@ -81,6 +81,11 @@ def bag_indices(n_cells: int, size: int, seed: int) -> np.ndarray:
     return np.sort(np.random.default_rng(seed).choice(n_cells, size, replace=False))
 
 
+def unversioned(gene_id: str) -> str:
+    """``ENSG00000223972.5`` -> ``ENSG00000223972``; the dictionaries hold bare IDs."""
+    return gene_id.split(".")[0] if gene_id.startswith("ENS") else gene_id
+
+
 def covered_rows(pairs: pd.DataFrame, covered: set[str]) -> pd.Series:
     """Rows whose two genes (columns ``ensembl_a``, ``ensembl_b``) are both covered."""
     return pairs["ensembl_a"].isin(covered) & pairs["ensembl_b"].isin(covered)
@@ -103,7 +108,7 @@ def line_summary(
     source = read_registry_source(
         Path(source_path), model_id=model_id, var_ensembl_col=var_ensembl_col
     )
-    ids = [mapping.get(str(gene), "") for gene in source.var_names]
+    ids = [mapping.get(unversioned(str(gene)), "") for gene in source.var_names]
     counts, _ = align_columns(source.X, ids, vocabulary)
     library = float(source.X.sum())
     totals = np.asarray(counts.sum(axis=0), dtype=np.float64).ravel()
