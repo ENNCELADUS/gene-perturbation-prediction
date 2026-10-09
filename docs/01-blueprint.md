@@ -1,75 +1,190 @@
-# Research Blueprint: Context-Conditioned Synthetic-Lethality Ranking
+# Research Blueprint — Context-Specific Synthetic Lethality Prediction Based on AI Virtual Cell Foundation Model
 
-Updated 2026-10-04. This document is the research statement: the question, why it is posed
-on cell lines, and the route to an answer. The rules the experiments follow are in the
-[GeneEffect protocol](03-geneeffect-protocol.md#11-rules) and the
-[SL protocol](04-sl-ranking-protocol.md#8-rules); [related work](02-literature-review.md)
-explains the prior art.
+Updated 2026-10-09. This note is the project's introduction, related work and task formulation, written as
+for an ML paper. Methods, experiment rules and results are kept in the repository: the GeneEffect protocol
+(`docs/03-geneeffect-protocol.md`), the SL protocol (`docs/04-sl-ranking-protocol.md`), the extended related
+work with full citations (`docs/02-literature-review.md`) and the result records under `results/`.
 
-## 1. The question
+## 1. Introduction
 
-Two genes are synthetic lethal (SL) when losing either one alone is tolerated and losing both
-kills the cell. Which pairs are lethal depends on the cell: its lineage, its expression
-programs, the paralogs and pathway partners it happens to express. Curated SL graphs record
-which pairs scored in screens; they say little about a cell nobody has screened.
+Synthetic lethality (SL) is the most direct route from a tumour's genetic defect to a drug target: when a
+tumour has lost gene $A$, inhibiting a partner gene $B$ kills the tumour cells while sparing normal cells that
+still carry $A$. PARP inhibitors in BRCA1/2-deficient cancers are the clinical proof of the idea. The
+clinically motivated question is: *given the molecular state of a tumour and a loss-of-function alteration
+it already carries, which additional gene inhibition is selectively lethal?*
 
-The task: given the basal single-cell transcriptome of a cancer cell line and a pair of genes,
-rank the pairs that are synthetic lethal in that line. The model sees the line only through its
-unperturbed cells. No dependency or SL measurement of the line is an input, and no SL graph
-enters the features.
+Which pairs are lethal depends on the cell. Lineage, expression programmes, and the paralogs and pathway
+partners a cell happens to express decide whether losing $B$ is tolerated once $A$ is gone, so a pair that is
+lethal in one cell line can be harmless in another. Measured SL is scarce: experimental SL labels exist for
+a few dozen cell lines, and a new tumour or cell line arrives with molecular profiles and no screen. DepMap
+measures single-gene dependency (GeneEffect) far more broadly, about 1,200 cancer cell lines by 18,500 genes in
+release 26Q1, but it too is a fixed panel. A context it never screened can only be served by a model that maps
+the context's basal state to its dependencies.
 
-The research question is whether what a model learns about a cell's context, from
-perturbation responses and single-gene dependencies, ranks SL partners better than gene
-identity, pan-essentiality and simple context predictors do.
+Such a model should read the context at single-cell resolution. The basal single-cell transcriptome is the
+profile most likely to be available for a new context, and it keeps the cell-to-cell heterogeneity that a bulk
+average discards. Single-cell foundation models, the AI virtual cell models pretrained on large single-cell
+atlases and perturbation data, offer a learned representation of cell state to build on.
 
-## 2. Why held-out cell lines
+We therefore pose SL prediction **across cell lines**: train on a set of cell lines, then predict for a cell
+line excluded from all supervised training and model selection, seen only through its basal profile. The
+task has two stages. Stage one predicts single-gene GeneEffect in the unseen line; stage two predicts which
+gene pairs are synthetic lethal there, reasoning from stage one's predicted dependencies.
 
-A pair that is lethal in one line and harmless in another can only be told apart by the
-context of the line. Splitting by cell line makes the model earn its context signal: every
-test line is a context the model has never seen, so memorising a gene, a pair or a line's
-identity does not help. The unit that has to generalise is the cell line. Genes are shared
-across train and test.
+## 2. Related work and how this work differs
 
-This is also the clinical shape of the problem: a new tumour or model line arrives with
-expression data and no screen.
+- **Cell-line-specific SL prediction.** EXP2SL, a graph-based cell-specific model and MiT4SL predict SL in a
+  named cell line; the latter two address transfer to lines with few or no labels, and the graph-based model's
+  authors report uneven transfer, poorest for EXP2SL. They represent a line by
+  expression signatures, cell-specific graphs or line-tailored interaction networks. None reads a held-out
+  line through its basal single-cell transcriptome with a single-cell foundation model.
+- **SL from DepMap dependencies.** Recursive Feature Machines predict knockout viability
+  from bulk expression and mutation features, then derive SL candidates from feature importance. That is the
+  closest relative of our two-stage, definition-1 logic, without a foundation model or single-cell input, and
+  with candidates checked against known pairs rather than per held-out line.
+- **Dependency prediction.** DeepDEP predicts dependencies from bulk omics, so stage one on
+  its own is not new; what is new is predicting it from basal single cells for lines held out from training.
+- **Foundation-model SL.** Cilantro-sl applies Geneformer to bulk expression, simulates
+  knockouts in silico, supervises a viability embedding on DepMap and classifies pairs. It is evaluated on
+  unseen pairs and unseen genes, never on unseen cell lines.
+- **Evaluation.** Benchmarks of SL prediction show that scores depend on the holdout setting; a pair- or
+  gene-holdout score says nothing about held-out cell lines. Cross-cell-line settings already exist: Feng et
+  al.'s benchmark trains on one line and tests on another, MiT4SL holds out one line of six, and SLWise and
+  ELISL transfer between lines or cancer types, all with weak transfer. Held-out-line SL evaluation is
+  therefore not new on its own; what this work adds is the basal single-cell context and holding the line out
+  of the dependency stage as well.
 
-## 3. The approach
+To our knowledge, no published SL predictor reads a held-out cell line through its basal single-cell
+transcriptome with a single-cell foundation model and is evaluated on cell lines excluded from all training.
 
-**Step one: a GeneEffect context model.** Predict each gene's DepMap single-gene dependency
-in a held-out line from its basal single cells and the gene's protein sequence. A frozen
-single-cell foundation model (Tx1) encodes the cells into a context; STATE, a perturbation-
-response model, supplies the predicted expression change when the gene is knocked out; a head
-combines them. The target is the residual over the training gene mean, so the part of a
-dependency that every line shares is fixed and the part that depends on context is what is
-learned. This track is implemented and is scored on a 226-line benchmark with 172 training,
-27 validation and 27 test lines, against context-blind priors and context predictors of
-increasing strength, including a closed-form linear prior from bulk and pseudo-bulk
-expression.
+## 3. Task formulation
 
-**Step two: SL ranking built on it.** For a pair $(a,b)$ in line $c$, the SL head reads
-symmetric features of the two genes' predicted dependency profiles across lines and their
-predicted dependencies in $c$, and outputs a ranking score. Pair labels come from
-experimental screens in nine named contexts, split by context. The comparison that matters
-is against the same head with the context information removed.
+### 3.1 Synthetic lethality: two operational definitions
 
-Single-gene predictions are the input to step two; they are not themselves SL results.
+**Definition 1: context-dependent SL, inferred from single-knockout dependency.** A gene pair $(A,B)$ is a
+candidate SL interaction when knockout of gene $B$ selectively impairs cell viability in $A$-deficient
+contexts compared with $A$-proficient contexts. It is commonly inferred by comparing gene dependencies across
+genetically characterised cancer cell lines.
 
-## 4. Where the work stands
+**Definition 2: SL as a genetic interaction, measured by combinatorial double knockout.** A gene pair $(A,B)$
+is SL when each single knockout is viable but the double knockout is lethal. Quantitatively it is an extreme
+negative genetic interaction: the observed double-knockout fitness is far below that expected from the two
+single-knockout effects.
 
-- **GeneEffect model.** Trained, tested and baselined once at seed 0, before the
-  expression-space change; it is a working path whose residual correlations trail simple
-  context baselines ([record](../results/joint_geneeffect_seed0/README.md)). The current
-  revision (head, objective, STATE treatment; [design](specs/2026-10-03-geneeffect-revision-design.md),
-  [head design](specs/2026-10-03-geneeffect-head-revision-design.md)) is specified in the
-  [GeneEffect protocol](03-geneeffect-protocol.md).
-- **Linear context prior.** A closed-form prior from expression alone scores selective
-  Spearman 0.223 on validation and test against 0.130 and 0.121 for the Tx1 context ridge
-  ([design](specs/2026-10-04-context-generalization-design.md),
-  [results](../results/context_prior_seed0/README.md)). The next run compares remedies for
-  the single-cell-to-bulk bridge that gene-level features need
-  ([plan](specs/2026-10-04-bridge-remedies-plan.md)).
-- **SL ranking.** Specified in the [SL protocol](04-sl-ranking-protocol.md); no head has
-  been trained.
+The two are operational approaches to the same biological phenomenon: the first infers candidate SL
+relationships from conditional single-gene dependencies, the second measures pairwise interactions directly.
 
-Curated evidence is under [`results/`](../results/); data cards are under
-[`docs/data/`](data/).
+**How this project uses them.** Definition 1 is the working definition the method reasons with, which keeps
+its predictions explainable: $B$ scores as an SL partner of $A$ in context $c$ when $B$'s predicted dependency in
+$c$ is selectively stronger than where $A$ is intact. Ground truth is a separate matter. An **SL label** is an
+experimental entry in an SL database for a named cell line, whichever approach produced it (in practice mostly
+combinatorial screens), and the assay behind each label is recorded. A dependency pattern derived from DepMap
+is never called an SL label.
+
+### 3.2 The cell line as input
+
+The unit of prediction is a cell line (context) $c$, which the model sees only through its basal, unperturbed
+molecular profile $x_c$. The basal single-cell transcriptome is the core of $x_c$; other baseline data of the
+line, such as bulk expression, mutation and copy number, may join it where available. No GeneEffect,
+perturbation-response or SL measurement of a held-out line is ever an input. When $x_c$ includes data beyond
+the single cells, what the single-cell foundation model contributes is established by ablation, not by the
+architecture.
+
+### 3.3 Task A — cross-line GeneEffect prediction (stage one)
+
+- **Input:** the basal profile $x_c$ of a cell line and a candidate knockout gene $g$.
+- **Output:** predicted GeneEffect $\hat{y}(c,g)$, continuous; more negative means a stronger dependency.
+- **Supervision:** observed DepMap (Chronos) GeneEffect $y(c,g)$ of the training lines.
+
+Task A does single-gene dependency prediction only. GeneEffect is a population-level fitness label, not a
+single-cell death label, and a single-gene prediction is not SL evidence.
+
+### 3.4 Task B — context-specific SL prediction (stage two)
+
+- **Input:** the basal profile $x_c$, a gene $A$ lost in $c$ (by the line's own defect, or by the knockout of a
+  screen), and a candidate gene $B$.
+- **Output:** an SL score $s(c,A,B)$ and a ranked list of candidate partners $B$ for each query $(c,A)$.
+- **Reasoning:** definition 1, through stage one's predicted dependencies.
+- **Ground truth:** experimental SL-database labels in named cell lines. A positive is an experimental SL hit in
+  $c$; a negative is a pair screened in $c$ that did not score, which is not evidence of non-SL anywhere else.
+  Untested pairs are unlabelled, never negatives. Database pairs are unordered, so each pair serves both query
+  directions.
+
+### 3.5 Why two stages
+
+GeneEffect prediction comes first because DepMap provides large-scale, cell-line-specific labels for
+single-gene knockouts, whereas labelled SL pairs with defined cellular contexts, suitable for training a model
+directly, are scarce. In the SL data assembled for this project, experimental labels cover a few dozen cell
+lines, and a pair's label never differs between the lines it was tested in.
+
+GeneEffect supervision lets the virtual-cell backbone learn how cellular context shapes gene dependency, and
+that knowledge transfers to SL prediction. GeneEffect alone does not decide whether two genes are synthetic
+lethal, so the second stage still needs SL-specific supervision. Definition 1 is the bridge: stage two reads
+stage one's predicted dependencies and asks whether $B$'s dependency is selective for contexts that have lost
+$A$.
+
+GeneEffect prediction also has value of its own: it predicts which gene knockouts reduce fitness in a given
+cancer context, and those predictions help screen context-specific SL candidates.
+
+### 3.6 Splits and generalization settings
+
+Generalization is measured over held-out cell lines. A held-out line is excluded from supervised training
+and model selection in both stages; models are selected on validation lines and scored once on test lines.
+
+- **Stage one** uses one fixed split of the cell lines that have basal single-cell profiles and DepMap
+  GeneEffect. DepMap lines without single-cell data may join the training side only.
+- **Stage two** uses one fixed split of the cell lines that carry SL labels and basal single-cell profiles. The
+  splits nest: SL training lines are stage-one training lines, SL validation lines are stage-one validation
+  lines, and SL test lines are stage-one test lines. Stage one may hold further lines on each side.
+
+| Test context | Test genes or pairs | Setting | Scope |
+| --- | --- | --- | --- |
+| Unseen line | Seen genes | Context generalization | **Primary** |
+| Unseen line | Unseen genes | Joint context and gene generalization | Reported separately |
+| Seen line | Seen genes, new pairs | Pair generalization | Not claimed |
+| Seen line | Unseen genes | Gene generalization | Not claimed |
+
+Unseen genes are withheld from every GeneEffect and SL training label. Results on seen and unseen genes are
+never pooled. In the primary setting a pair may be labelled in a training line and again in a test line; the
+question is whether the model predicts it in the new line, and a pair-identity control (§3.7) measures how much
+of a score memorising pairs alone would earn.
+
+### 3.7 Evaluation
+
+**Task A.** Two axes, both headline:
+
+- whole-matrix accuracy: Pearson, Spearman and RMSE over all (line, gene) entries;
+- context accuracy: for each gene, the correlation across held-out lines between predicted and measured
+  GeneEffect, taken as residuals over the training gene mean, on genes whose dependency varies between lines.
+
+Each axis is read against a context-blind gene-mean baseline, which already reaches whole-matrix Pearson 0.91
+on our benchmark, and against simple context predictors (a ridge on context principal components, a linear
+expression prior).
+
+**Task B.** For each held-out line: AUPRC against the line's positive rate, precision and recall at top $K$,
+ranking within each query $(c,A)$, and calibration. Each score is compared with controls that a real context
+effect must beat:
+
+- gene identity and pan-essentiality: rank $B$ by its average dependency;
+- $A$-blind: rank $B$ by stage one's predicted dependency in $c$, ignoring $A$;
+- pair identity: rank by the pair's labels in training lines, ignoring $c$;
+- context-ablated: the same model with the cell line's profile removed.
+
+Pairs whose label already appears in a training line are reported separately from pairs never labelled in
+training. Known context-specific pairs (SMARCA4–SMARCA2, ARID1A–ARID1B, MTAP–PRMT5, VPS4A–VPS4B,
+ENO1–ENO2, STAG2–STAG1) are reported by name.
+
+## 4. Clinical interpretation and limitations
+
+- A held-out cancer cell line is a practical proxy for an unseen context. A patient's tumour adds further
+  shifts: genotype, intra-tumour heterogeneity, microenvironment and treatment history.
+- Strong predicted GeneEffect for $B$ is not evidence of SL between $A$ and $B$. Definition-1 reasoning yields
+  candidates; an SL claim needs an experimental, context-specific measurement against matching single-knockout
+  controls, and attention to selectivity over normal cells.
+- SL-database labels are aggregated screen calls. In the assembled data a pair's label never differs between
+  lines, and some multi-line screens record identical labels for every line of their panel, so the benchmark
+  cannot test recovery of a pair that is SL in one line and not in another. Negatives are screened non-hits in
+  a named line only.
+- Experimental SL labels exist for few lines with basal single-cell data, so stage two has few validation and
+  test lines.
+

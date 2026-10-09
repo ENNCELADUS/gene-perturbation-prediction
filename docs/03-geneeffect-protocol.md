@@ -38,8 +38,10 @@ single-gene dependency: it is not an SL label and estimates no genetic interacti
 
 The question this protocol answers is whether a perturbation-response model learns
 context information that improves held-out-line dependency prediction beyond the
-gene mean and simple context predictors. It is a diagnostic for the backbone, scored
-on its own benchmark, and does not substitute for the SL protocol's pair evaluation.
+gene mean and simple context predictors. It is stage one of the blueprint's task
+([§3.3](01-blueprint.md#33-task-a--cross-line-geneeffect-prediction-stage-one)), with value of its
+own and as the backbone of stage two; scored on its own benchmark, it does not substitute for the
+SL protocol's pair evaluation.
 
 ## 2. Benchmark
 
@@ -56,7 +58,10 @@ documents its construction.
 All 47 original basal/SL-context union lines are fixed in train. The 179 atlas lines
 follow a patient-grouped partition: no patient's lines are split across cohorts, and
 GeneEffect values did not determine membership. The 226-line benchmark and the
-nine-context SL split never substitute for each other.
+nine-context SL split never substitute for each other. The planned SL split instead nests in this
+one ([blueprint §3.6](01-blueprint.md#36-splits-and-generalization-settings)): its training,
+validation and test lines are training, validation and test lines here, so the nine-context split
+is no longer the plan.
 
 ## 3. Inputs and supervision
 
@@ -303,9 +308,10 @@ GeneEffect of gene $g$ across lines (the centring rules below apply). Undefined 
 excluded and counted. This quantity is the selection criterion of §5
 (`val_selective_spearman`).
 
-**Why this metric.** The intended SL computation is statistical and cohort-based
-(DAISY, ISLE and SLIdR style): for a gene pair $(a,b)$, test whether lines in which $b$ is lost
-or low depend more strongly on $a$. That is a rank test on gene $a$'s dependency across lines,
+**Why this metric.** Stage two reasons by the blueprint's definition 1
+([§3.1](01-blueprint.md#31-synthetic-lethality-two-operational-definitions)), as cohort-based
+statistical methods do (DAISY, ISLE and SLIdR): for a gene pair $(a,b)$ it asks whether lines in which $b$
+is lost or low depend more strongly on $a$. That compares gene $a$'s dependency across lines,
 so what it consumes is the per-gene ranking of lines, concentrated on genes that have a
 dependent tail. Selective-gene Spearman measures that ranking directly, whereas the pooled
 Huber loss is dominated by high-variance genes and rewards shrinkage
@@ -728,9 +734,9 @@ specific to this task.
   later model decisions rest on validation.
 - **Experiment code reports; people decide.** Code computes and tabulates; it holds no pass,
   fail, keep or drop rule beyond hyperparameter tuning on validation.
-- **Query lines supply basal single cells only.** No GeneEffect or SL measurement of a query
-  line is an input. Validation lines' bulk RNA is read only in the labelled oracle row; test
-  lines' bulk RNA is never read.
+- **Query lines supply basal single cells only.** No GeneEffect, perturbation-response or SL
+  measurement of a query line is an input. Validation lines' bulk RNA is read only in the
+  labelled oracle row; test lines' bulk RNA is never read.
 - **Line authorities.** The [split file](../configs/benchmarks/cell_line_geneeffect_226_split.json)
   fixes the 226 members; the [extra-line membership file](../configs/benchmarks/extra_bulk_lines_26Q1.json)
   fixes the DepMap lines outside the 226 that may join the training side

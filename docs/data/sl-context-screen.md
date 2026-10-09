@@ -5,6 +5,12 @@ No model has run. The raw-filter audit is incomplete (see Audits). PC9 and HeLa 
 Tx1-contract-verified basal artifacts; they are SL-label-only test contexts because the pinned
 26Q1 GeneEffect file has no row for either ModelID. HAP1/22RV1 remain source-registered only.
 
+**Status (2026-10-09):** the [research blueprint](../01-blueprint.md#36-splits-and-generalization-settings)
+now plans one SL split nested in the [GeneEffect split](cell-line-geneeffect-226.md): SL training,
+validation and test lines are GeneEffect training, validation and test lines. This table's
+nine-context split is therefore no longer the plan; it remains a built artifact, and the facts below
+stand.
+
 This is the only card for this dataset. It supersedes the separate v1 and v2 cards; the v1
 artifact is preserved in the local 2026-09-05 archive as the pre-provenance snapshot.
 
@@ -15,7 +21,8 @@ selection and row-level leakage removal the published table has 94,083 rows, 82,
 
 ## Role
 
-The sole pair-label table and split authority for context-conditioned SL ranking:
+The pair-label table and split authority of the nine-context SL build (not the planned SL split;
+see the 2026-10-09 status):
 
 ```text
 (gene_a, gene_b, cell_line) -> experimental screen hit/non-hit

@@ -7,6 +7,24 @@ training and testing once
 ([result](../results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
 feature set or SL performance result exists.
 
+**Superseded in part (2026-10-09).** The [research blueprint](01-blueprint.md#3-task-formulation) now fixes
+the SL task differently, and this protocol is rewritten to match before stage two is implemented:
+
+- Definition 1 (B's dependency selectively stronger where A is lost) is the logic the method reasons with;
+  the SL query is a cell line, a gene A lost in it, and candidate partners B.
+- SL labels are experimental SL-database entries only; a DepMap-derived dependency pattern is never an SL
+  label.
+- Stage two uses one fixed SL split nested in the GeneEffect split: SL training, validation and test lines are
+  GeneEffect training, validation and test lines respectively. Of the 226 lines, those with at least ten
+  experimental positives and ten negatives in `sl_integrated_pairs.csv` (a 2026-10-09 name match, to be
+  confirmed by ModelID) are all training lines except MDA-MB-231, MDA-MB-468 (test) and PATU8988S
+  (validation), so any other SL validation or test line needs a new version of that split.
+- Evaluation follows blueprint §3.7: per-line AUPRC against the positive rate, precision and recall at top K,
+  per-query ranking and calibration, against pan-essentiality, A-blind, pair-identity and context-ablated
+  controls, with pairs already labelled in a training line reported separately from pairs never labelled there.
+
+The nine-context split and the separate eligibility rules below (§2, §4, §5) predate those decisions.
+
 ## 1. Objective and prediction unit
 
 For each held-out cell line $c$, rank canonical unordered gene pairs $(a,b)$ using

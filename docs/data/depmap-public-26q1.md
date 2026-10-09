@@ -48,5 +48,6 @@ Selected model: `ACH-000551`
 
 - Gene-effect columns are parsed as gene symbol plus Entrez ID.
 - This dataset supplies labels for `(cell line, perturbation gene)`.
-- Do not describe these labels as synthetic lethality without additional
-  context-specific evidence.
+- Do not describe these labels, or dependency patterns derived from them, as
+  synthetic lethality or as SL labels: SL labels are experimental SL-database
+  entries only ([blueprint §3.1](../01-blueprint.md#31-synthetic-lethality-two-operational-definitions)).

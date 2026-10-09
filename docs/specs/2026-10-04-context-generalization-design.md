@@ -214,7 +214,7 @@ embeddings deferred, since every gene is seen in training); no per-line lookup a
 **In this design.** STATE's predicted knockout response is a per-(g, c) feature computed from single cells, so it
 enters the correction, projected onto the same program space as the context views. The prior measures what
 expression alone gives; the correction with and without STATE's features measures what the virtual cell adds.
-That is the [blueprint](../01-blueprint.md#1-the-question) research question, asked on GeneEffect.
+That is the [blueprint](../01-blueprint.md#1-introduction) research question, asked on GeneEffect.
 
 **Recorded for the SL protocol, not run.** The prior reads a line's expression, so it can read a counterfactual
 line: the virtual cell's predicted state of c after knocking out b.

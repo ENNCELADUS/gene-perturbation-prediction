@@ -4,57 +4,91 @@ This file provides guidance to Codex and other coding agents when working with c
 
 ## Research task and document authority
 
-The task is context-conditioned synthetic-lethality (SL) ranking from basal single-cell transcriptomes in held-out **cell
-lines**, not held-out genes. 
+The task is context-specific synthetic-lethality (SL) prediction in held-out **cell lines**, read from their basal
+profiles with a single-cell foundation model: stage one predicts DepMap GeneEffect, stage two ranks SL partners against
+experimental SL-database labels (`docs/01-blueprint.md` §3). 
 
-`docs/` outranks this file. Start at `docs/01-blueprint.md` (the research question and approach, motivation only);
-`docs/02-literature-review.md` is prior art; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented
-GeneEffect track and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it. The current expression space,
+`docs/` outranks this file. Start at `docs/01-blueprint.md` (introduction, related work and task formulation, no modelling; it mirrors the
+Notion page https://app.notion.com/p/3f4c3591aaf681f68db1ccb9fd595c41, so edit both together);
+`docs/02-literature-review.md` is the extended related work; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented
+GeneEffect track (its §11 holds the rules) and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it (its §8 holds the rules; superseded in part by the 2026-10-09 blueprint). The current expression space,
 STATE wiring and `all` run follow `docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`. Read
 the `docs/data/` card before using a dataset. Results live in `results/`.
 
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-02)
+## Current state (2026-10-08)
 
-The joint GeneEffect model (`configs/geneeffect_joint.yaml`) has trained, tested and been baselined once, seed 0: Huber beats
-the context-blind gene-mean by 0.08% and residual correlations trail a Tx1 PCA-ridge baseline — a working path, not a result
-(`results/joint_geneeffect_seed0/`). That run predates the expression-space change (STATE was fed raw counts), so its
-numbers are not like for like with the current pipeline. The SL pair head is unimplemented. Further model decisions use
-validation; the test split is spent. Nothing here is SL evidence.
+The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and baselined once at seed 0, before the
+**expression-space change** (STATE was fed raw counts), so those numbers are not like for like with the current pipeline
+(`docs/03-geneeffect-protocol.md` §7, `results/joint_geneeffect_seed0/`). The 2026-10-02 `all` run
+(`all_20261002T174946Z`) finished: validation residual Pearson 0.068 for the joint model against 0.133 for the Tx1 context ridge,
+and the response comparison favours the HVG MLP over fine-tuned STATE and over the Tx1 MLP. The current work is the **revision**
+(`docs/specs/2026-10-03-geneeffect-revision-design.md`, then `docs/specs/2026-10-03-geneeffect-head-revision-design.md`): a
+selective-gene selector, a nested low-rank head over a training-line context PCA, and objective and STATE screens on the 30734
+container. The other current work is the **linear context prior**
+(`docs/specs/2026-10-04-context-generalization-design.md`, protocol §10; branch `feat/context-prior`): a closed-form
+CPU prior from bulk and pseudo-bulk expression, with DepMap lines outside the 226 as extra training-side lines
+(`docs/data/extra-bulk-lines-26q1.md`). Its 2026-10-04 run (`results/context_prior_seed0/`): validation chose the config
+without the haematopoietic extras, a ridge on 128 expression components over 953 labelled lines read from bridged
+pseudo-bulk; selective Spearman 0.223 validation / 0.223 test against 0.130 / 0.121 for the Tx1 context ridge; gene-level
+blocks did not survive the bridge. The bridge-remedy runs (`results/bridge_remedies_seed0/`, a minimal runner that
+decides nothing; plan `docs/specs/2026-10-04-bridge-remedies-plan.md`) found no remedy better than the affine bridge,
+and, once every components and gene penalty pair is reported (`configs/context_prior/bridge_remedies_penalty_grid.yaml`),
+the affine bridge with all gene-level blocks at components penalty 1 and gene penalty 10 scores 0.230 validation /
+0.235 test (+0.007 and +0.013 over components alone, intervals above zero). Its follow-ups
+(`results/default_prior_followups_seed0/`) found that the data-selected genes carry that gain, so the **default prior**
+(`configs/context_prior/default_prior.yaml`) is the affine bridge with components at penalty 1 and data-selected genes at gene
+penalty 10: 0.229 validation / 0.234 test. The **single-cell correction** (the nested head stacked on that prior's out-of-fold export,
+protocol §12) ran wave one (`docs/specs/2026-10-07-single-cell-correction-plan.md`, `results/correction_wave_one_seed0/`):
+`paths.prior` names the export, the stack starts at the prior and validates before its first update, the baselines add
+the prior alone and the prior plus the Tx1 ridge, and `configs/correction/` holds the objective screen and the STATE
+runs. In all six runs (four objectives with STATE absent, then standardised MSE with frozen and trainable STATE)
+`best.pt` is the prior alone (0.229 / 0.234): every trained epoch lowers validation, and the prior plus the Tx1 ridge
+scores 0.183 / 0.182. STATE absent won; the research plan is to be discussed before a second wave. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+**validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
 
-Python 3.11–3.12, managed by `uv`. Run Python, pytest and Ruff from the repo root through `uv run`, as modules; imports are
-`src.*`.
+Python 3.11–3.12, managed by `uv`. Every Python invocation goes through `uv run`, from the repo root, as a module (`-m`);
+imports are `src.*`.
 
 ```bash
 uv sync                                                   # core deps + dev group (pytest, ruff, xgboost); scib/datasets are optional extras
-uv run python -m pytest tests -q                          # full suite
-uv run python -m pytest tests/test_all.py -q -k <name>    # one file / one test
-uv run ruff check .                                       # lint (E,W,F only; import order not enforced)
-uv run ruff format <files you touched>                    # never `ruff format .` — rewrites unrelated files
+uv run python -m pytest tests -q > pytest.txt 2>&1       # full suite; redirect — see rtk note
+uv run python -m pytest tests/test_all.py -q             # one file; -k for one test
+.venv/bin/ruff check .                                    # lint (E,W,F only; import order not enforced)
+.venv/bin/ruff format <files you touched>                 # never `ruff format .` — rewrites unrelated files
 
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]  # prepare, comparison, train, val eval, baselines, readout, summary.md
-hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # the only route to the test split; `all` never runs it
+hpc/run.sh revision CONFIG [--run-id <id>] [--gpus 0,1,2,3]   # one variant: train, val then test eval with baselines, summary.md + revision.json in outputs/geneeffect_revision/<id>/ (configs/revision/*.yaml; no comparison, no readout)
+hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any checkpoint; `all` never runs test, `revision` scores its own best.pt
+hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   # linear context prior, CPU: bridge remedies scored on validation and test; rows/, results.md in outputs/context_prior/<id>/
+hpc/run.sh prior-selected CONFIG --run-id ID                # the reference row's data-selected genes, CPU: data_selected/ in the same run directory
+hpc/run.sh prior-export CONFIG --run-id ID                  # the reference row for the correction, CPU: export/ (val/test, training lines out of fold); never overwritten
+uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
-`all` skips every step whose output exists, so rerunning with the same run id resumes (training from `train/last.pt`). Every
+`all` and `revision` skip every step whose output exists, so rerunning with the same run id resumes (training from `train/last.pt`). Every
 GPU step uses every visible GPU, or those `--gpus` lists: untrained comparison arms on the first, training on all, then one
-trained comparison job per GPU at a time. Direct worker invocation is debug-only; runner details are in `hpc/README.md`.
+trained comparison job per GPU at a time (`revision` has only the training step). Direct worker invocation is debug-only; runner
+details are in `hpc/README.md`.
 
-- The local Mac has no GPU, no Tx1 weights and no raw data. Preparation, training and evaluation run on the H20 container
+- **Local Mac has no GPU, no Tx1 weights, no raw data.** Preparation, training and evaluation run on the H20 container
   (`.codex/skills/hpc-execution`), without a scheduler. Tests use synthetic fixtures and skip silently when gitignored data or
-  `accelerate` is missing — an import check proves nothing about an asset-dependent path.
-- Run the full suite before changing code so a failure you cause is distinguishable from one you inherit.
-- `tests/conftest.py` sets `PYTORCH_ENABLE_MPS_FALLBACK` and `OMP_NUM_THREADS` and imports xgboost before torch; running a test
-  file as a script segfaults. `-m` markers do nothing.
+  `accelerate` is missing — an "it imports" check proves nothing about an asset-dependent path.
+- The global `rtk` wrapper rewrites command output: `ruff check .` prints `[]`, foreground pytest shows fake collection errors. Use
+  `.venv/bin/ruff` and redirect pytest to a file. `rtk proxy <cmd>` when exact output matters.
+- **Baseline the suite before changing code** (full run to a file) so a failure you cause is distinguishable from one you inherit.
+- `tests/conftest.py` is load-bearing: it sets `PYTORCH_ENABLE_MPS_FALLBACK` and `OMP_NUM_THREADS` and imports xgboost before
+  torch. Running a test file as a script segfaults. `-m` markers do nothing.
 
 ## Project rules
 
 - When a change alters behaviour a doc describes, update that doc in the same change.
+- Experiment code reports results; decisions are made by reading them, not in code.
 - No formalism gates: do not add digest pinning, contract verifiers, eligibility ceremony or any check that blocks a run on
   model quality. Record provenance and proceed; model-quality signals are telemetry. The existing guards against silent wrong
   artifacts (below) fail closed and stay.
@@ -65,6 +99,10 @@ trained comparison job per GPU at a time. Direct worker invocation is debug-only
   lint pass, any requested review is adjudicated, and an asset-dependent path has run on the H20 host — then `main` is pushed and the branch
   deleted. Do not leave finished work on a side branch.
 - Commits use Conventional Commits (`feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`).
+- Codex review is optional and runs **only when the user asks**. Then run it from Bash (the slash commands are
+  `disable-model-invocation`) in a fresh `CODEX_HOME` holding only `auth.json` and a `config.toml` with `model = "gpt-6.1-sol"`,
+  `model_reasoning_effort = "high"`, `approval_policy = "never"` — recreate it per review, or Codex loads MCP servers and hangs.
+  Background `codex review --base <sha>` to a file (~200 KB) and adjudicate the findings against the code.
 
 ## Architecture
 
@@ -77,13 +115,20 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them.
 - **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
-  only the residual head's context. GeneEffect Huber every update, response replay on the four anchor lines every fourth.
-  `best.pt` and early stopping use **only** `val_geneeffect_loss`.
-- **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing from the checkpoint;
+  the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
+  128-component context PCA (fitted on training lines), plus a per-(g, c) correction that never sees the context, and predicts in units of the
+  per-gene training residual SD. One GeneEffect objective per update, `train.objective` (`huber`, `standardized_mse`,
+  `pearson_blocks`); response replay on the four anchor lines every fourth update only when `response_weight > 0` (the base config
+  has 0). `train.state_mode` freezes STATE at the released weights or trains it; no STATE is `head_blocks` `use_delta_proj` and
+  `use_s` both false, which skips STATE and the adapter. Warmup then cosine learning rate. `best.pt` and early stopping use
+  **only** `val_selective_spearman` (higher wins), over the selective genes fitted on training lines.
+- **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
+  selective genes, residual SD, context PCA) from the checkpoint;
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
-  `src/experiments/all.py` chains every step and writes `summary.md`.
+  `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
+  evaluation and baselines for one config.
 - `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (172 train / 27 val / 27 test);
-  `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config and provenance files are tracked data.
+  `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
 
 ## Pitfalls and claim boundaries
 
