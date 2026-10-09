@@ -19,7 +19,8 @@ synthetic-lethality research repository.
 - `domain_mapper`: read-only mapping of the `src` package and the relevant code,
   config, data, artifact, and documentation paths.
 - `experiment_planner`: read-only planning for the 226-line GeneEffect benchmark
-  and the `context_screen_v2` SL split, leakage controls, and verification.
+  and the SL split nested in it (the `context_screen_v2` split predates that plan),
+  leakage controls, and verification.
 - `implementation_worker`: narrowly scoped code, config, or test changes after the
   parent assigns ownership and success criteria.
 - `reviewer`: read-only adversarial review for correctness, leakage, silent

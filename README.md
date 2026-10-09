@@ -26,9 +26,9 @@
 
 The central question of the active direction:
 
-> Can a dependency profile predicted by a perturbation-response-trained virtual cell rank synthetic-lethal pairs in a cancer cell line that was excluded from every fitting and selection step, beyond what a declared null and a context-ablated model already achieve?
+> Can a dependency profile predicted by a perturbation-response-trained virtual cell rank the synthetic-lethal partners of a gene lost in a cancer cell line that was excluded from every fitting and selection step, beyond what pan-essentiality, the partner's predicted dependency alone, pair identity and a context-ablated model already achieve?
 
-The intuition is compositional: **a cell line's dependency profile is what makes a pair lethal there.** If a virtual cell can predict how a gene's fitness cost shifts with cellular context, then the shape of that shift across lines should carry pair-specific signal that a curated SL graph can only memorize. The bar is deliberately internal — the gene-mean block, the null baseline, and a context-ablated head must all be beaten before any context claim is licensed. Nothing here estimates a genetic interaction; see the rules in the [GeneEffect](docs/03-geneeffect-protocol.md#11-rules) and [SL](docs/04-sl-ranking-protocol.md#8-rules) protocols.
+The intuition is compositional: **a cell line's dependency profile is what makes a pair lethal there.** If a virtual cell can predict how a gene's fitness cost shifts with cellular context, then a partner whose dependency is selectively stronger where the query gene is lost is an SL candidate in that line (definition 1 of the [blueprint](docs/01-blueprint.md#31-synthetic-lethality-two-operational-definitions)), a signal that memorising known pairs does not give. The bar is deliberately internal — the gene-mean block, the null baseline, a ranking blind to the lost gene, a pair-identity prior and a context-ablated head must all be beaten before any context claim is licensed. Nothing here estimates a genetic interaction; see the rules in the [GeneEffect](docs/03-geneeffect-protocol.md#11-rules) and [SL](docs/04-sl-ranking-protocol.md#8-rules) protocols.
 
 ## *Latest News* 🔥
 
@@ -78,26 +78,27 @@ uv run python -m pytest tests -q
 
 ## Research Framing
 
-> **Status:** the SL contract and protocol are written, and SL ranking is scored on a benchmark this project proposes; its current build is the nine-context screen table, whose raw-filter audit is incomplete. The Feng 2024 SL benchmark is not used. No SL model has run. Research statement: [`docs/01-blueprint.md`](docs/01-blueprint.md); rules: [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md#8-rules).
+> **Status:** the 2026-10-09 blueprint fixes the SL task: definition 1 (selective dependency where A is lost) is the method's logic, SL labels are experimental SL-database entries only, and the SL split nests in the GeneEffect split. The SL protocol, whose current build is the nine-context screen table, is superseded in part and is rewritten before stage two. The Feng 2024 SL benchmark is not used. No SL model has run. Research statement: [`docs/01-blueprint.md`](docs/01-blueprint.md); rules: [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md#8-rules).
 
 ```text
-Given a cancer cell line described only by its basal single-cell transcriptome —
-no CRISPR screen, no SL screen — rank unordered gene pairs by the probability
-that the pair is an experimental synthetic-lethal hit in that line.
+Given a cancer cell line described only by its basal profile, a single-cell
+transcriptome at its core — no CRISPR screen, no SL screen — and a gene A lost
+in it, rank candidate partners B by the probability that (A, B) is an
+experimental synthetic-lethal hit in that line.
 ```
 
-The generalization axis is the **cell line**. Graph and knowledge-graph SL predictors need the query gene to already be a node, so they cannot score an unscreened gene at all and cannot condition on a cellular context; this program reaches both by reading from gene identity and predicted perturbation biology instead of graph topology. Genes are *not* held out here, so no unseen-gene claim is available from this benchmark.
+The generalization axis is the **cell line**. Predictors that learn only from SL-graph topology need the query gene to already be a node, so they cannot score a gene absent from the graph; this program reaches such genes by reading from gene identity and predicted perturbation biology instead of graph topology. Genes are *not* held out here, so no unseen-gene claim is available from this benchmark.
 
 - **Expression space.** Tx1 reads raw UMI counts. Every other expression quantity is `log1p(x·T/library size)` sliced to STATE's 2,000 highly variable genes, with library size over all genes and `T` the median library size of the Jurkat and HepG2 non-targeting cells, computed at preparation and recorded.
 - **Joint GeneEffect training.** STATE, initialised from its released Replogle checkpoint, reads log-normalised basal cells through its own basal encoder and is driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed only the context of the five-block residual head. STATE, the adapter and the head train together with GeneEffect Huber regression over the 170 labeled training lines; every fourth update also fits response distributions on all conditions of four anchor lines.
 - **Validation and testing.** Every epoch logs fixed-model `val_*` GeneEffect metrics over the 27 validation lines, the only validation split, and `train_eval_*` diagnostics over a fixed 27-line subset of the training lines (recorded in `run.json`). Early stopping and `best.pt` use only minimum `val_geneeffect_loss`. Use `src.evaluate --split train` for checkpoint diagnostics; test is evaluated only explicitly. Feature ablations use the five `model.head_blocks` flags; removing response from the readout requires disabling both `use_delta_proj` and `use_s`.
 - **Response-model comparison.** Six arms, leave one response anchor out: no change, global mean effect, the released STATE checkpoint, STATE as in the joint model, an MLP on log HVG cells and an MLP on Tx1 cell embeddings.
-- **Separate SL proposal.** A lightweight pair head would score unordered pairs from predicted residual profiles against a declared null. It requires its own out-of-fold fitting and evaluation and is not implemented.
+- **Separate SL proposal.** A lightweight head would rank candidate partners B of a gene A lost in the line, scoring B by how selectively its predicted dependency strengthens where A is lost, trained on experimental SL-database labels. It requires its own out-of-fold fitting and evaluation and is not implemented.
 
 The full contract — task definition, objective, split, controls, and claim boundaries — lives in the research vault, not here:
 
-- [`docs/01-blueprint.md`](docs/01-blueprint.md) — the research statement: question, approach and where the work stands.
-- [`docs/02-literature-review.md`](docs/02-literature-review.md) — related work and the novelty boundary.
+- [`docs/01-blueprint.md`](docs/01-blueprint.md) — introduction, related work and task formulation (mirrors the Notion blueprint page).
+- [`docs/02-literature-review.md`](docs/02-literature-review.md) — the extended related work and the novelty boundary.
 - [`docs/03-geneeffect-protocol.md`](docs/03-geneeffect-protocol.md) — the executable protocol of the implemented GeneEffect track: benchmark, expression space, model, training, evaluation, results.
 - [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md) — the SL-pair protocol that builds on it, and its prerequisites.
 - [`docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`](docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md) — the design of the current expression space, STATE wiring and `all` run.
@@ -195,7 +196,7 @@ The best distribution/prototype regressor (K64-centered Ridge) reaches Adamson *
 | Integrated SL screen pairs | SL pair labels | Experimental screen hits and screened non-hits in named cell lines, the source of the nine-context SL table; see [`docs/data/sl-context-screen.md`](docs/data/sl-context-screen.md). |
 | TCGA / patient omics | Disease context | Future biomarker framing only; not evidence of cell-line or patient generalization under the current protocol. |
 
-> **Data rules**: Prioritize CRISPRi or knockout Perturb-seq for DepMap alignment. Cross-cell-line claims require context-specific pairwise SL/GI labels; single-gene GeneEffect transfer is insufficient. Norman CRISPRa is auxiliary, and DepMap labels are population-level fitness readouts, not single-cell death.
+> **Data rules**: Prioritize CRISPRi or knockout Perturb-seq for DepMap alignment. Cross-cell-line SL claims require experimental SL-database labels in the named lines; single-gene GeneEffect transfer and DepMap-derived dependency patterns are not SL labels. Norman CRISPRa is auxiliary, and DepMap labels are population-level fitness readouts, not single-cell death.
 
 ## Documentation
 
