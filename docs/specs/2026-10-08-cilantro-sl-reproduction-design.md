@@ -211,6 +211,11 @@ HeLa's cells detect about 6,900 genes each, so the 2048-token cut binds inside s
 its screen genes drop out; it is unevaluable in both arms. 3,000 rows carry a symbol the gc30M
 dictionary does not name.
 
+**Decided 2026-10-09, after reading this report:** per-cell bags are the port's main arm; pseudo-bulk
+stays as the paper-faithful arm on its own covered rows. HeLa is kept and reported as unevaluable
+(its covered counts above), not dropped. Every metric of the port is computed on covered rows only,
+with the controls scored on the same rows.
+
 The reason, from a proxy on the stale four-context table: DepMap bulk TPM was divided by each gene's
 across-line nonzero median, as Geneformer divides by its corpus medians, and the top 2048 tokens were
 kept. The share of rows with both genes covered, and covered positives, by vocabulary size:
