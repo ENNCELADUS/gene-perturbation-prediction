@@ -7,6 +7,11 @@ Transcribed; as in the notebook, conformal prediction runs on the first fold onl
 fold; here each fold's test rows are written with both class probabilities instead,
 which is what the report reads. --epochs overrides the notebook's 100 for smoke runs
 only.
+
+By default the classifier is ``fast_classifier.fast_pair_classifier``, the released
+class with its data paths replaced by resident tensors (same batches, same per-row
+forward passes; see its docstring and the design's §4.4). --released uses the released
+class as is.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ def main() -> None:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--cv", type=int, choices=(1, 3), required=True)
     parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--released", action="store_true")
     args = parser.parse_args()
     configure(args.run_dir)
     seed_everything(0)
@@ -37,9 +43,11 @@ def main() -> None:
     import pair_classifier as pc_module
     import training_framework
     import via_film  # noqa: F401  # notebook 6 imports it; it initialises pandarallel
+    from fast_classifier import as_matrix, fast_pair_classifier
 
+    classifier = pc_module.pair_classifier if args.released else fast_pair_classifier
     d = pd.read_hdf(p["generated"] / "gene2vec_5x_all_double.h5", "table")
-    pc = pc_module.pair_classifier(d, model_type=pc_module.ModelType.COMBINED)
+    pc = classifier(d, model_type=pc_module.ModelType.COMBINED)
     framework = training_framework.Framework(
         None, pc, metrics_path=str(out / "gene2vec_5x.pkl")
     )
@@ -51,9 +59,9 @@ def main() -> None:
     )
     for i, fold in enumerate(test):
         scores = fold[["patient", "gene 1", "gene 2", "SL"]].copy()
-        probs = [prob.flatten() for prob in framework.metrics["probs"][i]]
-        scores["p_non_sl"] = [float(prob[0]) for prob in probs]
-        scores["p_sl"] = [float(prob[1]) for prob in probs]
+        probs = as_matrix(framework.metrics["probs"][i])
+        scores["p_non_sl"] = [float(prob) for prob in probs[:, 0]]
+        scores["p_sl"] = [float(prob) for prob in probs[:, 1]]
         scores.to_csv(out / f"fold{i}_test_scores.csv.gz", index=False)
 
     framework.all_test = test
@@ -76,6 +84,7 @@ def main() -> None:
         train_rows=[len(t) for t in train],
         general_results=framework.metrics["general_results"],
         epochs=args.epochs,
+        path="released" if args.released else "fast",
     )
 
 

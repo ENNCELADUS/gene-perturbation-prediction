@@ -138,6 +138,16 @@ exists, so rerunning the same RUN_ID resumes; `run.json` fixes the run's setting
 Logs are in `logs/<step>.log`. `--gene-subset N --epochs E` makes a smoke run (the N genes with
 the most SynLethDB pairs, E epochs), only to check the chain.
 
+The deletion, stage one and classifier steps run the harness's fast paths by default
+(`hpc/cilantro/fast_perturb.py`, `fast_classifier.py`, `fast_core.py`): the released computation
+with its per-gene process pools, repeated model loads, discarded forward passes and per-item data
+loaders removed, byte-identical outputs (design §4.4). Each step script takes `--released` to run the
+released code instead. `hpc/cilantro/check_equivalence.py --reference <finished run> --out <dir>`
+recomputes a few genes and one fold of stage one and the classifier both ways and compares them
+(`equivalence.json`); run it after any change to the fast paths. A run interrupted on the released
+path resumes on the fast path unchanged: the gene files are the same, and `perturb.py` first
+removes any gene whose files are incomplete.
+
 The port's coverage report (step 0, CPU only) runs in the project environment:
 `.venv-tx1/bin/python -m src.experiments.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
 

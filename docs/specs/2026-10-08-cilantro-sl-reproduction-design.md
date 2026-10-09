@@ -72,6 +72,10 @@ Read from the code; phase 1 measures what each costs where it can.
    empty, so it is plain split conformal.
 9. **Seeds.** Fold assignment and calibration sampling are unseeded (`random.shuffle`).
 10. **Environment.** The pinned torch 1.13.1+cu117 has no Hopper kernels and cannot run on the H20.
+11. **Pooling drops two tokens.** The fork's cell-mode `get_embs` tests the token dictionary for `<cls>`
+    and `<eos>`; gc95M has both, so it averages positions 1 to length−2 of every sequence, although the
+    tokenizer ran without special tokens: the top-ranked gene and the last token are left out of every
+    embedding (and of every delta). Measured 2026-10-09 while checking the fast deletion path (§4.4).
 
 ## 4. Phase 1: reproduction on the paper's data
 
@@ -158,6 +162,45 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   - before a deletion shard runs, delete and recompute any gene whose two output files lack
     one complete row per line containing the gene (the released skip test is existence).
   As in notebook 6, conformal prediction runs on the first fold only.
+- **Fast paths (2026-10-09), same computation.** The released deletion ran at about 80 s per gene per
+  process (eight processes on four H20s, 6 genes/min, about 25 h for 9,987 genes) and the classifier
+  was heading for about 20 h, almost all of it outside the model: per gene the released perturber
+  spawns two 16-process `datasets` pools, loads the model three times, runs four Geneformer passes
+  over every line containing the gene (two of them, plus cosine similarities, only to write pickles
+  nothing reads) and computes the masked-language head's logits it never uses; the classifier and
+  stage one fetch every training row through a per-item `Dataset` and the default collate, and score
+  test, calibration and conformal rows one `DataLoader` item at a time. The harness now computes the
+  same quantities directly, keeping every floating-point operation that reaches an output:
+  - `fast_perturb.Deleter` (default of `perturb.py`; `--released` keeps the released perturber):
+    one model load per shard, encoder only, cut after the penultimate layer; the released line
+    selection (filter, stable sort by length), batches of 50 in the same order, the released padding,
+    attention mask and pooling (including item 11 of §3), and the released pandas assembly of both
+    CSVs. A line's unperturbed embedding is identical in every batch of the same size but differs by
+    up to 3e-8 between batch sizes (measured), so every line is embedded once at batch size 50 when
+    the shard starts, full batches read that cache and a gene's final partial batch is recomputed at
+    its own size. Output files are byte-identical to the released ones.
+  - `fast_classifier.fast_pair_classifier` and `fast_via_film` (defaults of `classify.py` and
+    `pretrain.py`; `--released` keeps the released classes): the released `train_nn` runs unchanged on
+    batches gathered by one tensor index each, under the same `RandomSampler` permutation from the
+    same `DataLoader` iterator, so batches and RNG consumption are identical; the batch-size-1 loops
+    become loops over row slices of one resident GPU tensor, each row still a forward pass of its own
+    in the released shape, since batched forward passes of these nets differ from single-row passes
+    (max abs difference 6e-8 on the classifier's logits, 3.6e-7 on stage one's penultimate layer,
+    measured) and were therefore not adopted; probabilities are kept as one array (the metrics pickle
+    holds arrays where the released code pickled lists of one-row tensors) and the conformal p-values
+    come from one `searchsorted` over all rows instead of pandarallel over unique scores, which gives
+    the same numbers.
+  - `check_equivalence.py` is the acceptance test: on a finished run's inputs it recomputes genes with
+    the fast deletion and compares the CSVs byte for byte with the run's (and, with
+    `--released-deletion`, with a fresh released run), and trains and scores one fold of the
+    classifier and of stage one with the released and the fast classes from the same RNG state,
+    comparing weights, predictions, probabilities, metrics, conformal outputs and RNG states. Results
+    of 2026-10-09 on the 40-gene smoke run: see `results/cilantro_reproduction_seed0/` once curated,
+    and the summary in `hpc/README.md`.
+  - Not done, by the same bar: TF32, bf16 or fp16 (change every embedding), larger Geneformer batches
+    (batch size changes floats), batched inference of the small nets (above), running the five folds
+    on separate GPUs (each fold's RNG state would have to be replayed), and the pandas lookups of
+    `setup_input`, `data_generator` and `create_SL_embs` (not in the slow steps).
 - **pandas 1.5.3, not the yml's 1.3.5.** The released `cilantro_sl.yml` pins pandas 1.3.5 through
   pip, which conflicts with its own scanpy 1.10.3 (pandas ≥ 1.5) and cannot run the released
   perturber: `sub.insert(0, 'viability', ….to_frame())` needs pandas to align a one-column frame
