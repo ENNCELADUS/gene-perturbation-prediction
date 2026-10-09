@@ -53,6 +53,15 @@ def sliced_loader(
     )
 
 
+def consume_loader_seed() -> None:
+    """Draw what a released ``DataLoader`` draws from the global torch RNG when it is
+    iterated: every ``_BaseDataLoaderIter`` takes one int64 base seed, shuffled or not.
+    The fast paths iterate no loader over test, calibration or conformal rows, so they
+    call this once per released loop to leave the RNG stream where the released code
+    leaves it (the next fold's network is initialised from it)."""
+    torch.empty((), dtype=torch.int64).random_()
+
+
 def predict_rows(
     forward: Callable[[int], Sequence[torch.Tensor]], n: int
 ) -> list[torch.Tensor]:
