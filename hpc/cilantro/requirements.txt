@@ -4,6 +4,7 @@
 # (pandas >= 1.5) and cannot run the released perturber (its DataFrame.insert of a
 # one-column frame needs index alignment): 1.5.3, the lowest release scanpy accepts.
 torch==2.6.0
+torchvision==0.21.0
 numpy==1.23.5
 pandas==1.5.3
 scipy==1.13.1
