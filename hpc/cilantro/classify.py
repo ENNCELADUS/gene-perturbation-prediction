@@ -4,8 +4,9 @@ for one split regime.
 --cv 1 is pair-holdout and --cv 3 gene-holdout (the released split functions).
 Transcribed; as in the notebook, conformal prediction runs on the first fold only
 (`framework.folds = 1`). The notebook pickles the full train/test DataFrames of every
-fold; here each fold's test rows are written with their SL probability instead, which is
-what the report reads. --epochs overrides the notebook's 100 for smoke runs only.
+fold; here each fold's test rows are written with both class probabilities instead,
+which is what the report reads. --epochs overrides the notebook's 100 for smoke runs
+only.
 """
 
 from __future__ import annotations
@@ -50,9 +51,9 @@ def main() -> None:
     )
     for i, fold in enumerate(test):
         scores = fold[["patient", "gene 1", "gene 2", "SL"]].copy()
-        scores["p_sl"] = [
-            float(prob.flatten()[1]) for prob in framework.metrics["probs"][i]
-        ]
+        probs = [prob.flatten() for prob in framework.metrics["probs"][i]]
+        scores["p_non_sl"] = [float(prob[0]) for prob in probs]
+        scores["p_sl"] = [float(prob[1]) for prob in probs]
         scores.to_csv(out / f"fold{i}_test_scores.csv.gz", index=False)
 
     framework.all_test = test

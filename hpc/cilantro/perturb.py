@@ -4,7 +4,10 @@ gene in every line.
 One process runs one shard (genes i::n) on one GPU, with its own scratch directories,
 because the released perturber clears its scratch directory before every gene. Per-gene
 outputs land in one shared directory and finished genes are skipped, so shards can be
-relaunched to resume. --limit runs the first N genes of the shard (throughput).
+relaunched to resume. The released skip test is only that the file exists, so before
+the shard runs, a gene's two output files are deleted (and recomputed) unless each has
+one complete row per line whose tokens include the gene. --limit runs the first N
+genes of the shard (throughput).
 """
 
 from __future__ import annotations
@@ -12,12 +15,14 @@ from __future__ import annotations
 import argparse
 import json
 import pickle
+from collections import Counter
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
+    DICTIONARIES,
     GENEFORMER_MODEL,
     OFFICIAL_DATA,
     SYMBOL_MAP,
@@ -47,6 +52,46 @@ def most_paired_genes(genes: list[str], n: int) -> list[str]:
     return [g for g in degree.index if g in universe][:n]
 
 
+def expected_rows(run_dir: Path) -> dict[str, int]:
+    """Per gene, the lines whose tokens include it: the rows of a complete output."""
+    from datasets import load_from_disk
+
+    with open(DICTIONARIES[run_config(run_dir)["dictionary"]]["token"], "rb") as f:
+        token_of = pickle.load(f)
+    lines_with = Counter()
+    for tokens in load_from_disk(str(paths(run_dir)["tokenized"]))["input_ids"]:
+        lines_with.update(set(tokens))
+    return {gene: lines_with[token] for gene, token in token_of.items()}
+
+
+def complete(path: Path, rows: int) -> bool:
+    """A header plus ``rows`` rows, every one with the header's field count."""
+    if not path.exists():
+        return False
+    data = path.read_bytes()
+    if not data.endswith(b"\n"):
+        return False
+    lines = data[:-1].split(b"\n")
+    width = lines[0].count(b",")
+    return len(lines) == rows + 1 and all(line.count(b",") == width for line in lines)
+
+
+def remove_incomplete(perturb_dir: Path, genes: list[str], rows: dict[str, int]):
+    removed = []
+    for gene in genes:
+        files = [
+            perturb_dir / s / f"{gene}.csv"
+            for s in ("subtracted_embs", "perturbed_embs")
+        ]
+        if any(f.exists() for f in files) and not all(
+            complete(f, rows[gene]) for f in files
+        ):
+            for f in files:
+                f.unlink(missing_ok=True)
+            removed.append(gene)
+    return removed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
@@ -71,6 +116,8 @@ def main() -> None:
     genes = genes[args.shard :: args.num_shards]
     if args.limit is not None:
         genes = genes[: args.limit]
+    removed = remove_incomplete(p["perturb"], genes, expected_rows(args.run_dir))
+    print(f"incomplete outputs removed for recomputation: {removed}")
     gene_list = shard_dir / "genes.pkl"
     with open(gene_list, "wb") as f:
         pickle.dump(genes, f)
@@ -97,6 +144,7 @@ def main() -> None:
         "num_shards": args.num_shards,
         "genes": len(genes),
         "genes_written": done,
+        "incomplete_removed_at_start": removed,
         "seconds": round(elapsed, 1),
         "limit": args.limit,
     }
