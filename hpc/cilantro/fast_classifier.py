@@ -1,14 +1,20 @@
 """The released stage-one regressor and SL classifier with resident-tensor data paths.
 
 ``fast_via_film`` and ``fast_pair_classifier`` subclass the released ``via_film`` and
-``pair_classifier`` and override only how rows reach the network; the released
-``train_nn`` (initialisation, loss, optimiser, epoch loop, model saving) runs
-unchanged on the same batches in the same order, and the released ``Framework``
-drives them (docs/specs/2026-10-08-cilantro-sl-reproduction-design.md §4.4):
+``pair_classifier`` and override how rows reach the network and when the host reads
+the loss; the released ``Framework`` drives them
+(docs/specs/2026-10-08-cilantro-sl-reproduction-design.md §4.4):
 
 - training batches come from ``fast_core.sliced_loader``: one gather per batch instead
   of 128 or 512 ``__getitem__`` calls and a collate, under the same ``RandomSampler``
   permutation drawn from the same RNG stream, so every batch is identical;
+- ``train_nn`` is the released loop (same initialisation and RNG draws, loss,
+  optimiser, epoch loop, model saving) with one change: the released loop read
+  ``loss.item()`` after every batch, a GPU synchronisation that serialises the small
+  kernels of this network; here the detached per-batch losses are kept and added to
+  ``running_loss`` in the same order at the end of the epoch, which gives the same
+  Python double (measured: 5.8 ms per batch with the sync, 2.6 ms without, on a
+  shared GPU);
 - the batch-size-1 test, calibration and conformal loops become loops over row slices
   of one resident GPU tensor (``fast_core.predict_rows``), with the forward pass still
   taken one row at a time in the released shape (2-D rows of one, or 1-D in
@@ -32,6 +38,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from net_layers import FiLMNet, SLNet
 from sklearn.metrics import (
     average_precision_score,
     precision_recall_fscore_support,
@@ -41,7 +50,7 @@ from sklearn.model_selection import train_test_split
 
 from dataloader import dataset, dataset_classifier, dataset_unlabeled
 from fast_core import consume_loader_seed, predict_rows, sliced_loader
-from pair_classifier import pair_classifier
+from pair_classifier import ModelType, pair_classifier
 from via_film import via_film
 
 
@@ -52,7 +61,70 @@ def as_matrix(probs) -> np.ndarray:
     return torch.cat([p.reshape(1, -1) for p in probs]).cpu().numpy()
 
 
+def epoch_loss(losses: list[torch.Tensor]) -> float:
+    """``running_loss`` as the released loops accumulate it, ``+= loss.item()`` per
+    batch in order, from the kept per-batch losses."""
+    running_loss = 0.0
+    if losses:
+        for value in torch.stack(losses).tolist():
+            running_loss += value
+    return running_loss
+
+
 class fast_pair_classifier(pair_classifier):
+    def train_nn(self, path):
+        """The released train_nn (COMBINED model, no validation split) with the
+        per-batch ``loss.item()`` deferred to the end of the epoch."""
+        if self.model_type != ModelType.COMBINED:
+            raise NotImplementedError("only the COMBINED model is supported")
+        if self.validation:
+            raise NotImplementedError("the harness trains without a validation split")
+        print("Using normal net")
+        net = SLNet()
+        net.to(self.device)
+
+        labels = torch.tensor(self.train_SL.tolist())
+        print(labels)
+        labels.to(self.device)
+        class_counts = torch.bincount(labels)
+        class_weights = 1.0 / class_counts.float()
+        class_weights = class_weights / class_weights.sum()
+        print(f"Class weights: {class_weights}")
+
+        # Kept for the RNG draws the released code makes here.
+        test_output = torch.randn(128, 2)
+        test_labels = torch.randint(0, 2, (128,)).long()
+        nn.CrossEntropyLoss()(test_output, test_labels)
+
+        class_weights = class_weights.to(self.device)
+        criterion = nn.CrossEntropyLoss(weight=class_weights).to(self.device)
+        optimizer = optim.Adam(net.parameters(), lr=self.lr)
+        num_samples = len(self.dl_train)
+        loss_arr = []
+        for epoch in range(self.num_epochs):
+            losses = []
+            net.train()
+            for inputs, labels in self.dl_train:
+                inputs = inputs.float().to(self.device)
+                labels = labels.squeeze().long().to(self.device)
+                optimizer.zero_grad()
+                outputs = net(inputs).squeeze()
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                losses.append(loss.detach())
+            mean_loss = epoch_loss(losses) / num_samples
+            print(f"Epoch: {epoch} / {self.num_epochs}, Loss: {mean_loss}")
+            loss_arr.append(mean_loss)
+        print("Finished Training")
+        self.loss_arr = loss_arr
+        self.net = net
+        if path is not None:
+            print(f"Saving model at {path}")
+            torch.save(net.state_dict(), path)
+        else:
+            print("No path supplied, model not saved")
+
     def _tensors(self, df: pd.DataFrame) -> tuple[torch.Tensor, torch.Tensor]:
         data = dataset_classifier(df, self.input_length)
         return data.features, data.labels
@@ -165,6 +237,44 @@ class fast_pair_classifier(pair_classifier):
 
 
 class fast_via_film(via_film):
+    def train_nn(self, path=None):
+        """The released train_nn (one gene embedding, ``two_genes`` False) with the
+        per-batch ``loss.item()`` deferred to the end of the epoch."""
+        if self.two_genes:
+            raise NotImplementedError("only the single-gene FiLM net is supported")
+        net = FiLMNet(protein_size=self.input_length - 512)
+        print(f"Protein size is {self.input_length - 512}")
+        net.to(self.device)
+        optimizer = optim.Adam(net.parameters(), lr=self.lr)
+        num_samples = len(self.dl)
+        print(f"Starting to train, saving result at {path}")
+        loss_arr = []
+        for epoch in range(self.num_epochs):
+            losses = []
+            for inputs, labels in self.dl:
+                gene_embs = inputs[:, 512:]
+                inputs = inputs[:, :512]
+                inputs = inputs.float().to(self.device)
+                gene_embs = gene_embs.float().to(self.device)
+                labels = labels.float().to(self.device)
+                optimizer.zero_grad()
+                outputs, _ = net(inputs, gene_embs)
+                loss = self.criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                losses.append(loss.detach())
+            mean_loss = epoch_loss(losses) / num_samples
+            print(f"Epoch: {epoch} / {self.num_epochs}, Loss: {mean_loss}")
+            loss_arr.append(mean_loss)
+        print("Finished Training")
+        self.loss_arr = loss_arr
+        self.net = net
+        if path is not None:
+            print(f"Saving model at {path}")
+            torch.save(net.state_dict(), path)
+        else:
+            print("No path supplied, model not saved")
+
     def setup_dataloaders(self, test_size, seed=None):
         print(f"Setting up dataloaders with input length {self.input_length}")
         if test_size == 0.0:
