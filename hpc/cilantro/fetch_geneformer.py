@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import hashlib
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -71,17 +73,28 @@ def digest(data: bytes, kind: str) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def download(url: str, attempts: int = 5) -> bytes:
+    """The H20's resolver fails intermittently; retry a URLError a few times."""
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response:
+                return response.read()
+        except urllib.error.URLError as error:
+            if attempt == attempts:
+                raise
+            print(f"retry {attempt}: {error}")
+            time.sleep(15 * attempt)
+    raise AssertionError("unreachable")
+
+
 def main() -> None:
     for name, (kind, expected) in FILES.items():
         target = GENEFORMER_DATA / name
         if target.exists() and digest(target.read_bytes(), kind) == expected:
             print(f"ok      {name}")
             continue
-        request = urllib.request.Request(
-            BASE + name, headers={"User-Agent": "Mozilla/5.0"}
-        )
-        with urllib.request.urlopen(request, timeout=600) as response:
-            data = response.read()
+        data = download(BASE + name)
         actual = digest(data, kind)
         if actual != expected:
             raise SystemExit(f"{name}: {kind} {actual} != {expected}")
