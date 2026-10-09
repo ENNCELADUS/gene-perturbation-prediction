@@ -1,0 +1,29 @@
+# The released cilantro_sl.yml pins, for the packages the code imports, on Python 3.9.20.
+# torch 1.13.1+cu117 has no Hopper kernels, so torch is the one version change (2.6.0, CUDA 12.4, as .venv-tx1 uses).
+torch==2.6.0
+numpy==1.23.5
+pandas==1.3.5
+scipy==1.13.1
+scikit-learn==1.5.1
+anndata==0.10.9
+scanpy==1.10.3
+h5py==3.11.0
+tables==3.9.2
+loompy==3.0.6
+numba==0.60.0
+pyarrow==16.1.0
+pyarrow-hotfix==0.6
+datasets==3.2.0
+transformers==4.46.3
+tokenizers==0.20.4
+safetensors==0.4.4
+accelerate==1.0.1
+peft==0.13.2
+tdigest==0.5.2.2
+pandarallel==1.6.4
+matplotlib==3.9.2
+tqdm
+# Imported at module load by the Geneformer fork (geneformer/__init__.py imports its classifiers).
+optuna
+seaborn
+statsmodels

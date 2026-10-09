@@ -113,6 +113,31 @@ undefined quantities keep explicit counts and null scalar values. An export fail
 same evaluation command. Nothing here is SL interaction evidence; held-out lines retain the
 documented Tx1 pretraining exposure boundary.
 
+## The Cilantro-SL harness
+
+`hpc/cilantro/` runs the released Cilantro-SL code (phase 1 of
+`docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`) in its own environment,
+`.venv-cilantro` (Python 3.9.20), not `.venv-tx1`; its scripts are plain files run by that
+interpreter, not `src.*` modules. The released code is not tracked here. The H20 cannot reach
+GitHub, so from the laptop, with clones at the pinned commits:
+
+```bash
+ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git init -q third_party/cilantro_sl && git init -q third_party/geneformer_cilantro'
+git -C <clone of kaileyhh/Cilantro-SL> push ssh://root@10.15.171.204:30838/2023533015/VCC_Project/third_party/cilantro_sl c674b55e6fb126b3630502fbe8eb8ab49c5c9bc8:refs/heads/pinned
+git -C <clone of kaileyhh/geneformer> push ssh://root@10.15.171.204:30838/2023533015/VCC_Project/third_party/geneformer_cilantro 0e2bf2acbfdbc070a595d4ee66f5cda654dc624a:refs/heads/pinned
+```
+
+then on the H20 `git -C third_party/<name> checkout pinned` and `hpc/cilantro/setup.sh`, which checks
+the commits, applies `official.patch`, builds the environment and fetches Geneformer through
+hf-mirror. The four small official data files sit in `data/cilantro/official/`.
+
+`hpc/cilantro/run.sh RUN_ID --dictionary gc95M|gc30M [--gpus 0,1,2,3] [--procs-per-gpu 2]` runs
+every released step for one run under `outputs/cilantro_reproduction/RUN_ID/`. The deletion step
+runs one shard per process, `--procs-per-gpu` per GPU. A step is skipped once its `done.json`
+exists, so rerunning the same RUN_ID resumes; `run.json` fixes the run's settings at first launch.
+Logs are in `logs/<step>.log`. `--gene-subset N --epochs E` makes a smoke run (the N genes with
+the most SynLethDB pairs, E epochs), only to check the chain.
+
 ## The `prior` command
 
 `hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior

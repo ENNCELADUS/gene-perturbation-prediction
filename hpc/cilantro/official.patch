@@ -1,0 +1,122 @@
+diff --git a/input_setup/data_generator.py b/input_setup/data_generator.py
+index 8d6916a..f1d5d7d 100644
+--- a/input_setup/data_generator.py
++++ b/input_setup/data_generator.py
+@@ -30,15 +30,15 @@ class data_generator:
+             os.makedirs(output_dir)
+ 
+         if is_hvg:
+-            self.adata = sc.read_h5ad("/work/magroup/kaileyhu/datasets/depmap/processed/hvg/omics_expr_hvg_500.h5ad")
++            self.adata = sc.read_h5ad(os.environ["CILANTRO_HVG_H5AD"])
+         else:
+-            self.adata = sc.read_h5ad("/work/magroup/kaileyhu/datasets/depmap/processed/hvg/SL/omics_expr_hvg_w_SL.h5ad")
++            self.adata = sc.read_h5ad(os.environ["CILANTRO_SL_HVG_H5AD"])
+ 
+         self.n_cells = len(self.adata.X)
+ 
+     def get_original_embs(self):
+         # Using the pre-extracted CSV as per your implementation
+-        embs = pd.read_csv("/work/magroup/kaileyhu/res/via_classifier/orig_embedding_pretrained.csv")
++        embs = pd.read_csv(os.environ["CILANTRO_ORIG_EMBS_CSV"])
+         return embs
+ 
+     def remove_nan(self):
+diff --git a/isp/viability_perturber.py b/isp/viability_perturber.py
+index 4838324..e6a92cf 100644
+--- a/isp/viability_perturber.py
++++ b/isp/viability_perturber.py
+@@ -24,8 +24,8 @@ from geneformer import perturber_utils as pu
+ from transformers.utils import logging
+ logging.set_verbosity_error() 
+ 
+-TOKEN_DICTIONARY_FILE = "/work/magroup/kaileyhu/Geneformer/geneformer/token_dictionary_gc95M.pkl"
+-ENSEMBL_MAPPING_FILE = "/work/magroup/kaileyhu/Geneformer/geneformer/ensembl_mapping_dict_gc95M.pkl"
++TOKEN_DICTIONARY_FILE = os.environ["CILANTRO_TOKEN_DICTIONARY"]
++ENSEMBL_MAPPING_FILE = os.environ["CILANTRO_ENSEMBL_MAPPING"]
+ 
+ class via_perturber:
+     def __init__(self, dataset, model, n_classes, model_type, embs_prefix, emb_mode, hvg_viable_file, 
+@@ -73,7 +73,7 @@ class via_perturber:
+         self.out_dir = out_dir
+         self.prefix = "out"
+ 
+-        self.res_dir = "/work/magroup/kaileyhu/res/"
++        self.res_dir = os.environ["CILANTRO_RES_DIR"]
+         self.res_prefix = "original_embs"
+         self.perturb_prefix = "perturb_embs"
+ 
+@@ -88,10 +88,10 @@ class via_perturber:
+ 
+         new_value_mapping = {}
+ 
+-        self.total_cells = 1479
++        self.total_cells = len(self.ds)
+ 
+-        omics_expr = pd.read_csv("/work/magroup/kaileyhu/datasets/depmap/OmicsExpressionProteinCodingGenesTPMLogp1.csv")
+-        viability_mat = pd.read_csv("/work/magroup/kaileyhu/datasets/depmap/CRISPRGeneEffectProcessed.csv")
++        omics_expr = pd.read_csv(os.environ["CILANTRO_EXPRESSION_CSV"])
++        viability_mat = pd.read_csv(os.environ["CILANTRO_GENE_EFFECT_CSV"])
+         
+         omics_expr.set_index("Unnamed: 0", inplace = True)
+         viability_mat.set_index("Unnamed: 0", inplace = True)
+@@ -129,6 +129,7 @@ class via_perturber:
+                     emb_layer=-1,
+                     forward_batch_size=self.batch_size,
+                     nproc=16,
++                    token_dictionary_file=TOKEN_DICTIONARY_FILE,
+                     torch_batch_dir=self.temp_files)
+ 
+         return isp
+@@ -141,7 +142,8 @@ class via_perturber:
+                      emb_label=["patient_id"],
+                      forward_batch_size=self.batch_size,
+                      max_ncells=self.total_cells,
+-                     nproc=16)
++                     nproc=16,
++                     token_dictionary_file=TOKEN_DICTIONARY_FILE)
+ 
+         return embex
+ 
+diff --git a/nn_helpers/training_framework.py b/nn_helpers/training_framework.py
+index 3858387..e2e0d89 100644
+--- a/nn_helpers/training_framework.py
++++ b/nn_helpers/training_framework.py
+@@ -50,7 +50,7 @@ class Framework:
+             self.ve.init_regression(batch_size=batch_size, lr=lr, num_epochs=num_epochs)
+             self.ve.train_and_test(
+                 0.0,
+-                f"/work/magroup/kaileyhu/synthetic_lethality/prediction/sCilantro/models/{name}.pth",
++                os.path.join(os.environ["CILANTRO_MODEL_DIR"], f"{name}.pth"),
+             )
+             self.ve.setup_dataloaders(0.999)
+             self.ve.test_nn()
+@@ -129,7 +129,7 @@ class Framework:
+         )
+         print("\n\n")
+ 
+-        self.metrics[probs] = all_probs
++        self.metrics["probs"] = all_probs
+ 
+         self.metrics["general_results"] = {
+             "accuracy": t_accuracy,
+diff --git a/nn_helpers/via_film.py b/nn_helpers/via_film.py
+index 87f5b08..4658e45 100644
+--- a/nn_helpers/via_film.py
++++ b/nn_helpers/via_film.py
+@@ -6,6 +6,7 @@ import torch.nn.functional as F
+ 
+ print("Torch imports completed")
+ 
++import os
+ import pickle as pkl
+ import sys
+ import numpy as np
+@@ -56,7 +57,7 @@ class via_film:
+         self.input_length = input_length
+         self.two_genes = False
+ 
+-        ensembl_path = "/work/magroup/kaileyhu/Geneformer/geneformer/ensembl_mapping_dict_gc95M.pkl"
++        ensembl_path = os.environ["CILANTRO_ENSEMBL_MAPPING"]
+ 
+         with open(ensembl_path, "rb") as f:
+             id_gene_dict = pkl.load(f)

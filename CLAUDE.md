@@ -44,7 +44,9 @@ protocol §12) ran wave one (`docs/specs/2026-10-07-single-cell-correction-plan.
 the prior alone and the prior plus the Tx1 ridge, and `configs/correction/` holds the objective screen and the STATE
 runs. In all six runs (four objectives with STATE absent, then standardised MSE with frozen and trainable STATE)
 `best.pt` is the prior alone (0.229 / 0.234): every trained epoch lowers validation, and the prior plus the Tx1 ridge
-scores 0.183 / 0.182. STATE absent won; the research plan is to be discussed before a second wave. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+scores 0.183 / 0.182. STATE absent won; the research plan is to be discussed before a second wave. A reproduction of Cilantro-SL (Hua et al.
+2026) on its own data, then its port to the context screen and basal single cells, is designed
+(`docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`) and not implemented. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
