@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pickle
 import sys
 from pathlib import Path
 
@@ -46,8 +47,13 @@ def main() -> None:
     framework = training_framework.Framework(
         ve, None, metrics_path=str(p["metrics"] / "pretraining.pkl")
     )
+    # Notebook 5 passes the pickle's path, but create_SL_embs iterates its argument as
+    # the pair dictionary (it would loop over the path's characters); the notebook's
+    # commented-out alternative passes the loaded dictionary, as done here.
+    with open(p["pairs"], "rb") as f:
+        pair_list = pickle.load(f)
     framework.df_to_SL_embs(
-        str(p["pairs"]),
+        pair_list,
         str(p["generated"] / f"{name}_all.h5"),
         str(p["generated"] / f"{name}_all_double.h5"),
         batch_size=512,

@@ -149,6 +149,9 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   - read the per-gene deletion files in sorted order: the released code takes `os.listdir`
     order, which with parallel shards depends on which shard finished first and sets the
     stage-one row order, so the seed would not fix stage-one training;
+  - pass notebook 5's pair dictionary itself to `df_to_SL_embs`: the notebook passes the pickle's
+    path, which `create_SL_embs` iterates character by character; its commented-out alternative
+    passes the dictionary;
   - before a deletion shard runs, delete and recompute any gene whose two output files lack
     one complete row per line containing the gene (the released skip test is existence).
   As in notebook 6, conformal prediction runs on the first fold only.
