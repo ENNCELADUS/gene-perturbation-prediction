@@ -90,6 +90,14 @@ def main() -> None:
             lst.append(None)
     filtered_results = [val for val in lst if val is not None]
 
+    # 26Q1 adds an ATXN8 column, which the gc95M map sends to TWNK's Ensembl ID; the
+    # notebook's HVG loop cannot handle a repeated ID, so keep the first column per ID.
+    first = ~pd.Index(filtered_results).duplicated()
+    dropped = [g for g, keep in zip(genes, first) if not keep]
+    genes = [g for g, keep in zip(genes, first) if keep]
+    filtered_results = [e for e, keep in zip(filtered_results, first) if keep]
+    print(f"columns dropped for a repeated Ensembl ID: {dropped}")
+
     adata2 = adata[:, genes]
     adata2.var_names = filtered_results
     adata2.var["ensembl_id"] = filtered_results
@@ -153,6 +161,7 @@ def main() -> None:
         sl_genes_mapped=len(SL_ensembl),
         sl_genes_already_hvg=total_overlap,
         sl_genes_missing=total_missing,
+        columns_dropped_for_repeated_ensembl_id=dropped,
     )
 
 
