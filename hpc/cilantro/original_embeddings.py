@@ -58,7 +58,9 @@ def main() -> None:
         p["orig_embs"].stem,
     )
     order = ad.read_h5ad(p["sl_hvg_h5ad"], backed="r").obs_names
-    embs = embs.set_index("patient_id").loc[order].reset_index()
+    embs = (
+        embs.set_index("patient_id").loc[order].rename_axis("patient_id").reset_index()
+    )
     embs.to_csv(p["orig_embs"])
     mark_done(p["orig_embs"].parent, lines=int(len(embs)), dims=int(embs.shape[1] - 1))
 
