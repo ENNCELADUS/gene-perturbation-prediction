@@ -1,11 +1,12 @@
-"""Fetch gf-12L-30M-i2048 and the gc95M and gc30M dictionaries at a pinned Geneformer
-revision.
+"""Fetch gf-12L-30M-i2048 and the gc95M and gc30M dictionaries of Geneformer.
 
-The H20 reaches Hugging Face only through hf-mirror.com. Revision 01d3ea8...
-(2025-01-10) is the last one that still carries gf-12L-30M-i2048, the model the released
-Cilantro-SL code loads, alongside both dictionary sets. Every file is checked against
-the SHA-256 (LFS files) or git blob SHA-1 the Hugging Face API reports for that
-revision.
+The files are those of Hugging Face ctheodoris/Geneformer at revision 01d3ea8
+(2025-01-10), the last one that still carries gf-12L-30M-i2048, the model the released
+Cilantro-SL code loads. The H20 cannot download them from Hugging Face (hf-mirror
+redirects large files to Xet storage, which it cannot resolve), so they come from
+ModelScope's copy, ZhejiangLab-LifeScience/Geneformer, and each is checked against the
+SHA-256 (LFS files) or git blob SHA-1 that Hugging Face reports for that revision. The
+gc95M gene-name dictionary differs there and is not fetched: no step loads it.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import GENEFORMER_DATA  # noqa: E402
 
 REVISION = "01d3ea8993c2a49704375d7ee6175210cfa33f11"
-BASE = f"https://hf-mirror.com/ctheodoris/Geneformer/resolve/{REVISION}/"
+BASE = "https://www.modelscope.cn/models/ZhejiangLab-LifeScience/Geneformer/resolve/master/"
 FILES = {
     "gf-12L-30M-i2048/config.json": (
         "git-sha1",
@@ -40,10 +41,6 @@ FILES = {
     "geneformer/gene_median_dictionary_gc95M.pkl": (
         "sha256",
         "a51c53f6a771d64508dfaf61529df70e394c53bd20856926117ae5d641a24bf5",
-    ),
-    "geneformer/gene_name_id_dict_gc95M.pkl": (
-        "sha256",
-        "fabfa0c2f49c598c59ae432a32c3499a5908c033756c663b5e0cddf58deea8e1",
     ),
     "geneformer/ensembl_mapping_dict_gc95M.pkl": (
         "sha256",

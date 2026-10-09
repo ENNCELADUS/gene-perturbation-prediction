@@ -118,8 +118,9 @@ environment, `.venv-cilantro`, on Python 3.9.20 with the released pins except to
 12.4, since 1.13.1+cu117 has no Hopper kernels); Python itself comes from the npmmirror copy of
 python-build-standalone. Seeds are set at 0 in each step (Python, NumPy, torch, `PYTHONHASHSEED`),
 which fixes the released code's unseeded shuffles without editing it. `gf-12L-30M-i2048` and both
-dictionary sets come from `ctheodoris/Geneformer` revision `01d3ea8`, through hf-mirror, checked
-against the SHA-256 values Hugging Face reports. Run outputs go to `outputs/cilantro_reproduction/`
+dictionary sets are those of `ctheodoris/Geneformer` revision `01d3ea8`; hf-mirror sends large files
+to Xet storage the H20 cannot resolve, so they come from ModelScope's copy
+(`ZhejiangLab-LifeScience/Geneformer`), checked against the SHA-256 values Hugging Face reports. Run outputs go to `outputs/cilantro_reproduction/`
 on the H20; curated results to `results/cilantro_reproduction_seed0/`.
 
 ### 4.4 Amendments (2026-10-09)
