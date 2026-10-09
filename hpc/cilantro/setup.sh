@@ -3,7 +3,8 @@
 #
 # The H20 cannot reach GitHub, so the released code arrives by git push from the laptop into third_party/<name>
 # (see hpc/README.md); this script checks the pinned commits, applies official.patch, builds .venv-cilantro from
-# PyPI (Python itself from the npmmirror copy of python-build-standalone) and fetches Geneformer through hf-mirror.
+# PyPI (Python itself from the npmmirror copy of python-build-standalone) and fetches Geneformer from
+# ModelScope's copy, checked against the Hugging Face hashes.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -35,7 +36,7 @@ fi
 
 .venv-cilantro/bin/python hpc/cilantro/fetch_geneformer.py
 # The fork resolves its default (gc95M) dictionaries next to geneformer/__init__.py.
-for name in token_dictionary gene_median_dictionary gene_name_id_dict ensembl_mapping_dict; do
+for name in token_dictionary gene_median_dictionary ensembl_mapping_dict; do
   ln -sfn "$(pwd)/data/cilantro/geneformer/geneformer/${name}_gc95M.pkl" \
     "third_party/geneformer_cilantro/geneformer/${name}_gc95M.pkl"
 done

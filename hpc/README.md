@@ -128,8 +128,8 @@ git -C <clone of kaileyhh/geneformer> push ssh://root@10.15.171.204:30838/202353
 ```
 
 then on the H20 `git -C third_party/<name> checkout pinned` and `hpc/cilantro/setup.sh`, which checks
-the commits, applies `official.patch`, builds the environment and fetches Geneformer through
-hf-mirror. The four small official data files sit in `data/cilantro/official/`.
+the commits, applies `official.patch`, builds the environment and fetches Geneformer from
+ModelScope's copy, checked against the Hugging Face hashes. The four small official data files sit in `data/cilantro/official/`.
 
 `hpc/cilantro/run.sh RUN_ID --dictionary gc95M|gc30M [--gpus 0,1,2,3] [--procs-per-gpu 2]` runs
 every released step for one run under `outputs/cilantro_reproduction/RUN_ID/`. The deletion step
