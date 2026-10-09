@@ -35,6 +35,7 @@ def main() -> None:
     import pandas as pd
     import pair_classifier as pc_module
     import training_framework
+    import via_film  # noqa: F401  # notebook 6 imports it; it initialises pandarallel
 
     d = pd.read_hdf(p["generated"] / "gene2vec_5x_all_double.h5", "table")
     pc = pc_module.pair_classifier(d, model_type=pc_module.ModelType.COMBINED)
