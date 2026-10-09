@@ -140,7 +140,10 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   paths configurable, passes the run's token dictionary to the perturber's extractor and perturber
   (identical to the default in the as-released run), sizes the extractor to the dataset instead of
   the hard-coded 1,479 lines, and fixes `run_cv`, which used the list `probs` as a dictionary key
-  and crashed after the last fold. Outside the patch, the step scripts:
+  and crashed after the last fold. It also makes `create_SL_embs`'s `get_id` close over the
+  gene-ID dictionary instead of `self`: pandarallel serialises the closure into every worker, and
+  with `self` that is the GPU-resident network (which cannot load in a forked worker) and every
+  training row; the values computed are unchanged. Outside the patch, the step scripts:
   - apply notebook 4's commented-out `set_index`, without which its loop cannot parse the index;
   - rebuild the perturbed gene list (`Human_SL_genes.pkl`, not released) as the tokenized gene
     universe;
