@@ -18,6 +18,8 @@ def main() -> None:
     configure(args.run_dir)
     p = paths(args.run_dir)
 
+    import os
+
     from data_generator import data_generator
 
     dg = data_generator(
@@ -32,7 +34,14 @@ def main() -> None:
         n_classes=0,
         dataset=str(p["tokenized"]),
     )
-    dg.proc_input_subs()
+    # The released process_sub reads os.listdir order, which here depends on which shard
+    # finished first; that order becomes the stage-one row order, so list it sorted.
+    listdir = os.listdir
+    os.listdir = lambda path: sorted(listdir(path))
+    try:
+        dg.proc_input_subs()
+    finally:
+        os.listdir = listdir
     mark_done(
         p["generated"] / "sub_embs",
         rows=len(dg.adata.uns["viability_dict"]),

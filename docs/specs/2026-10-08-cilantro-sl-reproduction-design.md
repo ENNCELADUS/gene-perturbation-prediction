@@ -144,7 +144,13 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   - apply notebook 4's commented-out `set_index`, without which its loop cannot parse the index;
   - rebuild the perturbed gene list (`Human_SL_genes.pkl`, not released) as the tokenized gene
     universe;
-  - write the unperturbed embeddings `data_generator` reads, which no notebook writes.
+  - write the unperturbed embeddings `data_generator` reads, which no notebook writes, in the
+    AnnData's line order, which its `obsm` assignment requires;
+  - read the per-gene deletion files in sorted order: the released code takes `os.listdir`
+    order, which with parallel shards depends on which shard finished first and sets the
+    stage-one row order, so the seed would not fix stage-one training;
+  - before a deletion shard runs, delete and recompute any gene whose two output files lack
+    one complete row per line containing the gene (the released skip test is existence).
   As in notebook 6, conformal prediction runs on the first fold only.
 - **pandas 1.5.3, not the yml's 1.3.5.** The released `cilantro_sl.yml` pins pandas 1.3.5 through
   pip, which conflicts with its own scanpy 1.10.3 (pandas ≥ 1.5) and cannot run the released

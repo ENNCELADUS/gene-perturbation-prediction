@@ -25,25 +25,30 @@ ALPHAS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
 REGIMES = {"cv1": "pair-holdout", "cv3": "gene-holdout"}
 
 
-def classifier_metrics(labels, p_sl) -> dict:
+def classifier_metrics(labels, p_non_sl, p_sl) -> dict:
+    """The released compute_acc() metrics from both softmax columns (two-class AP; F1
+    at the argmax; AUROC and two-class AP are 0 on a single-class fold, as released),
+    then positive-class AUPR, prior, AUPR minus prior and AUROC (undefined there)."""
     import numpy as np
     from sklearn.metrics import average_precision_score, f1_score, roc_auc_score
 
     labels = np.asarray(labels, dtype=int)
-    p_sl = np.asarray(p_sl, dtype=float)
-    aupr = average_precision_score(labels, p_sl)
+    probs = np.column_stack([p_non_sl, p_sl]).astype(float)
+    both = len(np.unique(labels)) == 2
+    released_ap = average_precision_score(np.eye(2)[labels], probs) if both else 0.0
+    aupr = average_precision_score(labels, probs[:, 1]) if both else float("nan")
     prior = float(labels.mean())
     return {
         "n": int(len(labels)),
         "positives": int(labels.sum()),
-        "two_class_ap": float(
-            (aupr + average_precision_score(1 - labels, 1 - p_sl)) / 2
+        "two_class_ap": float(released_ap),
+        "f1_argmax": float(
+            f1_score(labels, probs.argmax(axis=1), average="binary", zero_division=0)
         ),
-        "f1_argmax": float(f1_score(labels, (p_sl > 0.5).astype(int))),
         "aupr": float(aupr),
         "prior": prior,
         "aupr_minus_prior": float(aupr - prior),
-        "auroc": float(roc_auc_score(labels, p_sl)),
+        "auroc": float(roc_auc_score(labels, probs[:, 1])) if both else float("nan"),
     }
 
 
@@ -56,15 +61,14 @@ def conformal(metrics: dict) -> dict:
     p_true = np.where(predicted == truth, p_best, p_other)
     rows = []
     for alpha in ALPHAS:
+        size = (p_best > alpha).astype(int) + (p_other > alpha).astype(int)
         rows.append(
             {
                 "alpha": alpha,
                 "target_coverage": 1 - alpha,
                 "coverage": float(np.mean(p_true > alpha)),
-                "mean_set_size": float(np.mean((p_best > alpha) + (p_other > alpha))),
-                "singleton_share": float(
-                    np.mean(((p_best > alpha) + (p_other > alpha)) == 1)
-                ),
+                "mean_set_size": float(np.mean(size)),
+                "singleton_share": float(np.mean(size == 1)),
             }
         )
     return {
@@ -110,11 +114,15 @@ def main() -> None:
         rows, pairs = [], []
         for i in range(5):
             scores = pd.read_csv(directory / f"fold{i}_test_scores.csv.gz")
-            rows.append(classifier_metrics(scores["SL"], scores["p_sl"]))
-            pair = scores.groupby(["gene 1", "gene 2"], sort=False).agg(
-                SL=("SL", "first"), p_sl=("p_sl", "mean")
+            rows.append(
+                classifier_metrics(scores["SL"], scores["p_non_sl"], scores["p_sl"])
             )
-            pairs.append(classifier_metrics(pair["SL"], pair["p_sl"]))
+            pair = scores.groupby(["gene 1", "gene 2"], sort=False).agg(
+                SL=("SL", "first"),
+                p_non_sl=("p_non_sl", "mean"),
+                p_sl=("p_sl", "mean"),
+            )
+            pairs.append(classifier_metrics(pair["SL"], pair["p_non_sl"], pair["p_sl"]))
         with open(directory / "gene2vec_5x.pkl", "rb") as f:
             released = pickle.load(f)
         report["regimes"][regime] = {

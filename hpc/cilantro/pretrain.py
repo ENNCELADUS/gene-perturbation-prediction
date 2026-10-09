@@ -36,6 +36,10 @@ def main() -> None:
     from scipy.stats import spearmanr
 
     name = "gene2vec_5x"
+    # The released df_to_SL_embs skips training when its embedding file exists; an
+    # interrupted run (no done marker) would then resume without a model. Start over.
+    for stale in (f"{name}_all.h5", f"{name}_all_double.h5"):
+        (p["generated"] / stale).unlink(missing_ok=True)
     df = pd.read_hdf(p["generated"] / "gene2vec_emb_mat.h5", "table")
     print(f"df shape is {df.shape}")
     ve = via_film.via_film(df, input_length=640)
