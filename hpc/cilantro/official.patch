@@ -100,7 +100,7 @@ index 3858387..e2e0d89 100644
          self.metrics["general_results"] = {
              "accuracy": t_accuracy,
 diff --git a/nn_helpers/via_film.py b/nn_helpers/via_film.py
-index 87f5b08..4658e45 100644
+index 87f5b08..ddb8ae3 100644
 --- a/nn_helpers/via_film.py
 +++ b/nn_helpers/via_film.py
 @@ -6,6 +6,7 @@ import torch.nn.functional as F
@@ -120,3 +120,17 @@ index 87f5b08..4658e45 100644
  
          with open(ensembl_path, "rb") as f:
              id_gene_dict = pkl.load(f)
+@@ -305,9 +306,11 @@ class via_film:
+         for pair in tqdm(pair_list):
+             df_list.append([pair[0], pair[1], pair_list[pair]])
+ 
++        id_gene_dict = self.id_gene_dict
++
+         def get_id(gene):
+-            if gene in self.id_gene_dict:
+-                return f"gene_{self.id_gene_dict[gene]}"
++            if gene in id_gene_dict:
++                return f"gene_{id_gene_dict[gene]}"
+             return None
+ 
+         d = pd.DataFrame(df_list, columns=["gene 1", "gene 2", "SL"])
