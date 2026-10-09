@@ -63,6 +63,18 @@ def test_sliced_loader_matches_per_item_dataloader(rows):
     assert not torch.equal(out[0][0][0], out[1][0][0])
 
 
+def test_consume_loader_seed_matches_one_dataloader_iteration():
+    features = torch.zeros(5, 2)
+    labels = torch.zeros(5, 1)
+    torch.manual_seed(3)
+    for _ in DataLoader(PerItem(features, labels), batch_size=1, shuffle=False):
+        pass
+    released_state = torch.get_rng_state()
+    torch.manual_seed(3)
+    fast_core.consume_loader_seed()
+    assert torch.equal(torch.get_rng_state(), released_state)
+
+
 def test_predict_rows_concatenates_each_output():
     x = torch.arange(10.0).reshape(5, 2)
     (doubled, summed) = fast_core.predict_rows(

@@ -14,7 +14,9 @@ drives them (docs/specs/2026-10-08-cilantro-sl-reproduction-design.md §4.4):
   taken one row at a time in the released shape (2-D rows of one, or 1-D in
   ``extract_nn_second_last``), which is bitwise what the released loops compute;
   batched forward passes are not (max abs difference 6e-8 / 3.6e-7, measured), so
-  they are not used;
+  they are not used; each released loop also drew one base seed from the global torch
+  RNG when its DataLoader was iterated, and the next fold's network is initialised
+  from that stream, so every replaced loop draws it too (``consume_loader_seed``);
 - class probabilities are returned as one (rows, 2) float32 array instead of a list of
   one-row CUDA tensors, so ``compute_acc`` and the conformal p-values read the same
   values from an array; the conformal p-values are evaluated by one ``searchsorted``
@@ -38,7 +40,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 
 from dataloader import dataset, dataset_classifier, dataset_unlabeled
-from fast_core import predict_rows, sliced_loader
+from fast_core import consume_loader_seed, predict_rows, sliced_loader
 from pair_classifier import pair_classifier
 from via_film import via_film
 
@@ -91,6 +93,7 @@ class fast_pair_classifier(pair_classifier):
         if self.net is None:
             print("Error: no net exists")
             return
+        consume_loader_seed()  # the released loop iterates dl_test
         vals, corr, conf_scores, probs = self._predict(*self.dl_test)
         correct = sum(v == c for v, c in zip(vals, corr))
         print(f"Accuracy: {correct / len(vals)}")
@@ -132,11 +135,13 @@ class fast_pair_classifier(pair_classifier):
             raise NotImplementedError("only the empty Mondrian class map is supported")
         mondrian_class = -1
         print("Calibrating with 0 mondrian classes")
+        consume_loader_seed()  # the released calibrate() iterates calibration_dl
         _, corr_c, _, probs_c = self._predict(*calibration_dl)
         p_calib = probs_c.astype(np.float64)
         true_class_prob = p_calib[np.arange(len(corr_c)), np.asarray(corr_c)]
         calibration_scores = {mondrian_class: (1 - true_class_prob).tolist()}
 
+        consume_loader_seed()  # the released test loop iterates test_dl
         vals, corr, _, probs = self._predict(*test_dl)
         p = probs.astype(np.float64)
         predicted = np.asarray(vals)
@@ -192,6 +197,7 @@ class fast_via_film(via_film):
         features, labels = self.dl_test
         cells, genes = self._split(features)
         net = self.net
+        consume_loader_seed()  # the released loop iterates dl_test
         (outputs,) = predict_rows(
             lambda i: (net(cells[i : i + 1], genes[i : i + 1])[0],), len(cells)
         )

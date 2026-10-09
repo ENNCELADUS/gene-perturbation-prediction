@@ -12,11 +12,12 @@ difference of the parsed values is reported. --released-deletion also runs the r
 ``via_perturber`` on the same genes into DIR/released (fresh evidence of determinism,
 and a timing of the released path), compared the same way.
 
-Classifier: on the reference run's pair table, fold 0 of the pair-holdout split for
---epochs epochs, trained and scored once by the released ``pair_classifier`` and once
-by ``fast_pair_classifier`` from the same RNG state; compares the trained weights,
-predictions, probabilities, released metrics, the RNG state after training, and the
-conformal outputs (calibration scores, p-values) of the saved model.
+Classifier: on the reference run's pair table, folds 0 and 1 of the pair-holdout split
+in sequence for --epochs epochs, trained and scored once by the released
+``pair_classifier`` and once by ``fast_pair_classifier`` from the same RNG state;
+compares per fold the trained weights, predictions, probabilities, released metrics
+and the RNG state after scoring (which seeds the next fold), and the conformal outputs
+(calibration scores, p-values) of fold 0's saved model.
 
 Stage one: the same for ``via_film`` against ``fast_via_film``: weights, the in-sample
 test predictions and targets, and the penultimate-layer table written to HDF5.
@@ -208,19 +209,40 @@ def check_classifier(reference: Path, out: Path, epochs: int) -> dict:
     start = rng_snapshot()
 
     def run(pc, tag):
+        """Folds 0 and 1 in sequence, as run_cv does, so the RNG stream fold 1 starts
+        from is the one fold 0 leaves; conformal prediction on fold 0, as notebook 6."""
         rng_restore(start)
-        path = str(out / f"classifier_{tag}.pth")
-        pc.init_classification(batch_size=128, lr=0.0001, num_epochs=epochs)
-        pc.setup_dataloaders_from_sets(test[0], train[0])
-        t0 = time.time()
-        pc.train_nn(path)
-        t_train = time.time() - t0
-        t0 = time.time()
-        vals, corr, _, probs = pc.test_nn()
-        t_test = time.time() - t0
-        metrics = pc.compute_acc(vals, corr, probs)
-        after = rng_snapshot()
-        pc.load_net(path)
+        folds = []
+        for i in range(2):
+            path = str(out / f"classifier_{tag}_fold{i}.pth")
+            pc.init_classification(batch_size=128, lr=0.0001, num_epochs=epochs)
+            pc.setup_dataloaders_from_sets(test[i], train[i])
+            t0 = time.time()
+            pc.train_nn(path)
+            t_train = time.time() - t0
+            t0 = time.time()
+            vals, corr, _, probs = pc.test_nn()
+            t_test = time.time() - t0
+            metrics = pc.compute_acc(vals, corr, probs)
+            folds.append(
+                {
+                    "state": {
+                        k: v.cpu().clone() for k, v in pc.net.state_dict().items()
+                    },
+                    "vals": vals,
+                    "corr": corr,
+                    "probs": as_matrix(probs),
+                    "metrics": [float(m) for m in metrics],
+                    "rng_after": rng_snapshot(),
+                    "timing": {
+                        "train_seconds_per_epoch": round(t_train / epochs, 2),
+                        "test_seconds": round(t_test, 2),
+                        "train_rows": len(train[i]),
+                        "test_rows": len(test[i]),
+                    },
+                }
+            )
+        pc.load_net(str(out / f"classifier_{tag}_fold0.pth"))
         calib_dl, test_dl = pc.get_calib_test(
             test[0], 0.1, mondrian_class_dict={}, extract_name=lambda x: x["patient"]
         )
@@ -231,47 +253,47 @@ def check_classifier(reference: Path, out: Path, epochs: int) -> dict:
             mondrian_class_dict={},
             extract_name=lambda x: x["patient"],
         )
-        t_conf = time.time() - t0
         return {
-            "state": {k: v.cpu().clone() for k, v in pc.net.state_dict().items()},
-            "vals": vals,
-            "corr": corr,
-            "probs": as_matrix(probs),
-            "metrics": [float(m) for m in metrics],
-            "rng_after": after,
+            "folds": folds,
             "c_vals": c_vals,
             "c_corr": c_corr,
             "conf_scores": conf_scores,
             "calib_scores": calib_scores,
             "c_probs": as_matrix(c_probs),
-            "timing": {
-                "train_seconds_per_epoch": round(t_train / epochs, 2),
-                "test_seconds": round(t_test, 2),
-                "conformal_seconds": round(t_conf, 2),
-                "train_rows": len(train[0]),
-                "test_rows": len(test[0]),
-            },
+            "conformal_seconds": round(time.time() - t0, 2),
         }
 
     r = run(released, "released")
     f = run(fast, "fast")
     import numpy as np
 
+    folds = []
+    for rf, ff in zip(r["folds"], f["folds"]):
+        folds.append(
+            {
+                "weights_equal": state_dict_equal(rf["state"], ff["state"]),
+                "predictions_equal": rf["vals"] == ff["vals"]
+                and rf["corr"] == ff["corr"],
+                "probs_equal": np.array_equal(rf["probs"], ff["probs"]),
+                "probs_max_abs_diff": float(np.abs(rf["probs"] - ff["probs"]).max()),
+                "metrics_equal": rf["metrics"] == ff["metrics"],
+                "metrics": {"released": rf["metrics"], "fast": ff["metrics"]},
+                "rng_after_equal": rng_equal(rf["rng_after"], ff["rng_after"]),
+                "timing": {"released": rf["timing"], "fast": ff["timing"]},
+            }
+        )
     return {
         "epochs": epochs,
-        "weights_equal": state_dict_equal(r["state"], f["state"]),
-        "predictions_equal": r["vals"] == f["vals"] and r["corr"] == f["corr"],
-        "probs_equal": np.array_equal(r["probs"], f["probs"]),
-        "probs_max_abs_diff": float(np.abs(r["probs"] - f["probs"]).max()),
-        "metrics_equal": r["metrics"] == f["metrics"],
-        "metrics": {"released": r["metrics"], "fast": f["metrics"]},
-        "rng_after_equal": rng_equal(r["rng_after"], f["rng_after"]),
+        "folds": folds,
         "conformal_predictions_equal": r["c_vals"] == f["c_vals"]
         and r["c_corr"] == f["c_corr"],
         "conformal_p_values_equal": r["conf_scores"] == f["conf_scores"],
         "calibration_scores_equal": r["calib_scores"] == f["calib_scores"],
         "conformal_probs_equal": np.array_equal(r["c_probs"], f["c_probs"]),
-        "timing": {"released": r["timing"], "fast": f["timing"]},
+        "conformal_seconds": {
+            "released": r["conformal_seconds"],
+            "fast": f["conformal_seconds"],
+        },
     }
 
 

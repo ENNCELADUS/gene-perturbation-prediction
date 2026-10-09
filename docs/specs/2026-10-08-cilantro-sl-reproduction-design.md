@@ -186,7 +186,9 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
     become loops over row slices of one resident GPU tensor, each row still a forward pass of its own
     in the released shape, since batched forward passes of these nets differ from single-row passes
     (max abs difference 6e-8 on the classifier's logits, 3.6e-7 on stage one's penultimate layer,
-    measured) and were therefore not adopted; probabilities are kept as one array (the metrics pickle
+    measured) and were therefore not adopted; every replaced loop still draws the one base seed the
+    released `DataLoader` took from the global torch RNG, which seeds the next fold's network;
+    probabilities are kept as one array (the metrics pickle
     holds arrays where the released code pickled lists of one-row tensors) and the conformal p-values
     come from one `searchsorted` over all rows instead of pandarallel over unique scores, which gives
     the same numbers.
