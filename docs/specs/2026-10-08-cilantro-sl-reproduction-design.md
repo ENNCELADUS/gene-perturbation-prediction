@@ -130,6 +130,8 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   default profile per model (1,719 lines); 1,140 lines have both expression and gene effect, against
   the paper's 1,021. Phase 1 is therefore the released code on the paper's labels and gene prior
   with a newer DepMap release; its numbers are read against the paper's, not expected to equal them.
+  26Q1 also has an ATXN8 column, which the gc95M symbol map sends to TWNK's Ensembl ID; notebook 1's
+  HVG loop fails on a repeated ID, so the first column per ID (TWNK) is kept.
 - **The four small Drive files went through the laptop.** `Human_SL.csv`, `Human_nonSL.csv`,
   `Human_SL_pairs.pkl` and `gene2vec_embs.pt` (34 MB) were fetched on the laptop, copied to
   `data/cilantro/official/` on the H20, checked by SHA-256 and deleted locally. SynLethDB's own site
@@ -144,6 +146,10 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
     universe;
   - write the unperturbed embeddings `data_generator` reads, which no notebook writes.
   As in notebook 6, conformal prediction runs on the first fold only.
+- **pandas 1.5.3, not the yml's 1.3.5.** The released `cilantro_sl.yml` pins pandas 1.3.5 through
+  pip, which conflicts with its own scanpy 1.10.3 (pandas ≥ 1.5) and cannot run the released
+  perturber: `sub.insert(0, 'viability', ….to_frame())` needs pandas to align a one-column frame
+  by index, which 1.3.5 does not. The environment uses 1.5.3, the lowest release scanpy accepts.
 - **The pinned Geneformer fork does not import.** Its `mtl_classifier.py` was reverted to an API
   that imports `mtl.train_utils`, but its `mtl/` package is the newer one without that module, so
   `import geneformer` fails. `geneformer.patch` drops the two `mtl_classifier` imports from

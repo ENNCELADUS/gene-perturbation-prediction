@@ -36,8 +36,7 @@ apply_patch geneformer_cilantro geneformer.patch
 
 "$UV" python install 3.9.20
 [[ -x .venv-cilantro/bin/python ]] || "$UV" venv --python 3.9.20 .venv-cilantro
-"$UV" pip install --python .venv-cilantro/bin/python -r hpc/cilantro/requirements.txt \
-  --override hpc/cilantro/overrides.txt
+"$UV" pip install --python .venv-cilantro/bin/python -r hpc/cilantro/requirements.txt
 
 .venv-cilantro/bin/python hpc/cilantro/fetch_geneformer.py
 # The fork resolves its default (gc95M) dictionaries next to geneformer/__init__.py.
