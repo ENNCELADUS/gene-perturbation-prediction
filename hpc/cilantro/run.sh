@@ -6,7 +6,7 @@
 #
 # Steps (released notebook in brackets): prepare_inputs, tokenize [1], original_embeddings, perturb [2, one shard
 # per process, --procs-per-gpu per GPU], generate [2], sample_negatives [3], setup_input [4], pretrain [5], then
-# classify [6] for pair-holdout (cv1) and gene-holdout (cv3) in parallel. A step is skipped once its done marker
+# classify [6] for pair-holdout (cv1) and gene-holdout (cv3) in parallel, then report.py. A step is skipped once its done marker
 # exists, so rerunning with the same RUN_ID resumes; the run's settings are fixed in run.json at first launch.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -95,4 +95,6 @@ done
 failed=0
 for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
 [[ $failed == 0 ]] || exit 1
+"$py" hpc/cilantro/report.py --run-dir "$run_dir" > "$run_dir/logs/report.log" 2>&1 \
+  || { echo "failed report: $run_dir/logs/report.log" >&2; exit 1; }
 echo "$(date -u +%FT%TZ) complete $run_dir"
