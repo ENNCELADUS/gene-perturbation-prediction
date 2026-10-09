@@ -3,7 +3,9 @@ reads.
 
 data_generator.remove_nan() loads orig_embedding_pretrained.csv; no released notebook
 writes it. It is produced with the extractor settings the released perturber uses (cell
-mode, penultimate layer, patient_id label).
+mode, penultimate layer, patient_id label). data_generator puts it in the AnnData's
+obsm, which requires the AnnData's line order; the extractor sorts lines by length, so
+the rows are put back in that order.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ def main() -> None:
     configure(args.run_dir)
     p = paths(args.run_dir)
 
+    import anndata as ad
     from datasets import load_from_disk
     from geneformer import EmbExtractor
 
@@ -54,6 +57,9 @@ def main() -> None:
         str(p["orig_embs"].parent),
         p["orig_embs"].stem,
     )
+    order = ad.read_h5ad(p["sl_hvg_h5ad"], backed="r").obs_names
+    embs = embs.set_index("patient_id").loc[order].reset_index()
+    embs.to_csv(p["orig_embs"])
     mark_done(p["orig_embs"].parent, lines=int(len(embs)), dims=int(embs.shape[1] - 1))
 
 
