@@ -144,6 +144,12 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
     universe;
   - write the unperturbed embeddings `data_generator` reads, which no notebook writes.
   As in notebook 6, conformal prediction runs on the first fold only.
+- **The pinned Geneformer fork does not import.** Its `mtl_classifier.py` was reverted to an API
+  that imports `mtl.train_utils`, but its `mtl/` package is the newer one without that module, so
+  `import geneformer` fails. `geneformer.patch` drops the two `mtl_classifier` imports from
+  `geneformer/__init__.py`; Cilantro never uses the multitask classifier. The notebooks import the
+  fork from its source directory, and so does the harness: its `setup.py` requires Python 3.10,
+  the released environment is 3.9.
 
 ## 5. Phase 2: the port
 
