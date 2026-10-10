@@ -6,7 +6,8 @@
 #
 # Steps (released notebook in brackets): prepare_inputs, tokenize [1], original_embeddings, perturb [2, one shard
 # per process, --procs-per-gpu per GPU], generate [2], sample_negatives [3], setup_input [4], pretrain [5], then
-# classify [6] for pair-holdout (cv1) and gene-holdout (cv3) in parallel, then report.py. A step is skipped once its done marker
+# classify [6]: the five folds of pair-holdout (cv1) and gene-holdout (cv3), ten processes spread over the GPUs, then
+# each regime's merge and conformal prediction, then report.py. A step is skipped once its done marker
 # exists, so rerunning with the same RUN_ID resumes; the run's settings are fixed in run.json at first launch.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -85,16 +86,33 @@ step setup_input generated_df/gene2vec/done.json "$py" hpc/cilantro/setup_input.
 step pretrain metrics/pretrain/done.json \
   env CUDA_VISIBLE_DEVICES="$first_gpu" "$py" hpc/cilantro/pretrain.py --run-dir "$run_dir" --epochs "$epochs"
 
+wait_all() {  # pids...; fails if any failed
+  local failed=0
+  for pid in "$@"; do wait "$pid" || failed=1; done
+  [[ $failed == 0 ]]
+}
+
+# Each fold is its own process; classify.py replays the RNG draws of the folds before it, so the folds are the
+# sequential run's.
+pids=() job=0
+for cv in 1 3; do
+  for fold in 0 1 2 3 4; do
+    gpu=${gpu_list[$((job % ${#gpu_list[@]}))]}
+    step "classify_cv${cv}_fold$fold" "metrics/cv$cv/fold$fold/done.json" env CUDA_VISIBLE_DEVICES="$gpu" "$py" \
+      hpc/cilantro/classify.py --run-dir "$run_dir" --cv "$cv" --fold "$fold" --epochs "$epochs" &
+    pids+=($!)
+    job=$((job + 1))
+  done
+done
+wait_all "${pids[@]}" || exit 1
 pids=()
 for cv in 1 3; do
   gpu=${gpu_list[$(( (cv / 2) % ${#gpu_list[@]} ))]}
   step "classify_cv$cv" "metrics/cv$cv/done.json" env CUDA_VISIBLE_DEVICES="$gpu" "$py" hpc/cilantro/classify.py \
-    --run-dir "$run_dir" --cv "$cv" --epochs "$epochs" &
+    --run-dir "$run_dir" --cv "$cv" --merge --epochs "$epochs" &
   pids+=($!)
 done
-failed=0
-for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
-[[ $failed == 0 ]] || exit 1
+wait_all "${pids[@]}" || exit 1
 "$py" hpc/cilantro/report.py --run-dir "$run_dir" > "$run_dir/logs/report.log" 2>&1 \
   || { echo "failed report: $run_dir/logs/report.log" >&2; exit 1; }
 echo "$(date -u +%FT%TZ) complete $run_dir"
