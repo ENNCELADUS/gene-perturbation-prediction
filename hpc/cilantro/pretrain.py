@@ -21,7 +21,13 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import configure, mark_done, paths, seed_everything  # noqa: E402
+from common import (  # noqa: E402
+    configure,
+    mark_done,
+    pandarallel_over_pipes,
+    paths,
+    seed_everything,
+)
 
 
 def main() -> None:
@@ -42,6 +48,8 @@ def main() -> None:
     import via_film
     from fast_classifier import fast_via_film
     from scipy.stats import spearmanr
+
+    pandarallel_over_pipes()
 
     regressor = via_film.via_film if args.released else fast_via_film
     name = "gene2vec_5x"
