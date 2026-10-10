@@ -133,7 +133,11 @@ ModelScope's copy, checked against the Hugging Face hashes. The four small offic
 
 `hpc/cilantro/run.sh RUN_ID --dictionary gc95M|gc30M [--gpus 0,1,2,3] [--procs-per-gpu 2]` runs
 every released step for one run under `outputs/cilantro_reproduction/RUN_ID/`. The deletion step
-runs one shard per process, `--procs-per-gpu` per GPU. A step is skipped once its `done.json`
+runs one shard per process, `--procs-per-gpu` per GPU. The classifier runs each of the five folds of
+both split regimes as its own process (`classify.py --fold K`, ten processes spread over the GPUs),
+each replaying the earlier folds' RNG draws so it trains exactly the sequential run's fold; then
+`classify.py --merge` per regime writes the metrics pickle and runs conformal prediction on fold 0.
+A step is skipped once its `done.json`
 exists, so rerunning the same RUN_ID resumes; `run.json` fixes the run's settings at first launch.
 Logs are in `logs/<step>.log`. `--gene-subset N --epochs E` makes a smoke run (the N genes with
 the most SynLethDB pairs, E epochs), only to check the chain.
@@ -147,7 +151,10 @@ recomputes a few genes and one fold of stage one and the classifier both ways an
 (`equivalence.json`); run it after any change to the fast paths (2026-10-09, smoke run: five genes
 byte-identical, two classifier folds and stage one equal in weights, losses, predictions,
 probabilities, conformal p-values and RNG state; released deletion 464 s for the five genes against
-97 s, released classifier epoch 4.3 s against 0.7 s on the smoke fold). A run interrupted on the released
+97 s, released classifier epoch 4.3 s against 0.7 s on the smoke fold; 2026-10-10: the fold replay
+leaves every RNG where a trained fold does, and the fold-per-process classifier reproduces the smoke
+run's sequential weights, test scores, metrics pickle and conformal outputs for all ten folds,
+`outputs/cilantro_reproduction/check_fold_parallel_smoke40/`). A run interrupted on the released
 path resumes on the fast path unchanged: the gene files are the same, and `perturb.py` first
 removes any gene whose files are incomplete.
 
