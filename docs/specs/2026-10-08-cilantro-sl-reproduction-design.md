@@ -1,6 +1,6 @@
 # Design: reproducing Cilantro-SL, then porting it to the context screen and basal single cells
 
-**Status:** design agreed 2026-10-08 (grill session); updated 2026-10-09. Phase 1 is implemented
+**Status:** design agreed 2026-10-08 (grill session); updated 2026-10-10. Phase 1 is implemented
 (`hpc/cilantro/`, branch `feat/cilantro-sl`) and its first run is in progress on the H20 (§4.5). Phase
 2 has only its coverage report (§5.2); the rest of §5 is not yet built and has no implementation
 plan. The port (phase 2) follows the [SL protocol rules](../04-sl-ranking-protocol.md#8-rules). Paper: Hua,
@@ -166,7 +166,12 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
     path, which `create_SL_embs` iterates character by character; its commented-out alternative
     passes the dictionary;
   - before a deletion shard runs, delete and recompute any gene whose two output files lack
-    one complete row per line containing the gene (the released skip test is existence).
+    one complete row per line containing the gene (the released skip test is existence);
+  - in stage one and the classifier, re-initialise pandarallel after `via_film` initialises it,
+    so workers return results through pipes instead of `/dev/shm`. The container's `/dev/shm`
+    is a 4 GiB tmpfs; `create_SL_embs`'s results (a 64-float list for each of about 12.8 million
+    pair and line rows, 112 workers) overflowed it and came back as truncated pickles. Only the
+    transport changes.
   As in notebook 6, conformal prediction runs on the first fold only.
 - **Fast paths (2026-10-09), same computation.** The released deletion ran at about 80 s per gene per
   process (eight processes on four H20s, 6 genes/min, about 25 h for 9,987 genes) and the classifier
@@ -256,7 +261,7 @@ Runs on the 30838 container (`outputs/cilantro_reproduction/`):
 | Run | Settings | State |
 | --- | --- | --- |
 | `smoke40_gc95M` | gc95M, 40 most-paired genes, 2 epochs | complete end to end, including `report.md`; its numbers check the chain only |
-| `as_released_gc95M` | gc95M, all 9,987 genes, 100 epochs | deletion in progress: about 1,300 of 9,987 genes at 07:53 UTC, about 31 genes per minute on the fast path (6 per minute on the released perturber before 07:39); then generate, negative sampling, setup, stage one, both classifier regimes, report, chained by `run.sh` |
+| `as_released_gc95M` | gc95M, all 9,987 genes, 100 epochs | 2026-10-09: deletion finished at 10:24 UTC (2 h 45 min on the fast path after 942 genes on the released perturber; 7,321 of the 9,987 genes are in some line's top 2,048 tokens and have output), generate 23 min, negative sampling 34 min, setup 11 min, stage-one training 22 min; the pair embeddings after it failed at 12:08 on the `/dev/shm` overflow (§4.4). Relaunched 2026-10-10 with the pipe transport; stage one restarts, then both classifier regimes and the report |
 
 A batch-size benchmark of the deletion (`outputs/cilantro_benchmarks/deletion_batch_size.json`, one
 GPU shared with the running deletion): 25.4 lines per second at the released batch of 50, 27.8 at

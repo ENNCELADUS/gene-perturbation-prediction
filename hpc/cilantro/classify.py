@@ -21,7 +21,13 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import configure, mark_done, paths, seed_everything  # noqa: E402
+from common import (  # noqa: E402
+    configure,
+    mark_done,
+    pandarallel_over_pipes,
+    paths,
+    seed_everything,
+)
 
 
 def main() -> None:
@@ -44,6 +50,8 @@ def main() -> None:
     import training_framework
     import via_film  # noqa: F401  # notebook 6 imports it; it initialises pandarallel
     from fast_classifier import as_matrix, fast_pair_classifier
+
+    pandarallel_over_pipes()
 
     classifier = pc_module.pair_classifier if args.released else fast_pair_classifier
     d = pd.read_hdf(p["generated"] / "gene2vec_5x_all_double.h5", "table")

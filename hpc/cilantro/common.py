@@ -120,6 +120,19 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def pandarallel_over_pipes() -> None:
+    """Re-initialise pandarallel, which via_film initialises on import, to pass worker
+    results through pipes instead of /dev/shm.
+
+    The container's /dev/shm is a 4 GiB tmpfs; the pair-embedding step's results (one
+    64-float list per pair and line, ~13M rows on the full data) overflow it and come
+    back as truncated pickles. Pipes change only the transport, not the results.
+    """
+    from pandarallel import pandarallel
+
+    pandarallel.initialize(progress_bar=True, use_memory_fs=False)
+
+
 def mark_done(directory: Path, **record) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "done.json").write_text(
