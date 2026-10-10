@@ -228,10 +228,24 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
     GPU to itself, which the pipeline order gives it but which could not be measured on 2026-10-09.
     The per-row loops (test, calibration, conformal, stage-one test and extraction: about 8 million
     rows per regime at full scale) are 10 to 60 times faster regardless.
+  - One process per classifier fold (2026-10-10). `run_cv` trains the five folds in sequence, and
+    each fold's network is initialised from the global torch RNG where the previous fold left it.
+    Per fold that stream is drawn only by SLNet's initialisation (built on the CPU), two dummy
+    tensors, the two seeds each epoch's loader iterator takes (its base seed and the
+    `RandomSampler`'s, independent of the rows) and the test loop's base seed; SLNet has no dropout
+    and nothing else draws. `classify.py --fold K` rebuilds the folds from seed 0, replays folds
+    0..K-1's draws without training (`fast_pair_classifier.skip_fold`) and runs `run_cv` on fold K
+    alone; `classify.py --merge` assembles the metrics pickle `run_cv` writes after five folds (fold
+    means summed in fold order, as `run_cv` sums them) and runs conformal prediction on fold 0.
+    `run.sh` spreads the ten fold processes of both regimes over the GPUs. Checked on the smoke run
+    (`outputs/cilantro_reproduction/check_fold_parallel_smoke40/`): `skip_fold` leaves the Python,
+    numpy, torch and CUDA RNGs where a trained and scored fold 0 leaves them, and the
+    fold-per-process run reproduces the smoke run's sequential (released-class) outputs for all ten
+    folds: weights, test-score files, the metrics pickle's results and probabilities, and every
+    conformal output.
   - Not done, by the same bar: TF32, bf16 or fp16 (change every embedding), larger Geneformer batches
-    (batch size changes floats), batched inference of the small nets (above), running the five folds
-    on separate GPUs (each fold's RNG state would have to be replayed), and the pandas lookups of
-    `setup_input`, `data_generator` and `create_SL_embs` (not in the slow steps).
+    (batch size changes floats), batched inference of the small nets (above), and the pandas lookups
+    of `setup_input`, `data_generator` and `create_SL_embs` (not in the slow steps).
 - **pandas 1.5.3, not the yml's 1.3.5.** The released `cilantro_sl.yml` pins pandas 1.3.5 through
   pip, which conflicts with its own scanpy 1.10.3 (pandas ≥ 1.5) and cannot run the released
   perturber: `sub.insert(0, 'viability', ….to_frame())` needs pandas to align a one-column frame
@@ -261,7 +275,7 @@ Runs on the 30838 container (`outputs/cilantro_reproduction/`):
 | Run | Settings | State |
 | --- | --- | --- |
 | `smoke40_gc95M` | gc95M, 40 most-paired genes, 2 epochs | complete end to end, including `report.md`; its numbers check the chain only |
-| `as_released_gc95M` | gc95M, all 9,987 genes, 100 epochs | 2026-10-09: deletion finished at 10:24 UTC (2 h 45 min on the fast path after 942 genes on the released perturber; 7,321 of the 9,987 genes are in some line's top 2,048 tokens and have output), generate 23 min, negative sampling 34 min, setup 11 min, stage-one training 22 min; the pair embeddings after it failed at 12:08 on the `/dev/shm` overflow (§4.4). Relaunched 2026-10-10 with the pipe transport; stage one restarts, then both classifier regimes and the report |
+| `as_released_gc95M` | gc95M, all 9,987 genes, 100 epochs | 2026-10-09: deletion finished at 10:24 UTC (2 h 45 min on the fast path after 942 genes on the released perturber; 7,321 of the 9,987 genes are in some line's top 2,048 tokens and have output), generate 23 min, negative sampling 34 min, setup 11 min, stage-one training 22 min; the pair embeddings after it failed at 12:08 on the `/dev/shm` overflow (§4.4). Relaunched 2026-10-10 with the pipe transport; stage one restarts, then the ten classifier folds as separate processes, the two merges and the report |
 
 A batch-size benchmark of the deletion (`outputs/cilantro_benchmarks/deletion_batch_size.json`, one
 GPU shared with the running deletion): 25.4 lines per second at the released batch of 50, 27.8 at
