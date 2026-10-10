@@ -17,13 +17,13 @@ synthetic-fixture tests only; real preparation, training and evaluation run on t
 Containers on the same host share the `/2023533015` filesystem, so one checkout, one
 `data/`, and one `outputs/` tree serve all of them. Pick a container by its SSH port:
 
-| Port | GPUs | Use |
-|---|---|---|
-| 30838 | 4 × H20 | default and, as of 2026-09-29, the only reachable one; no GitHub access |
-| 30030, 30670, 30846 | 4 × H20 | extra lanes when they accept connections (all refused on 2026-09-29) |
+| Available port | GPUs |
+|---|---|
+| 30838 | **4 × H20** |
+| 30986 | **4 × H20** |
 
 ```bash
-ssh -p 30838 root@10.15.171.204
+ssh -A -p 30838 root@10.15.171.204
 cd /2023533015/VCC_Project
 ```
 
@@ -37,16 +37,16 @@ a GPU, but they share the host's 224 CPU cores. `hpc/run.sh` does not cap thread
 
 ## Sync code through Git only
 
-Never rsync, scp or tar a working tree. The host has no GitHub access, so push from the
-laptop straight into the checkout over SSH, then move the checkout onto that branch:
+Never rsync, scp or tar a working tree. Commit and push authorized changes to GitHub
+from the laptop, then pull from the shared checkout through port 30838 with agent
+forwarding:
 
 ```bash
-git push ssh://root@10.15.171.204:30838/2023533015/VCC_Project main
-ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git checkout main && git log -1 --oneline'
+git push origin main
+ssh -A -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git checkout main && git pull --ff-only origin main && git log -1 --oneline'
 ```
 
-The checkout keeps its own branch and can drift from local `main`. Git refuses a push to
-the checked-out branch, so push a branch it is not on, or check `main` out first. Look at
+The checkout keeps its own branch and can drift from local `main`. Look at
 `git branch --show-current`, `git log -1` and `git status --short` there before assuming
 your code is present, and never discard the host's uncommitted changes.
 
