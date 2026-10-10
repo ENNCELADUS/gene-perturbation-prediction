@@ -17,7 +17,10 @@ in sequence for --epochs epochs, trained and scored once by the released
 ``pair_classifier`` and once by ``fast_pair_classifier`` from the same RNG state;
 compares per fold the trained weights, predictions, probabilities, released metrics
 and the RNG state after scoring (which seeds the next fold), and the conformal outputs
-(calibration scores, p-values) of fold 0's saved model.
+(calibration scores, p-values) of fold 0's saved model; and that
+``fast_pair_classifier.skip_fold`` leaves every RNG (python, numpy, torch, CUDA) where
+a trained and scored fold 0 leaves it, which is what lets ``classify.py`` run each fold
+in its own process.
 
 Stage one: the same for ``via_film`` against ``fast_via_film``: weights, the in-sample
 test predictions and targets, and the penultimate-layer table written to HDF5.
@@ -266,6 +269,9 @@ def check_classifier(reference: Path, out: Path, epochs: int) -> dict:
 
     r = run(released, "released")
     f = run(fast, "fast")
+    rng_restore(start)
+    fast_pair_classifier.skip_fold(epochs)
+    skipped = rng_snapshot()
     import numpy as np
 
     folds = []
@@ -287,6 +293,7 @@ def check_classifier(reference: Path, out: Path, epochs: int) -> dict:
     return {
         "epochs": epochs,
         "folds": folds,
+        "skip_fold_rng_equal": rng_equal(skipped, f["folds"][0]["rng_after"]),
         "conformal_predictions_equal": r["c_vals"] == f["c_vals"]
         and r["c_corr"] == f["c_corr"],
         "conformal_p_values_equal": r["conf_scores"] == f["conf_scores"],

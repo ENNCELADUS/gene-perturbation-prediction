@@ -29,6 +29,8 @@ the loss; the released ``Framework`` drives them
   over all rows instead of per unique score through pandarallel, which gives the same
   numbers. The metrics pickle therefore holds arrays under ``probs`` and
   ``mondrian_probs_list`` where the released code pickled tensor lists;
+- ``skip_fold`` replays one fold's draws from the global torch RNG without training,
+  so each fold can run in its own process from the state a sequential run reaches;
 - only the harness's call shapes are supported: no validation split, an empty
   Mondrian class map (plain split conformal), ``custom_func=None``.
 """
@@ -124,6 +126,28 @@ class fast_pair_classifier(pair_classifier):
             torch.save(net.state_dict(), path)
         else:
             print("No path supplied, model not saved")
+
+    @staticmethod
+    def skip_fold(num_epochs: int) -> None:
+        """Draw from the global torch RNG exactly what one fold of ``run_cv`` draws
+        (``train_nn`` then ``test_nn``), without training.
+
+        The folds of ``run_cv`` share that stream: each fold's network is initialised
+        from where the previous fold left it. A process that runs fold k alone replays
+        folds 0..k-1 with this and then trains fold k from the state a sequential run
+        reaches. Per fold the stream is drawn only by SLNet's initialisation (built on
+        the CPU), the two dummy tensors, the two seeds each epoch's loader iterator
+        takes (its base seed and the RandomSampler's seed, independent of the rows)
+        and the test loop's base seed; SLNet has no dropout, and the data, loss and
+        optimiser draw nothing.
+        """
+        SLNet()
+        torch.randn(128, 2)
+        torch.randint(0, 2, (128,))
+        loader = sliced_loader(torch.zeros(1, 1), torch.zeros(1, 1), 1)
+        for _ in range(num_epochs):
+            next(iter(loader))
+        consume_loader_seed()
 
     def _tensors(self, df: pd.DataFrame) -> tuple[torch.Tensor, torch.Tensor]:
         data = dataset_classifier(df, self.input_length)
