@@ -29,7 +29,7 @@ done
 
 run_dir=outputs/cilantro_reproduction/$run_id
 py=.venv-cilantro/bin/python
-export PYTHONHASHSEED=0 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 TOKENIZERS_PARALLELISM=false
+export PYTHONHASHSEED=0 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 TOKENIZERS_PARALLELISM=false
 trap 'kill 0' INT TERM
 mkdir -p "$run_dir/logs"
 
