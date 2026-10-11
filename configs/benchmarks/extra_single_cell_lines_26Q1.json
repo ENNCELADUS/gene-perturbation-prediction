@@ -73,21 +73,22 @@
       "other_sources": []
     },
     "ACH-000018": {
-      "source": "mixseq",
-      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
       "identifiers": [
-        "ACH-000018"
+        "T24"
       ],
-      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
-      "condition_class": "control_guide",
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
       "patient_id": "PT-Mi0cKz",
       "lineage": "Bladder/Urinary Tract",
-      "cells": 43,
+      "cells": 2479,
       "arms": {
-        "sgLACZ_expt2": 15,
-        "sgOR2J2_expt2": 28
+        "untreated": 2479
       },
-      "other_sources": []
+      "other_sources": [
+        "mixseq"
+      ]
     },
     "ACH-000021": {
       "source": "mixseq",
@@ -188,6 +189,38 @@
       },
       "other_sources": []
     },
+    "ACH-000039": {
+      "source": "gse236284",
+      "accession": "GEO GSE236284; SRA SRR25099374-6 (Cell Ranger BAM)",
+      "identifiers": [
+        "SKNMC"
+      ],
+      "condition": "untreated, HTO-hashed three-line lanes (CITE-seq); counts from the deposited Cell Ranger BAM",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-wGDMGe",
+      "lineage": "Bone",
+      "cells": 1264,
+      "arms": {
+        "untreated": 1264
+      },
+      "other_sources": []
+    },
+    "ACH-000041": {
+      "source": "gse236284",
+      "accession": "GEO GSE236284; SRA SRR25099374-6 (Cell Ranger BAM)",
+      "identifiers": [
+        "RDES"
+      ],
+      "condition": "untreated, HTO-hashed three-line lanes (CITE-seq); counts from the deposited Cell Ranger BAM",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-3yDaRJ",
+      "lineage": "Bone",
+      "cells": 631,
+      "arms": {
+        "untreated": 631
+      },
+      "other_sources": []
+    },
     "ACH-000047": {
       "source": "mixseq",
       "accession": "figshare 10.6084/m9.figshare.10298696",
@@ -202,6 +235,22 @@
       "arms": {
         "DMSO_6hr_expt3": 124,
         "DMSO_24hr_expt3": 106
+      },
+      "other_sources": []
+    },
+    "ACH-000052": {
+      "source": "gse236284",
+      "accession": "GEO GSE236284; SRA SRR25099374-6 (Cell Ranger BAM)",
+      "identifiers": [
+        "A673"
+      ],
+      "condition": "untreated, HTO-hashed three-line lanes (CITE-seq); counts from the deposited Cell Ranger BAM",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-IAac7b",
+      "lineage": "Bone",
+      "cells": 2398,
+      "arms": {
+        "untreated": 2398
       },
       "other_sources": []
     },
@@ -237,6 +286,22 @@
       },
       "other_sources": []
     },
+    "ACH-000075": {
+      "source": "gse261618",
+      "accession": "GEO GSE261618 (GSM8147508, ATCC pilot)",
+      "identifiers": [
+        "U87MG"
+      ],
+      "condition": "DMSO vehicle (sci-Plex hash), line from the authors' RT-well map",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-59c3mE",
+      "lineage": "CNS/Brain",
+      "cells": 971,
+      "arms": {
+        "DMSO": 971
+      },
+      "other_sources": []
+    },
     "ACH-000078": {
       "source": "gse229224",
       "accession": "GEO GSE229224",
@@ -267,7 +332,9 @@
       "arms": {
         "DMSO_24hr_expt10": 18
       },
-      "other_sources": []
+      "other_sources": [
+        "gse229062"
+      ]
     },
     "ACH-000094": {
       "source": "gse173339",
@@ -804,6 +871,22 @@
       },
       "other_sources": []
     },
+    "ACH-000334": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "DB"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-mgfMcU",
+      "lineage": "Lymphoid",
+      "cells": 7308,
+      "arms": {
+        "untreated": 7308
+      },
+      "other_sources": []
+    },
     "ACH-000336": {
       "source": "gse116256",
       "accession": "GSE116256",
@@ -853,6 +936,22 @@
       "other_sources": [
         "mixseq"
       ]
+    },
+    "ACH-000344": {
+      "source": "gse142750_recount",
+      "accession": "GEO GSE142750; SRA SRR10805155",
+      "identifiers": [
+        "SNU-668"
+      ],
+      "condition": "untreated 2D culture, 10x 3' v2 (re-counted from SRA: the deposited matrix is clipped)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-KDacEe",
+      "lineage": "Esophagus/Stomach",
+      "cells": 5752,
+      "arms": {
+        "untreated": 5752
+      },
+      "other_sources": []
     },
     "ACH-000354": {
       "source": "gse270117",
@@ -905,20 +1004,22 @@
       "other_sources": []
     },
     "ACH-000361": {
-      "source": "gse188289",
-      "accession": "GEO GSE188289",
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
       "identifiers": [
-        "SK-HEP-1"
+        "SK-HEP-01"
       ],
-      "condition": "untreated 2D culture, CITE-seq RNA (BGISEQ)",
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
       "condition_class": "basal_2d",
       "patient_id": "PT-sPLV6L",
       "lineage": "Liver",
-      "cells": 1647,
+      "cells": 3151,
       "arms": {
-        "untreated": 1647
+        "untreated": 3151
       },
-      "other_sources": []
+      "other_sources": [
+        "gse188289"
+      ]
     },
     "ACH-000362": {
       "source": "emtab13204",
@@ -935,6 +1036,24 @@
         "targets_only": 1905
       },
       "other_sources": []
+    },
+    "ACH-000364": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "U2-OS"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-WN1oZd",
+      "lineage": "Bone",
+      "cells": 2372,
+      "arms": {
+        "untreated": 2372
+      },
+      "other_sources": [
+        "gse288487"
+      ]
     },
     "ACH-000365": {
       "source": "emtab13204",
@@ -1104,23 +1223,27 @@
       "arms": {
         "untreated": 6717
       },
-      "other_sources": []
+      "other_sources": [
+        "gse236284"
+      ]
     },
     "ACH-000427": {
-      "source": "mixseq",
-      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "source": "gse142750_recount",
+      "accession": "GEO GSE142750; SRA SRR10805149",
       "identifiers": [
-        "ACH-000427"
+        "NCI-N87"
       ],
-      "condition": "expt 10 DMSO 24 h",
+      "condition": "untreated 2D culture, 10x 3' v2 (re-counted from SRA: the deposited matrix is clipped)",
       "condition_class": "basal_2d",
       "patient_id": "PT-e4bHZ8",
       "lineage": "Esophagus/Stomach",
-      "cells": 23,
+      "cells": 3661,
       "arms": {
-        "DMSO_24hr_expt10": 23
+        "untreated": 3661
       },
-      "other_sources": []
+      "other_sources": [
+        "mixseq"
+      ]
     },
     "ACH-000434": {
       "source": "mixseq",
@@ -1339,6 +1462,22 @@
       },
       "other_sources": []
     },
+    "ACH-000511": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "Calu-1"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-R4QjAn",
+      "lineage": "Lung",
+      "cells": 6715,
+      "arms": {
+        "untreated": 6715
+      },
+      "other_sources": []
+    },
     "ACH-000517": {
       "source": "mixseq",
       "accession": "figshare 10.6084/m9.figshare.10298696",
@@ -1512,6 +1651,22 @@
       },
       "other_sources": []
     },
+    "ACH-000571": {
+      "source": "gse261618",
+      "accession": "GEO GSE261618 (GSM8147508, ATCC pilot)",
+      "identifiers": [
+        "T98G"
+      ],
+      "condition": "DMSO vehicle (sci-Plex hash), line from the authors' RT-well map",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-dw7sni",
+      "lineage": "CNS/Brain",
+      "cells": 4845,
+      "arms": {
+        "DMSO": 4845
+      },
+      "other_sources": []
+    },
     "ACH-000581": {
       "source": "gse142750",
       "accession": "GEO GSE142750",
@@ -1598,22 +1753,22 @@
       "other_sources": []
     },
     "ACH-000624": {
-      "source": "mixseq",
-      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "source": "gse202435",
+      "accession": "GEO GSE202435; SRA SRR19135532-3",
       "identifiers": [
-        "ACH-000624"
+        "HCC1806"
       ],
-      "condition": "expt 10 DMSO 24 h",
+      "condition": "untreated parental, re-counted from SRA (the deposit is scaled)",
       "condition_class": "basal_2d",
       "patient_id": "PT-j1ziCB",
       "lineage": "Breast",
-      "cells": 63,
+      "cells": 6689,
       "arms": {
-        "DMSO_24hr_expt10": 63
+        "untreated": 6689
       },
       "other_sources": [
-        "gse202435",
-        "gse202771"
+        "gse202771",
+        "mixseq"
       ]
     },
     "ACH-000639": {
@@ -1799,6 +1954,22 @@
       },
       "other_sources": []
     },
+    "ACH-000699": {
+      "source": "srp199641",
+      "accession": "SRA SRR10051134 (SEQC2 10X_NCI_A; figshare 13264121)",
+      "identifiers": [
+        "HCC1395"
+      ],
+      "condition": "untreated reference culture, 10x 3' v2 library 10X_NCI_A, re-counted from SRA",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-8MisfZ",
+      "lineage": "Breast",
+      "cells": 6086,
+      "arms": {
+        "untreated": 6086
+      },
+      "other_sources": []
+    },
     "ACH-000701": {
       "source": "mixseq",
       "accession": "figshare 10.6084/m9.figshare.10298696",
@@ -1848,6 +2019,22 @@
       "arms": {
         "DMSO_6hr_expt3": 94,
         "DMSO_24hr_expt3": 45
+      },
+      "other_sources": []
+    },
+    "ACH-000736": {
+      "source": "gse142750_recount",
+      "accession": "GEO GSE142750; SRA SRR10805153",
+      "identifiers": [
+        "SNU-601"
+      ],
+      "condition": "untreated 2D culture, 10x 3' v2 (re-counted from SRA: the deposited matrix is clipped)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-2GXHBV",
+      "lineage": "Esophagus/Stomach",
+      "cells": 5523,
+      "arms": {
+        "untreated": 5523
       },
       "other_sources": []
     },
@@ -2050,22 +2237,41 @@
       },
       "other_sources": []
     },
-    "ACH-000822": {
-      "source": "mixseq",
-      "accession": "figshare 10.6084/m9.figshare.10298696",
+    "ACH-000811": {
+      "source": "gse206953",
+      "accession": "GEO GSE206953",
       "identifiers": [
-        "ACH-000822"
+        "SKOV3S"
       ],
-      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition": "parental in medium ('S', antibody-sensitive)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-RV3Y6W",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 6000,
+      "arms": {
+        "medium": 6000
+      },
+      "other_sources": [
+        "gse311521"
+      ]
+    },
+    "ACH-000822": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "Sk-Mel-24"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
       "condition_class": "basal_2d",
       "patient_id": "PT-n2hnAf",
       "lineage": "Skin",
-      "cells": 143,
+      "cells": 7872,
       "arms": {
-        "DMSO_6hr_expt3": 79,
-        "DMSO_24hr_expt3": 64
+        "untreated": 7872
       },
-      "other_sources": []
+      "other_sources": [
+        "mixseq"
+      ]
     },
     "ACH-000823": {
       "source": "figshare33273600",
@@ -2521,21 +2727,22 @@
       "other_sources": []
     },
     "ACH-000939": {
-      "source": "mixseq",
-      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
       "identifiers": [
-        "ACH-000939"
+        "SK-UT-01"
       ],
-      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
       "condition_class": "basal_2d",
       "patient_id": "PT-b2KmUs",
       "lineage": "Uterus",
-      "cells": 151,
+      "cells": 6271,
       "arms": {
-        "DMSO_6hr_expt3": 83,
-        "DMSO_24hr_expt3": 68
+        "untreated": 6271
       },
-      "other_sources": []
+      "other_sources": [
+        "mixseq"
+      ]
     },
     "ACH-000941": {
       "source": "mixseq",
@@ -2551,6 +2758,22 @@
       "arms": {
         "DMSO_6hr_expt3": 86,
         "DMSO_24hr_expt3": 49
+      },
+      "other_sources": []
+    },
+    "ACH-000944": {
+      "source": "gse314230",
+      "accession": "GEO GSE314230",
+      "identifiers": [
+        "Namalwa"
+      ],
+      "condition": "vehicle (parental control library, four lanes)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-grWxm0",
+      "lineage": "Lymphoid",
+      "cells": 7992,
+      "arms": {
+        "vehicle": 7992
       },
       "other_sources": []
     },
@@ -2684,7 +2907,9 @@
       "arms": {
         "untreated": 4560
       },
-      "other_sources": []
+      "other_sources": [
+        "gse236284"
+      ]
     },
     "ACH-001129": {
       "source": "emtab13204",
@@ -2703,18 +2928,52 @@
       "other_sources": []
     },
     "ACH-001188": {
-      "source": "gse331320",
-      "accession": "GEO GSE331320",
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
       "identifiers": [
-        "SHSY5Y"
+        "SH-SY5Y"
       ],
-      "condition": "treatment: None",
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
       "condition_class": "basal_2d",
       "patient_id": "PT-ombRgU",
       "lineage": "Peripheral Nervous System",
-      "cells": 2679,
+      "cells": 6138,
       "arms": {
-        "untreated": 2679
+        "untreated": 6138
+      },
+      "other_sources": [
+        "gse331320"
+      ]
+    },
+    "ACH-001192": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "SK-NEP-01"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-MPUfgI",
+      "lineage": "Bone",
+      "cells": 5874,
+      "arms": {
+        "untreated": 5874
+      },
+      "other_sources": []
+    },
+    "ACH-001205": {
+      "source": "gse236284",
+      "accession": "GEO GSE236284; SRA SRR25099374-6 (Cell Ranger BAM)",
+      "identifiers": [
+        "TC32"
+      ],
+      "condition": "untreated, HTO-hashed three-line lanes (CITE-seq); counts from the deposited Cell Ranger BAM",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-eQaQl0",
+      "lineage": "Bone",
+      "cells": 1303,
+      "arms": {
+        "untreated": 1303
       },
       "other_sources": []
     },
@@ -2749,6 +3008,22 @@
         "DMSO_6hr_expt3": 104,
         "DMSO_24hr_expt3": 91,
         "DMSO_24hr_expt10": 67
+      },
+      "other_sources": []
+    },
+    "ACH-001328": {
+      "source": "gse206953",
+      "accession": "GEO GSE206953",
+      "identifiers": [
+        "A431S"
+      ],
+      "condition": "parental in medium ('S', antibody-sensitive)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-BB1vF7",
+      "lineage": "Skin",
+      "cells": 8454,
+      "arms": {
+        "medium": 8454
       },
       "other_sources": []
     },
@@ -3030,6 +3305,38 @@
       },
       "other_sources": []
     },
+    "ACH-001814": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "OS252"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-2XpRTn",
+      "lineage": "Bone",
+      "cells": 2967,
+      "arms": {
+        "untreated": 2967
+      },
+      "other_sources": []
+    },
+    "ACH-001819": {
+      "source": "gse202771",
+      "accession": "GEO GSE202771; SRA SRR19171241-2",
+      "identifiers": [
+        "MFM223"
+      ],
+      "condition": "untreated, re-counted from SRA (the deposit is one RData)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-FVLPZS",
+      "lineage": "Breast",
+      "cells": 6404,
+      "arms": {
+        "untreated": 6404
+      },
+      "other_sources": []
+    },
     "ACH-001852": {
       "source": "figshare33273600",
       "accession": "figshare 10.6084/m9.figshare.33273600",
@@ -3079,23 +3386,86 @@
       "other_sources": []
     },
     "ACH-002181": {
-      "source": "gse147405",
-      "accession": "GEO GSE147405",
+      "source": "gse247098",
+      "accession": "GEO GSE247098; SRA SRR26686582",
       "identifiers": [
         "OVCA420"
       ],
-      "condition": "untreated: kinase-screen control wells (Untreated_Control) and EMT time-course day 0 (0d)",
+      "condition": "untreated control, re-counted from SRA (the deposited control matrix is truncated)",
       "condition_class": "basal_2d",
       "patient_id": "PT-B4cHwN",
       "lineage": "Ovary/Fallopian Tube",
-      "cells": 688,
+      "cells": 3457,
       "arms": {
-        "Untreated_Control": 145,
-        "0d": 543
+        "untreated": 3457
       },
       "other_sources": [
-        "gse247098"
+        "gse147405"
       ]
+    },
+    "ACH-002499": {
+      "source": "gse328823",
+      "accession": "GEO GSE328823",
+      "identifiers": [
+        "UACC-3199"
+      ],
+      "condition": "unbarcoded untreated parent (Parse split-pool); ClonMapper-barcoded arms not used",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-j6UudO",
+      "lineage": "Breast",
+      "cells": 6278,
+      "arms": {
+        "3199_parent": 6278
+      },
+      "other_sources": []
+    },
+    "ACH-002508": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "WM3211"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-SogXKU",
+      "lineage": "Skin",
+      "cells": 1695,
+      "arms": {
+        "untreated": 1695
+      },
+      "other_sources": []
+    },
+    "ACH-002510": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "M040416"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-6g2PcW",
+      "lineage": "Skin",
+      "cells": 385,
+      "arms": {
+        "untreated": 385
+      },
+      "other_sources": []
+    },
+    "ACH-002512": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "M160113"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-YwNqCa",
+      "lineage": "Skin",
+      "cells": 4784,
+      "arms": {
+        "untreated": 4784
+      },
+      "other_sources": []
     },
     "ACH-002659": {
       "source": "figshare33273600",
@@ -3119,6 +3489,7 @@
     "ACH-000073",
     "ACH-000081",
     "ACH-000105",
+    "ACH-000107",
     "ACH-000117",
     "ACH-000122",
     "ACH-000186",
@@ -3128,6 +3499,7 @@
     "ACH-000347",
     "ACH-000358",
     "ACH-000388",
+    "ACH-000400",
     "ACH-000409",
     "ACH-000423",
     "ACH-000428",
@@ -3160,9 +3532,14 @@
     "ACH-000954",
     "ACH-000967",
     "ACH-000982",
+    "ACH-000987",
     "ACH-000998",
+    "ACH-001034",
+    "ACH-001127",
+    "ACH-002010",
     "ACH-002217",
-    "ACH-002248"
+    "ACH-002248",
+    "ACH-002509"
   ],
   "pending": {},
   "excluded": {
@@ -3172,7 +3549,7 @@
   "inputs": {
     "candidates": {
       "path": "configs/benchmarks/single_cell_atlas_candidates.csv",
-      "sha256": "ff991a5ab6785e5b8e3314523555dc3fe9c10ea748dc2e2fdb0bfca18306a0f6"
+      "sha256": "558c1141d3355768a18897bd98e8e2741b68935b595b070100c7bbf6e861be48"
     },
     "model": {
       "path": "data/sl_dependency_v0/raw/depmap/Model.csv",
@@ -3226,6 +3603,10 @@
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse142750.json",
       "sha256": "7895f6313c34151802ad2da146f6557d13c7b28500c2b5d9b4f6b288df9e299b"
     },
+    "qc/gse142750_recount": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse142750_recount.json",
+      "sha256": "21e7641613f79808b757bb332085c086fc0a58baac53d8b6e735e84c65fd04f5"
+    },
     "qc/gse146221": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse146221.json",
       "sha256": "4591e0c9bd0cc0d00a127ae152b985ea861779a9d2e897da54d08da4cf397882"
@@ -3261,6 +3642,18 @@
     "qc/gse196766": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse196766.json",
       "sha256": "b554defec6f2c8619f0f34aa15fae4a9556b8ce37219b99c86bafdfea43e4dad"
+    },
+    "qc/gse202435": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse202435.json",
+      "sha256": "55f9e9d5b6788e49e930b91c6c7db3ac723e52c36b59fd475ccbe4ef9806655d"
+    },
+    "qc/gse202771": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse202771.json",
+      "sha256": "43b55c8818f24728d7f3f51e85e9c6c98fe338417c92786732dbfb1ac990b5d6"
+    },
+    "qc/gse206953": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse206953.json",
+      "sha256": "162b951ab614fcfce37cc599d4b6da33690ae537577c7340a8bb6dbc81c63a73"
     },
     "qc/gse207993": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse207993.json",
@@ -3306,6 +3699,10 @@
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse230574.json",
       "sha256": "b23905e6c7a5e65eb9771ef7dc9b4d1cef7c7cf9b747ccc0261cc4815476ae09"
     },
+    "qc/gse236284": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse236284.json",
+      "sha256": "c3bced2ec618f8a1071d5f4baebadf411a6d0c168bb7b51b3eac89844c758039"
+    },
     "qc/gse237228": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse237228.json",
       "sha256": "3b31027b8e30f7d24f69e4098941565287bb79dd49b1b9af58a35537fc644d5b"
@@ -3321,6 +3718,10 @@
     "qc/gse243665": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse243665.json",
       "sha256": "919c31d97d47f7282bd9ca2cc1c109ed88906d1fa5b256775fab68dc222a81f2"
+    },
+    "qc/gse247098": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse247098.json",
+      "sha256": "7f8dadde67117d10a4291f02783448fd72d4ea13903b28605d4cd048fd11dff2"
     },
     "qc/gse247688": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse247688.json",
@@ -3341,6 +3742,10 @@
     "qc/gse256301": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse256301.json",
       "sha256": "c29863a3681acdcef87889897f5dadb494dddf3237fe52c014b6320b9b0d161d"
+    },
+    "qc/gse261618": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse261618.json",
+      "sha256": "40a4902ec5a547b86e999108c6c26c49c89b3c0fba19251113515341c49de05b"
     },
     "qc/gse263747": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse263747.json",
@@ -3370,6 +3775,18 @@
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse303762.json",
       "sha256": "2ced1d1e976d0fdb21f9c804967c3f7e8f82db1f72cf0b240c0ad96ab1f9cd6d"
     },
+    "qc/gse311521": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse311521.json",
+      "sha256": "79fcff8e8ce9d6d0782e26380dacb4d8a844f122f2a72e04db3dc9635b72c331"
+    },
+    "qc/gse314230": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse314230.json",
+      "sha256": "bb42232e6ab13bbc96e74b6ac09af56269ae57507e99311b5a14228f8c751098"
+    },
+    "qc/gse328823": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse328823.json",
+      "sha256": "6ae9941cd94991057da8758ff56ac4ce16b603e8db2d11f87965fa3121a7409e"
+    },
     "qc/gse329598": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse329598.json",
       "sha256": "52b079f39ef0418455f69f8b3d01bf357fabf56356869425f6712e1776dfa91b"
@@ -3381,6 +3798,10 @@
     "qc/mixseq": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/mixseq.json",
       "sha256": "090b3e6c32c524621ed0e422f8503612b77c617efef8eaf40fd3ce186fa5986d"
+    },
+    "qc/srp199641": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/srp199641.json",
+      "sha256": "8096c740fba265d1c0aaad1f6238a8e57f144c09da1eecc7607fff7cb0072c38"
     },
     "qc/tahoe100m": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/tahoe100m.json",
