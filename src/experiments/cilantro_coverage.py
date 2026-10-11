@@ -46,9 +46,7 @@ HVG_COUNT = 500
 GENEFORMER = Path("data/cilantro/geneformer/geneformer/gene_dictionaries_30m")
 DEFAULTS = {
     "split": Path("configs/benchmarks/cell_line_geneeffect_226_split.json"),
-    "source_registry": Path(
-        "configs/experiments/13_geneeffect_226/basal_source_registry.csv"
-    ),
+    "basal_raw_umi": Path("data/sl_dependency_v0/processed/basal_raw_umi"),
     "sl_split": Path("configs/benchmarks/context_screen_v2_split.json"),
     "sl_pairs": Path(
         "data/SL_Benchmark_Formal/derived/context_screen_v2/sl_context_pairs.csv"
@@ -103,9 +101,9 @@ def line_summary(
     """One line: its cell count, pseudo-bulk (log1p CPM, ``vocabulary`` order) and
     the number of bag cells in which each vocabulary gene is a top token."""
     from src.data.basal import align_columns
-    from src.data.tx1_cache import read_registry_source
+    from src.data.tx1_cache import read_basal_source
 
-    source = read_registry_source(
+    source = read_basal_source(
         Path(source_path), model_id=model_id, var_ensembl_col=var_ensembl_col
     )
     ids = [mapping.get(unversioned(str(gene)), "") for gene in source.var_names]
@@ -163,11 +161,9 @@ def context_rows(
 def run(paths: dict[str, Path], out: Path, processes: int) -> dict:
     import torch
 
-    from src.data.geneeffect import load_source_registry
     from src.data.splits import load_geneeffect_226_split
 
     split = load_geneeffect_226_split(paths["split"])
-    registry = load_source_registry(paths["source_registry"], split)
     sl_split = json.loads(paths["sl_split"].read_text())
     held_out = {
         sl_split["contexts"][name]["model_id"]
@@ -202,8 +198,8 @@ def run(paths: dict[str, Path], out: Path, processes: int) -> dict:
     cells, pseudobulk, present = {}, {}, {}
     with ProcessPoolExecutor(max_workers=processes) as pool:
         futures = [
-            pool.submit(work, str(m), row["source_path"])
-            for m, row in registry.iterrows()
+            pool.submit(work, m, str(paths["basal_raw_umi"] / f"{m}.h5ad"))
+            for m in split.all_model_ids
         ]
         for done, future in enumerate(futures, start=1):
             model_id, n_cells, bulk, bag = future.result()

@@ -16,7 +16,11 @@ from scipy.sparse import csr_matrix
 from src.data.expression import library_sizes, log_normalize
 from src.data.prepared import load_inputs, select_context_cells
 from src.data.tx1_cache import write_line_cache
-from src.experiments.prepare import prepare_inputs
+from src.experiments.prepare import (
+    preparation_settings,
+    prepare_inputs,
+    prepare_pseudobulk,
+)
 
 K562, HEPG2, HCT116, JURKAT = "ACH-000551", "ACH-000739", "ACH-000971", "ACH-000995"
 ANCHORS = (K562, HEPG2, HCT116, JURKAT)
@@ -76,6 +80,29 @@ def _write_response_source(path: Path, seed: int, genes: tuple[str, ...]) -> Non
     ad.AnnData(X=csr_matrix(counts), obs=obs, var=var).write_h5ad(path)
 
 
+def _write_line(root: Path, line: str, seed: int) -> None:
+    """One line's raw-UMI source and its Tx1 cache."""
+    _write_basal_source(root / "basal_raw_umi" / f"{line}.h5ad", line, seed=seed)
+    cell_ids = [f"{line}-c{i}" for i in CACHED_CELLS]
+    write_line_cache(
+        root / "tx1",
+        line,
+        np.random.default_rng(seed).normal(size=(len(cell_ids), 2560)),
+        np.zeros((len(cell_ids), len(HVG)), dtype=np.float32),
+        pd.DataFrame({"model_id": line}, index=cell_ids),
+    )
+
+
+def _add_extra(root: Path, line: str, *, write: bool = True) -> None:
+    """Admit ``line`` as a built single-cell extra."""
+    if write:
+        _write_line(root, line, seed=99)
+    path = root / "extras.json"
+    payload = json.loads(path.read_text())
+    payload["labelled"][line] = {"source": "test", "cells": CELLS_PER_LINE}
+    path.write_text(json.dumps(payload))
+
+
 def build_world(root: Path) -> dict:
     """A complete raw world: split, labels, sources, Tx1 cache, STATE, ESM2."""
     root.mkdir(parents=True, exist_ok=True)
@@ -104,29 +131,20 @@ def build_world(root: Path) -> dict:
     frame.loc[K562, "GE (5)"] = np.nan  # no copy-prior donor value -> off panel
     frame.to_csv(root / "gene_effect.csv")
 
-    sources = root / "basal"
-    sources.mkdir()
-    registry = []
+    (root / "basal_raw_umi").mkdir()
     for index, line in enumerate(lines):
-        path = sources / f"{line}.h5ad"
-        _write_basal_source(path, line, seed=index)
-        registry.append(
+        _write_line(root, line, seed=index)
+    (root / "extras.json").write_text(
+        json.dumps(
             {
-                "model_id": line,
-                "source_path": str(path),
-                "source_kind": "h5ad",
-                "matrix_semantics": "raw_umi_counts",
+                "schema_version": "extra-single-cell-lines-26q1-v2",
+                "labelled": {},
+                "unlabelled": [],
+                "pending": {},
+                "excluded": {},
             }
         )
-        cell_ids = [f"{line}-c{i}" for i in CACHED_CELLS]
-        write_line_cache(
-            root / "tx1",
-            line,
-            rng.normal(size=(len(cell_ids), 2560)).astype(np.float32),
-            np.zeros((len(cell_ids), len(HVG)), dtype=np.float32),
-            pd.DataFrame({"model_id": line}, index=cell_ids),
-        )
-    pd.DataFrame(registry).to_csv(root / "registry.csv", index=False)
+    )
 
     response = {}
     for index, anchor in enumerate(ANCHORS):
@@ -162,7 +180,8 @@ def build_world(root: Path) -> dict:
     config["paths"].update(
         split=str(root / "split.json"),
         gene_effect=str(root / "gene_effect.csv"),
-        source_registry=str(root / "registry.csv"),
+        basal_raw_umi=str(root / "basal_raw_umi"),
+        extra_single_cell_lines=str(root / "extras.json"),
         tx1_cache=str(root / "tx1"),
         esm2_embeddings=str(root / "esm2.npz"),
         state_model_dir=str(root / "state"),
@@ -220,11 +239,7 @@ def test_target_sum_is_median_of_jurkat_hepg2_controls(prepared):
 def test_basal_hvg_is_log_space_over_all_genes(prepared):
     target_sum = _target_sum(prepared)
     for model_id in ("ACH-T1", "ACH-V2", K562):
-        raw = _raw(
-            Path(prepared["paths"]["source_registry"]).parent
-            / "basal"
-            / f"{model_id}.h5ad"
-        )
+        raw = _raw(Path(prepared["paths"]["basal_raw_umi"]) / f"{model_id}.h5ad")
         cached = [f"{model_id}-c{i}" for i in CACHED_CELLS]
         order = select_context_cells(model_id, cached, CELLS_PER_CONTEXT)
         rows = raw.obs_names.get_indexer([cached[i] for i in order])
@@ -277,11 +292,7 @@ def test_q_sc_mean_variance_in_log_space(prepared):
     target_sum = _target_sum(prepared)
     inputs = load_inputs(prepared, include_test=True)
     for model_id in ("ACH-T2", "ACH-S1"):
-        raw = _raw(
-            Path(prepared["paths"]["source_registry"]).parent
-            / "basal"
-            / f"{model_id}.h5ad"
-        )
+        raw = _raw(Path(prepared["paths"]["basal_raw_umi"]) / f"{model_id}.h5ad")
         q_sc = inputs.lines[model_id].q_sc
         assert q_sc.symbols == inputs.genes
         assert q_sc.available.all()
@@ -335,30 +346,69 @@ def test_checkpoint_preprocessing_restores_fit(prepared):
 
 def test_prepare_rejects_non_integer_source(tmp_path):
     config = build_world(tmp_path)
-    source = tmp_path / "basal" / "ACH-V1.h5ad"
+    source = tmp_path / "basal_raw_umi" / "ACH-V1.h5ad"
     _write_basal_source(source, "ACH-V1", seed=0, scale=0.37)
     with pytest.raises(ValueError, match="integer"):
         prepare_inputs(config)
     assert not (tmp_path / "prepared" / "prepared_inputs.json").exists()
 
 
-def test_prepare_skips_when_manifest_exists(tmp_path):
-    from src.experiments.prepare import preparation_settings
+def _files(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
 
+
+def test_prepare_grows_root_by_new_extra_line_only(tmp_path):
     config = build_world(tmp_path)
     root = Path(config["prepared_root"])
-    root.mkdir()
-    recorded = json.dumps({"settings": preparation_settings(config)})
-    (root / "prepared_inputs.json").write_text(recorded)
-    Path(config["paths"]["source_registry"]).unlink()
-    assert prepare_inputs(config) == root / "prepared_inputs.json"
-    assert (root / "prepared_inputs.json").read_text() == recorded
-    assert not (root / "lines").exists()
+    prepare_inputs(config)
+    before = _files(root)
+    prepare_inputs(config)  # complete: nothing is rewritten
+    assert _files(root) == before
+
+    _add_extra(tmp_path, "ACH-E1")
+    prepare_inputs(config)
+    after = _files(root)
+    assert set(after) - set(before) == {"lines/ACH-E1.npz"}
+    changed = {name for name in before if after[name] != before[name]}
+    assert changed == {"prepared_inputs.json"}
+    grown, earlier = _manifest(config), json.loads(before["prepared_inputs.json"])
+    assert grown.pop("lines") == [*earlier.pop("lines"), "ACH-E1"]
+    assert grown == earlier
+    with np.load(root / "lines" / "ACH-E1.npz") as line:
+        assert line["q_sc_values"].shape[0] == len(grown["common_gene_panel"])
+    assert "ACH-E1" not in load_inputs(config, include_test=True).lines
+
+
+def test_prepare_refuses_membership_line_without_raw_umi_file(tmp_path):
+    config = build_world(tmp_path)
+    _add_extra(tmp_path, "ACH-E1", write=False)
+    with pytest.raises(FileNotFoundError, match="ACH-E1"):
+        prepare_inputs(config)
+    assert not Path(config["prepared_root"]).exists()
+
+
+def test_pseudobulk_grows_and_keeps_existing_rows(tmp_path):
+    from src.data.pseudobulk import read_pseudobulk
+
+    config = build_world(tmp_path)
+    genes = ["GA", "GB", "H1", "NOT_MEASURED"]
+    prepare_pseudobulk(config, genes)
+    before = read_pseudobulk(Path(config["prepared_root"]))
+    _add_extra(tmp_path, "ACH-E1")
+    prepare_pseudobulk(config, genes)
+    after = read_pseudobulk(Path(config["prepared_root"]))
+    assert list(after.index) == [*before.index, "ACH-E1"]
+    pd.testing.assert_frame_equal(after.loc[before.index], before)
+    assert after.loc["ACH-E1", "NOT_MEASURED"] != after.loc["ACH-E1", "NOT_MEASURED"]
+    with pytest.raises(ValueError, match="other genes"):
+        prepare_pseudobulk(config, genes[:2])
 
 
 def test_prepare_refuses_reuse_under_different_settings(tmp_path):
-    from src.experiments.prepare import preparation_settings
-
     config = build_world(tmp_path)
     root = Path(config["prepared_root"])
     root.mkdir()
@@ -369,21 +419,16 @@ def test_prepare_refuses_reuse_under_different_settings(tmp_path):
         prepare_inputs(config)
 
 
-def test_prepare_reuses_a_root_whatever_prior_export_the_config_names(tmp_path):
-    """The prior export is read by training, not preparation: a root prepared
-    before ``paths.prior`` existed is reused by a correction config."""
+def test_line_set_paths_do_not_change_preparation_settings(tmp_path):
+    """The prior export is read by training, not preparation, and the extras'
+    membership grows a root: neither path makes a root unusable."""
     config = build_world(tmp_path)
-    root = Path(config["prepared_root"])
-    root.mkdir()
-    before = {key: value for key, value in config["paths"].items() if key != "prior"}
-    recorded = {
-        "preparation": dict(config["preparation"]),
-        "cells_per_context": config["features"]["cells_per_context"],
-        "paths": before,
-    }
-    (root / "prepared_inputs.json").write_text(json.dumps({"settings": recorded}))
-    config["paths"]["prior"] = "outputs/context_prior/some_export/export"
-    assert prepare_inputs(config) == root / "prepared_inputs.json"
+    moved = json.loads(json.dumps(config))
+    moved["paths"]["prior"] = "outputs/context_prior/some_export/export"
+    moved["paths"]["extra_single_cell_lines"] = "elsewhere.json"
+    assert preparation_settings(moved) == preparation_settings(config)
+    moved["paths"]["basal_raw_umi"] = "other_cells"
+    assert preparation_settings(moved) != preparation_settings(config)
 
 
 def test_train_means_fit_on_supervised_train_only(prepared, monkeypatch):
