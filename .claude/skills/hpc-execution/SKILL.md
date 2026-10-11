@@ -11,21 +11,28 @@ description: Use before running the `all` pipeline or a checkpoint test, or when
 Containers on one host share `/2023533015` (one checkout, `data/`, `outputs/`) but each sees only its own GPUs, and all
 share 224 CPU cores: set `OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes you launch (`hpc/run.sh` does not).
 
-| Port | GPUs | Use |
-|---|---|---|
-| 30838 | 4 × H20 | default |
+| Available port | GPUs |
+|---|---|
+| 30838 | **4 × H20** |
+| 30986 | **4 × H20** |
 
-`ssh -p 30838 root@10.15.171.204`, then `cd /2023533015/VCC_Project`. Ports change when a container is recreated; if one
+`ssh -A -p 30838 root@10.15.171.204`, then `cd /2023533015/VCC_Project`. Both ports accept password-free login with the
+laptop's existing SSH key; use `ssh -p 30986 root@10.15.171.204` for the second container. GitHub access on 30838 uses
+the laptop's GitHub key through SSH agent forwarding (`-A`); keep the session open while fetching or pulling. No GitHub
+private key is stored on the container. Ports change when a container is recreated; if one
 refuses, ask the user rather than scanning. Ports in `results/` are historical. Never store the SSH password in the repo.
 
-## Push code (the host has no GitHub access; push from the laptop over SSH)
+## Sync code through Git only
+
+Never rsync, scp or tar a working tree. Commit and push authorized changes to GitHub from the laptop, then pull through
+port 30838 with agent forwarding:
 
 ```bash
-git push ssh://root@10.15.171.204:30838/2023533015/VCC_Project main
-ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git checkout main && git log -1 --oneline'
+git push origin main
+ssh -A -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git checkout main && git pull --ff-only origin main && git log -1 --oneline'
 ```
 
-Git refuses a push to the checked-out branch, so check out another branch there first. The checkout drifts: read
+The checkout drifts: read
 `git branch --show-current`, `git log -1` and `git status --short` before assuming your code is present, and never discard
 the host's uncommitted changes. The host holds the only copies of caches, checkpoints and `outputs/`.
 

@@ -113,6 +113,54 @@ undefined quantities keep explicit counts and null scalar values. An export fail
 same evaluation command. Nothing here is SL interaction evidence; held-out lines retain the
 documented Tx1 pretraining exposure boundary.
 
+## The Cilantro-SL harness
+
+`hpc/cilantro/` runs the released Cilantro-SL code (phase 1 of
+`docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`) in its own environment,
+`.venv-cilantro` (Python 3.9.20), not `.venv-tx1`; its scripts are plain files run by that
+interpreter, not `src.*` modules. The released code is not tracked here. The H20 cannot reach
+GitHub, so from the laptop, with clones at the pinned commits:
+
+```bash
+ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git init -q third_party/cilantro_sl && git init -q third_party/geneformer_cilantro'
+git -C <clone of kaileyhh/Cilantro-SL> push ssh://root@10.15.171.204:30838/2023533015/VCC_Project/third_party/cilantro_sl c674b55e6fb126b3630502fbe8eb8ab49c5c9bc8:refs/heads/pinned
+git -C <clone of kaileyhh/geneformer> push ssh://root@10.15.171.204:30838/2023533015/VCC_Project/third_party/geneformer_cilantro 0e2bf2acbfdbc070a595d4ee66f5cda654dc624a:refs/heads/pinned
+```
+
+then on the H20 `git -C third_party/<name> checkout pinned` and `hpc/cilantro/setup.sh`, which checks
+the commits, applies `official.patch` and `geneformer.patch`, builds the environment and fetches Geneformer from
+ModelScope's copy, checked against the Hugging Face hashes. The four small official data files sit in `data/cilantro/official/`.
+
+`hpc/cilantro/run.sh RUN_ID --dictionary gc95M|gc30M [--gpus 0,1,2,3] [--procs-per-gpu 2]` runs
+every released step for one run under `outputs/cilantro_reproduction/RUN_ID/`. The deletion step
+runs one shard per process, `--procs-per-gpu` per GPU. The classifier runs each of the five folds of
+both split regimes as its own process (`classify.py --fold K`, ten processes spread over the GPUs),
+each replaying the earlier folds' RNG draws so it trains exactly the sequential run's fold; then
+`classify.py --merge` per regime writes the metrics pickle and runs conformal prediction on fold 0.
+A step is skipped once its `done.json`
+exists, so rerunning the same RUN_ID resumes; `run.json` fixes the run's settings at first launch.
+Logs are in `logs/<step>.log`. `--gene-subset N --epochs E` makes a smoke run (the N genes with
+the most SynLethDB pairs, E epochs), only to check the chain.
+
+The deletion, stage one and classifier steps run the harness's fast paths by default
+(`hpc/cilantro/fast_perturb.py`, `fast_classifier.py`, `fast_core.py`): the released computation
+with its per-gene process pools, repeated model loads, discarded forward passes and per-item data
+loaders removed, byte-identical outputs (design §4.4). Each step script takes `--released` to run the
+released code instead. `hpc/cilantro/check_equivalence.py --reference <finished run> --out <dir>`
+recomputes a few genes and one fold of stage one and the classifier both ways and compares them
+(`equivalence.json`); run it after any change to the fast paths (2026-10-09, smoke run: five genes
+byte-identical, two classifier folds and stage one equal in weights, losses, predictions,
+probabilities, conformal p-values and RNG state; released deletion 464 s for the five genes against
+97 s, released classifier epoch 4.3 s against 0.7 s on the smoke fold; 2026-10-10: the fold replay
+leaves every RNG where a trained fold does, and the fold-per-process classifier reproduces the smoke
+run's sequential weights, test scores, metrics pickle and conformal outputs for all ten folds,
+`outputs/cilantro_reproduction/check_fold_parallel_smoke40/`). A run interrupted on the released
+path resumes on the fast path unchanged: the gene files are the same, and `perturb.py` first
+removes any gene whose files are incomplete.
+
+The port's coverage report (step 0, CPU only) runs in the project environment:
+`.venv-tx1/bin/python -m src.experiments.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
+
 ## The `prior` command
 
 `hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior
