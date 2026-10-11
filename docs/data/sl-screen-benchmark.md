@@ -74,10 +74,13 @@ read through bulk RNA. A549 is a test line because the 226 split was rebuilt in 
   MAGeCK and BAGEL2. The call cannot make a pair with a single-depleted gene a hit, so those
   3,282 non-hit rows are unlabelled rather than negative. Kebabci et al.'s own Harle labels
   come from a GEMINI file they did not release.
-- **Genes** are mapped to current HGNC symbols: the approved symbol, else the one approved
-  symbol it was previously, else the one it is an alias of. Of 4,535 published symbols, 100
-  are renamed (`renamed_symbols.csv`) and 126 are absent from the 26Q1 GeneEffect columns;
-  `both_in_geneeffect` marks the pairs stage one can serve.
+- **Genes** are named as stage one names them. Each published symbol is first resolved to
+  its current HGNC symbol: the approved symbol, else the one approved symbol it was
+  previously, else the one it is an alias of. A gene then takes its 26Q1 GeneEffect symbol
+  when exactly one GeneEffect symbol resolves to the same HGNC gene (DepMap keeps some
+  symbols HGNC has since renamed, such as FAM83A), else its current HGNC symbol. Of 4,535
+  published symbols, 89 are renamed (`renamed_symbols.csv`) and 116 are absent from the
+  26Q1 GeneEffect columns; `both_in_geneeffect` marks the pairs stage one can serve.
 
 **These labels follow Kebabci's rule but are not Kebabci's labels.** On their ten Ito lines
 (MeWo left out), the build calls 1,511 SL in 47,315 points; they report 958 in 41,244. Their
@@ -143,9 +146,9 @@ On the H20 under `data/sl_screens/benchmark/`:
 
 | File | Content |
 | --- | --- |
-| `pairs.parquet` | One row per (screen, line, pair): `screen`, `screen_line`, `model_id`, `gene_a`, `gene_b` (current symbols, `gene_a < gene_b`), `screen_gene_a`, `screen_gene_b` (as published, `\|`-joined when merged), `both_in_geneeffect`, `gemini`, `lfc`, `gi`, `fdr`, `n_constructs`, `label` (1, 0 or missing), `unlabelled_reason`, `split`, `stratum`, `line_reason` |
+| `pairs.parquet` | One row per (screen, line, pair): `screen`, `screen_line`, `model_id`, `gene_a`, `gene_b` (GeneEffect symbol where the gene has one, else current HGNC; `gene_a < gene_b`), `screen_gene_a`, `screen_gene_b` (as published, `\|`-joined when merged), `both_in_geneeffect`, `gemini`, `lfc`, `gi`, `fdr`, `n_constructs`, `label` (1, 0 or missing), `unlabelled_reason`, `split`, `stratum`, `line_reason` |
 | `mit4sl_a549.parquet` | MiT4SL's A549 pairs and labels |
-| `renamed_symbols.csv` | Published symbols mapped to a different current symbol |
+| `renamed_symbols.csv` | Published symbols named differently in the benchmark |
 | `manifest.json` | Rule constants and GEMINI cuts, the Kebabci reproduction counts, per-screen counts by side, line sides and the SHA-256 of every input |
 
 ## Rebuild

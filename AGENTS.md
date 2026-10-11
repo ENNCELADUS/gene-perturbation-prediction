@@ -137,7 +137,9 @@ Mistakes here produce a complete-looking **wrong artifact**, not an exception.
 - `src/experiments/config.py` raises on unknown or missing keys; never add `.get(key, default)` config reads.
 - `load_inputs` refuses manifests without `expression_space`, and checkpoint loads raise on zero or mismatched keys
   (`load_released_state`). Never bypass either or add a bare `load_state_dict(..., strict=False)`.
-- Resume rejects a conflicting config; a batch-size change needs a new run id.
+- Resume rejects a conflicting config; a batch-size change needs a new run id. A checkpoint records the split
+  membership it was fitted under, and `load_inputs` refuses to restore it under another: every checkpoint from
+  before the 2026-10-11 in-place re-split (A549 to test) is refused for resume, evaluation and readout.
 - Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on fold-independent `mu_bar` — centering a prediction
   on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-prior residual correlations are undefined, not zero.
 - Join cell lines by DepMap ModelID through the checked-in map, never informal names (`K-562` ≠ `K562`). Fit means, gene
