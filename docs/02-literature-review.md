@@ -1,6 +1,6 @@
 # Related Work: Context, Dependency and Synthetic-Lethality Prediction
 
-Updated 2026-10-09. The extended related work of the [research blueprint](01-blueprint.md), written as the
+Updated 2026-10-11. The extended related work of the [research blueprint](01-blueprint.md), written as the
 related-work section of a paper. The blueprint states only how this project differs; this document gives the
 prior art behind each statement. It is a focused review, not an exhaustive novelty search.
 
@@ -37,6 +37,25 @@ ELISL transfers between cancer types and holds out one cancer type at a time, wi
 paralog pairs, Kebabci et al. evaluate the same pairs in unseen cell lines and new pairs in unseen lines
 ([Kebabci et al., bioRxiv 2026](https://doi.org/10.64898/2026.01.19.700065)).
 
+**Labels that differ between lines come from multi-line combinatorial screens.** The benchmarks above rarely
+test one pair in several lines: Feng et al.'s two lines share no pair, and of MiT4SL's 5,734 pairs 1,027 occur in
+two or more lines, 314 of them with different labels (computed from its released benchmark files), all from screens
+merged across studies. Screens that test one pair library in every line of a panel give the line-varying labels
+directly, each with a per-line score:
+
+| Screen | Lines × pairs | Hit pairs, and how many are non-hits in another line | Cross-line agreement (computed) |
+| --- | --- | --- | --- |
+| [Harle et al., Genome Biology 2025](https://doi.org/10.1186/s13059-025-03737-w) | 27 × 472 | 117, all 117 (103 with neither gene single-depleted in the non-hit line) | genetic-interaction Pearson 0.77 |
+| [Flister et al., Cell Reports 2025](https://doi.org/10.1101/2024.07.16.603642) | 20 × 5,116; genome-wide in NCI-H1299 and MDA-MB-231 | 780, all 780; genome-wide 117 and 51 hits, 22 shared | hit-set Jaccard 0.12 |
+| [Klingbeil et al., Cancer Discovery 2024](https://doi.org/10.1158/2159-8290.CD-23-1529) | 22 × about 2,700 | 368 and 363 at FDR < 0.05 (our threshold) | score Pearson 0.37 |
+| [Ito et al., Nature Genetics 2021](https://doi.org/10.1038/s41588-021-00967-z) | 11 × 4,859 | 502 of 4,170 pairs SL in one line and not in another (Kebabci et al.) | score Pearson 0.48 |
+| [Fong et al., Nature Genetics 2024](https://doi.org/10.1038/s41588-024-01971-9) | 7 × 11,774 | 3,409 at score < 0 and FDR < 0.1 (our threshold) | score Pearson 0.13 |
+
+Agreement within a screen ranges from strong (Harle) to close to noise (Fong), and calls agree poorly across studies
+even for the same line, so labels are compared within one screen. These screens include four of this project's
+held-out lines: NCI-H1299 (Harle, Flister, Klingbeil) and PA-TU-8988S (Ito) among the validation lines, MDA-MB-231
+(Flister, Klingbeil, Fong) and SK-MES-1 (Harle) among the test lines.
+
 **What these settings leave open.** The held-out line enters each of them differently: SLWise reads
 line-specific L1000 knockdown signatures and DepMap gene effects, ELISL cancer-type aggregates of cell-line
 and tissue profiles, MiT4SL a protein-interaction network filtered by the line's bulk expression together
@@ -51,8 +70,8 @@ on single-cell foundation-model or perturbation-model representations, scored ag
 context-ablated, pair-identity and pan-essentiality controls. The architecture alone establishes nothing, and
 the absence claim is bounded by its search: Europe PMC, Semantic Scholar, GitHub and bioRxiv abstracts up to
 2026-10-09, not Google Scholar, IEEE Xplore, RECOMB or ISMB 2026 proceedings or Chinese-language venues.
-MiT4SL's held-out A549 and 22Rv1 are this project's validation and test SL contexts, which makes it a
-comparable external reference once label sources are matched.
+MiT4SL's held-out A549 and 22Rv1 were the validation and test contexts of this project's earlier nine-context SL
+split; under the nested split both are training lines, and the multi-line screens above supply the held-out lines.
 
 ## 2. Synthetic lethality and how it is measured
 
@@ -97,7 +116,12 @@ single-gene knockouts in silico, supervises a viability embedding on DepMap CRIS
 classifier with conformal uncertainty. It is precedent for combining foundation-model representations,
 dependency supervision and SL classification; its evaluation holds out pairs and genes, within cell lines,
 and never holds out a cell line
-([Hua, Haber and Ma, bioRxiv 2026](https://pmc.ncbi.nlm.nih.gov/articles/PMC13160162/)).
+([Hua, Haber and Ma, bioRxiv 2026](https://pmc.ncbi.nlm.nih.gov/articles/PMC13160162/)). Running its released
+code shows how little of the context reaches the evaluation
+([our reproduction](../results/cilantro_reproduction_seed0/README.md)): stage one is scored only on the rows it
+trained on, where a gene mean taken from other lines matches it (Spearman 0.854 against 0.851); every SL pair
+carries one database label, copied to each line where both genes are among its 2,048 most expressed; and the
+gene-holdout result reproduces at two-class AP 0.54, not the reported 0.71.
 
 ## 4. Dependency prediction from molecular context
 

@@ -1,7 +1,8 @@
 # Design: reproducing Cilantro-SL, then porting it to the context screen and basal single cells
 
-**Status:** design agreed 2026-10-08 (grill session); updated 2026-10-10. Phase 1 is implemented
-(`hpc/cilantro/`, branch `feat/cilantro-sl`) and its first run is in progress on the H20 (§4.5). Phase
+**Status:** design agreed 2026-10-08 (grill session); updated 2026-10-11. Phase 1 is implemented
+(`hpc/cilantro/`, merged to `main`) and its as-released run is complete
+([result](../../results/cilantro_reproduction_seed0/README.md), §4.5). Phase
 2 has only its coverage report (§5.2); the rest of §5 is not yet built and has no implementation
 plan. The port (phase 2) follows the [SL protocol rules](../04-sl-ranking-protocol.md#8-rules). Paper: Hua,
 Haber and Ma, *Uncertainty-aware synthetic lethality prediction with pretrained foundation models*,
@@ -257,9 +258,9 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   fork from its source directory, and so does the harness: its `setup.py` requires Python 3.10,
   the released environment is 3.9.
 
-### 4.5 State of phase 1 (2026-10-09)
+### 4.5 State of phase 1 (2026-10-11)
 
-Built (`hpc/cilantro/`, commits on `feat/cilantro-sl`, not yet merged to `main`):
+Built (`hpc/cilantro/`, merged to `main` 2026-10-11):
 
 - `setup.sh` and `fetch_geneformer.py`: the pinned released code, its Python 3.9.20 environment
   (`.venv-cilantro`) and the Geneformer files, on the H20.
@@ -275,14 +276,17 @@ Runs on the 30838 container (`outputs/cilantro_reproduction/`):
 | Run | Settings | State |
 | --- | --- | --- |
 | `smoke40_gc95M` | gc95M, 40 most-paired genes, 2 epochs | complete end to end, including `report.md`; its numbers check the chain only |
-| `as_released_gc95M` | gc95M, all 9,987 genes, 100 epochs | 2026-10-09: deletion finished at 10:24 UTC (2 h 45 min on the fast path after 942 genes on the released perturber; 7,321 of the 9,987 genes are in some line's top 2,048 tokens and have output), generate 23 min, negative sampling 34 min, setup 11 min, stage-one training 22 min; the pair embeddings after it failed at 12:08 on the `/dev/shm` overflow (§4.4). Relaunched 2026-10-10 with the pipe transport; stage one restarts, then the ten classifier folds as separate processes, the two merges and the report |
+| `as_released_gc95M` | gc95M, all 9,987 genes, 100 epochs | 2026-10-09: deletion finished at 10:24 UTC (2 h 45 min on the fast path after 942 genes on the released perturber; 7,321 of the 9,987 genes are in some line's top 2,048 tokens and have output), generate 23 min, negative sampling 34 min, setup 11 min, stage-one training 22 min; the pair embeddings after it failed at 12:08 on the `/dev/shm` overflow (§4.4). Relaunched 2026-10-10 with the pipe transport: stage one, the ten classifier folds as separate processes (6–7.5 h in parallel), the two merges and the report; complete 2026-10-10 13:20 UTC ([result](../../results/cilantro_reproduction_seed0/README.md)): stage-one fit 0.229 / 0.851 / 0.868 (RMSE / Spearman / R², in-sample), gene-holdout two-class AP 0.542 against the paper's 0.7148, pair-holdout 0.806 |
 
 A batch-size benchmark of the deletion (`outputs/cilantro_benchmarks/deletion_batch_size.json`, one
 GPU shared with the running deletion): 25.4 lines per second at the released batch of 50, 27.8 at
 400, with embeddings differing by up to 2.4e-7 at any other size. Batch 50 is kept.
 
-Still to do for phase 1: the remaining rows of §4.1, a curated result under
-`results/cilantro_reproduction_seed0/`, and merging the branch once the full run has completed.
+Still to do for phase 1: the remaining rows of §4.1, first the matched-dictionary run
+(`hpc/cilantro/run.sh RUN_ID --dictionary gc30M`), the most direct test of the gene-holdout gap. The
+result record also shows that stage one's fit equals the gene mean (a gene mean from other lines
+reaches Spearman 0.854 and R² 0.850 on the same rows) and that every pair carries one label in every
+line.
 
 ## 5. Phase 2: the port
 

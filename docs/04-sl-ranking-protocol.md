@@ -7,7 +7,7 @@ training and testing once
 ([result](../results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
 feature set or SL performance result exists.
 
-**Superseded in part (2026-10-09).** The [research blueprint](01-blueprint.md#3-task-formulation) now fixes
+**Superseded in part (2026-10-09, labels 2026-10-11).** The [research blueprint](01-blueprint.md#3-task-formulation) now fixes
 the SL task differently, and this protocol is rewritten to match before stage two is implemented:
 
 - Definition 1 (B's dependency selectively stronger where A is lost) is the logic the method reasons with;
@@ -15,13 +15,27 @@ the SL task differently, and this protocol is rewritten to match before stage tw
 - SL labels are experimental SL-database entries only; a DepMap-derived dependency pattern is never an SL
   label.
 - Stage two uses one fixed SL split nested in the GeneEffect split: SL training, validation and test lines are
-  GeneEffect training, validation and test lines respectively. Of the 226 lines, those with at least ten
-  experimental positives and ten negatives in `sl_integrated_pairs.csv` (a 2026-10-09 name match, to be
-  confirmed by ModelID) are all training lines except MDA-MB-231, MDA-MB-468 (test) and PATU8988S
-  (validation), so any other SL validation or test line needs a new version of that split.
+  GeneEffect training, validation and test lines respectively.
+- **Labels (2026-10-11):** cell-line-specific benchmarks, the per-line calls and scores of multi-line combinatorial
+  screens, compared within one screen (blueprint §5; literature review §1). Four GeneEffect held-out lines were
+  screened, so the nested split needs no new version: validation NCI-H1299 (ACH-000510; Harle 2025, Flister 2025,
+  Klingbeil 2024) and PA-TU-8988S (ACH-000022; Ito 2021), test MDA-MB-231 (ACH-000768; Flister, Klingbeil, Fong 2024)
+  and SK-MES-1 (ACH-000665; Harle). The screens' other lines in the 226 are training lines; screened lines outside
+  the 226 with basal single cells from the MIX-seq or Kinker atlases (COR-L23, LK-2, NCI-H1975, KP-4, BxPC-3, RH-30,
+  T3M-4, GI-1, SK-MEL-5) may join the training side only. No screened line shares a PatientID with a validation or
+  test line. The lead benchmark is Harle et al. (27 lines × 472 pairs, per-line genetic-interaction score and call,
+  CC BY 4.0): NCI-H1299 has 40 hits and 77 pairs that are hits in another line but not there, SK-MES-1 42 and 75.
+- **Before a first run:** a data card per adopted screen (source table, the authors' call rule reproduced, line
+  mapping by ModelID, licence; Flister's is undetermined), the tables fetched on the H20, and a builder with the
+  tracked split. The context screen's table below stays a built artifact: its unanimity filters drop the 8,866
+  screen pairs whose evidence differs between lines, and some of its aggregated rows may not be fitness screens (the
+  A549;CAPAN1;MEL202;MEWO;OMM23 group reads, from the Harle and Chan papers' text, as a Cas9-negative
+  library-abundance control; unverified).
 - Evaluation follows blueprint §3.7: per-line AUPRC against the positive rate, precision and recall at top K,
   per-query ranking and calibration, against pan-essentiality, A-blind, pair-identity and context-ablated
-  controls, with pairs already labelled in a training line reported separately from pairs never labelled there.
+  controls. Within a screen every held-out pair is also measured in its training lines, so the pair-identity control
+  is the pair's hit rate in the same screen's training lines, and the pairs whose call differs between the screen's
+  lines are scored separately from the rest.
 
 The nine-context split and the separate eligibility rules below (§2, §4, §5) predate those decisions.
 

@@ -9,6 +9,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   (linear context prior, CPU)
        hpc/run.sh prior-selected CONFIG --run-id ID   (the reference prior's data-selected genes, CPU)
        hpc/run.sh prior-export CONFIG --run-id ID   (the reference prior's predictions for the correction, CPU)
+       hpc/run.sh prior-stack CONFIG --run-id ID   (single-cell statistics stacked on a prior export, CPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment.
 `all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every
 GPU step; --gpus restricts it to the listed ids among the visible ones.
@@ -21,6 +22,8 @@ test, into outputs/context_prior/<id>/ (rows/, results.md).
 data-selected stage into outputs/context_prior/<id>/data_selected/.
 `prior-export` writes the config's reference row, out of fold for the
 single-cell training lines, into outputs/context_prior/<id>/export/.
+`prior-stack` stacks each arm's single-cell statistics on the export of the
+config's prior_run, into outputs/context_prior/<id>/single_cell_stack/.
 EOF
 }
 
@@ -30,7 +33,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected|prior-export) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -41,5 +44,6 @@ case "$command" in
   prior) exec "$python_bin" -m src.experiments.context_prior "$@" ;;
   prior-selected) exec "$python_bin" -m src.experiments.data_selected_analysis "$@" ;;
   prior-export) exec "$python_bin" -m src.experiments.prior_export "$@" ;;
+  prior-stack) exec "$python_bin" -m src.experiments.single_cell_stack "$@" ;;
   test) checkpoint=$1; shift; exec "$python_bin" -m src.evaluate --checkpoint "$checkpoint" --split test "$@" ;;
 esac

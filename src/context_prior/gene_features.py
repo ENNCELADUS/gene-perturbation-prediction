@@ -106,12 +106,14 @@ def select_genes(
     chunk: int = 1024,
 ) -> np.ndarray:
     """Genes x ``count`` expression columns with the largest absolute Pearson
-    correlation with each gene's residual across rows; a gene's own column is
-    excluded. Missing residuals count as zero."""
-    if not 0 < count < expression.shape[1]:
+    correlation with each gene's residual across rows; a gene's own columns
+    (``own``: one per gene, or genes x k; -1 for none) are excluded. Missing
+    residuals count as zero."""
+    own = np.asarray(own).reshape(len(own), -1)
+    if not 0 < count <= expression.shape[1] - own.shape[1]:
         raise ValueError(
-            f"count must lie in [1, {expression.shape[1] - 1}] so a gene's own column "
-            f"can be left out, got {count}"
+            f"count must lie in [1, {expression.shape[1] - own.shape[1]}] so a gene's "
+            f"own columns can be left out, got {count}"
         )
     x = _standardize_columns(expression)
     y = _standardize_columns(np.where(np.isfinite(residual), residual, 0.0))
@@ -121,7 +123,7 @@ def select_genes(
         stop = min(start + chunk, genes)
         strength = np.abs(x.T @ y[:, start:stop]) / x.shape[0]
         for local, g in enumerate(range(start, stop)):
-            if own[g] >= 0:
-                strength[own[g], local] = -1.0
+            columns = own[g][own[g] >= 0]
+            strength[columns, local] = -1.0
         out[start:stop] = np.argpartition(-strength, count - 1, axis=0)[:count].T
     return out

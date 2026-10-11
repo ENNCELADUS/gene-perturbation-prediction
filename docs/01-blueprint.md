@@ -1,6 +1,6 @@
 # Research Blueprint — Context-Specific Synthetic Lethality Prediction Based on AI Virtual Cell Foundation Model
 
-Updated 2026-10-09. This note is the project's introduction, related work and task formulation, written as
+Updated 2026-10-11. This note is the project's introduction, related work, task formulation and research plan, written as
 for an ML paper. Methods, experiment rules and results are kept in the repository: the GeneEffect protocol
 (`docs/03-geneeffect-protocol.md`), the SL protocol (`docs/04-sl-ranking-protocol.md`), the extended related
 work with full citations (`docs/02-literature-review.md`) and the result records under `results/`.
@@ -115,7 +115,10 @@ single-cell death label, and a single-gene prediction is not SL evidence.
 GeneEffect prediction comes first because DepMap provides large-scale, cell-line-specific labels for
 single-gene knockouts, whereas labelled SL pairs with defined cellular contexts, suitable for training a model
 directly, are scarce. In the SL data assembled for this project, experimental labels cover a few dozen cell
-lines, and a pair's label never differs between the lines it was tested in.
+lines, and a pair's label never differs between the lines it was tested in, but only by construction: the table's
+unanimity filters drop the 8,866 screen pairs whose evidence is positive in some lines and negative in others.
+Multi-line combinatorial screens, which test one pair library in every line of a panel, show labels that do differ
+(§5).
 
 GeneEffect supervision lets the virtual-cell backbone learn how cellular context shapes gene dependency, and
 that knowledge transfers to SL prediction. GeneEffect alone does not decide whether two genes are synthetic
@@ -151,15 +154,14 @@ of a score memorising pairs alone would earn.
 
 ### 3.7 Evaluation
 
-**Task A.** Two axes, both headline:
-
-- whole-matrix accuracy: Pearson, Spearman and RMSE over all (line, gene) entries;
-- context accuracy: for each gene, the correlation across held-out lines between predicted and measured
-  GeneEffect, taken as residuals over the training gene mean, on genes whose dependency varies between lines.
-
-Each axis is read against a context-blind gene-mean baseline, which already reaches whole-matrix Pearson 0.91
-on our benchmark, and against simple context predictors (a ridge on context principal components, a linear
-expression prior).
+**Task A.** Context accuracy is the headline: for each gene, the correlation across held-out lines between
+predicted and measured GeneEffect, taken as residuals over the training gene mean, on genes whose dependency
+varies between lines. Whole-matrix accuracy (Pearson, Spearman and RMSE over all (line, gene) entries) is
+reported beside it but decides nothing, because a context-blind gene mean already supplies almost all of it:
+whole-matrix Pearson 0.91 and Spearman 0.71 on our validation lines, within 0.01 of our best model, and the
+same holds for Cilantro-SL's reported stage-one fit. Context accuracy is read against the gene mean (the
+floor), simple context predictors (a ridge on context principal components) and the linear expression prior,
+which is the bar a model must clear.
 
 **Task B.** For each held-out line: AUPRC against the line's positive rate, precision and recall at top $K$,
 ranking within each query $(c,A)$, and calibration. Each score is compared with controls that a real context
@@ -182,9 +184,63 @@ ENO1–ENO2, STAG2–STAG1) are reported by name.
   candidates; an SL claim needs an experimental, context-specific measurement against matching single-knockout
   controls, and attention to selectivity over normal cells.
 - SL-database labels are aggregated screen calls. In the assembled data a pair's label never differs between
-  lines, and some multi-line screens record identical labels for every line of their panel, so the benchmark
-  cannot test recovery of a pair that is SL in one line and not in another. Negatives are screened non-hits in
-  a named line only.
+  lines (its filters remove the pairs whose evidence disagrees, and some aggregated rows record one label for every
+  line of a panel), so that table cannot test recovery of a pair that is SL in one line and not in another; the
+  multi-line combinatorial screens of §5 can. Negatives are screened non-hits in a named line only, and calls agree
+  poorly across studies even for the same line, so labels are compared within one screen.
 - Experimental SL labels exist for few lines with basal single-cell data, so stage two has few validation and
   test lines.
 
+
+## 5. Research plan
+
+**Goal.** Predict GeneEffect in unseen cancer cell lines from their basal profile, beyond what a context-blind
+gene mean and a linear expression prior already give, and establish whether an AI-virtual-cell (single-cell
+foundation-model) representation adds to that. Once a model clears the bar, carry its predicted dependencies
+into SL prediction in unseen lines. A clean negative on the AI-virtual-cell question is a result, not a failed
+plan.
+
+**Task 1: cross-line GeneEffect prediction and interpretability.**
+
+- *Objective:* predict gene-specific dependency in held-out lines, especially each line's deviation from the
+  gene's mean over lines.
+- *Evaluation:* context accuracy on held-out lines (§3.7). The bar is the default linear prior of the GeneEffect
+  protocol (§10 there, selective Spearman 0.229 validation / 0.234 test), cleared by a paired line-bootstrap
+  interval above zero on validation; the gene mean is the floor.
+- *Interpretability:* why the same gene's dependency differs between lines: the features, pathways and cell
+  states behind context-specific vulnerabilities, starting from what the winning model exposes (the prior's
+  data-selected genes carry its gain). Every proposed explanation is set against lineage, the gene's own
+  expression, its copy number and its paralogs' expression on the same residual; one that lineage alone carries
+  is not a finding about context.
+
+**Task 2: does single-cell resolution add to pseudo-bulk?**
+
+- *Objective:* establish whether a line's basal single cells carry dependency information that its bulk or
+  pseudo-bulk average does not. Held-out lines have basal single cells only: perturbation responses exist for
+  four anchor lines, so a held-out line's response is a model's prediction, not a measurement.
+- *Approach, in layers:* first, per-gene single-cell statistics (detected fraction and variance across cells)
+  stacked linearly on the default prior, against a mean-expression arm built the same way (GeneEffect protocol
+  §13); only where that finds signal, distribution-level models of cellular heterogeneity, cell-state
+  proportions and perturbation-sensitive subpopulations, with AI-virtual-cell representations, built from the
+  statistic that carries it.
+- *Evaluation:* single-cell and pseudo-bulk arms under identical conditions: the same lines, genes, split,
+  selector and stacking on the same prior; the pseudo-bulk arm is the default prior itself, not a weaker
+  pseudo-bulk model.
+
+**Order.** The single-cell statistics stack; then, only on its signal, distributional and AI-virtual-cell
+models judged against the default prior; then interpretation of whichever model wins. Evidence so far: the
+joint STATE model trailed the context ridge, and in the single-cell correction every trained epoch lowered
+validation and STATE absent beat STATE frozen or trainable (GeneEffect protocol §7, §12).
+
+**Future extension: SL prediction in unseen lines.** Stage one's predicted, line-specific dependencies feed an
+SL framework evaluated on held-out lines, on cell-line-specific benchmarks: multi-line combinatorial screens that
+test one pair library in every line of a panel and publish a per-line call and score. Four GeneEffect held-out lines
+were screened this way, so the nested split of §3.6 holds without moving a line: validation NCI-H1299 (Harle et al.
+2025, Flister et al. 2025, Klingbeil et al. 2024) and PA-TU-8988S (Ito et al. 2021), test MDA-MB-231 (Flister,
+Klingbeil, Fong et al. 2024) and SK-MES-1 (Harle). The lead benchmark is Harle et al.'s 472 pairs in 27 lines
+(per-line genetic-interaction score and call; every one of its 117 hit pairs is a non-hit in some line); the others
+widen the pair library at lower cross-line agreement (literature review §1). The extension scores, per held-out line,
+the pairs whose call differs between the screen's lines separately from the rest, against the pair's hit rate in the
+same screen's training lines (the pair-identity control) and pan-essentiality (§3.7); a model that gives a pair one
+score in every line, as Cilantro-SL's classifier is trained to, cannot rank them. Composed single-gene predictions
+yield definition-1 candidates; they do not estimate a double-knockout phenotype.
