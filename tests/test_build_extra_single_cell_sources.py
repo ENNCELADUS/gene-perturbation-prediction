@@ -572,3 +572,32 @@ def test_mixed_species_mtx_keeps_prefixed_genes_and_hashtags_take_a_suffix(tmp_p
         tmp_path,
     )
     assert lines == ["a", "b", None]
+
+
+def test_r_written_label_table_keeps_its_row_names_as_cell_ids(tmp_path):
+    (tmp_path / "meta.csv").write_text(
+        '"cell_line_demuxlet","demuxlet_cls"\n'
+        '"AAAC","H1975","SNG"\n"GGTA","A549","DBL"\n"TTTG","H838","SNG"\n'
+    )
+    library = Library(
+        sparse.csr_matrix((3, 1)), ["TTTG", "AAAC", "GGTA"], ["g"], None, None, [], None
+    )
+    lines, _, _ = _identify(
+        library,
+        {
+            "kind": "labels",
+            "path": "meta.csv",
+            "sep": ",",
+            "skiprows": 0,
+            "cell_column": None,
+            "label_column": "cell_line_demuxlet",
+            "arm_column": None,
+            "keep": {"demuxlet_cls": ["SNG"]},
+            "cell_prefix": "",
+            "cell_suffix": "",
+        },
+        tmp_path,
+        {},
+        tmp_path,
+    )
+    assert lines == ["H838", "H1975", None]
