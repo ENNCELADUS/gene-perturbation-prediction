@@ -55,7 +55,7 @@ directly, each with a per-line score:
 Agreement within a screen ranges from strong (Harle) to close to noise (Fong), and calls agree poorly across studies
 even for the same line, so labels are compared within one screen. These screens include five of this project's
 held-out lines: NCI-H1299 (Harle, Flister, Klingbeil) and PA-TU-8988S (Ito) among the validation lines, MDA-MB-231
-(Flister, Klingbeil, Fong), SK-MES-1 (Harle) and A549 (all five screens; moved to test in the re-versioned split)
+(Flister, Klingbeil, Fong), SK-MES-1 (Harle) and A549 (all five screens; moved to test when the split was rebuilt on 2026-10-11)
 among the test lines. Kebabci et al.'s released code labels Ito, Klingbeil and Harle (with Parrish and CHyMErA),
 and those three screens are this project's SL benchmark (blueprint §5).
 
