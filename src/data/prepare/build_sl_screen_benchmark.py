@@ -23,13 +23,17 @@ import argparse
 import hashlib
 import json
 import shutil
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from src.data.extra_lines import load_extra_lines
+from src.data.extra_lines import (
+    ExtraSingleCellLines,
+    load_extra_lines,
+    load_extra_single_cell_lines,
+)
 from src.data.geneeffect import parse_gene_symbol
 from src.data.splits import FixedSplit, load_geneeffect_226_split
 
@@ -339,7 +343,7 @@ def line_sides(
     lines: pd.DataFrame,
     split: FixedSplit,
     extra_bulk_labelled: Collection[str],
-    extra_single_cell: Mapping[str, Collection[str]],
+    extra_single_cell: ExtraSingleCellLines,
 ) -> pd.DataFrame:
     """Each screen line's split side and input stratum.
 
@@ -348,8 +352,8 @@ def line_sides(
     (stratum ``single_cell``) or the labelled bulk extras (``bulk``); anything else is
     ``unused`` with a reason.
     """
-    sc_labelled = set(extra_single_cell["labelled"])
-    sc_unlabelled = set(extra_single_cell["unlabelled"])
+    sc_labelled = set(extra_single_cell.labelled)
+    sc_unlabelled = set(extra_single_cell.unlabelled)
     held = {**{m: "val" for m in split.val}, **{m: "test" for m in split.test}}
     rows = []
     for model_id in lines["model_id"].fillna(""):
@@ -458,7 +462,7 @@ def build(
         raise FileExistsError(f"refusing to overwrite {out}")
     split = load_geneeffect_226_split(split_path)
     extra_bulk = load_extra_lines(extra_bulk_path, split)
-    extra_single_cell = json.loads(Path(extra_single_cell_path).read_text())
+    extra_single_cell = load_extra_single_cell_lines(extra_single_cell_path, split)
     lines = pd.read_csv(lines_path, dtype=str).fillna("")
     sides = line_sides(lines, split, extra_bulk.labelled, extra_single_cell)
     geneeffect = {
