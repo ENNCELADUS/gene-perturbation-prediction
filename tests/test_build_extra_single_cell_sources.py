@@ -229,6 +229,15 @@ def test_sources_resume_and_refuse_interrupted_output(tmp_path):
         run(tmp_path / "spec.json", 1, out)
 
 
+def test_sources_option_builds_only_the_named_sources(tmp_path):
+    build_world(tmp_path)
+    out = tmp_path / "out"
+    run(tmp_path / "spec.json", 1, out, ["labelled"])
+    assert [p.name for p in (out / "qc").glob("*.json")] == ["labelled.json"]
+    with pytest.raises(ValueError, match="not in the spec"):
+        run(tmp_path / "spec.json", 1, out, ["nope"])
+
+
 def test_a_label_the_map_lacks_raises(tmp_path):
     spec = build_world(tmp_path)
     spec["sources"]["geo"]["libraries"][0]["identity"]["identifier"] = "Unmapped"
