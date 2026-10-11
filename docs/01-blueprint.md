@@ -115,7 +115,10 @@ single-cell death label, and a single-gene prediction is not SL evidence.
 GeneEffect prediction comes first because DepMap provides large-scale, cell-line-specific labels for
 single-gene knockouts, whereas labelled SL pairs with defined cellular contexts, suitable for training a model
 directly, are scarce. In the SL data assembled for this project, experimental labels cover a few dozen cell
-lines, and a pair's label never differs between the lines it was tested in.
+lines, and a pair's label never differs between the lines it was tested in, but only by construction: the table's
+unanimity filters drop the 8,866 screen pairs whose evidence is positive in some lines and negative in others.
+Multi-line combinatorial screens, which test one pair library in every line of a panel, show labels that do differ
+(§5).
 
 GeneEffect supervision lets the virtual-cell backbone learn how cellular context shapes gene dependency, and
 that knowledge transfers to SL prediction. GeneEffect alone does not decide whether two genes are synthetic
@@ -181,9 +184,10 @@ ENO1–ENO2, STAG2–STAG1) are reported by name.
   candidates; an SL claim needs an experimental, context-specific measurement against matching single-knockout
   controls, and attention to selectivity over normal cells.
 - SL-database labels are aggregated screen calls. In the assembled data a pair's label never differs between
-  lines, and some multi-line screens record identical labels for every line of their panel, so the benchmark
-  cannot test recovery of a pair that is SL in one line and not in another. Negatives are screened non-hits in
-  a named line only.
+  lines (its filters remove the pairs whose evidence disagrees, and some aggregated rows record one label for every
+  line of a panel), so that table cannot test recovery of a pair that is SL in one line and not in another; the
+  multi-line combinatorial screens of §5 can. Negatives are screened non-hits in a named line only, and calls agree
+  poorly across studies even for the same line, so labels are compared within one screen.
 - Experimental SL labels exist for few lines with basal single-cell data, so stage two has few validation and
   test lines.
 
@@ -229,9 +233,14 @@ joint STATE model trailed the context ridge, and in the single-cell correction e
 validation and STATE absent beat STATE frozen or trainable (GeneEffect protocol §7, §12).
 
 **Future extension: SL prediction in unseen lines.** Stage one's predicted, line-specific dependencies feed an
-SL framework evaluated on held-out lines, on cell-line-specific benchmarks: SL labels measured in named lines,
-where the same pair is tested in several lines and its label can differ between them. The project's own label
-table cannot test this (no pair changes label across its lines, §4), so the extension scores pairs whose label
-differs between lines on their own, against pair-identity and pan-essentiality controls (§3.7); a model that
-gives a pair one score in every line, as Cilantro-SL's classifier is trained to, cannot rank them. Composed
-single-gene predictions yield definition-1 candidates; they do not estimate a double-knockout phenotype.
+SL framework evaluated on held-out lines, on cell-line-specific benchmarks: multi-line combinatorial screens that
+test one pair library in every line of a panel and publish a per-line call and score. Four GeneEffect held-out lines
+were screened this way, so the nested split of §3.6 holds without moving a line: validation NCI-H1299 (Harle et al.
+2025, Flister et al. 2025, Klingbeil et al. 2024) and PA-TU-8988S (Ito et al. 2021), test MDA-MB-231 (Flister,
+Klingbeil, Fong et al. 2024) and SK-MES-1 (Harle). The lead benchmark is Harle et al.'s 472 pairs in 27 lines
+(per-line genetic-interaction score and call; every one of its 117 hit pairs is a non-hit in some line); the others
+widen the pair library at lower cross-line agreement (literature review §1). The extension scores, per held-out line,
+the pairs whose call differs between the screen's lines separately from the rest, against the pair's hit rate in the
+same screen's training lines (the pair-identity control) and pan-essentiality (§3.7); a model that gives a pair one
+score in every line, as Cilantro-SL's classifier is trained to, cannot rank them. Composed single-gene predictions
+yield definition-1 candidates; they do not estimate a double-knockout phenotype.

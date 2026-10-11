@@ -163,7 +163,10 @@ Everything under `derived/` is gitignored. The tracked split manifest and the da
 ## Scope and Cautions
 
 - No pre-split recurring pair changes label across contexts, so this table **cannot** test
-  recovery of context-dependent label reversal.
+  recovery of context-dependent label reversal. This is by construction: the unanimity filters
+  (conditions 2 and 3) drop the 8,866 screen-only raw rows with positive and negative evidence across
+  two or more contexts (counted 2026-10-11). The SL plan now takes labels from multi-line
+  combinatorial screens instead ([SL protocol](../04-sl-ranking-protocol.md), 2026-10-11).
 - Validation is the degenerate A549 context. Test has 22RV1 plus SL-only PC9 and HeLa;
   GeneEffect residual metrics are evaluable only for 22RV1.
 - PC9 and HeLa are one aggregate-label screen cluster, not independent test units; headline

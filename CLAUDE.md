@@ -56,7 +56,10 @@ distributional and AI-virtual-cell layer (the second-wave plan) has no single-ce
 port to the context screen and basal single cells, is designed (`docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`);
 phase 1's as-released run is complete (`results/cilantro_reproduction_seed0/`): stage one reproduces but equals a
 gene mean from other lines, labels are one per pair in every line, and gene-holdout two-class AP is 0.54 against the
-paper's 0.71; the port is not built. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+paper's 0.71; the port is not built. SL labels are to come from multi-line combinatorial screens compared within
+one screen (Harle et al. 2025 the lead; SL protocol, 2026-10-11): they screened four GeneEffect held-out lines
+(NCI-H1299, PA-TU-8988S; MDA-MB-231, SK-MES-1), so the nested split needs no change; no data card or builder exists
+yet. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
