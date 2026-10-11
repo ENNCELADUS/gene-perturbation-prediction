@@ -28,6 +28,7 @@ import re
 import shutil
 import tarfile
 import zipfile
+from array import array
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -183,23 +184,26 @@ def _read_tenx_bam(root: Path, spec: Mapping[str, Any]) -> Library:
     cells: dict[str, int] = {}
     genes: dict[str, int] = {}
     symbols: dict[str, str] = {}
-    rows, columns = [], []
+    rows, columns = array("l"), array("l")
     with pysam.AlignmentFile(
         root / spec["bam"], "rb", check_sq=False, threads=8
     ) as handle:
         for read in handle.fetch(until_eof=True):
-            if not read.has_tag("xf") or not read.get_tag("xf") & 8:
+            try:  # a missing tag raises KeyError
+                if not read.get_tag("xf") & 8:
+                    continue
+                cell, gene = read.get_tag("CB"), read.get_tag("GX")
+                read.get_tag("UB")
+            except KeyError:
                 continue
-            if not (read.has_tag("CB") and read.has_tag("UB") and read.has_tag("GX")):
-                continue
-            gene = read.get_tag("GX")
             if ";" in gene:
                 continue
-            rows.append(cells.setdefault(read.get_tag("CB"), len(cells)))
+            rows.append(cells.setdefault(cell, len(cells)))
             columns.append(genes.setdefault(gene, len(genes)))
-            symbols.setdefault(gene, read.get_tag("GN"))
+            if gene not in symbols:
+                symbols[gene] = read.get_tag("GN")
     counts = sparse.csr_matrix(
-        (np.ones(len(rows), dtype=np.int64), (rows, columns)),
+        (np.ones(len(rows), dtype=np.int64), (np.asarray(rows), np.asarray(columns))),
         shape=(len(cells), len(genes)),
     )
     counts.sum_duplicates()
