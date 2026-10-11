@@ -63,10 +63,13 @@ complement. On 2026-10-11 the 226 split was rebuilt in place with A549 in test (
 change) and the benchmark was built on the H20 (`data/sl_screens/benchmark/`, data card
 `docs/data/sl-screen-benchmark.md`). The default prior and the single-cell stack have not been rerun on the rebuilt
 split; their recorded numbers are on the 172/27/27 split. The **single-cell extras** (data layer only, plan of
-2026-10-11, [card](docs/data/single-cell-atlas-search.md)) are built for wave 1: 186 labelled lines outside the 226 with
-374,815 basal cells from 51 public deposits, prepared into `data/geneeffect_joint/v2` beside the unchanged 226 (no model
-reads them yet), and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk). The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
-**validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
+2026-10-11, [card](docs/data/single-cell-atlas-search.md)) are built in two waves: 208 labelled lines outside the 226 with
+505,097 basal cells from 62 public deposits, prepared into `data/geneeffect_joint/v2` beside the unchanged 226 (no model
+reads them yet), and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk).
+Wave 2 (counts recovered from processed deposits, Cell Ranger BAMs, or SRA reads re-counted with kb) added 22 lines and
+moved eight to sources with more or untreated cells; it adds no screened line. The SL pair head is **unimplemented**.
+One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
+no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
 
@@ -135,7 +138,8 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them. Its
   lines are the 226 and the built single-cell extras (`configs/benchmarks/extra_single_cell_lines_26Q1.json`), each read
   from `<paths.basal_raw_umi>/<ModelID>.h5ad`; an existing root grows by the lines it lacks, in the recorded space. The
-  extras' h5ad are built from public deposits by `src/data/prepare/build_extra_single_cell_sources.py`.
+  extras' h5ad are built from public deposits by `src/data/prepare/build_extra_single_cell_sources.py`, after
+  `src/data/prepare/recount_extra_single_cell_sources.py` re-counts the SRA reads of deposits without raw counts.
 - **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
   the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
