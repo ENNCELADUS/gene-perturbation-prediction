@@ -7,7 +7,7 @@ decision; nothing has been downloaded beyond metadata. Nothing here is SL eviden
 
 ## Purpose
 
-The 226 benchmark has 170 labelled single-cell training lines. The
+The 226 benchmark has 169 labelled single-cell training lines. The
 [extra bulk lines](extra-bulk-lines-26q1.md) add contexts with bulk RNA only. This search looks for
 lines that have both single cells in a basal condition and a 26Q1 CRISPRGeneEffect row, so that a
 training line could arrive as cells, like a query line does.

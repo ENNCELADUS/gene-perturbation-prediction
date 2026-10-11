@@ -143,7 +143,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
   `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
   evaluation and baselines for one config.
-- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (172 train / 27 val / 27 test);
+- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (171 train / 27 val / 28 test; A549 moved to test on 2026-10-11);
   `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
 
 ## Pitfalls and claim boundaries

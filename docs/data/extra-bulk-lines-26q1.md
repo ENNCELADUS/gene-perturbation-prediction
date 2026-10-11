@@ -7,7 +7,7 @@ linear context prior ([protocol §10](../03-geneeffect-protocol.md#10-linear-con
 
 ## Purpose
 
-The 226 benchmark gives 170 labelled single-cell training lines. Bulk RNA exists for many
+The 226 benchmark gives 169 labelled single-cell training lines. Bulk RNA exists for many
 more DepMap lines, and 26Q1 CRISPRGeneEffect labels for most of them. These lines add
 contexts that the single-cell atlas does not cover. Their bulk RNA fits context encoders
 (expression components, predicted genotype); their GeneEffect labels fit the prior only if
@@ -20,13 +20,13 @@ The file is the sole membership authority for the extra lines, as the split JSON
 
 | Group | Lines | Definition |
 | --- | ---: | --- |
-| Labelled | 919 | Outside the 226, with 26Q1 bulk RNA and 26Q1 GeneEffect |
+| Labelled | 918 | Outside the 226, with 26Q1 bulk RNA and 26Q1 GeneEffect |
 | Unlabelled | 576 | Outside the 226, with 26Q1 bulk RNA and no GeneEffect |
-| Excluded | 10 | Outside the 226, sharing a `PatientID` with a validation or test line |
+| Excluded | 12 | Outside the 226, sharing a `PatientID` with a validation or test line |
 
 The builder prints these counts when it writes the file; its printed counts are the
-authority, and this card follows them. The unlabelled count is the 1,664 training-side
-lines with bulk RNA, minus the 169 training members of the 226 that have it, minus the 919
+authority, and this card follows them. The unlabelled count is the 1,662 training-side
+lines with bulk RNA, minus the 168 training members of the 226 that have it, minus the 918
 labelled lines.
 
 **Exclusion rule.** A line outside the 226 whose `PatientID` (Model.csv) equals that of a
