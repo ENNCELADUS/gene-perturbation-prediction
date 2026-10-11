@@ -736,7 +736,9 @@ def _unpack(archive: Path, into: Path) -> None:
     marker.write_text("")
 
 
-def run(spec_path: Path, wave: int, output: Path) -> None:
+def run(
+    spec_path: Path, wave: int, output: Path, only: Sequence[str] | None = None
+) -> None:
     spec = json.loads(spec_path.read_text())
     split = load_geneeffect_226_split(Path(spec["split_path"]))
     candidates = read_map(Path(spec["candidates_path"]))
@@ -752,8 +754,11 @@ def run(spec_path: Path, wave: int, output: Path) -> None:
         spec, candidates, admission, split, models, gene_metadata, symbol_to_ensembl
     )
     (output / "qc").mkdir(parents=True, exist_ok=True)
+    unknown = sorted(set(only or ()) - set(spec["sources"]))
+    if unknown:
+        raise ValueError(f"--sources not in the spec: {unknown}")
     for name, source in spec["sources"].items():
-        if source["wave"] != wave:
+        if source["wave"] != wave or (only and name not in only):
             continue
         report_path = output / "qc" / f"{name}.json"
         if report_path.exists():
@@ -796,6 +801,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--wave", type=int, required=True)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--print-downloads", action="store_true")
+    parser.add_argument("--sources", help="comma-separated source keys (default: all)")
     args = parser.parse_args(argv)
     if args.print_downloads:
         for url, path in downloads(args.spec, args.wave):
@@ -803,7 +809,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.output_dir is None:
         parser.error("--output-dir is required to build")
-    run(args.spec, args.wave, args.output_dir)
+    only = None if args.sources is None else args.sources.split(",")
+    run(args.spec, args.wave, args.output_dir, only)
     return 0
 
 
