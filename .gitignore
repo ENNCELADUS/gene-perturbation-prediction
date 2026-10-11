@@ -110,6 +110,10 @@ csc286_eval.py
 /data/
 *.npz
 
+# Released third-party code and its environment, placed on the H20 only (hpc/cilantro/setup.sh)
+/third_party/
+/.venv-cilantro/
+
 # Documentation
 archive/
 MANIFEST.md

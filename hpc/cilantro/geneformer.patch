@@ -1,0 +1,10 @@
+diff --git a/geneformer/__init__.py b/geneformer/__init__.py
+index 52d4361..e22b865 100644
+--- a/geneformer/__init__.py
++++ b/geneformer/__init__.py
+@@ -30,5 +30,3 @@ from .tokenizer import TranscriptomeTokenizer
+ from . import classifier  # noqa # isort:skip
+ from .classifier import Classifier  # noqa # isort:skip
+ 
+-from . import mtl_classifier  # noqa # isort:skip
+-from .mtl_classifier import MTLClassifier  # noqa # isort:skip
