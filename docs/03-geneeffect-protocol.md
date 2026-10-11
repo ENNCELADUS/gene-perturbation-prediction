@@ -1,6 +1,6 @@
 # Experiment Protocol: Held-Out-Cell-Line GeneEffect Prediction
 
-Updated 2026-10-07. This is the protocol for the **implemented** GeneEffect track under
+Updated 2026-10-11. This is the protocol for the **implemented** GeneEffect track under
 [the research blueprint](01-blueprint.md); it holds the rules (§11), the model, expression space, training,
 metrics and results. The design behind the current wiring is the
 [expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md),
@@ -18,7 +18,9 @@ selection rule and STATE treatment (§4–§6, §9.3): §4–§6 state the curre
 historical records of earlier runs under the earlier head and Huber selection. The
 [SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here
 is SL evidence. §10 specifies the linear context prior, a CPU control that the joint model is
-compared against, and §12 the single-cell correction that stacks the joint head on it.
+compared against, §12 the single-cell correction that stacks the joint head on it, and §13 the
+linear single-cell statistics stack, the first test of whether single-cell resolution adds to
+pseudo-bulk.
 
 ## 1. Objective and prediction unit
 
@@ -747,6 +749,17 @@ specific to this task.
   copy prior, the nearest line and the context ridges (§6) decides whether a model learned
   context; high absolute correlation does not. Response improvement is not dependency
   improvement.
+- **The bar is the default prior.** The gene mean is the floor, not the bar: the default linear
+  prior (§10) already beats it on every residual metric from bulk and pseudo-bulk alone, and
+  whole-matrix correlation barely separates the two (overall Spearman 0.715 against 0.708 on
+  validation, 0.733 against 0.727 on test, over every labelled entry). A model, input or
+  representation adds context information when its selective Spearman exceeds the default prior's
+  on validation by a paired line-bootstrap interval above zero; test is reported beside it.
+- **Interpretation is checked against known explanations.** A feature, pathway or cell state
+  offered as the reason a gene's dependency differs between lines is reported beside what
+  lineage, the gene's own expression, its copy number and its paralogs' expression explain of the
+  same residual on the training lines. An explanation that lineage alone carries is not a finding
+  about context.
 - **Pretraining exposure.** Note Tx1's Tahoe-100M pretraining exposure of held-out lines, and
   STATE's pretraining exposure to K562, HepG2 and Jurkat, wherever results are compared.
 - **Scope.** A GeneEffect result is single-gene dependency evidence; it estimates no genetic
@@ -788,3 +801,43 @@ it without changing any model input.
   trainable. Test is reported for every run and never used to choose.
 - **Scope.** A correction result is single-gene dependency evidence on held-out lines; it
   estimates no genetic interaction and is not an SL result.
+
+## 13. Single-cell statistics stack
+
+The first test of whether single-cell resolution adds to pseudo-bulk (blueprint §5, Task 2): a linear
+stack of per-gene statistics of a line's basal cells on the default prior's out-of-fold export, run on
+CPU before any distributional model. `configs/context_prior/single_cell_stack.yaml`, run with
+`hpc/run.sh prior-stack CONFIG --run-id <id>` (`src/experiments/single_cell_stack.py`), writes
+`outputs/context_prior/<id>/single_cell_stack/` (`rows/<arm>.json`, `facts.json`, `results.md`).
+
+- **Statistics.** The `q_sc` summaries preparation caches for every line (§3.4 space, over all of a
+  line's source cells): log-space mean, detected fraction and log-space variance of each panel gene.
+  The space is the genes every validation and test line measures; a training line's gap takes the
+  training-line mean, and each statistic is quantile-normalised per line to the training lines' mean
+  sorted profile, so source depth and vocabulary do not read as context.
+- **Target.** What the export leaves on the 170 single-cell training lines, $r-\hat r_{\text{prior}}$ in
+  residual-SD units, the prior out of fold, so the stack learns at the prior's deployment error; a
+  missing label counts as zero, as in §10. Validation and test add the stack to the export's full fit.
+- **Stack.** Two ridge stages, each on what the earlier leaves: the gene's own statistics (weights
+  pooled over genes plus a per-gene deviation shrunk toward them, the knowledge-block ridge of §10),
+  then the 50 columns of the statistics pool most correlated with the gene's remaining residual on the
+  training lines, the gene's own columns excluded (the data-selected ridge of §10).
+- **Arms** differ only in the statistics read: `mean` (the log-space mean, close to pseudo-bulk: the
+  like-for-like control), `distribution` (detected fraction and variance) and `single_cell` (all three).
+  Every own shrinkage (1, 10, pooled only) and selected penalty (1, 10, 100) is a row.
+- **Reading.** Every row reports validation and test metrics, the selective-Spearman gain over the
+  prior alone and, for the other arms, over `mean` at the same penalties, with 95% paired line-bootstrap
+  intervals. Single-cell resolution adds information in this linear form when `single_cell` or
+  `distribution` beats `mean` on validation by an interval above zero; distributional models
+  (state views, partner fractions, STATE's response; the
+  [second-wave plan](specs/2026-10-07-single-cell-correction-second-wave-plan.md)) then start from the
+  statistic that carries it. Nothing is chosen in code.
+- **Result (2026-10-11, [record](../results/single_cell_stack_seed0/README.md)).** Two runs (the first grid, then
+  selected penalties to 10,000 because every best row sat at 100). No single-cell arm beats `mean` on validation by an
+  interval above zero at any penalty pair (largest +0.0011 [−0.0005, +0.0026]), and no arm's best validation row
+  clears the prior: `distribution` 0.2340 (+0.0050 [−0.0036, +0.0155]), `mean` 0.2329, `single_cell` 0.2329, against
+  0.2290 for the prior alone (test 0.2404, 0.2409, 0.2397 against 0.2338). In linear form, a gene's detected fraction
+  and variance across a line's cells add nothing its mean expression does not.
+- **Scope.** Per-line cell-state proportions need a new preparation step (second-wave plan, Task 4)
+  and are not in this stack. A stack result is single-gene dependency evidence on held-out lines; it is
+  not an SL result.
