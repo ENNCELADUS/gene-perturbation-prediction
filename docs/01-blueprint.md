@@ -252,7 +252,7 @@ call for Harle, whose Kebabci labels were not released; every row keeps its cont
 nested (§3.6); A549, which all three screened, moved from training to test when the 226 split was rebuilt: validation
 PA-TU-8988S (Ito) and NCI-H1299 (Klingbeil, Harle), test MDA-MB-231 (Klingbeil), SK-MES-1 (Harle) and A549 (all
 three). Stage two trains on the three screens pooled, with the screen as an input: the headline training side is
-the 21 screened training lines with basal single cells and GeneEffect, and the complementary model adds 21 more
+the 29 screened training lines with basal single cells and GeneEffect, and the complementary model adds 13 more
 read through bulk RNA (§3.6). Evaluation stays within one screen: per held-out line and screen, the pairs whose
 call differs between the screen's lines are scored separately from the rest, against the pair's hit rate in the
 same screen's training lines (the pair-identity control) and pan-essentiality (§3.7); a model that gives a pair one

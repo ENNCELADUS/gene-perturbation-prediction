@@ -23,9 +23,6 @@ DEPENDENCY_THRESHOLD: Final = -0.5
 UNLABELED_TRAIN: Final = ("ACH-000779", "ACH-001086")
 
 
-RAW_UMI_SEMANTICS: Final = "raw_umi_counts"
-
-
 SPLIT_SCHEMA_VERSION: Final = "cell-line-geneeffect-226-split-v2"
 
 
@@ -36,14 +33,6 @@ PINNED_SPLIT_SHA256: Final = (
 
 PINNED_COPY_PRIOR_SHA256: Final = (
     "b9a20999cdfdf94fd88f004d0d661e3e6d3c3214b9f8ed1b1ad9a0c276d3f785"
-)
-
-
-_REGISTRY_COLUMNS: Final = (
-    "model_id",
-    "source_path",
-    "source_kind",
-    "matrix_semantics",
 )
 
 
@@ -474,45 +463,3 @@ def build_g_var(
             "symbols": list(symbols),
         },
     )
-
-
-def load_source_registry(path: Path, split: Exp13Split) -> pd.DataFrame:
-    """Validate the complete raw-UMI source registry for all 226 ModelIDs."""
-    registry = pd.read_csv(path, dtype=str)
-    missing_columns = sorted(set(_REGISTRY_COLUMNS) - set(registry.columns))
-    if missing_columns:
-        raise ValueError(f"source registry is missing columns: {missing_columns}")
-    registry = registry.loc[:, _REGISTRY_COLUMNS].copy()
-    if registry.isna().any().any() or (registry == "").any().any():
-        raise ValueError("source registry contains missing values")
-    if registry["model_id"].duplicated().any():
-        duplicates = sorted(
-            registry.loc[registry["model_id"].duplicated(False), "model_id"].unique()
-        )
-        raise ValueError(
-            f"source registry contains duplicate ModelIDs: {duplicates[:10]}"
-        )
-    if registry["source_path"].duplicated().any():
-        raise ValueError("source registry contains duplicate source_path values")
-    expected = set(split.all_model_ids)
-    observed = set(registry["model_id"])
-    if observed != expected:
-        raise ValueError(
-            f"source registry ModelID mismatch: missing={sorted(expected - observed)}, "
-            f"extra={sorted(observed - expected)}"
-        )
-    bad = registry.loc[registry["matrix_semantics"] != RAW_UMI_SEMANTICS]
-    if not bad.empty:
-        raise ValueError(
-            "source registry contains non-raw-UMI semantics for ModelIDs: "
-            f"{sorted(bad['model_id'])[:10]}"
-        )
-    bad_kind = registry.loc[registry["source_kind"] != "h5ad"]
-    if not bad_kind.empty:
-        raise ValueError(
-            "source registry contains unsupported source_kind for ModelIDs: "
-            f"{sorted(bad_kind['model_id'])[:10]}"
-        )
-    return registry.set_index("model_id", verify_integrity=True).loc[
-        list(split.all_model_ids)
-    ]

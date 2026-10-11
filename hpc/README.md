@@ -22,7 +22,8 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
 1. **Preparation** into `prepared_root` (`data/geneeffect_joint/v2`): reuse the Tx1 cache
    (only missing lines are encoded), one pass over the basal sources computing library
    sizes, the target total `T`, log-space HVG bags and `q_sc`, the log-space response
-   cache, and the manifest with `expression_space`. Skipped when the manifest exists.
+   cache, and the manifest with `expression_space`. Once the manifest exists, only lines
+   without `lines/<ModelID>.npz` (new single-cell extras) are prepared, in the recorded space.
 2. **Untrained response-model comparison arms** (no change, global mean effect, released
    STATE checkpoint) on the first chosen GPU, which also give the **STATE sanity line**: the
    released checkpoint scored on each anchor against no-change. Printed and written; not a
@@ -197,8 +198,37 @@ rerunning the same command with the same run id; `results.md` is rewritten from 
 `--experiments` restricts a process to the named experiments (all of them by default), so several processes can
 share one run directory: rows are per setting and never shared. A run directory is bound to the config it started
 with; another config needs a new run id. The reference tables it reads are committed under
-`configs/context_prior/reference/` and the extra-line membership at `configs/benchmarks/extra_bulk_lines_26Q1.json`;
-the H20 host has no internet and downloads nothing.
+`configs/context_prior/reference/` and the extra-line membership at `configs/benchmarks/extra_bulk_lines_26Q1.json`.
+The H20 reaches GitHub, PyPI, EBI/ENA/BioStudies and hf-mirror, but not NCBI GEO, figshare, Zenodo, the 10x CDN or
+Cellosaurus: files from those hosts are downloaded on the Mac and copied to the H20 data directory with their SHA-256.
+
+## Extra single-cell lines
+
+Labelled DepMap lines outside the 226 with public basal single cells join the prepared root as raw-UMI h5ad
+([card](../docs/data/single-cell-atlas-search.md)). One wave of the source spec at a time, on CPU:
+
+```bash
+S=configs/data/extra_single_cell_sources_26Q1.json
+.venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_sources --spec $S --wave 1 --print-downloads \
+  | while IFS=$'\t' read url path; do mkdir -p "$(dirname "$path")"; wget -c -O "$path" "$url"; done
+OMP_NUM_THREADS=16 nohup .venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_sources --spec $S --wave 1 \
+  --output-dir data/sl_dependency_v0/processed/basal_raw_umi > outputs/launches/extras_wave1.log 2>&1 &
+.venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_lines build \
+  --candidates configs/benchmarks/single_cell_atlas_candidates.csv --model data/sl_dependency_v0/raw/depmap/Model.csv \
+  --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
+  --split configs/benchmarks/cell_line_geneeffect_226_split.json \
+  --qc-dir data/sl_dependency_v0/processed/basal_raw_umi/qc --out configs/benchmarks/extra_single_cell_lines_26Q1.json
+CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=16 nohup .venv-tx1/bin/python -m src.experiments.prepare configs/geneeffect_joint.yaml \
+  --pseudobulk-genes data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv \
+  > outputs/launches/prepare_extras.log 2>&1 &
+```
+
+The download step lists the files the wave lacks; files on hosts the H20 cannot reach are fetched on the Mac and
+copied to the same paths. The builder skips a source whose `qc/<source>.json` exists and refuses to overwrite an
+h5ad; an h5ad without its source's report (an interrupted run) stops it. The membership file is committed after the
+build. The last command grows `data/geneeffect_joint/v2` and its pseudo-bulk by the new lines (Tx1 encodes them on
+the visible GPU); the 226's files are left as written. To re-prepare one line, delete its h5ad, `lines/<ModelID>.npz`,
+Tx1 cache directory and pseudo-bulk row.
 
 ## Configuration and inputs
 
@@ -206,8 +236,9 @@ All configuration fields are explicit in `configs/geneeffect_joint.yaml`; unknow
 missing keys are errors; a checkpoint from before the selective-gene revision lacks its
 fitted selective genes and residual scale and is refused, and one from before the single-cell
 correction lacks its recorded prior export and is refused too. Input paths are relative to the repository root. Preparation
-requires the raw source registry, GeneEffect CSV, supplied ESM2 table, STATE checkpoint and
-gene order, and the response and basal sources. Missing Tx1 caches additionally need the
+requires one raw-UMI h5ad per prepared line at `paths.basal_raw_umi/<ModelID>.h5ad` (the 226 and the built
+extras of `paths.extra_single_cell_lines`), the GeneEffect CSV, supplied ESM2 table, STATE checkpoint and
+gene order, and the response sources. Missing Tx1 caches additionally need the
 configured local Tx1 model and a GPU; newly encoded cells use collation seed 0, and the Tx1
 cache's existing on-disk format is read, never rewritten. Tx1 reads raw UMI counts; every
 other expression quantity is log-normalised by whole-library size to `T`, the median

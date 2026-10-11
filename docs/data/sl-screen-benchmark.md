@@ -37,24 +37,30 @@ come straight from their host.
 It has 61 rows: Ito 11, Klingbeil 22, Harle 27 and MiT4SL 1. Harle's own `depMapID` column
 agrees with it. Harle's C092 has no Model.csv row and is mapped to no ModelID. The build
 assigns each line a split side and an input stratum from the
-[226 split](cell-line-geneeffect-226.md) and the [extra lines](extra-bulk-lines-26q1.md):
+[226 split](cell-line-geneeffect-226.md), the [bulk extra lines](extra-bulk-lines-26q1.md) and
+the [single-cell extra lines](single-cell-atlas-search.md):
 
 - **Validation and test lines** are the 226's own lines, read from basal single cells.
 - **`single_cell` training lines** are the 226's labelled training lines and the labelled
-  single-cell extras (MIX-seq).
+  single-cell extras whose basal cells are built (`labelled` in the single-cell membership file).
 - **`bulk` training lines** are labelled bulk extras without single cells; only the
   complementary model reads them.
 - **`unused` lines** carry a reason: no ModelID, no 26Q1 GeneEffect, or no expression source.
 
 | Screen | Validation | Test | Training, single cells | Training, bulk | Unused |
 | --- | --- | --- | --- | --- | --- |
-| Ito | PA-TU-8988S | A549 | GI-1 | 7 | MeWo |
-| Klingbeil | NCI-H1299 | MDA-MB-231, A549 | 6 | 12 | NCI-H1436 |
-| Harle | NCI-H1299 | SK-MES-1, A549 | 15 | 3 | C092, CHL-1, MeWo, SK-MEL-28, SK-MEL-5, KP-1N |
+| Ito | PA-TU-8988S | A549 | GI-1, IPC-298, MEL-JUSO | 5 | MeWo |
+| Klingbeil | NCI-H1299 | MDA-MB-231, A549 | 11 | 7 | NCI-H1436 |
+| Harle | NCI-H1299 | SK-MES-1, A549 | 17 | 1 | C092, CHL-1, MeWo, SK-MEL-28, SK-MEL-5, KP-1N |
 
-Across the three screens, 21 distinct training lines have single cells and 21 more are
+Across the three screens, 29 distinct training lines have single cells and 13 more are
 read through bulk RNA. A549 is a test line because the 226 split was rebuilt in place on
-2026-10-11 to put it there.
+2026-10-11 to put it there. The benchmark was rebuilt the same day after the wave-one
+single-cell extras were built: eight lines (nine screen rows) moved from bulk to single cells,
+IPC-298 and MEL-JUSO (Ito), NCI-H209, NCI-H211, HPAF-II, MOLM-13 and THP-1 (Klingbeil), Capan-1
+and HPAF-II (Harle), taking the single-cell stratum's labelled pairs from 41,926 to 63,864 and the
+bulk stratum's from 62,491 to 40,553. Rows, labels and sides are otherwise unchanged; the earlier
+build is kept on the H20 as `data/sl_screens/benchmark_2026-10-11_before_extras/`.
 
 ## Labels
 

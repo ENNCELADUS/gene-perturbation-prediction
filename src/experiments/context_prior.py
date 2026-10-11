@@ -158,7 +158,8 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     prepared = Path(joint["prepared_root"])
     panel = list(read_manifest(prepared)["common_gene_panel"])
     prepare_pseudobulk(joint, list(bulk.columns))
-    pseudo = read_pseudobulk(prepared)
+    # The prior reads the 226; the pseudo-bulk also holds the single-cell extras.
+    pseudo = read_pseudobulk(prepared).loc[list(split.all_model_ids)]
     space = measured_genes(pseudo, list(bulk.columns), [*split.val, *split.test])
     pseudo, filled = fill_unmeasured(pseudo.loc[:, space], split.train)
     definitions = fit_definitions(gene_effect, split, panel, joint["features"])

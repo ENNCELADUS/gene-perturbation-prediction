@@ -31,11 +31,12 @@ the SL task differently, and this protocol is rewritten to match before stage tw
   Validation PA-TU-8988S (ACH-000022; Ito) and NCI-H1299 (ACH-000510; Klingbeil, Harle); test MDA-MB-231
   (ACH-000768; Klingbeil), SK-MES-1 (ACH-000665; Harle) and A549. No screened line shares a PatientID with a
   validation or test line; A549's DepMap patient siblings leave the extra lines.
-- **Training side:** the three screens pooled, with the screen as an input. The headline model trains on the 21
-  screened training lines with basal single cells and GeneEffect (the 226's training lines and the MIX-seq extras
-  GI-1, RH-30, T3M-4, COR-L23, LK-2, NCI-H1975, KP-4 and BxPC-3); a complementary model adds the 21 screened lines
-  read through bulk RNA from the labelled extras (`configs/benchmarks/extra_bulk_lines_26Q1.json`), reported beside
-  it, never pooled. Flister 2025 and Fong 2024 are not adopted.
+- **Training side:** the three screens pooled, with the screen as an input. The headline model trains on the 29
+  screened training lines with basal single cells and GeneEffect (the 226's training lines and the built single-cell
+  extras GI-1, RH-30, T3M-4, COR-L23, LK-2, NCI-H1975, KP-4, BxPC-3, IPC-298, MEL-JUSO, NCI-H209, NCI-H211,
+  HPAF-II, MOLM-13, THP-1 and Capan-1, `configs/benchmarks/extra_single_cell_lines_26Q1.json`); a complementary
+  model adds the 13 screened lines read through bulk RNA from the labelled extras
+  (`configs/benchmarks/extra_bulk_lines_26Q1.json`), reported beside it, never pooled. Flister 2025 and Fong 2024 are not adopted.
 - **Built (2026-10-11):** the screen tables fetched on the H20, the line map
   `configs/benchmarks/sl_screen_lines.csv`, the builder `src/data/prepare/build_sl_screen_benchmark.py` and its
   output `data/sl_screens/benchmark/` on the H20, described in the [data card](data/sl-screen-benchmark.md). The

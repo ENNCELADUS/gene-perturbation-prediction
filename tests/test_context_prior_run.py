@@ -156,6 +156,7 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     )
     pseudo.loc["S0", "E15"] = np.nan  # a training line's source lacks E15: filled
     pseudo.loc["V0", "E14"] = np.nan  # a validation line lacks E14: out of the space
+    pseudo.loc["W0"] = np.nan  # a single-cell extra: never read by the prior
     models = pd.DataFrame(
         {
             "patient_id": everyone,
@@ -225,6 +226,7 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     assert set(bridge.folds) == set(single)
     assert bridge.val == tuple(val) and bridge.test == tuple(test)
     assert loaded.filled_lines == 1
+    assert list(bridge.pseudobulk.index) == list(split.all_model_ids)
     # Every normalised row takes the training side's reference profile.
     profile = quantile_reference(bulk.loc[side, space])
     assert np.allclose(np.sort(bridge.oracle.to_numpy(), axis=1), profile)

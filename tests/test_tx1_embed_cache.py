@@ -17,7 +17,7 @@ from src.data.tx1_cache import (
     load_hvg_gene_order,
     load_line_cache,
     missing_lines,
-    read_registry_source,
+    read_basal_source,
     tx1_cell_indices,
     write_line_cache,
 )
@@ -66,10 +66,7 @@ def test_hvg_gene_order_comes_from_var_dims(tmp_path):
 
 
 def test_encode_lines_writes_selected_raw_cells(tmp_path):
-    registry = pd.DataFrame(
-        {"source_path": [str(_source(tmp_path / "a.h5ad", "ACH-1"))]},
-        index=pd.Index(["ACH-1"], name="model_id"),
-    )
+    sources = {"ACH-1": _source(tmp_path / "a.h5ad", "ACH-1")}
     seen = []
 
     def encoder(adata):
@@ -77,7 +74,7 @@ def test_encode_lines_writes_selected_raw_cells(tmp_path):
         return np.ones((adata.n_obs, EMBEDDING_WIDTH), dtype=np.float32)
 
     encoded = encode_lines(
-        registry,
+        sources,
         tmp_path / "cache",
         encoder=encoder,
         hvg_order=("A", "C", "Z"),
@@ -100,15 +97,15 @@ def test_encode_lines_writes_selected_raw_cells(tmp_path):
     assert list(obs.index) == list(seen[0].obs_names)
 
 
-def test_registry_source_must_be_raw_counts_of_its_line(tmp_path):
+def test_basal_source_must_be_raw_counts_of_its_line(tmp_path):
     with pytest.raises(ValueError, match="integer"):
-        read_registry_source(
+        read_basal_source(
             _source(tmp_path / "a.h5ad", "ACH-1", scale=0.5),
             model_id="ACH-1",
             var_ensembl_col="ensembl_id",
         )
     with pytest.raises(ValueError, match="model_id"):
-        read_registry_source(
+        read_basal_source(
             _source(tmp_path / "b.h5ad", "ACH-2"),
             model_id="ACH-1",
             var_ensembl_col="ensembl_id",

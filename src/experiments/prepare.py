@@ -4,7 +4,13 @@ Tx1 reads raw UMI. Every other expression quantity is ``log1p(x * T / L_cell)``
 then STATE's HVG slice, with ``L_cell`` the cell's UMI total over every gene
 of its source matrix and ``T`` the median ``L_cell`` of the non-targeting
 cells in the Nadig 2025 Jurkat and HepG2 sources (data STATE's Replogle
-checkpoint was trained on). Skipped when ``prepared_inputs.json`` exists.
+checkpoint was trained on).
+
+The lines are the 226 and the built single-cell extras
+(``paths.extra_single_cell_lines``); each line's raw-UMI cells are
+``<paths.basal_raw_umi>/<ModelID>.h5ad``. Once ``prepared_inputs.json`` exists,
+a run prepares only the lines without ``lines/<ModelID>.npz``, in the recorded
+space (``T``, panel, HVG order); every other file stays as written.
 
 The two ``T`` sources and every response anchor are read at once, one process
 each; each anchor process writes its reduced cells to a temporary part file
@@ -102,12 +108,12 @@ def _prepare_basal_line(
     target_sum: float,
     cells_per_context: int,
 ) -> None:
-    """Write ``lines/<ModelID>.npz`` of one registered basal line."""
+    """Write ``lines/<ModelID>.npz`` of one basal line."""
     from src.data.basal import symbol_column
     from src.data.prepared import prepare_line, write_prepared_line
-    from src.data.tx1_cache import load_line_cache, read_registry_source
+    from src.data.tx1_cache import load_line_cache, read_basal_source
 
-    source = read_registry_source(
+    source = read_basal_source(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
     embeddings, _, obs = load_line_cache(tx1_cache, model_id)
@@ -127,12 +133,38 @@ def _prepare_basal_line(
     write_prepared_line(output_path, line)
 
 
-def _encode_missing_tx1(config: Mapping[str, Any], registry) -> list[str]:
+def basal_sources(config: Mapping[str, Any]) -> dict[str, Path]:
+    """ModelID to raw-UMI h5ad of every line preparation covers: the 226, then the
+    built single-cell extras. Raises, listing them, if any file is missing."""
+    from src.data.extra_lines import load_extra_single_cell_lines
+    from src.data.splits import load_geneeffect_226_split
+
+    paths = config["paths"]
+    split = load_geneeffect_226_split(Path(paths["split"]))
+    extras = load_extra_single_cell_lines(Path(paths["extra_single_cell_lines"]), split)
+    directory = Path(paths["basal_raw_umi"])
+    sources = {
+        model_id: directory / f"{model_id}.h5ad"
+        for model_id in (*split.all_model_ids, *extras.labelled)
+    }
+    missing = sorted(
+        model_id for model_id, path in sources.items() if not path.is_file()
+    )
+    if missing:
+        raise FileNotFoundError(
+            f"{directory}: no raw-UMI h5ad for {len(missing)} lines: {missing[:10]}"
+        )
+    return sources
+
+
+def _encode_missing_tx1(
+    config: Mapping[str, Any], sources: Mapping[str, Path]
+) -> list[str]:
     from src.data.tx1_cache import encode_lines, load_hvg_gene_order, missing_lines
 
     paths, settings = config["paths"], config["preparation"]
     cache = Path(paths["tx1_cache"])
-    missing = missing_lines(cache, registry.index)
+    missing = missing_lines(cache, list(sources))
     if not missing:
         return []
     from src.model.tx1 import _build_tx1_encoder
@@ -144,7 +176,7 @@ def _encode_missing_tx1(config: Mapping[str, Any], registry) -> list[str]:
         settings["tx1_max_length"],
     )
     return encode_lines(
-        registry.loc[missing],
+        {model_id: sources[model_id] for model_id in missing},
         cache,
         encoder=encoder,
         hvg_order=tuple(load_hvg_gene_order(Path(paths["state_model_dir"]))),
@@ -155,20 +187,69 @@ def _encode_missing_tx1(config: Mapping[str, Any], registry) -> list[str]:
     )
 
 
+#: Paths that say which lines exist, not how a line is prepared: the prior
+#: export is read by training and evaluation only, and the extras' membership
+#: grows the root (its lines are recorded in the manifest).
+_LINE_SET_PATHS: Final[frozenset[str]] = frozenset({"prior", "extra_single_cell_lines"})
+
+
 def preparation_settings(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Every config value that changes what preparation writes. The prior export
-    (``paths.prior``) is read by training and evaluation only."""
+    """Every config value that changes how preparation writes a line."""
     return {
         "preparation": dict(config["preparation"]),
         "cells_per_context": config["features"]["cells_per_context"],
         "paths": {
-            key: value for key, value in config["paths"].items() if key != "prior"
+            key: value
+            for key, value in config["paths"].items()
+            if key not in _LINE_SET_PATHS
         },
     }
 
 
+def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
+    os.replace(temporary, path)
+
+
+def _prepare_lines(
+    config: Mapping[str, Any],
+    root: Path,
+    sources: Mapping[str, Path],
+    *,
+    genes: tuple[str, ...],
+    hvg_order: tuple[str, ...],
+    target_sum: float,
+) -> None:
+    """Tx1-encode the uncached lines of ``sources``, then write their npz."""
+    paths, settings = config["paths"], config["preparation"]
+    encoded = _encode_missing_tx1(config, sources)
+    _LOGGER.info("Tx1 cache ready; %d lines newly encoded", len(encoded))
+    line_calls = [
+        partial(
+            _prepare_basal_line,
+            model_id,
+            path,
+            root / "lines" / f"{model_id}.npz",
+            tx1_cache=Path(paths["tx1_cache"]),
+            var_ensembl_col=settings["var_ensembl_col"],
+            hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
+            hvg_order=hvg_order,
+            genes=genes,
+            target_sum=target_sum,
+            cells_per_context=config["features"]["cells_per_context"],
+        )
+        for model_id, path in sources.items()
+    ]
+    for done, _ in enumerate(_in_processes(line_calls, LINE_PROCESSES), start=1):
+        if done % 25 == 0:
+            _LOGGER.info("Prepared basal line %d of %d", done, len(line_calls))
+    _LOGGER.info("Prepared %d basal lines", len(line_calls))
+
+
 def prepare_inputs(config: Mapping[str, Any]) -> Path:
-    """Write the prepared root; return its manifest path (written last)."""
+    """Write the prepared root, or grow it by its missing lines; return its
+    manifest path (written last)."""
     from src.experiments.config import validate_config
 
     validate_config(config)
@@ -177,20 +258,38 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
 
     manifest_path = root / PREPARED_METADATA_FILENAME
     produced_by = preparation_settings(config)
+    sources = basal_sources(config)
     if manifest_path.is_file():
-        recorded = json.loads(manifest_path.read_text()).get("settings")
-        if recorded != produced_by:
+        manifest = json.loads(manifest_path.read_text())
+        if manifest.get("settings") != produced_by:
             raise ValueError(
-                f"{root} was prepared with different settings ({recorded}); "
-                "choose a new prepared_root for these settings"
+                f"{root} was prepared with different settings "
+                f"({manifest.get('settings')}); choose a new prepared_root for "
+                "these settings"
             )
-        _LOGGER.info("Prepared inputs already exist at %s", root)
+        missing = {
+            model_id: path
+            for model_id, path in sources.items()
+            if not (root / "lines" / f"{model_id}.npz").is_file()
+        }
+        if missing:
+            _LOGGER.info("Growing %s by %d lines", root, len(missing))
+            _prepare_lines(
+                config,
+                root,
+                missing,
+                genes=tuple(manifest["common_gene_panel"]),
+                hvg_order=tuple(manifest["hvg_order"]),
+                target_sum=float(manifest["expression_space"]["target_sum"]),
+            )
+        if manifest.get("lines") != list(sources):
+            _write_json(manifest_path, {**manifest, "lines": list(sources)})
         return manifest_path
 
     import numpy as np
 
     from src.data.expression import median_library_size
-    from src.data.geneeffect import load_geneeffect_long, load_source_registry
+    from src.data.geneeffect import load_geneeffect_long
     from src.data.prepare.build_exp13_esm2_universe import (
         build_coverage_universe,
         restrict_coverage_universe_to_copy_prior,
@@ -209,7 +308,6 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     from src.data.tx1_cache import load_hvg_gene_order
 
     paths, settings = config["paths"], config["preparation"]
-    cells_per_context = config["features"]["cells_per_context"]
     split = load_geneeffect_226_split(Path(paths["split"]))
     labels = load_geneeffect_long(Path(paths["gene_effect"]), split)
     assert_fit_eligible(COPY_PRIOR_DONOR, split)
@@ -220,26 +318,23 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     candidates = restrict_coverage_universe_to_copy_prior(
         build_coverage_universe(labels, split), tuple(donor)
     )
-    registry = load_source_registry(Path(paths["source_registry"]), split)
     hvg_order = tuple(load_hvg_gene_order(Path(paths["state_model_dir"])))
-    encoded = _encode_missing_tx1(config, registry)
-    _LOGGER.info("Tx1 cache ready; %d lines newly encoded", len(encoded))
 
-    sources = load_response_sources(Path(paths["perturbseq_sources"]))
-    for anchor in sources:
+    responses = load_response_sources(Path(paths["perturbseq_sources"]))
+    for anchor in responses:
         assert_fit_eligible(anchor, split)
-    anchors = sorted(sources)
+    anchors = sorted(responses)
     part_dir = root / f".tmp-response-parts-{uuid.uuid4().hex}"
     part_dir.mkdir(parents=True)
     try:
         calls = [
-            partial(control_library_sizes, sources[model_id], model_id)
+            partial(control_library_sizes, responses[model_id], model_id)
             for model_id in TARGET_SUM_SOURCES
         ] + [
             partial(
                 write_response_part,
                 part_dir / f"{model_id}.npz",
-                sources[model_id],
+                responses[model_id],
                 model_id,
                 hvg_order,
                 max_cells_per_gene=settings["response_max_cells_per_gene"],
@@ -281,26 +376,9 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         shutil.rmtree(part_dir, ignore_errors=True)
 
     genes = tuple(union["common_gene_panel"])
-    line_calls = [
-        partial(
-            _prepare_basal_line,
-            str(model_id),
-            Path(row["source_path"]),
-            root / "lines" / f"{model_id}.npz",
-            tx1_cache=Path(paths["tx1_cache"]),
-            var_ensembl_col=settings["var_ensembl_col"],
-            hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
-            hvg_order=hvg_order,
-            genes=genes,
-            target_sum=target_sum,
-            cells_per_context=cells_per_context,
-        )
-        for model_id, row in registry.iterrows()
-    ]
-    for done, _ in enumerate(_in_processes(line_calls, LINE_PROCESSES), start=1):
-        if done % 25 == 0:
-            _LOGGER.info("Prepared basal line %d of %d", done, len(line_calls))
-    _LOGGER.info("Prepared %d basal lines", len(registry))
+    _prepare_lines(
+        config, root, sources, genes=genes, hvg_order=hvg_order, target_sum=target_sum
+    )
 
     manifest = {
         "expression_space": {
@@ -311,12 +389,11 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         },
         "common_gene_panel": list(genes),
         "hvg_order": list(hvg_order),
-        "response_anchors": sorted(sources),
+        "response_anchors": anchors,
         "settings": produced_by,
+        "lines": list(sources),
     }
-    temporary = manifest_path.with_name(manifest_path.name + ".tmp")
-    temporary.write_text(json.dumps(manifest, indent=2, allow_nan=False) + "\n")
-    os.replace(temporary, manifest_path)
+    _write_json(manifest_path, manifest)
     return manifest_path
 
 
@@ -330,9 +407,9 @@ def _pseudobulk_line(
 ):
     from src.data.basal import symbol_column
     from src.data.pseudobulk import pseudobulk
-    from src.data.tx1_cache import read_registry_source
+    from src.data.tx1_cache import read_basal_source
 
-    source = read_registry_source(
+    source = read_basal_source(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
     column = symbol_column(source.var, hvg_gene_symbol_col)
@@ -340,66 +417,81 @@ def _pseudobulk_line(
 
 
 def prepare_pseudobulk(config: Mapping[str, Any], genes: Sequence[str]) -> Path:
-    """Write ``<prepared_root>/pseudobulk/`` for every registered line, once.
+    """Write ``<prepared_root>/pseudobulk/`` for every line preparation covers,
+    or append the rows of lines it lacks; existing rows stay as written.
 
     Reads each line's raw source (preparation stays the only reader of raw data);
-    skipped when the manifest exists for the same genes.
+    raises when the existing pseudo-bulk is for other genes.
     """
     import numpy as np
     import pandas as pd
 
-    from src.data.geneeffect import load_source_registry
-    from src.data.pseudobulk import PSEUDOBULK_DIR, TRANSFORM
-    from src.data.splits import load_geneeffect_226_split
+    from src.data.pseudobulk import PSEUDOBULK_DIR, TRANSFORM, read_pseudobulk
 
-    root = Path(config["prepared_root"]) / PSEUDOBULK_DIR
+    prepared = Path(config["prepared_root"])
+    root = prepared / PSEUDOBULK_DIR
     manifest_path = root / "manifest.json"
+    sources = basal_sources(config)
     if manifest_path.is_file():
         if json.loads(manifest_path.read_text())["genes"] != list(genes):
             raise ValueError(f"{root} holds pseudo-bulk for other genes")
+        frame = read_pseudobulk(prepared)
+    else:
+        frame = pd.DataFrame(columns=list(genes), dtype=np.float32)
+    missing = [model_id for model_id in sources if model_id not in frame.index]
+    if not missing:
         return manifest_path
-    paths, settings = config["paths"], config["preparation"]
-    split = load_geneeffect_226_split(Path(paths["split"]))
-    registry = load_source_registry(Path(paths["source_registry"]), split)
+    settings = config["preparation"]
     calls = [
         partial(
             _pseudobulk_line,
-            str(model_id),
-            Path(row["source_path"]),
+            model_id,
+            sources[model_id],
             var_ensembl_col=settings["var_ensembl_col"],
             hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
             genes=tuple(genes),
         )
-        for model_id, row in registry.iterrows()
+        for model_id in missing
     ]
-    frame = pd.DataFrame(
+    added = pd.DataFrame(
         np.stack(list(_in_processes(calls, LINE_PROCESSES))),
-        index=pd.Index([str(m) for m in registry.index], name="model_id"),
+        index=missing,
         columns=list(genes),
     )
+    frame = pd.concat([frame, added]) if len(frame) else added
+    frame.index.name = "model_id"
     root.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(root / "pseudobulk.parquet")
-    manifest = {
-        "transform": TRANSFORM,
-        "genes": list(genes),
-        "lines": list(frame.index),
-    }
-    temporary = manifest_path.with_name(manifest_path.name + ".tmp")
-    temporary.write_text(json.dumps(manifest, indent=2) + "\n")
-    os.replace(temporary, manifest_path)
+    temporary = root / "pseudobulk.parquet.tmp"
+    frame.to_parquet(temporary)
+    os.replace(temporary, root / "pseudobulk.parquet")
+    _write_json(
+        manifest_path,
+        {"transform": TRANSFORM, "genes": list(genes), "lines": list(frame.index)},
+    )
     return manifest_path
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
+    parser.add_argument(
+        "--pseudobulk-genes",
+        type=Path,
+        help="a DepMap bulk matrix; also grow the pseudo-bulk over its genes",
+    )
     args = parser.parse_args(argv)
     from src.experiments.config import load_config
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
-    print(prepare_inputs(load_config(args.config)))
+    config = load_config(args.config)
+    print(prepare_inputs(config))
+    if args.pseudobulk_genes is not None:
+        from src.data.depmap import read_depmap_matrix
+
+        genes = list(read_depmap_matrix(args.pseudobulk_genes).columns)
+        print(prepare_pseudobulk(config, genes))
     return 0
 
 

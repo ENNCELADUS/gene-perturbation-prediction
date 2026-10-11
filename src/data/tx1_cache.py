@@ -15,8 +15,9 @@ import os
 import pickle
 import shutil
 import uuid
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Callable, Final, Sequence
+from typing import Final
 
 import anndata as ad
 import numpy as np
@@ -100,10 +101,10 @@ def write_line_cache(
     return final_dir
 
 
-def read_registry_source(
+def read_basal_source(
     source_path: Path, *, model_id: str, var_ensembl_col: str
 ) -> ad.AnnData:
-    """Every basal cell of one registered raw-UMI h5ad, Tx1-ready, in memory."""
+    """Every basal cell of one line's raw-UMI h5ad, Tx1-ready, in memory."""
     adata = ad.read_h5ad(source_path)
     observed = set(adata.obs["model_id"].astype(str))
     if observed != {model_id}:
@@ -144,7 +145,7 @@ def tx1_cell_indices(
 
 
 def encode_lines(
-    registry: pd.DataFrame,
+    sources: Mapping[str, Path],
     cache_dir: Path,
     *,
     encoder: EncoderFn,
@@ -154,14 +155,11 @@ def encode_lines(
     max_cells_per_line: int | None,
     seed: int = 0,
 ) -> list[str]:
-    """Encode and cache every registry line (index ModelID, ``source_path``)."""
+    """Encode and cache every line of ``sources`` (ModelID to raw-UMI h5ad)."""
     encoded = []
-    for model_id, row in registry.iterrows():
-        model_id = str(model_id)
-        source = read_registry_source(
-            Path(str(row["source_path"])),
-            model_id=model_id,
-            var_ensembl_col=var_ensembl_col,
+    for model_id, path in sources.items():
+        source = read_basal_source(
+            Path(path), model_id=model_id, var_ensembl_col=var_ensembl_col
         )
         cells = tx1_cell_indices(
             source.obs_names.astype(str), model_id, max_cells_per_line, seed
@@ -182,7 +180,7 @@ __all__ = [
     "load_hvg_gene_order",
     "load_line_cache",
     "missing_lines",
-    "read_registry_source",
+    "read_basal_source",
     "tx1_cell_indices",
     "write_line_cache",
 ]

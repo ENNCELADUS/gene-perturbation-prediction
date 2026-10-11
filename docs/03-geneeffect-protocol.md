@@ -91,7 +91,7 @@ held-out behaviour is measured by the comparison of §9.
 
 Use the pinned DepMap 26Q1 GeneEffect release, joined by ModelID. Fit the gene mean, the
 variable-gene set, the selective-gene set and per-gene residual SD of §4 and §6, and all
-normalization on the 170 labeled training lines only, and
+normalization on the 169 labeled training lines only, and
 reuse them unchanged in every later evaluation. Test values never enter preparation or
 fitting. Missing labels stay missing.
 
@@ -113,10 +113,18 @@ $$
 - Library size is taken over **all** genes of each source matrix, not over the HVG panel.
   This is a known approximation: gene universes differ slightly between the Nadig,
   Replogle, X-Atlas-Orion and atlas matrices.
-- Tx1 keeps raw UMI counts (§3.1). The transform covers STATE's basal bags for all 226
-  lines, the response targets and anchor control bags, the basal statistics $q_{g,c}$
+- Tx1 keeps raw UMI counts (§3.1). The transform covers STATE's basal bags for every
+  prepared line, the response targets and anchor control bags, the basal statistics $q_{g,c}$
   (mean and variance; detected fraction is space-invariant), and the HVG features of the
   context baselines (§6).
+- The prepared lines are the 226 and the built single-cell extras
+  (`configs/benchmarks/extra_single_cell_lines_26Q1.json`,
+  [card](data/single-cell-atlas-search.md)); each line's raw-UMI cells are
+  `<paths.basal_raw_umi>/<ModelID>.h5ad`, and a missing file stops preparation. $T$, the gene
+  panel and the HVG order are fixed by the 226. Once the manifest exists, a run prepares only
+  the lines without `lines/<ModelID>.npz`, in the recorded space, and records the line list in
+  the manifest; every other file stays as written. Training, evaluation and the controls read
+  the 226 only.
 - Preparation refuses a source matrix that is already normalised, and loading refuses a
   prepared root without `expression_space`, so a raw-count cache cannot reach STATE.
 
@@ -637,7 +645,9 @@ a module under `src/context_prior/remedies/`), a list of **settings** of that re
 block sets to fit under it. A run:
 
 1. **Pseudo-bulk and the bridge inputs.** Preparation sums each line's raw UMI over all its basal
-   cells, then CPM and log1p, into the prepared root; this is the only raw-data read. The shared
+   cells, then CPM and log1p, into the prepared root; this is the only raw-data read. It covers
+   every prepared line (§3.4) and appends the rows of new ones, keeping existing rows; the prior
+   reads the 226's rows. The shared
    space is the bulk genes every validation and test line's source measures (9,711); a training
    line lacking one takes the training lines' mean for it (counts in `facts.json`). Bulk and pseudo-bulk
    profiles are quantile-normalised to the mean sorted bulk profile of the training side.
@@ -743,8 +753,13 @@ specific to this task.
   labelled oracle row; test lines' bulk RNA is never read.
 - **Line authorities.** The [split file](../configs/benchmarks/cell_line_geneeffect_226_split.json)
   fixes the 226 members; the [extra-line membership file](../configs/benchmarks/extra_bulk_lines_26Q1.json)
-  fixes the DepMap lines outside the 226 that may join the training side
-  ([card](data/extra-bulk-lines-26q1.md)). Lines join by DepMap ModelID, never by name, and every
+  fixes the DepMap lines outside the 226 that may join the training side through bulk RNA
+  ([card](data/extra-bulk-lines-26q1.md)), and the
+  [single-cell membership file](../configs/benchmarks/extra_single_cell_lines_26Q1.json) those
+  whose basal single cells are built ([card](data/single-cell-atlas-search.md)). A source's own
+  spelling of a line becomes a ModelID only through a reviewed row of the
+  [identity map](../configs/benchmarks/single_cell_atlas_candidates.csv). Lines join by DepMap
+  ModelID, never by name at run time, and every
   line sharing a patient with a validation or test line is excluded from every fit. Results that
   use extra lines are a training-data change scored on the unchanged validation and test lines.
 - **Context claims need context-blind controls.** Residual evaluation against the gene mean, the
@@ -817,7 +832,7 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   The space is the genes every validation and test line measures; a training line's gap takes the
   training-line mean, and each statistic is quantile-normalised per line to the training lines' mean
   sorted profile, so source depth and vocabulary do not read as context.
-- **Target.** What the export leaves on the 170 single-cell training lines, $r-\hat r_{\text{prior}}$ in
+- **Target.** What the export leaves on the 169 single-cell training lines, $r-\hat r_{\text{prior}}$ in
   residual-SD units, the prior out of fold, so the stack learns at the prior's deployment error; a
   missing label counts as zero, as in §10. Validation and test add the stack to the export's full fit.
 - **Stack.** Two ridge stages, each on what the earlier leaves: the gene's own statistics (weights

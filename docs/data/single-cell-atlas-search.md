@@ -1,18 +1,106 @@
-# Single-Cell Atlas Search, DepMap 26Q1
+# Single-Cell Extra Lines, DepMap 26Q1
 
-**Status:** Candidate list of public single-cell RNA-seq of untreated or vehicle-treated DepMap
-cell lines, searched 2026-10-07, that could add labelled single-cell contexts beyond the
-[226-member GeneEffect benchmark](cell-line-geneeffect-226.md). Ingesting any of it is a separate
-decision; nothing has been downloaded beyond metadata. Nothing here is SL evidence.
+**Status:** Labelled DepMap lines outside the [226](cell-line-geneeffect-226.md) whose public basal
+single cells join the prepared root as training-side lines. The 2026-10-07 search below found the
+MIX-seq candidates; the 2026-10-11 survey (local note `docs/notes/Basal single cell DepMap lines.md`)
+found 131 more labelled lines, taken in two waves: wave 1 reads deposited count matrices, wave 2
+re-counts deposits that hold only processed values. Wave 1 was built on 2026-10-11: 51 sources,
+**186 labelled lines outside the 226 with 374,815 basal cells** (median 574 per line, 11 to
+58,324; 20 MIX-seq lines under 50), 160 of them untreated or vehicle 2D, 13 control-guide and 13
+Cas9 cutting-control lines; 48 chosen lines lack 26Q1 GeneEffect and 2 share a patient with a
+held-out line. They span 24 lineages, led by lung (30), ovary (17), oesophagus and stomach (16),
+lymphoid (14), skin, CNS and peripheral nervous system (11 each). Wave 2 is not built: the
+processed-only deposits of the survey (Easy-Sci GSE311521, the Ewing CITE-seq GSE236284, NAMALWA
+GSE314230, UACC-3199 GSE328823) and the re-count routes in the table below. Nothing here is SL
+evidence.
 
-## Purpose
+## Identity map
 
-The 226 benchmark has 169 labelled single-cell training lines. The
-[extra bulk lines](extra-bulk-lines-26q1.md) add contexts with bulk RNA only. This search looks for
-lines that have both single cells in a basal condition and a 26Q1 CRISPRGeneEffect row, so that a
-training line could arrive as cells, like a query line does.
+`configs/benchmarks/single_cell_atlas_candidates.csv` has one row per (source, identifier), where
+`identifier` is the source's own spelling of a line: a per-cell `DepMap_ID`, a Cellosaurus RRID, a
+GEO sample field, a label-table value, a hashtag-to-line value or a stated pool member. Every label a
+source can produce has a row, lines of the 226 included, so the builder can resolve or drop each cell.
 
-## Result
+| Column | Meaning |
+| --- | --- |
+| `source`, `accession` | Source key (lower-case accession) and its public accession |
+| `model_id`, `identifier_kind` | The ModelID and how it was found: `model_id`, `rrid`, `ccle_name`, `name` (Model.csv `StrippedCellLineName` or `CellLineName`, case and punctuation ignored) or `synonym` (an exact Cellosaurus name or synonym whose accession is a Model.csv RRID) |
+| `cells`, `raw_counts`, `condition`, `size_gb` | Expected basal cells, whether the deposit holds integer counts, the basal arm(s), the source's download size |
+| `condition_class` | `basal_2d` (untreated or vehicle 2D), `control_guide` (non-targeting or safe-targeting guide), `cutting_control` (Cas9 cut at an unexpressed locus), `other` |
+| `review` | `ok`, a flag (`ambiguous`, `no_match`, `problematic`, `derived`) or `dropped: <reason>` |
+| `wave` | `1` or `2` when the source is ingested, empty when not |
+| `note` | Evidence: Cellosaurus accession, GSM ids, the reviewer's reason |
+
+`build_extra_single_cell_lines propose` fills the rows without a review from the source's own ModelID
+or RRID, else a unique Model.csv name, else a Cellosaurus synonym, and flags the rest: two Model.csv
+lines share the name (`ambiguous`), nothing matches (`no_match`), Cellosaurus marks the DepMap line
+problematic (`problematic`), or the name is a Cellosaurus child of a DepMap line (`derived`). Flagged
+rows are settled by hand once (`ok` with a ModelID, or `dropped: <reason>`). Nothing joins lines by
+name at run time: the builder resolves labels only through `ok` rows, and a label absent from the map
+stops it.
+
+## Source choice and membership
+
+Each line takes its cells from one source: among `ok` rows of an ingested wave, the best
+`condition_class`, then integer counts, then most cells, then the source key. The membership file
+`configs/benchmarks/extra_single_cell_lines_26Q1.json` (schema `extra-single-cell-lines-26q1-v2`,
+`src/data/extra_lines.py:load_extra_single_cell_lines`) sorts the chosen lines outside the 226:
+`labelled` (26Q1 GeneEffect row and built cells, with source, identifiers, condition, patient,
+lineage, cells and arms), `pending` (labelled, source not built or no cell after QC), `unlabelled`
+(no GeneEffect row; never built) and `excluded` (shares a PatientID with a validation or test line).
+Preparation and the SL benchmark read only `labelled`. `inputs` records the SHA-256 of every input.
+
+## Builder
+
+`src/data/prepare/build_extra_single_cell_sources.py` reads the tracked source spec
+`configs/data/extra_single_cell_sources_26Q1.json` (per source: files and their URLs, archives to
+unpack, gene id kind, basal arms, libraries). Per library:
+
+- **Reader:** 10x mtx or h5 (expression and antibody-capture features split; header rows and a
+  mixed-species prefix such as `hg19_` handled), a dense count table (Drop-seq DGE, BD Rhapsody
+  molecules per cell, with comment lines skipped), an h5ad or a velocyto loom (`X`, `.raw` or a
+  layer), or the Tahoe-100M DMSO shards. Archives (tar, zip, gzip) are unpacked first. Counts must
+  be integers; a deposit clipped at a small cap passes that check, so it is excluded at review.
+- **Cells:** the deposit's called cells, or the inflection of the barcode-rank curve for unfiltered
+  matrices (the knee UMI is reported).
+- **Line per cell:** the whole library, the authors' per-cell table (with keep filters and an arm
+  column), a pattern on the cell id (a line prefix such as `SUM149PT_`, an aggregate's `-1` suffix,
+  an arm suffix such as `_C.R1`), hashtags (a singlet's top tag needs at least `min_count` and
+  `min_ratio` times the second),
+  or, for a pool without labels, k-means clusters assigned to the member whose DepMap bulk RNA deviation
+  correlates best, when it beats the second best by `min_margin` (every cluster's correlations and
+  margin are reported).
+- **Kept:** cells of the lines the choice takes from this source, in a listed basal arm, with at least
+  `min_genes` (200) detected genes and at most `max_mito_fraction` (25%) mitochondrial UMI. Cells of a
+  226 line are never written; each dropped cell is counted by reason. There is no minimum number of
+  cells per line.
+
+A line's libraries are stacked over the genes they all measure, mapped to the Tx1 vocabulary through
+Tahoe's gene metadata (unique symbols only). It writes `<basal_raw_umi>/<ModelID>.h5ad` (obs: line,
+patient, source, identifier, arm, library) and, last, `qc/<source>.json`; a source with a report is
+skipped, an h5ad is never overwritten, and an h5ad without its report stops the run.
+
+## Deposits not ingested in wave 1
+
+The 2026-10-11 specification found these deposits unusable as deposited; the lines they would
+add come from another source where one exists.
+
+| Deposit | Lines | Why | Route |
+| --- | --- | --- | --- |
+| GSE142750 (Andor 2020) | SNU-601, SNU-668, NCI-N87 | Integer matrices clipped at a small cap (MALAT1, ACTB, MT-CO1 equal the cap in every cell); they pass the integer check | Re-count from SRA |
+| GSE202771 (Jovanović 2023) | MFM-223, HCC1806, SUM lines | One RData `dgCMatrix` | Re-count from SRA, or an R reader |
+| GSE202435 | HCC1806 | Scaled, non-integer values only | Re-count from SRA |
+| SEQC2 (figshare 13264121) | HCC1395 | One RData of 72 matrices; use library 10X_NCI_A once | Re-count SRR10051134 |
+| GSE247098 | OVCA420 | Control matrix truncated (4.96 of 17.8 million entries) | Re-count from SRA; GSE147405 supplies 688 cells |
+| GSE288487 | U-2 OS | Poisson-corrected, about 5% non-integer values | Re-count from SRA |
+| GSE261618, GSE225775 (sci-Plex) | T98G, U-87 MG | Headerless (gene, cell, count) triplets; lines only through the RT-well map | A triplet reader and the authors' map |
+| GSE206953 | SK-OV-3, A-431 | Matrix without 10x barcode and feature files | A reader for R-style name tables |
+| GSE229062 | T3M-4 | h5Seurat only | An h5Seurat reader |
+| GSE266034 | PA-TU-8902 | Hashtags named only HTO1–HTO6, no key to line and medium | None |
+| GSE134842 | U-937 | TPA-differentiated, not basal | None |
+| figshare 33273600 deep rescreen | KMRC-20, UM-RC-3 (non-targeting) | No per-cell line column; NaN guide counts | The pilot's cutting controls are used |
+
+## 2026-10-07 search
 
 Only MIX-seq adds a material number of labelled lines. Tahoe-100M and Kinker et al. 2020 are
 already almost fully used: their lines outside the 226 have no 26Q1 GeneEffect row, except one
@@ -81,14 +169,9 @@ and the two patient exclusions); its printed counts are the authority, and this 
   the source gives, because the SNP reference that assigned the cells is that model's own
   sequencing.
 
-## Resolution rule
-
-Only identifiers the source itself gives are used: a DepMap ModelID (matched to `ModelID`, with
-`ModelIDAlias` as a fallback that no row needed), a Cellosaurus RRID (matched to `RRID` only when
-one Model.csv row carries it), or a CCLE name (matched exactly to the `CCLEName` column). A
-source that gives only informal names is not resolved, so `K-562` and `K562` are never joined by
-spelling. Lines in the 226 stay in the candidate file; the builder excludes them and lines that
-share a `PatientID` with a validation or test line, and records each exclusion with its reason.
+The 2026-10-07 rows were resolved only from identifiers the source itself gives (a ModelID, an RRID
+that one Model.csv row carries, or an exact CCLE name); they carry `review = ok`. Rows added from
+informal names go through the identity map's review above.
 
 ## Sources found but not usable
 
@@ -96,41 +179,47 @@ share a `PatientID` with a validation or test line, and records each exclusion w
 | --- | --- | ---: | --- |
 | Breast cancer cell line atlas (Gambardella et al. 2022) | GEO GSE173634; [figshare 15022698](https://figshare.com/articles/dataset/Single_Cell_Breast_Cancer_cell-line_Atlas/15022698) (CC BY 4.0, 1.93 GB, raw UMI, Drop-seq, untreated) | 32 | Informal names only (`HS578T`, `MDAMB361`; GEO `cell line: AU565`). The 226 already takes 14 lines from it through the earlier atlas manifest. |
 | Single-cell atlas of human cell lines (Zhu et al. 2023, Nat Commun 14, 8170) | [OMIX005191](https://ngdc.cncb.ac.cn/omix/release/OMIX005191) (open access, 56 files, about 1.5 GB of wide count tables) | 42 (40 cancer, 2 normal) | Informal names only (`K-562`, `HT29`, `HNSCCUM-02T`); hypoxia and lineage-tracing arms for five lines. The 226 already takes 13 lines from it. |
-| Controlled-heterogeneity benchmark (Sci Data 2024) | GEO GSE243665 | several lung lines | Files are named by informal names or ATCC catalog numbers (`A549`, `CCL-185-IG`, `CRL5868`, `DV90`). |
+| Controlled-heterogeneity benchmark (Sci Data 2024) | GEO GSE243665 | several lung lines | Files are named by informal names or ATCC catalog numbers (`A549`, `CCL-185-IG`, `CRL5868`, `DV90`). HCC-78, a labelled line outside the 226, is among them (2026-10-11 survey). |
 | Pathway Perturb-seq (Jiang et al. 2025, Nat Cell Biol) | [Zenodo 10520190](https://zenodo.org/records/10520190) (CC BY 4.0, 20.5 GB Seurat objects) | 6 | Released as one object per stimulation (IFN-β, IFN-γ, TNF-α, TGF-β1, insulin), so its controls come from stimulation screens; informal names. Not opened. |
 | X-Atlas/Orion and X-Atlas/Pisces (Xaira) | [figshare+ 29190726](https://doi.org/10.25452/figshare.plus.29190726) (about 520 GB); [X-Atlas-Pisces](https://huggingface.co/datasets/Xaira-Therapeutics/X-Atlas-Pisces) (CC BY-NC-SA 4.0) | HCT116, HEK293T, HepG2, Jurkat | Informal names; HCT116, HepG2 and Jurkat are already in the 226 and HEK293T is not a cancer line. Pisces files were not yet released when checked. |
 | scPerturb | scperturb.org | — | Repackages published perturbation sets, MIX-seq and sci-Plex among them; no further multi-line basal set was identified in it. |
-| Arc Virtual Cell Atlas / scBaseCount | arcinstitute.org/tools/virtualcellatlas | — | Reprocessed SRA data with agent-extracted metadata; no ModelID, RRID or CCLE-name field was found. Not pursued. |
+| Arc Virtual Cell Atlas / scBaseCount | arcinstitute.org/tools/virtualcellatlas | — | Reprocessed SRA data with agent-extracted metadata; no ModelID, RRID or CCLE-name field. It does carry a free-text `cell_line` field per experiment, which the 2026-10-11 survey used to find studies (about one match in five was misannotated); each study is ingested from its own deposit. |
 
 CELLxGENE Discover was searched through its curation API: of 2,238 public datasets, five carry a
 Cellosaurus cell-line tissue (the three sci-Plex 3 lines and the two SARS-CoV-2 lines above).
 
 ## Rebuild
 
-The candidate file is rebuilt by hand from the sources above; the membership file is rebuilt
-from it with:
+New sources enter as map rows (with an empty `review`) and spec entries; then, on the Mac,
+`propose` fills the rows and the flagged ones are reviewed by hand:
 
 ```bash
-uv run python -m src.data.prepare.build_extra_single_cell_lines \
+uv run python -m src.data.prepare.build_extra_single_cell_lines propose \
     --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
-    --model data/sl_dependency_v0/raw/depmap/Model.csv \
-    --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
-    --split configs/benchmarks/cell_line_geneeffect_226_split.json \
-    --out configs/benchmarks/extra_single_cell_lines_26Q1.json
+    --model data/sl_dependency_v0/raw/depmap/Model.csv
 ```
+
+On the H20, the builder and `build_extra_single_cell_lines build` write the h5ad, the QC reports and
+the membership file, and preparation grows the prepared root (commands in `hpc/README.md`, "Extra
+single-cell lines"). Re-preparing a line means deleting its h5ad, `lines/<ModelID>.npz`, Tx1 cache
+directory and pseudo-bulk row.
 
 ## Artifacts
 
-- `configs/benchmarks/single_cell_atlas_candidates.csv`: one row per (source, line), 452 rows;
-  columns `source, accession, model_id, identifier, identifier_kind, cells, raw_counts,
-  condition, size_gb`. `cells` counts cells in the listed condition; `size_gb` is the source's
-  total size, repeated per row.
-- `configs/benchmarks/extra_single_cell_lines_26Q1.json`: the membership file (`labelled`,
-  `unlabelled`, `excluded` with reasons, and each usable line's `sources`).
+- `configs/benchmarks/single_cell_atlas_candidates.csv`: the identity map, one row per (source,
+  identifier); columns above.
+- `configs/data/extra_single_cell_sources_26Q1.json`: the source spec, per wave.
+- `configs/benchmarks/extra_single_cell_lines_26Q1.json`: the membership file.
+- H20: `data/sl_dependency_v0/raw/extra_single_cell/<source>/` (deposits, `SHA256SUMS`) and
+  `data/sl_dependency_v0/processed/basal_raw_umi/` (one h5ad per prepared line, the 226 hard-linked
+  from their builders' outputs, and `qc/<source>.json`).
 
 ## Use
 
-The MIX-seq lines are thin: about a hundred QC-passing cells per line against tens of thousands
-for Tahoe, and from 10x chemistry and pools unlike any source in the 226. Whether lines this thin
-help is an empirical question for the run that ingests them, scored on the unchanged validation
-and test lines.
+Most extras come from their own study, so a line's lab and chemistry are confounded with the line;
+the panels and pools (MIX-seq, the gastric, neuroblastoma, SUM-breast and blood-cancer panels)
+give several lines inside one study. Calls to note: Groves' inDrop looms (GSE193959; COR-L279 and
+DMS 53) put the knee near 125 UMI, so nearly all of their deposited barcodes pass as cells; the
+OPM-2 and Dufva hashtag lanes have many doublets (reported per lane). The prepared extras are
+training-side data only: validation and
+test lines are unchanged, and whether and how a model uses the extras is decided by its own run.

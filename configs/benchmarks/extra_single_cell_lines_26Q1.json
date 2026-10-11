@@ -1,847 +1,3394 @@
 {
-  "schema_version": 1,
-  "policy": "Lines outside the 226 with public basal single-cell RNA; labelled ones have 26Q1 GeneEffect. A line in the 226 or sharing a PatientID with a validation or test line is excluded. Membership is pinned; ingesting the lines is a separate step.",
-  "labelled": [
-    "ACH-000001",
-    "ACH-000012",
-    "ACH-000014",
-    "ACH-000015",
-    "ACH-000018",
-    "ACH-000021",
-    "ACH-000026",
-    "ACH-000035",
-    "ACH-000047",
-    "ACH-000085",
-    "ACH-000096",
-    "ACH-000098",
-    "ACH-000142",
-    "ACH-000149",
-    "ACH-000174",
-    "ACH-000200",
-    "ACH-000212",
-    "ACH-000235",
-    "ACH-000237",
-    "ACH-000265",
-    "ACH-000268",
-    "ACH-000280",
-    "ACH-000281",
-    "ACH-000292",
-    "ACH-000341",
-    "ACH-000368",
-    "ACH-000390",
-    "ACH-000393",
-    "ACH-000407",
-    "ACH-000411",
-    "ACH-000416",
-    "ACH-000427",
-    "ACH-000434",
-    "ACH-000444",
-    "ACH-000445",
-    "ACH-000452",
-    "ACH-000458",
-    "ACH-000460",
-    "ACH-000477",
-    "ACH-000479",
-    "ACH-000486",
-    "ACH-000488",
-    "ACH-000495",
-    "ACH-000502",
-    "ACH-000517",
-    "ACH-000527",
-    "ACH-000532",
-    "ACH-000535",
-    "ACH-000537",
-    "ACH-000542",
-    "ACH-000549",
-    "ACH-000569",
-    "ACH-000587",
-    "ACH-000589",
-    "ACH-000595",
-    "ACH-000618",
-    "ACH-000624",
-    "ACH-000652",
-    "ACH-000657",
-    "ACH-000661",
-    "ACH-000662",
-    "ACH-000666",
-    "ACH-000685",
-    "ACH-000701",
-    "ACH-000704",
-    "ACH-000734",
-    "ACH-000738",
-    "ACH-000749",
-    "ACH-000756",
-    "ACH-000769",
-    "ACH-000774",
-    "ACH-000776",
-    "ACH-000784",
-    "ACH-000796",
-    "ACH-000822",
-    "ACH-000824",
-    "ACH-000826",
-    "ACH-000833",
-    "ACH-000836",
-    "ACH-000837",
-    "ACH-000847",
-    "ACH-000873",
-    "ACH-000880",
-    "ACH-000884",
-    "ACH-000886",
-    "ACH-000888",
-    "ACH-000896",
-    "ACH-000905",
-    "ACH-000906",
-    "ACH-000911",
-    "ACH-000921",
-    "ACH-000936",
-    "ACH-000939",
-    "ACH-000941",
-    "ACH-000961",
-    "ACH-000966",
-    "ACH-000973",
-    "ACH-001021",
-    "ACH-001239",
-    "ACH-001307"
-  ],
+  "schema_version": "extra-single-cell-lines-26q1-v2",
+  "policy": "Labelled lines outside the 226 whose basal single cells are built, one source per line (untreated or vehicle 2D first, then raw counts, then most cells). A line sharing a PatientID with a validation or test line is excluded; a chosen line without 26Q1 GeneEffect is unlabelled and not built; a labelled line whose source is not built yet is pending.",
+  "labelled": {
+    "ACH-000001": {
+      "source": "gse207993",
+      "accession": "GEO GSE207993",
+      "identifiers": [
+        "OVCAR3"
+      ],
+      "condition": "DMSO vehicle",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-gj46wT",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 8579,
+      "arms": {
+        "DMSO": 8579
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000012": {
+      "source": "gse118767",
+      "accession": "GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology",
+      "identifiers": [
+        "HCC827"
+      ],
+      "condition": "untreated, equal-proportion mixture",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-NdspH5",
+      "lineage": "Lung",
+      "cells": 844,
+      "arms": {
+        "untreated": 844
+      },
+      "other_sources": [
+        "gse303762",
+        "mixseq"
+      ]
+    },
+    "ACH-000014": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000014"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-fp8PeY",
+      "lineage": "Skin",
+      "cells": 38,
+      "arms": {
+        "DMSO_24hr_expt10": 38
+      },
+      "other_sources": []
+    },
+    "ACH-000015": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000015"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ffwajI",
+      "lineage": "Lung",
+      "cells": 280,
+      "arms": {
+        "DMSO_6hr_expt3": 166,
+        "DMSO_24hr_expt3": 114
+      },
+      "other_sources": []
+    },
+    "ACH-000018": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000018"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-Mi0cKz",
+      "lineage": "Bladder/Urinary Tract",
+      "cells": 43,
+      "arms": {
+        "sgLACZ_expt2": 15,
+        "sgOR2J2_expt2": 28
+      },
+      "other_sources": []
+    },
+    "ACH-000021": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000021"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-9p1WQv",
+      "lineage": "Lung",
+      "cells": 209,
+      "arms": {
+        "DMSO_6hr_expt3": 129,
+        "DMSO_24hr_expt3": 80
+      },
+      "other_sources": []
+    },
+    "ACH-000024": {
+      "source": "gse242465",
+      "accession": "GSE242465",
+      "identifiers": [
+        "OPM2"
+      ],
+      "condition": "DMSO vehicle 2 h, cell hashing (5' 10x)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-codP7n",
+      "lineage": "Lymphoid",
+      "cells": 3189,
+      "arms": {
+        "DMSO": 3189
+      },
+      "other_sources": []
+    },
+    "ACH-000026": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000026"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-AR7W9o",
+      "lineage": "Bladder/Urinary Tract",
+      "cells": 112,
+      "arms": {
+        "DMSO_24hr_expt10": 112
+      },
+      "other_sources": []
+    },
+    "ACH-000035": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000035"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-5LVIPg",
+      "lineage": "Lung",
+      "cells": 147,
+      "arms": {
+        "DMSO_6hr_expt3": 48,
+        "DMSO_24hr_expt3": 36,
+        "DMSO_24hr_expt10": 63
+      },
+      "other_sources": []
+    },
+    "ACH-000036": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "U343"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-llPs5J",
+      "lineage": "CNS/Brain",
+      "cells": 468,
+      "arms": {
+        "olfactory_cutting_control": 468
+      },
+      "other_sources": []
+    },
+    "ACH-000037": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000037"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-JfLphU",
+      "lineage": "Soft Tissue",
+      "cells": 21,
+      "arms": {
+        "DMSO_24hr_expt10": 21
+      },
+      "other_sources": []
+    },
+    "ACH-000047": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000047"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-UVwT4j",
+      "lineage": "Esophagus/Stomach",
+      "cells": 230,
+      "arms": {
+        "DMSO_6hr_expt3": 124,
+        "DMSO_24hr_expt3": 106
+      },
+      "other_sources": []
+    },
+    "ACH-000070": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "697"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-0yrZJC",
+      "lineage": "Lymphoid",
+      "cells": 721,
+      "arms": {
+        "targets_only": 721
+      },
+      "other_sources": []
+    },
+    "ACH-000074": {
+      "source": "gse329598",
+      "accession": "GSE329598",
+      "identifiers": [
+        "Ku812"
+      ],
+      "condition": "untreated, TotalSeq-B hashed with HMC1.2",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-FJahu6",
+      "lineage": "Myeloid",
+      "cells": 4924,
+      "arms": {
+        "untreated": 4924
+      },
+      "other_sources": []
+    },
+    "ACH-000078": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "MHHNB11"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Vot01h",
+      "lineage": "Peripheral Nervous System",
+      "cells": 1837,
+      "arms": {
+        "standard_culture": 1837
+      },
+      "other_sources": []
+    },
+    "ACH-000085": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000085"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-FnO2p8",
+      "lineage": "Pancreas",
+      "cells": 18,
+      "arms": {
+        "DMSO_24hr_expt10": 18
+      },
+      "other_sources": []
+    },
+    "ACH-000094": {
+      "source": "gse173339",
+      "accession": "GEO GSE173339",
+      "identifiers": [
+        "HPAF2"
+      ],
+      "condition": "untreated 2D monolayer, 10x 3'",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-bW9aaR",
+      "lineage": "Pancreas",
+      "cells": 4821,
+      "arms": {
+        "untreated": 4821
+      },
+      "other_sources": [
+        "gse270117"
+      ]
+    },
+    "ACH-000096": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000096"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ABKGjf",
+      "lineage": "Kidney",
+      "cells": 170,
+      "arms": {
+        "DMSO_6hr_expt3": 92,
+        "DMSO_24hr_expt3": 78
+      },
+      "other_sources": []
+    },
+    "ACH-000098": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000098"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-HmIANs",
+      "lineage": "CNS/Brain",
+      "cells": 82,
+      "arms": {
+        "DMSO_24hr_expt10": 82
+      },
+      "other_sources": []
+    },
+    "ACH-000100": {
+      "source": "gse113660",
+      "accession": "GEO GSE113660",
+      "identifiers": [
+        "Rh41"
+      ],
+      "condition": "untreated, unsorted",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-BN67ox",
+      "lineage": "Soft Tissue",
+      "cells": 7223,
+      "arms": {
+        "untreated": 7223
+      },
+      "other_sources": []
+    },
+    "ACH-000115": {
+      "source": "gse266216",
+      "accession": "GEO GSE266216",
+      "identifiers": [
+        "VCaP"
+      ],
+      "condition": "ethanol vehicle, 18 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-O15HlH",
+      "lineage": "Prostate",
+      "cells": 965,
+      "arms": {
+        "EtOH vehicle": 965
+      },
+      "other_sources": []
+    },
+    "ACH-000142": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000142"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Er9zxL",
+      "lineage": "Bladder/Urinary Tract",
+      "cells": 63,
+      "arms": {
+        "DMSO_24hr_expt10": 63
+      },
+      "other_sources": []
+    },
+    "ACH-000146": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "THP1"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Sv45MF",
+      "lineage": "Myeloid",
+      "cells": 1521,
+      "arms": {
+        "targets_only": 1521
+      },
+      "other_sources": [
+        "gse217922"
+      ]
+    },
+    "ACH-000149": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "SKNSH"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ombRgU",
+      "lineage": "Peripheral Nervous System",
+      "cells": 3371,
+      "arms": {
+        "standard_culture": 3371
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000174": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000174"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-dTkV2T",
+      "lineage": "Thyroid",
+      "cells": 557,
+      "arms": {
+        "sgLACZ_expt2": 72,
+        "sgOR2J2_expt2": 95,
+        "DMSO_6hr_expt3": 186,
+        "DMSO_24hr_expt3": 204
+      },
+      "other_sources": []
+    },
+    "ACH-000183": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "L363"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-T1yBnE",
+      "lineage": "Lymphoid",
+      "cells": 1483,
+      "arms": {
+        "targets_only": 1483
+      },
+      "other_sources": []
+    },
+    "ACH-000200": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000200"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-bkGAPG",
+      "lineage": "CNS/Brain",
+      "cells": 50,
+      "arms": {
+        "DMSO_24hr_expt10": 50
+      },
+      "other_sources": []
+    },
+    "ACH-000204": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "LP1"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-gN5ZVQ",
+      "lineage": "Lymphoid",
+      "cells": 719,
+      "arms": {
+        "targets_only": 719
+      },
+      "other_sources": []
+    },
+    "ACH-000212": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000212"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-y6HadC",
+      "lineage": "Breast",
+      "cells": 154,
+      "arms": {
+        "DMSO_6hr_expt3": 87,
+        "DMSO_24hr_expt3": 67
+      },
+      "other_sources": []
+    },
+    "ACH-000232": {
+      "source": "gse178116",
+      "accession": "GEO GSE178116 (SubSeries GSE178114)",
+      "identifiers": [
+        "U251"
+      ],
+      "condition": "ATRX wild type: CRISPR empty-vector control clone (U251-ATRX EV, ATRXEVB), untreated",
+      "condition_class": "control_guide",
+      "patient_id": "PT-88IC1n",
+      "lineage": "CNS/Brain",
+      "cells": 6207,
+      "arms": {
+        "ATRX_EV": 6207
+      },
+      "other_sources": []
+    },
+    "ACH-000235": {
+      "source": "gse218310",
+      "accession": "GEO GSE218310",
+      "identifiers": [
+        "Panc04.03"
+      ],
+      "condition": "untreated 2D culture, lectin-stained for scGlycan-seq (10x 5' v2 CITE-seq)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-zLTXv3",
+      "lineage": "Pancreas",
+      "cells": 5855,
+      "arms": {
+        "untreated": 5855
+      },
+      "other_sources": [
+        "gse270117",
+        "mixseq"
+      ]
+    },
+    "ACH-000237": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000237"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-wwKJYr",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 42,
+      "arms": {
+        "DMSO_6hr_expt3": 31,
+        "DMSO_24hr_expt3": 11
+      },
+      "other_sources": []
+    },
+    "ACH-000246": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "SLR23"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-bLoo9u",
+      "lineage": "Kidney",
+      "cells": 311,
+      "arms": {
+        "olfactory_cutting_control": 311
+      },
+      "other_sources": []
+    },
+    "ACH-000250": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "KMRC20"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-66upm1",
+      "lineage": "Kidney",
+      "cells": 1004,
+      "arms": {
+        "olfactory_cutting_control": 1004
+      },
+      "other_sources": []
+    },
+    "ACH-000256": {
+      "source": "gse297836",
+      "accession": "GEO GSE297836",
+      "identifiers": [
+        "COV318"
+      ],
+      "condition": "untreated parental",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-qexSkk",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 446,
+      "arms": {
+        "parental": 446
+      },
+      "other_sources": []
+    },
+    "ACH-000257": {
+      "source": "gse193959",
+      "accession": "GSE193959",
+      "identifiers": [
+        "CORL279"
+      ],
+      "condition": "untreated (no treatment field), inDrop",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-7LsK3v",
+      "lineage": "Lung",
+      "cells": 14315,
+      "arms": {
+        "untreated": 14315
+      },
+      "other_sources": []
+    },
+    "ACH-000259": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "KELLY"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-S07K7h",
+      "lineage": "Peripheral Nervous System",
+      "cells": 2167,
+      "arms": {
+        "standard_culture": 2167
+      },
+      "other_sources": []
+    },
+    "ACH-000263": {
+      "source": "gse243227",
+      "accession": "GSE243227",
+      "identifiers": [
+        "Kasumi-1"
+      ],
+      "condition": "untreated, mixed with K562 (10x 5')",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-uzWVHa",
+      "lineage": "Myeloid",
+      "cells": 14651,
+      "arms": {
+        "untreated": 14651
+      },
+      "other_sources": []
+    },
+    "ACH-000265": {
+      "source": "gse292402",
+      "accession": "GEO GSE292402",
+      "identifiers": [
+        "KP4"
+      ],
+      "condition": "untreated (time point 1) and 0.15% DMSO 24 h (time point 2) 2D culture, lentiviral UMI-barcoded (MOI < 0.1, puromycin-selected), 10x",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-o1wR3t",
+      "lineage": "Pancreas",
+      "cells": 58324,
+      "arms": {
+        "untreated": 24137,
+        "DMSO": 34187
+      },
+      "other_sources": [
+        "gse270117",
+        "mixseq"
+      ]
+    },
+    "ACH-000268": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000268"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-IrDGnP",
+      "lineage": "Biliary Tract",
+      "cells": 93,
+      "arms": {
+        "DMSO_6hr_expt3": 55,
+        "DMSO_24hr_expt3": 38
+      },
+      "other_sources": []
+    },
+    "ACH-000278": {
+      "source": "gse247689",
+      "accession": "GEO GSE247689",
+      "identifiers": [
+        "COV362"
+      ],
+      "condition": "untreated (C)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-BexFYH",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 1826,
+      "arms": {
+        "C": 1826
+      },
+      "other_sources": []
+    },
+    "ACH-000280": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000280"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-S0isOw",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 107,
+      "arms": {
+        "DMSO_24hr_expt10": 107
+      },
+      "other_sources": []
+    },
+    "ACH-000281": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000281"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-aIUMLY",
+      "lineage": "Pancreas",
+      "cells": 24,
+      "arms": {
+        "DMSO_24hr_expt10": 24
+      },
+      "other_sources": []
+    },
+    "ACH-000290": {
+      "source": "gse216182",
+      "accession": "GSE216182",
+      "identifiers": [
+        "NCI-H209"
+      ],
+      "condition": "untreated cell line before xenografting (eGFP-labelled)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-DzY90c",
+      "lineage": "Lung",
+      "cells": 677,
+      "arms": {
+        "untreated": 677
+      },
+      "other_sources": []
+    },
+    "ACH-000292": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000292"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-x8fAhk",
+      "lineage": "Lung",
+      "cells": 226,
+      "arms": {
+        "DMSO_6hr_expt3": 125,
+        "DMSO_24hr_expt3": 101
+      },
+      "other_sources": [
+        "gse193959"
+      ]
+    },
+    "ACH-000293": {
+      "source": "gse223848",
+      "accession": "GEO GSE223848",
+      "identifiers": [
+        "KLE"
+      ],
+      "condition": "log-phase growth (not starved)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-tjaCAG",
+      "lineage": "Uterus",
+      "cells": 5075,
+      "arms": {
+        "log_phase": 5075
+      },
+      "other_sources": []
+    },
+    "ACH-000310": {
+      "source": "gse331320",
+      "accession": "GEO GSE331320",
+      "identifiers": [
+        "IMR32P"
+      ],
+      "condition": "treatment: None (parental IMR-32)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-2Urqss",
+      "lineage": "Peripheral Nervous System",
+      "cells": 4730,
+      "arms": {
+        "untreated": 4730
+      },
+      "other_sources": []
+    },
+    "ACH-000312": {
+      "source": "gse331320",
+      "accession": "GEO GSE331320",
+      "identifiers": [
+        "SKNBE2"
+      ],
+      "condition": "treatment: None",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-k4Daz3",
+      "lineage": "Peripheral Nervous System",
+      "cells": 1261,
+      "arms": {
+        "untreated": 1261
+      },
+      "other_sources": []
+    },
+    "ACH-000336": {
+      "source": "gse116256",
+      "accession": "GSE116256",
+      "identifiers": [
+        "OCI-AML3"
+      ],
+      "condition": "untreated (Seq-Well)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-0F4qCF",
+      "lineage": "Myeloid",
+      "cells": 1178,
+      "arms": {
+        "untreated": 1178
+      },
+      "other_sources": []
+    },
+    "ACH-000337": {
+      "source": "gse139386",
+      "accession": "GSE139386",
+      "identifiers": [
+        "H3122"
+      ],
+      "condition": "untreated parental",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-0fXDWz",
+      "lineage": "Lung",
+      "cells": 4910,
+      "arms": {
+        "untreated": 4910
+      },
+      "other_sources": []
+    },
+    "ACH-000341": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "SKNFI"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-I4N9IW",
+      "lineage": "Peripheral Nervous System",
+      "cells": 3867,
+      "arms": {
+        "standard_culture": 3867
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000354": {
+      "source": "gse270117",
+      "accession": "GEO GSE270117",
+      "identifiers": [
+        "CAPAN1"
+      ],
+      "condition": "baseline (untreated) 2D culture, 7-line pool, 10x",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-MDCOET",
+      "lineage": "Pancreas",
+      "cells": 573,
+      "arms": {
+        "untreated": 573
+      },
+      "other_sources": []
+    },
+    "ACH-000355": {
+      "source": "gse216182",
+      "accession": "GSE216182",
+      "identifiers": [
+        "NCI-H82"
+      ],
+      "condition": "untreated cell line before xenografting (eGFP-labelled)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-TQn0DO",
+      "lineage": "Lung",
+      "cells": 1590,
+      "arms": {
+        "untreated": 1590
+      },
+      "other_sources": [
+        "gse193959"
+      ]
+    },
+    "ACH-000359": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "MG63"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-qWqYVi",
+      "lineage": "Bone",
+      "cells": 945,
+      "arms": {
+        "olfactory_cutting_control": 945
+      },
+      "other_sources": []
+    },
+    "ACH-000361": {
+      "source": "gse188289",
+      "accession": "GEO GSE188289",
+      "identifiers": [
+        "SK-HEP-1"
+      ],
+      "condition": "untreated 2D culture, CITE-seq RNA (BGISEQ)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-sPLV6L",
+      "lineage": "Liver",
+      "cells": 1647,
+      "arms": {
+        "untreated": 1647
+      },
+      "other_sources": []
+    },
+    "ACH-000362": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "MOLM13"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-H3wdRq",
+      "lineage": "Myeloid",
+      "cells": 1905,
+      "arms": {
+        "targets_only": 1905
+      },
+      "other_sources": []
+    },
+    "ACH-000365": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "SUDHL4"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-I24dRR",
+      "lineage": "Lymphoid",
+      "cells": 1691,
+      "arms": {
+        "targets_only": 1691
+      },
+      "other_sources": [
+        "gse217922"
+      ]
+    },
+    "ACH-000368": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000368"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-U0kXHW",
+      "lineage": "CNS/Brain",
+      "cells": 125,
+      "arms": {
+        "DMSO_6hr_expt3": 48,
+        "DMSO_24hr_expt3": 37,
+        "DMSO_24hr_expt10": 40
+      },
+      "other_sources": []
+    },
+    "ACH-000373": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "SKM1"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-8qF7hQ",
+      "lineage": "Myeloid",
+      "cells": 3112,
+      "arms": {
+        "targets_only": 3112
+      },
+      "other_sources": []
+    },
+    "ACH-000390": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000390"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-gDZo34",
+      "lineage": "Lung",
+      "cells": 87,
+      "arms": {
+        "DMSO_6hr_expt3": 61,
+        "DMSO_24hr_expt3": 26
+      },
+      "other_sources": []
+    },
+    "ACH-000393": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000393"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-saZI6H",
+      "lineage": "Liver",
+      "cells": 106,
+      "arms": {
+        "sgLACZ_expt2": 55,
+        "sgOR2J2_expt2": 51
+      },
+      "other_sources": []
+    },
+    "ACH-000398": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "RI1"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-OW2fam",
+      "lineage": "Lymphoid",
+      "cells": 2120,
+      "arms": {
+        "targets_only": 2120
+      },
+      "other_sources": []
+    },
+    "ACH-000407": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000407"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-iaJKdg",
+      "lineage": "Uterus",
+      "cells": 100,
+      "arms": {
+        "DMSO_6hr_expt3": 58,
+        "DMSO_24hr_expt3": 42
+      },
+      "other_sources": []
+    },
+    "ACH-000411": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000411"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Kwk2bU",
+      "lineage": "Kidney",
+      "cells": 250,
+      "arms": {
+        "DMSO_6hr_expt3": 140,
+        "DMSO_24hr_expt3": 110
+      },
+      "other_sources": []
+    },
+    "ACH-000416": {
+      "source": "gse118767",
+      "accession": "GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology",
+      "identifiers": [
+        "H838"
+      ],
+      "condition": "untreated, equal-proportion mixture",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-YdBNCw",
+      "lineage": "Lung",
+      "cells": 841,
+      "arms": {
+        "untreated": 841
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000424": {
+      "source": "gse146221",
+      "accession": "GEO GSE146221",
+      "identifiers": [
+        "TC71"
+      ],
+      "condition": "untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-BIG8te",
+      "lineage": "Bone",
+      "cells": 6717,
+      "arms": {
+        "untreated": 6717
+      },
+      "other_sources": []
+    },
+    "ACH-000427": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000427"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-e4bHZ8",
+      "lineage": "Esophagus/Stomach",
+      "cells": 23,
+      "arms": {
+        "DMSO_24hr_expt10": 23
+      },
+      "other_sources": []
+    },
+    "ACH-000434": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000434"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-3DrWN5",
+      "lineage": "Lung",
+      "cells": 153,
+      "arms": {
+        "DMSO_6hr_expt3": 93,
+        "DMSO_24hr_expt3": 60
+      },
+      "other_sources": []
+    },
+    "ACH-000444": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000444"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-IpPvfc",
+      "lineage": "Lung",
+      "cells": 82,
+      "arms": {
+        "DMSO_24hr_expt10": 82
+      },
+      "other_sources": []
+    },
+    "ACH-000445": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000445"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-N1UIhD",
+      "lineage": "CNS/Brain",
+      "cells": 85,
+      "arms": {
+        "DMSO_6hr_expt3": 48,
+        "DMSO_24hr_expt3": 37
+      },
+      "other_sources": []
+    },
+    "ACH-000452": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000452"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-xIsO4O",
+      "lineage": "Esophagus/Stomach",
+      "cells": 26,
+      "arms": {
+        "DMSO_24hr_expt10": 26
+      },
+      "other_sources": []
+    },
+    "ACH-000458": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000458"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-CfuEas",
+      "lineage": "Skin",
+      "cells": 92,
+      "arms": {
+        "DMSO_6hr_expt3": 67,
+        "DMSO_24hr_expt3": 25
+      },
+      "other_sources": []
+    },
+    "ACH-000460": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000460"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-OIFKmV",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 23,
+      "arms": {
+        "DMSO_24hr_expt10": 23
+      },
+      "other_sources": [
+        "figshare33273600"
+      ]
+    },
+    "ACH-000475": {
+      "source": "gse103867",
+      "accession": "GSE103867",
+      "identifiers": [
+        "huH-1"
+      ],
+      "condition": "untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-fHVhJI",
+      "lineage": "Liver",
+      "cells": 889,
+      "arms": {
+        "untreated": 889
+      },
+      "other_sources": []
+    },
+    "ACH-000477": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000477"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-A0Pe6P",
+      "lineage": "Skin",
+      "cells": 123,
+      "arms": {
+        "DMSO_6hr_expt3": 83,
+        "DMSO_24hr_expt3": 40
+      },
+      "other_sources": []
+    },
+    "ACH-000479": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000479"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-hM3DN4",
+      "lineage": "CNS/Brain",
+      "cells": 107,
+      "arms": {
+        "DMSO_6hr_expt3": 53,
+        "DMSO_24hr_expt3": 54
+      },
+      "other_sources": []
+    },
+    "ACH-000486": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000486"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-W6AZYO",
+      "lineage": "Bladder/Urinary Tract",
+      "cells": 87,
+      "arms": {
+        "DMSO_24hr_expt10": 87
+      },
+      "other_sources": []
+    },
+    "ACH-000488": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000488"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-wdkGZi",
+      "lineage": "Esophagus/Stomach",
+      "cells": 186,
+      "arms": {
+        "DMSO_6hr_expt3": 102,
+        "DMSO_24hr_expt3": 84
+      },
+      "other_sources": []
+    },
+    "ACH-000495": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000495"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-GcbNSr",
+      "lineage": "Kidney",
+      "cells": 100,
+      "arms": {
+        "DMSO_6hr_expt3": 65,
+        "DMSO_24hr_expt3": 35
+      },
+      "other_sources": []
+    },
+    "ACH-000502": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000502"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-HGOuqa",
+      "lineage": "Pancreas",
+      "cells": 72,
+      "arms": {
+        "DMSO_24hr_expt10": 72
+      },
+      "other_sources": []
+    },
+    "ACH-000517": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000517"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-V7OSXp",
+      "lineage": "Pancreas",
+      "cells": 71,
+      "arms": {
+        "DMSO_6hr_expt3": 35,
+        "DMSO_24hr_expt3": 18,
+        "DMSO_24hr_expt10": 18
+      },
+      "other_sources": []
+    },
+    "ACH-000524": {
+      "source": "gse247688",
+      "accession": "GEO GSE247688",
+      "identifiers": [
+        "KURAMOCHI"
+      ],
+      "condition": "untreated (C.R1, C.R2)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-6ZFCGi",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 4590,
+      "arms": {
+        "C.R1": 2435,
+        "C.R2": 2155
+      },
+      "other_sources": [
+        "gse297836"
+      ]
+    },
+    "ACH-000527": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000527"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-oYazft",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 42,
+      "arms": {
+        "DMSO_24hr_expt10": 42
+      },
+      "other_sources": []
+    },
+    "ACH-000532": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000532"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-663aNr",
+      "lineage": "Bowel",
+      "cells": 50,
+      "arms": {
+        "DMSO_6hr_expt3": 32,
+        "DMSO_24hr_expt3": 18
+      },
+      "other_sources": []
+    },
+    "ACH-000535": {
+      "source": "gse173339",
+      "accession": "GEO GSE173339",
+      "identifiers": [
+        "BXPC3"
+      ],
+      "condition": "untreated 2D monolayer, 10x 3'",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-xfjEoE",
+      "lineage": "Pancreas",
+      "cells": 10420,
+      "arms": {
+        "untreated": 10420
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000537": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000537"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-CLc6my",
+      "lineage": "Liver",
+      "cells": 54,
+      "arms": {
+        "DMSO_24hr_expt10": 54
+      },
+      "other_sources": [
+        "gse263747"
+      ]
+    },
+    "ACH-000542": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000542"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-0hMOxQ",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 11,
+      "arms": {
+        "sgLACZ_expt2": 5,
+        "sgOR2J2_expt2": 6
+      },
+      "other_sources": []
+    },
+    "ACH-000549": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000549"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-1JhWBd",
+      "lineage": "Head and Neck",
+      "cells": 56,
+      "arms": {
+        "sgLACZ_expt2": 28,
+        "sgOR2J2_expt2": 28
+      },
+      "other_sources": []
+    },
+    "ACH-000562": {
+      "source": "gse243665",
+      "accession": "GSE243665",
+      "identifiers": [
+        "HCC78"
+      ],
+      "condition": "untreated, CellPlex-multiplexed (CMO307)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-TdkTP0",
+      "lineage": "Lung",
+      "cells": 2747,
+      "arms": {
+        "untreated": 2747
+      },
+      "other_sources": []
+    },
+    "ACH-000569": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000569"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-uTRkEi",
+      "lineage": "Pleura",
+      "cells": 103,
+      "arms": {
+        "DMSO_6hr_expt3": 64,
+        "DMSO_24hr_expt3": 39
+      },
+      "other_sources": []
+    },
+    "ACH-000581": {
+      "source": "gse142750",
+      "accession": "GEO GSE142750",
+      "identifiers": [
+        "SNU-16"
+      ],
+      "condition": "untreated 2D culture, 10x 3' v2",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-NDi54R",
+      "lineage": "Esophagus/Stomach",
+      "cells": 2164,
+      "arms": {
+        "untreated": 2164
+      },
+      "other_sources": []
+    },
+    "ACH-000587": {
+      "source": "gse118767",
+      "accession": "GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology",
+      "identifiers": [
+        "H1975"
+      ],
+      "condition": "untreated, equal-proportion mixture",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-HkdFKw",
+      "lineage": "Lung",
+      "cells": 739,
+      "arms": {
+        "untreated": 739
+      },
+      "other_sources": [
+        "gse303762",
+        "mixseq"
+      ]
+    },
+    "ACH-000589": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000589"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-KKsvGZ",
+      "lineage": "Lung",
+      "cells": 46,
+      "arms": {
+        "DMSO_24hr_expt10": 46
+      },
+      "other_sources": []
+    },
+    "ACH-000595": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000595"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-jhnjmL",
+      "lineage": "CNS/Brain",
+      "cells": 165,
+      "arms": {
+        "DMSO_6hr_expt3": 83,
+        "DMSO_24hr_expt3": 82
+      },
+      "other_sources": []
+    },
+    "ACH-000618": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000618"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-BJe5Qe",
+      "lineage": "Head and Neck",
+      "cells": 129,
+      "arms": {
+        "DMSO_6hr_expt3": 77,
+        "DMSO_24hr_expt3": 52
+      },
+      "other_sources": []
+    },
+    "ACH-000624": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000624"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-j1ziCB",
+      "lineage": "Breast",
+      "cells": 63,
+      "arms": {
+        "DMSO_24hr_expt10": 63
+      },
+      "other_sources": [
+        "gse202435",
+        "gse202771"
+      ]
+    },
+    "ACH-000639": {
+      "source": "gse303762",
+      "accession": "GSE303762; labels s3://longbench-data",
+      "identifiers": [
+        "H211"
+      ],
+      "condition": "untreated, 8-line pooled 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-PkJ80f",
+      "lineage": "Lung",
+      "cells": 398,
+      "arms": {
+        "untreated": 398
+      },
+      "other_sources": []
+    },
+    "ACH-000652": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000652"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ETHfq8",
+      "lineage": "Pancreas",
+      "cells": 131,
+      "arms": {
+        "DMSO_24hr_expt10": 131
+      },
+      "other_sources": []
+    },
+    "ACH-000653": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "JJN3"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-vA8rQh",
+      "lineage": "Lymphoid",
+      "cells": 1465,
+      "arms": {
+        "targets_only": 1465
+      },
+      "other_sources": [
+        "gse196766"
+      ]
+    },
+    "ACH-000654": {
+      "source": "tenxcellplexjurkatraji10k",
+      "accession": "10x Genomics SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K (CC BY 4.0)",
+      "identifiers": [
+        "Raji"
+      ],
+      "condition": "untreated, CellPlex CMO302, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-WEYO1e",
+      "lineage": "Lymphoid",
+      "cells": 4382,
+      "arms": {
+        "untreated": 4382
+      },
+      "other_sources": []
+    },
+    "ACH-000657": {
+      "source": "gse272618",
+      "accession": "GEO GSE272618",
+      "identifiers": [
+        "A2780"
+      ],
+      "condition": "untreated (treatment: none)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ug3gCf",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 2867,
+      "arms": {
+        "untreated": 2867
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000661": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000661"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-VxRt2m",
+      "lineage": "Skin",
+      "cells": 50,
+      "arms": {
+        "DMSO_24hr_expt10": 50
+      },
+      "other_sources": []
+    },
+    "ACH-000662": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000662"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-S1tr6I",
+      "lineage": "Lung",
+      "cells": 95,
+      "arms": {
+        "DMSO_24hr_expt10": 95
+      },
+      "other_sources": []
+    },
+    "ACH-000666": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000666"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ELrBOm",
+      "lineage": "Lung",
+      "cells": 208,
+      "arms": {
+        "DMSO_6hr_expt3": 103,
+        "DMSO_24hr_expt3": 64,
+        "DMSO_24hr_expt10": 41
+      },
+      "other_sources": []
+    },
+    "ACH-000677": {
+      "source": "gse137912",
+      "accession": "GSE137912",
+      "identifiers": [
+        "SW1573"
+      ],
+      "condition": "untreated 0 h (baseline of the ARS1620 time course)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Z9x3iF",
+      "lineage": "Lung",
+      "cells": 1051,
+      "arms": {
+        "untreated": 1051
+      },
+      "other_sources": []
+    },
+    "ACH-000685": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000685"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-rSVcxp",
+      "lineage": "Pancreas",
+      "cells": 569,
+      "arms": {
+        "sgLACZ_expt2": 301,
+        "sgOR2J2_expt2": 268
+      },
+      "other_sources": []
+    },
+    "ACH-000698": {
+      "source": "gse193959",
+      "accession": "GSE193959",
+      "identifiers": [
+        "DMS53"
+      ],
+      "condition": "untreated (no treatment field), inDrop",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ERlBcq",
+      "lineage": "Lung",
+      "cells": 13620,
+      "arms": {
+        "untreated": 13620
+      },
+      "other_sources": []
+    },
+    "ACH-000701": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000701"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ColGZ0",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 27,
+      "arms": {
+        "DMSO_24hr_expt10": 27
+      },
+      "other_sources": []
+    },
+    "ACH-000704": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000704"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-9pirK7",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 314,
+      "arms": {
+        "sgLACZ_expt2": 6,
+        "sgOR2J2_expt2": 2,
+        "DMSO_6hr_expt3": 158,
+        "DMSO_24hr_expt3": 148
+      },
+      "other_sources": []
+    },
+    "ACH-000734": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000734"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-s6JoAb",
+      "lineage": "Liver",
+      "cells": 139,
+      "arms": {
+        "DMSO_6hr_expt3": 94,
+        "DMSO_24hr_expt3": 45
+      },
+      "other_sources": []
+    },
+    "ACH-000738": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000738"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-8oCN4x",
+      "lineage": "CNS/Brain",
+      "cells": 76,
+      "arms": {
+        "DMSO_24hr_expt10": 76
+      },
+      "other_sources": []
+    },
+    "ACH-000749": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000749"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-d1NyBL",
+      "lineage": "Lung",
+      "cells": 589,
+      "arms": {
+        "sgLACZ_expt2": 148,
+        "sgOR2J2_expt2": 170,
+        "DMSO_6hr_expt3": 147,
+        "DMSO_24hr_expt3": 124
+      },
+      "other_sources": []
+    },
+    "ACH-000756": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000756"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-cJo3y3",
+      "lineage": "CNS/Brain",
+      "cells": 58,
+      "arms": {
+        "DMSO_24hr_expt10": 58
+      },
+      "other_sources": []
+    },
+    "ACH-000763": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "MM1S"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-wvxTew",
+      "lineage": "Lymphoid",
+      "cells": 1402,
+      "arms": {
+        "targets_only": 1402
+      },
+      "other_sources": []
+    },
+    "ACH-000765": {
+      "source": "gse237228",
+      "accession": "GEO GSE237228",
+      "identifiers": [
+        "WM983B"
+      ],
+      "condition": "untreated 2D culture, 10x",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-mH5ckQ",
+      "lineage": "Skin",
+      "cells": 1449,
+      "arms": {
+        "untreated": 1449
+      },
+      "other_sources": []
+    },
+    "ACH-000767": {
+      "source": "gse303762",
+      "accession": "GSE303762; labels s3://longbench-data",
+      "identifiers": [
+        "H526"
+      ],
+      "condition": "untreated, 8-line pooled 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-1nXRn7",
+      "lineage": "Lung",
+      "cells": 286,
+      "arms": {
+        "untreated": 286
+      },
+      "other_sources": []
+    },
+    "ACH-000769": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000769"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-U2PG43",
+      "lineage": "Lung",
+      "cells": 162,
+      "arms": {
+        "DMSO_6hr_expt3": 105,
+        "DMSO_24hr_expt3": 57
+      },
+      "other_sources": []
+    },
+    "ACH-000774": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000774"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-lbbkFm",
+      "lineage": "Lung",
+      "cells": 18,
+      "arms": {
+        "DMSO_24hr_expt10": 18
+      },
+      "other_sources": []
+    },
+    "ACH-000776": {
+      "source": "gse254917",
+      "accession": "GEO GSE254917",
+      "identifiers": [
+        "ONS-76"
+      ],
+      "condition": "monolayer (2D) in vitro culture",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-DtdDWT",
+      "lineage": "CNS/Brain",
+      "cells": 578,
+      "arms": {
+        "monolayer": 578
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000777": {
+      "source": "gse249057",
+      "accession": "GEO GSE249057",
+      "identifiers": [
+        "KYSE30"
+      ],
+      "condition": "untreated 2D culture ('treatment: in vitro'), Luc-GFP labelled, FACS-collected, 10x",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-kporZQ",
+      "lineage": "Esophagus/Stomach",
+      "cells": 9254,
+      "arms": {
+        "untreated": 9254
+      },
+      "other_sources": []
+    },
+    "ACH-000784": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000784"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-YTdWR1",
+      "lineage": "Esophagus/Stomach",
+      "cells": 67,
+      "arms": {
+        "sgLACZ_expt2": 40,
+        "sgOR2J2_expt2": 27
+      },
+      "other_sources": []
+    },
+    "ACH-000796": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000796"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Tlf0ul",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 42,
+      "arms": {
+        "DMSO_24hr_expt10": 42
+      },
+      "other_sources": []
+    },
+    "ACH-000822": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000822"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-n2hnAf",
+      "lineage": "Skin",
+      "cells": 143,
+      "arms": {
+        "DMSO_6hr_expt3": 79,
+        "DMSO_24hr_expt3": 64
+      },
+      "other_sources": []
+    },
+    "ACH-000823": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "KYSE140"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-O7zBRO",
+      "lineage": "Esophagus/Stomach",
+      "cells": 727,
+      "arms": {
+        "olfactory_cutting_control": 727
+      },
+      "other_sources": []
+    },
+    "ACH-000824": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000824"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ItKoPJ",
+      "lineage": "Esophagus/Stomach",
+      "cells": 145,
+      "arms": {
+        "DMSO_24hr_expt10": 145
+      },
+      "other_sources": []
+    },
+    "ACH-000826": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000826"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-nAjtb0",
+      "lineage": "Lung",
+      "cells": 171,
+      "arms": {
+        "sgLACZ_expt2": 89,
+        "sgOR2J2_expt2": 82
+      },
+      "other_sources": []
+    },
+    "ACH-000827": {
+      "source": "gse230574",
+      "accession": "GSE230574",
+      "identifiers": [
+        "WM793"
+      ],
+      "condition": "untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-L3eOYW",
+      "lineage": "Skin",
+      "cells": 2215,
+      "arms": {
+        "untreated": 2215
+      },
+      "other_sources": []
+    },
+    "ACH-000833": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000833"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-lbYOig",
+      "lineage": "Soft Tissue",
+      "cells": 172,
+      "arms": {
+        "DMSO_6hr_expt3": 112,
+        "DMSO_24hr_expt3": 60
+      },
+      "other_sources": []
+    },
+    "ACH-000836": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000836"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-ZS5SNw",
+      "lineage": "Head and Neck",
+      "cells": 46,
+      "arms": {
+        "sgLACZ_expt2": 32,
+        "sgOR2J2_expt2": 14
+      },
+      "other_sources": []
+    },
+    "ACH-000837": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000837"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-9eMhTl",
+      "lineage": "Lung",
+      "cells": 124,
+      "arms": {
+        "DMSO_6hr_expt3": 60,
+        "DMSO_24hr_expt3": 34,
+        "DMSO_24hr_expt10": 30
+      },
+      "other_sources": []
+    },
+    "ACH-000838": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "AMO1"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-CmSm57",
+      "lineage": "Lymphoid",
+      "cells": 489,
+      "arms": {
+        "targets_only": 489
+      },
+      "other_sources": []
+    },
+    "ACH-000847": {
+      "source": "gse142750",
+      "accession": "GEO GSE142750",
+      "identifiers": [
+        "HGC-27"
+      ],
+      "condition": "untreated 2D culture, 10x 3' v2",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-dAMXIu",
+      "lineage": "Esophagus/Stomach",
+      "cells": 3600,
+      "arms": {
+        "untreated": 3600
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000865": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "KYSE450"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-zNE9qB",
+      "lineage": "Esophagus/Stomach",
+      "cells": 1462,
+      "arms": {
+        "olfactory_cutting_control": 1462
+      },
+      "other_sources": []
+    },
+    "ACH-000873": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000873"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-8iaWjG",
+      "lineage": "Esophagus/Stomach",
+      "cells": 186,
+      "arms": {
+        "DMSO_6hr_expt3": 111,
+        "DMSO_24hr_expt3": 75
+      },
+      "other_sources": []
+    },
+    "ACH-000874": {
+      "source": "gse218621",
+      "accession": "GSE218621",
+      "identifiers": [
+        "RS4;11"
+      ],
+      "condition": "DMSO 24 h (10x 3')",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-eEEvwF",
+      "lineage": "Lymphoid",
+      "cells": 4454,
+      "arms": {
+        "DMSO": 4454
+      },
+      "other_sources": []
+    },
+    "ACH-000880": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000880"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-VHRCrj",
+      "lineage": "Esophagus/Stomach",
+      "cells": 365,
+      "arms": {
+        "sgLACZ_expt2": 83,
+        "sgOR2J2_expt2": 63,
+        "DMSO_6hr_expt3": 118,
+        "DMSO_24hr_expt3": 101
+      },
+      "other_sources": []
+    },
+    "ACH-000881": {
+      "source": "gse230538",
+      "accession": "GEO GSE230538",
+      "identifiers": [
+        "MEL-JUSO"
+      ],
+      "condition": "untreated (drug-naive) 2D culture, Drop-seq",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-9PTPLm",
+      "lineage": "Skin",
+      "cells": 1504,
+      "arms": {
+        "untreated": 1504
+      },
+      "other_sources": []
+    },
+    "ACH-000884": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000884"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-3NwoWt",
+      "lineage": "Skin",
+      "cells": 205,
+      "arms": {
+        "DMSO_6hr_expt3": 80,
+        "DMSO_24hr_expt3": 68,
+        "DMSO_24hr_expt10": 57
+      },
+      "other_sources": []
+    },
+    "ACH-000886": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000886"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-bwPYLi",
+      "lineage": "Lung",
+      "cells": 38,
+      "arms": {
+        "DMSO_24hr_expt10": 38
+      },
+      "other_sources": []
+    },
+    "ACH-000888": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000888"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-JWHrxe",
+      "lineage": "Lung",
+      "cells": 179,
+      "arms": {
+        "DMSO_6hr_expt3": 65,
+        "DMSO_24hr_expt3": 43,
+        "DMSO_24hr_expt10": 71
+      },
+      "other_sources": []
+    },
+    "ACH-000896": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000896"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-bDT6oy",
+      "lineage": "Bladder/Urinary Tract",
+      "cells": 845,
+      "arms": {
+        "sgLACZ_expt2": 421,
+        "sgOR2J2_expt2": 424
+      },
+      "other_sources": []
+    },
+    "ACH-000898": {
+      "source": "gse101561",
+      "accession": "GEO GSE101561",
+      "identifiers": [
+        "SNU719"
+      ],
+      "condition": "untreated 2D culture (no treatment field), 10x",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-lvKDUW",
+      "lineage": "Esophagus/Stomach",
+      "cells": 5810,
+      "arms": {
+        "untreated": 5810
+      },
+      "other_sources": []
+    },
+    "ACH-000905": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000905"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-nC0LDL",
+      "lineage": "Bladder/Urinary Tract",
+      "cells": 43,
+      "arms": {
+        "DMSO_24hr_expt10": 43
+      },
+      "other_sources": []
+    },
+    "ACH-000906": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000906"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-rH0cpo",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 127,
+      "arms": {
+        "sgLACZ_expt2": 55,
+        "sgOR2J2_expt2": 72
+      },
+      "other_sources": []
+    },
+    "ACH-000911": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000911"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-BTCHFg",
+      "lineage": "Esophagus/Stomach",
+      "cells": 154,
+      "arms": {
+        "DMSO_6hr_expt3": 96,
+        "DMSO_24hr_expt3": 58
+      },
+      "other_sources": [
+        "gse256301"
+      ]
+    },
+    "ACH-000915": {
+      "source": "gse230538",
+      "accession": "GEO GSE230538",
+      "identifiers": [
+        "IPC-298"
+      ],
+      "condition": "untreated (drug-naive) 2D culture, Drop-seq",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Jc7cdo",
+      "lineage": "Skin",
+      "cells": 2834,
+      "arms": {
+        "untreated": 2834
+      },
+      "other_sources": []
+    },
+    "ACH-000921": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000921"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-jKAU6d",
+      "lineage": "Lung",
+      "cells": 42,
+      "arms": {
+        "DMSO_24hr_expt10": 42
+      },
+      "other_sources": []
+    },
+    "ACH-000922": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "RCHACV"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-0mdkef",
+      "lineage": "Lymphoid",
+      "cells": 1768,
+      "arms": {
+        "targets_only": 1768
+      },
+      "other_sources": []
+    },
+    "ACH-000936": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000936"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-AiIzwN",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 74,
+      "arms": {
+        "sgLACZ_expt2": 35,
+        "sgOR2J2_expt2": 39
+      },
+      "other_sources": []
+    },
+    "ACH-000938": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "NALM6"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-rgsUoa",
+      "lineage": "Lymphoid",
+      "cells": 2747,
+      "arms": {
+        "targets_only": 2747
+      },
+      "other_sources": []
+    },
+    "ACH-000939": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000939"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-b2KmUs",
+      "lineage": "Uterus",
+      "cells": 151,
+      "arms": {
+        "DMSO_6hr_expt3": 83,
+        "DMSO_24hr_expt3": 68
+      },
+      "other_sources": []
+    },
+    "ACH-000941": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000941"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-YZF57N",
+      "lineage": "Uterus",
+      "cells": 135,
+      "arms": {
+        "DMSO_6hr_expt3": 86,
+        "DMSO_24hr_expt3": 49
+      },
+      "other_sources": []
+    },
+    "ACH-000961": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000961"
+      ],
+      "condition": "expt 2 control sgLACZ 72-96 h; expt 2 control sgOR2J2 72-96 h (Cas9, control sgRNA only)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-P06fLR",
+      "lineage": "Uterus",
+      "cells": 601,
+      "arms": {
+        "sgLACZ_expt2": 323,
+        "sgOR2J2_expt2": 278
+      },
+      "other_sources": []
+    },
+    "ACH-000966": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000966"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-bGFaJu",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 318,
+      "arms": {
+        "DMSO_6hr_expt3": 130,
+        "DMSO_24hr_expt3": 140,
+        "DMSO_24hr_expt10": 48
+      },
+      "other_sources": []
+    },
+    "ACH-000973": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000973"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-P31KFG",
+      "lineage": "Bladder/Urinary Tract",
+      "cells": 67,
+      "arms": {
+        "DMSO_24hr_expt10": 67
+      },
+      "other_sources": []
+    },
+    "ACH-000979": {
+      "source": "gse147405",
+      "accession": "GEO GSE147405",
+      "identifiers": [
+        "DU145"
+      ],
+      "condition": "untreated: kinase-screen control wells (Untreated_Control) and EMT time-course day 0 (0d)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-05dldv",
+      "lineage": "Prostate",
+      "cells": 1392,
+      "arms": {
+        "Untreated_Control": 336,
+        "0d": 1056
+      },
+      "other_sources": []
+    },
+    "ACH-000981": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "DND41"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-zhUnhJ",
+      "lineage": "Lymphoid",
+      "cells": 1242,
+      "arms": {
+        "targets_only": 1242
+      },
+      "other_sources": []
+    },
+    "ACH-001001": {
+      "source": "gse179681",
+      "accession": "GSE179681",
+      "identifiers": [
+        "143B"
+      ],
+      "condition": "in vitro culture (hg19+mm10 reference, hg19 genes kept)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-epgMPc",
+      "lineage": "Bone",
+      "cells": 3731,
+      "arms": {
+        "untreated": 3731
+      },
+      "other_sources": []
+    },
+    "ACH-001021": {
+      "source": "tahoe100m",
+      "accession": "huggingface.co/datasets/tahoebio/Tahoe-100M",
+      "identifiers": [
+        "CVCL_1098"
+      ],
+      "condition": "DMSO_TF vehicle, plate-matched",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-qL6HtY",
+      "lineage": "Liver",
+      "cells": 29046,
+      "arms": {
+        "DMSO_TF": 29046
+      },
+      "other_sources": []
+    },
+    "ACH-001029": {
+      "source": "gse146221",
+      "accession": "GEO GSE146221",
+      "identifiers": [
+        "CHLA10"
+      ],
+      "condition": "untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-NX1XUV",
+      "lineage": "Bone",
+      "cells": 4560,
+      "arms": {
+        "untreated": 4560
+      },
+      "other_sources": []
+    },
+    "ACH-001129": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "MONOMAC1"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ej13Dz",
+      "lineage": "Myeloid",
+      "cells": 3307,
+      "arms": {
+        "targets_only": 3307
+      },
+      "other_sources": []
+    },
+    "ACH-001188": {
+      "source": "gse331320",
+      "accession": "GEO GSE331320",
+      "identifiers": [
+        "SHSY5Y"
+      ],
+      "condition": "treatment: None",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ombRgU",
+      "lineage": "Peripheral Nervous System",
+      "cells": 2679,
+      "arms": {
+        "untreated": 2679
+      },
+      "other_sources": []
+    },
+    "ACH-001239": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-001239"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-JAyPtz",
+      "lineage": "Skin",
+      "cells": 24,
+      "arms": {
+        "DMSO_24hr_expt10": 24
+      },
+      "other_sources": []
+    },
+    "ACH-001307": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-001307"
+      ],
+      "condition": "expt 3 DMSO 6 h; expt 3 DMSO 24 h; expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-1llqWx",
+      "lineage": "Thyroid",
+      "cells": 262,
+      "arms": {
+        "DMSO_6hr_expt3": 104,
+        "DMSO_24hr_expt3": 91,
+        "DMSO_24hr_expt10": 67
+      },
+      "other_sources": []
+    },
+    "ACH-001334": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "C4I"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-ERAmPK",
+      "lineage": "Cervix",
+      "cells": 652,
+      "arms": {
+        "olfactory_cutting_control": 652
+      },
+      "other_sources": []
+    },
+    "ACH-001338": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "CHP134"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-cvCz0R",
+      "lineage": "Peripheral Nervous System",
+      "cells": 3479,
+      "arms": {
+        "standard_culture": 3479
+      },
+      "other_sources": []
+    },
+    "ACH-001344": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "GIMEN"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-smWXLD",
+      "lineage": "Peripheral Nervous System",
+      "cells": 2114,
+      "arms": {
+        "standard_culture": 2114
+      },
+      "other_sources": []
+    },
+    "ACH-001366": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "NGP"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-jZHQTi",
+      "lineage": "Peripheral Nervous System",
+      "cells": 2668,
+      "arms": {
+        "standard_culture": 2668
+      },
+      "other_sources": []
+    },
+    "ACH-001389": {
+      "source": "gse228275",
+      "accession": "GEO GSE228275",
+      "identifiers": [
+        "SUM1315MO2"
+      ],
+      "condition": "no treatment",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-huyXeM",
+      "lineage": "Breast",
+      "cells": 786,
+      "arms": {
+        "no treatment": 786
+      },
+      "other_sources": [
+        "gse202771"
+      ]
+    },
+    "ACH-001390": {
+      "source": "gse182694",
+      "accession": "GEO GSE182694",
+      "identifiers": [
+        "SUM149"
+      ],
+      "condition": "untreated, cultured to passage 6 or less",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-SMhk4C",
+      "lineage": "Breast",
+      "cells": 1309,
+      "arms": {
+        "untreated": 1309
+      },
+      "other_sources": [
+        "gse228275"
+      ]
+    },
+    "ACH-001391": {
+      "source": "gse228275",
+      "accession": "GEO GSE228275",
+      "identifiers": [
+        "SUM159PT"
+      ],
+      "condition": "no treatment",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-OlQpj4",
+      "lineage": "Breast",
+      "cells": 976,
+      "arms": {
+        "no treatment": 976
+      },
+      "other_sources": []
+    },
+    "ACH-001392": {
+      "source": "gse228275",
+      "accession": "GEO GSE228275",
+      "identifiers": [
+        "SUM185PE"
+      ],
+      "condition": "no treatment",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-i9dYpA",
+      "lineage": "Breast",
+      "cells": 632,
+      "arms": {
+        "no treatment": 632
+      },
+      "other_sources": [
+        "gse202771"
+      ]
+    },
+    "ACH-001393": {
+      "source": "gse182694",
+      "accession": "GEO GSE182694",
+      "identifiers": [
+        "SUM190"
+      ],
+      "condition": "untreated, cultured to passage 6 or less",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-Zd61pI",
+      "lineage": "Breast",
+      "cells": 1420,
+      "arms": {
+        "untreated": 1420
+      },
+      "other_sources": []
+    },
+    "ACH-001394": {
+      "source": "gse228275",
+      "accession": "GEO GSE228275",
+      "identifiers": [
+        "SUM229PE"
+      ],
+      "condition": "no treatment",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-jgjbSo",
+      "lineage": "Breast",
+      "cells": 933,
+      "arms": {
+        "no treatment": 933
+      },
+      "other_sources": []
+    },
+    "ACH-001574": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "MOLM14"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-H3wdRq",
+      "lineage": "Myeloid",
+      "cells": 1796,
+      "arms": {
+        "targets_only": 1796
+      },
+      "other_sources": []
+    },
+    "ACH-001652": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "SKGII"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-IwYShD",
+      "lineage": "Cervix",
+      "cells": 576,
+      "arms": {
+        "olfactory_cutting_control": 576
+      },
+      "other_sources": []
+    },
+    "ACH-001664": {
+      "source": "gse142750",
+      "accession": "GEO GSE142750",
+      "identifiers": [
+        "SNU-638"
+      ],
+      "condition": "untreated 2D culture, 10x 3' v2",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-k5HJNy",
+      "lineage": "Esophagus/Stomach",
+      "cells": 972,
+      "arms": {
+        "untreated": 972
+      },
+      "other_sources": []
+    },
+    "ACH-001668": {
+      "source": "gse223848",
+      "accession": "GEO GSE223848",
+      "identifiers": [
+        "SuSa"
+      ],
+      "condition": "log-phase growth (not starved)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-2w1URA",
+      "lineage": "Testis",
+      "cells": 2876,
+      "arms": {
+        "log_phase": 2876
+      },
+      "other_sources": []
+    },
+    "ACH-001674": {
+      "source": "gse229224",
+      "accession": "GEO GSE229224",
+      "identifiers": [
+        "TGW"
+      ],
+      "condition": "standard culture conditions, untreated",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-o4jARg",
+      "lineage": "Peripheral Nervous System",
+      "cells": 2099,
+      "arms": {
+        "standard_culture": 2099
+      },
+      "other_sources": []
+    },
+    "ACH-001687": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "UMRC3"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-V3AbhR",
+      "lineage": "Kidney",
+      "cells": 959,
+      "arms": {
+        "olfactory_cutting_control": 959
+      },
+      "other_sources": []
+    },
+    "ACH-001765": {
+      "source": "gse219199",
+      "accession": "GEO GSE219199",
+      "identifiers": [
+        "RH4"
+      ],
+      "condition": "DMSO 16 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-BN67ox",
+      "lineage": "Soft Tissue",
+      "cells": 12938,
+      "arms": {
+        "DMSO_16h": 12938
+      },
+      "other_sources": []
+    },
+    "ACH-001852": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "HKGZCC"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-eIYOff",
+      "lineage": "Biliary Tract",
+      "cells": 1052,
+      "arms": {
+        "olfactory_cutting_control": 1052
+      },
+      "other_sources": []
+    },
+    "ACH-001992": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "ONE58"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-nrQ0Fm",
+      "lineage": "Pleura",
+      "cells": 1244,
+      "arms": {
+        "olfactory_cutting_control": 1244
+      },
+      "other_sources": []
+    },
+    "ACH-002042": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "T3M5"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-vhf9cn",
+      "lineage": "Head and Neck",
+      "cells": 552,
+      "arms": {
+        "olfactory_cutting_control": 552
+      },
+      "other_sources": []
+    },
+    "ACH-002181": {
+      "source": "gse147405",
+      "accession": "GEO GSE147405",
+      "identifiers": [
+        "OVCA420"
+      ],
+      "condition": "untreated: kinase-screen control wells (Untreated_Control) and EMT time-course day 0 (0d)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-B4cHwN",
+      "lineage": "Ovary/Fallopian Tube",
+      "cells": 688,
+      "arms": {
+        "Untreated_Control": 145,
+        "0d": 543
+      },
+      "other_sources": [
+        "gse247098"
+      ]
+    },
+    "ACH-002659": {
+      "source": "figshare33273600",
+      "accession": "figshare 10.6084/m9.figshare.33273600",
+      "identifiers": [
+        "JVE127"
+      ],
+      "condition": "olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",
+      "condition_class": "cutting_control",
+      "patient_id": "PT-btmPL5",
+      "lineage": "Bowel",
+      "cells": 1171,
+      "arms": {
+        "olfactory_cutting_control": 1171
+      },
+      "other_sources": []
+    }
+  },
   "unlabelled": [
-    "ACH-000027",
+    "ACH-000002",
+    "ACH-000073",
+    "ACH-000081",
+    "ACH-000105",
     "ACH-000117",
-    "ACH-000171",
+    "ACH-000122",
     "ACH-000186",
-    "ACH-000201",
-    "ACH-000205",
+    "ACH-000218",
     "ACH-000236",
     "ACH-000270",
     "ACH-000347",
-    "ACH-000392",
+    "ACH-000358",
+    "ACH-000388",
     "ACH-000409",
     "ACH-000423",
     "ACH-000428",
     "ACH-000447",
     "ACH-000449",
     "ACH-000457",
-    "ACH-000482",
+    "ACH-000506",
     "ACH-000553",
     "ACH-000555",
     "ACH-000572",
-    "ACH-000582",
-    "ACH-000590",
     "ACH-000603",
-    "ACH-000613",
-    "ACH-000617",
     "ACH-000625",
     "ACH-000628",
-    "ACH-000643",
     "ACH-000644",
     "ACH-000650",
     "ACH-000669",
     "ACH-000670",
-    "ACH-000678",
     "ACH-000680",
-    "ACH-000692",
     "ACH-000715",
     "ACH-000723",
-    "ACH-000726",
-    "ACH-000730",
+    "ACH-000728",
     "ACH-000750",
+    "ACH-000751",
     "ACH-000803",
-    "ACH-000808",
-    "ACH-000814",
-    "ACH-000852",
     "ACH-000868",
     "ACH-000875",
-    "ACH-000895",
     "ACH-000897",
     "ACH-000927",
     "ACH-000940",
     "ACH-000954",
     "ACH-000967",
     "ACH-000982",
-    "ACH-000990",
-    "ACH-000998"
+    "ACH-000998",
+    "ACH-002217",
+    "ACH-002248"
   ],
+  "pending": {},
   "excluded": {
-    "ACH-000013": "already one of the 226",
-    "ACH-000019": "already one of the 226",
-    "ACH-000022": "already one of the 226",
     "ACH-000023": "shares PatientID PT-lVglGI with held-out line ACH-000022",
-    "ACH-000028": "already one of the 226",
-    "ACH-000040": "already one of the 226",
-    "ACH-000042": "already one of the 226",
-    "ACH-000048": "already one of the 226",
-    "ACH-000054": "already one of the 226",
-    "ACH-000086": "already one of the 226",
-    "ACH-000087": "already one of the 226",
-    "ACH-000090": "already one of the 226",
-    "ACH-000092": "already one of the 226",
-    "ACH-000097": "already one of the 226",
-    "ACH-000114": "already one of the 226",
-    "ACH-000116": "already one of the 226",
-    "ACH-000118": "already one of the 226",
-    "ACH-000120": "already one of the 226",
-    "ACH-000123": "already one of the 226",
-    "ACH-000132": "already one of the 226",
-    "ACH-000133": "already one of the 226",
-    "ACH-000138": "already one of the 226",
-    "ACH-000139": "already one of the 226",
-    "ACH-000141": "already one of the 226",
-    "ACH-000147": "already one of the 226",
-    "ACH-000148": "already one of the 226",
-    "ACH-000155": "already one of the 226",
-    "ACH-000159": "already one of the 226",
-    "ACH-000163": "already one of the 226",
-    "ACH-000164": "already one of the 226",
-    "ACH-000169": "already one of the 226",
-    "ACH-000178": "already one of the 226",
-    "ACH-000181": "already one of the 226",
-    "ACH-000188": "already one of the 226",
-    "ACH-000189": "already one of the 226",
-    "ACH-000192": "already one of the 226",
-    "ACH-000207": "already one of the 226",
-    "ACH-000209": "already one of the 226",
-    "ACH-000211": "already one of the 226",
-    "ACH-000213": "already one of the 226",
-    "ACH-000217": "already one of the 226",
-    "ACH-000219": "already one of the 226",
-    "ACH-000222": "already one of the 226",
-    "ACH-000228": "already one of the 226",
-    "ACH-000231": "already one of the 226",
-    "ACH-000234": "already one of the 226",
-    "ACH-000242": "already one of the 226",
-    "ACH-000243": "already one of the 226",
-    "ACH-000244": "already one of the 226",
-    "ACH-000252": "already one of the 226",
-    "ACH-000255": "already one of the 226",
-    "ACH-000260": "already one of the 226",
-    "ACH-000261": "already one of the 226",
-    "ACH-000264": "already one of the 226",
-    "ACH-000274": "already one of the 226",
-    "ACH-000276": "already one of the 226",
-    "ACH-000277": "already one of the 226",
-    "ACH-000288": "already one of the 226",
-    "ACH-000296": "already one of the 226",
-    "ACH-000302": "already one of the 226",
-    "ACH-000311": "already one of the 226",
-    "ACH-000313": "already one of the 226",
-    "ACH-000318": "already one of the 226",
-    "ACH-000323": "already one of the 226",
-    "ACH-000324": "already one of the 226",
-    "ACH-000329": "already one of the 226",
-    "ACH-000335": "already one of the 226",
-    "ACH-000343": "already one of the 226",
-    "ACH-000348": "already one of the 226",
-    "ACH-000352": "already one of the 226",
-    "ACH-000356": "already one of the 226",
-    "ACH-000367": "already one of the 226",
-    "ACH-000374": "already one of the 226",
-    "ACH-000376": "already one of the 226",
-    "ACH-000389": "already one of the 226",
-    "ACH-000396": "already one of the 226",
-    "ACH-000397": "already one of the 226",
-    "ACH-000403": "already one of the 226",
-    "ACH-000414": "already one of the 226",
-    "ACH-000415": "already one of the 226",
-    "ACH-000420": "already one of the 226",
-    "ACH-000430": "already one of the 226",
-    "ACH-000435": "already one of the 226",
-    "ACH-000437": "already one of the 226",
-    "ACH-000446": "already one of the 226",
-    "ACH-000456": "already one of the 226",
-    "ACH-000461": "already one of the 226",
-    "ACH-000463": "already one of the 226",
-    "ACH-000464": "already one of the 226",
-    "ACH-000467": "already one of the 226",
-    "ACH-000468": "already one of the 226",
-    "ACH-000471": "already one of the 226",
-    "ACH-000481": "already one of the 226",
-    "ACH-000493": "already one of the 226",
-    "ACH-000496": "already one of the 226",
-    "ACH-000500": "already one of the 226",
-    "ACH-000503": "already one of the 226",
-    "ACH-000504": "already one of the 226",
-    "ACH-000510": "already one of the 226",
-    "ACH-000521": "already one of the 226",
-    "ACH-000528": "already one of the 226",
-    "ACH-000545": "already one of the 226",
-    "ACH-000547": "already one of the 226",
-    "ACH-000548": "already one of the 226",
-    "ACH-000551": "already one of the 226",
-    "ACH-000552": "already one of the 226",
-    "ACH-000558": "already one of the 226",
-    "ACH-000563": "already one of the 226",
-    "ACH-000565": "already one of the 226",
-    "ACH-000573": "already one of the 226",
-    "ACH-000579": "already one of the 226",
-    "ACH-000580": "already one of the 226",
-    "ACH-000592": "already one of the 226",
-    "ACH-000601": "already one of the 226",
-    "ACH-000605": "already one of the 226",
-    "ACH-000614": "already one of the 226",
-    "ACH-000622": "already one of the 226",
-    "ACH-000637": "already one of the 226",
-    "ACH-000647": "already one of the 226",
-    "ACH-000649": "already one of the 226",
-    "ACH-000663": "already one of the 226",
-    "ACH-000665": "already one of the 226",
-    "ACH-000671": "already one of the 226",
-    "ACH-000672": "already one of the 226",
-    "ACH-000681": "already one of the 226",
-    "ACH-000694": "already one of the 226",
-    "ACH-000706": "already one of the 226",
-    "ACH-000713": "already one of the 226",
-    "ACH-000717": "already one of the 226",
-    "ACH-000720": "already one of the 226",
-    "ACH-000721": "already one of the 226",
-    "ACH-000724": "already one of the 226",
-    "ACH-000735": "already one of the 226",
-    "ACH-000748": "already one of the 226",
-    "ACH-000757": "already one of the 226",
-    "ACH-000762": "already one of the 226",
-    "ACH-000764": "already one of the 226",
-    "ACH-000771": "already one of the 226",
-    "ACH-000775": "already one of the 226",
-    "ACH-000783": "already one of the 226",
-    "ACH-000785": "already one of the 226",
-    "ACH-000788": "already one of the 226",
-    "ACH-000790": "already one of the 226",
-    "ACH-000791": "already one of the 226",
-    "ACH-000792": "already one of the 226",
-    "ACH-000793": "already one of the 226",
-    "ACH-000800": "already one of the 226",
-    "ACH-000807": "already one of the 226",
-    "ACH-000810": "already one of the 226",
-    "ACH-000834": "already one of the 226",
-    "ACH-000840": "already one of the 226",
-    "ACH-000841": "already one of the 226",
-    "ACH-000842": "shares PatientID PT-IPboWn with held-out line ACH-000651",
-    "ACH-000845": "already one of the 226",
-    "ACH-000848": "already one of the 226",
-    "ACH-000849": "already one of the 226",
-    "ACH-000853": "already one of the 226",
-    "ACH-000860": "already one of the 226",
-    "ACH-000861": "already one of the 226",
-    "ACH-000866": "already one of the 226",
-    "ACH-000869": "already one of the 226",
-    "ACH-000882": "already one of the 226",
-    "ACH-000885": "already one of the 226",
-    "ACH-000890": "already one of the 226",
-    "ACH-000899": "already one of the 226",
-    "ACH-000900": "already one of the 226",
-    "ACH-000903": "already one of the 226",
-    "ACH-000916": "already one of the 226",
-    "ACH-000919": "already one of the 226",
-    "ACH-000926": "already one of the 226",
-    "ACH-000929": "already one of the 226",
-    "ACH-000932": "already one of the 226",
-    "ACH-000934": "already one of the 226",
-    "ACH-000943": "already one of the 226",
-    "ACH-000945": "already one of the 226",
-    "ACH-000947": "already one of the 226",
-    "ACH-000948": "already one of the 226",
-    "ACH-000950": "already one of the 226",
-    "ACH-000956": "already one of the 226",
-    "ACH-000957": "already one of the 226",
-    "ACH-000958": "already one of the 226",
-    "ACH-000959": "already one of the 226",
-    "ACH-000963": "already one of the 226",
-    "ACH-000968": "already one of the 226",
-    "ACH-000971": "already one of the 226",
-    "ACH-000972": "already one of the 226",
-    "ACH-000976": "already one of the 226",
-    "ACH-000977": "already one of the 226",
-    "ACH-000984": "already one of the 226",
-    "ACH-000988": "already one of the 226",
-    "ACH-000994": "already one of the 226",
-    "ACH-000996": "already one of the 226",
-    "ACH-000997": "already one of the 226",
-    "ACH-001039": "already one of the 226",
-    "ACH-001075": "already one of the 226",
-    "ACH-001190": "already one of the 226",
-    "ACH-001306": "already one of the 226",
-    "ACH-001333": "already one of the 226",
-    "ACH-002249": "already one of the 226",
-    "ACH-002251": "already one of the 226"
+    "ACH-000842": "shares PatientID PT-IPboWn with held-out line ACH-000651"
   },
-  "sources": {
-    "ACH-000001": [
-      "mixseq"
-    ],
-    "ACH-000012": [
-      "mixseq"
-    ],
-    "ACH-000014": [
-      "mixseq"
-    ],
-    "ACH-000015": [
-      "mixseq"
-    ],
-    "ACH-000018": [
-      "mixseq"
-    ],
-    "ACH-000021": [
-      "mixseq"
-    ],
-    "ACH-000026": [
-      "mixseq"
-    ],
-    "ACH-000027": [
-      "kinker_scp542"
-    ],
-    "ACH-000035": [
-      "mixseq"
-    ],
-    "ACH-000047": [
-      "mixseq"
-    ],
-    "ACH-000085": [
-      "mixseq"
-    ],
-    "ACH-000096": [
-      "mixseq"
-    ],
-    "ACH-000098": [
-      "mixseq"
-    ],
-    "ACH-000117": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000142": [
-      "mixseq"
-    ],
-    "ACH-000149": [
-      "mixseq"
-    ],
-    "ACH-000171": [
-      "kinker_scp542"
-    ],
-    "ACH-000174": [
-      "mixseq"
-    ],
-    "ACH-000186": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000200": [
-      "mixseq"
-    ],
-    "ACH-000201": [
-      "kinker_scp542"
-    ],
-    "ACH-000205": [
-      "kinker_scp542"
-    ],
-    "ACH-000212": [
-      "mixseq"
-    ],
-    "ACH-000235": [
-      "mixseq"
-    ],
-    "ACH-000236": [
-      "tahoe100m"
-    ],
-    "ACH-000237": [
-      "mixseq"
-    ],
-    "ACH-000265": [
-      "mixseq"
-    ],
-    "ACH-000268": [
-      "mixseq"
-    ],
-    "ACH-000270": [
-      "mixseq"
-    ],
-    "ACH-000280": [
-      "mixseq"
-    ],
-    "ACH-000281": [
-      "mixseq"
-    ],
-    "ACH-000292": [
-      "mixseq"
-    ],
-    "ACH-000341": [
-      "mixseq"
-    ],
-    "ACH-000347": [
-      "mixseq"
-    ],
-    "ACH-000368": [
-      "mixseq"
-    ],
-    "ACH-000390": [
-      "mixseq"
-    ],
-    "ACH-000392": [
-      "wyler2021_cellxgene"
-    ],
-    "ACH-000393": [
-      "mixseq"
-    ],
-    "ACH-000407": [
-      "mixseq"
-    ],
-    "ACH-000409": [
-      "kinker_scp542"
-    ],
-    "ACH-000411": [
-      "mixseq"
-    ],
-    "ACH-000416": [
-      "mixseq"
-    ],
-    "ACH-000423": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000427": [
-      "mixseq"
-    ],
-    "ACH-000428": [
-      "mixseq"
-    ],
-    "ACH-000434": [
-      "mixseq"
-    ],
-    "ACH-000444": [
-      "mixseq"
-    ],
-    "ACH-000445": [
-      "mixseq"
-    ],
-    "ACH-000447": [
-      "kinker_scp542"
-    ],
-    "ACH-000449": [
-      "mixseq"
-    ],
-    "ACH-000452": [
-      "mixseq"
-    ],
-    "ACH-000457": [
-      "mixseq"
-    ],
-    "ACH-000458": [
-      "mixseq"
-    ],
-    "ACH-000460": [
-      "mixseq"
-    ],
-    "ACH-000477": [
-      "mixseq"
-    ],
-    "ACH-000479": [
-      "mixseq"
-    ],
-    "ACH-000482": [
-      "kinker_scp542"
-    ],
-    "ACH-000486": [
-      "mixseq"
-    ],
-    "ACH-000488": [
-      "mixseq"
-    ],
-    "ACH-000495": [
-      "mixseq"
-    ],
-    "ACH-000502": [
-      "mixseq"
-    ],
-    "ACH-000517": [
-      "mixseq"
-    ],
-    "ACH-000527": [
-      "mixseq"
-    ],
-    "ACH-000532": [
-      "mixseq"
-    ],
-    "ACH-000535": [
-      "mixseq"
-    ],
-    "ACH-000537": [
-      "mixseq"
-    ],
-    "ACH-000542": [
-      "mixseq"
-    ],
-    "ACH-000549": [
-      "mixseq"
-    ],
-    "ACH-000553": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000555": [
-      "tahoe100m"
-    ],
-    "ACH-000569": [
-      "mixseq"
-    ],
-    "ACH-000572": [
-      "mixseq"
-    ],
-    "ACH-000582": [
-      "kinker_scp542"
-    ],
-    "ACH-000587": [
-      "mixseq"
-    ],
-    "ACH-000589": [
-      "mixseq"
-    ],
-    "ACH-000590": [
-      "kinker_scp542"
-    ],
-    "ACH-000595": [
-      "mixseq"
-    ],
-    "ACH-000603": [
-      "mixseq"
-    ],
-    "ACH-000613": [
-      "kinker_scp542"
-    ],
-    "ACH-000617": [
-      "kinker_scp542"
-    ],
-    "ACH-000618": [
-      "mixseq"
-    ],
-    "ACH-000624": [
-      "mixseq"
-    ],
-    "ACH-000625": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000628": [
-      "tahoe100m"
-    ],
-    "ACH-000643": [
-      "kinker_scp542"
-    ],
-    "ACH-000644": [
-      "mixseq"
-    ],
-    "ACH-000650": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000652": [
-      "mixseq"
-    ],
-    "ACH-000657": [
-      "mixseq"
-    ],
-    "ACH-000661": [
-      "mixseq"
-    ],
-    "ACH-000662": [
-      "mixseq"
-    ],
-    "ACH-000666": [
-      "mixseq"
-    ],
-    "ACH-000669": [
-      "mixseq",
-      "tahoe100m"
-    ],
-    "ACH-000670": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000678": [
-      "kinker_scp542"
-    ],
-    "ACH-000680": [
-      "mixseq"
-    ],
-    "ACH-000685": [
-      "mixseq"
-    ],
-    "ACH-000692": [
-      "kinker_scp542"
-    ],
-    "ACH-000701": [
-      "mixseq"
-    ],
-    "ACH-000704": [
-      "mixseq"
-    ],
-    "ACH-000715": [
-      "kinker_scp542",
-      "mixseq"
-    ],
-    "ACH-000723": [
-      "mixseq"
-    ],
-    "ACH-000726": [
-      "kinker_scp542"
-    ],
-    "ACH-000730": [
-      "kinker_scp542"
-    ],
-    "ACH-000734": [
-      "mixseq"
-    ],
-    "ACH-000738": [
-      "mixseq"
-    ],
-    "ACH-000749": [
-      "mixseq"
-    ],
-    "ACH-000750": [
-      "mixseq",
-      "tahoe100m"
-    ],
-    "ACH-000756": [
-      "mixseq"
-    ],
-    "ACH-000769": [
-      "mixseq"
-    ],
-    "ACH-000774": [
-      "mixseq"
-    ],
-    "ACH-000776": [
-      "mixseq"
-    ],
-    "ACH-000784": [
-      "mixseq"
-    ],
-    "ACH-000796": [
-      "mixseq"
-    ],
-    "ACH-000803": [
-      "mixseq"
-    ],
-    "ACH-000808": [
-      "kinker_scp542"
-    ],
-    "ACH-000814": [
-      "kinker_scp542"
-    ],
-    "ACH-000822": [
-      "mixseq"
-    ],
-    "ACH-000824": [
-      "mixseq"
-    ],
-    "ACH-000826": [
-      "mixseq"
-    ],
-    "ACH-000833": [
-      "mixseq"
-    ],
-    "ACH-000836": [
-      "mixseq"
-    ],
-    "ACH-000837": [
-      "mixseq"
-    ],
-    "ACH-000847": [
-      "mixseq"
-    ],
-    "ACH-000852": [
-      "kinker_scp542"
-    ],
-    "ACH-000868": [
-      "mixseq"
-    ],
-    "ACH-000873": [
-      "mixseq"
-    ],
-    "ACH-000875": [
-      "kinker_scp542",
-      "mixseq",
-      "tahoe100m"
-    ],
-    "ACH-000880": [
-      "mixseq"
-    ],
-    "ACH-000884": [
-      "mixseq"
-    ],
-    "ACH-000886": [
-      "mixseq"
-    ],
-    "ACH-000888": [
-      "mixseq"
-    ],
-    "ACH-000895": [
-      "kinker_scp542"
-    ],
-    "ACH-000896": [
-      "mixseq"
-    ],
-    "ACH-000897": [
-      "mixseq"
-    ],
-    "ACH-000905": [
-      "mixseq"
-    ],
-    "ACH-000906": [
-      "mixseq"
-    ],
-    "ACH-000911": [
-      "mixseq"
-    ],
-    "ACH-000921": [
-      "mixseq"
-    ],
-    "ACH-000927": [
-      "kinker_scp542",
-      "mixseq",
-      "tahoe100m"
-    ],
-    "ACH-000936": [
-      "mixseq"
-    ],
-    "ACH-000939": [
-      "mixseq"
-    ],
-    "ACH-000940": [
-      "tahoe100m"
-    ],
-    "ACH-000941": [
-      "mixseq"
-    ],
-    "ACH-000954": [
-      "mixseq",
-      "tahoe100m"
-    ],
-    "ACH-000961": [
-      "mixseq"
-    ],
-    "ACH-000966": [
-      "mixseq"
-    ],
-    "ACH-000967": [
-      "mixseq"
-    ],
-    "ACH-000973": [
-      "mixseq"
-    ],
-    "ACH-000982": [
-      "mixseq"
-    ],
-    "ACH-000990": [
-      "kinker_scp542"
-    ],
-    "ACH-000998": [
-      "mixseq"
-    ],
-    "ACH-001021": [
-      "tahoe100m"
-    ],
-    "ACH-001239": [
-      "mixseq"
-    ],
-    "ACH-001307": [
-      "mixseq"
-    ]
+  "inputs": {
+    "candidates": {
+      "path": "configs/benchmarks/single_cell_atlas_candidates.csv",
+      "sha256": "ff991a5ab6785e5b8e3314523555dc3fe9c10ea748dc2e2fdb0bfca18306a0f6"
+    },
+    "model": {
+      "path": "data/sl_dependency_v0/raw/depmap/Model.csv",
+      "sha256": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8"
+    },
+    "gene_effect": {
+      "path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
+      "sha256": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e"
+    },
+    "split": {
+      "path": "configs/benchmarks/cell_line_geneeffect_226_split.json",
+      "sha256": "8a264acfa63bf8c2c07d302e1adb5c4ce17edb19dd902f59ef6fd9b6e5434521"
+    },
+    "qc/emtab13204": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/emtab13204.json",
+      "sha256": "d1c3029a94ffb20cd4590e727ce8d43eb4b8f5e296710256575b47d11789b686"
+    },
+    "qc/figshare33273600": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/figshare33273600.json",
+      "sha256": "4de969cf557953cc45b8d9b39ef16e5def89363c137dbdf6ef5045e4b3728525"
+    },
+    "qc/gse101561": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse101561.json",
+      "sha256": "74048d82c862e4c8cde0f68e99a25dcac1c6b2ad8aa9c529c866cf22b3e08bba"
+    },
+    "qc/gse103867": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse103867.json",
+      "sha256": "1f8834621bd992afa3be7aee474098f4a5a2543ac08a49bda7659a6d6ff67862"
+    },
+    "qc/gse113660": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse113660.json",
+      "sha256": "450c8a95d91d28e7bbaf3b1eb5cc888660148c0b3ec6fafb5762ccff7ed8b377"
+    },
+    "qc/gse116256": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse116256.json",
+      "sha256": "d5f6c54a1fcdef0511857adc9a44e7733fdea47578048bd09ee6bcd062f32aa4"
+    },
+    "qc/gse118767": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse118767.json",
+      "sha256": "7e2e0c5ada4199ccb2426390ffd0520da4275d3e935658968143464dab6c9cc4"
+    },
+    "qc/gse137912": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse137912.json",
+      "sha256": "b476826328bb3e05aedd5350f464911fb83006bfb13e64a68d9e7b87650f2b0c"
+    },
+    "qc/gse139386": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse139386.json",
+      "sha256": "226f921fe934a0ee354a8b9e4febb8065e2a795628e3f10ed9c3c396aef5597b"
+    },
+    "qc/gse142750": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse142750.json",
+      "sha256": "7895f6313c34151802ad2da146f6557d13c7b28500c2b5d9b4f6b288df9e299b"
+    },
+    "qc/gse146221": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse146221.json",
+      "sha256": "4591e0c9bd0cc0d00a127ae152b985ea861779a9d2e897da54d08da4cf397882"
+    },
+    "qc/gse147405": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse147405.json",
+      "sha256": "606c296df252c175f01ac34e43e9d77fb030ad8a0af14f6553a12d76759f1de5"
+    },
+    "qc/gse173339": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse173339.json",
+      "sha256": "3e1b8a243d16da90a24cd95d7e5ef0203f1c0f773d718fc6a8d74bd11c4f5c99"
+    },
+    "qc/gse178116": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse178116.json",
+      "sha256": "cbd25d21917655f2037158bff74b6f8cc8ef3999b7de3478449b0c1afd9e2698"
+    },
+    "qc/gse179681": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse179681.json",
+      "sha256": "191b82399357f6778c2bfd959c6133876d617160b5ad9e6208abd51b3ac22113"
+    },
+    "qc/gse182694": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse182694.json",
+      "sha256": "3f843277692b243f0886890cea9179f24eed5235a762659cd49d758e8d258901"
+    },
+    "qc/gse188289": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse188289.json",
+      "sha256": "b1a6d8786fa0a9ade165c6808ca3c0dd6164a9b63df8a9fb59882cb25e328604"
+    },
+    "qc/gse193959": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse193959.json",
+      "sha256": "0aef47489d3aead453824ad843db35af1c12f2cdd01032b33e378467301441f5"
+    },
+    "qc/gse196766": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse196766.json",
+      "sha256": "b554defec6f2c8619f0f34aa15fae4a9556b8ce37219b99c86bafdfea43e4dad"
+    },
+    "qc/gse207993": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse207993.json",
+      "sha256": "9a3bcaac75ce4734d9c8af912ddd0345e8a3698ca98a3e07dc38e914712fc79e"
+    },
+    "qc/gse216182": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse216182.json",
+      "sha256": "c728be5e344793f57f1839f54a8c165d3018dcc78013edbbb8d01ad36649b274"
+    },
+    "qc/gse217922": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse217922.json",
+      "sha256": "9c1a7377cb414d6ffdda249a2281eac9e8dd25b7c7b71c597b67206a6e22a3fd"
+    },
+    "qc/gse218310": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse218310.json",
+      "sha256": "a83734b4187afbfbe199f07f0f36f32b1dade64e8efad5808a7c5ca75b9a8f24"
+    },
+    "qc/gse218621": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse218621.json",
+      "sha256": "a0012ff6e9313016d4e21b60498b510250bc9d5b2c0adaeac0320997528dbea6"
+    },
+    "qc/gse219199": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse219199.json",
+      "sha256": "d5ea77f862b3d8777353e924a3506f01f0f35e7cfe70afc6048d1da2706fa69c"
+    },
+    "qc/gse223848": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse223848.json",
+      "sha256": "3a2a5583b8befaffd4fa480a6e4bc46d3210aa947ffde54274ffc9d41326847c"
+    },
+    "qc/gse228275": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse228275.json",
+      "sha256": "29b04be5c60dc40be30bc0fc2d6b2d1b900987dbc632c6b31c86ed19ade773c9"
+    },
+    "qc/gse229224": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse229224.json",
+      "sha256": "95fe6849d78744b13efa8f06dac6ea4c55b3f8b14c26daced1fa1421f1a0ce81"
+    },
+    "qc/gse230538": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse230538.json",
+      "sha256": "4bb72cc2fcbb4aba08f980148fe8bb470f62c00dd961134cb0d2f0fda63a4260"
+    },
+    "qc/gse230574": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse230574.json",
+      "sha256": "b23905e6c7a5e65eb9771ef7dc9b4d1cef7c7cf9b747ccc0261cc4815476ae09"
+    },
+    "qc/gse237228": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse237228.json",
+      "sha256": "3b31027b8e30f7d24f69e4098941565287bb79dd49b1b9af58a35537fc644d5b"
+    },
+    "qc/gse242465": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse242465.json",
+      "sha256": "19f533cf8b438d02584ad6355616ba0ea7a4b48ac6866c021b95dca8d4729dd9"
+    },
+    "qc/gse243227": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse243227.json",
+      "sha256": "8b51e0e70468e615da305dfc050e3114f4c6e7341a4fcc246629397014039c64"
+    },
+    "qc/gse243665": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse243665.json",
+      "sha256": "919c31d97d47f7282bd9ca2cc1c109ed88906d1fa5b256775fab68dc222a81f2"
+    },
+    "qc/gse247688": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse247688.json",
+      "sha256": "ec96eee2d9aad88c1c09f3af417b161cdcb2a964e94bffd6309d150846a07371"
+    },
+    "qc/gse247689": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse247689.json",
+      "sha256": "8d6a7ff3dd9135d950ea61d2f40559de352d4529aabbdb97bee20f4a061d12e6"
+    },
+    "qc/gse249057": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse249057.json",
+      "sha256": "76691354fec388b1df32d8e1b5c5c4cdf062d66a9dce1c648f7473b56b8bbd4c"
+    },
+    "qc/gse254917": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse254917.json",
+      "sha256": "7b072619ae0e9bbe79aae5a3a3c998a585fc6163b5320df0634e8c637013638d"
+    },
+    "qc/gse256301": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse256301.json",
+      "sha256": "c29863a3681acdcef87889897f5dadb494dddf3237fe52c014b6320b9b0d161d"
+    },
+    "qc/gse263747": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse263747.json",
+      "sha256": "4eb6c2384f500f9c3934cb644c6694c2ac6895d129218f197ce0554f588b990a"
+    },
+    "qc/gse266216": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse266216.json",
+      "sha256": "870778c4ef49c5fa39b187b0aeb50046c6b46be3449d46dab022d3695b22af47"
+    },
+    "qc/gse270117": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse270117.json",
+      "sha256": "a70659e4b14e11a7ccecaf343ceb5c32cdca56ea540d1cdc110395519b1e151b"
+    },
+    "qc/gse272618": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse272618.json",
+      "sha256": "56d3a2e3ea7de88a94685b8260ce8d138c014c65f4c67d67f68b1c7c6ae153e4"
+    },
+    "qc/gse292402": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse292402.json",
+      "sha256": "71eaeaa751c9165f9fff6fcaf976e926484eaf598a9d5eca597d65a3cddf7a7a"
+    },
+    "qc/gse297836": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse297836.json",
+      "sha256": "6ce850349905b6f551b62597da68ba01193a2663bd4f9f65f50305f3208a8ba4"
+    },
+    "qc/gse303762": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse303762.json",
+      "sha256": "2ced1d1e976d0fdb21f9c804967c3f7e8f82db1f72cf0b240c0ad96ab1f9cd6d"
+    },
+    "qc/gse329598": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse329598.json",
+      "sha256": "52b079f39ef0418455f69f8b3d01bf357fabf56356869425f6712e1776dfa91b"
+    },
+    "qc/gse331320": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse331320.json",
+      "sha256": "e085977975fafc7c80efae49a14a5296e75472c17983124b93e0501a803af87e"
+    },
+    "qc/mixseq": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/mixseq.json",
+      "sha256": "090b3e6c32c524621ed0e422f8503612b77c617efef8eaf40fd3ce186fa5986d"
+    },
+    "qc/tahoe100m": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/tahoe100m.json",
+      "sha256": "2bb9ca4f2b0ca04cece1cbfaa453caedb2cfc4d2c40677ecba24cf33340f8f42"
+    },
+    "qc/tenxcellplexjurkatraji10k": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/tenxcellplexjurkatraji10k.json",
+      "sha256": "196012114e47f344c8864effe1c7ca356d884f79e15398de92405772d9c8d450"
+    }
   }
 }
