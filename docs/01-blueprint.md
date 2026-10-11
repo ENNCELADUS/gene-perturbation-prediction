@@ -233,10 +233,10 @@ plan.
   pseudo-bulk model.
 
 **Order.** The single-cell statistics stack; then, only on its signal, distributional and AI-virtual-cell
-models judged against the default prior; then interpretation of whichever model wins. Before any further
-stage-one work, the 226 split is re-versioned with A549 moved to test (the SL benchmark below needs it), and the
-default prior and the single-cell statistics stack are rerun on it; the old-split results stay as records of that
-split. Evidence so far: the
+models judged against the default prior; then interpretation of whichever model wins. On 2026-10-11 the 226 split
+was rebuilt in place with A549 moved to test (the SL benchmark below needs it); before any further stage-one work
+the default prior and the single-cell statistics stack are rerun on it, and the earlier results stay as records of
+the 172/27/27 split. Evidence so far: the
 joint STATE model trailed the context ridge, and in the single-cell correction every trained epoch lowered
 validation and STATE absent beat STATE frozen or trainable (GeneEffect protocol §7, §12).
 
@@ -249,7 +249,7 @@ project's DepMap lines most, and it is the only one with lines among the GeneEff
 Feng et al.'s, SLWise's and MiT4SL's settings is a GeneEffect training line. Labels follow Kebabci's rule for Ito
 and Klingbeil (GEMINI in the screen's top 10% and LFC below −0.51 and −1.03 respectively) and Harle et al.'s own
 call for Harle, whose Kebabci labels were not released; every row keeps its continuous score. The split stays
-nested (§3.6) and is re-versioned once, moving A549, which all three screened, from training to test: validation
+nested (§3.6); A549, which all three screened, moved from training to test when the 226 split was rebuilt: validation
 PA-TU-8988S (Ito) and NCI-H1299 (Klingbeil, Harle), test MDA-MB-231 (Klingbeil), SK-MES-1 (Harle) and A549 (all
 three). Stage two trains on the three screens pooled, with the screen as an input: the headline training side is
 the 21 screened training lines with basal single cells and GeneEffect, and the complementary model adds 21 more
@@ -258,5 +258,7 @@ call differs between the screen's lines are scored separately from the rest, aga
 same screen's training lines (the pair-identity control) and pan-essentiality (§3.7); a model that gives a pair one
 score in every line, as Cilantro-SL's classifier is trained to, cannot rank them. MiT4SL's own A549 labels are scored
 as a secondary external test beside its published A549 result (AUROC 0.673), which reads only the line's bulk RNA;
-Kebabci's published scores read the held-out line's measured GeneEffect and are no comparator. Composed
+Kebabci's published scores read the held-out line's measured GeneEffect and are no comparator. The built
+benchmark, its counts and its departures from Kebabci's own labels are in its data card
+(`docs/data/sl-screen-benchmark.md`). Composed
 single-gene predictions yield definition-1 candidates; they do not estimate a double-knockout phenotype.
