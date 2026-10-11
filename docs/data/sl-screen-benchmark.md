@@ -60,7 +60,10 @@ single-cell extras were built: eight lines (nine screen rows) moved from bulk to
 IPC-298 and MEL-JUSO (Ito), NCI-H209, NCI-H211, HPAF-II, MOLM-13 and THP-1 (Klingbeil), Capan-1
 and HPAF-II (Harle), taking the single-cell stratum's labelled pairs from 41,926 to 63,864 and the
 bulk stratum's from 62,491 to 40,553. Rows, labels and sides are otherwise unchanged; the earlier
-build is kept on the H20 as `data/sl_screens/benchmark_2026-10-11_before_extras/`.
+build is kept on the H20 as `data/sl_screens/benchmark_2026-10-11_before_extras/`. Wave 2 of the
+single-cell extras adds no screened line: rebuilt on its membership, the benchmark is unchanged
+except that MeWo's reason for being unused is now "no 26Q1 GeneEffect" (it has Easy-Sci cells); the
+wave-one build is kept as `data/sl_screens/benchmark_2026-10-11_before_wave2/`.
 
 ## Labels
 

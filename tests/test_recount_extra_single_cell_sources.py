@@ -35,7 +35,8 @@ log = Path(__file__).with_suffix(".calls")
 with log.open("a") as handle:
     handle.write(json.dumps(args) + "\\n")
 if args[:1] == ["info"]:  # kb prints its versions, then exits 1
-    print("usage: kb\\nkb_python 0.0.test\\nkallisto: 0.0 (fake)\\nbustools: 0.0 (fake)")
+    print("usage: kb\\nkb_python 0.0.test")
+    print("kallisto: 0.0 (fake)\\nbustools: 0.0 (fake)")
     sys.exit(1)
 elif args[:1] == ["ref"]:
     for flag in ("-i", "-g", "-f1"):
