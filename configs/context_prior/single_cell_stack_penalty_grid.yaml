@@ -1,0 +1,15 @@
+# The single-cell statistics stack (GeneEffect protocol §13) past the edge of its first grid: every arm's best
+# validation row in single_cell_stack_20261011 sat at the largest selected penalty (100), so this run continues the
+# selected grid upward. Otherwise as configs/context_prior/single_cell_stack.yaml; nothing is chosen in code.
+seed: 0
+output_root: outputs/context_prior
+prior_run: outputs/context_prior/default_prior_export
+bootstrap_repeats: 1000
+selected_genes: 50
+penalties:
+  own: [10.0, .inf]
+  selected: [100.0, 1000.0, 10000.0]
+arms:
+  mean: [mean]
+  distribution: [detected, variance]
+  single_cell: [mean, detected, variance]
