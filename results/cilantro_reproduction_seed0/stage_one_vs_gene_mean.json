@@ -1,0 +1,40 @@
+{
+ "rows": 2169637,
+ "lines": 1140,
+ "genes": 6670,
+ "lines_per_gene_median": 124.5,
+ "between_gene_share_of_variance": 0.850799773072964,
+ "pooled": {
+  "stage_one_model_in_sample": {
+   "rows": 2169637,
+   "rmse": 0.22878107752975377,
+   "spearman": 0.8505895948316312,
+   "pearson": 0.9316107518416786,
+   "r2": 0.867735218283063
+  },
+  "gene_mean_in_sample": {
+   "rows": 2169637,
+   "rmse": 0.24298682884568243,
+   "spearman": 0.8556538532505936,
+   "pearson": 0.9223880815974174,
+   "r2": 0.850799773072964
+  },
+  "gene_mean_held_out_lines": {
+   "rows": 2169082,
+   "rmse": 0.24370824572454555,
+   "spearman": 0.8543886436370921,
+   "pearson": 0.9219153133561606,
+   "r2": 0.8499275650529636
+  }
+ },
+ "line_specific": {
+  "stage_one_model_in_sample": {
+   "pooled_residual_pearson": 0.3963282692203946,
+   "within_gene_r2": 0.15652569235909453,
+   "genes_scored": 4756,
+   "per_gene_pearson_mean": 0.15621573637935832,
+   "per_gene_spearman_mean": 0.1394139493593646,
+   "per_gene_spearman_median": 0.09804329730902492
+  }
+ }
+}

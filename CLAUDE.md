@@ -18,7 +18,7 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-08)
+## Current state (2026-10-11)
 
 The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and baselined once at seed 0, before the
 **expression-space change** (STATE was fed raw counts), so those numbers are not like for like with the current pipeline
@@ -46,10 +46,20 @@ protocol §12) ran wave one (`docs/specs/2026-10-07-single-cell-correction-plan.
 the prior alone and the prior plus the Tx1 ridge, and `configs/correction/` holds the objective screen and the STATE
 runs. In all six runs (four objectives with STATE absent, then standardised MSE with frozen and trainable STATE)
 `best.pt` is the prior alone (0.229 / 0.234): every trained epoch lowers validation, and the prior plus the Tx1 ridge
-scores 0.183 / 0.182. STATE absent won; the research plan is to be discussed before a second wave. A reproduction of Cilantro-SL (Hua et al.
-2026) on its own data, then its port to the context screen and basal single cells, is designed
-(`docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`); phase 1 (the released code via `hpc/cilantro/`,
-branch `feat/cilantro-sl`) is implemented and its first full run is in progress on 30838; the port is not built. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+scores 0.183 / 0.182. STATE absent won. The **research plan** agreed on 2026-10-11 (blueprint §5) sets the bar at the default prior, not
+the gene mean, and asks first whether single-cell resolution adds to pseudo-bulk at all: the **single-cell statistics
+stack** (protocol §13, `configs/context_prior/single_cell_stack.yaml`, `hpc/run.sh prior-stack`) stacks per-gene
+detected fraction and variance on the prior's export against a mean-only arm. It ran on 2026-10-11
+(`results/single_cell_stack_seed0/`): no single-cell arm beats the mean arm on validation (largest +0.0011, interval
+spanning zero) and no arm's best row clears the prior (best 0.2340 against 0.2290, interval spanning zero), so the
+distributional and AI-virtual-cell layer (the second-wave plan) has no single-cell statistic to start from. A reproduction of Cilantro-SL (Hua et al. 2026), then its
+port to the context screen and basal single cells, is designed (`docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`);
+phase 1's as-released run is complete (`results/cilantro_reproduction_seed0/`): stage one reproduces but equals a
+gene mean from other lines, labels are one per pair in every line, and gene-holdout two-class AP is 0.54 against the
+paper's 0.71; the port is not built. SL labels are to come from multi-line combinatorial screens compared within
+one screen (Harle et al. 2025 the lead; SL protocol, 2026-10-11): they screened four GeneEffect held-out lines
+(NCI-H1299, PA-TU-8988S; MDA-MB-231, SK-MES-1), so the nested split needs no change; no data card or builder exists
+yet. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
@@ -70,6 +80,7 @@ hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any che
 hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   # linear context prior, CPU: bridge remedies scored on validation and test; rows/, results.md in outputs/context_prior/<id>/
 hpc/run.sh prior-selected CONFIG --run-id ID                # the reference row's data-selected genes, CPU: data_selected/ in the same run directory
 hpc/run.sh prior-export CONFIG --run-id ID                  # the reference row for the correction, CPU: export/ (val/test, training lines out of fold); never overwritten
+hpc/run.sh prior-stack CONFIG --run-id ID                   # single-cell q_sc statistics stacked on a prior export, CPU: single_cell_stack/ (protocol §13)
 uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
