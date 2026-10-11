@@ -53,11 +53,13 @@ documents its construction.
 
 | Cohort | Members | Labeled | Role |
 | --- | ---: | ---: | --- |
-| train | 172 | 170 | supervised fitting; PC9 and HeLa have no 26Q1 GeneEffect row |
+| train | 171 | 169 | supervised fitting; PC9 and HeLa have no 26Q1 GeneEffect row |
 | validation | 27 | 27 | once-per-epoch evaluation, checkpoint selection, early stopping |
-| test | 27 | 27 | one-shot final evaluation |
+| test | 28 | 28 | one-shot final evaluation |
 
-All 47 original basal/SL-context union lines are fixed in train. The 179 atlas lines
+The 47 original basal/SL-context union lines are fixed in train except A549, fixed in test
+since 2026-10-11 for the SL benchmark (the split was rebuilt in place; results recorded before
+that date used the 172/27/27 version with A549 in train). The 179 atlas lines
 follow a patient-grouped partition: no patient's lines are split across cohorts, and
 GeneEffect values did not determine membership. The 226-line benchmark and the
 nine-context SL split never substitute for each other. The planned SL split instead nests in this
@@ -619,7 +621,7 @@ units of the per-gene residual SD from a line's expression alone. It is a contro
 model of the joint pipeline: its own results table reports it beside the controls of §6, and the
 single-cell correction of §12 stacks the joint head on it. The prior reads the shared expression space of the design (bulk TPM for bulk lines,
 bridged pseudo-bulk for single-cell lines); the selective genes, $\hat\mu_g$ and $\sigma_g$ are
-those of §3.3 and §6, fitted on the 170 labelled training lines, so every number stays on the
+those of §3.3 and §6, fitted on the labelled training lines, so every number stays on the
 metrics of §6. A missing training label counts as a zero residual in fitting and is skipped in
 scoring. Lines outside the 226 enter the training side under the rules of §11 and the
 [data card](data/extra-bulk-lines-26q1.md).

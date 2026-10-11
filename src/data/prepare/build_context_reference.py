@@ -11,6 +11,9 @@ uv run python -m src.data.prepare.build_context_reference \
     --hotspot data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv \
     --damaging data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixDamaging.csv \
     --out configs/context_prior/reference
+
+After a split change, ``--line-tables-only`` rebuilds drivers.tsv and msi.tsv and keeps
+the fetched gene tables and their provenance.
 """  # noqa: E501
 
 from __future__ import annotations
@@ -198,21 +201,11 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("split", "extra-lines", "hotspot", "damaging", "out"):
-        parser.add_argument(f"--{name}", type=Path, required=True)
-    args = parser.parse_args(argv)
-    split = load_geneeffect_226_split(args.split)
-    extra = load_extra_lines(args.extra_lines, split)
-    blocked = {*split.val, *split.test, *extra.excluded}
-    out = args.out
-    out.mkdir(parents=True, exist_ok=True)
+def gene_tables() -> dict[str, tuple[pd.DataFrame, str]]:
+    """The fetched gene-level tables; no split enters them."""
     pairs = pd.concat(parse_paralogs(fetch(paralog_url(c))) for c in CHROMOSOMES)
     pairs = pairs.groupby(["gene", "paralog"], as_index=False)["identity"].max()
-    hotspot = read_depmap_matrix(args.hotspot)
-    damaging = read_depmap_matrix(args.damaging)
-    tables = {
+    return {
         "paralogs.tsv.gz": (
             closest_paralogs(
                 pairs, min_identity=PARALOG_MIN_IDENTITY, per_gene=PARALOGS_PER_GENE
@@ -225,30 +218,63 @@ def main(argv=None) -> int:
             parse_progeny(fetch(PROGENY_URL), top=PROGENY_TOP),
             PROGENY_URL,
         ),
+    }
+
+
+def line_tables(
+    hotspot_path: Path, damaging_path: Path, blocked: Collection[str]
+) -> dict[str, tuple[pd.DataFrame, str]]:
+    """The line-level tables, training-side lines only."""
+    hotspot = read_depmap_matrix(hotspot_path)
+    damaging = read_depmap_matrix(damaging_path)
+    return {
         "drivers.tsv": (
             driver_status(
                 hotspot,
                 damaging,
-                sorted(set(hotspot.index) - blocked),
+                sorted(set(hotspot.index) - set(blocked)),
                 min_fraction=DRIVER_MIN_FRACTION,
             ).reset_index(),
-            str(args.hotspot),
+            str(hotspot_path),
         ),
         "msi.tsv": (
             training_msi(fetch(SIGNATURES_URL), blocked).reset_index(),
             SIGNATURES_URL,
         ),
     }
-    provenance = {
-        "retrieved": date.today().isoformat(),
-        "settings": {
-            "paralog_min_identity": PARALOG_MIN_IDENTITY,
-            "paralogs_per_gene": PARALOGS_PER_GENE,
-            "progeny_top": PROGENY_TOP,
-            "driver_min_fraction": DRIVER_MIN_FRACTION,
-        },
-        "files": {},
-    }
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ("split", "extra-lines", "hotspot", "damaging", "out"):
+        parser.add_argument(f"--{name}", type=Path, required=True)
+    parser.add_argument(
+        "--line-tables-only",
+        action="store_true",
+        help="rebuild drivers.tsv and msi.tsv only, keeping the gene tables",
+    )
+    args = parser.parse_args(argv)
+    split = load_geneeffect_226_split(args.split)
+    extra = load_extra_lines(args.extra_lines, split)
+    blocked = {*split.val, *split.test, *extra.excluded}
+    out = args.out
+    out.mkdir(parents=True, exist_ok=True)
+    tables = line_tables(args.hotspot, args.damaging, blocked)
+    if args.line_tables_only:
+        provenance = json.loads((out / "provenance.json").read_text())
+        provenance["line_tables_rebuilt"] = date.today().isoformat()
+    else:
+        tables = {**gene_tables(), **tables}
+        provenance = {
+            "retrieved": date.today().isoformat(),
+            "settings": {
+                "paralog_min_identity": PARALOG_MIN_IDENTITY,
+                "paralogs_per_gene": PARALOGS_PER_GENE,
+                "progeny_top": PROGENY_TOP,
+                "driver_min_fraction": DRIVER_MIN_FRACTION,
+            },
+            "files": {},
+        }
     for name, (frame, source) in tables.items():
         frame.to_csv(out / name, sep="\t", index=False)
         provenance["files"][name] = {

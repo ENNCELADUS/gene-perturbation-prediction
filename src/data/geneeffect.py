@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from src.data.residual_target import ResidualTargets, build_residual_targets
 
-SPLIT_COUNTS: Final = {"train": 172, "val": 27, "test": 27}
+SPLIT_COUNTS: Final = {"train": 171, "val": 27, "test": 28}
 
 
 DEPENDENCY_THRESHOLD: Final = -0.5
@@ -26,11 +26,11 @@ UNLABELED_TRAIN: Final = ("ACH-000779", "ACH-001086")
 RAW_UMI_SEMANTICS: Final = "raw_umi_counts"
 
 
-SPLIT_SCHEMA_VERSION: Final = "cell-line-geneeffect-226-split-v1"
+SPLIT_SCHEMA_VERSION: Final = "cell-line-geneeffect-226-split-v2"
 
 
 PINNED_SPLIT_SHA256: Final = (
-    "1c91d3a821f50bb5aadfb9fac86b889311e194380c64b484463c1f437c41ed72"
+    "8a264acfa63bf8c2c07d302e1adb5c4ce17edb19dd902f59ef6fd9b6e5434521"
 )
 
 
@@ -133,9 +133,7 @@ def fit_variable_gene_membership(
     variance = grouped.var(ddof=0).reindex(eligible)
     if variance.empty or not bool(np.isfinite(variance.to_numpy()).all()):
         raise ValueError("variable-gene fit has no finite eligible variances")
-    threshold = float(
-        np.percentile(variance.to_numpy(), percentile, method="linear")
-    )
+    threshold = float(np.percentile(variance.to_numpy(), percentile, method="linear"))
     return frozenset(variance.index[variance >= threshold].astype(str))
 
 
@@ -229,7 +227,7 @@ def _unique_strings(values: Sequence[object], label: str) -> tuple[str, ...]:
 
 
 def load_exp13_split(path: Path) -> Exp13Split:
-    """Load and strictly validate the tracked 172/27/27 split authority."""
+    """Load and strictly validate the tracked 171/27/28 split authority."""
     path = Path(path)
     observed_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
     if observed_sha256 != PINNED_SPLIT_SHA256:
