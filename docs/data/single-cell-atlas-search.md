@@ -50,13 +50,17 @@ Preparation and the SL benchmark read only `labelled`. `inputs` records the SHA-
 `configs/data/extra_single_cell_sources_26Q1.json` (per source: files and their URLs, archives to
 unpack, gene id kind, basal arms, libraries). Per library:
 
-- **Reader:** 10x mtx or h5 (expression and antibody-capture features split), a dense count table
-  (Drop-seq DGE), an h5ad or loom (`X`, `.raw` or a layer), or the Tahoe-100M DMSO shards. Counts must
-  be integers.
+- **Reader:** 10x mtx or h5 (expression and antibody-capture features split; header rows and a
+  mixed-species prefix such as `hg19_` handled), a dense count table (Drop-seq DGE, BD Rhapsody
+  molecules per cell, with comment lines skipped), an h5ad or a velocyto loom (`X`, `.raw` or a
+  layer), or the Tahoe-100M DMSO shards. Archives (tar, zip, gzip) are unpacked first. Counts must
+  be integers; a deposit clipped at a small cap passes that check, so it is excluded at review.
 - **Cells:** the deposit's called cells, or the inflection of the barcode-rank curve for unfiltered
   matrices (the knee UMI is reported).
 - **Line per cell:** the whole library, the authors' per-cell table (with keep filters and an arm
-  column), hashtags (a singlet's top tag needs at least `min_count` and `min_ratio` times the second),
+  column), a pattern on the cell id (a line prefix such as `SUM149PT_`, an aggregate's `-1` suffix,
+  an arm suffix such as `_C.R1`), hashtags (a singlet's top tag needs at least `min_count` and
+  `min_ratio` times the second),
   or, for a pool without labels, k-means clusters assigned to the member whose DepMap bulk RNA deviation
   correlates best, when it beats the second best by `min_margin` (every cluster's correlations and
   margin are reported).

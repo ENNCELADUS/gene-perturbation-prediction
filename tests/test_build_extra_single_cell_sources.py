@@ -18,6 +18,8 @@ from scipy.io import mmwrite
 
 from src.data.prepare.build_extra_single_cell_lines import MAP_COLUMNS
 from src.data.prepare.build_extra_single_cell_sources import (
+    Library,
+    _identify,
     assign_pool,
     call_hashtags,
     knee,
@@ -52,6 +54,8 @@ def _library(path: str, identity: dict, *, arm="untreated", cells="deposited"):
         "matrix": f"{path}/matrix.mtx",
         "features": f"{path}/features.tsv",
         "barcodes": f"{path}/barcodes.tsv",
+        "header": False,
+        "gene_id_prefix": "",
         "cells": cells,
         "knee_min_umi": 10,
         "identity": identity,
@@ -168,6 +172,7 @@ def build_world(root: Path) -> dict:
                             "keep": {"quality": ["normal"]},
                             "cell_prefix": "",
                             "cell_suffix": "",
+                            "skiprows": 0,
                         },
                         arm=None,
                     )
@@ -262,7 +267,13 @@ def test_readers_agree_on_tenx_h5_table_and_anndata(tmp_path):
         pd.DataFrame(counts.T, index=SYMBOLS, columns=cells).to_csv(handle, sep="\t")
     table = read_library(
         tmp_path,
-        {"reader": "table", "path": "dge.txt.gz", "sep": "\t", "genes_by_cells": True},
+        {
+            "reader": "table",
+            "path": "dge.txt.gz",
+            "sep": "\t",
+            "skiprows": 0,
+            "genes_by_cells": True,
+        },
     )
     np.testing.assert_array_equal(table.counts.toarray(), counts)
     assert table.genes == SYMBOLS and table.cells == cells
@@ -357,3 +368,196 @@ def test_tahoe_reader_keeps_the_listed_lines_cells(tmp_path):
     assert library.genes == GENES[:2]
     np.testing.assert_array_equal(library.counts.toarray(), [[2, 1], [9, 0]])
     assert list(library.obs["cell_line_id"]) == ["CVCL_1098"] * 2
+
+
+def test_barcode_identity_reads_line_and_arm_from_cell_ids():
+    cells = ["SUM149PT_AAAC", "SUM159PT_GGTA", "AAAC-1_C.R1", "AAAG-2_T.R1", "odd"]
+    library = Library(sparse.csr_matrix((5, 1)), cells, ["g"], None, None, [], None)
+    lines, arms, report = _identify(
+        library,
+        {
+            "kind": "barcode",
+            "pattern": r"^(?P<line>SUM\w+?)_",
+            "identifier": None,
+            "rename": {},
+        },
+        Path("."),
+        {},
+        Path("."),
+    )
+    assert lines == ["SUM149PT", "SUM159PT", None, None, None]
+    assert report == {"matched_cells": 2}
+    lines, arms, _ = _identify(
+        library,
+        {
+            "kind": "barcode",
+            "pattern": r"-(?P<line>\d+)_(?P<arm>[^_]+)$",
+            "identifier": None,
+            "rename": {"1": "huH-1"},
+        },
+        Path("."),
+        {},
+        Path("."),
+    )
+    assert lines == [None, None, "huH-1", "2", None]
+    assert arms == [None, None, "C.R1", "T.R1", None]
+    lines, arms, _ = _identify(
+        library,
+        {
+            "kind": "barcode",
+            "pattern": r"_(?P<arm>C\.R\d)$",
+            "identifier": "KURAMOCHI",
+            "rename": {},
+        },
+        Path("."),
+        {},
+        Path("."),
+    )
+    assert lines == [None, None, "KURAMOCHI", None, None]
+    assert arms[2] == "C.R1"
+
+
+def test_table_and_labels_skip_comment_header_lines(tmp_path):
+    header = "####\n## pipeline 1.9\n####\n"
+    (tmp_path / "mols.csv").write_text(header + "Cell_Index,G1,G2\n11,3,0\n12,1,4\n")
+    (tmp_path / "tags.csv").write_text(
+        header + "Cell_Index,Sample_Tag,Sample_Name\n11,ST1,WM793\n12,ST2,Multiplet\n"
+    )
+    library = read_library(
+        tmp_path,
+        {
+            "reader": "table",
+            "path": "mols.csv",
+            "sep": ",",
+            "skiprows": 3,
+            "genes_by_cells": False,
+        },
+    )
+    assert library.cells == ["11", "12"] and library.genes == ["G1", "G2"]
+    lines, _, _ = _identify(
+        library,
+        {
+            "kind": "labels",
+            "path": "tags.csv",
+            "sep": ",",
+            "skiprows": 3,
+            "cell_column": "Cell_Index",
+            "label_column": "Sample_Name",
+            "arm_column": None,
+            "keep": {},
+            "cell_prefix": "",
+            "cell_suffix": "",
+        },
+        tmp_path,
+        {},
+        tmp_path,
+    )
+    assert lines == ["WM793", "Multiplet"]
+
+
+def test_loom_reader_and_gzip_unpack(tmp_path):
+    from src.data.prepare.build_extra_single_cell_sources import _unpack
+
+    rng = np.random.default_rng(2)
+    counts = _counts(rng, 5)
+    loom = tmp_path / "x.loom"
+    with h5py.File(loom, "w") as handle:
+        handle["matrix"] = counts.T.astype(np.float32)
+        handle.create_group("layers")["spliced"] = counts.T.astype(np.float32)
+        rows = handle.create_group("row_attrs")
+        rows["Gene"], rows["Accession"] = (
+            np.array(SYMBOLS, dtype="S"),
+            np.array(GENES, dtype="S"),
+        )
+        handle.create_group("col_attrs")["CellID"] = np.array(
+            [f"s:c{i}x" for i in range(5)], dtype="S"
+        )
+    with open(loom, "rb") as source, gzip.open(tmp_path / "x.loom.gz", "wb") as out:
+        out.write(source.read())
+    loom.unlink()
+    _unpack(tmp_path / "x.loom.gz", tmp_path)
+    spec = {
+        "reader": "anndata",
+        "path": "x.loom",
+        "counts": "layer:spliced",
+        "gene_column": "Accession",
+        "symbol_column": "index",
+    }
+    library = read_library(tmp_path, spec)
+    np.testing.assert_array_equal(library.counts.toarray(), counts)
+    assert library.genes == GENES and library.symbols == SYMBOLS
+    assert library.cells == [f"s:c{i}x" for i in range(5)]
+
+
+def test_label_table_cell_ids_may_be_its_unnamed_first_column(tmp_path):
+    pd.DataFrame(
+        {"cell_line_demuxlet": ["H1975", "A549"], "demuxlet_cls": ["SNG", "SNG"]},
+        index=["AAAC", "GGTA"],
+    ).to_csv(tmp_path / "meta.csv")
+    library = Library(
+        sparse.csr_matrix((2, 1)), ["GGTA", "AAAC"], ["g"], None, None, [], None
+    )
+    lines, _, _ = _identify(
+        library,
+        {
+            "kind": "labels",
+            "path": "meta.csv",
+            "sep": ",",
+            "skiprows": 0,
+            "cell_column": None,
+            "label_column": "cell_line_demuxlet",
+            "arm_column": None,
+            "keep": {"demuxlet_cls": ["SNG"]},
+            "cell_prefix": "",
+            "cell_suffix": "",
+        },
+        tmp_path,
+        {},
+        tmp_path,
+    )
+    assert lines == ["A549", "H1975"]
+
+
+def test_mixed_species_mtx_keeps_prefixed_genes_and_hashtags_take_a_suffix(tmp_path):
+    rng = np.random.default_rng(3)
+    counts = np.hstack([_counts(rng, 3), rng.poisson(3.0, (3, 2))])
+    directory = tmp_path / "m"
+    directory.mkdir()
+    mmwrite(directory / "matrix.mtx", sparse.coo_matrix(counts.T))
+    ids = [f"hg19_{g}" for g in GENES] + ["mm10_ENSMUSG1", "mm10_ENSMUSG2"]
+    names = [f"hg19_{s}" for s in SYMBOLS] + ["mm10_a", "mm10_b"]
+    pd.DataFrame(
+        {"gene_ids": ids, "gene": names, "feature_types": "Gene Expression"}
+    ).to_csv(directory / "features.tsv", sep="\t", index=False)
+    pd.DataFrame({"barcode": ["c0-1", "c1-1", "c2-1"], "call": "hg19"}).to_csv(
+        directory / "barcodes.tsv", sep="\t", index=False
+    )
+    spec = {**_library("m", {}), "header": True, "gene_id_prefix": "hg19_"}
+    library = read_library(tmp_path, spec)
+    assert library.genes == GENES and library.symbols == SYMBOLS
+    np.testing.assert_array_equal(library.counts.toarray(), counts[:, : len(GENES)])
+    assert library.cells == ["c0-1", "c1-1", "c2-1"]
+
+    hto = tmp_path / "hto"
+    hto.mkdir()
+    mmwrite(hto / "matrix.mtx", sparse.coo_matrix(np.array([[40, 1, 0], [0, 30, 2]])))
+    (hto / "features.tsv").write_text(
+        "H1\tH1\tAntibody Capture\nH2\tH2\tAntibody Capture\n"
+    )
+    (hto / "barcodes.tsv").write_text("c0\nc1\nc2\n")
+    hto_spec = {**_library("hto", {}), "reader": "tenx_mtx"}
+    lines, _, report = _identify(
+        library,
+        {
+            "kind": "hashtag",
+            "counts": hto_spec,
+            "cell_suffix": "-1",
+            "hashtags": {"H1": "a", "H2": "b"},
+            "min_count": 10,
+            "min_ratio": 3,
+        },
+        tmp_path,
+        {},
+        tmp_path,
+    )
+    assert lines == ["a", "b", None]

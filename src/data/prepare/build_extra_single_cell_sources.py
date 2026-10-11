@@ -21,8 +21,11 @@ uv run python -m src.data.prepare.build_extra_single_cell_sources \
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
+import re
+import shutil
 import tarfile
 import zipfile
 from collections import Counter
@@ -52,9 +55,9 @@ from src.data.splits import FixedSplit, load_geneeffect_226_split
 
 #: Keys each reader and each identity kind takes (all required).
 READERS = {
-    "tenx_mtx": ("matrix", "features", "barcodes"),
+    "tenx_mtx": ("matrix", "features", "barcodes", "header", "gene_id_prefix"),
     "tenx_h5": ("h5",),
-    "table": ("path", "sep", "genes_by_cells"),
+    "table": ("path", "sep", "skiprows", "genes_by_cells"),
     "anndata": ("path", "counts", "gene_column", "symbol_column"),
     "tahoe": ("shards", "gene_metadata", "cell_lines"),
 }
@@ -69,8 +72,10 @@ IDENTITIES = {
         "keep",
         "cell_prefix",
         "cell_suffix",
+        "skiprows",
     ),
-    "hashtag": ("counts", "hashtags", "min_count", "min_ratio"),
+    "barcode": ("pattern", "identifier", "rename"),
+    "hashtag": ("counts", "cell_suffix", "hashtags", "min_count", "min_ratio"),
     "pool": ("members", "clusters", "min_margin"),
 }
 
@@ -115,13 +120,27 @@ def _expression_and_tags(
 
 
 def _read_tenx_mtx(root: Path, spec: Mapping[str, Any]) -> Library:
+    """10x mtx (genes x cells). ``header``: the features and barcodes files start
+    with a header row. ``gene_id_prefix`` (e.g. ``hg19_`` of a mixed-species
+    reference): keep only features carrying it, without it."""
     counts = sparse.csr_matrix(mmread(root / spec["matrix"]).T)
-    features = pd.read_csv(root / spec["features"], sep="\t", header=None, dtype=str)
-    features = features.reindex(columns=range(3))
+    skip = 1 if spec["header"] else 0
+
+    def table(name: str) -> pd.DataFrame:
+        return pd.read_csv(
+            root / spec[name], sep="\t", header=None, skiprows=skip, dtype=str
+        )
+
+    features = table("features").reindex(columns=range(3))
     features.columns = ["id", "name", "type"]
     features["name"] = features["name"].fillna(features["id"])
-    cells = pd.read_csv(root / spec["barcodes"], sep="\t", header=None, dtype=str)[0]
-    return _expression_and_tags(counts, cells.tolist(), features)
+    prefix = spec["gene_id_prefix"]
+    if prefix:
+        ours = features["id"].str.startswith(prefix).to_numpy()
+        counts, features = counts[:, np.flatnonzero(ours)], features.loc[ours].copy()
+        for column in ("id", "name"):
+            features[column] = features[column].str.removeprefix(prefix)
+    return _expression_and_tags(counts, table("barcodes")[0].tolist(), features)
 
 
 def _read_tenx_h5(root: Path, spec: Mapping[str, Any]) -> Library:
@@ -152,7 +171,9 @@ def _read_tenx_h5(root: Path, spec: Mapping[str, Any]) -> Library:
 
 
 def _read_table(root: Path, spec: Mapping[str, Any]) -> Library:
-    frame = pd.read_csv(root / spec["path"], sep=spec["sep"], index_col=0)
+    frame = pd.read_csv(
+        root / spec["path"], sep=spec["sep"], skiprows=spec["skiprows"], index_col=0
+    )
     if spec["genes_by_cells"]:
         frame = frame.T
     return Library(
@@ -166,9 +187,41 @@ def _read_table(root: Path, spec: Mapping[str, Any]) -> Library:
     )
 
 
+def _read_loom(path: Path) -> ad.AnnData:
+    """A loom file (genes x cells HDF5, velocyto layout) as cells x genes; var is
+    the row attributes indexed by ``Gene``, obs the column attributes indexed by
+    ``CellID``, layers the loom layers."""
+
+    def frame(group, index: str) -> pd.DataFrame:
+        columns = {
+            key: [v.decode() if isinstance(v, bytes) else v for v in group[key][:]]
+            for key in group
+            if group[key].ndim == 1
+        }
+        return pd.DataFrame(columns).set_index(index, drop=False)
+
+    def matrix(dataset) -> sparse.csr_matrix:
+        blocks = [
+            sparse.csr_matrix(dataset[:, start : start + 4096].T)
+            for start in range(0, dataset.shape[1], 4096)
+        ]
+        return sparse.vstack(blocks).tocsr()
+
+    with h5py.File(path, "r") as handle:
+        var, obs = (
+            frame(handle["row_attrs"], "Gene"),
+            frame(handle["col_attrs"], "CellID"),
+        )
+        adata = ad.AnnData(X=matrix(handle["matrix"]), obs=obs, var=var)
+        for name in handle.get("layers", {}):
+            adata.layers[name] = matrix(handle["layers"][name])
+    adata.obs_names, adata.var_names = obs.index.astype(str), var.index.astype(str)
+    return adata
+
+
 def _read_anndata(root: Path, spec: Mapping[str, Any]) -> Library:
     path = root / spec["path"]
-    adata = ad.read_loom(path) if path.suffix == ".loom" else ad.read_h5ad(path)
+    adata = _read_loom(path) if path.suffix == ".loom" else ad.read_h5ad(path)
     where = spec["counts"]
     if where == "X":
         counts, var = adata.X, adata.var
@@ -382,8 +435,15 @@ def _identify(
             table = library.obs.assign(_cell=library.obs.index.astype(str))
             cell_column = "_cell"
         else:
-            table = pd.read_csv(root / identity["path"], sep=identity["sep"], dtype=str)
+            table = pd.read_csv(
+                root / identity["path"],
+                sep=identity["sep"],
+                skiprows=identity["skiprows"],
+                dtype=str,
+            )
             cell_column = identity["cell_column"]
+            if cell_column is None:  # cell ids are the table's unnamed first column
+                cell_column = table.columns[0]
         for column, values in identity["keep"].items():
             table = table.loc[table[column].astype(str).isin(values)]
         cells = identity["cell_prefix"] + table[cell_column] + identity["cell_suffix"]
@@ -403,14 +463,30 @@ def _identify(
             [None if pd.isna(a) else str(a) for a in arms],
             {"labelled_cells": int(sum(v is not None for v in clean))},
         )
+    if kind == "barcode":
+        # The line (group ``line``, else ``identifier``) and arm (group ``arm``)
+        # carried by each cell id; ``rename`` turns a captured line into a name.
+        pattern = re.compile(identity["pattern"])
+        lines, arms = [], []
+        for cell in library.cells:
+            match = pattern.search(cell)
+            groups = match.groupdict() if match else {}
+            line = groups.get("line", identity["identifier"]) if match else None
+            lines.append(None if line is None else identity["rename"].get(line, line))
+            arms.append(groups.get("arm"))
+        return lines, arms, {"matched_cells": int(sum(v is not None for v in lines))}
     if kind == "hashtag":
         if identity["counts"] is None:
             tags, names = library.tags, library.tag_names
             rows = np.arange(n)
         else:
             other = read_library(root, identity["counts"])
-            tags, names = other.counts, other.genes
-            position = {cell: i for i, cell in enumerate(other.cells)}
+            if other.tags is not None:  # 10x features typed as antibody capture
+                tags, names = other.tags, other.tag_names
+            else:
+                tags, names = other.counts, other.genes
+            suffix = identity["cell_suffix"]
+            position = {cell + suffix: i for i, cell in enumerate(other.cells)}
             rows = np.asarray([position.get(cell, -1) for cell in library.cells])
         if tags is None:
             raise ValueError("hashtag identity: the library has no tag features")
@@ -637,7 +713,13 @@ def _unpack(archive: Path, into: Path) -> None:
     if marker.exists():
         return
     destination = into.resolve()
-    if archive.suffix == ".zip":
+    if archive.suffix == ".gz" and not archive.name.endswith(".tar.gz"):
+        with (
+            gzip.open(archive, "rb") as source,
+            archive.with_suffix("").open("wb") as out,
+        ):
+            shutil.copyfileobj(source, out)
+    elif archive.suffix == ".zip":
         with zipfile.ZipFile(archive) as handle:
             members = handle.namelist()
             bad = [
