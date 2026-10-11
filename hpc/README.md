@@ -11,6 +11,7 @@ hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 hpc/run.sh prior configs/context_prior/bridge_remedies.yaml [--run-id <id>] [--experiments affine,contrastive]
 hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_export
+hpc/run.sh prior-stack configs/context_prior/single_cell_stack.yaml --run-id <id>
 hpc/run.sh revision configs/correction/huber_no_state.yaml --run-id correction_huber_no_state_seed0
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
@@ -182,6 +183,13 @@ labelled single-cell training line out of fold (the bridge and every stage refit
 fold). An existing export is never replaced; a correction checkpoint records the export's run id, so a new export
 needs a new run id. It runs on CPU (set `OMP_NUM_THREADS` and `MKL_NUM_THREADS`); `prior.json` holds its own
 validation and test scores, which reproduce the reference row of the `prior` run.
+
+`hpc/run.sh prior-stack CONFIG --run-id <id>` stacks per-gene single-cell statistics (the prepared `q_sc` caches)
+on the export of the config's `prior_run` (GeneEffect protocol §13) and writes
+`outputs/context_prior/<run_id>/{run_config.json, single_cell_stack/{rows/<arm>.json, facts.json, results.md}}`. It
+reads the prior run's bound config, so its genes, residual SD and lines are the export's, and refuses an export that
+does not match them. It runs on CPU in one process (set `OMP_NUM_THREADS` and `MKL_NUM_THREADS`); a finished run
+directory is refused, so a rerun needs a new run id.
 
 The run directory is `outputs/context_prior/<run_id>/{run_config.json, rows/<experiment>__<n>.json, results.md}`.
 Each setting writes its row file when finished and is skipped when the file exists, so an interrupted run resumes by

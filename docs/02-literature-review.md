@@ -97,7 +97,12 @@ single-gene knockouts in silico, supervises a viability embedding on DepMap CRIS
 classifier with conformal uncertainty. It is precedent for combining foundation-model representations,
 dependency supervision and SL classification; its evaluation holds out pairs and genes, within cell lines,
 and never holds out a cell line
-([Hua, Haber and Ma, bioRxiv 2026](https://pmc.ncbi.nlm.nih.gov/articles/PMC13160162/)).
+([Hua, Haber and Ma, bioRxiv 2026](https://pmc.ncbi.nlm.nih.gov/articles/PMC13160162/)). Running its released
+code shows how little of the context reaches the evaluation
+([our reproduction](../results/cilantro_reproduction_seed0/README.md)): stage one is scored only on the rows it
+trained on, where a gene mean taken from other lines matches it (Spearman 0.854 against 0.851); every SL pair
+carries one database label, copied to each line where both genes are among its 2,048 most expressed; and the
+gene-holdout result reproduces at two-class AP 0.54, not the reported 0.71.
 
 ## 4. Dependency prediction from molecular context
 

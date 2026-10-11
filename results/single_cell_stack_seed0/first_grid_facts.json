@@ -1,0 +1,33 @@
+{
+  "train_lines": 170,
+  "val_lines": 27,
+  "test_lines": 27,
+  "target_genes": 17787,
+  "selective_genes": 3057,
+  "statistic_genes": 9585,
+  "prior_identity": {
+    "run_id": "default_prior_export",
+    "reference": {
+      "experiment": "affine",
+      "block_set": "selected",
+      "components_penalty": 1.0,
+      "gene_penalty": 10.0
+    }
+  },
+  "prior_alone": {
+    "val": {
+      "selective_spearman": 0.2289696658882135,
+      "selective_aupr_lift": 0.1973582893442864,
+      "residual_pearson_macro_per_gene": 0.22290241519757514,
+      "geneeffect_loss": 0.015622232109308243,
+      "residual_sd_ratio_macro_per_gene": 0.11794232992327235
+    },
+    "test": {
+      "selective_spearman": 0.2337628827341302,
+      "selective_aupr_lift": 0.19097814641666547,
+      "residual_pearson_macro_per_gene": 0.22855373503760332,
+      "geneeffect_loss": 0.015482420101761818,
+      "residual_sd_ratio_macro_per_gene": 0.11390755179775003
+    }
+  }
+}
