@@ -29,13 +29,14 @@
     },
     "drivers.tsv": {
       "source": "data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv",
-      "rows": 1907,
-      "sha256": "50742744c17ec3df8808807c3f478136b3b90b9998be9b0d86cba05204a1b4f3"
+      "rows": 1904,
+      "sha256": "d6fbb8b6ca448ecd39c14281cd35765444e57b0cc10c266935db7c0f9cee06ff"
     },
     "msi.tsv": {
       "source": "https://ndownloader.figshare.com/files/51065726",
-      "rows": 1868,
-      "sha256": "7e821e6f6bc2e25b6234d9fe212db57bdb6246e07c865b4cf490dc750fa2a638"
+      "rows": 1865,
+      "sha256": "34d0d924d40548167d6b21211e6e6a8336d5c7dcb00fe201f7de2b6c75c4a4fa"
     }
-  }
+  },
+  "line_tables_rebuilt": "2026-10-11"
 }

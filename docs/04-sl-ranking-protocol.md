@@ -26,7 +26,8 @@ the SL task differently, and this protocol is rewritten to match before stage tw
   Harle labels come from a GEMINI file they did not release. A Harle pair with a gene flagged single-depleted in a
   line is unlabelled there, not a negative, since the authors' call cannot make it a hit. Every row keeps its
   continuous score.
-- **Split:** the 226 split is re-versioned once, moving A549 (ACH-000681; all three screens) from training to test.
+- **Split:** the 226 split was rebuilt in place on 2026-10-11, moving A549 (ACH-000681; all three screens) from
+  training to test.
   Validation PA-TU-8988S (ACH-000022; Ito) and NCI-H1299 (ACH-000510; Klingbeil, Harle); test MDA-MB-231
   (ACH-000768; Klingbeil), SK-MES-1 (ACH-000665; Harle) and A549. No screened line shares a PatientID with a
   validation or test line; A549's DepMap patient siblings leave the extra lines.
@@ -35,10 +36,13 @@ the SL task differently, and this protocol is rewritten to match before stage tw
   GI-1, RH-30, T3M-4, COR-L23, LK-2, NCI-H1975, KP-4 and BxPC-3); a complementary model adds the 21 screened lines
   read through bulk RNA from the labelled extras (`configs/benchmarks/extra_bulk_lines_26Q1.json`), reported beside
   it, never pooled. Flister 2025 and Fong 2024 are not adopted.
-- **Before a first run:** the re-versioned split, then a data card per adopted screen (source tables as Kebabci's
-  `data_sources.md` lists them: Ito Tables S4 and S9, Klingbeil Tables S2, S4 and S6, Harle Tables S4 and S5; the
-  labelling rule reproduced; line mapping by ModelID; licence), the tables fetched on the H20, and a builder with the
-  tracked split. The context screen's table below stays a built artifact: its unanimity filters drop the 8,866
+- **Built (2026-10-11):** the screen tables fetched on the H20, the line map
+  `configs/benchmarks/sl_screen_lines.csv`, the builder `src/data/prepare/build_sl_screen_benchmark.py` and its
+  output `data/sl_screens/benchmark/` on the H20, described in the [data card](data/sl-screen-benchmark.md). The
+  labels follow Kebabci's rule but are not Kebabci's labels: on Ito's ten lines the rule gives 1,511 SL calls in
+  47,315 points against their 958 in 41,244, because their GEMINI was recomputed from counts and their pairs were
+  filtered, neither released. Before a first run: the default prior and its out-of-fold export rerun on the
+  rebuilt split, then the SL head. The context screen's table below stays a built artifact: its unanimity filters drop the 8,866
   screen pairs whose evidence differs between lines, and some of its aggregated rows may not be fitness screens (the
   A549;CAPAN1;MEL202;MEWO;OMM23 group reads, from the Harle and Chan papers' text, as a Cas9-negative
   library-abundance control; unverified).

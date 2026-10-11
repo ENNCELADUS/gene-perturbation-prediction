@@ -9,19 +9,23 @@ the [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been obs
 
 | Cohort | Train | Validation | Test |
 | --- | ---: | ---: | ---: |
-| Original basal/SL-context union | 47 | 0 | 0 |
+| Original basal/SL-context union | 46 | 0 | 1 |
 | New single-cell atlas | 125 | 27 | 27 |
-| Total membership | 172 | 27 | 27 |
+| Total membership | 171 | 27 | 28 |
 
-This is the only train/validation/test split. All 47 original contexts are fixed in
-train. The 179 new contexts retain the deterministic patient-grouped MILP partition;
-no PatientID crosses split sides and GeneEffect values did not determine membership.
+This is the only train/validation/test split. The 47 original contexts are fixed in
+train except A549 (`ACH-000681`), fixed in test since 2026-10-11 because all three screens of
+the SL benchmark test it ([SL protocol](../04-sl-ranking-protocol.md)); the split was rebuilt in
+place, and the earlier 172/27/27 version, with A549 in train, is in git history. The 179 new
+contexts retain the deterministic patient-grouped MILP partition; no PatientID crosses split
+sides and GeneEffect values did not determine membership. Moving A549 leaves the
+coverage gene universe unchanged (17,931 genes), so the prepared caches did not change.
 
 ## Labels and inputs
 
 DepMap 26Q1 GeneEffect covers 224 of 226 members. PC9 (`ACH-000779`) and HeLa
 (`ACH-001086`) remain train members as required but have no GeneEffect row, so they
-cannot contribute supervised loss. Train therefore has 172 members and 170 labeled
+cannot contribute supervised loss. Train therefore has 171 members and 169 labeled
 contexts. Raw UMI, registered basal and processed CPM input semantics remain recorded
 per row at the available source level; `registered_basal` is not a numeric matrix
 semantic. **Resolved 2026-08-18:** the 152 `kinker_sccle` lines were published as
