@@ -57,7 +57,10 @@ from src.data.splits import FixedSplit, load_geneeffect_226_split
 READERS = {
     "tenx_mtx": ("matrix", "features", "barcodes", "header", "gene_id_prefix"),
     "tenx_h5": ("h5",),
+    "tenx_bam": ("bam", "cell_prefix"),
     "table": ("path", "sep", "skiprows", "genes_by_cells"),
+    "triplets": ("matrix", "cell_table", "gene_table"),
+    "mtx_names": ("matrix", "gene_table", "cell_table"),
     "anndata": ("path", "counts", "gene_column", "symbol_column"),
     "tahoe": ("shards", "gene_metadata", "cell_lines", "drug"),
 }
@@ -77,6 +80,7 @@ IDENTITIES = {
     "barcode": ("pattern", "identifier", "rename"),
     "hashtag": ("counts", "cell_suffix", "hashtags", "min_count", "min_ratio"),
     "pool": ("members", "clusters", "min_margin"),
+    "rt_hash": ("rt_barcodes", "rt_map", "hash_table", "min_count", "min_ratio"),
 }
 
 
@@ -170,6 +174,46 @@ def _read_tenx_h5(root: Path, spec: Mapping[str, Any]) -> Library:
     return _expression_and_tags(sparse.csr_matrix(matrix.T), cells, features)
 
 
+def _read_tenx_bam(root: Path, spec: Mapping[str, Any]) -> Library:
+    """Cell Ranger's UMI counts from its BAM: one count per read flagged as its
+    molecule's representative (``xf`` bit 8) with a cell (``CB``), a UMI and one
+    gene (``GX``, symbol ``GN``). Cells are named ``cell_prefix`` + ``CB``."""
+    import pysam
+
+    cells: dict[str, int] = {}
+    genes: dict[str, int] = {}
+    symbols: dict[str, str] = {}
+    rows, columns = [], []
+    with pysam.AlignmentFile(
+        root / spec["bam"], "rb", check_sq=False, threads=8
+    ) as handle:
+        for read in handle.fetch(until_eof=True):
+            if not read.has_tag("xf") or not read.get_tag("xf") & 8:
+                continue
+            if not (read.has_tag("CB") and read.has_tag("UB") and read.has_tag("GX")):
+                continue
+            gene = read.get_tag("GX")
+            if ";" in gene:
+                continue
+            rows.append(cells.setdefault(read.get_tag("CB"), len(cells)))
+            columns.append(genes.setdefault(gene, len(genes)))
+            symbols.setdefault(gene, read.get_tag("GN"))
+    counts = sparse.csr_matrix(
+        (np.ones(len(rows), dtype=np.int64), (rows, columns)),
+        shape=(len(cells), len(genes)),
+    )
+    counts.sum_duplicates()
+    return Library(
+        counts=counts,
+        cells=[spec["cell_prefix"] + cell for cell in cells],
+        genes=list(genes),
+        symbols=[symbols[gene] for gene in genes],
+        tags=None,
+        tag_names=[],
+        obs=None,
+    )
+
+
 def _read_table(root: Path, spec: Mapping[str, Any]) -> Library:
     frame = pd.read_csv(
         root / spec["path"], sep=spec["sep"], skiprows=spec["skiprows"], index_col=0
@@ -185,6 +229,75 @@ def _read_table(root: Path, spec: Mapping[str, Any]) -> Library:
         tag_names=[],
         obs=None,
     )
+
+
+def _read_triplets(root: Path, spec: Mapping[str, Any]) -> Library:
+    """A headerless (gene, cell, count) table, 1-based, with headerless cell and
+    gene annotation tables (cell id first; gene id, then symbol), as sci-RNA-seq3
+    pipelines write them."""
+
+    def table(name: str) -> pd.DataFrame:
+        return pd.read_csv(root / spec[name], sep="\t", header=None, dtype=str)
+
+    cells, genes = table("cell_table")[0].tolist(), table("gene_table")
+    entries = pd.read_csv(
+        root / spec["matrix"], sep="\t", header=None, dtype=np.int64
+    ).to_numpy()
+    counts = sparse.csr_matrix(
+        (entries[:, 2], (entries[:, 1] - 1, entries[:, 0] - 1)),
+        shape=(len(cells), len(genes)),
+    )
+    return Library(
+        counts=counts,
+        cells=cells,
+        genes=genes[0].tolist(),
+        symbols=genes[1].tolist(),
+        tags=None,
+        tag_names=[],
+        obs=None,
+    )
+
+
+def _read_mtx_names(root: Path, spec: Mapping[str, Any]) -> Library:
+    """A genes x cells mtx whose names sit in R ``write.csv`` vectors: gene names
+    are the ``gene_table``'s values, cell ids the ``cell_table``'s row names."""
+
+    def vector(name: str) -> pd.DataFrame:
+        return pd.read_csv(root / spec[name], dtype=str)
+
+    return Library(
+        counts=sparse.csr_matrix(mmread(root / spec["matrix"]).T),
+        cells=vector("cell_table").iloc[:, 0].tolist(),
+        genes=vector("gene_table").iloc[:, 1].tolist(),
+        symbols=None,
+        tags=None,
+        tag_names=[],
+        obs=None,
+    )
+
+
+def lognorm_counts(values: sparse.spmatrix, totals: np.ndarray) -> sparse.csr_matrix:
+    """The integer counts behind ``log1p(count * s_cell)`` values, given each
+    cell's UMI total: ``s_cell`` is the cell's ``expm1`` sum over its total.
+    Raises unless every recovered value is within 0.01 of a positive integer and
+    every cell's counts sum to its total (so a deposit normalised over other
+    genes, or with corrected counts, fails)."""
+    scaled = sparse.csr_matrix(values, dtype=np.float64)
+    scaled.data = np.expm1(scaled.data)
+    sums = np.asarray(scaled.sum(axis=1)).ravel()
+    totals = np.asarray(totals, dtype=np.float64)
+    if np.any(sums <= 0) or np.any(totals <= 0):
+        raise ValueError("lognorm counts: a cell without values or total")
+    counts = sparse.csr_matrix(sparse.diags(totals / sums) @ scaled)
+    rounded = np.rint(counts.data)
+    worst = float(np.max(np.abs(counts.data - rounded))) if counts.nnz else 0.0
+    if worst > 0.01 or (rounded < 1).any():
+        raise ValueError(f"lognorm counts: values are not integers (off by {worst})")
+    counts.data = rounded
+    counts = sparse.csr_matrix(counts, dtype=np.int64)
+    if not np.array_equal(np.asarray(counts.sum(axis=1)).ravel(), totals):
+        raise ValueError("lognorm counts: recovered counts do not sum to the totals")
+    return counts
 
 
 def _read_loom(path: Path) -> ad.AnnData:
@@ -220,9 +333,14 @@ def _read_loom(path: Path) -> ad.AnnData:
 
 
 def _read_anndata(root: Path, spec: Mapping[str, Any]) -> Library:
+    """``counts``: ``X``, ``raw``, ``layer:<name>``, or ``lognorm:<one of those>:
+    <obs column>`` for log-normalised values whose integer counts are recovered
+    with each cell's UMI total from that column (``lognorm_counts``)."""
     path = root / spec["path"]
     adata = _read_loom(path) if path.suffix == ".loom" else ad.read_h5ad(path)
-    where = spec["counts"]
+    where, total_column = spec["counts"], None
+    if where.startswith("lognorm:"):
+        where, total_column = where.removeprefix("lognorm:").rsplit(":", 1)
     if where == "X":
         counts, var = adata.X, adata.var
     elif where == "raw":
@@ -231,6 +349,8 @@ def _read_anndata(root: Path, spec: Mapping[str, Any]) -> Library:
         counts, var = adata.layers[where.split(":", 1)[1]], adata.var
     else:
         raise ValueError(f"{path}: counts must be X, raw or layer:<name>")
+    if total_column is not None:
+        counts = lognorm_counts(counts, adata.obs[total_column].to_numpy())
 
     def column(name):
         return var.index.astype(str) if name == "index" else var[name].astype(str)
@@ -284,7 +404,10 @@ def _read_tahoe(root: Path, spec: Mapping[str, Any]) -> Library:
 _READ = {
     "tenx_mtx": _read_tenx_mtx,
     "tenx_h5": _read_tenx_h5,
+    "tenx_bam": _read_tenx_bam,
     "table": _read_table,
+    "triplets": _read_triplets,
+    "mtx_names": _read_mtx_names,
     "anndata": _read_anndata,
     "tahoe": _read_tahoe,
 }
@@ -524,7 +647,62 @@ def _identify(
             min_margin=identity["min_margin"],
         )
         return calls, [None] * n, {"clusters": table}
+    if kind == "rt_hash":
+        return _rt_hash(library, identity, root)
     raise ValueError(f"unknown identity kind {kind!r}")
+
+
+def _rt_hash(
+    library: Library, identity: Mapping[str, Any], root: Path
+) -> tuple[list[str | None], list[str | None], dict[str, Any]]:
+    """sci-Plex: the line from the cell's RT barcode (the fifth ``_`` field of a
+    ``P5_P7_RT_BC_<n>_Lig_BC_<m>`` id, named in ``rt_barcodes`` as ``RT_BC_<n>``)
+    through the authors' RT-well map, and the arm from its hash: a singlet's top
+    oligo (``call_hashtags``) up to its first ``_`` (``DMSO_0nM_10H01`` is DMSO)."""
+    barcodes = pd.read_csv(
+        root / identity["rt_barcodes"], sep=r"\s+", header=None, dtype=str
+    )
+    sequence = dict(zip(barcodes[0], barcodes[1], strict=True))
+    wells = pd.read_csv(root / identity["rt_map"], dtype=str)
+    line_of = dict(zip(wells["Barcode"], wells["Cell Line"], strict=True))
+    lines = [
+        line_of.get(sequence.get(f"RT_BC_{cell.split('_')[4]}"))
+        for cell in library.cells
+    ]
+    hashes = pd.read_csv(
+        root / identity["hash_table"],
+        sep="\t",
+        header=None,
+        names=["sample", "cell", "oligo", "axis", "umis"],
+        dtype={"cell": str, "oligo": str, "umis": np.int64},
+    )
+    oligos = sorted(set(hashes["oligo"]))
+    position = {cell: i for i, cell in enumerate(library.cells)}
+    found = hashes["cell"].map(position)
+    hashes = hashes.loc[found.notna()]
+    tags = sparse.csr_matrix(
+        (
+            hashes["umis"].to_numpy(),
+            (
+                found.dropna().astype(np.int64).to_numpy(),
+                hashes["oligo"].map({o: i for i, o in enumerate(oligos)}).to_numpy(),
+            ),
+        ),
+        shape=(len(library.cells), len(oligos)),
+    )
+    calls, tally = call_hashtags(
+        tags.toarray(),
+        oligos,
+        {oligo: oligo for oligo in oligos},
+        min_count=identity["min_count"],
+        min_ratio=identity["min_ratio"],
+    )
+    arms = [None if call is None else call.split("_")[0] for call in calls]
+    report = {
+        "rt_lines": dict(Counter(line for line in lines if line is not None)),
+        "hashtags": tally,
+    }
+    return lines, arms, report
 
 
 @dataclass
@@ -786,17 +964,22 @@ def run(
 
 
 def downloads(spec_path: Path, wave: int) -> list[tuple[str, Path]]:
-    """``(url, path)`` of every file of the wave's sources not on disk."""
+    """``(url, path)`` of every file of the wave's sources not on disk, and of the
+    re-count reference when a source of the wave is re-counted."""
     spec = json.loads(spec_path.read_text())
-    wanted = []
+    files = []
     for name, source in spec["sources"].items():
         if source["wave"] != wave:
             continue
-        for relative, url in source["files"].items():
-            path = Path(spec["raw_root"]) / name / relative
-            if not path.exists():
-                wanted.append((url, path))
-    return wanted
+        root = Path(spec["raw_root"]) / name
+        files += [(url, root / relative) for relative, url in source["files"].items()]
+        if "recount" in source:
+            reference = spec["recount"]
+            files += [
+                (url, Path(reference["index_dir"]) / relative)
+                for relative, url in reference["files"].items()
+            ]
+    return [(url, path) for url, path in dict.fromkeys(files) if not path.exists()]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
