@@ -445,7 +445,11 @@ def _identify(
             )
             cell_column = identity["cell_column"]
             if cell_column is None:  # cell ids are the table's unnamed first column
-                cell_column = table.columns[0]
+                if isinstance(table.index, pd.RangeIndex):
+                    table = table.rename(columns={table.columns[0]: "_cell"})
+                else:  # an R table: header one field short, ids became the index
+                    table = table.rename_axis("_cell").reset_index()
+                cell_column = "_cell"
         for column, values in identity["keep"].items():
             table = table.loc[table[column].astype(str).isin(values)]
         cells = identity["cell_prefix"] + table[cell_column] + identity["cell_suffix"]
