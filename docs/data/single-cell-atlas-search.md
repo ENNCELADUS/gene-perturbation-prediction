@@ -59,14 +59,29 @@ unpack, gene id kind, basal arms, libraries). Per library:
 - **Reader:** 10x mtx or h5 (expression and antibody-capture features split; header rows and a
   mixed-species prefix such as `hg19_` handled), a dense count table (Drop-seq DGE, BD Rhapsody
   molecules per cell, with comment lines skipped), an h5ad or a velocyto loom (`X`, `.raw` or a
-  layer), or the Tahoe-100M DMSO shards. Archives (tar, zip, gzip) are unpacked first. Counts must
-  be integers; a deposit clipped at a small cap passes that check, so it is excluded at review.
+  layer), the Tahoe-100M DMSO shards, Cell Ranger's BAM (one UMI per read that its `xf` tag marks
+  as the molecule's representative, with a cell, a UMI and one gene), sci-RNA-seq3's headerless
+  (gene, cell, count) triplets, or an mtx whose gene and cell names are R `write.csv` vectors.
+  Log-normalised AnnData values are turned back into counts with each cell's UMI total from obs
+  (`lognorm:<where>:<column>`): `expm1` of each value times the cell's total over its `expm1` sum,
+  accepted only if every value lands within 0.01 of a positive integer and every cell sums to its
+  total. Archives (tar, zip, gzip) are unpacked first. Counts must be integers; a deposit clipped at
+  a small cap, or one holding corrected integer counts, passes that check, so it is excluded at
+  review.
+- **Re-count:** a source with a `recount` entry is counted from its SRA runs before it is built
+  (`src/data/prepare/recount_extra_single_cell_sources.py`): `fasterq-dump` with technical reads,
+  then `kb count` (kb-python 0.30.2, kallisto 0.52.0, bustools 0.45.1, standard workflow) against a
+  kallisto index of GENCODE v44 on the GRCh38 primary assembly, built once by `kb ref` with the
+  genome as its D-list. kb's unfiltered gene matrix is kept in Cell Ranger layout under
+  `<source>/kb/<library>/` and read like a deposit, cells called by the knee. These are kallisto
+  counts (reads pseudoaligned to transcripts, multi-gene reads dropped), not Cell Ranger's.
 - **Cells:** the deposit's called cells, or the inflection of the barcode-rank curve for unfiltered
   matrices (the knee UMI is reported).
 - **Line per cell:** the whole library, the authors' per-cell table (with keep filters and an arm
   column), a pattern on the cell id (a line prefix such as `SUM149PT_`, an aggregate's `-1` suffix,
   an arm suffix such as `_C.R1`), hashtags (a singlet's top tag needs at least `min_count` and
-  `min_ratio` times the second),
+  `min_ratio` times the second), sci-Plex's RT well (the cell id's RT barcode through the authors'
+  RT-plate map, with the arm from the cell's hash call),
   or, for a pool without labels, k-means clusters assigned to the member whose DepMap bulk RNA deviation
   correlates best, when it beats the second best by `min_margin` (every cluster's correlations and
   margin are reported).
@@ -199,10 +214,12 @@ uv run python -m src.data.prepare.build_extra_single_cell_lines propose \
     --model data/sl_dependency_v0/raw/depmap/Model.csv
 ```
 
-On the H20, the builder and `build_extra_single_cell_lines build` write the h5ad, the QC reports and
-the membership file, and preparation grows the prepared root (commands in `hpc/README.md`, "Extra
-single-cell lines"). Re-preparing a line means deleting its h5ad, `lines/<ModelID>.npz`, Tx1 cache
-directory and pseudo-bulk row.
+On the H20, the re-count step (wave 2), the builder and `build_extra_single_cell_lines build` write
+the count matrices, the h5ad, the QC reports and the membership file, and preparation grows the
+prepared root (commands in `hpc/README.md`, "Extra single-cell lines"). Re-preparing a line means
+deleting its h5ad, `lines/<ModelID>.npz`, Tx1 cache directory and pseudo-bulk row; when a new source
+takes over a built line, those files are moved under `data/superseded/` first, since the builder
+refuses to overwrite an h5ad.
 
 ## Artifacts
 
@@ -210,9 +227,12 @@ directory and pseudo-bulk row.
   identifier); columns above.
 - `configs/data/extra_single_cell_sources_26Q1.json`: the source spec, per wave.
 - `configs/benchmarks/extra_single_cell_lines_26Q1.json`: the membership file.
-- H20: `data/sl_dependency_v0/raw/extra_single_cell/<source>/` (deposits, `SHA256SUMS`) and
+- H20: `data/sl_dependency_v0/raw/extra_single_cell/<source>/` (deposits, `SHA256SUMS`, and for a
+  re-counted source its `.sra` runs and `kb/<library>/` matrices with `done.json`),
+  `data/references/gencode_v44/` (genome, GTF, kallisto index and its `kallisto_standard.json`),
   `data/sl_dependency_v0/processed/basal_raw_umi/` (one h5ad per prepared line, the 226 hard-linked
-  from their builders' outputs, and `qc/<source>.json`).
+  from their builders' outputs, and `qc/<source>.json`) and `data/superseded/extras_wave1_2026-10-11/`
+  (the wave-one files of the lines wave 2 rebuilt).
 
 ## Use
 

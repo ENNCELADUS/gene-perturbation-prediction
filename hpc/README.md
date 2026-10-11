@@ -230,6 +230,23 @@ build. The last command grows `data/geneeffect_joint/v2` and its pseudo-bulk by 
 the visible GPU); the 226's files are left as written. To re-prepare one line, delete its h5ad, `lines/<ModelID>.npz`,
 Tx1 cache directory and pseudo-bulk row.
 
+Wave 2 adds sources whose libraries are re-counted from SRA runs. Before building, the GENCODE reference is indexed
+once and each re-counted library is counted (sratoolkit's `fasterq-dump` and kb-python, installed outside the
+checkout under `/2023533015/tools/`; `pysam` from the `data` extra is in `.venv-tx1`):
+
+```bash
+K="--kb /2023533015/tools/kb-venv/bin/kb --fasterq-dump /2023533015/tools/sratoolkit/bin/fasterq-dump"
+.venv-tx1/bin/python -m src.data.prepare.recount_extra_single_cell_sources --spec $S --wave 2 $K index
+.venv-tx1/bin/python -m src.data.prepare.recount_extra_single_cell_sources --spec $S --wave 2 $K count \
+  [--sources gse142750_recount]
+```
+
+The `.sra` runs and Cell Ranger BAMs come from SRA's public AWS bucket (`sra-pub-run-odp`, `sra-pub-src-1`), whose
+single-stream rate from the H20 is a few MB/s; parallel ranged requests (about eight at once) are several times
+faster, while ENA's FASTQ host was slower still and drops the barcode reads of some runs. A line whose chosen source
+changes (a wave-2 source with more or better cells than its wave-1 one) is re-prepared: its h5ad, prepared npz, Tx1
+cache directory and pseudo-bulk row are moved under `data/superseded/` before the new source is built.
+
 ## Configuration and inputs
 
 All configuration fields are explicit in `configs/geneeffect_joint.yaml`; unknown or
