@@ -50,6 +50,7 @@ wheels/
 !configs/benchmarks/cell_line_geneeffect_226_split.csv
 # Pinned single-cell atlas candidates (accession, ModelID, identifier per line), small provenance.
 !configs/benchmarks/single_cell_atlas_candidates.csv
+!configs/benchmarks/sl_screen_lines.csv
 # Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
 !docs/report/tables/*.csv
 # Small historical benchmark provenance manifests.
