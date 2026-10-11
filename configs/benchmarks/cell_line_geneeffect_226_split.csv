@@ -14,6 +14,7 @@ test,new_cell_line_atlas_179,ACH-000565,PT-XIcCcb,RCM-1,Bowel,kinker_sccle,proce
 test,new_cell_line_atlas_179,ACH-000651,PT-IPboWn,SW 620,Bowel,ccla_omix005191,raw_umi_counts,True,False,False
 test,new_cell_line_atlas_179,ACH-000665,PT-41lHFE,SK-MES-1,Lung,kinker_sccle,processed_cpm,True,False,False
 test,new_cell_line_atlas_179,ACH-000671,PT-TtIXsL,HuH-6,Liver,kinker_sccle,processed_cpm,True,False,False
+test,original_context_47,ACH-000681,PT-cqv92I,A549,Lung,Tahoe-100M DMSO,registered_basal,True,True,True
 test,new_cell_line_atlas_179,ACH-000720,PT-ACqBkd,TCCSUP,Bladder/Urinary Tract,kinker_sccle,processed_cpm,True,False,False
 test,new_cell_line_atlas_179,ACH-000735,PT-M3R2ei,PE/CA-PJ49,Head and Neck,kinker_sccle,processed_cpm,True,False,False
 test,new_cell_line_atlas_179,ACH-000768,PT-pYG6Rc,MDA-MB-231,Breast,ccla_omix005191,raw_umi_counts,True,False,False
@@ -128,7 +129,6 @@ train,new_cell_line_atlas_179,ACH-000655,PT-ZQKvHU,SF268,CNS/Brain,ccla_omix0051
 train,new_cell_line_atlas_179,ACH-000663,PT-kymkHN,OVTOKO,Ovary/Fallopian Tube,kinker_sccle,processed_cpm,True,False,False
 train,new_cell_line_atlas_179,ACH-000668,PT-3DyHhv,HCC70,Breast,breast_cell_line_atlas,raw_umi_counts,True,False,False
 train,new_cell_line_atlas_179,ACH-000672,PT-C7amr4,IA-LM,Lung,kinker_sccle,processed_cpm,True,False,False
-train,original_context_47,ACH-000681,PT-cqv92I,A549,Lung,Tahoe-100M DMSO,registered_basal,True,True,True
 train,new_cell_line_atlas_179,ACH-000694,PT-bNO06l,TE-9,Esophagus/Stomach,kinker_sccle,processed_cpm,True,False,False
 train,original_context_47,ACH-000696,PT-AlUnJX,OVCAR-8,Ovary/Fallopian Tube,GSE150864 untreated raw UMI reconstruction,registered_basal,True,False,True
 train,new_cell_line_atlas_179,ACH-000706,PT-srkn4o,EKVX,Lung,kinker_sccle,processed_cpm,True,False,False

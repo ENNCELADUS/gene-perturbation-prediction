@@ -7,14 +7,14 @@
       "val": 27
     },
     "original_context_47": {
-      "test": 0,
-      "train": 47,
+      "test": 1,
+      "train": 46,
       "val": 0
     }
   },
   "counts": {
-    "test": 27,
-    "train": 172,
+    "test": 28,
+    "train": 171,
     "val": 27
   },
   "geneeffect": {
@@ -26,14 +26,14 @@
     ],
     "slices": {
       "test": {
-        "geneeffect_lines": 27,
+        "geneeffect_lines": 28,
         "genes_with_any_finite": 18513,
-        "membership_lines": 27
+        "membership_lines": 28
       },
       "train": {
-        "geneeffect_lines": 170,
+        "geneeffect_lines": 169,
         "genes_with_any_finite": 18531,
-        "membership_lines": 172
+        "membership_lines": 171
       },
       "val": {
         "geneeffect_lines": 27,
@@ -46,7 +46,7 @@
   "input_sha256": {
     "atlas_manifest": "12ac575e1deea1e8343fa05c04b4bd590c39534d004a682a1d0ba297055b8a37",
     "basal_registry": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47",
-    "builder_script": "e7103114cfb2a158bdbe7db997befd5613dbc5cefdad8963ba6e457b60bd10dc",
+    "builder_script": "198988220f1803df4b35e51dee992bfdc3a010734b201e51de4468f224de0a19",
     "depmap_model": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8",
     "geneeffect": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e",
     "phase_a_manifest": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297",
@@ -59,13 +59,15 @@
     "primary_objective": 15.657894736842104,
     "primary_optimal": true
   },
-  "original_contexts_all_train": true,
+  "original_contexts_test": [
+    "ACH-000681"
+  ],
   "output_sha256": {
-    "csv": "942e8278b165fe95866801c9563550728e260d9f2f2000104b6fabe0fbb94bfa",
-    "json": "1c91d3a821f50bb5aadfb9fac86b889311e194380c64b484463c1f437c41ed72"
+    "csv": "0aff7c3183f10979a36e21736b30a269e8bb9f0c9cd37ad000a34fd500cbee4d",
+    "json": "8a264acfa63bf8c2c07d302e1adb5c4ce17edb19dd902f59ef6fd9b6e5434521"
   },
   "patient_group_cross_split": 0,
-  "schema_version": "cell-line-geneeffect-226-split-audit-v1",
+  "schema_version": "cell-line-geneeffect-226-split-audit-v2",
   "selection_provenance": {
     "evidence_sha256": {
       "context_basal_registry": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47",
