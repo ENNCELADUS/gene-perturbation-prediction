@@ -5,6 +5,7 @@ import pytest
 
 from src.data.prepare.build_sl_screen_benchmark import (
     finish_rows,
+    geneeffect_namer,
     kebabci_labels,
     line_sides,
     symbol_mapper,
@@ -51,6 +52,21 @@ def test_symbol_mapper_prefers_approved_then_unique_previous_then_alias() -> Non
     assert current("ALIAS10") == "MAP3K10"
     assert current("OLDX") == "OLDX"  # ambiguous previous symbol stays as published
     assert current("UNKNOWN") == "UNKNOWN"
+
+
+def test_genes_take_their_geneeffect_symbol_when_hgnc_has_renamed_them() -> None:
+    hgnc = pd.DataFrame(
+        {
+            "symbol": ["SACK1A", "MAP3K21"],
+            "prev_symbol": ["FAM83A", "KIAA1804"],
+            "alias_symbol": [None, None],
+        }
+    )
+    name = geneeffect_namer(symbol_mapper(hgnc), {"FAM83A", "MAP3K10"})
+    assert name("FAM83A") == "FAM83A"  # DepMap 26Q1 still uses the old symbol
+    assert name("SACK1A") == "FAM83A"
+    assert name("KIAA1804") == "MAP3K21"  # outside GeneEffect: current HGNC symbol
+    assert name("MAP3K10") == "MAP3K10"
 
 
 def _sides() -> pd.DataFrame:

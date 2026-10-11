@@ -117,7 +117,16 @@ class PreparedInputs:
                 np.asarray(self.esm2_vectors, dtype=np.float32)
             ).clone(),
             "prior": None if self.prior is None else dict(self.prior.identity),
+            "split": _membership(self.split),
         }
+
+
+def _membership(split: FixedSplit) -> dict[str, list[str]]:
+    """The split membership a checkpoint was fitted under, sorted per side."""
+    return {
+        side: sorted(getattr(split, side))
+        for side in ("train", "val", "test", "unlabeled_train")
+    }
 
 
 # --- one basal line --------------------------------------------------------------
@@ -248,6 +257,27 @@ def _restored_keys(preprocessing: Mapping[str, Any]) -> None:
         )
 
 
+def _restored_split(preprocessing: Mapping[str, Any], split: FixedSplit) -> None:
+    """A checkpoint's fitted state belongs to the membership it was fitted under; the
+    split file can change in place (A549 moved from train to test on 2026-10-11)."""
+    if "split" not in preprocessing:
+        raise ValueError(
+            "checkpoint preprocessing has no split membership: it predates the "
+            "2026-10-11 in-place re-split, so its fitted state used A549 as a "
+            "training line that the current split scores as test; retrain it"
+        )
+    saved, current = preprocessing["split"], _membership(split)
+    changed = {
+        side: sorted(set(saved.get(side, [])) ^ set(members))
+        for side, members in current.items()
+        if sorted(saved.get(side, [])) != members
+    }
+    if changed:
+        raise ValueError(
+            f"checkpoint was fitted under a different split membership: {changed}"
+        )
+
+
 def load_inputs(
     config: Mapping[str, Any],
     *,
@@ -271,6 +301,8 @@ def load_inputs(
         _restored_keys(preprocessing)
     paths, features = config["paths"], config["features"]
     split = load_geneeffect_226_split(Path(paths["split"]))
+    if preprocessing is not None:
+        _restored_split(preprocessing, split)
     genes = tuple(manifest["common_gene_panel"])
     labels = load_geneeffect_long(Path(paths["gene_effect"]), split)
     labels = labels.loc[labels["gene_symbol"].isin(genes)].copy()
