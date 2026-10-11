@@ -177,6 +177,21 @@ def test_restore_skips_fitting_and_external_esm2(tmp_path, monkeypatch):
         load_inputs(config, preprocessing=state)
 
 
+def test_restore_rejects_state_fitted_under_another_split_membership(tmp_path):
+    config = make_prepared_fixture(tmp_path)
+    state = load_inputs(config).preprocessing_state()
+    assert load_inputs(config, preprocessing=state).split.train
+    moved = dict(state, split=dict(state["split"]))
+    line = moved["split"]["train"][0]
+    moved["split"]["train"] = moved["split"]["train"][1:]
+    moved["split"]["test"] = sorted([*moved["split"]["test"], line])
+    with pytest.raises(ValueError, match="different split membership"):
+        load_inputs(config, preprocessing=moved)
+    legacy = {key: value for key, value in state.items() if key != "split"}
+    with pytest.raises(ValueError, match="predates the 2026-10-11 in-place re-split"):
+        load_inputs(config, preprocessing=legacy)
+
+
 def test_dependency_batch_carries_gene_index_scale_and_selectivity(tmp_path):
     import dataclasses
 

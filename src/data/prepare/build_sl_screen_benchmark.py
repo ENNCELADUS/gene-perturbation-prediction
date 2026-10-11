@@ -315,6 +315,26 @@ def symbol_mapper(hgnc: pd.DataFrame) -> Callable[[str], str]:
     return current
 
 
+def geneeffect_namer(
+    current: Callable[[str], str], geneeffect: Collection[str]
+) -> Callable[[str], str]:
+    """Name a published symbol as stage one does: the 26Q1 GeneEffect symbol of the same
+    current HGNC gene when exactly one exists (DepMap keeps some symbols HGNC has since
+    renamed, such as FAM83A), else the current HGNC symbol."""
+    stage_one = set(geneeffect)
+    by_current: dict[str, set[str]] = {}
+    for symbol in stage_one:
+        by_current.setdefault(current(symbol), set()).add(symbol)
+
+    def name(symbol: str) -> str:
+        if symbol in stage_one:
+            return symbol
+        hits = by_current.get(current(symbol), set())
+        return next(iter(hits)) if len(hits) == 1 else current(symbol)
+
+    return name
+
+
 def line_sides(
     lines: pd.DataFrame,
     split: FixedSplit,
@@ -358,14 +378,14 @@ def finish_rows(
     frame: pd.DataFrame,
     screen: str,
     sides: pd.DataFrame,
-    current: Callable[[str], str],
+    name: Callable[[str], str],
     geneeffect: Collection[str],
 ) -> pd.DataFrame:
-    """Map genes to current symbols, drop pairs of one gene under two symbols, aggregate
+    """Name genes as stage one does, drop pairs of one gene under two symbols, aggregate
     to one row per (line, pair) and attach line sides. The dropped row count is in
     ``attrs["same_gene_rows"]``."""
-    mapped_a = frame["screen_gene_a"].astype(str).map(current)
-    mapped_b = frame["screen_gene_b"].astype(str).map(current)
+    mapped_a = frame["screen_gene_a"].astype(str).map(name)
+    mapped_b = frame["screen_gene_b"].astype(str).map(name)
     swap = mapped_a > mapped_b
     rows = frame.copy()
     rows["gene_a"] = mapped_a.where(~swap, mapped_b)
@@ -451,7 +471,7 @@ def build(
         usecols=["symbol", "prev_symbol", "alias_symbol"],
         dtype=str,
     )
-    current = symbol_mapper(hgnc)
+    name = geneeffect_namer(symbol_mapper(hgnc), geneeffect)
     paths = {name: Path(raw) / relative for name, relative in RAW_FILES.items()}
 
     ito = read_ito(paths["ito"])
@@ -461,13 +481,13 @@ def build(
     harle = read_harle(paths["harle"])
     parsed = {"ito_2021": ito, "klingbeil_2024": klingbeil, "harle_2025": harle}
     finished = {
-        screen: finish_rows(frame, screen, sides, current, geneeffect)
+        screen: finish_rows(frame, screen, sides, name, geneeffect)
         for screen, frame in parsed.items()
     }
     rows = pd.concat(finished.values(), ignore_index=True)
     mit4sl = read_mit4sl(paths["mit4sl_a549"], paths["mit4sl_nodes"])
     mapped = [
-        _sorted_pair(current(a), current(b))
+        _sorted_pair(name(a), name(b))
         for a, b in zip(mit4sl["screen_gene_a"], mit4sl["screen_gene_b"])
     ]
     mit4sl["gene_a"] = [a for a, _ in mapped]
@@ -485,7 +505,7 @@ def build(
         [parsed[s][["screen_gene_a", "screen_gene_b"]].stack() for s in SCREENS]
     ).astype(str)
     symbols = sorted(set(symbols))
-    renamed = {s: current(s) for s in symbols if current(s) != s}
+    renamed = {s: name(s) for s in symbols if name(s) != s}
     manifest = {
         "schema_version": "sl-screen-benchmark-v1",
         "rule": {
@@ -513,8 +533,8 @@ def build(
         },
         "genes": {
             "screen_symbols": len(symbols),
-            "renamed_to_current_hgnc": len(renamed),
-            "not_in_geneeffect": len({current(s) for s in symbols} - set(geneeffect)),
+            "renamed": len(renamed),
+            "not_in_geneeffect": len({name(s) for s in symbols} - set(geneeffect)),
         },
         "screens": {
             screen: _summary(rows.loc[rows["screen"] == screen]) for screen in SCREENS
@@ -562,7 +582,7 @@ def build(
                 "label",
             ],
         ].to_parquet(staging / "mit4sl_a549.parquet", index=False)
-        pd.Series(renamed, name="current_symbol").rename_axis("screen_symbol").to_csv(
+        pd.Series(renamed, name="symbol").rename_axis("screen_symbol").to_csv(
             staging / "renamed_symbols.csv"
         )
         (staging / "manifest.json").write_text(
