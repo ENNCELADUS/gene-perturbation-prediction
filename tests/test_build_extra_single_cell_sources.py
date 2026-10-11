@@ -601,3 +601,199 @@ def test_r_written_label_table_keeps_its_row_names_as_cell_ids(tmp_path):
         tmp_path,
     )
     assert lines == ["H838", "H1975", None]
+
+
+def test_lognorm_counts_recover_integers_and_refuse_other_values():
+    from src.data.prepare.build_extra_single_cell_sources import lognorm_counts
+
+    rng = np.random.default_rng(4)
+    counts = rng.poisson(2.0, size=(6, 30)).astype(np.int64)
+    counts[:, 0] += 1  # every cell has a value
+    totals = counts.sum(axis=1)
+    logged = sparse.csr_matrix(np.log1p(counts * (1e4 / totals[:, None])))
+    logged.data = logged.data.astype(np.float32)
+    np.testing.assert_array_equal(lognorm_counts(logged, totals).toarray(), counts)
+    with pytest.raises(ValueError, match="totals|integers"):
+        lognorm_counts(logged, totals + 7)  # normalised over other genes
+    corrected = sparse.csr_matrix(np.log1p(counts * 0.37))
+    with pytest.raises(ValueError, match="integers"):
+        lognorm_counts(corrected, np.round(totals * 0.37))
+
+
+def test_anndata_reader_inverts_lognormalised_raw_with_obs_totals(tmp_path):
+    rng = np.random.default_rng(5)
+    counts = _counts(rng, 4)
+    totals = counts.sum(axis=1)
+    adata = ad.AnnData(
+        X=np.zeros((4, 2), dtype=np.float32),
+        obs=pd.DataFrame({"nCount_RNA": totals}, index=[f"c{i}" for i in range(4)]),
+        var=pd.DataFrame(index=GENES[:2]),
+    )
+    adata.raw = ad.AnnData(
+        X=sparse.csr_matrix(np.log1p(counts * (1e4 / totals[:, None]))),
+        obs=adata.obs,
+        var=pd.DataFrame({"gene_symbol": SYMBOLS}, index=GENES),
+    )
+    adata.write_h5ad(tmp_path / "e.h5ad")
+    library = read_library(
+        tmp_path,
+        {
+            "reader": "anndata",
+            "path": "e.h5ad",
+            "counts": "lognorm:raw:nCount_RNA",
+            "gene_column": "index",
+            "symbol_column": "gene_symbol",
+        },
+    )
+    np.testing.assert_array_equal(library.counts.toarray(), counts)
+    assert library.symbols == SYMBOLS
+
+
+def test_triplets_reader_and_rt_hash_identity_follow_the_authors_maps(tmp_path):
+    cells = [
+        "01B_A01_RT_BC_1_Lig_BC_7",  # RT well A1: line X, DMSO singlet
+        "01B_A01_RT_BC_2_Lig_BC_3",  # RT well A2: line Y, drug singlet
+        "01B_A02_RT_BC_1_Lig_BC_9",  # line X, two hashes too close: no arm
+        "01B_A02_RT_BC_100_Lig_BC_1",  # RT barcode outside the map: no line
+    ]
+    with gzip.open(tmp_path / "umi.gz", "wt") as handle:
+        handle.write("1\t1\t3\n2\t1\t1\n3\t2\t5\n1\t3\t2\n3\t4\t1\n")
+    with gzip.open(tmp_path / "cells.gz", "wt") as handle:
+        handle.write("".join(f"{cell}\tsciPlex\n" for cell in cells))
+    with gzip.open(tmp_path / "genes.gz", "wt") as handle:
+        handle.write("".join(f"{g}.1\t{s}\n" for g, s in zip(GENES[:3], SYMBOLS)))
+    (tmp_path / "rt.txt").write_text("RT_BC_1 AAAA\nRT_BC_2 CCCC\nRT_BC_100 GGGG\n")
+    (tmp_path / "map.csv").write_text(
+        "Well Position,Barcode,Cell Line\nA1,AAAA,X\nA2,CCCC,Y\n"
+    )
+    with gzip.open(tmp_path / "hash.gz", "wt") as handle:
+        handle.write(
+            f"sciPlex\t{cells[0]}\tDMSO_0nM_10H01\t1\t40\n"
+            f"sciPlex\t{cells[0]}\tDrug_5nM_10A01\t1\t2\n"
+            f"sciPlex\t{cells[1]}\tDrug_5nM_10A01\t1\t30\n"
+            f"sciPlex\t{cells[2]}\tDMSO_0nM_10H01\t1\t25\n"
+            f"sciPlex\t{cells[2]}\tDrug_5nM_10A01\t1\t20\n"
+        )
+    library = read_library(
+        tmp_path,
+        {
+            "reader": "triplets",
+            "matrix": "umi.gz",
+            "cell_table": "cells.gz",
+            "gene_table": "genes.gz",
+        },
+    )
+    assert library.cells == cells and library.genes == [f"{g}.1" for g in GENES[:3]]
+    np.testing.assert_array_equal(
+        library.counts.toarray(), [[3, 1, 0], [0, 0, 5], [2, 0, 0], [0, 0, 1]]
+    )
+    lines, arms, report = _identify(
+        library,
+        {
+            "kind": "rt_hash",
+            "rt_barcodes": "rt.txt",
+            "rt_map": "map.csv",
+            "hash_table": "hash.gz",
+            "min_count": 20,
+            "min_ratio": 3,
+        },
+        tmp_path,
+        {},
+        tmp_path,
+    )
+    assert lines == ["X", "Y", "X", None]
+    assert arms == ["DMSO", "Drug", None, None]
+    assert report["hashtags"] == {"singlet": 2, "doublet": 1, "negative": 1}
+
+
+def test_mtx_names_reader_takes_names_from_r_vectors(tmp_path):
+    rng = np.random.default_rng(6)
+    counts = _counts(rng, 3)
+    mmwrite(tmp_path / "m.mtx", sparse.coo_matrix(counts.T))
+    pd.Series(SYMBOLS, index=range(1, len(SYMBOLS) + 1)).to_csv(tmp_path / "g.csv")
+    (tmp_path / "c.csv").write_text('"","x"\n"1","A431S"\n"2","A431R"\n"3","A431S"\n')
+    library = read_library(
+        tmp_path,
+        {
+            "reader": "mtx_names",
+            "matrix": "m.mtx",
+            "gene_table": "g.csv",
+            "cell_table": "c.csv",
+        },
+    )
+    assert library.cells == ["1", "2", "3"] and library.genes == SYMBOLS
+    np.testing.assert_array_equal(library.counts.toarray(), counts)
+    lines, _, _ = _identify(
+        library,
+        {
+            "kind": "labels",
+            "path": "c.csv",
+            "sep": ",",
+            "skiprows": 0,
+            "cell_column": None,
+            "label_column": "x",
+            "arm_column": None,
+            "keep": {},
+            "cell_prefix": "",
+            "cell_suffix": "",
+        },
+        tmp_path,
+        {},
+        tmp_path,
+    )
+    assert lines == ["A431S", "A431R", "A431S"]
+
+
+def test_tenx_bam_reader_counts_one_umi_per_representative_read(tmp_path):
+    pysam = pytest.importorskip("pysam")
+    header = {"HD": {"VN": "1.6"}, "SQ": [{"SN": "chr1", "LN": 10000}]}
+    reads = [  # (CB, UB, GX, GN, xf)
+        ("AAAC-1", "U1", "ENSG1", "G1", 25),
+        ("AAAC-1", "U1", "ENSG1", "G1", 17),  # duplicate read of that molecule
+        ("AAAC-1", "U2", "ENSG1", "G1", 25),
+        ("AAAC-1", "U3", "ENSG2", "G2", 25),
+        ("GGTA-1", "U1", "ENSG2", "G2", 25),
+        ("GGTA-1", "U4", "ENSG1;ENSG2", "G1;G2", 25),  # multi-gene: not counted
+        ("TTTG-1", "U5", "ENSG1", "G1", 1),  # low-support molecule
+    ]
+    with pysam.AlignmentFile(tmp_path / "x.bam", "wb", header=header) as handle:
+        for index, (cb, ub, gx, gn, xf) in enumerate(reads):
+            read = pysam.AlignedSegment(handle.header)
+            read.query_name = f"r{index}"
+            read.reference_id, read.reference_start = 0, 100 + index
+            read.cigarstring, read.query_sequence = "4M", "ACGT"
+            read.set_tags([("CB", cb), ("UB", ub), ("GX", gx), ("GN", gn), ("xf", xf)])
+            handle.write(read)
+    library = read_library(
+        tmp_path, {"reader": "tenx_bam", "bam": "x.bam", "cell_prefix": "E1_"}
+    )
+    assert library.cells == ["E1_AAAC-1", "E1_GGTA-1"]
+    assert library.genes == ["ENSG1", "ENSG2"] and library.symbols == ["G1", "G2"]
+    np.testing.assert_array_equal(library.counts.toarray(), [[2, 1], [0, 1]])
+
+
+def test_downloads_list_the_recount_reference_once(tmp_path):
+    from src.data.prepare.build_extra_single_cell_sources import downloads
+
+    spec = {
+        "raw_root": str(tmp_path / "raw"),
+        "recount": {
+            "index_dir": str(tmp_path / "ref"),
+            "files": {"genome.fa.gz": "https://example/genome"},
+        },
+        "sources": {
+            name: {
+                "wave": 2,
+                "files": {f"{name}.sra": f"https://example/{name}"},
+                "recount": {},
+            }
+            for name in ("one", "two")
+        },
+    }
+    (tmp_path / "spec.json").write_text(json.dumps(spec))
+    listed = downloads(tmp_path / "spec.json", 2)
+    assert [url for url, _ in listed] == [
+        "https://example/one",
+        "https://example/genome",
+        "https://example/two",
+    ]
