@@ -1,0 +1,4345 @@
+{
+  "candidates_path": "configs/benchmarks/single_cell_atlas_candidates.csv",
+  "model_path": "data/sl_dependency_v0/raw/depmap/Model.csv",
+  "gene_effect_path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
+  "bulk_expression_path": "data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv",
+  "split_path": "configs/benchmarks/cell_line_geneeffect_226_split.json",
+  "gene_metadata_path": "data/sl_dependency_v0/raw/tahoe_100m_metadata/gene_metadata.parquet",
+  "gene_metadata_ensembl_column": "ensembl_id",
+  "gene_metadata_symbol_column": "gene_symbol",
+  "gene_metadata_token_column": "token_id",
+  "minimum_token_id": 3,
+  "tx1_vocab_path": "data/models/tahoe_x1_3b/3b-model/vocab.json",
+  "tx1_model_dir": "data/models/tahoe_x1_3b/3b-model",
+  "state_model_dir": "model/checkpoints/state/ST-HVG-Replogle/fewshot/k562",
+  "run_tx1_loader_probe": true,
+  "tx1_loader_probe_max_length": 2048,
+  "raw_root": "data/sl_dependency_v0/raw/extra_single_cell",
+  "min_genes": 200,
+  "max_mito_fraction": 0.25,
+  "sources": {
+    "tahoe100m": {
+      "wave": 1,
+      "files": {},
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "DMSO_TF"
+      ],
+      "libraries": [
+        {
+          "reader": "tahoe",
+          "shards": "data/sl_dependency_v0/raw/tahoe_100m_dmso/shards",
+          "gene_metadata": "data/sl_dependency_v0/raw/tahoe_100m_metadata/gene_metadata.parquet",
+          "cell_lines": [
+            "CVCL_1098"
+          ],
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": null,
+            "sep": ",",
+            "cell_column": "",
+            "label_column": "cell_line_id",
+            "arm_column": null,
+            "keep": {},
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "DMSO_TF"
+        }
+      ]
+    },
+    "emtab13204": {
+      "wave": 1,
+      "files": {
+        "Batch1_targets_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch1_targets_matrix.mtx.gz",
+        "Batch1_targets_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch1_targets_barcodes.tsv.gz",
+        "Batch1_targets_HTO_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch1_targets_HTO_matrix.mtx.gz",
+        "Batch1_targets_HTO_features.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch1_targets_HTO_features.tsv.gz",
+        "Batch1_targets_HTO_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch1_targets_HTO_barcodes.tsv.gz",
+        "Batch1_targets_HTO_sample_list.txt": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch1_targets_HTO_sample_list.txt",
+        "Batch1_targets_features.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch1_targets_features.tsv.gz",
+        "Batch2_targets_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch2_targets_matrix.mtx.gz",
+        "Batch2_targets_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch2_targets_barcodes.tsv.gz",
+        "Batch2_targets_HTO_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch2_targets_HTO_matrix.mtx.gz",
+        "Batch2_targets_HTO_features.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch2_targets_HTO_features.tsv.gz",
+        "Batch2_targets_HTO_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch2_targets_HTO_barcodes.tsv.gz",
+        "Batch2_targets_HTO_sample_list.txt": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch2_targets_HTO_sample_list.txt",
+        "Batch5_targets_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch5_targets_matrix.mtx.gz",
+        "Batch5_targets_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch5_targets_barcodes.tsv.gz",
+        "Batch5_targets_HTO_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch5_targets_HTO_matrix.mtx.gz",
+        "Batch5_targets_HTO_features.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch5_targets_HTO_features.tsv.gz",
+        "Batch5_targets_HTO_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch5_targets_HTO_barcodes.tsv.gz",
+        "Batch5_targets_HTO_sample_list.txt": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch5_targets_HTO_sample_list.txt",
+        "Batch5_targets_features.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch5_targets_features.tsv.gz",
+        "Batch6_targets_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch6_targets_matrix.mtx.gz",
+        "Batch6_targets_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch6_targets_barcodes.tsv.gz",
+        "Batch6_targets_HTO_matrix.mtx.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch6_targets_HTO_matrix.mtx.gz",
+        "Batch6_targets_HTO_features.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch6_targets_HTO_features.tsv.gz",
+        "Batch6_targets_HTO_barcodes.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch6_targets_HTO_barcodes.tsv.gz",
+        "Batch6_targets_HTO_sample_list.txt": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch6_targets_HTO_sample_list.txt",
+        "Batch6_targets_features.tsv.gz": "https://ftp.ebi.ac.uk/biostudies/fire/E-MTAB-/204/E-MTAB-13204/Files/Batch6_targets_features.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "targets_only"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "Batch1_targets_matrix.mtx.gz",
+          "features": "Batch1_targets_features.tsv.gz",
+          "barcodes": "Batch1_targets_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": {
+              "reader": "tenx_mtx",
+              "matrix": "Batch1_targets_HTO_matrix.mtx.gz",
+              "features": "Batch1_targets_HTO_features.tsv.gz",
+              "barcodes": "Batch1_targets_HTO_barcodes.tsv.gz",
+              "header": false,
+              "gene_id_prefix": ""
+            },
+            "hashtags": {
+              "Hashtag_1-GTCAACTCTTTAGCG": "K562",
+              "Hashtag_2-TGATGGCCTATTGGG": "MOLM14",
+              "Hashtag_3-TTCCGCCTCTCTTTG": "MOLM13",
+              "Hashtag_4-AGTAAGTTCAGCGTA": "THP1",
+              "Hashtag_5-AAGTATCGTTTCGCA": "SUDHL4",
+              "Hashtag_6-GGTTGCCAGATGTCA": "RI1",
+              "Hashtag_7-TGTCTTTCCTGCCAG": "NUDHL1",
+              "Hashtag_8-CTCCTCTGCAATTAC": "GRANTA519",
+              "Hashtag_9-CAGTAGTCACGGTCA": "AMO1",
+              "Hashtag_10-ATTGACCCGCGTTAG": "JJN3",
+              "Hashtag_12-TAACGACCAGCCATA": "LP1",
+              "Hashtag_13-AAATCTCTCAGGCTC": "MM1S",
+              "Hashtag_14-CTGTATGTCCGATTG": "L363"
+            },
+            "min_count": 10,
+            "min_ratio": 3,
+            "cell_suffix": "-1"
+          },
+          "arm": "targets_only",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "Batch2_targets_matrix.mtx.gz",
+          "features": "Batch1_targets_features.tsv.gz",
+          "barcodes": "Batch2_targets_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": {
+              "reader": "tenx_mtx",
+              "matrix": "Batch2_targets_HTO_matrix.mtx.gz",
+              "features": "Batch2_targets_HTO_features.tsv.gz",
+              "barcodes": "Batch2_targets_HTO_barcodes.tsv.gz",
+              "header": false,
+              "gene_id_prefix": ""
+            },
+            "hashtags": {
+              "Hashtag_1-GTCAACTCTTTAGCG": "PL21",
+              "Hashtag_2-TGATGGCCTATTGGG": "MONOMAC1",
+              "Hashtag_3-TTCCGCCTCTCTTTG": "GDM1",
+              "Hashtag_4-AGTAAGTTCAGCGTA": "SKM1",
+              "Hashtag_5-AAGTATCGTTTCGCA": "OCIM1",
+              "Hashtag_6-GGTTGCCAGATGTCA": "JURKAT",
+              "Hashtag_7-TGTCTTTCCTGCCAG": "SUPT11",
+              "Hashtag_8-CTCCTCTGCAATTAC": "DND41",
+              "Hashtag_9-CAGTAGTCACGGTCA": "ALLSIL",
+              "Hashtag_10-ATTGACCCGCGTTAG": "NALM6",
+              "Hashtag_12-TAACGACCAGCCATA": "RCHACV",
+              "Hashtag_13-AAATCTCTCAGGCTC": "697",
+              "Hashtag_14-CTGTATGTCCGATTG": "KASUMI2"
+            },
+            "min_count": 10,
+            "min_ratio": 3,
+            "cell_suffix": "-1"
+          },
+          "arm": "targets_only",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "Batch5_targets_matrix.mtx.gz",
+          "features": "Batch5_targets_features.tsv.gz",
+          "barcodes": "Batch5_targets_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": {
+              "reader": "tenx_mtx",
+              "matrix": "Batch5_targets_HTO_matrix.mtx.gz",
+              "features": "Batch5_targets_HTO_features.tsv.gz",
+              "barcodes": "Batch5_targets_HTO_barcodes.tsv.gz",
+              "header": false,
+              "gene_id_prefix": ""
+            },
+            "hashtags": {
+              "Hashtag_1-GTCAACTCTTTAGCG": "K562",
+              "Hashtag_2-TGATGGCCTATTGGG": "MOLM14",
+              "Hashtag_3-TTCCGCCTCTCTTTG": "MOLM13",
+              "Hashtag_4-AGTAAGTTCAGCGTA": "THP1",
+              "Hashtag_5-AAGTATCGTTTCGCA": "SUDHL4",
+              "Hashtag_6-GGTTGCCAGATGTCA": "RI1",
+              "Hashtag_7-TGTCTTTCCTGCCAG": "NUDHL1",
+              "Hashtag_8-CTCCTCTGCAATTAC": "GRANTA519",
+              "Hashtag_9-CAGTAGTCACGGTCA": "AMO1",
+              "Hashtag_10-ATTGACCCGCGTTAG": "JJN3",
+              "Hashtag_12-TAACGACCAGCCATA": "LP1",
+              "Hashtag_13-AAATCTCTCAGGCTC": "MM1S",
+              "Hashtag_14-CTGTATGTCCGATTG": "L363"
+            },
+            "min_count": 10,
+            "min_ratio": 3,
+            "cell_suffix": "-1"
+          },
+          "arm": "targets_only",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "Batch6_targets_matrix.mtx.gz",
+          "features": "Batch6_targets_features.tsv.gz",
+          "barcodes": "Batch6_targets_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": {
+              "reader": "tenx_mtx",
+              "matrix": "Batch6_targets_HTO_matrix.mtx.gz",
+              "features": "Batch6_targets_HTO_features.tsv.gz",
+              "barcodes": "Batch6_targets_HTO_barcodes.tsv.gz",
+              "header": false,
+              "gene_id_prefix": ""
+            },
+            "hashtags": {
+              "Hashtag_1-GTCAACTCTTTAGCG": "PL21",
+              "Hashtag_2-TGATGGCCTATTGGG": "MONOMAC1",
+              "Hashtag_3-TTCCGCCTCTCTTTG": "GDM1",
+              "Hashtag_4-AGTAAGTTCAGCGTA": "SKM1",
+              "Hashtag_5-AAGTATCGTTTCGCA": "OCIM1",
+              "Hashtag_6-GGTTGCCAGATGTCA": "JURKAT",
+              "Hashtag_7-TGTCTTTCCTGCCAG": "SUPT11",
+              "Hashtag_8-CTCCTCTGCAATTAC": "DND41",
+              "Hashtag_9-CAGTAGTCACGGTCA": "ALLSIL",
+              "Hashtag_10-ATTGACCCGCGTTAG": "NALM6",
+              "Hashtag_12-TAACGACCAGCCATA": "RCHACV",
+              "Hashtag_13-AAATCTCTCAGGCTC": "KASUMI2"
+            },
+            "min_count": 10,
+            "min_ratio": 3,
+            "cell_suffix": "-1"
+          },
+          "arm": "targets_only",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse116256": {
+      "wave": 1,
+      "files": {
+        "GSM3588005_OCI-AML3.dem.txt.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3588nnn/GSM3588005/suppl/GSM3588005_OCI-AML3.dem.txt.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSM3588005_OCI-AML3.dem.txt.gz",
+          "sep": "\t",
+          "skiprows": 0,
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "OCI-AML3"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse196766": {
+      "wave": 1,
+      "files": {
+        "GSM5900274_JJN3-NT.h5": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5900nnn/GSM5900274/suppl/GSM5900274_JJN3-NT.h5",
+        "GSM5900278_JJN3-NT-1.h5": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5900nnn/GSM5900278/suppl/GSM5900278_JJN3-NT-1.h5",
+        "GSM5900279_JJN3-NT-2.h5": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5900nnn/GSM5900279/suppl/GSM5900279_JJN3-NT-2.h5"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "nt_aso_vehicle",
+        "nt_aso"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_h5",
+          "h5": "GSM5900274_JJN3-NT.h5",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "JJN3"
+          },
+          "arm": "nt_aso_vehicle"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "GSM5900278_JJN3-NT-1.h5",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "JJN3"
+          },
+          "arm": "nt_aso"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "GSM5900279_JJN3-NT-2.h5",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "JJN3"
+          },
+          "arm": "nt_aso"
+        }
+      ]
+    },
+    "gse242465": {
+      "wave": 1,
+      "files": {
+        "GSM7763799_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7763nnn/GSM7763799/suppl/GSM7763799_matrix.mtx.gz",
+        "GSM7763799_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7763nnn/GSM7763799/suppl/GSM7763799_features.tsv.gz",
+        "GSM7763799_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7763nnn/GSM7763799/suppl/GSM7763799_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "DMSO"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7763799_matrix.mtx.gz",
+          "features": "GSM7763799_features.tsv.gz",
+          "barcodes": "GSM7763799_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": null,
+            "hashtags": {
+              "DMSO": "OPM2",
+              "JQ1": null,
+              "BKM": null,
+              "JQ1.BKM": null,
+              "18D.S.": null
+            },
+            "min_count": 10,
+            "min_ratio": 3,
+            "cell_suffix": ""
+          },
+          "arm": "DMSO",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse243227": {
+      "wave": 1,
+      "files": {
+        "GSM7781085_Pool116_3_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781085/suppl/GSM7781085_Pool116_3_matrix.mtx.gz",
+        "GSM7781085_Pool116_3_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781085/suppl/GSM7781085_Pool116_3_features.tsv.gz",
+        "GSM7781085_Pool116_3_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781085/suppl/GSM7781085_Pool116_3_barcodes.tsv.gz",
+        "GSM7781086_Pool116_4_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781086/suppl/GSM7781086_Pool116_4_matrix.mtx.gz",
+        "GSM7781086_Pool116_4_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781086/suppl/GSM7781086_Pool116_4_features.tsv.gz",
+        "GSM7781086_Pool116_4_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781086/suppl/GSM7781086_Pool116_4_barcodes.tsv.gz",
+        "GSM7781087_Pool116_5_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781087/suppl/GSM7781087_Pool116_5_matrix.mtx.gz",
+        "GSM7781087_Pool116_5_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781087/suppl/GSM7781087_Pool116_5_features.tsv.gz",
+        "GSM7781087_Pool116_5_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7781nnn/GSM7781087/suppl/GSM7781087_Pool116_5_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7781085_Pool116_3_matrix.mtx.gz",
+          "features": "GSM7781085_Pool116_3_features.tsv.gz",
+          "barcodes": "GSM7781085_Pool116_3_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "pool",
+            "members": [
+              "K562",
+              "Kasumi-1"
+            ],
+            "clusters": 4,
+            "min_margin": 0.2
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7781086_Pool116_4_matrix.mtx.gz",
+          "features": "GSM7781086_Pool116_4_features.tsv.gz",
+          "barcodes": "GSM7781086_Pool116_4_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "pool",
+            "members": [
+              "K562",
+              "Kasumi-1"
+            ],
+            "clusters": 4,
+            "min_margin": 0.2
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7781087_Pool116_5_matrix.mtx.gz",
+          "features": "GSM7781087_Pool116_5_features.tsv.gz",
+          "barcodes": "GSM7781087_Pool116_5_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "pool",
+            "members": [
+              "K562",
+              "Kasumi-1"
+            ],
+            "clusters": 4,
+            "min_margin": 0.2
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse329598": {
+      "wave": 1,
+      "files": {
+        "GSE329598_Leukemic_cell_lines_scRNAseq_filtered_feature_bc_matrix.h5": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE329nnn/GSE329598/suppl/GSE329598_Leukemic_cell_lines_scRNAseq_filtered_feature_bc_matrix.h5",
+        "GSE329598_feature_reference.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE329nnn/GSE329598/suppl/GSE329598_feature_reference.csv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_h5",
+          "h5": "GSE329598_Leukemic_cell_lines_scRNAseq_filtered_feature_bc_matrix.h5",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": null,
+            "hashtags": {
+              "TotalSeqB0253_Hashtag3_Ab": "HMC1.2",
+              "TotalSeqB0254_Hashtag4_Ab": "Ku812"
+            },
+            "min_count": 10,
+            "min_ratio": 3,
+            "cell_suffix": ""
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "tenxcellplexjurkatraji10k": {
+      "wave": 1,
+      "files": {
+        "SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K_Raji_count_sample_feature_bc_matrix.h5": "https://cf.10xgenomics.com/samples/cell-exp/6.0.0/SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K_Raji/SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K_Raji_count_sample_feature_bc_matrix.h5",
+        "SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K_Multiplex_config.csv": "https://cf.10xgenomics.com/samples/cell-exp/6.0.0/SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K_Multiplex/SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K_Multiplex_config.csv"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_h5",
+          "h5": "SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K_Raji_count_sample_feature_bc_matrix.h5",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "Raji"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse217922": {
+      "wave": 1,
+      "files": {
+        "GSM6729997_raw_counts.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6729nnn/GSM6729997/suppl/GSM6729997_raw_counts.tsv.gz",
+        "GSM6729997_raw_counts_cell_line_anno.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6729nnn/GSM6729997/suppl/GSM6729997_raw_counts_cell_line_anno.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSM6729997_raw_counts.tsv.gz",
+          "sep": " ",
+          "skiprows": 0,
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSM6729997_raw_counts_cell_line_anno.tsv.gz",
+            "sep": "[ x]",
+            "skiprows": 0,
+            "cell_column": null,
+            "label_column": "Unnamed: 1",
+            "arm_column": null,
+            "keep": {},
+            "cell_prefix": "",
+            "cell_suffix": ""
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse218621": {
+      "wave": 1,
+      "files": {
+        "GSM6753396_RS411_DMSO.matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6753nnn/GSM6753396/suppl/GSM6753396_RS411_DMSO.matrix.mtx.gz",
+        "GSM6753396_RS411_DMSO_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6753nnn/GSM6753396/suppl/GSM6753396_RS411_DMSO_features.tsv.gz",
+        "GSM6753396_RS411_DMSO_barcode_metadata.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6753nnn/GSM6753396/suppl/GSM6753396_RS411_DMSO_barcode_metadata.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "DMSO"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM6753396_RS411_DMSO.matrix.mtx.gz",
+          "features": "GSM6753396_RS411_DMSO_features.tsv.gz",
+          "barcodes": "GSM6753396_RS411_DMSO_barcode_metadata.tsv.gz",
+          "header": true,
+          "gene_id_prefix": "hg19_",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "RS4;11"
+          },
+          "arm": "DMSO"
+        }
+      ]
+    },
+    "gse182694": {
+      "wave": 1,
+      "files": {
+        "GSM5534780_SUM149_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5534nnn/GSM5534780/suppl/GSM5534780_SUM149_matrix.mtx.gz",
+        "GSM5534780_SUM149_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5534nnn/GSM5534780/suppl/GSM5534780_SUM149_features.tsv.gz",
+        "GSM5534780_SUM149_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5534nnn/GSM5534780/suppl/GSM5534780_SUM149_barcodes.tsv.gz",
+        "GSM5534781_SUM190_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5534nnn/GSM5534781/suppl/GSM5534781_SUM190_matrix.mtx.gz",
+        "GSM5534781_SUM190_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5534nnn/GSM5534781/suppl/GSM5534781_SUM190_features.tsv.gz",
+        "GSM5534781_SUM190_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5534nnn/GSM5534781/suppl/GSM5534781_SUM190_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM5534780_SUM149_matrix.mtx.gz",
+          "features": "GSM5534780_SUM149_features.tsv.gz",
+          "barcodes": "GSM5534780_SUM149_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SUM149"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM5534781_SUM190_matrix.mtx.gz",
+          "features": "GSM5534781_SUM190_features.tsv.gz",
+          "barcodes": "GSM5534781_SUM190_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SUM190"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse228275": {
+      "wave": 1,
+      "files": {
+        "GSE228275_scAstral_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE228nnn/GSE228275/suppl/GSE228275_scAstral_matrix.mtx.gz",
+        "GSE228275_scAstral_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE228nnn/GSE228275/suppl/GSE228275_scAstral_features.tsv.gz",
+        "GSE228275_scAstral_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE228nnn/GSE228275/suppl/GSE228275_scAstral_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "no treatment"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSE228275_scAstral_matrix.mtx.gz",
+          "features": "GSE228275_scAstral_features.tsv.gz",
+          "barcodes": "GSE228275_scAstral_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "barcode",
+            "pattern": "^(?P<line>[^_]+)_",
+            "identifier": null,
+            "rename": {}
+          },
+          "arm": "no treatment",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse207993": {
+      "wave": 1,
+      "files": {
+        "GSM6329644_DMSO_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6329nnn/GSM6329644/suppl/GSM6329644_DMSO_matrix.mtx.gz",
+        "GSM6329644_DMSO_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6329nnn/GSM6329644/suppl/GSM6329644_DMSO_features.tsv.gz",
+        "GSM6329644_DMSO_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6329nnn/GSM6329644/suppl/GSM6329644_DMSO_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "DMSO"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM6329644_DMSO_matrix.mtx.gz",
+          "features": "GSM6329644_DMSO_features.tsv.gz",
+          "barcodes": "GSM6329644_DMSO_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "OVCAR3"
+          },
+          "arm": "DMSO",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse266216": {
+      "wave": 1,
+      "files": {
+        "GSM8242426_VCaP_scRNA_EtOH_filtered_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8242nnn/GSM8242426/suppl/GSM8242426_VCaP_scRNA_EtOH_filtered_matrix.mtx.gz",
+        "GSM8242426_VCaP_scRNA_EtOH_filtered_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8242nnn/GSM8242426/suppl/GSM8242426_VCaP_scRNA_EtOH_filtered_features.tsv.gz",
+        "GSM8242426_VCaP_scRNA_EtOH_filtered_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8242nnn/GSM8242426/suppl/GSM8242426_VCaP_scRNA_EtOH_filtered_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "EtOH vehicle"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8242426_VCaP_scRNA_EtOH_filtered_matrix.mtx.gz",
+          "features": "GSM8242426_VCaP_scRNA_EtOH_filtered_features.tsv.gz",
+          "barcodes": "GSM8242426_VCaP_scRNA_EtOH_filtered_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "VCaP"
+          },
+          "arm": "EtOH vehicle",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse272618": {
+      "wave": 1,
+      "files": {
+        "GSM8407133_A2780_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8407nnn/GSM8407133/suppl/GSM8407133_A2780_matrix.mtx.gz",
+        "GSM8407133_A2780_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8407nnn/GSM8407133/suppl/GSM8407133_A2780_features.tsv.gz",
+        "GSM8407133_A2780_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8407nnn/GSM8407133/suppl/GSM8407133_A2780_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8407133_A2780_matrix.mtx.gz",
+          "features": "GSM8407133_A2780_features.tsv.gz",
+          "barcodes": "GSM8407133_A2780_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "A2780"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse297836": {
+      "wave": 1,
+      "files": {
+        "GSE297836_seurat_counts.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE297nnn/GSE297836/suppl/GSE297836_seurat_counts.csv.gz",
+        "GSE297836_seurat_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE297nnn/GSE297836/suppl/GSE297836_seurat_metadata.csv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "parental"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSE297836_seurat_counts.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE297836_seurat_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "COV318",
+                "JHOS2",
+                "Kuramochi",
+                "Ovsaho"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "parental",
+          "skiprows": 0
+        }
+      ]
+    },
+    "gse247688": {
+      "wave": 1,
+      "files": {
+        "GSE247688_kuramochi_counts_all_C_P10_P320_T10_T320.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE247nnn/GSE247688/suppl/GSE247688_kuramochi_counts_all_C_P10_P320_T10_T320.csv.gz",
+        "GSE247688_kuramochi_C_P10_P320_T10_T320_metadata_g1.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE247nnn/GSE247688/suppl/GSE247688_kuramochi_C_P10_P320_T10_T320_metadata_g1.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "C.R1",
+        "C.R2"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSE247688_kuramochi_counts_all_C_P10_P320_T10_T320.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "barcode",
+            "pattern": "_(?P<arm>[^_]+)$",
+            "identifier": "KURAMOCHI",
+            "rename": {}
+          },
+          "arm": null,
+          "skiprows": 0
+        }
+      ]
+    },
+    "gse247689": {
+      "wave": 1,
+      "files": {
+        "GSE247689_cov362_counts_all_C_to_T40.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE247nnn/GSE247689/suppl/GSE247689_cov362_counts_all_C_to_T40.csv.gz",
+        "GSE247689_cov362_metadata_g1.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE247nnn/GSE247689/suppl/GSE247689_cov362_metadata_g1.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "C"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSE247689_cov362_counts_all_C_to_T40.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "barcode",
+            "pattern": "_(?P<arm>[^_]+)$",
+            "identifier": "COV362",
+            "rename": {}
+          },
+          "arm": null,
+          "skiprows": 0
+        }
+      ]
+    },
+    "gse147405": {
+      "wave": 1,
+      "files": {
+        "GSE147405_DU145_Untreated_KinaseScreen_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_Untreated_KinaseScreen_UMI_matrix.csv.gz",
+        "GSE147405_DU145_Untreated_KinaseScreen_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_Untreated_KinaseScreen_metadata.csv.gz",
+        "GSE147405_DU145_TGFB1_TimeCourse_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_TGFB1_TimeCourse_UMI_matrix.csv.gz",
+        "GSE147405_DU145_TGFB1_TimeCourse_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_TGFB1_TimeCourse_metadata.csv.gz",
+        "GSE147405_DU145_EGF_TimeCourse_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_EGF_TimeCourse_UMI_matrix.csv.gz",
+        "GSE147405_DU145_EGF_TimeCourse_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_EGF_TimeCourse_metadata.csv.gz",
+        "GSE147405_DU145_TNF_TimeCourse_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_TNF_TimeCourse_UMI_matrix.csv.gz",
+        "GSE147405_DU145_TNF_TimeCourse_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_DU145_TNF_TimeCourse_metadata.csv.gz",
+        "GSE147405_OVCA420_Untreated_KinaseScreen_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_Untreated_KinaseScreen_UMI_matrix.csv.gz",
+        "GSE147405_OVCA420_Untreated_KinaseScreen_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_Untreated_KinaseScreen_metadata.csv.gz",
+        "GSE147405_OVCA420_TGFB1_TimeCourse_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_TGFB1_TimeCourse_UMI_matrix.csv.gz",
+        "GSE147405_OVCA420_TGFB1_TimeCourse_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_TGFB1_TimeCourse_metadata.csv.gz",
+        "GSE147405_OVCA420_EGF_TimeCourse_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_EGF_TimeCourse_UMI_matrix.csv.gz",
+        "GSE147405_OVCA420_EGF_TimeCourse_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_EGF_TimeCourse_metadata.csv.gz",
+        "GSE147405_OVCA420_TNF_TimeCourse_UMI_matrix.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_TNF_TimeCourse_UMI_matrix.csv.gz",
+        "GSE147405_OVCA420_TNF_TimeCourse_metadata.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE147nnn/GSE147405/suppl/GSE147405_OVCA420_TNF_TimeCourse_metadata.csv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "Untreated_Control",
+        "0d"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSE147405_DU145_Untreated_KinaseScreen_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_DU145_Untreated_KinaseScreen_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Condition",
+            "keep": {
+              "Condition": [
+                "Untreated_Control"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSE147405_DU145_TGFB1_TimeCourse_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_DU145_TGFB1_TimeCourse_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Time",
+            "keep": {
+              "Time": [
+                "0d"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSE147405_DU145_EGF_TimeCourse_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_DU145_EGF_TimeCourse_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Time",
+            "keep": {
+              "Time": [
+                "0d"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSE147405_DU145_TNF_TimeCourse_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_DU145_TNF_TimeCourse_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Time",
+            "keep": {
+              "Time": [
+                "0d"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSE147405_OVCA420_Untreated_KinaseScreen_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_OVCA420_Untreated_KinaseScreen_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Condition",
+            "keep": {
+              "Condition": [
+                "Untreated_Control"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSE147405_OVCA420_TGFB1_TimeCourse_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_OVCA420_TGFB1_TimeCourse_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Time",
+            "keep": {
+              "Time": [
+                "0d"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSE147405_OVCA420_EGF_TimeCourse_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_OVCA420_EGF_TimeCourse_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Time",
+            "keep": {
+              "Time": [
+                "0d"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSE147405_OVCA420_TNF_TimeCourse_UMI_matrix.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSE147405_OVCA420_TNF_TimeCourse_metadata.csv.gz",
+            "sep": ",",
+            "cell_column": "Unnamed: 0",
+            "label_column": "CellLine",
+            "arm_column": "Time",
+            "keep": {
+              "Time": [
+                "0d"
+              ],
+              "Doublet": [
+                "Singlet"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null,
+          "skiprows": 0
+        }
+      ]
+    },
+    "mixseq": {
+      "wave": 1,
+      "files": {
+        "DMSO_6hr_expt1.zip": "https://ndownloader.figshare.com/files/18716357",
+        "DMSO_24hr_expt1.zip": "https://ndownloader.figshare.com/files/18716354",
+        "Untreated_6hr_expt1.zip": "https://ndownloader.figshare.com/files/18716360",
+        "sgLACZ_expt2.zip": "https://ndownloader.figshare.com/files/18716417",
+        "sgOR2J2_expt2.zip": "https://ndownloader.figshare.com/files/18716414",
+        "DMSO_6hr_expt3.zip": "https://ndownloader.figshare.com/files/18716393",
+        "DMSO_24hr_expt3.zip": "https://ndownloader.figshare.com/files/18716390",
+        "trametinib_tc_expt5.zip": "https://ndownloader.figshare.com/files/20000609",
+        "DMSO_expt10.zip": "https://ndownloader.figshare.com/files/24848513"
+      },
+      "unpack": [
+        "DMSO_6hr_expt1.zip",
+        "DMSO_24hr_expt1.zip",
+        "Untreated_6hr_expt1.zip",
+        "sgLACZ_expt2.zip",
+        "sgOR2J2_expt2.zip",
+        "DMSO_6hr_expt3.zip",
+        "DMSO_24hr_expt3.zip",
+        "trametinib_tc_expt5.zip",
+        "DMSO_expt10.zip"
+      ],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "DMSO_6hr_expt1",
+        "DMSO_24hr_expt1",
+        "Untreated_6hr_expt1",
+        "sgLACZ_expt2",
+        "sgOR2J2_expt2",
+        "DMSO_6hr_expt3",
+        "DMSO_24hr_expt3",
+        "DMSO_24hr_expt10",
+        "DMSO_3hr",
+        "DMSO_6hr",
+        "DMSO_12hr",
+        "DMSO_24hr",
+        "DMSO_48hr",
+        "Untreated_48hr"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "DMSO_6hr_expt1/matrix.mtx",
+          "features": "DMSO_6hr_expt1/genes.tsv",
+          "barcodes": "DMSO_6hr_expt1/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "DMSO_6hr_expt1/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "DMSO_6hr_expt1"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "DMSO_24hr_expt1/matrix.mtx",
+          "features": "DMSO_24hr_expt1/genes.tsv",
+          "barcodes": "DMSO_24hr_expt1/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "DMSO_24hr_expt1/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "DMSO_24hr_expt1"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "Untreated_6hr_expt1/matrix.mtx",
+          "features": "Untreated_6hr_expt1/genes.tsv",
+          "barcodes": "Untreated_6hr_expt1/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "Untreated_6hr_expt1/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "Untreated_6hr_expt1"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "sgLACZ_expt2/matrix.mtx",
+          "features": "sgLACZ_expt2/genes.tsv",
+          "barcodes": "sgLACZ_expt2/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "sgLACZ_expt2/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "sgLACZ_expt2"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "sgOR2J2_expt2/matrix.mtx",
+          "features": "sgOR2J2_expt2/genes.tsv",
+          "barcodes": "sgOR2J2_expt2/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "sgOR2J2_expt2/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "sgOR2J2_expt2"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "DMSO_6hr_expt3/matrix.mtx",
+          "features": "DMSO_6hr_expt3/genes.tsv",
+          "barcodes": "DMSO_6hr_expt3/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "DMSO_6hr_expt3/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "DMSO_6hr_expt3"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "DMSO_24hr_expt3/matrix.mtx",
+          "features": "DMSO_24hr_expt3/genes.tsv",
+          "barcodes": "DMSO_24hr_expt3/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "DMSO_24hr_expt3/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "DMSO_24hr_expt3"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "trametinib_tc_expt5/matrix.mtx",
+          "features": "trametinib_tc_expt5/genes.tsv",
+          "barcodes": "trametinib_tc_expt5/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "trametinib_tc_expt5/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": "hash_tag",
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": null
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "DMSO_expt10/matrix.mtx",
+          "features": "DMSO_expt10/genes.tsv",
+          "barcodes": "DMSO_expt10/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "DMSO_expt10/classifications.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "DepMap_ID",
+            "arm_column": null,
+            "keep": {
+              "cell_quality": [
+                "normal"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "DMSO_24hr_expt10"
+        }
+      ]
+    },
+    "figshare33273600": {
+      "wave": 1,
+      "files": {
+        "single_cell_data.zip": "https://ndownloader.figshare.com/files/67643568",
+        "processed.zip": "https://ndownloader.figshare.com/files/67643565"
+      },
+      "unpack": [
+        "single_cell_data.zip",
+        "processed.zip"
+      ],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "olfactory_cutting_control"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/C4I_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "C4I"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/HKGZCC_combined_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "HKGZCC"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/JVE127_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "JVE127"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/KMRC20_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "KMRC20"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/KYSE140_combined_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "KYSE140"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/KYSE450_all_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "KYSE450"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/MG63_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "MG63"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/ONE58_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "ONE58"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/SKGII_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "SKGII"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/SLR23_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "SLR23"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/SNU8_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "SNU8"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/T3M5_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "T3M5"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/U343_combined_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "U343"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "-1",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        },
+        {
+          "reader": "tenx_h5",
+          "h5": "single_cell_data/UMRC3_all_GE_filtered_feature_bc_matrix",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "processed/all_cells_table.csv",
+            "sep": ",",
+            "cell_column": "barcode",
+            "label_column": "cell_line",
+            "arm_column": null,
+            "keep": {
+              "cell_line": [
+                "UMRC3"
+              ],
+              "pass_qc": [
+                "True"
+              ],
+              "control_guide": [
+                "True"
+              ],
+              "arm_trunc": [
+                "False"
+              ],
+              "arm_gain": [
+                "False"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "olfactory_cutting_control"
+        }
+      ]
+    },
+    "gse142750": {
+      "wave": 1,
+      "files": {
+        "GSM4238679_HGC-27_1_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238679/suppl/GSM4238679_HGC-27_1_barcodes.tsv.gz",
+        "GSM4238679_HGC-27_1_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238679/suppl/GSM4238679_HGC-27_1_genes.tsv.gz",
+        "GSM4238679_HGC-27_1_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238679/suppl/GSM4238679_HGC-27_1_matrix.mtx.gz",
+        "GSM4238680_HGC-27_2_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238680/suppl/GSM4238680_HGC-27_2_barcodes.tsv.gz",
+        "GSM4238680_HGC-27_2_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238680/suppl/GSM4238680_HGC-27_2_genes.tsv.gz",
+        "GSM4238680_HGC-27_2_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238680/suppl/GSM4238680_HGC-27_2_matrix.mtx.gz",
+        "GSM4238685_SNU-16_1_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238685/suppl/GSM4238685_SNU-16_1_barcodes.tsv.gz",
+        "GSM4238685_SNU-16_1_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238685/suppl/GSM4238685_SNU-16_1_genes.tsv.gz",
+        "GSM4238685_SNU-16_1_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238685/suppl/GSM4238685_SNU-16_1_matrix.mtx.gz",
+        "GSM4238686_SNU-16_2_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238686/suppl/GSM4238686_SNU-16_2_barcodes.tsv.gz",
+        "GSM4238686_SNU-16_2_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238686/suppl/GSM4238686_SNU-16_2_genes.tsv.gz",
+        "GSM4238686_SNU-16_2_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238686/suppl/GSM4238686_SNU-16_2_matrix.mtx.gz",
+        "GSM4238688_SNU-638_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238688/suppl/GSM4238688_SNU-638_barcodes.tsv.gz",
+        "GSM4238688_SNU-638_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238688/suppl/GSM4238688_SNU-638_genes.tsv.gz",
+        "GSM4238688_SNU-638_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4238nnn/GSM4238688/suppl/GSM4238688_SNU-638_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4238679_HGC-27_1_matrix.mtx.gz",
+          "features": "GSM4238679_HGC-27_1_genes.tsv.gz",
+          "barcodes": "GSM4238679_HGC-27_1_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "HGC-27"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4238680_HGC-27_2_matrix.mtx.gz",
+          "features": "GSM4238680_HGC-27_2_genes.tsv.gz",
+          "barcodes": "GSM4238680_HGC-27_2_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "HGC-27"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4238685_SNU-16_1_matrix.mtx.gz",
+          "features": "GSM4238685_SNU-16_1_genes.tsv.gz",
+          "barcodes": "GSM4238685_SNU-16_1_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SNU-16"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4238686_SNU-16_2_matrix.mtx.gz",
+          "features": "GSM4238686_SNU-16_2_genes.tsv.gz",
+          "barcodes": "GSM4238686_SNU-16_2_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SNU-16"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4238688_SNU-638_matrix.mtx.gz",
+          "features": "GSM4238688_SNU-638_genes.tsv.gz",
+          "barcodes": "GSM4238688_SNU-638_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SNU-638"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse101561": {
+      "wave": 1,
+      "files": {
+        "GSM2706110_snu719_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2706nnn/GSM2706110/suppl/GSM2706110_snu719_barcodes.tsv.gz",
+        "GSM2706110_snu719_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2706nnn/GSM2706110/suppl/GSM2706110_snu719_genes.tsv.gz",
+        "GSM2706110_snu719_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2706nnn/GSM2706110/suppl/GSM2706110_snu719_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM2706110_snu719_matrix.mtx.gz",
+          "features": "GSM2706110_snu719_genes.tsv.gz",
+          "barcodes": "GSM2706110_snu719_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SNU719"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse103867": {
+      "wave": 1,
+      "files": {
+        "GSE103867_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103867/suppl/GSE103867_barcodes.tsv.gz",
+        "GSE103867_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103867/suppl/GSE103867_genes.tsv.gz",
+        "GSE103867_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103867/suppl/GSE103867_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSE103867_matrix.mtx.gz",
+          "features": "GSE103867_genes.tsv.gz",
+          "barcodes": "GSE103867_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "barcode",
+            "pattern": "-(?P<line>\\d+)$",
+            "identifier": null,
+            "rename": {
+              "1": "huH-1",
+              "2": "HuH-7",
+              "3": "patient"
+            }
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse188289": {
+      "wave": 1,
+      "files": {
+        "GSM5676999_scCite_SK-HEP-1_RNA.txt.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5676nnn/GSM5676999/suppl/GSM5676999_scCite_SK-HEP-1_RNA.txt.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSM5676999_scCite_SK-HEP-1_RNA.txt.gz",
+          "sep": "\t",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SK-HEP-1"
+          },
+          "arm": "untreated",
+          "skiprows": 0
+        }
+      ]
+    },
+    "gse249057": {
+      "wave": 1,
+      "files": {
+        "GSM7925719_0h_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7925nnn/GSM7925719/suppl/GSM7925719_0h_barcodes.tsv.gz",
+        "GSM7925719_0h_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7925nnn/GSM7925719/suppl/GSM7925719_0h_features.tsv.gz",
+        "GSM7925719_0h_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7925nnn/GSM7925719/suppl/GSM7925719_0h_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7925719_0h_matrix.mtx.gz",
+          "features": "GSM7925719_0h_features.tsv.gz",
+          "barcodes": "GSM7925719_0h_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "KYSE30"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse256301": {
+      "wave": 1,
+      "files": {
+        "GSM8093333_Pool109_30_filtered_feature_bc_matrix.zip": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8093nnn/GSM8093333/suppl/GSM8093333_Pool109_30_filtered_feature_bc_matrix.zip"
+      },
+      "unpack": [
+        "GSM8093333_Pool109_30_filtered_feature_bc_matrix.zip"
+      ],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "DMSO"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "Pool109_30_filtered_feature_bc_matrix/matrix.mtx.gz",
+          "features": "Pool109_30_filtered_feature_bc_matrix/features.tsv.gz",
+          "barcodes": "Pool109_30_filtered_feature_bc_matrix/barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": null,
+            "hashtags": {
+              "HTO_1": "NUGC3",
+              "HTO_2": "NUGC3 5'-FU"
+            },
+            "min_count": 10,
+            "min_ratio": 3,
+            "cell_suffix": ""
+          },
+          "arm": "DMSO",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse263747": {
+      "wave": 1,
+      "files": {
+        "GSM8197841_SNU_D5_GEX_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197841/suppl/GSM8197841_SNU_D5_GEX_barcodes.tsv.gz",
+        "GSM8197843_SNU_D5_sgRNA_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197843/suppl/GSM8197843_SNU_D5_sgRNA_barcodes.tsv.gz",
+        "GSM8197841_SNU_D5_GEX_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197841/suppl/GSM8197841_SNU_D5_GEX_features.tsv.gz",
+        "GSM8197843_SNU_D5_sgRNA_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197843/suppl/GSM8197843_SNU_D5_sgRNA_features.tsv.gz",
+        "GSM8197841_SNU_D5_GEX_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197841/suppl/GSM8197841_SNU_D5_GEX_matrix.mtx.gz",
+        "GSM8197843_SNU_D5_sgRNA_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197843/suppl/GSM8197843_SNU_D5_sgRNA_matrix.mtx.gz",
+        "GSM8197842_SNU_D10_GEX_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197842/suppl/GSM8197842_SNU_D10_GEX_barcodes.tsv.gz",
+        "GSM8197844_SNU_D10_sgRNA_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197844/suppl/GSM8197844_SNU_D10_sgRNA_barcodes.tsv.gz",
+        "GSM8197842_SNU_D10_GEX_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197842/suppl/GSM8197842_SNU_D10_GEX_features.tsv.gz",
+        "GSM8197844_SNU_D10_sgRNA_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197844/suppl/GSM8197844_SNU_D10_sgRNA_features.tsv.gz",
+        "GSM8197842_SNU_D10_GEX_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197842/suppl/GSM8197842_SNU_D10_GEX_matrix.mtx.gz",
+        "GSM8197844_SNU_D10_sgRNA_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8197nnn/GSM8197844/suppl/GSM8197844_SNU_D10_sgRNA_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "non-targeting sgRNA day 5",
+        "non-targeting sgRNA day 10"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8197841_SNU_D5_GEX_matrix.mtx.gz",
+          "features": "GSM8197841_SNU_D5_GEX_features.tsv.gz",
+          "barcodes": "GSM8197841_SNU_D5_GEX_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": {
+              "reader": "tenx_mtx",
+              "matrix": "GSM8197843_SNU_D5_sgRNA_matrix.mtx.gz",
+              "features": "GSM8197843_SNU_D5_sgRNA_features.tsv.gz",
+              "barcodes": "GSM8197843_SNU_D5_sgRNA_barcodes.tsv.gz",
+              "header": false,
+              "gene_id_prefix": ""
+            },
+            "hashtags": {
+              "ACP6_1": "SNU-761 targeting sgRNA",
+              "ACP6_2": "SNU-761 targeting sgRNA",
+              "ACP6_3": "SNU-761 targeting sgRNA",
+              "ACP6_4": "SNU-761 targeting sgRNA",
+              "ACTR3_1": "SNU-761 targeting sgRNA",
+              "ACTR3_2": "SNU-761 targeting sgRNA",
+              "ACTR3_3": "SNU-761 targeting sgRNA",
+              "ACTR3_4": "SNU-761 targeting sgRNA",
+              "ADM_1": "SNU-761 targeting sgRNA",
+              "ADM_2": "SNU-761 targeting sgRNA",
+              "ADM_3": "SNU-761 targeting sgRNA",
+              "ADM_4": "SNU-761 targeting sgRNA",
+              "AMOT_1": "SNU-761 targeting sgRNA",
+              "AMOT_2": "SNU-761 targeting sgRNA",
+              "AMOT_3": "SNU-761 targeting sgRNA",
+              "AMOT_4": "SNU-761 targeting sgRNA",
+              "AMOTL2_1": "SNU-761 targeting sgRNA",
+              "AMOTL2_2": "SNU-761 targeting sgRNA",
+              "AMOTL2_3": "SNU-761 targeting sgRNA",
+              "AMOTL2_4": "SNU-761 targeting sgRNA",
+              "ARF4_1": "SNU-761 targeting sgRNA",
+              "ARF4_2": "SNU-761 targeting sgRNA",
+              "ARF4_3": "SNU-761 targeting sgRNA",
+              "ARF4_4": "SNU-761 targeting sgRNA",
+              "ARHGEF7_1": "SNU-761 targeting sgRNA",
+              "ARHGEF7_2": "SNU-761 targeting sgRNA",
+              "ARHGEF7_3": "SNU-761 targeting sgRNA",
+              "ARHGEF7_4": "SNU-761 targeting sgRNA",
+              "AURKA_1": "SNU-761 targeting sgRNA",
+              "AURKA_2": "SNU-761 targeting sgRNA",
+              "AURKA_3": "SNU-761 targeting sgRNA",
+              "AURKA_4": "SNU-761 targeting sgRNA",
+              "AXL_1": "SNU-761 targeting sgRNA",
+              "AXL_2": "SNU-761 targeting sgRNA",
+              "AXL_3": "SNU-761 targeting sgRNA",
+              "AXL_4": "SNU-761 targeting sgRNA",
+              "BRD4_1": "SNU-761 targeting sgRNA",
+              "BRD4_2": "SNU-761 targeting sgRNA",
+              "BRD4_3": "SNU-761 targeting sgRNA",
+              "BRD4_4": "SNU-761 targeting sgRNA",
+              "CA11_1": "SNU-761 targeting sgRNA",
+              "CA11_2": "SNU-761 targeting sgRNA",
+              "CA11_3": "SNU-761 targeting sgRNA",
+              "CA11_4": "SNU-761 targeting sgRNA",
+              "CASP3_1": "SNU-761 targeting sgRNA",
+              "CASP3_2": "SNU-761 targeting sgRNA",
+              "CASP3_3": "SNU-761 targeting sgRNA",
+              "CASP3_4": "SNU-761 targeting sgRNA",
+              "CCN2_1": "SNU-761 targeting sgRNA",
+              "CCN2_2": "SNU-761 targeting sgRNA",
+              "CCN2_3": "SNU-761 targeting sgRNA",
+              "CCN2_4": "SNU-761 targeting sgRNA",
+              "CDC42_1": "SNU-761 targeting sgRNA",
+              "CDC42_2": "SNU-761 targeting sgRNA",
+              "CDC42_3": "SNU-761 targeting sgRNA",
+              "CENPF_1": "SNU-761 targeting sgRNA",
+              "CENPF_2": "SNU-761 targeting sgRNA",
+              "CENPF_3": "SNU-761 targeting sgRNA",
+              "CENPF_4": "SNU-761 targeting sgRNA",
+              "CHMP4B_1": "SNU-761 targeting sgRNA",
+              "CHMP4B_2": "SNU-761 targeting sgRNA",
+              "CHMP4B_3": "SNU-761 targeting sgRNA",
+              "CHMP4B_4": "SNU-761 targeting sgRNA",
+              "CRIM1_1": "SNU-761 targeting sgRNA",
+              "CRIM1_2": "SNU-761 targeting sgRNA",
+              "CRIM1_3": "SNU-761 targeting sgRNA",
+              "CRIM1_4": "SNU-761 targeting sgRNA",
+              "CRKL_1": "SNU-761 targeting sgRNA",
+              "CRKL_2": "SNU-761 targeting sgRNA",
+              "CRKL_3": "SNU-761 targeting sgRNA",
+              "CRKL_4": "SNU-761 targeting sgRNA",
+              "CSRP1_1": "SNU-761 targeting sgRNA",
+              "CSRP1_2": "SNU-761 targeting sgRNA",
+              "CSRP1_3": "SNU-761 targeting sgRNA",
+              "CSRP1_4": "SNU-761 targeting sgRNA",
+              "CTCF_1": "SNU-761 targeting sgRNA",
+              "CTCF_2": "SNU-761 targeting sgRNA",
+              "CTCF_3": "SNU-761 targeting sgRNA",
+              "CTCF_4": "SNU-761 targeting sgRNA",
+              "CTNNB1_1": "SNU-761 targeting sgRNA",
+              "CTNNB1_2": "SNU-761 targeting sgRNA",
+              "CTNNB1_3": "SNU-761 targeting sgRNA",
+              "CTNNB1_4": "SNU-761 targeting sgRNA",
+              "DNMT1_1": "SNU-761 targeting sgRNA",
+              "DNMT1_2": "SNU-761 targeting sgRNA",
+              "DNMT1_3": "SNU-761 targeting sgRNA",
+              "DNMT1_4": "SNU-761 targeting sgRNA",
+              "DUSP5_1": "SNU-761 targeting sgRNA",
+              "DUSP5_2": "SNU-761 targeting sgRNA",
+              "DUSP5_3": "SNU-761 targeting sgRNA",
+              "DUSP5_4": "SNU-761 targeting sgRNA",
+              "DVL2_1": "SNU-761 targeting sgRNA",
+              "DVL2_2": "SNU-761 targeting sgRNA",
+              "DVL2_3": "SNU-761 targeting sgRNA",
+              "DVL2_4": "SNU-761 targeting sgRNA",
+              "EGFR_1": "SNU-761 targeting sgRNA",
+              "EGFR_2": "SNU-761 targeting sgRNA",
+              "EGFR_3": "SNU-761 targeting sgRNA",
+              "EGFR_4": "SNU-761 targeting sgRNA",
+              "EMX1_1": "SNU-761 targeting sgRNA",
+              "EMX1_2": "SNU-761 targeting sgRNA",
+              "EMX1_3": "SNU-761 targeting sgRNA",
+              "EMX1_4": "SNU-761 targeting sgRNA",
+              "EMX2_1": "SNU-761 targeting sgRNA",
+              "EMX2_2": "SNU-761 targeting sgRNA",
+              "EMX2_3": "SNU-761 targeting sgRNA",
+              "EMX2_4": "SNU-761 targeting sgRNA",
+              "ERBB4_1": "SNU-761 targeting sgRNA",
+              "ERBB4_2": "SNU-761 targeting sgRNA",
+              "ERBB4_3": "SNU-761 targeting sgRNA",
+              "ERBB4_4": "SNU-761 targeting sgRNA",
+              "FAT1_1": "SNU-761 targeting sgRNA",
+              "FAT1_2": "SNU-761 targeting sgRNA",
+              "FAT1_3": "SNU-761 targeting sgRNA",
+              "FAT1_4": "SNU-761 targeting sgRNA",
+              "FGFR1_1": "SNU-761 targeting sgRNA",
+              "FGFR1_2": "SNU-761 targeting sgRNA",
+              "FGFR1_3": "SNU-761 targeting sgRNA",
+              "FGFR1_4": "SNU-761 targeting sgRNA",
+              "FOSL1_1": "SNU-761 targeting sgRNA",
+              "FOSL1_2": "SNU-761 targeting sgRNA",
+              "FOSL1_3": "SNU-761 targeting sgRNA",
+              "FOSL1_4": "SNU-761 targeting sgRNA",
+              "FOXO1_1": "SNU-761 targeting sgRNA",
+              "FOXO1_2": "SNU-761 targeting sgRNA",
+              "FOXO1_3": "SNU-761 targeting sgRNA",
+              "FOXO1_4": "SNU-761 targeting sgRNA",
+              "FOXO3_1": "SNU-761 targeting sgRNA",
+              "FOXO3_2": "SNU-761 targeting sgRNA",
+              "FOXO3_3": "SNU-761 targeting sgRNA",
+              "FOXO3_4": "SNU-761 targeting sgRNA",
+              "FOXO4_1": "SNU-761 targeting sgRNA",
+              "FOXO4_2": "SNU-761 targeting sgRNA",
+              "FOXO4_3": "SNU-761 targeting sgRNA",
+              "FOXO4_4": "SNU-761 targeting sgRNA",
+              "FRMD4B_1": "SNU-761 targeting sgRNA",
+              "FRMD4B_2": "SNU-761 targeting sgRNA",
+              "FRMD4B_3": "SNU-761 targeting sgRNA",
+              "FRMD4B_4": "SNU-761 targeting sgRNA",
+              "HDAC1_1": "SNU-761 targeting sgRNA",
+              "HDAC1_2": "SNU-761 targeting sgRNA",
+              "HDAC1_3": "SNU-761 targeting sgRNA",
+              "HDAC1_4": "SNU-761 targeting sgRNA",
+              "HDAC3_1": "SNU-761 targeting sgRNA",
+              "HDAC3_2": "SNU-761 targeting sgRNA",
+              "HDAC3_3": "SNU-761 targeting sgRNA",
+              "HDAC3_4": "SNU-761 targeting sgRNA",
+              "HPRT1_1": "SNU-761 targeting sgRNA",
+              "HPRT1_2": "SNU-761 targeting sgRNA",
+              "HPRT1_3": "SNU-761 targeting sgRNA",
+              "HPRT1_4": "SNU-761 targeting sgRNA",
+              "HSD17B11_1": "SNU-761 targeting sgRNA",
+              "HSD17B11_2": "SNU-761 targeting sgRNA",
+              "HSD17B11_3": "SNU-761 targeting sgRNA",
+              "HSD17B11_4": "SNU-761 targeting sgRNA",
+              "IGFBP3_1": "SNU-761 targeting sgRNA",
+              "IGFBP3_2": "SNU-761 targeting sgRNA",
+              "IGFBP3_3": "SNU-761 targeting sgRNA",
+              "IGFBP3_4": "SNU-761 targeting sgRNA",
+              "ILK_1": "SNU-761 targeting sgRNA",
+              "ILK_2": "SNU-761 targeting sgRNA",
+              "ILK_3": "SNU-761 targeting sgRNA",
+              "ILK_4": "SNU-761 targeting sgRNA",
+              "ITGAV_1": "SNU-761 targeting sgRNA",
+              "ITGAV_2": "SNU-761 targeting sgRNA",
+              "ITGAV_3": "SNU-761 targeting sgRNA",
+              "ITGAV_4": "SNU-761 targeting sgRNA",
+              "ITGB5_1": "SNU-761 targeting sgRNA",
+              "ITGB5_2": "SNU-761 targeting sgRNA",
+              "ITGB5_3": "SNU-761 targeting sgRNA",
+              "ITGB5_4": "SNU-761 targeting sgRNA",
+              "KIF11_1": "SNU-761 targeting sgRNA",
+              "KIF11_2": "SNU-761 targeting sgRNA",
+              "KIF11_3": "SNU-761 targeting sgRNA",
+              "KIF11_4": "SNU-761 targeting sgRNA",
+              "KLHL4_1": "SNU-761 targeting sgRNA",
+              "KLHL4_2": "SNU-761 targeting sgRNA",
+              "KLHL4_3": "SNU-761 targeting sgRNA",
+              "KLHL4_4": "SNU-761 targeting sgRNA",
+              "KRAS_1": "SNU-761 targeting sgRNA",
+              "KRAS_2": "SNU-761 targeting sgRNA",
+              "KRAS_3": "SNU-761 targeting sgRNA",
+              "KRAS_4": "SNU-761 targeting sgRNA",
+              "LATS1_1": "SNU-761 targeting sgRNA",
+              "LATS1_2": "SNU-761 targeting sgRNA",
+              "LATS1_3": "SNU-761 targeting sgRNA",
+              "LATS1_4": "SNU-761 targeting sgRNA",
+              "LATS2_1": "SNU-761 targeting sgRNA",
+              "LATS2_2": "SNU-761 targeting sgRNA",
+              "LATS2_3": "SNU-761 targeting sgRNA",
+              "LATS2_4": "SNU-761 targeting sgRNA",
+              "LETM2_1": "SNU-761 targeting sgRNA",
+              "LETM2_2": "SNU-761 targeting sgRNA",
+              "LETM2_3": "SNU-761 targeting sgRNA",
+              "LETM2_4": "SNU-761 targeting sgRNA",
+              "MAX_1": "SNU-761 targeting sgRNA",
+              "MAX_2": "SNU-761 targeting sgRNA",
+              "MAX_3": "SNU-761 targeting sgRNA",
+              "MAX_4": "SNU-761 targeting sgRNA",
+              "MCM10_1": "SNU-761 targeting sgRNA",
+              "MCM10_2": "SNU-761 targeting sgRNA",
+              "MCM10_3": "SNU-761 targeting sgRNA",
+              "MCM10_4": "SNU-761 targeting sgRNA",
+              "MDM2_1": "SNU-761 targeting sgRNA",
+              "MDM2_2": "SNU-761 targeting sgRNA",
+              "MDM2_3": "SNU-761 targeting sgRNA",
+              "MDM2_4": "SNU-761 targeting sgRNA",
+              "MOB1A_1": "SNU-761 targeting sgRNA",
+              "MOB1A_2": "SNU-761 targeting sgRNA",
+              "MOB1A_3": "SNU-761 targeting sgRNA",
+              "MOB1A_4": "SNU-761 targeting sgRNA",
+              "MOB1B_1": "SNU-761 targeting sgRNA",
+              "MOB1B_2": "SNU-761 targeting sgRNA",
+              "MOB1B_3": "SNU-761 targeting sgRNA",
+              "MOB1B_4": "SNU-761 targeting sgRNA",
+              "MOK_1": "SNU-761 targeting sgRNA",
+              "MOK_2": "SNU-761 targeting sgRNA",
+              "MOK_3": "SNU-761 targeting sgRNA",
+              "MOK_4": "SNU-761 targeting sgRNA",
+              "MYC_1": "SNU-761 targeting sgRNA",
+              "MYC_2": "SNU-761 targeting sgRNA",
+              "MYC_3": "SNU-761 targeting sgRNA",
+              "MYC_4": "SNU-761 targeting sgRNA",
+              "MYH9_1": "SNU-761 targeting sgRNA",
+              "MYH9_2": "SNU-761 targeting sgRNA",
+              "MYH9_3": "SNU-761 targeting sgRNA",
+              "MYH9_4": "SNU-761 targeting sgRNA",
+              "NCKAP1_1": "SNU-761 targeting sgRNA",
+              "NCKAP1_2": "SNU-761 targeting sgRNA",
+              "NCKAP1_3": "SNU-761 targeting sgRNA",
+              "NCKAP1_4": "SNU-761 targeting sgRNA",
+              "NF2_1": "SNU-761 targeting sgRNA",
+              "NF2_2": "SNU-761 targeting sgRNA",
+              "NF2_3": "SNU-761 targeting sgRNA",
+              "NF2_4": "SNU-761 targeting sgRNA",
+              "NPHP1_1": "SNU-761 targeting sgRNA",
+              "NPHP1_2": "SNU-761 targeting sgRNA",
+              "NPHP1_3": "SNU-761 targeting sgRNA",
+              "NPHP1_4": "SNU-761 targeting sgRNA",
+              "PKN2_1": "SNU-761 targeting sgRNA",
+              "PKN2_2": "SNU-761 targeting sgRNA",
+              "PKN2_3": "SNU-761 targeting sgRNA",
+              "PKN2_4": "SNU-761 targeting sgRNA",
+              "PLK1_1": "SNU-761 targeting sgRNA",
+              "PLK1_2": "SNU-761 targeting sgRNA",
+              "PLK1_3": "SNU-761 targeting sgRNA",
+              "PLK1_4": "SNU-761 targeting sgRNA",
+              "PML_1": "SNU-761 targeting sgRNA",
+              "PML_2": "SNU-761 targeting sgRNA",
+              "PML_3": "SNU-761 targeting sgRNA",
+              "PML_4": "SNU-761 targeting sgRNA",
+              "PMP22_1": "SNU-761 targeting sgRNA",
+              "PMP22_2": "SNU-761 targeting sgRNA",
+              "PMP22_3": "SNU-761 targeting sgRNA",
+              "PMP22_4": "SNU-761 targeting sgRNA",
+              "PPME1_1": "SNU-761 targeting sgRNA",
+              "PPME1_2": "SNU-761 targeting sgRNA",
+              "PPME1_3": "SNU-761 targeting sgRNA",
+              "PPME1_4": "SNU-761 targeting sgRNA",
+              "PPP1R12A_1": "SNU-761 targeting sgRNA",
+              "PPP1R12A_2": "SNU-761 targeting sgRNA",
+              "PPP1R12A_3": "SNU-761 targeting sgRNA",
+              "PPP1R12A_4": "SNU-761 targeting sgRNA",
+              "PPP1R7_1": "SNU-761 targeting sgRNA",
+              "PPP1R7_2": "SNU-761 targeting sgRNA",
+              "PPP1R7_3": "SNU-761 targeting sgRNA",
+              "PPP1R7_4": "SNU-761 targeting sgRNA",
+              "PRKAR1A_1": "SNU-761 targeting sgRNA",
+              "PRKAR1A_2": "SNU-761 targeting sgRNA",
+              "PRKAR1A_3": "SNU-761 targeting sgRNA",
+              "PRKAR1A_4": "SNU-761 targeting sgRNA",
+              "PRPS1_1": "SNU-761 targeting sgRNA",
+              "PRPS1_2": "SNU-761 targeting sgRNA",
+              "PRPS1_3": "SNU-761 targeting sgRNA",
+              "PRPS1_4": "SNU-761 targeting sgRNA",
+              "PTK2_1": "SNU-761 targeting sgRNA",
+              "PTK2_2": "SNU-761 targeting sgRNA",
+              "PTK2_3": "SNU-761 targeting sgRNA",
+              "PTK2_4": "SNU-761 targeting sgRNA",
+              "RAC1_1": "SNU-761 targeting sgRNA",
+              "RAC1_2": "SNU-761 targeting sgRNA",
+              "RAC1_3": "SNU-761 targeting sgRNA",
+              "RAC1_4": "SNU-761 targeting sgRNA",
+              "RHOA_1": "SNU-761 targeting sgRNA",
+              "RHOA_2": "SNU-761 targeting sgRNA",
+              "RHOA_3": "SNU-761 targeting sgRNA",
+              "RHOA_4": "SNU-761 targeting sgRNA",
+              "RUNX1_1": "SNU-761 targeting sgRNA",
+              "RUNX1_2": "SNU-761 targeting sgRNA",
+              "RUNX1_3": "SNU-761 targeting sgRNA",
+              "RUNX1_4": "SNU-761 targeting sgRNA",
+              "RUNX2_1": "SNU-761 targeting sgRNA",
+              "RUNX2_2": "SNU-761 targeting sgRNA",
+              "RUNX2_3": "SNU-761 targeting sgRNA",
+              "RUNX2_4": "SNU-761 targeting sgRNA",
+              "SAV1_1": "SNU-761 targeting sgRNA",
+              "SAV1_2": "SNU-761 targeting sgRNA",
+              "SAV1_3": "SNU-761 targeting sgRNA",
+              "SAV1_4": "SNU-761 targeting sgRNA",
+              "SELENBP1_1": "SNU-761 targeting sgRNA",
+              "SELENBP1_2": "SNU-761 targeting sgRNA",
+              "SELENBP1_3": "SNU-761 targeting sgRNA",
+              "SELENBP1_4": "SNU-761 targeting sgRNA",
+              "SERPINE1_1": "SNU-761 targeting sgRNA",
+              "SERPINE1_2": "SNU-761 targeting sgRNA",
+              "SERPINE1_3": "SNU-761 targeting sgRNA",
+              "SERPINE1_4": "SNU-761 targeting sgRNA",
+              "SKP2_1": "SNU-761 targeting sgRNA",
+              "SKP2_2": "SNU-761 targeting sgRNA",
+              "SKP2_3": "SNU-761 targeting sgRNA",
+              "SKP2_4": "SNU-761 targeting sgRNA",
+              "SMAD7_1": "SNU-761 targeting sgRNA",
+              "SMAD7_2": "SNU-761 targeting sgRNA",
+              "SMAD7_3": "SNU-761 targeting sgRNA",
+              "SMAD7_4": "SNU-761 targeting sgRNA",
+              "ST3GAL5_1": "SNU-761 targeting sgRNA",
+              "ST3GAL5_2": "SNU-761 targeting sgRNA",
+              "ST3GAL5_3": "SNU-761 targeting sgRNA",
+              "ST3GAL5_4": "SNU-761 targeting sgRNA",
+              "STAT1_1": "SNU-761 targeting sgRNA",
+              "STAT1_2": "SNU-761 targeting sgRNA",
+              "STAT1_3": "SNU-761 targeting sgRNA",
+              "STAT1_4": "SNU-761 targeting sgRNA",
+              "STK3_1": "SNU-761 targeting sgRNA",
+              "STK3_2": "SNU-761 targeting sgRNA",
+              "STK3_3": "SNU-761 targeting sgRNA",
+              "STK3_4": "SNU-761 targeting sgRNA",
+              "STK4_1": "SNU-761 targeting sgRNA",
+              "STK4_2": "SNU-761 targeting sgRNA",
+              "STK4_3": "SNU-761 targeting sgRNA",
+              "STK4_4": "SNU-761 targeting sgRNA",
+              "TCOF1_1": "SNU-761 targeting sgRNA",
+              "TCOF1_2": "SNU-761 targeting sgRNA",
+              "TCOF1_3": "SNU-761 targeting sgRNA",
+              "TCOF1_4": "SNU-761 targeting sgRNA",
+              "TEAD1_1": "SNU-761 targeting sgRNA",
+              "TEAD1_2": "SNU-761 targeting sgRNA",
+              "TEAD1_3": "SNU-761 targeting sgRNA",
+              "TEAD1_4": "SNU-761 targeting sgRNA",
+              "TEAD2_1": "SNU-761 targeting sgRNA",
+              "TEAD2_2": "SNU-761 targeting sgRNA",
+              "TEAD2_3": "SNU-761 targeting sgRNA",
+              "TEAD2_4": "SNU-761 targeting sgRNA",
+              "TEAD3_1": "SNU-761 targeting sgRNA",
+              "TEAD3_2": "SNU-761 targeting sgRNA",
+              "TEAD3_3": "SNU-761 targeting sgRNA",
+              "TEAD3_4": "SNU-761 targeting sgRNA",
+              "TEAD4_1": "SNU-761 targeting sgRNA",
+              "TEAD4_2": "SNU-761 targeting sgRNA",
+              "TEAD4_3": "SNU-761 targeting sgRNA",
+              "TEAD4_4": "SNU-761 targeting sgRNA",
+              "TJP1_1": "SNU-761 targeting sgRNA",
+              "TJP1_2": "SNU-761 targeting sgRNA",
+              "TJP1_3": "SNU-761 targeting sgRNA",
+              "TJP1_4": "SNU-761 targeting sgRNA",
+              "TJP2_1": "SNU-761 targeting sgRNA",
+              "TJP2_2": "SNU-761 targeting sgRNA",
+              "TJP2_3": "SNU-761 targeting sgRNA",
+              "TJP2_4": "SNU-761 targeting sgRNA",
+              "TK1_1": "SNU-761 targeting sgRNA",
+              "TK1_2": "SNU-761 targeting sgRNA",
+              "TK1_3": "SNU-761 targeting sgRNA",
+              "TK1_4": "SNU-761 targeting sgRNA",
+              "TLN1_1": "SNU-761 targeting sgRNA",
+              "TLN1_2": "SNU-761 targeting sgRNA",
+              "TLN1_3": "SNU-761 targeting sgRNA",
+              "TLN1_4": "SNU-761 targeting sgRNA",
+              "TOP2A_1": "SNU-761 targeting sgRNA",
+              "TOP2A_2": "SNU-761 targeting sgRNA",
+              "TOP2A_3": "SNU-761 targeting sgRNA",
+              "TOP2A_4": "SNU-761 targeting sgRNA",
+              "TP53_1": "SNU-761 targeting sgRNA",
+              "TP53_2": "SNU-761 targeting sgRNA",
+              "TP53_3": "SNU-761 targeting sgRNA",
+              "TP53_4": "SNU-761 targeting sgRNA",
+              "UAP1_1": "SNU-761 targeting sgRNA",
+              "UAP1_2": "SNU-761 targeting sgRNA",
+              "UAP1_3": "SNU-761 targeting sgRNA",
+              "UAP1_4": "SNU-761 targeting sgRNA",
+              "UBASH3B_1": "SNU-761 targeting sgRNA",
+              "UBASH3B_2": "SNU-761 targeting sgRNA",
+              "UBASH3B_3": "SNU-761 targeting sgRNA",
+              "UBASH3B_4": "SNU-761 targeting sgRNA",
+              "UFC1_1": "SNU-761 targeting sgRNA",
+              "UFC1_2": "SNU-761 targeting sgRNA",
+              "UFC1_3": "SNU-761 targeting sgRNA",
+              "UFC1_4": "SNU-761 targeting sgRNA",
+              "UFM1_1": "SNU-761 targeting sgRNA",
+              "UFM1_2": "SNU-761 targeting sgRNA",
+              "UFM1_3": "SNU-761 targeting sgRNA",
+              "VEGFA_1": "SNU-761 targeting sgRNA",
+              "VEGFA_2": "SNU-761 targeting sgRNA",
+              "VEGFA_3": "SNU-761 targeting sgRNA",
+              "VEGFA_4": "SNU-761 targeting sgRNA",
+              "VGLL1_1": "SNU-761 targeting sgRNA",
+              "VGLL1_2": "SNU-761 targeting sgRNA",
+              "VGLL1_3": "SNU-761 targeting sgRNA",
+              "VGLL1_4": "SNU-761 targeting sgRNA",
+              "VGLL2_1": "SNU-761 targeting sgRNA",
+              "VGLL2_2": "SNU-761 targeting sgRNA",
+              "VGLL2_3": "SNU-761 targeting sgRNA",
+              "VGLL2_4": "SNU-761 targeting sgRNA",
+              "VGLL3_1": "SNU-761 targeting sgRNA",
+              "VGLL3_2": "SNU-761 targeting sgRNA",
+              "VGLL3_3": "SNU-761 targeting sgRNA",
+              "VGLL3_4": "SNU-761 targeting sgRNA",
+              "VGLL4_1": "SNU-761 targeting sgRNA",
+              "VGLL4_2": "SNU-761 targeting sgRNA",
+              "VGLL4_3": "SNU-761 targeting sgRNA",
+              "VGLL4_4": "SNU-761 targeting sgRNA",
+              "WWTR1_1": "SNU-761 targeting sgRNA",
+              "WWTR1_2": "SNU-761 targeting sgRNA",
+              "WWTR1_3": "SNU-761 targeting sgRNA",
+              "WWTR1_4": "SNU-761 targeting sgRNA",
+              "YAP1_1": "SNU-761 targeting sgRNA",
+              "YAP1_2": "SNU-761 targeting sgRNA",
+              "YAP1_3": "SNU-761 targeting sgRNA",
+              "YAP1_4": "SNU-761 targeting sgRNA",
+              "YWHAB_1": "SNU-761 targeting sgRNA",
+              "YWHAB_2": "SNU-761 targeting sgRNA",
+              "YWHAB_3": "SNU-761 targeting sgRNA",
+              "YWHAB_4": "SNU-761 targeting sgRNA",
+              "YWHAE_1": "SNU-761 targeting sgRNA",
+              "YWHAE_2": "SNU-761 targeting sgRNA",
+              "YWHAE_3": "SNU-761 targeting sgRNA",
+              "YWHAE_4": "SNU-761 targeting sgRNA",
+              "ZFP36L1_1": "SNU-761 targeting sgRNA",
+              "ZFP36L1_2": "SNU-761 targeting sgRNA",
+              "ZFP36L1_3": "SNU-761 targeting sgRNA",
+              "ZFP36L1_4": "SNU-761 targeting sgRNA",
+              "gene_desert_1": "SNU-761 targeting sgRNA",
+              "gene_desert_2": "SNU-761 targeting sgRNA",
+              "gene_desert_3": "SNU-761 targeting sgRNA",
+              "gene_desert_4": "SNU-761 targeting sgRNA",
+              "gene_desert_5": "SNU-761 targeting sgRNA",
+              "gene_desert_6": "SNU-761 targeting sgRNA",
+              "gene_desert_7": "SNU-761 targeting sgRNA",
+              "gene_desert_8": "SNU-761 targeting sgRNA",
+              "gene_desert_9": "SNU-761 targeting sgRNA",
+              "gene_desert_10": "SNU-761 targeting sgRNA",
+              "non-targeting_1": "SNU-761",
+              "non-targeting_2": "SNU-761",
+              "non-targeting_3": "SNU-761",
+              "non-targeting_4": "SNU-761",
+              "non-targeting_5": "SNU-761",
+              "non-targeting_6": "SNU-761",
+              "non-targeting_7": "SNU-761",
+              "non-targeting_8": "SNU-761",
+              "non-targeting_9": "SNU-761",
+              "non-targeting_10": "SNU-761"
+            },
+            "min_count": 3,
+            "min_ratio": 50,
+            "cell_suffix": ""
+          },
+          "arm": "non-targeting sgRNA day 5",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8197842_SNU_D10_GEX_matrix.mtx.gz",
+          "features": "GSM8197842_SNU_D10_GEX_features.tsv.gz",
+          "barcodes": "GSM8197842_SNU_D10_GEX_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "hashtag",
+            "counts": {
+              "reader": "tenx_mtx",
+              "matrix": "GSM8197844_SNU_D10_sgRNA_matrix.mtx.gz",
+              "features": "GSM8197844_SNU_D10_sgRNA_features.tsv.gz",
+              "barcodes": "GSM8197844_SNU_D10_sgRNA_barcodes.tsv.gz",
+              "header": false,
+              "gene_id_prefix": ""
+            },
+            "hashtags": {
+              "ACP6_1": "SNU-761 targeting sgRNA",
+              "ACP6_2": "SNU-761 targeting sgRNA",
+              "ACP6_3": "SNU-761 targeting sgRNA",
+              "ACP6_4": "SNU-761 targeting sgRNA",
+              "ACTR3_1": "SNU-761 targeting sgRNA",
+              "ACTR3_2": "SNU-761 targeting sgRNA",
+              "ACTR3_3": "SNU-761 targeting sgRNA",
+              "ACTR3_4": "SNU-761 targeting sgRNA",
+              "ADM_1": "SNU-761 targeting sgRNA",
+              "ADM_2": "SNU-761 targeting sgRNA",
+              "ADM_3": "SNU-761 targeting sgRNA",
+              "ADM_4": "SNU-761 targeting sgRNA",
+              "AMOT_1": "SNU-761 targeting sgRNA",
+              "AMOT_2": "SNU-761 targeting sgRNA",
+              "AMOT_3": "SNU-761 targeting sgRNA",
+              "AMOT_4": "SNU-761 targeting sgRNA",
+              "AMOTL2_1": "SNU-761 targeting sgRNA",
+              "AMOTL2_2": "SNU-761 targeting sgRNA",
+              "AMOTL2_3": "SNU-761 targeting sgRNA",
+              "AMOTL2_4": "SNU-761 targeting sgRNA",
+              "ARF4_1": "SNU-761 targeting sgRNA",
+              "ARF4_2": "SNU-761 targeting sgRNA",
+              "ARF4_3": "SNU-761 targeting sgRNA",
+              "ARF4_4": "SNU-761 targeting sgRNA",
+              "ARHGEF7_1": "SNU-761 targeting sgRNA",
+              "ARHGEF7_2": "SNU-761 targeting sgRNA",
+              "ARHGEF7_3": "SNU-761 targeting sgRNA",
+              "ARHGEF7_4": "SNU-761 targeting sgRNA",
+              "AURKA_1": "SNU-761 targeting sgRNA",
+              "AURKA_2": "SNU-761 targeting sgRNA",
+              "AURKA_3": "SNU-761 targeting sgRNA",
+              "AURKA_4": "SNU-761 targeting sgRNA",
+              "AXL_1": "SNU-761 targeting sgRNA",
+              "AXL_2": "SNU-761 targeting sgRNA",
+              "AXL_3": "SNU-761 targeting sgRNA",
+              "AXL_4": "SNU-761 targeting sgRNA",
+              "BRD4_1": "SNU-761 targeting sgRNA",
+              "BRD4_2": "SNU-761 targeting sgRNA",
+              "BRD4_3": "SNU-761 targeting sgRNA",
+              "BRD4_4": "SNU-761 targeting sgRNA",
+              "CA11_1": "SNU-761 targeting sgRNA",
+              "CA11_2": "SNU-761 targeting sgRNA",
+              "CA11_3": "SNU-761 targeting sgRNA",
+              "CA11_4": "SNU-761 targeting sgRNA",
+              "CASP3_1": "SNU-761 targeting sgRNA",
+              "CASP3_2": "SNU-761 targeting sgRNA",
+              "CASP3_3": "SNU-761 targeting sgRNA",
+              "CASP3_4": "SNU-761 targeting sgRNA",
+              "CCN2_1": "SNU-761 targeting sgRNA",
+              "CCN2_2": "SNU-761 targeting sgRNA",
+              "CCN2_3": "SNU-761 targeting sgRNA",
+              "CCN2_4": "SNU-761 targeting sgRNA",
+              "CDC42_1": "SNU-761 targeting sgRNA",
+              "CDC42_2": "SNU-761 targeting sgRNA",
+              "CDC42_3": "SNU-761 targeting sgRNA",
+              "CENPF_1": "SNU-761 targeting sgRNA",
+              "CENPF_2": "SNU-761 targeting sgRNA",
+              "CENPF_3": "SNU-761 targeting sgRNA",
+              "CENPF_4": "SNU-761 targeting sgRNA",
+              "CHMP4B_1": "SNU-761 targeting sgRNA",
+              "CHMP4B_2": "SNU-761 targeting sgRNA",
+              "CHMP4B_3": "SNU-761 targeting sgRNA",
+              "CHMP4B_4": "SNU-761 targeting sgRNA",
+              "CRIM1_1": "SNU-761 targeting sgRNA",
+              "CRIM1_2": "SNU-761 targeting sgRNA",
+              "CRIM1_3": "SNU-761 targeting sgRNA",
+              "CRIM1_4": "SNU-761 targeting sgRNA",
+              "CRKL_1": "SNU-761 targeting sgRNA",
+              "CRKL_2": "SNU-761 targeting sgRNA",
+              "CRKL_3": "SNU-761 targeting sgRNA",
+              "CRKL_4": "SNU-761 targeting sgRNA",
+              "CSRP1_1": "SNU-761 targeting sgRNA",
+              "CSRP1_2": "SNU-761 targeting sgRNA",
+              "CSRP1_3": "SNU-761 targeting sgRNA",
+              "CSRP1_4": "SNU-761 targeting sgRNA",
+              "CTCF_1": "SNU-761 targeting sgRNA",
+              "CTCF_2": "SNU-761 targeting sgRNA",
+              "CTCF_3": "SNU-761 targeting sgRNA",
+              "CTCF_4": "SNU-761 targeting sgRNA",
+              "CTNNB1_1": "SNU-761 targeting sgRNA",
+              "CTNNB1_2": "SNU-761 targeting sgRNA",
+              "CTNNB1_3": "SNU-761 targeting sgRNA",
+              "CTNNB1_4": "SNU-761 targeting sgRNA",
+              "DNMT1_1": "SNU-761 targeting sgRNA",
+              "DNMT1_2": "SNU-761 targeting sgRNA",
+              "DNMT1_3": "SNU-761 targeting sgRNA",
+              "DNMT1_4": "SNU-761 targeting sgRNA",
+              "DUSP5_1": "SNU-761 targeting sgRNA",
+              "DUSP5_2": "SNU-761 targeting sgRNA",
+              "DUSP5_3": "SNU-761 targeting sgRNA",
+              "DUSP5_4": "SNU-761 targeting sgRNA",
+              "DVL2_1": "SNU-761 targeting sgRNA",
+              "DVL2_2": "SNU-761 targeting sgRNA",
+              "DVL2_3": "SNU-761 targeting sgRNA",
+              "DVL2_4": "SNU-761 targeting sgRNA",
+              "EGFR_1": "SNU-761 targeting sgRNA",
+              "EGFR_2": "SNU-761 targeting sgRNA",
+              "EGFR_3": "SNU-761 targeting sgRNA",
+              "EGFR_4": "SNU-761 targeting sgRNA",
+              "EMX1_1": "SNU-761 targeting sgRNA",
+              "EMX1_2": "SNU-761 targeting sgRNA",
+              "EMX1_3": "SNU-761 targeting sgRNA",
+              "EMX1_4": "SNU-761 targeting sgRNA",
+              "EMX2_1": "SNU-761 targeting sgRNA",
+              "EMX2_2": "SNU-761 targeting sgRNA",
+              "EMX2_3": "SNU-761 targeting sgRNA",
+              "EMX2_4": "SNU-761 targeting sgRNA",
+              "ERBB4_1": "SNU-761 targeting sgRNA",
+              "ERBB4_2": "SNU-761 targeting sgRNA",
+              "ERBB4_3": "SNU-761 targeting sgRNA",
+              "ERBB4_4": "SNU-761 targeting sgRNA",
+              "FAT1_1": "SNU-761 targeting sgRNA",
+              "FAT1_2": "SNU-761 targeting sgRNA",
+              "FAT1_3": "SNU-761 targeting sgRNA",
+              "FAT1_4": "SNU-761 targeting sgRNA",
+              "FGFR1_1": "SNU-761 targeting sgRNA",
+              "FGFR1_2": "SNU-761 targeting sgRNA",
+              "FGFR1_3": "SNU-761 targeting sgRNA",
+              "FGFR1_4": "SNU-761 targeting sgRNA",
+              "FOSL1_1": "SNU-761 targeting sgRNA",
+              "FOSL1_2": "SNU-761 targeting sgRNA",
+              "FOSL1_3": "SNU-761 targeting sgRNA",
+              "FOSL1_4": "SNU-761 targeting sgRNA",
+              "FOXO1_1": "SNU-761 targeting sgRNA",
+              "FOXO1_2": "SNU-761 targeting sgRNA",
+              "FOXO1_3": "SNU-761 targeting sgRNA",
+              "FOXO1_4": "SNU-761 targeting sgRNA",
+              "FOXO3_1": "SNU-761 targeting sgRNA",
+              "FOXO3_2": "SNU-761 targeting sgRNA",
+              "FOXO3_3": "SNU-761 targeting sgRNA",
+              "FOXO3_4": "SNU-761 targeting sgRNA",
+              "FOXO4_1": "SNU-761 targeting sgRNA",
+              "FOXO4_2": "SNU-761 targeting sgRNA",
+              "FOXO4_3": "SNU-761 targeting sgRNA",
+              "FOXO4_4": "SNU-761 targeting sgRNA",
+              "FRMD4B_1": "SNU-761 targeting sgRNA",
+              "FRMD4B_2": "SNU-761 targeting sgRNA",
+              "FRMD4B_3": "SNU-761 targeting sgRNA",
+              "FRMD4B_4": "SNU-761 targeting sgRNA",
+              "HDAC1_1": "SNU-761 targeting sgRNA",
+              "HDAC1_2": "SNU-761 targeting sgRNA",
+              "HDAC1_3": "SNU-761 targeting sgRNA",
+              "HDAC1_4": "SNU-761 targeting sgRNA",
+              "HDAC3_1": "SNU-761 targeting sgRNA",
+              "HDAC3_2": "SNU-761 targeting sgRNA",
+              "HDAC3_3": "SNU-761 targeting sgRNA",
+              "HDAC3_4": "SNU-761 targeting sgRNA",
+              "HPRT1_1": "SNU-761 targeting sgRNA",
+              "HPRT1_2": "SNU-761 targeting sgRNA",
+              "HPRT1_3": "SNU-761 targeting sgRNA",
+              "HPRT1_4": "SNU-761 targeting sgRNA",
+              "HSD17B11_1": "SNU-761 targeting sgRNA",
+              "HSD17B11_2": "SNU-761 targeting sgRNA",
+              "HSD17B11_3": "SNU-761 targeting sgRNA",
+              "HSD17B11_4": "SNU-761 targeting sgRNA",
+              "IGFBP3_1": "SNU-761 targeting sgRNA",
+              "IGFBP3_2": "SNU-761 targeting sgRNA",
+              "IGFBP3_3": "SNU-761 targeting sgRNA",
+              "IGFBP3_4": "SNU-761 targeting sgRNA",
+              "ILK_1": "SNU-761 targeting sgRNA",
+              "ILK_2": "SNU-761 targeting sgRNA",
+              "ILK_3": "SNU-761 targeting sgRNA",
+              "ILK_4": "SNU-761 targeting sgRNA",
+              "ITGAV_1": "SNU-761 targeting sgRNA",
+              "ITGAV_2": "SNU-761 targeting sgRNA",
+              "ITGAV_3": "SNU-761 targeting sgRNA",
+              "ITGAV_4": "SNU-761 targeting sgRNA",
+              "ITGB5_1": "SNU-761 targeting sgRNA",
+              "ITGB5_2": "SNU-761 targeting sgRNA",
+              "ITGB5_3": "SNU-761 targeting sgRNA",
+              "ITGB5_4": "SNU-761 targeting sgRNA",
+              "KIF11_1": "SNU-761 targeting sgRNA",
+              "KIF11_2": "SNU-761 targeting sgRNA",
+              "KIF11_3": "SNU-761 targeting sgRNA",
+              "KIF11_4": "SNU-761 targeting sgRNA",
+              "KLHL4_1": "SNU-761 targeting sgRNA",
+              "KLHL4_2": "SNU-761 targeting sgRNA",
+              "KLHL4_3": "SNU-761 targeting sgRNA",
+              "KLHL4_4": "SNU-761 targeting sgRNA",
+              "KRAS_1": "SNU-761 targeting sgRNA",
+              "KRAS_2": "SNU-761 targeting sgRNA",
+              "KRAS_3": "SNU-761 targeting sgRNA",
+              "KRAS_4": "SNU-761 targeting sgRNA",
+              "LATS1_1": "SNU-761 targeting sgRNA",
+              "LATS1_2": "SNU-761 targeting sgRNA",
+              "LATS1_3": "SNU-761 targeting sgRNA",
+              "LATS1_4": "SNU-761 targeting sgRNA",
+              "LATS2_1": "SNU-761 targeting sgRNA",
+              "LATS2_2": "SNU-761 targeting sgRNA",
+              "LATS2_3": "SNU-761 targeting sgRNA",
+              "LATS2_4": "SNU-761 targeting sgRNA",
+              "LETM2_1": "SNU-761 targeting sgRNA",
+              "LETM2_2": "SNU-761 targeting sgRNA",
+              "LETM2_3": "SNU-761 targeting sgRNA",
+              "LETM2_4": "SNU-761 targeting sgRNA",
+              "MAX_1": "SNU-761 targeting sgRNA",
+              "MAX_2": "SNU-761 targeting sgRNA",
+              "MAX_3": "SNU-761 targeting sgRNA",
+              "MAX_4": "SNU-761 targeting sgRNA",
+              "MCM10_1": "SNU-761 targeting sgRNA",
+              "MCM10_2": "SNU-761 targeting sgRNA",
+              "MCM10_3": "SNU-761 targeting sgRNA",
+              "MCM10_4": "SNU-761 targeting sgRNA",
+              "MDM2_1": "SNU-761 targeting sgRNA",
+              "MDM2_2": "SNU-761 targeting sgRNA",
+              "MDM2_3": "SNU-761 targeting sgRNA",
+              "MDM2_4": "SNU-761 targeting sgRNA",
+              "MOB1A_1": "SNU-761 targeting sgRNA",
+              "MOB1A_2": "SNU-761 targeting sgRNA",
+              "MOB1A_3": "SNU-761 targeting sgRNA",
+              "MOB1A_4": "SNU-761 targeting sgRNA",
+              "MOB1B_1": "SNU-761 targeting sgRNA",
+              "MOB1B_2": "SNU-761 targeting sgRNA",
+              "MOB1B_3": "SNU-761 targeting sgRNA",
+              "MOB1B_4": "SNU-761 targeting sgRNA",
+              "MOK_1": "SNU-761 targeting sgRNA",
+              "MOK_2": "SNU-761 targeting sgRNA",
+              "MOK_3": "SNU-761 targeting sgRNA",
+              "MOK_4": "SNU-761 targeting sgRNA",
+              "MYC_1": "SNU-761 targeting sgRNA",
+              "MYC_2": "SNU-761 targeting sgRNA",
+              "MYC_3": "SNU-761 targeting sgRNA",
+              "MYC_4": "SNU-761 targeting sgRNA",
+              "MYH9_1": "SNU-761 targeting sgRNA",
+              "MYH9_2": "SNU-761 targeting sgRNA",
+              "MYH9_3": "SNU-761 targeting sgRNA",
+              "MYH9_4": "SNU-761 targeting sgRNA",
+              "NCKAP1_1": "SNU-761 targeting sgRNA",
+              "NCKAP1_2": "SNU-761 targeting sgRNA",
+              "NCKAP1_3": "SNU-761 targeting sgRNA",
+              "NCKAP1_4": "SNU-761 targeting sgRNA",
+              "NF2_1": "SNU-761 targeting sgRNA",
+              "NF2_2": "SNU-761 targeting sgRNA",
+              "NF2_3": "SNU-761 targeting sgRNA",
+              "NF2_4": "SNU-761 targeting sgRNA",
+              "NPHP1_1": "SNU-761 targeting sgRNA",
+              "NPHP1_2": "SNU-761 targeting sgRNA",
+              "NPHP1_3": "SNU-761 targeting sgRNA",
+              "NPHP1_4": "SNU-761 targeting sgRNA",
+              "PKN2_1": "SNU-761 targeting sgRNA",
+              "PKN2_2": "SNU-761 targeting sgRNA",
+              "PKN2_3": "SNU-761 targeting sgRNA",
+              "PKN2_4": "SNU-761 targeting sgRNA",
+              "PLK1_1": "SNU-761 targeting sgRNA",
+              "PLK1_2": "SNU-761 targeting sgRNA",
+              "PLK1_3": "SNU-761 targeting sgRNA",
+              "PLK1_4": "SNU-761 targeting sgRNA",
+              "PML_1": "SNU-761 targeting sgRNA",
+              "PML_2": "SNU-761 targeting sgRNA",
+              "PML_3": "SNU-761 targeting sgRNA",
+              "PML_4": "SNU-761 targeting sgRNA",
+              "PMP22_1": "SNU-761 targeting sgRNA",
+              "PMP22_2": "SNU-761 targeting sgRNA",
+              "PMP22_3": "SNU-761 targeting sgRNA",
+              "PMP22_4": "SNU-761 targeting sgRNA",
+              "PPME1_1": "SNU-761 targeting sgRNA",
+              "PPME1_2": "SNU-761 targeting sgRNA",
+              "PPME1_3": "SNU-761 targeting sgRNA",
+              "PPME1_4": "SNU-761 targeting sgRNA",
+              "PPP1R12A_1": "SNU-761 targeting sgRNA",
+              "PPP1R12A_2": "SNU-761 targeting sgRNA",
+              "PPP1R12A_3": "SNU-761 targeting sgRNA",
+              "PPP1R12A_4": "SNU-761 targeting sgRNA",
+              "PPP1R7_1": "SNU-761 targeting sgRNA",
+              "PPP1R7_2": "SNU-761 targeting sgRNA",
+              "PPP1R7_3": "SNU-761 targeting sgRNA",
+              "PPP1R7_4": "SNU-761 targeting sgRNA",
+              "PRKAR1A_1": "SNU-761 targeting sgRNA",
+              "PRKAR1A_2": "SNU-761 targeting sgRNA",
+              "PRKAR1A_3": "SNU-761 targeting sgRNA",
+              "PRKAR1A_4": "SNU-761 targeting sgRNA",
+              "PRPS1_1": "SNU-761 targeting sgRNA",
+              "PRPS1_2": "SNU-761 targeting sgRNA",
+              "PRPS1_3": "SNU-761 targeting sgRNA",
+              "PRPS1_4": "SNU-761 targeting sgRNA",
+              "PTK2_1": "SNU-761 targeting sgRNA",
+              "PTK2_2": "SNU-761 targeting sgRNA",
+              "PTK2_3": "SNU-761 targeting sgRNA",
+              "PTK2_4": "SNU-761 targeting sgRNA",
+              "RAC1_1": "SNU-761 targeting sgRNA",
+              "RAC1_2": "SNU-761 targeting sgRNA",
+              "RAC1_3": "SNU-761 targeting sgRNA",
+              "RAC1_4": "SNU-761 targeting sgRNA",
+              "RHOA_1": "SNU-761 targeting sgRNA",
+              "RHOA_2": "SNU-761 targeting sgRNA",
+              "RHOA_3": "SNU-761 targeting sgRNA",
+              "RHOA_4": "SNU-761 targeting sgRNA",
+              "RUNX1_1": "SNU-761 targeting sgRNA",
+              "RUNX1_2": "SNU-761 targeting sgRNA",
+              "RUNX1_3": "SNU-761 targeting sgRNA",
+              "RUNX1_4": "SNU-761 targeting sgRNA",
+              "RUNX2_1": "SNU-761 targeting sgRNA",
+              "RUNX2_2": "SNU-761 targeting sgRNA",
+              "RUNX2_3": "SNU-761 targeting sgRNA",
+              "RUNX2_4": "SNU-761 targeting sgRNA",
+              "SAV1_1": "SNU-761 targeting sgRNA",
+              "SAV1_2": "SNU-761 targeting sgRNA",
+              "SAV1_3": "SNU-761 targeting sgRNA",
+              "SAV1_4": "SNU-761 targeting sgRNA",
+              "SELENBP1_1": "SNU-761 targeting sgRNA",
+              "SELENBP1_2": "SNU-761 targeting sgRNA",
+              "SELENBP1_3": "SNU-761 targeting sgRNA",
+              "SELENBP1_4": "SNU-761 targeting sgRNA",
+              "SERPINE1_1": "SNU-761 targeting sgRNA",
+              "SERPINE1_2": "SNU-761 targeting sgRNA",
+              "SERPINE1_3": "SNU-761 targeting sgRNA",
+              "SERPINE1_4": "SNU-761 targeting sgRNA",
+              "SKP2_1": "SNU-761 targeting sgRNA",
+              "SKP2_2": "SNU-761 targeting sgRNA",
+              "SKP2_3": "SNU-761 targeting sgRNA",
+              "SKP2_4": "SNU-761 targeting sgRNA",
+              "SMAD7_1": "SNU-761 targeting sgRNA",
+              "SMAD7_2": "SNU-761 targeting sgRNA",
+              "SMAD7_3": "SNU-761 targeting sgRNA",
+              "SMAD7_4": "SNU-761 targeting sgRNA",
+              "ST3GAL5_1": "SNU-761 targeting sgRNA",
+              "ST3GAL5_2": "SNU-761 targeting sgRNA",
+              "ST3GAL5_3": "SNU-761 targeting sgRNA",
+              "ST3GAL5_4": "SNU-761 targeting sgRNA",
+              "STAT1_1": "SNU-761 targeting sgRNA",
+              "STAT1_2": "SNU-761 targeting sgRNA",
+              "STAT1_3": "SNU-761 targeting sgRNA",
+              "STAT1_4": "SNU-761 targeting sgRNA",
+              "STK3_1": "SNU-761 targeting sgRNA",
+              "STK3_2": "SNU-761 targeting sgRNA",
+              "STK3_3": "SNU-761 targeting sgRNA",
+              "STK3_4": "SNU-761 targeting sgRNA",
+              "STK4_1": "SNU-761 targeting sgRNA",
+              "STK4_2": "SNU-761 targeting sgRNA",
+              "STK4_3": "SNU-761 targeting sgRNA",
+              "STK4_4": "SNU-761 targeting sgRNA",
+              "TCOF1_1": "SNU-761 targeting sgRNA",
+              "TCOF1_2": "SNU-761 targeting sgRNA",
+              "TCOF1_3": "SNU-761 targeting sgRNA",
+              "TCOF1_4": "SNU-761 targeting sgRNA",
+              "TEAD1_1": "SNU-761 targeting sgRNA",
+              "TEAD1_2": "SNU-761 targeting sgRNA",
+              "TEAD1_3": "SNU-761 targeting sgRNA",
+              "TEAD1_4": "SNU-761 targeting sgRNA",
+              "TEAD2_1": "SNU-761 targeting sgRNA",
+              "TEAD2_2": "SNU-761 targeting sgRNA",
+              "TEAD2_3": "SNU-761 targeting sgRNA",
+              "TEAD2_4": "SNU-761 targeting sgRNA",
+              "TEAD3_1": "SNU-761 targeting sgRNA",
+              "TEAD3_2": "SNU-761 targeting sgRNA",
+              "TEAD3_3": "SNU-761 targeting sgRNA",
+              "TEAD3_4": "SNU-761 targeting sgRNA",
+              "TEAD4_1": "SNU-761 targeting sgRNA",
+              "TEAD4_2": "SNU-761 targeting sgRNA",
+              "TEAD4_3": "SNU-761 targeting sgRNA",
+              "TEAD4_4": "SNU-761 targeting sgRNA",
+              "TJP1_1": "SNU-761 targeting sgRNA",
+              "TJP1_2": "SNU-761 targeting sgRNA",
+              "TJP1_3": "SNU-761 targeting sgRNA",
+              "TJP1_4": "SNU-761 targeting sgRNA",
+              "TJP2_1": "SNU-761 targeting sgRNA",
+              "TJP2_2": "SNU-761 targeting sgRNA",
+              "TJP2_3": "SNU-761 targeting sgRNA",
+              "TJP2_4": "SNU-761 targeting sgRNA",
+              "TK1_1": "SNU-761 targeting sgRNA",
+              "TK1_2": "SNU-761 targeting sgRNA",
+              "TK1_3": "SNU-761 targeting sgRNA",
+              "TK1_4": "SNU-761 targeting sgRNA",
+              "TLN1_1": "SNU-761 targeting sgRNA",
+              "TLN1_2": "SNU-761 targeting sgRNA",
+              "TLN1_3": "SNU-761 targeting sgRNA",
+              "TLN1_4": "SNU-761 targeting sgRNA",
+              "TOP2A_1": "SNU-761 targeting sgRNA",
+              "TOP2A_2": "SNU-761 targeting sgRNA",
+              "TOP2A_3": "SNU-761 targeting sgRNA",
+              "TOP2A_4": "SNU-761 targeting sgRNA",
+              "TP53_1": "SNU-761 targeting sgRNA",
+              "TP53_2": "SNU-761 targeting sgRNA",
+              "TP53_3": "SNU-761 targeting sgRNA",
+              "TP53_4": "SNU-761 targeting sgRNA",
+              "UAP1_1": "SNU-761 targeting sgRNA",
+              "UAP1_2": "SNU-761 targeting sgRNA",
+              "UAP1_3": "SNU-761 targeting sgRNA",
+              "UAP1_4": "SNU-761 targeting sgRNA",
+              "UBASH3B_1": "SNU-761 targeting sgRNA",
+              "UBASH3B_2": "SNU-761 targeting sgRNA",
+              "UBASH3B_3": "SNU-761 targeting sgRNA",
+              "UBASH3B_4": "SNU-761 targeting sgRNA",
+              "UFC1_1": "SNU-761 targeting sgRNA",
+              "UFC1_2": "SNU-761 targeting sgRNA",
+              "UFC1_3": "SNU-761 targeting sgRNA",
+              "UFC1_4": "SNU-761 targeting sgRNA",
+              "UFM1_1": "SNU-761 targeting sgRNA",
+              "UFM1_2": "SNU-761 targeting sgRNA",
+              "UFM1_3": "SNU-761 targeting sgRNA",
+              "VEGFA_1": "SNU-761 targeting sgRNA",
+              "VEGFA_2": "SNU-761 targeting sgRNA",
+              "VEGFA_3": "SNU-761 targeting sgRNA",
+              "VEGFA_4": "SNU-761 targeting sgRNA",
+              "VGLL1_1": "SNU-761 targeting sgRNA",
+              "VGLL1_2": "SNU-761 targeting sgRNA",
+              "VGLL1_3": "SNU-761 targeting sgRNA",
+              "VGLL1_4": "SNU-761 targeting sgRNA",
+              "VGLL2_1": "SNU-761 targeting sgRNA",
+              "VGLL2_2": "SNU-761 targeting sgRNA",
+              "VGLL2_3": "SNU-761 targeting sgRNA",
+              "VGLL2_4": "SNU-761 targeting sgRNA",
+              "VGLL3_1": "SNU-761 targeting sgRNA",
+              "VGLL3_2": "SNU-761 targeting sgRNA",
+              "VGLL3_3": "SNU-761 targeting sgRNA",
+              "VGLL3_4": "SNU-761 targeting sgRNA",
+              "VGLL4_1": "SNU-761 targeting sgRNA",
+              "VGLL4_2": "SNU-761 targeting sgRNA",
+              "VGLL4_3": "SNU-761 targeting sgRNA",
+              "VGLL4_4": "SNU-761 targeting sgRNA",
+              "WWTR1_1": "SNU-761 targeting sgRNA",
+              "WWTR1_2": "SNU-761 targeting sgRNA",
+              "WWTR1_3": "SNU-761 targeting sgRNA",
+              "WWTR1_4": "SNU-761 targeting sgRNA",
+              "YAP1_1": "SNU-761 targeting sgRNA",
+              "YAP1_2": "SNU-761 targeting sgRNA",
+              "YAP1_3": "SNU-761 targeting sgRNA",
+              "YAP1_4": "SNU-761 targeting sgRNA",
+              "YWHAB_1": "SNU-761 targeting sgRNA",
+              "YWHAB_2": "SNU-761 targeting sgRNA",
+              "YWHAB_3": "SNU-761 targeting sgRNA",
+              "YWHAB_4": "SNU-761 targeting sgRNA",
+              "YWHAE_1": "SNU-761 targeting sgRNA",
+              "YWHAE_2": "SNU-761 targeting sgRNA",
+              "YWHAE_3": "SNU-761 targeting sgRNA",
+              "YWHAE_4": "SNU-761 targeting sgRNA",
+              "ZFP36L1_1": "SNU-761 targeting sgRNA",
+              "ZFP36L1_2": "SNU-761 targeting sgRNA",
+              "ZFP36L1_3": "SNU-761 targeting sgRNA",
+              "ZFP36L1_4": "SNU-761 targeting sgRNA",
+              "gene_desert_1": "SNU-761 targeting sgRNA",
+              "gene_desert_2": "SNU-761 targeting sgRNA",
+              "gene_desert_3": "SNU-761 targeting sgRNA",
+              "gene_desert_4": "SNU-761 targeting sgRNA",
+              "gene_desert_5": "SNU-761 targeting sgRNA",
+              "gene_desert_6": "SNU-761 targeting sgRNA",
+              "gene_desert_7": "SNU-761 targeting sgRNA",
+              "gene_desert_8": "SNU-761 targeting sgRNA",
+              "gene_desert_9": "SNU-761 targeting sgRNA",
+              "gene_desert_10": "SNU-761 targeting sgRNA",
+              "non-targeting_1": "SNU-761",
+              "non-targeting_2": "SNU-761",
+              "non-targeting_3": "SNU-761",
+              "non-targeting_4": "SNU-761",
+              "non-targeting_5": "SNU-761",
+              "non-targeting_6": "SNU-761",
+              "non-targeting_7": "SNU-761",
+              "non-targeting_8": "SNU-761",
+              "non-targeting_9": "SNU-761",
+              "non-targeting_10": "SNU-761"
+            },
+            "min_count": 3,
+            "min_ratio": 50,
+            "cell_suffix": ""
+          },
+          "arm": "non-targeting sgRNA day 10",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse230538": {
+      "wave": 1,
+      "files": {
+        "GSM7226481_TI21_S1_DGE.txt.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7226nnn/GSM7226481/suppl/GSM7226481_TI21_S1_DGE.txt.gz",
+        "GSM7226485_TI25_S1_DGE.txt.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7226nnn/GSM7226485/suppl/GSM7226485_TI25_S1_DGE.txt.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSM7226481_TI21_S1_DGE.txt.gz",
+          "sep": "\t",
+          "genes_by_cells": true,
+          "cells": "knee",
+          "knee_min_umi": 500,
+          "identity": {
+            "kind": "line",
+            "identifier": "MEL-JUSO"
+          },
+          "arm": "untreated",
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "GSM7226485_TI25_S1_DGE.txt.gz",
+          "sep": "\t",
+          "genes_by_cells": true,
+          "cells": "knee",
+          "knee_min_umi": 500,
+          "identity": {
+            "kind": "line",
+            "identifier": "IPC-298"
+          },
+          "arm": "untreated",
+          "skiprows": 0
+        }
+      ]
+    },
+    "gse237228": {
+      "wave": 1,
+      "files": {
+        "GSM7597477_10x_exp2_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7597nnn/GSM7597477/suppl/GSM7597477_10x_exp2_barcodes.tsv.gz",
+        "GSM7597477_10x_exp2_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7597nnn/GSM7597477/suppl/GSM7597477_10x_exp2_genes.tsv.gz",
+        "GSM7597477_10x_exp2_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7597nnn/GSM7597477/suppl/GSM7597477_10x_exp2_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7597477_10x_exp2_matrix.mtx.gz",
+          "features": "GSM7597477_10x_exp2_genes.tsv.gz",
+          "barcodes": "GSM7597477_10x_exp2_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "WM983B"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse173339": {
+      "wave": 1,
+      "files": {
+        "GSM5266067_HPAF2_filtered_feature_bc_matrix.tar.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5266nnn/GSM5266067/suppl/GSM5266067_HPAF2_filtered_feature_bc_matrix.tar.gz",
+        "GSM5266068_BXPC3_filtered_feature_bc_matrix.tar.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5266nnn/GSM5266068/suppl/GSM5266068_BXPC3_filtered_feature_bc_matrix.tar.gz"
+      },
+      "unpack": [
+        "GSM5266067_HPAF2_filtered_feature_bc_matrix.tar.gz",
+        "GSM5266068_BXPC3_filtered_feature_bc_matrix.tar.gz"
+      ],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "HPAF2_filtered_feature_bc_matrix/matrix.mtx.gz",
+          "features": "HPAF2_filtered_feature_bc_matrix/features.tsv.gz",
+          "barcodes": "HPAF2_filtered_feature_bc_matrix/barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "HPAF2"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "BXPC3_filtered_feature_bc_matrix/matrix.mtx.gz",
+          "features": "BXPC3_filtered_feature_bc_matrix/features.tsv.gz",
+          "barcodes": "BXPC3_filtered_feature_bc_matrix/barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "BXPC3"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse270117": {
+      "wave": 1,
+      "files": {
+        "GSM8334737_KA201_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8334nnn/GSM8334737/suppl/GSM8334737_KA201_barcodes.tsv.gz",
+        "GSM8334737_KA201_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8334nnn/GSM8334737/suppl/GSM8334737_KA201_features.tsv.gz",
+        "GSM8334737_KA201_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8334nnn/GSM8334737/suppl/GSM8334737_KA201_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8334737_KA201_matrix.mtx.gz",
+          "features": "GSM8334737_KA201_features.tsv.gz",
+          "barcodes": "GSM8334737_KA201_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "pool",
+            "members": [
+              "CAPAN1",
+              "HPAFII",
+              "HS766T",
+              "KP4",
+              "MIAPACA2",
+              "PANC0403",
+              "PATU8988S"
+            ],
+            "clusters": 14,
+            "min_margin": 0.2
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse218310": {
+      "wave": 1,
+      "files": {
+        "GSE218310_KK1592_01_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE218nnn/GSE218310/suppl/GSE218310_KK1592_01_barcodes.tsv.gz",
+        "GSE218310_KK1592_01_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE218nnn/GSE218310/suppl/GSE218310_KK1592_01_features.tsv.gz",
+        "GSE218310_KK1592_01_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE218nnn/GSE218310/suppl/GSE218310_KK1592_01_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSE218310_KK1592_01_matrix.mtx.gz",
+          "features": "GSE218310_KK1592_01_features.tsv.gz",
+          "barcodes": "GSE218310_KK1592_01_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "Panc04.03"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse292402": {
+      "wave": 1,
+      "files": {
+        "GSM8858415_AM040_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858415/suppl/GSM8858415_AM040_barcodes.tsv.gz",
+        "GSM8858415_AM040_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858415/suppl/GSM8858415_AM040_features.tsv.gz",
+        "GSM8858415_AM040_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858415/suppl/GSM8858415_AM040_matrix.mtx.gz",
+        "GSM8858416_AM041_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858416/suppl/GSM8858416_AM041_barcodes.tsv.gz",
+        "GSM8858416_AM041_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858416/suppl/GSM8858416_AM041_features.tsv.gz",
+        "GSM8858416_AM041_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858416/suppl/GSM8858416_AM041_matrix.mtx.gz",
+        "GSM8858417_AM042_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858417/suppl/GSM8858417_AM042_barcodes.tsv.gz",
+        "GSM8858417_AM042_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858417/suppl/GSM8858417_AM042_features.tsv.gz",
+        "GSM8858417_AM042_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858417/suppl/GSM8858417_AM042_matrix.mtx.gz",
+        "GSM8858418_AM043_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858418/suppl/GSM8858418_AM043_barcodes.tsv.gz",
+        "GSM8858418_AM043_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858418/suppl/GSM8858418_AM043_features.tsv.gz",
+        "GSM8858418_AM043_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8858nnn/GSM8858418/suppl/GSM8858418_AM043_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated",
+        "DMSO"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8858415_AM040_matrix.mtx.gz",
+          "features": "GSM8858415_AM040_features.tsv.gz",
+          "barcodes": "GSM8858415_AM040_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "KP4"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8858416_AM041_matrix.mtx.gz",
+          "features": "GSM8858416_AM041_features.tsv.gz",
+          "barcodes": "GSM8858416_AM041_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "KP4"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8858417_AM042_matrix.mtx.gz",
+          "features": "GSM8858417_AM042_features.tsv.gz",
+          "barcodes": "GSM8858417_AM042_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "KP4"
+          },
+          "arm": "DMSO",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8858418_AM043_matrix.mtx.gz",
+          "features": "GSM8858418_AM043_features.tsv.gz",
+          "barcodes": "GSM8858418_AM043_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "KP4"
+          },
+          "arm": "DMSO",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse230574": {
+      "wave": 1,
+      "files": {
+        "GSM7226900_19145X2_RSEC_MolsPerCell.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7226nnn/GSM7226900/suppl/GSM7226900_19145X2_RSEC_MolsPerCell.csv.gz",
+        "GSM7226900_19145X2_Sample_Tag_Calls.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7226nnn/GSM7226900/suppl/GSM7226900_19145X2_Sample_Tag_Calls.csv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSM7226900_19145X2_RSEC_MolsPerCell.csv.gz",
+          "sep": ",",
+          "skiprows": 8,
+          "genes_by_cells": false,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "GSM7226900_19145X2_Sample_Tag_Calls.csv.gz",
+            "sep": ",",
+            "skiprows": 8,
+            "cell_column": "Cell_Index",
+            "label_column": "Sample_Name",
+            "arm_column": null,
+            "keep": {},
+            "cell_prefix": "",
+            "cell_suffix": ""
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse137912": {
+      "wave": 1,
+      "files": {
+        "GSM4094259_SW1573.0.barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4094nnn/GSM4094259/suppl/GSM4094259_SW1573.0.barcodes.tsv.gz",
+        "GSM4094259_SW1573.0.genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4094nnn/GSM4094259/suppl/GSM4094259_SW1573.0.genes.tsv.gz",
+        "GSM4094259_SW1573.0.matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4094nnn/GSM4094259/suppl/GSM4094259_SW1573.0.matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4094259_SW1573.0.matrix.mtx.gz",
+          "features": "GSM4094259_SW1573.0.genes.tsv.gz",
+          "barcodes": "GSM4094259_SW1573.0.barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SW1573"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse139386": {
+      "wave": 1,
+      "files": {
+        "GSM4140332_PR_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4140nnn/GSM4140332/suppl/GSM4140332_PR_barcodes.tsv.gz",
+        "GSM4140332_PR_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4140nnn/GSM4140332/suppl/GSM4140332_PR_features.tsv.gz",
+        "GSM4140332_PR_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4140nnn/GSM4140332/suppl/GSM4140332_PR_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4140332_PR_matrix.mtx.gz",
+          "features": "GSM4140332_PR_features.tsv.gz",
+          "barcodes": "GSM4140332_PR_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "H3122"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse216182": {
+      "wave": 1,
+      "files": {
+        "GSM6659864_HW_H209_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6659nnn/GSM6659864/suppl/GSM6659864_HW_H209_barcodes.tsv.gz",
+        "GSM6659864_HW_H209_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6659nnn/GSM6659864/suppl/GSM6659864_HW_H209_features.tsv.gz",
+        "GSM6659864_HW_H209_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6659nnn/GSM6659864/suppl/GSM6659864_HW_H209_matrix.mtx.gz",
+        "GSM6659872_HW_H82_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6659nnn/GSM6659872/suppl/GSM6659872_HW_H82_barcodes.tsv.gz",
+        "GSM6659872_HW_H82_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6659nnn/GSM6659872/suppl/GSM6659872_HW_H82_features.tsv.gz",
+        "GSM6659872_HW_H82_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6659nnn/GSM6659872/suppl/GSM6659872_HW_H82_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM6659864_HW_H209_matrix.mtx.gz",
+          "features": "GSM6659864_HW_H209_features.tsv.gz",
+          "barcodes": "GSM6659864_HW_H209_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "NCI-H209"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM6659872_HW_H82_matrix.mtx.gz",
+          "features": "GSM6659872_HW_H82_features.tsv.gz",
+          "barcodes": "GSM6659872_HW_H82_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "NCI-H82"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse243665": {
+      "wave": 1,
+      "files": {
+        "GSE243665_HCC78_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE243nnn/GSE243665/suppl/GSE243665_HCC78_barcodes.tsv.gz",
+        "GSE243665_HCC78_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE243nnn/GSE243665/suppl/GSE243665_HCC78_features.tsv.gz",
+        "GSE243665_HCC78_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE243nnn/GSE243665/suppl/GSE243665_HCC78_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSE243665_HCC78_matrix.mtx.gz",
+          "features": "GSE243665_HCC78_features.tsv.gz",
+          "barcodes": "GSE243665_HCC78_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "HCC78"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse303762": {
+      "wave": 1,
+      "files": {
+        "GSM9135506_ill_sc_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9135nnn/GSM9135506/suppl/GSM9135506_ill_sc_barcodes.tsv.gz",
+        "GSM9135506_ill_sc_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9135nnn/GSM9135506/suppl/GSM9135506_ill_sc_features.tsv.gz",
+        "GSM9135506_ill_sc_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9135nnn/GSM9135506/suppl/GSM9135506_ill_sc_matrix.mtx.gz",
+        "ill_sc_vireo_donor_ids.tsv": "https://longbench-data.s3.amazonaws.com/processed/cell_line_annotation/vireo_output/ill_sc_vireo/donor_ids.tsv"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM9135506_ill_sc_matrix.mtx.gz",
+          "features": "GSM9135506_ill_sc_features.tsv.gz",
+          "barcodes": "GSM9135506_ill_sc_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "ill_sc_vireo_donor_ids.tsv",
+            "sep": "\t",
+            "cell_column": "cell",
+            "label_column": "donor_id",
+            "arm_column": null,
+            "keep": {
+              "donor_id": [
+                "H146",
+                "H1975",
+                "H211",
+                "H2228",
+                "H526",
+                "H69",
+                "HCC827",
+                "SHP77"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse193959": {
+      "wave": 1,
+      "files": {
+        "GSM5824324_2637-SM-2-CTTGTA_S2.loom.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5824nnn/GSM5824324/suppl/GSM5824324_2637-SM-2-CTTGTA_S2.loom.gz",
+        "GSM5824326_2638-SM-1-GCCAAT_S1.loom.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5824nnn/GSM5824326/suppl/GSM5824326_2638-SM-1-GCCAAT_S1.loom.gz",
+        "GSM5824328_2638-SM-4-GTGAAA_S4.loom.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5824nnn/GSM5824328/suppl/GSM5824328_2638-SM-4-GTGAAA_S4.loom.gz",
+        "GSM5824330_2639-SM-2-CTTGTA_S2.loom.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5824nnn/GSM5824330/suppl/GSM5824330_2639-SM-2-CTTGTA_S2.loom.gz"
+      },
+      "unpack": [
+        "GSM5824324_2637-SM-2-CTTGTA_S2.loom.gz",
+        "GSM5824326_2638-SM-1-GCCAAT_S1.loom.gz",
+        "GSM5824328_2638-SM-4-GTGAAA_S4.loom.gz",
+        "GSM5824330_2639-SM-2-CTTGTA_S2.loom.gz"
+      ],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "anndata",
+          "path": "GSM5824324_2637-SM-2-CTTGTA_S2.loom",
+          "counts": "X",
+          "gene_column": "Accession",
+          "symbol_column": "index",
+          "cells": "knee",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "CORL279"
+          },
+          "arm": "untreated"
+        },
+        {
+          "reader": "anndata",
+          "path": "GSM5824326_2638-SM-1-GCCAAT_S1.loom",
+          "counts": "X",
+          "gene_column": "Accession",
+          "symbol_column": "index",
+          "cells": "knee",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "H82"
+          },
+          "arm": "untreated"
+        },
+        {
+          "reader": "anndata",
+          "path": "GSM5824328_2638-SM-4-GTGAAA_S4.loom",
+          "counts": "X",
+          "gene_column": "Accession",
+          "symbol_column": "index",
+          "cells": "knee",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "H841"
+          },
+          "arm": "untreated"
+        },
+        {
+          "reader": "anndata",
+          "path": "GSM5824330_2639-SM-2-CTTGTA_S2.loom",
+          "counts": "X",
+          "gene_column": "Accession",
+          "symbol_column": "index",
+          "cells": "knee",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "DMS53"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse118767": {
+      "wave": 1,
+      "files": {
+        "GSM3618014_gene_count.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3618nnn/GSM3618014/suppl/GSM3618014_gene_count.csv.gz",
+        "sc_10x_5cl.metadata.csv.gz": "https://raw.githubusercontent.com/LuyiTian/sc_mixology/master/data/csv/sc_10x_5cl.metadata.csv.gz",
+        "sc_10x.count.csv.gz": "https://raw.githubusercontent.com/LuyiTian/sc_mixology/master/data/csv/sc_10x.count.csv.gz",
+        "sc_10x.metadata.csv.gz": "https://raw.githubusercontent.com/LuyiTian/sc_mixology/master/data/csv/sc_10x.metadata.csv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSM3618014_gene_count.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "sc_10x_5cl.metadata.csv.gz",
+            "sep": ",",
+            "cell_column": null,
+            "label_column": "cell_line_demuxlet",
+            "arm_column": null,
+            "keep": {
+              "demuxlet_cls": [
+                "SNG"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "untreated",
+          "skiprows": 0
+        },
+        {
+          "reader": "table",
+          "path": "sc_10x.count.csv.gz",
+          "sep": ",",
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "sc_10x.metadata.csv.gz",
+            "sep": ",",
+            "cell_column": null,
+            "label_column": "cell_line_demuxlet",
+            "arm_column": null,
+            "keep": {
+              "demuxlet_cls": [
+                "SNG"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": "",
+            "skiprows": 0
+          },
+          "arm": "untreated",
+          "skiprows": 0
+        }
+      ]
+    },
+    "gse229224": {
+      "wave": 1,
+      "files": {
+        "GSM7157153_BE2C_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157153/suppl/GSM7157153_BE2C_barcodes.tsv.gz",
+        "GSM7157153_BE2C_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157153/suppl/GSM7157153_BE2C_features.tsv.gz",
+        "GSM7157153_BE2C_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157153/suppl/GSM7157153_BE2C_matrix.mtx.gz",
+        "GSM7157154_BE2M17_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157154/suppl/GSM7157154_BE2M17_barcodes.tsv.gz",
+        "GSM7157154_BE2M17_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157154/suppl/GSM7157154_BE2M17_features.tsv.gz",
+        "GSM7157154_BE2M17_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157154/suppl/GSM7157154_BE2M17_matrix.mtx.gz",
+        "GSM7157155_CHP134_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157155/suppl/GSM7157155_CHP134_barcodes.tsv.gz",
+        "GSM7157155_CHP134_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157155/suppl/GSM7157155_CHP134_features.tsv.gz",
+        "GSM7157155_CHP134_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157155/suppl/GSM7157155_CHP134_matrix.mtx.gz",
+        "GSM7157156_CHP212_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157156/suppl/GSM7157156_CHP212_barcodes.tsv.gz",
+        "GSM7157156_CHP212_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157156/suppl/GSM7157156_CHP212_features.tsv.gz",
+        "GSM7157156_CHP212_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157156/suppl/GSM7157156_CHP212_matrix.mtx.gz",
+        "GSM7157157_GIMEN_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157157/suppl/GSM7157157_GIMEN_barcodes.tsv.gz",
+        "GSM7157157_GIMEN_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157157/suppl/GSM7157157_GIMEN_features.tsv.gz",
+        "GSM7157157_GIMEN_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157157/suppl/GSM7157157_GIMEN_matrix.mtx.gz",
+        "GSM7157158_IMR5_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157158/suppl/GSM7157158_IMR5_barcodes.tsv.gz",
+        "GSM7157158_IMR5_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157158/suppl/GSM7157158_IMR5_features.tsv.gz",
+        "GSM7157158_IMR5_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157158/suppl/GSM7157158_IMR5_matrix.mtx.gz",
+        "GSM7157159_KELLY_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157159/suppl/GSM7157159_KELLY_barcodes.tsv.gz",
+        "GSM7157159_KELLY_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157159/suppl/GSM7157159_KELLY_features.tsv.gz",
+        "GSM7157159_KELLY_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157159/suppl/GSM7157159_KELLY_matrix.mtx.gz",
+        "GSM7157160_MHHNB11_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157160/suppl/GSM7157160_MHHNB11_barcodes.tsv.gz",
+        "GSM7157160_MHHNB11_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157160/suppl/GSM7157160_MHHNB11_features.tsv.gz",
+        "GSM7157160_MHHNB11_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157160/suppl/GSM7157160_MHHNB11_matrix.mtx.gz",
+        "GSM7157161_NGP_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157161/suppl/GSM7157161_NGP_barcodes.tsv.gz",
+        "GSM7157161_NGP_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157161/suppl/GSM7157161_NGP_features.tsv.gz",
+        "GSM7157161_NGP_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157161/suppl/GSM7157161_NGP_matrix.mtx.gz",
+        "GSM7157162_SKNAS_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157162/suppl/GSM7157162_SKNAS_barcodes.tsv.gz",
+        "GSM7157162_SKNAS_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157162/suppl/GSM7157162_SKNAS_features.tsv.gz",
+        "GSM7157162_SKNAS_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157162/suppl/GSM7157162_SKNAS_matrix.mtx.gz",
+        "GSM7157163_SKNFI_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157163/suppl/GSM7157163_SKNFI_barcodes.tsv.gz",
+        "GSM7157163_SKNFI_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157163/suppl/GSM7157163_SKNFI_features.tsv.gz",
+        "GSM7157163_SKNFI_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157163/suppl/GSM7157163_SKNFI_matrix.mtx.gz",
+        "GSM7157164_SKNSH_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157164/suppl/GSM7157164_SKNSH_barcodes.tsv.gz",
+        "GSM7157164_SKNSH_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157164/suppl/GSM7157164_SKNSH_features.tsv.gz",
+        "GSM7157164_SKNSH_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157164/suppl/GSM7157164_SKNSH_matrix.mtx.gz",
+        "GSM7157165_TGW_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157165/suppl/GSM7157165_TGW_barcodes.tsv.gz",
+        "GSM7157165_TGW_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157165/suppl/GSM7157165_TGW_features.tsv.gz",
+        "GSM7157165_TGW_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7157nnn/GSM7157165/suppl/GSM7157165_TGW_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "standard_culture"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157153_BE2C_matrix.mtx.gz",
+          "features": "GSM7157153_BE2C_features.tsv.gz",
+          "barcodes": "GSM7157153_BE2C_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "BE2C"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157154_BE2M17_matrix.mtx.gz",
+          "features": "GSM7157154_BE2M17_features.tsv.gz",
+          "barcodes": "GSM7157154_BE2M17_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "BE2M17"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157155_CHP134_matrix.mtx.gz",
+          "features": "GSM7157155_CHP134_features.tsv.gz",
+          "barcodes": "GSM7157155_CHP134_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "CHP134"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157156_CHP212_matrix.mtx.gz",
+          "features": "GSM7157156_CHP212_features.tsv.gz",
+          "barcodes": "GSM7157156_CHP212_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "CHP212"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157157_GIMEN_matrix.mtx.gz",
+          "features": "GSM7157157_GIMEN_features.tsv.gz",
+          "barcodes": "GSM7157157_GIMEN_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "GIMEN"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157158_IMR5_matrix.mtx.gz",
+          "features": "GSM7157158_IMR5_features.tsv.gz",
+          "barcodes": "GSM7157158_IMR5_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "IMR5"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157159_KELLY_matrix.mtx.gz",
+          "features": "GSM7157159_KELLY_features.tsv.gz",
+          "barcodes": "GSM7157159_KELLY_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "KELLY"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157160_MHHNB11_matrix.mtx.gz",
+          "features": "GSM7157160_MHHNB11_features.tsv.gz",
+          "barcodes": "GSM7157160_MHHNB11_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "MHHNB11"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157161_NGP_matrix.mtx.gz",
+          "features": "GSM7157161_NGP_features.tsv.gz",
+          "barcodes": "GSM7157161_NGP_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "NGP"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157162_SKNAS_matrix.mtx.gz",
+          "features": "GSM7157162_SKNAS_features.tsv.gz",
+          "barcodes": "GSM7157162_SKNAS_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SKNAS"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157163_SKNFI_matrix.mtx.gz",
+          "features": "GSM7157163_SKNFI_features.tsv.gz",
+          "barcodes": "GSM7157163_SKNFI_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SKNFI"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157164_SKNSH_matrix.mtx.gz",
+          "features": "GSM7157164_SKNSH_features.tsv.gz",
+          "barcodes": "GSM7157164_SKNSH_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SKNSH"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7157165_TGW_matrix.mtx.gz",
+          "features": "GSM7157165_TGW_features.tsv.gz",
+          "barcodes": "GSM7157165_TGW_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "TGW"
+          },
+          "arm": "standard_culture",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse331320": {
+      "wave": 1,
+      "files": {
+        "GSM9743870_IMR32P_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743870/suppl/GSM9743870_IMR32P_barcodes.tsv.gz",
+        "GSM9743870_IMR32P_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743870/suppl/GSM9743870_IMR32P_features.tsv.gz",
+        "GSM9743870_IMR32P_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743870/suppl/GSM9743870_IMR32P_matrix.mtx.gz",
+        "GSM9743876_SHSY5Y_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743876/suppl/GSM9743876_SHSY5Y_barcodes.tsv.gz",
+        "GSM9743876_SHSY5Y_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743876/suppl/GSM9743876_SHSY5Y_features.tsv.gz",
+        "GSM9743876_SHSY5Y_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743876/suppl/GSM9743876_SHSY5Y_matrix.mtx.gz",
+        "GSM9743878_SKNBE2_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743878/suppl/GSM9743878_SKNBE2_barcodes.tsv.gz",
+        "GSM9743878_SKNBE2_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743878/suppl/GSM9743878_SKNBE2_features.tsv.gz",
+        "GSM9743878_SKNBE2_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9743nnn/GSM9743878/suppl/GSM9743878_SKNBE2_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM9743870_IMR32P_matrix.mtx.gz",
+          "features": "GSM9743870_IMR32P_features.tsv.gz",
+          "barcodes": "GSM9743870_IMR32P_barcodes.tsv.gz",
+          "cells": "knee",
+          "knee_min_umi": 500,
+          "identity": {
+            "kind": "line",
+            "identifier": "IMR32P"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM9743876_SHSY5Y_matrix.mtx.gz",
+          "features": "GSM9743876_SHSY5Y_features.tsv.gz",
+          "barcodes": "GSM9743876_SHSY5Y_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SHSY5Y"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM9743878_SKNBE2_matrix.mtx.gz",
+          "features": "GSM9743878_SKNBE2_features.tsv.gz",
+          "barcodes": "GSM9743878_SKNBE2_barcodes.tsv.gz",
+          "cells": "knee",
+          "knee_min_umi": 500,
+          "identity": {
+            "kind": "line",
+            "identifier": "SKNBE2"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse178116": {
+      "wave": 1,
+      "files": {
+        "GSM5380412_981-RR-1.barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5380nnn/GSM5380412/suppl/GSM5380412_981-RR-1.barcodes.tsv.gz",
+        "GSM5380412_981-RR-1.features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5380nnn/GSM5380412/suppl/GSM5380412_981-RR-1.features.tsv.gz",
+        "GSM5380412_981-RR-1.matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5380nnn/GSM5380412/suppl/GSM5380412_981-RR-1.matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "ATRX_EV"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM5380412_981-RR-1.matrix.mtx.gz",
+          "features": "GSM5380412_981-RR-1.features.tsv.gz",
+          "barcodes": "GSM5380412_981-RR-1.barcodes.tsv.gz",
+          "cells": "knee",
+          "knee_min_umi": 3000,
+          "identity": {
+            "kind": "line",
+            "identifier": "U251"
+          },
+          "arm": "ATRX_EV",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse146221": {
+      "wave": 1,
+      "files": {
+        "GSM4368463_CHLA10_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4368nnn/GSM4368463/suppl/GSM4368463_CHLA10_barcodes.tsv.gz",
+        "GSM4368463_CHLA10_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4368nnn/GSM4368463/suppl/GSM4368463_CHLA10_features.tsv.gz",
+        "GSM4368463_CHLA10_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4368nnn/GSM4368463/suppl/GSM4368463_CHLA10_matrix.mtx.gz",
+        "GSM4368464_TC71_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4368nnn/GSM4368464/suppl/GSM4368464_TC71_barcodes.tsv.gz",
+        "GSM4368464_TC71_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4368nnn/GSM4368464/suppl/GSM4368464_TC71_features.tsv.gz",
+        "GSM4368464_TC71_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4368nnn/GSM4368464/suppl/GSM4368464_TC71_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4368463_CHLA10_matrix.mtx.gz",
+          "features": "GSM4368463_CHLA10_features.tsv.gz",
+          "barcodes": "GSM4368463_CHLA10_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "CHLA10"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4368464_TC71_matrix.mtx.gz",
+          "features": "GSM4368464_TC71_features.tsv.gz",
+          "barcodes": "GSM4368464_TC71_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "TC71"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse113660": {
+      "wave": 1,
+      "files": {
+        "GSM3110765_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3110nnn/GSM3110765/suppl/GSM3110765_barcodes.tsv.gz",
+        "GSM3110765_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3110nnn/GSM3110765/suppl/GSM3110765_genes.tsv.gz",
+        "GSM3110765_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3110nnn/GSM3110765/suppl/GSM3110765_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM3110765_matrix.mtx.gz",
+          "features": "GSM3110765_genes.tsv.gz",
+          "barcodes": "GSM3110765_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "Rh41"
+          },
+          "arm": "untreated",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse219199": {
+      "wave": 1,
+      "files": {
+        "GSM6777735_RH4_DMSO_16hr_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6777nnn/GSM6777735/suppl/GSM6777735_RH4_DMSO_16hr_barcodes.tsv.gz",
+        "GSM6777735_RH4_DMSO_16hr_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6777nnn/GSM6777735/suppl/GSM6777735_RH4_DMSO_16hr_features.tsv.gz",
+        "GSM6777735_RH4_DMSO_16hr_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6777nnn/GSM6777735/suppl/GSM6777735_RH4_DMSO_16hr_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "DMSO_16h"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM6777735_RH4_DMSO_16hr_matrix.mtx.gz",
+          "features": "GSM6777735_RH4_DMSO_16hr_features.tsv.gz",
+          "barcodes": "GSM6777735_RH4_DMSO_16hr_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "RH4"
+          },
+          "arm": "DMSO_16h",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse223848": {
+      "wave": 1,
+      "files": {
+        "GSM6997910_KLE_Log_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6997nnn/GSM6997910/suppl/GSM6997910_KLE_Log_barcodes.tsv.gz",
+        "GSM6997910_KLE_Log_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6997nnn/GSM6997910/suppl/GSM6997910_KLE_Log_features.tsv.gz",
+        "GSM6997910_KLE_Log_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6997nnn/GSM6997910/suppl/GSM6997910_KLE_Log_matrix.mtx.gz",
+        "GSM6997914_SuSa_Log_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6997nnn/GSM6997914/suppl/GSM6997914_SuSa_Log_barcodes.tsv.gz",
+        "GSM6997914_SuSa_Log_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6997nnn/GSM6997914/suppl/GSM6997914_SuSa_Log_features.tsv.gz",
+        "GSM6997914_SuSa_Log_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6997nnn/GSM6997914/suppl/GSM6997914_SuSa_Log_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "log_phase"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM6997910_KLE_Log_matrix.mtx.gz",
+          "features": "GSM6997910_KLE_Log_features.tsv.gz",
+          "barcodes": "GSM6997910_KLE_Log_barcodes.tsv.gz",
+          "cells": "knee",
+          "knee_min_umi": 500,
+          "identity": {
+            "kind": "line",
+            "identifier": "KLE"
+          },
+          "arm": "log_phase",
+          "header": false,
+          "gene_id_prefix": ""
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM6997914_SuSa_Log_matrix.mtx.gz",
+          "features": "GSM6997914_SuSa_Log_features.tsv.gz",
+          "barcodes": "GSM6997914_SuSa_Log_barcodes.tsv.gz",
+          "cells": "knee",
+          "knee_min_umi": 500,
+          "identity": {
+            "kind": "line",
+            "identifier": "SuSa"
+          },
+          "arm": "log_phase",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse254917": {
+      "wave": 1,
+      "files": {
+        "GSM8060206_ons76_2d_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8060nnn/GSM8060206/suppl/GSM8060206_ons76_2d_barcodes.tsv.gz",
+        "GSM8060206_ons76_2d_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8060nnn/GSM8060206/suppl/GSM8060206_ons76_2d_features.tsv.gz",
+        "GSM8060206_ons76_2d_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8060nnn/GSM8060206/suppl/GSM8060206_ons76_2d_matrix.mtx.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "monolayer"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8060206_ons76_2d_matrix.mtx.gz",
+          "features": "GSM8060206_ons76_2d_features.tsv.gz",
+          "barcodes": "GSM8060206_ons76_2d_barcodes.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "ONS-76"
+          },
+          "arm": "monolayer",
+          "header": false,
+          "gene_id_prefix": ""
+        }
+      ]
+    },
+    "gse179681": {
+      "wave": 1,
+      "files": {
+        "GSM5426217_S0017.tar.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5426nnn/GSM5426217/suppl/GSM5426217_S0017.tar.gz"
+      },
+      "unpack": [
+        "GSM5426217_S0017.tar.gz"
+      ],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "matrix.mtx.gz",
+          "features": "features.tsv.gz",
+          "barcodes": "barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "hg19_",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "143B"
+          },
+          "arm": "untreated"
+        }
+      ]
+    }
+  }
+}

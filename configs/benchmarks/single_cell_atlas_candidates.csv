@@ -451,3 +451,181 @@ sciplex3_cellxgene,CELLxGENE collection 00109df5-7810-4542-8db5-2288c46e0424; GE
 sciplex3_cellxgene,CELLxGENE collection 00109df5-7810-4542-8db5-2288c46e0424; GEO GSE139944,ACH-000681,CVCL_0023,rrid,3287,true,"vehicle, 24 h",1.86,basal_2d,ok,,
 wyler2021_cellxgene,CELLxGENE collection d0e9c47b-4ce7-4f84-b182-eddcfa0b2658; GEO GSE148729,ACH-000392,CVCL_0609,rrid,16512,true,"mock infection, 4 h and 12 h",11.4,other,ok,,
 wyler2021_cellxgene,CELLxGENE collection d0e9c47b-4ce7-4f84-b182-eddcfa0b2658; GEO GSE148729,ACH-000510,CVCL_0060,rrid,16218,true,"mock infection, 4 h and 36 h",11.4,other,ok,,
+emtab13204,E-MTAB-13204,ACH-000551,K562,name,2329,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-001574,MOLM14,name,1835,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000362,MOLM13,name,2005,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000146,THP1,name,1555,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000365,SUDHL4,name,1701,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000398,RI1,name,2164,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000388,NUDHL1,name,1032,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000073,GRANTA519,name,1349,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000838,AMO1,name,545,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000653,JJN3,name,1597,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000204,LP1,name,789,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000763,MM1S,name,1464,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000183,L363,name,1530,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000218,PL21,name,2755,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-001129,MONOMAC1,name,3509,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000081,GDM1,name,312,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000373,SKM1,name,3141,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000751,OCIM1,name,3096,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000995,JURKAT,name,2761,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000122,SUPT11,name,1408,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000981,DND41,name,1450,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000105,ALLSIL,name,2047,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000938,NALM6,name,2813,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000922,RCHACV,name,2010,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000070,697,name,769,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+emtab13204,E-MTAB-13204,ACH-000728,KASUMI2,name,1342,true,"Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",1.124,basal_2d,ok,1,
+gse116256,GSE116256,ACH-000336,OCI-AML3,name,1178,true,untreated (Seq-Well),0.0025,basal_2d,ok,1,
+gse196766,GSE196766,ACH-000653,JJN3,name,12902,true,non-targeting ASO 1 uM 3 weeks (one library also vehicle 48 h),0.093,control_guide,ok,1,
+gse242465,GSE242465,ACH-000024,OPM2,name,,true,"DMSO vehicle 2 h, cell hashing (5' 10x)",0.217,basal_2d,ok,1,
+gse243227,GSE243227,ACH-000263,Kasumi-1,name,22977,true,"untreated, mixed with K562 (10x 5')",0.169,basal_2d,ok,1,
+gse243227,GSE243227,ACH-000551,K562,name,4734,true,"untreated, mixed with Kasumi-1 (10x 5')",0.169,basal_2d,ok,1,
+gse329598,GSE329598,ACH-000074,Ku812,name,4975,true,"untreated, TotalSeq-B hashed with HMC1.2",0.048,basal_2d,ok,1,
+gse329598,GSE329598,,HMC1.2,,1481,true,"untreated, TotalSeq-B hashed with Ku812",0.048,basal_2d,dropped: no DepMap model,1,Cellosaurus: CVCL_H205
+gse217922,GSE217922,ACH-000146,THP1,name,562,true,"untreated, 4-line mix (HL60, K562, SUDHL4, THP1), 10x",0.0084,basal_2d,ok,1,
+gse217922,GSE217922,ACH-000365,SUDHL4,name,551,true,"untreated, 4-line mix (HL60, K562, SUDHL4, THP1), 10x",0.0084,basal_2d,ok,1,
+gse217922,GSE217922,ACH-000002,HL60,name,570,true,"untreated, 4-line mix (HL60, K562, SUDHL4, THP1), 10x",0.0084,basal_2d,ok,1,
+gse217922,GSE217922,ACH-000551,K562,name,659,true,"untreated, 4-line mix (HL60, K562, SUDHL4, THP1), 10x",0.0084,basal_2d,ok,1,
+tenxcellplexjurkatraji10k,10x Genomics SC3_v3_NextGem_DI_CellPlex_Jurkat_Raji_10K (CC BY 4.0),ACH-000654,Raji,name,5195,true,"untreated, CellPlex CMO302, 10x 3' v3.1",0.022,basal_2d,ok,1,
+gse218621,GSE218621,ACH-000874,RS4;11,name,4519,true,DMSO 24 h (10x 3'),0.056,basal_2d,ok,1,
+gse182694,GEO GSE182694,ACH-001390,SUM149,synonym,1517,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,Cellosaurus CVCL_3422
+gse182694,GEO GSE182694,ACH-001393,SUM190,synonym,1445,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,Cellosaurus CVCL_3423
+gse182694,GEO GSE182694,ACH-000147,T47D,name,5539,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,
+gse182694,GEO GSE182694,ACH-000910,MDAMB453,name,4837,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,
+gse182694,GEO GSE182694,ACH-000859,HCC1954,name,4282,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,
+gse182694,GEO GSE182694,ACH-000288,BT549,name,3425,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,
+gse182694,GEO GSE182694,ACH-000849,MDAMB468,name,1986,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,
+gse182694,GEO GSE182694,ACH-000768,MDAMB231,name,991,true,"untreated, cultured to passage 6 or less",0.046,basal_2d,ok,1,
+gse228275,GEO GSE228275,ACH-001390,SUM149PT,name,509,true,no treatment,0.042,basal_2d,ok,1,
+gse228275,GEO GSE228275,ACH-001391,SUM159PT,name,976,true,no treatment,0.042,basal_2d,ok,1,
+gse228275,GEO GSE228275,ACH-001392,SUM185PE,name,632,true,no treatment,0.042,basal_2d,ok,1,
+gse228275,GEO GSE228275,ACH-001394,SUM229PE,name,933,true,no treatment,0.042,basal_2d,ok,1,Cellosaurus flag reviewed 2026-10-11: deposited cells match DepMap SUM229PE bulk (deviation r 0.87) not SUM149PT (0.18)
+gse228275,GEO GSE228275,ACH-001389,SUM1315MO2,name,786,true,no treatment,0.042,basal_2d,ok,1,
+gse207993,GEO GSE207993,ACH-000001,OVCAR3,synonym,10071,true,DMSO vehicle,0.146,basal_2d,ok,1,Cellosaurus CVCL_0465
+gse266216,GEO GSE266216,ACH-000115,VCaP,name,2093,true,"ethanol vehicle, 18 h",0.014,basal_2d,ok,1,
+gse272618,GEO GSE272618,ACH-000657,A2780,name,2869,true,untreated (treatment: none),0.015,basal_2d,ok,1,
+gse297836,GEO GSE297836,ACH-000256,COV318,name,446,true,untreated parental,0.037,basal_2d,ok,1,
+gse297836,GEO GSE297836,ACH-000132,JHOS2,name,586,true,untreated parental,0.037,basal_2d,ok,1,
+gse297836,GEO GSE297836,ACH-000524,Kuramochi,name,149,true,untreated parental,0.037,basal_2d,ok,1,
+gse297836,GEO GSE297836,ACH-000409,Ovsaho,name,541,true,untreated parental,0.037,basal_2d,ok,1,
+gse147405,GEO GSE147405,ACH-000979,DU145,name,1400,true,untreated: kinase-screen control wells (Untreated_Control) and EMT time-course day 0 (0d),0.077,basal_2d,ok,1,
+gse147405,GEO GSE147405,ACH-002181,OVCA420,name,688,true,untreated: kinase-screen control wells (Untreated_Control) and EMT time-course day 0 (0d),0.077,basal_2d,ok,1,
+gse202771,GEO GSE202771,ACH-001819,MFM223,name,,true,untreated,0.632,basal_2d,ok,,
+gse202771,GEO GSE202771,ACH-000624,HCC1806,name,,true,untreated,0.632,basal_2d,ok,,
+gse202771,GEO GSE202771,ACH-001389,SUM1315,synonym,,true,untreated,0.632,basal_2d,ok,,Cellosaurus CVCL_5589
+gse202771,GEO GSE202771,ACH-001392,SUM185,synonym,,true,untreated,0.632,basal_2d,ok,,Cellosaurus CVCL_5591
+gse202771,GEO GSE202771,,SUM229,synonym,,true,untreated,0.632,basal_2d,dropped: source not ingestible,,Partially misidentified. For a period of time Asterand (now BioIVT) mistakenly distributed SUM149PT (Cellosaurus=CVCL_3422) under the designation of SUM229PE. This leads to the publication of a STR profile (PubMed=25877200) which was almost identical to that of SUM149PT.
+gse202435,GEO GSE202435,ACH-000624,HCC1806,name,,false,untreated parental,2.79,basal_2d,ok,,
+figshare13264121,figshare 10.6084/m9.figshare.13264121 (collection c.5213468); SRA SRP199641,ACH-000699,HCC1395,name,6425,true,untreated reference culture,1.57,basal_2d,ok,,
+gse247098,GEO GSE247098,ACH-002181,OVCA420,name,3372,true,untreated control,0.016,basal_2d,ok,,
+gse206953,GEO GSE206953,,SKOV3S,,6000,true,"parental, medium (antibody-sensitive)",0.383,basal_2d,dropped: source not ingestible,,Cellosaurus: nothing exact
+gse206953,GEO GSE206953,,A431S,,8454,true,"parental, medium (antibody-sensitive)",0.383,basal_2d,dropped: source not ingestible,,Cellosaurus: nothing exact
+gse247688,GEO GSE247688,ACH-000524,KURAMOCHI,name,4590,true,"untreated (C.R1, C.R2)",0.036,basal_2d,ok,1,
+gse247689,GEO GSE247689,ACH-000278,COV362,name,1826,true,untreated (C),0.016,basal_2d,ok,1,
+mixseq,figshare 10.6084/m9.figshare.10298696,ACH-000037,ACH-000037,model_id,21,true,expt 10 DMSO 24 h,0.86,basal_2d,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-001334,C4I,name,652,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-001852,HKGZCC,name,1052,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-002659,JVE127,name,1171,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000250,KMRC20,name,1004,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000823,KYSE140,name,727,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000865,KYSE450,name,1462,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000359,MG63,name,945,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-001992,ONE58,name,1244,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-001652,SKGII,name,576,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000246,SLR23,name,311,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000460,SNU8,name,1014,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-002042,T3M5,name,552,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000036,U343,name,468,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-001687,UMRC3,name,959,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000997,HCT15,name,495,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+figshare33273600,figshare 10.6084/m9.figshare.33273600,ACH-000348,RPMI7951,name,650,true,"olfactory-receptor Cas9 cutting-control guides (10 OR genes), harvest ~day 6; pass_qc, no arm truncation or gain",6.41,cutting_control,ok,1,
+gse142750,GEO GSE142750,ACH-000581,SNU-16,name,2208,true,"untreated 2D culture, 10x 3' v2",0.097,basal_2d,ok,1,
+gse142750,GEO GSE142750,ACH-001664,SNU-638,name,976,true,"untreated 2D culture, 10x 3' v2",0.097,basal_2d,ok,1,
+gse142750,GEO GSE142750,ACH-000847,HGC-27,name,3617,true,"untreated 2D culture, 10x 3' v2",0.097,basal_2d,ok,1,
+gse142750,GEO GSE142750,ACH-000356,MKN-45,name,2814,false,"untreated 2D culture, 10x 3' v2",0.097,basal_2d,ok,1,
+gse101561,GEO GSE101561,ACH-000898,SNU719,name,5951,true,"untreated 2D culture (no treatment field), 10x",0.074,basal_2d,ok,1,
+gse188289,GEO GSE188289,ACH-000361,SK-HEP-1,name,1647,true,"untreated 2D culture, CITE-seq RNA (BGISEQ)",0.007,basal_2d,ok,1,Cellosaurus flag reviewed 2026-10-11: lineage misclassification only; source and DepMap hold the same line
+gse249057,GEO GSE249057,ACH-000777,KYSE30,name,9593,true,"untreated 2D culture ('treatment: in vitro'), Luc-GFP labelled, FACS-collected, 10x",0.154,basal_2d,ok,1,
+gse256301,GEO GSE256301,ACH-000911,NUGC3,name,,true,"DMSO 2 days (hashtag HTO_1 'Control'), 10x + hashing",0.206,basal_2d,ok,1,
+gse256301,GEO GSE256301,,NUGC3 5'-FU,,,true,5-FU 2 days (hashtag HTO_2),0.206,other,dropped: 5-FU arm,1,Treated arm of GSM8093333 named only so its cells resolve; must stay unaccepted (e.g. review 'dropped: 5-FU arm'); accepting it would keep 5-FU cells
+gse263747,GEO GSE263747,ACH-000537,SNU-761,name,373,true,"Cas9 + one dominant non-targeting sgRNA (CROP-seq, days 5 and 10), 10x 5' HT",0.574,control_guide,ok,1,
+gse263747,GEO GSE263747,,SNU-761 targeting sgRNA,,,true,Cas9 + a dominant gene-targeting sgRNA (knockout),0.574,other,dropped: targeting guides,1,The 440 targeting guides of GSE263747 all map here so their cells resolve; must stay unaccepted (e.g. review 'dropped: targeting guide'); accepting it would keep knockout cells
+gse230538,GEO GSE230538,ACH-000881,MEL-JUSO,name,1518,true,"untreated (drug-naive) 2D culture, Drop-seq",0.012,basal_2d,ok,1,
+gse230538,GEO GSE230538,ACH-000915,IPC-298,name,2991,true,"untreated (drug-naive) 2D culture, Drop-seq",0.012,basal_2d,ok,1,
+gse237228,GEO GSE237228,ACH-000765,WM983B,name,1449,true,"untreated 2D culture, 10x",0.039,basal_2d,ok,1,
+gse173339,GEO GSE173339,ACH-000094,HPAF2,synonym,5104,true,"untreated 2D monolayer, 10x 3'",0.111,basal_2d,ok,1,Cellosaurus CVCL_0313
+gse173339,GEO GSE173339,ACH-000535,BXPC3,name,10495,true,"untreated 2D monolayer, 10x 3'",0.111,basal_2d,ok,1,
+gse270117,GEO GSE270117,ACH-000354,CAPAN1,name,,true,"baseline (untreated) 2D culture, 7-line pool, 10x",0.11,basal_2d,ok,1,
+gse270117,GEO GSE270117,ACH-000094,HPAFII,name,,true,"baseline (untreated) 2D culture, 7-line pool, 10x",0.11,basal_2d,ok,1,
+gse270117,GEO GSE270117,ACH-000178,HS766T,name,,true,"baseline (untreated) 2D culture, 7-line pool, 10x",0.11,basal_2d,ok,1,
+gse270117,GEO GSE270117,ACH-000265,KP4,name,,true,"baseline (untreated) 2D culture, 7-line pool, 10x",0.11,basal_2d,ok,1,
+gse270117,GEO GSE270117,ACH-000601,MIAPACA2,name,,true,"baseline (untreated) 2D culture, 7-line pool, 10x",0.11,basal_2d,ok,1,
+gse270117,GEO GSE270117,ACH-000235,PANC0403,name,,true,"baseline (untreated) 2D culture, 7-line pool, 10x",0.11,basal_2d,ok,1,
+gse270117,GEO GSE270117,ACH-000022,PATU8988S,name,,true,"baseline (untreated) 2D culture, 7-line pool, 10x",0.11,basal_2d,ok,1,
+gse218310,GEO GSE218310,ACH-000235,Panc04.03,name,5856,true,"untreated 2D culture, lectin-stained for scGlycan-seq (10x 5' v2 CITE-seq)",0.1,basal_2d,ok,1,
+gse292402,GEO GSE292402,ACH-000265,KP4,name,59705,true,"untreated (time point 1) and 0.15% DMSO 24 h (time point 2) 2D culture, lentiviral UMI-barcoded (MOI < 0.1, puromycin-selected), 10x",0.674,basal_2d,ok,1,
+gse103867,GSE103867,ACH-000475,huH-1,name,894,true,untreated,,basal_2d,ok,1,
+gse103867,GSE103867,ACH-000480,HuH-7,name,2082,true,untreated,,basal_2d,ok,1,
+gse103867,GSE103867,,patient,,,true,untreated,,basal_2d,dropped: patient tumour cells,1,barcode suffix -3
+gse230574,GSE230574,ACH-000827,WM793,name,2247,true,untreated,0.18,basal_2d,ok,1,
+gse230574,GSE230574,ACH-000219,A375,name,2962,true,untreated,0.18,basal_2d,ok,1,
+gse230574,GSE230574,,1205Lu,,2731,true,untreated,0.18,basal_2d,dropped: WM793 derivative without its own model,1,CVCL_5239 derives from ACH-000827
+gse230574,GSE230574,,501Mel_Parental,,3616,true,untreated,0.18,basal_2d,dropped: no DepMap model,1,Cellosaurus: nothing exact
+gse230574,GSE230574,,501Mel_CDKN2A,,,true,untreated,,basal_2d,dropped: engineered or treated arm,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,501Mel_mcherry_high,,,true,untreated,,basal_2d,dropped: engineered or treated arm,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,501Mel_mcherry_low,,,true,untreated,,basal_2d,dropped: engineered or treated arm,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,501Mel_mcherry_off,,,true,untreated,,basal_2d,dropped: engineered or treated arm,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,501Mel_vemurafenib,,,true,untreated,,basal_2d,dropped: engineered or treated arm,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,melanocyte_CDKN2A,,,true,untreated,,basal_2d,dropped: engineered or treated arm,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,melanocytes,,,true,untreated,,basal_2d,dropped: primary melanocytes,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,Multiplet,,,true,untreated,,basal_2d,dropped: not a line,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse230574,GSE230574,,Undetermined,,,true,untreated,,basal_2d,dropped: not a line,1,GSM7226900 BD Rhapsody Sample_Tag_Calls
+gse137912,GSE137912,ACH-000677,SW1573,name,1053,true,untreated 0 h (baseline of the ARS1620 time course),0.016,basal_2d,ok,1,
+gse139386,GSE139386,ACH-000337,H3122,synonym,4980,true,untreated parental,0.051,basal_2d,ok,1,Cellosaurus CVCL_5160
+gse216182,GSE216182,ACH-000290,NCI-H209,name,855,true,untreated cell line before xenografting (eGFP-labelled),0.039,basal_2d,ok,1,
+gse216182,GSE216182,ACH-000355,NCI-H82,name,2573,true,untreated cell line before xenografting (eGFP-labelled),0.039,basal_2d,ok,1,
+gse243665,GSE243665,ACH-000562,HCC78,name,2748,true,"untreated, CellPlex-multiplexed (CMO307)",0.029,basal_2d,ok,1,
+gse303762,GSE303762; labels s3://longbench-data,ACH-000506,H146,synonym,476,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,Cellosaurus CVCL_1473
+gse303762,GSE303762; labels s3://longbench-data,ACH-000587,H1975,synonym,716,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,Cellosaurus CVCL_1511
+gse303762,GSE303762; labels s3://longbench-data,ACH-000639,H211,synonym,489,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,Cellosaurus CVCL_1529
+gse303762,GSE303762; labels s3://longbench-data,ACH-000447,H2228,synonym,804,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,Cellosaurus CVCL_1543
+gse303762,GSE303762; labels s3://longbench-data,ACH-000767,H526,synonym,289,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,Cellosaurus CVCL_1569
+gse303762,GSE303762; labels s3://longbench-data,ACH-000358,H69,synonym,484,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,Cellosaurus CVCL_1579
+gse303762,GSE303762; labels s3://longbench-data,ACH-000012,HCC827,name,629,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,
+gse303762,GSE303762; labels s3://longbench-data,ACH-000790,SHP77,name,529,true,"untreated, 8-line pooled 10x 3' v3.1",0.075,basal_2d,ok,1,
+gse193959,GSE193959,ACH-000257,CORL279,name,,true,"untreated (no treatment field), inDrop",0.398,basal_2d,ok,1,
+gse193959,GSE193959,ACH-000355,H82,synonym,,true,"untreated (no treatment field), inDrop",0.398,basal_2d,ok,1,Cellosaurus CVCL_1591
+gse193959,GSE193959,ACH-000292,H841,synonym,,true,"untreated (no treatment field), inDrop",0.398,basal_2d,ok,1,Cellosaurus CVCL_1595
+gse193959,GSE193959,ACH-000698,DMS53,name,,true,"untreated (no treatment field), inDrop",0.398,basal_2d,ok,1,
+gse118767,GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology,ACH-000681,A549,name,1237,true,"untreated, equal-proportion mixture",0.026,basal_2d,ok,1,
+gse118767,GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology,ACH-000587,H1975,synonym,739,true,"untreated, equal-proportion mixture",0.026,basal_2d,ok,1,Cellosaurus CVCL_1511
+gse118767,GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology,ACH-000447,H2228,synonym,1056,true,"untreated, equal-proportion mixture",0.026,basal_2d,ok,1,Cellosaurus CVCL_1543
+gse118767,GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology,ACH-000416,H838,synonym,841,true,"untreated, equal-proportion mixture",0.026,basal_2d,ok,1,Cellosaurus CVCL_1594
+gse118767,GSE118767; GSE126906; GSE111108; github LuyiTian/sc_mixology,ACH-000012,HCC827,name,844,true,"untreated, equal-proportion mixture",0.026,basal_2d,ok,1,
+gse229224,GEO GSE229224,,BE2C,,2541,true,"standard culture conditions, untreated",0.723,basal_2d,dropped: SK-N-BE(2)-C subclone without a ModelID,1,CVCL_0529 derives from ACH-000312
+gse229224,GEO GSE229224,ACH-002217,BE2M17,name,8435,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-001338,CHP134,name,4409,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-000120,CHP212,name,3055,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-001344,GIMEN,name,2294,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-002248,IMR5,name,4885,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-000259,KELLY,name,2195,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-000078,MHHNB11,name,2002,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-001366,NGP,name,2734,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-000260,SKNAS,name,3885,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-000341,SKNFI,name,3937,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-000149,SKNSH,name,4391,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse229224,GEO GSE229224,ACH-001674,TGW,name,2198,true,"standard culture conditions, untreated",0.723,basal_2d,ok,1,
+gse331320,GEO GSE331320,ACH-000310,IMR32P,name,4900,true,treatment: None (parental IMR-32),0.138,basal_2d,ok,1,parental IMR-32 (IMR32P); reviewed 2026-10-11
+gse331320,GEO GSE331320,ACH-001188,SHSY5Y,name,2679,true,treatment: None,0.138,basal_2d,ok,1,Cellosaurus flag reviewed 2026-10-11: human 10x cells; the flag concerns mouse-contaminated stocks
+gse331320,GEO GSE331320,ACH-000312,SKNBE2,name,1262,true,treatment: None,0.138,basal_2d,ok,1,
+gse178116,GEO GSE178116 (SubSeries GSE178114),ACH-000232,U251,synonym,6300,true,"ATRX wild type: CRISPR empty-vector control clone (U251-ATRX EV, ATRXEVB), untreated",0.424,control_guide,ok,1,Cellosaurus CVCL_0021
+gse146221,GEO GSE146221,ACH-001029,CHLA10,name,4729,true,untreated,0.18,basal_2d,ok,1,
+gse146221,GEO GSE146221,ACH-000424,TC71,name,8468,true,untreated,0.18,basal_2d,ok,1,
+gse113660,GEO GSE113660,ACH-000100,Rh41,name,7261,true,"untreated, unsorted",0.094,basal_2d,ok,1,
+gse219199,GEO GSE219199,ACH-001765,RH4,name,13516,true,DMSO 16 h,0.148,basal_2d,ok,1,
+gse223848,GEO GSE223848,ACH-000293,KLE,name,4900,true,log-phase growth (not starved),0.375,basal_2d,ok,1,
+gse223848,GEO GSE223848,ACH-001668,SuSa,name,3800,true,log-phase growth (not starved),0.375,basal_2d,ok,1,
+gse254917,GEO GSE254917,ACH-000776,ONS-76,name,648,true,monolayer (2D) in vitro culture,0.013,basal_2d,ok,1,
+gse179681,GSE179681,ACH-001001,143B,name,,true,"in vitro culture (hg19+mm10 reference, hg19 genes kept)",0.09,basal_2d,ok,1,
