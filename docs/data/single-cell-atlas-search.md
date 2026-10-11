@@ -4,9 +4,15 @@
 single cells join the prepared root as training-side lines. The 2026-10-07 search below found the
 MIX-seq candidates; the 2026-10-11 survey (local note `docs/notes/Basal single cell DepMap lines.md`)
 found 131 more labelled lines, taken in two waves: wave 1 reads deposited count matrices, wave 2
-re-counts deposits that hold only processed values. The identity map, the source choice, the
-membership file and the builder below are in place; the membership counts are those of the last
-`build`. Nothing here is SL evidence.
+re-counts deposits that hold only processed values. Wave 1 was built on 2026-10-11: 51 sources,
+**186 labelled lines outside the 226 with 374,815 basal cells** (median 574 per line, 11 to
+58,324; 20 MIX-seq lines under 50), 160 of them untreated or vehicle 2D, 13 control-guide and 13
+Cas9 cutting-control lines; 48 chosen lines lack 26Q1 GeneEffect and 2 share a patient with a
+held-out line. They span 24 lineages, led by lung (30), ovary (17), oesophagus and stomach (16),
+lymphoid (14), skin, CNS and peripheral nervous system (11 each). Wave 2 is not built: the
+processed-only deposits of the survey (Easy-Sci GSE311521, the Ewing CITE-seq GSE236284, NAMALWA
+GSE314230, UACC-3199 GSE328823) and the re-count routes in the table below. Nothing here is SL
+evidence.
 
 ## Identity map
 
@@ -73,6 +79,26 @@ A line's libraries are stacked over the genes they all measure, mapped to the Tx
 Tahoe's gene metadata (unique symbols only). It writes `<basal_raw_umi>/<ModelID>.h5ad` (obs: line,
 patient, source, identifier, arm, library) and, last, `qc/<source>.json`; a source with a report is
 skipped, an h5ad is never overwritten, and an h5ad without its report stops the run.
+
+## Deposits not ingested in wave 1
+
+The 2026-10-11 specification found these deposits unusable as deposited; the lines they would
+add come from another source where one exists.
+
+| Deposit | Lines | Why | Route |
+| --- | --- | --- | --- |
+| GSE142750 (Andor 2020) | SNU-601, SNU-668, NCI-N87 | Integer matrices clipped at a small cap (MALAT1, ACTB, MT-CO1 equal the cap in every cell); they pass the integer check | Re-count from SRA |
+| GSE202771 (Jovanović 2023) | MFM-223, HCC1806, SUM lines | One RData `dgCMatrix` | Re-count from SRA, or an R reader |
+| GSE202435 | HCC1806 | Scaled, non-integer values only | Re-count from SRA |
+| SEQC2 (figshare 13264121) | HCC1395 | One RData of 72 matrices; use library 10X_NCI_A once | Re-count SRR10051134 |
+| GSE247098 | OVCA420 | Control matrix truncated (4.96 of 17.8 million entries) | Re-count from SRA; GSE147405 supplies 688 cells |
+| GSE288487 | U-2 OS | Poisson-corrected, about 5% non-integer values | Re-count from SRA |
+| GSE261618, GSE225775 (sci-Plex) | T98G, U-87 MG | Headerless (gene, cell, count) triplets; lines only through the RT-well map | A triplet reader and the authors' map |
+| GSE206953 | SK-OV-3, A-431 | Matrix without 10x barcode and feature files | A reader for R-style name tables |
+| GSE229062 | T3M-4 | h5Seurat only | An h5Seurat reader |
+| GSE266034 | PA-TU-8902 | Hashtags named only HTO1–HTO6, no key to line and medium | None |
+| GSE134842 | U-937 | TPA-differentiated, not basal | None |
+| figshare 33273600 deep rescreen | KMRC-20, UM-RC-3 (non-targeting) | No per-cell line column; NaN guide counts | The pilot's cutting controls are used |
 
 ## 2026-10-07 search
 
@@ -192,5 +218,8 @@ directory and pseudo-bulk row.
 
 Most extras come from their own study, so a line's lab and chemistry are confounded with the line;
 the panels and pools (MIX-seq, the gastric, neuroblastoma, SUM-breast and blood-cancer panels)
-give several lines inside one study. The prepared extras are training-side data only: validation and
+give several lines inside one study. Calls to note: Groves' inDrop looms (GSE193959; COR-L279 and
+DMS 53) put the knee near 125 UMI, so nearly all of their deposited barcodes pass as cells; the
+OPM-2 and Dufva hashtag lanes have many doublets (reported per lane). The prepared extras are
+training-side data only: validation and
 test lines are unchanged, and whether and how a model uses the extras is decided by its own run.
