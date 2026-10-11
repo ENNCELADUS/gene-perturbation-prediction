@@ -59,9 +59,10 @@ gene mean from other lines, labels are one per pair in every line, and gene-hold
 paper's 0.71; the port is not built. The **SL benchmark** (chosen 2026-10-11, blueprint §5, SL protocol) is the
 screen set of Kebabci et al. 2026: the Ito, Klingbeil and Harle multi-line screens, labelled by Kebabci's rule (Harle
 by its own call), trained pooled and scored within one screen, with a single-cell headline and a bulk-read
-complement. It needs one re-version of the 226 split, moving A549 to test, before any further stage-one work; the
-default prior and the single-cell stack are then rerun on it. Neither the new split nor a data card or builder exists
-yet. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+complement. On 2026-10-11 the 226 split was rebuilt in place with A549 in test (171/27/28; the prepared caches did not
+change) and the benchmark was built on the H20 (`data/sl_screens/benchmark/`, data card
+`docs/data/sl-screen-benchmark.md`). The default prior and the single-cell stack have not been rerun on the rebuilt
+split; their recorded numbers are on the 172/27/27 split. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
@@ -143,7 +144,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
   `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
   evaluation and baselines for one config.
-- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (172 train / 27 val / 27 test);
+- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (171 train / 27 val / 28 test; A549 moved to test on 2026-10-11);
   `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
 
 ## Pitfalls and claim boundaries

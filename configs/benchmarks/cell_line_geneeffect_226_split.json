@@ -1,6 +1,6 @@
 {
-  "policy": "One 172/27/27 split. All 47 original contexts are fixed in train; the 179 new contexts retain their patient-grouped 125/27/27 MILP partition. PC9 and HELA are train members without 26Q1 GeneEffect.",
-  "schema_version": "cell-line-geneeffect-226-split-v1",
+  "policy": "One 171/27/28 split. The 47 original contexts are fixed in train except A549, fixed in test for the SL benchmark; the 179 new contexts retain their patient-grouped 125/27/27 MILP partition. PC9 and HELA are train members without 26Q1 GeneEffect.",
+  "schema_version": "cell-line-geneeffect-226-split-v2",
   "test": [
     "ACH-000042",
     "ACH-000097",
@@ -17,6 +17,7 @@
     "ACH-000651",
     "ACH-000665",
     "ACH-000671",
+    "ACH-000681",
     "ACH-000720",
     "ACH-000735",
     "ACH-000768",
@@ -133,7 +134,6 @@
     "ACH-000663",
     "ACH-000668",
     "ACH-000672",
-    "ACH-000681",
     "ACH-000694",
     "ACH-000696",
     "ACH-000706",

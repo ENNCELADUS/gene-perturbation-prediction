@@ -63,7 +63,7 @@ def test_load_tracked_split_and_reject_membership_change(tmp_path: Path) -> None
     tracked = Path("configs/benchmarks/cell_line_geneeffect_226_split.json")
     split = load_exp13_split(tracked)
     assert len(split.all_model_ids) == 226
-    assert len(split.supervised_train) == 170
+    assert len(split.supervised_train) == 169
 
     payload = json.loads(tracked.read_text())
     payload["train"][0], payload["test"][0] = (

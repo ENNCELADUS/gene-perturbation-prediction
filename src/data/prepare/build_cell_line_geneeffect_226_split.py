@@ -31,6 +31,11 @@ PINNED_SHA256 = {
     "geneeffect": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e",
 }
 SPLITS = ("train", "val", "test")
+#: Original contexts moved out of train. A549 is screened by all three multi-line SL
+#: screens of the SL benchmark (Ito, Klingbeil, Harle), which needs it held out of
+#: stage one (blueprint §5, 2026-10-11).
+ORIGINAL_TEST = frozenset({"ACH-000681"})
+EXPECTED_COUNTS = {"train": 171, "val": 27, "test": 28}
 
 
 def _pin(path: Path, expected: str, label: str) -> None:
@@ -55,6 +60,8 @@ def _original_rows(
     original_ids = phase_ids | registry_ids
     if len(original_ids) != 47:
         raise ValueError("expected a 47-ModelID original-context union")
+    if not ORIGINAL_TEST <= original_ids:
+        raise ValueError(f"ORIGINAL_TEST is not original: {sorted(ORIGINAL_TEST)}")
     model = pd.read_csv(model_path, dtype=str).set_index("ModelID")
     missing_model = sorted(original_ids - set(model.index))
     if missing_model:
@@ -69,7 +76,7 @@ def _original_rows(
         registry_row = registry_by_id.get(model_id)
         rows.append(
             {
-                "split": "train",
+                "split": "test" if model_id in ORIGINAL_TEST else "train",
                 "cohort": "original_context_47",
                 "model_id": model_id,
                 "patient_id": str(metadata["PatientID"]),
@@ -185,13 +192,14 @@ def build(
     manifest = pd.concat([atlas_rows, original], ignore_index=True)
     manifest = manifest.sort_values(["split", "model_id"]).reset_index(drop=True)
     observed = manifest["split"].value_counts().to_dict()
-    expected = {"train": 172, "val": 27, "test": 27}
+    expected = EXPECTED_COUNTS
     if observed != expected:
         raise AssertionError(f"unified split count mismatch: {observed} != {expected}")
     if manifest.groupby("patient_id")["split"].nunique().max() != 1:
         raise AssertionError("PatientID crosses unified split sides")
-    if set(original["split"]) != {"train"}:
-        raise AssertionError("an original context escaped train")
+    moved = set(original.loc[original["split"] != "train", "model_id"])
+    if moved != ORIGINAL_TEST:
+        raise AssertionError(f"original contexts outside train {sorted(moved)}")
     label_audit = _label_audit(geneeffect_path, manifest)
 
     staging = output_dir.with_name(f".{output_dir.name}.building")
@@ -211,24 +219,25 @@ def build(
         payload.update(
             {
                 "unlabeled_train": ["ACH-000779", "ACH-001086"],
-                "schema_version": "cell-line-geneeffect-226-split-v1",
+                "schema_version": "cell-line-geneeffect-226-split-v2",
                 "policy": (
-                    "One 172/27/27 split. All 47 original contexts are fixed in train; "
-                    "the 179 new contexts retain their patient-grouped 125/27/27 MILP "
-                    "partition. PC9 and HELA are train members without 26Q1 GeneEffect."
+                    "One 171/27/28 split. The 47 original contexts are fixed in train "
+                    "except A549, fixed in test for the SL benchmark; the 179 new "
+                    "contexts retain their patient-grouped 125/27/27 MILP partition. "
+                    "PC9 and HELA are train members without 26Q1 GeneEffect."
                 ),
             }
         )
         json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
         audit = {
             "status": "verified_unified_split",
-            "schema_version": "cell-line-geneeffect-226-split-audit-v1",
+            "schema_version": "cell-line-geneeffect-226-split-audit-v2",
             "counts": expected,
             "cohort_counts": manifest.groupby(["cohort", "split"])
             .size()
             .unstack(fill_value=0)
             .to_dict(orient="index"),
-            "original_contexts_all_train": True,
+            "original_contexts_test": sorted(ORIGINAL_TEST),
             "patient_group_cross_split": 0,
             "atlas_original_model_id_overlap": 0,
             "optimizer_for_179_partition": optimizer,

@@ -91,7 +91,7 @@ def test_load_geneeffect_226_split_defaults_unlabeled_train_to_empty(
 
 def test_load_geneeffect_226_split_against_the_real_tracked_file() -> None:
     """The actual tracked split file must load and satisfy the documented shape
-    (172 train / 27 val / 27 test, PC9 + HeLa unlabeled) --
+    (171 train / 27 val / 28 test, PC9 + HeLa unlabeled) --
     ``docs/03-geneeffect-protocol.md`` §2."""
     repo_root = Path(__file__).resolve().parents[1]
     split_path = (
@@ -100,9 +100,9 @@ def test_load_geneeffect_226_split_against_the_real_tracked_file() -> None:
     if not split_path.exists():
         pytest.skip("cell_line_geneeffect_226_split.json not present")
     split = load_geneeffect_226_split(split_path)
-    assert len(split.train) == 172
+    assert len(split.train) == 171
     assert len(split.val) == 27
-    assert len(split.test) == 27
+    assert len(split.test) == 28
     assert set(split.unlabeled_train) == {"ACH-000779", "ACH-001086"}
     for model_id in split.unlabeled_train:
         with pytest.raises(ValueError):
