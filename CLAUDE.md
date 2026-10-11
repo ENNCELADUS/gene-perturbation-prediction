@@ -62,7 +62,10 @@ by its own call), trained pooled and scored within one screen, with a single-cel
 complement. On 2026-10-11 the 226 split was rebuilt in place with A549 in test (171/27/28; the prepared caches did not
 change) and the benchmark was built on the H20 (`data/sl_screens/benchmark/`, data card
 `docs/data/sl-screen-benchmark.md`). The default prior and the single-cell stack have not been rerun on the rebuilt
-split; their recorded numbers are on the 172/27/27 split. The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
+split; their recorded numbers are on the 172/27/27 split. The **single-cell extras** (data layer only, plan of
+2026-10-11, [card](docs/data/single-cell-atlas-search.md)) are built for wave 1: 186 labelled lines outside the 226 with
+374,815 basal cells from 51 public deposits, prepared into `data/geneeffect_joint/v2` beside the unchanged 226 (no model
+reads them yet), and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk). The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
 **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
 ## Commands
