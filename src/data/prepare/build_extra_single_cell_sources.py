@@ -1,0 +1,729 @@
+"""Build the extra single-cell lines' raw-UMI h5ad from their public deposits.
+
+One run takes the sources of one wave of the spec
+(``configs/data/extra_single_cell_sources_26Q1.json``). For every library of a
+source it reads the deposited counts, calls cells, names each cell's line (the
+whole library, the authors' per-cell labels, hashtags, or, for a pool without
+labels, the member whose DepMap bulk RNA its cluster matches), keeps the basal
+arms and applies the QC floor. Line names become ModelIDs only through accepted
+rows of the identity map; a name the map lacks raises. It then writes one
+``<output-dir>/<ModelID>.h5ad`` for each line the map's choice takes from this
+source (never a line of the 226), and ``<output-dir>/qc/<source>.json`` last. A
+source whose QC report exists is skipped; no h5ad is overwritten.
+
+uv run python -m src.data.prepare.build_extra_single_cell_sources \
+    --spec configs/data/extra_single_cell_sources_26Q1.json --wave 1 --print-downloads
+uv run python -m src.data.prepare.build_extra_single_cell_sources \
+    --spec configs/data/extra_single_cell_sources_26Q1.json --wave 1 \
+    --output-dir data/sl_dependency_v0/processed/basal_raw_umi
+"""  # noqa: E501
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import tarfile
+import zipfile
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import anndata as ad
+import h5py
+import numpy as np
+import pandas as pd
+from scipy import sparse
+from scipy.io import mmread
+
+from src.data.basal import align_columns, assert_tx1_input_contract
+from src.data.depmap import read_depmap_matrix, read_model_ids, read_models
+from src.data.prepare.build_extra_single_cell_lines import Admission, admit, read_map
+from src.data.prepare.prepare_cell_line_atlas_raw_umi import (
+    _assert_raw_integer,
+    _load_gene_mapping,
+    _map_and_collapse_genes,
+    _probe_tx1_loader,
+    _sha256,
+)
+from src.data.splits import FixedSplit, load_geneeffect_226_split
+
+#: Keys each reader and each identity kind takes (all required).
+READERS = {
+    "tenx_mtx": ("matrix", "features", "barcodes"),
+    "tenx_h5": ("h5",),
+    "table": ("path", "sep", "genes_by_cells"),
+    "anndata": ("path", "counts", "gene_column", "symbol_column"),
+    "tahoe": ("shards", "gene_metadata", "cell_lines"),
+}
+IDENTITIES = {
+    "line": ("identifier",),
+    "labels": (
+        "path",
+        "sep",
+        "cell_column",
+        "label_column",
+        "arm_column",
+        "keep",
+        "cell_prefix",
+        "cell_suffix",
+    ),
+    "hashtag": ("counts", "hashtags", "min_count", "min_ratio"),
+    "pool": ("members", "clusters", "min_margin"),
+}
+
+
+@dataclass
+class Library:
+    """One library as deposited: integer counts of cells × genes."""
+
+    counts: sparse.csr_matrix
+    cells: list[str]
+    genes: list[str]
+    symbols: list[str] | None
+    tags: sparse.csr_matrix | None
+    tag_names: list[str]
+    obs: pd.DataFrame | None
+
+
+def _require(spec: Mapping[str, Any], keys: Sequence[str], where: str) -> None:
+    missing = sorted(set(keys) - set(spec))
+    if missing:
+        raise ValueError(f"{where}: missing keys {missing}")
+
+
+def _expression_and_tags(
+    counts: sparse.csr_matrix,
+    cells: list[str],
+    features: pd.DataFrame,
+) -> Library:
+    """Split 10x features (``id``, ``name``, ``type``) into expression and tags."""
+    types = features["type"].fillna("Gene Expression").to_numpy()
+    expression = types == "Gene Expression"
+    tags = ~expression
+    return Library(
+        counts=counts[:, np.flatnonzero(expression)].tocsr(),
+        cells=cells,
+        genes=features.loc[expression, "id"].tolist(),
+        symbols=features.loc[expression, "name"].tolist(),
+        tags=counts[:, np.flatnonzero(tags)].tocsr() if tags.any() else None,
+        tag_names=features.loc[tags, "name"].tolist(),
+        obs=None,
+    )
+
+
+def _read_tenx_mtx(root: Path, spec: Mapping[str, Any]) -> Library:
+    counts = sparse.csr_matrix(mmread(root / spec["matrix"]).T)
+    features = pd.read_csv(root / spec["features"], sep="\t", header=None, dtype=str)
+    features = features.reindex(columns=range(3))
+    features.columns = ["id", "name", "type"]
+    features["name"] = features["name"].fillna(features["id"])
+    cells = pd.read_csv(root / spec["barcodes"], sep="\t", header=None, dtype=str)[0]
+    return _expression_and_tags(counts, cells.tolist(), features)
+
+
+def _read_tenx_h5(root: Path, spec: Mapping[str, Any]) -> Library:
+    def text(values) -> list[str]:
+        return [v.decode() if isinstance(v, bytes) else str(v) for v in values[:]]
+
+    with h5py.File(root / spec["h5"], "r") as handle:
+        group = handle["matrix"] if "matrix" in handle else handle[next(iter(handle))]
+        shape = tuple(group["shape"][:])
+        matrix = sparse.csc_matrix(
+            (group["data"][:], group["indices"][:], group["indptr"][:]), shape=shape
+        )
+        cells = text(group["barcodes"])
+        if "features" in group:
+            names = group["features"]
+            features = pd.DataFrame(
+                {
+                    "id": text(names["id"]),
+                    "name": text(names["name"]),
+                    "type": text(names["feature_type"]),
+                }
+            )
+        else:  # Cell Ranger 2: one genome group
+            features = pd.DataFrame(
+                {"id": text(group["genes"]), "name": text(group["gene_names"])}
+            ).assign(type="Gene Expression")
+    return _expression_and_tags(sparse.csr_matrix(matrix.T), cells, features)
+
+
+def _read_table(root: Path, spec: Mapping[str, Any]) -> Library:
+    frame = pd.read_csv(root / spec["path"], sep=spec["sep"], index_col=0)
+    if spec["genes_by_cells"]:
+        frame = frame.T
+    return Library(
+        counts=sparse.csr_matrix(frame.to_numpy()),
+        cells=[str(cell) for cell in frame.index],
+        genes=[str(gene) for gene in frame.columns],
+        symbols=None,
+        tags=None,
+        tag_names=[],
+        obs=None,
+    )
+
+
+def _read_anndata(root: Path, spec: Mapping[str, Any]) -> Library:
+    path = root / spec["path"]
+    adata = ad.read_loom(path) if path.suffix == ".loom" else ad.read_h5ad(path)
+    where = spec["counts"]
+    if where == "X":
+        counts, var = adata.X, adata.var
+    elif where == "raw":
+        counts, var = adata.raw.X, adata.raw.var
+    elif where.startswith("layer:"):
+        counts, var = adata.layers[where.split(":", 1)[1]], adata.var
+    else:
+        raise ValueError(f"{path}: counts must be X, raw or layer:<name>")
+
+    def column(name):
+        return var.index.astype(str) if name == "index" else var[name].astype(str)
+
+    return Library(
+        counts=sparse.csr_matrix(counts),
+        cells=adata.obs_names.astype(str).tolist(),
+        genes=column(spec["gene_column"]).tolist(),
+        symbols=(
+            None
+            if spec["symbol_column"] is None
+            else column(spec["symbol_column"]).tolist()
+        ),
+        tags=None,
+        tag_names=[],
+        obs=adata.obs.copy(),
+    )
+
+
+def _read_tahoe(root: Path, spec: Mapping[str, Any]) -> Library:
+    """Tahoe-100M DMSO shards (paths relative to the working directory): every
+    cell of the listed Cellosaurus lines, labelled by ``cell_line_id`` in obs."""
+    from src.data.basal import _assemble_tahoe_matrix
+
+    wanted = set(spec["cell_lines"])
+    columns = ["genes", "expressions", "BARCODE_SUB_LIB_ID", "cell_line_id"]
+    cells, lines, reservoir = [], [], []
+    for shard in sorted(Path(spec["shards"]).glob("*.parquet")):
+        frame = pd.read_parquet(shard, columns=columns)
+        for number, row in frame.loc[frame["cell_line_id"].isin(wanted)].iterrows():
+            cells.append(f"{shard.name}:{number}:{row['BARCODE_SUB_LIB_ID']}")
+            lines.append(str(row["cell_line_id"]))
+            reservoir.append((row["genes"], row["expressions"]))
+    if not cells:
+        raise ValueError(f"{spec['shards']}: no cells of {sorted(wanted)}")
+    metadata = pd.read_parquet(spec["gene_metadata"]).set_index("token_id")
+    counts, var = _assemble_tahoe_matrix(reservoir, metadata)
+    return Library(
+        counts=sparse.csr_matrix(counts),
+        cells=cells,
+        genes=var.index.astype(str).tolist(),
+        symbols=var["gene_symbol"].astype(str).tolist(),
+        tags=None,
+        tag_names=[],
+        obs=pd.DataFrame({"cell_line_id": lines}, index=cells),
+    )
+
+
+_READ = {
+    "tenx_mtx": _read_tenx_mtx,
+    "tenx_h5": _read_tenx_h5,
+    "table": _read_table,
+    "anndata": _read_anndata,
+    "tahoe": _read_tahoe,
+}
+
+
+def read_library(root: Path, spec: Mapping[str, Any]) -> Library:
+    """Read one library with its reader; counts must be raw integers."""
+    reader = spec["reader"]
+    _require(spec, READERS[reader], f"{reader} library")
+    library = _READ[reader](root, spec)
+    _assert_raw_integer(library.counts, f"{root} {reader} library")
+    if library.counts.shape != (len(library.cells), len(library.genes)):
+        raise ValueError(f"{root}: counts {library.counts.shape} do not match ids")
+    if len(set(library.cells)) != len(library.cells):
+        raise ValueError(f"{root}: duplicate cell ids")
+    return library
+
+
+def knee(totals: np.ndarray, min_umi: int) -> float:
+    """UMI total at the inflection of the log-log barcode-rank curve: the left end
+    of its steepest segment over distinct totals of at least ``min_umi`` (ignoring
+    the first ten ranks). Barcodes at or above it are cells."""
+    values = totals[totals >= min_umi]
+    unique, counts = np.unique(values, return_counts=True)
+    unique, counts = unique[::-1].astype(np.float64), counts[::-1]
+    last_rank = np.cumsum(counts)
+    allowed = last_rank[:-1] >= 10
+    if not allowed.any():
+        return float(min_umi)
+    mid_rank = last_rank - (counts - 1) / 2
+    slope = np.diff(np.log10(unique)) / np.diff(np.log10(mid_rank))
+    step = np.flatnonzero(allowed)[np.argmin(slope[allowed])]
+    return float(unique[step])
+
+
+def call_hashtags(
+    counts: np.ndarray,
+    names: Sequence[str],
+    hashtags: Mapping[str, str],
+    *,
+    min_count: int,
+    min_ratio: float,
+) -> tuple[list[str | None], dict[str, int]]:
+    """Each cell's identifier from its hashtag counts: a singlet's top tag
+    (at least ``min_count`` and ``min_ratio`` times the second); negatives and
+    doublets get None."""
+    columns = [list(names).index(tag) for tag in hashtags]
+    values = np.asarray(counts)[:, columns].astype(np.float64)
+    order = np.sort(values, axis=1)
+    top = order[:, -1]
+    second = order[:, -2] if values.shape[1] > 1 else np.zeros(len(values))
+    best = np.argmax(values, axis=1)
+    identifiers = list(hashtags.values())
+    calls, tally = [], Counter()
+    for index in range(len(values)):
+        if top[index] < min_count:
+            calls.append(None)
+            tally["negative"] += 1
+        elif top[index] >= min_ratio * second[index] and top[index] > second[index]:
+            calls.append(identifiers[best[index]])
+            tally["singlet"] += 1
+        else:
+            calls.append(None)
+            tally["doublet"] += 1
+    return calls, dict(tally)
+
+
+def assign_pool(
+    counts: sparse.csr_matrix,
+    symbols: Sequence[str],
+    members: Mapping[str, str],
+    bulk: pd.DataFrame,
+    *,
+    clusters: int,
+    min_margin: float,
+    seed: int = 0,
+) -> tuple[list[str | None], list[dict[str, Any]]]:
+    """Each cell's identifier in a pool without labels: cluster the cells, then
+    give each cluster the member (identifier to ModelID) whose DepMap bulk RNA
+    deviation best correlates with the cluster's, when it beats the second best
+    by ``min_margin``; other clusters' cells get None."""
+    from sklearn.cluster import KMeans
+    from sklearn.decomposition import PCA
+
+    missing = sorted(set(members.values()) - set(bulk.index))
+    if missing:
+        raise ValueError(f"pool members without DepMap bulk RNA: {missing}")
+    genes = [g for g in dict.fromkeys(s.upper() for s in symbols) if g in bulk.columns]
+    aligned, _ = align_columns(counts, [s.upper() for s in symbols], genes)
+    library = np.asarray(counts.sum(axis=1), dtype=np.float64).ravel()
+    logged = sparse.diags(1e4 / np.maximum(library, 1)) @ aligned
+    logged.data = np.log1p(logged.data)
+    variance = np.asarray(logged.power(2).mean(axis=0)).ravel() - np.square(
+        np.asarray(logged.mean(axis=0)).ravel()
+    )
+    top = np.argsort(variance)[::-1][:2000]
+    reduced = PCA(
+        n_components=min(30, len(top), counts.shape[0] - 1), random_state=seed
+    ).fit_transform(logged[:, top].toarray())
+    labels = KMeans(n_clusters=clusters, n_init=10, random_state=seed).fit_predict(
+        reduced
+    )
+    profile = bulk.loc[list(members.values()), genes]
+    markers = profile.var(axis=0).sort_values(ascending=False).index[:1000]
+    position = [genes.index(g) for g in markers]
+    member_dev = profile[markers] - profile[markers].mean(axis=0)
+    means = np.vstack(
+        [
+            np.asarray(logged[labels == k][:, position].mean(axis=0)).ravel()
+            for k in range(clusters)
+        ]
+    )
+    cluster_dev = means - means.mean(axis=0)
+    identifiers = list(members)
+    table, assigned = [], {}
+    for k in range(clusters):
+        r = [float(np.corrcoef(cluster_dev[k], row)[0, 1]) for row in member_dev.values]
+        ranked = np.argsort(r)[::-1]
+        margin = r[ranked[0]] - (r[ranked[1]] if len(r) > 1 else -1.0)
+        chosen = identifiers[ranked[0]] if margin >= min_margin else None
+        assigned[k] = chosen
+        table.append(
+            {
+                "cluster": k,
+                "cells": int((labels == k).sum()),
+                "r": dict(zip(identifiers, r, strict=True)),
+                "margin": margin,
+                "assigned": chosen,
+            }
+        )
+    return [assigned[k] for k in labels], table
+
+
+def _identify(
+    library: Library,
+    identity: Mapping[str, Any],
+    root: Path,
+    members: Mapping[str, str],
+    bulk_path: Path,
+) -> tuple[list[str | None], list[str | None], dict[str, Any]]:
+    """Per-cell identifier and arm (None where the identity rule names no line or
+    no arm), and the rule's report."""
+    kind = identity["kind"]
+    _require(identity, IDENTITIES[kind], f"{kind} identity")
+    n = len(library.cells)
+    if kind == "line":
+        return [identity["identifier"]] * n, [None] * n, {}
+    if kind == "labels":
+        if identity["path"] is None:
+            table = library.obs.assign(_cell=library.obs.index.astype(str))
+            cell_column = "_cell"
+        else:
+            table = pd.read_csv(root / identity["path"], sep=identity["sep"], dtype=str)
+            cell_column = identity["cell_column"]
+        for column, values in identity["keep"].items():
+            table = table.loc[table[column].astype(str).isin(values)]
+        cells = identity["cell_prefix"] + table[cell_column] + identity["cell_suffix"]
+        table = table.set_index(cells.to_numpy())
+        if not table.index.is_unique:
+            raise ValueError(f"{identity['path']}: duplicate labelled cells")
+        found = table.reindex(library.cells)
+        arms = (
+            [None] * n
+            if identity["arm_column"] is None
+            else found[identity["arm_column"]].tolist()
+        )
+        labels = found[identity["label_column"]].tolist()
+        clean = [None if pd.isna(v) else str(v) for v in labels]
+        return (
+            clean,
+            [None if pd.isna(a) else str(a) for a in arms],
+            {"labelled_cells": int(sum(v is not None for v in clean))},
+        )
+    if kind == "hashtag":
+        if identity["counts"] is None:
+            tags, names = library.tags, library.tag_names
+            rows = np.arange(n)
+        else:
+            other = read_library(root, identity["counts"])
+            tags, names = other.counts, other.genes
+            position = {cell: i for i, cell in enumerate(other.cells)}
+            rows = np.asarray([position.get(cell, -1) for cell in library.cells])
+        if tags is None:
+            raise ValueError("hashtag identity: the library has no tag features")
+        dense = np.zeros((n, tags.shape[1]))
+        present = rows >= 0
+        dense[present] = tags[rows[present]].toarray()
+        calls, tally = call_hashtags(
+            dense,
+            names,
+            identity["hashtags"],
+            min_count=identity["min_count"],
+            min_ratio=identity["min_ratio"],
+        )
+        calls = [c if ok else None for c, ok in zip(calls, present, strict=True)]
+        return calls, [None] * n, {"hashtags": tally}
+    if kind == "pool":
+        if library.symbols is None:
+            raise ValueError("pool identity needs gene symbols")
+        if len(identity["members"]) < 2:
+            raise ValueError("a pool has at least two members")
+        bulk = read_depmap_matrix(bulk_path)
+        pool = {name: members[name] for name in identity["members"]}
+        calls, table = assign_pool(
+            library.counts,
+            library.symbols,
+            pool,
+            bulk,
+            clusters=identity["clusters"],
+            min_margin=identity["min_margin"],
+        )
+        return calls, [None] * n, {"clusters": table}
+    raise ValueError(f"unknown identity kind {kind!r}")
+
+
+@dataclass
+class Context:
+    """What every source of a run reads."""
+
+    spec: Mapping[str, Any]
+    candidates: pd.DataFrame
+    admission: Admission
+    split: FixedSplit
+    models: pd.DataFrame
+    gene_metadata: pd.DataFrame
+    symbol_to_ensembl: dict[str, str]
+
+
+def _mito(library: Library, gene_metadata: pd.DataFrame, id_kind: str) -> np.ndarray:
+    if library.symbols is not None:
+        symbols = library.symbols
+    elif id_kind == "symbol":
+        symbols = library.genes
+    else:
+        ids = [gene.split(".")[0] for gene in library.genes]
+        symbols = gene_metadata["gene_symbol"].reindex(ids).fillna("").tolist()
+    return np.asarray([str(s).upper().startswith("MT-") for s in symbols])
+
+
+def build_source(
+    name: str, source: Mapping[str, Any], context: Context, output: Path
+) -> dict[str, Any]:
+    """Write this source's lines; return its QC report."""
+    _require(
+        source, ("wave", "files", "unpack", "gene_id_kind", "arms", "libraries"), name
+    )
+    root = Path(context.spec["raw_root"]) / name
+    for archive in source["unpack"]:
+        _unpack(root / archive, root)
+    accepted = context.candidates.loc[
+        (context.candidates["source"] == name) & (context.candidates["review"] == "ok")
+    ]
+    ours = dict(zip(accepted["identifier"], accepted["model_id"], strict=True))
+    flagged = set(
+        context.candidates.loc[
+            (context.candidates["source"] == name)
+            & (context.candidates["review"] != "ok"),
+            "identifier",
+        ]
+    )
+    wanted = {m for m, s in context.admission.labelled.items() if s == name}
+    blocks: dict[str, list[tuple[Any, ...]]] = {m: [] for m in wanted}
+    dropped, reports = Counter(), []
+    floor = context.spec["min_genes"], context.spec["max_mito_fraction"]
+    for index, spec in enumerate(source["libraries"]):
+        _require(
+            spec, ("reader", "cells", "identity", "arm"), f"{name} library {index}"
+        )
+        library = read_library(root, spec)
+        report: dict[str, Any] = {"library": index, "cells_read": len(library.cells)}
+        totals = np.asarray(library.counts.sum(axis=1)).ravel()
+        if spec["cells"] == "knee":
+            cut = knee(totals, int(spec["knee_min_umi"]))
+            called = totals >= cut
+            report["knee_umi"] = cut
+        elif spec["cells"] == "deposited":
+            called = np.ones(len(totals), dtype=bool)
+        else:
+            raise ValueError(f"{name}: cells must be deposited or knee")
+        identifiers, arms, report["identity"] = _identify(
+            library,
+            spec["identity"],
+            root,
+            ours,
+            Path(context.spec["bulk_expression_path"]),
+        )
+        arms = [arm if arm is not None else spec["arm"] for arm in arms]
+        detected = np.asarray((library.counts > 0).sum(axis=1)).ravel()
+        mito = _mito(library, context.gene_metadata, source["gene_id_kind"])
+        mito_umi = np.asarray(
+            library.counts[:, np.flatnonzero(mito)].sum(axis=1)
+        ).ravel()
+        report["mito_genes"] = int(mito.sum())
+        keep = np.zeros(len(totals), dtype=bool)
+        lines = np.empty(len(totals), dtype=object)
+        for cell, identifier in enumerate(identifiers):
+            if not called[cell]:
+                dropped["not called"] += 1
+            elif identifier is None:
+                dropped["no line"] += 1
+            elif identifier in flagged:
+                dropped["identity not accepted"] += 1
+            elif identifier not in ours:
+                raise ValueError(f"{name}: label {identifier!r} absent from the map")
+            elif ours[identifier] in context.split.all_model_ids:
+                dropped["line of the 226"] += 1
+            elif ours[identifier] not in wanted:
+                dropped["line not taken from this source"] += 1
+            elif arms[cell] not in source["arms"]:
+                dropped["arm"] += 1
+            elif detected[cell] < floor[0] or mito_umi[cell] > floor[1] * totals[cell]:
+                dropped["QC floor"] += 1
+            else:
+                keep[cell] = True
+                lines[cell] = ours[identifier]
+        report["cells_kept"] = int(keep.sum())
+        reports.append(report)
+        if not keep.any():
+            continue
+        rows = np.flatnonzero(keep)
+        mapped, var, gene_stats = _map_and_collapse_genes(
+            library.counts[rows],
+            [gene.split(".")[0] for gene in library.genes]
+            if source["gene_id_kind"] == "ensembl"
+            else library.genes,
+            source["gene_id_kind"],
+            context.gene_metadata,
+            context.symbol_to_ensembl,
+        )
+        report["genes"] = gene_stats
+        for model_id in sorted(set(lines[rows])):
+            mine = lines[rows] == model_id
+            blocks[model_id].append(
+                (
+                    mapped[np.flatnonzero(mine)],
+                    var,
+                    [f"{index}:{library.cells[c]}" for c in rows[mine]],
+                    [arms[c] for c in rows[mine]],
+                    [identifiers[c] for c in rows[mine]],
+                    index,
+                )
+            )
+    written = {}
+    for model_id in sorted(blocks):
+        if not blocks[model_id]:
+            continue
+        adata = _line_adata(model_id, name, blocks[model_id], context)
+        if context.spec["run_tx1_loader_probe"]:
+            _probe_tx1_loader(adata, context.spec)
+        _write_h5ad(adata, output / f"{model_id}.h5ad")
+        written[model_id] = {
+            "cells": int(adata.n_obs),
+            "genes": int(adata.n_vars),
+            "arms": dict(Counter(adata.obs["arm"])),
+            "identifiers": sorted(set(adata.obs["identifier"])),
+        }
+    return {
+        "source": name,
+        "wave": source["wave"],
+        "inputs": {rel: _sha256(root / rel) for rel in sorted(source["files"])},
+        "libraries": reports,
+        "dropped": dict(dropped),
+        "lines": written,
+        "not_built": sorted(wanted - set(written)),
+    }
+
+
+def _line_adata(
+    model_id: str, name: str, blocks: list[tuple[Any, ...]], context: Context
+) -> ad.AnnData:
+    """One line's cells over the genes every one of its libraries measures."""
+    shared = set.intersection(*(set(block[1].index) for block in blocks))
+    genes = [g for g in blocks[0][1].index if g in shared]
+    matrix = sparse.vstack(
+        [block[0][:, block[1].index.get_indexer(genes)] for block in blocks]
+    ).tocsr()
+    obs = pd.DataFrame(
+        {
+            "model_id": model_id,
+            "cell_type": model_id,
+            "patient_id": context.models.at[model_id, "patient_id"],
+            "source": name,
+            "identifier": [i for block in blocks for i in block[4]],
+            "arm": [a for block in blocks for a in block[3]],
+            "library": [block[5] for block in blocks for _ in block[2]],
+        },
+        index=[f"{model_id}:{cell}" for block in blocks for cell in block[2]],
+    )
+    var = blocks[0][1].loc[genes].drop(columns="source_gene_ids")
+    adata = ad.AnnData(X=sparse.csr_matrix(matrix, dtype=np.int64), obs=obs, var=var)
+    assert_tx1_input_contract(adata)
+    return adata
+
+
+def _write_h5ad(adata: ad.AnnData, path: Path) -> None:
+    if path.exists():
+        raise FileExistsError(f"refusing to overwrite {path}")
+    temporary = path.with_name(f".{path.name}.tmp")
+    adata.write_h5ad(temporary, compression="gzip")
+    os.replace(temporary, path)
+
+
+def _unpack(archive: Path, into: Path) -> None:
+    marker = into / f".{archive.name}.unpacked"
+    if marker.exists():
+        return
+    destination = into.resolve()
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive) as handle:
+            members = handle.namelist()
+            bad = [
+                m
+                for m in members
+                if not (destination / m).resolve().is_relative_to(destination)
+            ]
+            if bad:
+                raise ValueError(f"{archive}: members escape {into}: {bad[:3]}")
+            handle.extractall(into)
+    else:
+        with tarfile.open(archive) as handle:
+            handle.extractall(into, filter="data")
+    marker.write_text("")
+
+
+def run(spec_path: Path, wave: int, output: Path) -> None:
+    spec = json.loads(spec_path.read_text())
+    split = load_geneeffect_226_split(Path(spec["split_path"]))
+    candidates = read_map(Path(spec["candidates_path"]))
+    models = read_models(Path(spec["model_path"]))
+    admission = admit(
+        candidates,
+        models,
+        labelled_ids=read_model_ids(Path(spec["gene_effect_path"])),
+        split=split,
+    )
+    gene_metadata, symbol_to_ensembl = _load_gene_mapping(spec)
+    context = Context(
+        spec, candidates, admission, split, models, gene_metadata, symbol_to_ensembl
+    )
+    (output / "qc").mkdir(parents=True, exist_ok=True)
+    for name, source in spec["sources"].items():
+        if source["wave"] != wave:
+            continue
+        report_path = output / "qc" / f"{name}.json"
+        if report_path.exists():
+            print(f"{name}: built", flush=True)
+            continue
+        wanted = [m for m, s in admission.labelled.items() if s == name]
+        partial = [m for m in wanted if (output / f"{m}.h5ad").exists()]
+        if partial:
+            raise FileExistsError(
+                f"{name}: h5ad without a QC report (an interrupted run): {partial}"
+            )
+        print(f"{name}: building {len(wanted)} lines", flush=True)
+        report = build_source(name, source, context, output)
+        report["spec_sha256"] = _sha256(spec_path)
+        temporary = report_path.with_name(f".{report_path.name}.tmp")
+        temporary.write_text(json.dumps(report, indent=2, default=float) + "\n")
+        os.replace(temporary, report_path)
+        print(f"{name}: wrote {len(report['lines'])} lines", flush=True)
+
+
+def downloads(spec_path: Path, wave: int) -> list[tuple[str, Path]]:
+    """``(url, path)`` of every file of the wave's sources not on disk."""
+    spec = json.loads(spec_path.read_text())
+    wanted = []
+    for name, source in spec["sources"].items():
+        if source["wave"] != wave:
+            continue
+        for relative, url in source["files"].items():
+            path = Path(spec["raw_root"]) / name / relative
+            if not path.exists():
+                wanted.append((url, path))
+    return wanted
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--spec", type=Path, required=True)
+    parser.add_argument("--wave", type=int, required=True)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--print-downloads", action="store_true")
+    args = parser.parse_args(argv)
+    if args.print_downloads:
+        for url, path in downloads(args.spec, args.wave):
+            print(f"{url}\t{path}")
+        return 0
+    if args.output_dir is None:
+        parser.error("--output-dir is required to build")
+    run(args.spec, args.wave, args.output_dir)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

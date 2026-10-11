@@ -129,7 +129,10 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
 - **Expression space.** Everything except Tx1's input is log space: whole-library `normalize_total` to a recorded target `T`,
   `log1p`, then STATE's HVG slice. Tx1 reads raw UMI, not CPM.
 - **Preparation** (`src/experiments/prepare.py`) is the only place raw data is read. It writes fixed caches and a manifest
-  recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them.
+  recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them. Its
+  lines are the 226 and the built single-cell extras (`configs/benchmarks/extra_single_cell_lines_26Q1.json`), each read
+  from `<paths.basal_raw_umi>/<ModelID>.h5ad`; an existing root grows by the lines it lacks, in the recorded space. The
+  extras' h5ad are built from public deposits by `src/data/prepare/build_extra_single_cell_sources.py`.
 - **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
   the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
@@ -144,7 +147,8 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
   `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
   evaluation and baselines for one config.
-- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority (171 train / 27 val / 28 test; A549 moved to test on 2026-10-11);
+- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority of the 226 (171 train / 27 val / 28 test; A549 moved to test on 2026-10-11);
+  lines outside it join the training side only through `extra_bulk_lines_26Q1.json` or `extra_single_cell_lines_26Q1.json`;
   `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
 
 ## Pitfalls and claim boundaries
@@ -159,7 +163,8 @@ Mistakes here produce a complete-looking **wrong artifact**, not an exception.
   before the 2026-10-11 in-place re-split (A549 to test) is refused for resume, evaluation and readout.
 - Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on fold-independent `mu_bar` — centering a prediction
   on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-prior residual correlations are undefined, not zero.
-- Join cell lines by DepMap ModelID through the checked-in map, never informal names (`K-562` ≠ `K562`). Fit means, gene
+- Join cell lines by DepMap ModelID, never by informal names at run time (`K-562` ≠ `K562`): a source's spelling becomes a
+  ModelID only through a reviewed row of `configs/benchmarks/single_cell_atlas_candidates.csv`. Fit means, gene
   membership and normalization on labeled training lines only.
 - Context claims need residual evaluation against context-blind priors; the rules are in the GeneEffect protocol (§11) and the
   SL protocol (§8). Single-gene predictions are not SL or genetic-interaction evidence.
