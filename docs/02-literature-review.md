@@ -2,7 +2,8 @@
 
 Updated 2026-10-11. The extended related work of the [research blueprint](01-blueprint.md), written as the
 related-work section of a paper. The blueprint states only how this project differs; this document gives the
-prior art behind each statement. It is a focused review, not an exhaustive novelty search.
+prior art behind each statement. It is a focused review, not an exhaustive novelty search. It mirrors the Notion page
+https://app.notion.com/p/3f6c3591aaf68105996dc71d2543c9d0; edit both together.
 
 ## 1. Synthetic-lethality benchmarks and their holdout settings
 
