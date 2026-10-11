@@ -20,16 +20,17 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_single_split_contains_all_original_contexts_in_train() -> None:
+def test_single_split_keeps_original_contexts_in_train_except_a549() -> None:
     frame = pd.read_csv(CSV)
     assert frame["split"].value_counts().to_dict() == {
-        "train": 172,
+        "train": 171,
         "val": 27,
-        "test": 27,
+        "test": 28,
     }
     original = frame.loc[frame["cohort"] == "original_context_47"]
     assert len(original) == 47
-    assert set(original["split"]) == {"train"}
+    assert set(original.loc[original["split"] != "train", "model_id"]) == {"ACH-000681"}
+    assert original.set_index("model_id").loc["ACH-000681", "split"] == "test"
     assert set(original.loc[~original["geneeffect_available"], "model_id"]) == {
         "ACH-000779",
         "ACH-001086",
@@ -39,7 +40,7 @@ def test_single_split_contains_all_original_contexts_in_train() -> None:
 
 def test_json_is_the_only_three_way_membership_authority() -> None:
     split = load_geneeffect_226_split(SPLIT)
-    assert (len(split.train), len(split.val), len(split.test)) == (172, 27, 27)
+    assert (len(split.train), len(split.val), len(split.test)) == (171, 27, 28)
     assert not (set(split.train) & (set(split.val) | set(split.test)))
     assert not (set(split.val) & set(split.test))
 
@@ -47,7 +48,7 @@ def test_json_is_the_only_three_way_membership_authority() -> None:
 def test_audit_hashes_and_label_boundary() -> None:
     audit = json.loads(AUDIT.read_text())
     assert audit["status"] == "verified_unified_split"
-    assert audit["original_contexts_all_train"] is True
+    assert audit["original_contexts_test"] == ["ACH-000681"]
     assert audit["patient_group_cross_split"] == 0
     assert audit["geneeffect"]["missing_model_ids"] == [
         "ACH-000779",
