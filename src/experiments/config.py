@@ -135,3 +135,40 @@ def load_prior_config(path: Path) -> dict[str, Any]:
     """Load and validate a prior YAML config; paths resolve from the repo root."""
     with Path(path).open() as handle:
         return validate_prior_config(yaml.safe_load(handle))
+
+
+_STACK_TOP_LEVEL = (
+    "seed output_root prior_run bootstrap_repeats selected_genes penalties arms"
+)
+_STACK_PENALTIES = "own selected"
+_STACK_STATISTICS = ("mean", "detected", "variance")
+
+
+def validate_stack_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Keys of a single-cell statistics stack config: the prior run whose export
+    it stacks on, the penalty grids, and arms naming the statistics they read."""
+    _require_keys(config, set(_STACK_TOP_LEVEL.split()), "config")
+    _require_keys(config["penalties"], set(_STACK_PENALTIES.split()), "penalties")
+    if not all(p > 0 for p in config["penalties"]["own"]):
+        raise ValueError("penalties.own must be positive (.inf: pooled weights only)")
+    if not all(0 < p < float("inf") for p in config["penalties"]["selected"]):
+        raise ValueError("penalties.selected must be positive and finite")
+    if not config["arms"]:
+        raise ValueError("arms must name at least one arm")
+    for name, chosen in config["arms"].items():
+        if (
+            not chosen
+            or set(chosen) - set(_STACK_STATISTICS)
+            or len(set(chosen)) != len(chosen)
+        ):
+            raise ValueError(
+                f"arms.{name}: distinct statistics from {_STACK_STATISTICS}, "
+                f"got {chosen}"
+            )
+    return dict(config)
+
+
+def load_stack_config(path: Path) -> dict[str, Any]:
+    """Load and validate a single-cell statistics stack YAML config."""
+    with Path(path).open() as handle:
+        return validate_stack_config(yaml.safe_load(handle))
