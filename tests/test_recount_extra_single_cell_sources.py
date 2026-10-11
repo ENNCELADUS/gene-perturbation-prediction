@@ -34,10 +34,9 @@ args = sys.argv[1:]
 log = Path(__file__).with_suffix(".calls")
 with log.open("a") as handle:
     handle.write(json.dumps(args) + "\\n")
-if args[:1] == ["--version"]:
-    print("kb_python 0.0.test")
-elif args[:1] == ["info"]:
-    print("kallisto: 0.0 (fake)\\nbustools: 0.0 (fake)")
+if args[:1] == ["info"]:  # kb prints its versions, then exits 1
+    print("usage: kb\\nkb_python 0.0.test\\nkallisto: 0.0 (fake)\\nbustools: 0.0 (fake)")
+    sys.exit(1)
 elif args[:1] == ["ref"]:
     for flag in ("-i", "-g", "-f1"):
         Path(args[args.index(flag) + 1]).write_text("ref")
@@ -109,9 +108,13 @@ def test_count_passes_each_runs_barcode_and_cdna_reads_and_keeps_matrices(tmp_pa
     with pytest.raises(FileNotFoundError, match="index"):
         count(spec, 2, kb=kb, fasterq_dump=dump)
     build_index(spec, kb)
-    assert json.loads(index_paths(spec["recount"])["done"].read_text())["workflow"] == (
-        "standard"
-    )
+    record = json.loads(index_paths(spec["recount"])["done"].read_text())
+    assert record["workflow"] == "standard"
+    assert record["versions"] == [
+        "kb_python 0.0.test",
+        "kallisto: 0.0 (fake)",
+        "bustools: 0.0 (fake)",
+    ]
     count(spec, 2, kb=kb, fasterq_dump=dump)
 
     calls = [json.loads(line) for line in (tools / "kb.calls").read_text().splitlines()]

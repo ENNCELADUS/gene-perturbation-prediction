@@ -50,12 +50,14 @@ def _run(command: Sequence[str]) -> str:
     return done.stdout + done.stderr
 
 
-def _versions(kb: str) -> dict[str, Any]:
-    info = _run([kb, "info"])
-    return {
-        "kb": _run([kb, "--version"]).strip(),
-        "tools": [line for line in info.splitlines() if ": " in line][:2],
-    }
+def _versions(kb: str) -> list[str]:
+    """kb's, kallisto's and bustools' versions, from ``kb info`` (which exits 1)."""
+    info = subprocess.run([kb, "info"], capture_output=True, text=True)
+    return [
+        line
+        for line in (info.stdout + info.stderr).splitlines()
+        if line.startswith(("kb_python ", "kallisto: ", "bustools: "))
+    ]
 
 
 def index_paths(recount: Mapping[str, Any]) -> dict[str, Path]:
