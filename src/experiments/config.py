@@ -32,7 +32,8 @@ _GROUPS = {
         "var_ensembl_col hvg_gene_symbol_col"
     ),
     "paths": (
-        "split gene_effect source_registry tx1_registration cell_line_manifest "
+        "split gene_effect basal_raw_umi extra_single_cell_lines tx1_registration "
+        "cell_line_manifest "
         "tx1_model_dir tx1_cache esm2_embeddings state_checkpoint state_model_dir "
         "perturbseq_sources prior"
     ),

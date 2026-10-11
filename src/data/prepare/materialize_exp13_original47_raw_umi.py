@@ -30,7 +30,6 @@ from src.data.basal import (
 
 
 TAHOE_SOURCE = "Tahoe-100M DMSO"
-RAW_UMI_SEMANTICS = "raw_umi_counts"
 SPECIAL_MODEL_IDS = {
     "ACH-000696",  # OVCAR8
     "ACH-000779",  # PC9
@@ -515,11 +514,7 @@ def _materialize_specials(
 
 
 def materialize(args: argparse.Namespace) -> dict[str, object]:
-    if (
-        args.output_dir.exists()
-        or args.registry_output.exists()
-        or args.manifest_output.exists()
-    ):
+    if args.output_dir.exists() or args.manifest_output.exists():
         raise FileExistsError("refusing to overwrite original-47 outputs")
     manifest = pd.read_csv(args.cell_line_manifest, dtype=str, keep_default_na=False)
     if len(manifest) != 42:
@@ -553,19 +548,6 @@ def materialize(args: argparse.Namespace) -> dict[str, object]:
     )
     if len(records) != 47:
         raise ValueError(f"expected 47 materialized lines; observed {len(records)}")
-    registry = pd.DataFrame(
-        [
-            {
-                "model_id": model_id,
-                "source_path": records[model_id]["output_path"],
-                "source_kind": "h5ad",
-                "matrix_semantics": RAW_UMI_SEMANTICS,
-            }
-            for model_id in sorted(records)
-        ]
-    )
-    args.registry_output.parent.mkdir(parents=True, exist_ok=True)
-    registry.to_csv(args.registry_output, index=False)
     payload = {
         "schema_version": "exp13-original47-raw-umi-v1",
         "seed": args.seed,
@@ -574,8 +556,6 @@ def materialize(args: argparse.Namespace) -> dict[str, object]:
         "cell_line_manifest": str(args.cell_line_manifest),
         "cell_line_manifest_sha256": sha256_file(args.cell_line_manifest),
         "records": records,
-        "registry_path": str(args.registry_output),
-        "registry_sha256": sha256_file(args.registry_output),
     }
     args.manifest_output.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n"
@@ -588,7 +568,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cell-line-manifest",
         type=Path,
-        default=Path("configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv"),
+        default=Path(
+            "configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv"
+        ),
     )
     parser.add_argument(
         "--perturbseq-sources",
@@ -616,11 +598,6 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=Path("data/sl_dependency_v0/processed/exp13_original47_raw_umi"),
-    )
-    parser.add_argument(
-        "--registry-output",
-        type=Path,
-        default=Path("data/sl_dependency_v0/processed/exp13_original47_registry.csv"),
     )
     parser.add_argument(
         "--manifest-output",

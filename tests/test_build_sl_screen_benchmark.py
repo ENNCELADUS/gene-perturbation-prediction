@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from src.data.extra_lines import ExtraSingleCellLines
 from src.data.prepare.build_sl_screen_benchmark import (
     finish_rows,
     geneeffect_namer,
@@ -155,7 +156,9 @@ def test_line_sides_follow_the_nested_split_and_the_extra_lines() -> None:
         lines,
         split,
         extra_bulk_labelled={"B1", "SC1"},
-        extra_single_cell={"labelled": ["SC1"], "unlabelled": ["SCU"]},
+        extra_single_cell=ExtraSingleCellLines(
+            labelled={"SC1": {}}, unlabelled=("SCU",), pending={}, excluded={}
+        ),
     )
     assert sides["split"].tolist() == [
         "val",
