@@ -53,9 +53,11 @@ directly, each with a per-line score:
 | [Fong et al., Nature Genetics 2024](https://doi.org/10.1038/s41588-024-01971-9) | 7 × 11,774 | 3,409 at score < 0 and FDR < 0.1 (our threshold) | score Pearson 0.13 |
 
 Agreement within a screen ranges from strong (Harle) to close to noise (Fong), and calls agree poorly across studies
-even for the same line, so labels are compared within one screen. These screens include four of this project's
+even for the same line, so labels are compared within one screen. These screens include five of this project's
 held-out lines: NCI-H1299 (Harle, Flister, Klingbeil) and PA-TU-8988S (Ito) among the validation lines, MDA-MB-231
-(Flister, Klingbeil, Fong) and SK-MES-1 (Harle) among the test lines.
+(Flister, Klingbeil, Fong), SK-MES-1 (Harle) and A549 (all five screens; moved to test in the re-versioned split)
+among the test lines. Kebabci et al.'s released code labels Ito, Klingbeil and Harle (with Parrish and CHyMErA),
+and those three screens are this project's SL benchmark (blueprint §5).
 
 **What these settings leave open.** The held-out line enters each of them differently: SLWise reads
 line-specific L1000 knockdown signatures and DepMap gene effects, ELISL cancer-type aggregates of cell-line
@@ -72,7 +74,8 @@ context-ablated, pair-identity and pan-essentiality controls. The architecture a
 the absence claim is bounded by its search: Europe PMC, Semantic Scholar, GitHub and bioRxiv abstracts up to
 2026-10-09, not Google Scholar, IEEE Xplore, RECOMB or ISMB 2026 proceedings or Chinese-language venues.
 MiT4SL's held-out A549 and 22Rv1 were the validation and test contexts of this project's earlier nine-context SL
-split; under the nested split both are training lines, and the multi-line screens above supply the held-out lines.
+split; under the nested split 22Rv1 is a training line and A549 a test line, and the multi-line screens above supply
+the held-out lines.
 
 ## 2. Synthetic lethality and how it is measured
 
