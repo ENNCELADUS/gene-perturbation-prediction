@@ -59,7 +59,7 @@ READERS = {
     "tenx_h5": ("h5",),
     "table": ("path", "sep", "skiprows", "genes_by_cells"),
     "anndata": ("path", "counts", "gene_column", "symbol_column"),
-    "tahoe": ("shards", "gene_metadata", "cell_lines"),
+    "tahoe": ("shards", "gene_metadata", "cell_lines", "drug"),
 }
 IDENTITIES = {
     "line": ("identifier",),
@@ -251,16 +251,18 @@ def _read_anndata(root: Path, spec: Mapping[str, Any]) -> Library:
 
 
 def _read_tahoe(root: Path, spec: Mapping[str, Any]) -> Library:
-    """Tahoe-100M DMSO shards (paths relative to the working directory): every
-    cell of the listed Cellosaurus lines, labelled by ``cell_line_id`` in obs."""
+    """Tahoe-100M parquet shards (paths relative to the working directory): every
+    cell of the listed Cellosaurus lines given ``drug``, labelled by
+    ``cell_line_id`` in obs."""
     from src.data.basal import _assemble_tahoe_matrix
 
     wanted = set(spec["cell_lines"])
-    columns = ["genes", "expressions", "BARCODE_SUB_LIB_ID", "cell_line_id"]
+    columns = ["genes", "expressions", "BARCODE_SUB_LIB_ID", "cell_line_id", "drug"]
     cells, lines, reservoir = [], [], []
+    keep = [("cell_line_id", "in", sorted(wanted)), ("drug", "==", spec["drug"])]
     for shard in sorted(Path(spec["shards"]).glob("*.parquet")):
-        frame = pd.read_parquet(shard, columns=columns)
-        for number, row in frame.loc[frame["cell_line_id"].isin(wanted)].iterrows():
+        frame = pd.read_parquet(shard, columns=columns, filters=keep)
+        for number, row in frame.iterrows():
             cells.append(f"{shard.name}:{number}:{row['BARCODE_SUB_LIB_ID']}")
             lines.append(str(row["cell_line_id"]))
             reservoir.append((row["genes"], row["expressions"]))

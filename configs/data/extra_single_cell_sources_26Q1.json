@@ -29,11 +29,12 @@
       "libraries": [
         {
           "reader": "tahoe",
-          "shards": "data/sl_dependency_v0/raw/tahoe_100m_dmso/shards",
+          "shards": "data/sl_dependency_v0/raw/tahoe_100m_source_parquet",
           "gene_metadata": "data/sl_dependency_v0/raw/tahoe_100m_metadata/gene_metadata.parquet",
           "cell_lines": [
             "CVCL_1098"
           ],
+          "drug": "DMSO_TF",
           "cells": "deposited",
           "knee_min_umi": 100,
           "identity": {

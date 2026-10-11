@@ -359,6 +359,7 @@ def test_tahoe_reader_keeps_the_listed_lines_cells(tmp_path):
             "expressions": [np.array([2, 1]), np.array([7, 1]), np.array([9])],
             "BARCODE_SUB_LIB_ID": ["b0", "b1", "b2"],
             "cell_line_id": ["CVCL_1098", "CVCL_0001", "CVCL_1098"],
+            "drug": ["DMSO_TF", "DMSO_TF", "DMSO_TF"],
         }
     ).to_parquet(shards / "part-00001.parquet")
     pd.DataFrame(
@@ -371,9 +372,10 @@ def test_tahoe_reader_keeps_the_listed_lines_cells(tmp_path):
             "shards": str(shards),
             "gene_metadata": str(tmp_path / "meta.parquet"),
             "cell_lines": ["CVCL_1098"],
+            "drug": "DMSO_TF",
         },
     )
-    assert library.cells == ["part-00001.parquet:0:b0", "part-00001.parquet:2:b2"]
+    assert library.cells == ["part-00001.parquet:0:b0", "part-00001.parquet:1:b2"]
     assert library.genes == GENES[:2]
     np.testing.assert_array_equal(library.counts.toarray(), [[2, 1], [9, 0]])
     assert list(library.obs["cell_line_id"]) == ["CVCL_1098"] * 2
