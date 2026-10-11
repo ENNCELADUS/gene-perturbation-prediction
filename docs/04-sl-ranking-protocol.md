@@ -7,7 +7,7 @@ training and testing once
 ([result](../results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
 feature set or SL performance result exists.
 
-**Superseded in part (2026-10-09, labels 2026-10-11).** The [research blueprint](01-blueprint.md#3-task-formulation) now fixes
+**Superseded in part (2026-10-09, benchmark 2026-10-11).** The [research blueprint](01-blueprint.md#3-task-formulation) now fixes
 the SL task differently, and this protocol is rewritten to match before stage two is implemented:
 
 - Definition 1 (B's dependency selectively stronger where A is lost) is the logic the method reasons with;
@@ -16,26 +16,39 @@ the SL task differently, and this protocol is rewritten to match before stage tw
   label.
 - Stage two uses one fixed SL split nested in the GeneEffect split: SL training, validation and test lines are
   GeneEffect training, validation and test lines respectively.
-- **Labels (2026-10-11):** cell-line-specific benchmarks, the per-line calls and scores of multi-line combinatorial
-  screens, compared within one screen (blueprint §5; literature review §1). Four GeneEffect held-out lines were
-  screened, so the nested split needs no new version: validation NCI-H1299 (ACH-000510; Harle 2025, Flister 2025,
-  Klingbeil 2024) and PA-TU-8988S (ACH-000022; Ito 2021), test MDA-MB-231 (ACH-000768; Flister, Klingbeil, Fong 2024)
-  and SK-MES-1 (ACH-000665; Harle). The screens' other lines in the 226 are training lines; screened lines outside
-  the 226 with basal single cells from the MIX-seq or Kinker atlases (COR-L23, LK-2, NCI-H1975, KP-4, BxPC-3, RH-30,
-  T3M-4, GI-1, SK-MEL-5) may join the training side only. No screened line shares a PatientID with a validation or
-  test line. The lead benchmark is Harle et al. (27 lines × 472 pairs, per-line genetic-interaction score and call,
-  CC BY 4.0): NCI-H1299 has 40 hits and 77 pairs that are hits in another line but not there, SK-MES-1 42 and 75.
-- **Before a first run:** a data card per adopted screen (source table, the authors' call rule reproduced, line
-  mapping by ModelID, licence; Flister's is undetermined), the tables fetched on the H20, and a builder with the
+- **Benchmark (2026-10-11):** the screen set of Kebabci et al. 2026 (bioRxiv 10.64898/2026.01.19.700065; code
+  github.com/cancergenetics/context_specific_paralog_SL, MIT): Ito 2021 (11 lines × 4,859 pairs), Klingbeil 2024
+  (22 × about 2,700) and Harle 2025 (27 × 472, CC BY 4.0). Of the published benchmarks with a cross-cell-line
+  setting it overlaps the 226 most (literature review §1); Feng's, SLWise's and MiT4SL's lines are all GeneEffect
+  training lines. Labels compare within one screen. Ito and Klingbeil take Kebabci's rule
+  (`notebooks/03_feature_annotation/05_annotate_gemini.ipynb`): GEMINI at or above the screen's 90th percentile and
+  LFC below −0.51 (Ito) or −1.03 (Klingbeil). Harle takes the authors' Table S5 call, reproduced exactly; Kebabci's
+  Harle labels come from a GEMINI file they did not release. A Harle pair with a gene flagged single-depleted in a
+  line is unlabelled there, not a negative, since the authors' call cannot make it a hit. Every row keeps its
+  continuous score.
+- **Split:** the 226 split is re-versioned once, moving A549 (ACH-000681; all three screens) from training to test.
+  Validation PA-TU-8988S (ACH-000022; Ito) and NCI-H1299 (ACH-000510; Klingbeil, Harle); test MDA-MB-231
+  (ACH-000768; Klingbeil), SK-MES-1 (ACH-000665; Harle) and A549. No screened line shares a PatientID with a
+  validation or test line; A549's DepMap patient siblings leave the extra lines.
+- **Training side:** the three screens pooled, with the screen as an input. The headline model trains on the 21
+  screened training lines with basal single cells and GeneEffect (the 226's training lines and the MIX-seq extras
+  GI-1, RH-30, T3M-4, COR-L23, LK-2, NCI-H1975, KP-4 and BxPC-3); a complementary model adds the 21 screened lines
+  read through bulk RNA from the labelled extras (`configs/benchmarks/extra_bulk_lines_26Q1.json`), reported beside
+  it, never pooled. Flister 2025 and Fong 2024 are not adopted.
+- **Before a first run:** the re-versioned split, then a data card per adopted screen (source tables as Kebabci's
+  `data_sources.md` lists them: Ito Tables S4 and S9, Klingbeil Tables S2, S4 and S6, Harle Tables S4 and S5; the
+  labelling rule reproduced; line mapping by ModelID; licence), the tables fetched on the H20, and a builder with the
   tracked split. The context screen's table below stays a built artifact: its unanimity filters drop the 8,866
   screen pairs whose evidence differs between lines, and some of its aggregated rows may not be fitness screens (the
   A549;CAPAN1;MEL202;MEWO;OMM23 group reads, from the Harle and Chan papers' text, as a Cas9-negative
   library-abundance control; unverified).
-- Evaluation follows blueprint §3.7: per-line AUPRC against the positive rate, precision and recall at top K,
-  per-query ranking and calibration, against pan-essentiality, A-blind, pair-identity and context-ablated
-  controls. Within a screen every held-out pair is also measured in its training lines, so the pair-identity control
-  is the pair's hit rate in the same screen's training lines, and the pairs whose call differs between the screen's
-  lines are scored separately from the rest.
+- Evaluation follows blueprint §3.7: per held-out line and screen, AUPRC against the positive rate is the headline,
+  with precision and recall at top K and calibration; ranking within each query (c, A) is secondary and scored only
+  for genes with at least five screened partners. Controls are pan-essentiality, A-blind, pair-identity and
+  context-ablated. Within a screen every held-out pair is also measured in its training lines, so the pair-identity
+  control is the pair's hit rate in the same screen's training lines, and the pairs whose call differs between the
+  screen's lines are scored separately from the rest. MiT4SL's A549 labels are a secondary external test beside its
+  published A549 AUROC (0.673).
 
 The nine-context split and the separate eligibility rules below (§2, §4, §5) predate those decisions.
 

@@ -136,9 +136,12 @@ and model selection in both stages; models are selected on validation lines and 
 
 - **Stage one** uses one fixed split of the cell lines that have basal single-cell profiles and DepMap
   GeneEffect. DepMap lines without single-cell data may join the training side only.
-- **Stage two** uses one fixed split of the cell lines that carry SL labels and basal single-cell profiles. The
-  splits nest: SL training lines are stage-one training lines, SL validation lines are stage-one validation
-  lines, and SL test lines are stage-one test lines. Stage one may hold further lines on each side.
+- **Stage two** uses one fixed split of the cell lines that carry SL labels. The splits nest: SL training lines
+  are stage-one training lines, SL validation lines are stage-one validation lines, and SL test lines are
+  stage-one test lines. Stage one may hold further lines on each side. Validation and test lines carry basal
+  single-cell profiles. The headline model trains on the SL lines that have them; a complementary model adds
+  SL training lines read through their DepMap bulk RNA, as stage one's extra lines are, and the two are reported
+  side by side, never pooled.
 
 | Test context | Test genes or pairs | Setting | Scope |
 | --- | --- | --- | --- |
@@ -163,9 +166,10 @@ same holds for Cilantro-SL's reported stage-one fit. Context accuracy is read ag
 floor), simple context predictors (a ridge on context principal components) and the linear expression prior,
 which is the bar a model must clear.
 
-**Task B.** For each held-out line: AUPRC against the line's positive rate, precision and recall at top $K$,
-ranking within each query $(c,A)$, and calibration. Each score is compared with controls that a real context
-effect must beat:
+**Task B.** For each held-out line and screen, the headline is AUPRC against the line's positive rate, with
+precision and recall at top $K$ and calibration beside it. Ranking within each query $(c,A)$ is secondary and
+scored only for genes with at least five screened partners: the screens are paralog libraries, where 43% of genes
+have one screened partner. Each score is compared with controls that a real context effect must beat:
 
 - gene identity and pan-essentiality: rank $B$ by its average dependency;
 - $A$-blind: rank $B$ by stage one's predicted dependency in $c$, ignoring $A$;
@@ -174,7 +178,8 @@ effect must beat:
 
 Pairs whose label already appears in a training line are reported separately from pairs never labelled in
 training. Known context-specific pairs (SMARCA4–SMARCA2, ARID1A–ARID1B, MTAP–PRMT5, VPS4A–VPS4B,
-ENO1–ENO2, STAG2–STAG1) are reported by name.
+ENO1–ENO2, STAG2–STAG1) are reported by name where screened; the benchmark of §5 screens only SMARCA4–SMARCA2
+and ARID1A–ARID1B.
 
 ## 4. Clinical interpretation and limitations
 
@@ -228,19 +233,30 @@ plan.
   pseudo-bulk model.
 
 **Order.** The single-cell statistics stack; then, only on its signal, distributional and AI-virtual-cell
-models judged against the default prior; then interpretation of whichever model wins. Evidence so far: the
+models judged against the default prior; then interpretation of whichever model wins. Before any further
+stage-one work, the 226 split is re-versioned with A549 moved to test (the SL benchmark below needs it), and the
+default prior and the single-cell statistics stack are rerun on it; the old-split results stay as records of that
+split. Evidence so far: the
 joint STATE model trailed the context ridge, and in the single-cell correction every trained epoch lowered
 validation and STATE absent beat STATE frozen or trainable (GeneEffect protocol §7, §12).
 
 **Future extension: SL prediction in unseen lines.** Stage one's predicted, line-specific dependencies feed an
 SL framework evaluated on held-out lines, on cell-line-specific benchmarks: multi-line combinatorial screens that
-test one pair library in every line of a panel and publish a per-line call and score. Four GeneEffect held-out lines
-were screened this way, so the nested split of §3.6 holds without moving a line: validation NCI-H1299 (Harle et al.
-2025, Flister et al. 2025, Klingbeil et al. 2024) and PA-TU-8988S (Ito et al. 2021), test MDA-MB-231 (Flister,
-Klingbeil, Fong et al. 2024) and SK-MES-1 (Harle). The lead benchmark is Harle et al.'s 472 pairs in 27 lines
-(per-line genetic-interaction score and call; every one of its 117 hit pairs is a non-hit in some line); the others
-widen the pair library at lower cross-line agreement (literature review §1). The extension scores, per held-out line,
-the pairs whose call differs between the screen's lines separately from the rest, against the pair's hit rate in the
+test one pair library in every line of a panel and publish a per-line score. The benchmark (chosen 2026-10-11) is
+the screen set of Kebabci et al. 2026: Ito et al. 2021 (11 lines), Klingbeil et al. 2024 (22) and Harle et al. 2025
+(27). Of the published SL benchmarks with a cross-cell-line setting (literature review §1) it overlaps this
+project's DepMap lines most, and it is the only one with lines among the GeneEffect held-out lines; every line of
+Feng et al.'s, SLWise's and MiT4SL's settings is a GeneEffect training line. Labels follow Kebabci's rule for Ito
+and Klingbeil (GEMINI in the screen's top 10% and LFC below −0.51 and −1.03 respectively) and Harle et al.'s own
+call for Harle, whose Kebabci labels were not released; every row keeps its continuous score. The split stays
+nested (§3.6) and is re-versioned once, moving A549, which all three screened, from training to test: validation
+PA-TU-8988S (Ito) and NCI-H1299 (Klingbeil, Harle), test MDA-MB-231 (Klingbeil), SK-MES-1 (Harle) and A549 (all
+three). Stage two trains on the three screens pooled, with the screen as an input: the headline training side is
+the 21 screened training lines with basal single cells and GeneEffect, and the complementary model adds 21 more
+read through bulk RNA (§3.6). Evaluation stays within one screen: per held-out line and screen, the pairs whose
+call differs between the screen's lines are scored separately from the rest, against the pair's hit rate in the
 same screen's training lines (the pair-identity control) and pan-essentiality (§3.7); a model that gives a pair one
-score in every line, as Cilantro-SL's classifier is trained to, cannot rank them. Composed single-gene predictions
-yield definition-1 candidates; they do not estimate a double-knockout phenotype.
+score in every line, as Cilantro-SL's classifier is trained to, cannot rank them. MiT4SL's own A549 labels are scored
+as a secondary external test beside its published A549 result (AUROC 0.673), which reads only the line's bulk RNA;
+Kebabci's published scores read the held-out line's measured GeneEffect and are no comparator. Composed
+single-gene predictions yield definition-1 candidates; they do not estimate a double-knockout phenotype.
