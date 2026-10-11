@@ -4485,7 +4485,7 @@
           "header": false,
           "gene_id_prefix": "",
           "cells": "knee",
-          "knee_min_umi": 100,
+          "knee_min_umi": 500,
           "identity": {
             "kind": "line",
             "identifier": "Namalwa"
