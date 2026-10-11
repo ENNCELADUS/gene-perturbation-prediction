@@ -18,7 +18,6 @@ from src.data.geneeffect import (
     fit_selective_genes,
     load_exp13_split,
     load_geneeffect_long,
-    load_source_registry,
     parse_gene_symbol,
 )
 from src.data.prepared import load_inputs
@@ -329,25 +328,3 @@ def test_selective_genes_and_residual_scale_round_trip(
     state["residual_scale"]["values"][0] = 0.0
     with pytest.raises(ValueError, match="finite and positive"):
         load_inputs(config, preprocessing=state)
-
-
-def test_source_registry_requires_exact_membership_and_raw_umi(tmp_path: Path) -> None:
-    split = _split()
-    rows = [
-        {
-            "model_id": model_id,
-            "source_path": f"/{model_id}.h5ad",
-            "source_kind": "h5ad",
-            "matrix_semantics": "raw_umi_counts",
-        }
-        for model_id in split.all_model_ids
-    ]
-    path = tmp_path / "registry.csv"
-    pd.DataFrame(rows).to_csv(path, index=False)
-    registry = load_source_registry(path, split)
-    assert list(registry.index) == list(split.all_model_ids)
-
-    rows[0]["matrix_semantics"] = "processed_cpm"
-    pd.DataFrame(rows).to_csv(path, index=False)
-    with pytest.raises(ValueError, match="non-raw-UMI"):
-        load_source_registry(path, split)

@@ -48,7 +48,8 @@ preparation:
 paths:
   split: configs/benchmarks/cell_line_geneeffect_226_split.json
   gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
-  source_registry: configs/experiments/13_geneeffect_226/basal_source_registry.csv
+  basal_raw_umi: data/sl_dependency_v0/processed/basal_raw_umi
+  extra_single_cell_lines: configs/benchmarks/extra_single_cell_lines_26Q1.json
   tx1_registration: configs/benchmarks/provenance/phase_a_tx1_20260724/phase_a_registration.json
   cell_line_manifest: configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
   tx1_model_dir: data/models/tahoe_x1_3b/3b-model
