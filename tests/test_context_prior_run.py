@@ -142,8 +142,10 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     single = [f"S{i}" for i in range(30)]
     extras, unlabelled = [f"X{i}" for i in range(20)], [f"Y{i}" for i in range(10)]
     val, test = [f"V{i}" for i in range(6)], [f"T{i}" for i in range(6)]
-    blood = ["XB0", "YB0"]  # a labelled and an unlabelled haematopoietic extra
-    everyone = [*single, "U0", *extras, *unlabelled, *blood, *val, *test, "Z0"]
+    # A haematopoietic single-cell training line, labelled and unlabelled
+    # bulk-only line: all three leave the training side.
+    blood = ["S28", "XB0", "YB0"]
+    everyone = [*single, "U0", *extras, *unlabelled, "XB0", "YB0", *val, *test, "Z0"]
     bulk = pd.DataFrame(
         rng.normal(size=(len(everyone), len(SPACE))), index=everyone, columns=SPACE
     ).drop(index=["S29", "V5"])  # a training and a validation line without bulk
@@ -156,7 +158,7 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     )
     pseudo.loc["S0", "E15"] = np.nan  # a training line's source lacks E15: filled
     pseudo.loc["V0", "E14"] = np.nan  # a validation line lacks E14: out of the space
-    pseudo.loc["W0"] = np.nan  # a single-cell extra: never read by the prior
+    pseudo.loc["W0"] = np.nan  # a line outside the split: never read by the prior
     models = pd.DataFrame(
         {
             "patient_id": everyone,
@@ -214,16 +216,18 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     config["paths"]["bulk_expression"] = "bulk"
     config["training_side"]["exclude_lineages"] = ["Myeloid", "Lymphoid"]
     loaded = run.load_base(config)
-    side = [*single[:-1], "U0", *extras, *unlabelled]
+    side = [*single[:-2], "U0", *extras, *unlabelled]
     space = [g for g in SPACE if g != "E14"]
     bridge = loaded.bridge
     assert list(bridge.bulk.index) == side
     assert list(bridge.bulk.columns) == space == list(bridge.pseudobulk.columns)
     assert list(bridge.oracle.index) == val[:-1]
-    assert loaded.labelled == (*single[:-1], *extras)
-    assert bridge.paired == tuple(single[:-1])
-    assert bridge.single_cell_train == tuple(single)  # S29 without bulk included
+    assert loaded.labelled == (*single[:-2], *extras)
+    assert bridge.paired == tuple(single[:-2])
+    # S28 (dropped lineage) and S29 (no bulk) still take a fold and an export row.
+    assert bridge.single_cell_train == tuple(single)
     assert set(bridge.folds) == set(single)
+    assert "S28" in loaded.gene_effect.index
     assert bridge.val == tuple(val) and bridge.test == tuple(test)
     assert loaded.filled_lines == 1
     assert list(bridge.pseudobulk.index) == list(split.all_model_ids)

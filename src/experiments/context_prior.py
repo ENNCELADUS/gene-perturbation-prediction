@@ -123,8 +123,10 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     space is the bulk genes every validation and test line measures in
     pseudo-bulk; a training line whose source lacks one takes the training mean.
     Bulk and pseudo-bulk are quantile-normalised to the training side's profile.
-    The single-cell training lines are the split's labelled training lines; the
-    dropped lineages leave the bulk-only lines only.
+    The single-cell training lines are the split's labelled training lines. A
+    line of a dropped lineage leaves the training side, single-cell or bulk-only:
+    the prior neither fits nor encodes it and the bridge does not pair it, though
+    a single-cell training line still takes a fold and an export row.
     """
     from src.data.prepared import read_manifest
     from src.data.pseudobulk import read_pseudobulk
@@ -144,14 +146,15 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     bulk = bulk.drop(index=bulk.index.intersection([*split.test, *extra.excluded]))
     side = [
         m
-        for m in (*split.train, *kept(extra.labelled), *kept(extra.unlabelled))
+        for m in kept([*split.train, *extra.labelled, *extra.unlabelled])
         if m in bulk.index
     ]
     oracle_lines = [m for m in split.val if m in bulk.index]
+    on_side = set(side)
     labelled = tuple(
-        m for m in (*split.supervised_train, *kept(extra.labelled)) if m in bulk.index
+        m for m in (*split.supervised_train, *extra.labelled) if m in on_side
     )
-    paired = tuple(m for m in split.supervised_train if m in bulk.index)
+    paired = tuple(m for m in split.supervised_train if m in on_side)
 
     gene_effect = read_depmap_matrix(Path(joint["paths"]["gene_effect"]))
     needed = {*split.all_model_ids, *kept(extra.labelled)}
