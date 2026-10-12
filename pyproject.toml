@@ -32,9 +32,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Building the extra single-cell lines from Cell Ranger BAMs.
+# Building the extra single-cell lines from Cell Ranger BAMs; reading the R files of
+# the pinned cell-state programs.
 data = [
     "pysam>=0.23",
+    "rdata>=0.11",
 ]
 baseline = [
     "xgboost==2.1.4",

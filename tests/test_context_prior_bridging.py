@@ -83,6 +83,7 @@ def test_affine_remedy_and_diagnostics():
         ("gating", {"threshold": 0.3}),
         ("noise_matched", {}),
         ("denoise", {"rank": 4}),
+        ("rank_value", {"encoding": "rank_value", "top_k": 5}),
     ],
 )
 def test_oof_rows_never_read_their_own_folds_bulk(kind, setting):

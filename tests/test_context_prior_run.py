@@ -235,6 +235,11 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     profile = quantile_reference(bulk.loc[side, space])
     assert np.allclose(np.sort(bridge.oracle.to_numpy(), axis=1), profile)
     assert np.allclose(np.sort(bridge.pseudobulk.to_numpy(), axis=1), profile)
+    # Any pseudo-bulk rows enter the space as the prepared ones did.
+    pd.testing.assert_frame_equal(
+        loaded.normalize_pseudobulk(pseudo.loc[list(split.all_model_ids)]),
+        bridge.pseudobulk,
+    )
     assert set(seen) == {*val, *test, "Z0"}
     assert prepared == [list(bulk.columns)]
     assert "Z0" not in loaded.gene_effect.index
@@ -311,6 +316,8 @@ def synthetic_base(config) -> run.RunBase:
         reference=reference,
         bridge=bridge,
         filled_lines=0,
+        profile=quantile_reference(bridge.bulk),
+        pseudobulk_fill=bridge.pseudobulk.loc[list(bridge.single_cell_train)].mean(),
     )
 
 

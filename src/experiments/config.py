@@ -173,3 +173,45 @@ def load_stack_config(path: Path) -> dict[str, Any]:
     """Load and validate a single-cell statistics stack YAML config."""
     with Path(path).open() as handle:
         return validate_stack_config(yaml.safe_load(handle))
+
+
+_NOISE_GROUPS = {
+    "cell_sampling": "cells",
+    "learning_curve": "fractions",
+    "deposit": "min_lines permutations second_source_root",
+    "cell_states": (
+        "programs threshold_percentile cluster_components cluster_counts penalties"
+    ),
+    "screen_replicates": "screen_gene_effect screen_map",
+}
+_NOISE_TOP_LEVEL = "seed output_root prior_run bootstrap_repeats"
+
+
+def validate_noise_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Keys of a noise-diagnosis config: the prior run it reads, and one group per
+    measurement; the shapes of the grids are checked."""
+    _require_keys(config, {*_NOISE_GROUPS, *_NOISE_TOP_LEVEL.split()}, "config")
+    for name, keys in _NOISE_GROUPS.items():
+        _require_keys(config[name], set(keys.split()), name)
+    if not all(isinstance(n, int) and n > 0 for n in config["cell_sampling"]["cells"]):
+        raise ValueError("cell_sampling.cells must be positive integers")
+    if not all(0 < f < 1 for f in config["learning_curve"]["fractions"]):
+        raise ValueError("learning_curve.fractions must lie in (0, 1)")
+    states = config["cell_states"]
+    if not states["programs"] or len(set(states["programs"])) != len(
+        states["programs"]
+    ):
+        raise ValueError("cell_states.programs must name distinct programs")
+    if not 0 < states["threshold_percentile"] < 100:
+        raise ValueError("cell_states.threshold_percentile must lie in (0, 100)")
+    if not all(isinstance(k, int) and k > 1 for k in states["cluster_counts"]):
+        raise ValueError("cell_states.cluster_counts must be integers above 1")
+    if not all(0 < p < float("inf") for p in states["penalties"]):
+        raise ValueError("cell_states.penalties must be positive and finite")
+    return dict(config)
+
+
+def load_noise_config(path: Path) -> dict[str, Any]:
+    """Load and validate a noise-diagnosis YAML config."""
+    with Path(path).open() as handle:
+        return validate_noise_config(yaml.safe_load(handle))
