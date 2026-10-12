@@ -94,13 +94,17 @@ def _write_line(root: Path, line: str, seed: int) -> None:
 
 
 def _add_extra(root: Path, line: str, *, write: bool = True) -> None:
-    """Admit ``line`` as a built single-cell extra."""
+    """Admit ``line`` as a built single-cell extra: a labelled training line of the
+    split, after the 226's."""
     if write:
         _write_line(root, line, seed=99)
-    path = root / "extras.json"
+    path = root / "split.json"
     payload = json.loads(path.read_text())
-    payload["labelled"][line] = {"source": "test", "cells": CELLS_PER_LINE}
+    payload["train"].append(line)
     path.write_text(json.dumps(payload))
+    labels = pd.read_csv(root / "gene_effect.csv", index_col=0)
+    labels.loc[line] = np.random.default_rng(99).normal(size=labels.shape[1])
+    labels.to_csv(root / "gene_effect.csv")
 
 
 def build_world(root: Path) -> dict:
@@ -134,18 +138,6 @@ def build_world(root: Path) -> dict:
     (root / "basal_raw_umi").mkdir()
     for index, line in enumerate(lines):
         _write_line(root, line, seed=index)
-    (root / "extras.json").write_text(
-        json.dumps(
-            {
-                "schema_version": "extra-single-cell-lines-26q1-v2",
-                "labelled": {},
-                "unlabelled": [],
-                "pending": {},
-                "excluded": {},
-            }
-        )
-    )
-
     response = {}
     for index, anchor in enumerate(ANCHORS):
         genes = SOURCE_GENES if anchor != HCT116 else SOURCE_GENES[1:]  # no H1
@@ -181,7 +173,6 @@ def build_world(root: Path) -> dict:
         split=str(root / "split.json"),
         gene_effect=str(root / "gene_effect.csv"),
         basal_raw_umi=str(root / "basal_raw_umi"),
-        extra_single_cell_lines=str(root / "extras.json"),
         tx1_cache=str(root / "tx1"),
         esm2_embeddings=str(root / "esm2.npz"),
         state_model_dir=str(root / "state"),
@@ -376,18 +367,13 @@ def test_prepare_grows_root_by_new_extra_line_only(tmp_path):
     changed = {name for name in before if after[name] != before[name]}
     assert changed == {"prepared_inputs.json"}
     grown, earlier = _manifest(config), json.loads(before["prepared_inputs.json"])
-    assert grown.pop("lines") == [*earlier.pop("lines"), "ACH-E1"]
+    assert grown.pop("lines") == [*TRAIN, "ACH-E1", *VAL, *TEST]
+    earlier.pop("lines")
     assert grown == earlier
     with np.load(root / "lines" / "ACH-E1.npz") as line:
         assert line["q_sc_values"].shape[0] == len(grown["common_gene_panel"])
-    # A labelled extra opens as a training line, and only under the switch.
-    labels = pd.read_csv(config["paths"]["gene_effect"], index_col=0)
-    labels.loc["ACH-E1"] = 0.5
-    labels.to_csv(config["paths"]["gene_effect"])
-    opened = load_inputs(config, include_test=True)
-    assert opened.train_lines[-1] == "ACH-E1" and "ACH-E1" in opened.lines
-    config["train"]["single_cell_extras"] = False
-    assert "ACH-E1" not in load_inputs(config, include_test=True).lines
+    opened = load_inputs(config)
+    assert "ACH-E1" in opened.split.supervised_train and "ACH-E1" in opened.lines
 
 
 def test_prepare_refuses_membership_line_without_raw_umi_file(tmp_path):
@@ -427,15 +413,23 @@ def test_prepare_refuses_reuse_under_different_settings(tmp_path):
 
 
 def test_line_set_paths_do_not_change_preparation_settings(tmp_path):
-    """The prior export is read by training, not preparation, and the extras'
-    membership grows a root: neither path makes a root unusable."""
+    """The prior export is read by training, not preparation, and the split grows
+    a root: neither path makes a root unusable, recorded or not."""
     config = build_world(tmp_path)
     moved = json.loads(json.dumps(config))
     moved["paths"]["prior"] = "outputs/context_prior/some_export/export"
-    moved["paths"]["extra_single_cell_lines"] = "elsewhere.json"
+    moved["paths"]["split"] = "elsewhere.json"
     assert preparation_settings(moved) == preparation_settings(config)
     moved["paths"]["basal_raw_umi"] = "other_cells"
     assert preparation_settings(moved) != preparation_settings(config)
+    # A root whose manifest recorded another split path is still this config's.
+    prepare_inputs(config)
+    manifest = _manifest(config)
+    manifest["settings"]["paths"]["split"] = "the_226_split.json"
+    path = Path(config["prepared_root"]) / "prepared_inputs.json"
+    path.write_text(json.dumps(manifest))
+    prepare_inputs(config)
+    assert _manifest(config) == manifest
 
 
 def test_train_means_fit_on_supervised_train_only(prepared, monkeypatch):

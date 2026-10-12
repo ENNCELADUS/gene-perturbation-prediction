@@ -52,7 +52,7 @@ from src.data.prepare.prepare_cell_line_atlas_raw_umi import (
     _probe_tx1_loader,
     _sha256,
 )
-from src.data.splits import FixedSplit, load_geneeffect_226_split
+from src.data.splits import FixedSplit, load_geneeffect_split
 
 #: Keys each reader and each identity kind takes (all required).
 READERS = {
@@ -928,7 +928,7 @@ def run(
     spec_path: Path, wave: int, output: Path, only: Sequence[str] | None = None
 ) -> None:
     spec = json.loads(spec_path.read_text())
-    split = load_geneeffect_226_split(Path(spec["split_path"]))
+    split = load_geneeffect_split(Path(spec["split_path"]))
     candidates = read_map(Path(spec["candidates_path"]))
     models = read_models(Path(spec["model_path"]))
     admission = admit(

@@ -6,11 +6,11 @@ of its source matrix and ``T`` the median ``L_cell`` of the non-targeting
 cells in the Nadig 2025 Jurkat and HepG2 sources (data STATE's Replogle
 checkpoint was trained on).
 
-The lines are the 226 and the built single-cell extras
-(``paths.extra_single_cell_lines``); each line's raw-UMI cells are
-``<paths.basal_raw_umi>/<ModelID>.h5ad``. Once ``prepared_inputs.json`` exists,
-a run prepares only the lines without ``lines/<ModelID>.npz``, in the recorded
-space (``T``, panel, HVG order); every other file stays as written.
+The lines are the split's (``paths.split``: the 226 and the built single-cell
+extras); each line's raw-UMI cells are ``<paths.basal_raw_umi>/<ModelID>.h5ad``.
+Once ``prepared_inputs.json`` exists, a run prepares only the lines without
+``lines/<ModelID>.npz``, in the recorded space (``T``, panel, HVG order); every
+other file stays as written.
 
 The two ``T`` sources and every response anchor are read at once, one process
 each; each anchor process writes its reduced cells to a temporary part file
@@ -134,18 +134,15 @@ def _prepare_basal_line(
 
 
 def basal_sources(config: Mapping[str, Any]) -> dict[str, Path]:
-    """ModelID to raw-UMI h5ad of every line preparation covers: the 226, then the
-    built single-cell extras. Raises, listing them, if any file is missing."""
-    from src.data.extra_lines import load_extra_single_cell_lines
-    from src.data.splits import load_geneeffect_226_split
+    """ModelID to raw-UMI h5ad of every line of the split. Raises, listing them,
+    if any file is missing."""
+    from src.data.splits import load_geneeffect_split
 
     paths = config["paths"]
-    split = load_geneeffect_226_split(Path(paths["split"]))
-    extras = load_extra_single_cell_lines(Path(paths["extra_single_cell_lines"]), split)
+    split = load_geneeffect_split(Path(paths["split"]))
     directory = Path(paths["basal_raw_umi"])
     sources = {
-        model_id: directory / f"{model_id}.h5ad"
-        for model_id in (*split.all_model_ids, *extras.labelled)
+        model_id: directory / f"{model_id}.h5ad" for model_id in split.all_model_ids
     }
     missing = sorted(
         model_id for model_id, path in sources.items() if not path.is_file()
@@ -188,9 +185,10 @@ def _encode_missing_tx1(
 
 
 #: Paths that say which lines exist, not how a line is prepared: the prior
-#: export is read by training and evaluation only, and the extras' membership
-#: grows the root (its lines are recorded in the manifest).
-_LINE_SET_PATHS: Final[frozenset[str]] = frozenset({"prior", "extra_single_cell_lines"})
+#: export is read by training and evaluation only, and the split grows the root
+#: (its lines are recorded in the manifest; the gene panel of an existing root is
+#: the recorded one). A recorded value of either is ignored too.
+_LINE_SET_PATHS: Final[frozenset[str]] = frozenset({"prior", "split"})
 
 
 def preparation_settings(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -261,7 +259,14 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     sources = basal_sources(config)
     if manifest_path.is_file():
         manifest = json.loads(manifest_path.read_text())
-        if manifest.get("settings") != produced_by:
+        recorded = manifest.get("settings")
+        if isinstance(recorded, dict) and isinstance(recorded.get("paths"), dict):
+            paths = recorded["paths"]
+            recorded = {
+                **recorded,
+                "paths": {k: v for k, v in paths.items() if k not in _LINE_SET_PATHS},
+            }
+        if recorded != produced_by:
             raise ValueError(
                 f"{root} was prepared with different settings "
                 f"({manifest.get('settings')}); choose a new prepared_root for "
@@ -304,11 +309,11 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         write_response_part,
     )
     from src.data.response_cache import write_response_targets
-    from src.data.splits import assert_fit_eligible, load_geneeffect_226_split
+    from src.data.splits import assert_fit_eligible, load_geneeffect_split
     from src.data.tx1_cache import load_hvg_gene_order
 
     paths, settings = config["paths"], config["preparation"]
-    split = load_geneeffect_226_split(Path(paths["split"]))
+    split = load_geneeffect_split(Path(paths["split"]))
     labels = load_geneeffect_long(Path(paths["gene_effect"]), split)
     assert_fit_eligible(COPY_PRIOR_DONOR, split)
     donor = labels.loc[

@@ -44,8 +44,8 @@ from src.context_prior.space import (
 from src.context_prior.targets import Definitions, fit_definitions, residual_frame
 from src.context_prior.views import fit_expression_components
 from src.data.depmap import read_depmap_matrix, read_models
-from src.data.extra_lines import load_extra_lines, load_extra_single_cell_lines
-from src.data.splits import FixedSplit, load_geneeffect_226_split
+from src.data.extra_lines import load_bulk_lines
+from src.data.splits import FixedSplit, load_geneeffect_split
 from src.eval.metrics import paired_line_bootstrap
 from src.experiments.all import _number, _read_json
 from src.experiments.config import load_config, load_prior_config
@@ -87,11 +87,11 @@ class RunBase:
 
     Attributes:
         config: The prior config.
-        split: The 226-line split.
-        gene_effect: GeneEffect of the split's lines and the kept labelled extra
-            lines, over the definitions' genes.
+        split: The split: single-cell training, validation and test lines.
+        gene_effect: GeneEffect of the split's lines and the kept labelled
+            bulk-only lines, over the definitions' genes.
         definitions: Gene order, means, selective and variable genes and residual
-            SD, fitted on the split's labelled training lines.
+            SD, fitted on the labelled single-cell training lines.
         labelled: Labelled training-side lines with bulk RNA: the prior's fit lines.
         models: Every line's ``patient_id`` and ``lineage``.
         reference: Pinned reference tables.
@@ -123,11 +123,8 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     space is the bulk genes every validation and test line measures in
     pseudo-bulk; a training line whose source lacks one takes the training mean.
     Bulk and pseudo-bulk are quantile-normalised to the training side's profile.
-
-    The single-cell training lines are the split's labelled training lines and,
-    with ``training_side.single_cell_extras``, the built single-cell extras: they
-    pair for the bridge where their bulk RNA is on the training side (an extra of
-    a dropped lineage is not) and take a patient-grouped fold.
+    The single-cell training lines are the split's labelled training lines; the
+    dropped lineages leave the bulk-only lines only.
     """
     from src.data.prepared import read_manifest
     from src.data.pseudobulk import read_pseudobulk
@@ -135,18 +132,8 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
 
     joint = load_config(Path(config["joint_config"]))
     paths = config["paths"]
-    split = load_geneeffect_226_split(Path(joint["paths"]["split"]))
-    extra = load_extra_lines(Path(paths["extra_lines"]), split)
-    single_cell_extras = ()
-    if config["training_side"]["single_cell_extras"]:
-        single_cell_extras = tuple(
-            load_extra_single_cell_lines(
-                Path(joint["paths"]["extra_single_cell_lines"]), split
-            ).labelled
-        )
-        shared = sorted(set(single_cell_extras) & set(extra.excluded))
-        if shared:
-            raise ValueError(f"single-cell extras the bulk file excludes: {shared}")
+    split = load_geneeffect_split(Path(joint["paths"]["split"]))
+    extra = load_bulk_lines(Path(joint["paths"]["split"]), split)
     models = read_models(Path(paths["model"]))
     dropped = set(config["training_side"]["exclude_lineages"])
 
@@ -164,23 +151,18 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     labelled = tuple(
         m for m in (*split.supervised_train, *kept(extra.labelled)) if m in bulk.index
     )
-    single_cell_train = (*split.supervised_train, *single_cell_extras)
-    on_side = set(side)
-    paired = tuple(m for m in single_cell_train if m in on_side)
+    paired = tuple(m for m in split.supervised_train if m in bulk.index)
 
     gene_effect = read_depmap_matrix(Path(joint["paths"]["gene_effect"]))
-    needed = {*split.all_model_ids, *kept(extra.labelled), *single_cell_extras}
+    needed = {*split.all_model_ids, *kept(extra.labelled)}
     gene_effect = gene_effect.loc[gene_effect.index.isin(needed)]
 
     prepared = Path(joint["prepared_root"])
     panel = list(read_manifest(prepared)["common_gene_panel"])
     prepare_pseudobulk(joint, list(bulk.columns))
-    # The 226 and, when they are training lines, the single-cell extras.
-    pseudo = read_pseudobulk(prepared).loc[[*split.all_model_ids, *single_cell_extras]]
+    pseudo = read_pseudobulk(prepared).loc[list(split.all_model_ids)]
     space = measured_genes(pseudo, list(bulk.columns), [*split.val, *split.test])
-    pseudo, filled = fill_unmeasured(
-        pseudo.loc[:, space], [*split.train, *single_cell_extras]
-    )
+    pseudo, filled = fill_unmeasured(pseudo.loc[:, space], split.train)
     definitions = fit_definitions(gene_effect, split, panel, joint["features"])
     gene_effect = gene_effect.loc[:, list(definitions.genes)]
 
@@ -189,6 +171,7 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     profile = quantile_reference(bulk.iloc[: len(side)])
     normalized = quantile_normalize(bulk, profile)
     del bulk
+    single_cell_train = tuple(split.supervised_train)
     bridge = BridgeBase(
         bulk=normalized.loc[side],
         oracle=normalized.loc[oracle_lines],

@@ -21,10 +21,9 @@ class BridgeBase:
     Attributes:
         bulk: Training-side bulk rows.
         oracle: Validation lines' bulk rows (off-contract; scored, never fitted).
-        pseudobulk: Pseudo-bulk of the 226 lines and of the single-cell extras
-            when they are training lines.
-        paired: Labelled single-cell training lines with training-side bulk RNA:
-            the bridge's fit lines.
+        pseudobulk: Pseudo-bulk of the 226 lines.
+        paired: Labelled single-cell training lines with bulk RNA: the bridge's
+            fit lines.
         single_cell_train: Every labelled single-cell training line, with or
             without bulk RNA.
         val: Validation lines.

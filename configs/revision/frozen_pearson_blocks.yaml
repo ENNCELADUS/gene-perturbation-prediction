@@ -15,7 +15,6 @@ train:
   state_mode: frozen
   warmup_epochs: 1
   genes_per_block: 6
-  single_cell_extras: true  # the built single-cell extras join the training lines
 comparison:
   epochs: 50
   hidden: 512
@@ -44,10 +43,9 @@ preparation:
   var_ensembl_col: ensembl_id
   hvg_gene_symbol_col: auto
 paths:
-  split: configs/benchmarks/cell_line_geneeffect_226_split.json
+  split: configs/benchmarks/cell_line_geneeffect_split.json
   gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
   basal_raw_umi: data/sl_dependency_v0/processed/basal_raw_umi
-  extra_single_cell_lines: configs/benchmarks/extra_single_cell_lines_26Q1.json
   tx1_registration: configs/benchmarks/provenance/phase_a_tx1_20260724/phase_a_registration.json
   cell_line_manifest: configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
   tx1_model_dir: data/models/tahoe_x1_3b/3b-model

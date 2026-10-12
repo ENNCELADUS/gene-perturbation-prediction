@@ -14,9 +14,9 @@ from src.data.prepared import PreparedInputs
 
 
 def split_lines(inputs: PreparedInputs, split: str) -> tuple[str, ...]:
-    """Lines scored for a split; training uses the training lines."""
+    """Lines scored for a split; training uses the supervised training lines."""
     if split == "train":
-        return inputs.train_lines
+        return inputs.split.supervised_train
     return getattr(inputs.split, split)
 
 

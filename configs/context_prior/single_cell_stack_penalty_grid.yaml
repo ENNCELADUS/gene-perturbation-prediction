@@ -3,7 +3,7 @@
 # selected grid upward. Otherwise as configs/context_prior/single_cell_stack.yaml; nothing is chosen in code.
 seed: 0
 output_root: outputs/context_prior
-prior_run: outputs/context_prior/default_prior_resplit_20261012
+prior_run: outputs/context_prior/default_prior_final_split_20261012
 bootstrap_repeats: 1000
 selected_genes: 50
 penalties:

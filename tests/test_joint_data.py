@@ -112,11 +112,7 @@ def make_prepared_fixture(root: Path, *, hvg_width: int = 2) -> dict:
             "selective_max_fraction": 0.9,
             "residual_sd_floor_percentile": 10,
         },
-        "train": {
-            "dependency_batch_size": 2,
-            "response_batch_size": 8,
-            "single_cell_extras": False,
-        },
+        "train": {"dependency_batch_size": 2, "response_batch_size": 8},
         "seeds": {"train": 0, "collator": 0, "projection": 0},
         # Every Tx1 dimension of a fixture cell is equal: the contexts have rank one.
         "model": {"context_components": 1},
@@ -158,63 +154,6 @@ def test_test_lines_and_labels_need_include_test(tmp_path):
     assert "ACH-TEST" in opened.lines
     assert "ACH-TEST" in set(opened.labels.model_id)
     assert "ACH-UNLABELED" not in opened.lines
-
-
-def _add_single_cell_extra(config: dict, model_id: str = "ACH-EXTRA") -> None:
-    """A built single-cell extra outside the split: its labels, its prepared cells
-    (distinct Tx1 cells) and a membership file naming it."""
-    import shutil
-
-    root = Path(config["prepared_root"])
-    wide = pd.read_csv(config["paths"]["gene_effect"], index_col=0)
-    wide.loc[model_id] = [50.0, -50.0, 7.0]
-    wide.to_csv(config["paths"]["gene_effect"])
-    shutil.copy(root / "lines" / "ACH-TRAIN.npz", root / "lines" / f"{model_id}.npz")
-    _rewrite_tx1(config, model_id, np.random.default_rng(1).normal(size=(5, 2560)))
-    membership = root.parent / "extra_single_cell_lines.json"
-    membership.write_text(
-        json.dumps(
-            {
-                "schema_version": "extra-single-cell-lines-26q1-v2",
-                "labelled": {model_id: {"source": "fixture"}},
-                "unlabelled": [],
-                "pending": {},
-                "excluded": {},
-            }
-        )
-    )
-    config["paths"]["extra_single_cell_lines"] = str(membership)
-
-
-def test_single_cell_extras_train_the_model_but_leave_the_definitions(tmp_path):
-    from src.data.datasets import DependencyDataset
-    from src.training.trainer import training_diagnostic_lines
-
-    config = make_prepared_fixture(tmp_path)
-    without = load_inputs(config)
-    assert without.train_lines == without.split.supervised_train
-    _add_single_cell_extra(config)
-    assert "ACH-EXTRA" not in load_inputs(config).lines  # off: never opened
-    config["train"]["single_cell_extras"] = True
-    inputs = load_inputs(config)
-    assert inputs.train_lines == (*inputs.split.supervised_train, "ACH-EXTRA")
-    # The metric's definitions stay on the split's labelled training lines.
-    pd.testing.assert_series_equal(inputs.train_gene_means, without.train_gene_means)
-    pd.testing.assert_series_equal(inputs.residual_scale, without.residual_scale)
-    assert inputs.variable_genes == without.variable_genes
-    assert inputs.selective_genes == without.selective_genes
-    # The model fits on it: residual over the split's means, cells, context PCA.
-    extra = inputs.labels.loc[inputs.labels.model_id == "ACH-EXTRA"]
-    residual = extra.set_index("gene_symbol")["residual"]
-    assert residual["G0"] == 50.0 - without.train_gene_means["G0"]
-    assert not _same_pca(without.context_pca, inputs.context_pca)
-    assert "ACH-EXTRA" in set(DependencyDataset(inputs, "train").model_ids)
-    assert "ACH-EXTRA" in training_diagnostic_lines(inputs)
-    assert "ACH-EXTRA" not in DependencyDataset(inputs, "val").model_ids
-    wide = pd.read_csv(config["paths"]["gene_effect"], index_col=0)
-    wide.drop(index="ACH-EXTRA").to_csv(config["paths"]["gene_effect"])
-    with pytest.raises(ValueError, match="without a GeneEffect row"):
-        load_inputs(config)
 
 
 def test_restore_skips_fitting_and_external_esm2(tmp_path, monkeypatch):
