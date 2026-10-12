@@ -35,7 +35,7 @@ from src.data.extra_lines import (
     load_extra_single_cell_lines,
 )
 from src.data.geneeffect import parse_gene_symbol
-from src.data.splits import FixedSplit, load_geneeffect_226_split
+from src.data.splits import FixedSplit, load_geneeffect_split
 
 #: Published tables under ``--raw``, as fetched (docs/data/sl-screen-benchmark.md).
 RAW_FILES = {
@@ -460,7 +460,7 @@ def build(
 ) -> dict[str, object]:
     if out.exists():
         raise FileExistsError(f"refusing to overwrite {out}")
-    split = load_geneeffect_226_split(split_path)
+    split = load_geneeffect_split(split_path)
     extra_bulk = load_extra_lines(extra_bulk_path, split)
     extra_single_cell = load_extra_single_cell_lines(extra_single_cell_path, split)
     lines = pd.read_csv(lines_path, dtype=str).fillna("")

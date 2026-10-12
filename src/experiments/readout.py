@@ -83,7 +83,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
         },
         row_counts={split: len(data) for split, data in datasets.items()},
         split_lines={
-            "train": list(inputs.train_lines),
+            "train": list(inputs.split.supervised_train),
             "val": list(inputs.split.val),
         },
         genes=list(inputs.genes),
@@ -195,7 +195,7 @@ def main(argv=None):
     compare.add_argument(
         "--context-map",
         type=Path,
-        default=Path("configs/benchmarks/cell_line_geneeffect_226_split.csv"),
+        default=Path("configs/benchmarks/cell_line_geneeffect_split.csv"),
     )
     compare.add_argument("--bootstrap-repeats", type=int, default=1000)
     compare.add_argument(

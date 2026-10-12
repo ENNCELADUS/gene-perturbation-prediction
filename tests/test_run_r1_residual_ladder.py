@@ -814,7 +814,6 @@ def _synthetic_inputs():
     }
     return PreparedInputs(
         split=FixedSplit(train=train, val=val, test=test),
-        train_lines=tuple(train),
         labels=labels,
         genes=genes,
         train_gene_means=means,

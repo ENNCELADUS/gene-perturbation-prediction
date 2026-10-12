@@ -7,13 +7,11 @@ seed: 0
 joint_config: configs/revision/frozen_huber.yaml
 output_root: outputs/context_prior
 paths:
-  extra_lines: configs/benchmarks/extra_bulk_lines_26Q1.json
   reference: configs/context_prior/reference
   model: data/sl_dependency_v0/raw/depmap/Model.csv
   bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
 training_side:
   exclude_lineages: [Lymphoid, Myeloid]
-  single_cell_extras: false
 prior: {components: 128, folds: 5, bootstrap_repeats: 1000, selected_genes: 50}
 penalties:
   components: [0.1, 1.0, 10.0]

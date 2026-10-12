@@ -264,12 +264,8 @@ def parse_gene_symbol(column: object) -> str:
     return match.group("symbol").upper()
 
 
-def load_geneeffect_long(
-    path: Path, split: Exp13Split, extra_lines: Sequence[str] = ()
-) -> pd.DataFrame:
-    """Load CRISPRGeneEffect.csv into canonical ModelID/symbol long form: the
-    split's labelled lines, then ``extra_lines`` (lines outside the split, every
-    one of which must have a row)."""
+def load_geneeffect_long(path: Path, split: Exp13Split) -> pd.DataFrame:
+    """Load CRISPRGeneEffect.csv into canonical ModelID/symbol long form."""
     wide = pd.read_csv(path, index_col=0)
     wide.index = wide.index.astype(str)
     if not wide.index.is_unique:
@@ -290,12 +286,9 @@ def load_geneeffect_long(
             "split label coverage does not match unlabeled_train: "
             f"missing={sorted(observed_missing)}"
         )
-    absent = sorted(set(extra_lines) - set(wide.index))
-    if absent:
-        raise ValueError(f"extra lines without a GeneEffect row: {absent[:10]}")
     selected_ids = [
         model_id for model_id in split.all_model_ids if model_id in wide.index
-    ] + list(extra_lines)
+    ]
     selected = wide.loc[selected_ids]
     numeric = selected.apply(pd.to_numeric, errors="coerce")
     invalid = selected.notna() & numeric.isna()

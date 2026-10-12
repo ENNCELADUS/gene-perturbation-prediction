@@ -20,7 +20,7 @@ import pandas as pd
 
 from src.data.depmap import read_model_ids, read_models
 from src.data.extra_lines import SCHEMA_VERSION
-from src.data.splits import FixedSplit, load_geneeffect_226_split
+from src.data.splits import FixedSplit, load_geneeffect_split
 
 POLICY = (
     "Lines outside the 226 with 26Q1 bulk RNA; labelled ones also have 26Q1 "
@@ -77,7 +77,7 @@ def main(argv=None) -> int:
         read_models(args.model),
         labelled_ids=read_model_ids(args.gene_effect),
         bulk_ids=read_model_ids(args.bulk),
-        split=load_geneeffect_226_split(args.split),
+        split=load_geneeffect_split(args.split),
     )
     payload["sources"] = {
         name: {"path": str(path), "sha256": _sha256(path)}

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from src.data.splits import assert_fit_eligible, load_geneeffect_226_split
+from src.data.splits import assert_fit_eligible, load_geneeffect_split
 from src.data.splits import FixedSplit
 
 _SPLIT = FixedSplit(
@@ -53,7 +53,7 @@ def test_assert_fit_eligible_rejects_unknown_line() -> None:
         assert_fit_eligible("ACH-NOT-IN-SPLIT", _SPLIT)
 
 
-# --- load_geneeffect_226_split: shape validation -----------------------------
+# --- load_geneeffect_split: shape validation -----------------------------
 
 
 def _write_split(path: Path, payload: dict[str, object]) -> Path:
@@ -61,7 +61,7 @@ def _write_split(path: Path, payload: dict[str, object]) -> Path:
     return path
 
 
-def test_load_geneeffect_226_split_round_trips_the_real_split(tmp_path: Path) -> None:
+def test_load_geneeffect_split_round_trips_the_real_split(tmp_path: Path) -> None:
     split_path = _write_split(
         tmp_path / "split.json",
         {
@@ -71,25 +71,25 @@ def test_load_geneeffect_226_split_round_trips_the_real_split(tmp_path: Path) ->
             "unlabeled_train": ["ACH-PC9"],
         },
     )
-    split = load_geneeffect_226_split(split_path)
+    split = load_geneeffect_split(split_path)
     assert split.train == ("ACH-TRAIN-1", "ACH-PC9")
     assert split.val == ("ACH-VAL-1",)
     assert split.test == ("ACH-TEST-1",)
     assert split.unlabeled_train == ("ACH-PC9",)
 
 
-def test_load_geneeffect_226_split_defaults_unlabeled_train_to_empty(
+def test_load_geneeffect_split_defaults_unlabeled_train_to_empty(
     tmp_path: Path,
 ) -> None:
     split_path = _write_split(
         tmp_path / "split.json",
         {"train": ["ACH-1"], "val": [], "test": []},
     )
-    split = load_geneeffect_226_split(split_path)
+    split = load_geneeffect_split(split_path)
     assert split.unlabeled_train == ()
 
 
-def test_load_geneeffect_226_split_against_the_real_tracked_file() -> None:
+def test_load_geneeffect_split_against_the_real_tracked_file() -> None:
     """The actual tracked split file must load and satisfy the documented shape
     (171 train / 27 val / 28 test, PC9 + HeLa unlabeled) --
     ``docs/03-geneeffect-protocol.md`` §2."""
@@ -99,7 +99,7 @@ def test_load_geneeffect_226_split_against_the_real_tracked_file() -> None:
     )
     if not split_path.exists():
         pytest.skip("cell_line_geneeffect_226_split.json not present")
-    split = load_geneeffect_226_split(split_path)
+    split = load_geneeffect_split(split_path)
     assert len(split.train) == 171
     assert len(split.val) == 27
     assert len(split.test) == 28
@@ -109,23 +109,23 @@ def test_load_geneeffect_226_split_against_the_real_tracked_file() -> None:
             assert_fit_eligible(model_id, split)
 
 
-def test_load_geneeffect_226_split_rejects_missing_key(tmp_path: Path) -> None:
+def test_load_geneeffect_split_rejects_missing_key(tmp_path: Path) -> None:
     split_path = _write_split(tmp_path / "split.json", {"train": [], "val": []})
     with pytest.raises(ValueError, match="missing key"):
-        load_geneeffect_226_split(split_path)
+        load_geneeffect_split(split_path)
 
 
-def test_load_geneeffect_226_split_rejects_non_string_list(tmp_path: Path) -> None:
+def test_load_geneeffect_split_rejects_non_string_list(tmp_path: Path) -> None:
     split_path = _write_split(
         tmp_path / "split.json",
         {"train": [1, 2], "val": [], "test": []},
     )
     with pytest.raises(ValueError, match="list of strings"):
-        load_geneeffect_226_split(split_path)
+        load_geneeffect_split(split_path)
 
 
-def test_load_geneeffect_226_split_rejects_non_object_json(tmp_path: Path) -> None:
+def test_load_geneeffect_split_rejects_non_object_json(tmp_path: Path) -> None:
     split_path = tmp_path / "split.json"
     split_path.write_text(json.dumps(["not", "an", "object"]))
     with pytest.raises(ValueError, match="must be a JSON object"):
-        load_geneeffect_226_split(split_path)
+        load_geneeffect_split(split_path)

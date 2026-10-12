@@ -1,5 +1,7 @@
 """DepMap lines outside the 226 that join the training side: through bulk RNA, or
-through basal single cells."""
+through basal single cells. The two membership files are inputs of the final split
+(``src.data.prepare.build_cell_line_geneeffect_split``); fits read the final split,
+its bulk-only lines through :func:`load_bulk_lines`."""
 
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import Any
 
-from src.data.splits import FixedSplit
+from src.data.splits import SPLIT_SCHEMA_VERSION, FixedSplit
 
 SCHEMA_VERSION = "extra-bulk-lines-26q1-v1"
 SINGLE_CELL_SCHEMA_VERSION = "extra-single-cell-lines-26q1-v2"
@@ -89,6 +91,28 @@ def load_extra_lines(path: Path, split: FixedSplit) -> ExtraLines:
     return lines
 
 
+def load_bulk_lines(path: Path, split: FixedSplit) -> ExtraLines:
+    """The bulk-only training-side lines of the final split (``bulk_labelled``,
+    ``bulk_unlabelled``) and its excluded lines; raise on duplicates or any overlap
+    with each other or with the split's lines."""
+    payload = _payload(path, SPLIT_SCHEMA_VERSION)
+    lines = ExtraLines(
+        tuple(payload["bulk_labelled"]),
+        tuple(payload["bulk_unlabelled"]),
+        dict(payload["excluded"]),
+    )
+    _check_disjoint(
+        path,
+        {
+            "bulk_labelled": lines.labelled,
+            "bulk_unlabelled": lines.unlabelled,
+            "excluded": tuple(lines.excluded),
+            "split": split.all_model_ids,
+        },
+    )
+    return lines
+
+
 def load_extra_single_cell_lines(path: Path, split: FixedSplit) -> ExtraSingleCellLines:
     """Load the single-cell membership file; raise on duplicates or any overlap
     between its sets or with the split."""
@@ -117,6 +141,7 @@ __all__ = [
     "SINGLE_CELL_SCHEMA_VERSION",
     "ExtraLines",
     "ExtraSingleCellLines",
+    "load_bulk_lines",
     "load_extra_lines",
     "load_extra_single_cell_lines",
 ]
