@@ -946,4 +946,12 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   bridge's agreement say per-cell sampling does not bind; second-deposit predictions agreeing as well as the halves and no
   deposit η² above its null say deposit batch does not; a curve still rising says more lines would help; the replicate
   ceiling bounds the metric; fractions above means say state heterogeneity carries information beyond the mean.
+- **Result (2026-10-12, [record](../results/noise_diagnosis_seed0/README.md)).** Per-cell sampling does not bind:
+  split-half reliability 0.939 per gene, and ten cells per line score 0.2015 validation against 0.2045 (−0.0030
+  [−0.0092, +0.0036]); the bridge's agreement with bulk (0.453) is half its sampling ceiling. A second deposit moves a
+  line's input (agreement 0.375 against 0.865 for halves) and prediction (0.764 against 0.982) but not its accuracy
+  (+0.0066 [−0.0052, +0.0184] on 99 lines); deposit η² 0.0365 against a null of 0.0315. The learning curve still rises
+  (0.1930 at three quarters of the lines, +0.0115 for the last quarter). Screen replicates agree at 0.251 per gene
+  (ceiling about 0.587). Cell-state arms add at most +0.0010 and fractions never beat means; Cilantro's rank-value
+  encoding ties (−0.0022 [−0.0076, +0.0033]) and its top-2,048 truncations lose (−0.019, −0.014).
 - **Scope.** A diagnosis result is single-gene dependency evidence on held-out lines; it is not an SL result.

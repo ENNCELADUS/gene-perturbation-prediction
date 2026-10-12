@@ -29,9 +29,9 @@ on H20. Both downloads exited successfully, and the table records their on-host 
 `ScreenGeneEffect.csv` has an unnamed first column holding ScreenIDs and gene columns in `SYMBOL (Entrez ID)` format;
 `CRISPRScreenMap.csv` has columns `ScreenID,ModelID`. These are screen-level dependency labels, not SL labels.
 The full CSV read on H20 verified 1,458 unique screen rows with 18,531 numeric gene columns and 1,451 map rows;
-every mapped ScreenID exists in the effect matrix. The H20 checkout did not yet contain the noise-diagnosis module,
-so this check used pandas with `index_col=0`, the project's `depmap_symbol` parser, float64 conversion and the required
-mapping columns, matching the local loader's parsing requirements. The diagnosis itself was not run.
+every mapped ScreenID exists in the effect matrix. The noise diagnosis read them on 2026-10-12 (run
+`noise_20261012`, [record](../../results/noise_diagnosis_seed0/README.md)): 202 lines outside validation and test have
+two screens.
 
 Downloaded on 2026-05-11 from the DepMap downloads API:
 `https://depmap.org/portal/api/download/files`.

@@ -1,7 +1,7 @@
 # Design: diagnosing what limits cross-line GeneEffect prediction
 
-**Status:** agreed 2026-10-12 (grill session after the Cilantro-SL review); implemented on branch
-`feat/noise-diagnosis`; not yet run on the H20. Task 1 of the research plan ([blueprint §5](../01-blueprint.md#5-research-plan)):
+**Status:** agreed 2026-10-12 (grill session after the Cilantro-SL review); implemented and run on the H20 on
+2026-10-12 ([record](../../results/noise_diagnosis_seed0/README.md)). Task 1 of the research plan ([blueprint §5](../01-blueprint.md#5-research-plan)):
 before any single-cell model with its own noise handling is built, measure which noise limits the default linear prior
 (GeneEffect protocol §10), the bar every model has to clear. Protocol §14 holds the executable description.
 
