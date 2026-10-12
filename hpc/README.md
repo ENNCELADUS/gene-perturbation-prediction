@@ -10,7 +10,7 @@ hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 hpc/run.sh prior configs/context_prior/bridge_remedies.yaml [--run-id <id>] [--experiments affine,contrastive]
-hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_export
+hpc/run.sh prior-export configs/context_prior/default_prior_single_cell_extras.yaml --run-id default_prior_single_cell_extras_20261012
 hpc/run.sh prior-stack configs/context_prior/single_cell_stack.yaml --run-id <id>
 hpc/run.sh revision configs/correction/huber_no_state.yaml --run-id correction_huber_no_state_seed0
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
@@ -172,7 +172,17 @@ with its settings and block sets; the runner first prepares pseudo-bulk into `pr
 each line's basal cells; the one step that reads raw data; the prepared root of `all` is reused), then for every
 setting builds the bridged inputs, fits the prior for every block set and penalty, and scores validation and test
 (and the bulk-input oracle on validation). It decides nothing: gains are measured against the reference row the config
-pins, and the table is read by a person. `configs/context_prior/default_prior.yaml` holds the default prior alone.
+pins, and the table is read by a person. `configs/context_prior/default_prior.yaml` holds the default prior alone;
+`default_prior_single_cell_extras.yaml` is the same prior with `training_side.single_cell_extras`, the single-cell
+extras as single-cell training lines (bridge pairs where their bulk RNA is on the training side, out-of-fold export
+rows). Run each with `prior` and then `prior-export` under one run id:
+
+```bash
+OMP_NUM_THREADS=32 nohup bash -c "hpc/run.sh prior configs/context_prior/default_prior_single_cell_extras.yaml \
+  --run-id default_prior_single_cell_extras_20261012 && hpc/run.sh prior-export \
+  configs/context_prior/default_prior_single_cell_extras.yaml --run-id default_prior_single_cell_extras_20261012" \
+  > outputs/launches/default_prior_single_cell_extras_20261012.log 2>&1 &
+```
 
 `hpc/run.sh prior-selected CONFIG --run-id <id>` fits the config's reference row (its last stage must be the
 data-selected genes) and writes `data_selected/{features.csv, targets.csv, ablation.json, summary.md}` into the same run
@@ -181,7 +191,8 @@ directory: feature use, per-target gains of the stage, and scores with the stage
 `hpc/run.sh prior-export CONFIG --run-id <id>` writes the config's reference row for the single-cell correction into
 `outputs/context_prior/<run_id>/export/{prior.npz, prior.json}`: validation and test from the reference fit, and every
 labelled single-cell training line out of fold (the bridge and every stage refitted without the line's patient-grouped
-fold). An existing export is never replaced; a correction checkpoint records the export's run id, so a new export
+fold), the single-cell extras' included under the switch; a joint config with `train.single_cell_extras` needs such an
+export, since `load_inputs` refuses one lacking a line the run exposes. An existing export is never replaced; a correction checkpoint records the export's run id, so a new export
 needs a new run id. It runs on CPU (set `OMP_NUM_THREADS` and `MKL_NUM_THREADS`); `prior.json` holds its own
 validation and test scores, which reproduce the reference row of the `prior` run.
 

@@ -12,7 +12,7 @@ _GROUPS = {
         "max_epochs patience dependency_batch_size response_batch_size "
         "response_interval response_weight state_learning_rate "
         "adapter_learning_rate head_learning_rate weight_decay "
-        "objective state_mode warmup_epochs genes_per_block"
+        "objective state_mode warmup_epochs genes_per_block single_cell_extras"
     ),
     "comparison": (
         "epochs hidden learning_rate state_learning_rate batch_size shuffles bootstrap"
@@ -50,6 +50,11 @@ OBJECTIVES = (
 STATE_MODES = ("frozen", "trainable")
 
 
+def _require_bool(value: Any, name: str) -> None:
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be true or false")
+
+
 def _require_keys(value: Any, expected: set[str], name: str) -> None:
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be a mapping")
@@ -71,6 +76,7 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     for key, choices in (("objective", OBJECTIVES), ("state_mode", STATE_MODES)):
         if config["train"][key] not in choices:
             raise ValueError(f"train.{key} must be one of {choices}")
+    _require_bool(config["train"]["single_cell_extras"], "train.single_cell_extras")
     return dict(config)
 
 
@@ -82,7 +88,7 @@ def load_config(path: Path) -> dict[str, Any]:
 
 _PRIOR_GROUPS = {
     "paths": "extra_lines reference model bulk_expression",
-    "training_side": "exclude_lineages",
+    "training_side": "exclude_lineages single_cell_extras",
     "prior": "components folds bootstrap_repeats selected_genes",
     "penalties": "components gene",
 }
@@ -99,6 +105,8 @@ def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
     _require_keys(config, {*_PRIOR_GROUPS, *_PRIOR_TOP_LEVEL.split()}, "config")
     for name, keys in _PRIOR_GROUPS.items():
         _require_keys(config[name], set(keys.split()), name)
+    side = config["training_side"]
+    _require_bool(side["single_cell_extras"], "training_side.single_cell_extras")
     for name, blocks in config["block_sets"].items():
         if (
             not blocks

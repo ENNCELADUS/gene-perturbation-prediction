@@ -214,8 +214,8 @@ plan.
 - *Objective:* predict gene-specific dependency in held-out lines, especially each line's deviation from the
   gene's mean over lines.
 - *Evaluation:* context accuracy on held-out lines (§3.7). The bar is the default linear prior of the GeneEffect
-  protocol (§10 there, selective Spearman 0.229 validation / 0.234 test), cleared by a paired line-bootstrap
-  interval above zero on validation; the gene mean is the floor.
+  protocol (§10 there, selective Spearman 0.230 validation / 0.232 test on the current split), cleared by a paired
+  line-bootstrap interval above zero on validation; the gene mean is the floor.
 - *Interpretability:* why the same gene's dependency differs between lines: the features, pathways and cell
   states behind context-specific vulnerabilities, starting from what the winning model exposes (the prior's
   data-selected genes carry its gain). Every proposed explanation is set against lineage, the gene's own
@@ -238,9 +238,10 @@ plan.
 
 **Order.** The single-cell statistics stack; then, only on its signal, distributional and AI-virtual-cell
 models judged against the default prior; then interpretation of whichever model wins. On 2026-10-11 the 226 split
-was rebuilt in place with A549 moved to test (the SL benchmark below needs it); before any further stage-one work
-the default prior and the single-cell statistics stack are rerun on it, and the earlier results stay as records of
-the 172/27/27 split. Evidence so far: the
+was rebuilt in place with A549 moved to test (the SL benchmark below needs it). The default prior was rerun on it on
+2026-10-12 (0.230 validation / 0.232 test; with the single-cell extras as training lines 0.229 / 0.230, a difference
+whose interval spans zero); the single-cell statistics stack is still to be rerun, and the earlier results stay as
+records of the 172/27/27 split. Evidence so far: the
 joint STATE model trailed the context ridge, and in the single-cell correction every trained epoch lowered
 validation and STATE absent beat STATE frozen or trainable (GeneEffect protocol §7, §12).
 

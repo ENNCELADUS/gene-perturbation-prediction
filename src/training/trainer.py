@@ -40,13 +40,13 @@ TRAINING_DIAGNOSTIC_LINES = 27
 
 
 def training_diagnostic_lines(inputs: PreparedInputs) -> tuple[str, ...]:
-    """The supervised training lines scored by the per-epoch ``train_eval_`` metrics.
+    """The training lines scored by the per-epoch ``train_eval_`` metrics.
 
     ``TRAINING_DIAGNOSTIC_LINES`` lines (all of them if fewer) drawn once from the
-    sorted supervised training lines with ``np.random.default_rng(0)``, returned
-    sorted. Depends only on the split, so a resumed run scores the same lines.
+    sorted training lines with ``np.random.default_rng(0)``, returned sorted.
+    Depends only on the training lines, so a resumed run scores the same lines.
     """
-    lines = sorted(inputs.split.supervised_train)
+    lines = sorted(inputs.train_lines)
     chosen = np.random.default_rng(0).choice(
         len(lines), size=min(TRAINING_DIAGNOSTIC_LINES, len(lines)), replace=False
     )

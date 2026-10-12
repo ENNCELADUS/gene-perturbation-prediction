@@ -15,6 +15,7 @@ train:
   state_mode: frozen
   warmup_epochs: 1
   genes_per_block: 6
+  single_cell_extras: true  # the built single-cell extras join the training lines
 comparison:
   epochs: 50
   hidden: 512

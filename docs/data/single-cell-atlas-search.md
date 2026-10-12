@@ -285,5 +285,8 @@ blood-cancer panels) give several lines inside one study. Re-counted libraries c
 counts, the rest the deposits' own (mostly Cell Ranger) counts. Calls to note: Groves' inDrop looms (GSE193959; COR-L279 and
 DMS 53) put the knee near 125 UMI, so nearly all of their deposited barcodes pass as cells; the
 OPM-2 and Dufva hashtag lanes have many doublets (reported per lane). The prepared extras are
-training-side data only: validation and
-test lines are unchanged, and whether and how a model uses the extras is decided by its own run.
+training-side data only: validation and test lines are unchanged. Every joint config sets
+`train.single_cell_extras`, so the extras are training lines of the joint model (their labels and
+cells; the metric's definitions stay on the split's training lines), and a prior config's
+`training_side.single_cell_extras` makes them single-cell training lines of the prior, predicted
+out of fold by its export ([protocol §3.1, §10](../03-geneeffect-protocol.md#31-basal-cells)).
