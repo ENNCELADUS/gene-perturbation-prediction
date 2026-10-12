@@ -61,11 +61,14 @@ screen set of Kebabci et al. 2026: the Ito, Klingbeil and Harle multi-line scree
 by its own call), trained pooled and scored within one screen, with a single-cell headline and a bulk-read
 complement. On 2026-10-11 the 226 split was rebuilt in place with A549 in test (171/27/28; the prepared caches did not
 change) and the benchmark was built on the H20 (`data/sl_screens/benchmark/`, data card
-`docs/data/sl-screen-benchmark.md`). The default prior and the single-cell stack have not been rerun on the rebuilt
-split; their recorded numbers are on the 172/27/27 split. The **single-cell extras** (data layer only, plan of
+`docs/data/sl-screen-benchmark.md`). On 2026-10-12 the default prior was rerun on the rebuilt split: 0.2302 validation /
+0.2318 test (`results/default_prior_rerun_seed0/`), and 0.2290 / 0.2301 with the single-cell extras as its single-cell
+training lines (interval spanning zero); the single-cell stack has not been rerun, and its recorded numbers are on the
+172/27/27 split. The **single-cell extras** (data layer only, plan of
 2026-10-11, [card](docs/data/single-cell-atlas-search.md)) are built in two waves: 208 labelled lines outside the 226 with
-505,097 basal cells from 62 public deposits, prepared into `data/geneeffect_joint/v2` beside the unchanged 226 (no model
-reads them yet), and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk).
+505,097 basal cells from 62 public deposits, prepared into `data/geneeffect_joint/v2` beside the unchanged 226 (every
+joint config trains on them through `train.single_cell_extras`, and the correction configs stack on the prior export
+that predicts them out of fold; no model has been trained on them yet), and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk).
 Wave 2 (counts recovered from processed deposits, Cell Ranger BAMs, or SRA reads re-counted with kb) added 22 lines and
 moved eight to sources with more or untreated cells; it adds no screened line. The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
@@ -140,7 +143,10 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   from `<paths.basal_raw_umi>/<ModelID>.h5ad`; an existing root grows by the lines it lacks, in the recorded space. The
   extras' h5ad are built from public deposits by `src/data/prepare/build_extra_single_cell_sources.py`, after
   `src/data/prepare/recount_extra_single_cell_sources.py` re-counts the SRA reads of deposits without raw counts.
-- **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
+- **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`) fits on the training lines
+  (`PreparedInputs.train_lines`): the split's 169 labelled training lines and, under `train.single_cell_extras` (true in
+  every joint config), the 208 single-cell extras; gene means, selective genes and residual SD stay fitted on the split's
+  training lines, so runs with and without the extras share one metric. STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
   the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
   128-component context PCA (fitted on training lines), plus a per-(g, c) correction that never sees the context, and predicts in units of the
