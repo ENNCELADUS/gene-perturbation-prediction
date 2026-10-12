@@ -9,7 +9,7 @@ scores as population-level fitness labels, not single-cell death labels.
 ## Downloaded Files
 
 Remote root:
-`/home/richard/projects/VCC/data/sl_dependency_v0/raw/depmap/`
+`/2023533015/VCC_Project/data/sl_dependency_v0/raw/depmap/`
 
 | File | Size | SHA256 |
 | --- | ---: | --- |
@@ -19,12 +19,19 @@ Remote root:
 | `OmicsSomaticMutationsMatrixHotspot.csv` | 6902131 | `a86cd8c92b86d5507e63103f06a507913897c85262e0a0d7e44fa22768dd4dc9` |
 | `OmicsSomaticMutationsMatrixDamaging.csv` | 238858587 | `45709b1b842dd6dcd05e504cd42ca977fff760c480c60ff1184c1a5935b595b0` |
 | `OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv` | 305039593 | `0377be80c525fde98cbd2c6e8b06bdf2a4014a9683eb70182c1f8649d711021a` |
+| `ScreenGeneEffect.csv` | 528962158 | `f77ca708f884b89586f4d94450b6ca8d921a115548900022e17a8facd55a5099` |
+| `CRISPRScreenMap.csv` | 37743 | `9bec9f1fcc7ce5219c41c5f4d91be054f0828e8c289fca9f7b7d79337bc21a97` |
 
-Pending (noise diagnosis, [protocol §14](../03-geneeffect-protocol.md#14-noise-diagnosis)): `ScreenGeneEffect.csv`
-(per-screen gene effect, one row per ScreenID) and `CRISPRScreenMap.csv` (ScreenID to ModelID) of the same release. The
-portal's download API now answers scripts with a browser check (2026-10-12), so both are downloaded in a browser from the
-DepMap download page, copied to the directory above with their SHA-256 checked, and added to this table. Their columns are
-checked when read; nothing reads them before then.
+The two per-screen files for noise diagnosis ([protocol §14](../03-geneeffect-protocol.md#14-noise-diagnosis)) were
+downloaded on 2026-10-12. The browser selected **DepMap Public 26Q1** and resolved each file's signed download URL;
+Chrome blocked attachment navigation (`ERR_BLOCKED_BY_CLIENT`), so `wget` retrieved those browser-issued URLs directly
+on H20. Both downloads exited successfully, and the table records their on-host SHA-256 hashes.
+`ScreenGeneEffect.csv` has an unnamed first column holding ScreenIDs and gene columns in `SYMBOL (Entrez ID)` format;
+`CRISPRScreenMap.csv` has columns `ScreenID,ModelID`. These are screen-level dependency labels, not SL labels.
+The full CSV read on H20 verified 1,458 unique screen rows with 18,531 numeric gene columns and 1,451 map rows;
+every mapped ScreenID exists in the effect matrix. The H20 checkout did not yet contain the noise-diagnosis module,
+so this check used pandas with `index_col=0`, the project's `depmap_symbol` parser, float64 conversion and the required
+mapping columns, matching the local loader's parsing requirements. The diagnosis itself was not run.
 
 Downloaded on 2026-05-11 from the DepMap downloads API:
 `https://depmap.org/portal/api/download/files`.

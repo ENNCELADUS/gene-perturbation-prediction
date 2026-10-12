@@ -80,8 +80,8 @@ moved eight to sources with more or untreated cells; it adds no screened line. T
 limits the default prior before any denoising model is built: per-cell sampling (split halves, 10 to 400 cells), a
 learning curve over training lines, deposit batch (a confound test, and 99 planned second deposits built by
 `build_extra_single_cell_sources --second-source`), cell-state programs (Tirosh's cell cycle and the 21 Gavish
-meta-programs without a cell-line study) and K-means clusters, label replicates (DepMap per-screen files, a browser
-download still pending) and Cilantro's rank-value and top-2,048 encodings (`configs/context_prior/cilantro_encodings.yaml`).
+meta-programs without a cell-line study) and K-means clusters, label replicates (DepMap per-screen files, downloaded
+by hand on 2026-10-12) and Cilantro's rank-value and top-2,048 encodings (`configs/context_prior/cilantro_encodings.yaml`).
 Not yet run. The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.
