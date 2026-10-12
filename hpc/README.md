@@ -202,6 +202,22 @@ reads the prior run's bound config, so its genes, residual SD and lines are the 
 does not match them. It runs on CPU in one process (set `OMP_NUM_THREADS` and `MKL_NUM_THREADS`); a finished run
 directory is refused, so a rerun needs a new run id.
 
+`hpc/run.sh prior-noise CONFIG --run-id <id> [--sections A,B]` runs the noise diagnosis (GeneEffect protocol §14;
+`configs/context_prior/noise_diagnosis.yaml`) against the config's `prior_run` and writes
+`outputs/context_prior/<run_id>/{run_config.json, noise/{<section>.json, cell_sampling_genes.csv, results.md}}`; a
+finished section is skipped, so a rerun with the same run id resumes. The first section that needs them prepares
+`noise/subsamples.parquet` and `noise/programs/` under `prepared_root` from every line's raw cells (CPU, 16 processes);
+Sections run in the order `--sections` lists them, so the two that read no raw cells go first. `deposit_swap` first needs
+the second-deposit builds (Extra single-cell lines, below), and `screen_replicates` needs DepMap's per-screen files, which
+are downloaded in a browser ([card](../docs/data/depmap-public-26q1.md)). The Cilantro-SL encodings run through `prior`:
+
+```bash
+OMP_NUM_THREADS=32 nohup hpc/run.sh prior configs/context_prior/cilantro_encodings.yaml \
+  --run-id cilantro_encodings_20261012 > outputs/launches/cilantro_encodings_20261012.log 2>&1 &
+OMP_NUM_THREADS=32 nohup hpc/run.sh prior-noise configs/context_prior/noise_diagnosis.yaml --run-id noise_20261012 \
+  --sections learning_curve,deposit_confound,cell_sampling,cell_states > outputs/launches/noise_20261012.log 2>&1 &
+```
+
 The run directory is `outputs/context_prior/<run_id>/{run_config.json, rows/<experiment>__<n>.json, results.md}`.
 Each setting writes its row file when finished and is skipped when the file exists, so an interrupted run resumes by
 rerunning the same command with the same run id; `results.md` is rewritten from whatever rows exist on every run.
@@ -263,6 +279,18 @@ single-stream rate from the H20 is a few MB/s; parallel ranged requests (about e
 faster, while ENA's FASTQ host was slower still and drops the barcode reads of some runs. A line whose chosen source
 changes (a wave-2 source with more or better cells than its wave-1 one) is re-prepared: its h5ad, prepared npz, Tx1
 cache directory and pseudo-bulk row are moved under `data/superseded/` before the new source is built.
+
+**Second deposits** for the noise diagnosis's `deposit_swap`: `configs/data/second_source_lines_26Q1.json` (written on
+the Mac by `plan_second_sources.py`) names, for 99 labelled training lines, a second source of the extras spec. The
+builder's `--second-source` mode builds those lines, lines of the 226 included, into a directory of its own, one wave at a
+time; the training caches are not touched:
+
+```bash
+S=configs/data/extra_single_cell_sources_26Q1.json; P=configs/data/second_source_lines_26Q1.json
+O=data/sl_dependency_v0/processed/basal_raw_umi_second_source
+for W in 1 2; do OMP_NUM_THREADS=16 .venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_sources --spec $S \
+  --wave $W --second-source $P --output-dir $O; done > outputs/launches/second_sources.log 2>&1
+```
 
 ## Configuration and inputs
 
