@@ -83,7 +83,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
         },
         row_counts={split: len(data) for split, data in datasets.items()},
         split_lines={
-            "train": list(inputs.split.supervised_train),
+            "train": list(inputs.train_lines),
             "val": list(inputs.split.val),
         },
         genes=list(inputs.genes),

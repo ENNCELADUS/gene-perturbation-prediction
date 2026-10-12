@@ -380,6 +380,13 @@ def test_prepare_grows_root_by_new_extra_line_only(tmp_path):
     assert grown == earlier
     with np.load(root / "lines" / "ACH-E1.npz") as line:
         assert line["q_sc_values"].shape[0] == len(grown["common_gene_panel"])
+    # A labelled extra opens as a training line, and only under the switch.
+    labels = pd.read_csv(config["paths"]["gene_effect"], index_col=0)
+    labels.loc["ACH-E1"] = 0.5
+    labels.to_csv(config["paths"]["gene_effect"])
+    opened = load_inputs(config, include_test=True)
+    assert opened.train_lines[-1] == "ACH-E1" and "ACH-E1" in opened.lines
+    config["train"]["single_cell_extras"] = False
     assert "ACH-E1" not in load_inputs(config, include_test=True).lines
 
 
