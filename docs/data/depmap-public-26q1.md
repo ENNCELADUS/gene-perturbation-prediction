@@ -20,6 +20,12 @@ Remote root:
 | `OmicsSomaticMutationsMatrixDamaging.csv` | 238858587 | `45709b1b842dd6dcd05e504cd42ca977fff760c480c60ff1184c1a5935b595b0` |
 | `OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv` | 305039593 | `0377be80c525fde98cbd2c6e8b06bdf2a4014a9683eb70182c1f8649d711021a` |
 
+Pending (noise diagnosis, [protocol §14](../03-geneeffect-protocol.md#14-noise-diagnosis)): `ScreenGeneEffect.csv`
+(per-screen gene effect, one row per ScreenID) and `CRISPRScreenMap.csv` (ScreenID to ModelID) of the same release. The
+portal's download API now answers scripts with a browser check (2026-10-12), so both are downloaded in a browser from the
+DepMap download page, copied to the directory above with their SHA-256 checked, and added to this table. Their columns are
+checked when read; nothing reads them before then.
+
 Downloaded on 2026-05-11 from the DepMap downloads API:
 `https://depmap.org/portal/api/download/files`.
 Signed file URLs were resolved at download time and intentionally not persisted.

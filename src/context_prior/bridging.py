@@ -73,15 +73,20 @@ def oof_bridged(
     paired: Sequence[str],
     lines: Sequence[str],
     folds: Mapping[str, int],
+    *,
+    reading: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Bridged pseudo-bulk of ``lines``, each from a bridge fitted on the paired
-    lines outside its fold; rows in ``lines`` order."""
+    lines outside its fold; rows in ``lines`` order. With ``reading`` (other
+    pseudo-bulk of ``lines``, e.g. another deposit), the bridges fitted on
+    ``pseudobulk`` are applied to its rows instead."""
+    query = pseudobulk if reading is None else reading
     parts = []
     for fold in sorted({folds[m] for m in lines}):
         fit = [m for m in paired if folds[m] != fold]
         held = [m for m in lines if folds[m] == fold]
         bridge = fit_bridge(pseudobulk.loc[fit], bulk.loc[fit])
-        parts.append(bridge.apply(pseudobulk.loc[held]))
+        parts.append(bridge.apply(query.loc[held]))
     return pd.concat(parts).loc[list(lines)]
 
 

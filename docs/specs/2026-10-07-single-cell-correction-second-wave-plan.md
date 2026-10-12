@@ -73,6 +73,11 @@ All of wave one's Global Constraints apply. Also:
 
 ### Task 1: Pin the correction's gene tables (Mac, internet)
 
+> **2026-10-12:** `cell_cycle.tsv` and `meta_programs.tsv` are pinned by `src/data/prepare/build_state_programs.py` for
+> the noise diagnosis, with `meta_program_sources.tsv` counting each program's cell-line studies: 20 of the 41 Gavish
+> meta-programs count Kinker's CCLE pools among their sources (the stop condition below), so only the 21 without one
+> are read (`configs/context_prior/noise_diagnosis.yaml`). This task keeps gene positions and arms.
+
 **Files:**
 - Create: `src/data/prepare/build_correction_reference.py`, `tests/test_build_correction_reference.py`
 - Create (output): `configs/context_prior/reference/{cell_cycle.tsv, meta_programs.tsv, gene_positions.tsv, arms.tsv}`; `provenance.json` gains their entries.

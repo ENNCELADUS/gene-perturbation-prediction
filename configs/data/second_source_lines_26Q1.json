@@ -1,0 +1,600 @@
+{
+  "schema_version": 1,
+  "policy": "One second deposit per labelled single-cell training line: an accepted raw-count source of the identity map that the extras spec builds, other than the line's own and from another accession, chosen by the membership policy.",
+  "lines": {
+    "ACH-000001": {
+      "primary": "gse207993",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000012": {
+      "primary": "gse118767",
+      "second": "gse303762",
+      "wave": 1,
+      "accession": "GSE303762; labels s3://longbench-data"
+    },
+    "ACH-000017": {
+      "primary": "ccla_omix005191",
+      "second": "gse311521",
+      "wave": 2,
+      "accession": "GEO GSE311521"
+    },
+    "ACH-000018": {
+      "primary": "gse311521",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000054": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000086": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000087": {
+      "primary": "kinker_scp542",
+      "second": "gse311521",
+      "wave": 2,
+      "accession": "GEO GSE311521"
+    },
+    "ACH-000090": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000094": {
+      "primary": "gse173339",
+      "second": "gse270117",
+      "wave": 1,
+      "accession": "GEO GSE270117"
+    },
+    "ACH-000120": {
+      "primary": "tahoe100m",
+      "second": "gse229224",
+      "wave": 1,
+      "accession": "GEO GSE229224"
+    },
+    "ACH-000123": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000146": {
+      "primary": "emtab13204",
+      "second": "gse217922",
+      "wave": 1,
+      "accession": "GSE217922"
+    },
+    "ACH-000149": {
+      "primary": "gse229224",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000159": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000163": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000164": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000178": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000209": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000217": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000219": {
+      "primary": "kinker_scp542",
+      "second": "gse311521",
+      "wave": 2,
+      "accession": "GEO GSE311521"
+    },
+    "ACH-000228": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000235": {
+      "primary": "gse218310",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000244": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000252": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000255": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000260": {
+      "primary": "kinker_scp542",
+      "second": "gse311521",
+      "wave": 2,
+      "accession": "GEO GSE311521"
+    },
+    "ACH-000265": {
+      "primary": "gse292402",
+      "second": "gse270117",
+      "wave": 1,
+      "accession": "GEO GSE270117"
+    },
+    "ACH-000274": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000292": {
+      "primary": "mixseq",
+      "second": "gse193959",
+      "wave": 1,
+      "accession": "GSE193959"
+    },
+    "ACH-000302": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000324": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000341": {
+      "primary": "gse229224",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000343": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000348": {
+      "primary": "tahoe100m",
+      "second": "gse311521",
+      "wave": 2,
+      "accession": "GEO GSE311521"
+    },
+    "ACH-000355": {
+      "primary": "gse216182",
+      "second": "gse193959",
+      "wave": 1,
+      "accession": "GSE193959"
+    },
+    "ACH-000361": {
+      "primary": "gse311521",
+      "second": "gse188289",
+      "wave": 1,
+      "accession": "GEO GSE188289"
+    },
+    "ACH-000365": {
+      "primary": "emtab13204",
+      "second": "gse217922",
+      "wave": 1,
+      "accession": "GSE217922"
+    },
+    "ACH-000374": {
+      "primary": "breast_cell_line_atlas",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000389": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000396": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000397": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000415": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000416": {
+      "primary": "gse118767",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000424": {
+      "primary": "gse146221",
+      "second": "gse236284",
+      "wave": 2,
+      "accession": "GEO GSE236284; SRA SRR25099374-6 (Cell Ranger BAM)"
+    },
+    "ACH-000427": {
+      "primary": "gse142750_recount",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000460": {
+      "primary": "mixseq",
+      "second": "figshare33273600",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.33273600"
+    },
+    "ACH-000463": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000471": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000480": {
+      "primary": "ccla_omix005191",
+      "second": "gse103867",
+      "wave": 1,
+      "accession": "GSE103867"
+    },
+    "ACH-000524": {
+      "primary": "gse247688",
+      "second": "gse297836",
+      "wave": 1,
+      "accession": "GEO GSE297836"
+    },
+    "ACH-000535": {
+      "primary": "gse173339",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000537": {
+      "primary": "mixseq",
+      "second": "gse263747",
+      "wave": 1,
+      "accession": "GEO GSE263747"
+    },
+    "ACH-000545": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000551": {
+      "primary": "Perturb-seq non-targeting control",
+      "second": "gse243227",
+      "wave": 1,
+      "accession": "GSE243227"
+    },
+    "ACH-000552": {
+      "primary": "tahoe100m",
+      "second": "gse311521",
+      "wave": 2,
+      "accession": "GEO GSE311521"
+    },
+    "ACH-000558": {
+      "primary": "tahoe100m",
+      "second": "gse261618",
+      "wave": 2,
+      "accession": "GEO GSE261618 (GSM8147508, ATCC pilot)"
+    },
+    "ACH-000579": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000587": {
+      "primary": "gse118767",
+      "second": "gse303762",
+      "wave": 1,
+      "accession": "GSE303762; labels s3://longbench-data"
+    },
+    "ACH-000601": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000605": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000622": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000624": {
+      "primary": "gse202435",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000649": {
+      "primary": "ccla_omix005191",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000653": {
+      "primary": "emtab13204",
+      "second": "gse196766",
+      "wave": 1,
+      "accession": "GSE196766"
+    },
+    "ACH-000657": {
+      "primary": "gse272618",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000672": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000713": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000717": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000748": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000762": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000776": {
+      "primary": "gse254917",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000788": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000790": {
+      "primary": "tahoe100m",
+      "second": "gse303762",
+      "wave": 1,
+      "accession": "GSE303762; labels s3://longbench-data"
+    },
+    "ACH-000791": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000792": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000811": {
+      "primary": "gse206953",
+      "second": "gse311521",
+      "wave": 2,
+      "accession": "GEO GSE311521"
+    },
+    "ACH-000822": {
+      "primary": "gse311521",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000834": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000847": {
+      "primary": "gse142750",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000866": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000900": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000903": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000911": {
+      "primary": "mixseq",
+      "second": "gse256301",
+      "wave": 1,
+      "accession": "GEO GSE256301"
+    },
+    "ACH-000916": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000939": {
+      "primary": "gse311521",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000943": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000947": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000950": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000956": {
+      "primary": "scMultiome 22Rv1-DMSO raw counts",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000958": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000971": {
+      "primary": "Perturb-seq non-targeting control",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000977": {
+      "primary": "kinker_scp542",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-000995": {
+      "primary": "Perturb-seq non-targeting control",
+      "second": "emtab13204",
+      "wave": 1,
+      "accession": "E-MTAB-13204"
+    },
+    "ACH-000997": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-001029": {
+      "primary": "gse146221",
+      "second": "gse236284",
+      "wave": 2,
+      "accession": "GEO GSE236284; SRA SRR25099374-6 (Cell Ranger BAM)"
+    },
+    "ACH-001188": {
+      "primary": "gse311521",
+      "second": "gse331320",
+      "wave": 1,
+      "accession": "GEO GSE331320"
+    },
+    "ACH-001190": {
+      "primary": "tahoe100m",
+      "second": "mixseq",
+      "wave": 1,
+      "accession": "figshare 10.6084/m9.figshare.10298696"
+    },
+    "ACH-001390": {
+      "primary": "gse182694",
+      "second": "gse228275",
+      "wave": 1,
+      "accession": "GEO GSE228275"
+    },
+    "ACH-002181": {
+      "primary": "gse247098",
+      "second": "gse147405",
+      "wave": 1,
+      "accession": "GEO GSE147405"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+# What limits the default prior (noise-diagnosis design of 2026-10-12, protocol §14): per-cell sampling, the number of
+# training lines, the deposit a line's cells come from, cell-state heterogeneity and the noise of the label, each
+# measured against the default prior of the final split. Every row is reported on validation and test; nothing is
+# chosen in code. `hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]`.
+seed: 0
+output_root: outputs/context_prior
+prior_run: outputs/context_prior/default_prior_final_split_20261012
+bootstrap_repeats: 1000
+cell_sampling:
+  cells: [10, 25, 50, 100, 200, 400]
+learning_curve:
+  fractions: [0.125, 0.25, 0.5, 0.75]
+deposit:
+  min_lines: 5
+  permutations: 1000
+  second_source_root: data/sl_dependency_v0/processed/basal_raw_umi_second_source
+cell_states:
+  # Tirosh's cell-cycle phases, then the Gavish meta-programs with no cell-line study among their sources
+  # (configs/context_prior/reference/meta_program_sources.tsv; decided 2026-10-12).
+  programs:
+    - S
+    - G2M
+    - MP3 Cell Cylce HMG-rich
+    - MP9 Unfolded protein response
+    - MP15 EMT IV
+    - MP18 Interferon/MHC-II (II)
+    - MP20 MYC
+    - MP21 Respiration
+    - MP22 Secreted I
+    - MP23 Secreted II
+    - MP24 Cilia
+    - MP27 Oligo Progenitor
+    - MP28 Oligo normal
+    - MP30 PDAC-classical
+    - MP31 Alveolar
+    - MP33 RBCs
+    - MP34 Platelet-activation
+    - MP35 Hemato-related-I
+    - MP36 IG
+    - MP37 Hemato-related-II
+    - MP38 Glutathione
+    - MP39 Metal-response
+    - MP41 Unassigned
+  threshold_percentile: 90
+  cluster_components: 50
+  cluster_counts: [8, 16]
+  penalties: [1.0, 10.0, 100.0, 1000.0]
+screen_replicates:
+  # DepMap Public 26Q1, downloaded in a browser (the portal's download API sits behind a browser check) and copied
+  # here with their SHA-256 (docs/data/depmap-public-26q1.md).
+  screen_gene_effect: data/sl_dependency_v0/raw/depmap/ScreenGeneEffect.csv
+  screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv
