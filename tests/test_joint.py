@@ -103,6 +103,7 @@ def make_inputs(seed: int = 0) -> PreparedInputs:
     }
     return PreparedInputs(
         split=FixedSplit(train=TRAIN, val=VAL, test=TEST),
+        train_lines=TRAIN,
         labels=labels,
         genes=GENES,
         train_gene_means=means.reindex(list(GENES)),
@@ -417,17 +418,11 @@ def test_selection_uses_val_selective_spearman(world, tmp_path, monkeypatch):
 def test_training_diagnostic_uses_fixed_line_subset(world, tmp_path, monkeypatch):
     from accelerate import Accelerator
 
-    many = SimpleNamespace(
-        split=SimpleNamespace(supervised_train=tuple(f"ACH-{i:03d}" for i in range(60)))
-    )
+    many = SimpleNamespace(train_lines=tuple(f"ACH-{i:03d}" for i in range(60)))
     chosen = trainer.training_diagnostic_lines(many)
     assert len(chosen) == trainer.TRAINING_DIAGNOSTIC_LINES == 27
-    assert list(chosen) == sorted(chosen) and set(chosen) < set(
-        many.split.supervised_train
-    )
-    reversed_order = SimpleNamespace(
-        split=SimpleNamespace(supervised_train=many.split.supervised_train[::-1])
-    )
+    assert list(chosen) == sorted(chosen) and set(chosen) < set(many.train_lines)
+    reversed_order = SimpleNamespace(train_lines=many.train_lines[::-1])
     assert trainer.training_diagnostic_lines(reversed_order) == chosen
 
     # Three of the six synthetic training lines, every epoch the same three.

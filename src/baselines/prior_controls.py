@@ -4,7 +4,7 @@
 adds the Tx1 context-PCA ridge of the control ladder (mean and variance of the
 line's Tx1 cell embeddings, standardised on the training lines, 8 principal
 components, a ridge per gene at alpha 1) fitted on what the prior leaves on the
-labelled training lines: the linear special case of the head on the same target.
+model's training lines: the linear special case of the head on the same target.
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ def prior_control_rows(
     """Both controls' prediction rows for ``split``'s labelled lines."""
     if inputs.prior is None:
         raise ValueError("prior controls need a prior export, and no prior is set")
-    train = list(inputs.split.supervised_train)
+    train = list(inputs.train_lines)
     lines = list(getattr(inputs.split, split))
     genes = list(inputs.genes)
     scale = inputs.residual_scale.loc[genes].to_numpy()

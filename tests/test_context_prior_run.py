@@ -135,8 +135,10 @@ def test_shared_files_wait_for_the_run_directory_lock(tmp_path):
 SPACE = [f"E{i}" for i in range(16)]
 
 
-def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
-    from src.data.extra_lines import ExtraLines
+def _world(monkeypatch, single_cell_extras: bool) -> dict:
+    """Synthetic split, bulk and single-cell extras, GeneEffect and pseudo-bulk,
+    patched into ``load_base``; returns them and the config."""
+    from src.data.extra_lines import ExtraLines, ExtraSingleCellLines
 
     rng = np.random.default_rng(0)
     single = [f"S{i}" for i in range(30)]
@@ -144,25 +146,30 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     val, test = [f"V{i}" for i in range(6)], [f"T{i}" for i in range(6)]
     blood = ["XB0", "YB0"]  # a labelled and an unlabelled haematopoietic extra
     everyone = [*single, "U0", *extras, *unlabelled, *blood, *val, *test, "Z0"]
+    # Single-cell extras: one with training-side bulk, one of a dropped lineage,
+    # one without bulk RNA.
+    cells = ["X0", "XB0", "W0"]
     bulk = pd.DataFrame(
         rng.normal(size=(len(everyone), len(SPACE))), index=everyone, columns=SPACE
     ).drop(index=["S29", "V5"])  # a training and a validation line without bulk
+    labelled_ids = [*everyone, "W0"]
     gene_effect = pd.DataFrame(
-        rng.normal(size=(len(everyone), 3)), index=everyone, columns=["E0", "E1", "Q"]
+        rng.normal(size=(len(labelled_ids), 3)),
+        index=labelled_ids,
+        columns=["E0", "E1", "Q"],
     ).drop(index=["U0", *unlabelled, "YB0"])
-    scored = [*single, "U0", *val, *test]
+    scored = [*single, "U0", *val, *test, *cells]
     pseudo = pd.DataFrame(
         rng.normal(size=(len(scored), len(SPACE))), index=scored, columns=SPACE
     )
     pseudo.loc["S0", "E15"] = np.nan  # a training line's source lacks E15: filled
     pseudo.loc["V0", "E14"] = np.nan  # a validation line lacks E14: out of the space
-    pseudo.loc["W0"] = np.nan  # a single-cell extra: never read by the prior
     models = pd.DataFrame(
         {
-            "patient_id": everyone,
-            "lineage": ["Myeloid" if m in blood else "Lung" for m in everyone],
+            "patient_id": labelled_ids,
+            "lineage": ["Myeloid" if m in blood else "Lung" for m in labelled_ids],
         },
-        index=everyone,
+        index=labelled_ids,
     )
     split = FixedSplit(
         train=(*single, "U0"), val=tuple(val), test=tuple(test), unlabeled_train=("U0",)
@@ -175,11 +182,27 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
         "residual_sd_floor_percentile": 10,
     }
     joint = {
-        "paths": {"split": "split", "gene_effect": "effect"},
+        "paths": {
+            "split": "split",
+            "gene_effect": "effect",
+            "extra_single_cell_lines": "cells",
+        },
         "features": features,
         "prepared_root": "prepared",
     }
-    seen, prepared = [], []
+    world = {
+        "single": single,
+        "extras": extras,
+        "unlabelled": unlabelled,
+        "val": val,
+        "test": test,
+        "cells": cells,
+        "bulk": bulk,
+        "split": split,
+        "seen": [],
+        "prepared": [],
+        "membership": {m: {"lineage": models.at[m, "lineage"]} for m in cells},
+    }
     monkeypatch.setattr(run, "load_config", lambda path: joint)
     monkeypatch.setattr(run, "load_geneeffect_226_split", lambda path: split)
     monkeypatch.setattr(
@@ -189,6 +212,11 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
             (*extras, "XB0"), (*unlabelled, "YB0"), {"Z0": "shares a patient"}
         ),
     )
+    monkeypatch.setattr(
+        run,
+        "load_extra_single_cell_lines",
+        lambda path, split: ExtraSingleCellLines(world["membership"], (), {}, {}),
+    )
     monkeypatch.setattr(run, "read_models", lambda path: models)
     monkeypatch.setattr(
         run,
@@ -197,7 +225,7 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     )
 
     def reference(path, *, blocked):
-        seen.extend(blocked)
+        world["seen"].extend(blocked)
 
     monkeypatch.setattr(run, "load_reference", reference)
     monkeypatch.setattr(
@@ -206,14 +234,23 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     )
     monkeypatch.setattr(
         "src.experiments.prepare.prepare_pseudobulk",
-        lambda config, genes: prepared.append(list(genes)),
+        lambda config, genes: world["prepared"].append(list(genes)),
     )
     monkeypatch.setattr("src.data.pseudobulk.read_pseudobulk", lambda root: pseudo)
 
     config = copy.deepcopy(CONFIG)
     config["paths"]["bulk_expression"] = "bulk"
     config["training_side"]["exclude_lineages"] = ["Myeloid", "Lymphoid"]
-    loaded = run.load_base(config)
+    config["training_side"]["single_cell_extras"] = single_cell_extras
+    world["config"] = config
+    return world
+
+
+def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
+    world = _world(monkeypatch, single_cell_extras=False)
+    single, extras, unlabelled = world["single"], world["extras"], world["unlabelled"]
+    val, test, bulk, split = world["val"], world["test"], world["bulk"], world["split"]
+    loaded = run.load_base(world["config"])
     side = [*single[:-1], "U0", *extras, *unlabelled]
     space = [g for g in SPACE if g != "E14"]
     bridge = loaded.bridge
@@ -226,16 +263,51 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     assert set(bridge.folds) == set(single)
     assert bridge.val == tuple(val) and bridge.test == tuple(test)
     assert loaded.filled_lines == 1
+    # The single-cell extras are never read without the switch.
     assert list(bridge.pseudobulk.index) == list(split.all_model_ids)
     # Every normalised row takes the training side's reference profile.
     profile = quantile_reference(bulk.loc[side, space])
     assert np.allclose(np.sort(bridge.oracle.to_numpy(), axis=1), profile)
     assert np.allclose(np.sort(bridge.pseudobulk.to_numpy(), axis=1), profile)
-    assert set(seen) == {*val, *test, "Z0"}
-    assert prepared == [list(bulk.columns)]
+    assert set(world["seen"]) == {*val, *test, "Z0"}
+    assert world["prepared"] == [list(bulk.columns)]
     assert "Z0" not in loaded.gene_effect.index
-    assert "XB0" not in loaded.gene_effect.index
+    assert {"XB0", "W0"}.isdisjoint(loaded.gene_effect.index)
     assert loaded.definitions.genes == ("E0", "E1", "Q")
+
+
+def test_single_cell_extras_join_the_single_cell_training_lines(monkeypatch):
+    world = _world(monkeypatch, single_cell_extras=True)
+    single, extras, split = world["single"], world["extras"], world["split"]
+    loaded = run.load_base(world["config"])
+    bridge = loaded.bridge
+    cells = tuple(world["cells"])
+    assert bridge.single_cell_train == (*single, *cells)
+    # Paired only with training-side bulk: not W0 (no bulk), not XB0 (dropped).
+    assert bridge.paired == (*single[:-1], "X0")
+    assert set(bridge.folds) == set(bridge.single_cell_train)
+    assert list(bridge.pseudobulk.index) == [*split.all_model_ids, *cells]
+    # The prior's fit lines and the metric's definitions do not change.
+    assert loaded.labelled == (*single[:-1], *extras)
+    off = run.load_base(
+        {
+            **world["config"],
+            "training_side": {
+                **world["config"]["training_side"],
+                "single_cell_extras": False,
+            },
+        }
+    )
+    pd.testing.assert_series_equal(
+        loaded.definitions.residual_scale, off.definitions.residual_scale
+    )
+    assert loaded.definitions.selective == off.definitions.selective
+    # Every single-cell training line has the labels its export row is scored on.
+    assert set(cells) <= set(loaded.gene_effect.index)
+    assert loaded.truth(list(cells)).shape == (3, 3)
+    world["membership"]["Z0"] = {"lineage": "Lung"}
+    with pytest.raises(ValueError, match="the bulk file excludes"):
+        run.load_base(world["config"])
 
 
 # ----------------------------------------------------------------------------

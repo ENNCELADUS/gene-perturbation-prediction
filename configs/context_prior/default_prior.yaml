@@ -13,6 +13,7 @@ paths:
   bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
 training_side:
   exclude_lineages: [Lymphoid, Myeloid]
+  single_cell_extras: false
 prior: {components: 128, folds: 5, bootstrap_repeats: 1000, selected_genes: 50}
 penalties:
   components: [1.0]
